@@ -1,3 +1,5 @@
+import { shopIndustryPack, type ShopIndustryPackId } from './shop-service-scheduling.ts'
+
 export const CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1' as const
 export const CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1' as const
 export const CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v1' as const
@@ -22,6 +24,7 @@ export type ClientDemoPreset = {
   id: ClientDemoPresetId
   name: string
   description: string
+  shopIndustryPackId: ShopIndustryPackId
   selections: readonly ClientDemoSelection[]
 }
 
@@ -31,6 +34,7 @@ export type ClientDemoBlueprint = {
     workspace: string
     owner: string
     presetId: ClientDemoPresetId
+    shopIndustryPackId: ShopIndustryPackId
   }
   products: Array<{
     product: ClientSolutionId
@@ -312,6 +316,7 @@ export const clientDemoPresets: readonly ClientDemoPreset[] = [
     id: 'social-seller',
     name: 'Social seller',
     description: 'Chat orders, a clear website, and a Shop-backed storefront.',
+    shopIndustryPackId: 'retail',
     selections: [
       { product: 'commerce', templateId: 'social-commerce' },
       { product: 'website', templateId: 'lead-generation' },
@@ -322,6 +327,7 @@ export const clientDemoPresets: readonly ClientDemoPreset[] = [
     id: 'retail-network',
     name: 'Retail / wholesale',
     description: 'Stock, purchasing, catalog presentation, pickup, and wholesale requests.',
+    shopIndustryPackId: 'retail',
     selections: [
       { product: 'commerce', templateId: 'retail-wholesale' },
       { product: 'website', templateId: 'catalog-showcase' },
@@ -332,6 +338,7 @@ export const clientDemoPresets: readonly ClientDemoPreset[] = [
     id: 'food-service',
     name: 'Cafe / restaurant',
     description: 'Counter and channel orders with a menu site and preorder collection.',
+    shopIndustryPackId: 'cafe',
     selections: [
       { product: 'commerce', templateId: 'restaurant-ordering' },
       { product: 'website', templateId: 'business-presence' },
@@ -342,6 +349,7 @@ export const clientDemoPresets: readonly ClientDemoPreset[] = [
     id: 'manufacturing',
     name: 'Manufacturing',
     description: 'Demand, stock, production, catalog, and wholesale request handoffs.',
+    shopIndustryPackId: 'retail',
     selections: [
       { product: 'commerce', templateId: 'retail-wholesale' },
       { product: 'production', templateId: 'production-control' },
@@ -353,6 +361,7 @@ export const clientDemoPresets: readonly ClientDemoPreset[] = [
     id: 'service-business',
     name: 'Service business',
     description: 'Service sales, lead generation, and accountable follow-up.',
+    shopIndustryPackId: 'spa',
     selections: [
       { product: 'commerce', templateId: 'social-commerce' },
       { product: 'website', templateId: 'lead-generation' },
@@ -711,11 +720,13 @@ export function buildClientDemoBlueprint(input: {
   workspace: string
   owner: string
   presetId: ClientDemoPresetId
+  shopIndustryPackId?: ShopIndustryPackId
   selections: readonly ClientDemoSelection[]
 }): ClientDemoBlueprint {
   const workspace = boundedContext(input.workspace, 'Client name', 60)
   const owner = boundedContext(input.owner, 'Responsible owner', 80)
   const preset = clientDemoPreset(input.presetId)
+  const industryPack = shopIndustryPack(input.shopIndustryPackId ?? preset.shopIndustryPackId)
   if (input.selections.length < 1 || input.selections.length > clientDemoProductOrder.length) {
     throw new Error('Choose between one and four products for this client demo.')
   }
@@ -750,7 +761,7 @@ export function buildClientDemoBlueprint(input: {
   if (selected.has('production') && selected.has('commerce')) integrations.push({ from: 'commerce', to: 'production', outcome: 'Demand and material evidence connect Shop stock with Plant execution.' })
   return {
     schema: CLIENT_DEMO_BLUEPRINT_SCHEMA,
-    client: { workspace, owner, presetId: preset.id },
+    client: { workspace, owner, presetId: preset.id, shopIndustryPackId: industryPack.id },
     products,
     integrations,
     controls: {
@@ -770,9 +781,12 @@ function canonicalClientDemoBlueprint(value: unknown) {
       workspace: source.client.workspace ?? '',
       owner: source.client.owner ?? '',
       presetId: source.client.presetId as ClientDemoPresetId,
+      shopIndustryPackId: source.client.shopIndustryPackId,
       selections: source.products.map((product) => ({ product: product.product, templateId: product.templateId })),
     })
-    return JSON.stringify(rebuilt) === JSON.stringify(value) ? rebuilt : null
+    if (JSON.stringify(rebuilt) === JSON.stringify(value)) return rebuilt
+    const legacy = { ...rebuilt, client: { workspace: rebuilt.client.workspace, owner: rebuilt.client.owner, presetId: rebuilt.client.presetId } }
+    return JSON.stringify(legacy) === JSON.stringify(value) ? rebuilt : null
   } catch {
     return null
   }

@@ -1,5 +1,18 @@
-export const SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v1' as const
+export const SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v2' as const
 export const SHOP_SERVICE_SCHEDULE_STORAGE_KEY = 'supermega.shop.service-schedule.v1'
+const LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v1' as const
+
+export type ShopIndustryPackId = 'retail' | 'cafe' | 'restaurant' | 'spa' | 'gym' | 'school'
+
+export type ShopIndustryPack = {
+  id: ShopIndustryPackId
+  name: string
+  description: string
+  firstWorkflow: string
+  capabilities: readonly string[]
+  services: readonly Omit<ShopService, 'active'>[]
+  resources: readonly Omit<ShopServiceResource, 'active'>[]
+}
 
 export type ShopService = {
   id: string
@@ -43,6 +56,7 @@ export type ShopServiceScheduleEvent = {
 
 export type ShopServiceSchedule = {
   schema: typeof SHOP_SERVICE_SCHEDULE_SCHEMA
+  industryPackId: ShopIndustryPackId
   revision: number
   services: ShopService[]
   resources: ShopServiceResource[]
@@ -71,6 +85,105 @@ const bookingTransitions: Record<Exclude<ShopServiceBookingStatus, 'completed' |
   held: 'confirmed',
   confirmed: 'checked_in',
   checked_in: 'completed',
+}
+
+export const shopIndustryPacks: readonly ShopIndustryPack[] = [
+  {
+    id: 'retail',
+    name: 'Retail',
+    description: 'Counter sales, pickup windows, stock, purchasing, and returns.',
+    firstWorkflow: 'Complete a counter sale and schedule a reviewed pickup.',
+    capabilities: ['Sell', 'Orders', 'Stock', 'Purchasing', 'Returns', 'Pickup schedule'],
+    services: [
+      { id: 'service-personal-shopping', name: 'Personal shopping', durationMinutes: 30, priceMmk: 15_000 },
+      { id: 'service-pickup-window', name: 'Pickup window', durationMinutes: 15, priceMmk: 5_000 },
+    ],
+    resources: [
+      { id: 'resource-sales-1', name: 'Sales staff 1', kind: 'staff' },
+      { id: 'resource-pickup-1', name: 'Pickup desk 1', kind: 'room' },
+    ],
+  },
+  {
+    id: 'cafe',
+    name: 'Cafe',
+    description: 'Counter orders, collection slots, stock, and daily close.',
+    firstWorkflow: 'Take a counter order and schedule a large-order collection.',
+    capabilities: ['Sell', 'Orders', 'Stock', 'Daily close', 'Collection schedule'],
+    services: [
+      { id: 'service-catering-consultation', name: 'Catering consultation', durationMinutes: 30, priceMmk: 20_000 },
+      { id: 'service-preorder-collection', name: 'Preorder collection', durationMinutes: 15, priceMmk: 5_000 },
+    ],
+    resources: [
+      { id: 'resource-counter-1', name: 'Counter staff 1', kind: 'staff' },
+      { id: 'resource-collection-1', name: 'Collection point 1', kind: 'room' },
+    ],
+  },
+  {
+    id: 'restaurant',
+    name: 'Restaurant',
+    description: 'Orders, table reservations, deposits, stock, and payment review.',
+    firstWorkflow: 'Record an order and hold one accountable table reservation.',
+    capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Reservations'],
+    services: [
+      { id: 'service-table-reservation', name: 'Table reservation deposit', durationMinutes: 90, priceMmk: 10_000 },
+      { id: 'service-event-consultation', name: 'Private event consultation', durationMinutes: 45, priceMmk: 25_000 },
+    ],
+    resources: [
+      { id: 'resource-host-1', name: 'Host 1', kind: 'staff' },
+      { id: 'resource-table-zone-1', name: 'Table zone 1', kind: 'room' },
+    ],
+  },
+  {
+    id: 'spa',
+    name: 'Spa',
+    description: 'Service sales, appointments, staff, rooms, stock, and payments.',
+    firstWorkflow: 'Hold, confirm, check in, and complete one treatment appointment.',
+    capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Appointments', 'Service resources'],
+    services: [
+      { id: 'service-consultation', name: 'Consultation', durationMinutes: 30, priceMmk: 20_000 },
+      { id: 'service-session', name: 'Standard treatment', durationMinutes: 60, priceMmk: 45_000 },
+    ],
+    resources: [
+      { id: 'resource-staff-1', name: 'Therapist 1', kind: 'staff' },
+      { id: 'resource-room-1', name: 'Treatment room 1', kind: 'room' },
+    ],
+  },
+  {
+    id: 'gym',
+    name: 'Gym',
+    description: 'Service sales, consultations, training sessions, staff, and studios.',
+    firstWorkflow: 'Schedule and complete one personal-training session.',
+    capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Training schedule', 'Staff resources'],
+    services: [
+      { id: 'service-fitness-consultation', name: 'Fitness consultation', durationMinutes: 30, priceMmk: 15_000 },
+      { id: 'service-personal-training', name: 'Personal training', durationMinutes: 60, priceMmk: 30_000 },
+    ],
+    resources: [
+      { id: 'resource-trainer-1', name: 'Trainer 1', kind: 'staff' },
+      { id: 'resource-studio-1', name: 'Studio 1', kind: 'room' },
+    ],
+  },
+  {
+    id: 'school',
+    name: 'School',
+    description: 'Enrollment consultations, class sessions, teachers, rooms, and fee sales.',
+    firstWorkflow: 'Schedule one enrollment consultation or class session.',
+    capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Class schedule', 'Teacher resources'],
+    services: [
+      { id: 'service-enrollment-consultation', name: 'Enrollment consultation', durationMinutes: 30, priceMmk: 10_000 },
+      { id: 'service-class-session', name: 'Class session', durationMinutes: 60, priceMmk: 20_000 },
+    ],
+    resources: [
+      { id: 'resource-teacher-1', name: 'Teacher 1', kind: 'staff' },
+      { id: 'resource-classroom-1', name: 'Classroom 1', kind: 'room' },
+    ],
+  },
+] as const
+
+export function shopIndustryPack(id: ShopIndustryPackId) {
+  const pack = shopIndustryPacks.find((candidate) => candidate.id === id)
+  if (!pack) throw new Error('Choose a supported Shop industry pack.')
+  return pack
 }
 
 function boundedText(value: string, label: string, maximum = 160) {
@@ -109,18 +222,14 @@ function proofRecord(proof: ShopServiceScheduleProof) {
   }
 }
 
-export function createShopServiceSchedule(): ShopServiceSchedule {
+export function createShopServiceSchedule(industryPackId: ShopIndustryPackId = 'spa'): ShopServiceSchedule {
+  const pack = shopIndustryPack(industryPackId)
   return {
     schema: SHOP_SERVICE_SCHEDULE_SCHEMA,
+    industryPackId: pack.id,
     revision: 0,
-    services: [
-      { id: 'service-consultation', name: 'Consultation', durationMinutes: 30, priceMmk: 20_000, active: true },
-      { id: 'service-session', name: 'Standard session', durationMinutes: 60, priceMmk: 45_000, active: true },
-    ],
-    resources: [
-      { id: 'resource-staff-1', name: 'Staff 1', kind: 'staff', active: true },
-      { id: 'resource-room-1', name: 'Room 1', kind: 'room', active: true },
-    ],
+    services: pack.services.map((service) => ({ ...service, active: true })),
+    resources: pack.resources.map((resource) => ({ ...resource, active: true })),
     bookings: [],
     events: [],
   }
@@ -128,6 +237,7 @@ export function createShopServiceSchedule(): ShopServiceSchedule {
 
 export function validateShopServiceSchedule(state: ShopServiceSchedule) {
   if (!state || state.schema !== SHOP_SERVICE_SCHEDULE_SCHEMA) throw new Error('Unsupported Shop service schedule.')
+  shopIndustryPack(state.industryPackId)
   if (!Number.isSafeInteger(state.revision) || state.revision < 0) throw new Error('Invalid Shop service schedule revision.')
   if (!Array.isArray(state.services) || !Array.isArray(state.resources) || !Array.isArray(state.bookings) || !Array.isArray(state.events)) throw new Error('Incomplete Shop service schedule.')
   const serviceIds = new Set<string>()
@@ -306,8 +416,20 @@ export function projectShopServiceSchedule(state: ShopServiceSchedule, now = new
 export function readShopServiceSchedule(value: string | null) {
   if (!value) return createShopServiceSchedule()
   try {
-    return validateShopServiceSchedule(JSON.parse(value) as ShopServiceSchedule)
+    const parsed = JSON.parse(value) as Record<string, unknown>
+    if (parsed.schema === LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA && !parsed.industryPackId) {
+      return validateShopServiceSchedule({ ...parsed, schema: SHOP_SERVICE_SCHEDULE_SCHEMA, industryPackId: 'spa' } as ShopServiceSchedule)
+    }
+    return validateShopServiceSchedule(parsed as unknown as ShopServiceSchedule)
   } catch {
     throw new Error('Saved appointments are unreadable. Export or clear the local evidence before continuing.')
   }
+}
+
+export function provisionEmptyShopServiceSchedule(state: ShopServiceSchedule, industryPackId: ShopIndustryPackId) {
+  validateShopServiceSchedule(state)
+  if (state.bookings.length || state.events.length || state.revision !== 0) {
+    throw new Error('Existing appointment evidence was preserved. Reset that local demo before replacing its industry pack.')
+  }
+  return createShopServiceSchedule(industryPackId)
 }

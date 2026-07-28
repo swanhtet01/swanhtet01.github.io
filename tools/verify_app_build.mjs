@@ -116,7 +116,10 @@ if (!shopOperatingFlowSource.includes("export type ShopOperatingStageId = 'intak
   || !coreSource.includes('id="shop-close-controls"')
   || !coreCssSource.includes('.shop-flow-stages')) fail('shop_operating_flow_contract_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopOperatingFlowSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_operating_flow_side_effect_added')
-if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v1")
+if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v2")
+  || !shopServiceScheduleSource.includes("type ShopIndustryPackId = 'retail' | 'cafe' | 'restaurant' | 'spa' | 'gym' | 'school'")
+  || !shopServiceScheduleSource.includes('provisionEmptyShopServiceSchedule')
+  || !shopServiceScheduleSource.includes('LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA')
   || !shopServiceScheduleSource.includes('scheduleShopServiceBooking')
   || !shopServiceScheduleSource.includes('advanceShopServiceBooking')
   || !shopServiceScheduleSource.includes('registerShopServiceResource')
@@ -1750,6 +1753,8 @@ if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_i
   || !clientOnboardingSource.includes("'business-presence':")
   || !clientOnboardingSource.includes("'social-storefront':")
   || !clientOnboardingSource.includes('export const clientDemoPresets')
+  || !clientOnboardingSource.includes('shopIndustryPackId: ShopIndustryPackId')
+  || !clientOnboardingSource.includes('shopIndustryPack(input.shopIndustryPackId ?? preset.shopIndustryPackId)')
   || !clientOnboardingSource.includes('export function buildClientDemoBlueprint')
   || !clientOnboardingSource.includes("CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v1'")
   || !clientOnboardingSource.includes("CLIENT_DEMO_RUNBOOK_SCHEMA = 'supermega.client_demo_runbook.v1'")
@@ -1836,6 +1841,11 @@ if (!coreSource.includes('templateId: string')
   || !settingsPageSource.includes('className="demo-preset-grid"')
   || !settingsPageSource.includes('className="demo-solution-grid"')
   || !settingsPageSource.includes('className="demo-kit-result"')
+  || !settingsPageSource.includes('Shop business pack')
+  || !settingsPageSource.includes('shopIndustryPacks.map((pack)')
+  || !settingsPageSource.includes('provisionLocalShopIndustryPack')
+  || !settingsPageSource.includes('provisionEmptyShopServiceSchedule')
+  || !settingsPageSource.includes('Existing local evidence stays authoritative.')
   || !settingsPageSource.includes('loadClientDemoWorkspace')
   || !settingsPageSource.includes('restoreClientDemoWorkspace')
   || !settingsPageSource.includes('updateClientDemoWorkspaceProgress')
@@ -2361,6 +2371,11 @@ let workflowProfiles = 0
 const solutionProducts = manifest.customerProducts || []
 if (solutionProducts.map((product) => `${product.id}:${product.runtimeId}`).join(',') !== 'shop:commerce,plant:production,website:website,ecommerce:ecommerce') fail('canonical_four_product_order_missing')
 const websiteProductContract = solutionProducts.find((product) => product.id === 'website')
+const shopProductContract = solutionProducts.find((product) => product.id === 'shop')
+const shopPackIds = shopProductContract?.internalTemplatePacks?.map((pack) => pack.id) ?? []
+if (shopPackIds.join(',') !== 'retail,cafe,restaurant,spa,gym,school'
+  || shopProductContract?.internalTemplatePacks?.some((pack) => pack.status !== 'core-compatible' || !pack.availableNow?.some((capability) => /schedule|reservation|appointment/i.test(capability)))
+  || shopProductContract?.internalTemplatePacks?.some((pack) => pack.plannedNext?.includes('Appointments') || pack.plannedNext?.includes('Classes'))) fail('shop_industry_pack_manifest_not_operationally_aligned')
 if (websiteProductContract?.status !== 'available-in-app'
   || websiteProductContract?.views?.join(',') !== 'Start,Edit,Preview,Download'
   || websiteProductContract?.templates?.some((template) => template.workflow?.at(-1) !== 'Download website')
@@ -3139,10 +3154,24 @@ async function verifyShopServiceScheduleRuntime() {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-service-scheduling.ts')).href}?shop-service-schedule-verify=${Date.now()}`)
     const proof = (minute, reason) => ({ actor: 'Shop owner', reason, happenedAt: `2026-07-29T03:${String(minute).padStart(2, '0')}:00.000Z` })
     let state = model.createShopServiceSchedule()
-    assert(model.validateShopServiceSchedule(state) === state && state.revision === 0, 'shop_service_schedule_seed_invalid')
+    assert(model.validateShopServiceSchedule(state) === state && state.revision === 0 && state.industryPackId === 'spa', 'shop_service_schedule_seed_invalid')
     assert(state.services.length === 2 && state.resources.length === 2 && state.bookings.length === 0, 'shop_service_schedule_seed_not_useful')
+    assert(model.shopIndustryPacks.map((pack) => pack.id).join(',') === 'retail,cafe,restaurant,spa,gym,school' && new Set(model.shopIndustryPacks.map((pack) => pack.id)).size === 6, 'shop_industry_pack_catalog_wrong')
+    for (const pack of model.shopIndustryPacks) {
+      const packed = model.createShopServiceSchedule(pack.id)
+      assert(model.validateShopServiceSchedule(packed) === packed && packed.industryPackId === pack.id && packed.services.length === 2 && packed.resources.length === 2 && pack.capabilities.length >= 5, `shop_industry_pack_${pack.id}_not_operational`)
+    }
+    const gymSchedule = model.provisionEmptyShopServiceSchedule(state, 'gym')
+    assert(gymSchedule.industryPackId === 'gym' && gymSchedule.services.some((service) => service.name === 'Personal training') && gymSchedule.resources.some((resource) => resource.name === 'Trainer 1'), 'shop_industry_pack_provisioning_failed')
+    const legacySchedule = structuredClone(state)
+    legacySchedule.schema = 'supermega.shop.service_schedule.v1'
+    delete legacySchedule.industryPackId
+    const migratedSchedule = model.readShopServiceSchedule(JSON.stringify(legacySchedule))
+    assert(migratedSchedule.schema === model.SHOP_SERVICE_SCHEDULE_SCHEMA && migratedSchedule.industryPackId === 'spa', 'shop_service_schedule_v1_migration_failed')
+    assertThrows(() => model.shopIndustryPack('unknown'), 'shop_industry_unknown_pack_accepted')
     state = model.registerShopService(state, { name: 'Premium treatment', durationMinutes: 90, priceMmk: 75_000 }, proof(1, 'Reviewed service setup'))
     assert(state.services.at(-1).name === 'Premium treatment' && state.revision === 1, 'shop_service_registration_failed')
+    assertThrows(() => model.provisionEmptyShopServiceSchedule(state, 'school'), 'shop_industry_pack_overwrote_existing_evidence')
     state = model.registerShopServiceResource(state, { name: 'Therapist A', kind: 'staff' }, proof(2, 'Reviewed staff setup'))
     assert(state.resources.at(-1).kind === 'staff' && state.events.at(-1).type === 'resource_registered', 'shop_service_resource_registration_failed')
     const serviceId = state.services.at(-1).id
@@ -3768,7 +3797,7 @@ async function verifyClientOnboardingRuntime() {
     assert(model.clientDemoPresets.length === 5 && new Set(model.clientDemoPresets.map((preset) => preset.id)).size === 5, 'client_demo_presets_missing_or_duplicated')
     for (const preset of model.clientDemoPresets) {
       const blueprint = model.buildClientDemoBlueprint({ workspace: 'Golden Valley Trading', owner: 'Operations lead', presetId: preset.id, selections: preset.selections })
-      assert(blueprint.schema === model.CLIENT_DEMO_BLUEPRINT_SCHEMA && blueprint.client.presetId === preset.id, `client_demo_${preset.id}_identity_wrong`)
+      assert(blueprint.schema === model.CLIENT_DEMO_BLUEPRINT_SCHEMA && blueprint.client.presetId === preset.id && blueprint.client.shopIndustryPackId === preset.shopIndustryPackId, `client_demo_${preset.id}_identity_wrong`)
       assert(blueprint.products.length === preset.selections.length && blueprint.products.every((product) => product.sampleCsv && product.checklist.length === 5), `client_demo_${preset.id}_data_plan_incomplete`)
       assert(blueprint.controls.localDemoOnly === true && blueprint.controls.humanReviewRequired === true && blueprint.controls.externalWritesPerformed === false, `client_demo_${preset.id}_controls_weakened`)
     }
@@ -3776,10 +3805,16 @@ async function verifyClientOnboardingRuntime() {
     const manufacturingBlueprint = model.buildClientDemoBlueprint({ workspace: 'Integrated Factory', owner: 'General manager', presetId: 'manufacturing', selections: manufacturingPreset.selections })
     assert(manufacturingBlueprint.products.map((product) => product.product).join(',') === 'commerce,production,website,ecommerce', 'client_demo_manufacturing_product_order_drifted')
     assert(manufacturingBlueprint.integrations.length === 3 && manufacturingBlueprint.integrations.some((integration) => integration.from === 'ecommerce' && integration.to === 'commerce'), 'client_demo_integrations_missing')
+    const schoolBlueprint = model.buildClientDemoBlueprint({ workspace: 'Learning Centre', owner: 'School administrator', presetId: 'service-business', shopIndustryPackId: 'school', selections: model.clientDemoPresets.find((preset) => preset.id === 'service-business').selections })
+    assert(schoolBlueprint.client.shopIndustryPackId === 'school', 'client_demo_custom_shop_pack_not_bound')
     const workspaceCreatedAt = '2026-07-28T08:00:00.000Z'
     const demoWorkspace = model.createClientDemoWorkspace(manufacturingBlueprint, workspaceCreatedAt)
     assert(demoWorkspace.schema === model.CLIENT_DEMO_WORKSPACE_SCHEMA && demoWorkspace.products.length === 4 && demoWorkspace.products.every((product) => product.status === 'not_started'), 'client_demo_workspace_not_initialized')
     assert(JSON.stringify(model.restoreClientDemoWorkspace(JSON.parse(JSON.stringify(demoWorkspace)))) === JSON.stringify(demoWorkspace), 'client_demo_workspace_not_restorable')
+    const legacyBlueprint = structuredClone(manufacturingBlueprint)
+    delete legacyBlueprint.client.shopIndustryPackId
+    const migratedLegacyWorkspace = model.createClientDemoWorkspace(legacyBlueprint, workspaceCreatedAt)
+    assert(migratedLegacyWorkspace.blueprint.client.shopIndustryPackId === 'retail', 'client_demo_legacy_shop_pack_not_migrated')
     const shopReadyAt = '2026-07-28T08:05:00.000Z'
     const shopReady = model.updateClientDemoWorkspaceProgress(demoWorkspace, { product: 'commerce', status: 'data_ready', rows: 2, readyRows: 2, issueRows: 0, updatedAt: null }, shopReadyAt)
     assert(shopReady.updatedAt === shopReadyAt && shopReady.products[0].status === 'data_ready' && shopReady.products.slice(1).every((product) => product.status === 'not_started'), 'client_demo_workspace_progress_not_isolated')
@@ -3819,6 +3854,7 @@ async function verifyClientOnboardingRuntime() {
     rejectsSync(() => model.buildClientDemoBlueprint({ workspace: '', owner: 'Owner', presetId: 'social-seller', selections: model.clientDemoPresets[0].selections }), 'client_demo_blank_workspace_accepted')
     rejectsSync(() => model.buildClientDemoBlueprint({ workspace: 'Client', owner: 'Owner', presetId: 'social-seller', selections: [{ product: 'commerce', templateId: 'social-commerce' }, { product: 'commerce', templateId: 'retail-wholesale' }] }), 'client_demo_duplicate_product_accepted')
     rejectsSync(() => model.buildClientDemoBlueprint({ workspace: 'Client', owner: 'Owner', presetId: 'social-seller', selections: [{ product: 'commerce', templateId: 'unknown' }] }), 'client_demo_unknown_template_accepted')
+    rejectsSync(() => model.buildClientDemoBlueprint({ workspace: 'Client', owner: 'Owner', presetId: 'social-seller', shopIndustryPackId: 'unknown', selections: model.clientDemoPresets[0].selections }), 'client_demo_unknown_shop_pack_accepted')
 
     const socialTemplate = model.clientImportTemplate('commerce', 'social-commerce')
     const socialPreview = await model.createClientImportPreview(socialTemplate, 'commerce', undefined, 'social.csv', 'social-commerce')
