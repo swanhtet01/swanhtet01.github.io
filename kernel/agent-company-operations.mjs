@@ -59,7 +59,7 @@ const VERDICTS = new Set(['accepted', 'revision_required'])
 const EVALUATION_FIELDS = new Set(['clientId', 'workOrderId', 'planHash', 'verdict', 'checks', 'confirmation'])
 const GET_EVALUATION_FIELDS = new Set(['clientId', 'workOrderId'])
 const REPORT_FIELDS = new Set(['clientId', 'windowDays'])
-const CEO_OUTCOME_CYCLE_STATE_FIELDS = new Set(['clientId', 'authorityDigest', 'asOf'])
+const CEO_OUTCOME_CYCLE_STATE_FIELDS = new Set(['clientId', 'authorityDigest', 'asOf', 'includeDelivery'])
 const CEO_OUTCOME_RECORD_INPUT_FIELDS = new Set(['clientId', 'outcomeId', 'authorityDigest', 'completedAt', 'usage'])
 const CEO_OUTCOME_DELIVERY_INPUT_FIELDS = new Set(['clientId', 'operationId', 'recordHash', 'deliveryClaimId', 'status'])
 const CEO_OUTCOME_EVALUATION_INPUT_FIELDS = new Set(['clientId', 'operationId', 'recordHash', 'verdict', 'confirmation'])
@@ -625,6 +625,10 @@ export async function loadCeoOutcomeCycleState(input, options = {}) {
   if (isRecord(clientId)) return clientId
   const authorityDigest = String(input.authorityDigest || '').trim()
   const asOf = exactIso(input.asOf)
+  const includeDelivery = input.includeDelivery === true
+  if (Object.hasOwn(input, 'includeDelivery') && typeof input.includeDelivery !== 'boolean') {
+    return failure('ceo_outcome_cycle_delivery_option_invalid')
+  }
   if (!HASH_RE.test(authorityDigest)) return failure('ceo_outcome_invalid_authority_digest')
   if (!asOf) return failure('ceo_outcome_cycle_clock_invalid')
 
@@ -649,20 +653,29 @@ export async function loadCeoOutcomeCycleState(input, options = {}) {
   const window = utcWeekWindow(asOf)
   const asOfMs = Date.parse(asOf)
   const completed = new Map()
+  const seenOperationIds = new Set()
   let matchedRecords = 0
   for (const entry of listed.records) {
     const key = String(entry?.key || '')
     const record = validateCeoOutcomeRecord(entry?.payload, key)
     if (!record || record.clientId !== clientId) return failure('ceo_outcome_cycle_record_invalid')
     const completedMs = Date.parse(record.completedAt)
+    seenOperationIds.add(record.operationId)
     if (completedMs > asOfMs + 300_000) return failure('ceo_outcome_cycle_record_from_future')
     if (record.authorityDigest !== authorityDigest
       || completedMs < window.startMs
       || completedMs >= window.endMs) continue
     matchedRecords += 1
     if (completed.has(record.outcomeId)) return failure('ceo_outcome_cycle_duplicate_completion')
-    completed.set(record.outcomeId, record.completedAt)
+    completed.set(record.outcomeId, record)
   }
+
+  const delivery = includeDelivery
+    ? await buildCeoOutcomeDelivery([...completed.values()], seenOperationIds, clientId, {
+        ...options,
+        includeOutcomeStatuses: true,
+      })
+    : null
 
   return {
     ok: true,
@@ -676,6 +689,7 @@ export async function loadCeoOutcomeCycleState(input, options = {}) {
     completedOutcomeIds: [...completed.keys()].sort(),
     completedCount: completed.size,
     matchedRecords,
+    ...(delivery ? { delivery } : {}),
   }
 }
 
@@ -1185,14 +1199,27 @@ function unavailableCeoOutcomeDelivery(reason, completed = 0) {
   }
 }
 
+function withCeoDeliveryOutcomes(summary, records, deliveries, include) {
+  if (!include) return summary
+  return {
+    ...summary,
+    outcomes: records
+      .map((record) => ({
+        outcomeId: record.outcomeId,
+        status: deliveries?.get(record.operationId)?.status || 'missing',
+      }))
+      .sort((left, right) => left.outcomeId.localeCompare(right.outcomeId)),
+  }
+}
+
 async function buildCeoOutcomeDelivery(records, knownOperationIds, clientId, options = {}) {
   if (!records.length) {
-    return {
+    return withCeoDeliveryOutcomes({
       ...unavailableCeoOutcomeDelivery('no_outcomes'),
       available: true,
       durable: true,
       state: 'no_outcomes',
-    }
+    }, records, null, options.includeOutcomeStatuses === true)
   }
   const listDeliveries = options.listCeoOutcomeDeliveryRecords || listCachedResponseRecords
   let listed
@@ -1203,10 +1230,20 @@ async function buildCeoOutcomeDelivery(records, knownOperationIds, clientId, opt
       limit: MAX_CEO_OUTCOME_RECORDS,
     })
   } catch {
-    return unavailableCeoOutcomeDelivery('store_unavailable', records.length)
+    return withCeoDeliveryOutcomes(
+      unavailableCeoOutcomeDelivery('store_unavailable', records.length),
+      records,
+      null,
+      options.includeOutcomeStatuses === true,
+    )
   }
   if (!listed || !Array.isArray(listed.records)) {
-    return unavailableCeoOutcomeDelivery('store_unavailable', records.length)
+    return withCeoDeliveryOutcomes(
+      unavailableCeoOutcomeDelivery('store_unavailable', records.length),
+      records,
+      null,
+      options.includeOutcomeStatuses === true,
+    )
   }
 
   const includedOperations = new Map(records.map((record) => [record.operationId, record]))
@@ -1251,7 +1288,7 @@ async function buildCeoOutcomeDelivery(records, knownOperationIds, clientId, opt
   else if (listed.durable !== true) state = 'non_durable'
   else if (missing > 0) state = 'missing'
   else if (failed + uncertain > 0) state = 'attention'
-  return {
+  return withCeoDeliveryOutcomes({
     contract: CEO_OUTCOME_DELIVERY_CONTRACT,
     available: true,
     durable: listed.durable === true,
@@ -1266,7 +1303,7 @@ async function buildCeoOutcomeDelivery(records, knownOperationIds, clientId, opt
       outOfWindowRecords,
       capped,
     },
-  }
+  }, records, deliveries, options.includeOutcomeStatuses === true)
 }
 
 async function buildCeoOutcomeOperations(clientId, cutoff, nowMs, options = {}) {

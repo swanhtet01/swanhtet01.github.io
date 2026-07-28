@@ -6,6 +6,7 @@ import {
   evaluateCeoOutcomeDelivery,
   evaluateCompanyWorkOrder,
   getCompanyWorkOrderEvaluation,
+  loadCeoOutcomeCycleState,
   recordCeoOutcomeCompletion,
   recordCeoOutcomeDeliveryResult,
 } from './agent-company-operations.mjs'
@@ -269,6 +270,58 @@ test('CEO owner-delivery result is durable, idempotent, claim-bound, and metadat
     ...state.options,
     getActivityClaim: async () => ({ durable: false, claim: null }),
   })).reason, 'ceo_outcome_delivery_store_unavailable')
+})
+
+test('weekly CEO state reconciles delivery only for the protected console and returns no receipt identity', async () => {
+  const state = ceoOutcomeHarness()
+  const operation = await recordCeoOutcomeCompletion(ceoOutcomeInput({
+    completedAt: '2026-07-14T01:00:00.000Z',
+  }), state.options)
+  await recordCeoOutcomeDeliveryResult({
+    clientId: 'client-acme',
+    operationId: operation.outcome.operationId,
+    recordHash: operation.outcome.recordHash,
+    deliveryClaimId: `workcell:${'d'.repeat(40)}`,
+    status: 'failed',
+  }, state.options)
+  const list = (prefix) => async () => ({
+    durable: true,
+    records: [...state.cache.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, payload]) => ({ key, payload: structuredClone(payload) })),
+  })
+  const input = {
+    clientId: 'client-acme',
+    authorityDigest: AUTHORITY_DIGEST,
+    asOf: '2026-07-14T09:00:00.000Z',
+    includeDelivery: true,
+  }
+  const reconciled = await loadCeoOutcomeCycleState(input, {
+    listCeoOutcomeRecords: list('ceo-outcome-operation:'),
+    listCeoOutcomeDeliveryRecords: list('ceo-outcome-delivery:'),
+  })
+  assert.equal(reconciled.ok, true)
+  assert.equal(reconciled.delivery.state, 'attention')
+  assert.deepEqual(reconciled.delivery.counts, { completed: 1, recorded: 1, sent: 0, failed: 1, uncertain: 0, missing: 0 })
+  assert.deepEqual(reconciled.delivery.outcomes, [{ outcomeId: 'daily-company-control', status: 'failed' }])
+  assert.doesNotMatch(JSON.stringify(reconciled.delivery), /operationId|deliveryId|claim|brief|provider|model/i)
+
+  const missing = await loadCeoOutcomeCycleState(input, {
+    listCeoOutcomeRecords: list('ceo-outcome-operation:'),
+    listCeoOutcomeDeliveryRecords: async () => ({ durable: true, records: [] }),
+  })
+  assert.equal(missing.delivery.state, 'missing')
+  assert.deepEqual(missing.delivery.outcomes, [{ outcomeId: 'daily-company-control', status: 'missing' }])
+
+  let deliveryReads = 0
+  const scheduled = await loadCeoOutcomeCycleState({ ...input, includeDelivery: false }, {
+    listCeoOutcomeRecords: list('ceo-outcome-operation:'),
+    listCeoOutcomeDeliveryRecords: async () => { deliveryReads += 1; throw new Error('must not run') },
+  })
+  assert.equal(scheduled.ok, true)
+  assert.equal(Object.hasOwn(scheduled, 'delivery'), false)
+  assert.equal(deliveryReads, 0)
+  assert.equal((await loadCeoOutcomeCycleState({ ...input, includeDelivery: 'yes' })).reason, 'ceo_outcome_cycle_delivery_option_invalid')
 })
 
 test('accepted CEO outcomes per work unit require complete evaluation, valid usage, and clean coverage', async () => {

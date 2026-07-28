@@ -25,6 +25,7 @@ import {
   COMPANY_OPERATIONS_TARGETS,
   COMPANY_OPERATIONS_WINDOWS,
   CEO_OUTCOME_CYCLE_STATE_CONTRACT,
+  CEO_OUTCOME_DELIVERY_CONTRACT,
   evaluateCeoOutcomeDelivery,
   evaluateCompanyWorkOrder,
   loadCeoOutcomeCycleState,
@@ -55,6 +56,10 @@ const HOSTED_ACTIVATION_VIEW_CONTRACT = 'supermega.hosted-activation-view.v1'
 const HOSTED_STATUS_URL = 'https://app.supermega.dev/api/cloud-autonomy/status'
 const HOSTED_STATUS_TIMEOUT_MS = 2500
 const HOSTED_STATUS_MAX_BYTES = 64 * 1024
+const CEO_CYCLE_DELIVERY_STATES = new Set(['ready', 'no_outcomes', 'missing', 'attention', 'invalid_coverage', 'non_durable', 'store_unavailable'])
+const CEO_CYCLE_DELIVERY_STATUSES = new Set(['sent', 'failed', 'uncertain', 'missing'])
+const CEO_CYCLE_DELIVERY_FIELDS = new Set(['contract', 'available', 'durable', 'state', 'counts', 'coverage', 'outcomes'])
+const CEO_CYCLE_DELIVERY_COUNT_FIELDS = Object.freeze(['completed', 'recorded', 'sent', 'failed', 'uncertain', 'missing'])
 const HOSTED_ACTIVATION_PROOFS = Object.freeze([
   ['managed-database-tenant-isolation', 'Managed database tenant isolation'],
   ['private-storage-privacy', 'Private storage privacy'],
@@ -210,7 +215,8 @@ function validCycleState(state, expected) {
     || !Array.isArray(state.completedOutcomeIds)
     || state.completedOutcomeIds.length > 12
     || new Set(state.completedOutcomeIds).size !== state.completedOutcomeIds.length
-    || state.completedCount !== state.completedOutcomeIds.length) return false
+    || state.completedCount !== state.completedOutcomeIds.length
+    || !validCycleDelivery(state.delivery, state.completedOutcomeIds)) return false
   const startsAt = Date.parse(state.startsAt)
   const endsAt = Date.parse(state.endsAt)
   const asOf = expected.asOf.getTime()
@@ -219,6 +225,44 @@ function validCycleState(state, expected) {
     && endsAt - startsAt === 7 * 24 * 60 * 60 * 1000
     && asOf >= startsAt
     && asOf < endsAt
+}
+
+function validCycleDelivery(delivery, completedOutcomeIds) {
+  if (!delivery || typeof delivery !== 'object' || Array.isArray(delivery)
+    || Object.keys(delivery).some((field) => !CEO_CYCLE_DELIVERY_FIELDS.has(field))
+    || delivery.contract !== CEO_OUTCOME_DELIVERY_CONTRACT
+    || typeof delivery.available !== 'boolean'
+    || typeof delivery.durable !== 'boolean'
+    || !CEO_CYCLE_DELIVERY_STATES.has(delivery.state)
+    || !Array.isArray(delivery.outcomes)
+    || delivery.outcomes.length !== completedOutcomeIds.length) return false
+  const counts = delivery.counts
+  const countFields = CEO_CYCLE_DELIVERY_COUNT_FIELDS
+  if (!counts || Object.keys(counts).sort().join(',') !== [...countFields].sort().join(',')
+    || !countFields.every((field) => Number.isSafeInteger(counts[field]) && counts[field] >= 0)
+    || counts.completed !== completedOutcomeIds.length
+    || counts.recorded !== counts.sent + counts.failed + counts.uncertain
+    || counts.missing !== counts.completed - counts.recorded) return false
+  const completed = new Set(completedOutcomeIds)
+  const seen = new Set()
+  const observed = { sent: 0, failed: 0, uncertain: 0, missing: 0 }
+  for (const outcome of delivery.outcomes) {
+    if (!outcome || typeof outcome !== 'object' || Array.isArray(outcome)
+      || Object.keys(outcome).sort().join(',') !== 'outcomeId,status'
+      || !completed.has(outcome.outcomeId)
+      || seen.has(outcome.outcomeId)
+      || !CEO_CYCLE_DELIVERY_STATUSES.has(outcome.status)) return false
+    seen.add(outcome.outcomeId)
+    observed[outcome.status] += 1
+  }
+  if (countFields.slice(2).some((field) => counts[field] !== observed[field])) return false
+  if (delivery.state === 'ready' && (!delivery.available || !delivery.durable || counts.sent !== counts.completed)) return false
+  if (delivery.state === 'no_outcomes' && (!delivery.available || !delivery.durable || counts.completed !== 0 || counts.recorded !== 0)) return false
+  if (delivery.state === 'missing' && counts.missing === 0) return false
+  if (delivery.state === 'attention' && (counts.failed + counts.uncertain === 0 || counts.missing !== 0)) return false
+  if (delivery.state === 'non_durable' && delivery.durable) return false
+  if (delivery.state === 'store_unavailable' && (delivery.available || delivery.durable || counts.missing !== counts.completed)) return false
+  return true
 }
 
 async function buildCeoCycleView({ clientId, now, loadCycleState }) {
@@ -244,6 +288,7 @@ async function buildCeoCycleView({ clientId, now, loadCycleState }) {
       clientId,
       authorityDigest: initial.authorityDigest,
       asOf: now.toISOString(),
+      includeDelivery: true,
     })
   } catch {
     return unavailableCeoCycle('ceo_outcome_cycle_store_unavailable')
@@ -256,7 +301,12 @@ async function buildCeoCycleView({ clientId, now, loadCycleState }) {
   const selection = selectCeoOutcome({ completedOutcomeIds: state.completedOutcomeIds })
   if (!selection.ok) return unavailableCeoCycle(selection.reason || 'ceo_outcome_authority_invalid')
   const completed = new Set(state.completedOutcomeIds)
+  const deliveryByOutcome = new Map(state.delivery.outcomes.map((outcome) => [outcome.outcomeId, outcome.status]))
   const nextId = selection.selected?.id || ''
+  const deliveryReady = state.delivery.state === 'ready'
+    && state.delivery.durable === true
+    && state.delivery.counts.sent === state.completedCount
+  const recordedComplete = selection.declined === true
   return {
     contract: CEO_CYCLE_VIEW_CONTRACT,
     available: true,
@@ -268,19 +318,40 @@ async function buildCeoCycleView({ clientId, now, loadCycleState }) {
     startsAt: state.startsAt,
     endsAt: state.endsAt,
     completedCount: state.completedCount,
+    deliveredCount: state.delivery.counts.sent,
     totalOutcomes: readyOutcomes.length,
-    cycleComplete: selection.declined === true,
+    completionRecorded: recordedComplete,
+    cycleComplete: recordedComplete && deliveryReady,
     nextOutcome: selection.selected ? {
       id: selection.selected.id,
       title: selection.selected.title,
       team: selection.selected.team,
     } : null,
-    outcomes: readyOutcomes.map((outcome) => ({
-      id: outcome.id,
-      title: outcome.title,
-      team: outcome.team,
-      status: completed.has(outcome.id) ? 'complete' : outcome.id === nextId ? 'next' : 'queued',
-    })),
+    outcomes: readyOutcomes.map((outcome) => {
+      let status = outcome.id === nextId ? 'next' : 'queued'
+      if (completed.has(outcome.id)) {
+        const deliveryStatus = deliveryByOutcome.get(outcome.id)
+        status = ['invalid_coverage', 'non_durable', 'store_unavailable'].includes(state.delivery.state)
+          ? 'delivery_unverified'
+          : deliveryStatus === 'sent' ? 'delivered'
+            : deliveryStatus === 'failed' ? 'delivery_failed'
+              : deliveryStatus === 'uncertain' ? 'delivery_uncertain' : 'delivery_missing'
+      }
+      return { id: outcome.id, title: outcome.title, team: outcome.team, status }
+    }),
+    delivery: {
+      contract: state.delivery.contract,
+      available: state.delivery.available,
+      durable: state.delivery.durable,
+      state: state.delivery.state,
+      completed: state.delivery.counts.completed,
+      recorded: state.delivery.counts.recorded,
+      sent: state.delivery.counts.sent,
+      failed: state.delivery.counts.failed,
+      uncertain: state.delivery.counts.uncertain,
+      missing: state.delivery.counts.missing,
+      contentReturned: false,
+    },
     blockedConsequentialCount,
     controls: {
       maxOutcomesPerCycle: 1,
@@ -288,6 +359,7 @@ async function buildCeoCycleView({ clientId, now, loadCycleState }) {
       dynamicDelegation: false,
       recursiveDelegation: false,
       humanApprovalForConsequentialActions: true,
+      deliveryRequiredForCycleComplete: true,
     },
   }
 }

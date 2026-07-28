@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { handleAgentCompany } from './agent-company.mjs'
+import { SUPERMEGA_HQ_AUTHORITY } from '../supermega-hq-authority.mjs'
 
 const KEY = 'ops-secret'
 const CYCLE_NOW = new Date('2026-07-14T09:00:00.000Z')
@@ -32,6 +33,22 @@ const hostedResponse = (payload, { status = 200, contentType = 'application/json
       },
     },
     text: async () => body,
+  }
+}
+const cycleDelivery = (outcomes, patch = {}) => {
+  const counts = { sent: 0, failed: 0, uncertain: 0, missing: 0 }
+  outcomes.forEach((outcome) => { counts[outcome.status] += 1 })
+  const completed = outcomes.length
+  const recorded = completed - counts.missing
+  const state = counts.missing ? 'missing' : counts.failed + counts.uncertain ? 'attention' : completed ? 'ready' : 'no_outcomes'
+  return {
+    contract: 'supermega.ceo-outcome-delivery.v1',
+    available: true,
+    durable: true,
+    state,
+    counts: { completed, recorded, ...counts },
+    outcomes,
+    ...patch,
   }
 }
 
@@ -214,6 +231,7 @@ test('GET exposes one tenant-bound metadata-only company week', async () => {
         completedOutcomeIds: ['daily-company-control'],
         completedCount: 1,
         matchedRecords: 1,
+        delivery: cycleDelivery([{ outcomeId: 'daily-company-control', status: 'sent' }]),
       }
     },
   })
@@ -222,14 +240,16 @@ test('GET exposes one tenant-bound metadata-only company week', async () => {
     clientId: 'client-acme',
     authorityDigest: result.json.ceoCycle.authorityDigest,
     asOf: CYCLE_NOW.toISOString(),
+    includeDelivery: true,
   }])
   assert.equal(result.json.ceoCycle.available, true)
   assert.equal(result.json.ceoCycle.durable, true)
   assert.equal(result.json.ceoCycle.completedCount, 1)
+  assert.equal(result.json.ceoCycle.deliveredCount, 1)
   assert.equal(result.json.ceoCycle.totalOutcomes, 5)
   assert.equal(result.json.ceoCycle.nextOutcome.id, 'engineering-release-control')
   assert.deepEqual(result.json.ceoCycle.outcomes.map((outcome) => outcome.status), [
-    'complete',
+    'delivered',
     'next',
     'queued',
     'queued',
@@ -242,9 +262,88 @@ test('GET exposes one tenant-bound metadata-only company week', async () => {
     dynamicDelegation: false,
     recursiveDelegation: false,
     humanApprovalForConsequentialActions: true,
+    deliveryRequiredForCycleComplete: true,
+  })
+  assert.deepEqual(result.json.ceoCycle.delivery, {
+    contract: 'supermega.ceo-outcome-delivery.v1',
+    available: true,
+    durable: true,
+    state: 'ready',
+    completed: 1,
+    recorded: 1,
+    sent: 1,
+    failed: 0,
+    uncertain: 0,
+    missing: 0,
+    contentReturned: false,
   })
   const serialized = JSON.stringify(result.json.ceoCycle)
-  assert.doesNotMatch(serialized, /evidencePlan|objective|sourceRefs|blockers|usage|answer|output/)
+  assert.doesNotMatch(serialized, /evidencePlan|objective|sourceRefs|blockers|usage|answer|output|deliveryId|claim/i)
+
+  const allReadyOutcomeIds = SUPERMEGA_HQ_AUTHORITY.outcomes
+    .filter((outcome) => outcome.state === 'ready')
+    .map((outcome) => outcome.id)
+  const failedDelivery = await handleAgentCompany(request({ method: 'GET', body: undefined }), {
+    opsKey: KEY,
+    clientId: 'client-acme',
+    now: CYCLE_NOW,
+    loadCeoOutcomeCycleState: async (input) => ({
+      ok: true,
+      contract: 'supermega.ceo-outcome-cycle-state.v1',
+      durable: true,
+      clientId: input.clientId,
+      authorityDigest: input.authorityDigest,
+      cycleId: '2026-07-13',
+      startsAt: '2026-07-13T00:00:00.000Z',
+      endsAt: '2026-07-20T00:00:00.000Z',
+      completedOutcomeIds: allReadyOutcomeIds,
+      completedCount: allReadyOutcomeIds.length,
+      matchedRecords: allReadyOutcomeIds.length,
+      delivery: cycleDelivery(allReadyOutcomeIds.map((outcomeId, index) => ({
+        outcomeId,
+        status: index === 0 ? 'failed' : 'sent',
+      }))),
+    }),
+  })
+  assert.equal(failedDelivery.json.ceoCycle.completionRecorded, true)
+  assert.equal(failedDelivery.json.ceoCycle.cycleComplete, false)
+  assert.equal(failedDelivery.json.ceoCycle.deliveredCount, 4)
+  assert.equal(failedDelivery.json.ceoCycle.delivery.failed, 1)
+  assert.equal(failedDelivery.json.ceoCycle.outcomes.filter((outcome) => outcome.status === 'delivery_failed').length, 1)
+  const forgedDelivery = await handleAgentCompany(request({ method: 'GET', body: undefined }), {
+    opsKey: KEY,
+    clientId: 'client-acme',
+    now: CYCLE_NOW,
+    loadCeoOutcomeCycleState: async (input) => ({
+      ok: true,
+      contract: 'supermega.ceo-outcome-cycle-state.v1',
+      durable: true,
+      clientId: input.clientId,
+      authorityDigest: input.authorityDigest,
+      cycleId: '2026-07-13',
+      startsAt: '2026-07-13T00:00:00.000Z',
+      endsAt: '2026-07-20T00:00:00.000Z',
+      completedOutcomeIds: ['daily-company-control'],
+      completedCount: 1,
+      matchedRecords: 1,
+      delivery: cycleDelivery([{ outcomeId: 'daily-company-control', status: 'sent', briefText: 'must-not-escape' }]),
+    }),
+  })
+  assert.equal(forgedDelivery.json.ceoCycle.available, false)
+  assert.equal(forgedDelivery.json.ceoCycle.reason, 'ceo_outcome_cycle_state_invalid')
+  assert.doesNotMatch(JSON.stringify(forgedDelivery.json.ceoCycle), /must-not-escape|briefText/)
+  const consoleHtml = await readFile(new URL('../public/index.html', import.meta.url), 'utf8')
+  assert.match(consoleHtml, /delivery_failed:'Delivery failed'/)
+  assert.match(consoleHtml, /delivery_uncertain:'Delivery uncertain'/)
+  assert.match(consoleHtml, /delivery_missing:'Delivery missing'/)
+  assert.match(consoleHtml, /delivery_unverified:'Delivery unverified'/)
+  assert.match(consoleHtml, /delivery\.contentReturned!==false/)
+  assert.match(consoleHtml, /deliveryAttention=.*delivery\.failed.*delivery\.uncertain.*delivery\.missing/)
+  assert.match(consoleHtml, /week delivered/)
+  assert.match(consoleHtml, /recorded Â·.*delivered Â·.*no external writes/)
+  assert.doesNotMatch(consoleHtml, /statusLabel=\{complete:'Done'/)
+  assert.match(consoleHtml, /\.company-week-step\.delivery_failed,.company-week-step\.delivery_unverified/)
+  assert.match(consoleHtml, /\.company-week-step\.delivery_uncertain,.company-week-step\.delivery_missing/)
 
   const mismatched = await handleAgentCompany(request({ method: 'GET', body: undefined }), {
     opsKey: KEY,
