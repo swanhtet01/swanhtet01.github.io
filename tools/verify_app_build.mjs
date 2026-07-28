@@ -1447,7 +1447,14 @@ if (!coreSource.includes("mode: 'managed-unprovisioned'") || !coreSource.include
 if ((coreSource.match(/const conflict = \{ \.\.\.refreshed, error: '' \}/g) || []).length !== 2) fail('managed_conflict_refresh_remained_write_blocked')
 if (!coreSource.includes('confirmation?: AccountableAction') || !coreSource.includes('if (action.confirmation) return action.confirmation') || !coreSource.includes('Retry same confirmation') || !coreSource.includes('result.idempotent_replay') || !coreSource.includes('before the replay could be reconciled')) fail('managed_command_retry_not_frozen_or_reconciled')
 if (!managedCommerceRuntime.includes('commerce.workspace.initialized') || managedCommerceRuntime.includes('commerce.snapshot.saved') || !managedCommerceRuntime.includes('_one_changed') || !managedCommerceRuntime.includes('_validate_event_evidence') || !managedCommerceRuntime.includes('daily close totals must match completed, reconciled orders')) fail('managed_commerce_server_transition_contract_missing')
-if (!commerceSource.includes('registerCommerceItem') || !coreSource.includes('Add catalog item') || !coreSource.includes('Review catalog item') || !coreSource.includes('The opening balance may be zero.') || !managedCommerceRuntime.includes('one exact attributable opening balance')) fail('commerce_catalog_creation_contract_missing')
+if (!commerceSource.includes('registerCommerceItem')
+  || !commerceSource.includes('export function importCommerceCatalog')
+  || !commerceSource.includes('ACT-CLIENT-IMPORT-')
+  || !commerceSource.includes('alreadyPresent')
+  || !coreSource.includes('Add catalog item')
+  || !coreSource.includes('Review catalog item')
+  || !coreSource.includes('The opening balance may be zero.')
+  || !managedCommerceRuntime.includes('one exact attributable opening balance')) fail('commerce_catalog_creation_contract_missing')
 if (!commerceSource.includes('export type CommerceCatalogChange')
   || !commerceSource.includes('export type CommerceCatalogBaseline')
   || !commerceSource.includes('commerceCatalogBaselineDigest')
@@ -1713,7 +1720,13 @@ if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !clientOnboardingUiSource.includes('Technical receipt')
   || !clientOnboardingUiSource.includes('canPrepareImport')
   || !clientOnboardingUiSource.includes('workspace.trim() && owner.trim()')
-  || !clientOnboardingUiSource.includes('Prepare import file')
+  || !clientOnboardingUiSource.includes('Download prepared file')
+  || !clientOnboardingUiSource.includes('canApplyLocalShopImport')
+  || !clientOnboardingUiSource.includes('importCommerceCatalog(current')
+  || !clientOnboardingUiSource.includes("approve adding them to this browser's demo catalog")
+  || !clientOnboardingUiSource.includes('Add ${state.preview.totals.ready} items to Shop')
+  || !clientOnboardingUiSource.includes('Open Shop to use the imported catalog in a real sale.')
+  || !clientOnboardingUiSource.includes('Your source CSV was not retained or sent to AI.')
   || !clientOnboardingUiSource.includes('nothing is written until you confirm the import')
   || !clientOnboardingUiSource.includes('productRef.current !== expectedProduct')
   || !clientOnboardingUiSource.includes('onProgress?: (progress: ClientDemoProductProgress) => void')
@@ -1737,6 +1750,7 @@ if (!coreSource.includes('templateId: string')
   || !settingsPageSource.includes('loadClientDemoWorkspace')
   || !settingsPageSource.includes('restoreClientDemoWorkspace')
   || !settingsPageSource.includes('updateClientDemoWorkspaceProgress')
+  || !settingsPageSource.includes("previous.status === 'applied' && progress.status !== 'applied'")
   || !settingsPageSource.includes('buildClientDemoRunbook')
   || !settingsPageSource.includes('Do this next')
   || !settingsPageSource.includes('Required proof')
@@ -4992,6 +5006,49 @@ async function verifyCommerceRuntime() {
       ...model.createEmptyCommerce(),
       items: [{ sku: 'SKU-1', name: 'Test item', onHand: 10, reorderAt: 2, price: 100 }],
     }
+    const clientImportDigest = `sha256:${'c'.repeat(64)}`
+    const clientImportItems = [
+      { sku: 'CLIENT-1', name: 'Client item one', onHand: 12, reorderAt: 3, price: 4500 },
+      { sku: 'CLIENT-2', name: 'Client item two', onHand: 8, reorderAt: 2, price: 7000 },
+    ]
+    const clientImport = model.importCommerceCatalog(model.createEmptyCommerce(), {
+      items: clientImportItems,
+      sourceDigest: clientImportDigest,
+      capturedAt: '2026-07-23T09:00:00.000Z',
+      actor: 'Client owner',
+    })
+    assert(clientImport?.created === 2
+      && clientImport.alreadyPresent === 0
+      && clientImport.state.items.map((item) => item.sku).join(',') === 'CLIENT-2,CLIENT-1'
+      && clientImport.state.movements.length === 2
+      && clientImport.state.catalogBaselines?.length === 2,
+    'client_catalog_import_not_atomic_or_attributable')
+    const clientImportReplay = model.importCommerceCatalog(clientImport.state, {
+      items: clientImportItems,
+      sourceDigest: clientImportDigest,
+      capturedAt: '2026-07-23T10:00:00.000Z',
+      actor: 'Client owner',
+    })
+    assert(clientImportReplay?.replayed && clientImportReplay.created === 0 && clientImportReplay.alreadyPresent === 2 && clientImportReplay.state === clientImport.state, 'client_catalog_import_retry_not_idempotent')
+    assert(model.importCommerceCatalog(clientImport.state, {
+      items: [{ ...clientImportItems[0], price: 9999 }],
+      sourceDigest: clientImportDigest,
+      capturedAt: '2026-07-23T10:00:00.000Z',
+      actor: 'Client owner',
+    }) === null, 'client_catalog_import_overwrote_conflicting_sku')
+    const atomicImportBase = model.createEmptyCommerce()
+    assert(model.importCommerceCatalog(atomicImportBase, {
+      items: [clientImportItems[0], { ...clientImportItems[1], price: 0 }],
+      sourceDigest: clientImportDigest,
+      capturedAt: '2026-07-23T10:00:00.000Z',
+      actor: 'Client owner',
+    }) === null && atomicImportBase.items.length === 0, 'client_catalog_import_partially_mutated_after_invalid_row')
+    assert(model.importCommerceCatalog(model.createEmptyCommerce(), {
+      items: clientImportItems,
+      sourceDigest: 'not-a-digest',
+      capturedAt: '2026-07-23T09:00:00.000Z',
+      actor: 'Client owner',
+    }) === null, 'client_catalog_import_unbound_source_accepted')
     const productionRequest = {
       requestId: 'ISSUE-MANAGED-001',
       sourceCommandDigest: `sha256:${'a'.repeat(64)}`,

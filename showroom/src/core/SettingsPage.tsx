@@ -205,12 +205,14 @@ export function SettingsPage() {
   }, [requestedProduct, setSetup, setup.product])
 
   useEffect(() => {
+    let failureNoticeTimer: number | undefined
     try {
       if (demoWorkspace) window.localStorage.setItem(CLIENT_DEMO_WORKSPACE_STORAGE_KEY, JSON.stringify(demoWorkspace))
       else window.localStorage.removeItem(CLIENT_DEMO_WORKSPACE_STORAGE_KEY)
     } catch {
-      setNotice('This browser could not save the client workspace. The current setup remains open for this session.')
+      failureNoticeTimer = window.setTimeout(() => setNotice('This browser could not save the client workspace. The current setup remains open for this session.'), 0)
     }
+    return () => { if (failureNoticeTimer !== undefined) window.clearTimeout(failureNoticeTimer) }
   }, [demoWorkspace])
 
   function updateSetup(patch: Partial<SetupState>) {
@@ -286,6 +288,8 @@ export function SettingsPage() {
     setDemoWorkspace((current) => {
       const previous = current?.products.find((product) => product.product === progress.product)
       if (!current || !previous) return current
+      if ((progress.status === 'not_started' && previous.status !== 'not_started')
+        || (previous.status === 'applied' && progress.status !== 'applied')) return current
       if (previous.status === progress.status && previous.rows === progress.rows && previous.readyRows === progress.readyRows && previous.issueRows === progress.issueRows) return current
       try { return updateClientDemoWorkspaceProgress(current, progress, new Date().toISOString()) } catch { return current }
     })

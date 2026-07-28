@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router'
 
 import {
   CLIENT_IMPORT_MAX_BYTES,
@@ -12,6 +13,7 @@ import {
   type ClientDemoProductProgress,
   type ClientSolutionId,
 } from './client-onboarding'
+import { importCommerceCatalog, mutateCommerceWorkspace, type CommerceCatalogImportResult, type CommerceItem } from './commerce-workspace'
 import {
   ManagedTrialError,
   applyManagedClientImport,
@@ -52,6 +54,12 @@ type AppliedImport = {
   receipt: ManagedClientImportActivationResult
 }
 
+type LocalAppliedImport = {
+  contextKey: string
+  created: number
+  alreadyPresent: number
+}
+
 type ImportState = {
   sourceName: string
   sourceText: string
@@ -61,6 +69,7 @@ type ImportState = {
   applying: boolean
   applyConfirmed: boolean
   applied: AppliedImport | null
+  localApplied: LocalAppliedImport | null
   validation: ValidatedImport | null
   error: string
 }
@@ -98,6 +107,7 @@ function emptyImportState(): ImportState {
     applying: false,
     applyConfirmed: false,
     applied: null,
+    localApplied: null,
     validation: null,
     error: '',
   }
@@ -177,6 +187,12 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     && state.applied
     && state.applied.contextKey === currentValidationContext,
   )
+  const localAppliedIsCurrent = Boolean(
+    !managedIdentity
+    && product === 'commerce'
+    && state.localApplied
+    && state.localApplied.contextKey === currentValidationContext,
+  )
   const visibleRows = state.preview
     ? [
         ...state.preview.rows.filter((row) => row.status !== 'ready'),
@@ -247,13 +263,24 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     && !state.applying
     && !appliedIsCurrent,
   )
+  const canApplyLocalShopImport = Boolean(
+    !managedIdentity
+    && product === 'commerce'
+    && state.preview?.readyForStaging
+    && importContextReady
+    && state.applyConfirmed
+    && !state.applying
+    && !localAppliedIsCurrent,
+  )
   const importStageRows = [
     ['Read file', state.preview ? `${state.preview.totals.rows} rows` : state.busy ? 'Reading' : 'Waiting'],
     ['Match columns', state.preview ? mappingNeedsReview ? 'Review' : `${matchedFieldCount}/${state.preview.fields.length}` : 'Auto'],
-    ['Check workspace', appliedIsCurrent ? 'Applied' : validationIsCurrent ? 'Checked' : state.validating ? 'Checking' : managedIdentity ? 'Ready' : 'Local file'],
-    ['Confirm import', appliedIsCurrent ? 'Done' : state.applying ? 'Writing' : canApplyManagedImport ? 'Ready' : state.preview?.readyForStaging ? 'Prepare' : 'Locked'],
+    ['Check workspace', appliedIsCurrent || localAppliedIsCurrent ? 'Applied' : validationIsCurrent ? 'Checked' : state.validating ? 'Checking' : managedIdentity ? 'Ready' : product === 'commerce' ? 'Local Shop' : 'Local file'],
+    ['Confirm import', appliedIsCurrent || localAppliedIsCurrent ? 'Done' : state.applying ? 'Writing' : canApplyManagedImport || canApplyLocalShopImport ? 'Ready' : state.preview?.readyForStaging ? 'Prepare' : 'Locked'],
   ] as const
-  const importStageMessage = appliedIsCurrent
+  const importStageMessage = localAppliedIsCurrent
+    ? `${state.localApplied?.created ?? 0} Shop items added; ${state.localApplied?.alreadyPresent ?? 0} were already current.`
+    : appliedIsCurrent
     ? `${productName} import is confirmed in ${managedIdentity?.workspaceId}.`
     : state.preview
       ? mappingNeedsReview
@@ -284,7 +311,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           ? 'Remove or rename duplicate keys so every imported record has one owner.'
           : 'Fix the row messages below; ready rows stay protected while you clean the rest.'
     : ''
-  const progressStatus: ClientDemoProductProgress['status'] = appliedIsCurrent
+  const progressStatus: ClientDemoProductProgress['status'] = appliedIsCurrent || localAppliedIsCurrent
     ? 'applied'
     : validationIsCurrent
       ? 'workspace_checked'
@@ -313,7 +340,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
 
   useEffect(() => {
     validationRequestRef.current += 1
-    setState((current) => ({ ...current, validating: false, applying: false, applyConfirmed: false, applied: null, validation: null, error: '' }))
+    setState((current) => ({ ...current, validating: false, applying: false, applyConfirmed: false, applied: null, localApplied: null, validation: null, error: '' }))
   }, [managedIdentity?.userId, managedIdentity?.workspaceId, owner, workspace])
 
   async function runPreview(
@@ -504,6 +531,71 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     }
   }
 
+  async function activateLocalShopImport() {
+    if (!canApplyLocalShopImport || !state.preview || managedIdentity) return
+    const expectedContextKey = currentValidationContext
+    const expectedPreviewDigest = state.preview.previewDigest
+    const expectedProduct = product
+    const expectedWorkflowTemplateId = workflowTemplateId
+    const expectedWorkspace = workspace
+    const expectedOwner = owner
+    const activationRequestId = validationRequestRef.current + 1
+    validationRequestRef.current = activationRequestId
+    const contextChanged = () => (
+      validationRequestRef.current !== activationRequestId
+      || productRef.current !== expectedProduct
+      || workflowTemplateRef.current !== expectedWorkflowTemplateId
+      || workspaceRef.current !== expectedWorkspace
+      || ownerRef.current !== expectedOwner
+      || managedIdentityRef.current !== null
+    )
+    const stagingPackage = currentStagingPackage()
+    const items: CommerceItem[] = stagingPackage.rows.map((row) => ({
+      sku: row.values.sku,
+      name: row.values.name,
+      onHand: Number(row.values.onHand),
+      reorderAt: Number(row.values.reorderAt),
+      price: Number(row.values.price),
+    }))
+    let activation: CommerceCatalogImportResult | null = null
+    setState((current) => ({ ...current, applying: true, localApplied: null, error: '' }))
+    try {
+      const result = await mutateCommerceWorkspace((current) => {
+        activation = importCommerceCatalog(current, {
+          items,
+          sourceDigest: expectedPreviewDigest,
+          capturedAt: new Date().toISOString(),
+          actor: expectedOwner.trim(),
+        })
+        return activation?.state ?? null
+      })
+      if (contextChanged()) return
+      if (!result.ok || !activation) throw new Error(result.ok ? 'The Shop import could not be confirmed.' : result.error)
+      const confirmed = activation as CommerceCatalogImportResult
+      setState((current) => current.preview?.previewDigest === expectedPreviewDigest
+        ? {
+            ...current,
+            applying: false,
+            applyConfirmed: false,
+            localApplied: {
+              contextKey: expectedContextKey,
+              created: confirmed.created,
+              alreadyPresent: confirmed.alreadyPresent,
+            },
+            error: '',
+          }
+        : current)
+    } catch (error) {
+      if (contextChanged()) return
+      setState((current) => ({
+        ...current,
+        applying: false,
+        localApplied: null,
+        error: error instanceof Error ? error.message : 'The Shop catalog was not changed.',
+      }))
+    }
+  }
+
   async function activateManagedImport() {
     const expectedIdentity = managedIdentity
     const validated = state.validation
@@ -602,7 +694,9 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             {checklist.map((row) => <span data-required={row.required ? 'true' : 'false'} key={row.field}><small>{row.required ? 'Required' : 'Optional'} / {row.kind}</small><b>{row.field}</b><em>{row.acceptedHeaders.join(', ')}</em><code>{row.example || '-'}</code></span>)}
           </div>
         </div>
-        <p className="catalog-import-boundary">{appliedIsCurrent && state.applied
+        <p className="catalog-import-boundary">{localAppliedIsCurrent && state.localApplied
+          ? `${state.localApplied.created} Shop items were added and ${state.localApplied.alreadyPresent} were already current. Your source CSV was not retained or sent to AI.`
+          : appliedIsCurrent && state.applied
           ? `${state.applied.receipt.activation.row_count} ${managedActivation?.createdLabel ?? 'records'} were imported into ${managedIdentity?.workspaceId}. Your source CSV was not uploaded or sent to AI.`
           : managedIdentity
           ? `Your CSV stays in this tab. Only prepared rows are checked with ${managedIdentity.workspaceId}; nothing is written until you confirm the import.`
@@ -620,7 +714,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         {state.preview ? <div className="catalog-import-preview" ref={previewRef} tabIndex={-1}>
           <div className="catalog-import-source">
             <div><strong>{state.preview.sourceName}</strong><small>{state.preview.totals.rows} rows found, {matchedFieldCount} of {state.preview.fields.length} columns matched</small></div>
-            <span className={`status-pill ${appliedIsCurrent || validationIsCurrent || state.preview.readyForStaging ? 'approved' : 'pending'}`}>{appliedIsCurrent ? 'Applied' : validationIsCurrent ? 'Server checked' : state.preview.readyForStaging ? 'Ready to prepare' : 'Review needed'}</span>
+            <span className={`status-pill ${appliedIsCurrent || localAppliedIsCurrent || validationIsCurrent || state.preview.readyForStaging ? 'approved' : 'pending'}`}>{appliedIsCurrent || localAppliedIsCurrent ? 'Applied' : validationIsCurrent ? 'Server checked' : state.preview.readyForStaging ? 'Ready to prepare' : 'Review needed'}</span>
           </div>
           <div aria-label={`${productName} import repair queue`} className="catalog-import-repair">
             <div><span className="core-eyebrow">Repair queue</span><strong>{state.preview.readyForStaging ? 'No blocking fixes' : 'Clean this file'}</strong><small>{importRepairMessage}</small></div>
@@ -659,8 +753,14 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.validation.stagingPackage.rows.length} {managedActivation.reviewLabel} and approve this import.</span></label>
             <div className="form-actions"><button className="core-button primary" disabled={!canApplyManagedImport} onClick={() => void activateManagedImport()} type="button">{state.applying ? managedActivation.busyLabel : `Import ${state.validation.stagingPackage.rows.length} ${managedActivation.reviewLabel}`}</button></div>
           </> : null}
+          {!managedIdentity && product === 'commerce' && state.preview.readyForStaging && !localAppliedIsCurrent ? <>
+            <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.preview.totals.ready} Shop items and approve adding them to this browser's demo catalog.</span></label>
+            <div className="form-actions"><button className="core-button primary" disabled={!canApplyLocalShopImport} onClick={() => void activateLocalShopImport()} type="button">{state.applying ? 'Adding items...' : `Add ${state.preview.totals.ready} items to Shop`}</button></div>
+          </> : null}
           <div className="catalog-import-footer">
-            <div><strong>{appliedIsCurrent && state.applied ? `${state.applied.receipt.activation.row_count} ${managedActivation?.completedLabel ?? 'records'} ${managedActivation?.resultVerb ?? 'created'} in revision ${state.applied.receipt.result.version}.` : validationIsCurrent ? `Validated by ${managedIdentity?.workspaceId}.` : state.preview.readyForStaging && !importContextReady ? 'Add workspace and owner above.' : state.preview.readyForStaging ? 'Data check passed.' : 'Fix the highlighted rows first.'}</strong><small>{appliedIsCurrent && state.applied
+            <div><strong>{localAppliedIsCurrent && state.localApplied ? `${state.localApplied.created} Shop items added; ${state.localApplied.alreadyPresent} already current.` : appliedIsCurrent && state.applied ? `${state.applied.receipt.activation.row_count} ${managedActivation?.completedLabel ?? 'records'} ${managedActivation?.resultVerb ?? 'created'} in revision ${state.applied.receipt.result.version}.` : validationIsCurrent ? `Validated by ${managedIdentity?.workspaceId}.` : state.preview.readyForStaging && !importContextReady ? 'Add workspace and owner above.' : state.preview.readyForStaging ? product === 'commerce' && !managedIdentity ? 'Ready to add to this Shop demo.' : 'Data check passed.' : 'Fix the highlighted rows first.'}</strong><small>{localAppliedIsCurrent
+              ? 'Open Shop to use the imported catalog in a real sale.'
+              : appliedIsCurrent && state.applied
               ? `The ${managedActivation?.productLabel ?? 'product'} import is confirmed.`
               : validationIsCurrent
               ? 'Checked successfully. Review and confirm above before records are written.'
@@ -671,7 +771,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
                 : 'Ready to prepare an accountable import file.'}</small>
               {appliedIsCurrent && state.applied ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.applied.receipt.activation.package_digest.slice(7, 19).toUpperCase()} / revision {state.applied.receipt.result.version} / idempotent command confirmed</p></details> : validationIsCurrent && state.validation ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.validation.receipt.package_digest.slice(7, 19).toUpperCase()} / zero records written / {object.activationBoundary}</p></details> : null}
             </div>
-            <div className="form-actions"><button className="core-button" disabled={state.applying} onClick={clearPreview} type="button">Clear</button>{!appliedIsCurrent && !(validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation) ? <button className="core-button primary" disabled={!canPrepareImport} onClick={() => void validateOrDownloadStagingPackage()} type="button">{state.validating ? 'Checking...' : !importContextReady ? 'Add workspace and owner' : validationIsCurrent ? 'Download checked file' : managedIdentity ? 'Check with workspace' : 'Prepare import file'}</button> : null}</div>
+            <div className="form-actions"><button className="core-button" disabled={state.applying} onClick={clearPreview} type="button">Clear</button>{localAppliedIsCurrent ? <Link className="core-button primary" to="/shop/?tab=counter">Open Shop</Link> : !appliedIsCurrent && !(validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation) ? <button className="core-button" disabled={!canPrepareImport} onClick={() => void validateOrDownloadStagingPackage()} type="button">{state.validating ? 'Checking...' : !importContextReady ? 'Add workspace and owner' : validationIsCurrent ? 'Download checked file' : managedIdentity ? 'Check with workspace' : 'Download prepared file'}</button> : null}</div>
           </div>
         </div> : null}
       </div>

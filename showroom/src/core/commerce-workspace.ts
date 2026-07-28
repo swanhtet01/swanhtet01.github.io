@@ -2801,6 +2801,56 @@ export function registerCommerceItem(state: CommerceState, item: CommerceItem, p
   })
 }
 
+export type CommerceCatalogImportResult = {
+  state: CommerceState
+  created: number
+  alreadyPresent: number
+  replayed: boolean
+}
+
+export function importCommerceCatalog(stateValue: CommerceState, input: {
+  items: CommerceItem[]
+  sourceDigest: string
+  capturedAt: string
+  actor: string
+}): CommerceCatalogImportResult | null {
+  if (!Array.isArray(input?.items) || input.items.length < 1 || input.items.length > 500
+    || typeof input.sourceDigest !== 'string' || !sha256DigestPattern.test(input.sourceDigest)
+    || typeof input.capturedAt !== 'string' || !validTimestamp(input.capturedAt)
+    || typeof input.actor !== 'string' || input.actor !== input.actor.trim() || !input.actor || input.actor.length > 80) return null
+  const sourceState = validateCommerceState(stateValue)
+  const uniqueSkus = new Set(input.items.map((item) => item.sku))
+  if (uniqueSkus.size !== input.items.length) return null
+  let state = sourceState
+  let created = 0
+  let alreadyPresent = 0
+  for (const [index, item] of input.items.entries()) {
+    const existing = state.items.find((candidate) => candidate.sku === item.sku)
+    if (existing) {
+      if (existing.name !== item.name
+        || existing.variant !== item.variant
+        || existing.onHand !== item.onHand
+        || existing.reorderAt !== item.reorderAt
+        || existing.price !== item.price) return null
+      alreadyPresent += 1
+      continue
+    }
+    const sourceId = input.sourceDigest.slice(7, 19).toUpperCase()
+    const proof: CommerceActionProof = {
+      actionId: `ACT-CLIENT-IMPORT-${sourceId}-${String(index + 1).padStart(3, '0')}`,
+      capturedAt: input.capturedAt,
+      actor: input.actor,
+      reason: `Approved client catalog import row ${index + 1}.`,
+      evidenceReference: `CLIENT-IMPORT-${sourceId}-${item.sku}`,
+    }
+    const next = registerCommerceItem(state, item, proof)
+    if (!next) return null
+    state = next
+    created += 1
+  }
+  return { state, created, alreadyPresent, replayed: created === 0 }
+}
+
 export function updateCommerceItem(state: CommerceState, update: CommerceItemUpdate, proof: CommerceActionProof) {
   if (!validProof(proof)
     || typeof update?.sku !== 'string'
