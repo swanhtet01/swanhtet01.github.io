@@ -475,6 +475,27 @@ export function EcommerceProduct() {
     ))
   }
 
+  function recommendedSellableSkus() {
+    return [...catalog.items]
+      .filter((item) => item.onHand > 0)
+      .sort((left, right) => right.onHand - left.onHand || right.price - left.price || left.sku.localeCompare(right.sku))
+      .slice(0, 4)
+      .map((item) => item.sku)
+  }
+
+  function applyProductAutopilot() {
+    const nextSkus = recommendedSellableSkus()
+    if (!nextSkus.length) {
+      setDraftNotice('Product autopilot needs at least one in-stock Shop item before it can prepare the storefront.')
+      return
+    }
+    setSelectedSkus(nextSkus)
+    setMerchandising(null)
+    setBuyingCart([])
+    if (missingSavedSkus.length) setMissingSelectionReviewed(true)
+    setDraftNotice(`Product autopilot selected ${nextSkus.length} in-stock products. Save to confirm the storefront; no catalog, order, payment, delivery, stock, or Shop write ran.`)
+  }
+
   function showMobileWorkspace(view: 'setup' | 'preview') {
     setMobileWorkspace(view)
     if (!window.matchMedia('(max-width: 840px)').matches) return
@@ -871,6 +892,15 @@ export function EcommerceProduct() {
     })
     : []
   const buyingReady = Boolean(previewResult.preview && digest && (savedDraftIsCurrent || !managedIdentity))
+  const autopilotSkus = recommendedSellableSkus()
+  const autopilotMatchesSelection = selectedSkus.length === autopilotSkus.length
+    && autopilotSkus.every((sku) => selectedSkus.includes(sku))
+  const productAutopilotRows = [
+    ['Source', catalog.source === 'sample' ? 'Sample Shop' : catalog.source === 'managed-shop' ? 'Managed Shop' : catalog.source === 'shop-local' ? 'Local Shop' : 'No catalog'],
+    ['Pick', autopilotSkus.length ? `${autopilotSkus.length} in stock` : 'Needs stock'],
+    ['Mode', autopilotMatchesSelection ? 'Applied' : 'Ready'],
+    ['Boundary', 'Local selection'],
+  ] as const
   const pendingManagedRequests = managedInbox
     ? commerceStorefrontRequests(managedInbox.state).filter((request) => request.state === 'pending_shop_review')
     : []
@@ -1470,6 +1500,16 @@ export function EcommerceProduct() {
           <div className="ecommerce-catalog-head">
             <strong>Shop products</strong>
             <small>Select 1–8. Price and availability stay locked.</small>
+          </div>
+          <div aria-label="Product autopilot" className="ecommerce-product-autopilot">
+            <div>
+              <strong>Product autopilot</strong>
+              <small>AI prepares the simplest sellable set from in-stock Shop items. You only save after review.</small>
+            </div>
+            <div className="ecommerce-product-autopilot-rows">
+              {productAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
+            </div>
+            <button className="core-button secondary" disabled={catalogHydrating || draftBusy || !autopilotSkus.length || autopilotMatchesSelection} onClick={applyProductAutopilot} type="button">Use recommended products</button>
           </div>
           {catalog.error ? <p className="form-notice warning-text">{catalog.error}</p> : null}
           <div className="ecommerce-catalog-list">
