@@ -3010,7 +3010,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     <div className="shop-order-control-rows">{shopProcurementRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const supplierControl = <section className="shop-order-control supplier-control" aria-label="Supplier control">
-    <div><span className="core-eyebrow">Supplier control</span><strong>{supplierControlNext}</strong><small>AI turns supplier reference, promised arrival, open quantity, receipt evidence, and owner approval into one purchasing queue. No RFQ, supplier send, payment, payable, costing, or inventory write runs from this panel.</small></div>
+    <div><span className="core-eyebrow">Supplier control</span><strong>{supplierControlNext}</strong><small>AI turns supplier reference, promised arrival, open quantity, receipt evidence, and owner approval into one purchasing queue. No RFQ, supplier send, payment, payable, costing, or inventory write runs from this panel.</small><button className="text-link" disabled={commerceControlsDisabled || !uncoveredReorderItems.length} onClick={startSupplierRequest} type="button">Start supplier request</button></div>
     <div className="shop-order-control-rows">{supplierControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const shopAgentJob = !commerceCanWrite
@@ -4157,6 +4157,29 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     setNotice(active
       ? `Record only units counted against ${active.purchaseOrder.id}. Nothing changes until confirmation.`
       : `Create an internal order for ${item.name}. This does not contact a supplier or create a payment.`)
+  }
+
+  function startSupplierRequest() {
+    const item = uncoveredReorderItems[0]
+    if (!item) {
+      setNotice('Supplier request is clear. No uncovered reorder item needs a draft.')
+      return
+    }
+    if (catalogEditDraft) {
+      requestAnimationFrame(() => catalogEditEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
+      setNotice('Finish or cancel the catalog edit before starting a supplier request. Your catalog draft was preserved.')
+      return
+    }
+    if (stockCountDraft) {
+      const selector = stockCountTargetSelected ? '#stock-count-quantity' : '#stock-count-sku'
+      requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(selector)?.focus())
+      setNotice('Finish or cancel the stock count before starting a supplier request. Your count draft was preserved.')
+      return
+    }
+    const reorderQuantity = Math.max(item.reorderAt * 2 - item.onHand, 1)
+    setPurchaseOrderDraft({ mode: 'create', sku: item.sku, supplier: 'Preferred supplier', expectedAt: defaultPurchaseOrderExpectedInput(), quantity: String(reorderQuantity) })
+    setNotice(`Supplier request drafted for ${item.name}. Review supplier, arrival, and quantity; no RFQ, message, payment, payable, costing, or stock write is created.`)
+    requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
   }
 
   function cancelPurchaseOrderEditor() {
