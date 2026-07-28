@@ -4516,6 +4516,36 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     ['Replenish', activePurchaseOrders.length ? `${activePurchaseOrders.length} active PO` : lowStock.length ? `${lowStock.length} reorder` : 'Clear'],
     ['Return', returnDraft ? 'Drafting' : commerce.orders.some((order) => order.returns?.length) ? 'Recorded' : 'Accountable'],
   ] as const
+  const pendingPaymentOrders = commerce.orders.filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending')
+  const refundExposureOrders = commerce.orders.filter((order) => order.refundStatus === 'due')
+  const supplierReceiptExposure = overduePurchaseOrders.length + dueSoonPurchaseOrders.length + partiallyReceivedPurchaseOrders.length
+  const shopAccountingNext = !commerceCanWrite
+    ? 'Restore accounting readiness'
+    : pendingAction
+      ? 'Approve pending Shop action'
+      : pendingPaymentOrders.length
+        ? 'Review payment exceptions'
+        : refundExposureOrders.length
+          ? 'Review refund exposure'
+          : supplierReceiptExposure
+            ? 'Receive supplier evidence'
+            : lowStock.length
+              ? 'Reconcile stock evidence'
+              : closableOrders.length
+                ? 'Save daily close'
+                : 'Accounting package ready'
+  const shopAccountingRows = [
+    ['Sales', closableOrders.length ? `${closableOrders.length} ready` : latestClose ? 'Closed today' : 'No close'],
+    ['Payments', pendingPaymentOrders.length ? `${pendingPaymentOrders.length} exception` : 'Clear'],
+    ['Refunds', refundExposureOrders.length ? `${refundExposureOrders.length} due` : commerce.orders.some((order) => order.refundStatus === 'settled') ? 'Settled evidence' : 'Clear'],
+    ['Receipts', supplierReceiptExposure ? `${supplierReceiptExposure} review` : activePurchaseOrders.length ? 'Open supply' : 'Clear'],
+    ['Inventory', lowStock.length ? `${lowStock.length} reconcile` : managedInventoryProjection ? 'ATP evidence' : 'Catalog evidence'],
+    ['Export gate', commerceCanWrite && !pendingAction ? 'Review only' : 'Locked'],
+  ] as const
+  const shopAccountingReadiness = <section className="shop-order-control" aria-label="Shop accounting readiness">
+    <div><span className="core-eyebrow">Accounting readiness</span><strong>{shopAccountingNext}</strong><small>AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and owner approval before any accounting export is reviewed. No ledger, tax, payment, payable, refund, inventory, or Shop write runs from this panel.</small></div>
+    <div className="shop-order-control-rows">{shopAccountingRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
@@ -4537,6 +4567,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         <div><span className="core-eyebrow">Order lifecycle</span><strong>Capture to return</strong><small>AI guides capture, reserve, fulfil, collect, replenish, and returns. Owner confirms orders, payments, refunds, deliveries, cancellations, and stock writes.</small></div>
         <div className="shop-order-control-rows">{shopOrderLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
       </section>
+      {shopAccountingReadiness}
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftRecoveryWarning
