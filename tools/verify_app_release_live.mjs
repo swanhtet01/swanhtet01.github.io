@@ -150,7 +150,7 @@ for (const required of ['SUPERMEGA', 'Choose a product. Run work.', 'Free worksp
 for (const required of ['supermega.behavior-trail.v1', 'agent_job_seen', 'agent_job_chosen']) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_behavior_context:${required}`)
 }
-for (const required of ['Plant agent queue', 'Recommended Plant agent job', 'Agent job', 'Owner gate', 'Record next job output', 'Contain urgent Plant problems', 'Review quality holds', 'Close WCM records', 'Build shift handoff']) {
+for (const required of ['Plant agent queue', 'Recommended Plant agent job', 'Agent job', 'Owner gate', 'Record next job output', 'Contain urgent Plant problems', 'Review quality holds', 'Close WCM records', 'Build shift handoff', 'Plant control', 'Contain urgent problems', 'Close WCM work', 'Jobs', 'Quality', 'WCM', 'Materials', 'Handoff', 'Write gate', 'Owner confirms every production, quality, WCM, maintenance, material, and shift-handoff write before Plant changes.']) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_plant_context:${required}`)
 }
 for (const required of ['Shop agent queue', 'Recommended Shop agent job', 'Agent job', 'Owner gate', 'Restore Shop write readiness', 'Review online order requests', 'Finish fulfilment queue', 'Receive purchase orders', 'Reorder low stock', 'Set up stock locations', 'Order control', 'Review Ecommerce inbox', 'Reconcile payment exceptions', 'Online inbox', 'Write gate', 'Owner confirms every order, payment, refund, delivery, cancellation, and stock change before Shop writes.']) {

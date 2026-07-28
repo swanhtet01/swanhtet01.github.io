@@ -5111,6 +5111,28 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Reason', plantAgentReason],
     ['Owner gate', plantOwnerGate],
   ] as const
+  const plantControlNext = !productionCanWrite
+    ? 'Restore write readiness'
+    : urgentIssueCount
+      ? 'Contain urgent problems'
+      : heldJobs.length
+        ? 'Clear quality holds'
+        : openDowntimeIntervals.length + openMaintenanceRecords.length
+          ? 'Close WCM work'
+          : activeJobs.length
+            ? 'Record next output'
+            : !shiftHandoffIsCurrent
+              ? 'Build shift handoff'
+              : 'Plan next job'
+  const plantControlRows = [
+    ['Jobs', activeJobs.length ? `${activeJobs.length} active` : 'Plan'],
+    ['Quality', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
+    ['WCM', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
+    ['Materials', materialEntries.length ? `${materialEntries.length} traced` : 'No trace'],
+    ['Handoff', shiftHandoffIsCurrent ? 'Ready' : 'Build'],
+    ['Write gate', productionCanWrite && !pendingAction ? 'Ready' : 'Locked'],
+  ] as const
+  const plantControlBoundary = 'Owner confirms every production, quality, WCM, maintenance, material, and shift-handoff write before Plant changes.'
 
   useEffect(() => {
     const timer = window.setInterval(() => setIssueClock(Date.now()), 60_000)
@@ -5760,11 +5782,16 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'production', route: productionLocation.pathname + productionLocation.search, detail: plantAgentJob })
     }} to={plantAgentAction.to}>{plantAgentAction.label}</Link>
   </section>
+  const plantControl = <section aria-label="Plant control" className="plant-control">
+    <div><span className="core-eyebrow">Plant control</span><strong>{plantControlNext}</strong><small>{plantControlBoundary}</small></div>
+    <div className="plant-control-rows">{plantControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
 
   if (tab === 'production') return <div className="operation-module">
     {productionBoundary}
     {plantStatus}
     {plantAgentQueue}
+    {plantControl}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
@@ -5849,6 +5876,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {productionBoundary}
     {plantStatus}
     {plantAgentQueue}
+    {plantControl}
     <div className="control-workspace">
       <div className="split-workspace">
         <section className="core-panel production-issue-launcher">
