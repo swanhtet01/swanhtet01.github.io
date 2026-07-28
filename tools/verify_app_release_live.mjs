@@ -132,6 +132,9 @@ const assetCorpus = (await Promise.all([...scriptPaths, ...cssPaths].map(async (
 const settingsChunkPath = /assets\/SettingsPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!settingsChunkPath) throw new Error('settings_chunk_missing')
 const settingsChunk = (await get(`/${settingsChunkPath}`)).body
+const clientDataOnboardingChunkPath = /assets\/ClientDataOnboarding-[A-Za-z0-9_-]+\.js/.exec(settingsChunk)?.[0]
+if (!clientDataOnboardingChunkPath) throw new Error('client_data_onboarding_chunk_missing')
+const clientDataOnboardingChunk = (await get(`/${clientDataOnboardingChunkPath}`)).body
 const ecommerceChunkPath = /assets\/EcommerceProduct-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!ecommerceChunkPath) throw new Error('ecommerce_chunk_missing')
 const ecommerceChunk = (await get(`/${ecommerceChunkPath}`)).body
@@ -155,6 +158,9 @@ for (const required of ['Shop agent queue', 'Recommended Shop agent job', 'Agent
 }
 for (const required of ['Start guided sample', 'Request managed trial', 'Export evidence before managed import.', 'supermega_trial_evidence', 'activationRows', 'activationEvidencePlan', 'activationManifest', 'activationManifestRows', 'version:17', 'learningRows', 'learningPlanRows', 'agentPlanRows', 'behaviorTrail', 'agentBehaviorRows', 'Premium AI context', 'What the system can learn', 'Premium agent plan', 'What the agent can run', 'Agent behavior memory', 'Behavior memory', 'What owners keep choosing', 'Activation manifest', 'What automation may do next', 'Export AI context package']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_settings_context:${required}`)
+}
+for (const required of ['Import autopilot', 'Import coach', 'Next action', 'Write boundary', 'Start with a CSV or sample so SuperMega can map columns and inspect rows locally.', 'Managed check before write', 'Local/export only']) {
+  if (!clientDataOnboardingChunk.includes(required)) throw new Error(`missing_live_import_coach_context:${required}`)
 }
 for (const required of ['AI order desk', 'Recommended Ecommerce agent job', 'Agent job', 'Owner gate', 'Review Ecommerce requests in Shop', 'Prepare catalog import', 'Finish storefront setup', 'Review cart quote', 'Open storefront for ordering']) {
   if (!ecommerceChunk.includes(required)) throw new Error(`missing_live_ecommerce_context:${required}`)

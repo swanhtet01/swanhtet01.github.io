@@ -280,6 +280,45 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           ? 'Remove or rename duplicate keys so every imported record has one owner.'
           : 'Fix the row messages below; ready rows stay protected while you clean the rest.'
     : ''
+  const importCoachAction = appliedIsCurrent
+    ? 'Handoff ready'
+    : state.applying
+      ? 'Confirming import'
+      : canApplyManagedImport
+        ? `Import ${state.validation?.stagingPackage.rows.length ?? 0} reviewed rows`
+        : validationIsCurrent
+          ? 'Approve checked import'
+          : state.validating
+            ? 'Checking workspace'
+            : state.preview
+              ? mappingNeedsReview
+                ? 'Match required columns'
+                : state.preview.totals.duplicates
+                  ? 'Fix duplicate keys'
+                  : state.preview.totals.issueRows
+                    ? 'Fix row issues'
+                    : !importContextReady
+                      ? 'Add workspace and owner'
+                      : managedIdentity
+                        ? 'Check with workspace'
+                        : 'Prepare import file'
+              : 'Upload or try sample'
+  const importCoachReason = appliedIsCurrent
+    ? 'The managed result is confirmed and ready for handoff.'
+    : canApplyManagedImport
+      ? 'The workspace check passed and the owner approval box is ticked.'
+      : validationIsCurrent
+        ? 'The server checked the file. Owner approval is still required before writing records.'
+        : state.preview
+          ? state.preview.readyForStaging
+            ? 'The file is clean; the next step is accountable preparation or managed validation.'
+            : importRepairMessage
+          : 'Start with a CSV or sample so SuperMega can map columns and inspect rows locally.'
+  const importCoachRows = [
+    ['Next action', importCoachAction],
+    ['Reason', importCoachReason],
+    ['Write boundary', managedIdentity ? 'Managed check before write' : 'Local/export only'],
+  ] as const
 
   useEffect(() => {
     requestRef.current += 1
@@ -587,6 +626,12 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           <div><strong>Import autopilot</strong><small>{importStageMessage}</small></div>
           <div className="catalog-import-stage-list">
             {importStageRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
+          </div>
+        </div>
+        <div aria-label={`${productName} import coach`} className="catalog-import-coach">
+          <div><span className="core-eyebrow">Import coach</span><strong>{importCoachAction}</strong><small>{importCoachReason}</small></div>
+          <div className="catalog-import-coach-list">
+            {importCoachRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
           </div>
         </div>
         {state.busy ? <p className="form-notice" role="status">Matching columns and checking every row...</p> : null}
