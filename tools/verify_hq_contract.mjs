@@ -754,7 +754,10 @@ requireContract('OneDrive archive is not authority',
 requireContract('source provenance retained',
   ['1VkuZ5_aUQ7DiYirt2asvzwsQJT9F_AuA', '1uxZ1Ey8xLX5yGmOCZrJ7Mx3I0HMd1unT', 'DawBDyzkTf8', '7483054882816675840', 'Da-NXcnkz8p']
     .every((token) => readme.includes(token))
-  && readme.includes('HQ derives no claim, feature, or backlog item from it'))
+  && readme.includes('HQ derives no claim, feature, or backlog item from it')
+  && workboard.includes('| OPS-053 | CEO + Agent Operations / Provenance Integrity Codex | done-local |')
+  && workboard.includes('Checkpoint `72059a8` replaces the inaccessible Instagram reference')
+  && !workboard.includes('The selected Instagram slide confirms'))
 requireContract('HQ stays concise',
   readme.length < 7000
   && now.length < 9000
