@@ -6,6 +6,7 @@ import {
   WEBSITE_ECOMMERCE_HANDOFF_KEY,
   WEBSITE_STORAGE_KEY,
 } from '../products/product-handoff'
+import { getCurrentPublish, loadWebsiteWorkspace } from '../products/website/website-model'
 import { COMMERCE_KEY, LEGACY_COMMERCE_KEYS } from './commerce-workspace'
 import {
   ACTION_KEY,
@@ -53,6 +54,7 @@ import { LEGACY_PRODUCTION_KEYS, PRODUCTION_KEY } from './production-workspace'
 import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } from './team-work'
 import {
   buildClientDemoBlueprint,
+  buildClientDemoRunbook,
   CLIENT_DEMO_WORKSPACE_STORAGE_KEY,
   clientDemoPresets,
   clientImportWorkflowTemplateIds,
@@ -64,6 +66,7 @@ import {
   type ClientDemoPresetId,
   type ClientDemoWorkspace,
 } from './client-onboarding'
+import { projectPlantOrder } from './plant-order-foundation'
 
 const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding').then((module) => ({ default: module.ClientDataOnboarding })))
 const ManagedActivationRunbook = lazy(() => import('./ManagedActivationRunbook').then((module) => ({ default: module.ManagedActivationRunbook })))
@@ -80,6 +83,13 @@ const demoProgressLabels: Record<ClientDemoProductProgress['status'], string> = 
   workspace_checked: 'Workspace checked',
   applied: 'Applied',
 }
+
+const demoRunbookLabels = {
+  prepare_data: 'Prepare data',
+  needs_fix: 'Fix data',
+  ready_to_run: 'Ready to run',
+  proven: 'Evidence proven',
+} as const
 
 export function SettingsPage() {
   const runtime = useOutletContext<RuntimeHealth>()
@@ -125,6 +135,26 @@ export function SettingsPage() {
   const demoBlueprintFilename = `supermega-client-demo-${setup.workspace.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || evidenceDate}.json`
   const demoBlueprintHref = demoBlueprint ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ ...demoBlueprint, exportedAt: new Date().toISOString() }, null, 2))}` : ''
   const demoReadyCount = demoWorkspace?.products.filter((product) => ['data_ready', 'workspace_checked', 'applied'].includes(product.status)).length ?? 0
+  const plantReleasedBatches = (() => {
+    try { return production.orderExecution && projectPlantOrder(production.orderExecution).status === 'released_to_stock' ? 1 : 0 } catch { return 0 }
+  })()
+  const approvedWebsiteReleases = (() => {
+    const loaded = loadWebsiteWorkspace(window.localStorage)
+    return loaded.ok && getCurrentPublish(loaded.workspace) ? 1 : 0
+  })()
+  const demoRunbook = demoWorkspace ? buildClientDemoRunbook(demoWorkspace, {
+    commerce: {
+      completedOrders: commerce.orders.filter((order) => order.status === 'completed').length,
+      reconciledOrders: commerce.orders.filter((order) => order.paymentStatus === 'reconciled').length,
+    },
+    production: { releasedBatches: plantReleasedBatches },
+    website: { approvedReleases: approvedWebsiteReleases },
+    ecommerce: {
+      savedStorefronts: commerce.storefrontConfiguration ? 1 : 0,
+      reviewedRequests: commerce.storefrontRequests?.length ?? 0,
+    },
+  }) : null
+  const nextDemoMission = demoRunbook?.products.find((product) => product.product === demoRunbook.nextProduct) ?? null
   const managedApprovalRequests = approvals.map(toManagedApprovalRequest).filter((request): request is NonNullable<typeof request> => Boolean(request))
   const localProductRecords = collectLocalProductRecords(window.localStorage)
   const localRecordCount = Object.keys(localProductRecords).length
@@ -227,6 +257,11 @@ export function SettingsPage() {
     }))
     if (openProduct) navigate(setupProductPreviewPath(product))
     else setNotice(`${productDisplayName(product)} is selected below. Add client data or try the prepared sample.`)
+  }
+
+  function prepareDemoProduct(product: SetupProductId, templateId: string) {
+    configureDemoProduct(product, templateId, false)
+    window.requestAnimationFrame(() => document.getElementById('client-data-setup')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
 
   function createDemoKit() {
@@ -385,15 +420,17 @@ export function SettingsPage() {
             })}</div>
             <div className="settings-step-actions"><span>Creates a local setup package. No client data is sent.</span><button className="core-button primary" disabled={!workflowReady} onClick={createDemoKit} type="button">Build client demo kit</button></div>
             {demoBlueprint ? <section aria-label="Client demo kit" className="demo-kit-result">
-              <div className="panel-head"><div><span className="core-eyebrow">Client workspace</span><h3>{demoBlueprint.client.workspace}</h3><p>{demoReadyCount} of {demoBlueprint.products.length} products have checked data · owner {demoBlueprint.client.owner}</p></div><a className="core-button" download={demoBlueprintFilename} href={demoBlueprintHref}>Download setup kit</a></div>
+              <div className="panel-head"><div><span className="core-eyebrow">Client workspace</span><h3>{demoBlueprint.client.workspace}</h3><p>{demoRunbook?.provenCount ?? 0} proven · {demoReadyCount} data-ready · owner {demoBlueprint.client.owner}</p></div><a className="core-button" download={demoBlueprintFilename} href={demoBlueprintHref}>Download setup kit</a></div>
               {demoBlueprint.integrations.length ? <ol className="demo-integration-flow">{demoBlueprint.integrations.map((integration) => <li key={`${integration.from}-${integration.to}`}><strong>{productDisplayName(integration.from)} → {productDisplayName(integration.to)}</strong><span>{integration.outcome}</span></li>)}</ol> : <p className="form-notice">This demo has one standalone product.</p>}
-              <div className="demo-kit-products">{demoBlueprint.products.map((product) => {
-                const progress = demoWorkspace?.products.find((candidate) => candidate.product === product.product)
-                return <article key={product.product}><div><strong>{product.label}</strong><small>{templateFor(product.product, product.templateId).name} · {progress?.rows ? `${progress.readyRows}/${progress.rows} rows ready` : `${product.checklist.length} data fields`}</small></div><span className={`status-pill ${progress && ['data_ready', 'workspace_checked', 'applied'].includes(progress.status) ? 'approved' : progress?.status === 'needs_fix' ? 'pending' : 'bounded'}`}>{demoProgressLabels[progress?.status ?? 'not_started']}</span><div><button className="text-link" onClick={() => configureDemoProduct(product.product, product.templateId, false)} type="button">Prepare data</button><button className="core-button" onClick={() => configureDemoProduct(product.product, product.templateId, true)} type="button">Open demo</button></div></article>
+              {nextDemoMission ? <div className="demo-next-mission"><div><span className="core-eyebrow">Do this next</span><strong>{nextDemoMission.label}: {nextDemoMission.scenario}</strong><small>{nextDemoMission.status === 'ready_to_run' ? nextDemoMission.evidenceRequirement : 'Prepare clean client data, then run the real workflow.'}</small></div>{nextDemoMission.status === 'prepare_data' || nextDemoMission.status === 'needs_fix' ? <button className="core-button primary" onClick={() => prepareDemoProduct(nextDemoMission.product, demoBlueprint.products.find((product) => product.product === nextDemoMission.product)?.templateId ?? '')} type="button">{nextDemoMission.actionLabel}</button> : <Link className="core-button primary" to={nextDemoMission.actionPath}>{nextDemoMission.actionLabel}</Link>}</div> : <div className="demo-next-mission complete"><div><span className="core-eyebrow">Demo evidence complete</span><strong>All selected product missions are proven.</strong><small>Export the setup kit and use the recorded product evidence for the client review.</small></div></div>}
+              <div className="demo-runbook-products">{demoRunbook?.products.map((mission, index) => {
+                const blueprintProduct = demoBlueprint.products.find((product) => product.product === mission.product)
+                const statusClass = mission.status === 'proven' ? 'approved' : mission.status === 'needs_fix' ? 'pending' : 'bounded'
+                return <details data-status={mission.status} key={mission.product}><summary><span><small>Mission {index + 1} · {templateFor(mission.product, blueprintProduct?.templateId ?? '').name}</small><strong>{mission.label}: {mission.scenario}</strong></span><span className={`status-pill ${statusClass}`}>{demoRunbookLabels[mission.status]}</span></summary><div><ol>{mission.steps.map((step) => <li key={step}>{step}</li>)}</ol><div className="demo-proof-contract"><small>Required proof</small><strong>{mission.evidenceRequirement}</strong><em>Observed: {mission.evidenceObserved} · data {demoProgressLabels[mission.importStatus].toLowerCase()}</em></div>{mission.status === 'prepare_data' || mission.status === 'needs_fix' ? <button className="core-button" onClick={() => prepareDemoProduct(mission.product, blueprintProduct?.templateId ?? '')} type="button">{mission.actionLabel}</button> : <Link className="core-button" to={mission.actionPath}>{mission.actionLabel}</Link>}</div></details>
               })}</div>
             </section> : null}
           </>}
-          {requestedProduct || demoBlueprint ? <section className="demo-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Prepare {selectedProduct.name}</h3><p>Try the safe sample now or drop in the client's matching CSV for review.</p></div><Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding managedIdentity={managedIdentity} onProgress={recordDemoProductProgress} owner={setup.owner} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense></section> : null}
+          {requestedProduct || demoBlueprint ? <section className="demo-data-setup" id="client-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Prepare {selectedProduct.name}</h3><p>Try the safe sample now or drop in the client's matching CSV for review.</p></div><Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding managedIdentity={managedIdentity} onProgress={recordDemoProductProgress} owner={setup.owner} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense></section> : null}
           <div className="settings-step-actions"><span>{requestedProduct ? 'Sample first. Plan when needed.' : 'Add measurable success criteria after the demo kit is ready.'}</span><div className="setup-action-group"><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Add trial plan</button>{requestedProduct ? <button className="core-button primary" disabled={!workflowReady} onClick={startGuidedTrial} type="button">Start guided sample</button> : null}</div></div>
           </fieldset>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'success'} hidden={settingsStep !== 'success'}>

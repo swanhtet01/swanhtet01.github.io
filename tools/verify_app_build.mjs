@@ -1661,10 +1661,12 @@ if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_i
   || !clientOnboardingSource.includes('export const clientDemoPresets')
   || !clientOnboardingSource.includes('export function buildClientDemoBlueprint')
   || !clientOnboardingSource.includes("CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v1'")
+  || !clientOnboardingSource.includes("CLIENT_DEMO_RUNBOOK_SCHEMA = 'supermega.client_demo_runbook.v1'")
   || !clientOnboardingSource.includes("CLIENT_DEMO_WORKSPACE_STORAGE_KEY = 'supermega.client-demo-workspace.v1'")
   || !clientOnboardingSource.includes('export function createClientDemoWorkspace')
   || !clientOnboardingSource.includes('export function restoreClientDemoWorkspace')
   || !clientOnboardingSource.includes('export function updateClientDemoWorkspaceProgress')
+  || !clientOnboardingSource.includes('export function buildClientDemoRunbook')
   || !clientOnboardingSource.includes("id: 'manufacturing'")
   || !clientOnboardingSource.includes('maximumRows: 100')
   || !clientOnboardingSource.includes('maximumRows: 4')
@@ -1735,12 +1737,16 @@ if (!coreSource.includes('templateId: string')
   || !settingsPageSource.includes('loadClientDemoWorkspace')
   || !settingsPageSource.includes('restoreClientDemoWorkspace')
   || !settingsPageSource.includes('updateClientDemoWorkspaceProgress')
-  || !settingsPageSource.includes('products have checked data')
+  || !settingsPageSource.includes('buildClientDemoRunbook')
+  || !settingsPageSource.includes('Do this next')
+  || !settingsPageSource.includes('Required proof')
+  || !settingsPageSource.includes('Observed: {mission.evidenceObserved}')
   || !settingsPageSource.includes('onProgress={recordDemoProductProgress}')
   || !settingsPageSource.includes("not_started: 'Not started'")
   || !settingsPageSource.includes('Build client demo kit')
   || !settingsPageSource.includes('Download setup kit')
-  || !settingsPageSource.includes('configureDemoProduct(product.product, product.templateId, true)')
+  || !settingsPageSource.includes('prepareDemoProduct(nextDemoMission.product')
+  || !settingsPageSource.includes('to={nextDemoMission.actionPath}')
   || !settingsPageSource.includes('className="setup-template-summary"')
   || !settingsPageSource.includes('<span>Advanced controls</span>')
   || (settingsStepNavContract.match(/<button /g) || []).length !== 2
@@ -1749,8 +1755,9 @@ if (!coreSource.includes('templateId: string')
   || !coreCssSource.includes('.demo-preset-grid { display: grid;')
   || !coreCssSource.includes('.demo-solution-card[data-selected="true"]')
   || !coreCssSource.includes('.demo-integration-flow li')
-  || !coreCssSource.includes('.demo-kit-products article { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto auto;')
-  || !coreCssSource.includes('.demo-kit-products article > .status-pill { justify-self: start; }')
+  || !coreCssSource.includes('.demo-next-mission { min-width: 0; display: flex;')
+  || !coreCssSource.includes('.demo-runbook-products details > div { display: grid; grid-template-columns: minmax(190px,.8fr) minmax(0,1.2fr) auto;')
+  || !coreCssSource.includes('.demo-runbook-products details > div { grid-template-columns: 1fr; align-items: stretch; }')
   || !coreCssSource.includes('.settings-step-nav { display: grid; grid-template-columns: repeat(2,minmax(0,1fr));')) fail('client_setup_template_identity_or_two_step_ux_missing')
 const managedClientImportUiContract = sourceBlock(clientOnboardingUiSource, '  async function validateOrDownloadStagingPackage()', '\n\n  return (')
 if (!managedTrialSource.includes('export async function validateManagedClientImport')
@@ -3473,6 +3480,32 @@ async function verifyClientOnboardingRuntime() {
     const shopReadyAt = '2026-07-28T08:05:00.000Z'
     const shopReady = model.updateClientDemoWorkspaceProgress(demoWorkspace, { product: 'commerce', status: 'data_ready', rows: 2, readyRows: 2, issueRows: 0, updatedAt: null }, shopReadyAt)
     assert(shopReady.updatedAt === shopReadyAt && shopReady.products[0].status === 'data_ready' && shopReady.products.slice(1).every((product) => product.status === 'not_started'), 'client_demo_workspace_progress_not_isolated')
+    const noOperationalEvidence = {
+      commerce: { completedOrders: 0, reconciledOrders: 0 },
+      production: { releasedBatches: 0 },
+      website: { approvedReleases: 0 },
+      ecommerce: { savedStorefronts: 0, reviewedRequests: 0 },
+    }
+    const readyRunbook = model.buildClientDemoRunbook(shopReady, noOperationalEvidence)
+    assert(readyRunbook.schema === model.CLIENT_DEMO_RUNBOOK_SCHEMA
+      && readyRunbook.nextProduct === 'commerce'
+      && readyRunbook.provenCount === 0
+      && readyRunbook.products.map((product) => product.status).join(',') === 'ready_to_run,prepare_data,prepare_data,prepare_data', 'client_demo_runbook_readiness_wrong')
+    assert(readyRunbook.products.every((product) => product.steps.length === 3 && product.evidenceRequirement && product.startPath.startsWith('/')), 'client_demo_runbook_scenario_contract_incomplete')
+    const shopProvenRunbook = model.buildClientDemoRunbook(shopReady, {
+      ...noOperationalEvidence,
+      commerce: { completedOrders: 1, reconciledOrders: 1 },
+    })
+    assert(shopProvenRunbook.provenCount === 1 && shopProvenRunbook.nextProduct === 'production' && shopProvenRunbook.products[0].status === 'proven', 'client_demo_runbook_shop_proof_not_derived')
+    const allProvenRunbook = model.buildClientDemoRunbook(shopReady, {
+      commerce: { completedOrders: 1, reconciledOrders: 1 },
+      production: { releasedBatches: 1 },
+      website: { approvedReleases: 1 },
+      ecommerce: { savedStorefronts: 1, reviewedRequests: 1 },
+    })
+    assert(allProvenRunbook.provenCount === 4 && allProvenRunbook.nextProduct === null && allProvenRunbook.products.every((product) => product.status === 'proven'), 'client_demo_runbook_complete_proof_wrong')
+    rejectsSync(() => model.buildClientDemoRunbook(shopReady, { ...noOperationalEvidence, production: { releasedBatches: -1 } }), 'client_demo_runbook_negative_evidence_accepted')
+    rejectsSync(() => model.buildClientDemoRunbook(shopReady, { ...noOperationalEvidence, website: { approvedReleases: 0, manualDone: true } }), 'client_demo_runbook_manual_completion_field_accepted')
     const tamperedWorkspace = structuredClone(shopReady)
     tamperedWorkspace.blueprint.products[0].demoPath = 'https://attacker.example/'
     assert(model.restoreClientDemoWorkspace(tamperedWorkspace) === null, 'client_demo_workspace_blueprint_tamper_accepted')

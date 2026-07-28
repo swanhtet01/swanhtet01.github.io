@@ -2,6 +2,7 @@ export const CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1' as cons
 export const CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1' as const
 export const CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v1' as const
 export const CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v1' as const
+export const CLIENT_DEMO_RUNBOOK_SCHEMA = 'supermega.client_demo_runbook.v1' as const
 export const CLIENT_DEMO_WORKSPACE_STORAGE_KEY = 'supermega.client-demo-workspace.v1'
 export const CLIENT_IMPORT_MAX_BYTES = 512 * 1024
 export const CLIENT_IMPORT_MAX_ROWS = 500
@@ -71,6 +72,36 @@ export type ClientDemoWorkspace = {
   blueprint: ClientDemoBlueprint
   products: ClientDemoProductProgress[]
   updatedAt: string
+}
+
+export type ClientDemoOperationalEvidence = {
+  commerce: { completedOrders: number; reconciledOrders: number }
+  production: { releasedBatches: number }
+  website: { approvedReleases: number }
+  ecommerce: { savedStorefronts: number; reviewedRequests: number }
+}
+
+export type ClientDemoRunbookStatus = 'prepare_data' | 'needs_fix' | 'ready_to_run' | 'proven'
+
+export type ClientDemoRunbook = {
+  schema: typeof CLIENT_DEMO_RUNBOOK_SCHEMA
+  workspace: string
+  owner: string
+  provenCount: number
+  nextProduct: ClientSolutionId | null
+  products: Array<{
+    product: ClientSolutionId
+    label: string
+    scenario: string
+    startPath: string
+    steps: readonly string[]
+    evidenceRequirement: string
+    evidenceObserved: string
+    status: ClientDemoRunbookStatus
+    importStatus: ClientDemoProductProgressStatus
+    actionLabel: string
+    actionPath: string
+  }>
 }
 
 type ClientImportFieldKind = 'boolean' | 'date' | 'integer' | 'slug' | 'sku' | 'text' | 'url'
@@ -247,6 +278,33 @@ const clientDemoProductDetails: Record<ClientSolutionId, { label: string; demoPa
   production: { label: 'Plant', demoPath: '/plant/?tab=production', setupPath: '/settings/?product=plant' },
   website: { label: 'Website', demoPath: '/website/', setupPath: '/settings/?product=website' },
   ecommerce: { label: 'Ecommerce', demoPath: '/ecommerce/', setupPath: '/settings/?product=ecommerce' },
+}
+
+const clientDemoRunbookContracts: Record<ClientSolutionId, {
+  scenario: string
+  steps: readonly string[]
+  evidenceRequirement: string
+}> = {
+  commerce: {
+    scenario: 'Complete one accountable customer sale.',
+    steps: ['Add a real item and customer', 'Confirm and reconcile payment', 'Complete the order'],
+    evidenceRequirement: 'At least one completed order with a reconciled payment.',
+  },
+  production: {
+    scenario: 'Release one controlled batch to stock.',
+    steps: ['Plan and check availability', 'Run and inspect the batch', 'Authorize release to stock'],
+    evidenceRequirement: 'A Plant batch projection in released-to-stock state.',
+  },
+  website: {
+    scenario: 'Approve one responsive client website release.',
+    steps: ['Review pages and approved copy', 'Attach content, link, and responsive evidence', 'Approve and record the local release'],
+    evidenceRequirement: 'A current Website publish bound to its approval and evidence set.',
+  },
+  ecommerce: {
+    scenario: 'Turn one storefront visit into a Shop-reviewed request.',
+    steps: ['Save the Shop-backed storefront', 'Build and review one customer quote', 'Send the request to Shop for confirmation'],
+    evidenceRequirement: 'A saved storefront configuration and at least one reviewed request in Shop.',
+  },
 }
 
 export const clientDemoPresets: readonly ClientDemoPreset[] = [
@@ -793,6 +851,98 @@ export function updateClientDemoWorkspaceProgress(
     ...workspace,
     products: workspace.products.map((candidate, candidateIndex) => candidateIndex === index ? { ...progress, updatedAt } : candidate),
     updatedAt,
+  }
+}
+
+function clientDemoEvidenceCount(value: unknown, field: string) {
+  if (!Number.isSafeInteger(value) || Number(value) < 0 || Number(value) > 100_000) {
+    throw new Error(`Client demo evidence ${field} is invalid.`)
+  }
+  return Number(value)
+}
+
+function canonicalClientDemoEvidence(value: unknown): ClientDemoOperationalEvidence {
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || !hasExactKeys(value, ['commerce', 'production', 'website', 'ecommerce'])) {
+    throw new Error('The client demo operational evidence is invalid.')
+  }
+  const source = value as Partial<ClientDemoOperationalEvidence>
+  if (!source.commerce || !source.production || !source.website || !source.ecommerce
+    || !hasExactKeys(source.commerce, ['completedOrders', 'reconciledOrders'])
+    || !hasExactKeys(source.production, ['releasedBatches'])
+    || !hasExactKeys(source.website, ['approvedReleases'])
+    || !hasExactKeys(source.ecommerce, ['savedStorefronts', 'reviewedRequests'])) {
+    throw new Error('The client demo operational evidence is invalid.')
+  }
+  return {
+    commerce: {
+      completedOrders: clientDemoEvidenceCount(source.commerce.completedOrders, 'completed orders'),
+      reconciledOrders: clientDemoEvidenceCount(source.commerce.reconciledOrders, 'reconciled orders'),
+    },
+    production: { releasedBatches: clientDemoEvidenceCount(source.production.releasedBatches, 'released batches') },
+    website: { approvedReleases: clientDemoEvidenceCount(source.website.approvedReleases, 'approved releases') },
+    ecommerce: {
+      savedStorefronts: clientDemoEvidenceCount(source.ecommerce.savedStorefronts, 'saved storefronts'),
+      reviewedRequests: clientDemoEvidenceCount(source.ecommerce.reviewedRequests, 'reviewed requests'),
+    },
+  }
+}
+
+export function buildClientDemoRunbook(workspaceValue: unknown, evidenceValue: unknown): ClientDemoRunbook {
+  const workspace = restoreClientDemoWorkspace(workspaceValue)
+  if (!workspace) throw new Error('The client demo workspace is invalid.')
+  const evidence = canonicalClientDemoEvidence(evidenceValue)
+  const proofByProduct: Record<ClientSolutionId, { ready: boolean; observed: string }> = {
+    commerce: {
+      ready: evidence.commerce.completedOrders > 0 && evidence.commerce.reconciledOrders > 0,
+      observed: `${evidence.commerce.completedOrders} completed · ${evidence.commerce.reconciledOrders} payment reconciled`,
+    },
+    production: {
+      ready: evidence.production.releasedBatches > 0,
+      observed: `${evidence.production.releasedBatches} batch${evidence.production.releasedBatches === 1 ? '' : 'es'} released to stock`,
+    },
+    website: {
+      ready: evidence.website.approvedReleases > 0,
+      observed: `${evidence.website.approvedReleases} approved local release${evidence.website.approvedReleases === 1 ? '' : 's'}`,
+    },
+    ecommerce: {
+      ready: evidence.ecommerce.savedStorefronts > 0 && evidence.ecommerce.reviewedRequests > 0,
+      observed: `${evidence.ecommerce.savedStorefronts} saved storefront · ${evidence.ecommerce.reviewedRequests} Shop request${evidence.ecommerce.reviewedRequests === 1 ? '' : 's'}`,
+    },
+  }
+  const products = workspace.blueprint.products.map((product) => {
+    const progress = workspace.products.find((candidate) => candidate.product === product.product)
+    if (!progress) throw new Error(`The ${product.label} demo progress is missing.`)
+    const proof = proofByProduct[product.product]
+    const status: ClientDemoRunbookStatus = proof.ready
+      ? 'proven'
+      : progress.status === 'needs_fix'
+        ? 'needs_fix'
+        : ['data_ready', 'workspace_checked', 'applied'].includes(progress.status)
+          ? 'ready_to_run'
+          : 'prepare_data'
+    const contract = clientDemoRunbookContracts[product.product]
+    return {
+      product: product.product,
+      label: product.label,
+      scenario: contract.scenario,
+      startPath: product.demoPath,
+      steps: contract.steps,
+      evidenceRequirement: contract.evidenceRequirement,
+      evidenceObserved: proof.observed,
+      status,
+      importStatus: progress.status,
+      actionLabel: status === 'proven' ? `Review ${product.label}` : status === 'ready_to_run' ? `Run ${product.label} scenario` : `Prepare ${product.label} data`,
+      actionPath: status === 'prepare_data' || status === 'needs_fix' ? product.setupPath : product.demoPath,
+    }
+  })
+  return {
+    schema: CLIENT_DEMO_RUNBOOK_SCHEMA,
+    workspace: workspace.blueprint.client.workspace,
+    owner: workspace.blueprint.client.owner,
+    provenCount: products.filter((product) => product.status === 'proven').length,
+    nextProduct: products.find((product) => product.status !== 'proven')?.product ?? null,
+    products,
   }
 }
 
