@@ -253,6 +253,26 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             : 'The file is clean. Download the prepared import file or connect a managed workspace.'
           : 'Fix the highlighted rows before this can become a managed import.'
       : `Drop in a CSV or try the sample. SuperMega reads, maps, and checks ${object.label.toLowerCase()} before any write.`
+  const missingRequiredColumns = state.preview
+    ? state.preview.fields.filter((field) => field.required && !state.preview?.mapping[field.id]).length
+    : 0
+  const importRepairRows = state.preview
+    ? [
+        ['Missing columns', missingRequiredColumns ? `${missingRequiredColumns} fix` : 'Clear'],
+        ['Row fixes', state.preview.totals.issueRows ? `${state.preview.totals.issueRows} rows` : 'None'],
+        ['Duplicate keys', state.preview.totals.duplicates ? `${state.preview.totals.duplicates} found` : 'None'],
+        ['Ready rows', `${state.preview.totals.ready}/${state.preview.totals.rows}`],
+      ] as const
+    : []
+  const importRepairMessage = state.preview
+    ? state.preview.readyForStaging
+      ? 'Clean enough to prepare. SuperMega will still ask before anything is written.'
+      : missingRequiredColumns
+        ? 'Match the required columns first; then row-level fixes become reliable.'
+        : state.preview.totals.duplicates
+          ? 'Remove or rename duplicate keys so every imported record has one owner.'
+          : 'Fix the row messages below; ready rows stay protected while you clean the rest.'
+    : ''
 
   useEffect(() => {
     requestRef.current += 1
@@ -545,6 +565,12 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           <div className="catalog-import-source">
             <div><strong>{state.preview.sourceName}</strong><small>{state.preview.totals.rows} rows found, {matchedFieldCount} of {state.preview.fields.length} columns matched</small></div>
             <span className={`status-pill ${appliedIsCurrent || validationIsCurrent || state.preview.readyForStaging ? 'approved' : 'pending'}`}>{appliedIsCurrent ? 'Applied' : validationIsCurrent ? 'Server checked' : state.preview.readyForStaging ? 'Ready to prepare' : 'Review needed'}</span>
+          </div>
+          <div aria-label={`${productName} import repair queue`} className="catalog-import-repair">
+            <div><span className="core-eyebrow">Repair queue</span><strong>{state.preview.readyForStaging ? 'No blocking fixes' : 'Clean this file'}</strong><small>{importRepairMessage}</small></div>
+            <div className="catalog-import-repair-list">
+              {importRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
+            </div>
           </div>
           <details className="catalog-import-mapping-review" open={mappingNeedsReview || undefined}>
             <summary><span>Column matching</span><small>{mappingNeedsReview ? 'Needs your review' : `${matchedFieldCount} of ${state.preview.fields.length} matched`}</small></summary>
