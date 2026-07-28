@@ -3,10 +3,10 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 
 import {
   CoreLayout,
-  OperationsPage,
   ProductHomePage,
-} from './core/CoreApp'
+} from './core/CoreShell'
 
+const OperationsPage = lazy(() => import('./core/CoreApp').then((module) => ({ default: module.OperationsPage })))
 const WebsiteProduct = lazy(() => import('./products/website/WebsiteProduct').then((module) => ({ default: module.WebsiteProduct })))
 const EcommerceProduct = lazy(() => import('./products/ecommerce/EcommerceProduct').then((module) => ({ default: module.EcommerceProduct })))
 const SettingsPage = lazy(() => import('./core/SettingsPage').then((module) => ({ default: module.SettingsPage })))
@@ -44,8 +44,8 @@ export default function App() {
       <Routes>
         <Route element={<CoreLayout />}>
           <Route element={<ProductHomeEntry />} index />
-          <Route element={<OperationsPage product="commerce" />} path="shop/*" />
-          <Route element={<OperationsPage product="production" />} path="plant/*" />
+          <Route element={<Suspense fallback={<ProductLoading name="Shop" />}><OperationsPage product="commerce" /></Suspense>} path="shop/*" />
+          <Route element={<Suspense fallback={<ProductLoading name="Plant" />}><OperationsPage product="production" /></Suspense>} path="plant/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Website" />}><WebsiteProduct /></Suspense>} path="website/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Ecommerce" />}><EcommerceProduct /></Suspense>} path="ecommerce/*" />
           <Route element={<Navigate replace to="/shop/" />} path="operations/commerce/*" />
