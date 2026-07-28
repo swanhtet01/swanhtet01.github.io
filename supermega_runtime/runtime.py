@@ -316,7 +316,7 @@ def _activation_evidence_plan(
             "id": "identity_gateway",
             "label": "Identity gateway",
             "ready": security_ready,
-            "proof": "Show trusted gateway signing or Supabase named-user token verification with no browser service-role secret.",
+            "proof": "Show trusted gateway signing or Supabase named-user verification with no browser privileged credential.",
             "verifier": "node tools/verify_app_security_contract.mjs",
         },
         {
