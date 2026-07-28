@@ -17,6 +17,7 @@ from supermega_runtime.plant_order_foundation import (
     issue_plant_order_material,
     plant_order_evidence_digest,
     project_plant_order,
+    record_plant_order_effectiveness,
     record_plant_order_operation,
     record_plant_order_output,
     release_plant_order,
@@ -221,6 +222,90 @@ def fully_issued_execution_state() -> dict[str, object]:
 
 
 class PlantOrderFoundationTests(unittest.TestCase):
+    def test_effectiveness_window_is_order_bound_and_fail_closed(self) -> None:
+        state = released_state()
+        evidence = {
+            "planId": "PLN-20260726-001",
+            "jobId": "JOB-401",
+            "windowStart": "2026-07-26T08:00:00+06:30",
+            "windowEnd": "2026-07-26T09:00:00+06:30",
+            "workCentres": [
+                {"workCentreId": "WC-ASSEMBLY-01", "plannedProductiveMinutesMilli": 60_000},
+                {"workCentreId": "WC-TEST-01", "plannedProductiveMinutesMilli": 60_000},
+            ],
+            "downtimeIntervals": [
+                {"downtimeId": "DT-ASSEMBLY-01", "workCentreId": "WC-ASSEMBLY-01", "startedAt": "2026-07-26T08:10:00+06:30", "endedAt": "2026-07-26T08:25:00+06:30"},
+                {"downtimeId": "DT-TEST-01", "workCentreId": "WC-TEST-01", "startedAt": "2026-07-26T08:35:00+06:30", "endedAt": "2026-07-26T08:50:00+06:30"},
+            ],
+        }
+        with self.assertRaisesRegex(PlantOrderValidationError, "sourceDigest does not match"):
+            record_plant_order_effectiveness(
+                state,
+                effectiveness_id="OEE-BAD-DIGEST",
+                **{
+                    "plan_id": evidence["planId"],
+                    "job_id": evidence["jobId"],
+                    "window_start": evidence["windowStart"],
+                    "window_end": evidence["windowEnd"],
+                    "work_centres": evidence["workCentres"],
+                    "downtime_intervals": evidence["downtimeIntervals"],
+                },
+                source_digest=plant_order_evidence_digest({"wrong": True}),
+                proof=proof(4, "bad effectiveness digest"),
+                expected_head_digest=state["headDigest"],
+            )
+        future = {**evidence, "windowEnd": "2026-07-26T10:00:00+06:30"}
+        with self.assertRaisesRegex(PlantOrderValidationError, "at or after the closed effectiveness window"):
+            record_plant_order_effectiveness(
+                state,
+                effectiveness_id="OEE-FUTURE-001",
+                plan_id=future["planId"],
+                job_id=future["jobId"],
+                window_start=future["windowStart"],
+                window_end=future["windowEnd"],
+                work_centres=future["workCentres"],
+                downtime_intervals=future["downtimeIntervals"],
+                source_digest=plant_order_evidence_digest(future),
+                proof=proof(4, "future effectiveness window"),
+                expected_head_digest=state["headDigest"],
+            )
+        result = record_plant_order_effectiveness(
+            state,
+            effectiveness_id="OEE-20260726-001",
+            plan_id=evidence["planId"],
+            job_id=evidence["jobId"],
+            window_start=evidence["windowStart"],
+            window_end=evidence["windowEnd"],
+            work_centres=evidence["workCentres"],
+            downtime_intervals=evidence["downtimeIntervals"],
+            source_digest=plant_order_evidence_digest(evidence),
+            proof=proof(4, "reviewed order-bound effectiveness evidence"),
+            expected_head_digest=state["headDigest"],
+        )
+        projection = project_plant_order(result["state"])
+        self.assertEqual(projection["effectivenessWindow"]["jobId"], "JOB-401")
+        self.assertEqual(len(projection["effectivenessWindow"]["downtimeIntervals"]), 2)
+
+        overlapping = deepcopy(evidence)
+        overlapping["downtimeIntervals"] = [
+            {"downtimeId": "DT-ASSEMBLY-01", "workCentreId": "WC-ASSEMBLY-01", "startedAt": "2026-07-26T08:10:00+06:30", "endedAt": "2026-07-26T08:30:00+06:30"},
+            {"downtimeId": "DT-ASSEMBLY-02", "workCentreId": "WC-ASSEMBLY-01", "startedAt": "2026-07-26T08:20:00+06:30", "endedAt": "2026-07-26T08:35:00+06:30"},
+        ]
+        with self.assertRaisesRegex(PlantOrderValidationError, "downtime overlaps"):
+            record_plant_order_effectiveness(
+                state,
+                effectiveness_id="OEE-OVERLAP-001",
+                plan_id=overlapping["planId"],
+                job_id=overlapping["jobId"],
+                window_start=overlapping["windowStart"],
+                window_end=overlapping["windowEnd"],
+                work_centres=overlapping["workCentres"],
+                downtime_intervals=overlapping["downtimeIntervals"],
+                source_digest=plant_order_evidence_digest(overlapping),
+                proof=proof(4, "overlapping downtime"),
+                expected_head_digest=state["headDigest"],
+            )
+
     def test_reviewed_plan_is_digest_bound_and_projects_requirements(self) -> None:
         package = reviewed_plan()
         self.assertEqual(package["contract"], PLANT_ORDER_PLAN_CONTRACT)

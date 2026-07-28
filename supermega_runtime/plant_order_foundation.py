@@ -38,6 +38,7 @@ _COMMAND_KINDS = frozenset(
         "availability_check",
         "release_order",
         "issue_material",
+        "record_effectiveness",
         "record_operation",
         "record_output",
         "inspect_output",
@@ -484,6 +485,181 @@ def _capacity_availability(value: object, field: str) -> list[dict[str, Any]]:
     return result
 
 
+def _effectiveness_work_centres(value: object, field: str) -> list[dict[str, Any]]:
+    rows = _array(value, field, minimum=1, maximum=_MAX_WORK_CENTRES)
+    result: list[dict[str, Any]] = []
+    for index, candidate in enumerate(rows):
+        row_field = f"{field}[{index}]"
+        source = _object(
+            candidate, row_field, ("workCentreId", "plannedProductiveMinutesMilli")
+        )
+        result.append(
+            {
+                "workCentreId": _identifier(
+                    source["workCentreId"], f"{row_field}.workCentreId", "WC"
+                ),
+                "plannedProductiveMinutesMilli": _integer(
+                    source["plannedProductiveMinutesMilli"],
+                    f"{row_field}.plannedProductiveMinutesMilli",
+                    minimum=1,
+                ),
+            }
+        )
+    ids = [row["workCentreId"] for row in result]
+    _unique(ids, f"{field} work-centre IDs")
+    _sorted(ids, f"{field} work-centre IDs")
+    return result
+
+
+def _duration_minutes_milli(started_at: object, ended_at: object, field: str) -> int:
+    started = datetime.fromisoformat(
+        _timestamp(started_at, f"{field}.startedAt").replace("Z", "+00:00")
+    )
+    ended = datetime.fromisoformat(
+        _timestamp(ended_at, f"{field}.endedAt").replace("Z", "+00:00")
+    )
+    delta = ended - started
+    duration_micros = (
+        delta.days * 86_400_000_000
+        + delta.seconds * 1_000_000
+        + delta.microseconds
+    )
+    if duration_micros <= 0:
+        raise _fail(f"{field}.endedAt must follow startedAt.")
+    if duration_micros % 60_000:
+        raise _fail(
+            f"{field} duration must resolve to whole thousandths of a minute."
+        )
+    duration = duration_micros // 60_000
+    if duration > _MAX_SAFE_INTEGER:
+        raise _fail(f"{field} duration exceeds the supported range.")
+    return duration
+
+
+def _downtime_intervals(value: object, field: str) -> list[dict[str, Any]]:
+    rows = _array(value, field, maximum=200)
+    result: list[dict[str, Any]] = []
+    for index, candidate in enumerate(rows):
+        row_field = f"{field}[{index}]"
+        source = _object(
+            candidate,
+            row_field,
+            ("downtimeId", "workCentreId", "startedAt", "endedAt"),
+        )
+        row = {
+            "downtimeId": _identifier(
+                source["downtimeId"], f"{row_field}.downtimeId", "DT"
+            ),
+            "workCentreId": _identifier(
+                source["workCentreId"], f"{row_field}.workCentreId", "WC"
+            ),
+            "startedAt": _timestamp(source["startedAt"], f"{row_field}.startedAt"),
+            "endedAt": _timestamp(source["endedAt"], f"{row_field}.endedAt"),
+        }
+        _duration_minutes_milli(row["startedAt"], row["endedAt"], row_field)
+        result.append(row)
+    ids = [row["downtimeId"] for row in result]
+    _unique(ids, f"{field} downtime IDs")
+    _sorted(ids, f"{field} downtime IDs")
+    return result
+
+
+def _effectiveness_command(value: object, field: str) -> dict[str, Any]:
+    source = _object(
+        value,
+        field,
+        (
+            "kind",
+            "id",
+            "planId",
+            "jobId",
+            "windowStart",
+            "windowEnd",
+            "sourceDigest",
+            "workCentres",
+            "downtimeIntervals",
+            "proof",
+        ),
+    )
+    plan_id = _identifier(source["planId"], f"{field}.planId", "PLN")
+    job_id = _identifier(source["jobId"], f"{field}.jobId", "JOB")
+    window_start = _timestamp(source["windowStart"], f"{field}.windowStart")
+    window_end = _timestamp(source["windowEnd"], f"{field}.windowEnd")
+    window_duration = _duration_minutes_milli(window_start, window_end, field)
+    work_centres = _effectiveness_work_centres(
+        source["workCentres"], f"{field}.workCentres"
+    )
+    downtime_intervals = _downtime_intervals(
+        source["downtimeIntervals"], f"{field}.downtimeIntervals"
+    )
+    source_digest = _digest(source["sourceDigest"], f"{field}.sourceDigest")
+    evidence = {
+        "planId": plan_id,
+        "jobId": job_id,
+        "windowStart": window_start,
+        "windowEnd": window_end,
+        "workCentres": work_centres,
+        "downtimeIntervals": downtime_intervals,
+    }
+    if source_digest != _canonical_digest(evidence):
+        raise _fail(
+            f"{field}.sourceDigest does not match its order-bound effectiveness evidence."
+        )
+    centre_ids = {row["workCentreId"] for row in work_centres}
+    window_start_dt = datetime.fromisoformat(window_start.replace("Z", "+00:00"))
+    window_end_dt = datetime.fromisoformat(window_end.replace("Z", "+00:00"))
+    by_centre: dict[str, list[tuple[datetime, datetime, int]]] = {}
+    for index, interval in enumerate(downtime_intervals):
+        if interval["workCentreId"] not in centre_ids:
+            raise _fail(
+                f"{field}.downtimeIntervals[{index}].workCentreId is not in the effectiveness work centres."
+            )
+        start = datetime.fromisoformat(interval["startedAt"].replace("Z", "+00:00"))
+        end = datetime.fromisoformat(interval["endedAt"].replace("Z", "+00:00"))
+        if start < window_start_dt or end > window_end_dt:
+            raise _fail(
+                f"{field}.downtimeIntervals[{index}] falls outside the effectiveness window."
+            )
+        by_centre.setdefault(interval["workCentreId"], []).append(
+            (
+                start,
+                end,
+                _duration_minutes_milli(
+                    interval["startedAt"],
+                    interval["endedAt"],
+                    f"{field}.downtimeIntervals[{index}]",
+                ),
+            )
+        )
+    for centre in work_centres:
+        centre_id = centre["workCentreId"]
+        if centre["plannedProductiveMinutesMilli"] > window_duration:
+            raise _fail(
+                f"{field} planned productive time for {centre_id} exceeds the evidence window."
+            )
+        intervals = sorted(by_centre.get(centre_id, []), key=lambda row: row[0])
+        if any(intervals[index][0] < intervals[index - 1][1] for index in range(1, len(intervals))):
+            raise _fail(f"{field} downtime overlaps for {centre_id}.")
+        downtime = sum(row[2] for row in intervals)
+        if downtime > centre["plannedProductiveMinutesMilli"]:
+            raise _fail(
+                f"{field} downtime exceeds planned productive time for {centre_id}."
+            )
+    proof = _proof(source["proof"], f"{field}.proof")
+    proof_time = datetime.fromisoformat(proof["capturedAt"].replace("Z", "+00:00"))
+    if proof_time < window_end_dt:
+        raise _fail(
+            f"{field}.proof.capturedAt must be at or after the closed effectiveness window."
+        )
+    return {
+        "kind": "record_effectiveness",
+        "id": _identifier(source["id"], f"{field}.id", "OEE"),
+        **evidence,
+        "sourceDigest": source_digest,
+        "proof": proof,
+    }
+
+
 def _command_payload(value: object, field: str) -> dict[str, Any]:
     if not isinstance(value, Mapping) or not isinstance(value.get("kind"), str):
         raise _fail(f"{field}.kind is unsupported.")
@@ -556,6 +732,9 @@ def _command_payload(value: object, field: str) -> dict[str, Any]:
             ),
             "proof": _proof(source["proof"], f"{field}.proof"),
         }
+
+    if kind == "record_effectiveness":
+        return _effectiveness_command(value, field)
 
     if kind == "record_operation":
         source = _object(
@@ -747,6 +926,7 @@ def _empty_projection() -> dict[str, Any]:
         "status": "unplanned",
         "latestAvailability": None,
         "orderRelease": None,
+        "effectivenessWindow": None,
         "materials": [],
         "routing": [],
         "operations": [],
@@ -776,6 +956,7 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
     plan: dict[str, Any] | None = None
     latest_availability: dict[str, Any] | None = None
     order_release: dict[str, Any] | None = None
+    effectiveness_window: dict[str, Any] | None = None
     issued: dict[str, int] = {}
     operation_quantities: dict[str, int] = {}
     operation_minutes: dict[str, int] = {}
@@ -827,6 +1008,15 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
 
         if order_release is None:
             raise _fail(f"{field} requires human order release.")
+        if kind == "record_effectiveness":
+            if command["planId"] != plan["planId"] or command["jobId"] != job["jobId"]:
+                raise _fail(f"{field} is not bound to the reviewed order.")
+            routed_centres = sorted({row["workCentreId"] for row in plan["routing"]})
+            observed_centres = [row["workCentreId"] for row in command["workCentres"]]
+            if routed_centres != observed_centres:
+                raise _fail(f"{field} must cover every and only routed work centre.")
+            effectiveness_window = command
+            continue
         if batch_release is not None:
             raise _fail(f"{field} follows final batch release.")
 
@@ -1079,6 +1269,7 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
         "status": status,
         "latestAvailability": latest_availability,
         "orderRelease": order_release,
+        "effectivenessWindow": effectiveness_window,
         "materials": material_rows,
         "routing": plan["routing"],
         "operations": operations,
@@ -1320,6 +1511,38 @@ def issue_plant_order_material(
     )
 
 
+def record_plant_order_effectiveness(
+    state: object,
+    *,
+    effectiveness_id: object,
+    plan_id: object,
+    job_id: object,
+    window_start: object,
+    window_end: object,
+    source_digest: object,
+    work_centres: object,
+    downtime_intervals: object,
+    proof: object,
+    expected_head_digest: object,
+) -> dict[str, Any]:
+    return _append_command(
+        state,
+        {
+            "kind": "record_effectiveness",
+            "id": effectiveness_id,
+            "planId": plan_id,
+            "jobId": job_id,
+            "windowStart": window_start,
+            "windowEnd": window_end,
+            "sourceDigest": source_digest,
+            "workCentres": work_centres,
+            "downtimeIntervals": downtime_intervals,
+            "proof": _proof(proof, "proof"),
+        },
+        expected_head_digest=expected_head_digest,
+    )
+
+
 def record_plant_order_operation(
     state: object,
     *,
@@ -1432,6 +1655,7 @@ __all__ = (
     "issue_plant_order_material",
     "plant_order_evidence_digest",
     "project_plant_order",
+    "record_plant_order_effectiveness",
     "record_plant_order_operation",
     "record_plant_order_output",
     "release_plant_order",

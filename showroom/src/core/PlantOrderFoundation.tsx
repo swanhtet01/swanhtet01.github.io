@@ -12,12 +12,14 @@ import {
   issuePlantOrderMaterial,
   loadPlantOrderWorkspace,
   mutatePlantOrderWorkspace,
+  parsePlantOrderDowntimePaste,
   parsePlantOrderMaterialPaste,
   parsePlantOrderQuantityMilli,
   parsePlantOrderRoutingPaste,
   plantOrderEvidenceDigest,
   projectPlantOrder,
   projectPlantOrderEffectiveness,
+  recordPlantOrderEffectiveness,
   recordPlantOrderOperation,
   recordPlantOrderOutput,
   releasePlantOrder,
@@ -80,6 +82,12 @@ type AvailabilityDraft = {
 }
 
 type OperationDraft = { operationId: string; quantity: string; actualMinutes: string }
+type EffectivenessDraft = {
+  windowStart: string
+  windowEnd: string
+  workCentres: Record<string, string>
+  downtimeIntervals: string
+}
 
 const setupMaterialUnits: PlantOrderMaterial['unit'][] = ['pcs', 'kg', 'g', 'l', 'ml', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm']
 
@@ -134,6 +142,13 @@ function formatMilli(value: number) {
 
 function formatBasisPoints(value: number) {
   return `${(value / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
+}
+
+function explicitOffsetTimestamp(value: string, field: string) {
+  if (!value) throw new Error(`Enter ${field}.`)
+  const parsed = new Date(value)
+  if (!Number.isFinite(parsed.getTime())) throw new Error(`Enter a valid ${field}.`)
+  return parsed.toISOString()
 }
 
 function milliInputValue(value: number) {
@@ -225,6 +240,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
   const [setupDraft, setSetupDraft] = useState(() => defaultSetup(activeJobs[0]))
   const [availabilityDraft, setAvailabilityDraft] = useState(() => availabilityDefaults(initial.state))
   const [operationDraft, setOperationDraft] = useState<OperationDraft>({ operationId: '', quantity: '', actualMinutes: '' })
+  const [effectivenessDraft, setEffectivenessDraft] = useState<EffectivenessDraft>({ windowStart: '', windowEnd: '', workCentres: {}, downtimeIntervals: '' })
   const [inspectionDraft, setInspectionDraft] = useState({ result: 'pass' as 'pass' | 'fail', rejected: '0' })
   const [review, setReview] = useState<ReviewedTransition | null>(null)
   const setupDialogRef = useRef<HTMLDialogElement>(null)
@@ -478,6 +494,35 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
     setAvailabilityDraft((current) => ({ ...current, workCentres: { ...current.workCentres, [workCentreId]: availableMinutes } }))
   }
 
+  function reviewEffectiveness(event: FormEvent) {
+    event.preventDefault()
+    if (!projection.plan || !projection.orderRelease) return
+    try {
+      const windowStart = explicitOffsetTimestamp(effectivenessDraft.windowStart, 'the production window start')
+      const windowEnd = explicitOffsetTimestamp(effectivenessDraft.windowEnd, 'the production window end')
+      const routedCentreIds = new Set(projection.routing.map((operation) => operation.workCentreId))
+      const workCentres = projection.plan.workCentres.filter((centre) => routedCentreIds.has(centre.workCentreId)).map((centre) => {
+        const plannedProductiveMinutesMilli = parsePlantOrderQuantityMilli(effectivenessDraft.workCentres[centre.workCentreId] ?? '')
+        if (!plannedProductiveMinutesMilli) throw new Error(`Enter positive planned productive minutes for ${centre.workCentreId}.`)
+        return { workCentreId: centre.workCentreId, plannedProductiveMinutesMilli }
+      })
+      const downtimeIntervals = parsePlantOrderDowntimePaste(effectivenessDraft.downtimeIntervals)
+      const source = { planId: projection.plan.planId, jobId: projection.plan.job.jobId, windowStart, windowEnd, workCentres, downtimeIntervals }
+      const sourceDigest = plantOrderEvidenceDigest(source); const effectivenessId = commandId('OEE'); const expectedHeadDigest = state.headDigest
+      const actionProof = proof(actor, 'order-bound planned productive time and closed downtime')
+      stage({
+        title: 'Effectiveness evidence',
+        summary: `${workCentres.length} work ${workCentres.length === 1 ? 'centre' : 'centres'} · ${downtimeIntervals.length} closed downtime ${downtimeIntervals.length === 1 ? 'interval' : 'intervals'}`,
+        details: [{ label: 'Order', value: projection.plan.job.jobId }, { label: 'Window', value: `${windowStart} → ${windowEnd}` }],
+        boundary: 'Records reviewed order-bound timing evidence only. It does not infer runtime from released capacity, control equipment, or post labour, cost, inventory, or accounting entries.',
+        proof: actionProof,
+        apply: (current) => recordPlantOrderEffectiveness(current, { effectivenessId, ...source, sourceDigest, proof: actionProof, expectedHeadDigest }),
+      })
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Effectiveness evidence could not be prepared for review.')
+    }
+  }
+
   function reviewOrderRelease() {
     if (!projection.latestAvailability) return
     const releaseId = commandId('REL'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, 'human production-order release')
@@ -587,12 +632,17 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
 
       {!bindingCurrent && projection.status !== 'released_to_stock' ? <p className="form-notice warning-text" role="alert">The bound Plant job changed after this execution plan was reviewed. This chain is paused; reconcile the job snapshot before continuing.</p> : null}
       {requiresOperationEvidence ? <details className="compact-disclosure production-history"><summary>Routing progress <span>{projection.metrics.completedOperationCount}/{projection.operations.length}</span></summary><div className="issue-list">{projection.operations.map((operation) => <article key={operation.operationId}><span aria-hidden="true" className={`issue-mark ${operation.status === 'complete' ? 'resolved' : ''}`}>{operation.sequence}</span><div><strong>{operation.name}</strong><small>{operation.completedQuantity.toLocaleString()} / {projection.metrics.targetQuantity.toLocaleString()} units · {formatMilli(operation.actualMinutesMilli)} actual / {formatMilli(operation.plannedMinutesMilli)} planned minutes · {operation.status.replace('_', ' ')}</small></div></article>)}</div></details> : null}
-      {projection.plan ? <details className="compact-disclosure production-history"><summary>Effectiveness <span>{effectiveness.status === 'availability_setup_required' ? 'Setup availability' : 'Collecting'}</span></summary><div className="issue-list">
-        <article><span aria-hidden="true" className="issue-mark">A</span><div><strong>Availability · Setup required</strong><small>Bind planned productive time and downtime to this order and work centre.</small></div></article>
+      {projection.plan ? <details className="compact-disclosure production-history"><summary>Effectiveness <span>{effectiveness.oeeBasisPoints !== null ? formatBasisPoints(effectiveness.oeeBasisPoints) : effectiveness.status === 'availability_setup_required' ? 'Setup availability' : 'Collecting'}</span></summary><div className="issue-list">
+        <article><span aria-hidden="true" className={`issue-mark ${effectiveness.availability ? 'resolved' : ''}`}>A</span><div><strong>Availability · {effectiveness.availability ? formatBasisPoints(effectiveness.availability.basisPoints) : 'Setup required'}</strong><small>{effectiveness.availability ? `${formatMilli(effectiveness.availability.operatingMinutesMilli)} operating / ${formatMilli(effectiveness.availability.plannedProductiveMinutesMilli)} planned productive minutes · ${formatMilli(effectiveness.availability.downtimeMinutesMilli)} downtime · ${effectiveness.availability.downtimeIntervalCount} closed intervals` : 'Bind planned productive time and closed downtime to this exact order, window, and routed work centre.'}</small></div></article>
         <article><span aria-hidden="true" className={`issue-mark ${effectiveness.performance ? 'resolved' : ''}`}>P</span><div><strong>Performance · {effectiveness.performance ? formatBasisPoints(effectiveness.performance.basisPoints) : 'Collecting'}</strong><small>{effectiveness.performance ? `${formatMilli(effectiveness.performance.designedMinutesMilli)} designed / ${formatMilli(effectiveness.performance.actualMinutesMilli)} actual minutes · ${formatMilli(effectiveness.performance.speedLossMinutesMilli)} speed loss` : 'Record completed routing units and actual minutes.'}</small></div></article>
         <article><span aria-hidden="true" className={`issue-mark ${effectiveness.quality ? 'resolved' : ''}`}>Q</span><div><strong>Quality · {effectiveness.quality ? formatBasisPoints(effectiveness.quality.basisPoints) : 'Collecting'}</strong><small>{effectiveness.quality ? `${effectiveness.quality.acceptedQuantity.toLocaleString()} accepted / ${effectiveness.quality.inspectedQuantity.toLocaleString()} inspected · ${effectiveness.quality.rejectedQuantity.toLocaleString()} rejected` : 'Complete the current output inspection.'}</small></div></article>
-        <article><span aria-hidden="true" className="issue-mark">OEE</span><div><strong>OEE · Not calculated</strong><small>Availability × Performance × Quality. Available capacity is not substituted for actual productive time.</small></div></article>
-      </div></details> : null}
+        <article><span aria-hidden="true" className={`issue-mark ${effectiveness.oeeBasisPoints !== null ? 'resolved' : ''}`}>OEE</span><div><strong>OEE · {effectiveness.oeeBasisPoints !== null ? formatBasisPoints(effectiveness.oeeBasisPoints) : 'Not calculated'}</strong><small>Availability × Performance × Quality. Available capacity is never substituted for actual productive time.</small></div></article>
+      </div>{projection.orderRelease ? <form className="core-form compact-form" onSubmit={reviewEffectiveness}>
+        <div className="form-row"><label>Window start<input disabled={controlsDisabled} onChange={(event) => setEffectivenessDraft((current) => ({ ...current, windowStart: event.target.value }))} required type="datetime-local" value={effectivenessDraft.windowStart} /></label><label>Window end<input disabled={controlsDisabled} onChange={(event) => setEffectivenessDraft((current) => ({ ...current, windowEnd: event.target.value }))} required type="datetime-local" value={effectivenessDraft.windowEnd} /></label></div>
+        <div className="plant-availability-fields"><section aria-label="Planned productive time" className="plant-availability-group">{projection.plan.workCentres.filter((centre) => projection.routing.some((operation) => operation.workCentreId === centre.workCentreId)).map((centre) => <div className="plant-availability-item" key={centre.workCentreId}><div><strong>{centre.name}</strong><small>{centre.workCentreId} · exact order window</small></div><label>Planned productive minutes<input disabled={controlsDisabled} inputMode="decimal" min="0.001" onChange={(event) => setEffectivenessDraft((current) => ({ ...current, workCentres: { ...current.workCentres, [centre.workCentreId]: event.target.value } }))} required step="0.001" type="number" value={effectivenessDraft.workCentres[centre.workCentreId] ?? ''} /></label></div>)}</section></div>
+        <label>Closed downtime intervals (optional)<textarea disabled={controlsDisabled} maxLength={32_000} onChange={(event) => setEffectivenessDraft((current) => ({ ...current, downtimeIntervals: event.target.value }))} placeholder="DT-LINESTOP-01 | WC-ASSEMBLY-01 | 2026-07-28T08:20:00+06:30 | 2026-07-28T08:35:00+06:30" rows={3} value={effectivenessDraft.downtimeIntervals} /><small>One row per closed interval: downtime ID | work centre ID | started at | ended at. Intervals must be inside this order window and cannot overlap.</small></label>
+        <button className="core-button" disabled={controlsDisabled} type="submit">Review effectiveness evidence</button>
+      </form> : <p className="panel-copy">Release the reviewed order before recording its production window.</p>}</details> : null}
       {projection.genealogy.length ? <details className="compact-disclosure production-history"><summary>Batch genealogy <span>{projection.genealogy.length}</span></summary><div className="issue-list">{projection.genealogy.map((row) => <article key={row.materialId}><span aria-hidden="true" className="issue-mark resolved">LOT</span><div><strong>{row.inputLotId} → {row.outputBatchId}</strong><small>{row.materialId} · {formatMilli(row.issuedQuantityMilli)} {row.unit}</small></div></article>)}</div></details> : null}
       <p aria-live="polite" className="form-notice">{error || notice || (projection.status === 'released_to_stock' ? 'Batch release is recorded. Post Shop receipt, costing, and accounting only through their own reviewed controls.' : `${managed ? 'Managed' : 'Local'} execution evidence only. No machine command, external send, inventory posting, payment, or accounting action occurs.`)}</p>
     </section>

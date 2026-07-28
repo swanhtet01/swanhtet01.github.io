@@ -2,7 +2,7 @@ export const PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.order_foundation.v1' as
 export const PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1' as const
 export const PLANT_ORDER_EXECUTION_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v2' as const
 export const PLANT_ORDER_PROJECTION_CONTRACT = 'supermega.plant.order_projection.v1' as const
-export const PLANT_ORDER_EFFECTIVENESS_CONTRACT = 'supermega.plant.order_effectiveness.v1' as const
+export const PLANT_ORDER_EFFECTIVENESS_CONTRACT = 'supermega.plant.order_effectiveness.v2' as const
 export const EMPTY_PLANT_ORDER_DIGEST = `sha256:${'0'.repeat(64)}`
 export const PLANT_ORDER_STORAGE_PREFIX = 'supermega.plant.order-foundation.v1:'
 export const PLANT_ORDER_ADDITIONAL_MATERIAL_MAX = 11
@@ -67,6 +67,20 @@ type AvailabilityCommand = {
 }
 type ReleaseOrderCommand = { kind: 'release_order'; id: string; availabilityCheckId: string; proof: PlantOrderProof }
 type IssueMaterialCommand = { kind: 'issue_material'; id: string; materialId: string; inputLotId: string; quantityMilli: number; proof: PlantOrderProof }
+export type PlantOrderEffectivenessWorkCentre = { workCentreId: string; plannedProductiveMinutesMilli: number }
+export type PlantOrderDowntimeInterval = { downtimeId: string; workCentreId: string; startedAt: string; endedAt: string }
+export type RecordEffectivenessCommand = {
+  kind: 'record_effectiveness'
+  id: string
+  planId: string
+  jobId: string
+  windowStart: string
+  windowEnd: string
+  sourceDigest: string
+  workCentres: PlantOrderEffectivenessWorkCentre[]
+  downtimeIntervals: PlantOrderDowntimeInterval[]
+  proof: PlantOrderProof
+}
 export type RecordOperationCommand = { kind: 'record_operation'; id: string; operationId: string; quantity: number; actualMinutesMilli: number; proof: PlantOrderProof }
 type RecordOutputCommand = { kind: 'record_output'; id: string; outputBatchId: string; quantity: number; proof: PlantOrderProof }
 export type InspectOutputCommand = {
@@ -80,7 +94,7 @@ export type InspectOutputCommand = {
   proof: PlantOrderProof
 }
 type ReleaseBatchCommand = { kind: 'release_batch'; id: string; outputBatchId: string; inspectionId: string; proof: PlantOrderProof }
-export type PlantOrderCommandPayload = ImportPlanCommand | AvailabilityCommand | ReleaseOrderCommand | IssueMaterialCommand | RecordOperationCommand | RecordOutputCommand | InspectOutputCommand | ReleaseBatchCommand
+export type PlantOrderCommandPayload = ImportPlanCommand | AvailabilityCommand | ReleaseOrderCommand | IssueMaterialCommand | RecordEffectivenessCommand | RecordOperationCommand | RecordOutputCommand | InspectOutputCommand | ReleaseBatchCommand
 
 export type PlantOrderCommand = {
   sequence: number
@@ -117,6 +131,7 @@ export type PlantOrderProjection = {
   status: 'unplanned' | 'planned' | 'shortfall' | 'ready' | 'released' | 'in_process' | 'inspection_due' | 'quality_hold' | 'ready_to_release' | 'released_to_stock'
   latestAvailability: PlantOrderAvailabilityProjection | null
   orderRelease: ReleaseOrderCommand | null
+  effectivenessWindow: RecordEffectivenessCommand | null
   materials: Array<PlantOrderMaterial & { requiredQuantityMilli: number; issuedQuantityMilli: number; remainingToIssueMilli: number; inputLotId: string | null; availableQuantityMilli: number | null }>
   routing: PlantOrderRoutingStep[]
   operations: Array<PlantOrderRoutingStep & { completedQuantity: number; remainingQuantity: number; plannedMinutesMilli: number; actualMinutesMilli: number; status: 'blocked' | 'ready' | 'in_progress' | 'complete' }>
@@ -133,8 +148,20 @@ export type PlantOrderProjection = {
 
 export type PlantOrderEffectivenessProjection = {
   contract: typeof PLANT_ORDER_EFFECTIVENESS_CONTRACT
-  status: 'not_started' | 'collecting' | 'availability_setup_required'
-  availabilityBasisPoints: null
+  status: 'not_started' | 'collecting' | 'availability_setup_required' | 'complete'
+  availabilityBasisPoints: number | null
+  availability: null | {
+    basisPoints: number
+    plannedProductiveMinutesMilli: number
+    downtimeMinutesMilli: number
+    operatingMinutesMilli: number
+    windowStart: string
+    windowEnd: string
+    workCentreCount: number
+    downtimeIntervalCount: number
+    sourceDigest: string
+    proof: PlantOrderProof
+  }
   performance: null | {
     basisPoints: number
     designedMinutesMilli: number
@@ -147,7 +174,7 @@ export type PlantOrderEffectivenessProjection = {
     acceptedQuantity: number
     rejectedQuantity: number
   }
-  oeeBasisPoints: null
+  oeeBasisPoints: number | null
   missingEvidence: string[]
 }
 
@@ -158,7 +185,7 @@ const digestPattern = /^sha256:[0-9a-f]{64}$/
 const businessIdPattern = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$/
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
 const materialUnits = new Set(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
-const commandKinds = new Set(['import_plan', 'availability_check', 'release_order', 'issue_material', 'record_operation', 'record_output', 'inspect_output', 'release_batch'])
+const commandKinds = new Set(['import_plan', 'availability_check', 'release_order', 'issue_material', 'record_effectiveness', 'record_operation', 'record_output', 'inspect_output', 'release_batch'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -464,6 +491,92 @@ function validateCapacityAvailability(value: unknown, field: string): PlantOrder
   return rows
 }
 
+function validateEffectivenessWorkCentres(value: unknown, field: string): PlantOrderEffectivenessWorkCentre[] {
+  const rows = array(value, field, 1, 50).map((candidate, index) => {
+    const rowField = `${field}[${index}]`; const row = exact(candidate, rowField, ['workCentreId', 'plannedProductiveMinutesMilli'])
+    return {
+      workCentreId: identifier(row.workCentreId, `${rowField}.workCentreId`, 'WC'),
+      plannedProductiveMinutesMilli: integer(row.plannedProductiveMinutesMilli, `${rowField}.plannedProductiveMinutesMilli`, 1),
+    }
+  })
+  unique(rows.map((row) => row.workCentreId), `${field} work-centre IDs`); sorted(rows.map((row) => row.workCentreId), `${field} work-centre IDs`)
+  return rows
+}
+
+function intervalDurationMinutesMilli(startedAt: string, endedAt: string, field: string) {
+  const started = timestampMicros(startedAt, `${field}.startedAt`).micros
+  const ended = timestampMicros(endedAt, `${field}.endedAt`).micros
+  const durationMicros = ended - started
+  if (durationMicros <= 0n) throw new Error(`${field}.endedAt must follow startedAt.`)
+  if (durationMicros % 60_000n !== 0n) throw new Error(`${field} duration must resolve to whole thousandths of a minute.`)
+  const duration = durationMicros / 60_000n
+  if (duration > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error(`${field} duration exceeds the supported range.`)
+  return Number(duration)
+}
+
+function validateDowntimeIntervals(value: unknown, field: string): PlantOrderDowntimeInterval[] {
+  const rows = array(value, field, 0, 200).map((candidate, index) => {
+    const rowField = `${field}[${index}]`; const row = exact(candidate, rowField, ['downtimeId', 'workCentreId', 'startedAt', 'endedAt'])
+    const result = {
+      downtimeId: identifier(row.downtimeId, `${rowField}.downtimeId`, 'DT'),
+      workCentreId: identifier(row.workCentreId, `${rowField}.workCentreId`, 'WC'),
+      startedAt: timestampMicros(row.startedAt, `${rowField}.startedAt`).value,
+      endedAt: timestampMicros(row.endedAt, `${rowField}.endedAt`).value,
+    }
+    intervalDurationMinutesMilli(result.startedAt, result.endedAt, rowField)
+    return result
+  })
+  unique(rows.map((row) => row.downtimeId), `${field} downtime IDs`); sorted(rows.map((row) => row.downtimeId), `${field} downtime IDs`)
+  return rows
+}
+
+export function parsePlantOrderDowntimePaste(value: unknown) {
+  if (typeof value !== 'string') throw new Error('Downtime evidence must be text.')
+  const lines = value.replace(/^\uFEFF/, '').split(/\r?\n/).map((row, index) => ({ line: index + 1, value: row.trim() })).filter((row) => row.value)
+  if (lines[0]?.value.toLowerCase().replaceAll(' ', '') === 'downtime_id|work_centre_id|started_at|ended_at') lines.shift()
+  if (lines.length > 200) throw new Error('Add at most 200 closed downtime intervals.')
+  const rows = lines.map(({ line, value: row }) => {
+    const columns = row.split('|').map((column) => column.trim())
+    if (columns.length !== 4) throw new Error(`Downtime line ${line} must contain downtime ID | work centre ID | started at | ended at.`)
+    return { downtimeId: columns[0].toUpperCase(), workCentreId: columns[1].toUpperCase(), startedAt: columns[2], endedAt: columns[3] }
+  }).sort((left, right) => compareCanonicalText(left.downtimeId, right.downtimeId))
+  return validateDowntimeIntervals(rows, 'downtime evidence')
+}
+
+function validateEffectivenessWindow(value: Record<string, unknown>, field: string): RecordEffectivenessCommand {
+  const row = exact(value, field, ['kind', 'id', 'planId', 'jobId', 'windowStart', 'windowEnd', 'sourceDigest', 'workCentres', 'downtimeIntervals', 'proof'])
+  const planId = identifier(row.planId, `${field}.planId`, 'PLN'); const jobId = identifier(row.jobId, `${field}.jobId`, 'JOB')
+  const windowStart = timestampMicros(row.windowStart, `${field}.windowStart`).value; const windowEnd = timestampMicros(row.windowEnd, `${field}.windowEnd`).value
+  const windowDurationMinutesMilli = intervalDurationMinutesMilli(windowStart, windowEnd, field)
+  const workCentres = validateEffectivenessWorkCentres(row.workCentres, `${field}.workCentres`)
+  const downtimeIntervals = validateDowntimeIntervals(row.downtimeIntervals, `${field}.downtimeIntervals`)
+  const sourceDigest = digest(row.sourceDigest, `${field}.sourceDigest`)
+  const source = { planId, jobId, windowStart, windowEnd, workCentres, downtimeIntervals }
+  if (sourceDigest !== canonicalDigest(source)) throw new Error(`${field}.sourceDigest does not match its order-bound effectiveness evidence.`)
+  const centreIds = new Set(workCentres.map((centre) => centre.workCentreId))
+  const windowStartMicros = timestampMicros(windowStart, `${field}.windowStart`).micros; const windowEndMicros = timestampMicros(windowEnd, `${field}.windowEnd`).micros
+  const downtimeByCentre = new Map<string, Array<{ start: bigint; end: bigint; duration: number }>>()
+  downtimeIntervals.forEach((interval, index) => {
+    if (!centreIds.has(interval.workCentreId)) throw new Error(`${field}.downtimeIntervals[${index}].workCentreId is not in the effectiveness work centres.`)
+    const start = timestampMicros(interval.startedAt, `${field}.downtimeIntervals[${index}].startedAt`).micros
+    const end = timestampMicros(interval.endedAt, `${field}.downtimeIntervals[${index}].endedAt`).micros
+    if (start < windowStartMicros || end > windowEndMicros) throw new Error(`${field}.downtimeIntervals[${index}] falls outside the effectiveness window.`)
+    const rows = downtimeByCentre.get(interval.workCentreId) ?? []
+    rows.push({ start, end, duration: intervalDurationMinutesMilli(interval.startedAt, interval.endedAt, `${field}.downtimeIntervals[${index}]`) })
+    downtimeByCentre.set(interval.workCentreId, rows)
+  })
+  workCentres.forEach((centre) => {
+    if (centre.plannedProductiveMinutesMilli > windowDurationMinutesMilli) throw new Error(`${field} planned productive time for ${centre.workCentreId} exceeds the evidence window.`)
+    const intervals = [...(downtimeByCentre.get(centre.workCentreId) ?? [])].sort((left, right) => left.start < right.start ? -1 : left.start > right.start ? 1 : 0)
+    intervals.forEach((interval, index) => { if (index && interval.start < intervals[index - 1].end) throw new Error(`${field} downtime overlaps for ${centre.workCentreId}.`) })
+    const downtime = intervals.reduce((total, interval) => total + interval.duration, 0)
+    if (!Number.isSafeInteger(downtime) || downtime > centre.plannedProductiveMinutesMilli) throw new Error(`${field} downtime exceeds planned productive time for ${centre.workCentreId}.`)
+  })
+  const proof = actionProof(row.proof, `${field}.proof`)
+  if (timestampMicros(proof.capturedAt, `${field}.proof.capturedAt`).micros < windowEndMicros) throw new Error(`${field}.proof.capturedAt must be at or after the closed effectiveness window.`)
+  return { kind: 'record_effectiveness', id: identifier(row.id, `${field}.id`, 'OEE'), ...source, sourceDigest, proof }
+}
+
 function commandPayload(value: unknown, field: string): PlantOrderCommandPayload {
   if (!isRecord(value) || typeof value.kind !== 'string' || !commandKinds.has(value.kind)) throw new Error(`${field}.kind is unsupported.`)
   if (value.kind === 'import_plan') {
@@ -484,6 +597,7 @@ function commandPayload(value: unknown, field: string): PlantOrderCommandPayload
     const row = exact(value, field, ['kind', 'id', 'materialId', 'inputLotId', 'quantityMilli', 'proof'])
     return { kind: 'issue_material', id: identifier(row.id, `${field}.id`, 'ISSUE'), materialId: identifier(row.materialId, `${field}.materialId`, 'MAT'), inputLotId: identifier(row.inputLotId, `${field}.inputLotId`, 'LOT'), quantityMilli: integer(row.quantityMilli, `${field}.quantityMilli`, 1), proof: actionProof(row.proof, `${field}.proof`) }
   }
+  if (value.kind === 'record_effectiveness') return validateEffectivenessWindow(value, field)
   if (value.kind === 'record_operation') {
     const row = exact(value, field, ['kind', 'id', 'operationId', 'quantity', 'actualMinutesMilli', 'proof'])
     return { kind: 'record_operation', id: identifier(row.id, `${field}.id`, 'OPRUN'), operationId: identifier(row.operationId, `${field}.operationId`, 'OP'), quantity: integer(row.quantity, `${field}.quantity`, 1), actualMinutesMilli: integer(row.actualMinutesMilli, `${field}.actualMinutesMilli`, 1), proof: actionProof(row.proof, `${field}.proof`) }
@@ -535,12 +649,12 @@ function availabilityProjection(plan: PlantOrderPlan, command: AvailabilityComma
 }
 
 function emptyProjection(): Omit<PlantOrderProjection, 'contract' | 'revision' | 'headDigest'> {
-  return { plan: null, status: 'unplanned', latestAvailability: null, orderRelease: null, materials: [], routing: [], operations: [], workCentres: [], outputEntries: [], totalOutput: 0, inspections: [], latestInspection: null, qualityHold: null, batchRelease: null, genealogy: [], metrics: { targetQuantity: 0, issuedMaterialCount: 0, completedOperationCount: 0, actualOperationMinutesMilli: 0, outputQuantity: 0, acceptedQuantity: 0 } }
+  return { plan: null, status: 'unplanned', latestAvailability: null, orderRelease: null, effectivenessWindow: null, materials: [], routing: [], operations: [], workCentres: [], outputEntries: [], totalOutput: 0, inspections: [], latestInspection: null, qualityHold: null, batchRelease: null, genealogy: [], metrics: { targetQuantity: 0, issuedMaterialCount: 0, completedOperationCount: 0, actualOperationMinutesMilli: 0, outputQuantity: 0, acceptedQuantity: 0 } }
 }
 
 function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderProjection, 'contract' | 'revision' | 'headDigest'> {
   if (!commands.length) return emptyProjection()
-  let plan: PlantOrderPlan | null = null; let latestAvailability: PlantOrderAvailabilityProjection | null = null; let orderRelease: ReleaseOrderCommand | null = null
+  let plan: PlantOrderPlan | null = null; let latestAvailability: PlantOrderAvailabilityProjection | null = null; let orderRelease: ReleaseOrderCommand | null = null; let effectivenessWindow: RecordEffectivenessCommand | null = null
   let issued = new Map<string, number>(); let operationQuantities = new Map<string, number>(); let operationMinutes = new Map<string, number>(); const materialIssueCommands: IssueMaterialCommand[] = []; const operationCommands: RecordOperationCommand[] = []; const outputEntries: RecordOutputCommand[] = []; const inspections: InspectOutputCommand[] = []
   let batchRelease: ReleaseBatchCommand | null = null; let totalOutput = 0
   commands.forEach((command, index) => {
@@ -564,6 +678,13 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
       orderRelease = command; return
     }
     if (!orderRelease) throw new Error(`${field} requires human order release.`)
+    if (command.kind === 'record_effectiveness') {
+      if (command.planId !== currentPlan.planId || command.jobId !== currentPlan.job.jobId) throw new Error(`${field} is not bound to the reviewed order.`)
+      const routedCentreIds = [...new Set(currentPlan.routing.map((row) => row.workCentreId))].sort(compareCanonicalText)
+      const observedCentreIds = command.workCentres.map((row) => row.workCentreId)
+      if (routedCentreIds.length !== observedCentreIds.length || routedCentreIds.some((id, index) => id !== observedCentreIds[index])) throw new Error(`${field} must cover every and only routed work centre.`)
+      effectivenessWindow = command; return
+    }
     if (batchRelease) throw new Error(`${field} follows final batch release.`)
     const latestInspection = inspections.at(-1); const currentHold = Boolean(latestInspection && latestInspection.inspectedQuantity === totalOutput && latestInspection.result === 'fail')
     if (command.kind === 'issue_material') {
@@ -652,7 +773,7 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
   else if (totalOutput === finalPlan.job.targetQuantity) status = inspectionIsCurrent && latestInspection?.result === 'pass' ? 'ready_to_release' : 'inspection_due'
   else if (totalOutput || materialIssueCommands.length || operationCommands.length) status = 'in_process'
   else status = 'released'
-  return { plan: finalPlan, status, latestAvailability: finalAvailability, orderRelease: finalOrderRelease, materials, routing: finalPlan.routing, operations, workCentres: finalAvailability?.workCentres ?? [], outputEntries, totalOutput, inspections, latestInspection, qualityHold, batchRelease: finalBatchRelease, genealogy, metrics: { targetQuantity: finalPlan.job.targetQuantity, issuedMaterialCount: [...issued.values()].filter(Boolean).length, completedOperationCount: operations.filter((row) => row.status === 'complete').length, actualOperationMinutesMilli: [...operationMinutes.values()].reduce((total, value) => total + value, 0), outputQuantity: totalOutput, acceptedQuantity: inspectionIsCurrent && latestInspection ? latestInspection.acceptedQuantity : 0 } }
+  return { plan: finalPlan, status, latestAvailability: finalAvailability, orderRelease: finalOrderRelease, effectivenessWindow, materials, routing: finalPlan.routing, operations, workCentres: finalAvailability?.workCentres ?? [], outputEntries, totalOutput, inspections, latestInspection, qualityHold, batchRelease: finalBatchRelease, genealogy, metrics: { targetQuantity: finalPlan.job.targetQuantity, issuedMaterialCount: [...issued.values()].filter(Boolean).length, completedOperationCount: operations.filter((row) => row.status === 'complete').length, actualOperationMinutesMilli: [...operationMinutes.values()].reduce((total, value) => total + value, 0), outputQuantity: totalOutput, acceptedQuantity: inspectionIsCurrent && latestInspection ? latestInspection.acceptedQuantity : 0 } }
 }
 
 export function validatePlantOrderState(value: unknown): PlantOrderState {
@@ -693,16 +814,39 @@ function ratioBasisPoints(numerator: number, denominator: number) {
 }
 
 export function projectPlantOrderEffectiveness(projection: PlantOrderProjection): PlantOrderEffectivenessProjection {
-  const missingEvidence = ['Order-bound planned productive time and downtime']
+  const missingEvidence: string[] = []
   if (!projection.plan) return {
     contract: PLANT_ORDER_EFFECTIVENESS_CONTRACT,
     status: 'not_started',
     availabilityBasisPoints: null,
+    availability: null,
     performance: null,
     quality: null,
     oeeBasisPoints: null,
-    missingEvidence: [...missingEvidence, 'Reviewed routing time', 'Current output inspection'],
+    missingEvidence: ['Order-bound planned productive time and downtime', 'Reviewed routing time', 'Current output inspection'],
   }
+
+  const window = projection.effectivenessWindow
+  let plannedProductiveMinutesMilli = 0; let downtimeMinutesMilli = 0
+  if (window) {
+    for (const centre of window.workCentres) plannedProductiveMinutesMilli += centre.plannedProductiveMinutesMilli
+    for (const interval of window.downtimeIntervals) downtimeMinutesMilli += intervalDurationMinutesMilli(interval.startedAt, interval.endedAt, `effectiveness downtime ${interval.downtimeId}`)
+  }
+  const operatingMinutesMilli = plannedProductiveMinutesMilli - downtimeMinutesMilli
+  const availabilityBasisPoints = window ? ratioBasisPoints(operatingMinutesMilli, plannedProductiveMinutesMilli) : null
+  const availability = window && availabilityBasisPoints !== null ? {
+    basisPoints: availabilityBasisPoints,
+    plannedProductiveMinutesMilli,
+    downtimeMinutesMilli,
+    operatingMinutesMilli,
+    windowStart: window.windowStart,
+    windowEnd: window.windowEnd,
+    workCentreCount: window.workCentres.length,
+    downtimeIntervalCount: window.downtimeIntervals.length,
+    sourceDigest: window.sourceDigest,
+    proof: window.proof,
+  } : null
+  if (!availability) missingEvidence.push('Order-bound planned productive time and downtime')
 
   let designedMinutes = 0n
   for (const operation of projection.operations) {
@@ -736,13 +880,23 @@ export function projectPlantOrderEffectiveness(projection: PlantOrderProjection)
     : null
   if (!quality) missingEvidence.push('Current output inspection')
 
+  let oeeBasisPoints: number | null = null
+  if (availability && performance && quality) {
+    const rounded = (
+      BigInt(availability.basisPoints) * BigInt(performance.basisPoints) * BigInt(quality.basisPoints)
+      + 50_000_000n
+    ) / 100_000_000n
+    if (rounded <= BigInt(Number.MAX_SAFE_INTEGER)) oeeBasisPoints = Number(rounded)
+  }
+
   return {
     contract: PLANT_ORDER_EFFECTIVENESS_CONTRACT,
-    status: performance && quality ? 'availability_setup_required' : 'collecting',
-    availabilityBasisPoints: null,
+    status: oeeBasisPoints !== null ? 'complete' : performance && quality && !availability ? 'availability_setup_required' : 'collecting',
+    availabilityBasisPoints,
+    availability,
     performance,
     quality,
-    oeeBasisPoints: null,
+    oeeBasisPoints,
     missingEvidence,
   }
 }
@@ -775,6 +929,10 @@ export function releasePlantOrder(state: unknown, input: { releaseId: unknown; a
 
 export function issuePlantOrderMaterial(state: unknown, input: { issueId: unknown; materialId: unknown; inputLotId: unknown; quantityMilli: unknown; proof: unknown; expectedHeadDigest: unknown }) {
   return appendCommand(state, { kind: 'issue_material', id: input.issueId, materialId: input.materialId, inputLotId: input.inputLotId, quantityMilli: input.quantityMilli, proof: actionProof(input.proof, 'proof') }, input.expectedHeadDigest)
+}
+
+export function recordPlantOrderEffectiveness(state: unknown, input: { effectivenessId: unknown; planId: unknown; jobId: unknown; windowStart: unknown; windowEnd: unknown; sourceDigest: unknown; workCentres: unknown; downtimeIntervals: unknown; proof: unknown; expectedHeadDigest: unknown }) {
+  return appendCommand(state, { kind: 'record_effectiveness', id: input.effectivenessId, planId: input.planId, jobId: input.jobId, windowStart: input.windowStart, windowEnd: input.windowEnd, sourceDigest: input.sourceDigest, workCentres: input.workCentres, downtimeIntervals: input.downtimeIntervals, proof: actionProof(input.proof, 'proof') }, input.expectedHeadDigest)
 }
 
 export function recordPlantOrderOperation(state: unknown, input: { operationRunId: unknown; operationId: unknown; quantity: unknown; actualMinutesMilli: unknown; proof: unknown; expectedHeadDigest: unknown }) {

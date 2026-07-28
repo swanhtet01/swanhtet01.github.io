@@ -1601,11 +1601,13 @@ if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.orde
   || !plantOrderSource.includes('export function checkPlantOrderAvailability')
   || !plantOrderSource.includes('export function releasePlantOrder')
   || !plantOrderSource.includes('export function issuePlantOrderMaterial')
+  || !plantOrderSource.includes('export function parsePlantOrderDowntimePaste')
+  || !plantOrderSource.includes('export function recordPlantOrderEffectiveness')
   || !plantOrderSource.includes('export function recordPlantOrderOperation')
-  || !plantOrderSource.includes("PLANT_ORDER_EFFECTIVENESS_CONTRACT = 'supermega.plant.order_effectiveness.v1'")
+  || !plantOrderSource.includes("PLANT_ORDER_EFFECTIVENESS_CONTRACT = 'supermega.plant.order_effectiveness.v2'")
   || !plantOrderSource.includes('export function projectPlantOrderEffectiveness')
-  || !plantOrderSource.includes("const missingEvidence = ['Order-bound planned productive time and downtime']")
-  || !plantOrderSource.includes('oeeBasisPoints: null')
+  || !plantOrderSource.includes("missingEvidence.push('Order-bound planned productive time and downtime')")
+  || !plantOrderSource.includes("kind: 'record_effectiveness'")
   || !plantOrderSource.includes('export function inspectPlantOrderOutput')
   || !plantOrderSource.includes('export function releasePlantOrderBatch')
   || !plantOrderSource.includes('export async function mutatePlantOrderWorkspace')
@@ -1634,9 +1636,9 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || !plantOrderUiSource.includes('Review operation progress')
   || !plantOrderUiSource.includes('Routing progress')
   || !plantOrderUiSource.includes('Effectiveness')
-  || !plantOrderUiSource.includes('Availability · Setup required')
-  || !plantOrderUiSource.includes('OEE · Not calculated')
-  || !plantOrderUiSource.includes('Available capacity is not substituted for actual productive time.')
+  || !plantOrderUiSource.includes('Review effectiveness evidence')
+  || !plantOrderUiSource.includes('Closed downtime intervals (optional)')
+  || !plantOrderUiSource.includes('Available capacity is never substituted for actual productive time.')
   || !plantOrderUiSource.includes('aria-label="Plant operating flow"')
   || !plantOrderUiSource.includes('id="plant-operating-flow"')
   || !plantOrderUiSource.includes('Next required step')
@@ -3133,6 +3135,12 @@ async function verifyPlantOrderRuntime() {
     assertThrows(() => model.parsePlantOrderRoutingPaste('OP-TEST-20 | Test | WC-TEST-01 | Test'), 'plant_order_routing_paste_malformed_row_succeeded')
     const tooManyOperations = Array.from({ length: model.PLANT_ORDER_ADDITIONAL_OPERATION_MAX + 1 }, (_, index) => `OP-EXTRA-${String(index + 1).padStart(2, '0')} | Extra ${index + 1} | WC-EXTRA-${String(index + 1).padStart(2, '0')} | Extra ${index + 1} | 1`).join('\n')
     assertThrows(() => model.parsePlantOrderRoutingPaste(tooManyOperations), 'plant_order_routing_paste_row_limit_not_enforced')
+    const pastedDowntime = model.parsePlantOrderDowntimePaste('\uFEFFdowntime_id | work_centre_id | started_at | ended_at\ndt-test-01 | wc-test-01 | 2026-07-26T08:20:00+06:30 | 2026-07-26T08:35:00+06:30')
+    assert(pastedDowntime.length === 1
+      && pastedDowntime[0].downtimeId === 'DT-TEST-01'
+      && pastedDowntime[0].workCentreId === 'WC-TEST-01',
+    'plant_order_downtime_paste_not_canonical')
+    assertThrows(() => model.parsePlantOrderDowntimePaste('DT-TEST-01 | WC-TEST-01 | 2026-07-26T08:35:00+06:30 | 2026-07-26T08:20:00+06:30'), 'plant_order_reverse_downtime_interval_succeeded')
     const planInput = {
       planId: 'PLN-20260726-001',
       sourceDigest: model.plantOrderEvidenceDigest({ jobId: 'JOB-401', revision: 12, target: 10 }),
@@ -3263,6 +3271,45 @@ async function verifyPlantOrderRuntime() {
       && effectiveness.oeeBasisPoints === null
       && effectiveness.missingEvidence.join('|') === 'Order-bound planned productive time and downtime',
     'plant_order_effectiveness_calculated_without_exact_factor_evidence')
+
+    const effectivenessEvidence = {
+      planId: executionPlan.planId,
+      jobId: executionPlan.job.jobId,
+      windowStart: '2026-07-26T08:00:00+06:30',
+      windowEnd: '2026-07-26T09:00:00+06:30',
+      workCentres: [
+        { workCentreId: 'WC-ASSEMBLY-01', plannedProductiveMinutesMilli: 60_000 },
+        { workCentreId: 'WC-TEST-01', plannedProductiveMinutesMilli: 60_000 },
+      ],
+      downtimeIntervals: [
+        { downtimeId: 'DT-ASSEMBLY-01', workCentreId: 'WC-ASSEMBLY-01', startedAt: '2026-07-26T08:10:00+06:30', endedAt: '2026-07-26T08:25:00+06:30' },
+        { downtimeId: 'DT-TEST-01', workCentreId: 'WC-TEST-01', startedAt: '2026-07-26T08:35:00+06:30', endedAt: '2026-07-26T08:50:00+06:30' },
+      ],
+    }
+    assertThrows(() => model.recordPlantOrderEffectiveness(executionResult.state, {
+      effectivenessId: 'OEE-V2-BAD-DIGEST', ...effectivenessEvidence, sourceDigest: model.plantOrderEvidenceDigest({ wrong: true }), proof: proof(13, 'bad effectiveness digest'), expectedHeadDigest: executionResult.state.headDigest,
+    }), 'plant_order_effectiveness_bad_digest_succeeded')
+    const futureEffectivenessEvidence = { ...effectivenessEvidence, windowEnd: '2026-07-26T10:00:00+06:30' }
+    assertThrows(() => model.recordPlantOrderEffectiveness(executionResult.state, {
+      effectivenessId: 'OEE-V2-FUTURE', ...futureEffectivenessEvidence, sourceDigest: model.plantOrderEvidenceDigest(futureEffectivenessEvidence), proof: proof(13, 'future effectiveness window'), expectedHeadDigest: executionResult.state.headDigest,
+    }), 'plant_order_future_effectiveness_attestation_succeeded')
+    executionResult = model.recordPlantOrderEffectiveness(executionResult.state, {
+      effectivenessId: 'OEE-V2-001', ...effectivenessEvidence, sourceDigest: model.plantOrderEvidenceDigest(effectivenessEvidence), proof: proof(13, 'reviewed order-bound effectiveness evidence'), expectedHeadDigest: executionResult.state.headDigest,
+    })
+    const completedEffectiveness = model.projectPlantOrderEffectiveness(model.projectPlantOrder(executionResult.state))
+    assert(completedEffectiveness.contract === 'supermega.plant.order_effectiveness.v2'
+      && completedEffectiveness.status === 'complete'
+      && completedEffectiveness.availabilityBasisPoints === 7_500
+      && completedEffectiveness.availability?.plannedProductiveMinutesMilli === 120_000
+      && completedEffectiveness.availability?.downtimeMinutesMilli === 30_000
+      && completedEffectiveness.availability?.operatingMinutesMilli === 90_000
+      && completedEffectiveness.availability?.workCentreCount === 2
+      && completedEffectiveness.availability?.downtimeIntervalCount === 2
+      && completedEffectiveness.performance?.basisPoints === 9_677
+      && completedEffectiveness.quality?.basisPoints === 8_000
+      && completedEffectiveness.oeeBasisPoints === 5_806
+      && completedEffectiveness.missingEvidence.length === 0,
+    'plant_order_complete_oee_not_bound_to_reviewed_window')
 
     const heldOutput = model.recordPlantOrderOutput(issuedState, { outputId: 'OUT-HOLD-001', outputBatchId: 'BATCH-20260726-401', quantity: 5, proof: proof(6, 'partial output for hold test'), expectedHeadDigest: issuedState.headDigest })
     const held = model.inspectPlantOrderOutput(heldOutput.state, { inspectionId: 'INSP-HOLD-001', outputBatchId: 'BATCH-20260726-401', inspectedQuantity: 5, acceptedQuantity: 4, rejectedQuantity: 1, result: 'fail', proof: proof(7, 'held failed batch'), expectedHeadDigest: heldOutput.state.headDigest })
