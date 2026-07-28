@@ -371,6 +371,7 @@ textarea { min-height: 72px; resize: vertical; }
 .orders-module.has-return-draft .order-archive-list { max-height: none; overflow: visible; }
 .order-queue-actions { display: flex; align-items: center; gap: 12px; }
 .shop-order-control { display: grid; grid-template-columns: minmax(220px,.55fr) minmax(0,1fr); gap: 9px; border: 1px solid rgba(11,116,94,.18); border-radius: 10px; padding: 10px; background: rgba(11,116,94,.045); }
+.shop-order-control.supplier-control { border-color: rgba(21,94,117,.2); background: rgba(14,116,144,.055); }
 .shop-order-control > div:first-child { min-width: 0; display: grid; align-content: center; gap: 3px; }
 .shop-order-control strong { color: var(--core-ink); font-size: 14px; line-height: 1.25; }
 .shop-order-control small { color: var(--core-muted); font-size: 10px; line-height: 1.35; }

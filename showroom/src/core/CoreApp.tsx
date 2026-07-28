@@ -2958,6 +2958,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const dueSoonPurchaseOrders = procurementArrivalRows.filter(({ urgency }) => urgency === 'due_soon')
   const uncoveredReorderItems = lowStock.filter((item) => !activePurchaseOrderBySku.has(item.sku))
   const openPurchaseRemainingUnits = activePurchaseOrders.reduce((total, { progress }) => total + progress.remaining, 0)
+  const activeSupplierCount = new Set(activePurchaseOrders.map(({ purchaseOrder }) => purchaseOrder.supplier)).size
+  const partiallyReceivedPurchaseOrders = activePurchaseOrders.filter(({ progress }) => progress.status === 'partially_received')
   const shopProcurementNext = !commerceCanWrite
     ? 'Restore Shop readiness'
     : pendingAction
@@ -2981,9 +2983,35 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     ['Receipt', commerce.inventoryFoundation && managedInventoryProjection ? 'Location + lot' : 'Simple stock'],
     ['Owner gate', commerceCanWrite && !pendingAction ? 'Required' : 'Locked'],
   ] as const
+  const supplierControlNext = !commerceCanWrite
+    ? 'Restore purchasing readiness'
+    : pendingAction
+      ? 'Approve pending supplier action'
+      : overduePurchaseOrders.length
+        ? 'Resolve late supplier order'
+        : dueSoonPurchaseOrders.length
+          ? 'Prepare receiving evidence'
+          : partiallyReceivedPurchaseOrders.length
+            ? 'Close partial receipt'
+            : uncoveredReorderItems.length
+              ? 'Choose supplier and arrival'
+              : activePurchaseOrders.length
+                ? 'Monitor supplier promise'
+                : 'Supplier controls ready'
+  const supplierControlRows = [
+    ['Suppliers', activeSupplierCount ? `${activeSupplierCount} active` : uncoveredReorderItems.length ? 'Choose one' : 'None needed'],
+    ['Arrival', overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : dueSoonPurchaseOrders.length ? `${dueSoonPurchaseOrders.length} due` : activePurchaseOrders.length ? 'Scheduled' : 'Clear'],
+    ['Open units', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} remaining` : 'Clear'],
+    ['Receipt', commerce.inventoryFoundation && managedInventoryProjection ? 'Lot evidence' : 'Simple count'],
+    ['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Owner confirms' : 'Locked'],
+  ] as const
   const shopProcurement = <section className="shop-order-control" aria-label="Shop procurement readiness">
     <div><span className="core-eyebrow">Procurement readiness</span><strong>{shopProcurementNext}</strong><small>AI checks reorder demand, open POs, arrival risk, receipt evidence, and location/lot readiness. No supplier message, payment, receipt, stock, costing, or accounting write runs from this panel.</small></div>
     <div className="shop-order-control-rows">{shopProcurementRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
+  const supplierControl = <section className="shop-order-control supplier-control" aria-label="Supplier control">
+    <div><span className="core-eyebrow">Supplier control</span><strong>{supplierControlNext}</strong><small>AI turns supplier reference, promised arrival, open quantity, receipt evidence, and owner approval into one purchasing queue. No RFQ, supplier send, payment, payable, costing, or inventory write runs from this panel.</small></div>
+    <div className="shop-order-control-rows">{supplierControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const shopAgentJob = !commerceCanWrite
     ? 'Restore Shop write readiness'
@@ -4646,6 +4674,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     <section className="core-panel inventory-panel">
       <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : 'Count stock'}</button></div></div>
       {shopProcurement}
+      {supplierControl}
       {stockCountDraft ? <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">Stock check</span>
