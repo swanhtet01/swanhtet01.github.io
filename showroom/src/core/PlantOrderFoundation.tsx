@@ -253,6 +253,42 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
   const rejected = /^\d+$/.test(inspectionDraft.rejected) ? Number(inspectionDraft.rejected) : Number.NaN
   const inspectionValid = Number.isSafeInteger(rejected) && rejected >= 0 && rejected <= inspectedQuantity
     && (inspectionDraft.result === 'pass' ? rejected === 0 : rejected > 0)
+  const flowActiveIndex = projection.status === 'unplanned' ? 0
+    : projection.status === 'planned' || projection.status === 'shortfall' ? 1
+      : projection.status === 'ready' ? 2
+        : projection.status === 'released' || projection.status === 'in_process' ? 3
+          : projection.status === 'inspection_due' || projection.status === 'quality_hold' ? 4
+            : projection.status === 'ready_to_release' ? 5 : 6
+  const flowBlocked = projection.status === 'shortfall' || projection.status === 'quality_hold' || awaitingWarehouse || !bindingCurrent
+  const flowStages = [
+    { id: 'plan', label: 'Plan', detail: projection.plan ? projection.plan.job.jobId : activeJobs.length ? `${activeJobs.length} active ${activeJobs.length === 1 ? 'job' : 'jobs'}` : 'Add a job first' },
+    { id: 'check', label: 'Check', detail: projection.latestAvailability ? projection.latestAvailability.passed ? 'Material + capacity passed' : `${projection.latestAvailability.shortfalls.length} ${projection.latestAvailability.shortfalls.length === 1 ? 'shortfall' : 'shortfalls'}` : 'Material + capacity' },
+    { id: 'release', label: 'Release', detail: projection.orderRelease ? 'Work package released' : 'Supervisor review' },
+    { id: 'run', label: 'Run', detail: projection.plan ? `${projection.metrics.completedOperationCount}/${projection.operations.length} operations · ${projection.totalOutput}/${projection.metrics.targetQuantity} output` : 'Issue · make · record' },
+    { id: 'inspect', label: 'Inspect', detail: projection.latestInspection ? `${projection.latestInspection.acceptedQuantity} accepted · ${projection.latestInspection.rejectedQuantity} rejected` : 'Quality decision' },
+    { id: 'stock', label: 'Stock', detail: projection.batchRelease ? `${projection.metrics.acceptedQuantity} units released` : 'Human batch release' },
+  ].map((stage, index) => ({
+    ...stage,
+    state: flowActiveIndex === 6 || index < flowActiveIndex ? 'complete' : index === flowActiveIndex ? flowBlocked ? 'blocked' : 'current' : 'upcoming',
+  }))
+  const flowNext = projection.status === 'unplanned'
+    ? activeJobs.length ? { title: 'Set up this batch', detail: 'Choose one active job, then review its BOM and routing.' } : { title: 'Add a production job first', detail: 'A controlled batch must start from one scheduled, owned job.' }
+    : projection.status === 'planned' || projection.status === 'shortfall'
+      ? { title: projection.status === 'shortfall' ? 'Resolve the availability shortfall' : 'Check material and capacity', detail: 'Record exact lots and work-centre minutes before release.' }
+      : projection.status === 'ready'
+        ? { title: 'Release the work package', detail: 'Confirm the reviewed plan before any material or operation record.' }
+        : projection.status === 'released' || projection.status === 'in_process'
+          ? awaitingWarehouse ? { title: 'Issue requested material in Shop', detail: 'Shop remains the stock authority; return here after the reviewed issue.' }
+            : nextMaterial ? { title: `Request ${nextMaterial.name}`, detail: 'Bind the next material lot to this output batch.' }
+              : nextOperation ? { title: `Record ${nextOperation.name}`, detail: 'Enter completed units and actual time for the current routing step.' }
+                : { title: 'Record batch output', detail: `${outputRemaining.toLocaleString()} units remain before inspection.` }
+          : projection.status === 'inspection_due'
+            ? { title: 'Inspect the completed batch', detail: 'Record accepted and rejected units before release.' }
+            : projection.status === 'quality_hold'
+              ? { title: 'Resolve the quality hold', detail: 'Reinspect the current output; release remains blocked.' }
+              : projection.status === 'ready_to_release'
+                ? { title: 'Release the accepted batch', detail: 'Record the final human quality release to stock.' }
+                : { title: 'Batch execution complete', detail: 'The released quantity is ready for a separate reviewed Shop receipt.' }
 
 
   useEffect(() => {
@@ -483,14 +519,27 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
   }
 
   return <>
-    <section aria-labelledby="plant-execution-title" className="catalog-onboarding-bridge plant-execution-foundation">
-      <div>
-        <span className="core-eyebrow">Execution control</span>
-        <h3 id="plant-execution-title">{projection.plan ? `${projection.plan.job.jobId} · ${visibleStatus}` : 'Run one controlled batch'}</h3>
-        <p>{projection.plan ? `${projection.totalOutput.toLocaleString()} / ${projection.metrics.targetQuantity.toLocaleString()} output · ${projection.genealogy.length} traced input ${projection.genealogy.length === 1 ? 'lot' : 'lots'} · revision ${projection.revision}` : 'Turn an active job into one reviewed BOM, routing, material, output, inspection, and release chain.'}</p>
+    <section aria-labelledby="plant-execution-title" className="core-panel plant-execution-foundation">
+      <div className="plant-execution-head">
+        <div>
+          <span className="core-eyebrow">Execution control</span>
+          <h3 id="plant-execution-title">{projection.plan ? `${projection.plan.job.jobId} · ${visibleStatus}` : 'Run one controlled batch'}</h3>
+          <p>{projection.plan ? `${projection.totalOutput.toLocaleString()} / ${projection.metrics.targetQuantity.toLocaleString()} output · ${projection.genealogy.length} traced input ${projection.genealogy.length === 1 ? 'lot' : 'lots'} · revision ${projection.revision}` : 'Turn an active job into one reviewed BOM, routing, material, output, inspection, and release chain.'}</p>
+        </div>
+        {!projection.plan ? <button aria-controls="plant-execution-setup" aria-expanded={setupOpen} className="core-button primary" disabled={disabled} onClick={() => { setSetupOpen(true); setReview(null) }} ref={setupTriggerRef} type="button">Set up batch</button> : null}
+        {projection.plan ? <span className={`status-pill ${awaitingWarehouse || projection.status === 'quality_hold' || projection.status === 'shortfall' ? 'pending' : 'bounded'}`}>{visibleStatus}</span> : null}
       </div>
-      {!projection.plan ? <button aria-controls="plant-execution-setup" aria-expanded={setupOpen} className="core-button primary" disabled={disabled} onClick={() => { setSetupOpen(true); setReview(null) }} ref={setupTriggerRef} type="button">Set up batch</button> : null}
-      {projection.plan ? <span className={`status-pill ${awaitingWarehouse || projection.status === 'quality_hold' || projection.status === 'shortfall' ? 'pending' : 'bounded'}`}>{visibleStatus}</span> : null}
+      <section aria-label="Plant operating flow" className="plant-operating-flow" id="plant-operating-flow">
+        <div className={`plant-next-work${flowBlocked ? ' is-blocked' : ''}`}>
+          <div><span className="core-eyebrow">Next required step</span><strong>{flowNext.title}</strong><small>{flowNext.detail}</small></div>
+          <span className={`status-pill ${flowBlocked ? 'pending' : projection.status === 'released_to_stock' ? 'bounded' : ''}`}>{projection.status === 'released_to_stock' ? 'Complete' : flowBlocked ? 'Needs attention' : `Step ${Math.min(flowActiveIndex + 1, flowStages.length)} of ${flowStages.length}`}</span>
+        </div>
+        <ol className="plant-flow-stages">
+          {flowStages.map((stage, index) => <li aria-current={stage.state === 'current' || stage.state === 'blocked' ? 'step' : undefined} className={stage.state} key={stage.id}>
+            <span>{String(index + 1).padStart(2, '0')} · {stage.label}</span><strong>{stage.state === 'complete' ? 'Done' : stage.state === 'blocked' ? 'Blocked' : stage.state === 'current' ? 'Now' : 'Next'}</strong><small>{stage.detail}</small>
+          </li>)}
+        </ol>
+      </section>
 
       {projection.plan && (projection.status === 'planned' || projection.status === 'shortfall') ? <form className="core-form compact-form" onSubmit={reviewAvailability}>
         <div aria-label="Material and capacity availability" className="plant-availability-fields">

@@ -5624,10 +5624,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         </details>
       </section>
     </div>
-    <details className="plant-execution-disclosure">
-      <summary><span><strong>Batch control</strong><small>BOM, routing, materials, inspection, and release</small></span><b>Open</b></summary>
-      <Suspense fallback={<p className="form-notice" role="status">Loading batch control…</p>}><PlantOrderFoundation actor={managedIdentity?.userId ?? 'Local Plant supervisor'} commerceState={relatedCommerce} disabled={!productionCanWrite || Boolean(pendingAction)} jobs={production.jobs} key={`plant-order:${managedWorkspaceId ?? managedIdentity?.workspaceId ?? 'local-sample'}:${production.orderExecution?.headDigest ?? 'empty'}`} managedState={managedIdentity ? production.orderExecution ?? null : undefined} onManagedCommand={managedIdentity ? mutateProduction : undefined} scope={`plant:${managedWorkspaceId ?? managedIdentity?.workspaceId ?? 'local-sample'}`} /></Suspense>
-    </details>
+    <Suspense fallback={<p className="form-notice" role="status">Loading batch execution…</p>}><PlantOrderFoundation actor={managedIdentity?.userId ?? 'Local Plant supervisor'} commerceState={relatedCommerce} disabled={!productionCanWrite || Boolean(pendingAction)} jobs={production.jobs} key={`plant-order:${managedWorkspaceId ?? managedIdentity?.workspaceId ?? 'local-sample'}:${production.orderExecution?.headDigest ?? 'empty'}`} managedState={managedIdentity ? production.orderExecution ?? null : undefined} onManagedCommand={managedIdentity ? mutateProduction : undefined} scope={`plant:${managedWorkspaceId ?? managedIdentity?.workspaceId ?? 'local-sample'}`} /></Suspense>
     <dialog aria-labelledby="job-schedule-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeJobSchedule() }} ref={scheduleDialogRef}>
       {scheduleDraft ? <>
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2 id="job-schedule-title">Change {scheduleDraft.jobId} plan</h2></div><button aria-label="Close job schedule" className="text-link" onClick={closeJobSchedule} type="button">Close</button></div>
