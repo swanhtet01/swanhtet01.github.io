@@ -24,7 +24,7 @@ import {
 } from '../kernel/gateway.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyCompanyCycleText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyCompanyCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -40,6 +40,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'hq', 'research', 'release-reconciliation-2026-07-26.md'), 'utf8'),
   readFile(resolve(root, 'tools', 'audit_ally_runtime.ps1'), 'utf8'),
   readFile(resolve(root, 'tools', 'invoke_supermega_company_cycle.ps1'), 'utf8'),
+  readFile(resolve(root, 'tools', 'run_supermega_agent_jobs.py'), 'utf8'),
   readFile(resolve(root, 'package.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'pilots', 'private-storage-privacy-audit.md'), 'utf8'),
   readFile(resolve(root, 'tools', 'verify_hq_live_state.mjs'), 'utf8'),
@@ -795,6 +796,19 @@ requireContract('Ally company cycles are host-admitted and serial',
   && allyCompanyCycleText.includes('scale to zero after completion')
   && packageText.includes('"company:ally:self-test"')
   && !/\b(?:Stop-Process|Start-Process|taskkill|kill|Remove-Item|EmptyWorkingSet|SetProcessWorkingSetSize)\b/i.test(allyCompanyCycleText))
+
+requireContract('agent job cycles are canonical, bounded, and scale to zero',
+  workforce.runtime_policy.max_batch_jobs === 4
+  && workforce.runtime_policy.scale_to_zero === true
+  && agentJobRunnerText.includes('AGENT_RUNNER_CYCLE_CONTRACT = "supermega.agent-runner-cycle-budget.v1"')
+  && agentJobRunnerText.includes('MAX_PROCESSED_PER_CYCLE = 4')
+  && agentJobRunnerText.includes('MAX_JOB_TYPE_ARGUMENTS = 24')
+  && agentJobRunnerText.includes('def build_job_cycle_plan(')
+  && agentJobRunnerText.includes('raise RuntimeError("job_type_not_canonical")')
+  && agentJobRunnerText.includes('raise RuntimeError("workspace_login_requires_explicit_job_types")')
+  && agentJobRunnerText.includes('raise RuntimeError("workspace_login_job_limit_exceeded")')
+  && agentJobRunnerText.includes('"limit": cycle_plan["process_limit"]')
+  && !/\b(?:subprocess|Popen|Start-Process|multiprocessing|ThreadPoolExecutor)\b/.test(agentJobRunnerText))
 
 requireContract('live HQ state is machine-verifiable and read-only',
   now.includes('Live state contract: `supermega.hq-live-state.v1`')
