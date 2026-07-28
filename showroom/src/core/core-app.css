@@ -744,6 +744,8 @@ textarea { min-height: 72px; resize: vertical; }
 .context-quality-rows small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .context-quality-rows strong { overflow: hidden; color: var(--core-ink); font-size: 11px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
 .context-quality-rows em { overflow: hidden; color: var(--core-muted); font-size: 10px; font-style: normal; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.packet-review-field { min-width: 0; display: grid; gap: 6px; color: var(--core-muted); font-size: 11px; font-weight: 760; }
+.packet-review-field textarea { width: 100%; min-height: 118px; resize: vertical; border: 1px solid var(--core-line); border-radius: 9px; padding: 10px; background: var(--core-panel); color: var(--core-ink); font-family: var(--core-mono); font-size: 11px; line-height: 1.45; }
 
 .simple-toolbar { justify-content: flex-start; }
 .team-picker { min-width: 220px; display: flex; align-items: center; gap: 9px; }

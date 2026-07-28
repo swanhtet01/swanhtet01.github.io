@@ -51,6 +51,7 @@ import {
   signInManagedTrial,
   signOutManagedTrial,
 } from './managed-trial'
+import { validateEcommerceManagedStoreActivationPacket } from '../products/ecommerce/ecommerce-activation-packet'
 import { LEGACY_PRODUCTION_KEYS, PRODUCTION_KEY } from './production-workspace'
 import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } from './team-work'
 
@@ -153,6 +154,11 @@ export function SettingsPage() {
   const [managedWorkspace, setManagedWorkspace] = useState(currentManagedWorkspace())
   const [managedNotice, setManagedNotice] = useState('')
   const [managedBusy, setManagedBusy] = useState(false)
+  const [ecommerceActivationPacketText, setEcommerceActivationPacketText] = useState('')
+  const [ecommerceActivationPacketReview, setEcommerceActivationPacketReview] = useState<Array<readonly [string, string]>>([
+    ['Status', 'Waiting for packet'],
+    ['Boundary', 'Review only'],
+  ])
   const completion = pilotProgress(setup)
   const isPilotReady = pilotReady(setup)
   const workflowReady = Boolean(setup.workspace.trim() && setup.owner.trim() && setup.entryPoint.trim())
@@ -446,6 +452,28 @@ export function SettingsPage() {
     setNotice('Trial plan saved locally. No external action was connected.')
   }
 
+  function reviewEcommerceActivationPacket() {
+    try {
+      const packet = validateEcommerceManagedStoreActivationPacket(JSON.parse(ecommerceActivationPacketText))
+      setEcommerceActivationPacketReview([
+        ['Status', 'Valid packet'],
+        ['Schema', packet.schema],
+        ['Store', packet.storeName],
+        ['Source', `${packet.source.catalogSource} / ${packet.source.selectedSkus.length} SKUs`],
+        ['Queue', `${packet.orderQueue.pendingShopReviews} Shop review`],
+        ['Boundary', packet.forbiddenActions.includes('managed_activation') ? 'Managed activation blocked' : 'Unsafe'],
+      ])
+      setNotice('Ecommerce activation packet reviewed locally. No import, managed activation, Shop write, payment, delivery, stock, or customer action ran.')
+    } catch (error) {
+      setEcommerceActivationPacketReview([
+        ['Status', 'Rejected'],
+        ['Reason', error instanceof Error ? error.message : 'Invalid packet'],
+        ['Boundary', 'No import'],
+      ])
+      setNotice('Ecommerce activation packet rejected locally. No managed action ran.')
+    }
+  }
+
   async function resetDemoWorkspace() {
     setResetBusy(true)
     try {
@@ -575,6 +603,12 @@ export function SettingsPage() {
                 <div><span className="core-eyebrow">Import provisioning</span><h3>What must pass before real imports</h3><p>Backend health owns this checklist. Uploaded files stay local or export-only until identity, schema, validation, approval, adapter, and revision proof are ready.</p></div>
                 <div className="context-quality-rows">{importProvisioningRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
               </div>
+              {setup.product === 'ecommerce' ? <div aria-label="Ecommerce activation packet review" className="learning-plan-agent context-quality-panel">
+                <div><span className="core-eyebrow">Ecommerce activation packet</span><h3>Review before managed setup</h3><p>Paste the downloaded Ecommerce activation JSON. The browser validates schema, source, queue, and forbidden actions locally; no import, managed activation, Shop write, payment, delivery, stock, or customer action runs.</p></div>
+                <label className="packet-review-field">Activation packet JSON<textarea maxLength={12000} onChange={(event) => setEcommerceActivationPacketText(event.target.value)} placeholder="Paste supermega.ecommerce.managed_store_activation_packet.v1 JSON" rows={5} value={ecommerceActivationPacketText} /></label>
+                <div className="context-quality-rows">{ecommerceActivationPacketReview.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{label === 'Boundary' ? 'Review only; production setup still requires managed proof.' : 'Local packet check'}</em></span>)}</div>
+                <button className="core-button" disabled={!ecommerceActivationPacketText.trim()} onClick={reviewEcommerceActivationPacket} type="button">Review packet locally</button>
+              </div> : null}
               <div aria-label="Agent behavior memory" className="learning-plan-agent">
                 <div><span className="core-eyebrow">Behavior memory</span><h3>What owners keep choosing</h3><p>Free mode keeps this local. Premium can use approved queue behavior after managed import.</p></div>
                 <div className="learning-plan-rows">{agentBehaviorRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
