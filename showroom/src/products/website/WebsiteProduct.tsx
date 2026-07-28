@@ -823,6 +823,31 @@ export function WebsiteProduct() {
     ['Package', publishIsCurrent ? 'Retained' : 'Needed'],
     ['Publish gate', storageMode === 'managed' ? 'Owner-run rollout' : 'No deploy here'],
   ]
+  const readyBuyerCtaPages = workspace.pages.filter((page) => page.stage === 'ready'
+    && Boolean(page.hero.ctaLabel.trim())
+    && Boolean(page.hero.ctaHref.trim()))
+  const websiteLeadCaptureNext = storageIssue || canRepairLocalStorage
+    ? 'Recover Website workspace'
+    : starterSetupActive || starterAvailable
+      ? 'Start business brief'
+      : hasUnsavedChanges
+        ? 'Save site edits'
+        : failingContentChecks.length
+          ? 'Fix capture blockers'
+          : !readyBuyerCtaPages.length
+            ? 'Add contact path'
+            : !approvalIsCurrent
+              ? 'Record owner approval'
+              : !publishIsCurrent
+                ? 'Build release package'
+                : 'Lead capture ready'
+  const websiteLeadCaptureRows = [
+    ['Brief', starterAvailable ? 'Sample only' : 'Saved'],
+    ['Contact', readyBuyerCtaPages.length ? `${readyBuyerCtaPages.length} CTA ready` : 'Missing'],
+    ['Content', failingContentChecks.length ? `${failingContentChecks.length} fixes` : 'Passed'],
+    ['Approval', approvalIsCurrent ? 'Recorded' : 'Needed'],
+    ['Handoff', publishIsCurrent ? 'Package ready' : 'No send here'],
+  ]
   useEffect(() => {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_seen',
@@ -1067,6 +1092,17 @@ export function WebsiteProduct() {
             </div>
             <div className="website-launch-cockpit-rows">
               {websiteLaunchRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            </div>
+          </section>
+
+          <section aria-label="Website lead capture readiness" className="website-lead-capture-cockpit">
+            <div>
+              <span className="website-kicker">Website lead capture readiness</span>
+              <h2>{websiteLeadCaptureNext}</h2>
+              <p>AI checks business brief, contact path, content proof, owner approval, and release package before the site can capture a real customer request. No form send, customer message, domain, publish, CRM, or Shop write runs from this panel.</p>
+            </div>
+            <div className="website-lead-capture-cockpit-rows">
+              {websiteLeadCaptureRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
             </div>
           </section>
 
