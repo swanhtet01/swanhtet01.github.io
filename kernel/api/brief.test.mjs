@@ -275,6 +275,20 @@ test('legacy CEO brief remains available and is also duplicate-safe', async () =
   assert.equal(runs, 0)
 })
 
+test('deferred CEO operations load on demand and fail closed without durable state', async () => {
+  let work = 0
+  const result = await runScheduledBrief({
+    env: { SUPERMEGA_CLIENT_ID: 'client-deferred-operations' },
+    now: NOW,
+    runOperator: async () => { work += 1; return { ok: true } },
+    claimWorkcellExecution: async () => { work += 1; return { fresh: true, durable: true } },
+    notify: async () => { work += 1; return true },
+  })
+  assert.equal(result.ok, false)
+  assert.equal(result.reason, 'ceo_outcome_cycle_store_unavailable')
+  assert.equal(work, 0)
+})
+
 test('SuperMega CEO cycle selects one HQ outcome and uses its fixed evidence plan', async () => {
   const executions = durableClaimStore('execution')
   const deliveries = durableClaimStore('delivery')

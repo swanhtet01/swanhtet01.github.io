@@ -55,6 +55,7 @@ async function closure(entry, includeDynamic = false) {
 
 const eager = await closure(ENTRY)
 const fullStatus = await closure(FULL_STATUS)
+const briefSource = await readFile(ENTRY, 'utf8')
 const toolsSource = await readFile(TOOLS, 'utf8')
 const connectorIndexSource = await readFile(CONNECTOR_INDEX, 'utf8')
 const relativeFiles = eager.files.map((file) => relative(root, file).replaceAll('\\', '/'))
@@ -66,9 +67,15 @@ const checks = {
   eagerByteBudget: eager.bytes <= MAX_EAGER_BYTES,
   fullStatusNotEager: !relativeFiles.includes('api/status.mjs'),
   connectorFleetNotEager: !relativeFiles.includes('connectors/index.mjs'),
+  companyOperationsNotEager: !relativeFiles.includes('agent-company-operations.mjs')
+    && !relativeFiles.includes('agent-company-work-orders.mjs'),
   fullStatusOwnsConnectorFleet: fullStatusFiles.includes('connectors/index.mjs'),
   statusImportIsDeferred: toolsSource.includes("await import('./api/status.mjs')"),
   statusImportIsNotStatic: !/(?:from\s+|import\s+)['"]\.\/api\/status\.mjs['"]/.test(toolsSource),
+  companyOperationsImportsAreDeferred: toolsSource.includes("await import('./agent-company-operations.mjs')")
+    && briefSource.includes("import('../agent-company-operations.mjs')"),
+  companyOperationsImportsAreNotStatic: !/(?:from\s+|import\s+)['"]\.\/agent-company-operations\.mjs['"]/.test(toolsSource)
+    && !/(?:from\s+|import\s+)['"]\.\.\/agent-company-operations\.mjs['"]/.test(briefSource),
   connectorInventoryComplete: connectorImports === EXPECTED_CONNECTORS,
 }
 const failed = Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name)

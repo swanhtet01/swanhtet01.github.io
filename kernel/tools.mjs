@@ -12,10 +12,10 @@ import clickup from './connectors/data-clickup.mjs'
 import telegram from './connectors/messaging-telegram.mjs'
 import { ownerEvidenceConfigured, readOwnerEvidence } from './owner-evidence.mjs'
 import { MAX_CYCLE_AGENTS, MAX_CYCLE_ROLE_BUDGET, MAX_REGISTERED_COMPANY_AGENTS } from './agent-company.mjs'
-import { buildCompanyOperationsReport, COMPANY_OPERATIONS_WINDOWS } from './agent-company-operations.mjs'
 
 const PLATFORM_STATUS_CONTRACT = 'supermega.platform-status.v1'
 const COMPANY_OPERATIONS_STATUS_CONTRACT = 'supermega.company-operations-status.v1'
+const COMPANY_OPERATIONS_WINDOWS = Object.freeze([7, 30, 90])
 const STORE_MODES = new Set(['memory', 'postgres', 'supabase'])
 const RELEASE_ENVIRONMENTS = new Set(['local', 'development', 'preview', 'production'])
 const OPERATIONS_READINESS = new Set(['no_orders', 'collecting', 'meeting_targets', 'at_risk'])
@@ -305,6 +305,7 @@ export const TOOLS = {
       const clientId = String(process.env.SUPERMEGA_CLIENT_ID || '').trim()
       if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(clientId)) return operationsUnavailable(windowDays)
       try {
+        const { buildCompanyOperationsReport } = await import('./agent-company-operations.mjs')
         const report = await buildCompanyOperationsReport({ clientId, windowDays })
         return companyOperationsStatusView(report, windowDays)
       } catch {
