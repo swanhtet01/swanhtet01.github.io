@@ -44,6 +44,7 @@ const shopInventoryRuntime = await read('supermega_runtime/shop_inventory_runtim
 const orderIntakeProvider = await read('supermega_runtime/order_intake_provider.py')
 const clientImportRuntime = await read('supermega_runtime/client_import_runtime.py')
 const clientOnboardingUi = await read('showroom/src/core/ClientDataOnboarding.tsx')
+const clientOnboardingModel = await read('showroom/src/core/client-onboarding.ts')
 const plantIndustryPacks = await read('showroom/src/core/plant-industry-packs.ts')
 const orderIntakeRoute = trialRuntime.slice(
   trialRuntime.indexOf('@router.post("/commerce/order-intake/drafts")'),
@@ -436,6 +437,17 @@ requireContract('Website and Ecommerce client activation provenance is package-b
   && /Ecommerce activation provenance must be cleared when imported content changes/.test(commerceRuntime)
   && /activation\.packageDigest !== expectedPackageDigest/.test(managedTrialClient)
   && /activation\.skus/.test(managedTrialClient))
+requireContract('client demo setup kits are bounded, canonical, and explicitly data-free',
+  /CLIENT_DEMO_KIT_MAX_BYTES = 128 \* 1024/.test(clientOnboardingModel)
+  && /export function restoreClientDemoKit/.test(clientOnboardingModel)
+  && /!hasExactKeys\(value, \['schema', 'blueprint', 'exportedAt', 'controls'\]\)/.test(clientOnboardingModel)
+  && /canonicalClientDemoBlueprint\(source\.blueprint\)/.test(clientOnboardingModel)
+  && /source\.controls\.clientRecordsIncluded !== false/.test(clientOnboardingModel)
+  && /source\.controls\.productProgressIncluded !== false/.test(clientOnboardingModel)
+  && /source\.controls\.humanReviewRequired !== true/.test(clientOnboardingModel)
+  && /file\.size < 1 \|\| file\.size > CLIENT_DEMO_KIT_MAX_BYTES/.test(settingsPage)
+  && /origin === 'created' && blueprint\.products\.some/.test(settingsPage)
+  && /Client records, product packs, and progress were not changed/.test(settingsPage))
 requireContract('managed Shop location inventory and order allocation are human-only, server-stamped, and digest-chained',
   /commerce\.inventory\.initialized/.test(managedTrialClient)
   && /commerce\.inventory\.transferred/.test(managedTrialClient)

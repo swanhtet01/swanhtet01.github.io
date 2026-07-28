@@ -54,12 +54,15 @@ import { LEGACY_PRODUCTION_KEYS, PRODUCTION_KEY } from './production-workspace'
 import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } from './team-work'
 import {
   buildClientDemoBlueprint,
+  buildClientDemoKit,
   buildClientDemoRunbook,
+  CLIENT_DEMO_KIT_MAX_BYTES,
   CLIENT_DEMO_WORKSPACE_STORAGE_KEY,
   clientDemoPresets,
   clientImportWorkflowTemplateIds,
   createClientDemoWorkspace,
   restoreClientDemoWorkspace,
+  restoreClientDemoKit,
   updateClientDemoWorkspaceProgress,
   type ClientDemoBlueprint,
   type ClientDemoProductProgress,
@@ -166,7 +169,7 @@ export function SettingsPage() {
   const evidenceDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date())
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
   const demoBlueprintFilename = `supermega-client-demo-${setup.workspace.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || evidenceDate}.json`
-  const demoBlueprintHref = demoBlueprint ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ ...demoBlueprint, exportedAt: new Date().toISOString() }, null, 2))}` : ''
+  const demoBlueprintHref = demoBlueprint ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(buildClientDemoKit(demoBlueprint, new Date().toISOString()), null, 2))}` : ''
   const demoReadyCount = demoWorkspace?.products.filter((product) => ['data_ready', 'workspace_checked', 'applied'].includes(product.status)).length ?? 0
   const plantReleasedBatches = (() => {
     try { return production.orderExecution && projectPlantOrder(production.orderExecution).status === 'released_to_stock' ? 1 : 0 } catch { return 0 }
@@ -315,6 +318,57 @@ export function SettingsPage() {
     window.requestAnimationFrame(() => document.getElementById('client-data-setup')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
 
+  function installDemoBlueprint(blueprint: ClientDemoBlueprint, origin: 'created' | 'loaded') {
+    let shopPackNotice = ''
+    if (origin === 'created' && blueprint.products.some((product) => product.product === 'commerce')) {
+      try {
+        const schedule = provisionLocalShopIndustryPack(blueprint.client.shopIndustryPackId)
+        shopPackNotice = ` ${shopIndustryPack(schedule.industryPackId).name} Shop data is prepared.`
+      } catch (error) {
+        shopPackNotice = ` ${error instanceof Error ? error.message : 'Existing Shop appointment data was preserved.'}`
+      }
+    }
+    let plantPackNotice = ''
+    if (origin === 'created' && blueprint.products.some((product) => product.product === 'production')) {
+      savePlantIndustryPackId(blueprint.client.plantIndustryPackId, window.localStorage)
+      plantPackNotice = ` ${plantIndustryPack(blueprint.client.plantIndustryPackId).name} Plant setup is prepared.`
+    }
+    const first = blueprint.products[0]
+    setDemoPresetId(blueprint.client.presetId)
+    setShopIndustryPackId(blueprint.client.shopIndustryPackId)
+    setPlantIndustryPackId(blueprint.client.plantIndustryPackId)
+    setDemoSelections(Object.fromEntries(blueprint.products.map((product) => [product.product, product.templateId])))
+    setDemoBlueprint(blueprint)
+    setDemoWorkspace(createClientDemoWorkspace(blueprint, new Date().toISOString()))
+    if (first) {
+      const template = templateFor(first.product, first.templateId)
+      setSetup((current) => ({
+        ...current,
+        workspace: blueprint.client.workspace,
+        owner: blueprint.client.owner,
+        product: first.product,
+        templateId: template.id,
+        entryPoint: template.entryPoints[0] ?? '',
+        savedAt: undefined,
+      }))
+    }
+    setNotice(origin === 'loaded'
+      ? `${blueprint.products.length}-product setup loaded. Client records, product packs, and progress were not changed; prepare the data again on this device.`
+      : `${blueprint.products.length}-product demo kit ready.${shopPackNotice}${plantPackNotice} Prepare data or open a product.`)
+  }
+
+  async function loadDemoKit(file: File | null) {
+    if (!file) return
+    try {
+      if (file.size < 1 || file.size > CLIENT_DEMO_KIT_MAX_BYTES) throw new Error('Choose a SuperMega setup kit smaller than 128 KB.')
+      const kit = restoreClientDemoKit(JSON.parse(await file.text()))
+      if (!kit) throw new Error('This setup kit is invalid or has been changed.')
+      installDemoBlueprint(kit.blueprint, 'loaded')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The setup kit could not be loaded.')
+    }
+  }
+
   function createDemoKit() {
     try {
       const blueprint = buildClientDemoBlueprint({
@@ -325,25 +379,7 @@ export function SettingsPage() {
         plantIndustryPackId,
         selections: selectedDemoEntries.map(([product, templateId]) => ({ product, templateId })),
       })
-      let shopPackNotice = ''
-      if (blueprint.products.some((product) => product.product === 'commerce')) {
-        try {
-          const schedule = provisionLocalShopIndustryPack(blueprint.client.shopIndustryPackId)
-          shopPackNotice = ` ${shopIndustryPack(schedule.industryPackId).name} Shop data is prepared.`
-        } catch (error) {
-          shopPackNotice = ` ${error instanceof Error ? error.message : 'Existing Shop appointment data was preserved.'}`
-        }
-      }
-      let plantPackNotice = ''
-      if (blueprint.products.some((product) => product.product === 'production')) {
-        savePlantIndustryPackId(blueprint.client.plantIndustryPackId, window.localStorage)
-        plantPackNotice = ` ${plantIndustryPack(blueprint.client.plantIndustryPackId).name} Plant setup is prepared.`
-      }
-      setDemoBlueprint(blueprint)
-      setDemoWorkspace(createClientDemoWorkspace(blueprint, new Date().toISOString()))
-      const first = blueprint.products[0]
-      if (first) configureDemoProduct(first.product, first.templateId, false)
-      setNotice(`${blueprint.products.length}-product demo kit ready.${shopPackNotice}${plantPackNotice} Prepare data or open a product.`)
+      installDemoBlueprint(blueprint, 'created')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The client demo kit could not be prepared.')
     }
@@ -466,7 +502,7 @@ export function SettingsPage() {
 
   return (
     <div className="workspace-screen settings-screen">
-      <PageHeading eyebrow={requestedProduct ? 'Guided trial' : 'Client setup'} title={requestedProduct ? `Set up ${selectedProduct.name}` : 'Create a working client demo.'} copy={requestedProduct ? 'Name the client, choose one workflow, and prepare their data.' : 'Pick the business, name the owner, and open a connected demo. Customize only when needed.'} />
+      <PageHeading eyebrow={requestedProduct ? 'Guided trial' : 'Client setup'} title={requestedProduct ? `Set up ${selectedProduct.name}` : 'Create a working client demo.'} copy={requestedProduct ? 'Name the client, choose one workflow, and prepare their data.' : 'Pick the business, name the owner, and open a connected demo. Customize only when needed.'} actions={requestedProduct ? undefined : <label className="core-button">Load setup kit<input accept=".json,application/json" className="sr-only" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void loadDemoKit(file) }} type="file" /></label>} />
       {requestedProduct ? <nav aria-label="Setup steps" className="settings-step-nav">
         <button aria-current={settingsStep === 'workflow' ? 'step' : undefined} onClick={() => chooseSettingsStep('workflow')} type="button"><span>1</span>{requestedProduct ? 'Template' : 'Demo kit'}</button>
         <button aria-current={settingsStep === 'success' ? 'step' : undefined} onClick={() => chooseSettingsStep('success')} type="button"><span>2</span>Trial plan</button>

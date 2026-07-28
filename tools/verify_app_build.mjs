@@ -1786,10 +1786,14 @@ if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_i
   || !clientOnboardingSource.includes("...(plantPackId ? { plantIndustryPackId: plantPackId } : {})")
   || !clientOnboardingSource.includes('export function buildClientDemoBlueprint')
   || !clientOnboardingSource.includes("CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v1'")
+  || !clientOnboardingSource.includes("CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v1'")
+  || !clientOnboardingSource.includes('CLIENT_DEMO_KIT_MAX_BYTES = 128 * 1024')
   || !clientOnboardingSource.includes("CLIENT_DEMO_RUNBOOK_SCHEMA = 'supermega.client_demo_runbook.v1'")
   || !clientOnboardingSource.includes("CLIENT_DEMO_WORKSPACE_STORAGE_KEY = 'supermega.client-demo-workspace.v1'")
   || !clientOnboardingSource.includes('export function createClientDemoWorkspace')
   || !clientOnboardingSource.includes('export function restoreClientDemoWorkspace')
+  || !clientOnboardingSource.includes('export function buildClientDemoKit')
+  || !clientOnboardingSource.includes('export function restoreClientDemoKit')
   || !clientOnboardingSource.includes('export function updateClientDemoWorkspaceProgress')
   || !clientOnboardingSource.includes('export function buildClientDemoRunbook')
   || !clientOnboardingSource.includes("id: 'manufacturing'")
@@ -1901,6 +1905,10 @@ if (!coreSource.includes('templateId: string')
   || !settingsPageSource.includes(': Boolean(demoWorkspace)')
   || !settingsPageSource.includes('{requestedProduct ? <nav aria-label="Setup steps"')
   || !settingsPageSource.includes('Download setup kit')
+  || !settingsPageSource.includes('Load setup kit')
+  || !settingsPageSource.includes('Client records, product packs, and progress were not changed')
+  || !settingsPageSource.includes("origin === 'created' && blueprint.products.some")
+  || !settingsPageSource.includes('restoreClientDemoKit(JSON.parse(await file.text()))')
   || !settingsPageSource.includes('prepareDemoProduct(nextDemoMission.product')
   || !settingsPageSource.includes('to={nextDemoMission.actionPath}')
   || !settingsPageSource.includes('className="setup-template-summary"')
@@ -3857,6 +3865,20 @@ async function verifyClientOnboardingRuntime() {
     const demoWorkspace = model.createClientDemoWorkspace(manufacturingBlueprint, workspaceCreatedAt)
     assert(demoWorkspace.schema === model.CLIENT_DEMO_WORKSPACE_SCHEMA && demoWorkspace.products.length === 4 && demoWorkspace.products.every((product) => product.status === 'not_started'), 'client_demo_workspace_not_initialized')
     assert(JSON.stringify(model.restoreClientDemoWorkspace(JSON.parse(JSON.stringify(demoWorkspace)))) === JSON.stringify(demoWorkspace), 'client_demo_workspace_not_restorable')
+    const demoKit = model.buildClientDemoKit(manufacturingBlueprint, workspaceCreatedAt)
+    assert(demoKit.schema === model.CLIENT_DEMO_KIT_SCHEMA
+      && demoKit.controls.clientRecordsIncluded === false
+      && demoKit.controls.productProgressIncluded === false
+      && JSON.stringify(model.restoreClientDemoKit(JSON.parse(JSON.stringify(demoKit)))) === JSON.stringify(demoKit), 'client_demo_kit_not_safely_restorable')
+    const tamperedDemoKit = structuredClone(demoKit)
+    tamperedDemoKit.blueprint.products[0].demoPath = 'https://attacker.example/'
+    assert(model.restoreClientDemoKit(tamperedDemoKit) === null, 'client_demo_kit_blueprint_tamper_accepted')
+    const recordBearingDemoKit = structuredClone(demoKit)
+    recordBearingDemoKit.controls.clientRecordsIncluded = true
+    assert(model.restoreClientDemoKit(recordBearingDemoKit) === null, 'client_demo_kit_record_claim_accepted')
+    const extraFieldDemoKit = structuredClone(demoKit)
+    extraFieldDemoKit.customerData = 'must-not-load'
+    assert(model.restoreClientDemoKit(extraFieldDemoKit) === null, 'client_demo_kit_extra_field_accepted')
     const legacyBlueprint = structuredClone(manufacturingBlueprint)
     delete legacyBlueprint.client.shopIndustryPackId
     const migratedLegacyWorkspace = model.createClientDemoWorkspace(legacyBlueprint, workspaceCreatedAt)

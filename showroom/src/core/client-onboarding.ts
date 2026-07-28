@@ -4,9 +4,11 @@ import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-pa
 export const CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1' as const
 export const CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1' as const
 export const CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v1' as const
+export const CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v1' as const
 export const CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v1' as const
 export const CLIENT_DEMO_RUNBOOK_SCHEMA = 'supermega.client_demo_runbook.v1' as const
 export const CLIENT_DEMO_WORKSPACE_STORAGE_KEY = 'supermega.client-demo-workspace.v1'
+export const CLIENT_DEMO_KIT_MAX_BYTES = 128 * 1024
 export const CLIENT_IMPORT_MAX_BYTES = 512 * 1024
 export const CLIENT_IMPORT_MAX_ROWS = 500
 
@@ -79,6 +81,17 @@ export type ClientDemoWorkspace = {
   blueprint: ClientDemoBlueprint
   products: ClientDemoProductProgress[]
   updatedAt: string
+}
+
+export type ClientDemoKit = {
+  schema: typeof CLIENT_DEMO_KIT_SCHEMA
+  blueprint: ClientDemoBlueprint
+  exportedAt: string
+  controls: {
+    clientRecordsIncluded: false
+    productProgressIncluded: false
+    humanReviewRequired: true
+  }
 }
 
 export type ClientDemoOperationalEvidence = {
@@ -814,6 +827,41 @@ function canonicalTimestamp(value: unknown) {
 
 function hasExactKeys(value: object, keys: readonly string[]) {
   return JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...keys].sort())
+}
+
+export function buildClientDemoKit(blueprintValue: unknown, exportedAtValue: unknown): ClientDemoKit {
+  const blueprint = canonicalClientDemoBlueprint(blueprintValue)
+  const exportedAt = canonicalTimestamp(exportedAtValue)
+  if (!blueprint || !exportedAt) throw new Error('The client demo setup kit is invalid.')
+  const kit: ClientDemoKit = {
+    schema: CLIENT_DEMO_KIT_SCHEMA,
+    blueprint,
+    exportedAt,
+    controls: {
+      clientRecordsIncluded: false,
+      productProgressIncluded: false,
+      humanReviewRequired: true,
+    },
+  }
+  if (byteLength(JSON.stringify(kit)) > CLIENT_DEMO_KIT_MAX_BYTES) throw new Error('The client demo setup kit is too large.')
+  return kit
+}
+
+export function restoreClientDemoKit(value: unknown): ClientDemoKit | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  try {
+    if (byteLength(JSON.stringify(value)) > CLIENT_DEMO_KIT_MAX_BYTES) return null
+  } catch { return null }
+  if (!hasExactKeys(value, ['schema', 'blueprint', 'exportedAt', 'controls'])) return null
+  const source = value as Partial<ClientDemoKit>
+  const blueprint = canonicalClientDemoBlueprint(source.blueprint)
+  const exportedAt = canonicalTimestamp(source.exportedAt)
+  if (source.schema !== CLIENT_DEMO_KIT_SCHEMA || !blueprint || !exportedAt || !source.controls
+    || !hasExactKeys(source.controls, ['clientRecordsIncluded', 'productProgressIncluded', 'humanReviewRequired'])
+    || source.controls.clientRecordsIncluded !== false
+    || source.controls.productProgressIncluded !== false
+    || source.controls.humanReviewRequired !== true) return null
+  return { schema: CLIENT_DEMO_KIT_SCHEMA, blueprint, exportedAt, controls: { ...source.controls } }
 }
 
 function canonicalProgress(value: unknown, product: ClientSolutionId): ClientDemoProductProgress | null {
