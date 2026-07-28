@@ -125,6 +125,30 @@ test('dispatch rejects a stored plan with unused role authority', async () => {
   assert.equal(runs, 0)
 })
 
+test('dispatch rejects a stored plan that exceeds company assignment capacity', async () => {
+  const state = harness()
+  const created = await createCompanyWorkOrder(work(), state.options)
+  const key = `company-work-order-record:${created.workOrder.workOrderId}`
+  const record = state.records.get(key)
+  record.plan.controls.maxConcurrentCycles += 1
+  state.records.set(key, record)
+
+  let runs = 0
+  const result = await runCompanyWorkOrder({
+    clientId: created.workOrder.clientId,
+    workOrderId: created.workOrder.workOrderId,
+    planHash: created.workOrder.planHash,
+    confirmation: `RUN ${created.workOrder.workOrderId}`,
+  }, {
+    ...state.options,
+    runCompanyCycle: async () => { runs += 1; return { ok: true } },
+  })
+  assert.equal(result.reason, 'company_work_order_capacity_authority_mismatch')
+  assert.equal(result.status, 'blocked')
+  assert.deepEqual(result.retry, { requiresNewCycleId: true })
+  assert.equal(runs, 0)
+})
+
 test('duplicate creation replays the same order and rejects changed evidence for one cycle id', async () => {
   const state = harness()
   const first = await createCompanyWorkOrder(work(), state.options)

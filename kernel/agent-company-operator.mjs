@@ -5,6 +5,8 @@ const HASH_RE = /^[a-f0-9]{64}$/
 const MANIFEST_FIELDS = new Set(['clientId', 'cycleId', 'agents', 'evidence', 'roleBudget'])
 const MAX_AGENTS = 2
 const MAX_ROLE_BUDGET = 8
+const MAX_ACTIVE_ASSIGNMENTS = 4
+const MAX_CONCURRENT_CYCLES = Math.floor(MAX_ACTIVE_ASSIGNMENTS / MAX_AGENTS)
 const MAX_EVIDENCE_BYTES = 8_192
 const TERMINAL_STATUSES = new Set(['completed', 'partial', 'failed'])
 const WORK_ORDER_STATUSES = new Set(['planned', 'running', ...TERMINAL_STATUSES])
@@ -224,6 +226,8 @@ function assertPlan(plan, manifest, roster, preflight) {
     fail('agent_company_operator_budget_mismatch')
   }
   if (plan.controls?.execution !== 'sequential'
+    || Number(plan.controls?.maxConcurrentCycles) !== MAX_CONCURRENT_CYCLES
+    || Number(plan.controls?.maxActiveAssignments) !== MAX_ACTIVE_ASSIGNMENTS
     || plan.controls?.dynamicDelegation !== false
     || plan.controls?.crossAgentContext !== false
     || plan.controls?.externalWrites !== false

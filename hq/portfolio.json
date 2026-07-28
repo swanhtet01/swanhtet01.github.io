@@ -11,6 +11,7 @@
     "activeAssignmentLimit": 4,
     "batchJobLimit": 4,
     "maxAgentsPerCycle": 2,
+    "maxConcurrentCompanyCycles": 2,
     "validatedCrewCapabilities": 15,
     "ceoOutcomeAuthority": "supermega.ceo-outcome-authority.v2",
     "ceoOutcomeOperationsContract": "supermega.ceo-outcome-operation.v2",

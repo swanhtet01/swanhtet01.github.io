@@ -4,6 +4,7 @@ import {
   listCompanyAgents,
   COMPANY_CAPACITY_CLAIM_CONTRACT,
   COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
+  MAX_ACTIVE_COMPANY_ASSIGNMENTS,
   MAX_CYCLE_AGENTS,
   MAX_CYCLE_ROLE_BUDGET,
   MAX_RUNNING_COMPANY_CYCLES,
@@ -550,6 +551,7 @@ export async function handleAgentCompany(request = {}, options = {}) {
         limits: {
           maxAgents: MAX_CYCLE_AGENTS,
           maxRoleBudget: MAX_CYCLE_ROLE_BUDGET,
+          maxActiveAssignments: MAX_ACTIVE_COMPANY_ASSIGNMENTS,
           maxConcurrentCycles: MAX_RUNNING_COMPANY_CYCLES,
           capacityClaimContract: COMPANY_CAPACITY_CLAIM_CONTRACT,
           capacityClaimTtlSeconds: COMPANY_CAPACITY_CLAIM_TTL_SECONDS,

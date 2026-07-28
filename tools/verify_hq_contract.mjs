@@ -5,6 +5,7 @@ import {
   COMPANY_CAPACITY_CLAIM_CONTRACT,
   COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
   listCompanyAgents,
+  MAX_ACTIVE_COMPANY_ASSIGNMENTS,
   MAX_CYCLE_AGENTS,
   MAX_CYCLE_ROLE_BUDGET,
   MAX_REGISTERED_COMPANY_AGENTS,
@@ -131,6 +132,7 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.activeAssignmentLimit === 4
   && portfolio.agentOperatingModel?.batchJobLimit === 4
   && portfolio.agentOperatingModel?.maxAgentsPerCycle === 2
+  && portfolio.agentOperatingModel?.maxConcurrentCompanyCycles === 2
   && portfolio.agentOperatingModel?.validatedCrewCapabilities === 15
   && portfolio.agentOperatingModel?.ceoOutcomeAuthority === 'supermega.ceo-outcome-authority.v2'
   && portfolio.agentOperatingModel?.ceoOutcomeOperationsContract === CEO_OUTCOME_OPERATION_CONTRACT
@@ -185,6 +187,8 @@ requireContract('one bounded agent operating model is authoritative',
 requireContract('agent capacity agrees across HQ, coordinator, and Kernel',
   workforce.runtime_policy?.max_registered_specialists === portfolio.agentOperatingModel?.registeredRoleLimit
   && workforce.runtime_policy?.max_running === portfolio.agentOperatingModel?.activeAssignmentLimit
+  && workforce.runtime_policy?.max_company_cycles === portfolio.agentOperatingModel?.maxConcurrentCompanyCycles
+  && workforce.runtime_policy?.max_specialists_per_company_cycle === portfolio.agentOperatingModel?.maxAgentsPerCycle
   && workforce.runtime_policy?.local_host_admission_contract === 'supermega.ally-host-admission.v1'
   && workforce.runtime_policy?.max_local_running === 1
   && workforce.runtime_policy?.local_memory_pressure_blocks_dispatch === true
@@ -196,7 +200,9 @@ requireContract('agent capacity agrees across HQ, coordinator, and Kernel',
   && workforce.build_teams?.map((entry) => entry.id).join(',') === portfolio.agentOperatingModel?.buildTeams?.join(',')
   && MAX_REGISTERED_COMPANY_AGENTS === portfolio.agentOperatingModel?.registeredRoleLimit
   && kernelRoster.length === MAX_REGISTERED_COMPANY_AGENTS
-  && MAX_RUNNING_COMPANY_CYCLES === portfolio.agentOperatingModel?.activeAssignmentLimit
+  && MAX_ACTIVE_COMPANY_ASSIGNMENTS === portfolio.agentOperatingModel?.activeAssignmentLimit
+  && MAX_RUNNING_COMPANY_CYCLES === portfolio.agentOperatingModel?.maxConcurrentCompanyCycles
+  && MAX_RUNNING_COMPANY_CYCLES * MAX_CYCLE_AGENTS === MAX_ACTIVE_COMPANY_ASSIGNMENTS
   && workforce.runtime_policy?.capacity_claim_contract === COMPANY_CAPACITY_CLAIM_CONTRACT
   && workforce.runtime_policy?.capacity_claim_ttl_seconds === COMPANY_CAPACITY_CLAIM_TTL_SECONDS
   && MAX_CYCLE_AGENTS === portfolio.agentOperatingModel?.maxAgentsPerCycle
@@ -437,7 +443,7 @@ requireContract('agent security brief is reconciled to current controls',
   && agentSecurity.includes('Human review is bound to one clean commit')
   && agentSecurity.includes('builds once, rechecks the canonical project')
   && agentSecurity.includes('pinned `--prebuilt`')
-  && agentSecurity.includes('four atomic durable capacity claims')
+  && agentSecurity.includes('two atomic durable capacity claims')
   && agentSecurity.includes('old Google Cloud Scheduler entry point is now a read-only compatibility shim')
   && agentSecurity.includes('no production or preview project activity over 90 days')
   && agentSecurity.includes('prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG')
@@ -905,6 +911,7 @@ console.log(JSON.stringify({
   agentOperatingModel: {
     registeredRoles: portfolio.agentOperatingModel.registeredRoleLimit,
     activeAssignments: portfolio.agentOperatingModel.activeAssignmentLimit,
+    maxConcurrentCompanyCycles: portfolio.agentOperatingModel.maxConcurrentCompanyCycles,
     crewCapabilities: portfolio.agentOperatingModel.validatedCrewCapabilities,
     ceoOutcomeAuthority: portfolio.agentOperatingModel.ceoOutcomeAuthority,
     maxOutcomesPerCeoCycle: portfolio.agentOperatingModel.maxOutcomesPerCeoCycle,

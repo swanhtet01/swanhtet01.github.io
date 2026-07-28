@@ -3,7 +3,12 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto'
 
-import { planCompanyCycle, runCompanyCycle } from './agent-company.mjs'
+import {
+  MAX_ACTIVE_COMPANY_ASSIGNMENTS,
+  MAX_RUNNING_COMPANY_CYCLES,
+  planCompanyCycle,
+  runCompanyCycle,
+} from './agent-company.mjs'
 import {
   claimActivity,
   getCachedResponse,
@@ -289,6 +294,12 @@ function hasExactRoleAuthorization(plan) {
     && Number(plan.budget.remainingRoles) === 0
 }
 
+function hasBoundedCapacityAuthorization(plan) {
+  return isRecord(plan?.controls)
+    && Number(plan.controls.maxConcurrentCycles) === MAX_RUNNING_COMPANY_CYCLES
+    && Number(plan.controls.maxActiveAssignments) === MAX_ACTIVE_COMPANY_ASSIGNMENTS
+}
+
 export async function createCompanyWorkOrder(input, options = {}) {
   const fields = onlyFields(input, CREATE_FIELDS)
   if (!fields.ok) return fields
@@ -297,6 +308,9 @@ export async function createCompanyWorkOrder(input, options = {}) {
   if (!plan.ok) return plan
   if (!hasExactRoleAuthorization(plan)) {
     return failure('company_work_order_role_authority_mismatch', { status: 'blocked' })
+  }
+  if (!hasBoundedCapacityAuthorization(plan)) {
+    return failure('company_work_order_capacity_authority_mismatch', { status: 'blocked' })
   }
 
   let storedInput
@@ -422,6 +436,13 @@ export async function runCompanyWorkOrder(input, options = {}) {
   }
   if (!hasExactRoleAuthorization(record.plan)) {
     return failure('company_work_order_role_authority_mismatch', {
+      status: 'blocked',
+      workOrderId,
+      retry: { requiresNewCycleId: true },
+    })
+  }
+  if (!hasBoundedCapacityAuthorization(record.plan)) {
+    return failure('company_work_order_capacity_authority_mismatch', {
       status: 'blocked',
       workOrderId,
       retry: { requiresNewCycleId: true },

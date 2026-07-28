@@ -18,7 +18,8 @@ export const MAX_CYCLE_AGENTS = 2
 export const MAX_CYCLE_ROLE_BUDGET = 8
 export const MAX_AGENT_EVIDENCE_BYTES = 12_000
 export const MAX_REGISTERED_COMPANY_AGENTS = 12
-export const MAX_RUNNING_COMPANY_CYCLES = 4
+export const MAX_ACTIVE_COMPANY_ASSIGNMENTS = 4
+export const MAX_RUNNING_COMPANY_CYCLES = Math.floor(MAX_ACTIVE_COMPANY_ASSIGNMENTS / MAX_CYCLE_AGENTS)
 export const COMPANY_CAPACITY_CLAIM_CONTRACT = 'supermega.agent-company-capacity-claims.v1'
 export const COMPANY_CAPACITY_CLAIM_TTL_SECONDS = 120
 
@@ -368,6 +369,7 @@ async function prepareCompanyCycle(input, options = {}) {
       capacityClaimContract: COMPANY_CAPACITY_CLAIM_CONTRACT,
       capacityClaimTtlSeconds: COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
       maxConcurrentCycles: MAX_RUNNING_COMPANY_CYCLES,
+      maxActiveAssignments: MAX_ACTIVE_COMPANY_ASSIGNMENTS,
       dynamicDelegation: false,
       crossAgentContext: false,
       externalWrites: false,
@@ -586,6 +588,7 @@ export async function runCompanyCycle(input, options = {}) {
       capacity: {
         contract: COMPANY_CAPACITY_CLAIM_CONTRACT,
         maxConcurrentCycles: MAX_RUNNING_COMPANY_CYCLES,
+        maxActiveAssignments: MAX_ACTIVE_COMPANY_ASSIGNMENTS,
         claimTtlSeconds: COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
         release: 'finally',
       },
@@ -612,6 +615,7 @@ export default {
   AGENT_ROSTER,
   COMPANY_CAPACITY_CLAIM_CONTRACT,
   COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
+  MAX_ACTIVE_COMPANY_ASSIGNMENTS,
   MAX_RUNNING_COMPANY_CYCLES,
   MAX_REGISTERED_COMPANY_AGENTS,
   listCompanyAgents,

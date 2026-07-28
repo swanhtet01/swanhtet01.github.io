@@ -5,6 +5,7 @@ import {
   COMPANY_CAPACITY_CLAIM_CONTRACT,
   COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
   listCompanyAgents,
+  MAX_ACTIVE_COMPANY_ASSIGNMENTS,
   MAX_CYCLE_AGENTS,
   MAX_CYCLE_ROLE_BUDGET,
   MAX_REGISTERED_COMPANY_AGENTS,
@@ -57,7 +58,9 @@ test('agent roster is fixed, bounded, and backed by validated crews', async () =
   const roster = listCompanyAgents()
   assert.equal(roster.length, 12)
   assert.equal(MAX_REGISTERED_COMPANY_AGENTS, 12)
-  assert.equal(MAX_RUNNING_COMPANY_CYCLES, 4)
+  assert.equal(MAX_ACTIVE_COMPANY_ASSIGNMENTS, 4)
+  assert.equal(MAX_RUNNING_COMPANY_CYCLES, 2)
+  assert.equal(MAX_RUNNING_COMPANY_CYCLES * MAX_CYCLE_AGENTS, MAX_ACTIVE_COMPANY_ASSIGNMENTS)
   assert.equal(COMPANY_CAPACITY_CLAIM_CONTRACT, 'supermega.agent-company-capacity-claims.v1')
   assert.equal(COMPANY_CAPACITY_CLAIM_TTL_SECONDS, 120)
   assert.equal(MAX_CYCLE_AGENTS, 2)
@@ -96,7 +99,8 @@ test('agent roster is fixed, bounded, and backed by validated crews', async () =
   assert.equal(plan.budget.roleLimit, 6)
   assert.equal(plan.budget.remainingRoles, 0)
   assert.equal(plan.controls.execution, 'sequential')
-  assert.equal(plan.controls.maxConcurrentCycles, 4)
+  assert.equal(plan.controls.maxConcurrentCycles, 2)
+  assert.equal(plan.controls.maxActiveAssignments, 4)
   assert.equal(plan.controls.capacityClaimContract, COMPANY_CAPACITY_CLAIM_CONTRACT)
   assert.equal(plan.controls.capacityClaimTtlSeconds, COMPANY_CAPACITY_CLAIM_TTL_SECONDS)
   assert.equal(plan.controls.dynamicDelegation, false)
@@ -237,7 +241,7 @@ test('runner uses a durable claim, executes serially, and isolates each agent ev
   assert.deepEqual(result.trace[0].guardrails, result.results[0].guardrails)
 })
 
-test('runner admits four durable cycles, blocks the fifth, and releases capacity on every result', async () => {
+test('runner admits two durable cycles, blocks the third, and releases capacity on every result', async () => {
   const state = durableClaimHarness()
   let started = 0
   let releaseCrews
@@ -264,27 +268,27 @@ test('runner admits four durable cycles, blocks the fifth, and releases capacity
   }))
   await Promise.race([
     crewsStarted,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('capacity probe did not admit four cycles')), 1_000)),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('capacity probe did not admit bounded cycles')), 1_000)),
   ])
 
-  const fifthInput = inputFor(5)
-  const fifth = await runCompanyCycle(fifthInput, {
+  const overflowInput = inputFor(MAX_RUNNING_COMPANY_CYCLES + 1)
+  const overflow = await runCompanyCycle(overflowInput, {
     ...state,
     putRunResult: async () => true,
-    runCrew: async () => { throw new Error('fifth cycle must not execute') },
+    runCrew: async () => { throw new Error('overflow cycle must not execute') },
   })
-  assert.equal(fifth.reason, 'company_capacity_exhausted')
-  assert.equal(fifth.status, 'busy')
-  assert.equal(fifth.maxRunning, MAX_RUNNING_COMPANY_CYCLES)
+  assert.equal(overflow.reason, 'company_capacity_exhausted')
+  assert.equal(overflow.status, 'busy')
+  assert.equal(overflow.maxRunning, MAX_RUNNING_COMPANY_CYCLES)
   assert.equal(started, MAX_RUNNING_COMPANY_CYCLES)
-  assert.equal([...state.claims.keys()].filter((id) => id.startsWith('agent-company-capacity:')).length, 4)
+  assert.equal([...state.claims.keys()].filter((id) => id.startsWith('agent-company-capacity:')).length, MAX_RUNNING_COMPANY_CYCLES)
 
   releaseCrews()
   const completed = await Promise.all(admitted)
-  assert.deepEqual(completed.map((result) => result.status), ['completed', 'completed', 'completed', 'failed'])
+  assert.deepEqual(completed.map((result) => result.status), ['completed', 'failed'])
   assert.equal([...state.claims.keys()].filter((id) => id.startsWith('agent-company-capacity:')).length, 0)
 
-  const retried = await runCompanyCycle(fifthInput, {
+  const retried = await runCompanyCycle(overflowInput, {
     ...state,
     putRunResult: async () => true,
     runCrew: async () => ({ ok: true, output: { ready: true }, usageByRole: [], trace: [] }),
