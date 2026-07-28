@@ -555,6 +555,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && now.includes('The active delivery focus is:')
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
   && now.includes('operation/output requires exact authenticated Shop issue evidence')
+  && now.includes('Controlled batches derive Performance and Quality but withhold OEE')
   && now.includes('one manifest-backed smart import')
   && now.includes('The public site exposes four direct product links with no template catalogue')
   && now.includes('Shop Stock has one Commerce authority')
@@ -625,7 +626,13 @@ requireContract('Plant uses the stable production runtime',
   && product('plant')?.runtimeSurface === 'production'
   && product('plant')?.compatibilityPath === '/operations/production/'
   && product('plant')?.surfaces?.join(',') === 'Jobs,Problems'
-  && product('plant')?.templateContract?.productId === 'production')
+  && product('plant')?.templateContract?.productId === 'production'
+  && product('plant')?.nextGate?.includes('bind planned productive time and downtime to the exact order and work centre')
+  && workboard.includes('| ENG-102 | Plant + Manufacturing Performance Codex | done-local |')
+  && workboard.includes('adds `supermega.plant.order_effectiveness.v1`')
+  && workboard.includes('96.77% Performance, 80% Quality')
+  && research.includes('https://help.sap.com/docs/sap-digital-manufacturing/insights/oee-calculations')
+  && research.includes('must not calculate OEE until planned productive time and downtime are bound'))
 requireContract('Website remains truthful',
   product('website')?.status === 'release-candidate-local'
   && product('website')?.surfaces?.join(',') === 'Preview,Edit,Download'
@@ -721,9 +728,8 @@ requireContract('owner authority remains explicit',
   && now.includes('No external send, payment, refund, publish, domain change, connector write, merge, deployment, access change, production database write'))
 requireContract('Home prioritizes products before internal machinery',
   now.includes('Home keeps Shop and Plant exceptions above collapsed HQ work.')
-  && now.includes('a Plant issue badge links to Problems and otherwise the card opens Jobs.')
-  && now.includes('`/work/` stays labelled HQ')
-  && now.includes('bottom navigation reads Home, HQ, and Products'))
+  && now.includes('Plant issues link to Problems')
+  && now.includes('`/work/` stays labelled HQ'))
 requireContract('local and managed truth remains explicit',
   current.includes('The default app remains an isolated browser-local trial')
   && current.includes('Managed mode remains locked behind authenticated tenant identity')

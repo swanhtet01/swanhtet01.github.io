@@ -422,6 +422,7 @@ Current source notes that materially affect implementation:
 - Supabase support for Postgres 14 ended on 2026-07-01. Managed activation must verify the actual database version and extension compatibility rather than assume the migration target.
 - Vercel Workflows support durable JavaScript/TypeScript and Python, but the current documentation marks Python beta. That reinforces a bounded evaluation rather than an immediate runtime switch.
 - OpenAI recommends Responses for new projects. Structured Outputs provide schema adherence; strict function tools require closed schemas. Those mechanisms improve format reliability but do not replace business validation, authorization, provenance, or human approval.
+- SAP Digital Manufacturing defines OEE as Availability × Performance × Quality. SuperMega may derive Performance from designed versus actual operation time and Quality from accepted versus inspected output, but must not calculate OEE until planned productive time and downtime are bound to the same order/resource context: https://help.sap.com/docs/sap-digital-manufacturing/insights/oee-calculations
 
 ## Delivery plan: smallest releasable slices
 

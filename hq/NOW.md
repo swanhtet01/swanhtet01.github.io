@@ -41,12 +41,12 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal 
 - Each CEO cycle selects one outcome. Invalid identity/evidence stops before spend; owner-send uncertainty is explicit, retains claims, and is never auto-retried (`f1328a0`, `cafdafe`, `f626ee7`).
 - AI attempts reserve before provider I/O under a 2,000,000-unit hard daily cap; failures stay charged and cache hits spend zero (`a2e1b89`). A shared rejection records later specialists as `not_run`; replay spends zero (`44dfba9`).
 - Ecommerce uses versioned Shop data. Managed workspaces retain exact requests in the Shop inbox; only Shop confirmation creates an order (`aed737a`).
-- All four browser-local imports activate only after review: Shop stock, Plant jobs/BOM/routing, Website content, and Ecommerce merchandising through Shop authority (`7ae8c80`).
-- Client setup is two steps with one manifest-backed smart import; exact matches collapse and exceptions open for review (`ab9a89e`).
+- Reviewed local imports cover Shop stock, Plant BOM/routing, Website content, and Ecommerce merchandising (`7ae8c80`).
+- Client setup uses one manifest-backed smart import with exception review (`ab9a89e`).
 - Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancel releases, complete consumes, and sellable returns restore the exact fulfilled location/lot (`3cd4825`).
 - Shop close keeps a balanced accounting-review CSV grouped by payment method and freezes a human-approved versioned tax code, rate, and inclusive/exclusive treatment into future orders. Owner-reviewed account mappings apply only to later closes; history stays unchanged and no filing or posting occurs (`d47f5d9`, `39b7fc2`, `369cb2b`).
-- Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, release, replay, and rollback; operation/output requires exact authenticated Shop issue evidence (`3c885d8`).
-- Home keeps Shop and Plant exceptions above collapsed HQ work. When present, a Plant issue badge links to Problems and otherwise the card opens Jobs. `/work/` stays labelled HQ; bottom navigation reads Home, HQ, and Products.
+- Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, release, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches derive Performance and Quality but withhold OEE until productive time and downtime are order-bound (`3c885d8`, `607565a`).
+- Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 - CEO status is output-free across weekly briefs. Company Week separates recorded from delivered and fails incomplete delivery to attention; Company Health shows receipt counts (`8d97d4d`, `ece46ce`).
 - CEO brief startup is 13 files/240,190 bytes; operations and eight connectors are deferred (`006070f`, `c508983`). Fixed HQ synthesis keeps report time in evidence but outside cache keys, so unchanged evidence uses zero model work (`1c62d45`).
@@ -75,7 +75,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - The four live products are isolated samples; managed persistence and tenant security are unproven.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling stays blocked: no signed bundle, cron credentials, worker URL, or allowlist exists. Activate only after managed storage, security, recovery, and owner evidence pass.
-- Enterprise gaps: Shop corrections, jurisdiction packs, condition rules, and approved posting adapters; Plant costing/OEE/calibration; Website hosted CMS/release; Ecommerce payment/shipping/tax/returns.
+- Enterprise gaps: Shop corrections, jurisdiction packs, condition rules, and approved posting adapters; Plant costing/order-bound Availability/calibration; Website hosted CMS/release; Ecommerce payment/shipping/tax/returns.
 
 ## Decisions in force
 
