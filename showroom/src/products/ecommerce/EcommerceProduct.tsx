@@ -795,6 +795,13 @@ export function EcommerceProduct() {
     ['Payment', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} review` : 'Not charged'],
     ['Handoff', pendingManagedRequests.length ? 'Shop owns writes' : buyingReady ? 'Ready for quote' : 'Setup first'],
   ] as const
+  const lifecycleRows = [
+    ['Capture', pendingManagedRequests.length ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'}` : buyingCart.length ? `${buyingCart.length} cart lines` : 'Ready'],
+    ['Price', buyingReady ? 'Quote controlled' : 'Save store first'],
+    ['ATP', orderOpsStockRiskCount ? `${orderOpsStockRiskCount} risk` : catalog.items.length ? 'Shop stock' : 'Need catalog'],
+    ['Fulfil', pendingManagedRequests.length ? 'Shop queue' : savedDraftIsCurrent ? 'Pickup/delivery ready' : 'Setup first'],
+    ['Return', 'Shop accountable'],
+  ] as const
   const setupRows = [
     ['Catalog', sourceLabel],
     ['Products', `${selectedSkus.length}/${Math.min(catalog.items.length, 8)} selected`],
@@ -915,6 +922,17 @@ export function EcommerceProduct() {
         </div>
         <div className="ecommerce-ops-cockpit-rows">
           {orderOpsRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+      </section>
+
+      <section aria-label="Order lifecycle control" className="ecommerce-ops-cockpit">
+        <div>
+          <span className="core-eyebrow">Order lifecycle</span>
+          <h2>One path from cart to return</h2>
+          <p>AI guides capture, pricing, available-to-promise, fulfilment, and returns from the same Shop-controlled source. No charge, message, refund, or stock write starts here.</p>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {lifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
       </section>
 
