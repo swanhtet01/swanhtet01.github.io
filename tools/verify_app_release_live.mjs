@@ -138,6 +138,9 @@ const settingsChunk = (await get(`/${settingsChunkPath}`)).body
 const clientDataOnboardingChunkPath = /assets\/ClientDataOnboarding-[A-Za-z0-9_-]+\.js/.exec(settingsChunk)?.[0]
 if (!clientDataOnboardingChunkPath) throw new Error('client_data_onboarding_chunk_missing')
 const clientDataOnboardingChunk = (await get(`/${clientDataOnboardingChunkPath}`)).body
+const operatingModelsChunkPath = /assets\/operating-models-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
+if (!operatingModelsChunkPath) throw new Error('operating_models_chunk_missing')
+const operatingModelsChunk = (await get(`/${operatingModelsChunkPath}`)).body
 const ecommerceChunkPath = /assets\/EcommerceProduct-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!ecommerceChunkPath) throw new Error('ecommerce_chunk_missing')
 const ecommerceChunk = (await get(`/${ecommerceChunkPath}`)).body
@@ -169,7 +172,7 @@ for (const required of ['Import autopilot', 'Import coach', 'Next action', 'Writ
   if (!clientDataOnboardingChunk.includes(required)) throw new Error(`missing_live_import_coach_context:${required}`)
 }
 for (const required of ['supermega.client_import_provisioning_plan.v1', 'zero_write_validation_receipt', 'durable_revision_confirmation', 'copy_browser_storage_to_production', 'scheduler_autopilot']) {
-  if (!assetCorpus.includes(required)) throw new Error(`missing_live_import_provisioning_contract:${required}`)
+  if (!operatingModelsChunk.includes(required)) throw new Error(`missing_live_import_provisioning_contract:${required}`)
 }
 for (const required of ['AI order desk', 'Recommended Ecommerce agent job', 'Agent job', 'Owner gate', 'Review Ecommerce requests in Shop', 'Prepare catalog import', 'Finish storefront setup', 'Review cart quote', 'Open storefront for ordering', 'Order ops cockpit', 'AI ranks order exceptions from the live queue, quote expiry, stock risk, and payment state. Shop still confirms every write.', 'Priority', 'SLA', 'Stock risk', 'Handoff', 'Shop owns writes', 'Order autopilot', 'Repair checkout recovery', 'Confirm reviewed quote', 'Shop handoff', 'Needs owner check', 'Payment', 'Not charged', 'Browser-local quote only. No stock, delivery, message, payment, or Shop record changes here.']) {
   if (!ecommerceChunk.includes(required)) throw new Error(`missing_live_ecommerce_context:${required}`)
