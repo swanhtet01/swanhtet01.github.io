@@ -26,6 +26,42 @@ test('external operator connectors are exposed only as bounded read tools', () =
   }
 })
 
+test('optional connector availability stays credential-bound without loading provider code', () => {
+  const names = [
+    'GOOGLE_SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS',
+    'GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'GOOGLE_OAUTH_REFRESH_TOKEN',
+    'PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET',
+    'PIPEDRIVE_ACCESS_TOKEN', 'PIPEDRIVE_API_TOKEN',
+    'CLICKUP_ACCESS_TOKEN', 'CLICKUP_API_TOKEN',
+    'TELEGRAM_BOT_TOKEN', 'TELEGRAM_ALERT_CHAT_ID', 'TELEGRAM_CHAT_ID',
+    'WORKCELL_OWNER_EVIDENCE_ENABLED', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY',
+  ]
+  const original = new Map(names.map((name) => [name, process.env[name]]))
+  try {
+    for (const name of names) delete process.env[name]
+    for (const tool of ['gmail_count', 'sheets_read', 'settled_transactions_read', 'crm_deals_read', 'work_tasks_read', 'owner_updates_read']) {
+      assert.equal(TOOLS[tool].available(), false, `${tool} must stay hidden without credentials`)
+    }
+    process.env.GOOGLE_OAUTH_CLIENT_ID = 'client'
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'secret'
+    process.env.GOOGLE_OAUTH_REFRESH_TOKEN = 'refresh'
+    process.env.PAYPAL_CLIENT_ID = 'client'
+    process.env.PAYPAL_CLIENT_SECRET = 'secret'
+    process.env.PIPEDRIVE_ACCESS_TOKEN = 'token'
+    process.env.CLICKUP_ACCESS_TOKEN = 'token'
+    process.env.TELEGRAM_BOT_TOKEN = 'token'
+    process.env.TELEGRAM_ALERT_CHAT_ID = '123456'
+    for (const tool of ['gmail_count', 'sheets_read', 'settled_transactions_read', 'crm_deals_read', 'work_tasks_read', 'owner_updates_read']) {
+      assert.equal(TOOLS[tool].available(), true, `${tool} must appear with its exact credential shape`)
+    }
+  } finally {
+    for (const [name, value] of original) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
+  }
+})
+
 test('runTool executes an allow-listed local tool', async () => {
   const r = await runTool('platform_status', {})
   assert.equal(r.ok, true)

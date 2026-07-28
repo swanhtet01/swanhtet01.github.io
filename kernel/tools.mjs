@@ -1,15 +1,7 @@
 // SUPERMEGA AI Operator — the safe tool-belt. Curated, READ-ONLY capabilities the operator agent can
 // call to gather real data toward a goal. By design this exposes NO money/send/write capability — the
 // draft→approve→act gate stays on those. Each tool: { description, input_schema, available, run }.
-import infraHttp from './connectors/infra-http.mjs'
-import gmail from './connectors/data-gmail.mjs'
 import store from './store.mjs'
-import cbm from './connectors/data-cbm-rate.mjs'
-import sheets from './connectors/data-sheets.mjs'
-import paypal from './connectors/payment-paypal.mjs'
-import pipedrive from './connectors/crm-pipedrive.mjs'
-import clickup from './connectors/data-clickup.mjs'
-import telegram from './connectors/messaging-telegram.mjs'
 import { ownerEvidenceConfigured, readOwnerEvidence } from './owner-evidence.mjs'
 import { MAX_CYCLE_AGENTS, MAX_CYCLE_ROLE_BUDGET, MAX_REGISTERED_COMPANY_AGENTS } from './agent-company.mjs'
 
@@ -30,6 +22,37 @@ const OUTCOME_STATES = new Set([
   'store_unavailable',
 ])
 const DELIVERY_STATES = new Set(['ready', 'no_outcomes', 'missing', 'attention', 'invalid_coverage', 'non_durable', 'store_unavailable'])
+
+function envValue(name, env = process.env) {
+  return String(env?.[name] || '').trim()
+}
+
+function googleConnectorConfigured(env = process.env) {
+  const serviceAccount = envValue('GOOGLE_SERVICE_ACCOUNT_JSON', env)
+    || envValue('GOOGLE_APPLICATION_CREDENTIALS', env)
+  const oauth = envValue('GOOGLE_OAUTH_CLIENT_ID', env)
+    && envValue('GOOGLE_OAUTH_CLIENT_SECRET', env)
+    && envValue('GOOGLE_OAUTH_REFRESH_TOKEN', env)
+  return Boolean(serviceAccount || oauth)
+}
+
+function paypalConfigured(env = process.env) {
+  return Boolean(envValue('PAYPAL_CLIENT_ID', env) && envValue('PAYPAL_CLIENT_SECRET', env))
+}
+
+function pipedriveConfigured(env = process.env) {
+  return Boolean(envValue('PIPEDRIVE_ACCESS_TOKEN', env) || envValue('PIPEDRIVE_API_TOKEN', env))
+}
+
+function clickupConfigured(env = process.env) {
+  return Boolean(envValue('CLICKUP_ACCESS_TOKEN', env) || envValue('CLICKUP_API_TOKEN', env))
+}
+
+function telegramOwnerConfigured(env = process.env) {
+  const token = envValue('TELEGRAM_BOT_TOKEN', env)
+  const chatId = envValue('TELEGRAM_ALERT_CHAT_ID', env) || envValue('TELEGRAM_CHAT_ID', env)
+  return Boolean(token && /^-?\d{1,20}$/.test(chatId))
+}
 
 function releaseIdentity() {
   const candidate = String(process.env.SUPERMEGA_RELEASE_COMMIT || process.env.VERCEL_GIT_COMMIT_SHA || '').trim().toLowerCase()
@@ -318,6 +341,7 @@ export const TOOLS = {
     input_schema: { type: 'object', properties: { url: { type: 'string', description: 'full https:// URL' } }, required: ['url'], additionalProperties: false },
     available: () => true,
     run: async ({ url }) => {
+      const { default: infraHttp } = await import('./connectors/infra-http.mjs')
       const r = await infraHttp.get(String(url || ''))
       const body = typeof r.body === 'string' ? r.body.slice(0, 2000) : r.body
       return { status: r.status || 0, ok: Boolean(r.ok), body, reason: r.reason }
@@ -327,7 +351,11 @@ export const TOOLS = {
     description: 'Latest Central Bank of Myanmar reference exchange rates (MMK per USD, EUR, SGD, and others). Read-only; no args.',
     input_schema: { type: 'object', properties: {}, additionalProperties: false },
     available: () => true,
-    run: async () => { const r = await cbm.getRates(); return r.ok ? { rates: r.rates, source: r.source, timestamp: r.timestamp } : { ok: false, reason: r.reason } },
+    run: async () => {
+      const { default: cbm } = await import('./connectors/data-cbm-rate.mjs')
+      const r = await cbm.getRates()
+      return r.ok ? { rates: r.rates, source: r.source, timestamp: r.timestamp } : { ok: false, reason: r.reason }
+    },
   },
   leads_overview: {
     description: 'Overview of inbound leads from the SuperMega CRM: total count, breakdown by stage, and the most recent few (name, company, stage, score). Read-only.',
@@ -356,8 +384,9 @@ export const TOOLS = {
   gmail_count: {
     description: 'Count emails in the connected mailbox matching a Gmail search query (e.g. "from:client@x.com newer_than:7d" or "subject:invoice"). Returns an approximate count. Read-only; never reads message bodies.',
     input_schema: { type: 'object', properties: { query: { type: 'string', description: 'a Gmail search expression' } }, required: ['query'], additionalProperties: false },
-    available: () => { try { return gmail.configured() } catch { return false } },
+    available: () => googleConnectorConfigured(),
     run: async ({ query }) => {
+      const { default: gmail } = await import('./connectors/data-gmail.mjs')
       const r = await gmail.search(String(query || ''), { maxResults: 1 })
       return { query: String(query || ''), approxCount: r.resultSizeEstimate || 0 }
     },
@@ -365,8 +394,9 @@ export const TOOLS = {
   sheets_read: {
     description: 'Read a range of cells from a Google Sheet the service account can access (the sheet must be shared with it). Args: spreadsheet_id (from the sheet URL) + range (A1 notation, e.g. "Sheet1!A1:F50"). Returns the rows. Read-only — never writes.',
     input_schema: { type: 'object', properties: { spreadsheet_id: { type: 'string' }, range: { type: 'string', description: 'A1 notation, e.g. Sheet1!A1:F50' } }, required: ['spreadsheet_id', 'range'], additionalProperties: false },
-    available: () => { try { return sheets.configured() } catch { return false } },
+    available: () => googleConnectorConfigured(),
     run: async ({ spreadsheet_id, range }) => {
+      const { default: sheets } = await import('./connectors/data-sheets.mjs')
       const r = await sheets.readRange(String(spreadsheet_id || ''), String(range || ''))
       const values = (r.values || []).slice(0, 50).map((row) => (Array.isArray(row) ? row.slice(0, 20) : row))
       return { range: r.range, rows: values.length, values }
@@ -385,8 +415,9 @@ export const TOOLS = {
       required: ['start_date', 'end_date'],
       additionalProperties: false,
     },
-    available: () => { try { return paypal.configured() } catch { return false } },
+    available: () => paypalConfigured(),
     run: async ({ start_date, end_date, page = 1, page_size = 100 } = {}) => {
+      const { default: paypal } = await import('./connectors/payment-paypal.mjs')
       const result = await paypal.listTransactions({
         startDate: start_date,
         endDate: end_date,
@@ -430,8 +461,9 @@ export const TOOLS = {
       },
       additionalProperties: false,
     },
-    available: () => { try { return pipedrive.configured() } catch { return false } },
+    available: () => pipedriveConfigured(),
     run: async ({ limit = 100, cursor, status } = {}) => {
+      const { default: pipedrive } = await import('./connectors/crm-pipedrive.mjs')
       const result = await pipedrive.listDeals({ limit: Math.min(100, Number(limit) || 100), cursor, status })
       if (!result.ok) throw new Error(result.reason || 'crm-pipedrive_read_failed')
       return {
@@ -461,8 +493,9 @@ export const TOOLS = {
       required: ['list_id'],
       additionalProperties: false,
     },
-    available: () => { try { return clickup.configured() } catch { return false } },
+    available: () => clickupConfigured(),
     run: async ({ list_id, page = 0, include_closed = false, subtasks = false } = {}) => {
+      const { default: clickup } = await import('./connectors/data-clickup.mjs')
       const result = await clickup.listTasks({
         listId: list_id,
         page,
@@ -500,12 +533,13 @@ export const TOOLS = {
       additionalProperties: false,
     },
     available: () => {
-      try { return telegram.ownerChatConfigured() || ownerEvidenceConfigured() } catch { return false }
+      try { return telegramOwnerConfigured() || ownerEvidenceConfigured() } catch { return false }
     },
     run: async ({ start_date, end_date, limit = 100 } = {}) => {
       const boundedLimit = Math.max(1, Math.min(100, Number.parseInt(String(limit), 10) || 100))
       const readers = []
-      if (telegram.ownerChatConfigured()) {
+      if (telegramOwnerConfigured()) {
+        const { default: telegram } = await import('./connectors/messaging-telegram.mjs')
         readers.push({
           source: 'telegram',
           promise: telegram.readOwnerUpdates({ startDate: start_date, endDate: end_date, limit: boundedLimit }),

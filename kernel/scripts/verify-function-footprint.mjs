@@ -9,6 +9,16 @@ const CONNECTOR_INDEX = resolve(root, 'connectors', 'index.mjs')
 const MAX_EAGER_FILES = 30
 const MAX_EAGER_BYTES = 400 * 1024
 const EXPECTED_CONNECTORS = 69
+const OPTIONAL_TOOL_CONNECTORS = Object.freeze([
+  'connectors/infra-http.mjs',
+  'connectors/data-cbm-rate.mjs',
+  'connectors/data-gmail.mjs',
+  'connectors/data-sheets.mjs',
+  'connectors/payment-paypal.mjs',
+  'connectors/crm-pipedrive.mjs',
+  'connectors/data-clickup.mjs',
+  'connectors/messaging-telegram.mjs',
+])
 
 function localSpecifiers(source, includeDynamic = false) {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
@@ -76,6 +86,11 @@ const checks = {
     && briefSource.includes("import('../agent-company-operations.mjs')"),
   companyOperationsImportsAreNotStatic: !/(?:from\s+|import\s+)['"]\.\/agent-company-operations\.mjs['"]/.test(toolsSource)
     && !/(?:from\s+|import\s+)['"]\.\.\/agent-company-operations\.mjs['"]/.test(briefSource),
+  optionalToolConnectorsNotEager: OPTIONAL_TOOL_CONNECTORS.every((file) => !relativeFiles.includes(file)),
+  optionalToolConnectorImportsAreDeferred: OPTIONAL_TOOL_CONNECTORS.every((file) => (
+    toolsSource.includes(`import('./${file}')`)
+    && !new RegExp(`(?:from\\s+|import\\s+)['"]\\./${file.replaceAll('.', '\\.')}['"]`).test(toolsSource)
+  )),
   connectorInventoryComplete: connectorImports === EXPECTED_CONNECTORS,
 }
 const failed = Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name)
