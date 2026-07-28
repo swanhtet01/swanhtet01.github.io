@@ -39,27 +39,27 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation (`07dd959`).
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked (`be78a02`).
 - Each CEO cycle selects at most one HQ-authorized outcome; blocked, duplicate, or invalid work stops before model or send (`cdd925a`).
-- Model calls reserve before provider I/O. All tenants and retries share one atomic UTC-day ceiling; failures stay charged, cache hits reserve nothing, hosted memory state fails closed, and the hard maximum is 2,000,000 units (`a2e1b89`).
-- Ecommerce uses versioned Shop data for a recoverable multi-line cart and deterministic quote. Managed workspaces retain exact requests in the Shop inbox; V1 requests stay readable, and only Shop confirmation creates an order (`aed737a`).
+- Model calls reserve before provider I/O under one atomic UTC-day ceiling; failures stay charged, cache hits reserve nothing, and the hard maximum is 2,000,000 units (`a2e1b89`).
+- Ecommerce uses versioned Shop data. Managed workspaces retain exact requests in the Shop inbox; only Shop confirmation creates an order (`aed737a`).
 - All four browser-local imports activate only after review: Shop stock, Plant jobs/BOM/routing, Website content, and Ecommerce merchandising through Shop authority (`7ae8c80`).
-- Local Ecommerce-to-Shop QA imports a catalogue, submits a cart/quote, reviews it in Shop, creates one order, reserves stock, and retains history; synthetic records were reset.
+- Ecommerce-to-Shop QA imports, quotes, reviews, orders, reserves stock, and retains history; synthetic records were reset.
 - Client setup is two steps with one manifest-backed smart import; exact matches collapse and exceptions open for review (`ab9a89e`).
-- Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancel releases, complete consumes, and sellable returns restore the exact fulfilled location/lot. Counts reconcile physical balances above reservations; Plant issues consume deterministic fewest-lot ATP. Aggregate-only managed changes fail closed (`3cd4825`).
+- Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancel releases, complete consumes, and sellable returns restore the exact fulfilled location/lot (`3cd4825`).
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, release, replay, and rollback; operation/output requires exact authenticated Shop issue evidence (`3c885d8`).
-- Home keeps Shop and Plant exceptions above collapsed HQ work. Purchases suppress duplicate stock tasks; a Plant issue badge links to Problems and otherwise the card opens Jobs. `/work/` stays labelled HQ; bottom navigation reads Home, HQ, and Products.
+- Home keeps Shop and Plant exceptions above collapsed HQ work. When present, a Plant issue badge links to Problems and otherwise the card opens Jobs. `/work/` stays labelled HQ; bottom navigation reads Home, HQ, and Products.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
-- CEO `platform_status` now reports one exact secret-safe readiness contract covering persistence, connector registration, AI failover availability, bounded draft-only Agent Company capacity, payment-adapter counts, and immutable release identity. It makes no model or connector call and grants no write authority (`e8a3adb`).
+- CEO `platform_status` now reports one exact secret-safe readiness contract; `company_operations_status` adds 30-day work, target, workforce, usage, evaluation, and accepted-outcome evidence to all five weekly briefs. Both are output-free and grant no write/model authority; daily control no longer fetches FX (`e8a3adb`, `909807d`).
 
 ## Verified baseline
 
-- Current checkpoints: product `7ae8c80`, CEO evidence `e8a3adb`, release `39642eb`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
+- Current checkpoints: product `7ae8c80`, CEO evidence `e8a3adb`, CEO operations `909807d`, release `39642eb`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
 - App/local gates pass: 329 Python tests, lint/build, 54 Shop inventory/226 Commerce/265 Production checks, 70 security checks, and the complete release/database/Vercel/HQ suite.
 - PostgreSQL 17.10 rehearsal passes twice: migrations, isolation, four-product journeys, human approvals, TLS, backup/restore, and cleanup. Hosted Storage privacy remains unproven (`2930ecf`).
 - At 390 px, Shop exact-lot flow and Plant output open/close pass without overflow; Plant passes both themes with focus return. Managed count/allocation remain model verified.
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
 - Both `supermega.dev` and `app.supermega.dev` serve exact remote `main` commit `af3f45c22b13e5edccdf87214608817fc3499e4d`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Paired release identity is current at catalog `2026-07-28.1`.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-- The post-gate non-terminating Codex trim restored serial local admission at 81.4% RAM, zero loaded models, one worker, and one frontend. No process, task, or server was stopped.
+- The post-gate non-terminating Codex trim restored serial local admission at 82.2% RAM, zero loaded models, one worker, and one frontend. No process, task, or server was stopped.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 

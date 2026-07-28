@@ -116,6 +116,12 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.ceoOutcomeAuthority === 'supermega.ceo-outcome-authority.v1'
   && portfolio.agentOperatingModel?.ceoOutcomeOperationsContract === CEO_OUTCOME_OPERATION_CONTRACT
   && portfolio.agentOperatingModel?.ceoOutcomeEvaluationContract === CEO_OUTCOME_EVALUATION_CONTRACT
+  && portfolio.agentOperatingModel?.companyOperationsStatusContract === 'supermega.company-operations-status.v1'
+  && portfolio.agentOperatingModel?.companyOperationsWindowDays === 30
+  && portfolio.agentOperatingModel?.weeklyReadOnlyOutcomeCount === 5
+  && portfolio.agentOperatingModel?.allWeeklyOutcomesObserveCompanyOperations === true
+  && portfolio.agentOperatingModel?.dailyCompanyControlUsesFx === false
+  && portfolio.agentOperatingModel?.companyOperationsRawEvidenceReturned === false
   && portfolio.agentOperatingModel?.maxOutcomesPerCeoCycle === 1
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
@@ -323,6 +329,7 @@ requireContract('agent security brief is reconciled to current controls',
   && agentSecurity.includes('Company model calls now follow `supermega.company-ai-budget.v1`')
   && agentSecurity.includes('Daily AI-budget telemetry is already implemented')
   && agentSecurity.includes('CEO platform-status reads now follow `supermega.platform-status.v1`')
+  && agentSecurity.includes('Every ready weekly CEO outcome now reads `supermega.company-operations-status.v1`')
   && agentSecurity.includes('Efficiency remains unavailable unless the tenant-bound records are durable')
   && agentSecurity.includes('Hosted cleanup still requires a protected deployment')
   && agentSecurity.includes('The unlinked claimable-preview service is retired')
@@ -424,7 +431,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && workboard.includes('Checkpoints `0831ad7` and `920c13d` add an immutable reviewed BOM/routing package')
   && workboard.includes('Checkpoints `0f3dc09` and `03e1f1b` add tenant-bound')
   && workboard.includes('Retain the completed Shop, Plant, Website, and Ecommerce checkpoints')
-  && now.includes('Current checkpoints: product `7ae8c80`, CEO evidence `e8a3adb`, release `39642eb`')
+  && now.includes('Current checkpoints: product `7ae8c80`, CEO evidence `e8a3adb`, CEO operations `909807d`, release `39642eb`')
   && now.includes('First-action QA routes Shop, Plant, and Website blockers to the next task')
   && now.includes('The active delivery focus is:')
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
@@ -698,6 +705,13 @@ requireContract('current CEO platform evidence is recorded without expanding aut
   && workboard.includes('All 289 Kernel tests, 69 connectors across 993 adversarial calls, 15 crews across 214 checks, plus the complete app gate with 69 release and 70 security checks pass')
   && now.includes('CEO `platform_status` now reports one exact secret-safe readiness contract')
   && now.includes('No process, task, or server was stopped'))
+
+requireContract('current company-operations evidence is recorded without adding runtime capacity',
+  workboard.includes('| OPS-040 | CEO + Agent Operations / Evidence Quality Codex | done-local |')
+  && workboard.includes('Checkpoint `909807d` adds `supermega.company-operations-status.v1`')
+  && workboard.includes('All 291 Kernel tests, 69 connectors across 993 adversarial calls, 15 crews across 214 checks')
+  && now.includes('`company_operations_status` adds 30-day work, target, workforce, usage, evaluation, and accepted-outcome evidence to all five weekly briefs')
+  && now.includes('daily control no longer fetches FX'))
 
 for (const forbidden of ['Yangon Tyre', 'ytf.supermega.dev', 'pos.supermega.dev', 'twelve product']) {
   requireContract(`retired HQ context absent: ${forbidden}`,

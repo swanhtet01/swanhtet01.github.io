@@ -14,7 +14,7 @@ Runtime work is limited by job family, queue depth, concurrent runs, daily runs,
 ## Verified locally
 
 - Full app lint/build and release/security/database/Vercel/HQ contracts pass.
-- All 309 Python tests pass; the focused Storage slice has 13, its offline self-test has 11 adversarial cases, the Kernel has 289, and the coordinated-release verifier has 69 passing checks. All 69 connectors survive 993 adversarial calls and all 15 crews pass 214 checks.
+- All 309 Python tests pass; the focused Storage slice has 13, its offline self-test has 11 adversarial cases, the Kernel has 291, and the coordinated-release verifier has 69 passing checks. All 69 connectors survive 993 adversarial calls and all 15 crews pass 214 checks.
 - The retired AgentOS gateway reports not-ready and writes-disabled; old log/status routes return HTTP 410 and OpenAPI is disabled.
 - The retired finance launcher reports payments-disabled and exits nonzero.
 - HQ Agent Teams at 390 and 1280 px has no horizontal overflow or browser warnings/errors; visible mobile controls are at least 44 px.
@@ -51,6 +51,7 @@ Runtime work is limited by job family, queue depth, concurrent runs, daily runs,
 19. Company model calls now follow `supermega.company-ai-budget.v1`. Every provider attempt atomically reserves a conservative cost-weighted maximum before network I/O across all tenants and retries. Failed or ambiguous attempts remain charged, cache hits reserve nothing, caller output limits are tier-bounded, and hosted runtimes reject per-process state. The Supabase table has RLS, no anon/authenticated privileges, and an invoker-rights RPC executable only by the server service role. The default is 500,000 and the compiled/database hard maximum is 2,000,000 bulk-equivalent units per UTC day. This is local code and concurrency evidence; no hosted migration or provider call occurred.
 20. Daily AI-budget telemetry is already implemented in the existing protected owner state (`7be84f4`); it adds no page, worker, cron, or model call and exposes no tenant, prompt, output, provider-error, or reservation detail.
 21. CEO platform-status reads now follow `supermega.platform-status.v1` (`e8a3adb`). The fixed read reports secret-safe runtime readiness, exact compiled agent limits, draft-only/no-write authority, and immutable release identity without invoking a model or connector.
+22. Every ready weekly CEO outcome now reads `supermega.company-operations-status.v1` (`909807d`). It exposes only reconciled counts, attention, target states, 12-role utilization, cache/model work units, evaluation coverage, and durable accepted-outcome efficiency. Client/work/agent identities, evidence, brief/model/specialist output, and provider rows are removed; malformed totals or boundaries fail to attention. Daily control drops its redundant FX read, while Growth and Finance retain FX. This adds no agent, page, worker, connector request, or model call.
 
 These are local code and test results. They do not prove a hosted deployment, live credentials, or production data migration.
 
