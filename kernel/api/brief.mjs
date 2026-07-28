@@ -4,7 +4,7 @@
 
 import crypto from 'node:crypto'
 import { runOperator } from './operator.mjs'
-import { notify } from '../alert.mjs'
+import { notifyDetailed } from '../alert.mjs'
 import { claimWorkcellDelivery, claimWorkcellExecution, formatWorkcellNotification, releaseWorkcellDelivery, runWorkcell } from '../workcell-run.mjs'
 import { resolveWorkcellConfig, scheduledWorkcellSlugs } from '../workcells.mjs'
 import { buildCeoOutcomeGoal, selectCeoOutcome } from '../supermega-hq-authority.mjs'
@@ -12,6 +12,7 @@ import {
   CEO_OUTCOME_CYCLE_STATE_CONTRACT,
   loadCeoOutcomeCycleState,
   recordCeoOutcomeCompletion,
+  recordCeoOutcomeDeliveryResult,
 } from '../agent-company-operations.mjs'
 
 const COMPANY_CLIENT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/
@@ -48,6 +49,20 @@ function ceoOutcomeView(selection) {
   } : null
 }
 
+function normalizeDeliveryResult(value) {
+  if (typeof value === 'boolean') return { ok: value, status: value ? 'sent' : 'failed' }
+  if (value?.ok === true && value?.status === 'sent') return { ok: true, status: 'sent' }
+  if (value?.ok === false && ['failed', 'uncertain'].includes(value?.status)) {
+    return { ok: false, status: value.status }
+  }
+  return { ok: false, status: 'uncertain' }
+}
+
+async function deliverSafely(send, message) {
+  try { return normalizeDeliveryResult(await send(message)) }
+  catch { return { ok: false, status: 'uncertain' } }
+}
+
 function validCycleState(value, expected) {
   if (!value?.ok
     || value.contract !== CEO_OUTCOME_CYCLE_STATE_CONTRACT
@@ -73,7 +88,7 @@ function validCycleState(value, expected) {
 export async function runScheduledBrief(options = {}) {
   const env = options.env || process.env
   const now = options.now || new Date()
-  const send = options.notify || notify
+  const send = options.notify || notifyDetailed
   const claimExecution = options.claimWorkcellExecution || claimWorkcellExecution
   const claimDelivery = options.claimWorkcellDelivery || claimWorkcellDelivery
   const releaseDelivery = options.releaseWorkcellDelivery || releaseWorkcellDelivery
@@ -110,8 +125,8 @@ export async function runScheduledBrief(options = {}) {
         results.push({ slug, ok: false, reason: deliveryClaim?.reason || 'durable_delivery_claim_unavailable', retryable })
         continue
       }
-      let sent = false
-      try { sent = await send(formatWorkcellNotification(workcell)) } catch { sent = false }
+      const delivery = await deliverSafely(send, formatWorkcellNotification(workcell))
+      const sent = delivery.ok
       let retryable
       if (!sent) {
         const deliveryReleased = await releaseClaimSafely(releaseDelivery, deliveryClaim)
@@ -274,21 +289,50 @@ export async function runScheduledBrief(options = {}) {
     const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
     return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: deliveryClaim?.reason || 'durable_delivery_claim_unavailable', retryable, outcome, cycle }
   }
-  let sent = false
-  try { sent = await send(`SuperMega | ${selection.selected.title}\n\n${result.answer}`) } catch { sent = false }
-  let retryable
-  if (!sent) {
-    const deliveryReleased = await releaseClaimSafely(releaseDelivery, deliveryClaim)
-    const executionReleased = await releaseClaimSafely(releaseDelivery, executionClaim)
-    retryable = deliveryReleased && executionReleased
+  const delivery = await deliverSafely(send, `SuperMega | ${selection.selected.title}\n\n${result.answer}`)
+  const recordDelivery = options.recordCeoOutcomeDeliveryResult || recordCeoOutcomeDeliveryResult
+  let deliveryRecord
+  try {
+    deliveryRecord = await recordDelivery({
+      clientId,
+      operationId: recorded.outcome?.operationId,
+      recordHash: recorded.outcome?.recordHash,
+      deliveryClaimId: deliveryClaim.claimId,
+      status: delivery.status,
+    })
+  } catch {
+    deliveryRecord = { ok: false, reason: 'ceo_outcome_delivery_store_unavailable' }
   }
+  if (!deliveryRecord?.ok) {
+    return {
+      ok: false,
+      mode: 'legacy',
+      companyMode: 'supermega_hq',
+      sent: delivery.ok,
+      reason: deliveryRecord?.reason || 'ceo_outcome_delivery_store_unavailable',
+      retryable: false,
+      deliveryStatus: 'uncertain',
+      outcome,
+      cycle,
+      outcomeMetrics,
+    }
+  }
+  outcomeMetrics.delivery = {
+    recorded: true,
+    deliveryId: deliveryRecord.delivery?.deliveryId,
+    status: deliveryRecord.delivery?.status,
+    deliveryHash: deliveryRecord.delivery?.deliveryHash,
+    replayed: deliveryRecord.replayed === true,
+  }
+  const sent = delivery.ok
   return {
     ok: Boolean(sent),
     mode: 'legacy',
     companyMode: 'supermega_hq',
     sent: Boolean(sent),
-    reason: sent ? undefined : 'owner_delivery_failed',
-    retryable,
+    reason: sent ? undefined : delivery.status === 'uncertain' ? 'owner_delivery_uncertain' : 'owner_delivery_failed',
+    retryable: false,
+    deliveryStatus: delivery.status,
     outcome,
     cycle,
     planningMode: result.planningMode || null,

@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { runScheduledBrief } from './brief.mjs'
+import { notifyDetailed } from '../alert.mjs'
 import { loadCeoOutcomeCycleState, recordCeoOutcomeCompletion } from '../agent-company-operations.mjs'
 import { SUPERMEGA_HQ_AUTHORITY } from '../supermega-hq-authority.mjs'
 import { executionClaimId } from '../workcell-run.mjs'
@@ -248,6 +249,7 @@ test('SuperMega CEO cycle selects one HQ outcome and uses its fixed evidence pla
   const operatorInputs = []
   const sent = []
   const recorded = []
+  const deliveryRecords = []
   const result = await runScheduledBrief({
     env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
     now: NOW,
@@ -285,6 +287,17 @@ test('SuperMega CEO cycle selects one HQ outcome and uses its fixed evidence pla
         },
       }
     },
+    recordCeoOutcomeDeliveryResult: async (input) => {
+      deliveryRecords.push(input)
+      return {
+        ok: true,
+        delivery: {
+          deliveryId: `ceo-outcome-delivery:${'c'.repeat(40)}`,
+          status: input.status,
+          deliveryHash: 'd'.repeat(64),
+        },
+      }
+    },
   })
 
   assert.equal(result.ok, true)
@@ -319,6 +332,70 @@ test('SuperMega CEO cycle selects one HQ outcome and uses its fixed evidence pla
   })
   assert.equal(JSON.stringify(recorded[0]).includes('One decision'), false)
   assert.equal(JSON.stringify(recorded[0]).includes('provider'), false)
+  assert.equal(deliveryRecords.length, 1)
+  assert.deepEqual(deliveryRecords[0], {
+    clientId: 'client-acme',
+    operationId: `ceo-outcome:${'a'.repeat(40)}`,
+    recordHash: 'b'.repeat(64),
+    deliveryClaimId: 'delivery:ceo-daily-company-control',
+    status: 'sent',
+  })
+  assert.equal(JSON.stringify(deliveryRecords[0]).includes('One decision'), false)
+  assert.equal(result.deliveryStatus, 'sent')
+  assert.equal(result.outcomeMetrics.delivery.status, 'sent')
+})
+
+test('failed CEO delivery is durably recorded once and never advertised as an automatic retry', async () => {
+  const executions = durableClaimStore('execution')
+  const deliveries = durableClaimStore('delivery')
+  let runs = 0
+  let sends = 0
+  let releases = 0
+  const deliveryRecords = []
+  const options = {
+    env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
+    now: NOW,
+    completedOutcomeIds: [],
+    runOperator: async () => {
+      runs += 1
+      return { ok: true, answer: 'private answer', results: [], usage: CEO_USAGE }
+    },
+    claimWorkcellExecution: executions.claim,
+    claimWorkcellDelivery: deliveries.claim,
+    releaseWorkcellDelivery: async () => { releases += 1; return true },
+    recordCeoOutcomeCompletion: async () => ({
+      ok: true,
+      outcome: { operationId: `ceo-outcome:${'a'.repeat(40)}`, status: 'completed', recordHash: 'b'.repeat(64) },
+    }),
+    recordCeoOutcomeDeliveryResult: async (input) => {
+      deliveryRecords.push(input)
+      return {
+        ok: true,
+        delivery: {
+          deliveryId: `ceo-outcome-delivery:${'c'.repeat(40)}`,
+          status: input.status,
+          deliveryHash: 'd'.repeat(64),
+        },
+      }
+    },
+    notify: async () => { sends += 1; return { ok: false, status: 'failed' } },
+  }
+
+  const failed = await runScheduledBrief(options)
+  const duplicate = await runScheduledBrief(options)
+
+  assert.equal(failed.ok, false)
+  assert.equal(failed.reason, 'owner_delivery_failed')
+  assert.equal(failed.retryable, false)
+  assert.equal(failed.deliveryStatus, 'failed')
+  assert.equal(failed.outcomeMetrics.delivery.status, 'failed')
+  assert.equal(duplicate.ok, true)
+  assert.equal(duplicate.duplicate, true)
+  assert.equal(runs, 1)
+  assert.equal(sends, 1)
+  assert.equal(releases, 0)
+  assert.equal(deliveryRecords.length, 1)
+  assert.doesNotMatch(JSON.stringify(deliveryRecords), /private answer/)
 })
 
 test('CEO cycle does not notify the owner when completion metadata is not durable', async () => {
@@ -512,4 +589,20 @@ test('missing or invalid CEO client identity stops before state, claims, tools, 
   assert.equal(invalid.reason, 'company_client_id_invalid')
   assert.equal(work, 0)
   assert.doesNotMatch(JSON.stringify(invalid), /bad client|private-token/)
+})
+
+test('owner notification distinguishes acknowledgement, rejection, and transport uncertainty', async () => {
+  const env = { TELEGRAM_BOT_TOKEN: 'private-token', TELEGRAM_ALERT_CHAT_ID: 'owner-chat' }
+  const sent = await notifyDetailed('brief', { env, fetch: async () => ({ ok: true }) })
+  const rejected = await notifyDetailed('brief', { env, fetch: async () => ({ ok: false }) })
+  const uncertain = await notifyDetailed('brief', { env, fetch: async () => { throw new Error('private transport failure') } })
+  let requests = 0
+  const unconfigured = await notifyDetailed('brief', { env: {}, fetch: async () => { requests += 1; return { ok: true } } })
+
+  assert.deepEqual(sent, { ok: true, status: 'sent' })
+  assert.deepEqual(rejected, { ok: false, status: 'failed' })
+  assert.deepEqual(uncertain, { ok: false, status: 'uncertain' })
+  assert.deepEqual(unconfigured, { ok: false, status: 'failed' })
+  assert.equal(requests, 0)
+  assert.doesNotMatch(JSON.stringify({ sent, rejected, uncertain, unconfigured }), /private|owner-chat/)
 })

@@ -21,6 +21,7 @@ import {
 } from './gateway.mjs'
 import {
   claimActivity,
+  getActivityClaim,
   getCachedResponse,
   listCachedResponseRecords,
   putCachedResponse,
@@ -32,6 +33,7 @@ export const COMPANY_USAGE_UNITS = 'bulk_equivalent_tokens'
 export const CEO_OUTCOME_OPERATION_CONTRACT = 'supermega.ceo-outcome-operation.v1'
 export const CEO_OUTCOME_EVALUATION_CONTRACT = 'supermega.ceo-outcome-evaluation.v1'
 export const CEO_OUTCOME_CYCLE_STATE_CONTRACT = 'supermega.ceo-outcome-cycle-state.v1'
+export const CEO_OUTCOME_DELIVERY_CONTRACT = 'supermega.ceo-outcome-delivery.v1'
 export const MAX_CEO_OUTCOME_RECORDS = 90
 export const COMPANY_OPERATIONS_TARGETS = Object.freeze({
   minimumSamples: 5,
@@ -49,13 +51,17 @@ const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/
 const HASH_RE = /^[a-f0-9]{64}$/
 const CEO_OUTCOME_ID_RE = /^[a-z0-9][a-z0-9-]{0,79}$/
 const CEO_OPERATION_ID_RE = /^ceo-outcome:[a-f0-9]{40}$/
+const CEO_DELIVERY_ID_RE = /^ceo-outcome-delivery:[a-f0-9]{40}$/
+const WORKCELL_DELIVERY_CLAIM_RE = /^workcell:[a-f0-9]{40}$/
 const TERMINAL_STATUSES = new Set(['completed', 'partial', 'blocked', 'failed'])
+const CEO_DELIVERY_STATUSES = new Set(['sent', 'failed', 'uncertain'])
 const VERDICTS = new Set(['accepted', 'revision_required'])
 const EVALUATION_FIELDS = new Set(['clientId', 'workOrderId', 'planHash', 'verdict', 'checks', 'confirmation'])
 const GET_EVALUATION_FIELDS = new Set(['clientId', 'workOrderId'])
 const REPORT_FIELDS = new Set(['clientId', 'windowDays'])
 const CEO_OUTCOME_CYCLE_STATE_FIELDS = new Set(['clientId', 'authorityDigest', 'asOf'])
 const CEO_OUTCOME_RECORD_INPUT_FIELDS = new Set(['clientId', 'outcomeId', 'authorityDigest', 'completedAt', 'usage'])
+const CEO_OUTCOME_DELIVERY_INPUT_FIELDS = new Set(['clientId', 'operationId', 'recordHash', 'deliveryClaimId', 'status'])
 const CEO_OUTCOME_EVALUATION_INPUT_FIELDS = new Set(['clientId', 'operationId', 'recordHash', 'verdict', 'confirmation'])
 const CEO_OUTCOME_RECORD_FIELDS = new Set([
   'contract',
@@ -80,6 +86,18 @@ const CEO_OUTCOME_EVALUATION_FIELDS = new Set([
   'evaluatedAt',
   'evaluationHash',
 ])
+const CEO_OUTCOME_DELIVERY_FIELDS = new Set([
+  'contract',
+  'deliveryId',
+  'operationId',
+  'clientId',
+  'outcomeId',
+  'operationHash',
+  'deliveryClaimId',
+  'status',
+  'recordedAt',
+  'deliveryHash',
+])
 const CEO_USAGE_FIELDS = new Set([
   'contract',
   'units',
@@ -91,6 +109,7 @@ const CEO_USAGE_FIELDS = new Set([
 ])
 const CEO_OUTCOME_RECORD_PREFIX = 'ceo-outcome-operation:'
 const CEO_OUTCOME_EVALUATION_PREFIX = 'ceo-outcome-evaluation:'
+const CEO_OUTCOME_DELIVERY_PREFIX = 'ceo-outcome-delivery:'
 const OPERATOR_USAGE_CONTRACT = 'supermega.operator-usage.v1'
 const CHECK_FIELDS = Object.freeze(['accurate', 'complete', 'usable', 'boundarySafe'])
 const USAGE_TIERS = Object.freeze(Object.keys(TIER_COST_WEIGHTS))
@@ -102,6 +121,7 @@ const evaluationIdFor = (workOrderId) => `company-evaluation:${String(workOrderI
 const evaluationKey = (workOrderId) => `company-work-order-evaluation:${workOrderId}`
 const ceoRecordKey = (operationId) => `${CEO_OUTCOME_RECORD_PREFIX}${String(operationId).split(':').pop()}`
 const ceoEvaluationKey = (operationId) => `${CEO_OUTCOME_EVALUATION_PREFIX}${String(operationId).split(':').pop()}`
+const ceoDeliveryKey = (operationId) => `${CEO_OUTCOME_DELIVERY_PREFIX}${String(operationId).split(':').pop()}`
 
 function onlyFields(input, allowed) {
   if (!isRecord(input)) return failure('company_operations_invalid_request')
@@ -243,6 +263,37 @@ function validateCeoOutcomeEvaluation(value, operation) {
     evaluatedAt: value.evaluatedAt,
   }
   return sameHash(value.evaluationHash, sha256(stableStringify(payload))) ? { ...payload, evaluationHash: value.evaluationHash } : null
+}
+
+function validateCeoOutcomeDelivery(value, operation = null) {
+  if (!isRecord(value) || Object.keys(value).some((field) => !CEO_OUTCOME_DELIVERY_FIELDS.has(field))) return null
+  if (value.contract !== CEO_OUTCOME_DELIVERY_CONTRACT
+    || !CEO_DELIVERY_ID_RE.test(String(value.deliveryId || ''))
+    || !CEO_OPERATION_ID_RE.test(String(value.operationId || ''))
+    || !ID_RE.test(String(value.clientId || ''))
+    || !CEO_OUTCOME_ID_RE.test(String(value.outcomeId || ''))
+    || !HASH_RE.test(String(value.operationHash || ''))
+    || !WORKCELL_DELIVERY_CLAIM_RE.test(String(value.deliveryClaimId || ''))
+    || !CEO_DELIVERY_STATUSES.has(value.status)
+    || !exactIso(value.recordedAt)
+    || !HASH_RE.test(String(value.deliveryHash || ''))
+    || value.deliveryId !== ceoDeliveryKey(value.operationId)) return null
+  if (operation && (value.operationId !== operation.operationId
+    || value.clientId !== operation.clientId
+    || value.outcomeId !== operation.outcomeId
+    || !sameHash(value.operationHash, operation.recordHash))) return null
+  const payload = {
+    contract: CEO_OUTCOME_DELIVERY_CONTRACT,
+    deliveryId: value.deliveryId,
+    operationId: value.operationId,
+    clientId: value.clientId,
+    outcomeId: value.outcomeId,
+    operationHash: value.operationHash,
+    deliveryClaimId: value.deliveryClaimId,
+    status: value.status,
+    recordedAt: value.recordedAt,
+  }
+  return sameHash(value.deliveryHash, sha256(stableStringify(payload))) ? { ...payload, deliveryHash: value.deliveryHash } : null
 }
 
 function normalizeChecks(value) {
@@ -448,6 +499,95 @@ export async function recordCeoOutcomeCompletion(input, options = {}) {
   return { ok: true, mode: 'ceo_outcome_record', replayed: false, outcome: publicCeoOutcomeRecord(record) }
 }
 
+export async function recordCeoOutcomeDeliveryResult(input, options = {}) {
+  const fields = onlyFields(input, CEO_OUTCOME_DELIVERY_INPUT_FIELDS)
+  if (!fields.ok) return fields
+  const clientId = normalizeId(input.clientId, 'company_invalid_client_id')
+  if (isRecord(clientId)) return clientId
+  const operationId = String(input.operationId || '').trim()
+  const recordHash = String(input.recordHash || '').trim()
+  const deliveryClaimId = String(input.deliveryClaimId || '').trim()
+  const status = String(input.status || '').trim()
+  if (!CEO_OPERATION_ID_RE.test(operationId)) return failure('ceo_outcome_invalid_operation_id')
+  if (!HASH_RE.test(recordHash)) return failure('ceo_outcome_record_mismatch')
+  if (!WORKCELL_DELIVERY_CLAIM_RE.test(deliveryClaimId)) return failure('ceo_outcome_delivery_claim_invalid')
+  if (!CEO_DELIVERY_STATUSES.has(status)) return failure('ceo_outcome_delivery_status_invalid')
+
+  const readOperation = options.getCeoOutcomeRecord || getCachedResponse
+  let operation = null
+  try { operation = validateCeoOutcomeRecord(await readOperation(ceoRecordKey(operationId)), ceoRecordKey(operationId)) }
+  catch { operation = null }
+  if (!operation || operation.clientId !== clientId) return failure('ceo_outcome_not_found')
+  if (!sameHash(operation.recordHash, recordHash)) return failure('ceo_outcome_record_mismatch')
+
+  const readClaim = options.getActivityClaim || getActivityClaim
+  let deliveryClaim
+  try { deliveryClaim = await readClaim(deliveryClaimId) }
+  catch { deliveryClaim = null }
+  if (!deliveryClaim || deliveryClaim.durable !== true) return failure('ceo_outcome_delivery_store_unavailable')
+  const expectedRefPrefix = `ceo-${operation.outcomeId}:`
+  if (deliveryClaim.claim?.id !== deliveryClaimId
+    || deliveryClaim.claim?.kind !== 'workcell_delivery'
+    || !String(deliveryClaim.claim?.ref || '').startsWith(expectedRefPrefix)) {
+    return failure('ceo_outcome_delivery_claim_mismatch')
+  }
+
+  const deliveryId = ceoDeliveryKey(operationId)
+  const recordedAt = String(options.now?.() || new Date().toISOString())
+  if (!exactIso(recordedAt)) return failure('ceo_outcome_delivery_clock_invalid')
+  const payload = {
+    contract: CEO_OUTCOME_DELIVERY_CONTRACT,
+    deliveryId,
+    operationId,
+    clientId,
+    outcomeId: operation.outcomeId,
+    operationHash: operation.recordHash,
+    deliveryClaimId,
+    status,
+    recordedAt,
+  }
+  const record = { ...payload, deliveryHash: sha256(stableStringify(payload)) }
+  const reserve = options.claimActivity || claimActivity
+  const release = options.releaseActivityClaim || releaseActivityClaim
+  const save = options.putCeoOutcomeDeliveryRecord || putCachedResponse
+  const read = options.getCeoOutcomeDeliveryRecord || getCachedResponse
+  const claimId = `ceo-outcome-delivery-record:${String(operationId).split(':').pop()}`
+  let claim
+  try {
+    claim = await reserve({
+      id: claimId,
+      kind: 'ceo_outcome_delivery_record',
+      summary: 'CEO outcome owner-delivery metadata recorded',
+      ref: clientId,
+    })
+  } catch {
+    claim = { fresh: false, durable: false }
+  }
+  if (!claim?.fresh) {
+    if (!claim?.durable) return failure('ceo_outcome_delivery_store_unavailable')
+    let existing = null
+    try { existing = validateCeoOutcomeDelivery(await read(deliveryId), operation) }
+    catch { existing = null }
+    if (!existing) return failure('ceo_outcome_delivery_already_claimed')
+    if (existing.deliveryClaimId !== deliveryClaimId || existing.status !== status) {
+      return failure('ceo_outcome_delivery_conflict')
+    }
+    return { ok: true, mode: 'ceo_outcome_delivery_record', replayed: true, delivery: publicCeoOutcomeDelivery(existing) }
+  }
+  if (!claim.durable) {
+    try { await release(claimId, clientId) } catch { /* no delivery record was persisted */ }
+    return failure('ceo_outcome_delivery_durable_claim_required')
+  }
+  let stored = false
+  try { stored = Boolean(await save(deliveryId, record)) }
+  catch { stored = false }
+  if (!stored) {
+    try { await release(claimId, clientId) } catch { /* allow an explicit metadata retry */ }
+    return failure('ceo_outcome_delivery_store_unavailable')
+  }
+  return { ok: true, mode: 'ceo_outcome_delivery_record', replayed: false, delivery: publicCeoOutcomeDelivery(record) }
+}
+
 function utcWeekWindow(asOf) {
   const value = new Date(asOf)
   const daysSinceMonday = (value.getUTCDay() + 6) % 7
@@ -459,6 +599,21 @@ function utcWeekWindow(asOf) {
     endsAt: new Date(endMs).toISOString(),
     startMs,
     endMs,
+  }
+}
+
+function publicCeoOutcomeDelivery(record) {
+  return {
+    contract: record.contract,
+    deliveryId: record.deliveryId,
+    operationId: record.operationId,
+    clientId: record.clientId,
+    outcomeId: record.outcomeId,
+    operationHash: record.operationHash,
+    deliveryClaimId: record.deliveryClaimId,
+    status: record.status,
+    recordedAt: record.recordedAt,
+    deliveryHash: record.deliveryHash,
   }
 }
 
@@ -1241,6 +1396,7 @@ export async function buildCompanyOperationsReport(input, options = {}) {
 export default {
   evaluateCompanyWorkOrder,
   recordCeoOutcomeCompletion,
+  recordCeoOutcomeDeliveryResult,
   evaluateCeoOutcomeDelivery,
   buildCompanyOperationsReport,
 }

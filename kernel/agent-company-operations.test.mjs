@@ -7,6 +7,7 @@ import {
   evaluateCompanyWorkOrder,
   getCompanyWorkOrderEvaluation,
   recordCeoOutcomeCompletion,
+  recordCeoOutcomeDeliveryResult,
 } from './agent-company-operations.mjs'
 
 const HASH = 'a'.repeat(64)
@@ -109,6 +110,12 @@ function ceoOutcomeHarness() {
       getCeoOutcomeRecord: async (key) => structuredClone(cache.get(key) || null),
       putCeoOutcomeEvaluation: async (key, value) => { cache.set(key, structuredClone(value)); return true },
       getCeoOutcomeEvaluation: async (key) => structuredClone(cache.get(key) || null),
+      putCeoOutcomeDeliveryRecord: async (key, value) => { cache.set(key, structuredClone(value)); return true },
+      getCeoOutcomeDeliveryRecord: async (key) => structuredClone(cache.get(key) || null),
+      getActivityClaim: async (id) => ({
+        durable: true,
+        claim: { id, kind: 'workcell_delivery', ref: 'ceo-daily-company-control:2026-07-14' },
+      }),
       now: () => '2026-07-16T01:00:00.000Z',
     },
   }
@@ -229,6 +236,39 @@ test('CEO outcome completion and owner acceptance are immutable, tenant-bound, a
   assert.equal(JSON.stringify(accepted).includes('answer'), false)
   assert.equal((await evaluateCeoOutcomeDelivery(evaluationInput, state.options)).replayed, true)
   assert.equal((await evaluateCeoOutcomeDelivery({ ...evaluationInput, verdict: 'revision_required' }, state.options)).reason, 'ceo_outcome_evaluation_conflict')
+})
+
+test('CEO owner-delivery result is durable, idempotent, claim-bound, and metadata-only', async () => {
+  const state = ceoOutcomeHarness()
+  const completed = await recordCeoOutcomeCompletion(ceoOutcomeInput(), state.options)
+  const input = {
+    clientId: 'client-acme',
+    operationId: completed.outcome.operationId,
+    recordHash: completed.outcome.recordHash,
+    deliveryClaimId: `workcell:${'d'.repeat(40)}`,
+    status: 'sent',
+  }
+  const recorded = await recordCeoOutcomeDeliveryResult(input, state.options)
+  assert.equal(recorded.ok, true)
+  assert.equal(recorded.delivery.status, 'sent')
+  assert.match(recorded.delivery.deliveryId, /^ceo-outcome-delivery:[a-f0-9]{40}$/)
+  assert.match(recorded.delivery.deliveryHash, /^[a-f0-9]{64}$/)
+  assert.doesNotMatch(JSON.stringify(recorded), /answer|provider|model output|private/)
+
+  const replay = await recordCeoOutcomeDeliveryResult(input, state.options)
+  assert.equal(replay.ok, true)
+  assert.equal(replay.replayed, true)
+  const conflict = await recordCeoOutcomeDeliveryResult({ ...input, status: 'failed' }, state.options)
+  assert.equal(conflict.reason, 'ceo_outcome_delivery_conflict')
+  assert.equal((await recordCeoOutcomeDeliveryResult({ ...input, briefText: 'private answer' }, state.options)).reason, 'company_operations_unknown_field')
+  assert.equal((await recordCeoOutcomeDeliveryResult(input, {
+    ...state.options,
+    getActivityClaim: async () => ({ durable: true, claim: { id: input.deliveryClaimId, kind: 'other', ref: 'private' } }),
+  })).reason, 'ceo_outcome_delivery_claim_mismatch')
+  assert.equal((await recordCeoOutcomeDeliveryResult(input, {
+    ...state.options,
+    getActivityClaim: async () => ({ durable: false, claim: null }),
+  })).reason, 'ceo_outcome_delivery_store_unavailable')
 })
 
 test('accepted CEO outcomes per work unit require complete evaluation, valid usage, and clean coverage', async () => {
