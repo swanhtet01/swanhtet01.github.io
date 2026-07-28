@@ -25,7 +25,7 @@ import {
 } from '../kernel/gateway.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -44,6 +44,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'tools', 'invoke_supermega_company_cycle.ps1'), 'utf8'),
   readFile(resolve(root, 'kernel', 'ally-ceo-company-plan.mjs'), 'utf8'),
   readFile(resolve(root, 'kernel', 'scripts', 'plan-ally-ceo-company.mjs'), 'utf8'),
+  readFile(resolve(root, 'tools', 'run_ally_ceo_local_cycle.mjs'), 'utf8'),
   readFile(resolve(root, 'tools', 'run_supermega_agent_jobs.py'), 'utf8'),
   readFile(resolve(root, 'package.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'pilots', 'private-storage-privacy-audit.md'), 'utf8'),
@@ -940,6 +941,35 @@ requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect
   && agentSecurity.includes('Instagram shortcode `Da-NXcnkz8p`')
   && !/\b(?:fetch|XMLHttpRequest|WebSocket|child_process|execFile|spawn|Worker|setInterval)\b/.test(allyCeoPlannerText)
   && !/\b(?:fetch|XMLHttpRequest|WebSocket|child_process|execFile|spawn|Worker|setInterval|unlink|rm)\b/.test(allyCeoPlannerCliText))
+
+requireContract('Ally CEO execution uses one exact local-company run and no external action surface',
+  allyCeoLocalCycleText.includes("ALLY_CEO_LOCAL_CYCLE_CONTRACT = 'supermega.ally-ceo-local-cycle.v1'")
+  && allyCeoLocalCycleText.includes("'operations-analyst': 'operations'")
+  && allyCeoLocalCycleText.includes("'project-controller': 'chief-of-staff'")
+  && allyCeoLocalCycleText.includes("ally_ceo_local_cycle_host_blocked")
+  && allyCeoLocalCycleText.includes("ally_ceo_local_cycle_host_not_idle")
+  && allyCeoLocalCycleText.includes("ally_ceo_local_cycle_knowledge_not_current")
+  && allyCeoLocalCycleText.includes("ally_ceo_local_cycle_duplicate_plan")
+  && allyCeoLocalCycleText.includes("EXECUTION_SPEC_VERSION = '2026-07-29.5'")
+  && allyCeoLocalCycleText.includes('`[ALLY_CEO_CYCLE:${shortHash}]`')
+  && allyCeoLocalCycleText.includes("ally_ceo_local_cycle_queue_preflight_rejected")
+  && allyCeoLocalCycleText.includes("'queue', 'run-next', '--queue-id', queueId")
+  && allyCeoLocalCycleText.includes("'--keep-alive', '0s'")
+  && allyCeoLocalCycleText.includes("controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true }")
+  && allyCeoLocalCycleText.includes("PYTHONPATH: resolve(localCompanyRoot, 'src')")
+  && allyCeoLocalCycleText.includes("within(resolve(localCompanyHome, 'outputs'), absolute)")
+  && allyCeoLocalCycleText.includes('validateFinalAudit(finalAudit)')
+  && allyCeoLocalCycleText.includes('validateAcceptedReport(await inspectReport(result.reportPath))')
+  && allyCeoLocalCycleText.includes('ally_ceo_local_cycle_report_semantics_rejected')
+  && allyCeoLocalCycleText.includes('ally_ceo_local_cycle_report_citations_rejected')
+  && allyCeoLocalCycleText.includes("status: existingRejectedReason ? 'existing_rejected' : 'existing'")
+  && allyCeoLocalCycleText.includes("args: ['show', existing.jobId]")
+  && packageText.includes('"company:ally:self-test": "node --test tools/run_ally_ceo_local_cycle.test.mjs"')
+  && packageText.includes('"company:ally:preflight": "node tools/run_ally_ceo_local_cycle.mjs"')
+  && packageText.includes('"company:ally:run": "node tools/run_ally_ceo_local_cycle.mjs --execute"')
+  && workboard.includes('| OPS-064 | CEO + Local Agent Operations Codex | done-local |')
+  && !packageText.includes('"company:ally:self-test": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/invoke_supermega_company_cycle.ps1')
+  && !/\b(?:fetch|XMLHttpRequest|WebSocket|https?:\/\/|vercel|supabase|stripe|resend)\b/i.test(allyCeoLocalCycleText))
 
 requireContract('agent job cycles are canonical, bounded, and scale to zero',
   workforce.runtime_policy.max_batch_jobs === 4
