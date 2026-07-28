@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-export const CEO_OUTCOME_AUTHORITY_CONTRACT = 'supermega.ceo-outcome-authority.v1'
+export const CEO_OUTCOME_AUTHORITY_CONTRACT = 'supermega.ceo-outcome-authority.v2'
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,79}$/
 const OUTCOME_STATES = new Set(['ready', 'blocked', 'done'])
@@ -32,6 +32,7 @@ const OUTCOME_FIELDS = new Set([
   'actionMode',
   'deliverable',
   'objective',
+  'successMeasure',
   'blockers',
   'evidencePlan',
   'sourceRefs',
@@ -108,7 +109,8 @@ function normalizeAuthority(value) {
     const actionMode = boundedText(candidate.actionMode, 40)
     const deliverable = boundedText(candidate.deliverable, 400)
     const objective = boundedText(candidate.objective, 1_200)
-    if (!ID_RE.test(id) || !ID_RE.test(team) || !title || !deliverable || !objective) return null
+    const successMeasure = boundedText(candidate.successMeasure, 400)
+    if (!ID_RE.test(id) || !ID_RE.test(team) || !title || !deliverable || !objective || !successMeasure) return null
     if (!Number.isInteger(candidate.priority) || candidate.priority < 0 || candidate.priority > 100) return null
     if (!OUTCOME_STATES.has(state) || !ACTION_MODES.has(actionMode)) return null
 
@@ -131,6 +133,7 @@ function normalizeAuthority(value) {
       actionMode,
       deliverable,
       objective,
+      successMeasure,
       blockers: [...blockers],
       evidencePlan,
       sourceRefs,
@@ -157,7 +160,7 @@ function normalizeAuthority(value) {
 
 export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
   contract: CEO_OUTCOME_AUTHORITY_CONTRACT,
-  authorityId: 'supermega-hq-2026-07-27',
+  authorityId: 'supermega-hq-2026-07-28',
   company: 'supermega',
   northStar: 'One real workflow reaches a measurable outcome through an accountable operating record.',
   selectionPolicy: 'priority_then_id',
@@ -179,6 +182,7 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
       actionMode: 'credentialed_provider_read',
       deliverable: 'Bucket inventory plus anonymous-list, cross-tenant-list, and short-lived authorized-object evidence.',
       objective: 'Verify that a stranger cannot enumerate or read another tenant\'s uploads even when individual object links look private.',
+      successMeasure: 'All six bounded Storage requests produce the expected access classes with zero anonymous or cross-tenant visibility and one authorized short-lived positive control.',
       blockers: Object.freeze(['isolated-tenant-missing', 'owner-provider-approval-required']),
       evidencePlan: Object.freeze([]),
       sourceRefs: Object.freeze([
@@ -196,6 +200,7 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
       actionMode: 'protected_preview',
       deliverable: 'One exact-commit preview with desktop, mobile, persistence, security, observability, and rollback evidence.',
       objective: 'Prove the clean candidate on the canonical project without changing production aliases.',
+      successMeasure: 'The protected preview serves the reviewed commit, passes every required contract and viewport, and retains a verified exact rollback target without production alias mutation.',
       blockers: Object.freeze(['canonical-project-link-missing', 'owner-release-approval-required']),
       evidencePlan: Object.freeze([]),
       sourceRefs: Object.freeze(['hq/NOW.md', 'hq/WORKBOARD.md']),
@@ -209,6 +214,7 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
       actionMode: 'managed_pilot',
       deliverable: 'A named operator, baseline, isolated tenant, five-day evidence plan, and measured workflow outcome.',
       objective: 'Move one Shop, Plant, Website, or Ecommerce workflow from local release candidate to measured customer proof.',
+      successMeasure: 'One named operator completes the agreed workflow for five days with retained baseline, completion, correction, recovery, and acceptance evidence on an isolated tenant.',
       blockers: Object.freeze(['named-pilot-missing', 'isolated-tenant-missing']),
       evidencePlan: Object.freeze([]),
       sourceRefs: Object.freeze(['hq/portfolio.json', 'hq/NOW.md']),
@@ -222,6 +228,7 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
       actionMode: 'read_only_brief',
       deliverable: 'One exact release-health brief with current platform state, the highest verified delivery risk, and one bounded engineering next action.',
       objective: 'Inspect only the fixed platform evidence. Separate live facts from missing proof, identify the most important quality, security, reliability, or rollback gap, and propose one reversible next action. Do not deploy, modify infrastructure, or invent incident evidence.',
+      successMeasure: 'The brief names one evidence-linked highest risk, distinguishes missing proof, and gives one reversible action with a concrete acceptance check and no infrastructure mutation.',
       blockers: Object.freeze([]),
       evidencePlan: Object.freeze([
         Object.freeze({ tool: 'platform_status', args: Object.freeze({}) }),
@@ -238,6 +245,7 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
       actionMode: 'read_only_brief',
       deliverable: 'One evidence-backed product brief naming the strongest customer signal, the largest evidence gap, and one measurable product decision.',
       objective: 'Compare the fixed lead, pipeline, and company-operation evidence across Shop, Plant, Website, and Ecommerce. Prefer a real workflow outcome over feature volume, state missing evidence plainly, and propose one measurable product decision. Do not change the roadmap or customer records.',
+      successMeasure: 'The brief identifies one source-backed customer signal, one explicit evidence gap, and one product decision with an observable workflow metric and no record mutation.',
       blockers: Object.freeze([]),
       evidencePlan: Object.freeze([
         Object.freeze({ tool: 'leads_overview', args: Object.freeze({ limit: 5 }) }),
@@ -255,6 +263,7 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
       actionMode: 'read_only_brief',
       deliverable: 'One supportable growth brief with the best qualified conversation, the next onboarding proof, and one owner-approved communication decision.',
       objective: 'Use only fixed lead, pipeline, and exchange-rate evidence. Rank one qualified conversation and one proof that could reduce onboarding friction for Myanmar customers. Draft no unsupported claim and do not send or modify any communication.',
+      successMeasure: 'The brief ranks one evidence-backed conversation, defines one onboarding proof with a measurable completion signal, and asks for one owner communication decision without sending it.',
       blockers: Object.freeze([]),
       evidencePlan: Object.freeze([
         Object.freeze({ tool: 'leads_overview', args: Object.freeze({ limit: 5 }) }),
@@ -273,6 +282,7 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
       actionMode: 'read_only_brief',
       deliverable: 'One risk-control brief with the largest evidenced exposure, missing control proof, and one owner decision that preserves cash, privacy, or release safety.',
       objective: 'Inspect only fixed pipeline, exchange-rate, and platform evidence. Distinguish measured exposure from missing evidence, retain every production and security gate, and propose one owner decision. Do not pay, approve, change access, or weaken a release gate.',
+      successMeasure: 'The brief quantifies one evidenced exposure or labels it unavailable, identifies one missing control proof, and requests one owner decision without weakening a gate or changing access.',
       blockers: Object.freeze([]),
       evidencePlan: Object.freeze([
         Object.freeze({ tool: 'pipeline_overview', args: Object.freeze({}) }),
@@ -291,6 +301,7 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
       actionMode: 'read_only_brief',
       deliverable: 'At most six short lines with real leads, pipeline, company-operation status, missing evidence, and one owner decision.',
       objective: 'Use only the fixed read-only evidence plan. State exact values, distinguish missing evidence, and identify one decision for the owner. Do not send, deploy, pay, modify records, or imply that a blocked outcome is executable.',
+      successMeasure: 'The output stays within six short lines, traces every stated value to fixed evidence, labels unavailable facts, and ends with exactly one owner decision.',
       blockers: Object.freeze([]),
       evidencePlan: Object.freeze([
         Object.freeze({ tool: 'leads_overview', args: Object.freeze({ limit: 5 }) }),
@@ -375,6 +386,7 @@ export function buildCeoOutcomeGoal(selection) {
     `Selected outcome: ${selection.selected.title}`,
     `Deliverable: ${selection.selected.deliverable}`,
     `Objective: ${selection.selected.objective}`,
+    `Success measure: ${selection.selected.successMeasure}`,
     `Blocked context only - never execute or present as ready: ${blocked || 'none'}`,
   ].join('\n')
 }

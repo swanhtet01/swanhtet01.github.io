@@ -132,7 +132,7 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.batchJobLimit === 4
   && portfolio.agentOperatingModel?.maxAgentsPerCycle === 2
   && portfolio.agentOperatingModel?.validatedCrewCapabilities === 15
-  && portfolio.agentOperatingModel?.ceoOutcomeAuthority === 'supermega.ceo-outcome-authority.v1'
+  && portfolio.agentOperatingModel?.ceoOutcomeAuthority === 'supermega.ceo-outcome-authority.v2'
   && portfolio.agentOperatingModel?.ceoOutcomeOperationsContract === CEO_OUTCOME_OPERATION_CONTRACT
   && portfolio.agentOperatingModel?.ceoOutcomeEvaluationContract === CEO_OUTCOME_EVALUATION_CONTRACT
   && portfolio.agentOperatingModel?.ceoOutcomeDeliveryContract === CEO_OUTCOME_DELIVERY_CONTRACT
