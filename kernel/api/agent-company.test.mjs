@@ -94,6 +94,8 @@ test('GET returns the protected fixed roster and hard limits', async () => {
   assert.equal(result.json.operations.modelOutputReturned, false)
   assert.equal(result.json.operations.workforceMetrics, true)
   assert.equal(result.json.operations.customerSlaClaimed, false)
+  assert.equal(result.json.operations.ownerDeliveryCoverage, true)
+  assert.equal(result.json.operations.ownerDeliveryContentReturned, false)
   assert.equal(result.json.ceoCycle.contract, 'supermega.ceo-cycle-view.v1')
   assert.equal(result.json.ceoCycle.available, false)
   assert.equal(result.json.ceoCycle.reason, 'company_client_id_missing')

@@ -531,6 +531,8 @@ export async function handleAgentCompany(request = {}, options = {}) {
           acceptedOutcomeEfficiency: true,
           ceoBriefTextReturned: false,
           providerRowsReturned: false,
+          ownerDeliveryCoverage: true,
+          ownerDeliveryContentReturned: false,
         },
       },
     }
