@@ -48,6 +48,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
         "commerce.storefront.merchandising.imported",
+        "commerce.tax_configuration.saved",
         "production.workspace.initialized",
         "production.job.created",
         "production.job.schedule_updated",
@@ -1531,6 +1532,34 @@ def _authoritative_command_payload(
             "actor": principal.actor_id,
             "capturedAt": _canonical_millisecond_utc(captured_at),
         }
+        return authoritative
+    if event_type == "commerce.tax_configuration.saved":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        configurations = state.get("taxConfigurations") if isinstance(state, Mapping) else None
+        configuration = configurations[0] if isinstance(configurations, list) and configurations else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(configuration, Mapping)
+        ):
+            return authoritative
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": captured_at,
+        }
+        authoritative_configuration = {
+            **dict(configuration),
+            "proof": deepcopy(authoritative_evidence),
+        }
+        authoritative_state = dict(state)
+        authoritative_state["taxConfigurations"] = [
+            authoritative_configuration,
+            *deepcopy(configurations[1:]),
+        ]
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
         return authoritative
     if event_type != "commerce.storefront.configuration.saved":
         return authoritative

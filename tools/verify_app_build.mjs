@@ -1397,7 +1397,7 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${shopInventoryUiSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.storefront_request.received')
@@ -1424,8 +1424,16 @@ if (!coreSource.includes("'commerce.refund.settled'")
   || !coreSource.includes("kind: 'refund_settle'")) fail('commerce_refund_settlement_gate_missing')
 if (!coreSource.includes('data-order-calculation-note="true"')
   || !coreSource.includes('Recorded total {formatMoney(order.total)} · Tax status not recorded')
-  || !coreSource.includes('Subtotal ${formatMoney(orderTotal)} · Tax not configured')
+  || !coreSource.includes('formatCommerceCalculation(calculationReview)')
+  || !coreSource.includes("data-order-calculation-status={'taxCode' in order.calculation ? 'configured' : 'not-configured'}")
   || (coreSource.match(/<OrderCalculationNote order=\{order\} \/>/g) || []).length !== 2) fail('commerce_order_calculation_visibility_missing_or_bloated')
+if (!coreSource.includes('data-tax-configuration="versioned"')
+  || !coreSource.includes("kind: 'tax_configuration'")
+  || !coreSource.includes("'commerce.tax_configuration.saved'")
+  || !coreSource.includes('configureCommerceTax(current, input, commerceActionProof(action))')
+  || !coreSource.includes('Applies only to future orders. Saved orders keep their original calculation.')
+  || !managedCommerceRuntime.includes('def _validate_tax_configuration_saved(')
+  || !managedCommerceRuntime.includes('command evidence must match the saved tax configuration proof.')) fail('commerce_tax_configuration_ui_or_managed_boundary_missing')
 if (!coreSource.includes('data-close-export="accounting-csv-v1"')
   || !coreSource.includes('Download close CSV')
   || !commerceSource.includes('supermega.commerce.daily-close-export.v1')
@@ -4035,6 +4043,13 @@ async function verifyManagedClientImportRuntime() {
     ) === ecommerceReceipt, 'managed_client_import_ecommerce_receipt_rejected')
     const priorCommerceBase = {
       ...commerceWorkspace.createSeedCommerce(),
+      items: ecommerceStaged.rows.map((row, index) => ({
+        sku: row.values.sku,
+        name: row.values.displayName || row.values.sku,
+        onHand: 20 + index,
+        reorderAt: 5,
+        price: 5_000 + index * 1_000,
+      })),
       orders: [],
       movements: [],
       closes: [],
@@ -5672,6 +5687,81 @@ async function verifyCommerceRuntime() {
       && reserved.orders[0].calculation.taxMmk === 0
       && reserved.orders[0].calculation.totalMmk === 200,
     'new_order_calculation_not_bound_to_catalog_subtotal')
+    const taxProof = proof('ACT-TAX-CONFIG-001', -1_000)
+    const exclusiveTaxInput = { code: 'CT5', label: 'Configured output tax', rateBasisPoints: 500, mode: 'exclusive' }
+    const exclusiveTaxBase = model.configureCommerceTax(base, exclusiveTaxInput, taxProof)
+    assert(exclusiveTaxBase?.taxConfigurations.length === 1
+      && exclusiveTaxBase.taxConfigurations[0].revision === 1
+      && exclusiveTaxBase.taxConfigurations[0].code === 'CT5'
+      && exclusiveTaxBase.taxConfigurations[0].rateBasisPoints === 500
+      && exclusiveTaxBase.taxConfigurations[0].proof.actionId === taxProof.actionId,
+    'tax_configuration_not_versioned_or_attributed')
+    assert(model.configureCommerceTax(exclusiveTaxBase, exclusiveTaxInput, taxProof) === exclusiveTaxBase, 'tax_configuration_retry_not_idempotent')
+    assert(model.configureCommerceTax(exclusiveTaxBase, { ...exclusiveTaxInput, rateBasisPoints: 501 }, taxProof) === null, 'tax_configuration_conflicting_retry_succeeded')
+    assert(model.configureCommerceTax(exclusiveTaxBase, exclusiveTaxInput, proof('ACT-TAX-CONFIG-UNCHANGED')) === null, 'unchanged_tax_configuration_was_appended')
+    assert(model.configureCommerceTax(base, { ...exclusiveTaxInput, code: 'ct5' }, proof('ACT-TAX-CONFIG-LOWER')) === null, 'noncanonical_tax_code_was_accepted')
+    assert(model.configureCommerceTax(base, { ...exclusiveTaxInput, rateBasisPoints: 10_001 }, proof('ACT-TAX-CONFIG-RATE')) === null, 'unsafe_tax_rate_was_accepted')
+    const exclusiveReserveProof = proof('ACT-TAX-ORDER-001', 1_000)
+    const exclusiveOrder = {
+      ...order,
+      id: 'ORD-TAX-1',
+      createdAt: '2026-07-23T09:00:00.000Z',
+      owner: exclusiveReserveProof.actor,
+      sourceRecordId: 'WEB-TAX-1',
+      evidenceReference: exclusiveReserveProof.evidenceReference,
+    }
+    const exclusiveReserved = model.reserveCommerceOrder(exclusiveTaxBase, exclusiveOrder, exclusiveReserveProof)
+    const exclusiveCalculation = exclusiveReserved?.orders[0].calculation
+    assert(exclusiveCalculation?.schema === 'supermega.commerce.order-calculation.v2'
+      && exclusiveCalculation.taxConfigurationRevision === 1
+      && exclusiveCalculation.taxCode === 'CT5'
+      && exclusiveCalculation.taxRateBasisPoints === 500
+      && exclusiveCalculation.taxMode === 'exclusive'
+      && exclusiveCalculation.listedSubtotalMmk === 200
+      && exclusiveCalculation.subtotalMmk === 200
+      && exclusiveCalculation.taxMmk === 10
+      && exclusiveCalculation.totalMmk === 210
+      && exclusiveReserved.orders[0].total === 210,
+    'exclusive_tax_determination_not_frozen_on_order')
+    assert(model.reserveCommerceOrder(exclusiveReserved, exclusiveOrder, exclusiveReserveProof) === exclusiveReserved, 'taxed_order_retry_not_idempotent')
+    const inclusiveTaxProof = proof('ACT-TAX-CONFIG-002', 2_000)
+    const inclusiveTaxInput = { code: 'CT5I', label: 'Configured tax included', rateBasisPoints: 500, mode: 'inclusive' }
+    const inclusiveTaxBase = model.configureCommerceTax(exclusiveReserved, inclusiveTaxInput, inclusiveTaxProof)
+    assert(inclusiveTaxBase?.taxConfigurations.length === 2
+      && inclusiveTaxBase.taxConfigurations[0].revision === 2
+      && inclusiveTaxBase.orders[0].calculation.taxConfigurationRevision === 1
+      && inclusiveTaxBase.orders[0].total === 210,
+    'tax_configuration_update_rewrote_prior_order')
+    const inclusiveReserveProof = proof('ACT-TAX-ORDER-002', 4_000)
+    const inclusiveOrder = {
+      ...order,
+      id: 'ORD-TAX-2',
+      createdAt: '2026-07-23T09:00:03.000Z',
+      owner: inclusiveReserveProof.actor,
+      sourceRecordId: 'WEB-TAX-2',
+      evidenceReference: inclusiveReserveProof.evidenceReference,
+    }
+    const inclusiveReserved = model.reserveCommerceOrder(inclusiveTaxBase, inclusiveOrder, inclusiveReserveProof)
+    const inclusiveCalculation = inclusiveReserved?.orders[0].calculation
+    assert(inclusiveCalculation?.schema === 'supermega.commerce.order-calculation.v2'
+      && inclusiveCalculation.taxConfigurationRevision === 2
+      && inclusiveCalculation.taxMode === 'inclusive'
+      && inclusiveCalculation.listedSubtotalMmk === 200
+      && inclusiveCalculation.subtotalMmk === 190
+      && inclusiveCalculation.taxMmk === 10
+      && inclusiveCalculation.totalMmk === 200,
+    'inclusive_tax_determination_not_deterministic')
+    assertThrows(() => model.validateCommerceState({
+      ...inclusiveReserved,
+      orders: inclusiveReserved.orders.map((candidate, index) => index ? candidate : {
+        ...candidate,
+        calculation: { ...candidate.calculation, taxMmk: candidate.calculation.taxMmk + 1 },
+      }),
+    }), 'tampered_tax_calculation_was_loaded')
+    assertThrows(() => model.validateCommerceState({
+      ...inclusiveReserved,
+      taxConfigurations: inclusiveReserved.taxConfigurations.map((candidate, index) => index ? candidate : { ...candidate, unexpected: true }),
+    }), 'tax_configuration_extra_field_was_loaded')
     const legacyOrderWithoutCalculation = { ...reserved.orders[0] }
     delete legacyOrderWithoutCalculation.calculation
     assert(model.validateCommerceState({ ...reserved, orders: [legacyOrderWithoutCalculation] }).orders[0].calculation === undefined, 'legacy_order_without_calculation_not_readable')
@@ -5896,7 +5986,7 @@ async function verifyCommerceRuntime() {
       && accountingExport.orders[0].calculationStatus === 'accepted'
       && accountingExport.orders[0].subtotalMmk === 200
       && accountingExport.orders[0].taxMode === 'not_configured'
-      && accountingExport.digest === 'sha256:d61fc044f45e2c3aea6471b79493c159c1e2f68687a81020abe2d2b65545ea7e'
+      && accountingExport.digest === 'sha256:0611e2aea498391299c922c0b379dd9a5123489e41a6973a317ba444d8d03889'
       && !JSON.stringify(accountingExport).includes('Customer'),
     'daily_close_export_not_deterministic_or_minimal')
     const accountingCsv = model.commerceDailyCloseCsv(accountingExport)

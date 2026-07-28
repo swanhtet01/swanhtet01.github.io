@@ -257,9 +257,9 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     maximumRows: 8,
     activationBoundary: 'Every SKU must match the current Shop catalog before a storefront draft can be approved.',
     workflowTemplates: {
-      'social-storefront': 'sku,featured,collection,display_name,merchandising_note\r\nSM-1001,true,Best sellers,Daily essentials basket,Lead with the everyday value and Messenger order path.\r\nSM-1003,false,Home care,Household refill,Keep local availability visible before checkout.\r\n',
-      'pickup-preorder': 'sku,featured,collection,display_name,merchandising_note\r\nSM-1002,true,Pickup this week,Cold drink pack,Show the pickup promise before request.\r\nSM-1003,false,Home care,Household refill,Confirm availability before collection.\r\n',
-      'wholesale-request': 'sku,featured,collection,display_name,merchandising_note\r\nSM-1001,true,Trade essentials,Daily essentials basket,Ask for quantity and delivery area.\r\nSM-CARE-01,false,Trade bundles,Family care set,Keep trade pricing under review.\r\n',
+      'social-storefront': 'sku,featured,collection,display_name,merchandising_note\r\nCOFFEE-250,true,Best sellers,Myanmar coffee 250g,Lead with everyday value and the Messenger order path.\r\nTEA-20,false,Tea,Green tea 20 pack,Keep local availability visible before checkout.\r\n',
+      'pickup-preorder': 'sku,featured,collection,display_name,merchandising_note\r\nMENU-MOHINGA,true,Pickup this week,Mohinga,Show the pickup promise before request.\r\nMENU-TEA,false,Drinks,Myanmar milk tea,Confirm availability before collection.\r\n',
+      'wholesale-request': 'sku,featured,collection,display_name,merchandising_note\r\nRICE-25KG,true,Trade essentials,Premium rice 25kg,Ask for quantity and delivery area.\r\nOIL-1L,false,Trade essentials,Cooking oil 1L,Keep trade pricing under review.\r\n',
     },
     fields: [
       { id: 'sku', label: 'Shop SKU', required: true, kind: 'sku', aliases: ['sku', 'shop_sku', 'item_sku', 'product_code', 'ပစ္စည်းကုဒ်'], maximum: 80 },
@@ -325,7 +325,7 @@ export const clientDemoPresets: readonly ClientDemoPreset[] = [
     selections: [
       { product: 'commerce', templateId: 'retail-wholesale' },
       { product: 'website', templateId: 'catalog-showcase' },
-      { product: 'ecommerce', templateId: 'pickup-preorder' },
+      { product: 'ecommerce', templateId: 'wholesale-request' },
     ],
   },
   {

@@ -56,6 +56,7 @@ export type ManagedCommerceEvent =
   | 'commerce.website_intake.created'
   | 'commerce.website_intake.converted'
   | 'commerce.storefront.configuration.saved'
+  | 'commerce.tax_configuration.saved'
   | 'commerce.storefront.merchandising.imported'
   | 'commerce.storefront_request.received'
   | 'commerce.order.created'

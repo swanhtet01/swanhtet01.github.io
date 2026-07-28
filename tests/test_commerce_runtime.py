@@ -187,6 +187,30 @@ def action_evidence(
     }
 
 
+def tax_configuration(
+    revision: int,
+    *,
+    code: str = "CT5",
+    label: str = "Commercial tax 5%",
+    rate_basis_points: int = 500,
+    mode: str = "exclusive",
+    action_id: str | None = None,
+    captured_at: str = NOW,
+) -> dict[str, object]:
+    return {
+        "revision": revision,
+        "code": code,
+        "label": label,
+        "rateBasisPoints": rate_basis_points,
+        "mode": mode,
+        "proof": action_evidence(
+            action_id or f"ACT-TAX-R{revision}",
+            captured_at=captured_at,
+            reason="Reviewed the Shop tax setup for future orders.",
+        ),
+    }
+
+
 def catalog_baseline(
     item: dict[str, object],
     proof: dict[str, str],
@@ -726,6 +750,8 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         return storefront_evidence(next_state["storefrontRequests"][0])  # type: ignore[index,arg-type]
     if event_type == "commerce.storefront.configuration.saved":
         return dict(next_state["storefrontConfiguration"]["saved"])  # type: ignore[index,arg-type]
+    if event_type == "commerce.tax_configuration.saved":
+        return dict(next_state["taxConfigurations"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.order.advanced":
         completed_orders = [
             order
@@ -2215,11 +2241,13 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.website_intake.converted",
                     "commerce.storefront.configuration.saved",
                     "commerce.storefront.merchandising.imported",
+                    "commerce.tax_configuration.saved",
                 }
             ),
         )
         self.assertIn("commerce.item.updated", COMMERCE_EVENTS)
         self.assertIn("commerce.storefront.merchandising.imported", COMMERCE_EVENTS)
+        self.assertIn("commerce.tax_configuration.saved", COMMERCE_EVENTS)
 
     def test_website_intake_creation_records_no_order_or_stock_movement(self) -> None:
         current = catalog_state()
@@ -4387,6 +4415,212 @@ class CommerceRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(accepted_boundary["closes"][0]["businessDate"], "2026-07-24")  # type: ignore[index]
 
+    def test_tax_configuration_is_versioned_bound_and_freezes_order_calculation(self) -> None:
+        current = catalog_state()
+        configured_state = deepcopy(current)
+        configured_state["taxConfigurations"] = [tax_configuration(1)]
+        configured = apply_event(
+            current,
+            "commerce.tax_configuration.saved",
+            configured_state,
+        )
+        self.assertEqual(configured["taxConfigurations"][0]["revision"], 1)  # type: ignore[index]
+
+        replay = apply_event(
+            current,
+            "commerce.tax_configuration.saved",
+            configured_state,
+        )
+        self.assertEqual(replay, configured)
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.tax_configuration.saved",
+                configured_state,
+                action_evidence("ACT-WRONG-EVIDENCE"),
+            )
+
+        unchanged = deepcopy(configured)
+        unchanged["taxConfigurations"] = [  # type: ignore[index]
+            tax_configuration(2, action_id="ACT-TAX-UNCHANGED"),
+            *configured["taxConfigurations"],  # type: ignore[index]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(configured, "commerce.tax_configuration.saved", unchanged)
+
+        unrelated_mutation = deepcopy(configured)
+        unrelated_mutation["items"][0]["price"] = 101  # type: ignore[index]
+        unrelated_mutation["taxConfigurations"] = [  # type: ignore[index]
+            tax_configuration(2, code="CT5I", mode="inclusive"),
+            *configured["taxConfigurations"],  # type: ignore[index]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                configured,
+                "commerce.tax_configuration.saved",
+                unrelated_mutation,
+            )
+
+        def order_state(
+            basis: dict[str, object],
+            order_id: str,
+            calculation: dict[str, object],
+        ) -> dict[str, object]:
+            state = deepcopy(basis)
+            state["items"][0]["onHand"] -= 2  # type: ignore[index,operator]
+            order = order_record(order_id)
+            order["lines"] = [
+                {
+                    "sku": "SKU-1",
+                    "name": "Test item",
+                    "quantity": 2,
+                    "unitPriceMmk": 100,
+                }
+            ]
+            order["total"] = calculation["totalMmk"]
+            order["calculation"] = calculation
+            state["orders"] = [order, *basis["orders"]]  # type: ignore[index]
+            state["movements"] = [
+                movement("reserve", f"ACT-{order_id}", -2, order_id=order_id),
+                *basis["movements"],  # type: ignore[index]
+            ]
+            return state
+
+        exclusive_calculation: dict[str, object] = {
+            "schema": "supermega.commerce.order-calculation.v2",
+            "currency": "MMK",
+            "catalogRevision": 0,
+            "taxConfigurationRevision": 1,
+            "taxCode": "CT5",
+            "taxRateBasisPoints": 500,
+            "taxMode": "exclusive",
+            "listedSubtotalMmk": 200,
+            "subtotalMmk": 200,
+            "taxMmk": 10,
+            "totalMmk": 210,
+        }
+        first_order = apply_event(
+            configured,
+            "commerce.order.created",
+            order_state(configured, "ORD-TAX-1", exclusive_calculation),
+        )
+
+        revision_two_state = deepcopy(first_order)
+        revision_two_state["taxConfigurations"] = [  # type: ignore[index]
+            tax_configuration(2, code="CT5I", label="Commercial tax included", mode="inclusive"),
+            *first_order["taxConfigurations"],  # type: ignore[index]
+        ]
+        revision_two = apply_event(
+            first_order,
+            "commerce.tax_configuration.saved",
+            revision_two_state,
+        )
+        self.assertEqual(
+            revision_two["orders"][0]["calculation"]["taxConfigurationRevision"],  # type: ignore[index]
+            1,
+        )
+
+        stale_order = order_state(
+            revision_two,
+            "ORD-TAX-STALE",
+            exclusive_calculation,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(revision_two, "commerce.order.created", stale_order)
+
+        inclusive_calculation: dict[str, object] = {
+            "schema": "supermega.commerce.order-calculation.v2",
+            "currency": "MMK",
+            "catalogRevision": 0,
+            "taxConfigurationRevision": 2,
+            "taxCode": "CT5I",
+            "taxRateBasisPoints": 500,
+            "taxMode": "inclusive",
+            "listedSubtotalMmk": 200,
+            "subtotalMmk": 190,
+            "taxMmk": 10,
+            "totalMmk": 200,
+        }
+        second_order = apply_event(
+            revision_two,
+            "commerce.order.created",
+            order_state(revision_two, "ORD-TAX-2", inclusive_calculation),
+        )
+        self.assertEqual(second_order["orders"][0]["calculation"], inclusive_calculation)  # type: ignore[index]
+        self.assertEqual(
+            second_order["orders"][1]["calculation"]["taxConfigurationRevision"],  # type: ignore[index]
+            1,
+        )
+
+        tampered = deepcopy(second_order)
+        tampered["orders"][0]["calculation"]["taxMmk"] = 11  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(tampered)
+
+    def test_tax_configuration_store_is_human_only_and_server_attributed(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-tax", "operator-tax", "human")
+        agent = TrialPrincipal("workspace-tax", "tax-agent", "agent")
+        for principal in (operator, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={"state": catalog_state(), "evidence": action_evidence("ACT-INIT-TAX")},
+        )
+        configured_state = deepcopy(initialized.state)
+        configured_state["taxConfigurations"] = [
+            tax_configuration(
+                1,
+                action_id="ACT-TAX-SERVER",
+                captured_at="2099-01-01T00:00:00.000Z",
+            )
+        ]
+        configured_state["taxConfigurations"][0]["proof"]["actor"] = "forged-actor"  # type: ignore[index]
+        payload = {
+            "state": configured_state,
+            "evidence": dict(configured_state["taxConfigurations"][0]["proof"]),  # type: ignore[index,arg-type]
+        }
+        command_id = str(uuid4())
+        saved = store.apply_command(
+            operator,
+            command_id=command_id,
+            surface="commerce",
+            event_type="commerce.tax_configuration.saved",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        replay = store.apply_command(
+            operator,
+            command_id=command_id,
+            surface="commerce",
+            event_type="commerce.tax_configuration.saved",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        proof = saved.state["taxConfigurations"][0]["proof"]  # type: ignore[index]
+        self.assertEqual(proof["actor"], operator.actor_id)
+        self.assertNotEqual(proof["capturedAt"], "2099-01-01T00:00:00.000Z")
+        self.assertTrue(replay.idempotent_replay)
+        self.assertEqual(replay.state, saved.state)
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.tax_configuration.saved",
+                expected_version=saved.version,
+                payload=payload,
+            )
+
     def test_daily_close_export_is_deterministic_minimal_and_formula_safe(self) -> None:
         current = completed_state()
         current["orders"][0]["calculation"] = {  # type: ignore[index]
@@ -4446,7 +4680,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertNotIn("customer", json.dumps(artifact))
         self.assertEqual(
             artifact["digest"],
-            "sha256:d61fc044f45e2c3aea6471b79493c159c1e2f68687a81020abe2d2b65545ea7e",
+            "sha256:3ce1a64913cc067ed3804f0ca88f2aa024aecbe771d7cca4b218cdfd1c31e655",
         )
 
         csv_text = commerce_daily_close_csv(closed, CLOSE_ID)

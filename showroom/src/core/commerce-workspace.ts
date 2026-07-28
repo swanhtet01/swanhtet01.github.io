@@ -16,6 +16,7 @@ import {
 export const COMMERCE_WORKSPACE_SCHEMA = 'supermega.commerce.workspace.v2' as const
 export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as const
 export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calculation.v1' as const
+export const COMMERCE_ORDER_CALCULATION_V2_SCHEMA = 'supermega.commerce.order-calculation.v2' as const
 export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v1' as const
 export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v1' as const
 const COMMERCE_STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
@@ -45,7 +46,7 @@ export type CommerceOrderLine = {
   unitPriceMmk: number
 }
 
-export type CommerceOrderCalculation = {
+export type CommerceOrderCalculationV1 = {
   schema: typeof COMMERCE_ORDER_CALCULATION_SCHEMA
   currency: 'MMK'
   catalogRevision: number
@@ -53,6 +54,40 @@ export type CommerceOrderCalculation = {
   taxMode: 'not_configured'
   taxMmk: 0
   totalMmk: number
+}
+
+export type CommerceTaxMode = 'exclusive' | 'inclusive'
+
+export type CommerceOrderCalculationV2 = {
+  schema: typeof COMMERCE_ORDER_CALCULATION_V2_SCHEMA
+  currency: 'MMK'
+  catalogRevision: number
+  taxConfigurationRevision: number
+  taxCode: string
+  taxRateBasisPoints: number
+  taxMode: CommerceTaxMode
+  listedSubtotalMmk: number
+  subtotalMmk: number
+  taxMmk: number
+  totalMmk: number
+}
+
+export type CommerceOrderCalculation = CommerceOrderCalculationV1 | CommerceOrderCalculationV2
+
+export type CommerceTaxConfiguration = {
+  revision: number
+  code: string
+  label: string
+  rateBasisPoints: number
+  mode: CommerceTaxMode
+  proof: CommerceActionProof
+}
+
+export type CommerceTaxConfigurationInput = {
+  code: string
+  label: string
+  rateBasisPoints: number
+  mode: CommerceTaxMode
 }
 
 export type CommerceOrderReturn = {
@@ -181,8 +216,12 @@ export type CommerceDailyCloseExportOrder = {
   paymentEvidenceReference: string | null
   currency: 'MMK'
   catalogRevision: number | null
+  taxConfigurationRevision: number | null
+  taxCode: string | null
+  taxRateBasisPoints: number | null
+  listedSubtotalMmk: number | null
   subtotalMmk: number | null
-  taxMode: 'not_configured' | 'not_recorded'
+  taxMode: 'not_configured' | 'not_recorded' | CommerceTaxMode
   taxMmk: number | null
   totalMmk: number
   calculationStatus: 'accepted' | 'legacy_unverified'
@@ -401,6 +440,7 @@ export type CommerceState = {
   closes: CommerceClose[]
   catalogBaselines?: CommerceCatalogBaseline[]
   catalogChanges?: CommerceCatalogChange[]
+  taxConfigurations?: CommerceTaxConfiguration[]
   websiteIntakes?: CommerceWebsiteIntake[]
   storefrontRequests?: CommerceStorefrontRequest[]
   storefrontConfiguration?: CommerceStorefrontConfiguration
@@ -538,12 +578,14 @@ const maxStorefrontRequests = 100
 const maxPurchaseOrders = 100
 const maxCatalogBaselines = 500
 const maxCatalogChanges = 500
+const maxTaxConfigurations = 100
 const maxOrderLines = 20
 const maxReturnsPerOrder = 100
 const closeIdPattern = /^CLOSE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const closeActionIdPattern = /^ACT-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const businessDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const purchaseOrderIdPattern = /^PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
+const taxCodePattern = /^[A-Z0-9][A-Z0-9_-]{0,11}$/
 const isoTimestampPattern = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
 const myanmarUtcOffsetMs = (6 * 60 + 30) * 60 * 1000
 const deterministicSeedNow = Date.parse('2026-07-23T08:00:00.000Z')
@@ -1066,6 +1108,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (!Array.isArray(value.items) || !Array.isArray(value.orders) || !Array.isArray(value.movements) || !Array.isArray(value.closes)) throw new Error('Commerce workspace collections are incomplete.')
   if (value.catalogBaselines !== undefined && !Array.isArray(value.catalogBaselines)) throw new Error('Commerce catalog baselines must be an array when present.')
   if (value.catalogChanges !== undefined && !Array.isArray(value.catalogChanges)) throw new Error('Commerce catalog changes must be an array when present.')
+  if (value.taxConfigurations !== undefined && !Array.isArray(value.taxConfigurations)) throw new Error('Commerce tax configurations must be an array when present.')
   if (value.websiteIntakes !== undefined && !Array.isArray(value.websiteIntakes)) throw new Error('Commerce Website intakes must be an array when present.')
   if (value.storefrontRequests !== undefined && !Array.isArray(value.storefrontRequests)) throw new Error('Commerce storefront requests must be an array when present.')
   if (value.storefrontConfiguration !== undefined && !isRecord(value.storefrontConfiguration)) throw new Error('Commerce storefront configuration must be an object when present.')
@@ -1092,12 +1135,14 @@ export function validateCommerceState(value: unknown): CommerceState {
   const closes = value.closes as unknown[]
   const catalogBaselines = (value.catalogBaselines ?? []) as unknown[]
   const catalogChanges = (value.catalogChanges ?? []) as unknown[]
+  const taxConfigurations = (value.taxConfigurations ?? []) as unknown[]
   const websiteIntakes = (value.websiteIntakes ?? []) as unknown[]
   const storefrontRequests = (value.storefrontRequests ?? []) as unknown[]
   const storefrontConfiguration = value.storefrontConfiguration
   const purchaseOrders = (value.purchaseOrders ?? []) as unknown[]
   if (catalogBaselines.length > maxCatalogBaselines) throw new Error(`Commerce catalog baselines cannot exceed ${maxCatalogBaselines}.`)
   if (catalogChanges.length > maxCatalogChanges) throw new Error(`Commerce catalog changes cannot exceed ${maxCatalogChanges}.`)
+  if (taxConfigurations.length > maxTaxConfigurations) throw new Error(`Commerce tax configurations cannot exceed ${maxTaxConfigurations}.`)
   if (storefrontRequests.length > maxStorefrontRequests) throw new Error(`Commerce storefront requests cannot exceed ${maxStorefrontRequests}.`)
   if (purchaseOrders.length > maxPurchaseOrders) throw new Error(`Commerce purchase orders cannot exceed ${maxPurchaseOrders}.`)
   const itemSkus: string[] = []
@@ -1120,6 +1165,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const websiteIntakeConversionActionIds: string[] = []
   const catalogBaselineActionIds: string[] = []
   const catalogChangeActionIds: string[] = []
+  const taxConfigurationActionIds: string[] = []
   const purchaseOrderActionIds: string[] = []
   const purchaseOrderIds: string[] = []
   const activePurchaseOrderSkus: string[] = []
@@ -1237,6 +1283,39 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (item.price !== baseline.price || item.reorderAt !== baseline.reorderAt) {
       throw new Error(`Catalog baseline for ${sku} does not match the unchanged catalog item.`)
     }
+  }
+
+  let newerTaxConfiguration: CommerceTaxConfiguration | null = null
+  for (const [index, candidate] of taxConfigurations.entries()) {
+    if (!isRecord(candidate) || !hasExactKeys(
+      candidate,
+      ['revision', 'code', 'label', 'rateBasisPoints', 'mode', 'proof'],
+    )) throw new Error(`taxConfigurations[${index}] is invalid.`)
+    assertSafeInteger(candidate.revision, `taxConfigurations[${index}].revision`, 1)
+    if (candidate.revision !== taxConfigurations.length - index) {
+      throw new Error(`taxConfigurations[${index}].revision breaks the newest-first sequence.`)
+    }
+    const code = canonicalText(candidate.code, `taxConfigurations[${index}].code`, 12)
+    if (!taxCodePattern.test(code)) throw new Error(`taxConfigurations[${index}].code is invalid.`)
+    canonicalText(candidate.label, `taxConfigurations[${index}].label`, 80)
+    assertSafeInteger(candidate.rateBasisPoints, `taxConfigurations[${index}].rateBasisPoints`)
+    if (Number(candidate.rateBasisPoints) > 10_000) throw new Error(`taxConfigurations[${index}].rateBasisPoints must be at most 10000.`)
+    if (candidate.mode !== 'exclusive' && candidate.mode !== 'inclusive') throw new Error(`taxConfigurations[${index}].mode is invalid.`)
+    if (!isRecord(candidate.proof)
+      || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !validProof(candidate.proof as CommerceActionProof)) {
+      throw new Error(`taxConfigurations[${index}].proof is invalid.`)
+    }
+    const configuration = candidate as unknown as CommerceTaxConfiguration
+    for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+      canonicalText(configuration.proof[field], `taxConfigurations[${index}].proof.${field}`, field === 'actionId' ? 160 : 180)
+    }
+    if (newerTaxConfiguration
+      && (timestampMicros(newerTaxConfiguration.proof.capturedAt) as bigint) < (timestampMicros(configuration.proof.capturedAt) as bigint)) {
+      throw new Error(`taxConfigurations[${index}] breaks the newest-first chronology.`)
+    }
+    newerTaxConfiguration = configuration
+    taxConfigurationActionIds.push(configuration.proof.actionId)
   }
 
   for (const [index, candidate] of purchaseOrders.entries()) {
@@ -1392,34 +1471,66 @@ export function validateCommerceState(value: unknown): CommerceState {
       const expectedItemSku = capturedLines.length === 1 ? capturedLines[0].sku : undefined
       if (candidate.item !== commerceOrderItemSummary(capturedLines)
         || candidate.itemSku !== expectedItemSku
-        || candidate.quantity !== capturedQuantity
-        || candidate.total !== capturedTotal) throw new Error(`orders[${index}] does not match its immutable line snapshots.`)
+        || candidate.quantity !== capturedQuantity) throw new Error(`orders[${index}] does not match its immutable line snapshots.`)
     }
     if (candidate.calculation !== undefined) {
-      if (!isRecord(candidate.calculation) || !hasExactKeys(candidate.calculation, [
-        'schema',
-        'currency',
-        'catalogRevision',
-        'subtotalMmk',
-        'taxMode',
-        'taxMmk',
-        'totalMmk',
-      ])) throw new Error(`orders[${index}].calculation is invalid.`)
+      if (!isRecord(candidate.calculation)) throw new Error(`orders[${index}].calculation is invalid.`)
       const calculation = candidate.calculation
+      const v1 = calculation.schema === COMMERCE_ORDER_CALCULATION_SCHEMA
+      const v2 = calculation.schema === COMMERCE_ORDER_CALCULATION_V2_SCHEMA
+      const validShape = v1
+        ? hasExactKeys(calculation, ['schema', 'currency', 'catalogRevision', 'subtotalMmk', 'taxMode', 'taxMmk', 'totalMmk'])
+        : v2 && hasExactKeys(calculation, [
+          'schema',
+          'currency',
+          'catalogRevision',
+          'taxConfigurationRevision',
+          'taxCode',
+          'taxRateBasisPoints',
+          'taxMode',
+          'listedSubtotalMmk',
+          'subtotalMmk',
+          'taxMmk',
+          'totalMmk',
+        ])
+      if (!validShape) throw new Error(`orders[${index}].calculation is invalid.`)
       assertSafeInteger(calculation.catalogRevision, `orders[${index}].calculation.catalogRevision`)
-      assertSafeInteger(calculation.subtotalMmk, `orders[${index}].calculation.subtotalMmk`, 1)
+      assertSafeInteger(calculation.subtotalMmk, `orders[${index}].calculation.subtotalMmk`, v1 ? 1 : 0)
       assertSafeInteger(calculation.taxMmk, `orders[${index}].calculation.taxMmk`)
       assertSafeInteger(calculation.totalMmk, `orders[${index}].calculation.totalMmk`, 1)
-      if (calculation.schema !== COMMERCE_ORDER_CALCULATION_SCHEMA
-        || calculation.currency !== 'MMK'
+      if (calculation.currency !== 'MMK'
         || Number(calculation.catalogRevision) > catalogChanges.length
-        || calculation.taxMode !== 'not_configured'
-        || calculation.taxMmk !== 0
-        || calculation.totalMmk !== calculation.subtotalMmk
-        || candidate.total !== calculation.totalMmk
-        || (capturedLineSubtotal !== null && calculation.subtotalMmk !== capturedLineSubtotal)) {
-        throw new Error(`orders[${index}].calculation must be a deterministic MMK subtotal with tax explicitly not configured.`)
+        || candidate.total !== calculation.totalMmk) throw new Error(`orders[${index}].calculation totals are invalid.`)
+      if (v1) {
+        if (calculation.taxMode !== 'not_configured'
+          || calculation.taxMmk !== 0
+          || calculation.totalMmk !== calculation.subtotalMmk
+          || (capturedLineSubtotal !== null && calculation.subtotalMmk !== capturedLineSubtotal)) {
+          throw new Error(`orders[${index}].calculation must preserve its deterministic untaxed MMK subtotal.`)
+        }
+      } else {
+        assertSafeInteger(calculation.taxConfigurationRevision, `orders[${index}].calculation.taxConfigurationRevision`, 1)
+        assertSafeInteger(calculation.taxRateBasisPoints, `orders[${index}].calculation.taxRateBasisPoints`)
+        assertSafeInteger(calculation.listedSubtotalMmk, `orders[${index}].calculation.listedSubtotalMmk`, 1)
+        const configuration = (taxConfigurations as CommerceTaxConfiguration[]).find((entry) => entry.revision === calculation.taxConfigurationRevision)
+        const expected = configuration && capturedLineSubtotal !== null
+          ? configuredOrderCalculation(configuration, capturedLineSubtotal, Number(calculation.catalogRevision))
+          : null
+        if (!configuration
+          || !expected
+          || (timestampMicros(configuration.proof.capturedAt) as bigint) > (timestampMicros(candidate.createdAt) as bigint)
+          || calculation.taxCode !== expected.taxCode
+          || calculation.taxRateBasisPoints !== expected.taxRateBasisPoints
+          || calculation.taxMode !== expected.taxMode
+          || calculation.listedSubtotalMmk !== expected.listedSubtotalMmk
+          || calculation.subtotalMmk !== expected.subtotalMmk
+          || calculation.taxMmk !== expected.taxMmk
+          || calculation.totalMmk !== expected.totalMmk) {
+          throw new Error(`orders[${index}].calculation does not match its immutable tax configuration.`)
+        }
       }
+    } else if (capturedLineSubtotal !== null && candidate.total !== capturedLineSubtotal) {
+      throw new Error(`orders[${index}] legacy total does not match its immutable line snapshots.`)
     }
     if (!orderStatuses.includes(candidate.status as CommerceOrderStatus)) throw new Error(`orders[${index}].status is invalid.`)
     if (!paymentStatuses.includes(candidate.paymentStatus as CommercePaymentStatus)) throw new Error(`orders[${index}].paymentStatus is invalid.`)
@@ -2010,6 +2121,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     ...returnActionIds,
     ...catalogChangeActionIds.filter((actionId) => !catalogBaselineActionSet.has(actionId)),
     ...catalogBaselineActionSet,
+    ...taxConfigurationActionIds,
     ...websiteIntakeCreationActionIds,
     ...closeActionIds,
     ...purchaseOrderActionIds,
@@ -2224,6 +2336,7 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || state.closes.some((close) => close.actionId === actionId)
     || commerceCatalogBaselines(state).some((baseline) => baseline.proof.actionId === actionId)
     || commerceCatalogChanges(state).some((change) => change.proof.actionId === actionId)
+    || commerceTaxConfigurations(state).some((configuration) => configuration.proof.actionId === actionId)
     || commerceWebsiteIntakes(state).some((intake) => intake.creation.actionId === actionId || intake.conversion?.actionId === actionId)
     || commercePurchaseOrders(state).some((purchaseOrder) => purchaseOrder.creation.actionId === actionId || purchaseOrder.cancellation?.actionId === actionId)
     || state.storefrontConfiguration?.saved.actionId === actionId
@@ -2264,6 +2377,15 @@ function sameCatalogBaseline(left: CommerceCatalogBaseline, right: CommerceCatal
     && sameActionProof(left.proof, right.proof)
 }
 
+function sameTaxConfiguration(left: CommerceTaxConfiguration, right: CommerceTaxConfiguration) {
+  return left.revision === right.revision
+    && left.code === right.code
+    && left.label === right.label
+    && left.rateBasisPoints === right.rateBasisPoints
+    && left.mode === right.mode
+    && sameActionProof(left.proof, right.proof)
+}
+
 function validWebsiteSource(source: CommerceWebsiteSource) {
   return websiteFingerprintPattern.test(source.fingerprint)
     && [source.approvalId, source.snapshotId, source.pageId, source.siteName, source.pagePath].every((value) => typeof value === 'string' && value === value.trim() && value.length > 0 && value.length <= 160)
@@ -2282,19 +2404,62 @@ export function commerceCatalogChanges(state: CommerceState) {
   return state.catalogChanges ?? []
 }
 
+export function commerceTaxConfigurations(state: CommerceState) {
+  return state.taxConfigurations ?? []
+}
+
+export function commerceCurrentTaxConfiguration(state: CommerceState) {
+  return commerceTaxConfigurations(state)[0] ?? null
+}
+
+function roundedTax(numerator: bigint, denominator: bigint) {
+  return (numerator * 2n + denominator) / (denominator * 2n)
+}
+
+function configuredOrderCalculation(
+  configuration: CommerceTaxConfiguration,
+  listedSubtotalMmk: number,
+  catalogRevision: number,
+): CommerceOrderCalculationV2 | null {
+  if (!Number.isSafeInteger(listedSubtotalMmk) || listedSubtotalMmk < 1) return null
+  const listed = BigInt(listedSubtotalMmk)
+  const rate = BigInt(configuration.rateBasisPoints)
+  const tax = configuration.mode === 'exclusive'
+    ? roundedTax(listed * rate, 10_000n)
+    : roundedTax(listed * rate, 10_000n + rate)
+  const subtotal = configuration.mode === 'exclusive' ? listed : listed - tax
+  const total = configuration.mode === 'exclusive' ? listed + tax : listed
+  if (subtotal < 0n || tax < 0n || total < 1n || total > BigInt(Number.MAX_SAFE_INTEGER)) return null
+  return {
+    schema: COMMERCE_ORDER_CALCULATION_V2_SCHEMA,
+    currency: 'MMK',
+    catalogRevision,
+    taxConfigurationRevision: configuration.revision,
+    taxCode: configuration.code,
+    taxRateBasisPoints: configuration.rateBasisPoints,
+    taxMode: configuration.mode,
+    listedSubtotalMmk,
+    subtotalMmk: Number(subtotal),
+    taxMmk: Number(tax),
+    totalMmk: Number(total),
+  }
+}
+
 export function commerceOrderCalculation(
   state: CommerceState,
-  subtotalMmk: number,
+  listedSubtotalMmk: number,
 ): CommerceOrderCalculation | null {
-  if (!Number.isSafeInteger(subtotalMmk) || subtotalMmk < 1) return null
+  if (!Number.isSafeInteger(listedSubtotalMmk) || listedSubtotalMmk < 1) return null
+  const configuration = commerceCurrentTaxConfiguration(state)
+  if (configuration) return configuredOrderCalculation(configuration, listedSubtotalMmk, commerceCatalogChanges(state).length)
   return {
     schema: COMMERCE_ORDER_CALCULATION_SCHEMA,
     currency: 'MMK',
     catalogRevision: commerceCatalogChanges(state).length,
-    subtotalMmk,
+    subtotalMmk: listedSubtotalMmk,
     taxMode: 'not_configured',
     taxMmk: 0,
-    totalMmk: subtotalMmk,
+    totalMmk: listedSubtotalMmk,
   }
 }
 
@@ -2934,6 +3099,55 @@ export function updateCommerceItem(state: CommerceState, update: CommerceItemUpd
   })
 }
 
+export function configureCommerceTax(
+  state: CommerceState,
+  input: CommerceTaxConfigurationInput,
+  proof: CommerceActionProof,
+) {
+  if (!validProof(proof)
+    || typeof input?.code !== 'string'
+    || input.code !== input.code.trim()
+    || !taxCodePattern.test(input.code)
+    || typeof input.label !== 'string'
+    || input.label !== input.label.trim()
+    || !input.label
+    || input.label.length > 80
+    || !Number.isSafeInteger(input.rateBasisPoints)
+    || input.rateBasisPoints < 0
+    || input.rateBasisPoints > 10_000
+    || (input.mode !== 'exclusive' && input.mode !== 'inclusive')) return null
+  const current = validateCommerceState(state)
+  const history = commerceTaxConfigurations(current)
+  const replay = history.find((configuration) => configuration.proof.actionId === proof.actionId)
+  if (replay) {
+    return sameTaxConfiguration(replay, {
+      revision: replay.revision,
+      ...input,
+      proof,
+    }) ? current : null
+  }
+  const latest = history[0]
+  if (history.length >= maxTaxConfigurations
+    || actionIdIsUsed(current, proof.actionId)
+    || (latest && latest.code === input.code
+      && latest.label === input.label
+      && latest.rateBasisPoints === input.rateBasisPoints
+      && latest.mode === input.mode)
+    || (latest && (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(latest.proof.capturedAt) as bigint))) return null
+  const configuration: CommerceTaxConfiguration = {
+    revision: history.length + 1,
+    code: input.code,
+    label: input.label,
+    rateBasisPoints: input.rateBasisPoints,
+    mode: input.mode,
+    proof: { ...proof },
+  }
+  return validateCommerceState({
+    ...current,
+    taxConfigurations: [configuration, ...history],
+  })
+}
+
 function validatedOrderLineSnapshots(order: CommerceOrder): CommerceOrderLine[] | null {
   if (!Array.isArray(order.lines) || order.lines.length < 1 || order.lines.length > maxOrderLines) return null
   const skus = new Set<string>()
@@ -2960,7 +3174,9 @@ function validatedOrderLineSnapshots(order: CommerceOrder): CommerceOrderLine[] 
   return order.item === commerceOrderItemSummary(order.lines)
     && order.itemSku === expectedItemSku
     && order.quantity === quantity
-    && order.total === total ? order.lines : null
+    && (order.calculation?.schema === COMMERCE_ORDER_CALCULATION_V2_SCHEMA
+      ? order.calculation.listedSubtotalMmk === total && order.total === order.calculation.totalMmk
+      : order.total === total) ? order.lines : null
 }
 
 export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder, proof: CommerceActionProof) {
@@ -2994,9 +3210,13 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
     if (!storedOrder) return null
     const storedLines = reservationLinesForOrder(storedOrder)
     const storedBusinessOrder = { ...storedOrder }
+    if (storedOrder.calculation?.schema === COMMERCE_ORDER_CALCULATION_V2_SCHEMA) {
+      storedBusinessOrder.total = storedOrder.calculation.listedSubtotalMmk
+    }
     delete storedBusinessOrder.calculation
     const requestedBusinessOrder = { ...order }
     delete requestedBusinessOrder.calculation
+    if (requestedBusinessOrder.lines === undefined) delete storedBusinessOrder.lines
     return proofMovements.length === storedLines.length
       && storedLines.every((line) => proofMovements.some((movement) => movement.kind === 'reserve'
         && movement.orderId === storedOrder.id
@@ -3046,6 +3266,7 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
   if (!calculation) return null
   const authoritativeOrder: CommerceOrder = {
     ...order,
+    lines,
     calculation,
     total: calculation.totalMmk,
   }
@@ -3896,6 +4117,10 @@ function commerceDailyCloseExportProjection(artifact: Omit<CommerceDailyCloseExp
       order.paymentEvidenceReference,
       order.currency,
       order.catalogRevision,
+      order.taxConfigurationRevision,
+      order.taxCode,
+      order.taxRateBasisPoints,
+      order.listedSubtotalMmk,
       order.subtotalMmk,
       order.taxMode,
       order.taxMmk,
@@ -3921,6 +4146,7 @@ export function commerceDailyCloseExport(state: CommerceState, closeId: string):
   const orders = close.orderIds.map((orderId): CommerceDailyCloseExportOrder => {
     const order = orderById.get(orderId) as CommerceOrder
     const calculation = order.calculation
+    const configured = calculation?.schema === COMMERCE_ORDER_CALCULATION_V2_SCHEMA ? calculation : null
     return {
       orderId: order.id,
       orderCreatedAt: order.createdAt,
@@ -3929,6 +4155,10 @@ export function commerceDailyCloseExport(state: CommerceState, closeId: string):
       paymentEvidenceReference: order.paymentEvidenceReference ?? null,
       currency: calculation?.currency ?? 'MMK',
       catalogRevision: calculation?.catalogRevision ?? null,
+      taxConfigurationRevision: configured?.taxConfigurationRevision ?? null,
+      taxCode: configured?.taxCode ?? null,
+      taxRateBasisPoints: configured?.taxRateBasisPoints ?? null,
+      listedSubtotalMmk: configured?.listedSubtotalMmk ?? calculation?.subtotalMmk ?? null,
       subtotalMmk: calculation?.subtotalMmk ?? null,
       taxMode: calculation?.taxMode ?? 'not_recorded',
       taxMmk: calculation?.taxMmk ?? null,
@@ -3979,6 +4209,10 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     'payment_evidence_reference',
     'currency',
     'catalog_revision',
+    'tax_configuration_revision',
+    'tax_code',
+    'tax_rate_basis_points',
+    'listed_subtotal_mmk',
     'subtotal_mmk',
     'tax_mode',
     'tax_mmk',
@@ -4006,6 +4240,10 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     null,
     null,
     null,
+    null,
+    null,
+    null,
+    null,
     artifact.totalMmk,
     null,
     artifact.paymentExceptionOrderIds,
@@ -4027,6 +4265,10 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     order.paymentEvidenceReference,
     order.currency,
     order.catalogRevision,
+    order.taxConfigurationRevision,
+    order.taxCode,
+    order.taxRateBasisPoints,
+    order.listedSubtotalMmk,
     order.subtotalMmk,
     order.taxMode,
     order.taxMmk,

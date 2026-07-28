@@ -39,6 +39,8 @@ import {
   commerceDailyCloseCsv,
   commerceDailyCloseExport,
   commerceCloseExpectation,
+  commerceCurrentTaxConfiguration,
+  commerceOrderCalculation,
   commerceOrderReturnExpectation,
   commerceOrderItemSummary,
   commerceOrderLocationAllocationPreview,
@@ -54,6 +56,7 @@ import {
   commerceWorkspaceCanWrite,
   commerceWebsiteIntakes,
   convertCommerceWebsiteIntake,
+  configureCommerceTax,
   createCommerceCatalogBaseline,
   createCommercePurchaseOrder,
   createEmptyCommerce,
@@ -77,6 +80,8 @@ import {
   type CommerceReturnDisposition,
   type CommerceState,
   type CommerceStockMovement,
+  type CommerceTaxConfiguration,
+  type CommerceTaxMode,
   type CommerceWebsiteOrderInput,
 } from './commerce-workspace'
 import { projectShopInventory } from './shop-inventory-foundation'
@@ -221,6 +226,7 @@ type ActionKind =
   | 'purchase_order_receive'
   | 'purchase_order_cancel'
   | 'daily_close'
+  | 'tax_configuration'
   | 'production_job'
   | 'production_job_schedule'
   | 'production_job_close'
@@ -246,6 +252,13 @@ type StockCountDraft = {
   stockUnitId: string
   locationId: string
   quantity: string
+}
+
+type TaxConfigurationDraft = {
+  code: string
+  label: string
+  ratePercent: string
+  mode: CommerceTaxMode
 }
 
 type CatalogItemEditDraft = {
@@ -1354,6 +1367,34 @@ function formatMoney(value: number) {
   return `${new Intl.NumberFormat('en-US').format(value)} MMK`
 }
 
+function formatTaxRate(rateBasisPoints: number) {
+  return `${(rateBasisPoints / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`
+}
+
+function formatCommerceCalculation(calculation: NonNullable<CommerceOrder['calculation']>) {
+  if (!('taxCode' in calculation)) {
+    return `Subtotal ${formatMoney(calculation.subtotalMmk)} · Tax not configured · Total ${formatMoney(calculation.totalMmk)}`
+  }
+  const treatment = calculation.taxMode === 'inclusive' ? 'included' : 'added'
+  return `Net ${formatMoney(calculation.subtotalMmk)} · Tax ${calculation.taxCode} ${formatTaxRate(calculation.taxRateBasisPoints)} ${treatment} ${formatMoney(calculation.taxMmk)} · Total ${formatMoney(calculation.totalMmk)}`
+}
+
+function taxConfigurationDraft(configuration: CommerceTaxConfiguration | null): TaxConfigurationDraft {
+  return {
+    code: configuration?.code ?? '',
+    label: configuration?.label ?? '',
+    ratePercent: configuration ? String(configuration.rateBasisPoints / 100) : '',
+    mode: configuration?.mode ?? 'exclusive',
+  }
+}
+
+function parseTaxRateBasisPoints(value: string) {
+  const match = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(value.trim())
+  if (!match) return null
+  const basisPoints = Number(match[1]) * 100 + Number((match[2] ?? '').padEnd(2, '0'))
+  return Number.isSafeInteger(basisPoints) && basisPoints <= 10_000 ? basisPoints : null
+}
+
 function fulfilmentLabel(value: string | undefined) {
   if (value === 'pickup') return 'Pickup'
   if (value === 'delivery') return 'Delivery'
@@ -2213,6 +2254,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const commerceLocation = useLocation()
   const purchaseOrderClock = useMinuteClock()
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite] = useCommerceWorkspace(managedIdentity)
+  const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
   const orderDraftScope = localCommerceOrderDraftScope(managedIdentity?.workspaceId)
   const [actions, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
@@ -2270,8 +2312,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
+  const [taxDraft, setTaxDraft] = useState<TaxConfigurationDraft | null>(null)
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [catalogError, setCatalogError] = useState('')
+  const effectiveTaxDraft = taxDraft ?? taxConfigurationDraft(currentTaxConfiguration)
   const selectedSku = commerce.items.some((item) => item.sku === sku) || (resumedOrderDraft && sku)
     ? sku
     : commerce.items[0]?.sku ?? ''
@@ -3604,12 +3648,17 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         return
       }
     }
+    const calculationReview = commerceOrderCalculation(commerce, orderTotal)
+    if (!calculationReview) {
+      setNotice('The order total cannot be calculated safely. Review item prices and tax setup before continuing.')
+      return
+    }
     queueAction({
       kind: 'order_create',
       subjectId: order.id,
       summary: ecommerceDraft ? 'Review Ecommerce order' : `Confirm order for ${order.customer}`,
       before: `${sourceRecordId ? `Request ${sourceRecordId} · ` : ''}Customer ${order.customer} · ${lineReview}`,
-      after: `Order ${order.id} · Subtotal ${formatMoney(orderTotal)} · Tax not configured · Payment ${payment} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
+      after: `Order ${order.id} · ${formatCommerceCalculation(calculationReview)} · Payment ${payment} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
       evidenceReferenceSuggestion: confirmationEvidence,
       evidenceReferenceLocked: Boolean(sourceRecordId),
       reasonSuggestion: ecommerceDraft
@@ -4194,6 +4243,42 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     }, purchaseOrderTriggerRefs.current.get(row.purchaseOrder.sku))
   }
 
+  function reviewTaxConfiguration(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const code = effectiveTaxDraft.code.trim().toUpperCase()
+    const label = effectiveTaxDraft.label.trim()
+    const rateBasisPoints = parseTaxRateBasisPoints(effectiveTaxDraft.ratePercent)
+    if (!/^[A-Z0-9][A-Z0-9_-]{0,11}$/.test(code) || !label || label.length > 80 || rateBasisPoints === null) {
+      setNotice('Enter an uppercase tax code, a short label, and a rate from 0 to 100 with at most two decimal places.')
+      return
+    }
+    const expectedRevision = currentTaxConfiguration?.revision ?? 0
+    const input = { code, label, rateBasisPoints, mode: effectiveTaxDraft.mode }
+    const previous = currentTaxConfiguration
+      ? `${currentTaxConfiguration.code} · ${formatTaxRate(currentTaxConfiguration.rateBasisPoints)} · ${currentTaxConfiguration.mode} · revision ${currentTaxConfiguration.revision}`
+      : 'No Shop tax configuration'
+    queueAction({
+      kind: 'tax_configuration',
+      subjectId: `SHOP-TAX-R${expectedRevision + 1}`,
+      summary: `Set Shop tax code ${code}`,
+      before: previous,
+      after: `${code} · ${label} · ${formatTaxRate(rateBasisPoints)} · ${effectiveTaxDraft.mode} · future orders only`,
+      reasonSuggestion: 'Reviewed the Shop tax setup for future orders.',
+      apply: async (action) => {
+        await mutateCommerce(
+          'commerce.tax_configuration.saved',
+          action.commandId,
+          commerceActionProof(action),
+          (current) => {
+            if ((commerceCurrentTaxConfiguration(current)?.revision ?? 0) !== expectedRevision) return null
+            return configureCommerceTax(current, input, commerceActionProof(action))
+          },
+        )
+        setTaxDraft(null)
+      },
+    }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
+  }
+
   function closeDay() {
     const queuedAt = new Date().toISOString()
     const expected = commerceCloseExpectation(commerce, queuedAt)
@@ -4414,6 +4499,20 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       <div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div>
       <div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/shop/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div>
       <p className="form-notice">Orders ready: {closePreview?.orderIds.length ? closePreview.orderIds.join(', ') : 'none'} · Payment exceptions: {paymentReview.length ? paymentReview.map((order) => order.id).join(', ') : 'none'} · Stock exceptions: {lowStock.length ? lowStock.map((item) => item.sku).join(', ') : 'none'}</p>
+      <details className="compact-disclosure" data-tax-configuration="versioned">
+        <summary><span>Tax setup</span><small>{currentTaxConfiguration ? `${currentTaxConfiguration.code} · ${formatTaxRate(currentTaxConfiguration.rateBasisPoints)} · ${currentTaxConfiguration.mode}` : 'Not configured'}</small></summary>
+        <form className="core-form compact-form" onSubmit={reviewTaxConfiguration}>
+          <div className="form-row">
+            <label>Tax code<input autoCapitalize="characters" disabled={commerceControlsDisabled} maxLength={12} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, code: event.target.value.toUpperCase() })} placeholder="Your configured code" required value={effectiveTaxDraft.code} /></label>
+            <label>Rate (%)<input disabled={commerceControlsDisabled} inputMode="decimal" max="100" min="0" onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, ratePercent: event.target.value })} placeholder="Enter reviewed rate" required step="0.01" type="number" value={effectiveTaxDraft.ratePercent} /></label>
+          </div>
+          <label>Label<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, label: event.target.value })} placeholder="How staff recognize this code" required value={effectiveTaxDraft.label} /></label>
+          <label>Price treatment<select disabled={commerceControlsDisabled} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, mode: event.target.value as CommerceTaxMode })} value={effectiveTaxDraft.mode}><option value="exclusive">Add tax to listed price</option><option value="inclusive">Tax included in listed price</option></select></label>
+          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review tax setup</button></div>
+          <p className="panel-copy">Applies only to future orders. Saved orders keep their original calculation. This does not file tax, choose a legal rate, map accounts, or post externally.</p>
+          {currentTaxConfiguration ? <p className="form-notice">Revision {currentTaxConfiguration.revision} · saved by {currentTaxConfiguration.proof.actor} · evidence {currentTaxConfiguration.proof.evidenceReference}</p> : null}
+        </form>
+      </details>
       <button className="core-button" disabled={commerceControlsDisabled || !closePreview} onClick={closeDay} type="button">{closePreview ? 'Save daily close' : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
       <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p>
       {latestClose?.operator ? <details className="compact-disclosure">
@@ -4560,7 +4659,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
 
 function OrderCalculationNote({ order }: { order: CommerceOrder }) {
   if (!order.calculation) return <small data-order-calculation-note="true" data-order-calculation-status="legacy">Recorded total {formatMoney(order.total)} · Tax status not recorded</small>
-  return <small data-order-calculation-note="true">Subtotal {formatMoney(order.calculation.subtotalMmk)} · Tax not configured</small>
+  return <small data-order-calculation-note="true" data-order-calculation-status={'taxCode' in order.calculation ? 'configured' : 'not-configured'}>{formatCommerceCalculation(order.calculation)}</small>
 }
 
 function OrderList({

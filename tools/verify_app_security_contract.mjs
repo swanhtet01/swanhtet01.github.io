@@ -276,6 +276,7 @@ const expectedHumanCommerceEvents = [
   'commerce.stock.received',
   'commerce.storefront.configuration.saved',
   'commerce.storefront.merchandising.imported',
+  'commerce.tax_configuration.saved',
   'commerce.website_intake.converted',
   'commerce.workspace.initialized',
 ]

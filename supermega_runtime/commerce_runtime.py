@@ -37,6 +37,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.workspace.initialized",
         "commerce.item.created",
         "commerce.item.updated",
+        "commerce.tax_configuration.saved",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
@@ -64,6 +65,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.workspace.initialized",
         "commerce.item.created",
         "commerce.item.updated",
+        "commerce.tax_configuration.saved",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
@@ -120,12 +122,14 @@ _MAX_STOREFRONT_REQUESTS = 100
 _MAX_PURCHASE_ORDERS = 100
 _MAX_CATALOG_BASELINES = 500
 _MAX_CATALOG_CHANGES = 500
+_MAX_TAX_CONFIGURATIONS = 100
 _MAX_ORDER_LINES = 20
 _MAX_RETURNS_PER_ORDER = 100
 _MAX_MOVEMENT_ID_LENGTH = 2_000
 _PURCHASE_ORDER_ID_PATTERN = re.compile(
     r"PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
+_TAX_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{0,11}")
 _ISO_TIMESTAMP_PATTERN = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}:[0-9]{2}"
     r"(?:\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])"
@@ -145,6 +149,9 @@ _CATALOG_CHANGE_FIELDS = frozenset(
 )
 _CATALOG_BASELINE_FIELDS = frozenset(
     {"sku", "price", "reorderAt", "proof", "anchorDigest"}
+)
+_TAX_CONFIGURATION_FIELDS = frozenset(
+    {"revision", "code", "label", "rateBasisPoints", "mode", "proof"}
 )
 _ORDER_REQUIRED_FIELDS = frozenset(
     {
@@ -190,6 +197,7 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
 _ORDER_LINE_REQUIRED_FIELDS = frozenset({"sku", "name", "quantity", "unitPriceMmk"})
 _ORDER_LINE_OPTIONAL_FIELDS = frozenset({"variant"})
 _ORDER_CALCULATION_SCHEMA = "supermega.commerce.order-calculation.v1"
+_ORDER_CALCULATION_V2_SCHEMA = "supermega.commerce.order-calculation.v2"
 _ORDER_CALCULATION_FIELDS = frozenset(
     {
         "schema",
@@ -197,6 +205,21 @@ _ORDER_CALCULATION_FIELDS = frozenset(
         "catalogRevision",
         "subtotalMmk",
         "taxMode",
+        "taxMmk",
+        "totalMmk",
+    }
+)
+_ORDER_CALCULATION_V2_FIELDS = frozenset(
+    {
+        "schema",
+        "currency",
+        "catalogRevision",
+        "taxConfigurationRevision",
+        "taxCode",
+        "taxRateBasisPoints",
+        "taxMode",
+        "listedSubtotalMmk",
+        "subtotalMmk",
         "taxMmk",
         "totalMmk",
     }
@@ -525,6 +548,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "purchaseOrders",
                 "catalogBaselines",
                 "catalogChanges",
+                "taxConfigurations",
                 "inventoryFoundation",
             }
         ),
@@ -553,6 +577,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         state.get("catalogChanges", []),
         "commerce state.catalogChanges",
     )
+    tax_configurations = _list(
+        state.get("taxConfigurations", []),
+        "commerce state.taxConfigurations",
+    )
     if "storefrontConfiguration" in state and state["storefrontConfiguration"] is None:
         raise TrialValidationError(
             "commerce state.storefrontConfiguration must be an object when present."
@@ -573,6 +601,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     if len(catalog_changes) > _MAX_CATALOG_CHANGES:
         raise TrialValidationError(
             f"commerce state.catalogChanges cannot exceed {_MAX_CATALOG_CHANGES}."
+        )
+    if len(tax_configurations) > _MAX_TAX_CONFIGURATIONS:
+        raise TrialValidationError(
+            f"commerce state.taxConfigurations cannot exceed {_MAX_TAX_CONFIGURATIONS}."
         )
 
     item_skus: list[str] = []
@@ -726,6 +758,46 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             raise TrialValidationError(
                 f"Catalog baseline for {sku} does not match the unchanged catalog item."
             )
+
+    tax_configuration_action_ids: list[str] = []
+    newer_tax_configuration: dict[str, Any] | None = None
+    for index, candidate in enumerate(tax_configurations):
+        field = f"taxConfigurations[{index}]"
+        configuration = _object(candidate, field)
+        _exact_fields(configuration, field, required=_TAX_CONFIGURATION_FIELDS)
+        revision = _integer(configuration["revision"], f"{field}.revision", minimum=1)
+        if revision != len(tax_configurations) - index:
+            raise TrialValidationError(
+                f"{field}.revision breaks the newest-first sequence."
+            )
+        code = _text(configuration["code"], f"{field}.code", maximum=12)
+        if _TAX_CODE_PATTERN.fullmatch(code) is None:
+            raise TrialValidationError(f"{field}.code is invalid.")
+        _text(configuration["label"], f"{field}.label", maximum=80)
+        rate_basis_points = _integer(
+            configuration["rateBasisPoints"],
+            f"{field}.rateBasisPoints",
+        )
+        if rate_basis_points > 10_000:
+            raise TrialValidationError(
+                f"{field}.rateBasisPoints must be at most 10000."
+            )
+        if configuration["mode"] not in {"exclusive", "inclusive"}:
+            raise TrialValidationError(f"{field}.mode is invalid.")
+        proof = _action_proof(configuration["proof"], f"{field}.proof")
+        if newer_tax_configuration is not None:
+            newer_captured_at = datetime.fromisoformat(
+                str(newer_tax_configuration["proof"]["capturedAt"]).replace("Z", "+00:00")
+            )
+            captured_at = datetime.fromisoformat(
+                proof["capturedAt"].replace("Z", "+00:00")
+            )
+            if captured_at > newer_captured_at:
+                raise TrialValidationError(
+                    f"{field} tax configurations must be newest first."
+                )
+        newer_tax_configuration = configuration
+        tax_configuration_action_ids.append(proof["actionId"])
 
     purchase_order_ids: list[str] = []
     purchase_order_action_ids: list[str] = []
@@ -1001,7 +1073,6 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 order["item"] != _order_item_summary(validated_lines)
                 or order.get("itemSku") != expected_item_sku
                 or order["quantity"] != captured_quantity
-                or order["total"] != captured_total
             ):
                 raise TrialValidationError(
                     f"orders[{index}] does not match its immutable line snapshots."
@@ -1012,11 +1083,23 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 calculation_candidate,
                 f"orders[{index}].calculation",
             )
-            _exact_fields(
-                calculation,
-                f"orders[{index}].calculation",
-                required=_ORDER_CALCULATION_FIELDS,
-            )
+            calculation_schema = calculation.get("schema")
+            if calculation_schema == _ORDER_CALCULATION_SCHEMA:
+                _exact_fields(
+                    calculation,
+                    f"orders[{index}].calculation",
+                    required=_ORDER_CALCULATION_FIELDS,
+                )
+            elif calculation_schema == _ORDER_CALCULATION_V2_SCHEMA:
+                _exact_fields(
+                    calculation,
+                    f"orders[{index}].calculation",
+                    required=_ORDER_CALCULATION_V2_FIELDS,
+                )
+            else:
+                raise TrialValidationError(
+                    f"orders[{index}].calculation schema is invalid."
+                )
             catalog_revision = _integer(
                 calculation["catalogRevision"],
                 f"orders[{index}].calculation.catalogRevision",
@@ -1024,7 +1107,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             subtotal_mmk = _integer(
                 calculation["subtotalMmk"],
                 f"orders[{index}].calculation.subtotalMmk",
-                minimum=1,
+                minimum=1 if calculation_schema == _ORDER_CALCULATION_SCHEMA else 0,
             )
             tax_mmk = _integer(
                 calculation["taxMmk"],
@@ -1035,22 +1118,73 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 f"orders[{index}].calculation.totalMmk",
                 minimum=1,
             )
-            if (
-                calculation["schema"] != _ORDER_CALCULATION_SCHEMA
-                or calculation["currency"] != "MMK"
-                or catalog_revision > len(catalog_changes)
-                or calculation["taxMode"] != "not_configured"
-                or tax_mmk != 0
-                or total_mmk != subtotal_mmk
-                or order["total"] != total_mmk
-                or (
-                    captured_total is not None
-                    and subtotal_mmk != captured_total
-                )
-            ):
+            if calculation["currency"] != "MMK" or catalog_revision > len(catalog_changes) or order["total"] != total_mmk:
                 raise TrialValidationError(
-                    f"orders[{index}].calculation must be a deterministic MMK subtotal with tax explicitly not configured."
+                    f"orders[{index}].calculation totals are invalid."
                 )
+            if calculation_schema == _ORDER_CALCULATION_SCHEMA:
+                if (
+                    calculation["taxMode"] != "not_configured"
+                    or tax_mmk != 0
+                    or total_mmk != subtotal_mmk
+                    or (
+                        captured_total is not None
+                        and subtotal_mmk != captured_total
+                    )
+                ):
+                    raise TrialValidationError(
+                        f"orders[{index}].calculation must preserve its deterministic untaxed MMK subtotal."
+                    )
+            else:
+                tax_revision = _integer(
+                    calculation["taxConfigurationRevision"],
+                    f"orders[{index}].calculation.taxConfigurationRevision",
+                    minimum=1,
+                )
+                _integer(
+                    calculation["taxRateBasisPoints"],
+                    f"orders[{index}].calculation.taxRateBasisPoints",
+                )
+                _integer(
+                    calculation["listedSubtotalMmk"],
+                    f"orders[{index}].calculation.listedSubtotalMmk",
+                    minimum=1,
+                )
+                configuration = next(
+                    (
+                        row
+                        for row in tax_configurations
+                        if isinstance(row, Mapping)
+                        and row.get("revision") == tax_revision
+                    ),
+                    None,
+                )
+                expected = (
+                    _configured_order_calculation(
+                        configuration,
+                        captured_total,
+                        catalog_revision,
+                    )
+                    if configuration is not None and captured_total is not None
+                    else None
+                )
+                if (
+                    expected is None
+                    or datetime.fromisoformat(
+                        str(configuration["proof"]["capturedAt"]).replace("Z", "+00:00")
+                    )
+                    > datetime.fromisoformat(
+                        str(order["createdAt"]).replace("Z", "+00:00")
+                    )
+                    or calculation != expected
+                ):
+                    raise TrialValidationError(
+                        f"orders[{index}].calculation does not match its immutable tax configuration."
+                    )
+        elif captured_total is not None and order["total"] != captured_total:
+            raise TrialValidationError(
+                f"orders[{index}] legacy total does not match its immutable line snapshots."
+            )
         if order["status"] not in _ORDER_STATUSES:
             raise TrialValidationError(f"orders[{index}].status is invalid.")
         if order["paymentStatus"] not in _PAYMENT_STATUSES:
@@ -2034,6 +2168,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 if action_id not in catalog_baseline_action_set
             ),
             *catalog_baseline_action_set,
+            *tax_configuration_action_ids,
             *storefront_action_ids,
             *(
                 [storefront_configuration_action_id]
@@ -2233,6 +2368,12 @@ def _validate_event_evidence(
         if not _proof_matches_evidence(saved, evidence):
             raise TrialValidationError(
                 "command evidence must match the saved Ecommerce storefront configuration."
+            )
+    elif event_type == "commerce.tax_configuration.saved":
+        proof = next_state["taxConfigurations"][0]["proof"]
+        if not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the saved tax configuration proof."
             )
     elif event_type == "commerce.purchase_order.created":
         creation = next_state["purchaseOrders"][0]["creation"]
@@ -2506,6 +2647,47 @@ def _catalog_changes(state: Mapping[str, Any]) -> list[Any]:
     return state.get("catalogChanges", [])
 
 
+def _tax_configurations(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("taxConfigurations", [])
+
+
+def _round_tax(numerator: int, denominator: int) -> int:
+    return (numerator * 2 + denominator) // (denominator * 2)
+
+
+def _configured_order_calculation(
+    configuration: Mapping[str, Any],
+    listed_subtotal_mmk: int,
+    catalog_revision: int,
+) -> dict[str, Any] | None:
+    if not 1 <= listed_subtotal_mmk <= _MAX_SAFE_INTEGER:
+        return None
+    rate = int(configuration["rateBasisPoints"])
+    mode = str(configuration["mode"])
+    tax_mmk = (
+        _round_tax(listed_subtotal_mmk * rate, 10_000)
+        if mode == "exclusive"
+        else _round_tax(listed_subtotal_mmk * rate, 10_000 + rate)
+    )
+    subtotal_mmk = listed_subtotal_mmk if mode == "exclusive" else listed_subtotal_mmk - tax_mmk
+    total_mmk = listed_subtotal_mmk + tax_mmk if mode == "exclusive" else listed_subtotal_mmk
+    if subtotal_mmk < 0 or tax_mmk < 0 or not 1 <= total_mmk <= _MAX_SAFE_INTEGER:
+        return None
+    return {
+        "schema": _ORDER_CALCULATION_V2_SCHEMA,
+        "currency": "MMK",
+        "catalogRevision": catalog_revision,
+        "taxConfigurationRevision": configuration["revision"],
+        "taxCode": configuration["code"],
+        "taxRateBasisPoints": rate,
+        "taxMode": mode,
+        "listedSubtotalMmk": listed_subtotal_mmk,
+        "subtotalMmk": subtotal_mmk,
+        "taxMmk": tax_mmk,
+        "totalMmk": total_mmk,
+    }
+
+
 def _catalog_baselines(state: Mapping[str, Any]) -> list[Any]:
     return state.get("catalogBaselines", [])
 
@@ -2627,6 +2809,22 @@ def commerce_daily_close_export(
                 "paymentEvidenceReference": order.get("paymentEvidenceReference"),
                 "currency": calculation["currency"] if accepted_calculation else "MMK",
                 "catalogRevision": calculation["catalogRevision"] if accepted_calculation else None,
+                "taxConfigurationRevision": (
+                    calculation.get("taxConfigurationRevision")
+                    if accepted_calculation
+                    else None
+                ),
+                "taxCode": calculation.get("taxCode") if accepted_calculation else None,
+                "taxRateBasisPoints": (
+                    calculation.get("taxRateBasisPoints")
+                    if accepted_calculation
+                    else None
+                ),
+                "listedSubtotalMmk": (
+                    calculation.get("listedSubtotalMmk")
+                    if accepted_calculation
+                    else None
+                ),
                 "subtotalMmk": calculation["subtotalMmk"] if accepted_calculation else None,
                 "taxMode": calculation["taxMode"] if accepted_calculation else "not_recorded",
                 "taxMmk": calculation["taxMmk"] if accepted_calculation else None,
@@ -2672,6 +2870,10 @@ def commerce_daily_close_export(
                     row["paymentEvidenceReference"],
                     row["currency"],
                     row["catalogRevision"],
+                    row["taxConfigurationRevision"],
+                    row["taxCode"],
+                    row["taxRateBasisPoints"],
+                    row["listedSubtotalMmk"],
                     row["subtotalMmk"],
                     row["taxMode"],
                     row["taxMmk"],
@@ -2721,6 +2923,10 @@ def commerce_daily_close_csv(
         "payment_evidence_reference",
         "currency",
         "catalog_revision",
+        "tax_configuration_revision",
+        "tax_code",
+        "tax_rate_basis_points",
+        "listed_subtotal_mmk",
         "subtotal_mmk",
         "tax_mode",
         "tax_mmk",
@@ -2749,6 +2955,10 @@ def commerce_daily_close_csv(
             None,
             None,
             None,
+            None,
+            None,
+            None,
+            None,
             artifact["totalMmk"],
             None,
             artifact["paymentExceptionOrderIds"],
@@ -2772,6 +2982,10 @@ def commerce_daily_close_csv(
             row["paymentEvidenceReference"],
             row["currency"],
             row["catalogRevision"],
+            row["taxConfigurationRevision"],
+            row["taxCode"],
+            row["taxRateBasisPoints"],
+            row["listedSubtotalMmk"],
             row["subtotalMmk"],
             row["taxMode"],
             row["taxMmk"],
@@ -2890,6 +3104,14 @@ def _require_catalog_baselines_unchanged(
 ) -> None:
     if _catalog_baselines(current) != _catalog_baselines(next_state):
         raise TrialValidationError("event cannot change: catalogBaselines.")
+
+
+def _require_tax_configurations_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _tax_configurations(current) != _tax_configurations(next_state):
+        raise TrialValidationError("event cannot change: taxConfigurations.")
 
 
 def _inventory_foundation(state: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -3328,9 +3550,21 @@ def _validate_new_order_and_reservation(
     _require_unchanged(current, next_state, "closes")
     order = next_state["orders"][0]
     calculation = order.get("calculation")
+    current_tax_configurations = _tax_configurations(current)
+    expected_calculation_schema = (
+        _ORDER_CALCULATION_V2_SCHEMA
+        if current_tax_configurations
+        else _ORDER_CALCULATION_SCHEMA
+    )
     if (
         not isinstance(calculation, Mapping)
         or calculation.get("catalogRevision") != len(_catalog_changes(current))
+        or calculation.get("schema") != expected_calculation_schema
+        or (
+            current_tax_configurations
+            and calculation.get("taxConfigurationRevision")
+            != current_tax_configurations[0].get("revision")
+        )
     ):
         raise TrialValidationError(
             "a new order requires the current deterministic pricing calculation."
@@ -4573,6 +4807,34 @@ def _validate_storefront_configuration_saved(
         )
 
 
+def _validate_tax_configuration_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    _require_catalog_changes_unchanged(current, next_state)
+    _require_catalog_baselines_unchanged(current, next_state)
+    _require_inventory_foundation_unchanged(current, next_state)
+    before = _tax_configurations(current)
+    after = _tax_configurations(next_state)
+    if len(after) != len(before) + 1 or after[1:] != before:
+        raise TrialValidationError(
+            "commerce.tax_configuration.saved must prepend exactly one tax configuration."
+        )
+    configuration = after[0]
+    if configuration["revision"] != len(before) + 1:
+        raise TrialValidationError("tax configuration revision must advance exactly once.")
+    if before and all(
+        configuration[field] == before[0][field]
+        for field in ("code", "label", "rateBasisPoints", "mode")
+    ):
+        raise TrialValidationError("an unchanged tax configuration cannot advance.")
+
+
 _TRANSITION_VALIDATORS = {
     "commerce.item.created": _validate_item_created,
     "commerce.item.updated": _validate_item_updated,
@@ -4595,6 +4857,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.website_intake.converted": _validate_website_intake_converted,
     "commerce.storefront.configuration.saved": _validate_storefront_configuration_saved,
     "commerce.storefront_request.received": _validate_storefront_request_received,
+    "commerce.tax_configuration.saved": _validate_tax_configuration_saved,
 }
 
 
@@ -4623,6 +4886,7 @@ def reduce_commerce_state(
             or _storefront_configuration(next_state)
             or _purchase_orders(next_state)
             or _catalog_changes(next_state)
+            or _tax_configurations(next_state)
         ):
             raise TrialValidationError("Commerce initialization requires a non-empty catalog and no operating history.")
         return next_state
@@ -4636,6 +4900,8 @@ def reduce_commerce_state(
         _require_storefront_requests_unchanged(current_state, next_state)
     if event_type != "commerce.storefront.configuration.saved":
         _require_storefront_configuration_unchanged(current_state, next_state)
+    if event_type != "commerce.tax_configuration.saved":
+        _require_tax_configurations_unchanged(current_state, next_state)
     if event_type not in {
         "commerce.purchase_order.created",
         "commerce.purchase_order.cancelled",
