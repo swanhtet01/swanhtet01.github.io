@@ -75,6 +75,10 @@ _STATE_OPTIONAL_FIELDS = frozenset({"openingPlan", "orderExecution"})
 _OPENING_PLAN_FIELDS = frozenset(
     {"contract", "packageDigest", "confirmedAt", "jobIds", "machineIds"}
 )
+_OPENING_PLAN_OPTIONAL_FIELDS = frozenset({"industryPackId"})
+_PLANT_INDUSTRY_PACK_IDS = frozenset(
+    {"general-manufacturing", "batch-process", "food-beverage", "apparel", "assembly"}
+)
 _OPENING_PLAN_CONTRACT = "supermega.production.opening-plan.v1"
 _DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 _JOB_REQUIRED_FIELDS = frozenset({"id", "line", "product", "target", "output"})
@@ -455,10 +459,15 @@ def _validate_opening_plan(
         plan,
         "production state.openingPlan",
         required=_OPENING_PLAN_FIELDS,
+        optional=_OPENING_PLAN_OPTIONAL_FIELDS,
     )
     if plan["contract"] != _OPENING_PLAN_CONTRACT:
         raise TrialValidationError(
             f"production state.openingPlan.contract must be {_OPENING_PLAN_CONTRACT}."
+        )
+    if "industryPackId" in plan and plan["industryPackId"] not in _PLANT_INDUSTRY_PACK_IDS:
+        raise TrialValidationError(
+            "production state.openingPlan.industryPackId is unsupported."
         )
     package_digest = _text(
         plan["packageDigest"],

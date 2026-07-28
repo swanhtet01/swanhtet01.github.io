@@ -177,6 +177,7 @@ def opening_plan_workspace(
             "contract": "supermega.production.opening-plan.v1",
             "packageDigest": digest,
             "confirmedAt": confirmed_at,
+            "industryPackId": "general-manufacturing",
             "jobIds": ["JOB-OPENING-001", "JOB-OPENING-002"],
             "machineIds": ["MACHINE-OPENING-001", "MACHINE-OPENING-002"],
         },
@@ -909,6 +910,10 @@ class ProductionRuntimeTests(unittest.TestCase):
         bad_contract = opening_plan_workspace()
         bad_contract["openingPlan"]["contract"] = "supermega.production.opening-plan.v0"
         invalid_states.append(("bad contract", bad_contract))
+
+        bad_pack = opening_plan_workspace()
+        bad_pack["openingPlan"]["industryPackId"] = "unsupported-pack"
+        invalid_states.append(("bad industry pack", bad_pack))
 
         bad_digest = opening_plan_workspace(digest="sha256:not-a-digest")
         invalid_states.append(("bad digest", bad_digest))

@@ -17,6 +17,7 @@ from supermega_runtime.client_import_runtime import (
     CLIENT_IMPORT_PREVIEW_SCHEMA,
     CLIENT_IMPORT_PROFILE_IDS,
     CLIENT_IMPORT_STAGING_SCHEMA,
+    PLANT_INDUSTRY_PACK_IDS,
     ClientImportValidationError,
     validate_client_import_staging_package,
 )
@@ -133,6 +134,7 @@ def _package(product: str = "commerce", workflow_template_id: str | None = None)
         "product": product,
         "object": spec.identifier,
         "workflowTemplateId": workflow_template_id or CLIENT_IMPORT_PROFILE_IDS[product][0],
+        **({"plantIndustryPackId": "general-manufacturing"} if product == "production" else {}),
         "workspace": "Example Myanmar Company",
         "owner": "Accountable owner",
         "source": {
@@ -175,6 +177,10 @@ class ClientImportValidatorTests(unittest.TestCase):
             "ecommerce": tuple(item["id"] for item in manifest_products["ecommerce"]["templates"]),
         }
         self.assertEqual(manifest_profiles, CLIENT_IMPORT_PROFILE_IDS)
+        self.assertEqual(
+            frozenset(item["id"] for item in manifest_products["plant"]["internalTemplatePacks"]),
+            PLANT_INDUSTRY_PACK_IDS,
+        )
 
         for product, profile_ids in CLIENT_IMPORT_PROFILE_IDS.items():
             for profile_id in profile_ids:
@@ -268,6 +274,14 @@ class ClientImportValidatorTests(unittest.TestCase):
         wrong_profile = _package()
         wrong_profile["workflowTemplateId"] = "business-presence"
         cases.append(("cross-product workflow", _resign(wrong_profile)))
+
+        wrong_plant_pack = _package("production")
+        wrong_plant_pack["plantIndustryPackId"] = "unsupported-pack"
+        cases.append(("unsupported Plant pack", wrong_plant_pack))
+
+        missing_plant_pack = _package("production")
+        del missing_plant_pack["plantIndustryPackId"]
+        cases.append(("missing Plant pack", missing_plant_pack))
 
         duplicate_mapping = _package()
         duplicate_mapping["mapping"]["name"] = "sku"
@@ -983,6 +997,7 @@ class ClientImportRouteTests(unittest.TestCase):
                 "contract": "supermega.production.opening-plan.v1",
                 "packageDigest": validation.package_digest,
                 "confirmedAt": canonical_confirmed_at,
+                "industryPackId": "general-manufacturing",
                 "jobIds": ["JOB-001", "JOB-002", "JOB-003"],
                 "machineIds": ["machine-import-1", "machine-import-2"],
             },

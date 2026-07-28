@@ -38,6 +38,7 @@ import {
 import type { CommerceState } from './commerce-workspace'
 import { pendingProductionMaterialHandoffs } from './production-material-handoff'
 import { validateProductionState, type ProductionJob, type ProductionState } from './production-workspace'
+import { plantIndustryPack, plantIndustryPackSetup, type PlantIndustryPackId } from './plant-industry-packs'
 
 
 type PlantOrderFoundationProps = {
@@ -45,6 +46,7 @@ type PlantOrderFoundationProps = {
   commerceState: CommerceState
   disabled: boolean
   jobs: ProductionJob[]
+  industryPackId: PlantIndustryPackId
   managedState?: PlantOrderState | null
   onManagedCommand?: (
     eventType: 'production.order_execution.recorded',
@@ -167,23 +169,8 @@ function milliInputValue(value: number) {
   return fraction ? `${whole}.${fraction}` : String(whole)
 }
 
-function defaultSetup(job?: ProductionJob): SetupDraft {
-  const suffix = job?.id.replace(/^JOB-/, '') ?? '001'
-  return {
-    jobId: job?.id ?? '',
-    outputBatchId: `BATCH-${suffix}`,
-    materialId: 'MAT-PRIMARY-001',
-    materialName: 'Primary material',
-    materialUnit: 'pcs',
-    quantityPerUnit: '1',
-    standardCostPerUnitMmk: '',
-    additionalMaterials: '',
-    workCentreId: 'WC-ASSEMBLY-01',
-    workCentreName: 'Assembly',
-    minutesPerUnit: '1',
-    standardCostPerMinuteMmk: '',
-    additionalOperations: '',
-  }
+function defaultSetup(job: ProductionJob | undefined, industryPackId: PlantIndustryPackId): SetupDraft {
+  return plantIndustryPackSetup(industryPackId, job)
 }
 
 function availabilityDefaultsForPlan(plan: PlantOrderPlan): AvailabilityDraft {
@@ -237,7 +224,7 @@ const statusCopy = {
   released_to_stock: 'Batch released',
 } as const
 
-export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, managedState, onManagedCommand, scope }: PlantOrderFoundationProps) {
+export function PlantOrderFoundation({ actor, commerceState, disabled, industryPackId, jobs, managedState, onManagedCommand, scope }: PlantOrderFoundationProps) {
   const managed = managedState !== undefined
   const activeJobs = jobs.filter((job) => !job.closure && !job.qualityHold && remaining(job) > 0)
   const [initial] = useState(() => managed
@@ -248,7 +235,8 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false)
-  const [setupDraft, setSetupDraft] = useState(() => defaultSetup(activeJobs[0]))
+  const industryPack = plantIndustryPack(industryPackId)
+  const [setupDraft, setSetupDraft] = useState(() => defaultSetup(activeJobs[0], industryPackId))
   const [availabilityDraft, setAvailabilityDraft] = useState(() => availabilityDefaults(initial.state))
   const [operationDraft, setOperationDraft] = useState<OperationDraft>({ operationId: '', quantity: '', actualMinutes: '' })
   const [effectivenessDraft, setEffectivenessDraft] = useState<EffectivenessDraft>({ windowStart: '', windowEnd: '', workCentres: {}, downtimeIntervals: '' })
@@ -672,7 +660,8 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
     <dialog aria-labelledby="plant-execution-setup-title" className="production-issue-dialog" id="plant-execution-setup" onCancel={(event) => { event.preventDefault(); closeSetup() }} ref={setupDialogRef}>
       <div className="panel-head"><div><span className="core-eyebrow">Plant execution</span><h2 id="plant-execution-setup-title">Set up controlled batch</h2></div><button aria-label="Close batch setup" className="text-link" onClick={closeSetup} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
       {!projection.plan ? <form autoComplete="off" className="core-form" onSubmit={reviewSetup}>
-        <label>Active job<select disabled={disabled || Boolean(review)} onChange={(event) => { const job = activeJobs.find((candidate) => candidate.id === event.target.value); setSetupDraft(defaultSetup(job)) }} value={selectedSetupJob?.id ?? ''}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {remaining(job).toLocaleString()} left</option>) : <option value="">No active jobs</option>}</select></label>
+        <p className="form-notice"><strong>{industryPack.name} pack.</strong> {industryPack.firstWorkflow}. Review quantities and costs before recording.</p>
+        <label>Active job<select disabled={disabled || Boolean(review)} onChange={(event) => { const job = activeJobs.find((candidate) => candidate.id === event.target.value); setSetupDraft(defaultSetup(job, industryPackId)) }} value={selectedSetupJob?.id ?? ''}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {remaining(job).toLocaleString()} left</option>) : <option value="">No active jobs</option>}</select></label>
         <label>Output batch ID<input disabled={disabled || Boolean(review)} maxLength={80} onChange={(event) => setSetupDraft((current) => ({ ...current, outputBatchId: event.target.value }))} required value={setupDraft.outputBatchId} /></label>
         <details className="compact-disclosure production-history">
           <summary>Customize material and routing <span>Up to {PLANT_ORDER_ADDITIONAL_MATERIAL_MAX + 1} materials · {PLANT_ORDER_ADDITIONAL_OPERATION_MAX + 1} operations</span></summary>

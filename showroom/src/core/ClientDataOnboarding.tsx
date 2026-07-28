@@ -43,6 +43,7 @@ import {
   type ManagedIdentity,
 } from './managed-trial'
 import { createShopServiceSchedule, type ShopIndustryPackId } from './shop-service-scheduling'
+import type { PlantIndustryPackId } from './plant-industry-packs'
 
 type ClientDataOnboardingProps = {
   product: ClientSolutionId
@@ -52,6 +53,7 @@ type ClientDataOnboardingProps = {
   workspace: string
   owner: string
   shopIndustryPackId?: ShopIndustryPackId
+  plantIndustryPackId?: PlantIndustryPackId
   managedIdentity: ManagedIdentity | null
   onProgress?: (progress: ClientDemoProductProgress) => void
 }
@@ -68,6 +70,7 @@ type AppliedImport = {
   contextKey: string
   receipt: ManagedClientImportActivationResult
   shopPack?: { id: ShopIndustryPackId; version: number }
+  plantPack?: { id: PlantIndustryPackId }
 }
 
 type LocalAppliedImport = {
@@ -136,9 +139,10 @@ function importCommandId() {
   return commandId
 }
 
-function managedShopImportBase(state: Record<string, unknown>) {
+function managedImportBase(product: ClientSolutionId, state: Record<string, unknown>) {
   const base = { ...state }
-  delete base.serviceSchedule
+  if (product === 'commerce') delete base.serviceSchedule
+  if (product === 'production') delete base.orderExecution
   return base
 }
 
@@ -150,6 +154,7 @@ function validationContextKey(
   owner: string,
   managedIdentity: ManagedIdentity | null,
   shopIndustryPackId?: ShopIndustryPackId,
+  plantIndustryPackId?: PlantIndustryPackId,
 ) {
   return JSON.stringify([
     product,
@@ -160,6 +165,7 @@ function validationContextKey(
     managedIdentity?.userId ?? '',
     managedIdentity?.workspaceId ?? '',
     shopIndustryPackId ?? '',
+    plantIndustryPackId ?? '',
   ])
 }
 
@@ -175,7 +181,7 @@ function downloadFile(filename: string, content: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
-export function ClientDataOnboarding({ product, productName, productSlug, workflowTemplateId, workspace, owner, shopIndustryPackId, managedIdentity, onProgress }: ClientDataOnboardingProps) {
+export function ClientDataOnboarding({ product, productName, productSlug, workflowTemplateId, workspace, owner, shopIndustryPackId, plantIndustryPackId, managedIdentity, onProgress }: ClientDataOnboardingProps) {
   const object = clientImportObject(product)
   const checklist = clientImportChecklist(product, workflowTemplateId)
   const requestRef = useRef(0)
@@ -185,6 +191,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   const workspaceRef = useRef(workspace)
   const ownerRef = useRef(owner)
   const shopIndustryPackIdRef = useRef(shopIndustryPackId)
+  const plantIndustryPackIdRef = useRef(plantIndustryPackId)
   const managedIdentityRef = useRef(managedIdentity)
   const previewRef = useRef<HTMLDivElement>(null)
   const onProgressRef = useRef(onProgress)
@@ -193,6 +200,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   workspaceRef.current = workspace
   ownerRef.current = owner
   shopIndustryPackIdRef.current = shopIndustryPackId
+  plantIndustryPackIdRef.current = plantIndustryPackId
   managedIdentityRef.current = managedIdentity
   onProgressRef.current = onProgress
   const [state, setState] = useState<ImportState>(emptyImportState)
@@ -204,6 +212,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     owner,
     managedIdentity,
     shopIndustryPackId,
+    plantIndustryPackId,
   )
   const validationIsCurrent = Boolean(
     managedIdentity
@@ -480,6 +489,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       workflowTemplateId,
       workspace,
       owner,
+      plantIndustryPackId,
     })
   }
 
@@ -499,6 +509,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     const expectedWorkspace = workspace
     const expectedOwner = owner
     const expectedShopIndustryPackId = shopIndustryPackId
+    const expectedPlantIndustryPackId = plantIndustryPackId
     const expectedPreviewDigest = state.preview.previewDigest
     const expectedContextKey = currentValidationContext
     const validationContextChanged = () => (
@@ -507,6 +518,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       || workspaceRef.current !== expectedWorkspace
       || ownerRef.current !== expectedOwner
       || shopIndustryPackIdRef.current !== expectedShopIndustryPackId
+      || plantIndustryPackIdRef.current !== expectedPlantIndustryPackId
       || !expectedIdentity
       || !managedIdentityRef.current
       || !sameManagedIdentity(managedIdentityRef.current, expectedIdentity)
@@ -575,6 +587,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     const expectedWorkspace = workspace
     const expectedOwner = owner
     const expectedShopIndustryPackId = shopIndustryPackId
+    const expectedPlantIndustryPackId = plantIndustryPackId
     const activationRequestId = validationRequestRef.current + 1
     validationRequestRef.current = activationRequestId
     const contextChanged = () => (
@@ -584,6 +597,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       || workspaceRef.current !== expectedWorkspace
       || ownerRef.current !== expectedOwner
       || shopIndustryPackIdRef.current !== expectedShopIndustryPackId
+      || plantIndustryPackIdRef.current !== expectedPlantIndustryPackId
       || managedIdentityRef.current !== null
     )
     const stagingPackage = currentStagingPackage()
@@ -712,6 +726,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     const expectedWorkspace = workspace
     const expectedOwner = owner
     const expectedShopIndustryPackId = shopIndustryPackId
+    const expectedPlantIndustryPackId = plantIndustryPackId
     const activationRequestId = validationRequestRef.current + 1
     validationRequestRef.current = activationRequestId
     const contextChanged = () => (
@@ -721,6 +736,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       || workspaceRef.current !== expectedWorkspace
       || ownerRef.current !== expectedOwner
       || shopIndustryPackIdRef.current !== expectedShopIndustryPackId
+      || plantIndustryPackIdRef.current !== expectedPlantIndustryPackId
       || !managedIdentityRef.current
       || !sameManagedIdentity(managedIdentityRef.current, expectedIdentity)
     )
@@ -738,8 +754,8 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       const bootstrap = await loadManagedBootstrap(expectedIdentity)
       if (contextChanged()) return
       const confirmed = bootstrap.states[managedActivation.surface]
-      const confirmedImportState = expectedProduct === 'commerce'
-        ? managedShopImportBase(confirmed?.state ?? {})
+      const confirmedImportState = expectedProduct === 'commerce' || expectedProduct === 'production'
+        ? managedImportBase(expectedProduct, confirmed?.state ?? {})
         : confirmed?.state
       if (!confirmed
         || confirmed.version < receipt.result.version
@@ -757,6 +773,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         },
       )
       let shopPack: AppliedImport['shopPack']
+      let plantPack: AppliedImport['plantPack']
       if (expectedProduct === 'commerce') {
         const packId = expectedShopIndustryPackId ?? 'retail'
         const currentSchedule = await loadManagedServiceSchedule(expectedIdentity)
@@ -778,13 +795,17 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         }
         shopPack = { id: packId, version: provisioned.version }
       }
+      if (expectedProduct === 'production') {
+        if (!expectedPlantIndustryPackId) throw new Error('Choose a Plant industry pack before activation.')
+        plantPack = { id: expectedPlantIndustryPackId }
+      }
       setState((current) => current.preview?.previewDigest === expectedPreviewDigest
         && current.validation?.commandId === validated.commandId
         ? {
             ...current,
             applying: false,
             applyConfirmed: false,
-            applied: { contextKey: expectedContextKey, receipt, shopPack },
+            applied: { contextKey: expectedContextKey, receipt, shopPack, plantPack },
             error: '',
           }
         : current)
@@ -830,7 +851,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         <p className="catalog-import-boundary">{localAppliedIsCurrent && state.localApplied
           ? `${state.localApplied.created} ${localRecordLabel} were added and ${state.localApplied.alreadyPresent} were already current. Your source CSV was not retained or sent to AI.`
           : appliedIsCurrent && state.applied
-          ? `${state.applied.receipt.activation.row_count} ${managedActivation?.createdLabel ?? 'records'} were imported into ${managedIdentity?.workspaceId}.${state.applied.shopPack ? ` The ${state.applied.shopPack.id} services and resources are ready in the same workspace.` : ''} Your source CSV was not uploaded or sent to AI.`
+          ? `${state.applied.receipt.activation.row_count} ${managedActivation?.createdLabel ?? 'records'} were imported into ${managedIdentity?.workspaceId}.${state.applied.shopPack ? ` The ${state.applied.shopPack.id} services and resources are ready in the same workspace.` : ''}${state.applied.plantPack ? ` The ${state.applied.plantPack.id} Plant setup pack is bound to the opening plan.` : ''} Your source CSV was not uploaded or sent to AI.`
           : managedIdentity
           ? `Your CSV stays in this tab. Only prepared rows are checked with ${managedIdentity.workspaceId}; nothing is written until you confirm the import.`
           : `Your CSV stays in this browser. Nothing is sent to AI or added to ${productName} while you review it.`}</p>
@@ -894,7 +915,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             <div><strong>{localAppliedIsCurrent && state.localApplied ? `${state.localApplied.created} ${localRecordLabel} added; ${state.localApplied.alreadyPresent} already current.` : appliedIsCurrent && state.applied ? `${state.applied.receipt.activation.row_count} ${managedActivation?.completedLabel ?? 'records'} ${managedActivation?.resultVerb ?? 'created'} in revision ${state.applied.receipt.result.version}.` : validationIsCurrent ? `Validated by ${managedIdentity?.workspaceId}.` : state.preview.readyForStaging && !importContextReady ? 'Add workspace and owner above.' : state.preview.readyForStaging ? localActivationAvailable ? `Ready to add to this ${productName} demo.` : 'Data check passed.' : 'Fix the highlighted rows first.'}</strong><small>{localAppliedIsCurrent
               ? `Open ${productName} to use the imported ${localUseLabel}.`
               : appliedIsCurrent && state.applied
-              ? `The ${managedActivation?.productLabel ?? 'product'} import is confirmed.${state.applied.shopPack ? ` ${state.applied.shopPack.id} pack revision ${state.applied.shopPack.version} is ready.` : ''}`
+              ? `The ${managedActivation?.productLabel ?? 'product'} import is confirmed.${state.applied.shopPack ? ` ${state.applied.shopPack.id} pack revision ${state.applied.shopPack.version} is ready.` : ''}${state.applied.plantPack ? ` ${state.applied.plantPack.id} Plant setup is ready.` : ''}`
               : validationIsCurrent
               ? 'Checked successfully. Review and confirm above before records are written.'
               : state.preview.readyForStaging && !importContextReady

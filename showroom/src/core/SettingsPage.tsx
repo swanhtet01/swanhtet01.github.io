@@ -76,6 +76,13 @@ import {
   shopIndustryPacks,
   type ShopIndustryPackId,
 } from './shop-service-scheduling'
+import {
+  plantIndustryPack,
+  plantIndustryPacks,
+  readPlantIndustryPackId,
+  savePlantIndustryPackId,
+  type PlantIndustryPackId,
+} from './plant-industry-packs'
 
 const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding').then((module) => ({ default: module.ClientDataOnboarding })))
 const ManagedActivationRunbook = lazy(() => import('./ManagedActivationRunbook').then((module) => ({ default: module.ManagedActivationRunbook })))
@@ -133,6 +140,7 @@ export function SettingsPage() {
   const [demoWorkspace, setDemoWorkspace] = useState<ClientDemoWorkspace | null>(loadClientDemoWorkspace)
   const [demoPresetId, setDemoPresetId] = useState<ClientDemoPresetId>(() => demoWorkspace?.blueprint.client.presetId ?? 'social-seller')
   const [shopIndustryPackId, setShopIndustryPackId] = useState<ShopIndustryPackId>(() => demoWorkspace?.blueprint.client.shopIndustryPackId ?? clientDemoPresets[0].shopIndustryPackId)
+  const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => demoWorkspace?.blueprint.client.plantIndustryPackId ?? readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
   const [demoSelections, setDemoSelections] = useState<Partial<Record<SetupProductId, string>>>(() => Object.fromEntries((demoWorkspace?.blueprint.products ?? clientDemoPresets[0].selections).map((selection) => [selection.product, selection.templateId])))
   const [demoBlueprint, setDemoBlueprint] = useState<ClientDemoBlueprint | null>(() => demoWorkspace?.blueprint ?? null)
   const completion = pilotProgress(setup)
@@ -141,6 +149,7 @@ export function SettingsPage() {
   const selectedDemoEntries = Object.entries(demoSelections).filter((entry): entry is [SetupProductId, string] => Boolean(entry[1]))
   const selectedDemoPreset = clientDemoPresets.find((preset) => preset.id === demoPresetId) ?? clientDemoPresets[0]
   const selectedShopIndustryPack = shopIndustryPack(shopIndustryPackId)
+  const selectedPlantIndustryPack = plantIndustryPack(plantIndustryPackId)
   const selectedDemoProductNames = selectedDemoEntries.map(([product]) => productDisplayName(product))
   const selectedDemoProductSummary = selectedDemoProductNames.length ? selectedDemoProductNames.join(' · ') : 'Choose at least one'
   const demoInputReady = Boolean(setup.workspace.trim() && setup.owner.trim() && selectedDemoEntries.length)
@@ -249,6 +258,7 @@ export function SettingsPage() {
     const preset = clientDemoPresets.find((candidate) => candidate.id === presetId) ?? clientDemoPresets[0]
     setDemoPresetId(preset.id)
     setShopIndustryPackId(preset.shopIndustryPackId)
+    setPlantIndustryPackId(preset.plantIndustryPackId)
     setDemoSelections(Object.fromEntries(preset.selections.map((selection) => [selection.product, selection.templateId])))
     setDemoBlueprint(null)
     setDemoWorkspace(null)
@@ -279,6 +289,13 @@ export function SettingsPage() {
     setNotice('Shop pack changed. Create the client demo again to bind this configuration.')
   }
 
+  function changePlantIndustryPack(industryPackId: PlantIndustryPackId) {
+    setPlantIndustryPackId(plantIndustryPack(industryPackId).id)
+    setDemoBlueprint(null)
+    setDemoWorkspace(null)
+    setNotice('Plant pack changed. Create the client demo again to bind this configuration.')
+  }
+
   function configureDemoProduct(product: SetupProductId, templateId: string, openProduct: boolean) {
     const template = templateFor(product, templateId)
     setSetup((current) => ({
@@ -305,6 +322,7 @@ export function SettingsPage() {
         owner: setup.owner,
         presetId: demoPresetId,
         shopIndustryPackId,
+        plantIndustryPackId,
         selections: selectedDemoEntries.map(([product, templateId]) => ({ product, templateId })),
       })
       let shopPackNotice = ''
@@ -316,11 +334,16 @@ export function SettingsPage() {
           shopPackNotice = ` ${error instanceof Error ? error.message : 'Existing Shop appointment data was preserved.'}`
         }
       }
+      let plantPackNotice = ''
+      if (blueprint.products.some((product) => product.product === 'production')) {
+        savePlantIndustryPackId(blueprint.client.plantIndustryPackId, window.localStorage)
+        plantPackNotice = ` ${plantIndustryPack(blueprint.client.plantIndustryPackId).name} Plant setup is prepared.`
+      }
       setDemoBlueprint(blueprint)
       setDemoWorkspace(createClientDemoWorkspace(blueprint, new Date().toISOString()))
       const first = blueprint.products[0]
       if (first) configureDemoProduct(first.product, first.templateId, false)
-      setNotice(`${blueprint.products.length}-product demo kit ready.${shopPackNotice} Prepare data or open a product.`)
+      setNotice(`${blueprint.products.length}-product demo kit ready.${shopPackNotice}${plantPackNotice} Prepare data or open a product.`)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The client demo kit could not be prepared.')
     }
@@ -356,6 +379,7 @@ export function SettingsPage() {
     if (setup.product === 'commerce') {
       try { provisionLocalShopIndustryPack(shopIndustryPackId) } catch { /* Existing local evidence stays authoritative. */ }
     }
+    if (setup.product === 'production') savePlantIndustryPackId(plantIndustryPackId, window.localStorage)
     const startedAt = new Date().toISOString()
     setSetup((current) => ({ ...current, startedAt }))
     navigate(setupProductPreviewPath(setup.product))
@@ -455,6 +479,7 @@ export function SettingsPage() {
           {requestedProduct ? <div className="setup-selected-product"><span><small>Selected product</small><strong>{selectedProduct.name}</strong></span><Link className="text-link" to="/settings/">Build full demo kit</Link></div> : null}
           <div className="form-row"><label>Client or workspace name<input maxLength={60} required value={setup.workspace} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" /></label><label>Responsible owner<input maxLength={80} required value={setup.owner} onChange={(event) => updateSetup({ owner: event.target.value })} placeholder="Name or role" /></label></div>
           {requestedProduct === 'commerce' || (!requestedProduct && Boolean(demoSelections.commerce)) ? <div className="form-row"><label>Shop business pack<select onChange={(event) => changeShopIndustryPack(event.target.value as ShopIndustryPackId)} value={shopIndustryPackId}>{shopIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select></label><div className="template-contract"><span>{selectedShopIndustryPack.description}</span><strong>{selectedShopIndustryPack.firstWorkflow}</strong><small>{selectedShopIndustryPack.capabilities.join(' · ')}</small></div></div> : null}
+          {requestedProduct === 'production' || (!requestedProduct && Boolean(demoSelections.production)) ? <div className="form-row"><label>Plant industry pack<select onChange={(event) => changePlantIndustryPack(event.target.value as PlantIndustryPackId)} value={plantIndustryPackId}>{plantIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select></label><div className="template-contract"><span>{selectedPlantIndustryPack.description}</span><strong>{selectedPlantIndustryPack.firstWorkflow}</strong><small>{selectedPlantIndustryPack.capabilities.join(' · ')}</small></div></div> : null}
           {requestedProduct ? <>
             <div className="form-row"><label>Workflow<select value={setup.templateId} onChange={(event) => changeTemplate(event.target.value)}>{templatesFor(setup.product).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label><label>Current starting point<select value={setup.entryPoint} onChange={(event) => updateSetup({ entryPoint: event.target.value })}>{selectedTemplate.entryPoints.map((entryPoint) => <option key={entryPoint}>{entryPoint}</option>)}</select></label></div>
             <div className="setup-template-summary"><div><span>Outcome</span><strong>{selectedTemplate.outcome}</strong></div><ol aria-label={`${selectedTemplate.name} workflow`}>{selectedTemplate.workflow.map((step) => <li key={step}>{step}</li>)}</ol><small>Measure success with {selectedTemplate.metric.toLowerCase()}.</small></div>
@@ -484,7 +509,7 @@ export function SettingsPage() {
               })}</div></details>
             </section> : null}
           </>}
-          {requestedProduct || demoBlueprint ? <section className="demo-data-setup" id="client-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Prepare {selectedProduct.name}</h3><p>Try the safe sample now or drop in the client's matching CSV for review.</p></div><Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding managedIdentity={managedIdentity} onProgress={recordDemoProductProgress} owner={setup.owner} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} shopIndustryPackId={setup.product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense></section> : null}
+          {requestedProduct || demoBlueprint ? <section className="demo-data-setup" id="client-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Prepare {selectedProduct.name}</h3><p>Try the safe sample now or drop in the client's matching CSV for review.</p></div><Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding managedIdentity={managedIdentity} onProgress={recordDemoProductProgress} owner={setup.owner} plantIndustryPackId={setup.product === 'production' ? plantIndustryPackId : undefined} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} shopIndustryPackId={setup.product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense></section> : null}
           {requestedProduct || demoBlueprint ? <div className="settings-step-actions"><span>{requestedProduct ? 'Sample first. Plan when needed.' : 'Optional: add measurable success criteria after the demo works.'}</span><div className="setup-action-group"><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Add success criteria</button>{requestedProduct ? <button className="core-button primary" disabled={!workflowReady} onClick={startGuidedTrial} type="button">Start guided sample</button> : null}</div></div> : null}
           </fieldset>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'success'} hidden={settingsStep !== 'success'}>

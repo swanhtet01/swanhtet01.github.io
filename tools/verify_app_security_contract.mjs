@@ -42,6 +42,9 @@ const migration = `${rolePreflight}\n${foundationMigration}\n${decisionMigration
 const productionMaterialHandoff = await read('supermega_runtime/production_material_handoff.py')
 const shopInventoryRuntime = await read('supermega_runtime/shop_inventory_runtime.py')
 const orderIntakeProvider = await read('supermega_runtime/order_intake_provider.py')
+const clientImportRuntime = await read('supermega_runtime/client_import_runtime.py')
+const clientOnboardingUi = await read('showroom/src/core/ClientDataOnboarding.tsx')
+const plantIndustryPacks = await read('showroom/src/core/plant-industry-packs.ts')
 const orderIntakeRoute = trialRuntime.slice(
   trialRuntime.indexOf('@router.post("/commerce/order-intake/drafts")'),
   trialRuntime.indexOf('@router.get("/commerce/service-schedule")'),
@@ -411,6 +414,16 @@ requireContract('Plant material and Shop stock are cross-surface digest-bound be
   && /require_shop_issue_matches_plant/.test(productionMaterialHandoff)
   && /require_shop_issue_before_plant_progress/.test(productionMaterialHandoff)
   && /productionCommandDigest/.test(commerceRuntime))
+requireContract('Plant client packs are package-bound, tenant-retained, fail-closed, and require reviewed costs',
+  /PLANT_INDUSTRY_PACK_IDS/.test(clientImportRuntime)
+  && /package\["plantIndustryPackId"\]/.test(clientImportRuntime)
+  && /\{"plantIndustryPackId": plant_industry_pack_id\}/.test(clientImportRuntime)
+  && /"industryPackId": industry_pack_id/.test(trialRuntime)
+  && /_PLANT_INDUSTRY_PACK_IDS/.test(productionRuntime)
+  && /openingPlan\.industryPackId !== stagingPackage\.plantIndustryPackId/.test(managedTrialClient)
+  && /plantIndustryPackIdRef\.current !== expectedPlantIndustryPackId/.test(clientOnboardingUi)
+  && /standardCostPerUnitMmk: ''/.test(plantIndustryPacks)
+  && /standardCostPerMinuteMmk: ''/.test(plantIndustryPacks))
 requireContract('managed Shop location inventory and order allocation are human-only, server-stamped, and digest-chained',
   /commerce\.inventory\.initialized/.test(managedTrialClient)
   && /commerce\.inventory\.transferred/.test(managedTrialClient)

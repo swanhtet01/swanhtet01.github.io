@@ -431,7 +431,13 @@ def _plant_jobs_import_payload(
 ) -> dict[str, Any]:
     rows = package.get("rows")
     owner = package.get("owner")
-    if not isinstance(rows, list) or not rows or not isinstance(owner, str):
+    industry_pack_id = package.get("plantIndustryPackId")
+    if (
+        not isinstance(rows, list)
+        or not rows
+        or not isinstance(owner, str)
+        or not isinstance(industry_pack_id, str)
+    ):
         raise _error(422, "client_import_activation_invalid")
     jobs: list[dict[str, Any]] = []
     machines: list[dict[str, str]] = []
@@ -488,6 +494,7 @@ def _plant_jobs_import_payload(
                 "contract": "supermega.production.opening-plan.v1",
                 "packageDigest": package_digest,
                 "confirmedAt": "server-assigned",
+                "industryPackId": industry_pack_id,
                 "jobIds": [job["id"] for job in jobs],
                 "machineIds": [machine["id"] for machine in machines],
             },

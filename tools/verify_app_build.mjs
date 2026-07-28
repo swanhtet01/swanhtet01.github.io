@@ -91,6 +91,7 @@ const settingsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core
 const channelOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ChannelOrderIntake.tsx'), 'utf8')
 const plantOrderSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts'), 'utf8')
 const plantOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantOrderFoundation.tsx'), 'utf8')
+const plantIndustryPacksSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-industry-packs.ts'), 'utf8')
 const productionMaterialHandoffSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'production-material-handoff.ts'), 'utf8')
 const shopProductionHandoffUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopProductionHandoff.tsx'), 'utf8')
 const productionMaterialHandoffPython = await readFile(resolve(root, 'supermega_runtime', 'production_material_handoff.py'), 'utf8')
@@ -1780,6 +1781,9 @@ if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_i
   || !clientOnboardingSource.includes('export const clientDemoPresets')
   || !clientOnboardingSource.includes('shopIndustryPackId: ShopIndustryPackId')
   || !clientOnboardingSource.includes('shopIndustryPack(input.shopIndustryPackId ?? preset.shopIndustryPackId)')
+  || !clientOnboardingSource.includes('plantIndustryPack(input.plantIndustryPackId ?? preset.plantIndustryPackId)')
+  || !clientOnboardingSource.includes('plantIndustryPackId: PlantIndustryPackId')
+  || !clientOnboardingSource.includes("...(plantPackId ? { plantIndustryPackId: plantPackId } : {})")
   || !clientOnboardingSource.includes('export function buildClientDemoBlueprint')
   || !clientOnboardingSource.includes("CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v1'")
   || !clientOnboardingSource.includes("CLIENT_DEMO_RUNBOOK_SCHEMA = 'supermega.client_demo_runbook.v1'")
@@ -1796,6 +1800,15 @@ if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_i
   || !clientOnboardingSource.includes("activationStatus: 'staged_not_applied'")
   || !clientOnboardingSource.includes('humanReviewRequired: true')
   || !clientOnboardingSource.includes('externalWritesPerformed: false')) fail('four_product_client_import_contract_missing')
+const manifestPlantPackIds = manifest.customerProducts.find((product) => product.id === 'plant')?.internalTemplatePacks?.map((pack) => pack.id) ?? []
+if (manifestPlantPackIds.join(',') !== 'general-manufacturing,batch-process,food-beverage,apparel,assembly'
+  || !manifestPlantPackIds.every((id) => plantIndustryPacksSource.includes(`id: '${id}'`))
+  || !plantIndustryPacksSource.includes("PLANT_INDUSTRY_PACK_STORAGE_KEY = 'supermega.plant.industry-pack.v1'")
+  || !plantIndustryPacksSource.includes('standardCostPerUnitMmk:')
+  || !plantIndustryPacksSource.includes("standardCostPerUnitMmk: ''")
+  || !plantOrderUiSource.includes('Review quantities and costs before recording.')
+  || !settingsPageSource.includes('Plant industry pack')
+  || !settingsPageSource.includes('plantIndustryPacks.map((pack)')) fail('plant_industry_pack_contract_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => clientOnboardingSource.toLowerCase().includes(marker.toLowerCase()))) fail('client_import_external_or_persistent_side_effect_added')
 if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !coreSource.includes("website: requireProductContract('website')")
@@ -3793,6 +3806,10 @@ async function verifyClientOnboardingRuntime() {
   }
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?client-onboarding-verify=${Date.now()}`)
+    const plantPacks = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-industry-packs.ts')).href}?plant-packs-verify=${Date.now()}`)
+    assert(plantPacks.plantIndustryPacks.map((pack) => pack.id).join(',') === manifestPlantPackIds.join(','), 'plant_industry_pack_manifest_drifted')
+    const apparelSetup = plantPacks.plantIndustryPackSetup('apparel', { id: 'JOB-STYLE-01', line: 'Sewing A' })
+    assert(apparelSetup.materialUnit === 'm' && apparelSetup.workCentreId === 'WC-SEW-SEWING-A' && apparelSetup.standardCostPerUnitMmk === '' && apparelSetup.standardCostPerMinuteMmk === '', 'plant_industry_pack_setup_not_review_safe')
     const objectIds = new Set()
     for (const productProfile of solutionProducts) {
       const product = productProfile.runtimeId
@@ -3810,8 +3827,9 @@ async function verifyClientOnboardingRuntime() {
         assert(/^sha256:[a-f0-9]{64}$/.test(preview.sourceDigest) && /^sha256:[a-f0-9]{64}$/.test(preview.previewDigest), `client_import_${workflowTemplate.id}_digest_missing`)
         const retried = await model.createClientImportPreview(template, product, preview.mapping, 'renamed.csv', workflowTemplate.id)
         assert(retried.sourceDigest === preview.sourceDigest && retried.previewDigest === preview.previewDigest, `client_import_${workflowTemplate.id}_preview_not_deterministic`)
-        const staged = model.buildClientImportStagingPackage(preview, { workflowTemplateId: workflowTemplate.id, workspace: `${product} client`, owner: 'Owner' })
-        assert(staged.contract === model.CLIENT_STAGING_SCHEMA && staged.controls.activationStatus === 'staged_not_applied', `client_import_${workflowTemplate.id}_staging_contract_wrong`)
+      const staged = model.buildClientImportStagingPackage(preview, { workflowTemplateId: workflowTemplate.id, workspace: `${product} client`, owner: 'Owner' })
+      assert(staged.contract === model.CLIENT_STAGING_SCHEMA && staged.controls.activationStatus === 'staged_not_applied', `client_import_${workflowTemplate.id}_staging_contract_wrong`)
+      if (product === 'production') assert(staged.plantIndustryPackId === 'general-manufacturing', `client_import_${workflowTemplate.id}_plant_pack_missing`)
         assert(staged.controls.rowCount === 2 && staged.controls.humanReviewRequired === true && staged.controls.externalWritesPerformed === false, `client_import_${workflowTemplate.id}_staging_controls_wrong`)
         previewDigests.add(preview.previewDigest)
       }
@@ -3822,7 +3840,7 @@ async function verifyClientOnboardingRuntime() {
     assert(model.clientDemoPresets.length === 5 && new Set(model.clientDemoPresets.map((preset) => preset.id)).size === 5, 'client_demo_presets_missing_or_duplicated')
     for (const preset of model.clientDemoPresets) {
       const blueprint = model.buildClientDemoBlueprint({ workspace: 'Golden Valley Trading', owner: 'Operations lead', presetId: preset.id, selections: preset.selections })
-      assert(blueprint.schema === model.CLIENT_DEMO_BLUEPRINT_SCHEMA && blueprint.client.presetId === preset.id && blueprint.client.shopIndustryPackId === preset.shopIndustryPackId, `client_demo_${preset.id}_identity_wrong`)
+      assert(blueprint.schema === model.CLIENT_DEMO_BLUEPRINT_SCHEMA && blueprint.client.presetId === preset.id && blueprint.client.shopIndustryPackId === preset.shopIndustryPackId && blueprint.client.plantIndustryPackId === preset.plantIndustryPackId, `client_demo_${preset.id}_identity_wrong`)
       assert(blueprint.products.length === preset.selections.length && blueprint.products.every((product) => product.sampleCsv && product.checklist.length === 5), `client_demo_${preset.id}_data_plan_incomplete`)
       assert(blueprint.controls.localDemoOnly === true && blueprint.controls.humanReviewRequired === true && blueprint.controls.externalWritesPerformed === false, `client_demo_${preset.id}_controls_weakened`)
     }
@@ -3830,6 +3848,9 @@ async function verifyClientOnboardingRuntime() {
     const manufacturingBlueprint = model.buildClientDemoBlueprint({ workspace: 'Integrated Factory', owner: 'General manager', presetId: 'manufacturing', selections: manufacturingPreset.selections })
     assert(manufacturingBlueprint.products.map((product) => product.product).join(',') === 'commerce,production,website,ecommerce', 'client_demo_manufacturing_product_order_drifted')
     assert(manufacturingBlueprint.integrations.length === 3 && manufacturingBlueprint.integrations.some((integration) => integration.from === 'ecommerce' && integration.to === 'commerce'), 'client_demo_integrations_missing')
+    const customPlantPreview = await model.createClientImportPreview(model.clientImportTemplate('production', 'production-control'), 'production', undefined, 'custom-plant.csv', 'production-control')
+    const customPlantPackage = model.buildClientImportStagingPackage(customPlantPreview, { workflowTemplateId: 'production-control', workspace: 'Integrated Factory', owner: 'General manager', plantIndustryPackId: 'batch-process' })
+    assert(customPlantPackage.plantIndustryPackId === 'batch-process', 'client_demo_custom_plant_pack_not_bound')
     const schoolBlueprint = model.buildClientDemoBlueprint({ workspace: 'Learning Centre', owner: 'School administrator', presetId: 'service-business', shopIndustryPackId: 'school', selections: model.clientDemoPresets.find((preset) => preset.id === 'service-business').selections })
     assert(schoolBlueprint.client.shopIndustryPackId === 'school', 'client_demo_custom_shop_pack_not_bound')
     const workspaceCreatedAt = '2026-07-28T08:00:00.000Z'
@@ -3880,6 +3901,7 @@ async function verifyClientOnboardingRuntime() {
     rejectsSync(() => model.buildClientDemoBlueprint({ workspace: 'Client', owner: 'Owner', presetId: 'social-seller', selections: [{ product: 'commerce', templateId: 'social-commerce' }, { product: 'commerce', templateId: 'retail-wholesale' }] }), 'client_demo_duplicate_product_accepted')
     rejectsSync(() => model.buildClientDemoBlueprint({ workspace: 'Client', owner: 'Owner', presetId: 'social-seller', selections: [{ product: 'commerce', templateId: 'unknown' }] }), 'client_demo_unknown_template_accepted')
     rejectsSync(() => model.buildClientDemoBlueprint({ workspace: 'Client', owner: 'Owner', presetId: 'social-seller', shopIndustryPackId: 'unknown', selections: model.clientDemoPresets[0].selections }), 'client_demo_unknown_shop_pack_accepted')
+    rejectsSync(() => model.buildClientDemoBlueprint({ workspace: 'Client', owner: 'Owner', presetId: 'manufacturing', plantIndustryPackId: 'unknown', selections: manufacturingPreset.selections }), 'client_demo_unknown_plant_pack_accepted')
 
     const socialTemplate = model.clientImportTemplate('commerce', 'social-commerce')
     const socialPreview = await model.createClientImportPreview(socialTemplate, 'commerce', undefined, 'social.csv', 'social-commerce')
@@ -4145,6 +4167,7 @@ async function verifyManagedClientImportRuntime() {
         contract: 'supermega.production.opening-plan.v1',
         packageDigest: plantPackageDigest,
         confirmedAt: plantTimestamp,
+        industryPackId: plantStaged.plantIndustryPackId,
         jobIds: plantStaged.rows.map((row) => row.values.jobCode),
         machineIds: plantLines.map((_, index) => `machine-import-${index + 1}`),
       },
@@ -4188,6 +4211,7 @@ async function verifyManagedClientImportRuntime() {
       ['machine', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, machines: [{ ...plantState.machines[0], state: 'stopped' }, ...plantState.machines.slice(1)] } } }],
       ['digest', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, openingPlan: { ...plantState.openingPlan, packageDigest: `sha256:${'0'.repeat(64)}` } } } }],
       ['timestamp', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, openingPlan: { ...plantState.openingPlan, confirmedAt: 'server-assigned' } } } }],
+      ['pack', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, openingPlan: { ...plantState.openingPlan, industryPackId: 'unsupported-pack' } } } }],
       ['job_ids', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, openingPlan: { ...plantState.openingPlan, jobIds: [...plantState.openingPlan.jobIds].reverse() } } } }],
     ]) {
       await rejectsAsync(
@@ -8407,6 +8431,7 @@ async function verifyProductionRuntime() {
         contract: 'supermega.production.opening-plan.v1',
         packageDigest: `sha256:${'a'.repeat(64)}`,
         confirmedAt: '2026-07-23T09:00:00.000Z',
+        industryPackId: 'general-manufacturing',
         jobIds: ['JOB-OPEN-1', 'JOB-OPEN-2'],
         machineIds: ['machine-import-1', 'machine-import-2'],
       },
@@ -8416,6 +8441,7 @@ async function verifyProductionRuntime() {
     assertThrows(() => model.validateProductionState({ ...openingPlanState, openingPlan: { ...openingPlanState.openingPlan, jobIds: [...openingPlanState.openingPlan.jobIds].reverse() } }), 'production_opening_plan_job_tamper_accepted')
     assertThrows(() => model.validateProductionState({ ...openingPlanState, openingPlan: { ...openingPlanState.openingPlan, machineIds: [...openingPlanState.openingPlan.machineIds].reverse() } }), 'production_opening_plan_machine_tamper_accepted')
     assertThrows(() => model.validateProductionState({ ...openingPlanState, openingPlan: { ...openingPlanState.openingPlan, confirmedAt: '2026-07-23T09:00:00Z' } }), 'production_opening_plan_noncanonical_time_accepted')
+    assertThrows(() => model.validateProductionState({ ...openingPlanState, openingPlan: { ...openingPlanState.openingPlan, industryPackId: 'unsupported-pack' } }), 'production_opening_plan_bad_industry_pack_accepted')
     const openingPlanWithJob = model.registerProductionJob(openingPlanState, newJob, jobProof)
     assert(openingPlanWithJob?.jobs[0].id === newJob.id
       && openingPlanWithJob.openingPlan === openingPlanState.openingPlan

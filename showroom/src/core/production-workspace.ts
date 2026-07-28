@@ -1,4 +1,5 @@
 import type { PlantOrderState } from './plant-order-foundation'
+import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs.ts'
 
 export const PRODUCTION_WORKSPACE_SCHEMA = 'supermega.production.workspace.v2' as const
 export const PRODUCTION_KEY = 'supermega.production.workspace.v2'
@@ -75,6 +76,7 @@ export type ProductionOpeningPlan = {
   contract: 'supermega.production.opening-plan.v1'
   packageDigest: string
   confirmedAt: string
+  industryPackId?: PlantIndustryPackId
   jobIds: string[]
   machineIds: string[]
 }
@@ -313,7 +315,7 @@ const downtimeEndEventFields = [...baseEventFields, 'downtimeStartActionId']
 const maintenanceStartEventFields = [...baseEventFields, 'maintenanceOwner']
 const maintenanceCompleteEventFields = [...baseEventFields, 'maintenanceStartActionId']
 const productionStateFields = ['schema', 'revision', 'jobs', 'issues', 'machines', 'events', 'openingPlan', 'orderExecution']
-const productionOpeningPlanFields = ['contract', 'packageDigest', 'confirmedAt', 'jobIds', 'machineIds']
+const productionOpeningPlanFields = ['contract', 'packageDigest', 'confirmedAt', 'industryPackId', 'jobIds', 'machineIds']
 const productionJobFields = ['id', 'line', 'product', 'target', 'output', 'owner', 'priority', 'dueAt', 'scrap', 'qualityHold', 'closure']
 const productionIssueFields = ['id', 'createdAt', 'area', 'kind', 'summary', 'status', 'severity', 'owner', 'dueAt', 'containment', 'resolution']
 const productionIssueResolutionFields = ['actionId', 'resolvedAt', 'resolvedBy', 'reason', 'evidenceReference']
@@ -656,6 +658,7 @@ export function validateProductionState(value: unknown): ProductionState {
     if (openingPlan.contract !== 'supermega.production.opening-plan.v1') throw new Error('Production opening plan contract is invalid.')
     if (typeof openingPlan.packageDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(openingPlan.packageDigest)) throw new Error('Production opening plan package digest is invalid.')
     if (!validDowntimeTimestamp(openingPlan.confirmedAt)) throw new Error('Production opening plan confirmation time is invalid.')
+    if (openingPlan.industryPackId !== undefined) plantIndustryPack(String(openingPlan.industryPackId))
     if (!Array.isArray(openingPlan.jobIds)
       || !openingPlan.jobIds.length
       || openingPlan.jobIds.length > 100

@@ -507,7 +507,7 @@ export function assertManagedPlantImportState(
   const stateKeys = ['events', 'issues', 'jobs', 'machines', 'openingPlan', 'revision', 'schema'] as const
   const jobKeys = ['dueAt', 'id', 'line', 'output', 'owner', 'priority', 'product', 'target'] as const
   const machineKeys = ['id', 'name', 'state'] as const
-  const openingPlanKeys = ['confirmedAt', 'contract', 'jobIds', 'machineIds', 'packageDigest'] as const
+  const openingPlanKeys = ['confirmedAt', 'contract', 'industryPackId', 'jobIds', 'machineIds', 'packageDigest'] as const
   if (stagingPackage.product !== 'production'
     || !/^sha256:[0-9a-f]{64}$/.test(expectedPackageDigest)
     || !isRecord(state)
@@ -525,6 +525,7 @@ export function assertManagedPlantImportState(
     || !hasExactKeys(state.openingPlan, openingPlanKeys)
     || state.openingPlan.contract !== 'supermega.production.opening-plan.v1'
     || state.openingPlan.packageDigest !== expectedPackageDigest
+    || state.openingPlan.industryPackId !== stagingPackage.plantIndustryPackId
     || !isCanonicalManagedImportTimestamp(state.openingPlan.confirmedAt)
     || !Array.isArray(state.openingPlan.jobIds)
     || !Array.isArray(state.openingPlan.machineIds)) {

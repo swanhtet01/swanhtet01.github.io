@@ -1,4 +1,5 @@
 import { shopIndustryPack, type ShopIndustryPackId } from './shop-service-scheduling.ts'
+import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs.ts'
 
 export const CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1' as const
 export const CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1' as const
@@ -25,6 +26,7 @@ export type ClientDemoPreset = {
   name: string
   description: string
   shopIndustryPackId: ShopIndustryPackId
+  plantIndustryPackId: PlantIndustryPackId
   selections: readonly ClientDemoSelection[]
 }
 
@@ -35,6 +37,7 @@ export type ClientDemoBlueprint = {
     owner: string
     presetId: ClientDemoPresetId
     shopIndustryPackId: ShopIndustryPackId
+    plantIndustryPackId: PlantIndustryPackId
   }
   products: Array<{
     product: ClientSolutionId
@@ -317,6 +320,7 @@ export const clientDemoPresets: readonly ClientDemoPreset[] = [
     name: 'Social seller',
     description: 'Chat orders, a clear website, and a Shop-backed storefront.',
     shopIndustryPackId: 'retail',
+    plantIndustryPackId: 'general-manufacturing',
     selections: [
       { product: 'commerce', templateId: 'social-commerce' },
       { product: 'website', templateId: 'lead-generation' },
@@ -328,6 +332,7 @@ export const clientDemoPresets: readonly ClientDemoPreset[] = [
     name: 'Retail / wholesale',
     description: 'Stock, purchasing, catalog presentation, pickup, and wholesale requests.',
     shopIndustryPackId: 'retail',
+    plantIndustryPackId: 'assembly',
     selections: [
       { product: 'commerce', templateId: 'retail-wholesale' },
       { product: 'website', templateId: 'catalog-showcase' },
@@ -339,6 +344,7 @@ export const clientDemoPresets: readonly ClientDemoPreset[] = [
     name: 'Cafe / restaurant',
     description: 'Counter and channel orders with a menu site and preorder collection.',
     shopIndustryPackId: 'cafe',
+    plantIndustryPackId: 'food-beverage',
     selections: [
       { product: 'commerce', templateId: 'restaurant-ordering' },
       { product: 'website', templateId: 'business-presence' },
@@ -350,6 +356,7 @@ export const clientDemoPresets: readonly ClientDemoPreset[] = [
     name: 'Manufacturing',
     description: 'Demand, stock, production, catalog, and wholesale request handoffs.',
     shopIndustryPackId: 'retail',
+    plantIndustryPackId: 'general-manufacturing',
     selections: [
       { product: 'commerce', templateId: 'retail-wholesale' },
       { product: 'production', templateId: 'production-control' },
@@ -362,6 +369,7 @@ export const clientDemoPresets: readonly ClientDemoPreset[] = [
     name: 'Service business',
     description: 'Service sales, lead generation, and accountable follow-up.',
     shopIndustryPackId: 'spa',
+    plantIndustryPackId: 'general-manufacturing',
     selections: [
       { product: 'commerce', templateId: 'social-commerce' },
       { product: 'website', templateId: 'lead-generation' },
@@ -721,12 +729,14 @@ export function buildClientDemoBlueprint(input: {
   owner: string
   presetId: ClientDemoPresetId
   shopIndustryPackId?: ShopIndustryPackId
+  plantIndustryPackId?: PlantIndustryPackId
   selections: readonly ClientDemoSelection[]
 }): ClientDemoBlueprint {
   const workspace = boundedContext(input.workspace, 'Client name', 60)
   const owner = boundedContext(input.owner, 'Responsible owner', 80)
   const preset = clientDemoPreset(input.presetId)
   const industryPack = shopIndustryPack(input.shopIndustryPackId ?? preset.shopIndustryPackId)
+  const plantPack = plantIndustryPack(input.plantIndustryPackId ?? preset.plantIndustryPackId)
   if (input.selections.length < 1 || input.selections.length > clientDemoProductOrder.length) {
     throw new Error('Choose between one and four products for this client demo.')
   }
@@ -761,7 +771,7 @@ export function buildClientDemoBlueprint(input: {
   if (selected.has('production') && selected.has('commerce')) integrations.push({ from: 'commerce', to: 'production', outcome: 'Demand and material evidence connect Shop stock with Plant execution.' })
   return {
     schema: CLIENT_DEMO_BLUEPRINT_SCHEMA,
-    client: { workspace, owner, presetId: preset.id, shopIndustryPackId: industryPack.id },
+    client: { workspace, owner, presetId: preset.id, shopIndustryPackId: industryPack.id, plantIndustryPackId: plantPack.id },
     products,
     integrations,
     controls: {
@@ -782,9 +792,14 @@ function canonicalClientDemoBlueprint(value: unknown) {
       owner: source.client.owner ?? '',
       presetId: source.client.presetId as ClientDemoPresetId,
       shopIndustryPackId: source.client.shopIndustryPackId,
+      plantIndustryPackId: source.client.plantIndustryPackId,
       selections: source.products.map((product) => ({ product: product.product, templateId: product.templateId })),
     })
     if (JSON.stringify(rebuilt) === JSON.stringify(value)) return rebuilt
+    const legacyShopOnly = { ...rebuilt, client: { workspace: rebuilt.client.workspace, owner: rebuilt.client.owner, presetId: rebuilt.client.presetId, shopIndustryPackId: rebuilt.client.shopIndustryPackId } }
+    if (JSON.stringify(legacyShopOnly) === JSON.stringify(value)) return rebuilt
+    const legacyPlantOnly = { ...rebuilt, client: { workspace: rebuilt.client.workspace, owner: rebuilt.client.owner, presetId: rebuilt.client.presetId, plantIndustryPackId: rebuilt.client.plantIndustryPackId } }
+    if (JSON.stringify(legacyPlantOnly) === JSON.stringify(value)) return rebuilt
     const legacy = { ...rebuilt, client: { workspace: rebuilt.client.workspace, owner: rebuilt.client.owner, presetId: rebuilt.client.presetId } }
     return JSON.stringify(legacy) === JSON.stringify(value) ? rebuilt : null
   } catch {
@@ -964,6 +979,7 @@ export function buildClientImportStagingPackage(preview: ClientImportPreview, co
   workflowTemplateId: string
   workspace: string
   owner: string
+  plantIndustryPackId?: PlantIndustryPackId
 }) {
   if (preview.schema !== CLIENT_IMPORT_SCHEMA || !preview.readyForStaging || preview.rows.some((row) => row.status !== 'ready')) {
     throw new Error('Resolve every mapping and row issue before creating a staging package.')
@@ -974,11 +990,15 @@ export function buildClientImportStagingPackage(preview: ClientImportPreview, co
   }
   const workspace = boundedContext(context.workspace, 'Workspace name', preview.product === 'website' ? 60 : 120)
   const owner = boundedContext(context.owner, 'Responsible owner')
+  const plantPackId = preview.product === 'production'
+    ? plantIndustryPack(context.plantIndustryPackId ?? 'general-manufacturing').id
+    : undefined
   return {
     contract: CLIENT_STAGING_SCHEMA,
     product: preview.product,
     object: preview.object,
     workflowTemplateId,
+    ...(plantPackId ? { plantIndustryPackId: plantPackId } : {}),
     workspace,
     owner,
     source: {
