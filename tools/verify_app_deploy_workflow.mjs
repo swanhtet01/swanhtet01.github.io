@@ -138,7 +138,7 @@ requireContract('canonical API function', config.routes?.[0]?.dest === '/api/app
 requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))
 requireContract('deployment control files trigger coordinated release', workflow.includes('- vercel.json') && workflow.includes('- .vercelignore'))
-requireContract('remote app build includes kernel release contract', !generator.includes("'kernel'"))
+requireContract('remote app build includes kernel release contract', generator.includes("['.github', 'kernel', 'supabase']"))
 requireContract('retired alias control triggers coordinated release', workflow.includes('tools/verify_retired_vercel_alias_state.mjs'))
 requireContract('app and public changes trigger one release authority', workflow.includes("- 'showroom/**'") && workflow.includes('tools/create_public_vercel_output.mjs') && workflow.includes('tools/verify_coordinated_release_live.mjs'))
 requireContract('HQ-only evidence validates without redeploying unchanged products',

@@ -118,7 +118,7 @@ const generatedIgnore = [
 const existingIgnore = existsSync('.vercelignore')
   ? readFileSync('.vercelignore', 'utf8').split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
   : []
-const requiredBuildInputs = new Set(['.github', 'supabase'])
+const requiredBuildInputs = new Set(['.github', 'kernel', 'supabase'])
 const nextIgnore = [...new Set([...existingIgnore, ...generatedIgnore])]
   .filter((line) => !requiredBuildInputs.has(line))
 writeFileSync('.vercelignore', `${nextIgnore.join('\n')}\n`)
