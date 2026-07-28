@@ -529,6 +529,9 @@ requireContract('accepted core checkpoints lead directly to real work',
   && workboard.includes('| ENG-098 | Shop + Finance Integrity Codex | done-local |')
   && workboard.includes('adds `supermega.commerce.accounting-handoff.v1`')
   && workboard.includes('54 Shop inventory/230 Commerce/265 Production checks')
+  && workboard.includes('| ENG-099 | Shop + Finance Integrity Codex | done-local |')
+  && workboard.includes('append-only tax-configuration revisions')
+  && workboard.includes('All 331 Python tests, production build, 54 Shop inventory/242 Commerce/265 Production checks')
   && workboard.includes('Checkpoints `0831ad7` and `920c13d` add an immutable reviewed BOM/routing package')
   && workboard.includes('Checkpoints `0f3dc09` and `03e1f1b` add tenant-bound')
   && workboard.includes('Retain the completed Shop, Plant, Website, and Ecommerce checkpoints')
@@ -543,6 +546,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && now.includes('Orders and Website conversions reserve deterministic location/lots')
   && now.includes('sellable returns restore the exact fulfilled location/lot')
   && now.includes('balanced accounting-review CSV grouped by payment method')
+  && now.includes('human-approved versioned tax code, rate, and inclusive/exclusive treatment')
   && now.includes('Managed workspaces retain exact requests in the Shop inbox')
   && now.includes('`npm run dev` starts canonical FastAPI plus Vite on loopback')
   && now.includes('Records stay browser-local; hosted activation is not proven')
@@ -590,10 +594,13 @@ requireContract('Shop uses the stable commerce runtime',
   && product('shop')?.runtimeSurface === 'commerce'
   && product('shop')?.compatibilityPath === '/operations/commerce/'
   && product('shop')?.surfaces?.join(',') === 'Sell,Orders,Stock'
+  && product('shop')?.job?.includes('versioned per-order tax calculation')
   && product('shop')?.job?.includes('balanced review-only accounting handoff')
   && product('shop')?.templateContract?.productId === 'commerce')
 requireContract('Shop finance roadmap separates reviewed handoff from tax and posting authority',
   enterpriseRoadmap.includes('Checkpoint `369cb2b` adds `supermega.commerce.accounting-handoff.v1`')
+  && enterpriseRoadmap.includes('Checkpoint `39b7fc2` adds `supermega.commerce.order-calculation.v2`')
+  && enterpriseRoadmap.includes('append-only human-reviewed tax-code revisions')
   && enterpriseRoadmap.includes('posting authority is `none`')
   && enterpriseRoadmap.includes('must not invent a Myanmar rate, hidden default, or G/L account')
   && enterpriseRoadmap.includes('https://help.sap.com/docs/SAP_BUSINESS_BYDESIGN/')
