@@ -1,4 +1,12 @@
-import { type FormEvent, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+
+import {
+  ManagedTrialError,
+  currentManagedIdentity,
+  loadManagedServiceSchedule,
+  saveManagedServiceSchedule,
+  type ManagedIdentity,
+} from './managed-trial'
 
 import {
   SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
@@ -47,7 +55,7 @@ function initialSchedule() {
   }
 }
 
-export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled = false }: { actor?: string; disabled?: boolean }) {
+export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: externallyDisabled = false }: { actor?: string; disabled?: boolean }) {
   const [initial] = useState(initialSchedule)
   const [schedule, setSchedule] = useState<ShopServiceSchedule | null>(initial.schedule)
   const [notice, setNotice] = useState(initial.error)
@@ -55,16 +63,90 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled = 
   const [bookingDraft, setBookingDraft] = useState({ customerName: '', contact: '', serviceId: initial.schedule?.services[0]?.id ?? '', resourceId: initial.schedule?.resources[0]?.id ?? '', startsAt: nextLocalStart(), note: '' })
   const [serviceDraft, setServiceDraft] = useState({ name: '', durationMinutes: '60', priceMmk: '' })
   const [resourceDraft, setResourceDraft] = useState({ name: '', kind: 'staff' as 'staff' | 'room' | 'equipment' })
+  const [managedLoading, setManagedLoading] = useState(true)
+  const [managedSaving, setManagedSaving] = useState(false)
+  const managedIdentityRef = useRef<ManagedIdentity | null>(null)
+  const managedVersionRef = useRef<number | null>(null)
+  const managedSaveBusyRef = useRef(false)
   const projection = useMemo(() => schedule ? projectShopServiceSchedule(schedule) : null, [schedule])
+  const disabled = externallyDisabled || managedLoading || managedSaving
+
+  useEffect(() => {
+    let active = true
+    void currentManagedIdentity().then(async (identity) => {
+      if (!active || !identity) return
+      managedIdentityRef.current = identity
+      const managed = await loadManagedServiceSchedule(identity)
+      if (!active) return
+      managedVersionRef.current = managed.version
+      if (managed.schedule) {
+        setSchedule(managed.schedule)
+        window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(managed.schedule))
+        setNotice('Appointments loaded from this managed workspace.')
+      } else {
+        setNotice('Managed appointments are ready. Your next change will create the shared schedule.')
+      }
+    }).catch((error) => {
+      if (active) setNotice(error instanceof Error ? `${error.message} Appointments remain available on this device.` : 'Managed appointments are unavailable; this device remains available.')
+    }).finally(() => {
+      if (active) setManagedLoading(false)
+    })
+    return () => { active = false }
+  }, [])
+
+  function persistLocal(next: ShopServiceSchedule) {
+    window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(next))
+  }
 
   function commit(next: ShopServiceSchedule, message: string) {
     setSchedule(next)
     try {
-      window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(next))
+      persistLocal(next)
       setNotice(message)
     } catch {
       setNotice('The appointment changed in memory but could not be saved on this device. Do not close this page until local storage is available.')
     }
+    const identity = managedIdentityRef.current
+    const expectedVersion = managedVersionRef.current
+    if (!identity || expectedVersion === null) return
+    if (managedSaveBusyRef.current) {
+      setNotice('Wait for the current managed appointment change to finish.')
+      return
+    }
+    managedSaveBusyRef.current = true
+    setManagedSaving(true)
+    void saveManagedServiceSchedule({
+      commandId: crypto.randomUUID(),
+      expectedVersion,
+      identity,
+      schedule: next,
+    }).then((saved) => {
+      managedVersionRef.current = saved.version
+      if (saved.schedule) {
+        setSchedule(saved.schedule)
+        try { persistLocal(saved.schedule) } catch { /* The managed copy remains authoritative. */ }
+      }
+      setNotice(`${message} Shared workspace saved.`)
+    }).catch(async (error) => {
+      if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
+        try {
+          const current = await loadManagedServiceSchedule(identity)
+          managedVersionRef.current = current.version
+          if (current.schedule) {
+            setSchedule(current.schedule)
+            try { persistLocal(current.schedule) } catch { /* The managed copy remains authoritative. */ }
+          }
+          setNotice('Another user changed appointments first. The current shared schedule was reloaded; review and try again.')
+          return
+        } catch {
+          // Fall through to the recoverable local warning.
+        }
+      }
+      setNotice(`${error instanceof Error ? error.message : 'Managed save failed.'} This device retained the change; reconnect and try again before another operator edits the schedule.`)
+    }).finally(() => {
+      managedSaveBusyRef.current = false
+      setManagedSaving(false)
+    })
   }
 
   function proof(reason: string) {
@@ -133,7 +215,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled = 
     }
   }
 
-  if (!schedule || !projection) return <section className="core-panel shop-service-schedule"><div className="panel-head"><div><span className="core-eyebrow">Appointments</span><h2>Local schedule needs recovery</h2></div></div><p className="form-notice" role="alert">{notice}</p></section>
+  if (!schedule || !projection) return <section className="core-panel shop-service-schedule"><div className="panel-head"><div><span className="core-eyebrow">Appointments</span><h2>Schedule needs recovery</h2></div></div><p className="form-notice" role="alert">{notice}</p></section>
 
   const serviceById = new Map(schedule.services.map((service) => [service.id, service]))
   const resourceById = new Map(schedule.resources.map((resource) => [resource.id, resource]))
@@ -176,7 +258,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled = 
           <form onSubmit={createResource}><strong>Add staff or resource</strong><label>Name<input disabled={disabled} maxLength={160} onChange={(event) => setResourceDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Staff name or Room 2" required value={resourceDraft.name} /></label><label>Type<select disabled={disabled} onChange={(event) => setResourceDraft((current) => ({ ...current, kind: event.target.value as typeof resourceDraft.kind }))} value={resourceDraft.kind}><option value="staff">Staff</option><option value="room">Room</option><option value="equipment">Equipment</option></select></label><button className="core-button" disabled={disabled} type="submit">Add resource</button></form>
         </div>
       </details>
-      <p className="form-notice" aria-live="polite">{notice || 'Appointments persist on this device. Customer messages, calendar sync, and payment remain separate human-approved actions.'}</p>
+      <p className="form-notice" aria-live="polite">{notice || (managedIdentityRef.current ? 'Appointments persist in this managed workspace. Customer messages, calendar sync, and payment remain separate human-approved actions.' : 'Appointments persist on this device. Sign in to share them across the managed workspace.')}</p>
     </div>
   </details>
 }

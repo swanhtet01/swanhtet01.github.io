@@ -6,6 +6,10 @@ import {
   validateCommerceState,
   type CommerceState,
 } from './commerce-workspace.ts'
+import {
+  readShopServiceSchedule,
+  type ShopServiceSchedule,
+} from './shop-service-scheduling.ts'
 
 
 const WORKSPACE_STORAGE_KEY = 'supermega.managed.workspace.v1'
@@ -58,6 +62,7 @@ export type ManagedCommerceEvent =
   | 'commerce.storefront.configuration.saved'
   | 'commerce.tax_configuration.saved'
   | 'commerce.account_mapping.saved'
+  | 'commerce.service_schedule.saved'
   | 'commerce.storefront.merchandising.imported'
   | 'commerce.storefront_request.received'
   | 'commerce.order.created'
@@ -137,6 +142,11 @@ export type ManagedCommandEvidence = {
   actor: string
   reason: string
   evidenceReference: string
+}
+
+export type ManagedServiceScheduleRecord = {
+  version: number
+  schedule: ShopServiceSchedule | null
 }
 
 export type ManagedBootstrap = {
@@ -1154,6 +1164,78 @@ export async function loadManagedBootstrap(expectedIdentity?: ManagedIdentity) {
     expectedIdentity,
   )
   return expectedIdentity ? assertManagedBootstrapIdentity(bootstrap, expectedIdentity) : bootstrap
+}
+
+function managedServiceSchedule(value: unknown) {
+  try {
+    return value === null || value === undefined
+      ? null
+      : readShopServiceSchedule(JSON.stringify(value))
+  } catch {
+    throw new ManagedTrialError('The managed appointment schedule is invalid.', {
+      code: 'managed_service_schedule_invalid',
+    })
+  }
+}
+
+export async function loadManagedServiceSchedule(
+  identity: ManagedIdentity,
+): Promise<ManagedServiceScheduleRecord> {
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/commerce/service-schedule',
+    {},
+    true,
+    identity,
+  )
+  if (!isRecord(response)
+    || response.workspace_id !== identity.workspaceId
+    || typeof response.version !== 'number'
+    || !Number.isSafeInteger(response.version)
+    || response.version < 1) {
+    throw new ManagedTrialError('The managed appointment response is invalid.', {
+      code: 'managed_service_schedule_response_invalid',
+    })
+  }
+  return {
+    version: response.version,
+    schedule: managedServiceSchedule(response.schedule),
+  }
+}
+
+export async function saveManagedServiceSchedule(request: {
+  commandId: string
+  expectedVersion: number
+  identity: ManagedIdentity
+  schedule: ShopServiceSchedule
+}): Promise<ManagedServiceScheduleRecord> {
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/commerce/service-schedule',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        command_id: request.commandId,
+        expected_version: request.expectedVersion,
+        schedule: request.schedule,
+      }),
+    },
+    true,
+    request.identity,
+  )
+  const result = isRecord(response) && isRecord(response.result) ? response.result : null
+  const state = result && isRecord(result.state) ? result.state : null
+  const nextSchedule = state ? managedServiceSchedule(state.serviceSchedule) : null
+  if (!result
+    || result.surface !== 'commerce'
+    || result.event_type !== 'commerce.service_schedule.saved'
+    || typeof result.version !== 'number'
+    || !Number.isSafeInteger(result.version)
+    || result.version !== request.expectedVersion + 1
+    || !nextSchedule) {
+    throw new ManagedTrialError('The managed appointment save response is invalid.', {
+      code: 'managed_service_schedule_save_invalid',
+    })
+  }
+  return { version: result.version, schedule: nextSchedule }
 }
 
 export async function prepareManagedOrderIntakeDraft(request: {

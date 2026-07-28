@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
 from datetime import date
 from hashlib import sha256
 import json
@@ -10,7 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from supermega_runtime.commerce_runtime import COMMERCE_HUMAN_EVENTS
+from supermega_runtime.commerce_runtime import COMMERCE_HUMAN_EVENTS, validate_commerce_state
 from supermega_runtime.client_import_runtime import (
     CLIENT_IMPORT_MAX_PACKAGE_BYTES,
     ClientImportValidationError,
@@ -128,6 +129,12 @@ class TrialOrderIntakeDraftRequest(_StrictRequest):
         if not value.strip():
             raise ValueError("order message must contain visible characters")
         return value
+
+
+class TrialServiceScheduleSaveRequest(_StrictRequest):
+    command_id: UUID
+    expected_version: int = Field(ge=1)
+    schedule: dict[str, Any]
 
 
 class TrialDecisionSubject(_StrictRequest):
@@ -741,6 +748,79 @@ def create_trial_router(
                 f"sha256:{sha256(body.source_label.encode('utf-8')).hexdigest()}"
             ),
         }
+
+    @router.get("/commerce/service-schedule")
+    def trial_service_schedule(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_read_ready(readiness)
+        if not has_surface_read_capability(readiness.capabilities, "commerce"):
+            raise _error(
+                403,
+                "trial_capability_required",
+                required_capability="commerce.read",
+            )
+        commerce = _invoke(lambda: store.get_state(principal, "commerce"))
+        if not commerce.state:
+            raise _error(409, "commerce_workspace_required")
+        state = _invoke(lambda: validate_commerce_state(commerce.state))
+        return {
+            "workspace_id": principal.workspace_id,
+            "version": commerce.version,
+            "schedule": deepcopy(state.get("serviceSchedule")),
+        }
+
+    @router.post("/commerce/service-schedule")
+    async def trial_service_schedule_save(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_write_ready(readiness, "commerce.write")
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        raw_body = await _bounded_json_body(request, maximum_bytes=64 * 1024)
+        try:
+            body = TrialServiceScheduleSaveRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "service_schedule_request_invalid") from exc
+        _reject_client_identity(body.schedule, path="schedule")
+        commerce = _invoke(lambda: store.get_state(principal, "commerce"))
+        if not commerce.state:
+            raise _error(409, "commerce_workspace_required")
+        current_state = _invoke(lambda: validate_commerce_state(commerce.state))
+        schedule = deepcopy(body.schedule)
+        events = schedule.get("events")
+        revision = schedule.get("revision")
+        if (
+            not isinstance(events, list)
+            or not events
+            or not isinstance(revision, int)
+            or isinstance(revision, bool)
+            or revision < 1
+            or not isinstance(events[-1], Mapping)
+        ):
+            raise _error(422, "service_schedule_evidence_required")
+        latest_event = dict(events[-1])
+        latest_event["actor"] = principal.actor_id
+        events[-1] = latest_event
+        next_state = {**current_state, "serviceSchedule": schedule}
+        evidence = {
+            "actionId": f"ACT-SERVICE-SCHEDULE-R{revision}",
+            "capturedAt": latest_event.get("happenedAt"),
+            "actor": principal.actor_id,
+            "reason": latest_event.get("reason"),
+            "evidenceReference": f"SHOP-SERVICE-SCHEDULE:R{revision}",
+        }
+        result = _invoke(
+            lambda: store.apply_command(
+                principal,
+                command_id=body.command_id,
+                surface="commerce",
+                event_type="commerce.service_schedule.saved",
+                expected_version=body.expected_version,
+                payload={"state": next_state, "evidence": evidence},
+            )
+        )
+        return _command_response(result)
 
     @router.post("/imports/validate")
     async def trial_import_validation(request: Request) -> dict[str, Any]:

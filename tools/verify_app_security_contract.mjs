@@ -44,6 +44,10 @@ const shopInventoryRuntime = await read('supermega_runtime/shop_inventory_runtim
 const orderIntakeProvider = await read('supermega_runtime/order_intake_provider.py')
 const orderIntakeRoute = trialRuntime.slice(
   trialRuntime.indexOf('@router.post("/commerce/order-intake/drafts")'),
+  trialRuntime.indexOf('@router.get("/commerce/service-schedule")'),
+)
+const serviceScheduleRoute = trialRuntime.slice(
+  trialRuntime.indexOf('@router.get("/commerce/service-schedule")'),
   trialRuntime.indexOf('@router.post("/imports/validate")'),
 )
 const managedPurchaseReceiptAuthority = trialStore.slice(
@@ -274,6 +278,7 @@ const expectedHumanCommerceEvents = [
   'commerce.purchase_order.created',
   'commerce.purchase_order.received',
   'commerce.refund.settled',
+  'commerce.service_schedule.saved',
   'commerce.stock.counted',
   'commerce.stock.received',
   'commerce.storefront.configuration.saved',
@@ -342,6 +347,17 @@ requireContract('AI order intake provider cannot use tools, store responses, red
   && /PostgresOrderIntakeBudget\(database_url, cap\)/.test(orderIntakeProvider)
   && /else UnavailableOrderIntakeBudget\(\)/.test(orderIntakeProvider)
   && /order_intake_provider_quota_exhausted/.test(orderIntakeProvider))
+requireContract('managed Shop appointments are tenant-scoped, human-only, identity-bound, and optimistic',
+  /_resolve_principal\(request, resolve_principal\)/.test(serviceScheduleRoute)
+  && /has_surface_read_capability\(readiness\.capabilities, "commerce"\)/.test(serviceScheduleRoute)
+  && /_require_write_ready\(readiness, "commerce\.write"\)/.test(serviceScheduleRoute)
+  && /principal\.actor_kind != "human"/.test(serviceScheduleRoute)
+  && /_reject_client_identity\(body\.schedule/.test(serviceScheduleRoute)
+  && /expected_version=body\.expected_version/.test(serviceScheduleRoute)
+  && /event_type="commerce\.service_schedule\.saved"/.test(serviceScheduleRoute)
+  && /event_type == "commerce\.service_schedule\.saved"/.test(trialStore)
+  && /service schedule evidence history is immutable/.test(commerceRuntime)
+  && /contains overlapping bookings/.test(commerceRuntime))
 requireContract('runtime exposes bounded health truth', /"operating_mode": "managed_trial" if not requirements else "isolated_demo"/.test(runtime) && /"browser_service_role_exposed": False/.test(runtime))
 requireContract('managed browser auth is readiness gated and cannot accept a secret key', /runtime\.status === 'enterprise' && managedTrialAuthConfigured\(\)/.test(settingsPage) && /validPublishableKey/.test(managedTrialClient) && !/VITE_SUPABASE_(?:SERVICE_ROLE|SECRET)/.test(managedTrialClient))
 requireContract('managed approval evidence is never persisted in demo storage', /localApprovalsOnly/.test(coreApp) && /persist \? persist\(normalizedState\)/.test(coreApp) && /current\.filter\(\(approval\) => !approval\.managed\)/.test(settingsPage))

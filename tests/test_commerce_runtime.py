@@ -2351,6 +2351,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.storefront.merchandising.imported",
                     "commerce.tax_configuration.saved",
                     "commerce.account_mapping.saved",
+                    "commerce.service_schedule.saved",
                 }
             ),
         )
@@ -2358,6 +2359,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIn("commerce.storefront.merchandising.imported", COMMERCE_EVENTS)
         self.assertIn("commerce.tax_configuration.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.account_mapping.saved", COMMERCE_EVENTS)
+        self.assertIn("commerce.service_schedule.saved", COMMERCE_EVENTS)
 
     def test_website_intake_creation_records_no_order_or_stock_movement(self) -> None:
         current = catalog_state()
@@ -5829,6 +5831,136 @@ class CommerceRuntimeTests(unittest.TestCase):
             apply_event({}, "commerce.workspace.initialized", invalid)
         with self.assertRaises(TrialValidationError):
             apply_event({}, "commerce.snapshot.saved", catalog_state())
+
+    def test_service_schedule_is_versioned_inside_commerce_and_fails_closed(self) -> None:
+        current = catalog_state()
+        schedule = {
+            "schema": "supermega.shop.service_schedule.v2",
+            "industryPackId": "spa",
+            "revision": 1,
+            "services": [
+                {
+                    "id": "service-session",
+                    "name": "Standard treatment",
+                    "durationMinutes": 60,
+                    "priceMmk": 45000,
+                    "active": True,
+                }
+            ],
+            "resources": [
+                {
+                    "id": "resource-room-1",
+                    "name": "Treatment room 1",
+                    "kind": "room",
+                    "active": True,
+                }
+            ],
+            "bookings": [
+                {
+                    "id": "booking-0001",
+                    "customerName": "Client A",
+                    "contact": "09-111-111",
+                    "serviceId": "service-session",
+                    "resourceId": "resource-room-1",
+                    "startsAt": "2026-07-29T04:30:00.000Z",
+                    "endsAt": "2026-07-29T05:30:00.000Z",
+                    "status": "held",
+                    "note": "",
+                    "createdAt": "2026-07-29T04:00:00.000Z",
+                    "updatedAt": "2026-07-29T04:00:00.000Z",
+                }
+            ],
+            "events": [
+                {
+                    "revision": 1,
+                    "type": "booking_scheduled",
+                    "subjectId": "booking-0001",
+                    "actor": "operator-1",
+                    "reason": "Scheduled from the Shop appointment workspace.",
+                    "happenedAt": "2026-07-29T04:00:00.000Z",
+                }
+            ],
+        }
+        first = {**current, "serviceSchedule": schedule}
+        first_evidence = {
+            "actionId": "ACT-SERVICE-SCHEDULE-R1",
+            "capturedAt": "2026-07-29T04:00:00.000Z",
+            "actor": "operator-1",
+            "reason": "Scheduled from the Shop appointment workspace.",
+            "evidenceReference": "SHOP-SERVICE-SCHEDULE:R1",
+        }
+        accepted = apply_event(
+            current,
+            "commerce.service_schedule.saved",
+            first,
+            first_evidence,
+        )
+        self.assertEqual(accepted["serviceSchedule"], schedule)
+
+        confirmed_schedule = deepcopy(schedule)
+        confirmed_schedule["revision"] = 2
+        confirmed_schedule["bookings"][0]["status"] = "confirmed"
+        confirmed_schedule["bookings"][0]["updatedAt"] = "2026-07-29T04:05:00.000Z"
+        confirmed_schedule["events"].append(
+            {
+                "revision": 2,
+                "type": "booking_advanced",
+                "subjectId": "booking-0001",
+                "actor": "operator-1",
+                "reason": "Advanced by the responsible Shop operator.",
+                "happenedAt": "2026-07-29T04:05:00.000Z",
+            }
+        )
+        confirmed = apply_event(
+            accepted,
+            "commerce.service_schedule.saved",
+            {**accepted, "serviceSchedule": confirmed_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-R2",
+                "capturedAt": "2026-07-29T04:05:00.000Z",
+                "actor": "operator-1",
+                "reason": "Advanced by the responsible Shop operator.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:R2",
+            },
+        )
+        self.assertEqual(confirmed["serviceSchedule"]["bookings"][0]["status"], "confirmed")
+
+        tampered = deepcopy(confirmed_schedule)
+        tampered["bookings"][0]["customerName"] = "Rewritten history"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                accepted,
+                "commerce.service_schedule.saved",
+                {**accepted, "serviceSchedule": tampered},
+                {
+                    "actionId": "ACT-SERVICE-SCHEDULE-R2",
+                    "capturedAt": "2026-07-29T04:05:00.000Z",
+                    "actor": "operator-1",
+                    "reason": "Advanced by the responsible Shop operator.",
+                    "evidenceReference": "SHOP-SERVICE-SCHEDULE:R2",
+                },
+            )
+
+        overlap = deepcopy(schedule)
+        overlap["revision"] = 2
+        overlap["bookings"].append({**overlap["bookings"][0], "id": "booking-0002"})
+        overlap["events"].append(
+            {
+                "revision": 2,
+                "type": "booking_scheduled",
+                "subjectId": "booking-0002",
+                "actor": "operator-1",
+                "reason": "Conflicting booking.",
+                "happenedAt": "2026-07-29T04:06:00.000Z",
+            }
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state({**current, "serviceSchedule": overlap})
+
+        wrong_duration = deepcopy(schedule)
+        wrong_duration["bookings"][0]["endsAt"] = "2026-07-29T05:00:00.000Z"
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state({**current, "serviceSchedule": wrong_duration})
 
 
 if __name__ == "__main__":

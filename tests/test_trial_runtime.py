@@ -457,6 +457,122 @@ class TrialRuntimeTests(unittest.TestCase):
         self.assertTrue(recovered_replay.json()["result"]["idempotent_replay"])
         recovered_client.close()
 
+    def test_service_schedule_endpoint_is_scoped_human_versioned_and_replayable(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        self._provision(store)
+        client = self._client(store)
+        catalog = {
+            "schema": "supermega.commerce.workspace.v2",
+            "items": [{"sku": "SKU-1", "name": "Test item", "onHand": 10, "reorderAt": 2, "price": 100}],
+            "orders": [],
+            "movements": [],
+            "closes": [],
+        }
+        initialized = client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers(),
+            json={
+                "command_id": str(uuid4()),
+                "surface": "commerce",
+                "event_type": "commerce.workspace.initialized",
+                "expected_version": 0,
+                "payload": {
+                    "state": catalog,
+                    "evidence": {
+                        "actionId": f"ACT-{uuid4()}",
+                        "capturedAt": "2026-07-29T04:00:00.000Z",
+                        "actor": "actor-operator",
+                        "reason": "Initialize the current Shop catalog.",
+                        "evidenceReference": "catalog://opening/1",
+                    },
+                },
+            },
+        )
+        self.assertEqual(initialized.status_code, 200, initialized.text)
+        empty = client.get(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+        )
+        self.assertEqual(empty.status_code, 200, empty.text)
+        self.assertEqual(
+            empty.json(),
+            {"workspace_id": "workspace-a", "version": 1, "schedule": None},
+        )
+        schedule = {
+            "schema": "supermega.shop.service_schedule.v2",
+            "industryPackId": "spa",
+            "revision": 1,
+            "services": [
+                {
+                    "id": "service-session",
+                    "name": "Standard treatment",
+                    "durationMinutes": 60,
+                    "priceMmk": 45000,
+                    "active": True,
+                }
+            ],
+            "resources": [
+                {
+                    "id": "resource-room-1",
+                    "name": "Treatment room 1",
+                    "kind": "room",
+                    "active": True,
+                }
+            ],
+            "bookings": [],
+            "events": [
+                {
+                    "revision": 1,
+                    "type": "service_registered",
+                    "subjectId": "service-session",
+                    "actor": "fabricated-client-actor",
+                    "reason": "Added from Shop appointment setup.",
+                    "happenedAt": "2026-07-29T04:05:00.000Z",
+                }
+            ],
+        }
+        command = {
+            "command_id": str(uuid4()),
+            "expected_version": 1,
+            "schedule": schedule,
+        }
+        first = client.post(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+            json=command,
+        )
+        replay = client.post(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+            json=command,
+        )
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(first.json()["result"]["version"], 2)
+        self.assertEqual(
+            first.json()["result"]["state"]["serviceSchedule"]["events"][-1]["actor"],
+            "actor-operator",
+        )
+        self.assertTrue(replay.json()["result"]["idempotent_replay"])
+        stale = client.post(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+            json={**command, "command_id": str(uuid4())},
+        )
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.json()["detail"]["code"], "trial_version_conflict")
+        forbidden_identity = client.post(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+            json={
+                **command,
+                "command_id": str(uuid4()),
+                "schedule": {**schedule, "workspace_id": "workspace-b"},
+            },
+        )
+        self.assertEqual(forbidden_identity.status_code, 422)
+        self.assertEqual(forbidden_identity.json()["detail"]["code"], "client_identity_forbidden")
+        client.close()
+
     def test_runtime_checks_membership_and_capability(self) -> None:
         missing = self.client.post(
             "/api/trial/v1/commands",

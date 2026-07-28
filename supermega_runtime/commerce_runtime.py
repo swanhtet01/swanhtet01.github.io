@@ -61,6 +61,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.storefront.configuration.saved",
         "commerce.storefront.merchandising.imported",
         "commerce.storefront_request.received",
+        "commerce.service_schedule.saved",
     }
 )
 COMMERCE_HUMAN_EVENTS = frozenset(
@@ -89,6 +90,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
         "commerce.storefront.merchandising.imported",
+        "commerce.service_schedule.saved",
     }
 )
 _ORDER_STATUSES = ("confirmed", "preparing", "ready", "completed", "cancelled")
@@ -135,6 +137,14 @@ _MAX_ORDER_LINES = 20
 _MAX_RETURNS_PER_ORDER = 100
 _MAX_CORRECTIONS_PER_ORDER = 100
 _MAX_MOVEMENT_ID_LENGTH = 2_000
+_SERVICE_SCHEDULE_SCHEMA = "supermega.shop.service_schedule.v2"
+_SERVICE_SCHEDULE_PACKS = frozenset({"retail", "cafe", "restaurant", "spa", "gym", "school"})
+_SERVICE_SCHEDULE_EVENT_TYPES = frozenset(
+    {"service_registered", "resource_registered", "booking_scheduled", "booking_advanced", "booking_cancelled"}
+)
+_SERVICE_SCHEDULE_BOOKING_STATUSES = frozenset(
+    {"held", "confirmed", "checked_in", "completed", "cancelled"}
+)
 _PURCHASE_ORDER_ID_PATTERN = re.compile(
     r"PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
@@ -153,6 +163,9 @@ _ISO_TIMESTAMP_PATTERN = re.compile(
 )
 
 _STATE_FIELDS = frozenset({"schema", "items", "orders", "movements", "closes"})
+_SERVICE_SCHEDULE_FIELDS = frozenset(
+    {"schema", "industryPackId", "revision", "services", "resources", "bookings", "events"}
+)
 _ITEM_FIELDS = frozenset({"sku", "name", "variant", "onHand", "reorderAt", "price"})
 _CATALOG_CHANGE_FIELDS = frozenset(
     {
@@ -590,6 +603,141 @@ def _storefront_request(value: object, field: str) -> dict[str, Any]:
     return request
 
 
+def _validate_service_schedule(value: object) -> dict[str, Any]:
+    schedule = _object(value, "commerce state.serviceSchedule")
+    _exact_fields(
+        schedule,
+        "commerce state.serviceSchedule",
+        required=_SERVICE_SCHEDULE_FIELDS,
+    )
+    if schedule.get("schema") != _SERVICE_SCHEDULE_SCHEMA:
+        raise TrialValidationError(
+            f"commerce state.serviceSchedule.schema must be {_SERVICE_SCHEDULE_SCHEMA}."
+        )
+    if schedule.get("industryPackId") not in _SERVICE_SCHEDULE_PACKS:
+        raise TrialValidationError("commerce state.serviceSchedule industry pack is unsupported.")
+    revision = _integer(
+        schedule.get("revision"),
+        "commerce state.serviceSchedule.revision",
+    )
+    services = _list(schedule.get("services"), "commerce state.serviceSchedule.services")
+    resources = _list(schedule.get("resources"), "commerce state.serviceSchedule.resources")
+    bookings = _list(schedule.get("bookings"), "commerce state.serviceSchedule.bookings")
+    events = _list(schedule.get("events"), "commerce state.serviceSchedule.events")
+    if len(services) > 100 or len(resources) > 100 or len(bookings) > 500 or len(events) > 1000:
+        raise TrialValidationError("commerce state.serviceSchedule exceeds managed workspace limits.")
+
+    service_ids: list[str] = []
+    for index, candidate in enumerate(services):
+        field = f"commerce state.serviceSchedule.services[{index}]"
+        service = _object(candidate, field)
+        _exact_fields(
+            service,
+            field,
+            required=frozenset({"id", "name", "durationMinutes", "priceMmk", "active"}),
+        )
+        service_ids.append(_text(service.get("id"), f"{field}.id", maximum=80))
+        _text(service.get("name"), f"{field}.name", maximum=160)
+        duration = _integer(service.get("durationMinutes"), f"{field}.durationMinutes", minimum=1)
+        _integer(service.get("priceMmk"), f"{field}.priceMmk", minimum=1)
+        if duration > 1440 or not isinstance(service.get("active"), bool):
+            raise TrialValidationError(f"{field} duration or active state is invalid.")
+    _unique(service_ids, "commerce state.serviceSchedule service ID")
+    service_by_id = {service["id"]: service for service in services}
+
+    resource_ids: list[str] = []
+    for index, candidate in enumerate(resources):
+        field = f"commerce state.serviceSchedule.resources[{index}]"
+        resource = _object(candidate, field)
+        _exact_fields(
+            resource,
+            field,
+            required=frozenset({"id", "name", "kind", "active"}),
+        )
+        resource_ids.append(_text(resource.get("id"), f"{field}.id", maximum=80))
+        _text(resource.get("name"), f"{field}.name", maximum=160)
+        if resource.get("kind") not in {"staff", "room", "equipment"} or not isinstance(
+            resource.get("active"), bool
+        ):
+            raise TrialValidationError(f"{field} kind or active state is invalid.")
+    _unique(resource_ids, "commerce state.serviceSchedule resource ID")
+
+    booking_ids: list[str] = []
+    normalized_bookings: list[dict[str, Any]] = []
+    for index, candidate in enumerate(bookings):
+        field = f"commerce state.serviceSchedule.bookings[{index}]"
+        booking = _object(candidate, field)
+        _exact_fields(
+            booking,
+            field,
+            required=frozenset(
+                {
+                    "id", "customerName", "contact", "serviceId", "resourceId", "startsAt",
+                    "endsAt", "status", "note", "createdAt", "updatedAt",
+                }
+            ),
+        )
+        booking_id = _text(booking.get("id"), f"{field}.id", maximum=80)
+        booking_ids.append(booking_id)
+        _text(booking.get("customerName"), f"{field}.customerName", maximum=160)
+        _text(booking.get("contact"), f"{field}.contact", maximum=160)
+        if booking.get("serviceId") not in service_ids or booking.get("resourceId") not in resource_ids:
+            raise TrialValidationError(f"{field} references an unknown service or resource.")
+        starts_at = _timestamp(booking.get("startsAt"), f"{field}.startsAt")
+        ends_at = _timestamp(booking.get("endsAt"), f"{field}.endsAt")
+        if datetime.fromisoformat(ends_at.replace("Z", "+00:00")) <= datetime.fromisoformat(
+            starts_at.replace("Z", "+00:00")
+        ):
+            raise TrialValidationError(f"{field} must end after it starts.")
+        expected_end = datetime.fromisoformat(starts_at.replace("Z", "+00:00")) + timedelta(
+            minutes=service_by_id[booking["serviceId"]]["durationMinutes"]
+        )
+        if datetime.fromisoformat(ends_at.replace("Z", "+00:00")) != expected_end:
+            raise TrialValidationError(f"{field} duration must match its service.")
+        if booking.get("status") not in _SERVICE_SCHEDULE_BOOKING_STATUSES:
+            raise TrialValidationError(f"{field}.status is invalid.")
+        _blankable_text(booking.get("note"), f"{field}.note", maximum=300)
+        _timestamp(booking.get("createdAt"), f"{field}.createdAt")
+        _timestamp(booking.get("updatedAt"), f"{field}.updatedAt")
+        normalized_bookings.append(booking)
+    _unique(booking_ids, "commerce state.serviceSchedule booking ID")
+    blocking = [booking for booking in normalized_bookings if booking["status"] != "cancelled"]
+    for left, first in enumerate(blocking):
+        for second in blocking[left + 1 :]:
+            if (
+                first["resourceId"] == second["resourceId"]
+                and datetime.fromisoformat(first["startsAt"].replace("Z", "+00:00"))
+                < datetime.fromisoformat(second["endsAt"].replace("Z", "+00:00"))
+                and datetime.fromisoformat(second["startsAt"].replace("Z", "+00:00"))
+                < datetime.fromisoformat(first["endsAt"].replace("Z", "+00:00"))
+            ):
+                raise TrialValidationError("commerce state.serviceSchedule contains overlapping bookings.")
+
+    if len(events) != revision:
+        raise TrialValidationError("commerce state.serviceSchedule evidence is incomplete.")
+    for index, candidate in enumerate(events):
+        field = f"commerce state.serviceSchedule.events[{index}]"
+        event = _object(candidate, field)
+        _exact_fields(
+            event,
+            field,
+            required=frozenset({"revision", "type", "subjectId", "actor", "reason", "happenedAt"}),
+        )
+        if event.get("revision") != index + 1 or event.get("type") not in _SERVICE_SCHEDULE_EVENT_TYPES:
+            raise TrialValidationError(f"{field} revision or type is invalid.")
+        subject_id = _text(event.get("subjectId"), f"{field}.subjectId", maximum=80)
+        if (
+            (event["type"] == "service_registered" and subject_id not in service_ids)
+            or (event["type"] == "resource_registered" and subject_id not in resource_ids)
+            or (event["type"].startswith("booking_") and subject_id not in booking_ids)
+        ):
+            raise TrialValidationError(f"{field} references an unknown subject.")
+        _text(event.get("actor"), f"{field}.actor", maximum=120)
+        _text(event.get("reason"), f"{field}.reason", maximum=240)
+        _timestamp(event.get("happenedAt"), f"{field}.happenedAt")
+    return schedule
+
+
 def validate_commerce_state(value: object) -> dict[str, Any]:
     """Validate the complete managed Commerce snapshot without repairing it."""
 
@@ -609,6 +757,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "taxConfigurations",
                 "accountMappingConfigurations",
                 "inventoryFoundation",
+                "serviceSchedule",
             }
         ),
     )
@@ -644,6 +793,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         state.get("accountMappingConfigurations", []),
         "commerce state.accountMappingConfigurations",
     )
+    if "serviceSchedule" in state:
+        _validate_service_schedule(state["serviceSchedule"])
     if "storefrontConfiguration" in state and state["storefrontConfiguration"] is None:
         raise TrialValidationError(
             "commerce state.storefrontConfiguration must be an object when present."
@@ -2646,6 +2797,20 @@ def _validate_event_evidence(
         if not _proof_matches_evidence(proof, evidence):
             raise TrialValidationError(
                 "command evidence must match the saved account mapping proof."
+            )
+    elif event_type == "commerce.service_schedule.saved":
+        schedule = next_state["serviceSchedule"]
+        latest = schedule["events"][-1]
+        revision = schedule["revision"]
+        if (
+            latest["actor"] != evidence["actor"]
+            or latest["reason"] != evidence["reason"]
+            or latest["happenedAt"] != evidence["capturedAt"]
+            or evidence["actionId"] != f"ACT-SERVICE-SCHEDULE-R{revision}"
+            or evidence["evidenceReference"] != f"SHOP-SERVICE-SCHEDULE:R{revision}"
+        ):
+            raise TrialValidationError(
+                "command evidence must match the saved service schedule revision."
             )
     elif event_type == "commerce.purchase_order.created":
         creation = next_state["purchaseOrders"][0]["creation"]
@@ -5630,6 +5795,122 @@ def _validate_account_mapping_saved(
         )
 
 
+def _service_schedule(state: Mapping[str, Any]) -> dict[str, Any] | None:
+    value = state.get("serviceSchedule")
+    return _validate_service_schedule(value) if value is not None else None
+
+
+def _require_service_schedule_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if current.get("serviceSchedule") != next_state.get("serviceSchedule"):
+        raise TrialValidationError(
+            "commerce service schedule can change only through commerce.service_schedule.saved."
+        )
+
+
+def _validate_service_schedule_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    current_without_schedule = dict(current)
+    current_without_schedule.pop("serviceSchedule", None)
+    next_without_schedule = dict(next_state)
+    next_without_schedule.pop("serviceSchedule", None)
+    if current_without_schedule != next_without_schedule:
+        raise TrialValidationError(
+            "commerce.service_schedule.saved cannot change other Commerce records."
+        )
+    before = _service_schedule(current)
+    after = _service_schedule(next_state)
+    if after is None or after["revision"] < 1:
+        raise TrialValidationError(
+            "commerce.service_schedule.saved requires a reviewed schedule change."
+        )
+    if before is None:
+        return
+    if after["industryPackId"] != before["industryPackId"]:
+        raise TrialValidationError("an active service schedule cannot change industry pack.")
+    if after["revision"] != before["revision"] + 1:
+        raise TrialValidationError("service schedule revision must advance exactly once.")
+    if after["events"][:-1] != before["events"]:
+        raise TrialValidationError("service schedule evidence history is immutable.")
+    latest = after["events"][-1]
+    event_type = latest["type"]
+    if event_type == "service_registered":
+        valid_change = (
+            len(after["services"]) == len(before["services"]) + 1
+            and after["services"][:-1] == before["services"]
+            and latest["subjectId"] == after["services"][-1]["id"]
+            and after["services"][-1]["active"] is True
+            and after["resources"] == before["resources"]
+            and after["bookings"] == before["bookings"]
+        )
+    elif event_type == "resource_registered":
+        valid_change = (
+            len(after["resources"]) == len(before["resources"]) + 1
+            and after["resources"][:-1] == before["resources"]
+            and latest["subjectId"] == after["resources"][-1]["id"]
+            and after["resources"][-1]["active"] is True
+            and after["services"] == before["services"]
+            and after["bookings"] == before["bookings"]
+        )
+    elif event_type == "booking_scheduled":
+        valid_change = (
+            len(after["bookings"]) == len(before["bookings"]) + 1
+            and after["bookings"][:-1] == before["bookings"]
+            and latest["subjectId"] == after["bookings"][-1]["id"]
+            and after["bookings"][-1]["status"] == "held"
+            and after["bookings"][-1]["createdAt"] == latest["happenedAt"]
+            and after["bookings"][-1]["updatedAt"] == latest["happenedAt"]
+            and after["services"] == before["services"]
+            and after["resources"] == before["resources"]
+        )
+    else:
+        before_by_id = {booking["id"]: booking for booking in before["bookings"]}
+        changed_bookings = [
+            booking
+            for booking in after["bookings"]
+            if before_by_id.get(booking["id"]) != booking
+        ]
+        changed = changed_bookings[0] if len(changed_bookings) == 1 else None
+        prior = before_by_id.get(changed["id"]) if changed else None
+        expected_status = (
+            {"held": "confirmed", "confirmed": "checked_in", "checked_in": "completed"}.get(
+                prior["status"]
+            )
+            if prior and event_type == "booking_advanced"
+            else (
+                "cancelled"
+                if prior and prior["status"] not in {"completed", "cancelled"}
+                else None
+            )
+        )
+        expected_booking = (
+            {
+                **prior,
+                "status": expected_status,
+                "updatedAt": latest["happenedAt"],
+            }
+            if prior and expected_status
+            else None
+        )
+        valid_change = (
+            len(after["bookings"]) == len(before["bookings"])
+            and {booking["id"] for booking in after["bookings"]} == set(before_by_id)
+            and len(changed_bookings) == 1
+            and changed == expected_booking
+            and changed["id"] == latest["subjectId"]
+            and after["services"] == before["services"]
+            and after["resources"] == before["resources"]
+        )
+    if not valid_change:
+        raise TrialValidationError(
+            "service schedule change does not match its latest evidence event."
+        )
+
+
 _TRANSITION_VALIDATORS = {
     "commerce.item.created": _validate_item_created,
     "commerce.item.updated": _validate_item_updated,
@@ -5655,6 +5936,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.storefront_request.received": _validate_storefront_request_received,
     "commerce.tax_configuration.saved": _validate_tax_configuration_saved,
     "commerce.account_mapping.saved": _validate_account_mapping_saved,
+    "commerce.service_schedule.saved": _validate_service_schedule_saved,
 }
 
 
@@ -5702,6 +5984,8 @@ def reduce_commerce_state(
         _require_tax_configurations_unchanged(current_state, next_state)
     if event_type != "commerce.account_mapping.saved":
         _require_account_mapping_configurations_unchanged(current_state, next_state)
+    if event_type != "commerce.service_schedule.saved":
+        _require_service_schedule_unchanged(current_state, next_state)
     if event_type not in {
         "commerce.purchase_order.created",
         "commerce.purchase_order.cancelled",
