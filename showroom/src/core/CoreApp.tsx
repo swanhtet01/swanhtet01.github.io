@@ -1582,17 +1582,17 @@ const customerTracks = [
 export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Pick a product. SuperMega prepares work; owners approve sends, payments, changes, publish." eyebrow="Products" title="Choose a product. Run work." />
+      <PageHeading copy="Use a local workspace first. Activate managed data and AI when ready." eyebrow="Products" title="Choose a product. Run work." />
       <section className="product-home-operating-model" aria-label="SuperMega operating model">
         <div>
-          <span className="core-eyebrow">Handled by SuperMega</span>
-          <strong>Import, queue, reconcile, and prepare.</strong>
+          <span className="core-eyebrow">Free workspace</span>
+          <strong>Sample data, imports, review, and evidence.</strong>
         </div>
         <div>
-          <span className="core-eyebrow">Approved by owner</span>
-          <strong>Orders, production, payments, messages, publishing.</strong>
+          <span className="core-eyebrow">Premium activation</span>
+          <strong>Managed data, AI context, roles, audit, and writes.</strong>
         </div>
-        <Link className="core-button primary" to="/settings/">Set up pilot</Link>
+        <Link className="core-button primary" to="/settings/">Check readiness</Link>
       </section>
       <nav aria-label="Business tracks" className="product-track-grid">
         {customerTracks.map(([name, fit, outcome, path, product]) => (
