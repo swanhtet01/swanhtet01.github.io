@@ -57,6 +57,7 @@ import {
 import './ecommerce-product.css'
 
 type PreviewDevice = 'phone' | 'desktop'
+type RequestInboxFilter = 'all' | 'stock' | 'expiring' | 'payment' | 'delivery'
 type EcommerceCatalog = {
   source: 'shop-local' | 'sample' | 'unavailable' | 'managed-shop'
   items: CommerceItem[]
@@ -214,6 +215,7 @@ export function EcommerceProduct() {
     error: '',
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
+  const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
   const [customerFollowUpDraft, setCustomerFollowUpDraft] = useState('')
   const [deliveryReviewDraft, setDeliveryReviewDraft] = useState('')
   const storefrontSaveRef = useRef<HTMLButtonElement>(null)
@@ -713,6 +715,11 @@ export function EcommerceProduct() {
     setDeliveryReviewDraft(`Owner draft only: review ${zoneHint} as the delivery zone for ${deliveryReviewRequest.customerReference}. Quote ${itemSummary} at ${formatMmk(deliveryReviewRequest.totalMmk)} before delivery fee. Shop must confirm fee, rider handoff, payment, and stock before any customer message or booking. Reference ${deliveryReviewRequest.id}.`)
   }
 
+  function openFilteredRequestInShop() {
+    if (!requestInboxNextRequest) return
+    navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestInboxNextRequest.id)}`)
+  }
+
   async function recordManagedBuyingRequest(request: EcommerceOrderRequestV2) {
     const identity = managedIdentity
     if (!identity || !globalThis.crypto?.randomUUID) throw new Error('Managed Ecommerce request identity is unavailable. Nothing was sent to Shop.')
@@ -867,6 +874,53 @@ export function EcommerceProduct() {
     ['Expiry', orderOpsExpiringCount ? `${orderOpsExpiringCount} quote` : buyingReady ? '30 min quote' : 'No quote'],
     ['Control', pendingManagedRequests.length ? 'Shop confirms' : 'No customer send'],
   ] as const
+  const requestHasStockRisk = (request: typeof pendingManagedRequests[number]) => commerceStorefrontRequestLines(request).some((line) => {
+    const item = catalog.items.find((candidate) => candidate.sku === line.sku)
+    return !item || item.onHand < line.quantity
+  })
+  const requestIsExpiring = (request: typeof pendingManagedRequests[number]) => {
+    const minutes = minutesUntil('quote' in request ? request.quote.expiresAt : undefined, orderOpsNow)
+    return minutes !== null && minutes <= 15
+  }
+  const requestNeedsPaymentReview = (request: typeof pendingManagedRequests[number]) => 'quote' in request && request.quote.payment.adapter === 'kbzpay_manual'
+  const requestInboxFilteredRequests = pendingManagedRequests.filter((request) => (
+    requestInboxFilter === 'all'
+      || (requestInboxFilter === 'stock' && requestHasStockRisk(request))
+      || (requestInboxFilter === 'expiring' && requestIsExpiring(request))
+      || (requestInboxFilter === 'payment' && requestNeedsPaymentReview(request))
+      || (requestInboxFilter === 'delivery' && request.fulfilment === 'delivery')
+  ))
+  const requestInboxNextRequest = requestInboxFilteredRequests[0] ?? null
+  const requestInboxStage = importNeeded
+    ? 'Import catalog before request review'
+    : !savedDraftIsCurrent
+      ? 'Save storefront before request review'
+      : requestInboxFilteredRequests.length
+        ? 'Open filtered Shop review'
+        : pendingManagedRequests.length
+          ? 'Switch filter to find requests'
+          : buyingReady
+            ? 'Inbox ready for requests'
+            : 'Request inbox locked'
+  const requestInboxRows = [
+    ['All', `${pendingManagedRequests.length}`],
+    ['Stock', `${orderOpsStockRiskCount}`],
+    ['Expiring', `${orderOpsExpiringCount}`],
+    ['Payment', `${orderOpsPaymentRiskCount}`],
+    ['Delivery', `${deliveryReviewCount}`],
+  ] as const
+  const requestInboxFilterButtons = [
+    ['all', 'All'],
+    ['stock', 'Stock'],
+    ['expiring', 'Expiring'],
+    ['payment', 'Payment'],
+    ['delivery', 'Delivery'],
+  ] as const
+  const requestInboxNextSummary = requestInboxNextRequest
+    ? `${requestInboxNextRequest.customerReference} · ${commerceStorefrontRequestLines(requestInboxNextRequest).length} line${commerceStorefrontRequestLines(requestInboxNextRequest).length === 1 ? '' : 's'} · ${formatMmk(requestInboxNextRequest.totalMmk)}`
+    : pendingManagedRequests.length
+      ? 'No request matches this filter.'
+      : 'No customer request is waiting.'
   const quoteRecoveryStage = importNeeded
     ? 'Import catalog before recovery'
     : !savedDraftIsCurrent
@@ -1071,6 +1125,22 @@ export function EcommerceProduct() {
               recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'ecommerce', route: location.pathname + location.search, detail: aiAgentJob })
               finishStorefrontSetup()
             }} type="button">Finish setup</button>}
+      </section>
+
+      <section aria-label="Ecommerce request inbox" className="ecommerce-ops-cockpit ecommerce-request-inbox-cockpit">
+        <div>
+          <span className="core-eyebrow">Request inbox</span>
+          <h2>{requestInboxStage}</h2>
+          <p>AI filters customer requests by stock risk, quote expiry, manual QR review, and delivery mode so the owner opens the right Shop review first. No customer message, payment, delivery booking, stock move, refund, or Shop write runs here.</p>
+          <div className="ecommerce-request-filter" role="group" aria-label="Request inbox filter">
+            {requestInboxFilterButtons.map(([value, label]) => <button aria-pressed={requestInboxFilter === value} key={value} onClick={() => setRequestInboxFilter(value)} type="button">{label}</button>)}
+          </div>
+          <button className="text-link" disabled={!requestInboxNextRequest} onClick={openFilteredRequestInShop} type="button">Open filtered request</button>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {requestInboxRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+        <p className="ecommerce-request-inbox-summary" role="status">{requestInboxNextSummary}</p>
       </section>
 
       <section aria-label="Order ops cockpit" className="ecommerce-ops-cockpit">
