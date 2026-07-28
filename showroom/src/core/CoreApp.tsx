@@ -34,6 +34,8 @@ import {
   cancelCommercePurchaseOrder,
   cancelCommerceOrder,
   countCommerceStock,
+  commerceAccountingHandoff,
+  commerceAccountingHandoffCsv,
   commerceDailyCloseCsv,
   commerceDailyCloseExport,
   commerceCloseExpectation,
@@ -2350,6 +2352,16 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       href: `data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${commerceDailyCloseCsv(artifact)}`)}`,
     }
   }, [commerce, latestClose])
+  const latestAccountingDownload = useMemo(() => {
+    if (!latestClose) return null
+    const artifact = commerceAccountingHandoff(commerce, latestClose.id)
+    if (!artifact) return null
+    return {
+      filename: `supermega-shop-accounting-${artifact.businessDate}-${artifact.digest.slice(7, 15)}.csv`,
+      href: `data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${commerceAccountingHandoffCsv(artifact)}`)}`,
+      artifact,
+    }
+  }, [commerce, latestClose])
   const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
   const websiteIntakes = commerceWebsiteIntakes(commerce)
   const localWebsiteIntake = managedIdentity ? null : readWebsiteEcommerceHandoff()
@@ -4409,6 +4421,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         <p className="form-notice">{latestClose.operator} · {formatTime(latestClose.createdAt)} · evidence {latestClose.evidenceReference}</p>
         <p className="form-notice">Orders: {latestClose.orderIds?.length ? latestClose.orderIds.join(', ') : 'none'} · Payment exceptions: {latestClose.paymentExceptionOrderIds?.length ? latestClose.paymentExceptionOrderIds.join(', ') : 'none'} · Stock exceptions: {latestClose.stockExceptionSkus?.length ? latestClose.stockExceptionSkus.join(', ') : 'none'}</p>
         {latestCloseDownload ? <a className="core-button" data-close-export="accounting-csv-v1" download={latestCloseDownload.filename} href={latestCloseDownload.href}>Download close CSV</a> : null}
+        {latestAccountingDownload ? <div className="form-notice" data-accounting-handoff="review-required">
+          <strong>Accounting review</strong> · balanced {formatMoney(latestAccountingDownload.artifact.totalDebitMmk)} debit / credit · account mapping required · no external posting
+          <br /><a className="text-link" download={latestAccountingDownload.filename} href={latestAccountingDownload.href}>Download accounting CSV</a>
+        </div> : null}
       </details> : null}
       {actionHistory}
     </div>

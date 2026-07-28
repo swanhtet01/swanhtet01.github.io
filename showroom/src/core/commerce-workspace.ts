@@ -17,6 +17,7 @@ export const COMMERCE_WORKSPACE_SCHEMA = 'supermega.commerce.workspace.v2' as co
 export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as const
 export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calculation.v1' as const
 export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v1' as const
+export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v1' as const
 const COMMERCE_STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
 export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
 export const LEGACY_COMMERCE_KEYS = ['supermega.commerce.workspace.v1', 'supermega.shop.workspace.v2']
@@ -201,6 +202,38 @@ export type CommerceDailyCloseExport = {
   paymentExceptionOrderIds: string[]
   stockExceptionSkus: string[]
   orders: CommerceDailyCloseExportOrder[]
+  digest: string
+}
+
+export type CommerceAccountingHandoffEntry = {
+  lineId: string
+  side: 'debit' | 'credit'
+  accountRole: 'payment_clearing' | 'sales_revenue' | 'sales_revenue_unverified' | 'tax_payable'
+  externalAccountCode: null
+  paymentMethod: string | null
+  calculationStatus: 'accepted' | 'legacy_unverified' | 'mixed'
+  amountMmk: number
+  mappingStatus: 'unmapped'
+}
+
+export type CommerceAccountingHandoff = {
+  schema: typeof COMMERCE_ACCOUNTING_HANDOFF_SCHEMA
+  status: 'review_required'
+  postingAuthority: 'none'
+  externalPostingPerformed: false
+  currency: 'MMK'
+  closeId: string
+  businessDate: string
+  closedAt: string
+  sourceCloseDigest: string
+  totalDebitMmk: number
+  totalCreditMmk: number
+  acceptedOrderCount: number
+  legacyUnverifiedOrderCount: number
+  taxConfiguredOrderCount: number
+  paymentExceptionOrderIds: string[]
+  stockExceptionSkus: string[]
+  entries: CommerceAccountingHandoffEntry[]
   digest: string
 }
 
@@ -4003,6 +4036,185 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     null,
     artifact.digest,
   ]))
+  return [header, ...rows].map((row) => row.map(commerceCsvCell).join(',')).join('\r\n') + '\r\n'
+}
+
+function commerceAccountingHandoffProjection(artifact: Omit<CommerceAccountingHandoff, 'digest'>) {
+  return [
+    artifact.schema,
+    artifact.status,
+    artifact.postingAuthority,
+    artifact.externalPostingPerformed,
+    artifact.currency,
+    artifact.closeId,
+    artifact.businessDate,
+    artifact.closedAt,
+    artifact.sourceCloseDigest,
+    artifact.totalDebitMmk,
+    artifact.totalCreditMmk,
+    artifact.acceptedOrderCount,
+    artifact.legacyUnverifiedOrderCount,
+    artifact.taxConfiguredOrderCount,
+    artifact.paymentExceptionOrderIds,
+    artifact.stockExceptionSkus,
+    artifact.entries.map((entry) => [
+      entry.lineId,
+      entry.side,
+      entry.accountRole,
+      entry.externalAccountCode,
+      entry.paymentMethod,
+      entry.calculationStatus,
+      entry.amountMmk,
+      entry.mappingStatus,
+    ]),
+  ]
+}
+
+export function commerceAccountingHandoff(state: CommerceState, closeId: string): CommerceAccountingHandoff | null {
+  const closeExport = commerceDailyCloseExport(state, closeId)
+  if (!closeExport) return null
+  const paymentGroups = new Map<string, { amountMmk: number; statuses: Set<CommerceDailyCloseExportOrder['calculationStatus']> }>()
+  let acceptedSubtotalMmk = 0
+  let acceptedTaxMmk = 0
+  let legacyUnverifiedMmk = 0
+  let acceptedOrderCount = 0
+  let legacyUnverifiedOrderCount = 0
+  let taxConfiguredOrderCount = 0
+  for (const order of closeExport.orders) {
+    const payment = paymentGroups.get(order.paymentMethod) ?? { amountMmk: 0, statuses: new Set() }
+    payment.amountMmk += order.totalMmk
+    payment.statuses.add(order.calculationStatus)
+    paymentGroups.set(order.paymentMethod, payment)
+    if (order.calculationStatus === 'accepted' && order.subtotalMmk !== null && order.taxMmk !== null) {
+      acceptedOrderCount += 1
+      acceptedSubtotalMmk += order.subtotalMmk
+      acceptedTaxMmk += order.taxMmk
+      if (order.taxMode !== 'not_configured') taxConfiguredOrderCount += 1
+    } else {
+      legacyUnverifiedOrderCount += 1
+      legacyUnverifiedMmk += order.totalMmk
+    }
+  }
+  const entries: CommerceAccountingHandoffEntry[] = [...paymentGroups.entries()]
+    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+    .map(([paymentMethod, group], index) => ({
+      lineId: `DEBIT-${String(index + 1).padStart(3, '0')}`,
+      side: 'debit',
+      accountRole: 'payment_clearing',
+      externalAccountCode: null,
+      paymentMethod,
+      calculationStatus: group.statuses.size > 1 ? 'mixed' : [...group.statuses][0],
+      amountMmk: group.amountMmk,
+      mappingStatus: 'unmapped',
+    }))
+  const credits: Array<Omit<CommerceAccountingHandoffEntry, 'lineId'>> = []
+  if (acceptedSubtotalMmk) credits.push({
+    side: 'credit',
+    accountRole: 'sales_revenue',
+    externalAccountCode: null,
+    paymentMethod: null,
+    calculationStatus: 'accepted',
+    amountMmk: acceptedSubtotalMmk,
+    mappingStatus: 'unmapped',
+  })
+  if (acceptedTaxMmk) credits.push({
+    side: 'credit',
+    accountRole: 'tax_payable',
+    externalAccountCode: null,
+    paymentMethod: null,
+    calculationStatus: 'accepted',
+    amountMmk: acceptedTaxMmk,
+    mappingStatus: 'unmapped',
+  })
+  if (legacyUnverifiedMmk) credits.push({
+    side: 'credit',
+    accountRole: 'sales_revenue_unverified',
+    externalAccountCode: null,
+    paymentMethod: null,
+    calculationStatus: 'legacy_unverified',
+    amountMmk: legacyUnverifiedMmk,
+    mappingStatus: 'unmapped',
+  })
+  entries.push(...credits.map((entry, index) => ({ ...entry, lineId: `CREDIT-${String(index + 1).padStart(3, '0')}` })))
+  const totalDebitMmk = entries.filter((entry) => entry.side === 'debit').reduce((total, entry) => total + entry.amountMmk, 0)
+  const totalCreditMmk = entries.filter((entry) => entry.side === 'credit').reduce((total, entry) => total + entry.amountMmk, 0)
+  if (totalDebitMmk !== closeExport.totalMmk || totalCreditMmk !== closeExport.totalMmk) return null
+  const artifact: Omit<CommerceAccountingHandoff, 'digest'> = {
+    schema: COMMERCE_ACCOUNTING_HANDOFF_SCHEMA,
+    status: 'review_required',
+    postingAuthority: 'none',
+    externalPostingPerformed: false,
+    currency: 'MMK',
+    closeId: closeExport.closeId,
+    businessDate: closeExport.businessDate,
+    closedAt: closeExport.closedAt,
+    sourceCloseDigest: closeExport.digest,
+    totalDebitMmk,
+    totalCreditMmk,
+    acceptedOrderCount,
+    legacyUnverifiedOrderCount,
+    taxConfiguredOrderCount,
+    paymentExceptionOrderIds: [...closeExport.paymentExceptionOrderIds],
+    stockExceptionSkus: [...closeExport.stockExceptionSkus],
+    entries,
+  }
+  return {
+    ...artifact,
+    digest: `sha256:${sha256Hex(JSON.stringify(commerceAccountingHandoffProjection(artifact)))}`,
+  }
+}
+
+export function commerceAccountingHandoffCsv(artifact: CommerceAccountingHandoff) {
+  const header = [
+    'schema',
+    'status',
+    'posting_authority',
+    'external_posting_performed',
+    'close_id',
+    'business_date',
+    'closed_at',
+    'currency',
+    'source_close_digest',
+    'line_id',
+    'side',
+    'account_role',
+    'external_account_code',
+    'payment_method',
+    'calculation_status',
+    'amount_mmk',
+    'mapping_status',
+    'accepted_order_count',
+    'legacy_unverified_order_count',
+    'tax_configured_order_count',
+    'payment_exception_order_ids',
+    'stock_exception_skus',
+    'artifact_digest',
+  ]
+  const rows = artifact.entries.map((entry): Array<string | number | null | string[]> => [
+    artifact.schema,
+    artifact.status,
+    artifact.postingAuthority,
+    String(artifact.externalPostingPerformed),
+    artifact.closeId,
+    artifact.businessDate,
+    artifact.closedAt,
+    artifact.currency,
+    artifact.sourceCloseDigest,
+    entry.lineId,
+    entry.side,
+    entry.accountRole,
+    entry.externalAccountCode,
+    entry.paymentMethod,
+    entry.calculationStatus,
+    entry.amountMmk,
+    entry.mappingStatus,
+    artifact.acceptedOrderCount,
+    artifact.legacyUnverifiedOrderCount,
+    artifact.taxConfiguredOrderCount,
+    artifact.paymentExceptionOrderIds,
+    artifact.stockExceptionSkus,
+    artifact.digest,
+  ])
   return [header, ...rows].map((row) => row.map(commerceCsvCell).join(',')).join('\r\n') + '\r\n'
 }
 

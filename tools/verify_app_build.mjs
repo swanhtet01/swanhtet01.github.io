@@ -1434,6 +1434,15 @@ if (!coreSource.includes('data-close-export="accounting-csv-v1"')
   || !commerceSource.includes("if (/^[=+@-]/.test(raw)) raw = `'${raw}`")
   || !managedCommerceRuntime.includes('def commerce_daily_close_export(')
   || !managedCommerceRuntime.includes('def commerce_daily_close_csv(')) fail('commerce_daily_close_export_missing_or_unsafe')
+if (!coreSource.includes('data-accounting-handoff="review-required"')
+  || !coreSource.includes('Download accounting CSV')
+  || !coreSource.includes('account mapping required · no external posting')
+  || !commerceSource.includes('supermega.commerce.accounting-handoff.v1')
+  || !commerceSource.includes("postingAuthority: 'none'")
+  || !commerceSource.includes('externalPostingPerformed: false')
+  || !commerceSource.includes("accountRole: 'payment_clearing'")
+  || !commerceSource.includes("accountRole: 'sales_revenue_unverified'")
+  || !commerceSource.includes('if (totalDebitMmk !== closeExport.totalMmk || totalCreditMmk !== closeExport.totalMmk) return null')) fail('commerce_accounting_handoff_missing_or_unsafe')
 if (!coreSource.includes("'commerce.order.return_recorded'")
   || !coreSource.includes("kind: 'order_return'")
   || !coreSource.includes('Record return')
@@ -5896,6 +5905,35 @@ async function verifyCommerceRuntime() {
       && !accountingCsv.includes('Customer')
       && accountingCsv.split('\r\n').length - 1 === 3,
     'daily_close_csv_not_complete_or_minimal')
+    const accountingHandoff = model.commerceAccountingHandoff(accountingClosed, accountingCloseId)
+    assert(accountingHandoff?.schema === 'supermega.commerce.accounting-handoff.v1'
+      && accountingHandoff.status === 'review_required'
+      && accountingHandoff.postingAuthority === 'none'
+      && accountingHandoff.externalPostingPerformed === false
+      && accountingHandoff.sourceCloseDigest === accountingExport.digest
+      && accountingHandoff.totalDebitMmk === 200
+      && accountingHandoff.totalCreditMmk === 200
+      && accountingHandoff.acceptedOrderCount === 1
+      && accountingHandoff.legacyUnverifiedOrderCount === 0
+      && accountingHandoff.taxConfiguredOrderCount === 0
+      && accountingHandoff.entries.length === 2
+      && accountingHandoff.entries[0].side === 'debit'
+      && accountingHandoff.entries[0].accountRole === 'payment_clearing'
+      && accountingHandoff.entries[0].externalAccountCode === null
+      && accountingHandoff.entries[0].mappingStatus === 'unmapped'
+      && accountingHandoff.entries[1].side === 'credit'
+      && accountingHandoff.entries[1].accountRole === 'sales_revenue'
+      && accountingHandoff.digest === model.commerceAccountingHandoff(accountingClosed, accountingCloseId).digest
+      && !JSON.stringify(accountingHandoff).includes('Customer'),
+    'accounting_handoff_not_balanced_deterministic_or_minimal')
+    const accountingHandoffCsv = model.commerceAccountingHandoffCsv(accountingHandoff)
+    assert(accountingHandoffCsv.includes('"posting_authority"')
+      && accountingHandoffCsv.includes('"review_required"')
+      && accountingHandoffCsv.includes('"unmapped"')
+      && accountingHandoffCsv.includes('"false"')
+      && accountingHandoffCsv.split('\r\n').length - 1 === 3
+      && !accountingHandoffCsv.includes('Customer'),
+    'accounting_handoff_csv_not_review_bounded_or_minimal')
     const formulaClosed = model.validateCommerceState({
       ...accountingClosed,
       closes: [{ ...accountingClosed.closes[0], operator: '=2+2' }],
@@ -5910,6 +5948,19 @@ async function verifyCommerceRuntime() {
       && legacyAccountingExport.orders[0].subtotalMmk === null
       && legacyAccountingExport.orders[0].taxMode === 'not_recorded',
     'daily_close_export_invented_legacy_calculation')
+    const legacyAccountingHandoff = model.commerceAccountingHandoff(legacyAccountingState, accountingCloseId)
+    assert(legacyAccountingHandoff?.acceptedOrderCount === 0
+      && legacyAccountingHandoff.legacyUnverifiedOrderCount === 1
+      && legacyAccountingHandoff.totalDebitMmk === legacyAccountingHandoff.totalCreditMmk
+      && legacyAccountingHandoff.entries.some((entry) => entry.accountRole === 'sales_revenue_unverified')
+      && !legacyAccountingHandoff.entries.some((entry) => entry.accountRole === 'sales_revenue'),
+    'accounting_handoff_invented_legacy_revenue_classification')
+    const formulaPaymentState = model.validateCommerceState({
+      ...accountingClosed,
+      orders: accountingClosed.orders.map((candidate) => ({ ...candidate, payment: '=2+2' })),
+    })
+    const formulaAccountingHandoff = model.commerceAccountingHandoff(formulaPaymentState, accountingCloseId)
+    assert(model.commerceAccountingHandoffCsv(formulaAccountingHandoff).includes('"\'=2+2"'), 'accounting_handoff_csv_formula_injection_not_neutralized')
     assert(model.commerceDailyCloseExport(migrated, 'CLOSE-1') === null, 'legacy_close_without_proof_became_exportable')
     assert(model.advanceCommerceOrder(reconciled, order.id, 'ready') === null, 'completion_without_attribution_succeeded')
     assert(model.advanceCommerceOrder(reconciled, order.id, 'ready', proof('ACT-COMPLETE-EARLY', 500)) === null, 'backdated_completion_succeeded')
