@@ -24,7 +24,7 @@ import {
 } from '../kernel/gateway.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyCompanyCycleText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyCompanyCycleText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -50,6 +50,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'kernel', 'alert.mjs'), 'utf8'),
   readFile(resolve(root, 'kernel', 'agent-company-operations.mjs'), 'utf8'),
   readFile(resolve(root, 'kernel', 'public', 'index.html'), 'utf8'),
+  readFile(resolve(root, 'kernel', 'api', 'agent-company.mjs'), 'utf8'),
 ])
 
 const manifest = JSON.parse(manifestText)
@@ -142,6 +143,9 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.companyOperationsDeliveryCoverage === true
   && portfolio.agentOperatingModel?.deliveryAttentionMetadataOnly === true
   && portfolio.agentOperatingModel?.ownerConsoleDeliveryCoverage === true
+  && portfolio.agentOperatingModel?.weeklyCycleDeliveryRequiredForComplete === true
+  && portfolio.agentOperatingModel?.ownerConsoleDeliveryPerOutcomeStatus === true
+  && portfolio.agentOperatingModel?.scheduledCycleDeliveryReads === false
   && portfolio.agentOperatingModel?.scheduledFunctionFootprintContract === 'supermega.kernel-function-footprint.v1'
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerFiles === 30
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerBytes === 409600
@@ -283,6 +287,17 @@ requireContract('owner console presents delivery coverage without exposing recei
   && kernelConsoleText.includes('attention.deliveryUncertain')
   && kernelConsoleText.includes('attention.deliveryMissing')
   && !/delivery\.records|deliveryId|deliveryClaimId/.test(kernelConsoleText))
+requireContract('weekly CEO completion remains distinct from durable owner delivery',
+  kernelOperationsText.includes("CEO_OUTCOME_CYCLE_STATE_FIELDS = new Set(['clientId', 'authorityDigest', 'asOf', 'includeDelivery'])")
+  && kernelOperationsText.includes('includeOutcomeStatuses: true')
+  && kernelAgentCompanyApiText.includes('includeDelivery: true')
+  && kernelAgentCompanyApiText.includes('cycleComplete: recordedComplete && deliveryReady')
+  && kernelAgentCompanyApiText.includes('deliveryRequiredForCycleComplete: true')
+  && kernelAgentCompanyApiText.includes('contentReturned: false')
+  && kernelConsoleText.includes("delivery_failed:'Delivery failed'")
+  && kernelConsoleText.includes("delivery_unverified:'Delivery unverified'")
+  && kernelConsoleText.includes("complete?'week delivered':deliveryAttention?'delivery attention'")
+  && !kernelBriefText.includes('includeDelivery'))
 requireContract('workspace consumes one capacity authority without repeating ceilings',
   agentWorkspace.resource_id === 'supermega-core-agent-workspace-v3'
   && agentWorkspace.capacity_authority === 'repository://agent_os/workforce/supermega_build_workforce.json'
@@ -785,7 +800,7 @@ requireContract('current CEO platform evidence is recorded without expanding aut
   workboard.includes('| OPS-039 | CEO + Agent Operations / Evidence Quality Codex | done-local |')
   && workboard.includes('Checkpoint `e8a3adb` adds `supermega.platform-status.v1`')
   && workboard.includes('All 289 Kernel tests, 69 connectors across 993 adversarial calls, 15 crews across 214 checks, plus the complete app gate with 69 release and 70 security checks pass')
-  && now.includes('CEO status and 30-day operations evidence are output-free across all weekly briefs')
+  && now.includes('CEO status is output-free across weekly briefs')
   && now.includes('No process, task, or server was stopped'))
 
 requireContract('current company-operations evidence is recorded without adding runtime capacity',
@@ -796,7 +811,9 @@ requireContract('current company-operations evidence is recorded without adding 
   && workboard.includes('Checkpoint `8d97d4d` reconciles each in-window completion')
   && workboard.includes('| OPS-045 | Owner Console + Agent Operations Codex | done-local |')
   && workboard.includes('Checkpoint `2b24bbf` adds one receipt-only summary')
-  && now.includes('Company Health shows receipt coverage; failed, uncertain, missing, non-durable, or invalid delivery raises owner attention'))
+  && workboard.includes('| OPS-046 | Owner Console + Agent Operations / Delivery Truth Codex | done-local |')
+  && workboard.includes('Checkpoint `ece46ce` reconciles receipt status only for the protected console')
+  && now.includes('Company Week separates recorded from delivered and fails incomplete delivery to attention'))
 
 requireContract('scheduled CEO function keeps the full connector fleet deferred and budgeted',
   kernelPackageText.includes('"function:footprint": "node scripts/verify-function-footprint.mjs"')
