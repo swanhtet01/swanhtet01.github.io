@@ -89,6 +89,7 @@ export function SettingsPage() {
   const selectedTemplate = templateFor(setup.product, setup.templateId)
   const evidenceDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date())
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
+  const managedTrialRequestFilename = `supermega-managed-trial-request-${evidenceDate}.json`
   const managedApprovalRequests = approvals.map(toManagedApprovalRequest).filter((request): request is NonNullable<typeof request> => Boolean(request))
   const localProductRecords = collectLocalProductRecords(window.localStorage)
   const localRecordCount = Object.keys(localProductRecords).length
@@ -148,6 +149,41 @@ export function SettingsPage() {
     ['Blocked gates', runtime.activationManifest?.blocked_gate_ids.length ? runtime.activationManifest.blocked_gate_ids.join(', ') : 'No blocked gates'],
     ['Safe enables', runtime.activationManifest?.safe_enable.length ? runtime.activationManifest.safe_enable.join(', ') : 'Browser-local trial only'],
   ] as const
+  const managedTrialRequest = {
+    contract: 'supermega.managed_trial_request.v1',
+    version: 1,
+    createdAt: new Date().toISOString(),
+    product: selectedProduct.name,
+    productSlug: selectedProduct.slug,
+    templateId: selectedTemplate.id,
+    templateName: selectedTemplate.name,
+    workspace: setup.workspace || 'Workspace not named',
+    owner: setup.owner || 'Owner not assigned',
+    entryPoint: setup.entryPoint || selectedTemplate.entryPoints[0] || '',
+    currentRecord: setup.currentRecord,
+    targetOutcome: setup.targetOutcome,
+    acceptanceEvidence: setup.acceptanceEvidence,
+    evidenceFilename,
+    evidenceVersion: 18,
+    pilotReady: isPilotReady,
+    localRecords: localRecordCount,
+    approvalPackets: managedApprovalRequests.length || approvals.length,
+    behaviorSignals: behaviorSignalCount,
+    activationManifest: runtime.activationManifest,
+    blockedGateIds: runtime.activationManifest?.blocked_gate_ids ?? [],
+    safeEnable: runtime.activationManifest?.safe_enable ?? ['browser_local_trial', 'evidence_export'],
+    nextHostedBlocker: runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Configure managed activation.',
+    automationBoundary: runtime.activationManifest?.automation_boundary ?? 'Human approval is required before external sends, payments, publishing, imports, or managed writes.',
+    noExternalSend: true,
+  }
+  const managedTrialRequestRows = [
+    ['Workspace', managedTrialRequest.workspace],
+    ['Product', `${managedTrialRequest.product} / ${managedTrialRequest.templateName}`],
+    ['Evidence', `${managedTrialRequest.evidenceFilename} v${managedTrialRequest.evidenceVersion}`],
+    ['Hosted blocker', managedTrialRequest.nextHostedBlocker],
+    ['Safe enables', managedTrialRequest.safeEnable.join(', ')],
+    ['Write boundary', 'No external send or managed write from this packet'],
+  ] as const
   const activationRows: Array<readonly [string, string]> = [
     ['Trial', isPilotReady ? 'Ready' : `${completion}%`],
     ['Runtime', runtime.serviceStatus],
@@ -162,7 +198,8 @@ export function SettingsPage() {
       ]),
     ['Coverage', `${runtime.coverageScore}%`],
   ]
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 17, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, learningRows, learningPlanRows, agentPlanRows }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 18, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows }, null, 2))}`
+  const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
 
   useEffect(() => {
     if (!requestedProduct || requestedProduct === setup.product) return
@@ -325,7 +362,7 @@ export function SettingsPage() {
           <div className="form-row pilot-text-row"><label>Baseline<textarea maxLength={240} required value={setup.baseline} onChange={(event) => updateSetup({ baseline: event.target.value })} placeholder="Current time, error rate, backlog, output." /></label><label>Target outcome<textarea maxLength={240} required value={setup.targetOutcome} onChange={(event) => updateSetup({ targetOutcome: event.target.value })} placeholder={`Target for ${selectedTemplate.metric.toLowerCase()}.`} /></label></div>
           <div className="form-row pilot-text-row"><label>Human authority boundary<textarea maxLength={240} required value={setup.authorityBoundary} onChange={(event) => updateSetup({ authorityBoundary: event.target.value })} placeholder="Which actions need owner approval?" /></label><label>Acceptance evidence<textarea maxLength={240} required value={setup.acceptanceEvidence} onChange={(event) => updateSetup({ acceptanceEvidence: event.target.value })} placeholder="What proves the pilot works?" /></label></div>
           <div className="settings-step-actions"><button className="text-link" onClick={() => chooseSettingsStep('workflow')} type="button">Back</button><button className="core-button primary" type="submit">Save client setup</button></div>
-          {setup.savedAt ? <div className="setup-complete"><div><strong>Trial plan saved.</strong><small>Export evidence before managed import.</small></div><div className="setup-complete-actions"><Link className="core-button" to={setupProductPreviewPath(setup.product)}>Open {productDisplayName(setup.product)}</Link><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a><a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id)}>Request managed trial</a></div></div> : null}
+          {setup.savedAt ? <div className="setup-complete"><div><strong>Trial plan saved.</strong><small>Export evidence before managed import.</small></div><div className="setup-complete-actions"><Link className="core-button" to={setupProductPreviewPath(setup.product)}>Open {productDisplayName(setup.product)}</Link><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a><a className="core-button" download={managedTrialRequestFilename} href={managedTrialRequestHref}>Download request packet</a><a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id)}>Request managed trial</a></div></div> : null}
           </fieldset>
           <p className="form-notice" aria-live="polite">{notice || (setup.savedAt ? `Last saved ${formatTime(setup.savedAt)}` : setup.startedAt ? `Guided ${selectedTemplate.name} sample started.` : 'Draft stays local.')}</p>
         </form>
@@ -354,7 +391,11 @@ export function SettingsPage() {
                 <div><span className="core-eyebrow">Activation manifest</span><h3>What automation may do next</h3><p>{runtime.activationManifest?.automation_boundary ?? 'Agents may prepare evidence and drafts; managed writes stay locked until runtime health confirms activation.'}</p></div>
                 <div className="learning-plan-rows">{activationManifestRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
               </div>
-              <div className="learning-plan-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export AI context package</a>{setup.savedAt ? <a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id)}>Request managed trial</a> : <button className="core-button primary" disabled type="button">Save trial first</button>}</div>
+              <div aria-label="Managed trial request packet" className="learning-plan-agent managed-request-panel">
+                <div><span className="core-eyebrow">Managed trial request</span><h3>What support needs</h3><p>This packet is local. It packages the workspace, product, evidence file, blocked gates, and safe automation boundary for handoff.</p></div>
+                <div className="managed-request-rows">{managedTrialRequestRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+              </div>
+              <div className="learning-plan-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export AI context package</a>{setup.savedAt ? <><a className="core-button" download={managedTrialRequestFilename} href={managedTrialRequestHref}>Download request packet</a><a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id)}>Request managed trial</a></> : <button className="core-button primary" disabled type="button">Save trial first</button>}</div>
             </div>
             <Suspense fallback={<p className="form-notice" role="status">Loading managed activation plan...</p>}><ManagedActivationRunbook runtime={runtime} /></Suspense>
             {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}

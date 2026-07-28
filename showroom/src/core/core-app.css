@@ -701,6 +701,13 @@ textarea { min-height: 72px; resize: vertical; }
 .learning-plan-rows strong { overflow: hidden; color: var(--core-ink); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .learning-plan-rows em { overflow: hidden; color: var(--core-muted); font-size: 10px; font-style: normal; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .learning-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.managed-request-panel { border-top: 1px solid var(--core-line); padding-top: 12px; }
+.managed-request-rows { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 9px; background: var(--core-panel); }
+.managed-request-rows span { min-width: 0; min-height: 76px; display: grid; align-content: center; gap: 4px; border-right: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); padding: 10px; }
+.managed-request-rows span:nth-child(3n) { border-right: 0; }
+.managed-request-rows span:nth-last-child(-n+3) { border-bottom: 0; }
+.managed-request-rows small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.managed-request-rows strong { overflow: hidden; color: var(--core-ink); font-size: 11px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
 
 .simple-toolbar { justify-content: flex-start; }
 .team-picker { min-width: 220px; display: flex; align-items: center; gap: 9px; }
@@ -1190,6 +1197,10 @@ textarea { min-height: 72px; resize: vertical; }
   .learning-plan-rows span { border-right: 0; }
   .learning-plan-rows span:nth-last-child(-n+2) { border-bottom: 1px solid var(--core-line); }
   .learning-plan-rows span:last-child { border-bottom: 0; }
+  .managed-request-rows { grid-template-columns: 1fr; }
+  .managed-request-rows span { min-height: 66px; border-right: 0; border-bottom: 1px solid var(--core-line); }
+  .managed-request-rows span:nth-last-child(-n+3) { border-bottom: 1px solid var(--core-line); }
+  .managed-request-rows span:last-child { border-bottom: 0; }
   .learning-plan-actions .core-button { flex: 1 1 180px; }
   .trial-control-panel { align-items: flex-start; }
   .agent-team-workspace { height: auto; }
