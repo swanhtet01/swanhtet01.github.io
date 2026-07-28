@@ -46,6 +46,14 @@ Lead or channel message -> customer and quote -> order -> availability and alloc
 9. Workforce and branch operations: roles, shifts, targets, commissions, till responsibility, branch transfer, opening and closing checklist.
 10. Insight: sales, margin projection, stock turns, fill rate, dead stock, supplier lead time, channel conversion, exceptions, audit.
 
+### Implemented finance boundary
+
+Checkpoint `369cb2b` adds `supermega.commerce.accounting-handoff.v1` inside the existing Last close disclosure. It derives balanced debit and credit control totals from the immutable close, groups debits by payment method, separates accepted sales revenue from legacy-unverified revenue, retains exception references, neutralizes spreadsheet formulas, and binds the artifact to the source-close digest. Account roles remain deliberately unmapped, status is `review_required`, posting authority is `none`, and no external accounting write occurs.
+
+This follows the enterprise pattern in current SAP guidance: tax codes are configuration records determined from document attributes, and tax codes also determine the applicable tax account. SuperMega therefore must not invent a Myanmar rate, hidden default, or G/L account. The next finance slice requires versioned tax-code configuration, immutable per-order determination evidence, explicit account mapping, correction handling, and an owner-approved duplicate-safe adapter before any posting claim.
+
+Primary references: [SAP Configuration: Tax Codes](https://help.sap.com/docs/SAP_BUSINESS_BYDESIGN/0635ec3491974ad988be05d6b1dcf734/2d0f85c6722d101492eddec9ab33f6ec.html?locale=en-US) and [SAP S/4HANA Tax Codes](https://help.sap.com/docs/SAP_S4HANA_ON-PREMISE/238f821691174c1d9df721487e44deb0/3d7ec2531bb9b44ce10000000a174cb4.html).
+
 ### Template packs
 
 - Retail and wholesale: POS, price tiers, purchasing, warehouse, returns, branch close.

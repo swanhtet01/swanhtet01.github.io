@@ -52,6 +52,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'kernel', 'public', 'index.html'), 'utf8'),
   readFile(resolve(root, 'kernel', 'api', 'agent-company.mjs'), 'utf8'),
 ])
+const enterpriseRoadmap = await readFile(resolve(root, 'hq', 'research', 'enterprise-product-roadmap-2026-07-28.md'), 'utf8')
 
 const manifest = JSON.parse(manifestText)
 const portfolio = JSON.parse(portfolioText)
@@ -525,6 +526,9 @@ requireContract('accepted core checkpoints lead directly to real work',
   && workboard.includes('one deterministic `ORT` command bound to the order, SKU, quantity, human evidence')
   && workboard.includes('All 314 Python tests, 54 Shop inventory/221 Commerce/258 Production checks')
   && workboard.includes('previewed `Main store / OPENING-001`')
+  && workboard.includes('| ENG-098 | Shop + Finance Integrity Codex | done-local |')
+  && workboard.includes('adds `supermega.commerce.accounting-handoff.v1`')
+  && workboard.includes('54 Shop inventory/230 Commerce/265 Production checks')
   && workboard.includes('Checkpoints `0831ad7` and `920c13d` add an immutable reviewed BOM/routing package')
   && workboard.includes('Checkpoints `0f3dc09` and `03e1f1b` add tenant-bound')
   && workboard.includes('Retain the completed Shop, Plant, Website, and Ecommerce checkpoints')
@@ -538,6 +542,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && now.includes('Shop Stock has one Commerce authority')
   && now.includes('Orders and Website conversions reserve deterministic location/lots')
   && now.includes('sellable returns restore the exact fulfilled location/lot')
+  && now.includes('balanced accounting-review CSV grouped by payment method')
   && now.includes('Managed workspaces retain exact requests in the Shop inbox')
   && now.includes('`npm run dev` starts canonical FastAPI plus Vite on loopback')
   && now.includes('Records stay browser-local; hosted activation is not proven')
@@ -585,7 +590,14 @@ requireContract('Shop uses the stable commerce runtime',
   && product('shop')?.runtimeSurface === 'commerce'
   && product('shop')?.compatibilityPath === '/operations/commerce/'
   && product('shop')?.surfaces?.join(',') === 'Sell,Orders,Stock'
+  && product('shop')?.job?.includes('balanced review-only accounting handoff')
   && product('shop')?.templateContract?.productId === 'commerce')
+requireContract('Shop finance roadmap separates reviewed handoff from tax and posting authority',
+  enterpriseRoadmap.includes('Checkpoint `369cb2b` adds `supermega.commerce.accounting-handoff.v1`')
+  && enterpriseRoadmap.includes('posting authority is `none`')
+  && enterpriseRoadmap.includes('must not invent a Myanmar rate, hidden default, or G/L account')
+  && enterpriseRoadmap.includes('https://help.sap.com/docs/SAP_BUSINESS_BYDESIGN/')
+  && enterpriseRoadmap.includes('https://help.sap.com/docs/SAP_S4HANA_ON-PREMISE/'))
 requireContract('Plant uses the stable production runtime',
   product('plant')?.name === 'Plant'
   && product('plant')?.runtimeSurface === 'production'
