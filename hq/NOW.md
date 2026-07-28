@@ -48,8 +48,8 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, release, replay, and rollback; operation/output requires exact authenticated Shop issue evidence (`3c885d8`).
 - Home keeps Shop and Plant exceptions above collapsed HQ work. When present, a Plant issue badge links to Problems and otherwise the card opens Jobs. `/work/` stays labelled HQ; bottom navigation reads Home, HQ, and Products.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
-- CEO status and 30-day operations evidence are secret-safe, output-free, and present in all five weekly briefs; daily control no longer fetches FX (`e8a3adb`, `909807d`).
-- CEO brief startup is capped at 30 eager files/409,600 bytes; current evidence is 26/390,651. The full 69-connector audit loads only for Engineering and Finance/Risk (`6bad4e7`).
+- CEO status and 30-day operations evidence are output-free across all weekly briefs. Delivery receipts are reconciled; failed, uncertain, missing, non-durable, or invalid coverage raises owner attention (`909807d`, `8d97d4d`).
+- CEO brief startup is capped at 30 eager files/409,600 bytes; current evidence is 26/397,378. The full 69-connector audit loads only for Engineering and Finance/Risk (`6bad4e7`).
 
 ## Verified baseline
 
@@ -60,7 +60,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
 - Both `supermega.dev` and `app.supermega.dev` serve exact remote `main` commit `af3f45c22b13e5edccdf87214608817fc3499e4d`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Paired release identity is current at catalog `2026-07-28.1`.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-- The latest post-gate Ally audit is serially eligible at 84.0% RAM; the prior non-terminating trim released 1,732 MB. Zero models, one worker, and one frontend remain. No process, task, or server was stopped.
+- The latest post-gate Ally audit is serially eligible at 81.9% RAM after a non-terminating trim released 1,687.6 MB. Zero models, one worker, and one frontend remain. No process, task, or server was stopped.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 

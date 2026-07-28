@@ -82,12 +82,12 @@ const ceoOperationsEvidence = companyOperationsStatusView({
   windowDays: 30,
   readiness: 'meeting_targets',
   counts: { total: 5, planned: 0, running: 0, cancelled: 0, terminal: 5, completed: 5, partial: 0, blocked: 0, failed: 0, evaluated: 5, accepted: 5, revisionRequired: 0, missingEvaluation: 0 },
-  attention: { overduePlanned: 0, overdueRunning: 0, failedOrBlocked: 0, revisionRequired: 0, missingEvaluation: 0 },
+  attention: { overduePlanned: 0, overdueRunning: 0, failedOrBlocked: 0, revisionRequired: 0, missingEvaluation: 0, deliveryFailed: 0, deliveryUncertain: 0, deliveryMissing: 0 },
   targets: Array.from({ length: 8 }, () => ({ state: 'met' })),
   workforce: { availableAgents: 12, utilizedAgents: 2, totalAssignments: 5, activeAssignments: 0, usedRoleCalls: 15, modelCalls: 3, cacheHits: 2, weightedTotalUnits: 1200, agents: [{ agentId: 'must-not-escape' }] },
-  outcomes: { available: true, durable: true, state: 'measured', counts: { completed: 5, evaluated: 5, accepted: 5, revisionRequired: 0 }, efficiency: { available: true, acceptedOutcomesPer1000WorkUnits: 4.166667 }, records: [{ output: 'must-not-escape' }] },
+  outcomes: { available: true, durable: true, state: 'measured', counts: { completed: 5, evaluated: 5, accepted: 5, revisionRequired: 0 }, efficiency: { available: true, acceptedOutcomesPer1000WorkUnits: 4.166667 }, delivery: { available: true, durable: true, state: 'ready', counts: { completed: 5, recorded: 5, sent: 5, failed: 0, uncertain: 0, missing: 0 }, records: [{ deliveryId: 'must-not-escape-delivery' }] }, records: [{ output: 'must-not-escape' }] },
   coverage: { directCyclesExcluded: true },
-  exposure: { rawEvidenceReturned: false, modelOutputReturned: false, specialistOutputReturned: false, providerRowsReturned: false },
+  exposure: { rawEvidenceReturned: false, modelOutputReturned: false, specialistOutputReturned: false, providerRowsReturned: false, ceoDeliveryContentReturned: false },
 })
 const ceoClientGateIndex = kernelBriefText.indexOf('if (!clientId)')
 const ceoExecutionClaimIndex = kernelBriefText.indexOf('const executionClaim =', ceoClientGateIndex)
@@ -138,6 +138,8 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.allWeeklyOutcomesObserveCompanyOperations === true
   && portfolio.agentOperatingModel?.dailyCompanyControlUsesFx === false
   && portfolio.agentOperatingModel?.companyOperationsRawEvidenceReturned === false
+  && portfolio.agentOperatingModel?.companyOperationsDeliveryCoverage === true
+  && portfolio.agentOperatingModel?.deliveryAttentionMetadataOnly === true
   && portfolio.agentOperatingModel?.scheduledFunctionFootprintContract === 'supermega.kernel-function-footprint.v1'
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerFiles === 30
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerBytes === 409600
@@ -232,6 +234,8 @@ requireContract('CEO owner delivery is durable, metadata-only, and never unsafel
   && kernelOperationsText.includes("export const CEO_OUTCOME_DELIVERY_CONTRACT = 'supermega.ceo-outcome-delivery.v1'")
   && kernelOperationsText.includes("const CEO_OUTCOME_DELIVERY_INPUT_FIELDS = new Set(['clientId', 'operationId', 'recordHash', 'deliveryClaimId', 'status'])")
   && kernelOperationsText.includes("CEO_DELIVERY_STATUSES = new Set(['sent', 'failed', 'uncertain'])")
+  && kernelOperationsText.includes('async function buildCeoOutcomeDelivery(')
+  && kernelOperationsText.includes('deliveryFailed: outcomes.delivery.counts.failed')
   && !kernelOperationsText.includes("CEO_OUTCOME_DELIVERY_INPUT_FIELDS = new Set(['briefText'"))
 requireContract('CEO platform evidence is exact, bounded, and secret-safe',
   ceoPlatformEvidence.contract === 'supermega.platform-status.v1'
@@ -257,12 +261,19 @@ requireContract('CEO company-operations evidence is measured, bounded, and outpu
   && ceoOperationsEvidence.workforce?.utilizedAgents === 2
   && ceoOperationsEvidence.outcomes?.durable === true
   && ceoOperationsEvidence.outcomes?.efficiencyAvailable === true
+  && ceoOperationsEvidence.delivery?.durable === true
+  && ceoOperationsEvidence.delivery?.state === 'ready'
+  && ceoOperationsEvidence.delivery?.sent === 5
+  && ceoOperationsEvidence.attention?.deliveryFailed === 0
+  && ceoOperationsEvidence.attention?.deliveryUncertain === 0
+  && ceoOperationsEvidence.attention?.deliveryMissing === 0
   && ceoOperationsEvidence.controls?.metadataOnly === true
   && ceoOperationsEvidence.controls?.rawEvidenceReturned === false
   && ceoOperationsEvidence.controls?.modelOutputReturned === false
   && ceoOperationsEvidence.controls?.specialistOutputReturned === false
   && ceoOperationsEvidence.controls?.providerRowsReturned === false
-  && !/must-not-escape|"clientId"|"agentId"|"briefText"/i.test(JSON.stringify(ceoOperationsEvidence)))
+  && ceoOperationsEvidence.controls?.ceoDeliveryContentReturned === false
+  && !/must-not-escape|"clientId"|"agentId"|"briefText"|"deliveryId"/i.test(JSON.stringify(ceoOperationsEvidence)))
 requireContract('workspace consumes one capacity authority without repeating ceilings',
   agentWorkspace.resource_id === 'supermega-core-agent-workspace-v3'
   && agentWorkspace.capacity_authority === 'repository://agent_os/workforce/supermega_build_workforce.json'
@@ -765,15 +776,16 @@ requireContract('current CEO platform evidence is recorded without expanding aut
   workboard.includes('| OPS-039 | CEO + Agent Operations / Evidence Quality Codex | done-local |')
   && workboard.includes('Checkpoint `e8a3adb` adds `supermega.platform-status.v1`')
   && workboard.includes('All 289 Kernel tests, 69 connectors across 993 adversarial calls, 15 crews across 214 checks, plus the complete app gate with 69 release and 70 security checks pass')
-  && now.includes('CEO status and 30-day operations evidence are secret-safe, output-free')
+  && now.includes('CEO status and 30-day operations evidence are output-free across all weekly briefs')
   && now.includes('No process, task, or server was stopped'))
 
 requireContract('current company-operations evidence is recorded without adding runtime capacity',
   workboard.includes('| OPS-040 | CEO + Agent Operations / Evidence Quality Codex | done-local |')
   && workboard.includes('Checkpoint `909807d` adds `supermega.company-operations-status.v1`')
   && workboard.includes('All 291 Kernel tests, 69 connectors across 993 adversarial calls, 15 crews across 214 checks')
-  && now.includes('present in all five weekly briefs')
-  && now.includes('daily control no longer fetches FX'))
+  && workboard.includes('| OPS-044 | CEO + Agent Operations / Delivery Evidence Codex | done-local |')
+  && workboard.includes('Checkpoint `8d97d4d` reconciles each in-window completion')
+  && now.includes('Delivery receipts are reconciled; failed, uncertain, missing, non-durable, or invalid coverage raises owner attention'))
 
 requireContract('scheduled CEO function keeps the full connector fleet deferred and budgeted',
   kernelPackageText.includes('"function:footprint": "node scripts/verify-function-footprint.mjs"')
