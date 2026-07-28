@@ -221,12 +221,18 @@
   background: #fff8ed;
 }
 
+.ecommerce-delivery-template-cockpit {
+  border-color: rgba(20, 83, 45, .18);
+  background: #f4fbf1;
+}
+
 .ecommerce-customer-follow-up-cockpit {
   border-color: rgba(79, 70, 229, .18);
   background: #f7f7ff;
 }
 
 .ecommerce-delivery-review-draft,
+.ecommerce-delivery-template-draft,
 .ecommerce-follow-up-draft {
   grid-column: 1 / -1;
   border-radius: 9px;
@@ -239,6 +245,10 @@
 
 .ecommerce-delivery-review-draft {
   border: 1px solid rgba(180, 83, 9, .16);
+}
+
+.ecommerce-delivery-template-draft {
+  border: 1px solid rgba(20, 83, 45, .16);
 }
 
 .ecommerce-follow-up-draft {

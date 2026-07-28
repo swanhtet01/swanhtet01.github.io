@@ -109,6 +109,13 @@ function storefrontDisplayName(item: StorefrontPreviewItem) {
   return item.merchandising?.displayName || item.name
 }
 
+function deliveryAreaFromCustomerReference(value: string) {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  const separatorIndex = normalized.lastIndexOf('·')
+  const candidate = separatorIndex >= 0 ? normalized.slice(separatorIndex + 1).trim() : ''
+  return candidate || 'Customer area'
+}
+
 function storefrontArtworkKind(sku: string) {
   return Array.from(sku).reduce((total, character) => total + character.charCodeAt(0), 0) % 5
 }
@@ -218,6 +225,7 @@ export function EcommerceProduct() {
   const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
   const [customerFollowUpDraft, setCustomerFollowUpDraft] = useState('')
   const [deliveryReviewDraft, setDeliveryReviewDraft] = useState('')
+  const [deliveryAreaTemplateDraft, setDeliveryAreaTemplateDraft] = useState('')
   const storefrontSaveRef = useRef<HTMLButtonElement>(null)
   const storefrontPreviewHeadingRef = useRef<HTMLHeadingElement>(null)
 
@@ -710,9 +718,25 @@ export function EcommerceProduct() {
       return
     }
     const lines = commerceStorefrontRequestLines(deliveryReviewRequest)
-    const zoneHint = deliveryReviewRequest.customerReference.split('·').pop()?.trim() || 'customer area'
+    const zoneHint = deliveryAreaFromCustomerReference(deliveryReviewRequest.customerReference)
     const itemSummary = lines.length === 1 ? lines[0].name : `${lines.length} items`
     setDeliveryReviewDraft(`Owner draft only: review ${zoneHint} as the delivery zone for ${deliveryReviewRequest.customerReference}. Quote ${itemSummary} at ${formatMmk(deliveryReviewRequest.totalMmk)} before delivery fee. Shop must confirm fee, rider handoff, payment, and stock before any customer message or booking. Reference ${deliveryReviewRequest.id}.`)
+  }
+
+  function prepareDeliveryAreaTemplate() {
+    if (!deliveryReviewRequest) {
+      if (!buyingReady) {
+        finishStorefrontSetup()
+        return
+      }
+      setDeliveryAreaTemplateDraft('Owner draft only: delivery-area templates are ready. Wait for a reviewed delivery request, then approve area, fee rule, rider handoff, payment policy, and cut-off before reuse.')
+      return
+    }
+    const area = deliveryAreaFromCustomerReference(deliveryReviewRequest.customerReference)
+    const paymentPolicy = 'quote' in deliveryReviewRequest && deliveryReviewRequest.quote.payment.adapter === 'kbzpay_manual'
+      ? 'manual QR review'
+      : 'cash-on-delivery review'
+    setDeliveryAreaTemplateDraft(`Owner draft only: save ${area} as a delivery-area template after Shop approves fee, rider handoff, ${paymentPolicy}, cut-off, and stock confirmation. Reuse stays locked until managed activation proves audit, roles, and write controls. Reference ${deliveryReviewRequest.id}.`)
   }
 
   function openFilteredRequestInShop() {
@@ -978,7 +1002,23 @@ export function EcommerceProduct() {
   ] as const
   const deliveryReviewRequest = pendingManagedRequests.find((request) => request.fulfilment === 'delivery')
     ?? null
-  const deliveryZoneHint = deliveryReviewRequest?.customerReference.split('·').pop()?.trim() || ''
+  const deliveryZoneHint = deliveryReviewRequest ? deliveryAreaFromCustomerReference(deliveryReviewRequest.customerReference) : ''
+  const deliveryAreaTemplateStage = importNeeded
+    ? 'Import catalog before delivery templates'
+    : !savedDraftIsCurrent
+      ? 'Save storefront before delivery templates'
+      : deliveryReviewRequest
+        ? 'Prepare delivery-area template'
+        : buyingReady
+          ? 'Template ready when requests arrive'
+          : 'Delivery templates locked'
+  const deliveryAreaTemplateRows = [
+    ['Area', deliveryZoneHint || 'No request yet'],
+    ['Rule', deliveryReviewRequest ? 'Owner fee review' : savedDraftIsCurrent ? 'Template shell' : 'Locked'],
+    ['Rider', deliveryReviewRequest ? 'Handoff review' : 'Not assigned'],
+    ['Payment', deliveryReviewRequest && 'quote' in deliveryReviewRequest ? deliveryReviewRequest.quote.payment.adapter === 'kbzpay_manual' ? 'Manual QR' : 'COD review' : 'No charge'],
+    ['Reuse', deliveryReviewRequest ? 'After approval' : 'Managed gate'],
+  ] as const
   const deliveryFeeStage = importNeeded
     ? 'Import catalog before delivery setup'
     : !savedDraftIsCurrent
@@ -1198,6 +1238,19 @@ export function EcommerceProduct() {
           {deliveryFeeRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
         {deliveryReviewDraft ? <p className="ecommerce-delivery-review-draft" role="status">{deliveryReviewDraft}</p> : null}
+      </section>
+
+      <section aria-label="Delivery-area template controls" className="ecommerce-ops-cockpit ecommerce-delivery-template-cockpit">
+        <div>
+          <span className="core-eyebrow">Delivery-area templates</span>
+          <h2>{deliveryAreaTemplateStage}</h2>
+          <p>AI turns repeated delivery requests into reusable area, fee, rider, payment, and cut-off templates. No saved template, customer message, rider booking, fee charge, settlement write, stock move, or Shop write runs here.</p>
+          <button className="text-link" disabled={catalogHydrating || (!deliveryReviewRequest && !buyingReady)} onClick={prepareDeliveryAreaTemplate} type="button">Prepare area template</button>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {deliveryAreaTemplateRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+        {deliveryAreaTemplateDraft ? <p className="ecommerce-delivery-template-draft" role="status">{deliveryAreaTemplateDraft}</p> : null}
       </section>
 
       <section aria-label="Quote recovery controls" className="ecommerce-ops-cockpit ecommerce-quote-recovery-cockpit">
