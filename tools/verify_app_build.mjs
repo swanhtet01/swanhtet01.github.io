@@ -1970,6 +1970,14 @@ if (!coreSource.includes('templateId: string')
 const managedClientImportUiContract = sourceBlock(clientOnboardingUiSource, '  async function validateOrDownloadStagingPackage()', '\n\n  return (')
 if (!managedTrialSource.includes('export async function validateManagedClientImport')
   || !managedTrialSource.includes("'/api/trial/v1/imports/validate'")
+  || !managedTrialSource.includes('export type ManagedClientImportProvisioningPlan = {')
+  || !managedTrialSource.includes("contract: 'supermega.client_import_provisioning_plan.v1'")
+  || !managedTrialSource.includes('export function buildManagedClientImportProvisioningPlan')
+  || !managedTrialSource.includes('zero_write_validation_receipt')
+  || !managedTrialSource.includes('durable_revision_confirmation')
+  || !managedTrialSource.includes('forbidden_until_applied')
+  || !managedTrialSource.includes('copy_browser_storage_to_production')
+  || !managedTrialSource.includes('scheduler_autopilot')
   || !managedTrialSource.includes('expectedPackageDigest = await sha256Text(body)')
   || !managedTrialSource.includes('assertManagedClientImportValidation(')
   || !managedTrialSource.includes("activation.status !== 'not_applied'")
@@ -2000,6 +2008,11 @@ if (!managedTrialSource.includes('export async function validateManagedClientImp
   || !clientOnboardingUiSource.includes("error.code === 'trial_version_conflict'")
   || !clientOnboardingUiSource.includes('validation: ecommerceNeedsRefresh ? null : current.validation')
   || !clientOnboardingUiSource.includes('const bootstrap = await loadManagedBootstrap(expectedIdentity)')
+  || !clientOnboardingUiSource.includes('buildManagedClientImportProvisioningPlan(')
+  || !clientOnboardingUiSource.includes('provisioningPlan')
+  || !clientOnboardingUiSource.includes('Provisioning plan')
+  || !clientOnboardingUiSource.includes('managed provisioning plan')
+  || !clientOnboardingUiSource.includes('No browser storage, customer message, payment, domain publish, or scheduler autopilot is allowed from this validation.')
   || !clientOnboardingUiSource.includes('validated.receipt.package_digest,')
   || !clientOnboardingUiSource.includes('and approve this import.')
   || !clientOnboardingUiSource.includes('idempotent command confirmed')
@@ -3800,6 +3813,29 @@ async function verifyManagedClientImportRuntime() {
       packageDigest,
     )
     assert(accepted === receipt && /^sha256:[0-9a-f]{64}$/.test(packageDigest), 'managed_client_import_valid_receipt_rejected')
+    const provisioningPlan = managedTrial.buildManagedClientImportProvisioningPlan(
+      staged,
+      accepted,
+      identity,
+      managedTrial.managedClientImportActivationContext(staged),
+    )
+    assert(provisioningPlan.contract === 'supermega.client_import_provisioning_plan.v1'
+      && provisioningPlan.status === 'ready_for_owner_review'
+      && provisioningPlan.workspace_id === identity.workspaceId
+      && provisioningPlan.package_digest === packageDigest
+      && provisioningPlan.expected_version === 0
+      && provisioningPlan.required_controls.includes('zero_write_validation_receipt')
+      && provisioningPlan.required_controls.includes('durable_revision_confirmation')
+      && provisioningPlan.forbidden_until_applied.includes('copy_browser_storage_to_production')
+      && provisioningPlan.forbidden_until_applied.includes('scheduler_autopilot'), 'managed_client_import_provisioning_plan_invalid')
+    const blockedProvisioningPlan = managedTrial.buildManagedClientImportProvisioningPlan(
+      staged,
+      { ...accepted, activation: { ...accepted.activation, atomic_adapter_ready: false } },
+      identity,
+      managedTrial.managedClientImportActivationContext(staged),
+    )
+    assert(blockedProvisioningPlan.status === 'blocked', 'managed_client_import_blocked_provisioning_plan_marked_ready')
+    managedClientImportRuntimeChecks += 2
     assert(await managedTrial.managedClientImportPackageDigest(staged) === packageDigest, 'managed_client_import_package_digest_not_deterministic')
     assert(await managedTrial.managedClientImportPackageDigest({ ...staged, owner: 'Different owner' }) !== packageDigest, 'managed_client_import_context_not_digest_bound')
 

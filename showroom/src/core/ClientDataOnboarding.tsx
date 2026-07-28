@@ -15,6 +15,7 @@ import {
   ManagedTrialError,
   applyManagedClientImport,
   assertManagedClientImportState,
+  buildManagedClientImportProvisioningPlan,
   loadManagedBootstrap,
   managedClientImportActivationContext,
   sameManagedClientImportState,
@@ -23,6 +24,7 @@ import {
   type ManagedClientImportActivationContext,
   type ManagedClientImportActivationResult,
   type ManagedClientImportPackage,
+  type ManagedClientImportProvisioningPlan,
   type ManagedClientImportValidation,
   type ManagedIdentity,
 } from './managed-trial'
@@ -41,6 +43,7 @@ type ValidatedImport = {
   activationContext: ManagedClientImportActivationContext
   commandId: string
   contextKey: string
+  provisioningPlan: ManagedClientImportProvisioningPlan
   receipt: ManagedClientImportValidation
   stagingPackage: ManagedClientImportPackage
 }
@@ -351,6 +354,16 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     ['Owner', importContextReady ? owner.trim() : 'Missing'],
     ['Review', appliedIsCurrent ? 'Receipt ready' : canApplyManagedImport ? 'Approved' : validationIsCurrent ? 'Approve' : state.preview?.readyForStaging ? 'Prepare' : 'Locked'],
   ] as const
+  const provisioningPlan = validationIsCurrent ? state.validation?.provisioningPlan : null
+  const provisioningPlanRows = provisioningPlan
+    ? [
+        ['Status', provisioningPlan.status === 'ready_for_owner_review' ? 'Owner review' : 'Blocked'],
+        ['Target', provisioningPlan.target_surface],
+        ['Rows', `${provisioningPlan.row_count}`],
+        ['Version', `${provisioningPlan.expected_version}`],
+        ['Controls', `${provisioningPlan.required_controls.length}`],
+      ] as const
+    : []
 
   useEffect(() => {
     requestRef.current += 1
@@ -521,6 +534,12 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         : undefined
       if (validationRequestRef.current !== validationRequestId || validationContextChanged()) return
       const activationContext = managedClientImportActivationContext(stagingPackage, activationBootstrap)
+      const provisioningPlan = buildManagedClientImportProvisioningPlan(
+        stagingPackage,
+        receipt,
+        expectedIdentity,
+        activationContext,
+      )
       const commandId = receipt.activation.atomic_adapter_ready ? importCommandId() : ''
       setState((current) => current.preview?.previewDigest === expectedPreviewDigest
         ? {
@@ -533,6 +552,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
               activationContext,
               commandId,
               contextKey: expectedContextKey,
+              provisioningPlan,
               receipt,
               stagingPackage,
             },
@@ -672,6 +692,12 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             {activationHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
           </div>
         </div>
+        {provisioningPlan ? <div aria-label={`${productName} managed provisioning plan`} className="catalog-import-handoff">
+          <div><span className="core-eyebrow">Provisioning plan</span><strong>{provisioningPlan.next_step}</strong><small>No browser storage, customer message, payment, domain publish, or scheduler autopilot is allowed from this validation.</small></div>
+          <div className="catalog-import-handoff-list">
+            {provisioningPlanRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
+          </div>
+        </div> : null}
         {state.busy ? <p className="form-notice" role="status">Matching columns and checking every row...</p> : null}
         {state.validating ? <p className="form-notice" role="status">Checking the prepared import with your workspace...</p> : null}
         {state.applying ? <p className="form-notice" role="status">{managedActivation?.progressLabel ?? 'Confirming the import...'}</p> : null}
