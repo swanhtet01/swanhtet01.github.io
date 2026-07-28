@@ -32,12 +32,14 @@ from supermega_runtime.trial_store import TrialValidationError
 
 COMMERCE_SCHEMA = "supermega.commerce.workspace.v2"
 COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v1"
+COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v2"
 COMMERCE_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
         "commerce.item.created",
         "commerce.item.updated",
         "commerce.tax_configuration.saved",
+        "commerce.account_mapping.saved",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
@@ -66,6 +68,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.item.created",
         "commerce.item.updated",
         "commerce.tax_configuration.saved",
+        "commerce.account_mapping.saved",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
@@ -123,6 +126,7 @@ _MAX_PURCHASE_ORDERS = 100
 _MAX_CATALOG_BASELINES = 500
 _MAX_CATALOG_CHANGES = 500
 _MAX_TAX_CONFIGURATIONS = 100
+_MAX_ACCOUNT_MAPPING_CONFIGURATIONS = 100
 _MAX_ORDER_LINES = 20
 _MAX_RETURNS_PER_ORDER = 100
 _MAX_MOVEMENT_ID_LENGTH = 2_000
@@ -130,6 +134,13 @@ _PURCHASE_ORDER_ID_PATTERN = re.compile(
     r"PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
 _TAX_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{0,11}")
+_EXTERNAL_ACCOUNT_CODE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,39}")
+_ACCOUNT_ROLES = (
+    "payment_clearing",
+    "sales_revenue",
+    "sales_revenue_unverified",
+    "tax_payable",
+)
 _ISO_TIMESTAMP_PATTERN = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}:[0-9]{2}"
     r"(?:\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])"
@@ -153,6 +164,8 @@ _CATALOG_BASELINE_FIELDS = frozenset(
 _TAX_CONFIGURATION_FIELDS = frozenset(
     {"revision", "code", "label", "rateBasisPoints", "mode", "proof"}
 )
+_ACCOUNT_MAPPING_CONFIGURATION_FIELDS = frozenset({"revision", "mappings", "proof"})
+_ACCOUNT_MAPPING_FIELDS = frozenset({"accountRole", "externalAccountCode"})
 _ORDER_REQUIRED_FIELDS = frozenset(
     {
         "id",
@@ -549,6 +562,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "catalogBaselines",
                 "catalogChanges",
                 "taxConfigurations",
+                "accountMappingConfigurations",
                 "inventoryFoundation",
             }
         ),
@@ -581,6 +595,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         state.get("taxConfigurations", []),
         "commerce state.taxConfigurations",
     )
+    account_mapping_configurations = _list(
+        state.get("accountMappingConfigurations", []),
+        "commerce state.accountMappingConfigurations",
+    )
     if "storefrontConfiguration" in state and state["storefrontConfiguration"] is None:
         raise TrialValidationError(
             "commerce state.storefrontConfiguration must be an object when present."
@@ -605,6 +623,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     if len(tax_configurations) > _MAX_TAX_CONFIGURATIONS:
         raise TrialValidationError(
             f"commerce state.taxConfigurations cannot exceed {_MAX_TAX_CONFIGURATIONS}."
+        )
+    if len(account_mapping_configurations) > _MAX_ACCOUNT_MAPPING_CONFIGURATIONS:
+        raise TrialValidationError(
+            "commerce state.accountMappingConfigurations cannot exceed "
+            f"{_MAX_ACCOUNT_MAPPING_CONFIGURATIONS}."
         )
 
     item_skus: list[str] = []
@@ -798,6 +821,56 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 )
         newer_tax_configuration = configuration
         tax_configuration_action_ids.append(proof["actionId"])
+
+    account_mapping_configuration_action_ids: list[str] = []
+    newer_account_mapping_configuration: dict[str, Any] | None = None
+    for index, candidate in enumerate(account_mapping_configurations):
+        field = f"accountMappingConfigurations[{index}]"
+        configuration = _object(candidate, field)
+        _exact_fields(
+            configuration,
+            field,
+            required=_ACCOUNT_MAPPING_CONFIGURATION_FIELDS,
+        )
+        revision = _integer(configuration["revision"], f"{field}.revision", minimum=1)
+        if revision != len(account_mapping_configurations) - index:
+            raise TrialValidationError(
+                f"{field}.revision breaks the newest-first sequence."
+            )
+        mappings = _list(configuration["mappings"], f"{field}.mappings")
+        if len(mappings) != len(_ACCOUNT_ROLES):
+            raise TrialValidationError(
+                f"{field}.mappings must cover every account role exactly once."
+            )
+        for mapping_index, account_role in enumerate(_ACCOUNT_ROLES):
+            mapping_field = f"{field}.mappings[{mapping_index}]"
+            mapping = _object(mappings[mapping_index], mapping_field)
+            _exact_fields(mapping, mapping_field, required=_ACCOUNT_MAPPING_FIELDS)
+            if mapping["accountRole"] != account_role:
+                raise TrialValidationError(
+                    f"{mapping_field} must use the canonical account role order."
+                )
+            code = _text(
+                mapping["externalAccountCode"],
+                f"{mapping_field}.externalAccountCode",
+                maximum=40,
+            )
+            if _EXTERNAL_ACCOUNT_CODE_PATTERN.fullmatch(code) is None:
+                raise TrialValidationError(
+                    f"{mapping_field}.externalAccountCode is invalid."
+                )
+        proof = _action_proof(configuration["proof"], f"{field}.proof")
+        if newer_account_mapping_configuration is not None:
+            newer_captured_at = datetime.fromisoformat(
+                str(newer_account_mapping_configuration["proof"]["capturedAt"]).replace("Z", "+00:00")
+            )
+            captured_at = datetime.fromisoformat(proof["capturedAt"].replace("Z", "+00:00"))
+            if captured_at > newer_captured_at:
+                raise TrialValidationError(
+                    f"{field} account mapping configurations must be newest first."
+                )
+        newer_account_mapping_configuration = configuration
+        account_mapping_configuration_action_ids.append(proof["actionId"])
 
     purchase_order_ids: list[str] = []
     purchase_order_action_ids: list[str] = []
@@ -2169,6 +2242,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             ),
             *catalog_baseline_action_set,
             *tax_configuration_action_ids,
+            *account_mapping_configuration_action_ids,
             *storefront_action_ids,
             *(
                 [storefront_configuration_action_id]
@@ -2374,6 +2448,12 @@ def _validate_event_evidence(
         if not _proof_matches_evidence(proof, evidence):
             raise TrialValidationError(
                 "command evidence must match the saved tax configuration proof."
+            )
+    elif event_type == "commerce.account_mapping.saved":
+        proof = next_state["accountMappingConfigurations"][0]["proof"]
+        if not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the saved account mapping proof."
             )
     elif event_type == "commerce.purchase_order.created":
         creation = next_state["purchaseOrders"][0]["creation"]
@@ -2649,6 +2729,10 @@ def _catalog_changes(state: Mapping[str, Any]) -> list[Any]:
 
 def _tax_configurations(state: Mapping[str, Any]) -> list[Any]:
     return state.get("taxConfigurations", [])
+
+
+def _account_mapping_configurations(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("accountMappingConfigurations", [])
 
 
 def _round_tax(numerator: int, denominator: int) -> int:
@@ -3003,6 +3087,214 @@ def commerce_daily_close_csv(
     ) + "\r\n"
 
 
+def commerce_accounting_handoff(
+    state: Mapping[str, Any],
+    close_id: str,
+) -> dict[str, Any] | None:
+    """Create a balanced, review-only accounting handoff using close-effective mappings."""
+
+    current = validate_commerce_state(state)
+    close_export = commerce_daily_close_export(current, close_id)
+    if close_export is None:
+        return None
+    closed_at = datetime.fromisoformat(close_export["closedAt"].replace("Z", "+00:00"))
+    account_mapping = next(
+        (
+            configuration
+            for configuration in _account_mapping_configurations(current)
+            if datetime.fromisoformat(
+                configuration["proof"]["capturedAt"].replace("Z", "+00:00")
+            )
+            <= closed_at
+        ),
+        None,
+    )
+    account_code_by_role = {
+        mapping["accountRole"]: mapping["externalAccountCode"]
+        for mapping in account_mapping["mappings"]
+    } if account_mapping is not None else {}
+    mapping_status = "mapped" if account_mapping is not None else "unmapped"
+    payment_groups: dict[str, dict[str, Any]] = {}
+    accepted_subtotal_mmk = 0
+    accepted_tax_mmk = 0
+    legacy_unverified_mmk = 0
+    accepted_order_count = 0
+    legacy_unverified_order_count = 0
+    tax_configured_order_count = 0
+    for order in close_export["orders"]:
+        payment = payment_groups.setdefault(
+            order["paymentMethod"],
+            {"amountMmk": 0, "statuses": set()},
+        )
+        payment["amountMmk"] += order["totalMmk"]
+        payment["statuses"].add(order["calculationStatus"])
+        if (
+            order["calculationStatus"] == "accepted"
+            and order["subtotalMmk"] is not None
+            and order["taxMmk"] is not None
+        ):
+            accepted_order_count += 1
+            accepted_subtotal_mmk += order["subtotalMmk"]
+            accepted_tax_mmk += order["taxMmk"]
+            if order["taxMode"] != "not_configured":
+                tax_configured_order_count += 1
+        else:
+            legacy_unverified_order_count += 1
+            legacy_unverified_mmk += order["totalMmk"]
+
+    entries: list[dict[str, Any]] = []
+    for index, payment_method in enumerate(sorted(payment_groups), start=1):
+        group = payment_groups[payment_method]
+        statuses = group["statuses"]
+        entries.append(
+            {
+                "lineId": f"DEBIT-{index:03d}",
+                "side": "debit",
+                "accountRole": "payment_clearing",
+                "externalAccountCode": account_code_by_role.get("payment_clearing"),
+                "paymentMethod": payment_method,
+                "calculationStatus": "mixed" if len(statuses) > 1 else next(iter(statuses)),
+                "amountMmk": group["amountMmk"],
+                "mappingStatus": mapping_status,
+            }
+        )
+    credits: list[dict[str, Any]] = []
+    if accepted_subtotal_mmk:
+        credits.append(
+            {
+                "side": "credit",
+                "accountRole": "sales_revenue",
+                "externalAccountCode": account_code_by_role.get("sales_revenue"),
+                "paymentMethod": None,
+                "calculationStatus": "accepted",
+                "amountMmk": accepted_subtotal_mmk,
+                "mappingStatus": mapping_status,
+            }
+        )
+    if accepted_tax_mmk:
+        credits.append(
+            {
+                "side": "credit",
+                "accountRole": "tax_payable",
+                "externalAccountCode": account_code_by_role.get("tax_payable"),
+                "paymentMethod": None,
+                "calculationStatus": "accepted",
+                "amountMmk": accepted_tax_mmk,
+                "mappingStatus": mapping_status,
+            }
+        )
+    if legacy_unverified_mmk:
+        credits.append(
+            {
+                "side": "credit",
+                "accountRole": "sales_revenue_unverified",
+                "externalAccountCode": account_code_by_role.get("sales_revenue_unverified"),
+                "paymentMethod": None,
+                "calculationStatus": "legacy_unverified",
+                "amountMmk": legacy_unverified_mmk,
+                "mappingStatus": mapping_status,
+            }
+        )
+    entries.extend(
+        {**entry, "lineId": f"CREDIT-{index:03d}"}
+        for index, entry in enumerate(credits, start=1)
+    )
+    total_debit_mmk = sum(entry["amountMmk"] for entry in entries if entry["side"] == "debit")
+    total_credit_mmk = sum(entry["amountMmk"] for entry in entries if entry["side"] == "credit")
+    if total_debit_mmk != close_export["totalMmk"] or total_credit_mmk != close_export["totalMmk"]:
+        return None
+    artifact: dict[str, Any] = {
+        "schema": COMMERCE_ACCOUNTING_HANDOFF_SCHEMA,
+        "status": "review_required",
+        "postingAuthority": "none",
+        "externalPostingPerformed": False,
+        "currency": "MMK",
+        "closeId": close_export["closeId"],
+        "businessDate": close_export["businessDate"],
+        "closedAt": close_export["closedAt"],
+        "sourceCloseDigest": close_export["digest"],
+        "accountMappingRevision": account_mapping["revision"] if account_mapping else None,
+        "accountMappingEvidenceReference": account_mapping["proof"]["evidenceReference"] if account_mapping else None,
+        "totalDebitMmk": total_debit_mmk,
+        "totalCreditMmk": total_credit_mmk,
+        "acceptedOrderCount": accepted_order_count,
+        "legacyUnverifiedOrderCount": legacy_unverified_order_count,
+        "taxConfiguredOrderCount": tax_configured_order_count,
+        "paymentExceptionOrderIds": list(close_export["paymentExceptionOrderIds"]),
+        "stockExceptionSkus": list(close_export["stockExceptionSkus"]),
+        "entries": entries,
+    }
+    artifact["digest"] = _projection_digest(
+        [
+            artifact["schema"],
+            artifact["status"],
+            artifact["postingAuthority"],
+            artifact["externalPostingPerformed"],
+            artifact["currency"],
+            artifact["closeId"],
+            artifact["businessDate"],
+            artifact["closedAt"],
+            artifact["sourceCloseDigest"],
+            artifact["accountMappingRevision"],
+            artifact["accountMappingEvidenceReference"],
+            artifact["totalDebitMmk"],
+            artifact["totalCreditMmk"],
+            artifact["acceptedOrderCount"],
+            artifact["legacyUnverifiedOrderCount"],
+            artifact["taxConfiguredOrderCount"],
+            artifact["paymentExceptionOrderIds"],
+            artifact["stockExceptionSkus"],
+            [
+                [
+                    entry["lineId"],
+                    entry["side"],
+                    entry["accountRole"],
+                    entry["externalAccountCode"],
+                    entry["paymentMethod"],
+                    entry["calculationStatus"],
+                    entry["amountMmk"],
+                    entry["mappingStatus"],
+                ]
+                for entry in entries
+            ],
+        ]
+    )
+    return artifact
+
+
+def commerce_accounting_handoff_csv(artifact: Mapping[str, Any]) -> str:
+    """Render one derived accounting handoff as a formula-safe deterministic CSV."""
+
+    header = [
+        "schema", "status", "posting_authority", "external_posting_performed",
+        "close_id", "business_date", "closed_at", "currency", "source_close_digest",
+        "account_mapping_revision", "account_mapping_evidence_reference", "line_id",
+        "side", "account_role", "external_account_code", "payment_method",
+        "calculation_status", "amount_mmk", "mapping_status", "accepted_order_count",
+        "legacy_unverified_order_count", "tax_configured_order_count",
+        "payment_exception_order_ids", "stock_exception_skus", "artifact_digest",
+    ]
+    rows = [
+        [
+            artifact["schema"], artifact["status"], artifact["postingAuthority"],
+            str(artifact["externalPostingPerformed"]).lower(), artifact["closeId"],
+            artifact["businessDate"], artifact["closedAt"], artifact["currency"],
+            artifact["sourceCloseDigest"], artifact["accountMappingRevision"],
+            artifact["accountMappingEvidenceReference"], entry["lineId"], entry["side"],
+            entry["accountRole"], entry["externalAccountCode"], entry["paymentMethod"],
+            entry["calculationStatus"], entry["amountMmk"], entry["mappingStatus"],
+            artifact["acceptedOrderCount"], artifact["legacyUnverifiedOrderCount"],
+            artifact["taxConfiguredOrderCount"], artifact["paymentExceptionOrderIds"],
+            artifact["stockExceptionSkus"], artifact["digest"],
+        ]
+        for entry in artifact["entries"]
+    ]
+    return "\r\n".join(
+        ",".join(_commerce_csv_cell(cell) for cell in row)
+        for row in [header, *rows]
+    ) + "\r\n"
+
+
 def _configured_storefront_preview_digest(
     state: Mapping[str, Any],
     configuration: Mapping[str, Any],
@@ -3112,6 +3404,16 @@ def _require_tax_configurations_unchanged(
 ) -> None:
     if _tax_configurations(current) != _tax_configurations(next_state):
         raise TrialValidationError("event cannot change: taxConfigurations.")
+
+
+def _require_account_mapping_configurations_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _account_mapping_configurations(current) != _account_mapping_configurations(next_state):
+        raise TrialValidationError(
+            "event cannot change: accountMappingConfigurations."
+        )
 
 
 def _inventory_foundation(state: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -4835,6 +5137,36 @@ def _validate_tax_configuration_saved(
         raise TrialValidationError("an unchanged tax configuration cannot advance.")
 
 
+def _validate_account_mapping_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    _require_catalog_changes_unchanged(current, next_state)
+    _require_catalog_baselines_unchanged(current, next_state)
+    _require_tax_configurations_unchanged(current, next_state)
+    _require_inventory_foundation_unchanged(current, next_state)
+    before = _account_mapping_configurations(current)
+    after = _account_mapping_configurations(next_state)
+    if len(after) != len(before) + 1 or after[1:] != before:
+        raise TrialValidationError(
+            "commerce.account_mapping.saved must prepend exactly one account mapping configuration."
+        )
+    configuration = after[0]
+    if configuration["revision"] != len(before) + 1:
+        raise TrialValidationError(
+            "account mapping configuration revision must advance exactly once."
+        )
+    if before and configuration["mappings"] == before[0]["mappings"]:
+        raise TrialValidationError(
+            "an unchanged account mapping configuration cannot advance."
+        )
+
+
 _TRANSITION_VALIDATORS = {
     "commerce.item.created": _validate_item_created,
     "commerce.item.updated": _validate_item_updated,
@@ -4858,6 +5190,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.storefront.configuration.saved": _validate_storefront_configuration_saved,
     "commerce.storefront_request.received": _validate_storefront_request_received,
     "commerce.tax_configuration.saved": _validate_tax_configuration_saved,
+    "commerce.account_mapping.saved": _validate_account_mapping_saved,
 }
 
 
@@ -4887,6 +5220,7 @@ def reduce_commerce_state(
             or _purchase_orders(next_state)
             or _catalog_changes(next_state)
             or _tax_configurations(next_state)
+            or _account_mapping_configurations(next_state)
         ):
             raise TrialValidationError("Commerce initialization requires a non-empty catalog and no operating history.")
         return next_state
@@ -4902,6 +5236,8 @@ def reduce_commerce_state(
         _require_storefront_configuration_unchanged(current_state, next_state)
     if event_type != "commerce.tax_configuration.saved":
         _require_tax_configurations_unchanged(current_state, next_state)
+    if event_type != "commerce.account_mapping.saved":
+        _require_account_mapping_configurations_unchanged(current_state, next_state)
     if event_type not in {
         "commerce.purchase_order.created",
         "commerce.purchase_order.cancelled",
@@ -4926,12 +5262,15 @@ def reduce_commerce_state(
 
 
 __all__ = [
+    "COMMERCE_ACCOUNTING_HANDOFF_SCHEMA",
     "COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA",
     "COMMERCE_EVENTS",
     "COMMERCE_HUMAN_EVENTS",
     "COMMERCE_SCHEMA",
     "commerce_catalog_baseline_digest",
     "commerce_catalog_digest",
+    "commerce_accounting_handoff",
+    "commerce_accounting_handoff_csv",
     "commerce_daily_close_csv",
     "commerce_daily_close_export",
     "commerce_storefront_preview_digest",

@@ -18,7 +18,7 @@ export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as
 export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calculation.v1' as const
 export const COMMERCE_ORDER_CALCULATION_V2_SCHEMA = 'supermega.commerce.order-calculation.v2' as const
 export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v1' as const
-export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v1' as const
+export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v2' as const
 const COMMERCE_STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
 export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
 export const LEGACY_COMMERCE_KEYS = ['supermega.commerce.workspace.v1', 'supermega.shop.workspace.v2']
@@ -88,6 +88,23 @@ export type CommerceTaxConfigurationInput = {
   label: string
   rateBasisPoints: number
   mode: CommerceTaxMode
+}
+
+export type CommerceAccountRole = 'payment_clearing' | 'sales_revenue' | 'sales_revenue_unverified' | 'tax_payable'
+
+export type CommerceAccountMappingEntry = {
+  accountRole: CommerceAccountRole
+  externalAccountCode: string
+}
+
+export type CommerceAccountMappingConfiguration = {
+  revision: number
+  mappings: CommerceAccountMappingEntry[]
+  proof: CommerceActionProof
+}
+
+export type CommerceAccountMappingInput = {
+  mappings: CommerceAccountMappingEntry[]
 }
 
 export type CommerceOrderReturn = {
@@ -247,12 +264,12 @@ export type CommerceDailyCloseExport = {
 export type CommerceAccountingHandoffEntry = {
   lineId: string
   side: 'debit' | 'credit'
-  accountRole: 'payment_clearing' | 'sales_revenue' | 'sales_revenue_unverified' | 'tax_payable'
-  externalAccountCode: null
+  accountRole: CommerceAccountRole
+  externalAccountCode: string | null
   paymentMethod: string | null
   calculationStatus: 'accepted' | 'legacy_unverified' | 'mixed'
   amountMmk: number
-  mappingStatus: 'unmapped'
+  mappingStatus: 'mapped' | 'unmapped'
 }
 
 export type CommerceAccountingHandoff = {
@@ -265,6 +282,8 @@ export type CommerceAccountingHandoff = {
   businessDate: string
   closedAt: string
   sourceCloseDigest: string
+  accountMappingRevision: number | null
+  accountMappingEvidenceReference: string | null
   totalDebitMmk: number
   totalCreditMmk: number
   acceptedOrderCount: number
@@ -441,6 +460,7 @@ export type CommerceState = {
   catalogBaselines?: CommerceCatalogBaseline[]
   catalogChanges?: CommerceCatalogChange[]
   taxConfigurations?: CommerceTaxConfiguration[]
+  accountMappingConfigurations?: CommerceAccountMappingConfiguration[]
   websiteIntakes?: CommerceWebsiteIntake[]
   storefrontRequests?: CommerceStorefrontRequest[]
   storefrontConfiguration?: CommerceStorefrontConfiguration
@@ -579,6 +599,7 @@ const maxPurchaseOrders = 100
 const maxCatalogBaselines = 500
 const maxCatalogChanges = 500
 const maxTaxConfigurations = 100
+const maxAccountMappingConfigurations = 100
 const maxOrderLines = 20
 const maxReturnsPerOrder = 100
 const closeIdPattern = /^CLOSE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
@@ -586,6 +607,8 @@ const closeActionIdPattern = /^ACT-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0
 const businessDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const purchaseOrderIdPattern = /^PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const taxCodePattern = /^[A-Z0-9][A-Z0-9_-]{0,11}$/
+const externalAccountCodePattern = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,39}$/
+export const commerceAccountRoles: CommerceAccountRole[] = ['payment_clearing', 'sales_revenue', 'sales_revenue_unverified', 'tax_payable']
 const isoTimestampPattern = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
 const myanmarUtcOffsetMs = (6 * 60 + 30) * 60 * 1000
 const deterministicSeedNow = Date.parse('2026-07-23T08:00:00.000Z')
@@ -1109,6 +1132,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (value.catalogBaselines !== undefined && !Array.isArray(value.catalogBaselines)) throw new Error('Commerce catalog baselines must be an array when present.')
   if (value.catalogChanges !== undefined && !Array.isArray(value.catalogChanges)) throw new Error('Commerce catalog changes must be an array when present.')
   if (value.taxConfigurations !== undefined && !Array.isArray(value.taxConfigurations)) throw new Error('Commerce tax configurations must be an array when present.')
+  if (value.accountMappingConfigurations !== undefined && !Array.isArray(value.accountMappingConfigurations)) throw new Error('Commerce account mapping configurations must be an array when present.')
   if (value.websiteIntakes !== undefined && !Array.isArray(value.websiteIntakes)) throw new Error('Commerce Website intakes must be an array when present.')
   if (value.storefrontRequests !== undefined && !Array.isArray(value.storefrontRequests)) throw new Error('Commerce storefront requests must be an array when present.')
   if (value.storefrontConfiguration !== undefined && !isRecord(value.storefrontConfiguration)) throw new Error('Commerce storefront configuration must be an object when present.')
@@ -1136,6 +1160,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const catalogBaselines = (value.catalogBaselines ?? []) as unknown[]
   const catalogChanges = (value.catalogChanges ?? []) as unknown[]
   const taxConfigurations = (value.taxConfigurations ?? []) as unknown[]
+  const accountMappingConfigurations = (value.accountMappingConfigurations ?? []) as unknown[]
   const websiteIntakes = (value.websiteIntakes ?? []) as unknown[]
   const storefrontRequests = (value.storefrontRequests ?? []) as unknown[]
   const storefrontConfiguration = value.storefrontConfiguration
@@ -1143,6 +1168,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (catalogBaselines.length > maxCatalogBaselines) throw new Error(`Commerce catalog baselines cannot exceed ${maxCatalogBaselines}.`)
   if (catalogChanges.length > maxCatalogChanges) throw new Error(`Commerce catalog changes cannot exceed ${maxCatalogChanges}.`)
   if (taxConfigurations.length > maxTaxConfigurations) throw new Error(`Commerce tax configurations cannot exceed ${maxTaxConfigurations}.`)
+  if (accountMappingConfigurations.length > maxAccountMappingConfigurations) throw new Error(`Commerce account mapping configurations cannot exceed ${maxAccountMappingConfigurations}.`)
   if (storefrontRequests.length > maxStorefrontRequests) throw new Error(`Commerce storefront requests cannot exceed ${maxStorefrontRequests}.`)
   if (purchaseOrders.length > maxPurchaseOrders) throw new Error(`Commerce purchase orders cannot exceed ${maxPurchaseOrders}.`)
   const itemSkus: string[] = []
@@ -1166,6 +1192,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const catalogBaselineActionIds: string[] = []
   const catalogChangeActionIds: string[] = []
   const taxConfigurationActionIds: string[] = []
+  const accountMappingConfigurationActionIds: string[] = []
   const purchaseOrderActionIds: string[] = []
   const purchaseOrderIds: string[] = []
   const activePurchaseOrderSkus: string[] = []
@@ -1316,6 +1343,44 @@ export function validateCommerceState(value: unknown): CommerceState {
     }
     newerTaxConfiguration = configuration
     taxConfigurationActionIds.push(configuration.proof.actionId)
+  }
+
+  let newerAccountMappingConfiguration: CommerceAccountMappingConfiguration | null = null
+  for (const [index, candidate] of accountMappingConfigurations.entries()) {
+    if (!isRecord(candidate) || !hasExactKeys(candidate, ['revision', 'mappings', 'proof'])) {
+      throw new Error(`accountMappingConfigurations[${index}] is invalid.`)
+    }
+    assertSafeInteger(candidate.revision, `accountMappingConfigurations[${index}].revision`, 1)
+    if (candidate.revision !== accountMappingConfigurations.length - index) {
+      throw new Error(`accountMappingConfigurations[${index}].revision breaks the newest-first sequence.`)
+    }
+    if (!Array.isArray(candidate.mappings) || candidate.mappings.length !== commerceAccountRoles.length) {
+      throw new Error(`accountMappingConfigurations[${index}].mappings must cover every account role exactly once.`)
+    }
+    for (const [mappingIndex, mapping] of candidate.mappings.entries()) {
+      const field = `accountMappingConfigurations[${index}].mappings[${mappingIndex}]`
+      if (!isRecord(mapping) || !hasExactKeys(mapping, ['accountRole', 'externalAccountCode'])
+        || mapping.accountRole !== commerceAccountRoles[mappingIndex]) {
+        throw new Error(`${field} must use the canonical account role order.`)
+      }
+      const code = canonicalText(mapping.externalAccountCode, `${field}.externalAccountCode`, 40)
+      if (!externalAccountCodePattern.test(code)) throw new Error(`${field}.externalAccountCode is invalid.`)
+    }
+    if (!isRecord(candidate.proof)
+      || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !validProof(candidate.proof as CommerceActionProof)) {
+      throw new Error(`accountMappingConfigurations[${index}].proof is invalid.`)
+    }
+    const configuration = candidate as unknown as CommerceAccountMappingConfiguration
+    for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+      canonicalText(configuration.proof[field], `accountMappingConfigurations[${index}].proof.${field}`, field === 'actionId' ? 160 : 180)
+    }
+    if (newerAccountMappingConfiguration
+      && (timestampMicros(newerAccountMappingConfiguration.proof.capturedAt) as bigint) < (timestampMicros(configuration.proof.capturedAt) as bigint)) {
+      throw new Error(`accountMappingConfigurations[${index}] breaks the newest-first chronology.`)
+    }
+    newerAccountMappingConfiguration = configuration
+    accountMappingConfigurationActionIds.push(configuration.proof.actionId)
   }
 
   for (const [index, candidate] of purchaseOrders.entries()) {
@@ -2122,6 +2187,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     ...catalogChangeActionIds.filter((actionId) => !catalogBaselineActionSet.has(actionId)),
     ...catalogBaselineActionSet,
     ...taxConfigurationActionIds,
+    ...accountMappingConfigurationActionIds,
     ...websiteIntakeCreationActionIds,
     ...closeActionIds,
     ...purchaseOrderActionIds,
@@ -2337,6 +2403,7 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || commerceCatalogBaselines(state).some((baseline) => baseline.proof.actionId === actionId)
     || commerceCatalogChanges(state).some((change) => change.proof.actionId === actionId)
     || commerceTaxConfigurations(state).some((configuration) => configuration.proof.actionId === actionId)
+    || commerceAccountMappingConfigurations(state).some((configuration) => configuration.proof.actionId === actionId)
     || commerceWebsiteIntakes(state).some((intake) => intake.creation.actionId === actionId || intake.conversion?.actionId === actionId)
     || commercePurchaseOrders(state).some((purchaseOrder) => purchaseOrder.creation.actionId === actionId || purchaseOrder.cancellation?.actionId === actionId)
     || state.storefrontConfiguration?.saved.actionId === actionId
@@ -2386,6 +2453,14 @@ function sameTaxConfiguration(left: CommerceTaxConfiguration, right: CommerceTax
     && sameActionProof(left.proof, right.proof)
 }
 
+function sameAccountMappingConfiguration(left: CommerceAccountMappingConfiguration, right: CommerceAccountMappingConfiguration) {
+  return left.revision === right.revision
+    && left.mappings.length === right.mappings.length
+    && left.mappings.every((mapping, index) => mapping.accountRole === right.mappings[index]?.accountRole
+      && mapping.externalAccountCode === right.mappings[index]?.externalAccountCode)
+    && sameActionProof(left.proof, right.proof)
+}
+
 function validWebsiteSource(source: CommerceWebsiteSource) {
   return websiteFingerprintPattern.test(source.fingerprint)
     && [source.approvalId, source.snapshotId, source.pageId, source.siteName, source.pagePath].every((value) => typeof value === 'string' && value === value.trim() && value.length > 0 && value.length <= 160)
@@ -2410,6 +2485,14 @@ export function commerceTaxConfigurations(state: CommerceState) {
 
 export function commerceCurrentTaxConfiguration(state: CommerceState) {
   return commerceTaxConfigurations(state)[0] ?? null
+}
+
+export function commerceAccountMappingConfigurations(state: CommerceState) {
+  return state.accountMappingConfigurations ?? []
+}
+
+export function commerceCurrentAccountMappingConfiguration(state: CommerceState) {
+  return commerceAccountMappingConfigurations(state)[0] ?? null
 }
 
 function roundedTax(numerator: bigint, denominator: bigint) {
@@ -3145,6 +3228,48 @@ export function configureCommerceTax(
   return validateCommerceState({
     ...current,
     taxConfigurations: [configuration, ...history],
+  })
+}
+
+export function configureCommerceAccountMapping(
+  state: CommerceState,
+  input: CommerceAccountMappingInput,
+  proof: CommerceActionProof,
+) {
+  if (!validProof(proof) || !Array.isArray(input?.mappings) || input.mappings.length !== commerceAccountRoles.length) return null
+  const mappings: CommerceAccountMappingEntry[] = []
+  for (const [index, accountRole] of commerceAccountRoles.entries()) {
+    const mapping = input.mappings[index]
+    if (!mapping || mapping.accountRole !== accountRole
+      || typeof mapping.externalAccountCode !== 'string'
+      || mapping.externalAccountCode !== mapping.externalAccountCode.trim()
+      || !externalAccountCodePattern.test(mapping.externalAccountCode)) return null
+    mappings.push({ accountRole, externalAccountCode: mapping.externalAccountCode })
+  }
+  const current = validateCommerceState(state)
+  const history = commerceAccountMappingConfigurations(current)
+  const replay = history.find((configuration) => configuration.proof.actionId === proof.actionId)
+  if (replay) {
+    return sameAccountMappingConfiguration(replay, {
+      revision: replay.revision,
+      mappings,
+      proof,
+    }) ? current : null
+  }
+  const latest = history[0]
+  if (history.length >= maxAccountMappingConfigurations
+    || actionIdIsUsed(current, proof.actionId)
+    || (latest && latest.mappings.every((mapping, index) => mapping.accountRole === mappings[index].accountRole
+      && mapping.externalAccountCode === mappings[index].externalAccountCode))
+    || (latest && (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(latest.proof.capturedAt) as bigint))) return null
+  const configuration: CommerceAccountMappingConfiguration = {
+    revision: history.length + 1,
+    mappings,
+    proof: { ...proof },
+  }
+  return validateCommerceState({
+    ...current,
+    accountMappingConfigurations: [configuration, ...history],
   })
 }
 
@@ -4292,6 +4417,8 @@ function commerceAccountingHandoffProjection(artifact: Omit<CommerceAccountingHa
     artifact.businessDate,
     artifact.closedAt,
     artifact.sourceCloseDigest,
+    artifact.accountMappingRevision,
+    artifact.accountMappingEvidenceReference,
     artifact.totalDebitMmk,
     artifact.totalCreditMmk,
     artifact.acceptedOrderCount,
@@ -4315,6 +4442,14 @@ function commerceAccountingHandoffProjection(artifact: Omit<CommerceAccountingHa
 export function commerceAccountingHandoff(state: CommerceState, closeId: string): CommerceAccountingHandoff | null {
   const closeExport = commerceDailyCloseExport(state, closeId)
   if (!closeExport) return null
+  const closeAt = timestampMicros(closeExport.closedAt) as bigint
+  const accountMapping = commerceAccountMappingConfigurations(validateCommerceState(state)).find(
+    (configuration) => (timestampMicros(configuration.proof.capturedAt) as bigint) <= closeAt,
+  ) ?? null
+  const externalAccountCodeByRole = new Map(
+    accountMapping?.mappings.map((mapping) => [mapping.accountRole, mapping.externalAccountCode]) ?? [],
+  )
+  const mappedAccount = (accountRole: CommerceAccountRole) => externalAccountCodeByRole.get(accountRole) ?? null
   const paymentGroups = new Map<string, { amountMmk: number; statuses: Set<CommerceDailyCloseExportOrder['calculationStatus']> }>()
   let acceptedSubtotalMmk = 0
   let acceptedTaxMmk = 0
@@ -4343,39 +4478,39 @@ export function commerceAccountingHandoff(state: CommerceState, closeId: string)
       lineId: `DEBIT-${String(index + 1).padStart(3, '0')}`,
       side: 'debit',
       accountRole: 'payment_clearing',
-      externalAccountCode: null,
+      externalAccountCode: mappedAccount('payment_clearing'),
       paymentMethod,
       calculationStatus: group.statuses.size > 1 ? 'mixed' : [...group.statuses][0],
       amountMmk: group.amountMmk,
-      mappingStatus: 'unmapped',
+      mappingStatus: accountMapping ? 'mapped' : 'unmapped',
     }))
   const credits: Array<Omit<CommerceAccountingHandoffEntry, 'lineId'>> = []
   if (acceptedSubtotalMmk) credits.push({
     side: 'credit',
     accountRole: 'sales_revenue',
-    externalAccountCode: null,
+    externalAccountCode: mappedAccount('sales_revenue'),
     paymentMethod: null,
     calculationStatus: 'accepted',
     amountMmk: acceptedSubtotalMmk,
-    mappingStatus: 'unmapped',
+    mappingStatus: accountMapping ? 'mapped' : 'unmapped',
   })
   if (acceptedTaxMmk) credits.push({
     side: 'credit',
     accountRole: 'tax_payable',
-    externalAccountCode: null,
+    externalAccountCode: mappedAccount('tax_payable'),
     paymentMethod: null,
     calculationStatus: 'accepted',
     amountMmk: acceptedTaxMmk,
-    mappingStatus: 'unmapped',
+    mappingStatus: accountMapping ? 'mapped' : 'unmapped',
   })
   if (legacyUnverifiedMmk) credits.push({
     side: 'credit',
     accountRole: 'sales_revenue_unverified',
-    externalAccountCode: null,
+    externalAccountCode: mappedAccount('sales_revenue_unverified'),
     paymentMethod: null,
     calculationStatus: 'legacy_unverified',
     amountMmk: legacyUnverifiedMmk,
-    mappingStatus: 'unmapped',
+    mappingStatus: accountMapping ? 'mapped' : 'unmapped',
   })
   entries.push(...credits.map((entry, index) => ({ ...entry, lineId: `CREDIT-${String(index + 1).padStart(3, '0')}` })))
   const totalDebitMmk = entries.filter((entry) => entry.side === 'debit').reduce((total, entry) => total + entry.amountMmk, 0)
@@ -4391,6 +4526,8 @@ export function commerceAccountingHandoff(state: CommerceState, closeId: string)
     businessDate: closeExport.businessDate,
     closedAt: closeExport.closedAt,
     sourceCloseDigest: closeExport.digest,
+    accountMappingRevision: accountMapping?.revision ?? null,
+    accountMappingEvidenceReference: accountMapping?.proof.evidenceReference ?? null,
     totalDebitMmk,
     totalCreditMmk,
     acceptedOrderCount,
@@ -4417,6 +4554,8 @@ export function commerceAccountingHandoffCsv(artifact: CommerceAccountingHandoff
     'closed_at',
     'currency',
     'source_close_digest',
+    'account_mapping_revision',
+    'account_mapping_evidence_reference',
     'line_id',
     'side',
     'account_role',
@@ -4442,6 +4581,8 @@ export function commerceAccountingHandoffCsv(artifact: CommerceAccountingHandoff
     artifact.closedAt,
     artifact.currency,
     artifact.sourceCloseDigest,
+    artifact.accountMappingRevision,
+    artifact.accountMappingEvidenceReference,
     entry.lineId,
     entry.side,
     entry.accountRole,

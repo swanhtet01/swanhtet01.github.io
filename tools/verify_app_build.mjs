@@ -1397,7 +1397,7 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${shopInventoryUiSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.storefront_request.received')
@@ -1444,13 +1444,17 @@ if (!coreSource.includes('data-close-export="accounting-csv-v1"')
   || !managedCommerceRuntime.includes('def commerce_daily_close_csv(')) fail('commerce_daily_close_export_missing_or_unsafe')
 if (!coreSource.includes('data-accounting-handoff="review-required"')
   || !coreSource.includes('Download accounting CSV')
-  || !coreSource.includes('account mapping required · no external posting')
-  || !commerceSource.includes('supermega.commerce.accounting-handoff.v1')
+  || !coreSource.includes('data-account-mapping="versioned"')
+  || !coreSource.includes("kind: 'account_mapping'")
+  || !coreSource.includes("'commerce.account_mapping.saved'")
+  || !commerceSource.includes('supermega.commerce.accounting-handoff.v2')
   || !commerceSource.includes("postingAuthority: 'none'")
   || !commerceSource.includes('externalPostingPerformed: false')
   || !commerceSource.includes("accountRole: 'payment_clearing'")
   || !commerceSource.includes("accountRole: 'sales_revenue_unverified'")
-  || !commerceSource.includes('if (totalDebitMmk !== closeExport.totalMmk || totalCreditMmk !== closeExport.totalMmk) return null')) fail('commerce_accounting_handoff_missing_or_unsafe')
+  || !commerceSource.includes('if (totalDebitMmk !== closeExport.totalMmk || totalCreditMmk !== closeExport.totalMmk) return null')
+  || !managedCommerceRuntime.includes('def _validate_account_mapping_saved(')
+  || !managedCommerceRuntime.includes('def commerce_accounting_handoff(')) fail('commerce_accounting_handoff_missing_or_unsafe')
 if (!coreSource.includes("'commerce.order.return_recorded'")
   || !coreSource.includes("kind: 'order_return'")
   || !coreSource.includes('Record return')
@@ -5996,11 +6000,13 @@ async function verifyCommerceRuntime() {
       && accountingCsv.split('\r\n').length - 1 === 3,
     'daily_close_csv_not_complete_or_minimal')
     const accountingHandoff = model.commerceAccountingHandoff(accountingClosed, accountingCloseId)
-    assert(accountingHandoff?.schema === 'supermega.commerce.accounting-handoff.v1'
+    assert(accountingHandoff?.schema === 'supermega.commerce.accounting-handoff.v2'
       && accountingHandoff.status === 'review_required'
       && accountingHandoff.postingAuthority === 'none'
       && accountingHandoff.externalPostingPerformed === false
       && accountingHandoff.sourceCloseDigest === accountingExport.digest
+      && accountingHandoff.accountMappingRevision === null
+      && accountingHandoff.accountMappingEvidenceReference === null
       && accountingHandoff.totalDebitMmk === 200
       && accountingHandoff.totalCreditMmk === 200
       && accountingHandoff.acceptedOrderCount === 1
@@ -6024,6 +6030,30 @@ async function verifyCommerceRuntime() {
       && accountingHandoffCsv.split('\r\n').length - 1 === 3
       && !accountingHandoffCsv.includes('Customer'),
     'accounting_handoff_csv_not_review_bounded_or_minimal')
+    const mappingProof = proof('ACT-ACCOUNT-MAPPING', 600)
+    const mappingInput = { mappings: [
+      { accountRole: 'payment_clearing', externalAccountCode: '1100-CLEAR' },
+      { accountRole: 'sales_revenue', externalAccountCode: '4100-SALES' },
+      { accountRole: 'sales_revenue_unverified', externalAccountCode: '4190-REVIEW' },
+      { accountRole: 'tax_payable', externalAccountCode: '2100-TAX' },
+    ] }
+    const mappedBeforeClose = model.configureCommerceAccountMapping(completed, mappingInput, mappingProof)
+    const mappedCloseExpectation = model.commerceCloseExpectation(mappedBeforeClose, accountingCloseAt)
+    const mappedClosed = model.saveCommerceClose(mappedBeforeClose, accountingCloseId, accountingCloseProof, mappedCloseExpectation)
+    const mappedHandoff = model.commerceAccountingHandoff(mappedClosed, accountingCloseId)
+    assert(mappedHandoff?.accountMappingRevision === 1
+      && mappedHandoff.accountMappingEvidenceReference === mappingProof.evidenceReference
+      && mappedHandoff.entries.every((entry) => entry.mappingStatus === 'mapped' && entry.externalAccountCode)
+      && mappedHandoff.entries[0].externalAccountCode === '1100-CLEAR'
+      && model.commerceAccountingHandoffCsv(mappedHandoff).includes('"1100-CLEAR"'),
+    'accounting_handoff_mapping_not_effective_or_attributable')
+    const mappedAfterClose = model.configureCommerceAccountMapping(accountingClosed, mappingInput, proof('ACT-ACCOUNT-MAPPING-LATE', 0, { capturedAt: '2026-07-23T10:01:00.000Z' }))
+    const historicalHandoff = model.commerceAccountingHandoff(mappedAfterClose, accountingCloseId)
+    assert(historicalHandoff?.accountMappingRevision === null
+      && historicalHandoff.entries.every((entry) => entry.mappingStatus === 'unmapped' && entry.externalAccountCode === null),
+    'accounting_handoff_rewrote_historical_close')
+    assert(model.configureCommerceAccountMapping(mappedBeforeClose, mappingInput, proof('ACT-ACCOUNT-MAPPING-UNCHANGED', 700)) === null,
+      'unchanged_account_mapping_advanced')
     const formulaClosed = model.validateCommerceState({
       ...accountingClosed,
       closes: [{ ...accountingClosed.closes[0], operator: '=2+2' }],

@@ -14,6 +14,8 @@ from supermega_runtime.commerce_runtime import (
     COMMERCE_HUMAN_EVENTS,
     commerce_catalog_baseline_digest,
     commerce_catalog_digest,
+    commerce_accounting_handoff,
+    commerce_accounting_handoff_csv,
     commerce_daily_close_csv,
     commerce_daily_close_export,
     commerce_storefront_preview_digest,
@@ -207,6 +209,32 @@ def tax_configuration(
             action_id or f"ACT-TAX-R{revision}",
             captured_at=captured_at,
             reason="Reviewed the Shop tax setup for future orders.",
+        ),
+    }
+
+
+def account_mapping_configuration(
+    revision: int,
+    *,
+    action_id: str | None = None,
+    captured_at: str = NOW,
+    payment_clearing: str = "1100-CLEAR",
+    sales_revenue: str = "4100-SALES",
+    legacy_revenue: str = "4190-REVIEW",
+    tax_payable: str = "2100-TAX",
+) -> dict[str, object]:
+    return {
+        "revision": revision,
+        "mappings": [
+            {"accountRole": "payment_clearing", "externalAccountCode": payment_clearing},
+            {"accountRole": "sales_revenue", "externalAccountCode": sales_revenue},
+            {"accountRole": "sales_revenue_unverified", "externalAccountCode": legacy_revenue},
+            {"accountRole": "tax_payable", "externalAccountCode": tax_payable},
+        ],
+        "proof": action_evidence(
+            action_id or f"ACT-ACCOUNT-MAPPING-R{revision}",
+            captured_at=captured_at,
+            reason="Reviewed the Shop account mapping for future closes.",
         ),
     }
 
@@ -752,6 +780,8 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         return dict(next_state["storefrontConfiguration"]["saved"])  # type: ignore[index,arg-type]
     if event_type == "commerce.tax_configuration.saved":
         return dict(next_state["taxConfigurations"][0]["proof"])  # type: ignore[index,arg-type]
+    if event_type == "commerce.account_mapping.saved":
+        return dict(next_state["accountMappingConfigurations"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.order.advanced":
         completed_orders = [
             order
@@ -2242,12 +2272,14 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.storefront.configuration.saved",
                     "commerce.storefront.merchandising.imported",
                     "commerce.tax_configuration.saved",
+                    "commerce.account_mapping.saved",
                 }
             ),
         )
         self.assertIn("commerce.item.updated", COMMERCE_EVENTS)
         self.assertIn("commerce.storefront.merchandising.imported", COMMERCE_EVENTS)
         self.assertIn("commerce.tax_configuration.saved", COMMERCE_EVENTS)
+        self.assertIn("commerce.account_mapping.saved", COMMERCE_EVENTS)
 
     def test_website_intake_creation_records_no_order_or_stock_movement(self) -> None:
         current = catalog_state()
@@ -4621,6 +4653,85 @@ class CommerceRuntimeTests(unittest.TestCase):
                 payload=payload,
             )
 
+    def test_account_mapping_is_versioned_human_only_and_server_attributed(self) -> None:
+        current = catalog_state()
+        next_state = deepcopy(current)
+        next_state["accountMappingConfigurations"] = [account_mapping_configuration(1)]
+        configured = apply_event(current, "commerce.account_mapping.saved", next_state)
+        self.assertEqual(configured["accountMappingConfigurations"][0]["revision"], 1)  # type: ignore[index]
+
+        unchanged = deepcopy(configured)
+        unchanged["accountMappingConfigurations"] = [  # type: ignore[index]
+            account_mapping_configuration(2, action_id="ACT-ACCOUNT-MAPPING-UNCHANGED"),
+            *configured["accountMappingConfigurations"],  # type: ignore[index]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(configured, "commerce.account_mapping.saved", unchanged)
+
+        malformed = deepcopy(configured)
+        malformed["accountMappingConfigurations"] = [  # type: ignore[index]
+            account_mapping_configuration(
+                2,
+                action_id="ACT-ACCOUNT-MAPPING-MALFORMED",
+                sales_revenue="=FORMULA",
+            ),
+            *configured["accountMappingConfigurations"],  # type: ignore[index]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(configured, "commerce.account_mapping.saved", malformed)
+
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-accounts", "operator-accounts", "human")
+        agent = TrialPrincipal("workspace-accounts", "account-agent", "agent")
+        for principal in (operator, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={"state": current, "evidence": action_evidence("ACT-INIT-ACCOUNTS")},
+        )
+        forged = deepcopy(initialized.state)
+        forged["accountMappingConfigurations"] = [
+            account_mapping_configuration(
+                1,
+                action_id="ACT-ACCOUNT-MAPPING-SERVER",
+                captured_at="2099-01-01T00:00:00.000Z",
+            )
+        ]
+        forged["accountMappingConfigurations"][0]["proof"]["actor"] = "forged-actor"  # type: ignore[index]
+        payload = {
+            "state": forged,
+            "evidence": dict(forged["accountMappingConfigurations"][0]["proof"]),  # type: ignore[index,arg-type]
+        }
+        saved = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.account_mapping.saved",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        proof = saved.state["accountMappingConfigurations"][0]["proof"]  # type: ignore[index]
+        self.assertEqual(proof["actor"], operator.actor_id)
+        self.assertNotEqual(proof["capturedAt"], "2099-01-01T00:00:00.000Z")
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.account_mapping.saved",
+                expected_version=saved.version,
+                payload=payload,
+            )
+
     def test_daily_close_export_is_deterministic_minimal_and_formula_safe(self) -> None:
         current = completed_state()
         current["orders"][0]["calculation"] = {  # type: ignore[index]
@@ -4690,6 +4801,77 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIn('"accepted"', csv_text)
         self.assertNotIn("Customer ref", csv_text)
         self.assertEqual(csv_text.count("\r\n"), 3)
+
+        unmapped_handoff = commerce_accounting_handoff(closed, CLOSE_ID)
+        self.assertIsNotNone(unmapped_handoff)
+        assert unmapped_handoff is not None
+        self.assertEqual(unmapped_handoff["schema"], "supermega.commerce.accounting-handoff.v2")
+        self.assertIsNone(unmapped_handoff["accountMappingRevision"])
+        self.assertTrue(
+            all(
+                entry["mappingStatus"] == "unmapped"
+                and entry["externalAccountCode"] is None
+                for entry in unmapped_handoff["entries"]
+            )
+        )
+        self.assertEqual(unmapped_handoff["totalDebitMmk"], unmapped_handoff["totalCreditMmk"])
+
+        late_mapping = deepcopy(closed)
+        late_mapping["accountMappingConfigurations"] = [
+            account_mapping_configuration(
+                1,
+                action_id="ACT-ACCOUNT-MAPPING-LATE",
+                captured_at="2026-07-23T10:01:00.000Z",
+            )
+        ]
+        late_mapping = validate_commerce_state(late_mapping)
+        historical_handoff = commerce_accounting_handoff(late_mapping, CLOSE_ID)
+        self.assertIsNotNone(historical_handoff)
+        assert historical_handoff is not None
+        self.assertIsNone(historical_handoff["accountMappingRevision"])
+
+        mapped_current = deepcopy(current)
+        mapped_current["accountMappingConfigurations"] = [
+            account_mapping_configuration(
+                1,
+                captured_at="2026-07-23T09:30:00.000Z",
+            )
+        ]
+        mapped_current = apply_event(
+            current,
+            "commerce.account_mapping.saved",
+            mapped_current,
+        )
+        mapped_next = deepcopy(mapped_current)
+        mapped_next["closes"] = [close]
+        mapped_closed = apply_event(
+            mapped_current,
+            "commerce.close.saved",
+            mapped_next,
+            action_evidence(
+                CLOSE_ACTION_ID,
+                captured_at="2026-07-23T10:00:00.000Z",
+                actor="OP-OWNER",
+                evidence_reference="EV-ACCOUNTING-CLOSE-001",
+            ),
+        )
+        mapped_handoff = commerce_accounting_handoff(mapped_closed, CLOSE_ID)
+        self.assertIsNotNone(mapped_handoff)
+        assert mapped_handoff is not None
+        self.assertEqual(mapped_handoff["accountMappingRevision"], 1)
+        self.assertEqual(mapped_handoff["accountMappingEvidenceReference"], "EV-ACT-ACCOUNT-MAPPING-R1")
+        self.assertTrue(
+            all(
+                entry["mappingStatus"] == "mapped"
+                and entry["externalAccountCode"]
+                for entry in mapped_handoff["entries"]
+            )
+        )
+        self.assertEqual(mapped_handoff, commerce_accounting_handoff(mapped_closed, CLOSE_ID))
+        mapped_csv = commerce_accounting_handoff_csv(mapped_handoff)
+        self.assertIn('"1100-CLEAR"', mapped_csv)
+        self.assertIn('"false"', mapped_csv)
+        self.assertNotIn("Customer ref", mapped_csv)
 
         formula_state = deepcopy(closed)
         formula_state["closes"][0]["operator"] = "=2+2"  # type: ignore[index]

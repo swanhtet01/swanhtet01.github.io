@@ -257,6 +257,7 @@ const requireContract = (name, condition) => {
 requireContract('source line endings normalize across platforms',
   normalizeSourceText('line one\r\nline two\rline three') === 'line one\nline two\nline three')
 const expectedHumanCommerceEvents = [
+  'commerce.account_mapping.saved',
   'commerce.close.saved',
   'commerce.inventory.initialized',
   'commerce.inventory.transferred',

@@ -799,7 +799,7 @@ textarea { min-height: 72px; resize: vertical; }
 .agent-evidence-card > strong { font-size: 11px; }
 .agent-evidence-card > small, .agent-evidence-card > p { margin: 0; color: var(--core-quiet); font-size: 9px; }
 .compact-disclosure { position: relative; }
-.compact-disclosure > summary { min-height: 34px; display: inline-flex; align-items: center; border: 1px solid var(--core-line-strong); border-radius: 5px; padding: 0 10px; color: var(--core-muted); font-size: 10px; font-weight: 760; cursor: pointer; list-style: none; }
+.compact-disclosure > summary { min-height: 34px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--core-line-strong); border-radius: 5px; padding: 0 10px; color: var(--core-muted); font-size: 10px; font-weight: 760; cursor: pointer; list-style: none; }
 .compact-disclosure[open] > summary { border-color: var(--core-green); color: var(--core-ink); }
 .catalog-disclosure { margin-top: 12px; border-top: 1px solid var(--core-line); padding-top: 10px; }
 .catalog-create-form { max-width: none; margin-top: 10px; }

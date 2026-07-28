@@ -40,6 +40,7 @@ import {
   commerceDailyCloseExport,
   commerceCloseExpectation,
   commerceCurrentTaxConfiguration,
+  commerceCurrentAccountMappingConfiguration,
   commerceOrderCalculation,
   commerceOrderReturnExpectation,
   commerceOrderItemSummary,
@@ -57,6 +58,7 @@ import {
   commerceWebsiteIntakes,
   convertCommerceWebsiteIntake,
   configureCommerceTax,
+  configureCommerceAccountMapping,
   createCommerceCatalogBaseline,
   createCommercePurchaseOrder,
   createEmptyCommerce,
@@ -227,6 +229,7 @@ type ActionKind =
   | 'purchase_order_cancel'
   | 'daily_close'
   | 'tax_configuration'
+  | 'account_mapping'
   | 'production_job'
   | 'production_job_schedule'
   | 'production_job_close'
@@ -259,6 +262,13 @@ type TaxConfigurationDraft = {
   label: string
   ratePercent: string
   mode: CommerceTaxMode
+}
+
+type AccountMappingDraft = {
+  paymentClearing: string
+  salesRevenue: string
+  taxPayable: string
+  legacyRevenue: string
 }
 
 type CatalogItemEditDraft = {
@@ -1388,6 +1398,16 @@ function taxConfigurationDraft(configuration: CommerceTaxConfiguration | null): 
   }
 }
 
+function accountMappingDraft(configuration: ReturnType<typeof commerceCurrentAccountMappingConfiguration>): AccountMappingDraft {
+  const mappings = new Map(configuration?.mappings.map((mapping) => [mapping.accountRole, mapping.externalAccountCode]) ?? [])
+  return {
+    paymentClearing: mappings.get('payment_clearing') ?? '',
+    salesRevenue: mappings.get('sales_revenue') ?? '',
+    taxPayable: mappings.get('tax_payable') ?? '',
+    legacyRevenue: mappings.get('sales_revenue_unverified') ?? '',
+  }
+}
+
 function parseTaxRateBasisPoints(value: string) {
   const match = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(value.trim())
   if (!match) return null
@@ -2255,6 +2275,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const purchaseOrderClock = useMinuteClock()
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite] = useCommerceWorkspace(managedIdentity)
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
+  const currentAccountMappingConfiguration = commerceCurrentAccountMappingConfiguration(commerce)
   const orderDraftScope = localCommerceOrderDraftScope(managedIdentity?.workspaceId)
   const [actions, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
@@ -2313,9 +2334,11 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
   const [taxDraft, setTaxDraft] = useState<TaxConfigurationDraft | null>(null)
+  const [accountMapping, setAccountMapping] = useState<AccountMappingDraft | null>(null)
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [catalogError, setCatalogError] = useState('')
   const effectiveTaxDraft = taxDraft ?? taxConfigurationDraft(currentTaxConfiguration)
+  const effectiveAccountMapping = accountMapping ?? accountMappingDraft(currentAccountMappingConfiguration)
   const selectedSku = commerce.items.some((item) => item.sku === sku) || (resumedOrderDraft && sku)
     ? sku
     : commerce.items[0]?.sku ?? ''
@@ -4279,6 +4302,50 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
   }
 
+  function reviewAccountMapping(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const values = {
+      paymentClearing: effectiveAccountMapping.paymentClearing.trim(),
+      salesRevenue: effectiveAccountMapping.salesRevenue.trim(),
+      taxPayable: effectiveAccountMapping.taxPayable.trim(),
+      legacyRevenue: effectiveAccountMapping.legacyRevenue.trim(),
+    }
+    if (Object.values(values).some((value) => !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,39}$/.test(value))) {
+      setNotice('Enter all four reviewed account codes using letters, numbers, dot, underscore, slash, or hyphen.')
+      return
+    }
+    const expectedRevision = currentAccountMappingConfiguration?.revision ?? 0
+    const mappings = [
+      { accountRole: 'payment_clearing' as const, externalAccountCode: values.paymentClearing },
+      { accountRole: 'sales_revenue' as const, externalAccountCode: values.salesRevenue },
+      { accountRole: 'sales_revenue_unverified' as const, externalAccountCode: values.legacyRevenue },
+      { accountRole: 'tax_payable' as const, externalAccountCode: values.taxPayable },
+    ]
+    const previous = currentAccountMappingConfiguration
+      ? `Account mapping revision ${currentAccountMappingConfiguration.revision}`
+      : 'No Shop account mapping'
+    queueAction({
+      kind: 'account_mapping',
+      subjectId: `SHOP-ACCOUNTS-R${expectedRevision + 1}`,
+      summary: 'Set Shop accounting handoff mapping',
+      before: previous,
+      after: `clearing ${values.paymentClearing} · revenue ${values.salesRevenue} · tax ${values.taxPayable} · legacy ${values.legacyRevenue} · future closes only`,
+      reasonSuggestion: 'Reviewed the Shop account mapping for future closes.',
+      apply: async (action) => {
+        await mutateCommerce(
+          'commerce.account_mapping.saved',
+          action.commandId,
+          commerceActionProof(action),
+          (current) => {
+            if ((commerceCurrentAccountMappingConfiguration(current)?.revision ?? 0) !== expectedRevision) return null
+            return configureCommerceAccountMapping(current, { mappings }, commerceActionProof(action))
+          },
+        )
+        setAccountMapping(null)
+      },
+    }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
+  }
+
   function closeDay() {
     const queuedAt = new Date().toISOString()
     const expected = commerceCloseExpectation(commerce, queuedAt)
@@ -4513,6 +4580,22 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
           {currentTaxConfiguration ? <p className="form-notice">Revision {currentTaxConfiguration.revision} · saved by {currentTaxConfiguration.proof.actor} · evidence {currentTaxConfiguration.proof.evidenceReference}</p> : null}
         </form>
       </details>
+      <details className="compact-disclosure" data-account-mapping="versioned">
+        <summary><span>Account mapping</span><small>{currentAccountMappingConfiguration ? `Revision ${currentAccountMappingConfiguration.revision} · 4 roles mapped` : 'Required for mapped exports'}</small></summary>
+        <form className="core-form compact-form" onSubmit={reviewAccountMapping}>
+          <div className="form-row">
+            <label>Payment clearing<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, paymentClearing: event.target.value })} placeholder="Reviewed account code" required value={effectiveAccountMapping.paymentClearing} /></label>
+            <label>Sales revenue<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, salesRevenue: event.target.value })} placeholder="Reviewed account code" required value={effectiveAccountMapping.salesRevenue} /></label>
+          </div>
+          <div className="form-row">
+            <label>Tax payable<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, taxPayable: event.target.value })} placeholder="Reviewed account code" required value={effectiveAccountMapping.taxPayable} /></label>
+            <label>Legacy / unverified revenue<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, legacyRevenue: event.target.value })} placeholder="Reviewed account code" required value={effectiveAccountMapping.legacyRevenue} /></label>
+          </div>
+          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review account mapping</button></div>
+          <p className="panel-copy">Applies only to closes saved after this mapping. Historical exports do not change. Every accounting CSV remains review-only and never posts externally.</p>
+          {currentAccountMappingConfiguration ? <p className="form-notice">Revision {currentAccountMappingConfiguration.revision} · saved by {currentAccountMappingConfiguration.proof.actor} · evidence {currentAccountMappingConfiguration.proof.evidenceReference}</p> : null}
+        </form>
+      </details>
       <button className="core-button" disabled={commerceControlsDisabled || !closePreview} onClick={closeDay} type="button">{closePreview ? 'Save daily close' : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
       <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p>
       {latestClose?.operator ? <details className="compact-disclosure">
@@ -4521,7 +4604,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         <p className="form-notice">Orders: {latestClose.orderIds?.length ? latestClose.orderIds.join(', ') : 'none'} · Payment exceptions: {latestClose.paymentExceptionOrderIds?.length ? latestClose.paymentExceptionOrderIds.join(', ') : 'none'} · Stock exceptions: {latestClose.stockExceptionSkus?.length ? latestClose.stockExceptionSkus.join(', ') : 'none'}</p>
         {latestCloseDownload ? <a className="core-button" data-close-export="accounting-csv-v1" download={latestCloseDownload.filename} href={latestCloseDownload.href}>Download close CSV</a> : null}
         {latestAccountingDownload ? <div className="form-notice" data-accounting-handoff="review-required">
-          <strong>Accounting review</strong> · balanced {formatMoney(latestAccountingDownload.artifact.totalDebitMmk)} debit / credit · account mapping required · no external posting
+          <strong>Accounting review</strong> · balanced {formatMoney(latestAccountingDownload.artifact.totalDebitMmk)} debit / credit · {latestAccountingDownload.artifact.accountMappingRevision ? `mapping revision ${latestAccountingDownload.artifact.accountMappingRevision}` : 'account mapping required'} · no external posting
           <br /><a className="text-link" download={latestAccountingDownload.filename} href={latestAccountingDownload.href}>Download accounting CSV</a>
         </div> : null}
       </details> : null}
