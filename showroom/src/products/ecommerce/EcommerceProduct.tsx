@@ -215,6 +215,7 @@ export function EcommerceProduct() {
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
   const [customerFollowUpDraft, setCustomerFollowUpDraft] = useState('')
+  const [deliveryReviewDraft, setDeliveryReviewDraft] = useState('')
   const storefrontSaveRef = useRef<HTMLButtonElement>(null)
   const storefrontPreviewHeadingRef = useRef<HTMLHeadingElement>(null)
 
@@ -697,6 +698,21 @@ export function EcommerceProduct() {
     setCustomerFollowUpDraft(`Owner draft only: Hi ${request.customerReference}, your ${itemSummary} request totals ${formatMmk(request.totalMmk)}. Shop is reviewing ${fulfilmentText} before anything is confirmed.${expiryText} Reference ${request.id}.`)
   }
 
+  function prepareDeliveryFeeReview() {
+    if (!deliveryReviewRequest) {
+      if (!buyingReady) {
+        finishStorefrontSetup()
+        return
+      }
+      setDeliveryReviewDraft('Owner draft only: delivery review is ready. Wait for a delivery request, then confirm zone, fee, rider handoff, and payment in Shop before quoting a customer.')
+      return
+    }
+    const lines = commerceStorefrontRequestLines(deliveryReviewRequest)
+    const zoneHint = deliveryReviewRequest.customerReference.split('·').pop()?.trim() || 'customer area'
+    const itemSummary = lines.length === 1 ? lines[0].name : `${lines.length} items`
+    setDeliveryReviewDraft(`Owner draft only: review ${zoneHint} as the delivery zone for ${deliveryReviewRequest.customerReference}. Quote ${itemSummary} at ${formatMmk(deliveryReviewRequest.totalMmk)} before delivery fee. Shop must confirm fee, rider handoff, payment, and stock before any customer message or booking. Reference ${deliveryReviewRequest.id}.`)
+  }
+
   async function recordManagedBuyingRequest(request: EcommerceOrderRequestV2) {
     const identity = managedIdentity
     if (!identity || !globalThis.crypto?.randomUUID) throw new Error('Managed Ecommerce request identity is unavailable. Nothing was sent to Shop.')
@@ -906,6 +922,25 @@ export function EcommerceProduct() {
     ['Delivery', deliveryReviewCount ? `${deliveryReviewCount} review` : pickupReviewCount ? 'Pickup allowed' : 'None yet'],
     ['Boundary', 'Draft only'],
   ] as const
+  const deliveryReviewRequest = pendingManagedRequests.find((request) => request.fulfilment === 'delivery')
+    ?? null
+  const deliveryZoneHint = deliveryReviewRequest?.customerReference.split('·').pop()?.trim() || ''
+  const deliveryFeeStage = importNeeded
+    ? 'Import catalog before delivery setup'
+    : !savedDraftIsCurrent
+      ? 'Save storefront before delivery setup'
+      : deliveryReviewCount
+        ? 'Review delivery zone and fee'
+        : buyingReady
+          ? 'Delivery template ready'
+          : 'Delivery setup locked'
+  const deliveryFeeRows = [
+    ['Zone', deliveryZoneHint || (deliveryReviewCount ? 'Review area' : 'No request yet')],
+    ['Fee', deliveryReviewCount ? 'Shop confirms' : savedDraftIsCurrent ? 'Template only' : 'Locked'],
+    ['Rider', deliveryReviewCount ? 'Assign in Shop' : 'Not booked'],
+    ['Payment', deliveryReviewRequest && 'quote' in deliveryReviewRequest ? deliveryReviewRequest.quote.payment.adapter === 'kbzpay_manual' ? 'Manual QR' : 'COD' : 'Not charged'],
+    ['Boundary', 'No booking'],
+  ] as const
   const orderingReadinessStage = importNeeded
     ? 'Import Shop catalog'
     : !selectedSkus.length
@@ -1080,6 +1115,19 @@ export function EcommerceProduct() {
         <div className="ecommerce-ops-cockpit-rows">
           {paymentDeliveryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
+      </section>
+
+      <section aria-label="Delivery fee review controls" className="ecommerce-ops-cockpit ecommerce-delivery-fee-cockpit">
+        <div>
+          <span className="core-eyebrow">Delivery fee review</span>
+          <h2>{deliveryFeeStage}</h2>
+          <p>AI prepares a local delivery zone, fee, rider handoff, and payment review packet from the customer request. No rider booking, fee charge, customer message, payment capture, stock move, refund, or Shop write runs here.</p>
+          <button className="text-link" disabled={catalogHydrating || (!deliveryReviewRequest && !buyingReady)} onClick={prepareDeliveryFeeReview} type="button">Prepare delivery review</button>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {deliveryFeeRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+        {deliveryReviewDraft ? <p className="ecommerce-delivery-review-draft" role="status">{deliveryReviewDraft}</p> : null}
       </section>
 
       <section aria-label="Quote recovery controls" className="ecommerce-ops-cockpit ecommerce-quote-recovery-cockpit">
