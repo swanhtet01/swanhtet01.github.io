@@ -319,6 +319,38 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     ['Reason', importCoachReason],
     ['Write boundary', managedIdentity ? 'Managed check before write' : 'Local/export only'],
   ] as const
+  const activationHandoffAction = appliedIsCurrent
+    ? 'Hand off live workspace'
+    : canApplyManagedImport
+      ? 'Owner can activate import'
+      : validationIsCurrent
+        ? 'Owner approval required'
+        : state.preview?.readyForStaging
+          ? managedIdentity
+            ? 'Run managed check'
+            : 'Download activation package'
+          : state.preview
+            ? 'Clean package first'
+            : 'Prepare first package'
+  const activationHandoffReason = appliedIsCurrent
+    ? `${managedIdentity?.workspaceId ?? 'Managed workspace'} has a confirmed import receipt.`
+    : canApplyManagedImport
+      ? 'The package is checked, the adapter is ready, and the owner approval box is selected.'
+      : validationIsCurrent
+        ? 'Server validation passed with zero records written; approve the import before activation.'
+        : state.preview?.readyForStaging
+          ? managedIdentity
+            ? 'The clean package can be checked against the managed workspace before any write.'
+            : 'Free mode can export the package for support review without sending data from the browser.'
+          : state.preview
+            ? 'The handoff stays locked until required columns, row issues, and duplicate keys are clear.'
+            : 'Start with the sample or a CSV so SuperMega can build one accountable activation package.'
+  const activationHandoffRows = [
+    ['Package', state.preview ? `${state.preview.totals.ready}/${state.preview.totals.rows} ready` : 'Waiting'],
+    ['Workspace', importContextReady ? workspace.trim() : 'Missing'],
+    ['Owner', importContextReady ? owner.trim() : 'Missing'],
+    ['Review', appliedIsCurrent ? 'Receipt ready' : canApplyManagedImport ? 'Approved' : validationIsCurrent ? 'Approve' : state.preview?.readyForStaging ? 'Prepare' : 'Locked'],
+  ] as const
 
   useEffect(() => {
     requestRef.current += 1
@@ -632,6 +664,12 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           <div><span className="core-eyebrow">Import coach</span><strong>{importCoachAction}</strong><small>{importCoachReason}</small></div>
           <div className="catalog-import-coach-list">
             {importCoachRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
+          </div>
+        </div>
+        <div aria-label={`${productName} activation handoff`} className="catalog-import-handoff">
+          <div><span className="core-eyebrow">Activation handoff</span><strong>{activationHandoffAction}</strong><small>{activationHandoffReason}</small></div>
+          <div className="catalog-import-handoff-list">
+            {activationHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
           </div>
         </div>
         {state.busy ? <p className="form-notice" role="status">Matching columns and checking every row...</p> : null}
