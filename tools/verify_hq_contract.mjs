@@ -21,7 +21,7 @@ import {
 } from '../kernel/gateway.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, packageText, storageAuditHandoff, hqLiveStateVerifier] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyCompanyCycleText, packageText, storageAuditHandoff, hqLiveStateVerifier] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -36,6 +36,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'hq', 'research', 'postgres17-rehearsal.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'research', 'release-reconciliation-2026-07-26.md'), 'utf8'),
   readFile(resolve(root, 'tools', 'audit_ally_runtime.ps1'), 'utf8'),
+  readFile(resolve(root, 'tools', 'invoke_supermega_company_cycle.ps1'), 'utf8'),
   readFile(resolve(root, 'package.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'pilots', 'private-storage-privacy-audit.md'), 'utf8'),
   readFile(resolve(root, 'tools', 'verify_hq_live_state.mjs'), 'utf8'),
@@ -46,6 +47,7 @@ const portfolio = JSON.parse(portfolioText)
 const workforce = JSON.parse(workforceText)
 const agentWorkspace = JSON.parse(agentWorkspaceText)
 const databaseRehearsal = JSON.parse(databaseRehearsalText)
+const liveReleaseCommit = now.match(/^Live release commit: `([0-9a-f]{40})`$/m)?.[1] ?? ''
 const executionOrderMarker = '## Execution order'
 const workboardExecutionOrder = workboard.includes(executionOrderMarker)
   ? workboard.slice(workboard.indexOf(executionOrderMarker))
@@ -113,6 +115,11 @@ requireContract('one bounded agent operating model is authoritative',
 requireContract('agent capacity agrees across HQ, coordinator, and Kernel',
   workforce.runtime_policy?.max_registered_specialists === portfolio.agentOperatingModel?.registeredRoleLimit
   && workforce.runtime_policy?.max_running === portfolio.agentOperatingModel?.activeAssignmentLimit
+  && workforce.runtime_policy?.local_host_admission_contract === 'supermega.ally-host-admission.v1'
+  && workforce.runtime_policy?.max_local_running === 1
+  && workforce.runtime_policy?.local_memory_pressure_blocks_dispatch === true
+  && workforce.runtime_policy?.local_duplicate_listener_blocks_dispatch === true
+  && workforce.runtime_policy?.local_loaded_model_blocks_dispatch === true
   && workforce.runtime_policy?.max_batch_jobs === portfolio.agentOperatingModel?.batchJobLimit
   && workforce.runtime_policy?.scale_to_zero === portfolio.agentOperatingModel?.scaleToZero
   && workforce.runtime_policy?.registered_specialists_consume_compute === portfolio.agentOperatingModel?.idleCapabilitiesConsumeCompute
@@ -373,7 +380,8 @@ requireContract('release history is retained and current live state is discovera
   workboard.includes('| OPS-006 | Release / Codex integrator | done-local |')
   && workboard.includes('strict fast-forward descendant of open draft PR #258 head `338b6fd`')
   && workboard.includes('release-reconciliation-2026-07-26.md')
-  && now.includes('Both `supermega.dev` and `app.supermega.dev` serve exact commit `39642eb7a881a09899a030bbdfb68a5687f12fc6`')
+  && /^[0-9a-f]{40}$/.test(liveReleaseCommit)
+  && now.includes(`Both \`supermega.dev\` and \`app.supermega.dev\` serve exact remote \`main\` commit \`${liveReleaseCommit}\``)
   && workboard.includes('| CEO-010 | CEO / Codex integrator | done-live |')
   && workboard.includes('focused bottom sheet with backdrop, Escape/Close actions, 44 px controls, and focus return'))
 requireContract('workboard release authority and active execution order are current',
@@ -572,6 +580,9 @@ requireContract('research uses official sources',
     /^https:\/\/(?:vercel\.com|tanstack\.com|supabase\.com|platform\.openai\.com)\//.test(entry.source || '')))
 requireContract('Ally runtime audit is read-only and bounded',
   allyAuditText.includes("supermega.ally-runtime-audit.v1")
+  && allyAuditText.includes("$HostAdmissionContract = 'supermega.ally-host-admission.v1'")
+  && allyAuditText.includes('$port -ge 5173 -and $port -le 5199')
+  && allyAuditText.includes('maxConcurrentLocalRuns')
   && allyAuditText.includes("subagentObservation = 'not_os_observable'")
   && allyAuditText.includes('commandLinesInspectedForOwnership = $true')
   && allyAuditText.includes('commandLinesReturned = $false')
@@ -583,6 +594,15 @@ requireContract('Ally runtime audit is read-only and bounded',
   && packageText.includes('"audit:ally"')
   && packageText.includes('"audit:ally:self-test"')
   && !/\b(?:Stop-Process|Start-Process|taskkill|kill|Remove-Item|EmptyWorkingSet|SetProcessWorkingSetSize)\b/i.test(allyAuditText))
+
+requireContract('Ally company cycles are host-admitted and serial',
+  allyCompanyCycleText.includes("$Contract = 'supermega.ally-company-cycle.v1'")
+  && allyCompanyCycleText.includes("$HostAdmissionContract = 'supermega.ally-host-admission.v1'")
+  && allyCompanyCycleText.includes("throw 'ally_local_job_limit_exceeded'")
+  && allyCompanyCycleText.includes('ally_host_admission_blocked:')
+  && allyCompanyCycleText.includes("'--job-type', $JobType")
+  && allyCompanyCycleText.includes('scale to zero after completion')
+  && !/\b(?:Stop-Process|Start-Process|taskkill|kill|Remove-Item|EmptyWorkingSet|SetProcessWorkingSetSize)\b/i.test(allyCompanyCycleText))
 
 requireContract('live HQ state is machine-verifiable and read-only',
   now.includes('Live state contract: `supermega.hq-live-state.v1`')

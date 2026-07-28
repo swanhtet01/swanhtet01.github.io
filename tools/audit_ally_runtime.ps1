@@ -5,6 +5,8 @@ param(
     [switch]$FailOnWarning,
     [ValidateRange(50, 99)]
     [int]$MemoryWarningPercent = 80,
+    [ValidateRange(51, 99)]
+    [int]$MemoryBlockPercent = 85,
     [ValidateRange(256, 16384)]
     [int]$CodexWorkingSetWarningMb = 2500
 )
@@ -13,6 +15,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $Contract = 'supermega.ally-runtime-audit.v1'
+$HostAdmissionContract = 'supermega.ally-host-admission.v1'
 $RepoMarker = 'supermega-platform'
 
 function Get-AuditFindings {
@@ -26,6 +29,9 @@ function Get-AuditFindings {
     $findings = [System.Collections.Generic.List[object]]::new()
     if ($UsedMemoryPercent -ge $MemoryWarningPercent) {
         $findings.Add([pscustomobject]@{ code = 'memory_pressure'; severity = 'warning'; detail = "RAM use is $UsedMemoryPercent percent." })
+    }
+    if ($UsedMemoryPercent -ge $MemoryBlockPercent) {
+        $findings.Add([pscustomobject]@{ code = 'memory_pressure_critical'; severity = 'blocker'; detail = "RAM use is $UsedMemoryPercent percent; local company dispatch is paused." })
     }
     if ($CodexWorkingSetMb -ge $CodexWorkingSetWarningMb) {
         $findings.Add([pscustomobject]@{ code = 'codex_working_set_high'; severity = 'warning'; detail = "Codex resident memory is $CodexWorkingSetMb MB." })
@@ -51,7 +57,29 @@ function Get-AuditFindings {
     return @($findings)
 }
 
+function Get-HostAdmission {
+    param([object[]]$Findings)
+    $blockingCodes = @(
+        'memory_pressure_critical',
+        'codex_working_set_high',
+        'local_models_loaded',
+        'listener_inventory_unavailable',
+        'duplicate_frontend_listeners',
+        'duplicate_backend_listeners',
+        'duplicate_local_workers',
+        'ambiguous_listener_ownership'
+    )
+    $blockers = @($Findings | Where-Object { $blockingCodes -contains [string]$_.code } | ForEach-Object { [string]$_.code })
+    [pscustomobject]@{
+        contract = $HostAdmissionContract
+        eligible = $blockers.Count -eq 0
+        maxConcurrentLocalRuns = if ($blockers.Count -eq 0) { 1 } else { 0 }
+        blockers = $blockers
+    }
+}
+
 function Invoke-SelfTest {
+    if ($MemoryBlockPercent -le $MemoryWarningPercent) { throw 'memory_threshold_order_invalid' }
     $empty = [pscustomobject]@{ frontends = 1; backends = 1; workers = 1; ambiguous = 0 }
     $healthyFindings = @(Get-AuditFindings 50 500 0 $empty $true)
     if ($healthyFindings.Count -ne 0) { throw 'healthy_fixture_failed' }
@@ -61,7 +89,13 @@ function Invoke-SelfTest {
     foreach ($code in @('duplicate_frontend_listeners', 'duplicate_local_workers', 'ambiguous_listener_ownership')) {
         if ($codes -notcontains $code) { throw "missing_fixture_$code" }
     }
-    [pscustomobject]@{ ok = $true; contract = $Contract; checks = 4; processMutation = $false }
+    $healthyAdmission = Get-HostAdmission $healthyFindings
+    if (-not $healthyAdmission.eligible -or $healthyAdmission.maxConcurrentLocalRuns -ne 1) { throw 'healthy_admission_failed' }
+    $warningAdmission = Get-HostAdmission @(Get-AuditFindings 82 500 0 $empty $true)
+    if (-not $warningAdmission.eligible -or $warningAdmission.maxConcurrentLocalRuns -ne 1) { throw 'warning_admission_failed' }
+    $blockedAdmission = Get-HostAdmission @(Get-AuditFindings 90 500 0 $empty $true)
+    if ($blockedAdmission.eligible -or $blockedAdmission.maxConcurrentLocalRuns -ne 0 -or $blockedAdmission.blockers -notcontains 'memory_pressure_critical') { throw 'blocked_admission_failed' }
+    [pscustomobject]@{ ok = $true; contract = $Contract; hostAdmissionContract = $HostAdmissionContract; checks = 8; processMutation = $false }
 }
 
 if ($SelfTest) {
@@ -125,7 +159,7 @@ try {
     $listeners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop)
     foreach ($listener in $listeners) {
         $port = [int]$listener.LocalPort
-        $role = if ($port -ge 4173 -and $port -le 4199) { 'frontend' }
+        $role = if (($port -ge 4173 -and $port -le 4199) -or ($port -ge 5173 -and $port -le 5199)) { 'frontend' }
             elseif ($port -in @(8000, 8001)) { 'backend' }
             elseif ($port -eq 8765) { 'worker' }
             else { '' }
@@ -155,6 +189,7 @@ $listenerSummary = [pscustomobject]@{
     ambiguous = @($listenerRecords | Where-Object ownership -eq 'ambiguous').Count
 }
 $findings = @(Get-AuditFindings $usedMemoryPercent $codexWorkingSetMb $loadedModelCount $listenerSummary $listenerInventoryAvailable)
+$hostAdmission = Get-HostAdmission $findings
 $report = [ordered]@{
     ok = $findings.Count -eq 0
     contract = $Contract
@@ -189,6 +224,7 @@ $report = [ordered]@{
         records = @($listenerRecords)
     }
     findings = $findings
+    hostAdmission = $hostAdmission
     controls = [ordered]@{
         processMutation = $false
         commandLinesInspectedForOwnership = $true
@@ -204,6 +240,7 @@ if ($Json) {
 } else {
     "Ally runtime: $($report.memory.usedPercent)% RAM used; $($report.codex.workingSetMb) MB Codex; $($report.localModels.loaded) loaded model(s)."
     "Listeners: $($report.listeners.frontends) frontend, $($report.listeners.backends) backend, $($report.listeners.workers) worker, $($report.listeners.ambiguous) ambiguous."
+    "Local company admission: $(if ($report.hostAdmission.eligible) { 'ready (maximum one run)' } else { 'blocked' })."
     if ($findings.Count) { $findings | Format-Table code, severity, detail -AutoSize } else { 'No runtime findings.' }
 }
 
