@@ -272,6 +272,7 @@ test('operator rejects identity, hash, and boundary drift across server response
   for (const testCase of [
     { action: 'plan', mutate: (body) => { body.plan.clientId = 'another-client' } },
     { action: 'plan', mutate: (body) => { body.plan.runId = 'agent-company:another-run' } },
+    { action: 'plan', mutate: (body) => { body.plan.budget.roleLimit = 8 } },
     { action: 'work-order-create', mutate: (body) => { body.workOrder.cycleId = 'another-cycle' } },
     { action: 'work-order-create', mutate: (body) => { body.workOrder.workOrderId = 'company-order:another-order' } },
     { action: 'work-order-create', mutate: (body) => { body.workOrder.planHash = 'f'.repeat(64) } },
@@ -288,7 +289,7 @@ test('operator rejects identity, hash, and boundary drift across server response
     await assert.rejects(runGuidedAgentCompany(MANIFEST, {
       request,
       readConfirmation: async (confirmation) => confirmation,
-    }), /agent_company_operator_(plan_mismatch|work_order_mismatch|plan_hash_mismatch|queued_plan_mismatch|result_mismatch|invalid_proof)/)
+    }), /agent_company_operator_(plan_mismatch|budget_mismatch|work_order_mismatch|plan_hash_mismatch|queued_plan_mismatch|result_mismatch|invalid_proof)/)
   }
 })
 

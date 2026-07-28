@@ -359,9 +359,9 @@ async function prepareCompanyCycle(input, options = {}) {
     budget: {
       agentLimit: MAX_CYCLE_AGENTS,
       selectedAgents: assignments.length,
-      roleLimit: roleBudget,
+      roleLimit: plannedRoles,
       plannedRoles,
-      remainingRoles: roleBudget - plannedRoles,
+      remainingRoles: 0,
     },
     controls: {
       execution: 'sequential',

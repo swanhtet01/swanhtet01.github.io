@@ -212,7 +212,17 @@ function assertPlan(plan, manifest, roster, preflight) {
   if (assignments.some((assignment, index) => assignment.agentId !== manifest.agents[index])) {
     fail('agent_company_operator_assignment_mismatch')
   }
-  if (Number(plan.budget?.plannedRoles || 0) > manifest.roleBudget) fail('agent_company_operator_budget_mismatch')
+  const plannedRoles = Number(plan.budget?.plannedRoles)
+  const roleLimit = Number(plan.budget?.roleLimit)
+  const assignedRoles = assignments.reduce((total, assignment) => total + Number(assignment?.roleCount || 0), 0)
+  if (!Number.isInteger(plannedRoles)
+    || plannedRoles < 1
+    || plannedRoles > manifest.roleBudget
+    || roleLimit !== plannedRoles
+    || assignedRoles !== plannedRoles
+    || Number(plan.budget?.remainingRoles) !== 0) {
+    fail('agent_company_operator_budget_mismatch')
+  }
   if (plan.controls?.execution !== 'sequential'
     || plan.controls?.dynamicDelegation !== false
     || plan.controls?.crossAgentContext !== false

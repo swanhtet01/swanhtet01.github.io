@@ -93,6 +93,8 @@ test('agent roster is fixed, bounded, and backed by validated crews', async () =
   assert.equal(plan.actionMode, 'draft_only')
   assert.equal(plan.approvalRequired, true)
   assert.equal(plan.budget.plannedRoles, 6)
+  assert.equal(plan.budget.roleLimit, 6)
+  assert.equal(plan.budget.remainingRoles, 0)
   assert.equal(plan.controls.execution, 'sequential')
   assert.equal(plan.controls.maxConcurrentCycles, 4)
   assert.equal(plan.controls.capacityClaimContract, COMPANY_CAPACITY_CLAIM_CONTRACT)
@@ -109,7 +111,23 @@ test('agent roster is fixed, bounded, and backed by validated crews', async () =
       roleBudget: MAX_CYCLE_ROLE_BUDGET,
     })
     assert.equal(single.ok, true, `${agent.id} is backed by a valid fixed crew`)
+    assert.equal(single.budget.roleLimit, single.budget.plannedRoles, `${agent.id} has no unused role authority`)
+    assert.equal(single.budget.remainingRoles, 0, `${agent.id} has no executable role headroom`)
   }
+})
+
+test('planner uses the caller role budget only as an admission ceiling', async () => {
+  const plan = await planCompanyCycle({
+    clientId: 'client-acme',
+    cycleId: 'exact-role-authority',
+    agents: ['operations-analyst'],
+    evidence: { 'operations-analyst': 'Approved daily operations evidence.' },
+    roleBudget: MAX_CYCLE_ROLE_BUDGET,
+  })
+  assert.equal(plan.ok, true)
+  assert.equal(plan.budget.plannedRoles, 3)
+  assert.equal(plan.budget.roleLimit, 3)
+  assert.equal(plan.budget.remainingRoles, 0)
 })
 
 test('general-use specialists plan through primary fixed crews under the same budget', async () => {
