@@ -18,6 +18,7 @@ import {
   parsePlantOrderRoutingPaste,
   plantOrderEvidenceDigest,
   projectPlantOrder,
+  projectPlantOrderCostDrivers,
   projectPlantOrderEffectiveness,
   recordPlantOrderEffectiveness,
   recordPlantOrderOperation,
@@ -248,6 +249,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
   const reviewDialogRef = useRef<HTMLDialogElement>(null)
   const projection = useMemo(() => projectPlantOrder(state), [state])
   const effectiveness = useMemo(() => projectPlantOrderEffectiveness(projection), [projection])
+  const costDrivers = useMemo(() => projectPlantOrderCostDrivers(projection), [projection])
   const pendingWarehouseIssues = useMemo(
     () => pendingProductionMaterialHandoffs(state, commerceState),
     [commerceState, state],
@@ -632,6 +634,10 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
 
       {!bindingCurrent && projection.status !== 'released_to_stock' ? <p className="form-notice warning-text" role="alert">The bound Plant job changed after this execution plan was reviewed. This chain is paused; reconcile the job snapshot before continuing.</p> : null}
       {requiresOperationEvidence ? <details className="compact-disclosure production-history"><summary>Routing progress <span>{projection.metrics.completedOperationCount}/{projection.operations.length}</span></summary><div className="issue-list">{projection.operations.map((operation) => <article key={operation.operationId}><span aria-hidden="true" className={`issue-mark ${operation.status === 'complete' ? 'resolved' : ''}`}>{operation.sequence}</span><div><strong>{operation.name}</strong><small>{operation.completedQuantity.toLocaleString()} / {projection.metrics.targetQuantity.toLocaleString()} units · {formatMilli(operation.actualMinutesMilli)} actual / {formatMilli(operation.plannedMinutesMilli)} planned minutes · {operation.status.replace('_', ' ')}</small></div></article>)}</div></details> : null}
+      {projection.plan ? <details className="compact-disclosure production-history"><summary>Standard vs actual <span>{costDrivers.status === 'not_started' ? 'No activity' : `${formatMilli(costDrivers.conversion.varianceMinutesMilli)} min variance`}</span></summary><div className="issue-list">
+        {costDrivers.materials.map((material) => <article key={material.materialId}><span aria-hidden="true" className={`issue-mark ${material.varianceQuantityMilli <= 0 ? 'resolved' : ''}`}>MAT</span><div><strong>{material.name}</strong><small>{formatMilli(material.actualQuantityMilli)} actual / {formatMilli(material.standardQuantityMilli)} standard {material.unit} · {formatMilli(material.varianceQuantityMilli)} variance</small></div></article>)}
+        {costDrivers.operations.map((operation) => <article key={operation.operationId}><span aria-hidden="true" className={`issue-mark ${operation.varianceMinutesMilli <= 0 ? 'resolved' : ''}`}>MIN</span><div><strong>{operation.name}</strong><small>{formatMilli(operation.actualMinutesMilli)} actual / {formatMilli(operation.standardMinutesMilli)} standard minutes · {formatMilli(operation.varianceMinutesMilli)} variance</small></div></article>)}
+      </div><p className="panel-copy">{costDrivers.financialCostReason} This view uses reviewed BOM quantities, completed routing units, and actual minutes only.</p></details> : null}
       {projection.plan ? <details className="compact-disclosure production-history"><summary>Effectiveness <span>{effectiveness.oeeBasisPoints !== null ? formatBasisPoints(effectiveness.oeeBasisPoints) : effectiveness.status === 'availability_setup_required' ? 'Setup availability' : 'Collecting'}</span></summary><div className="issue-list">
         <article><span aria-hidden="true" className={`issue-mark ${effectiveness.availability ? 'resolved' : ''}`}>A</span><div><strong>Availability · {effectiveness.availability ? formatBasisPoints(effectiveness.availability.basisPoints) : 'Setup required'}</strong><small>{effectiveness.availability ? `${formatMilli(effectiveness.availability.operatingMinutesMilli)} operating / ${formatMilli(effectiveness.availability.plannedProductiveMinutesMilli)} planned productive minutes · ${formatMilli(effectiveness.availability.downtimeMinutesMilli)} downtime · ${effectiveness.availability.downtimeIntervalCount} closed intervals` : 'Bind planned productive time and closed downtime to this exact order, window, and routed work centre.'}</small></div></article>
         <article><span aria-hidden="true" className={`issue-mark ${effectiveness.performance ? 'resolved' : ''}`}>P</span><div><strong>Performance · {effectiveness.performance ? formatBasisPoints(effectiveness.performance.basisPoints) : 'Collecting'}</strong><small>{effectiveness.performance ? `${formatMilli(effectiveness.performance.designedMinutesMilli)} designed / ${formatMilli(effectiveness.performance.actualMinutesMilli)} actual minutes · ${formatMilli(effectiveness.performance.speedLossMinutesMilli)} speed loss` : 'Record completed routing units and actual minutes.'}</small></div></article>

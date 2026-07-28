@@ -3272,6 +3272,16 @@ async function verifyPlantOrderRuntime() {
       && collectingEffectiveness.oeeBasisPoints === null
       && collectingEffectiveness.missingEvidence.join('|') === 'Order-bound planned productive time and downtime|Current output inspection',
     'plant_order_collecting_effectiveness_not_evidence_bound')
+    const collectingCostDrivers = model.projectPlantOrderCostDrivers(operationProjection)
+    assert(collectingCostDrivers.contract === 'supermega.plant.cost_driver_variance.v1'
+      && collectingCostDrivers.status === 'collecting'
+      && collectingCostDrivers.earnedUnits === 4
+      && collectingCostDrivers.materials.map((row) => row.varianceQuantityMilli).join(',') === '9000,12000'
+      && collectingCostDrivers.conversion.standardMinutesMilli === 6_000
+      && collectingCostDrivers.conversion.actualMinutesMilli === 6_200
+      && collectingCostDrivers.conversion.varianceMinutesMilli === 200
+      && collectingCostDrivers.financialCostAvailable === false,
+    'plant_order_cost_driver_variance_not_evidence_bound')
     executionResult = model.recordPlantOrderOutput(executionResult.state, { outputId: 'OUT-V2-TRANSFER-001', outputBatchId: 'BATCH-20260726-401', quantity: 4, proof: proof(8, 'recorded routed transfer output'), expectedHeadDigest: executionResult.state.headDigest })
     assert(model.projectPlantOrder(executionResult.state).totalOutput === 4, 'plant_order_v2_routed_output_not_recorded')
     executionResult = model.recordPlantOrderOperation(executionResult.state, { operationRunId: 'OPRUN-V2-ASSEMBLY-002', operationId: 'OP-ASSEMBLY-10', quantity: 6, actualMinutesMilli: 3_300, proof: proof(9, 'completed assembly transfer quantity'), expectedHeadDigest: executionResult.state.headDigest })
@@ -3279,6 +3289,13 @@ async function verifyPlantOrderRuntime() {
     executionResult = model.recordPlantOrderOutput(executionResult.state, { outputId: 'OUT-V2-TRANSFER-002', outputBatchId: 'BATCH-20260726-401', quantity: 6, proof: proof(11, 'recorded remaining routed output'), expectedHeadDigest: executionResult.state.headDigest })
     executionResult = model.inspectPlantOrderOutput(executionResult.state, { inspectionId: 'INSP-V2-001', outputBatchId: 'BATCH-20260726-401', inspectedQuantity: 10, acceptedQuantity: 8, rejectedQuantity: 2, result: 'fail', proof: proof(12, 'inspected routed output with rejects'), expectedHeadDigest: executionResult.state.headDigest })
     const effectiveness = model.projectPlantOrderEffectiveness(model.projectPlantOrder(executionResult.state))
+    const completedCostDrivers = model.projectPlantOrderCostDrivers(model.projectPlantOrder(executionResult.state))
+    assert(completedCostDrivers.earnedUnits === 10
+      && completedCostDrivers.materials.every((row) => row.varianceQuantityMilli === 0)
+      && completedCostDrivers.conversion.standardMinutesMilli === 15_000
+      && completedCostDrivers.conversion.actualMinutesMilli === 15_500
+      && completedCostDrivers.conversion.varianceMinutesMilli === 500,
+    'plant_order_completed_cost_driver_variance_wrong')
     assert(effectiveness.status === 'availability_setup_required'
       && effectiveness.availabilityBasisPoints === null
       && effectiveness.performance?.basisPoints === 9_677

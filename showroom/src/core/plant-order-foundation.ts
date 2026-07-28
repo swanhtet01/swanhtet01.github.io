@@ -3,6 +3,7 @@ export const PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1' as c
 export const PLANT_ORDER_EXECUTION_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v2' as const
 export const PLANT_ORDER_PROJECTION_CONTRACT = 'supermega.plant.order_projection.v1' as const
 export const PLANT_ORDER_EFFECTIVENESS_CONTRACT = 'supermega.plant.order_effectiveness.v2' as const
+export const PLANT_ORDER_COST_DRIVER_CONTRACT = 'supermega.plant.cost_driver_variance.v1' as const
 export const EMPTY_PLANT_ORDER_DIGEST = `sha256:${'0'.repeat(64)}`
 export const PLANT_ORDER_STORAGE_PREFIX = 'supermega.plant.order-foundation.v1:'
 export const PLANT_ORDER_ADDITIONAL_MATERIAL_MAX = 11
@@ -176,6 +177,31 @@ export type PlantOrderEffectivenessProjection = {
   }
   oeeBasisPoints: number | null
   missingEvidence: string[]
+}
+
+export type PlantOrderCostDriverProjection = {
+  contract: typeof PLANT_ORDER_COST_DRIVER_CONTRACT
+  status: 'not_started' | 'collecting' | 'complete'
+  earnedUnits: number
+  materials: Array<{
+    materialId: string
+    name: string
+    unit: PlantOrderMaterial['unit']
+    standardQuantityMilli: number
+    actualQuantityMilli: number
+    varianceQuantityMilli: number
+  }>
+  operations: Array<{
+    operationId: string
+    name: string
+    completedQuantity: number
+    standardMinutesMilli: number
+    actualMinutesMilli: number
+    varianceMinutesMilli: number
+  }>
+  conversion: { standardMinutesMilli: number; actualMinutesMilli: number; varianceMinutesMilli: number }
+  financialCostAvailable: false
+  financialCostReason: string
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
@@ -898,6 +924,55 @@ export function projectPlantOrderEffectiveness(projection: PlantOrderProjection)
     quality,
     oeeBasisPoints,
     missingEvidence,
+  }
+}
+
+export function projectPlantOrderCostDrivers(projection: PlantOrderProjection): PlantOrderCostDriverProjection {
+  if (!projection.plan) return {
+    contract: PLANT_ORDER_COST_DRIVER_CONTRACT,
+    status: 'not_started',
+    earnedUnits: 0,
+    materials: [],
+    operations: [],
+    conversion: { standardMinutesMilli: 0, actualMinutesMilli: 0, varianceMinutesMilli: 0 },
+    financialCostAvailable: false,
+    financialCostReason: 'Configure reviewed material and work-centre rates before claiming MMK cost.',
+  }
+  const firstOperationQuantity = projection.operations[0]?.completedQuantity ?? 0
+  const earnedUnits = Math.max(projection.totalOutput, firstOperationQuantity)
+  const materials = projection.materials.map((material) => {
+    const standardQuantityMilli = safeProduct(earnedUnits, material.quantityPerUnitMilli, `standard material quantity for ${material.materialId}`)
+    return {
+      materialId: material.materialId,
+      name: material.name,
+      unit: material.unit,
+      standardQuantityMilli,
+      actualQuantityMilli: material.issuedQuantityMilli,
+      varianceQuantityMilli: material.issuedQuantityMilli - standardQuantityMilli,
+    }
+  })
+  const operations = projection.operations.map((operation) => {
+    const standardMinutesMilli = safeProduct(operation.completedQuantity, operation.minutesPerUnitMilli, `standard conversion minutes for ${operation.operationId}`)
+    return {
+      operationId: operation.operationId,
+      name: operation.name,
+      completedQuantity: operation.completedQuantity,
+      standardMinutesMilli,
+      actualMinutesMilli: operation.actualMinutesMilli,
+      varianceMinutesMilli: operation.actualMinutesMilli - standardMinutesMilli,
+    }
+  })
+  const standardMinutesMilli = operations.reduce((total, operation) => total + operation.standardMinutesMilli, 0)
+  const actualMinutesMilli = operations.reduce((total, operation) => total + operation.actualMinutesMilli, 0)
+  return {
+    contract: PLANT_ORDER_COST_DRIVER_CONTRACT,
+    status: projection.status === 'released_to_stock' ? 'complete' : earnedUnits || actualMinutesMilli || materials.some((material) => material.actualQuantityMilli) ? 'collecting' : 'not_started',
+    earnedUnits,
+    materials,
+    operations,
+    conversion: { standardMinutesMilli, actualMinutesMilli, varianceMinutesMilli: actualMinutesMilli - standardMinutesMilli },
+    financialCostAvailable: false,
+    financialCostReason: 'Configure reviewed material and work-centre rates before claiming MMK cost.',
   }
 }
 
