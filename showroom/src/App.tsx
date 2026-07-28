@@ -22,6 +22,8 @@ function LegacyEntryRedirect() {
 
   if (demo === 'plant' || demo === 'factory') return <Navigate replace to="/plant/" />
   if (demo === 'shop' || demo === 'retail') return <Navigate replace to="/shop/" />
+  if (demo === 'website' || demo === 'site') return <Navigate replace to="/website/" />
+  if (demo === 'ecommerce' || demo === 'storefront' || demo === 'online-orders') return <Navigate replace to="/ecommerce/" />
   return <Navigate replace to="/" />
 }
 
