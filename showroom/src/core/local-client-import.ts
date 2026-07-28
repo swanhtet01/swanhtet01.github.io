@@ -33,6 +33,10 @@ export type LocalClientDemoProductInstall = {
   alreadyPresent: number
 }
 
+type LocalClientDemoActivationOptions = {
+  replaceExistingEcommerceDraft?: boolean
+}
+
 const localProductLabels: Record<ClientSolutionId, string> = {
   commerce: 'Shop',
   production: 'Plant',
@@ -40,7 +44,10 @@ const localProductLabels: Record<ClientSolutionId, string> = {
   ecommerce: 'Ecommerce',
 }
 
-export async function activateLocalStagingPackage(stagingPackage: ManagedClientImportPackage): Promise<LocalClientDemoProductInstall> {
+export async function activateLocalStagingPackage(
+  stagingPackage: ManagedClientImportPackage,
+  options: LocalClientDemoActivationOptions = {},
+): Promise<LocalClientDemoProductInstall> {
   const capturedAt = new Date().toISOString()
   let activation: CommerceCatalogImportResult | ProductionJobsImportResult | WebsitePageDraftsImportResult | LocalEcommerceMerchandisingImport | null = null
   let mutationOk: boolean
@@ -115,7 +122,7 @@ export async function activateLocalStagingPackage(stagingPackage: ManagedClientI
       storeName: stagingPackage.workspace.trim(),
       rows,
       sourceDigest: stagingPackage.source.previewDigest,
-    })
+    }, { replaceExistingDraft: options.replaceExistingEcommerceDraft })
     mutationOk = true
   }
   if (!mutationOk || !activation) throw new Error(mutationOk ? `The ${localProductLabels[stagingPackage.product]} import could not be confirmed.` : mutationError)
@@ -138,5 +145,7 @@ export async function applyPreparedLocalClientDemoProduct(
   }
   const preparedProduct = artifact.products.find((entry) => entry.product === product)
   if (!preparedProduct) throw new Error('This product is not included in the private client package.')
-  return activateLocalStagingPackage(preparedProduct.stagingPackage)
+  return activateLocalStagingPackage(preparedProduct.stagingPackage, {
+    replaceExistingEcommerceDraft: product === 'ecommerce',
+  })
 }

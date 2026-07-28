@@ -26,6 +26,7 @@ type LocalEcommerceMerchandisingImportOptions = {
   storage?: StorefrontDraftStorage
   locks?: StorefrontDraftLockManager
   now?: () => string
+  replaceExistingDraft?: boolean
 }
 
 const defaultStorefrontSummary = 'Browse this reviewed collection with clear local pricing and availability from Shop.'
@@ -53,11 +54,12 @@ export async function activateLocalEcommerceMerchandising(
   const selectedSkus = input.rows.map((row) => row.sku).sort((left, right) => left.localeCompare(right, 'en'))
   const current = currentResult.draft
   if (current && (current.selectedSkus.length !== selectedSkus.length
-    || current.selectedSkus.some((sku, index) => sku !== selectedSkus[index]))) {
+    || current.selectedSkus.some((sku, index) => sku !== selectedSkus[index]))
+    && !options.replaceExistingDraft) {
     throw new Error('These display rows do not match the saved Ecommerce product selection. Select the same Shop SKUs in Ecommerce, save, and retry.')
   }
-  const storeName = current?.storeName ?? input.storeName
-  const summary = current?.summary ?? defaultStorefrontSummary
+  const storeName = current && !options.replaceExistingDraft ? current.storeName : input.storeName
+  const summary = current && !options.replaceExistingDraft ? current.summary : defaultStorefrontSummary
   const preview = buildStorefrontPreview(catalog.items, {
     storeName,
     summary,

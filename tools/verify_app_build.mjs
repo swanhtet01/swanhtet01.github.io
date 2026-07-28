@@ -1823,7 +1823,8 @@ if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermeg
   || !clientOnboardingSource.includes("source.review.confirmation !== `APPROVE CLIENT DEMO ${source.bundleDigest}`")
   || !localClientImportSource.includes('export async function applyPreparedLocalClientDemoProduct')
   || !localClientImportSource.includes('const artifact = await restoreClientDemoPreparationArtifact(artifactValue)')
-  || !localClientImportSource.includes('return activateLocalStagingPackage(preparedProduct.stagingPackage)')
+  || !localClientImportSource.includes('return activateLocalStagingPackage(preparedProduct.stagingPackage, {')
+  || !localClientImportSource.includes("replaceExistingEcommerceDraft: product === 'ecommerce'")
   || ['applyManagedClientImport', 'validateManagedClientImport', 'fetch(', 'supabase'].some((marker) => localClientImportSource.includes(marker))
   || !settingsPageSource.includes('Load private package')
   || !settingsPageSource.includes('Private client rows stay in this browser. Nothing is uploaded, shared, or installed automatically.')
@@ -7646,6 +7647,25 @@ async function verifyStorefrontDraftRuntime() {
       })
     } catch { importConflictRejected = true }
     assert(importConflictRejected && importValues.get(localKey) === beforeImportConflict, 'local_ecommerce_merchandising_conflict_changed_draft')
+
+    const replacedImport = await localMerchandisingImport.activateLocalEcommerceMerchandising({
+      storeName: 'Approved Replacement Storefront',
+      rows: [{ sku: 'SM-1002', featured: true, collection: 'Pickup', displayName: 'Cold drink pack', note: '' }],
+      sourceDigest: previewDigestB,
+    }, {
+      catalog: commerceModel.createSeedCommerce().items,
+      storage: importStorage,
+      locks,
+      now: () => '2026-07-24T10:06:33.000Z',
+      replaceExistingDraft: true,
+    })
+    const replacedDraft = draftModel.readStorefrontDraft(localScope, importStorage).draft
+    assert(replacedImport.created === 1
+      && replacedImport.alreadyPresent === 0
+      && replacedImport.revision === 2
+      && replacedDraft?.storeName === 'Approved Replacement Storefront'
+      && replacedDraft?.selectedSkus.join(',') === 'SM-1002',
+    'approved_local_ecommerce_merchandising_replacement_failed')
 
     values.clear()
     lockRequests = 0

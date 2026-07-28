@@ -38,7 +38,6 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal 
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation (`07dd959`).
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked (`be78a02`).
 - Each CEO cycle selects one outcome. Invalid identity/evidence stops before spend; owner-send uncertainty is explicit, retains claims, and is never auto-retried (`f1328a0`, `cafdafe`, `f626ee7`).
-- AI reserves budget before provider I/O; failures stay charged, cache hits and rejected replay spend zero (`a2e1b89`, `44dfba9`).
 - Ecommerce uses versioned Shop data. Managed workspaces retain exact requests in the Shop inbox; only Shop confirmation creates an order (`aed737a`).
 - Reviewed local imports cover Shop stock, Plant BOM/routing, Website content, and Ecommerce merchandising (`7ae8c80`).
 - Client setup uses one manifest-backed smart import with exception review (`ab9a89e`).
@@ -55,12 +54,11 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal 
 
 - Current checkpoints: product `7ae8c80`, CEO preflight `f1328a0`, delivery `cafdafe`/`f626ee7`, CEO operations `909807d`, performance `6bad4e7`, release `39642eb`; Shop `479802b`, Plant `5cb85db`, agent operations `a2e1b89`, operations `63a245f`.
 - Private client preparation `39ceec5` and activation `bdd843e` pass production build, 168 onboarding, 74 security, five preparation tests, release/privacy/database/Vercel/HQ, and approval/tamper-before-write checks.
-- PostgreSQL 17.10 rehearsal passes twice: migrations, isolation, four-product journeys, human approvals, TLS, backup/restore, and cleanup. Hosted Storage privacy remains unproven (`2930ecf`).
+- Browser proof: one Manufacturing kit installed all four products, persisted prepared records, completed a Shop sale (OIL-1L 48 to 47; orders four to five), reset cleanly, and reprovisioned. Desktop/mobile had no overflow or browser warnings.
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
 - Both `supermega.dev` and `app.supermega.dev` serve exact remote `main` commit `af3f45c22b13e5edccdf87214608817fc3499e4d`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Paired release identity is current at catalog `2026-07-28.1`.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-- Ally: `supermega.ally-working-set-trim.v1` released 2,112.8 MB across 31 verified targets, moving RAM from 86.4% to 81.6% with zero loaded models, eligible dispatch, and no process stops.
-
+- Ally: `supermega.ally-working-set-trim.v1` released 2,565.1 MB; RAM moved from 88.9% to 83.7% with zero models, eligible dispatch, and no process stops.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
 ## Owner-gated actions
@@ -89,7 +87,7 @@ Every slice must keep one primary action, progressive disclosure, mobile accepta
 
 ## Next evidence
 
-1. Render private-package upload, approval, dependency, retry, reload, mission, and reset locally at mobile/desktop widths without exposing row values.
+1. Repeat the proven private-package path with founder-selected client CSVs for all four products and validate reconciliation, correction, and rollback evidence.
 2. On approved isolated Supabase, prove private Storage, RLS, isolation, recovery, and one tenant before writes.
 3. Repeat all 12 profiles live, including mobile, reload, import repair, duplicate handoff, export, and reset.
 4. Recruit one founder-approved Shop design partner with a named operator, baseline, five-day evidence plan, and explicit acceptance criteria.
