@@ -25,7 +25,7 @@ import {
 } from '../kernel/gateway.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -42,6 +42,8 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'tools', 'audit_ally_runtime.ps1'), 'utf8'),
   readFile(resolve(root, 'tools', 'trim_codex_working_sets.ps1'), 'utf8'),
   readFile(resolve(root, 'tools', 'invoke_supermega_company_cycle.ps1'), 'utf8'),
+  readFile(resolve(root, 'kernel', 'ally-ceo-company-plan.mjs'), 'utf8'),
+  readFile(resolve(root, 'kernel', 'scripts', 'plan-ally-ceo-company.mjs'), 'utf8'),
   readFile(resolve(root, 'tools', 'run_supermega_agent_jobs.py'), 'utf8'),
   readFile(resolve(root, 'package.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'pilots', 'private-storage-privacy-audit.md'), 'utf8'),
@@ -914,6 +916,30 @@ requireContract('Ally company cycles are host-admitted and serial',
   && allyCompanyCycleText.includes('scale to zero after completion')
   && packageText.includes('"company:ally:self-test"')
   && !/\b(?:Stop-Process|Start-Process|taskkill|kill|Remove-Item|EmptyWorkingSet|SetProcessWorkingSetSize)\b/i.test(allyCompanyCycleText))
+
+requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
+  allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
+  && allyCeoPlannerText.includes("'daily-company-control': Object.freeze(['operations-analyst', 'project-controller'])")
+  && allyCeoPlannerText.includes("registeredRoleLimit !== 12")
+  && allyCeoPlannerText.includes("activeAssignmentLimit !== 4")
+  && allyCeoPlannerText.includes("maxAgentsPerCycle !== 2")
+  && allyCeoPlannerText.includes("maxConcurrentCompanyCycles !== 2")
+  && allyCeoPlannerText.includes("maxConcurrentAllyRuns: 1")
+  && allyCeoPlannerText.includes("planningModelCalls: 0")
+  && allyCeoPlannerText.includes("planningConnectorRequests: 0")
+  && allyCeoPlannerText.includes("planningExternalWrites: false")
+  && allyCeoPlannerText.includes("ally_ceo_company_plan_non_authoritative_source")
+  && allyCeoPlannerText.includes("ally_ceo_company_plan_sensitive_evidence")
+  && allyCeoPlannerText.includes("hq/WORKBOARD.md#execution-order")
+  && allyCeoPlannerCliText.includes('supermega-ally-ceo-company-plan-${planHash.slice(0, 12)}.json')
+  && allyCeoPlannerCliText.includes("flag: 'wx'")
+  && allyCeoPlannerCliText.includes("ally_ceo_company_plan_current_evidence_mismatch")
+  && packageText.includes('"company:ally:plan": "node kernel/scripts/plan-ally-ceo-company.mjs"')
+  && packageText.includes('"company:ally:plan:verify": "node kernel/scripts/plan-ally-ceo-company.mjs --verify"')
+  && workboard.includes('| OPS-063 | CEO + Agent Operations / Ally Planning Codex | done-local |')
+  && agentSecurity.includes('Instagram shortcode `Da-NXcnkz8p`')
+  && !/\b(?:fetch|XMLHttpRequest|WebSocket|child_process|execFile|spawn|Worker|setInterval)\b/.test(allyCeoPlannerText)
+  && !/\b(?:fetch|XMLHttpRequest|WebSocket|child_process|execFile|spawn|Worker|setInterval|unlink|rm)\b/.test(allyCeoPlannerCliText))
 
 requireContract('agent job cycles are canonical, bounded, and scale to zero',
   workforce.runtime_policy.max_batch_jobs === 4

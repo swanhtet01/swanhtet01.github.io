@@ -73,6 +73,8 @@ These are local code and test results. They do not prove a hosted deployment, li
 
 The selected Instagram reference could not be re-fetched on 2026-07-28 because both the web fetch and browser retry failed. SuperMega's current release rule does not depend on a fresh social-media claim: the private-Storage threat model itself requires bucket inventory, anonymous-list denial, cross-tenant-list denial, and short-lived authorized object access before managed activation. This remains a release gate, not hosted proof.
 
+On 2026-07-29, the newly supplied Instagram shortcode `Da-NXcnkz8p` again returned no public web content and the in-app browser reached only a DNS failure. The previously supplied LinkedIn post returned no public fetch or search content and browser policy denied direct navigation. Both remain non-authoritative R&D signals: neither may enter a CEO evidence plan, authorize a model or connector call, or support a product, security, or market claim.
+
 ## Next bounded evidence
 
 Run the private Storage, RLS, recovery, and durable-budget proofs only on one founder-approved isolated hosted tenant. Until that target and owner evidence exist, local agents remain serial and scale-to-zero, platform status stays read-only, and every managed write or model call fails closed.
