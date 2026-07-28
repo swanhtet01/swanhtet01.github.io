@@ -153,6 +153,9 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.scheduledFunctionFootprintContract === 'supermega.kernel-function-footprint.v1'
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerFiles === 30
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerBytes === 409600
+  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerFiles === 24
+  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 306087
+  && portfolio.agentOperatingModel?.companyOperationsDeferredForStartup === true
   && portfolio.agentOperatingModel?.fullPlatformStatusTeams?.join(',') === 'engineering,finance-risk'
   && portfolio.agentOperatingModel?.connectorFleetDeferredForDailyProductGrowth === true
   && portfolio.agentOperatingModel?.maxOutcomesPerCeoCycle === 1
@@ -767,6 +770,8 @@ requireContract('source provenance retained',
   && workboard.includes('Checkpoint `02cb277` keeps the caller\'s role budget as a maximum admission ceiling')
   && workboard.includes('| OPS-055 | CEO + Agent Operations / Assignment Capacity Codex | done-local |')
   && workboard.includes('Checkpoint `f4aa81e` derives two concurrent company cycles from four active assignments')
+  && workboard.includes('| OPS-056 | CEO + Vercel Operations / Startup Efficiency Codex | done-local |')
+  && workboard.includes('Checkpoint `006070f` defers the 66 KB company-operations reporter')
   && !workboard.includes('The selected Instagram slide confirms'))
 requireContract('HQ stays concise',
   readme.length < 7000
@@ -866,7 +871,7 @@ requireContract('current CEO platform evidence is recorded without expanding aut
   && workboard.includes('Checkpoint `e8a3adb` adds `supermega.platform-status.v1`')
   && workboard.includes('All 289 Kernel tests, 69 connectors across 993 adversarial calls, 15 crews across 214 checks, plus the complete app gate with 69 release and 70 security checks pass')
   && now.includes('CEO status is output-free across weekly briefs')
-  && now.includes('No process, task, or server was stopped'))
+  && now.includes('eligible dispatch, and no process stops'))
 
 requireContract('current company-operations evidence is recorded without adding runtime capacity',
   workboard.includes('| OPS-040 | CEO + Agent Operations / Evidence Quality Codex | done-local |')
@@ -891,7 +896,7 @@ requireContract('scheduled CEO function keeps the full connector fleet deferred 
   && kernelFootprintVerifier.includes('connectorInventoryComplete: connectorImports === EXPECTED_CONNECTORS')
   && workboard.includes('| OPS-041 | CEO + Agent Operations / Vercel Efficiency Codex | done-local |')
   && workboard.includes('Checkpoint `6bad4e7` defers full status from the operator tool import')
-  && now.includes('CEO brief startup is capped at 30 eager files/409,600 bytes')
+  && now.includes('CEO brief startup is 24 files/306,087 bytes under the 30/409,600 cap')
   && now.includes('full 69-connector audit loads only for Engineering and Finance/Risk'))
 
 for (const forbidden of ['Yangon Tyre', 'ytf.supermega.dev', 'pos.supermega.dev', 'twelve product']) {
