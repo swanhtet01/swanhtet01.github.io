@@ -531,6 +531,84 @@ function productFromPathname(pathname: string): SetupProductId | null {
   return null
 }
 
+export const BEHAVIOR_TRAIL_KEY = 'supermega.behavior-trail.v1'
+
+export type BehaviorTrailEvent = 'home_opened' | 'product_opened' | 'setup_opened' | 'settings_opened'
+
+export type BehaviorTrailEntry = {
+  id: string
+  event: BehaviorTrailEvent
+  product: SetupProductId | 'unknown'
+  route: string
+  detail: string
+  createdAt: string
+}
+
+const behaviorTrailLimit = 80
+
+function boundedText(value: unknown, fallback: string, limit: number) {
+  const text = typeof value === 'string' && value.trim() ? value.trim() : fallback
+  return text.slice(0, limit)
+}
+
+function normalizeBehaviorTrail(value: unknown): BehaviorTrailEntry[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null
+      const source = entry as Partial<BehaviorTrailEntry>
+      const event = source.event === 'home_opened'
+        || source.event === 'product_opened'
+        || source.event === 'setup_opened'
+        || source.event === 'settings_opened'
+        ? source.event
+        : null
+      if (!event) return null
+      const product = source.product === 'commerce'
+        || source.product === 'production'
+        || source.product === 'website'
+        || source.product === 'ecommerce'
+        ? source.product
+        : 'unknown'
+      return {
+        id: boundedText(source.id, uid('BEHAVIOR'), 80),
+        event,
+        product,
+        route: boundedText(source.route, '/', 120),
+        detail: boundedText(source.detail, 'Local workspace activity', 160),
+        createdAt: boundedText(source.createdAt, new Date().toISOString(), 40),
+      }
+    })
+    .filter((entry): entry is BehaviorTrailEntry => Boolean(entry))
+    .slice(-behaviorTrailLimit)
+}
+
+export function readBehaviorTrail(storage: Storage): BehaviorTrailEntry[] {
+  try {
+    const raw = storage.getItem(BEHAVIOR_TRAIL_KEY)
+    return raw ? normalizeBehaviorTrail(JSON.parse(raw)) : []
+  } catch {
+    return []
+  }
+}
+
+export function recordBehaviorSignal(storage: Storage, entry: Omit<BehaviorTrailEntry, 'id' | 'createdAt'>) {
+  try {
+    const current = readBehaviorTrail(storage)
+    const normalized = normalizeBehaviorTrail([{
+      ...entry,
+      id: uid('BEHAVIOR'),
+      createdAt: new Date().toISOString(),
+    }])[0]
+    if (!normalized) return
+    const previous = current.at(-1)
+    if (previous && previous.event === normalized.event && previous.route === normalized.route && previous.product === normalized.product && previous.detail === normalized.detail) return
+    storage.setItem(BEHAVIOR_TRAIL_KEY, JSON.stringify([...current, normalized].slice(-behaviorTrailLimit)))
+  } catch {
+    // Behavior learning remains optional when browser storage is unavailable.
+  }
+}
+
 export function pilotProgress(setup: SetupState) {
   const complete = pilotRequiredFields.filter((field) => setup[field].trim()).length
   return Math.round((complete / pilotRequiredFields.length) * 100)
@@ -1522,6 +1600,7 @@ export function CoreLayout() {
   const [theme, setTheme] = useState<InterfaceTheme>(initialInterfaceTheme)
   const workspaceMainRef = useRef<HTMLElement>(null)
   const routeProduct = productFromPathname(location.pathname)
+  const settingsProduct = location.pathname.startsWith('/settings/') ? setupProductFromQuery(new URLSearchParams(location.search).get('product')) : null
   const routeName = location.pathname.startsWith('/website/')
       ? 'Website'
     : location.pathname.startsWith('/ecommerce/')
@@ -1539,6 +1618,23 @@ export function CoreLayout() {
     document.title = `${routeName} | SuperMega`
     window.scrollTo({ top: 0, behavior: 'instant' })
   }, [location.pathname, location.search, routeName])
+
+  useEffect(() => {
+    const route = `${location.pathname}${location.search}`
+    const product = routeProduct ?? settingsProduct ?? 'unknown'
+    recordBehaviorSignal(window.localStorage, {
+      event: location.pathname === '/'
+        ? 'home_opened'
+        : location.pathname.startsWith('/settings/')
+          ? (settingsProduct ? 'setup_opened' : 'settings_opened')
+          : routeProduct
+            ? 'product_opened'
+            : 'settings_opened',
+      product,
+      route,
+      detail: routeProduct ? `${productDisplayName(routeProduct)} workspace viewed.` : location.pathname.startsWith('/settings/') ? 'Setup and activation controls viewed.' : 'Product launcher viewed.',
+    })
+  }, [location.pathname, location.search, routeProduct, settingsProduct])
 
   useEffect(() => {
     document.documentElement.dataset.supermegaTheme = theme

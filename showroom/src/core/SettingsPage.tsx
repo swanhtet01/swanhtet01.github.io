@@ -10,6 +10,7 @@ import { COMMERCE_KEY, LEGACY_COMMERCE_KEYS } from './commerce-workspace'
 import {
   ACTION_KEY,
   APPROVAL_KEY,
+  BEHAVIOR_TRAIL_KEY,
   collectLocalProductRecords,
   clientSetupPath,
   LEGACY_APPROVAL_KEYS,
@@ -23,6 +24,7 @@ import {
   pilotReady,
   productContracts,
   productDisplayName,
+  readBehaviorTrail,
   RuntimeBadge,
   SETUP_KEY,
   setupProductFromQuery,
@@ -91,15 +93,17 @@ export function SettingsPage() {
   const managedApprovalRequests = approvals.map(toManagedApprovalRequest).filter((request): request is NonNullable<typeof request> => Boolean(request))
   const localProductRecords = collectLocalProductRecords(window.localStorage)
   const localRecordCount = Object.keys(localProductRecords).length
+  const behaviorTrail = readBehaviorTrail(window.localStorage)
+  const behaviorSignalCount = behaviorTrail.length
   const learningRows = [
     ['Data', localRecordCount ? `${localRecordCount} records` : 'Import'],
     ['Trust', `${runtime.coverageScore}%`],
     ['Review', `${managedApprovalRequests.length || approvals.length} packets`],
-    ['AI', runtime.enterpriseDbReady && runtime.writesReady ? 'Ready' : 'Locked'],
+    ['Behavior', behaviorSignalCount ? `${behaviorSignalCount} signals` : 'Local only'],
   ] as const
   const learningPlanRows = [
     ['Source graph', localRecordCount ? `${localRecordCount} local records prepared` : 'No local records yet', localRecordCount ? 'Exported evidence keeps the browser-local source package for managed validation.' : 'Use Shop, Plant, Website, Ecommerce, or import setup to create the first record.'],
-    ['Behavior trail', actions.length ? `${actions.length} accountable actions` : 'No accountable actions yet', actions.length ? 'Premium can rank next actions from reviewed operator behavior after import.' : 'Use the product sample so the system can capture local action history.'],
+    ['Behavior trail', behaviorSignalCount ? `${behaviorSignalCount} local signals` : 'No local signals yet', behaviorSignalCount ? 'Premium can rank next actions from reviewed workspace behavior after import.' : 'Open Shop, Plant, Website, Ecommerce, or setup so the system can capture local activity history.'],
     ['Decision memory', managedApprovalRequests.length || approvals.length ? `${managedApprovalRequests.length || approvals.length} review packets` : 'No review packets yet', managedApprovalRequests.length || approvals.length ? 'Human approvals become reusable context after managed activation.' : 'Approve or decline at least one prepared decision before relying on AI context.'],
     ['Owner gate', isPilotReady ? 'Ready for managed review' : `${completion}% trial evidence`, isPilotReady ? 'Export evidence, then request managed trial; writes stay locked until server controls pass.' : 'Complete baseline, target, authority boundary, and acceptance evidence first.'],
   ] as const
@@ -107,7 +111,7 @@ export function SettingsPage() {
     ['Agent worker', `${selectedProduct.name} operator`, `Prepares ${selectedTemplate.name.toLowerCase()} from approved sources.`],
     ['First job', selectedTemplate.workflow[0] ?? selectedTemplate.outcome, selectedTemplate.outcome],
     ['Tool boundary', runtime.writesReady ? 'Write gate ready' : 'Writes locked', 'Drafts, imports, messages, publishes, payments, and production changes wait for human approval.'],
-    ['Learning loop', localRecordCount || actions.length ? `${localRecordCount + actions.length} signals` : 'No signals yet', 'Premium learns only from exported records, accountable actions, and reviewed decisions.'],
+    ['Learning loop', localRecordCount || actions.length || behaviorSignalCount ? `${localRecordCount + actions.length + behaviorSignalCount} signals` : 'No signals yet', 'Premium learns only from exported records, local behavior, accountable actions, and reviewed decisions.'],
   ] as const
   const activationRows: Array<readonly [string, string]> = [
     ['Trial', isPilotReady ? 'Ready' : `${completion}%`],
@@ -123,7 +127,7 @@ export function SettingsPage() {
       ]),
     ['Coverage', `${runtime.coverageScore}%`],
   ]
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 14, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, learningRows, learningPlanRows, agentPlanRows }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 15, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, learningRows, learningPlanRows, agentPlanRows }, null, 2))}`
 
   useEffect(() => {
     if (!requestedProduct || requestedProduct === setup.product) return
@@ -209,6 +213,7 @@ export function SettingsPage() {
         APPROVAL_KEY,
         SETUP_KEY,
         ACTION_KEY,
+        BEHAVIOR_TRAIL_KEY,
         SHOP_ORDER_DRAFT_RESET_EPOCH_KEY,
         TEAM_WORK_KEY,
         WEBSITE_STORAGE_KEY,
