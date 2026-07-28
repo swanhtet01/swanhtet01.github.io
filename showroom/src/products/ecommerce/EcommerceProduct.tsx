@@ -1103,6 +1103,30 @@ export function EcommerceProduct() {
     ['Queue', pendingManagedRequests.length ? `${pendingManagedRequests.length} Shop review` : 'Clear'],
     ['Safety', managedIdentity ? 'Managed gate' : 'Local trial'],
   ] as const
+  const managedStoreActivationStage = importNeeded
+    ? 'Import catalog for activation'
+    : !savedDraftIsCurrent
+      ? 'Save storefront for activation'
+      : !buyingReady
+        ? 'Repair checkout activation'
+        : pendingManagedRequests.length
+          ? 'Clear Shop activation queue'
+          : orderOpsPaymentRiskCount
+            ? 'Review payment activation'
+            : deliveryReviewCount
+              ? 'Review delivery activation'
+              : managedIdentity
+                ? 'Managed store activation ready'
+                : 'Download activation packet'
+  const managedStoreActivationRows = [
+    ['Catalog', importNeeded ? 'Needed' : `${selectedSkus.length} sellable`],
+    ['Storefront', savedDraftIsCurrent ? 'Saved fingerprint' : 'Save required'],
+    ['Checkout', buyingReady ? 'Quote controlled' : 'Locked'],
+    ['Payments', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} manual QR` : 'Review only'],
+    ['Delivery', deliveryReviewCount ? `${deliveryReviewCount} review` : savedDraftIsCurrent ? 'Template ready' : 'Locked'],
+    ['Shop gate', pendingManagedRequests.length ? `${pendingManagedRequests.length} owner review` : 'No queue'],
+    ['Activation', managedIdentity ? 'Managed controls' : 'Free local only'],
+  ] as const
   const setupRows = [
     ['Catalog', sourceLabel],
     ['Products', `${selectedSkus.length}/${Math.min(catalog.items.length, 8)} selected`],
@@ -1250,6 +1274,17 @@ export function EcommerceProduct() {
         </div>
         <div className="ecommerce-ops-cockpit-rows">
           {orderingReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+      </section>
+
+      <section aria-label="Ecommerce managed store activation packet" className="ecommerce-ops-cockpit ecommerce-managed-activation-cockpit">
+        <div>
+          <span className="core-eyebrow">Managed store activation packet</span>
+          <h2>{managedStoreActivationStage}</h2>
+          <p>AI packages catalog, storefront fingerprint, checkout quote controls, manual payment review, delivery template readiness, Shop review queue, and managed gate for store activation. No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or managed activation runs from this packet.</p>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows ecommerce-managed-activation-rows">
+          {managedStoreActivationRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
       </section>
 
