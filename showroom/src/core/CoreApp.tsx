@@ -134,6 +134,7 @@ import {
   type ProductionShiftHandoff,
   type ProductionState,
 } from './production-workspace'
+import { projectPlantOrder } from './plant-order-foundation'
 
 const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
 const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').then((module) => ({ default: module.ShopInventoryFoundation })))
@@ -5196,6 +5197,28 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Handoff', shiftHandoffIsCurrent ? 'Ready' : 'Build'],
   ] as const
   const plantControlBoundary = 'Owner confirms production, quality, WCM, maintenance, material, and handoff writes.'
+  const openMaterialIssues = openIssues.filter((issue) => issue.kind === 'materials')
+  const shopLowStock = relatedCommerce.items.filter((item) => item.onHand <= item.reorderAt)
+  const orderExecutionProjection = production.orderExecution ? projectPlantOrder(production.orderExecution) : null
+  const plantMrpNext = !productionCanWrite
+    ? 'Restore Plant readiness'
+    : openMaterialIssues.length
+      ? 'Resolve material blockers'
+      : orderExecutionProjection?.latestAvailability?.shortfalls.length
+        ? 'Check BOM shortfalls'
+        : shopLowStock.length
+          ? 'Review Shop supply'
+          : activeJobs.length && !materialEntries.length
+            ? 'Record first material use'
+            : 'Materials ready for review'
+  const plantMrpRows = [
+    ['Demand', activeJobs.length ? `${activeJobs.length} active jobs` : 'No active job'],
+    ['BOM', orderExecutionProjection?.plan ? `${orderExecutionProjection.materials.length} materials` : 'Use order plan'],
+    ['Availability', orderExecutionProjection?.latestAvailability ? orderExecutionProjection.latestAvailability.passed ? 'Checked clear' : `${orderExecutionProjection.latestAvailability.shortfalls.length} short` : 'Needs check'],
+    ['Shop supply', shopLowStock.length ? `${shopLowStock.length} low SKU` : 'Clear'],
+    ['Issue gate', openMaterialIssues.length ? `${openMaterialIssues.length} open` : 'Clear'],
+    ['Trace', materialEntries.length ? `${materialEntries.length} consumed` : 'Not started'],
+  ] as const
 
   useEffect(() => {
     const timer = window.setInterval(() => setIssueClock(Date.now()), 60_000)
@@ -5853,6 +5876,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div><span className="core-eyebrow">MES lifecycle</span><strong>Plan to handoff</strong><small>AI guides plan, execution, quality, WCM, trace, and handoff. No equipment or production write runs without owner approval.</small></div>
     <div className="plant-control-rows">{plantLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
+  const plantMrp = <section aria-label="Plant MRP readiness" className="plant-control">
+    <div><span className="core-eyebrow">MRP readiness</span><strong>{plantMrpNext}</strong><small>AI reviews job demand, BOM, availability, Shop supply, material blockers, and trace evidence. No purchase, issue, costing, inventory, or production write runs from this panel.</small></div>
+    <div className="plant-control-rows">{plantMrpRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
 
   if (tab === 'production') return <div className="operation-module">
     {productionBoundary}
@@ -5860,6 +5887,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {plantAgentQueue}
     {plantControl}
     {plantLifecycle}
+    {plantMrp}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
@@ -5946,6 +5974,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {plantAgentQueue}
     {plantControl}
     {plantLifecycle}
+    {plantMrp}
     <div className="control-workspace">
       <div className="split-workspace">
         <section className="core-panel production-issue-launcher">
