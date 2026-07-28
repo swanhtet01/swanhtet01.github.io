@@ -1538,3 +1538,55 @@ textarea { min-height: 72px; resize: vertical; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+.shop-service-schedule { padding: 0; overflow: hidden; }
+.shop-service-schedule > summary { min-height: 74px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 18px; cursor: pointer; list-style: none; }
+.shop-service-schedule > summary::-webkit-details-marker { display: none; }
+.shop-service-schedule > summary > span { display: grid; gap: 3px; }
+.shop-service-schedule > summary > span:last-child { display: block; color: var(--core-muted); font-size: 12px; }
+.shop-service-schedule > summary small { color: var(--core-accent); font-family: var(--core-mono); font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.shop-service-schedule > summary strong { font-size: 18px; }
+.service-schedule-body { display: grid; gap: 14px; border-top: 1px solid var(--core-line); padding: 16px; }
+.service-schedule-summary { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); border: 1px solid var(--core-line); border-radius: 12px; overflow: hidden; }
+.service-schedule-summary > span { min-height: 66px; display: grid; align-content: center; gap: 4px; border-right: 1px solid var(--core-line); padding: 10px 12px; }
+.service-schedule-summary > span:last-child { border-right: 0; }
+.service-schedule-summary small { color: var(--core-muted); font-size: 10px; }
+.service-schedule-summary strong { font-size: 15px; }
+.service-booking-form { display: grid; grid-template-columns: minmax(170px,1.2fr) repeat(2,minmax(150px,1fr)); gap: 10px; align-items: end; border: 1px solid var(--core-line); border-radius: 14px; padding: 14px; background: color-mix(in srgb,var(--core-panel) 88%,var(--core-accent) 12%); }
+.service-booking-form > div { grid-row: span 2; align-self: start; padding: 4px 8px 4px 2px; }
+.service-booking-form h3, .service-agenda h3 { margin: 4px 0; font-size: 17px; }
+.service-booking-form p { max-width: 290px; margin: 0; color: var(--core-muted); font-size: 11px; line-height: 1.5; }
+.service-booking-form label, .service-schedule-setup label { display: grid; gap: 5px; color: var(--core-muted); font-size: 10px; font-weight: 700; }
+.service-booking-form .core-button { justify-self: stretch; }
+.service-agenda { display: grid; gap: 0; }
+.service-agenda .panel-head { padding-bottom: 8px; }
+.service-agenda article { min-height: 74px; display: grid; grid-template-columns: 72px minmax(0,1fr) auto; align-items: center; gap: 12px; border-top: 1px solid var(--core-line); padding: 10px 2px; }
+.service-agenda time, .service-agenda article > div { display: grid; gap: 3px; }
+.service-agenda time strong { font-family: var(--core-mono); font-size: 14px; }
+.service-agenda small, .service-agenda em { color: var(--core-muted); font-size: 10px; font-style: normal; }
+.service-agenda article > div:last-child { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.service-schedule-setup > div { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; padding: 12px; }
+.service-schedule-setup form { display: grid; grid-template-columns: minmax(0,1fr) 110px auto; align-items: end; gap: 8px; border: 1px solid var(--core-line); border-radius: 12px; padding: 12px; }
+.service-schedule-setup form > strong { grid-column: 1 / -1; font-size: 12px; }
+
+@media (max-width: 840px) {
+  .service-booking-form { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .service-booking-form > div { grid-column: 1 / -1; grid-row: auto; }
+  .service-booking-form > div p { max-width: none; }
+  .service-schedule-setup > div { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .shop-service-schedule > summary { min-height: 64px; padding: 12px 14px; }
+  .shop-service-schedule > summary > span:last-child { text-align: right; }
+  .service-schedule-body { padding: 10px; }
+  .service-schedule-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .service-schedule-summary > span:nth-child(2) { border-right: 0; }
+  .service-schedule-summary > span:nth-child(-n+2) { border-bottom: 1px solid var(--core-line); }
+  .service-booking-form { grid-template-columns: 1fr; }
+  .service-booking-form > div { grid-column: auto; }
+  .service-agenda article { grid-template-columns: 58px minmax(0,1fr); }
+  .service-agenda article > div:last-child { grid-column: 1 / -1; justify-content: flex-start; padding-left: 70px; }
+  .service-schedule-setup form { grid-template-columns: 1fr; }
+  .service-schedule-setup form > strong { grid-column: auto; }
+}

@@ -1,0 +1,182 @@
+import { type FormEvent, useMemo, useState } from 'react'
+
+import {
+  SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
+  advanceShopServiceBooking,
+  cancelShopServiceBooking,
+  projectShopServiceSchedule,
+  readShopServiceSchedule,
+  registerShopService,
+  registerShopServiceResource,
+  scheduleShopServiceBooking,
+  type ShopServiceBookingStatus,
+  type ShopServiceSchedule,
+} from './shop-service-scheduling'
+
+const statusLabels: Record<ShopServiceBookingStatus, string> = {
+  held: 'Held',
+  confirmed: 'Confirmed',
+  checked_in: 'Checked in',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+}
+
+const nextActionLabels: Partial<Record<ShopServiceBookingStatus, string>> = {
+  held: 'Confirm',
+  confirmed: 'Check in',
+  checked_in: 'Complete',
+}
+
+function nextLocalStart() {
+  const date = new Date()
+  date.setMinutes(0, 0, 0)
+  date.setHours(date.getHours() + 1)
+  const offset = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16)
+}
+
+function formatMmk(value: number) {
+  return `${value.toLocaleString()} MMK`
+}
+
+function initialSchedule() {
+  try {
+    return { schedule: readShopServiceSchedule(window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)), error: '' }
+  } catch (error) {
+    return { schedule: null, error: error instanceof Error ? error.message : 'Appointments could not be loaded.' }
+  }
+}
+
+export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled = false }: { actor?: string; disabled?: boolean }) {
+  const [initial] = useState(initialSchedule)
+  const [schedule, setSchedule] = useState<ShopServiceSchedule | null>(initial.schedule)
+  const [notice, setNotice] = useState(initial.error)
+  const [workspaceOpen, setWorkspaceOpen] = useState((initial.schedule?.bookings.length ?? 0) === 0)
+  const [bookingDraft, setBookingDraft] = useState({ customerName: '', contact: '', serviceId: initial.schedule?.services[0]?.id ?? '', resourceId: initial.schedule?.resources[0]?.id ?? '', startsAt: nextLocalStart(), note: '' })
+  const [serviceDraft, setServiceDraft] = useState({ name: '', durationMinutes: '60', priceMmk: '' })
+  const [resourceDraft, setResourceDraft] = useState({ name: '', kind: 'staff' as 'staff' | 'room' | 'equipment' })
+  const projection = useMemo(() => schedule ? projectShopServiceSchedule(schedule) : null, [schedule])
+
+  function commit(next: ShopServiceSchedule, message: string) {
+    setSchedule(next)
+    try {
+      window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(next))
+      setNotice(message)
+    } catch {
+      setNotice('The appointment changed in memory but could not be saved on this device. Do not close this page until local storage is available.')
+    }
+  }
+
+  function proof(reason: string) {
+    return { actor, reason, happenedAt: new Date().toISOString() }
+  }
+
+  function createBooking(event: FormEvent) {
+    event.preventDefault()
+    if (!schedule) return
+    try {
+      const startsAt = new Date(bookingDraft.startsAt)
+      if (!Number.isFinite(startsAt.getTime())) throw new Error('Choose a valid appointment date and time.')
+      const next = scheduleShopServiceBooking(schedule, { ...bookingDraft, startsAt: startsAt.toISOString() }, proof('Scheduled from the Shop appointment workspace.'))
+      commit(next, 'Appointment held. Confirm it after checking the customer and resource.')
+      setBookingDraft((current) => ({ ...current, customerName: '', contact: '', startsAt: nextLocalStart(), note: '' }))
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The appointment could not be scheduled.')
+    }
+  }
+
+  function advanceBooking(bookingId: string) {
+    if (!schedule) return
+    try {
+      const next = advanceShopServiceBooking(schedule, bookingId, proof('Advanced by the responsible Shop operator.'))
+      const booking = next.bookings.find((candidate) => candidate.id === bookingId)
+      commit(next, `Appointment marked ${booking ? statusLabels[booking.status].toLowerCase() : 'updated'}.`)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The appointment could not advance.')
+    }
+  }
+
+  function cancelBooking(bookingId: string) {
+    if (!schedule) return
+    try {
+      commit(cancelShopServiceBooking(schedule, bookingId, proof('Cancelled by the responsible Shop operator.')), 'Appointment cancelled; the resource is available again.')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The appointment could not be cancelled.')
+    }
+  }
+
+  function createService(event: FormEvent) {
+    event.preventDefault()
+    if (!schedule) return
+    try {
+      const next = registerShopService(schedule, { name: serviceDraft.name, durationMinutes: Number(serviceDraft.durationMinutes), priceMmk: Number(serviceDraft.priceMmk) }, proof('Added from Shop appointment setup.'))
+      commit(next, 'Service added to appointment setup.')
+      const serviceId = next.services.at(-1)?.id ?? bookingDraft.serviceId
+      setBookingDraft((current) => ({ ...current, serviceId }))
+      setServiceDraft({ name: '', durationMinutes: '60', priceMmk: '' })
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The service could not be added.')
+    }
+  }
+
+  function createResource(event: FormEvent) {
+    event.preventDefault()
+    if (!schedule) return
+    try {
+      const next = registerShopServiceResource(schedule, resourceDraft, proof('Added from Shop appointment setup.'))
+      commit(next, 'Staff or resource added to appointment setup.')
+      const resourceId = next.resources.at(-1)?.id ?? bookingDraft.resourceId
+      setBookingDraft((current) => ({ ...current, resourceId }))
+      setResourceDraft({ name: '', kind: 'staff' })
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The resource could not be added.')
+    }
+  }
+
+  if (!schedule || !projection) return <section className="core-panel shop-service-schedule"><div className="panel-head"><div><span className="core-eyebrow">Appointments</span><h2>Local schedule needs recovery</h2></div></div><p className="form-notice" role="alert">{notice}</p></section>
+
+  const serviceById = new Map(schedule.services.map((service) => [service.id, service]))
+  const resourceById = new Map(schedule.resources.map((resource) => [resource.id, resource]))
+
+  return <details className="core-panel shop-service-schedule" onToggle={(event) => setWorkspaceOpen(event.currentTarget.open)} open={workspaceOpen}>
+    <summary><span><small>Appointments</small><strong>{projection.today.length ? `${projection.today.length} today` : 'Schedule services'}</strong></span><span>{projection.awaitingArrival} waiting · {projection.inService} in service</span></summary>
+    <div className="service-schedule-body">
+      <div className="service-schedule-summary" aria-label="Appointment summary">
+        <span><small>Today</small><strong>{projection.today.length}</strong></span>
+        <span><small>Expected</small><strong>{formatMmk(projection.expectedRevenueMmk)}</strong></span>
+        <span><small>Services</small><strong>{projection.activeServices}</strong></span>
+        <span><small>Staff / rooms</small><strong>{projection.activeResources}</strong></span>
+      </div>
+      <form className="service-booking-form" onSubmit={createBooking}>
+        <div><span className="core-eyebrow">New appointment</span><h3>Hold a time</h3><p>Shop blocks overlapping bookings for the same staff member, room, or equipment.</p></div>
+        <label>Customer<input disabled={disabled} maxLength={160} onChange={(event) => setBookingDraft((current) => ({ ...current, customerName: event.target.value }))} placeholder="Customer name" required value={bookingDraft.customerName} /></label>
+        <label>Contact<input disabled={disabled} maxLength={160} onChange={(event) => setBookingDraft((current) => ({ ...current, contact: event.target.value }))} placeholder="Phone or reference" required value={bookingDraft.contact} /></label>
+        <label>Service<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, serviceId: event.target.value }))} required value={bookingDraft.serviceId}>{schedule.services.filter((service) => service.active).map((service) => <option key={service.id} value={service.id}>{service.name} · {service.durationMinutes} min · {formatMmk(service.priceMmk)}</option>)}</select></label>
+        <label>Staff, room, or equipment<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, resourceId: event.target.value }))} required value={bookingDraft.resourceId}>{schedule.resources.filter((resource) => resource.active).map((resource) => <option key={resource.id} value={resource.id}>{resource.name} · {resource.kind}</option>)}</select></label>
+        <label>Starts<input disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, startsAt: event.target.value }))} required type="datetime-local" value={bookingDraft.startsAt} /></label>
+        <label>Note<input disabled={disabled} maxLength={300} onChange={(event) => setBookingDraft((current) => ({ ...current, note: event.target.value }))} placeholder="Optional request" value={bookingDraft.note} /></label>
+        <button className="core-button primary" disabled={disabled} type="submit">Hold appointment</button>
+      </form>
+      <section className="service-agenda" aria-label="Upcoming appointments">
+        <div className="panel-head"><div><span className="core-eyebrow">Agenda</span><h3>{projection.upcoming.length ? 'Next appointments' : 'No upcoming appointments'}</h3></div><span className="panel-note">revision {schedule.revision}</span></div>
+        {projection.upcoming.length ? projection.upcoming.slice(0, 12).map((booking) => {
+          const service = serviceById.get(booking.serviceId)
+          const resource = resourceById.get(booking.resourceId)
+          return <article key={booking.id}>
+            <time dateTime={booking.startsAt}><strong>{new Date(booking.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong><small>{new Date(booking.startsAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}</small></time>
+            <div><strong>{booking.customerName}</strong><small>{service?.name} · {resource?.name} · {booking.contact}</small>{booking.note ? <em>{booking.note}</em> : null}</div>
+            <div><span className={`status-pill ${booking.status === 'completed' ? 'approved' : booking.status === 'checked_in' ? 'pending' : 'bounded'}`}>{statusLabels[booking.status]}</span>{nextActionLabels[booking.status] ? <button className="core-button compact" disabled={disabled} onClick={() => advanceBooking(booking.id)} type="button">{nextActionLabels[booking.status]}</button> : null}{booking.status !== 'completed' && booking.status !== 'cancelled' ? <button className="text-link danger-text" disabled={disabled} onClick={() => cancelBooking(booking.id)} type="button">Cancel</button> : null}</div>
+          </article>
+        }) : <p className="form-notice">Hold the first appointment above. Nothing is sent to the customer or an external calendar.</p>}
+      </section>
+      <details className="compact-disclosure service-schedule-setup">
+        <summary><span>Services and resources</span><small>{schedule.services.length} services · {schedule.resources.length} resources</small></summary>
+        <div>
+          <form onSubmit={createService}><strong>Add service</strong><label>Name<input disabled={disabled} maxLength={160} onChange={(event) => setServiceDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Massage, class, consultation" required value={serviceDraft.name} /></label><label>Minutes<input disabled={disabled} max={1440} min={1} onChange={(event) => setServiceDraft((current) => ({ ...current, durationMinutes: event.target.value }))} required type="number" value={serviceDraft.durationMinutes} /></label><label>Price MMK<input disabled={disabled} min={1} onChange={(event) => setServiceDraft((current) => ({ ...current, priceMmk: event.target.value }))} required type="number" value={serviceDraft.priceMmk} /></label><button className="core-button" disabled={disabled} type="submit">Add service</button></form>
+          <form onSubmit={createResource}><strong>Add staff or resource</strong><label>Name<input disabled={disabled} maxLength={160} onChange={(event) => setResourceDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Staff name or Room 2" required value={resourceDraft.name} /></label><label>Type<select disabled={disabled} onChange={(event) => setResourceDraft((current) => ({ ...current, kind: event.target.value as typeof resourceDraft.kind }))} value={resourceDraft.kind}><option value="staff">Staff</option><option value="room">Room</option><option value="equipment">Equipment</option></select></label><button className="core-button" disabled={disabled} type="submit">Add resource</button></form>
+        </div>
+      </details>
+      <p className="form-notice" aria-live="polite">{notice || 'Appointments persist on this device. Customer messages, calendar sync, and payment remain separate human-approved actions.'}</p>
+    </div>
+  </details>
+}

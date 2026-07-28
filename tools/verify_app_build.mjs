@@ -26,6 +26,7 @@ let catalogImportRuntimeChecks = 0
 let clientOnboardingRuntimeChecks = 0
 let managedClientImportRuntimeChecks = 0
 let shopInventoryRuntimeChecks = 0
+let shopServiceScheduleRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
 let websiteReleaseRuntimeChecks = 0
 let shopOperatingFlowRuntimeChecks = 0
@@ -102,6 +103,8 @@ const ecommerceBuyingUiSource = await readFile(resolve(root, 'showroom', 'src', 
 const ecommerceBuyingLifecycleSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-buying-lifecycle.ts'), 'utf8')
 const shopOperatingFlowSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-operating-flow.ts'), 'utf8')
 const shopOperatingFlowUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopOperatingFlow.tsx'), 'utf8')
+const shopServiceScheduleSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-service-scheduling.ts'), 'utf8')
+const shopServiceScheduleUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopServiceSchedule.tsx'), 'utf8')
 
 if (!shopOperatingFlowSource.includes("export type ShopOperatingStageId = 'intake' | 'accepted' | 'fulfilment' | 'money' | 'close'")
   || !shopOperatingFlowSource.includes('export function buildShopOperatingFlow')
@@ -113,6 +116,19 @@ if (!shopOperatingFlowSource.includes("export type ShopOperatingStageId = 'intak
   || !coreSource.includes('id="shop-close-controls"')
   || !coreCssSource.includes('.shop-flow-stages')) fail('shop_operating_flow_contract_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopOperatingFlowSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_operating_flow_side_effect_added')
+if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v1")
+  || !shopServiceScheduleSource.includes('scheduleShopServiceBooking')
+  || !shopServiceScheduleSource.includes('advanceShopServiceBooking')
+  || !shopServiceScheduleSource.includes('registerShopServiceResource')
+  || !shopServiceScheduleSource.includes('Bookings ${first.id} and ${second.id} overlap.')
+  || !shopServiceScheduleUiSource.includes('Hold appointment')
+  || !shopServiceScheduleUiSource.includes('Services and resources')
+  || !shopServiceScheduleUiSource.includes('Nothing is sent to the customer or an external calendar.')
+  || !coreSource.includes("lazy(() => import('./ShopServiceSchedule')")
+  || !coreSource.includes('<ShopServiceSchedule')
+  || !coreCssSource.includes('.service-booking-form')
+  || !coreCssSource.includes('.service-agenda article')) fail('shop_service_schedule_contract_missing')
+if (['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource(', 'supabase', 'openai', 'anthropic'].some((marker) => `${shopServiceScheduleSource}\n${shopServiceScheduleUiSource}`.toLowerCase().includes(marker.toLowerCase()))) fail('shop_service_schedule_crossed_external_boundary')
 
 if (!websiteReleaseSource.includes("supermega.website.release_foundation.v1")
   || !websiteReleaseSource.includes('buildWebsiteReleasePackage')
@@ -3107,6 +3123,54 @@ async function verifyShopInventoryRuntime() {
 
   } catch (error) {
     fail(`shop_inventory_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyShopServiceScheduleRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopServiceScheduleRuntimeChecks += 1
+  }
+  const assertThrows = (action, reason) => {
+    try { action() } catch { shopServiceScheduleRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-service-scheduling.ts')).href}?shop-service-schedule-verify=${Date.now()}`)
+    const proof = (minute, reason) => ({ actor: 'Shop owner', reason, happenedAt: `2026-07-29T03:${String(minute).padStart(2, '0')}:00.000Z` })
+    let state = model.createShopServiceSchedule()
+    assert(model.validateShopServiceSchedule(state) === state && state.revision === 0, 'shop_service_schedule_seed_invalid')
+    assert(state.services.length === 2 && state.resources.length === 2 && state.bookings.length === 0, 'shop_service_schedule_seed_not_useful')
+    state = model.registerShopService(state, { name: 'Premium treatment', durationMinutes: 90, priceMmk: 75_000 }, proof(1, 'Reviewed service setup'))
+    assert(state.services.at(-1).name === 'Premium treatment' && state.revision === 1, 'shop_service_registration_failed')
+    state = model.registerShopServiceResource(state, { name: 'Therapist A', kind: 'staff' }, proof(2, 'Reviewed staff setup'))
+    assert(state.resources.at(-1).kind === 'staff' && state.events.at(-1).type === 'resource_registered', 'shop_service_resource_registration_failed')
+    const serviceId = state.services.at(-1).id
+    const resourceId = state.resources.at(-1).id
+    state = model.scheduleShopServiceBooking(state, { customerName: 'Client A', contact: '09-000-000', serviceId, resourceId, startsAt: '2026-07-29T04:00:00.000Z', note: 'First visit' }, proof(3, 'Reviewed booking request'))
+    const bookingId = state.bookings[0].id
+    assert(state.bookings[0].endsAt === '2026-07-29T05:30:00.000Z' && state.bookings[0].status === 'held', 'shop_service_booking_duration_or_initial_state_wrong')
+    assertThrows(() => model.scheduleShopServiceBooking(state, { customerName: 'Client B', contact: '09-111-111', serviceId, resourceId, startsAt: '2026-07-29T05:00:00.000Z' }, proof(4, 'Conflicting request')), 'shop_service_booking_conflict_succeeded')
+    const projected = model.projectShopServiceSchedule(state, new Date('2026-07-29T04:15:00.000Z'))
+    assert(projected.today.length === 1 && projected.upcoming.length === 1 && projected.expectedRevenueMmk === 75_000 && projected.awaitingArrival === 1, 'shop_service_schedule_projection_wrong')
+    state = model.advanceShopServiceBooking(state, bookingId, proof(5, 'Customer confirmed'))
+    assert(state.bookings[0].status === 'confirmed', 'shop_service_booking_confirmation_failed')
+    state = model.advanceShopServiceBooking(state, bookingId, proof(6, 'Customer arrived'))
+    assert(state.bookings[0].status === 'checked_in', 'shop_service_booking_check_in_failed')
+    state = model.advanceShopServiceBooking(state, bookingId, proof(7, 'Service completed'))
+    assert(state.bookings[0].status === 'completed' && state.events.length === state.revision, 'shop_service_booking_completion_or_evidence_failed')
+    assertThrows(() => model.advanceShopServiceBooking(state, bookingId, proof(8, 'Invalid extra advance')), 'shop_service_completed_booking_advanced')
+    assertThrows(() => model.cancelShopServiceBooking(state, bookingId, proof(9, 'Invalid cancellation')), 'shop_service_completed_booking_cancelled')
+    state = model.scheduleShopServiceBooking(state, { customerName: 'Client C', contact: '09-222-222', serviceId, resourceId, startsAt: '2026-07-29T06:00:00.000Z' }, proof(10, 'Second reviewed booking'))
+    const cancellableId = state.bookings.at(-1).id
+    state = model.cancelShopServiceBooking(state, cancellableId, proof(11, 'Customer cancelled'))
+    assert(state.bookings.at(-1).status === 'cancelled', 'shop_service_booking_cancellation_failed')
+    state = model.scheduleShopServiceBooking(state, { customerName: 'Client D', contact: '09-333-333', serviceId, resourceId, startsAt: '2026-07-29T06:00:00.000Z' }, proof(12, 'Replacement reviewed booking'))
+    assert(state.bookings.at(-1).status === 'held', 'shop_service_cancelled_slot_not_reusable')
+    assertThrows(() => model.validateShopServiceSchedule({ ...state, events: state.events.slice(1) }), 'shop_service_missing_evidence_accepted')
+    assertThrows(() => model.readShopServiceSchedule('{"schema":"wrong"}'), 'shop_service_invalid_storage_accepted')
+  } catch (error) {
+    fail(`shop_service_schedule_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
@@ -9323,6 +9387,7 @@ async function verifyShopOperatingFlowRuntime() {
 await verifyShopOperatingFlowRuntime()
 await verifyChannelOrderRuntime()
 await verifyShopInventoryRuntime()
+await verifyShopServiceScheduleRuntime()
 await verifyPlantOrderRuntime()
 await verifyWebsiteReleaseRuntime()
 await verifyCatalogImportRuntime()
@@ -9345,10 +9410,11 @@ const largestJavascriptBytes = Math.max(...await Promise.all(javascriptFiles.map
 if (largestJavascriptBytes > 500_000) fail(`javascript_chunk_budget:${largestJavascriptBytes}`)
 if (!javascriptFiles.some((path) => /[\\/]router-[^\\/]+\.js$/.test(path))) fail('router_chunk_artifact_missing')
 if (!javascriptFiles.some((path) => /[\\/]ClientDataOnboarding-[^\\/]+\.js$/.test(path))) fail('client_onboarding_chunk_artifact_missing')
+if (!javascriptFiles.some((path) => /[\\/]ShopServiceSchedule-[^\\/]+\.js$/.test(path))) fail('shop_service_schedule_chunk_artifact_missing')
 if (largestJavascriptBytes > 480_000) fail(`javascript_headroom_budget:${largestJavascriptBytes}`)
 
 if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
