@@ -4420,7 +4420,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     ['Recovery', orderDraftRecoveryBlocked ? 'Blocked' : orderDraftRecoveryVisible ? 'Resume available' : 'Ready'],
     ['Write gate', commerceCanWrite && !pendingAction ? 'Ready' : 'Locked'],
   ] as const
-  const shopOrderControlBoundary = 'Owner confirms every order, payment, refund, delivery, cancellation, and stock change before Shop writes.'
+  const shopOrderControlBoundary = 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock changes.'
   const shopOrderLifecycleRows = [
     ['Capture', pendingStorefrontRequests.length || legacyWebsiteWorkWaiting ? `${pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)} online` : openOrders.length ? `${openOrders.length} open` : 'Ready'],
     ['Reserve', managedInventoryProjection ? 'ATP active' : 'Catalog stock'],
@@ -4447,7 +4447,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         <div className="shop-order-control-rows">{shopOrderControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
       </section>
       <section className="shop-order-control" aria-label="Shop order lifecycle">
-        <div><span className="core-eyebrow">Order lifecycle</span><strong>Capture to return</strong><small>AI guides capture, reservation, fulfilment, collection, replenishment, and returns from one Shop record. Owner confirms every order, payment, refund, delivery, cancellation, and stock write.</small></div>
+        <div><span className="core-eyebrow">Order lifecycle</span><strong>Capture to return</strong><small>AI guides capture, reserve, fulfil, collect, replenish, and returns. Owner confirms orders, payments, refunds, deliveries, cancellations, and stock writes.</small></div>
         <div className="shop-order-control-rows">{shopOrderLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
       </section>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
@@ -5195,7 +5195,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'No trace'],
     ['Handoff', shiftHandoffIsCurrent ? 'Ready' : 'Build'],
   ] as const
-  const plantControlBoundary = 'Owner confirms every production, quality, WCM, maintenance, material, and shift-handoff write before Plant changes.'
+  const plantControlBoundary = 'Owner confirms production, quality, WCM, maintenance, material, and handoff writes.'
 
   useEffect(() => {
     const timer = window.setInterval(() => setIssueClock(Date.now()), 60_000)
@@ -5850,7 +5850,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div className="plant-control-rows">{plantControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantLifecycle = <section aria-label="Plant lifecycle control" className="plant-control">
-    <div><span className="core-eyebrow">MES lifecycle</span><strong>Plan to handoff</strong><small>AI guides plan, execution, quality, WCM, traceability, and handoff from one Plant record. No equipment command or production write runs without owner approval.</small></div>
+    <div><span className="core-eyebrow">MES lifecycle</span><strong>Plan to handoff</strong><small>AI guides plan, execution, quality, WCM, trace, and handoff. No equipment or production write runs without owner approval.</small></div>
     <div className="plant-control-rows">{plantLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
 
