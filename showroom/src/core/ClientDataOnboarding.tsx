@@ -13,17 +13,7 @@ import {
   type ClientDemoProductProgress,
   type ClientSolutionId,
 } from './client-onboarding'
-import { importCommerceCatalog, mutateCommerceWorkspace, type CommerceCatalogImportResult, type CommerceItem, type CommerceStorefrontMerchandising } from './commerce-workspace'
-import { importProductionJobs, mutateProductionWorkspace, type ProductionJob, type ProductionJobsImportResult } from './production-workspace'
-import {
-  activateLocalWebsitePageDrafts,
-  type WebsitePageDraftsImportResult,
-  type WebsitePageImportDraft,
-} from '../products/website/website-model'
-import {
-  activateLocalEcommerceMerchandising,
-  type LocalEcommerceMerchandisingImport,
-} from '../products/ecommerce/local-merchandising-import'
+import { activateLocalStagingPackage } from './local-client-import'
 import {
   ManagedTrialError,
   applyManagedClientImport,
@@ -31,7 +21,6 @@ import {
   loadManagedBootstrap,
   loadManagedServiceSchedule,
   managedClientImportActivationContext,
-  plantImportDueAt,
   sameManagedClientImportState,
   sameManagedIdentity,
   saveManagedServiceSchedule,
@@ -603,86 +592,8 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     const stagingPackage = currentStagingPackage()
     setState((current) => ({ ...current, applying: true, localApplied: null, error: '' }))
     try {
-      const capturedAt = new Date().toISOString()
-      let activation: CommerceCatalogImportResult | ProductionJobsImportResult | WebsitePageDraftsImportResult | LocalEcommerceMerchandisingImport | null = null
-      let mutationOk = false
-      let mutationError = ''
-      if (expectedLocalProduct === 'commerce') {
-        const result = await mutateCommerceWorkspace((current) => {
-          const items: CommerceItem[] = stagingPackage.rows.map((row) => ({
-            sku: row.values.sku,
-            name: row.values.name,
-            onHand: Number(row.values.onHand),
-            reorderAt: Number(row.values.reorderAt),
-            price: Number(row.values.price),
-          }))
-          activation = importCommerceCatalog(current, {
-            items,
-            sourceDigest: expectedPreviewDigest,
-            capturedAt,
-            actor: expectedOwner.trim(),
-          })
-          return activation?.state ?? null
-        })
-        mutationOk = result.ok
-        mutationError = result.ok ? '' : result.error
-      } else if (expectedLocalProduct === 'production') {
-        const result = await mutateProductionWorkspace((current) => {
-          const jobs: ProductionJob[] = stagingPackage.rows.map((row) => ({
-            id: row.values.jobCode,
-            line: row.values.line,
-            product: row.values.productName,
-            target: Number(row.values.targetQuantity),
-            output: 0,
-            owner: expectedOwner.trim(),
-            priority: 'normal',
-            dueAt: plantImportDueAt(row.values.dueDate),
-          }))
-          activation = importProductionJobs(current, {
-            jobs,
-            sourceDigest: expectedPreviewDigest,
-            capturedAt,
-            actor: expectedOwner.trim(),
-          })
-          return activation?.state ?? null
-        })
-        mutationOk = result.ok
-        mutationError = result.ok ? '' : result.error
-      } else if (expectedLocalProduct === 'website') {
-        const pages: WebsitePageImportDraft[] = stagingPackage.rows.map((row) => ({
-          slug: row.values.slug,
-          title: row.values.title,
-          headline: row.values.headline,
-          body: row.values.body,
-          contactUrl: row.values.contactUrl,
-        }))
-        const result = await activateLocalWebsitePageDrafts({
-          siteName: expectedWorkspace.trim(),
-          pages,
-          sourceDigest: expectedPreviewDigest,
-          capturedAt,
-        })
-        activation = result.ok ? result.import : null
-        mutationOk = result.ok
-        mutationError = result.ok ? '' : result.error
-      } else {
-        const rows: CommerceStorefrontMerchandising[] = stagingPackage.rows.map((row) => ({
-          sku: row.values.sku,
-          featured: row.values.featured === 'true',
-          collection: row.values.collection,
-          displayName: row.values.displayName,
-          note: row.values.note,
-        }))
-        activation = await activateLocalEcommerceMerchandising({
-          storeName: expectedWorkspace.trim(),
-          rows,
-          sourceDigest: expectedPreviewDigest,
-        })
-        mutationOk = true
-      }
+      const confirmed = await activateLocalStagingPackage(stagingPackage)
       if (contextChanged()) return
-      if (!mutationOk || !activation) throw new Error(mutationOk ? `The ${productName} import could not be confirmed.` : mutationError)
-      const confirmed = activation as CommerceCatalogImportResult | ProductionJobsImportResult | WebsitePageDraftsImportResult | LocalEcommerceMerchandisingImport
       setState((current) => current.preview?.previewDigest === expectedPreviewDigest
         ? {
             ...current,

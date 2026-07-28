@@ -87,6 +87,7 @@ const shopInventorySource = await readFile(resolve(root, 'showroom', 'src', 'cor
 const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopInventoryFoundation.tsx'), 'utf8')
 const shopInventoryPythonSource = await readFile(resolve(root, 'supermega_runtime', 'shop_inventory_runtime.py'), 'utf8')
 const managedActivationRunbookSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedActivationRunbook.tsx'), 'utf8')
+const localClientImportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'local-client-import.ts'), 'utf8')
 const settingsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'SettingsPage.tsx'), 'utf8')
 const channelOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ChannelOrderIntake.tsx'), 'utf8')
 const plantOrderSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts'), 'utf8')
@@ -1814,6 +1815,25 @@ if (manifestPlantPackIds.join(',') !== 'general-manufacturing,batch-process,food
   || !settingsPageSource.includes('Plant industry pack')
   || !settingsPageSource.includes('plantIndustryPacks.map((pack)')) fail('plant_industry_pack_contract_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => clientOnboardingSource.toLowerCase().includes(marker.toLowerCase()))) fail('client_import_external_or_persistent_side_effect_added')
+if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermega.client_demo_preparation.v1'")
+  || !clientOnboardingSource.includes('CLIENT_DEMO_PREPARATION_MAX_BYTES = 5 * 1024 * 1024')
+  || !clientOnboardingSource.includes('export async function restoreClientDemoPreparationArtifact')
+  || !clientOnboardingSource.includes("await sha256(JSON.stringify(stagingPackage)) !== product.packageDigest")
+  || !clientOnboardingSource.includes('await sha256(JSON.stringify(payload)) !== source.bundleDigest')
+  || !clientOnboardingSource.includes("source.review.confirmation !== `APPROVE CLIENT DEMO ${source.bundleDigest}`")
+  || !localClientImportSource.includes('export async function applyPreparedLocalClientDemoProduct')
+  || !localClientImportSource.includes('const artifact = await restoreClientDemoPreparationArtifact(artifactValue)')
+  || !localClientImportSource.includes('return activateLocalStagingPackage(preparedProduct.stagingPackage)')
+  || ['applyManagedClientImport', 'validateManagedClientImport', 'fetch(', 'supabase'].some((marker) => localClientImportSource.includes(marker))
+  || !settingsPageSource.includes('Load private package')
+  || !settingsPageSource.includes('Private client rows stay in this browser. Nothing is uploaded, shared, or installed automatically.')
+  || !settingsPageSource.includes('Install real demo data, one product at a time.')
+  || !settingsPageSource.includes('preparedArtifact.products.map((product)')
+  || !settingsPageSource.includes("product.product === 'ecommerce' && preparedArtifact.products.some((entry) => entry.product === 'commerce')")
+  || !settingsPageSource.includes("dependencyBlocked ? 'Install Shop first' : 'Install locally'")
+  || !settingsPageSource.includes('disabled={!preparedApprovalReady || Boolean(preparedBusyProduct) || Boolean(managedIdentity) || applied || dependencyBlocked}')
+  || !settingsPageSource.includes("await import('./local-client-import')")
+  || !settingsPageSource.includes('applyPreparedLocalClientDemoProduct(artifact, product, preparedConfirmation)')) fail('private_client_demo_installer_contract_missing')
 if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !coreSource.includes("website: requireProductContract('website')")
   || !coreSource.includes("ecommerce: requireProductContract('ecommerce')")
@@ -1854,10 +1874,11 @@ if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !clientOnboardingUiSource.includes('Download prepared file')
   || !clientOnboardingUiSource.includes('canApplyLocalImport')
   || !clientOnboardingUiSource.includes('const localActivationAvailable = !managedIdentity')
-  || !clientOnboardingUiSource.includes('importCommerceCatalog(current')
-  || !clientOnboardingUiSource.includes('importProductionJobs(current')
-  || !clientOnboardingUiSource.includes('activateLocalWebsitePageDrafts({')
-  || !clientOnboardingUiSource.includes('activateLocalEcommerceMerchandising({')
+  || !clientOnboardingUiSource.includes("import { activateLocalStagingPackage } from './local-client-import'")
+  || !localClientImportSource.includes('importCommerceCatalog(current')
+  || !localClientImportSource.includes('importProductionJobs(current')
+  || !localClientImportSource.includes('activateLocalWebsitePageDrafts({')
+  || !localClientImportSource.includes('activateLocalEcommerceMerchandising({')
   || !clientOnboardingUiSource.includes("approve adding them to this browser's {productName} demo")
   || !clientOnboardingUiSource.includes("'pages to Website'")
   || !clientOnboardingUiSource.includes("'page drafts in the Website editor'")
@@ -3879,6 +3900,98 @@ async function verifyClientOnboardingRuntime() {
     const extraFieldDemoKit = structuredClone(demoKit)
     extraFieldDemoKit.customerData = 'must-not-load'
     assert(model.restoreClientDemoKit(extraFieldDemoKit) === null, 'client_demo_kit_extra_field_accepted')
+    const digest = async (value) => {
+      const bytes = new TextEncoder().encode(value)
+      const hashed = await globalThis.crypto.subtle.digest('SHA-256', bytes)
+      return `sha256:${Array.from(new Uint8Array(hashed), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
+    }
+    const preparedProducts = []
+    for (const product of manufacturingBlueprint.products) {
+      const preview = await model.createClientImportPreview(product.sampleCsv, product.product, undefined, `sample-${product.product}.csv`, product.templateId)
+      const stagingPackage = model.buildClientImportStagingPackage(preview, {
+        workflowTemplateId: product.templateId,
+        workspace: manufacturingBlueprint.client.workspace,
+        owner: manufacturingBlueprint.client.owner,
+        plantIndustryPackId: manufacturingBlueprint.client.plantIndustryPackId,
+      })
+      preparedProducts.push({
+        product: product.product,
+        label: product.label,
+        templateId: product.templateId,
+        sourceMode: 'kit_sample_fixture',
+        sourceName: stagingPackage.source.name,
+        rowCount: stagingPackage.rows.length,
+        previewDigest: stagingPackage.source.previewDigest,
+        packageDigest: await digest(JSON.stringify(stagingPackage)),
+        demoPath: product.demoPath,
+        setupPath: product.setupPath,
+        stagingPackage,
+      })
+    }
+    const preparationPayload = {
+      contract: model.CLIENT_DEMO_PREPARATION_SCHEMA,
+      preparedAt: workspaceCreatedAt,
+      kit: { schema: model.CLIENT_DEMO_KIT_SCHEMA, digest: await digest(JSON.stringify(demoKit)), exportedAt: workspaceCreatedAt },
+      client: manufacturingBlueprint.client,
+      products: preparedProducts,
+      integrations: manufacturingBlueprint.integrations,
+      checks: { ecommerceCatalogAligned: true, websiteHomePresent: true, plantLinesPresent: true, oneWorkspaceAndOwner: true },
+      controls: {
+        localArtifactOnly: true,
+        containsNormalizedClientData: false,
+        containsSampleFixtures: true,
+        safeToShareExternally: false,
+        humanReviewRequired: true,
+        externalWritesPerformed: false,
+        hostedWritesPerformed: false,
+        connectorCallsPerformed: false,
+        modelCallsPerformed: false,
+        activationStatus: 'not_applied',
+      },
+    }
+    const preparedBundleDigest = await digest(JSON.stringify(preparationPayload))
+    const preparedArtifact = {
+      ...preparationPayload,
+      bundleDigest: preparedBundleDigest,
+      review: {
+        status: 'awaiting_founder_review',
+        confirmation: `APPROVE CLIENT DEMO ${preparedBundleDigest}`,
+        checklist: [
+          'Confirm the workspace, owner, selected templates, and industry packs.',
+          'Review every normalized source row and resolve client-data corrections.',
+          'Open each product demo path and complete its operational proof scenario.',
+          'Confirm Shop, Plant, Website, and Ecommerce cross-product checks.',
+          'Approve this exact bundle digest before any managed activation.',
+        ],
+      },
+    }
+    const restoredPreparation = await model.restoreClientDemoPreparationArtifact(preparedArtifact)
+    assert(restoredPreparation?.bundleDigest === preparedBundleDigest && restoredPreparation.products.length === 4, 'client_demo_preparation_not_restorable')
+    assert(model.clientDemoPreparationConfirmationMatches(restoredPreparation, preparedArtifact.review.confirmation), 'client_demo_preparation_confirmation_not_exact')
+    assert(!model.clientDemoPreparationConfirmationMatches(restoredPreparation, `${preparedArtifact.review.confirmation} `), 'client_demo_preparation_confirmation_whitespace_accepted')
+    const restoredPreparationBlueprint = model.clientDemoPreparationBlueprint(restoredPreparation)
+    assert(JSON.stringify(restoredPreparationBlueprint) === JSON.stringify(manufacturingBlueprint), 'client_demo_preparation_blueprint_drifted')
+    const localInstaller = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'local-client-import.ts')).href}?local-client-installer-verify=${Date.now()}`)
+    await rejects(() => localInstaller.applyPreparedLocalClientDemoProduct(preparedArtifact, 'commerce', 'WRONG APPROVAL'), 'client_demo_preparation_wrong_confirmation_reached_local_write')
+    const rowTamper = structuredClone(preparedArtifact)
+    rowTamper.products[0].stagingPackage.rows[0].values.name = 'Changed after review'
+    assert(await model.restoreClientDemoPreparationArtifact(rowTamper) === null, 'client_demo_preparation_row_tamper_accepted')
+    await rejects(() => localInstaller.applyPreparedLocalClientDemoProduct(rowTamper, 'commerce', preparedArtifact.review.confirmation), 'client_demo_preparation_tamper_reached_local_write')
+    const packageDigestTamper = structuredClone(preparedArtifact)
+    packageDigestTamper.products[1].packageDigest = await digest('wrong-package')
+    assert(await model.restoreClientDemoPreparationArtifact(packageDigestTamper) === null, 'client_demo_preparation_package_digest_tamper_accepted')
+    const unsafeControl = structuredClone(preparedArtifact)
+    unsafeControl.controls.safeToShareExternally = true
+    assert(await model.restoreClientDemoPreparationArtifact(unsafeControl) === null, 'client_demo_preparation_unsafe_control_accepted')
+    const reviewTamper = structuredClone(preparedArtifact)
+    reviewTamper.review.confirmation = 'APPROVE EVERYTHING'
+    assert(await model.restoreClientDemoPreparationArtifact(reviewTamper) === null, 'client_demo_preparation_review_tamper_accepted')
+    const duplicatePreparedProduct = structuredClone(preparedArtifact)
+    duplicatePreparedProduct.products[1].product = 'commerce'
+    assert(await model.restoreClientDemoPreparationArtifact(duplicatePreparedProduct) === null, 'client_demo_preparation_duplicate_product_accepted')
+    const extraPreparationField = structuredClone(preparedArtifact)
+    extraPreparationField.customerSecret = 'must-not-load'
+    assert(await model.restoreClientDemoPreparationArtifact(extraPreparationField) === null, 'client_demo_preparation_extra_field_accepted')
     const legacyBlueprint = structuredClone(manufacturingBlueprint)
     delete legacyBlueprint.client.shopIndustryPackId
     const migratedLegacyWorkspace = model.createClientDemoWorkspace(legacyBlueprint, workspaceCreatedAt)
@@ -9536,6 +9649,7 @@ const largestJavascriptBytes = Math.max(...await Promise.all(javascriptFiles.map
 if (largestJavascriptBytes > 500_000) fail(`javascript_chunk_budget:${largestJavascriptBytes}`)
 if (!javascriptFiles.some((path) => /[\\/]router-[^\\/]+\.js$/.test(path))) fail('router_chunk_artifact_missing')
 if (!javascriptFiles.some((path) => /[\\/]ClientDataOnboarding-[^\\/]+\.js$/.test(path))) fail('client_onboarding_chunk_artifact_missing')
+if (!javascriptFiles.some((path) => /[\\/]local-client-import-[^\\/]+\.js$/.test(path))) fail('local_client_import_chunk_artifact_missing')
 if (!javascriptFiles.some((path) => /[\\/]ShopServiceSchedule-[^\\/]+\.js$/.test(path))) fail('shop_service_schedule_chunk_artifact_missing')
 if (largestJavascriptBytes > 480_000) fail(`javascript_headroom_budget:${largestJavascriptBytes}`)
 

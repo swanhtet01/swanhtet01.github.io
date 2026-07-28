@@ -7,8 +7,10 @@ export const CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v1'
 export const CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v1' as const
 export const CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v1' as const
 export const CLIENT_DEMO_RUNBOOK_SCHEMA = 'supermega.client_demo_runbook.v1' as const
+export const CLIENT_DEMO_PREPARATION_SCHEMA = 'supermega.client_demo_preparation.v1' as const
 export const CLIENT_DEMO_WORKSPACE_STORAGE_KEY = 'supermega.client-demo-workspace.v1'
 export const CLIENT_DEMO_KIT_MAX_BYTES = 128 * 1024
+export const CLIENT_DEMO_PREPARATION_MAX_BYTES = 5 * 1024 * 1024
 export const CLIENT_IMPORT_MAX_BYTES = 512 * 1024
 export const CLIENT_IMPORT_MAX_ROWS = 500
 
@@ -291,6 +293,82 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
   },
 }
 
+export type ClientImportStagingPackage = {
+  contract: typeof CLIENT_STAGING_SCHEMA
+  product: ClientSolutionId
+  object: string
+  workflowTemplateId: string
+  plantIndustryPackId?: PlantIndustryPackId
+  workspace: string
+  owner: string
+  source: {
+    name: string
+    digest: string
+    previewDigest: string
+  }
+  mapping: ClientImportMapping
+  rows: Array<{
+    sourceRow: number
+    key: string
+    values: Record<string, string>
+  }>
+  controls: {
+    rowCount: number
+    humanReviewRequired: true
+    externalWritesPerformed: false
+    activationStatus: 'staged_not_applied'
+  }
+}
+
+export type ClientDemoPreparationArtifact = {
+  contract: typeof CLIENT_DEMO_PREPARATION_SCHEMA
+  preparedAt: string
+  kit: {
+    schema: typeof CLIENT_DEMO_KIT_SCHEMA
+    digest: string
+    exportedAt: string
+  }
+  client: ClientDemoBlueprint['client']
+  products: Array<{
+    product: ClientSolutionId
+    label: string
+    templateId: string
+    sourceMode: 'client_csv' | 'kit_sample_fixture'
+    sourceName: string
+    rowCount: number
+    previewDigest: string
+    packageDigest: string
+    demoPath: string
+    setupPath: string
+    stagingPackage: ClientImportStagingPackage
+  }>
+  integrations: ClientDemoBlueprint['integrations']
+  checks: {
+    ecommerceCatalogAligned: true
+    websiteHomePresent: true
+    plantLinesPresent: true
+    oneWorkspaceAndOwner: true
+  }
+  controls: {
+    localArtifactOnly: true
+    containsNormalizedClientData: boolean
+    containsSampleFixtures: boolean
+    safeToShareExternally: false
+    humanReviewRequired: true
+    externalWritesPerformed: false
+    hostedWritesPerformed: false
+    connectorCallsPerformed: false
+    modelCallsPerformed: false
+    activationStatus: 'not_applied'
+  }
+  bundleDigest: string
+  review: {
+    status: 'awaiting_founder_review'
+    confirmation: string
+    checklist: string[]
+  }
+}
+
 const clientDemoProductOrder: readonly ClientSolutionId[] = ['commerce', 'production', 'website', 'ecommerce']
 
 const clientDemoProductDetails: Record<ClientSolutionId, { label: string; demoPath: string; setupPath: string }> = {
@@ -299,6 +377,16 @@ const clientDemoProductDetails: Record<ClientSolutionId, { label: string; demoPa
   website: { label: 'Website', demoPath: '/website/', setupPath: '/settings/?product=website' },
   ecommerce: { label: 'Ecommerce', demoPath: '/ecommerce/', setupPath: '/settings/?product=ecommerce' },
 }
+
+const clientDemoPreparationReviewChecklist = [
+  'Confirm the workspace, owner, selected templates, and industry packs.',
+  'Review every normalized source row and resolve client-data corrections.',
+  'Open each product demo path and complete its operational proof scenario.',
+  'Confirm Shop, Plant, Website, and Ecommerce cross-product checks.',
+  'Approve this exact bundle digest before any managed activation.',
+] as const
+
+const sha256Pattern = /^sha256:[0-9a-f]{64}$/
 
 const clientDemoRunbookContracts: Record<ClientSolutionId, {
   scenario: string
@@ -862,6 +950,183 @@ export function restoreClientDemoKit(value: unknown): ClientDemoKit | null {
     || source.controls.productProgressIncluded !== false
     || source.controls.humanReviewRequired !== true) return null
   return { schema: CLIENT_DEMO_KIT_SCHEMA, blueprint, exportedAt, controls: { ...source.controls } }
+}
+
+function clientDemoPreparationChecks(packages: readonly ClientImportStagingPackage[]) {
+  const byProduct = new Map(packages.map((entry) => [entry.product, entry]))
+  const shopSkus = new Set((byProduct.get('commerce')?.rows ?? []).map((row) => row.values.sku))
+  return {
+    ecommerceCatalogAligned: (!byProduct.has('ecommerce') || !byProduct.has('commerce')
+      || (byProduct.get('ecommerce')?.rows ?? []).every((row) => shopSkus.has(row.values.sku))),
+    websiteHomePresent: (!byProduct.has('website')
+      || (byProduct.get('website')?.rows ?? []).some((row) => row.values.slug === 'home')),
+    plantLinesPresent: (!byProduct.has('production')
+      || (byProduct.get('production')?.rows ?? []).every((row) => Boolean(row.values.line))),
+    oneWorkspaceAndOwner: new Set(packages.map((entry) => `${entry.workspace}\u0000${entry.owner}`)).size === 1,
+  }
+}
+
+function clientDemoPreparationBlueprintFromSource(source: ClientDemoPreparationArtifact) {
+  return buildClientDemoBlueprint({
+    workspace: source.client.workspace,
+    owner: source.client.owner,
+    presetId: source.client.presetId,
+    shopIndustryPackId: source.client.shopIndustryPackId,
+    plantIndustryPackId: source.client.plantIndustryPackId,
+    selections: source.products.map((product) => ({ product: product.product, templateId: product.templateId })),
+  })
+}
+
+export function clientDemoPreparationBlueprint(source: ClientDemoPreparationArtifact) {
+  return clientDemoPreparationBlueprintFromSource(source)
+}
+
+export function clientDemoPreparationConfirmationMatches(source: ClientDemoPreparationArtifact, confirmation: string) {
+  return confirmation === source.review.confirmation
+}
+
+export async function restoreClientDemoPreparationArtifact(value: unknown): Promise<ClientDemoPreparationArtifact | null> {
+  let source: ClientDemoPreparationArtifact
+  try {
+    const serialized = JSON.stringify(value)
+    if (!serialized || byteLength(serialized) > CLIENT_DEMO_PREPARATION_MAX_BYTES) return null
+    source = JSON.parse(serialized) as ClientDemoPreparationArtifact
+  } catch { return null }
+  if (!source || typeof source !== 'object' || Array.isArray(source)
+    || !hasExactKeys(source, ['contract', 'preparedAt', 'kit', 'client', 'products', 'integrations', 'checks', 'controls', 'bundleDigest', 'review'])
+    || source.contract !== CLIENT_DEMO_PREPARATION_SCHEMA
+    || !canonicalTimestamp(source.preparedAt)
+    || !source.kit || typeof source.kit !== 'object' || Array.isArray(source.kit)
+    || !hasExactKeys(source.kit, ['schema', 'digest', 'exportedAt'])
+    || source.kit.schema !== CLIENT_DEMO_KIT_SCHEMA
+    || !sha256Pattern.test(source.kit.digest)
+    || !canonicalTimestamp(source.kit.exportedAt)
+    || !source.client || typeof source.client !== 'object' || Array.isArray(source.client)
+    || !hasExactKeys(source.client, ['workspace', 'owner', 'presetId', 'shopIndustryPackId', 'plantIndustryPackId'])
+    || !Array.isArray(source.products) || source.products.length < 1 || source.products.length > clientDemoProductOrder.length
+    || !Array.isArray(source.integrations)
+    || !source.checks || typeof source.checks !== 'object' || Array.isArray(source.checks)
+    || !hasExactKeys(source.checks, ['ecommerceCatalogAligned', 'websiteHomePresent', 'plantLinesPresent', 'oneWorkspaceAndOwner'])
+    || !source.controls || typeof source.controls !== 'object' || Array.isArray(source.controls)
+    || !hasExactKeys(source.controls, ['localArtifactOnly', 'containsNormalizedClientData', 'containsSampleFixtures', 'safeToShareExternally', 'humanReviewRequired', 'externalWritesPerformed', 'hostedWritesPerformed', 'connectorCallsPerformed', 'modelCallsPerformed', 'activationStatus'])
+    || !sha256Pattern.test(source.bundleDigest)
+    || !source.review || typeof source.review !== 'object' || Array.isArray(source.review)
+    || !hasExactKeys(source.review, ['status', 'confirmation', 'checklist'])) return null
+
+  const selectedProducts = source.products.map((product) => product?.product)
+  if (JSON.stringify(selectedProducts) !== JSON.stringify(clientDemoProductOrder.filter((product) => selectedProducts.includes(product)))) return null
+
+  let blueprint: ClientDemoBlueprint
+  try { blueprint = clientDemoPreparationBlueprintFromSource(source) } catch { return null }
+  const packages: ClientImportStagingPackage[] = []
+  for (let index = 0; index < source.products.length; index += 1) {
+    const product = source.products[index]
+    const productId = selectedProducts[index]
+    const details = clientDemoProductDetails[productId]
+    const blueprintProduct = blueprint.products[index]
+    const stagingPackage = product?.stagingPackage
+    if (!product || typeof product !== 'object' || Array.isArray(product)
+      || !hasExactKeys(product, ['product', 'label', 'templateId', 'sourceMode', 'sourceName', 'rowCount', 'previewDigest', 'packageDigest', 'demoPath', 'setupPath', 'stagingPackage'])
+      || !details || !blueprintProduct || blueprintProduct.product !== productId
+      || product.label !== details.label || product.templateId !== blueprintProduct.templateId
+      || !['client_csv', 'kit_sample_fixture'].includes(product.sourceMode)
+      || product.demoPath !== details.demoPath || product.setupPath !== details.setupPath
+      || !Number.isSafeInteger(product.rowCount) || product.rowCount < 1
+      || !sha256Pattern.test(product.previewDigest) || !sha256Pattern.test(product.packageDigest)
+      || !stagingPackage || typeof stagingPackage !== 'object' || Array.isArray(stagingPackage)) return null
+
+    const object = clientImportObject(productId)
+    const stagingKeys = ['contract', 'product', 'object', 'workflowTemplateId', 'workspace', 'owner', 'source', 'mapping', 'rows', 'controls']
+    if (productId === 'production') stagingKeys.push('plantIndustryPackId')
+    if (!hasExactKeys(stagingPackage, stagingKeys)
+      || stagingPackage.contract !== CLIENT_STAGING_SCHEMA
+      || stagingPackage.product !== productId || stagingPackage.object !== object.id
+      || stagingPackage.workflowTemplateId !== product.templateId
+      || stagingPackage.workspace !== source.client.workspace || stagingPackage.owner !== source.client.owner
+      || (productId === 'production' && stagingPackage.plantIndustryPackId !== source.client.plantIndustryPackId)
+      || (productId !== 'production' && stagingPackage.plantIndustryPackId !== undefined)
+      || !stagingPackage.source || typeof stagingPackage.source !== 'object' || Array.isArray(stagingPackage.source)
+      || !hasExactKeys(stagingPackage.source, ['name', 'digest', 'previewDigest'])
+      || typeof stagingPackage.source.name !== 'string' || stagingPackage.source.name !== product.sourceName
+      || !stagingPackage.source.name.trim() || stagingPackage.source.name !== stagingPackage.source.name.trim()
+      || stagingPackage.source.name.length > 180 || hasControlCharacter(stagingPackage.source.name)
+      || !sha256Pattern.test(stagingPackage.source.digest)
+      || stagingPackage.source.previewDigest !== product.previewDigest
+      || !stagingPackage.mapping || typeof stagingPackage.mapping !== 'object' || Array.isArray(stagingPackage.mapping)
+      || !hasExactKeys(stagingPackage.mapping, object.fields.map((field) => field.id))
+      || !Array.isArray(stagingPackage.rows) || stagingPackage.rows.length !== product.rowCount
+      || product.rowCount > object.maximumRows
+      || !stagingPackage.controls || typeof stagingPackage.controls !== 'object' || Array.isArray(stagingPackage.controls)
+      || !hasExactKeys(stagingPackage.controls, ['rowCount', 'humanReviewRequired', 'externalWritesPerformed', 'activationStatus'])
+      || stagingPackage.controls.rowCount !== product.rowCount
+      || stagingPackage.controls.humanReviewRequired !== true
+      || stagingPackage.controls.externalWritesPerformed !== false
+      || stagingPackage.controls.activationStatus !== 'staged_not_applied') return null
+
+    const mappedHeaders = object.fields.map((field) => stagingPackage.mapping[field.id])
+    if (mappedHeaders.some((header, fieldIndex) => typeof header !== 'string'
+      || (object.fields[fieldIndex].required && !header)
+      || Boolean(header && (header !== header.trim() || hasControlCharacter(header))))
+      || new Set(mappedHeaders.filter(Boolean)).size !== mappedHeaders.filter(Boolean).length) return null
+
+    const seenKeys = new Set<string>()
+    for (let rowIndex = 0; rowIndex < stagingPackage.rows.length; rowIndex += 1) {
+      const row = stagingPackage.rows[rowIndex]
+      if (!row || typeof row !== 'object' || Array.isArray(row)
+        || !hasExactKeys(row, ['sourceRow', 'key', 'values'])
+        || row.sourceRow !== rowIndex + 2
+        || !row.values || typeof row.values !== 'object' || Array.isArray(row.values)
+        || !hasExactKeys(row.values, object.fields.map((field) => field.id))
+        || row.key !== row.values[object.keyField] || seenKeys.has(row.key)) return null
+      seenKeys.add(row.key)
+      if (object.fields.some((field) => typeof row.values[field.id] !== 'string' || fieldIssue(field, row.values[field.id]) !== null)) return null
+    }
+    const expectedPreviewDigest = await sha256(JSON.stringify({
+      schema: CLIENT_IMPORT_SCHEMA,
+      product: productId,
+      object: object.id,
+      workflowTemplateId: product.templateId,
+      sourceDigest: stagingPackage.source.digest,
+      mapping: stagingPackage.mapping,
+    }))
+    if (expectedPreviewDigest !== product.previewDigest
+      || await sha256(JSON.stringify(stagingPackage)) !== product.packageDigest) return null
+    packages.push(stagingPackage)
+  }
+
+  if (JSON.stringify(source.integrations) !== JSON.stringify(blueprint.integrations)) return null
+  const expectedChecks = clientDemoPreparationChecks(packages)
+  if (Object.values(expectedChecks).some((check) => check !== true)
+    || JSON.stringify(source.checks) !== JSON.stringify(expectedChecks)) return null
+  const customSourceCount = source.products.filter((product) => product.sourceMode === 'client_csv').length
+  const expectedControls: ClientDemoPreparationArtifact['controls'] = {
+    localArtifactOnly: true,
+    containsNormalizedClientData: customSourceCount > 0,
+    containsSampleFixtures: customSourceCount < source.products.length,
+    safeToShareExternally: false,
+    humanReviewRequired: true,
+    externalWritesPerformed: false,
+    hostedWritesPerformed: false,
+    connectorCallsPerformed: false,
+    modelCallsPerformed: false,
+    activationStatus: 'not_applied',
+  }
+  if (JSON.stringify(source.controls) !== JSON.stringify(expectedControls)) return null
+  const payload = {
+    contract: source.contract,
+    preparedAt: source.preparedAt,
+    kit: source.kit,
+    client: source.client,
+    products: source.products,
+    integrations: source.integrations,
+    checks: source.checks,
+    controls: source.controls,
+  }
+  if (await sha256(JSON.stringify(payload)) !== source.bundleDigest
+    || source.review.status !== 'awaiting_founder_review'
+    || source.review.confirmation !== `APPROVE CLIENT DEMO ${source.bundleDigest}`
+    || JSON.stringify(source.review.checklist) !== JSON.stringify(clientDemoPreparationReviewChecklist)) return null
+  return source
 }
 
 function canonicalProgress(value: unknown, product: ClientSolutionId): ClientDemoProductProgress | null {
