@@ -75,9 +75,9 @@ const internalSystem = (id) => portfolio.internalSystems?.find((entry) => entry.
 
 requireContract('portfolio schema', portfolio.schemaVersion === 'supermega.hq.portfolio.v3')
 requireContract('portfolio is current',
-  portfolio.updatedAt === '2026-07-27'
-  && now.includes('Updated: 2026-07-27')
-  && current.includes('Last confirmed: 2026-07-27'))
+  portfolio.updatedAt === '2026-07-28'
+  && now.includes('Updated: 2026-07-28')
+  && current.includes('Last confirmed: 2026-07-28'))
 requireContract('customer portfolio is explicit',
   portfolio.products?.map((entry) => entry.id).join(',') === 'shop,plant,website,ecommerce')
 requireContract('customer paths are canonical',
@@ -288,7 +288,8 @@ requireContract('agent security brief is reconciled to current controls',
   && agentSecurity.includes('The 11-case self-test makes zero network requests')
   && agentSecurity.includes('`storage:privacy:preflight` now loads the same exact target')
   && agentSecurity.includes('Company model calls now follow `supermega.company-ai-budget.v1`')
-  && agentSecurity.includes('Expose metadata-only daily AI-budget telemetry in the existing protected operator status')
+  && agentSecurity.includes('Daily AI-budget telemetry is already implemented')
+  && agentSecurity.includes('CEO platform-status reads now follow `supermega.platform-status.v1`')
   && agentSecurity.includes('Efficiency remains unavailable unless the tenant-bound records are durable')
   && agentSecurity.includes('Hosted cleanup still requires a protected deployment')
   && agentSecurity.includes('The unlinked claimable-preview service is retired')
@@ -328,7 +329,7 @@ requireContract('product QA brief is discoverable from assignment authority',
   && workboard.includes('Checkpoint `dadb013` passes 10 routes at 390/1280 px')
   && workboard.includes('focus lands on `#workspace-main`'))
 requireContract('accepted core checkpoints lead directly to real work',
-  workboard.includes('Current accepted product checkpoint: `17b458f48f170298db8acc9f543f1e1e093b6c8e`')
+  workboard.includes('Current accepted product checkpoint: `7ae8c80617b73c4827bfbc08f74262685620a86f`')
   && workboard.includes('| ENG-075 | Shop + Data Engineering Codex | done-local |')
   && workboard.includes('| ENG-076 | Plant + Manufacturing Engineering Codex | done-local |')
   && workboard.includes('| ENG-077 | Website + Product Engineering Codex | done-local |')
@@ -390,7 +391,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && workboard.includes('Checkpoints `0831ad7` and `920c13d` add an immutable reviewed BOM/routing package')
   && workboard.includes('Checkpoints `0f3dc09` and `03e1f1b` add tenant-bound')
   && workboard.includes('Retain the completed Shop, Plant, Website, and Ecommerce checkpoints')
-  && now.includes('Current checkpoints: product `17b458f`, release `39642eb`')
+  && now.includes('Current checkpoints: product `7ae8c80`, CEO evidence `e8a3adb`, release `39642eb`')
   && now.includes('First-action QA routes Shop, Plant, and Website blockers to the next task')
   && now.includes('The active delivery focus is:')
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
@@ -657,6 +658,13 @@ requireContract('live HQ state is machine-verifiable and read-only',
   && workboard.includes('| OPS-038 | CEO + Release Operations Codex | done-local |')
   && workboard.includes('Checkpoint `bc19dac2` adds `supermega.hq-live-state.v1`')
   && workboard.includes('A one-off non-terminating working-set trim released 2,084.8 MB'))
+
+requireContract('current CEO platform evidence is recorded without expanding authority',
+  workboard.includes('| OPS-039 | CEO + Agent Operations / Evidence Quality Codex | done-local |')
+  && workboard.includes('Checkpoint `e8a3adb` adds `supermega.platform-status.v1`')
+  && workboard.includes('All 289 Kernel tests, 69 connectors across 993 adversarial calls, 15 crews across 214 checks, plus the complete app gate with 69 release and 70 security checks pass')
+  && now.includes('CEO `platform_status` now reports one exact secret-safe readiness contract')
+  && now.includes('No process, task, or server was stopped'))
 
 for (const forbidden of ['Yangon Tyre', 'ytf.supermega.dev', 'pos.supermega.dev', 'twelve product']) {
   requireContract(`retired HQ context absent: ${forbidden}`,
