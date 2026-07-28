@@ -2950,6 +2950,41 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const orderNotice = notice || commerceStorageError
   const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)
   const activePurchaseOrders = purchaseOrderRows.filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received')
+  const procurementArrivalRows = activePurchaseOrders.map((row) => ({
+    ...row,
+    urgency: commercePurchaseOrderArrivalUrgency(row.purchaseOrder, row.progress, purchaseOrderClock),
+  }))
+  const overduePurchaseOrders = procurementArrivalRows.filter(({ urgency }) => urgency === 'late')
+  const dueSoonPurchaseOrders = procurementArrivalRows.filter(({ urgency }) => urgency === 'due_soon')
+  const uncoveredReorderItems = lowStock.filter((item) => !activePurchaseOrderBySku.has(item.sku))
+  const openPurchaseRemainingUnits = activePurchaseOrders.reduce((total, { progress }) => total + progress.remaining, 0)
+  const shopProcurementNext = !commerceCanWrite
+    ? 'Restore Shop readiness'
+    : pendingAction
+      ? 'Approve pending stock action'
+      : overduePurchaseOrders.length
+        ? 'Receive or cancel late PO'
+        : dueSoonPurchaseOrders.length
+          ? 'Check arriving PO'
+          : uncoveredReorderItems.length
+            ? 'Order uncovered stock'
+            : activePurchaseOrders.length
+              ? 'Track open supply'
+              : !commerce.inventoryFoundation || !managedInventoryProjection
+                ? 'Set up stock foundation'
+                : 'Supply ready'
+  const shopProcurementRows = [
+    ['Need', uncoveredReorderItems.length ? `${uncoveredReorderItems.length} SKU` : 'Covered'],
+    ['On order', activePurchaseOrders.length ? `${activePurchaseOrders.length} PO` : 'None'],
+    ['Remaining', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} units` : 'Clear'],
+    ['Arrival', overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : dueSoonPurchaseOrders.length ? `${dueSoonPurchaseOrders.length} due soon` : 'Scheduled'],
+    ['Receipt', commerce.inventoryFoundation && managedInventoryProjection ? 'Location + lot' : 'Simple stock'],
+    ['Owner gate', commerceCanWrite && !pendingAction ? 'Required' : 'Locked'],
+  ] as const
+  const shopProcurement = <section className="shop-order-control" aria-label="Shop procurement readiness">
+    <div><span className="core-eyebrow">Procurement readiness</span><strong>{shopProcurementNext}</strong><small>AI checks reorder demand, open POs, arrival risk, receipt evidence, and location/lot readiness. No supplier message, payment, receipt, stock, costing, or accounting write runs from this panel.</small></div>
+    <div className="shop-order-control-rows">{shopProcurementRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
   const shopAgentJob = !commerceCanWrite
     ? 'Restore Shop write readiness'
     : pendingAction
@@ -4610,6 +4645,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     {shopAgentQueue}
     <section className="core-panel inventory-panel">
       <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : 'Count stock'}</button></div></div>
+      {shopProcurement}
       {stockCountDraft ? <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">Stock check</span>
