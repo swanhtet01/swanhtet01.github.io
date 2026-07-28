@@ -25,16 +25,16 @@ The active delivery focus is:
 3. **Website** — a local website builder and review workflow.
 4. **Ecommerce** — a storefront builder with request receipt and Shop handoff.
 
-AI assistance stays gated R&D until these four pass onboarding, import, recovery, security, and pilot evidence.
+AI assistance remains gated R&D pending onboarding, import, recovery, security, and pilot evidence.
 
-`Commerce` and `Production` remain internal IDs. Ecommerce owns the customer storefront and order intent; Shop owns the operating record and close.
+`Commerce` and `Production` are internal IDs. Ecommerce owns storefront/order intent; Shop owns the operating record.
 
-HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal, not customer products.
+HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal only.
 
 ## Implemented reality
 
 - HQ caps 12 roles, four jobs, and zero idle compute; overrides fail closed and duplicate ceilings are removed.
-- Ally stays zero-subagent; multi-agent is disabled. One coordinator listener remains, with no duplicate dev server or loaded local model. Idle Ollama hosts were stopped.
+- Ally stays zero-subagent; multi-agent is disabled. One coordinator listener remains, with no duplicate dev server or loaded local model. Idle Ollama hosts were stopped. A named single-flight lease blocks duplicate company cycles and releases in `finally` (`21afe44`).
 - Seven jobs use Agent Operations or core GitHub; exact-tenant catalogs mean YTF identities cannot render in core operations (`b46c386`).
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation (`07dd959`).
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked (`be78a02`).
@@ -53,14 +53,13 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- Current checkpoints: product `7ae8c80`, CEO preflight `f1328a0`, delivery `cafdafe`/`f626ee7`, CEO operations `909807d`, performance `6bad4e7`, release `39642eb`, Shop finance `d47f5d9`/`39b7fc2`/`369cb2b`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
+- Current checkpoints: product `7ae8c80`, CEO preflight `f1328a0`, delivery `cafdafe`/`f626ee7`, CEO operations `909807d`, performance `6bad4e7`, release `39642eb`, Shop finance `d47f5d9`/`39b7fc2`/`369cb2b`, agent operations `a2e1b89`, operations `63a245f`, security `98b8044`, and Ally dispatch `21afe44`.
 - App gates pass: 332 Python, production build, 54 Shop inventory/245 Commerce/265 Production, 70 security, and release/database/Vercel/HQ checks.
 - PostgreSQL 17.10 rehearsal passes twice: migrations, isolation, four-product journeys, human approvals, TLS, backup/restore, and cleanup. Hosted Storage privacy remains unproven (`2930ecf`).
-- At 390 px, Shop finance review has no overflow/errors; Plant passes both themes.
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
 - Both `supermega.dev` and `app.supermega.dev` serve exact remote `main` commit `af3f45c22b13e5edccdf87214608817fc3499e4d`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Paired release identity is current at catalog `2026-07-28.1`.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-- Ally: 81.1% RAM, zero models, one worker/frontend, one-run admission; a non-terminating trim released 1,726.5 MB. No process, task, or server was stopped.
+- Ally: 81.1% RAM, zero models, one worker/frontend; cross-process contention and recovery pass with zero network or process mutation. No process, task, or server was stopped.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
