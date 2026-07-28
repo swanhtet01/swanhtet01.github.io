@@ -19,6 +19,12 @@ test('HQ authority selects exactly one ready outcome after declining blocked wor
   assert.equal(result.selected.id, 'daily-company-control')
   assert.equal(result.selected.actionMode, 'read_only_brief')
   assert.equal(result.selected.evidencePlan.length, 4)
+  assert.deepEqual(result.selected.evidencePlan.map((step) => step.tool), [
+    'leads_overview',
+    'pipeline_overview',
+    'platform_status',
+    'company_operations_status',
+  ])
   assert.deepEqual(result.skipped.map((item) => item.reason), [
     'authority_blocked',
     'authority_blocked',
@@ -26,6 +32,20 @@ test('HQ authority selects exactly one ready outcome after declining blocked wor
   ])
   assert.match(buildCeoOutcomeGoal(result), /Blocked context only - never execute/)
   assert.match(result.authorityDigest, /^[a-f0-9]{64}$/)
+})
+
+test('every weekly department brief observes bounded company operations without expanding model or write authority', () => {
+  const ready = SUPERMEGA_HQ_AUTHORITY.outcomes.filter((outcome) => outcome.state === 'ready')
+  assert.equal(ready.length, 5)
+  for (const outcome of ready) {
+    const operations = outcome.evidencePlan.filter((step) => step.tool === 'company_operations_status')
+    assert.deepEqual(operations, [{ tool: 'company_operations_status', args: { window_days: 30 } }])
+    assert.ok(outcome.evidencePlan.length <= 4)
+    assert.equal(outcome.actionMode, 'read_only_brief')
+  }
+  assert.equal(SUPERMEGA_HQ_AUTHORITY.controls.externalWrites, false)
+  assert.equal(SUPERMEGA_HQ_AUTHORITY.controls.dynamicDelegation, false)
+  assert.equal(SUPERMEGA_HQ_AUTHORITY.controls.recursiveDelegation, false)
 })
 
 test('completed and in-flight outcomes are duplicate-safe and consume no selection slot', () => {

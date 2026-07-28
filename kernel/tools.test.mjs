@@ -1,11 +1,12 @@
 // AI Operator tool-belt — the safety boundary: only allow-listed read-only tools run. `node --test`.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { TOOLS, availableTools, platformStatusView, runTool } from './tools.mjs'
+import { TOOLS, availableTools, companyOperationsStatusView, platformStatusView, runTool } from './tools.mjs'
 
 test('the tool-belt exposes NO money/send/write capability', () => {
   const names = Object.keys(TOOLS)
   assert.ok(names.includes('platform_status'))
+  assert.ok(names.includes('company_operations_status'))
   // None of the tools may be a payment/send/write action — the draft→approve gate stays on those.
   for (const n of names) assert.equal(/pay|charge|send|email|sms|post|delete|write|create|refund/i.test(n), false, `tool ${n} must be read-only`)
 })
@@ -78,6 +79,67 @@ test('platform status is exact, metadata-only, and fails malformed readiness clo
   assert.equal(malformed.agentCompany.maxAgents, 0)
   assert.equal(malformed.agentCompany.maxRoleBudget, 0)
   assert.equal(malformed.agentCompany.externalWrites, null)
+})
+
+test('company operations status exposes measured control metadata and strips work identities and output', () => {
+  const report = {
+    ok: true,
+    mode: 'operations_report',
+    clientId: 'must-not-escape-client',
+    generatedAt: '2026-07-28T12:00:00.000Z',
+    windowDays: 30,
+    readiness: 'meeting_targets',
+    counts: { total: 5, planned: 0, running: 0, cancelled: 0, terminal: 5, completed: 5, partial: 0, blocked: 0, failed: 0, evaluated: 5, accepted: 5, revisionRequired: 0, missingEvaluation: 0 },
+    attention: { overduePlanned: 0, overdueRunning: 0, failedOrBlocked: 0, revisionRequired: 0, missingEvaluation: 0 },
+    targets: Array.from({ length: 8 }, (_, index) => ({ id: `private-target-${index}`, state: 'met' })),
+    workforce: { availableAgents: 12, utilizedAgents: 2, totalAssignments: 5, activeAssignments: 0, usedRoleCalls: 15, modelCalls: 3, cacheHits: 2, weightedTotalUnits: 1200, agents: [{ agentId: 'must-not-escape-agent' }] },
+    outcomes: {
+      available: true,
+      durable: true,
+      state: 'measured',
+      counts: { completed: 5, evaluated: 5, accepted: 5, revisionRequired: 0 },
+      efficiency: { available: true, acceptedOutcomesPer1000WorkUnits: 4.166667 },
+      records: [{ briefText: 'must-not-escape-output' }],
+    },
+    coverage: { directCyclesExcluded: true },
+    exposure: { rawEvidenceReturned: false, modelOutputReturned: false, specialistOutputReturned: false, providerRowsReturned: false },
+    provider: 'must-not-escape-provider',
+  }
+  const ready = companyOperationsStatusView(report, 30)
+  assert.equal(ready.contract, 'supermega.company-operations-status.v1')
+  assert.equal(ready.status, 'ready')
+  assert.deepEqual(ready.targets, { met: 8, atRisk: 0, collecting: 0 })
+  assert.equal(ready.workforce.availableAgents, 12)
+  assert.equal(ready.workforce.utilizedAgents, 2)
+  assert.equal(ready.outcomes.efficiencyAvailable, true)
+  assert.equal(ready.controls.metadataOnly, true)
+  assert.doesNotMatch(JSON.stringify(ready), /must-not-escape|"clientId"|"agentId"|"briefText"/i)
+
+  const malformed = companyOperationsStatusView({
+    ...report,
+    generatedAt: 'not-a-date',
+    workforce: { ...report.workforce, availableAgents: 175, utilizedAgents: 175 },
+    exposure: { ...report.exposure, rawEvidenceReturned: true },
+  }, 30)
+  assert.equal(malformed.status, 'attention')
+  assert.equal(malformed.generatedAt, null)
+  assert.equal(malformed.workforce.availableAgents, 0)
+  assert.equal(malformed.workforce.utilizedAgents, 0)
+  assert.equal(malformed.controls.metadataOnly, false)
+
+  const inconsistent = companyOperationsStatusView({
+    ...report,
+    counts: { ...report.counts, accepted: 6 },
+    attention: { ...report.attention, failedOrBlocked: -1 },
+  }, 30)
+  assert.equal(inconsistent.status, 'attention')
+  assert.equal(inconsistent.attention.failedOrBlocked, 0)
+
+  const unavailable = companyOperationsStatusView({ ok: false, clientId: 'must-not-escape' }, 90)
+  assert.equal(unavailable.status, 'unavailable')
+  assert.equal(unavailable.windowDays, 90)
+  assert.equal(unavailable.workforce.availableAgents, 12)
+  assert.doesNotMatch(JSON.stringify(unavailable), /must-not-escape|"clientId"|"agentId"|"briefText"/i)
 })
 
 test('runTool rejects an unknown tool (no arbitrary execution)', async () => {

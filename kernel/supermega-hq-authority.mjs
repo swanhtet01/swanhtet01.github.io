@@ -5,7 +5,7 @@ export const CEO_OUTCOME_AUTHORITY_CONTRACT = 'supermega.ceo-outcome-authority.v
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,79}$/
 const OUTCOME_STATES = new Set(['ready', 'blocked', 'done'])
 const ACTION_MODES = new Set(['read_only_brief', 'credentialed_provider_read', 'protected_preview', 'managed_pilot'])
-const SAFE_EVIDENCE_TOOLS = new Set(['platform_status', 'leads_overview', 'pipeline_overview', 'fx_rate'])
+const SAFE_EVIDENCE_TOOLS = new Set(['platform_status', 'company_operations_status', 'leads_overview', 'pipeline_overview', 'fx_rate'])
 const AUTHORITY_FIELDS = new Set([
   'contract',
   'authorityId',
@@ -225,6 +225,7 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
       blockers: Object.freeze([]),
       evidencePlan: Object.freeze([
         Object.freeze({ tool: 'platform_status', args: Object.freeze({}) }),
+        Object.freeze({ tool: 'company_operations_status', args: Object.freeze({ window_days: 30 }) }),
       ]),
       sourceRefs: Object.freeze(['hq/NOW.md', 'hq/WORKBOARD.md']),
     }),
@@ -242,6 +243,7 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
         Object.freeze({ tool: 'leads_overview', args: Object.freeze({ limit: 5 }) }),
         Object.freeze({ tool: 'pipeline_overview', args: Object.freeze({}) }),
         Object.freeze({ tool: 'platform_status', args: Object.freeze({}) }),
+        Object.freeze({ tool: 'company_operations_status', args: Object.freeze({ window_days: 30 }) }),
       ]),
       sourceRefs: Object.freeze(['hq/portfolio.json', 'hq/NOW.md']),
     }),
@@ -259,6 +261,7 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
         Object.freeze({ tool: 'leads_overview', args: Object.freeze({ limit: 5 }) }),
         Object.freeze({ tool: 'pipeline_overview', args: Object.freeze({}) }),
         Object.freeze({ tool: 'fx_rate', args: Object.freeze({}) }),
+        Object.freeze({ tool: 'company_operations_status', args: Object.freeze({ window_days: 30 }) }),
       ]),
       sourceRefs: Object.freeze(['hq/portfolio.json', 'hq/NOW.md']),
     }),
@@ -276,6 +279,7 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
         Object.freeze({ tool: 'pipeline_overview', args: Object.freeze({}) }),
         Object.freeze({ tool: 'fx_rate', args: Object.freeze({}) }),
         Object.freeze({ tool: 'platform_status', args: Object.freeze({}) }),
+        Object.freeze({ tool: 'company_operations_status', args: Object.freeze({ window_days: 30 }) }),
       ]),
       sourceRefs: Object.freeze(['hq/NOW.md', 'hq/research/agent-operations-security-2026-07-26.md']),
     }),
@@ -286,14 +290,14 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
       priority: 75,
       state: 'ready',
       actionMode: 'read_only_brief',
-      deliverable: 'At most six short lines with real leads, pipeline, USD/MMK, platform status, missing evidence, and one owner decision.',
+      deliverable: 'At most six short lines with real leads, pipeline, platform and company-operation status, missing evidence, and one owner decision.',
       objective: 'Use only the fixed read-only evidence plan. State exact values, distinguish missing evidence, and identify one decision for the owner. Do not send, deploy, pay, modify records, or imply that a blocked outcome is executable.',
       blockers: Object.freeze([]),
       evidencePlan: Object.freeze([
         Object.freeze({ tool: 'leads_overview', args: Object.freeze({ limit: 5 }) }),
         Object.freeze({ tool: 'pipeline_overview', args: Object.freeze({}) }),
-        Object.freeze({ tool: 'fx_rate', args: Object.freeze({}) }),
         Object.freeze({ tool: 'platform_status', args: Object.freeze({}) }),
+        Object.freeze({ tool: 'company_operations_status', args: Object.freeze({ window_days: 30 }) }),
       ]),
       sourceRefs: Object.freeze(['hq/portfolio.json', 'hq/NOW.md']),
     }),

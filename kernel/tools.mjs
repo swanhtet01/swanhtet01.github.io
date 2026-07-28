@@ -12,11 +12,24 @@ import clickup from './connectors/data-clickup.mjs'
 import telegram from './connectors/messaging-telegram.mjs'
 import { ownerEvidenceConfigured, readOwnerEvidence } from './owner-evidence.mjs'
 import { buildStatus as buildKernelStatus } from './api/status.mjs'
-import { MAX_CYCLE_AGENTS, MAX_CYCLE_ROLE_BUDGET } from './agent-company.mjs'
+import { MAX_CYCLE_AGENTS, MAX_CYCLE_ROLE_BUDGET, MAX_REGISTERED_COMPANY_AGENTS } from './agent-company.mjs'
+import { buildCompanyOperationsReport, COMPANY_OPERATIONS_WINDOWS } from './agent-company-operations.mjs'
 
 const PLATFORM_STATUS_CONTRACT = 'supermega.platform-status.v1'
+const COMPANY_OPERATIONS_STATUS_CONTRACT = 'supermega.company-operations-status.v1'
 const STORE_MODES = new Set(['memory', 'postgres', 'supabase'])
 const RELEASE_ENVIRONMENTS = new Set(['local', 'development', 'preview', 'production'])
+const OPERATIONS_READINESS = new Set(['no_orders', 'collecting', 'meeting_targets', 'at_risk'])
+const OUTCOME_STATES = new Set([
+  'measured',
+  'no_outcomes',
+  'invalid_coverage',
+  'non_durable',
+  'incomplete_evaluations',
+  'incomplete_usage',
+  'zero_work_units',
+  'store_unavailable',
+])
 
 function releaseIdentity() {
   const candidate = String(process.env.SUPERMEGA_RELEASE_COMMIT || process.env.VERCEL_GIT_COMMIT_SHA || '').trim().toLowerCase()
@@ -85,6 +98,161 @@ export function platformStatusView(status) {
   }
 }
 
+const exactCount = (value, max = 1_000_000) => Number.isSafeInteger(value) && value >= 0 && value <= max ? value : 0
+const exactMetric = (value, max = 1_000_000_000) => Number.isFinite(value) && value >= 0 && value <= max ? value : null
+const exactIso = (value) => {
+  if (typeof value !== 'string') return null
+  const time = Date.parse(value)
+  return Number.isFinite(time) && new Date(time).toISOString() === value ? value : null
+}
+
+function operationsUnavailable(windowDays) {
+  return {
+    contract: COMPANY_OPERATIONS_STATUS_CONTRACT,
+    status: 'unavailable',
+    windowDays,
+    readiness: 'unavailable',
+    generatedAt: null,
+    counts: { total: 0, planned: 0, running: 0, cancelled: 0, terminal: 0, completed: 0, partial: 0, blocked: 0, failed: 0, evaluated: 0, accepted: 0, revisionRequired: 0, missingEvaluation: 0 },
+    attention: { overduePlanned: 0, overdueRunning: 0, failedOrBlocked: 0, revisionRequired: 0, missingEvaluation: 0 },
+    targets: { met: 0, atRisk: 0, collecting: 0 },
+    workforce: { availableAgents: MAX_REGISTERED_COMPANY_AGENTS, utilizedAgents: 0, totalAssignments: 0, activeAssignments: 0, usedRoleCalls: 0, modelCalls: 0, cacheHits: 0, weightedTotalUnits: 0 },
+    outcomes: { available: false, durable: false, state: 'unavailable', completed: 0, evaluated: 0, accepted: 0, revisionRequired: 0, efficiencyAvailable: false, acceptedPer1000WorkUnits: null },
+    controls: { metadataOnly: true, directCyclesExcluded: true, rawEvidenceReturned: false, modelOutputReturned: false, specialistOutputReturned: false, providerRowsReturned: false },
+  }
+}
+
+export function companyOperationsStatusView(report, requestedWindowDays = 30) {
+  const requested = COMPANY_OPERATIONS_WINDOWS.includes(Number(requestedWindowDays)) ? Number(requestedWindowDays) : 30
+  if (!report?.ok || report.mode !== 'operations_report' || report.windowDays !== requested) return operationsUnavailable(requested)
+
+  const generatedAt = exactIso(report.generatedAt)
+  const readiness = OPERATIONS_READINESS.has(report.readiness) ? report.readiness : 'at_risk'
+  const countKeys = ['total', 'planned', 'running', 'cancelled', 'terminal', 'completed', 'partial', 'blocked', 'failed', 'evaluated', 'accepted', 'revisionRequired', 'missingEvaluation']
+  const attentionKeys = ['overduePlanned', 'overdueRunning', 'failedOrBlocked', 'revisionRequired', 'missingEvaluation']
+  const countsValid = countKeys.every((key) => exactCount(report.counts?.[key]) === report.counts?.[key])
+    && report.counts.total === report.counts.planned + report.counts.running + report.counts.cancelled + report.counts.terminal
+    && report.counts.terminal === report.counts.completed + report.counts.partial + report.counts.blocked + report.counts.failed
+    && report.counts.evaluated <= report.counts.terminal
+    && report.counts.accepted + report.counts.revisionRequired === report.counts.evaluated
+    && report.counts.missingEvaluation === report.counts.terminal - report.counts.evaluated
+  const attentionValid = attentionKeys.every((key) => exactCount(report.attention?.[key]) === report.attention?.[key])
+    && report.attention.failedOrBlocked === report.counts.failed + report.counts.blocked
+    && report.attention.revisionRequired === report.counts.revisionRequired
+    && report.attention.missingEvaluation === report.counts.missingEvaluation
+  const count = (key) => exactCount(report.counts?.[key])
+  const attention = (key) => exactCount(report.attention?.[key])
+  const targets = Array.isArray(report.targets) ? report.targets : []
+  const targetsValid = targets.length === 8 && targets.every((target) => ['met', 'missed', 'collecting'].includes(target?.state))
+  const targetSummary = targetsValid ? {
+      met: targets.filter((target) => target.state === 'met').length,
+      atRisk: targets.filter((target) => target.state === 'missed').length,
+      collecting: targets.filter((target) => target.state === 'collecting').length,
+    } : { met: 0, atRisk: 0, collecting: 0 }
+  const availableAgents = report.workforce?.availableAgents === MAX_REGISTERED_COMPANY_AGENTS ? MAX_REGISTERED_COMPANY_AGENTS : 0
+  const utilizedAgents = exactCount(report.workforce?.utilizedAgents, MAX_REGISTERED_COMPANY_AGENTS)
+  const totalAssignments = exactCount(report.workforce?.totalAssignments)
+  const activeAssignments = exactCount(report.workforce?.activeAssignments)
+  const usedRoleCalls = exactCount(report.workforce?.usedRoleCalls)
+  const modelCalls = exactCount(report.workforce?.modelCalls)
+  const cacheHits = exactCount(report.workforce?.cacheHits)
+  const weightedTotalUnits = exactCount(report.workforce?.weightedTotalUnits, 1_000_000_000)
+  const workforceValid = availableAgents === MAX_REGISTERED_COMPANY_AGENTS
+    && utilizedAgents <= availableAgents
+    && totalAssignments === report.workforce?.totalAssignments
+    && activeAssignments === report.workforce?.activeAssignments
+    && activeAssignments <= totalAssignments
+    && usedRoleCalls === report.workforce?.usedRoleCalls
+    && usedRoleCalls <= totalAssignments * MAX_CYCLE_ROLE_BUDGET
+    && modelCalls === report.workforce?.modelCalls
+    && cacheHits === report.workforce?.cacheHits
+    && modelCalls + cacheHits <= usedRoleCalls
+    && weightedTotalUnits === report.workforce?.weightedTotalUnits
+  const outcomeState = OUTCOME_STATES.has(report.outcomes?.state) ? report.outcomes.state : 'invalid_coverage'
+  const outcomesDurable = report.outcomes?.durable === true
+  const outcomeCounts = ['completed', 'evaluated', 'accepted', 'revisionRequired']
+  const outcomesValid = outcomeCounts.every((key) => exactCount(report.outcomes?.counts?.[key]) === report.outcomes?.counts?.[key])
+    && report.outcomes.counts.evaluated <= report.outcomes.counts.completed
+    && report.outcomes.counts.accepted + report.outcomes.counts.revisionRequired === report.outcomes.counts.evaluated
+    && (report.outcomes?.efficiency?.available !== true
+      || exactMetric(report.outcomes.efficiency.acceptedOutcomesPer1000WorkUnits) !== null)
+  const boundarySafe = report.coverage?.directCyclesExcluded === true
+    && report.exposure?.rawEvidenceReturned === false
+    && report.exposure?.modelOutputReturned === false
+    && report.exposure?.specialistOutputReturned === false
+    && report.exposure?.providerRowsReturned === false
+  const attentionTotal = attention('overduePlanned') + attention('overdueRunning') + attention('failedOrBlocked')
+    + attention('revisionRequired') + attention('missingEvaluation')
+  const outcomeReady = outcomeState === 'measured' && outcomesDurable
+  const status = !generatedAt || !countsValid || !attentionValid || !targetsValid || !workforceValid || !outcomesValid
+    || !boundarySafe || readiness === 'at_risk' || attentionTotal > 0
+    || ['invalid_coverage', 'non_durable', 'store_unavailable'].includes(outcomeState)
+    ? 'attention'
+    : readiness === 'meeting_targets' && outcomeReady ? 'ready' : 'collecting'
+
+  return {
+    contract: COMPANY_OPERATIONS_STATUS_CONTRACT,
+    status,
+    windowDays: requested,
+    readiness,
+    generatedAt,
+    counts: {
+      total: count('total'),
+      planned: count('planned'),
+      running: count('running'),
+      cancelled: count('cancelled'),
+      terminal: count('terminal'),
+      completed: count('completed'),
+      partial: count('partial'),
+      blocked: count('blocked'),
+      failed: count('failed'),
+      evaluated: count('evaluated'),
+      accepted: count('accepted'),
+      revisionRequired: count('revisionRequired'),
+      missingEvaluation: count('missingEvaluation'),
+    },
+    attention: {
+      overduePlanned: attention('overduePlanned'),
+      overdueRunning: attention('overdueRunning'),
+      failedOrBlocked: attention('failedOrBlocked'),
+      revisionRequired: attention('revisionRequired'),
+      missingEvaluation: attention('missingEvaluation'),
+    },
+    targets: targetSummary,
+    workforce: {
+      availableAgents,
+      utilizedAgents: workforceValid ? utilizedAgents : 0,
+      totalAssignments: workforceValid ? totalAssignments : 0,
+      activeAssignments: workforceValid ? activeAssignments : 0,
+      usedRoleCalls: workforceValid ? usedRoleCalls : 0,
+      modelCalls: workforceValid ? modelCalls : 0,
+      cacheHits: workforceValid ? cacheHits : 0,
+      weightedTotalUnits: workforceValid ? weightedTotalUnits : 0,
+    },
+    outcomes: {
+      available: report.outcomes?.available === true,
+      durable: outcomesDurable,
+      state: outcomeState,
+      completed: exactCount(report.outcomes?.counts?.completed),
+      evaluated: exactCount(report.outcomes?.counts?.evaluated),
+      accepted: exactCount(report.outcomes?.counts?.accepted),
+      revisionRequired: exactCount(report.outcomes?.counts?.revisionRequired),
+      efficiencyAvailable: report.outcomes?.efficiency?.available === true,
+      acceptedPer1000WorkUnits: report.outcomes?.efficiency?.available === true
+        ? exactMetric(report.outcomes.efficiency.acceptedOutcomesPer1000WorkUnits)
+        : null,
+    },
+    controls: {
+      metadataOnly: boundarySafe,
+      directCyclesExcluded: report.coverage?.directCyclesExcluded === true,
+      rawEvidenceReturned: report.exposure?.rawEvidenceReturned === true,
+      modelOutputReturned: report.exposure?.modelOutputReturned === true,
+      specialistOutputReturned: report.exposure?.specialistOutputReturned === true,
+      providerRowsReturned: report.exposure?.providerRowsReturned === true,
+    },
+  }
+}
+
 export const TOOLS = {
   platform_status: {
     description: 'Get a secret-safe SuperMega runtime readiness snapshot: persistence, connector registration, AI/provider availability, bounded Agent Company controls, payment-adapter count, and release identity. Read-only; no model or connector calls. No args.',
@@ -93,6 +261,22 @@ export const TOOLS = {
     run: async () => {
       const status = await buildKernelStatus()
       return platformStatusView(status)
+    },
+  },
+  company_operations_status: {
+    description: 'Get a metadata-only 7, 30, or 90 day Agent Company operating readout: accountable work states, overdue/blocked attention, target coverage, bounded workforce utilization, cache/model work units, and accepted CEO outcomes. Read-only; no model or connector calls and no raw evidence or output. Defaults to 30 days.',
+    input_schema: { type: 'object', properties: { window_days: { type: 'integer', enum: COMPANY_OPERATIONS_WINDOWS } }, additionalProperties: false },
+    available: () => true,
+    run: async ({ window_days = 30 } = {}) => {
+      const windowDays = COMPANY_OPERATIONS_WINDOWS.includes(Number(window_days)) ? Number(window_days) : 30
+      const clientId = String(process.env.SUPERMEGA_CLIENT_ID || '').trim()
+      if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(clientId)) return operationsUnavailable(windowDays)
+      try {
+        const report = await buildCompanyOperationsReport({ clientId, windowDays })
+        return companyOperationsStatusView(report, windowDays)
+      } catch {
+        return operationsUnavailable(windowDays)
+      }
     },
   },
   web_get: {

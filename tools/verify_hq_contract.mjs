@@ -10,7 +10,7 @@ import {
   MAX_REGISTERED_COMPANY_AGENTS,
   MAX_RUNNING_COMPANY_CYCLES,
 } from '../kernel/agent-company.mjs'
-import { platformStatusView } from '../kernel/tools.mjs'
+import { companyOperationsStatusView, platformStatusView } from '../kernel/tools.mjs'
 import { SUPERMEGA_HQ_AUTHORITY, selectCeoOutcome } from '../kernel/supermega-hq-authority.mjs'
 import {
   CEO_OUTCOME_EVALUATION_CONTRACT,
@@ -66,6 +66,21 @@ const ceoPlatformEvidence = platformStatusView({
   money: { stripe: true, manual: false },
   tenant: 'must-not-escape',
   prompt: 'must-not-escape',
+})
+const ceoOperationsEvidence = companyOperationsStatusView({
+  ok: true,
+  mode: 'operations_report',
+  clientId: 'must-not-escape',
+  generatedAt: '2026-07-28T12:00:00.000Z',
+  windowDays: 30,
+  readiness: 'meeting_targets',
+  counts: { total: 5, planned: 0, running: 0, cancelled: 0, terminal: 5, completed: 5, partial: 0, blocked: 0, failed: 0, evaluated: 5, accepted: 5, revisionRequired: 0, missingEvaluation: 0 },
+  attention: { overduePlanned: 0, overdueRunning: 0, failedOrBlocked: 0, revisionRequired: 0, missingEvaluation: 0 },
+  targets: Array.from({ length: 8 }, () => ({ state: 'met' })),
+  workforce: { availableAgents: 12, utilizedAgents: 2, totalAssignments: 5, activeAssignments: 0, usedRoleCalls: 15, modelCalls: 3, cacheHits: 2, weightedTotalUnits: 1200, agents: [{ agentId: 'must-not-escape' }] },
+  outcomes: { available: true, durable: true, state: 'measured', counts: { completed: 5, evaluated: 5, accepted: 5, revisionRequired: 0 }, efficiency: { available: true, acceptedOutcomesPer1000WorkUnits: 4.166667 }, records: [{ output: 'must-not-escape' }] },
+  coverage: { directCyclesExcluded: true },
+  exposure: { rawEvidenceReturned: false, modelOutputReturned: false, specialistOutputReturned: false, providerRowsReturned: false },
 })
 const failures = []
 const requireContract = (name, condition) => { if (!condition) failures.push(name) }
@@ -150,7 +165,11 @@ requireContract('CEO outcome authority is bounded and reconciled to HQ',
   && SUPERMEGA_HQ_AUTHORITY.northStar === portfolio.northStar
   && ceoOutcomeSelection.ok === true
   && ceoOutcomeSelection.selected?.id === 'daily-company-control'
-  && ceoOutcomeSelection.selected?.evidencePlan?.map((step) => step.tool).join(',') === 'leads_overview,pipeline_overview,fx_rate,platform_status'
+  && ceoOutcomeSelection.selected?.evidencePlan?.map((step) => step.tool).join(',') === 'leads_overview,pipeline_overview,platform_status,company_operations_status'
+  && SUPERMEGA_HQ_AUTHORITY.outcomes?.filter((item) => item.state === 'ready').length === 5
+  && SUPERMEGA_HQ_AUTHORITY.outcomes?.filter((item) => item.state === 'ready').every((item) =>
+    item.evidencePlan.length <= 4
+    && item.evidencePlan.filter((step) => step.tool === 'company_operations_status').length === 1)
   && ceoOutcomeSelection.skipped?.filter((item) => item.reason === 'authority_blocked').length === 3
   && SUPERMEGA_HQ_AUTHORITY.outcomes?.find((item) => item.id === 'managed-storage-privacy-proof')?.sourceRefs
     ?.includes('https://www.instagram.com/p/Da-NXcnkz8p/?img_index=8'))
@@ -170,6 +189,20 @@ requireContract('CEO platform evidence is exact, bounded, and secret-safe',
   && ceoPlatformEvidence.agentCompany?.modelRequest === false
   && ceoPlatformEvidence.agentCompany?.externalWrites === false
   && !/must-not-escape|tenant|prompt|providerError|reservationId|secret|token/i.test(JSON.stringify(ceoPlatformEvidence)))
+requireContract('CEO company-operations evidence is measured, bounded, and output-free',
+  ceoOperationsEvidence.contract === 'supermega.company-operations-status.v1'
+  && ceoOperationsEvidence.status === 'ready'
+  && ceoOperationsEvidence.counts?.accepted === 5
+  && ceoOperationsEvidence.workforce?.availableAgents === 12
+  && ceoOperationsEvidence.workforce?.utilizedAgents === 2
+  && ceoOperationsEvidence.outcomes?.durable === true
+  && ceoOperationsEvidence.outcomes?.efficiencyAvailable === true
+  && ceoOperationsEvidence.controls?.metadataOnly === true
+  && ceoOperationsEvidence.controls?.rawEvidenceReturned === false
+  && ceoOperationsEvidence.controls?.modelOutputReturned === false
+  && ceoOperationsEvidence.controls?.specialistOutputReturned === false
+  && ceoOperationsEvidence.controls?.providerRowsReturned === false
+  && !/must-not-escape|"clientId"|"agentId"|"briefText"/i.test(JSON.stringify(ceoOperationsEvidence)))
 requireContract('workspace consumes one capacity authority without repeating ceilings',
   agentWorkspace.resource_id === 'supermega-core-agent-workspace-v3'
   && agentWorkspace.capacity_authority === 'repository://agent_os/workforce/supermega_build_workforce.json'
