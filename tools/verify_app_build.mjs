@@ -1398,6 +1398,16 @@ if (!commerceSource.includes('export type CommerceOrderReturn')
   || !commerceSource.includes("kind: 'return'")
   || !managedCommerceRuntime.includes('def _validate_return_recorded')
   || !managedCommerceRuntime.includes('"commerce.order.return_recorded"')) fail('commerce_order_return_contract_missing')
+if (!commerceSource.includes('export type CommerceOrderCorrection')
+  || !commerceSource.includes("financialStatus: 'review_required'")
+  || !commerceSource.includes("postingAuthority: 'none'")
+  || !commerceSource.includes('externalPostingPerformed: false')
+  || !commerceSource.includes('export function commerceOrderCorrectionExpectation')
+  || !commerceSource.includes('export function recordCommerceOrderCorrection')
+  || !commerceSource.includes('sourceCalculationDigest')
+  || !commerceSource.includes('commerceOrderAdjustedTotal')
+  || !managedCommerceRuntime.includes('def _validate_correction_recorded')
+  || !managedCommerceRuntime.includes('"commerce.order.correction_recorded"')) fail('commerce_order_correction_contract_missing')
 if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('expected_version: request.expectedVersion')
   || !managedTrialSource.includes("surface: 'commerce'")
@@ -1407,7 +1417,7 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${shopInventoryUiSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.storefront_request.received')
@@ -1446,12 +1456,18 @@ if (!coreSource.includes('data-tax-configuration="versioned"')
   || !managedCommerceRuntime.includes('command evidence must match the saved tax configuration proof.')) fail('commerce_tax_configuration_ui_or_managed_boundary_missing')
 if (!coreSource.includes('data-close-export="accounting-csv-v1"')
   || !coreSource.includes('Download close CSV')
-  || !commerceSource.includes('supermega.commerce.daily-close-export.v1')
+  || !commerceSource.includes('supermega.commerce.daily-close-export.v2')
   || !commerceSource.includes("calculationStatus: calculation ? 'accepted' : 'legacy_unverified'")
   || !commerceSource.includes("taxMode: calculation?.taxMode ?? 'not_recorded'")
   || !commerceSource.includes("if (/^[=+@-]/.test(raw)) raw = `'${raw}`")
   || !managedCommerceRuntime.includes('def commerce_daily_close_export(')
   || !managedCommerceRuntime.includes('def commerce_daily_close_csv(')) fail('commerce_daily_close_export_missing_or_unsafe')
+if (!coreSource.includes("'commerce.order.correction_recorded'")
+  || !coreSource.includes("kind: 'order_correction'")
+  || !coreSource.includes('Correct invoice')
+  || !coreSource.includes('The original invoice stays unchanged.')
+  || !coreSource.includes('same tax snapshot as the original invoice')
+  || !coreSource.includes('no external posting performed')) fail('commerce_order_correction_ui_or_gate_missing')
 if (!coreSource.includes('data-accounting-handoff="review-required"')
   || !coreSource.includes('Download accounting CSV')
   || !coreSource.includes('data-account-mapping="versioned"')
@@ -6088,12 +6104,14 @@ async function verifyCommerceRuntime() {
     const accountingCloseExpectation = model.commerceCloseExpectation(completed, accountingCloseAt)
     const accountingClosed = model.saveCommerceClose(completed, accountingCloseId, accountingCloseProof, accountingCloseExpectation)
     const accountingExport = model.commerceDailyCloseExport(accountingClosed, accountingCloseId)
-    assert(accountingExport?.schema === 'supermega.commerce.daily-close-export.v1'
+    assert(accountingExport?.schema === 'supermega.commerce.daily-close-export.v2'
       && accountingExport.orderCount === 1
       && accountingExport.orders[0].calculationStatus === 'accepted'
       && accountingExport.orders[0].subtotalMmk === 200
       && accountingExport.orders[0].taxMode === 'not_configured'
-      && accountingExport.digest === 'sha256:0611e2aea498391299c922c0b379dd9a5123489e41a6973a317ba444d8d03889'
+      && accountingExport.orders[0].originalTotalMmk === 200
+      && accountingExport.orders[0].corrections.length === 0
+      && accountingExport.digest === model.commerceDailyCloseExport(accountingClosed, accountingCloseId).digest
       && !JSON.stringify(accountingExport).includes('Customer'),
     'daily_close_export_not_deterministic_or_minimal')
     const accountingCsv = model.commerceDailyCloseCsv(accountingExport)
@@ -6133,6 +6151,45 @@ async function verifyCommerceRuntime() {
       && accountingHandoffCsv.split('\r\n').length - 1 === 3
       && !accountingHandoffCsv.includes('Customer'),
     'accounting_handoff_csv_not_review_bounded_or_minimal')
+    const correctionExpectation = model.commerceOrderCorrectionExpectation(completed, order.id)
+    const correctionInput = { orderId: order.id, kind: 'credit', reasonCode: 'pricing_error', listedAmountMmk: 50 }
+    const correctionProof = proof('ACT-CORRECTION-1', 3_000)
+    const corrected = model.recordCommerceOrderCorrection(completed, correctionInput, correctionProof, correctionExpectation)
+    assert(correctionExpectation?.currentBalanceMmk === 200
+      && corrected?.orders[0].total === 200
+      && corrected.orders[0].calculation.totalMmk === 200
+      && corrected.orders[0].corrections[0].calculation.totalMmk === 50
+      && corrected.orders[0].corrections[0].balanceAfterMmk === 150
+      && corrected.orders[0].corrections[0].sourceCalculationDigest === model.commerceOrderCalculationDigest(completed.orders[0])
+      && corrected.orders[0].corrections[0].financialStatus === 'review_required'
+      && corrected.orders[0].corrections[0].postingAuthority === 'none'
+      && corrected.orders[0].corrections[0].externalPostingPerformed === false
+      && model.commerceOrderAdjustedTotal(corrected.orders[0]) === 150
+      && corrected.items === completed.items
+      && corrected.movements === completed.movements,
+    'invoice_correction_rewrote_original_or_lost_review_boundary')
+    assert(model.recordCommerceOrderCorrection(corrected, correctionInput, correctionProof, correctionExpectation) === corrected, 'exact_correction_retry_not_idempotent')
+    assert(model.recordCommerceOrderCorrection(corrected, { ...correctionInput, kind: 'debit' }, correctionProof, correctionExpectation) === null, 'changed_correction_retry_succeeded')
+    assert(model.recordCommerceOrderCorrection(corrected, correctionInput, proof('ACT-CORRECTION-STALE', 4_000), correctionExpectation) === null, 'stale_correction_review_succeeded')
+    assert(model.recordCommerceOrderCorrection(completed, { ...correctionInput, listedAmountMmk: 201 }, proof('ACT-CORRECTION-OVER', 3_000), correctionExpectation) === null, 'over_credit_succeeded')
+    assert(model.recordCommerceOrderCorrection(completed, correctionInput, proof('ACT-CORRECTION-EARLY', 1_500), correctionExpectation) === null, 'backdated_correction_succeeded')
+    const correctedCloseId = 'CLOSE-00000000-0000-4000-8000-000000000099'
+    const correctedCloseProof = proof('ACT-00000000-0000-4000-8000-000000000099', 0, {
+      capturedAt: accountingCloseAt,
+      evidenceReference: 'EV-CORRECTED-CLOSE-099',
+    })
+    const correctedCloseExpectation = model.commerceCloseExpectation(corrected, accountingCloseAt)
+    const correctedClosed = model.saveCommerceClose(corrected, correctedCloseId, correctedCloseProof, correctedCloseExpectation)
+    const correctedExport = model.commerceDailyCloseExport(correctedClosed, correctedCloseId)
+    assert(correctedCloseExpectation?.total === 150
+      && correctedExport?.totalMmk === 150
+      && correctedExport.orders[0].originalTotalMmk === 200
+      && correctedExport.orders[0].totalMmk === 150
+      && correctedExport.orders[0].corrections[0].documentId === corrected.orders[0].corrections[0].documentId
+      && model.commerceDailyCloseCsv(correctedExport).includes('"corrections_json"')
+      && model.commerceAccountingHandoff(correctedClosed, correctedCloseId) === null
+      && model.commerceOrderCorrectionExpectation(correctedClosed, order.id) === null,
+    'corrected_close_overclaimed_accounting_or_lost_correction_evidence')
     const mappingProof = proof('ACT-ACCOUNT-MAPPING', 600)
     const mappingInput = { mappings: [
       { accountRole: 'payment_clearing', externalAccountCode: '1100-CLEAR' },

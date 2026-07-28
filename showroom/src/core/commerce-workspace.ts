@@ -17,7 +17,7 @@ export const COMMERCE_WORKSPACE_SCHEMA = 'supermega.commerce.workspace.v2' as co
 export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as const
 export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calculation.v1' as const
 export const COMMERCE_ORDER_CALCULATION_V2_SCHEMA = 'supermega.commerce.order-calculation.v2' as const
-export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v1' as const
+export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v2' as const
 export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v2' as const
 const COMMERCE_STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
 export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
@@ -37,6 +37,8 @@ export type CommerceOrderStatus = 'confirmed' | 'preparing' | 'ready' | 'complet
 export type CommercePaymentStatus = 'pending' | 'reconciled'
 export type CommerceRefundStatus = 'none' | 'due' | 'settled'
 export type CommerceReturnDisposition = 'restock' | 'not_restocked'
+export type CommerceCorrectionKind = 'credit' | 'debit'
+export type CommerceCorrectionReasonCode = 'pricing_error' | 'service_recovery' | 'fee_adjustment' | 'other'
 
 export type CommerceOrderLine = {
   sku: string
@@ -118,6 +120,35 @@ export type CommerceOrderReturn = {
   disposition: CommerceReturnDisposition
 }
 
+export type CommerceCorrectionCalculation = {
+  currency: 'MMK'
+  taxConfigurationRevision: number | null
+  taxCode: string | null
+  taxRateBasisPoints: number | null
+  taxMode: 'not_configured' | CommerceTaxMode
+  listedAmountMmk: number
+  subtotalMmk: number
+  taxMmk: number
+  totalMmk: number
+}
+
+export type CommerceOrderCorrection = {
+  documentId: string
+  actionId: string
+  createdAt: string
+  actor: string
+  reason: string
+  evidenceReference: string
+  kind: CommerceCorrectionKind
+  reasonCode: CommerceCorrectionReasonCode
+  sourceCalculationDigest: string
+  calculation: CommerceCorrectionCalculation
+  balanceAfterMmk: number
+  financialStatus: 'review_required'
+  postingAuthority: 'none'
+  externalPostingPerformed: false
+}
+
 export type CommerceOrder = {
   id: string
   createdAt: string
@@ -149,6 +180,7 @@ export type CommerceOrder = {
   advancementActionIds?: string[]
   completion?: CommerceActionProof
   returns?: CommerceOrderReturn[]
+  corrections?: CommerceOrderCorrection[]
   calculation?: CommerceOrderCalculation
   total: number
   status: CommerceOrderStatus
@@ -225,6 +257,24 @@ export type CommerceCloseExpectation = {
   stateSnapshot: string
 }
 
+export type CommerceDailyCloseExportCorrection = {
+  documentId: string
+  kind: CommerceCorrectionKind
+  reasonCode: CommerceCorrectionReasonCode
+  createdAt: string
+  actor: string
+  evidenceReference: string
+  sourceCalculationDigest: string
+  listedAmountMmk: number
+  subtotalMmk: number
+  taxMmk: number
+  totalMmk: number
+  balanceAfterMmk: number
+  financialStatus: 'review_required'
+  postingAuthority: 'none'
+  externalPostingPerformed: false
+}
+
 export type CommerceDailyCloseExportOrder = {
   orderId: string
   orderCreatedAt: string
@@ -240,7 +290,9 @@ export type CommerceDailyCloseExportOrder = {
   subtotalMmk: number | null
   taxMode: 'not_configured' | 'not_recorded' | CommerceTaxMode
   taxMmk: number | null
+  originalTotalMmk: number
   totalMmk: number
+  corrections: CommerceDailyCloseExportCorrection[]
   calculationStatus: 'accepted' | 'legacy_unverified'
 }
 
@@ -520,6 +572,21 @@ export type CommerceOrderReturnExpectation = {
   orderSnapshot: string
 }
 
+export type CommerceOrderCorrectionInput = {
+  orderId: string
+  kind: CommerceCorrectionKind
+  reasonCode: CommerceCorrectionReasonCode
+  listedAmountMmk: number
+}
+
+export type CommerceOrderCorrectionExpectation = {
+  orderId: string
+  sourceCalculationDigest: string
+  correctionCount: number
+  currentBalanceMmk: number
+  orderSnapshot: string
+}
+
 export type CommerceWebsiteIntakeInput = {
   id: string
   source: CommerceWebsiteSource
@@ -603,6 +670,8 @@ const productionIssueFields = [
   'conversionNote',
 ] as const
 const returnDispositions: CommerceReturnDisposition[] = ['restock', 'not_restocked']
+const correctionKinds: CommerceCorrectionKind[] = ['credit', 'debit']
+const correctionReasonCodes: CommerceCorrectionReasonCode[] = ['pricing_error', 'service_recovery', 'fee_adjustment', 'other']
 const websiteIntakeStatuses: CommerceWebsiteIntakeStatus[] = ['pending_confirmation', 'converted']
 const closeSnapshotFields = ['businessDate', 'orderIds', 'paymentExceptionOrderIds', 'stockExceptionSkus', 'actionId', 'operator', 'reason', 'evidenceReference'] as const
 const refundSettlementFields = ['refundSettledAt', 'refundSettlementActionId', 'refundSettledBy', 'refundSettlementReason', 'refundEvidenceReference'] as const
@@ -620,6 +689,7 @@ const maxTaxConfigurations = 100
 const maxAccountMappingConfigurations = 100
 const maxOrderLines = 20
 const maxReturnsPerOrder = 100
+const maxCorrectionsPerOrder = 100
 const closeIdPattern = /^CLOSE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const closeActionIdPattern = /^ACT-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const businessDatePattern = /^\d{4}-\d{2}-\d{2}$/
@@ -1201,6 +1271,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const advancementActionIds: string[] = []
   const completionActionIds: string[] = []
   const returnActionIds: string[] = []
+  const correctionActionIds: string[] = []
   const orderReturns: Array<{ orderId: string; record: CommerceOrderReturn }> = []
   const closeActionIds: string[] = []
   const closeBusinessDates: string[] = []
@@ -1684,8 +1755,46 @@ export function validateCommerceState(value: unknown): CommerceState {
         throw new Error(`orders[${index}].completion is outside the order chronology.`)
       }
       completionActionIds.push(completion.actionId)
-    } else if (candidate.returns !== undefined) {
-      throw new Error(`orders[${index}] cannot retain returns without completion proof.`)
+    } else if (candidate.returns !== undefined || candidate.corrections !== undefined) {
+      throw new Error(`orders[${index}] cannot retain returns or corrections without completion proof.`)
+    }
+    if (candidate.corrections !== undefined) {
+      if (!Array.isArray(candidate.corrections)
+        || candidate.corrections.length < 1
+        || candidate.corrections.length > maxCorrectionsPerOrder
+        || candidate.status !== 'completed'
+        || candidate.paymentStatus !== 'reconciled'
+        || !candidate.calculation) {
+        throw new Error(`orders[${index}].corrections requires 1 to ${maxCorrectionsPerOrder} records on a calculated, reconciled, completed order.`)
+      }
+      const order = candidate as unknown as CommerceOrder
+      const sourceCalculationDigest = commerceOrderCalculationDigest(order)
+      let expectedBalance = order.total
+      let previousCreatedAt = timestampMicros((candidate.completion as CommerceActionProof).capturedAt) as bigint
+      for (const [correctionIndex, correctionCandidate] of [...candidate.corrections].reverse().entries()) {
+        const field = `orders[${index}].corrections[${candidate.corrections.length - correctionIndex - 1}]`
+        if (!isRecord(correctionCandidate) || !hasExactKeys(correctionCandidate, [
+          'documentId', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'reasonCode',
+          'sourceCalculationDigest', 'calculation', 'balanceAfterMmk', 'financialStatus', 'postingAuthority',
+          'externalPostingPerformed',
+        ])) throw new Error(`${field} is invalid.`)
+        const record = correctionCandidate as unknown as CommerceOrderCorrection
+        const actionId = canonicalText(record.actionId, `${field}.actionId`, 160)
+        if (record.documentId !== `COR2:${encodeURIComponent(actionId)}`) throw new Error(`${field}.documentId is invalid.`)
+        const createdAt = timestampMicros(record.createdAt)
+        if (createdAt === null || createdAt < previousCreatedAt) throw new Error(`${field}.createdAt is outside the order chronology.`)
+        previousCreatedAt = createdAt
+        for (const textField of ['actor', 'reason', 'evidenceReference'] as const) canonicalText(record[textField], `${field}.${textField}`)
+        if (!correctionKinds.includes(record.kind) || !correctionReasonCodes.includes(record.reasonCode)) throw new Error(`${field} classification is invalid.`)
+        if (record.sourceCalculationDigest !== sourceCalculationDigest) throw new Error(`${field}.sourceCalculationDigest does not bind the original order calculation.`)
+        if (!isRecord(record.calculation)) throw new Error(`${field}.calculation is invalid.`)
+        const calculation = commerceCorrectionCalculation(order, record.calculation.listedAmountMmk)
+        if (!calculation || JSON.stringify(calculation) !== JSON.stringify(record.calculation)) throw new Error(`${field}.calculation is not deterministic from the original tax snapshot.`)
+        expectedBalance += record.kind === 'debit' ? calculation.totalMmk : -calculation.totalMmk
+        if (!Number.isSafeInteger(expectedBalance) || expectedBalance < 0 || record.balanceAfterMmk !== expectedBalance) throw new Error(`${field}.balanceAfterMmk is invalid.`)
+        if (record.financialStatus !== 'review_required' || record.postingAuthority !== 'none' || record.externalPostingPerformed !== false) throw new Error(`${field} overclaims posting authority.`)
+        correctionActionIds.push(actionId)
+      }
     }
     if (candidate.returns !== undefined) {
       if (!Array.isArray(candidate.returns)
@@ -1739,6 +1848,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   assertUnique(refundSettlementActionIds, 'Refund settlement action ID')
   assertUnique(completionActionIds, 'Order completion action ID')
   assertUnique(returnActionIds, 'Order return action ID')
+  assertUnique(correctionActionIds, 'Order correction action ID')
 
   const reserveByOrder = new Map<string, number>()
   const releaseByOrder = new Map<string, number>()
@@ -1976,10 +2086,12 @@ export function validateCommerceState(value: unknown): CommerceState {
         || !sameStringArray(stockExceptionSkus, [...stockExceptionSkus].sort())) {
         throw new Error(`closes[${index}] exception references must be sorted.`)
       }
-      const memberOrders = orderIdsForClose.map((orderId) => orderById.get(orderId) as Record<string, unknown>)
+      const memberOrders = orderIdsForClose.map((orderId) => orderById.get(orderId) as unknown as CommerceOrder)
+      const memberAdjustedTotals = memberOrders.map(commerceOrderAdjustedTotal)
       if (memberOrders.some((order) => order.status !== 'completed' || order.paymentStatus !== 'reconciled')
+        || memberAdjustedTotals.some((total) => total === null)
         || candidate.orders !== orderIdsForClose.length
-        || candidate.total !== memberOrders.reduce((sum, order) => sum + Number(order.total), 0)) {
+        || candidate.total !== memberAdjustedTotals.reduce((sum, total) => sum + (total ?? 0), 0)) {
         throw new Error(`closes[${index}] totals must match its completed, reconciled order membership.`)
       }
       if (!closeIdPattern.test(String(candidate.id))) throw new Error(`closes[${index}].id must be a full close UUID.`)
@@ -2417,6 +2529,7 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || state.orders.some((order) => order.advancementActionIds?.includes(actionId))
     || state.orders.some((order) => order.completion?.actionId === actionId)
     || state.orders.some((order) => order.returns?.some((record) => record.actionId === actionId))
+    || state.orders.some((order) => order.corrections?.some((record) => record.actionId === actionId))
     || state.closes.some((close) => close.actionId === actionId)
     || commerceCatalogBaselines(state).some((baseline) => baseline.proof.actionId === actionId)
     || commerceCatalogChanges(state).some((change) => change.proof.actionId === actionId)
@@ -2562,6 +2675,69 @@ export function commerceOrderCalculation(
     taxMmk: 0,
     totalMmk: listedSubtotalMmk,
   }
+}
+
+export function commerceOrderCalculationDigest(order: CommerceOrder) {
+  if (!order.calculation) return null
+  return `sha256:${sha256Hex(JSON.stringify([
+    'supermega.commerce.order-calculation.snapshot.v1',
+    order.id,
+    order.calculation,
+  ]))}`
+}
+
+export function commerceCorrectionCalculation(
+  order: CommerceOrder,
+  listedAmountMmk: number,
+): CommerceCorrectionCalculation | null {
+  if (!order.calculation || !Number.isSafeInteger(listedAmountMmk) || listedAmountMmk < 1) return null
+  if (order.calculation.schema === COMMERCE_ORDER_CALCULATION_SCHEMA) {
+    return {
+      currency: 'MMK',
+      taxConfigurationRevision: null,
+      taxCode: null,
+      taxRateBasisPoints: null,
+      taxMode: 'not_configured',
+      listedAmountMmk,
+      subtotalMmk: listedAmountMmk,
+      taxMmk: 0,
+      totalMmk: listedAmountMmk,
+    }
+  }
+  const configured = configuredOrderCalculation({
+    revision: order.calculation.taxConfigurationRevision,
+    code: order.calculation.taxCode,
+    label: order.calculation.taxCode,
+    rateBasisPoints: order.calculation.taxRateBasisPoints,
+    mode: order.calculation.taxMode,
+    proof: order.completion ?? {
+      actionId: 'calculation-only',
+      capturedAt: order.createdAt,
+      actor: 'calculation-only',
+      reason: 'calculation-only',
+      evidenceReference: 'calculation-only',
+    },
+  }, listedAmountMmk, order.calculation.catalogRevision)
+  return configured ? {
+    currency: configured.currency,
+    taxConfigurationRevision: configured.taxConfigurationRevision,
+    taxCode: configured.taxCode,
+    taxRateBasisPoints: configured.taxRateBasisPoints,
+    taxMode: configured.taxMode,
+    listedAmountMmk: configured.listedSubtotalMmk,
+    subtotalMmk: configured.subtotalMmk,
+    taxMmk: configured.taxMmk,
+    totalMmk: configured.totalMmk,
+  } : null
+}
+
+export function commerceOrderAdjustedTotal(order: CommerceOrder) {
+  let total = order.total
+  for (const correction of order.corrections ?? []) {
+    total += correction.kind === 'debit' ? correction.calculation.totalMmk : -correction.calculation.totalMmk
+    if (!Number.isSafeInteger(total) || total < 0) return null
+  }
+  return total
 }
 
 export function commerceStorefrontRequests(state: CommerceState) {
@@ -4227,6 +4403,127 @@ export function recordCommerceOrderReturn(
   })
 }
 
+function sameOrderCorrectionExpectation(
+  left: CommerceOrderCorrectionExpectation,
+  right: CommerceOrderCorrectionExpectation,
+) {
+  return left.orderId === right.orderId
+    && left.sourceCalculationDigest === right.sourceCalculationDigest
+    && left.correctionCount === right.correctionCount
+    && left.currentBalanceMmk === right.currentBalanceMmk
+    && left.orderSnapshot === right.orderSnapshot
+}
+
+function correctionMatches(
+  record: CommerceOrderCorrection,
+  input: CommerceOrderCorrectionInput,
+  proof: CommerceActionProof,
+) {
+  return record.actionId === proof.actionId
+    && record.createdAt === proof.capturedAt
+    && record.actor === proof.actor
+    && record.reason === proof.reason
+    && record.evidenceReference === proof.evidenceReference
+    && record.kind === input.kind
+    && record.reasonCode === input.reasonCode
+    && record.calculation.listedAmountMmk === input.listedAmountMmk
+}
+
+export function commerceOrderCorrectionExpectation(
+  state: CommerceState,
+  orderId: string,
+): CommerceOrderCorrectionExpectation | null {
+  const current = validateCommerceState(state)
+  const order = current.orders.find((candidate) => candidate.id === orderId)
+  const closedOrderIds = new Set(current.closes.flatMap((close) => close.orderIds ?? []))
+  const sourceCalculationDigest = order ? commerceOrderCalculationDigest(order) : null
+  const currentBalanceMmk = order ? commerceOrderAdjustedTotal(order) : null
+  if (!order
+    || order.status !== 'completed'
+    || order.paymentStatus !== 'reconciled'
+    || !order.completion
+    || closedOrderIds.has(order.id)
+    || !sourceCalculationDigest
+    || currentBalanceMmk === null
+    || (order.corrections?.length ?? 0) >= maxCorrectionsPerOrder) return null
+  return {
+    orderId,
+    sourceCalculationDigest,
+    correctionCount: order.corrections?.length ?? 0,
+    currentBalanceMmk,
+    orderSnapshot: JSON.stringify(order),
+  }
+}
+
+export function recordCommerceOrderCorrection(
+  state: CommerceState,
+  input: CommerceOrderCorrectionInput,
+  proof: CommerceActionProof,
+  expected: CommerceOrderCorrectionExpectation,
+) {
+  if (!validProof(proof)
+    || typeof input.orderId !== 'string'
+    || !input.orderId
+    || input.orderId !== input.orderId.trim()
+    || input.orderId.length > 160
+    || !correctionKinds.includes(input.kind)
+    || !correctionReasonCodes.includes(input.reasonCode)
+    || !Number.isSafeInteger(input.listedAmountMmk)
+    || input.listedAmountMmk < 1
+    || [proof.actionId, proof.actor, proof.reason, proof.evidenceReference].some((value) => value !== value.trim())) return null
+  const current = validateCommerceState(state)
+  const replayRecords = current.orders.flatMap((order) => (
+    (order.corrections ?? [])
+      .filter((record) => record.actionId === proof.actionId)
+      .map((record) => ({ order, record }))
+  ))
+  if (replayRecords.length) {
+    return replayRecords.length === 1
+      && replayRecords[0].order.id === input.orderId
+      && correctionMatches(replayRecords[0].record, input, proof) ? current : null
+  }
+  if (actionIdIsUsed(current, proof.actionId)) return null
+  const actual = commerceOrderCorrectionExpectation(current, input.orderId)
+  if (!actual || !expected || !sameOrderCorrectionExpectation(actual, expected)) return null
+  const order = current.orders.find((candidate) => candidate.id === input.orderId)
+  if (!order || !order.completion) return null
+  const calculation = commerceCorrectionCalculation(order, input.listedAmountMmk)
+  if (!calculation) return null
+  const balanceAfterMmk = actual.currentBalanceMmk
+    + (input.kind === 'debit' ? calculation.totalMmk : -calculation.totalMmk)
+  if (!Number.isSafeInteger(balanceAfterMmk) || balanceAfterMmk < 0) return null
+  const latestBasis = [
+    order.createdAt,
+    order.paymentReconciledAt,
+    order.completion.capturedAt,
+    ...(order.corrections ?? []).map((record) => record.createdAt),
+  ].flatMap((timestamp) => timestamp ? [timestampMicros(timestamp) as bigint] : [])
+    .reduce((latest, timestamp) => timestamp > latest ? timestamp : latest, 0n)
+  if ((timestampMicros(proof.capturedAt) as bigint) < latestBasis) return null
+  const record: CommerceOrderCorrection = {
+    documentId: `COR2:${encodeURIComponent(proof.actionId)}`,
+    actionId: proof.actionId,
+    createdAt: proof.capturedAt,
+    actor: proof.actor,
+    reason: proof.reason,
+    evidenceReference: proof.evidenceReference,
+    kind: input.kind,
+    reasonCode: input.reasonCode,
+    sourceCalculationDigest: actual.sourceCalculationDigest,
+    calculation,
+    balanceAfterMmk,
+    financialStatus: 'review_required',
+    postingAuthority: 'none',
+    externalPostingPerformed: false,
+  }
+  return validateCommerceState({
+    ...current,
+    orders: current.orders.map((candidate) => candidate.id === input.orderId
+      ? { ...candidate, corrections: [record, ...(candidate.corrections ?? [])] }
+      : candidate),
+  })
+}
+
 function sameCloseExpectation(left: CommerceCloseExpectation, right: CommerceCloseExpectation) {
   return left.businessDate === right.businessDate
     && left.total === right.total
@@ -4241,6 +4538,7 @@ function commerceOrderCloseBasis(order: CommerceOrder) {
     order.createdAt,
     order.paymentReconciledAt,
     order.completion?.capturedAt,
+    ...(order.corrections ?? []).map((correction) => correction.createdAt),
   ].flatMap((timestamp) => timestamp ? [timestampMicros(timestamp) as bigint] : [])
     .reduce((latest, timestamp) => timestamp > latest ? timestamp : latest, 0n)
 }
@@ -4260,7 +4558,9 @@ export function commerceCloseExpectation(state: CommerceState, capturedAt: strin
   const orderIds = eligibleOrders
     .map((order) => order.id)
     .sort()
-  const total = orderIds.reduce((sum, orderId) => sum + (current.orders.find((order) => order.id === orderId)?.total ?? 0), 0)
+  const adjustedTotals = orderIds.map((orderId) => commerceOrderAdjustedTotal(current.orders.find((order) => order.id === orderId) as CommerceOrder))
+  if (adjustedTotals.some((total) => total === null)) return null
+  const total = adjustedTotals.reduce((sum, value) => sum + (value ?? 0), 0)
   if (!Number.isSafeInteger(total)) return null
   return {
     businessDate,
@@ -4341,7 +4641,25 @@ function commerceDailyCloseExportProjection(artifact: Omit<CommerceDailyCloseExp
       order.subtotalMmk,
       order.taxMode,
       order.taxMmk,
+      order.originalTotalMmk,
       order.totalMmk,
+      order.corrections.map((correction) => [
+        correction.documentId,
+        correction.kind,
+        correction.reasonCode,
+        correction.createdAt,
+        correction.actor,
+        correction.evidenceReference,
+        correction.sourceCalculationDigest,
+        correction.listedAmountMmk,
+        correction.subtotalMmk,
+        correction.taxMmk,
+        correction.totalMmk,
+        correction.balanceAfterMmk,
+        correction.financialStatus,
+        correction.postingAuthority,
+        correction.externalPostingPerformed,
+      ]),
       order.calculationStatus,
     ]),
   ]
@@ -4364,6 +4682,25 @@ export function commerceDailyCloseExport(state: CommerceState, closeId: string):
     const order = orderById.get(orderId) as CommerceOrder
     const calculation = order.calculation
     const configured = calculation?.schema === COMMERCE_ORDER_CALCULATION_V2_SCHEMA ? calculation : null
+    const corrections = (order.corrections ?? []).map((correction): CommerceDailyCloseExportCorrection => ({
+      documentId: correction.documentId,
+      kind: correction.kind,
+      reasonCode: correction.reasonCode,
+      createdAt: correction.createdAt,
+      actor: correction.actor,
+      evidenceReference: correction.evidenceReference,
+      sourceCalculationDigest: correction.sourceCalculationDigest,
+      listedAmountMmk: correction.calculation.listedAmountMmk,
+      subtotalMmk: correction.calculation.subtotalMmk,
+      taxMmk: correction.calculation.taxMmk,
+      totalMmk: correction.calculation.totalMmk,
+      balanceAfterMmk: correction.balanceAfterMmk,
+      financialStatus: correction.financialStatus,
+      postingAuthority: correction.postingAuthority,
+      externalPostingPerformed: correction.externalPostingPerformed,
+    }))
+    const adjustedTotal = commerceOrderAdjustedTotal(order)
+    if (adjustedTotal === null) throw new Error(`Order ${order.id} has an invalid adjusted total.`)
     return {
       orderId: order.id,
       orderCreatedAt: order.createdAt,
@@ -4379,7 +4716,9 @@ export function commerceDailyCloseExport(state: CommerceState, closeId: string):
       subtotalMmk: calculation?.subtotalMmk ?? null,
       taxMode: calculation?.taxMode ?? 'not_recorded',
       taxMmk: calculation?.taxMmk ?? null,
-      totalMmk: order.total,
+      originalTotalMmk: order.total,
+      totalMmk: adjustedTotal,
+      corrections,
       calculationStatus: calculation ? 'accepted' : 'legacy_unverified',
     }
   })
@@ -4433,7 +4772,9 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     'subtotal_mmk',
     'tax_mode',
     'tax_mmk',
+    'original_total_mmk',
     'total_mmk',
+    'corrections_json',
     'calculation_status',
     'payment_exception_order_ids',
     'stock_exception_skus',
@@ -4461,7 +4802,9 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     null,
     null,
     null,
+    null,
     artifact.totalMmk,
+    null,
     null,
     artifact.paymentExceptionOrderIds,
     artifact.stockExceptionSkus,
@@ -4489,7 +4832,9 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     order.subtotalMmk,
     order.taxMode,
     order.taxMmk,
+    order.originalTotalMmk,
     order.totalMmk,
+    JSON.stringify(order.corrections),
     order.calculationStatus,
     null,
     null,
@@ -4534,6 +4879,7 @@ function commerceAccountingHandoffProjection(artifact: Omit<CommerceAccountingHa
 export function commerceAccountingHandoff(state: CommerceState, closeId: string): CommerceAccountingHandoff | null {
   const closeExport = commerceDailyCloseExport(state, closeId)
   if (!closeExport) return null
+  if (closeExport.orders.some((order) => order.corrections.length)) return null
   const closeAt = timestampMicros(closeExport.closedAt) as bigint
   const accountMapping = commerceAccountMappingConfigurations(validateCommerceState(state)).find(
     (configuration) => (timestampMicros(configuration.proof.capturedAt) as bigint) <= closeAt,

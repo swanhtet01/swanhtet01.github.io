@@ -31,7 +31,7 @@ from supermega_runtime.trial_store import TrialValidationError
 
 
 COMMERCE_SCHEMA = "supermega.commerce.workspace.v2"
-COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v1"
+COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v2"
 COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v2"
 COMMERCE_EVENTS = frozenset(
     {
@@ -44,6 +44,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.order.advanced",
         "commerce.order.cancelled",
         "commerce.order.return_recorded",
+        "commerce.order.correction_recorded",
         "commerce.payment.reconciled",
         "commerce.refund.settled",
         "commerce.stock.received",
@@ -73,6 +74,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.order.advanced",
         "commerce.order.cancelled",
         "commerce.order.return_recorded",
+        "commerce.order.correction_recorded",
         "commerce.payment.reconciled",
         "commerce.refund.settled",
         "commerce.stock.received",
@@ -106,6 +108,8 @@ _PRODUCTION_MATERIAL_UNITS = frozenset(
     {"kg", "g", "l", "ml", "pcs", "pack", "bag", "roll", "sheet", "m", "cm"}
 )
 _RETURN_DISPOSITIONS = ("restock", "not_restocked")
+_CORRECTION_KINDS = ("credit", "debit")
+_CORRECTION_REASON_CODES = ("pricing_error", "service_recovery", "fee_adjustment", "other")
 _WEBSITE_INTAKE_STATUSES = ("pending_confirmation", "converted")
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _WEBSITE_FINGERPRINT_PATTERN = re.compile(r"web-[a-f0-9]{8}")
@@ -129,6 +133,7 @@ _MAX_TAX_CONFIGURATIONS = 100
 _MAX_ACCOUNT_MAPPING_CONFIGURATIONS = 100
 _MAX_ORDER_LINES = 20
 _MAX_RETURNS_PER_ORDER = 100
+_MAX_CORRECTIONS_PER_ORDER = 100
 _MAX_MOVEMENT_ID_LENGTH = 2_000
 _PURCHASE_ORDER_ID_PATTERN = re.compile(
     r"PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
@@ -204,6 +209,7 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "advancementActionIds",
         "completion",
         "returns",
+        "corrections",
         "calculation",
     }
 )
@@ -247,6 +253,37 @@ _ORDER_RETURN_FIELDS = frozenset(
         "sku",
         "quantity",
         "disposition",
+    }
+)
+_ORDER_CORRECTION_FIELDS = frozenset(
+    {
+        "documentId",
+        "actionId",
+        "createdAt",
+        "actor",
+        "reason",
+        "evidenceReference",
+        "kind",
+        "reasonCode",
+        "sourceCalculationDigest",
+        "calculation",
+        "balanceAfterMmk",
+        "financialStatus",
+        "postingAuthority",
+        "externalPostingPerformed",
+    }
+)
+_CORRECTION_CALCULATION_FIELDS = frozenset(
+    {
+        "currency",
+        "taxConfigurationRevision",
+        "taxCode",
+        "taxRateBasisPoints",
+        "taxMode",
+        "listedAmountMmk",
+        "subtotalMmk",
+        "taxMmk",
+        "totalMmk",
     }
 )
 _RECONCILIATION_FIELDS = frozenset(
@@ -1073,6 +1110,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     advancement_action_ids: list[str] = []
     completion_action_ids: list[str] = []
     return_action_ids: list[str] = []
+    correction_action_ids: list[str] = []
     order_returns: list[tuple[str, dict[str, Any]]] = []
     order_by_id: dict[str, dict[str, Any]] = {}
     for index, candidate in enumerate(orders):
@@ -1457,6 +1495,76 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 returned_by_sku[sku] = returned
                 return_action_ids.append(action_id)
                 order_returns.append((order_id, return_record))
+        if "corrections" in order:
+            corrections = _list(order["corrections"], f"orders[{index}].corrections")
+            if (
+                not 1 <= len(corrections) <= _MAX_CORRECTIONS_PER_ORDER
+                or order["status"] != "completed"
+                or order["paymentStatus"] != "reconciled"
+                or completion is None
+                or not isinstance(order.get("calculation"), Mapping)
+            ):
+                raise TrialValidationError(
+                    f"orders[{index}].corrections requires 1 to "
+                    f"{_MAX_CORRECTIONS_PER_ORDER} records on a calculated, "
+                    "reconciled, completed order."
+                )
+            source_digest = commerce_order_calculation_digest(order)
+            expected_balance = int(order["total"])
+            previous_created_at = datetime.fromisoformat(
+                completion["capturedAt"].replace("Z", "+00:00")
+            )
+            for reverse_index, correction_candidate in enumerate(reversed(corrections)):
+                correction_index = len(corrections) - reverse_index - 1
+                field = f"orders[{index}].corrections[{correction_index}]"
+                correction = _object(correction_candidate, field)
+                _exact_fields(correction, field, required=_ORDER_CORRECTION_FIELDS)
+                action_id = _text(correction["actionId"], f"{field}.actionId", maximum=160)
+                if correction["documentId"] != f"COR2:{quote(action_id, safe='')}" :
+                    raise TrialValidationError(f"{field}.documentId is invalid.")
+                created_at = datetime.fromisoformat(
+                    _timestamp(correction["createdAt"], f"{field}.createdAt").replace("Z", "+00:00")
+                )
+                if created_at < previous_created_at:
+                    raise TrialValidationError(f"{field}.createdAt is outside the order chronology.")
+                previous_created_at = created_at
+                for proof_field in ("actor", "reason", "evidenceReference"):
+                    _text(correction[proof_field], f"{field}.{proof_field}")
+                if correction["kind"] not in _CORRECTION_KINDS or correction["reasonCode"] not in _CORRECTION_REASON_CODES:
+                    raise TrialValidationError(f"{field} classification is invalid.")
+                if correction["sourceCalculationDigest"] != source_digest:
+                    raise TrialValidationError(
+                        f"{field}.sourceCalculationDigest does not bind the original order calculation."
+                    )
+                calculation = _object(correction["calculation"], f"{field}.calculation")
+                _exact_fields(calculation, f"{field}.calculation", required=_CORRECTION_CALCULATION_FIELDS)
+                listed_amount = _integer(
+                    calculation["listedAmountMmk"],
+                    f"{field}.calculation.listedAmountMmk",
+                    minimum=1,
+                )
+                expected_calculation = _correction_calculation(order, listed_amount)
+                if calculation != expected_calculation:
+                    raise TrialValidationError(
+                        f"{field}.calculation is not deterministic from the original tax snapshot."
+                    )
+                expected_balance += (
+                    int(calculation["totalMmk"])
+                    if correction["kind"] == "debit"
+                    else -int(calculation["totalMmk"])
+                )
+                if (
+                    not 0 <= expected_balance <= _MAX_SAFE_INTEGER
+                    or correction["balanceAfterMmk"] != expected_balance
+                ):
+                    raise TrialValidationError(f"{field}.balanceAfterMmk is invalid.")
+                if (
+                    correction["financialStatus"] != "review_required"
+                    or correction["postingAuthority"] != "none"
+                    or correction["externalPostingPerformed"] is not False
+                ):
+                    raise TrialValidationError(f"{field} overclaims posting authority.")
+                correction_action_ids.append(action_id)
         order_ids.append(order_id)
         order_by_id[order_id] = order
     _unique(order_ids, "Order ID")
@@ -1466,6 +1574,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     _unique(advancement_action_ids, "Order advancement action ID")
     _unique(completion_action_ids, "Order completion action ID")
     _unique(return_action_ids, "Order return action ID")
+    _unique(correction_action_ids, "Order correction action ID")
 
     movement_ids: list[str] = []
     movement_action_ids: list[str] = []
@@ -2008,14 +2117,16 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             if any(sku not in item_by_sku for sku in stock_exception_skus):
                 raise TrialValidationError(f"closes[{index}] references an unknown stock exception SKU.")
             member_orders = [order_by_id[order_id] for order_id in order_ids_for_close]
+            member_adjusted_totals = [_order_adjusted_total(order) for order in member_orders]
             if (
                 any(
                     order["status"] != "completed"
                     or order["paymentStatus"] != "reconciled"
                     for order in member_orders
                 )
+                or any(total is None for total in member_adjusted_totals)
                 or close["orders"] != len(order_ids_for_close)
-                or close["total"] != sum(order["total"] for order in member_orders)
+                or close["total"] != sum(total or 0 for total in member_adjusted_totals)
             ):
                 raise TrialValidationError(
                     f"closes[{index}] totals must match its completed, reconciled order membership."
@@ -2232,6 +2343,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *advancement_action_ids,
             *completion_action_ids,
             *return_action_ids,
+            *correction_action_ids,
             *intake_action_ids,
             *close_action_ids,
             *purchase_order_action_ids,
@@ -2523,6 +2635,27 @@ def _validate_event_evidence(
             raise TrialValidationError(
                 "command evidence must match the order return proof."
             )
+    elif event_type == "commerce.order.correction_recorded":
+        _, corrected_order = _one_changed(
+            current["orders"],
+            next_state["orders"],
+            "orders",
+        )
+        corrections = corrected_order.get("corrections")
+        record = corrections[0] if isinstance(corrections, list) and corrections else {}
+        if any(
+            record.get(record_field) != evidence[evidence_field]
+            for record_field, evidence_field in (
+                ("actionId", "actionId"),
+                ("createdAt", "capturedAt"),
+                ("actor", "actor"),
+                ("reason", "reason"),
+                ("evidenceReference", "evidenceReference"),
+            )
+        ):
+            raise TrialValidationError(
+                "command evidence must match the order correction proof."
+            )
     elif event_type in {
         "commerce.inventory.initialized",
         "commerce.inventory.transferred",
@@ -2799,6 +2932,78 @@ def _projection_digest(projection: Sequence[Any]) -> str:
     return f"sha256:{sha256(encoded).hexdigest()}"
 
 
+def commerce_order_calculation_digest(order: Mapping[str, Any]) -> str | None:
+    calculation = order.get("calculation")
+    if not isinstance(calculation, Mapping):
+        return None
+    return _projection_digest(
+        [
+            "supermega.commerce.order-calculation.snapshot.v1",
+            order["id"],
+            calculation,
+        ]
+    )
+
+
+def _correction_calculation(
+    order: Mapping[str, Any],
+    listed_amount_mmk: int,
+) -> dict[str, Any] | None:
+    calculation = order.get("calculation")
+    if (
+        not isinstance(calculation, Mapping)
+        or isinstance(listed_amount_mmk, bool)
+        or not isinstance(listed_amount_mmk, int)
+        or not 1 <= listed_amount_mmk <= _MAX_SAFE_INTEGER
+    ):
+        return None
+    if calculation.get("schema") == _ORDER_CALCULATION_SCHEMA:
+        return {
+            "currency": "MMK",
+            "taxConfigurationRevision": None,
+            "taxCode": None,
+            "taxRateBasisPoints": None,
+            "taxMode": "not_configured",
+            "listedAmountMmk": listed_amount_mmk,
+            "subtotalMmk": listed_amount_mmk,
+            "taxMmk": 0,
+            "totalMmk": listed_amount_mmk,
+        }
+    configured = _configured_order_calculation(
+        {
+            "revision": calculation["taxConfigurationRevision"],
+            "code": calculation["taxCode"],
+            "rateBasisPoints": calculation["taxRateBasisPoints"],
+            "mode": calculation["taxMode"],
+        },
+        listed_amount_mmk,
+        int(calculation["catalogRevision"]),
+    )
+    if configured is None:
+        return None
+    return {
+        "currency": configured["currency"],
+        "taxConfigurationRevision": configured["taxConfigurationRevision"],
+        "taxCode": configured["taxCode"],
+        "taxRateBasisPoints": configured["taxRateBasisPoints"],
+        "taxMode": configured["taxMode"],
+        "listedAmountMmk": configured["listedSubtotalMmk"],
+        "subtotalMmk": configured["subtotalMmk"],
+        "taxMmk": configured["taxMmk"],
+        "totalMmk": configured["totalMmk"],
+    }
+
+
+def _order_adjusted_total(order: Mapping[str, Any]) -> int | None:
+    total = int(order["total"])
+    for correction in order.get("corrections", []):
+        amount = int(correction["calculation"]["totalMmk"])
+        total += amount if correction["kind"] == "debit" else -amount
+        if not 0 <= total <= _MAX_SAFE_INTEGER:
+            return None
+    return total
+
+
 def commerce_catalog_baseline_digest(baseline: Mapping[str, Any]) -> str:
     """Bind one opening price and reorder snapshot to its accountable proof."""
 
@@ -2884,6 +3089,29 @@ def commerce_daily_close_export(
         order = order_by_id[order_id]
         calculation = order.get("calculation")
         accepted_calculation = isinstance(calculation, Mapping)
+        corrections = [
+            {
+                "documentId": correction["documentId"],
+                "kind": correction["kind"],
+                "reasonCode": correction["reasonCode"],
+                "createdAt": correction["createdAt"],
+                "actor": correction["actor"],
+                "evidenceReference": correction["evidenceReference"],
+                "sourceCalculationDigest": correction["sourceCalculationDigest"],
+                "listedAmountMmk": correction["calculation"]["listedAmountMmk"],
+                "subtotalMmk": correction["calculation"]["subtotalMmk"],
+                "taxMmk": correction["calculation"]["taxMmk"],
+                "totalMmk": correction["calculation"]["totalMmk"],
+                "balanceAfterMmk": correction["balanceAfterMmk"],
+                "financialStatus": correction["financialStatus"],
+                "postingAuthority": correction["postingAuthority"],
+                "externalPostingPerformed": correction["externalPostingPerformed"],
+            }
+            for correction in order.get("corrections", [])
+        ]
+        adjusted_total = _order_adjusted_total(order)
+        if adjusted_total is None:
+            return None
         rows.append(
             {
                 "orderId": order["id"],
@@ -2912,7 +3140,9 @@ def commerce_daily_close_export(
                 "subtotalMmk": calculation["subtotalMmk"] if accepted_calculation else None,
                 "taxMode": calculation["taxMode"] if accepted_calculation else "not_recorded",
                 "taxMmk": calculation["taxMmk"] if accepted_calculation else None,
-                "totalMmk": order["total"],
+                "originalTotalMmk": order["total"],
+                "totalMmk": adjusted_total,
+                "corrections": corrections,
                 "calculationStatus": "accepted" if accepted_calculation else "legacy_unverified",
             }
         )
@@ -2961,7 +3191,28 @@ def commerce_daily_close_export(
                     row["subtotalMmk"],
                     row["taxMode"],
                     row["taxMmk"],
+                    row["originalTotalMmk"],
                     row["totalMmk"],
+                    [
+                        [
+                            correction["documentId"],
+                            correction["kind"],
+                            correction["reasonCode"],
+                            correction["createdAt"],
+                            correction["actor"],
+                            correction["evidenceReference"],
+                            correction["sourceCalculationDigest"],
+                            correction["listedAmountMmk"],
+                            correction["subtotalMmk"],
+                            correction["taxMmk"],
+                            correction["totalMmk"],
+                            correction["balanceAfterMmk"],
+                            correction["financialStatus"],
+                            correction["postingAuthority"],
+                            correction["externalPostingPerformed"],
+                        ]
+                        for correction in row["corrections"]
+                    ],
                     row["calculationStatus"],
                 ]
                 for row in rows
@@ -3014,7 +3265,9 @@ def commerce_daily_close_csv(
         "subtotal_mmk",
         "tax_mode",
         "tax_mmk",
+        "original_total_mmk",
         "total_mmk",
+        "corrections_json",
         "calculation_status",
         "payment_exception_order_ids",
         "stock_exception_skus",
@@ -3043,7 +3296,9 @@ def commerce_daily_close_csv(
             None,
             None,
             None,
+            None,
             artifact["totalMmk"],
+            None,
             None,
             artifact["paymentExceptionOrderIds"],
             artifact["stockExceptionSkus"],
@@ -3073,7 +3328,9 @@ def commerce_daily_close_csv(
             row["subtotalMmk"],
             row["taxMode"],
             row["taxMmk"],
+            row["originalTotalMmk"],
             row["totalMmk"],
+            json.dumps(row["corrections"], ensure_ascii=False, separators=(",", ":")),
             row["calculationStatus"],
             None,
             None,
@@ -3096,6 +3353,8 @@ def commerce_accounting_handoff(
     current = validate_commerce_state(state)
     close_export = commerce_daily_close_export(current, close_id)
     if close_export is None:
+        return None
+    if any(order["corrections"] for order in close_export["orders"]):
         return None
     closed_at = datetime.fromisoformat(close_export["closedAt"].replace("Z", "+00:00"))
     account_mapping = next(
@@ -4324,6 +4583,50 @@ def _validate_return_recorded(
         raise TrialValidationError("return disposition is invalid.")
 
 
+def _validate_correction_recorded(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    before_order, after_order = _one_changed(
+        current["orders"],
+        next_state["orders"],
+        "orders",
+    )
+    closed_order_ids = {
+        order_id
+        for close in current["closes"]
+        if isinstance(close, Mapping)
+        for order_id in close.get("orderIds", [])
+    }
+    if (
+        before_order["status"] != "completed"
+        or before_order["paymentStatus"] != "reconciled"
+        or "completion" not in before_order
+        or "calculation" not in before_order
+        or before_order["id"] in closed_order_ids
+    ):
+        raise TrialValidationError(
+            "corrections require an unclosed, calculated, reconciled, completed order."
+        )
+    before_corrections = before_order.get("corrections", [])
+    after_corrections = after_order.get("corrections")
+    if (
+        not isinstance(after_corrections, list)
+        or len(after_corrections) != len(before_corrections) + 1
+        or after_corrections[1:] != before_corrections
+        or _without(before_order, frozenset({"corrections"}))
+        != _without(after_order, frozenset({"corrections"}))
+    ):
+        raise TrialValidationError(
+            "commerce.order.correction_recorded must prepend exactly one immutable correction."
+        )
+
+
 def _validate_reconciled(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     _require_unchanged(current, next_state, "items", "movements", "closes")
     _require_website_intakes_unchanged(current, next_state)
@@ -4866,6 +5169,11 @@ def _commerce_order_close_basis(order: Mapping[str, Any]) -> datetime:
     completion = order.get("completion")
     if isinstance(completion, Mapping):
         timestamps.append(str(completion["capturedAt"]))
+    timestamps.extend(
+        str(correction["createdAt"])
+        for correction in order.get("corrections", [])
+        if isinstance(correction, Mapping)
+    )
     return max(
         datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         for timestamp in timestamps
@@ -4907,7 +5215,12 @@ def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -
     close_at = datetime.fromisoformat(str(close["createdAt"]).replace("Z", "+00:00"))
     if any(_commerce_order_close_basis(order) > close_at for order in eligible):
         raise TrialValidationError("daily close cannot predate included order evidence.")
-    if close["orders"] != len(eligible) or close["total"] != sum(order["total"] for order in eligible):
+    adjusted_totals = [_order_adjusted_total(order) for order in eligible]
+    if (
+        any(total is None for total in adjusted_totals)
+        or close["orders"] != len(eligible)
+        or close["total"] != sum(total or 0 for total in adjusted_totals)
+    ):
         raise TrialValidationError("daily close totals must match completed, reconciled orders.")
     if close["businessDate"] != _myanmar_business_date(close["createdAt"]) or any(
         prior_close.get("businessDate") == close["businessDate"]
@@ -5174,6 +5487,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.order.advanced": _validate_advanced,
     "commerce.order.cancelled": _validate_cancelled,
     "commerce.order.return_recorded": _validate_return_recorded,
+    "commerce.order.correction_recorded": _validate_correction_recorded,
     "commerce.payment.reconciled": _validate_reconciled,
     "commerce.refund.settled": _validate_refund_settled,
     "commerce.stock.received": _validate_received,
@@ -5269,6 +5583,7 @@ __all__ = [
     "COMMERCE_SCHEMA",
     "commerce_catalog_baseline_digest",
     "commerce_catalog_digest",
+    "commerce_order_calculation_digest",
     "commerce_accounting_handoff",
     "commerce_accounting_handoff_csv",
     "commerce_daily_close_csv",

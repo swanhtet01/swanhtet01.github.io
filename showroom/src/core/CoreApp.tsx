@@ -39,9 +39,12 @@ import {
   commerceDailyCloseCsv,
   commerceDailyCloseExport,
   commerceCloseExpectation,
+  commerceCorrectionCalculation,
   commerceCurrentTaxConfiguration,
   commerceCurrentAccountMappingConfiguration,
   commerceOrderCalculation,
+  commerceOrderCorrectionExpectation,
+  commerceOrderAdjustedTotal,
   commerceOrderReturnExpectation,
   commerceOrderItemSummary,
   commerceOrderLocationAllocationPreview,
@@ -68,6 +71,7 @@ import {
   receiveCommercePurchaseOrder,
   reconcileCommercePayment,
   recordCommerceOrderReturn,
+  recordCommerceOrderCorrection,
   registerCommerceItem,
   reserveCommerceOrder,
   saveCommerceClose,
@@ -75,6 +79,8 @@ import {
   updateCommerceItem,
   validateCommerceState,
   type CommerceActionProof,
+  type CommerceCorrectionKind,
+  type CommerceCorrectionReasonCode,
   type CommerceItem,
   type CommerceItemUpdate,
   type CommerceOrder,
@@ -219,6 +225,7 @@ type ActionKind =
   | 'order_status'
   | 'order_cancel'
   | 'order_return'
+  | 'order_correction'
   | 'payment_reconcile'
   | 'refund_settle'
   | 'catalog_item_create'
@@ -1378,6 +1385,13 @@ function formatMoney(value: number) {
   return `${new Intl.NumberFormat('en-US').format(value)} MMK`
 }
 
+type CommerceCorrectionDraft = {
+  orderId: string
+  kind: CommerceCorrectionKind
+  reasonCode: CommerceCorrectionReasonCode
+  listedAmountMmk: string
+}
+
 function formatTaxRate(rateBasisPoints: number) {
   return `${(rateBasisPoints / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`
 }
@@ -2316,6 +2330,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const stockCountEditorRef = useRef<HTMLFormElement>(null)
   const returnTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const returnEditorRef = useRef<HTMLFormElement>(null)
+  const correctionTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
+  const correctionEditorRef = useRef<HTMLFormElement>(null)
   const ecommerceInboxTargetRef = useRef<HTMLButtonElement>(null)
   const preparedChannelRef = useRef<HTMLDivElement>(null)
   const consumedEcommerceDraftId = useRef('')
@@ -2334,6 +2350,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
+  const [correctionDraft, setCorrectionDraft] = useState<CommerceCorrectionDraft | null>(null)
   const [taxDraft, setTaxDraft] = useState<TaxConfigurationDraft | null>(null)
   const [accountMapping, setAccountMapping] = useState<AccountMappingDraft | null>(null)
   const [catalogBusy, setCatalogBusy] = useState(false)
@@ -2602,6 +2619,21 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     const stockUnit = managedInventoryProjection?.stockUnits.find((candidate) => candidate.id === allocation.stockUnitId)
     return `${location?.name ?? allocation.locationId} · ${stockUnit?.trackingCode ?? allocation.stockUnitId} × ${allocation.quantity}`
   }).join(', ') ?? ''
+  const correctionDraftOrder = correctionDraft
+    ? commerce.orders.find((order) => order.id === correctionDraft.orderId)
+    : undefined
+  const correctionAmountText = correctionDraft?.listedAmountMmk.trim() ?? ''
+  const correctionAmount = /^[0-9]+$/.test(correctionAmountText)
+    ? Number(correctionAmountText)
+    : Number.NaN
+  const correctionCalculation = correctionDraftOrder
+    && Number.isSafeInteger(correctionAmount)
+    && correctionAmount > 0
+    ? commerceCorrectionCalculation(correctionDraftOrder, correctionAmount)
+    : null
+  const correctionReviewExpectation = useMemo(() => (
+    correctionDraft ? commerceOrderCorrectionExpectation(commerce, correctionDraft.orderId) : null
+  ), [commerce, correctionDraft])
 
   useEffect(() => {
     if (tab !== 'inventory' || commerceLocation.hash !== '#purchase-orders') return
@@ -3958,6 +3990,70 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     }, returnTriggerRefs.current.get(input.orderId))
   }
 
+  function canCorrectOrder(orderId: string) {
+    return Boolean(commerceOrderCorrectionExpectation(commerce, orderId))
+  }
+
+  function openCorrectionEditor(orderId: string) {
+    if (pendingAction || returnDraft) {
+      setNotice('Finish or close the current Shop action before recording a correction.')
+      return
+    }
+    const expectation = commerceOrderCorrectionExpectation(commerce, orderId)
+    if (!expectation) {
+      setNotice('Corrections require an unclosed, calculated, reconciled, completed order.')
+      return
+    }
+    setCorrectionDraft((current) => current?.orderId === orderId
+      ? current
+      : { orderId, kind: 'credit', reasonCode: 'pricing_error', listedAmountMmk: '' })
+    requestAnimationFrame(() => correctionEditorRef.current?.querySelector<HTMLElement>('#order-correction-amount')?.focus())
+  }
+
+  function cancelCorrectionEditor() {
+    const orderId = correctionDraft?.orderId
+    setCorrectionDraft(null)
+    setNotice('Correction draft closed. Shop data was not modified.')
+    requestAnimationFrame(() => orderId && correctionTriggerRefs.current.get(orderId)?.focus())
+  }
+
+  function reviewOrderCorrection(event: FormEvent) {
+    event.preventDefault()
+    if (!correctionDraft || !correctionDraftOrder || !correctionCalculation || !correctionReviewExpectation) {
+      setNotice('Enter a positive whole MMK amount on an eligible completed order.')
+      return
+    }
+    const balanceAfter = correctionReviewExpectation.currentBalanceMmk
+      + (correctionDraft.kind === 'debit' ? correctionCalculation.totalMmk : -correctionCalculation.totalMmk)
+    if (!Number.isSafeInteger(balanceAfter) || balanceAfter < 0) {
+      setNotice('A credit cannot exceed the order’s current corrected balance.')
+      return
+    }
+    const input = {
+      orderId: correctionDraft.orderId,
+      kind: correctionDraft.kind,
+      reasonCode: correctionDraft.reasonCode,
+      listedAmountMmk: correctionCalculation.listedAmountMmk,
+    } as const
+    queueAction({
+      kind: 'order_correction',
+      subjectId: input.orderId,
+      summary: `Record ${input.kind} note for ${input.orderId}`,
+      before: `Original invoice preserved · corrected balance ${formatMoney(correctionReviewExpectation.currentBalanceMmk)}`,
+      after: `${input.kind} ${formatMoney(correctionCalculation.totalMmk)} · corrected balance ${formatMoney(balanceAfter)} · external posting not performed`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce(
+          'commerce.order.correction_recorded',
+          action.commandId,
+          proof,
+          (current) => recordCommerceOrderCorrection(current, input, proof, correctionReviewExpectation),
+        )
+        setCorrectionDraft(null)
+      },
+    }, correctionTriggerRefs.current.get(input.orderId))
+  }
+
   function cancelOrder(orderId: string) {
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
     if (!order || order.status === 'completed' || order.status === 'cancelled') return
@@ -4547,12 +4643,24 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       </> : null}
     </dialog>
   <ClosedOrderHistory
+    canCorrect={canCorrectOrder}
     canReturn={canReturnOrder}
+    correctionCalculation={correctionCalculation}
+    correctionDraft={correctionDraft}
     disabled={commerceControlsDisabled}
+    onCancelCorrection={cancelCorrectionEditor}
     onCancelReturn={cancelReturnEditor}
+    onChangeCorrection={(patch) => setCorrectionDraft((current) => current ? { ...current, ...patch } : current)}
     onChangeReturn={(patch) => setReturnDraft((current) => current ? { ...current, ...patch } : current)}
+    onOpenCorrection={openCorrectionEditor}
     onOpenReturn={openReturnEditor}
+    onReviewCorrection={reviewOrderCorrection}
     onReviewReturn={reviewOrderReturn}
+    onCorrectionEditor={(node) => { correctionEditorRef.current = node }}
+    onCorrectionTrigger={(orderId, node) => {
+      if (node) correctionTriggerRefs.current.set(orderId, node)
+      else correctionTriggerRefs.current.delete(orderId)
+    }}
     onReturnEditor={(node) => { returnEditorRef.current = node }}
     onReturnTrigger={(orderId, node) => {
       if (node) returnTriggerRefs.current.set(orderId, node)
@@ -4813,24 +4921,42 @@ function OrderList({
 }
 
 function ClosedOrderHistory({
+  canCorrect,
   canReturn,
+  correctionCalculation,
+  correctionDraft,
   disabled,
+  onCancelCorrection,
   onCancelReturn,
+  onChangeCorrection,
   onChangeReturn,
+  onOpenCorrection,
   onOpenReturn,
+  onReviewCorrection,
   onReviewReturn,
+  onCorrectionEditor,
+  onCorrectionTrigger,
   onReturnEditor,
   onReturnTrigger,
   orders,
   returnDraft,
   returnLocationPreview,
 }: {
+  canCorrect: (orderId: string) => boolean
   canReturn: (orderId: string) => boolean
+  correctionCalculation: ReturnType<typeof commerceCorrectionCalculation>
+  correctionDraft: CommerceCorrectionDraft | null
   disabled: boolean
+  onCancelCorrection: () => void
   onCancelReturn: () => void
+  onChangeCorrection: (patch: Partial<CommerceCorrectionDraft>) => void
   onChangeReturn: (patch: Partial<CommerceReturnDraft>) => void
+  onOpenCorrection: (orderId: string) => void
   onOpenReturn: (orderId: string) => void
+  onReviewCorrection: (event: FormEvent) => void
   onReviewReturn: (event: FormEvent) => void
+  onCorrectionEditor: (node: HTMLFormElement | null) => void
+  onCorrectionTrigger: (orderId: string, node: HTMLButtonElement | null) => void
   onReturnEditor: (node: HTMLFormElement | null) => void
   onReturnTrigger: (orderId: string, node: HTMLButtonElement | null) => void
   orders: CommerceOrder[]
@@ -4844,7 +4970,7 @@ function ClosedOrderHistory({
   const currentPage = Math.min(page, pageCount - 1)
   const visibleOrders = orders.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
   return <details className="order-archive" id="shop-order-history">
-    <summary><span>Completed and cancelled orders</span><small>{orders.length} {orders.length === 1 ? 'record' : 'records'} · returns here</small></summary>
+    <summary><span>Completed and cancelled orders</span><small>{orders.length} {orders.length === 1 ? 'record' : 'records'} · returns and corrections</small></summary>
     <div className="order-archive-list">{visibleOrders.map((order) => {
       const lines = commerceOrderReturnLines(order).map((line) => {
         const returned = (order.returns ?? [])
@@ -4858,9 +4984,13 @@ function ClosedOrderHistory({
         : undefined
       const activeReturnDraft = draftedLine && returnDraft?.orderId === order.id ? returnDraft : null
       const editing = activeReturnDraft !== null
+      const activeCorrectionDraft = correctionDraft?.orderId === order.id ? correctionDraft : null
+      const correcting = activeCorrectionDraft !== null
       const selectedLine = draftedLine ?? availableLines[0]
       const returnable = canReturn(order.id)
-      return <article className={editing ? 'is-returning' : undefined} key={order.id}>
+      const correctable = canCorrect(order.id)
+      const adjustedTotal = commerceOrderAdjustedTotal(order) ?? order.total
+      return <article className={editing || correcting ? 'is-returning' : undefined} key={order.id}>
       <div className="order-archive-main">
         <strong>{order.customer} · {order.lines
           ? order.lines.length === 1
@@ -4876,20 +5006,36 @@ function ClosedOrderHistory({
         {order.status === 'completed' && order.completion && availableLines.length > 0 && !returnable ? <small role="note">Return unavailable: the sold quantity cannot be matched to an attributable stock reservation.</small> : null}
       </div>
       <div className="order-archive-actions">
-        <b>{formatMoney(order.total)}</b>
+        <b>{formatMoney(adjustedTotal)}</b>
+        {adjustedTotal !== order.total ? <small>original {formatMoney(order.total)}</small> : null}
         {order.status === 'completed' && (returnable || editing) ? <button
           aria-expanded={editing}
           className="text-link"
-          disabled={disabled}
+          disabled={disabled || correcting}
           onClick={() => editing ? onCancelReturn() : onOpenReturn(order.id)}
           ref={(node) => { onReturnTrigger(order.id, node) }}
           type="button"
         >{editing ? 'Close return' : 'Record return'}</button> : null}
+        {order.status === 'completed' && (correctable || correcting) ? <button
+          aria-expanded={correcting}
+          className="text-link"
+          disabled={disabled || editing}
+          onClick={() => correcting ? onCancelCorrection() : onOpenCorrection(order.id)}
+          ref={(node) => { onCorrectionTrigger(order.id, node) }}
+          type="button"
+        >{correcting ? 'Close correction' : 'Correct invoice'}</button> : null}
       </div>
       {order.returns?.length ? <div className="order-return-records" role="list">
         {order.returns.map((record) => <div key={record.actionId} role="listitem">
           <strong>{record.quantity} {record.sku} returned · {record.disposition === 'restock' ? 'restocked' : 'not restocked'}</strong>
           <small>{record.actor} · {formatTime(record.createdAt)} · evidence {record.evidenceReference}</small>
+        </div>)}
+      </div> : null}
+      {order.corrections?.length ? <div className="order-return-records" role="list">
+        {order.corrections.map((record) => <div key={record.documentId} role="listitem">
+          <strong>{record.kind} note · {formatMoney(record.calculation.totalMmk)} · balance {formatMoney(record.balanceAfterMmk)}</strong>
+          <small>{record.reasonCode.replaceAll('_', ' ')} · {record.actor} · {formatTime(record.createdAt)} · evidence {record.evidenceReference}</small>
+          <small>Review required · no external posting performed</small>
         </div>)}
       </div> : null}
       {activeReturnDraft && selectedLine ? <form aria-label={`Return items from ${order.id}`} className="order-return-editor" onSubmit={onReviewReturn} ref={onReturnEditor}>
@@ -4899,6 +5045,14 @@ function ClosedOrderHistory({
         <label>Stock result<select disabled={disabled} onChange={(event) => onChangeReturn({ disposition: event.target.value as CommerceReturnDisposition })} value={activeReturnDraft.disposition}><option value="restock">Sellable · add to stock</option><option value="not_restocked">Not sellable · stock unchanged</option></select></label>
         {activeReturnDraft.disposition === 'restock' && returnLocationPreview ? <small role="note">Restock to {returnLocationPreview}</small> : null}
         <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review return</button><button className="core-button compact" disabled={disabled} onClick={onCancelReturn} type="button">Cancel</button></div>
+      </form> : null}
+      {activeCorrectionDraft ? <form aria-label={`Correct invoice ${order.id}`} className="order-return-editor" onSubmit={onReviewCorrection} ref={onCorrectionEditor}>
+        <div className="order-return-copy"><span className="core-eyebrow">Correction note</span><strong>{order.id}</strong><small>The original invoice stays unchanged. This records review evidence; it does not post externally.</small></div>
+        <label>Type<select disabled={disabled} onChange={(event) => onChangeCorrection({ kind: event.target.value as CommerceCorrectionKind })} value={activeCorrectionDraft.kind}><option value="credit">Credit · reduce balance</option><option value="debit">Debit · increase balance</option></select></label>
+        <label>Reason<select disabled={disabled} onChange={(event) => onChangeCorrection({ reasonCode: event.target.value as CommerceCorrectionReasonCode })} value={activeCorrectionDraft.reasonCode}><option value="pricing_error">Pricing error</option><option value="service_recovery">Service recovery</option><option value="fee_adjustment">Fee adjustment</option><option value="other">Other</option></select></label>
+        <label>Amount before tax<input disabled={disabled} id="order-correction-amount" inputMode="numeric" min="1" onChange={(event) => onChangeCorrection({ listedAmountMmk: event.target.value })} required step="1" type="number" value={activeCorrectionDraft.listedAmountMmk} /></label>
+        {correctionCalculation ? <small role="note">Tax {formatMoney(correctionCalculation.taxMmk)} · note total {formatMoney(correctionCalculation.totalMmk)} · same tax snapshot as the original invoice</small> : null}
+        <div className="form-actions"><button className="core-button primary compact" disabled={disabled || !correctionCalculation} type="submit">Review correction</button><button className="core-button compact" disabled={disabled} onClick={onCancelCorrection} type="button">Cancel</button></div>
       </form> : null}
     </article>})}</div>
     {pageCount > 1 ? <nav aria-label="Closed order pages" className="order-archive-pagination">

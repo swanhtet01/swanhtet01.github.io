@@ -34,6 +34,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.order.advanced",
         "commerce.order.cancelled",
         "commerce.order.return_recorded",
+        "commerce.order.correction_recorded",
         "commerce.payment.reconciled",
         "commerce.refund.settled",
         "commerce.stock.received",
@@ -1559,6 +1560,66 @@ def _authoritative_command_payload(
             authoritative_configuration,
             *deepcopy(configurations[1:]),
         ]
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.order.correction_recorded":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        orders = state.get("orders") if isinstance(state, Mapping) else None
+        if not isinstance(evidence, Mapping) or not isinstance(state, Mapping) or not isinstance(orders, list):
+            return authoritative
+        corrected_order = next(
+            (
+                order
+                for order in orders
+                if isinstance(order, Mapping)
+                and isinstance(order.get("corrections"), list)
+                and order["corrections"]
+                and isinstance(order["corrections"][0], Mapping)
+                and order["corrections"][0].get("actionId") == evidence.get("actionId")
+            ),
+            None,
+        )
+        effective_captured_at = captured_at
+        if corrected_order is not None:
+            completion = corrected_order.get("completion")
+            prior_corrections = corrected_order.get("corrections", [])[1:]
+            effective_captured_at = _not_before(
+                captured_at,
+                corrected_order.get("createdAt"),
+                corrected_order.get("paymentReconciledAt"),
+                completion.get("capturedAt") if isinstance(completion, Mapping) else None,
+                *(
+                    record.get("createdAt")
+                    for record in prior_corrections
+                    if isinstance(record, Mapping)
+                ),
+            )
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = effective_captured_at
+        authoritative_orders = deepcopy(orders)
+        for order_index, order in enumerate(authoritative_orders):
+            corrections = order.get("corrections") if isinstance(order, Mapping) else None
+            if (
+                not isinstance(corrections, list)
+                or not corrections
+                or not isinstance(corrections[0], Mapping)
+                or corrections[0].get("actionId") != evidence.get("actionId")
+            ):
+                continue
+            authoritative_correction = dict(corrections[0])
+            authoritative_correction["actor"] = principal.actor_id
+            authoritative_correction["createdAt"] = effective_captured_at
+            authoritative_order = dict(order)
+            authoritative_order["corrections"] = [
+                authoritative_correction,
+                *deepcopy(corrections[1:]),
+            ]
+            authoritative_orders[order_index] = authoritative_order
+        authoritative_state = dict(state)
+        authoritative_state["orders"] = authoritative_orders
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative

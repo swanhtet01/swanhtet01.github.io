@@ -18,6 +18,7 @@ from supermega_runtime.commerce_runtime import (
     commerce_accounting_handoff_csv,
     commerce_daily_close_csv,
     commerce_daily_close_export,
+    commerce_order_calculation_digest,
     commerce_storefront_preview_digest,
     commerce_website_intake_snapshot_digest,
     validate_commerce_state,
@@ -50,6 +51,7 @@ PAYMENT_AT = "2026-07-23T09:10:00.000Z"
 COMPLETED_AT = "2026-07-23T09:20:00.000Z"
 RETURN_AT = "2026-07-23T09:30:00.000Z"
 RETURN_AT_2 = "2026-07-23T09:40:00.000Z"
+CORRECTION_AT = "2026-07-23T09:35:00.000Z"
 WEBSITE_INTAKE_ID = "WINT-12345678"
 CLOSE_ACTION_ID = "ACT-00000000-0000-4000-8000-000000000001"
 CLOSE_ID = "CLOSE-00000000-0000-4000-8000-000000000001"
@@ -334,7 +336,12 @@ def close_record(
     return {
         "id": close_id or f"CLOSE-{action_id.removeprefix('ACT-')}",
         "createdAt": evidence["capturedAt"],
-        "total": sum(order["total"] for order in eligible),
+        "total": sum(
+            order.get("corrections", [{}])[0].get("balanceAfterMmk", order["total"])
+            if order.get("corrections")
+            else order["total"]
+            for order in eligible
+        ),
         "orders": len(eligible),
         "businessDate": myanmar_business_date(evidence["capturedAt"]),
         "orderIds": [order["id"] for order in eligible],
@@ -693,6 +700,58 @@ def returned_state(
     return state
 
 
+def corrected_state(
+    current: dict[str, object],
+    *,
+    kind: str = "credit",
+    reason_code: str = "pricing_error",
+    listed_amount_mmk: int = 50,
+    action_id: str = "ACT-CORRECTION-1",
+    captured_at: str = CORRECTION_AT,
+) -> dict[str, object]:
+    state = deepcopy(current)
+    order = state["orders"][0]  # type: ignore[index]
+    evidence = action_evidence(
+        action_id,
+        captured_at=captured_at,
+        reason="Approved the invoice correction against source evidence.",
+    )
+    calculation = {
+        "currency": "MMK",
+        "taxConfigurationRevision": None,
+        "taxCode": None,
+        "taxRateBasisPoints": None,
+        "taxMode": "not_configured",
+        "listedAmountMmk": listed_amount_mmk,
+        "subtotalMmk": listed_amount_mmk,
+        "taxMmk": 0,
+        "totalMmk": listed_amount_mmk,
+    }
+    current_balance = (
+        order.get("corrections", [{}])[0].get("balanceAfterMmk", order["total"])
+        if order.get("corrections")
+        else order["total"]
+    )
+    record = {
+        "documentId": "COR2:" + quote(action_id, safe="-_.!~*'()"),
+        "actionId": action_id,
+        "createdAt": captured_at,
+        "actor": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "kind": kind,
+        "reasonCode": reason_code,
+        "sourceCalculationDigest": commerce_order_calculation_digest(order),
+        "calculation": calculation,
+        "balanceAfterMmk": current_balance + (listed_amount_mmk if kind == "debit" else -listed_amount_mmk),
+        "financialStatus": "review_required",
+        "postingAuthority": "none",
+        "externalPostingPerformed": False,
+    }
+    order["corrections"] = [record, *order.get("corrections", [])]
+    return state
+
+
 def cancelled_due_state(
     order_ids: tuple[str, ...] = ("ORD-REFUND",),
 ) -> dict[str, object]:
@@ -806,6 +865,20 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
             if order.get("returns")
         ]
         record = returned_orders[0]["returns"][0]
+        return {
+            "actionId": record["actionId"],
+            "capturedAt": record["createdAt"],
+            "actor": record["actor"],
+            "reason": record["reason"],
+            "evidenceReference": record["evidenceReference"],
+        }
+    if event_type == "commerce.order.correction_recorded":
+        corrected_orders = [
+            order
+            for order in next_state["orders"]  # type: ignore[union-attr]
+            if order.get("corrections")
+        ]
+        record = corrected_orders[0]["corrections"][0]
         return {
             "actionId": record["actionId"],
             "capturedAt": record["createdAt"],
@@ -2257,6 +2330,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.order.advanced",
                     "commerce.order.cancelled",
                     "commerce.order.return_recorded",
+                    "commerce.order.correction_recorded",
                     "commerce.payment.reconciled",
                     "commerce.refund.settled",
                     "commerce.stock.received",
@@ -4351,6 +4425,77 @@ class CommerceRuntimeTests(unittest.TestCase):
         with self.assertRaises(TrialValidationError):
             validate_commerce_state(reused_completion_action)
 
+    def test_invoice_correction_is_immutable_tax_bound_and_close_integrated(self) -> None:
+        current = completed_state()
+        current["orders"][0]["calculation"] = {  # type: ignore[index]
+            "schema": "supermega.commerce.order-calculation.v1",
+            "currency": "MMK",
+            "catalogRevision": 0,
+            "subtotalMmk": 200,
+            "taxMode": "not_configured",
+            "taxMmk": 0,
+            "totalMmk": 200,
+        }
+        current = validate_commerce_state(current)
+        original_order = deepcopy(current["orders"][0])
+
+        corrected = apply_event(
+            current,
+            "commerce.order.correction_recorded",
+            corrected_state(current),
+        )
+        record = corrected["orders"][0]["corrections"][0]  # type: ignore[index]
+        self.assertEqual(record["kind"], "credit")
+        self.assertEqual(record["balanceAfterMmk"], 150)
+        self.assertEqual(record["financialStatus"], "review_required")
+        self.assertEqual(record["postingAuthority"], "none")
+        self.assertFalse(record["externalPostingPerformed"])
+        for field in ("total", "calculation", "paymentStatus", "completion"):
+            self.assertEqual(corrected["orders"][0][field], original_order[field])  # type: ignore[index]
+        self.assertEqual(corrected["items"], current["items"])
+        self.assertEqual(corrected["movements"], current["movements"])
+
+        close = close_record(
+            corrected,
+            CLOSE_ACTION_ID_2,
+            close_id=CLOSE_ID_2,
+            captured_at="2026-07-23T10:00:00.000Z",
+        )
+        self.assertEqual(close["total"], 150)
+        closed = deepcopy(corrected)
+        closed["closes"] = [close]
+        accepted_close = apply_event(corrected, "commerce.close.saved", closed)
+        export = commerce_daily_close_export(accepted_close, CLOSE_ID_2)
+        self.assertIsNotNone(export)
+        assert export is not None
+        self.assertEqual(export["schema"], "supermega.commerce.daily-close-export.v2")
+        self.assertEqual(export["totalMmk"], 150)
+        self.assertEqual(export["orders"][0]["originalTotalMmk"], 200)
+        self.assertEqual(export["orders"][0]["totalMmk"], 150)
+        self.assertEqual(export["orders"][0]["corrections"][0]["documentId"], record["documentId"])
+        self.assertIsNone(commerce_accounting_handoff(accepted_close, CLOSE_ID_2))
+
+        forged_total = corrected_state(current)
+        forged_total["orders"][0]["total"] = 150  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.order.correction_recorded", forged_total)
+
+        over_credit = corrected_state(current, listed_amount_mmk=201)
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(over_credit)
+
+        backdated = corrected_state(current, captured_at=PAYMENT_AT)
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(backdated)
+
+        after_close = corrected_state(accepted_close, action_id="ACT-CORRECTION-2")
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                accepted_close,
+                "commerce.order.correction_recorded",
+                after_close,
+            )
+
     def test_daily_close_snapshots_exact_exceptions_and_legacy_records_still_load(self) -> None:
         current = created_state("ORD-EXCEPTION")
         current["items"][0]["reorderAt"] = 8  # type: ignore[index]
@@ -4783,7 +4928,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIsNotNone(artifact)
         assert artifact is not None
         self.assertEqual(artifact, commerce_daily_close_export(closed, CLOSE_ID))
-        self.assertEqual(artifact["schema"], "supermega.commerce.daily-close-export.v1")
+        self.assertEqual(artifact["schema"], "supermega.commerce.daily-close-export.v2")
         self.assertEqual(artifact["orderCount"], 1)
         self.assertEqual(artifact["orders"][0]["calculationStatus"], "accepted")
         self.assertEqual(artifact["orders"][0]["subtotalMmk"], 200)
@@ -4791,7 +4936,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertNotIn("customer", json.dumps(artifact))
         self.assertEqual(
             artifact["digest"],
-            "sha256:3ce1a64913cc067ed3804f0ca88f2aa024aecbe771d7cca4b218cdfd1c31e655",
+            "sha256:f0d3d83368f9893efb39965a1376207e205fe2262a3aa624e23a23b95b5b7ec6",
         )
 
         csv_text = commerce_daily_close_csv(closed, CLOSE_ID)
@@ -5529,9 +5674,50 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertTrue(return_replay.idempotent_replay)
         self.assertEqual(return_replay.version, returned.version)
 
-        forged_close_state = deepcopy(returned.state)
-        forged_close = close_record(
+        forged_correction_state = corrected_state(
             returned.state,
+            action_id="ACT-STORE-CORRECTION",
+            captured_at="2099-01-01T00:00:00.000Z",
+        )
+        forged_correction = forged_correction_state["orders"][0]["corrections"][0]  # type: ignore[index]
+        forged_correction["actor"] = "Fabricated Finance Bot"
+        correction_payload = {
+            "state": forged_correction_state,
+            "evidence": evidence_for(
+                "commerce.order.correction_recorded",
+                forged_correction_state,
+            ),
+        }
+        correction_command_id = str(uuid4())
+        corrected = store.apply_command(
+            principal,
+            command_id=correction_command_id,
+            surface="commerce",
+            event_type="commerce.order.correction_recorded",
+            expected_version=returned.version,
+            payload=correction_payload,
+        )
+        correction_replay = store.apply_command(
+            principal,
+            command_id=correction_command_id,
+            surface="commerce",
+            event_type="commerce.order.correction_recorded",
+            expected_version=returned.version,
+            payload=correction_payload,
+        )
+        authoritative_correction = corrected.state["orders"][0]["corrections"][0]  # type: ignore[index]
+        self.assertEqual(authoritative_correction["actor"], principal.actor_id)
+        self.assertNotEqual(
+            authoritative_correction["createdAt"],
+            "2099-01-01T00:00:00.000Z",
+        )
+        self.assertEqual(authoritative_correction["balanceAfterMmk"], 150)
+        self.assertTrue(correction_replay.idempotent_replay)
+        self.assertEqual(correction_replay.version, corrected.version)
+
+        forged_close_state = deepcopy(corrected.state)
+        forged_close = close_record(
+            corrected.state,
             CLOSE_ACTION_ID,
             close_id=CLOSE_ID,
             captured_at="2099-01-01T00:00:00.000Z",
@@ -5548,7 +5734,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             command_id=close_command_id,
             surface="commerce",
             event_type="commerce.close.saved",
-            expected_version=returned.version,
+            expected_version=corrected.version,
             payload=forged_payload,
         )
         close_replay = store.apply_command(
@@ -5556,7 +5742,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             command_id=close_command_id,
             surface="commerce",
             event_type="commerce.close.saved",
-            expected_version=returned.version,
+            expected_version=corrected.version,
             payload=forged_payload,
         )
         authoritative_close = closed.state["closes"][0]  # type: ignore[index]
@@ -5567,6 +5753,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             myanmar_business_date(authoritative_close["createdAt"]),
         )
         self.assertEqual(authoritative_close["orderIds"], ["ORD-1"])
+        self.assertEqual(authoritative_close["total"], 150)
         self.assertTrue(close_replay.idempotent_replay)
         self.assertEqual(close_replay.state, closed.state)
 
