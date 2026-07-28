@@ -288,6 +288,54 @@ def _activation_steps(
     ]
 
 
+def _activation_evidence_plan(
+    *,
+    database_ready: bool,
+    role_ready: bool,
+    schema_ready: bool,
+    security_ready: bool,
+    audit_ready: bool,
+    writes_ready: bool,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": "postgres17_rehearsal",
+            "label": "Postgres 17 rehearsal",
+            "ready": database_ready and role_ready and schema_ready,
+            "proof": "Run the private trial migration rehearsal and keep the read-only validator output.",
+            "verifier": "node tools/run_postgres17_rehearsal.mjs",
+        },
+        {
+            "id": "runtime_role_audit",
+            "label": "Runtime role audit",
+            "ready": database_ready and role_ready and audit_ready,
+            "proof": "Prove the runtime login is non-BYPASSRLS, TLS-backed, role-scoped, and can append immutable audit events.",
+            "verifier": "python tools/validate_supermega_database_url.py --read-only",
+        },
+        {
+            "id": "identity_gateway",
+            "label": "Identity gateway",
+            "ready": security_ready,
+            "proof": "Show trusted gateway signing or Supabase named-user token verification with no browser service-role secret.",
+            "verifier": "node tools/verify_app_security_contract.mjs",
+        },
+        {
+            "id": "storage_privacy",
+            "label": "Storage privacy",
+            "ready": database_ready and audit_ready,
+            "proof": "Run the bounded private-storage privacy proof with redacted output and no persistent mutation.",
+            "verifier": "npm run storage:privacy:self-test",
+        },
+        {
+            "id": "write_acceptance",
+            "label": "Write acceptance",
+            "ready": database_ready and role_ready and schema_ready and security_ready and audit_ready and writes_ready,
+            "proof": "Enable writes only after managed Shop, Plant, Website, Ecommerce, recovery, RLS, and human-approval acceptance tests pass.",
+            "verifier": "npm run app:verify",
+        },
+    ]
+
+
 def create_app() -> FastAPI:
     database_url = _text(os.getenv("SUPERMEGA_DATABASE_URL"))
     store = PostgresTrialStore(
@@ -356,6 +404,14 @@ def create_app() -> FastAPI:
             audit_ready=readiness.audit_ready,
             writes_ready=readiness.write_enabled,
         )
+        evidence_plan = _activation_evidence_plan(
+            database_ready=readiness.database_ready,
+            role_ready=readiness.role_ready,
+            schema_ready=readiness.schema_ready,
+            security_ready=security_ready,
+            audit_ready=readiness.audit_ready,
+            writes_ready=readiness.write_enabled,
+        )
         coverage_score = round(
             sum(1 for step in activation_steps if step["ready"]) / len(activation_steps) * 100
         )
@@ -390,6 +446,8 @@ def create_app() -> FastAPI:
                 "status": "ready" if not requirements else "attention",
                 "requirements": requirements,
                 "steps": activation_steps,
+                "evidence_plan": evidence_plan,
+                "evidence_ready": all(item["ready"] for item in evidence_plan),
                 "secret_values_exposed": False,
             },
         }

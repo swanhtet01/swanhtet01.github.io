@@ -350,6 +350,14 @@ type RuntimeActivationStep = {
   action: string
 }
 
+type RuntimeEvidencePlanItem = {
+  id: string
+  label: string
+  ready: boolean
+  proof: string
+  verifier: string
+}
+
 export type RuntimeHealth = {
   status: RuntimeStatus
   serviceStatus: string
@@ -361,6 +369,7 @@ export type RuntimeHealth = {
   coverageScore: number
   requirements: string[]
   activationSteps: RuntimeActivationStep[]
+  evidencePlan: RuntimeEvidencePlanItem[]
 }
 
 type CommerceTab = 'counter' | 'orders' | 'inventory'
@@ -542,6 +551,7 @@ const checkingRuntime: RuntimeHealth = {
   coverageScore: 0,
   requirements: [],
   activationSteps: [],
+  evidencePlan: [],
 }
 
 const navigation = [
@@ -1459,11 +1469,14 @@ function useRuntimeHealth() {
           coverage_score?: number
           authentication?: { trusted_gateway_ready?: boolean; supabase_user_tokens_ready?: boolean }
           trial_backend?: { audit_ready?: boolean; write_enabled?: boolean }
-          enterprise_activation?: { requirements?: string[]; steps?: RuntimeActivationStep[] }
+          enterprise_activation?: { requirements?: string[]; steps?: RuntimeActivationStep[]; evidence_plan?: RuntimeEvidencePlanItem[] }
         }
         const requirements = Array.isArray(body.enterprise_activation?.requirements) ? body.enterprise_activation.requirements : []
         const activationSteps = Array.isArray(body.enterprise_activation?.steps)
           ? body.enterprise_activation.steps.filter((step) => typeof step.id === 'string' && typeof step.label === 'string' && typeof step.ready === 'boolean' && typeof step.action === 'string')
+          : []
+        const evidencePlan = Array.isArray(body.enterprise_activation?.evidence_plan)
+          ? body.enterprise_activation.evidence_plan.filter((item) => typeof item.id === 'string' && typeof item.label === 'string' && typeof item.ready === 'boolean' && typeof item.proof === 'string' && typeof item.verifier === 'string')
           : []
         const authReady = Boolean(body.authentication?.trusted_gateway_ready || body.authentication?.supabase_user_tokens_ready)
         const auditReady = body.trial_backend?.audit_ready === true
@@ -1487,6 +1500,7 @@ function useRuntimeHealth() {
           coverageScore: Number.isFinite(body.coverage_score) ? Number(body.coverage_score) : 0,
           requirements,
           activationSteps,
+          evidencePlan,
         })
       })
       .catch(() => {

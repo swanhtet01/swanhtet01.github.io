@@ -90,6 +90,12 @@ if (!Array.isArray(activationSteps)
   || health.coverage_score > 100) throw new Error('managed_activation_steps_contract_missing')
 const activationCoverage = Math.round((activationSteps.filter((step) => step.ready).length / activationSteps.length) * 100)
 if (activationCoverage !== health.coverage_score) throw new Error('managed_activation_coverage_mismatch')
+const activationEvidencePlan = health.enterprise_activation?.evidence_plan
+if (!Array.isArray(activationEvidencePlan)
+  || JSON.stringify(activationEvidencePlan.map((item) => item.id)) !== JSON.stringify(['postgres17_rehearsal', 'runtime_role_audit', 'identity_gateway', 'storage_privacy', 'write_acceptance'])
+  || activationEvidencePlan.some((item) => typeof item.ready !== 'boolean' || typeof item.proof !== 'string' || item.proof.length < 30 || typeof item.verifier !== 'string' || item.verifier.length < 10)
+  || health.enterprise_activation?.evidence_ready !== activationEvidencePlan.every((item) => item.ready)
+  || JSON.stringify(activationEvidencePlan).toLowerCase().includes('secret')) throw new Error('managed_activation_evidence_plan_contract_missing')
 if (health.operating_mode === 'managed_trial' && (health.enterprise_db_ready !== true || health.security_ready !== true)) throw new Error('managed_trial_readiness_mismatch')
 if (health.operating_mode === 'managed_trial' && health.trial_backend.role_ready !== true) throw new Error('managed_trial_runtime_role_unsafe')
 
@@ -112,7 +118,7 @@ const settingsChunk = (await get(`/${settingsChunkPath}`)).body
 for (const required of ['SUPERMEGA', 'Choose a product. Run work.', 'Free workspace', 'Premium activation', 'Managed data, AI context', 'Check readiness', 'Open product', 'Set up product', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sample workspace', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_context:${required}`)
 }
-for (const required of ['Start guided sample', 'Request managed trial', 'Export evidence before managed import.', 'supermega_trial_evidence', 'activationRows', 'learningRows', 'learningPlanRows', 'Premium AI context', 'What the system can learn', 'Export AI context package']) {
+for (const required of ['Start guided sample', 'Request managed trial', 'Export evidence before managed import.', 'supermega_trial_evidence', 'activationRows', 'activationEvidencePlan', 'version:13', 'Managed activation evidence plan', 'Evidence to go live', 'learningRows', 'learningPlanRows', 'Premium AI context', 'What the system can learn', 'Export AI context package']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_settings_context:${required}`)
 }
 for (const forbidden of ['Pick a track. Run work.', 'Handled by SuperMega', 'Approved by owner', 'Factory MES', 'Website catalog', 'Online orders', 'Open track', 'Set up data', 'Choose what you want to run.', 'Each product opens directly to a working sample.', 'SuperMega HQ', 'One next action for the company', 'Agents prepare work', 'pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a']) {
