@@ -676,6 +676,7 @@ textarea { min-height: 72px; resize: vertical; }
 .learning-plan { display: grid; gap: 12px; margin-top: 12px; border: 1px solid rgba(11,116,94,.22); border-radius: 10px; padding: 13px; background: var(--core-panel-raised); }
 .learning-plan h3 { margin: 3px 0 4px; color: var(--core-ink); font-size: 15px; line-height: 1.2; }
 .learning-plan p { margin: 0; color: var(--core-muted); font-size: 11px; line-height: 1.45; }
+.learning-plan-agent { display: grid; gap: 10px; }
 .learning-plan-rows { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 9px; background: var(--core-panel); }
 .learning-plan-rows span { min-width: 0; min-height: 86px; display: grid; align-content: center; gap: 4px; border-right: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); padding: 10px; }
 .learning-plan-rows span:nth-child(2n) { border-right: 0; }

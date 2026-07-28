@@ -121,7 +121,7 @@ const activationRunbookChunk = (await get(`/${activationRunbookChunkPath}`)).bod
 for (const required of ['SUPERMEGA', 'Choose a product. Run work.', 'Free workspace', 'Premium activation', 'Managed data, AI context', 'Check readiness', 'Open product', 'Set up product', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sample workspace', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_context:${required}`)
 }
-for (const required of ['Start guided sample', 'Request managed trial', 'Export evidence before managed import.', 'supermega_trial_evidence', 'activationRows', 'activationEvidencePlan', 'version:13', 'learningRows', 'learningPlanRows', 'Premium AI context', 'What the system can learn', 'Export AI context package']) {
+for (const required of ['Start guided sample', 'Request managed trial', 'Export evidence before managed import.', 'supermega_trial_evidence', 'activationRows', 'activationEvidencePlan', 'version:14', 'learningRows', 'learningPlanRows', 'agentPlanRows', 'Premium AI context', 'What the system can learn', 'Premium agent plan', 'What the agent can run', 'Export AI context package']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_settings_context:${required}`)
 }
 for (const required of ['Managed activation evidence plan', 'Evidence to go live', 'proof gates ready']) {
