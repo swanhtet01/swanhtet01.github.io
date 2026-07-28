@@ -5007,6 +5007,55 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Trace', `${materialEntries.length} material`],
     ['Handoff', shiftHandoffIsCurrent ? 'Ready' : 'Build'],
   ] as const
+  const plantAgentJob = !productionCanWrite
+    ? 'Restore Plant write readiness'
+    : urgentIssueCount
+      ? 'Contain urgent Plant problems'
+      : heldJobs.length
+        ? 'Review quality holds'
+        : openDowntimeIntervals.length + openMaintenanceRecords.length
+          ? 'Close WCM records'
+          : activeJobs.length
+            ? 'Record next job output'
+            : !shiftHandoffIsCurrent
+              ? 'Build shift handoff'
+              : 'Add next Plant job'
+  const plantAgentReason = !productionCanWrite
+    ? 'The workspace must confirm durable storage or managed writes before records can change.'
+    : urgentIssueCount
+      ? `${urgentIssueCount} urgent issue${urgentIssueCount === 1 ? '' : 's'} need owner-reviewed containment.`
+      : heldJobs.length
+        ? `${heldJobs.length} job${heldJobs.length === 1 ? '' : 's'} held by quality need evidence review.`
+        : openDowntimeIntervals.length + openMaintenanceRecords.length
+          ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} WCM record${openDowntimeIntervals.length + openMaintenanceRecords.length === 1 ? '' : 's'} remain open.`
+          : activeJobs.length
+            ? `${activeJobs[0].id} is the next active job by priority and due time.`
+            : !shiftHandoffIsCurrent
+              ? 'The latest Plant revision needs a shift handoff before the next operator relies on it.'
+              : 'No active production job is waiting, so the next controlled step is planning.'
+  const plantOwnerGate = !productionCanWrite
+    ? 'Owner opens Settings or reloads before retrying.'
+    : urgentIssueCount
+      ? 'Human confirms problem, containment, reason, and evidence.'
+      : heldJobs.length
+        ? 'Quality owner releases or keeps the hold with evidence.'
+        : openDowntimeIntervals.length + openMaintenanceRecords.length
+          ? 'Maintenance owner records outcome; no equipment command is sent.'
+          : activeJobs.length
+            ? 'Operator reviews output, shift, reason, and evidence before posting.'
+            : !shiftHandoffIsCurrent
+              ? 'Supervisor reviews the read-only handoff before use.'
+              : 'Owner approves the job plan before Plant records change.'
+  const plantAgentAction = !productionCanWrite
+    ? { label: 'Open Settings', to: '/settings/#controls' }
+    : urgentIssueCount || heldJobs.length || openDowntimeIntervals.length + openMaintenanceRecords.length || !shiftHandoffIsCurrent
+      ? { label: 'Open control', to: '/plant/?tab=control' }
+      : { label: activeJobs.length ? 'Open jobs' : 'Plan job', to: '/plant/?tab=production' }
+  const plantAgentRows = [
+    ['Agent job', plantAgentJob],
+    ['Reason', plantAgentReason],
+    ['Owner gate', plantOwnerGate],
+  ] as const
 
   useEffect(() => {
     const timer = window.setInterval(() => setIssueClock(Date.now()), 60_000)
@@ -5640,10 +5689,16 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <ProductionEventHistory events={production.events} />
   </>
   const plantStatus = <div aria-label="Plant MES status" className="readiness-list plant-mes-strip">{plantRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+  const plantAgentQueue = <section aria-label="Recommended Plant agent job" className="plant-agent-queue">
+    <div><span className="core-eyebrow">Plant agent queue</span><h2>{plantAgentJob}</h2><p>AI prepares the next Plant record from live jobs, quality, WCM, trace, and handoff state. Humans still approve every consequential action.</p></div>
+    <div>{plantAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+    <Link className="core-button primary compact" to={plantAgentAction.to}>{plantAgentAction.label}</Link>
+  </section>
 
   if (tab === 'production') return <div className="operation-module">
     {productionBoundary}
     {plantStatus}
+    {plantAgentQueue}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
@@ -5727,6 +5782,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   if (tab === 'control') return <div className="operation-module">
     {productionBoundary}
     {plantStatus}
+    {plantAgentQueue}
     <div className="control-workspace">
       <div className="split-workspace">
         <section className="core-panel production-issue-launcher">

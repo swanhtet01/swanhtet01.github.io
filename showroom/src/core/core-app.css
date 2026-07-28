@@ -634,6 +634,14 @@ textarea { min-height: 72px; resize: vertical; }
 .plant-mes-strip { grid-template-columns: repeat(6,minmax(0,1fr)); }
 .plant-mes-strip span:nth-child(n) { border-right: 1px solid var(--core-line); border-bottom: 0; }
 .plant-mes-strip span:last-child { border-right: 0; }
+.plant-agent-queue { display: grid; grid-template-columns: minmax(0,.95fr) minmax(300px,1fr) auto; align-items: center; gap: 12px; margin: 10px 0; border: 1px solid var(--core-line); border-radius: 9px; padding: 11px; background: var(--core-panel); }
+.plant-agent-queue > div:first-child { min-width: 0; display: grid; gap: 3px; }
+.plant-agent-queue h2 { margin: 0; color: var(--core-ink); font-size: 16px; line-height: 1.2; }
+.plant-agent-queue p { margin: 0; color: var(--core-muted); font-size: 11px; line-height: 1.45; }
+.plant-agent-queue > div:nth-child(2) { min-width: 0; display: grid; gap: 6px; }
+.plant-agent-queue span { min-width: 0; display: grid; gap: 2px; }
+.plant-agent-queue small { color: var(--core-quiet); font-family: var(--core-mono); font-size: 7px; text-transform: uppercase; }
+.plant-agent-queue strong { min-width: 0; color: var(--core-ink); font-size: 11px; line-height: 1.28; overflow-wrap: anywhere; }
 .activation-runbook { display: grid; gap: 10px; border: 1px solid var(--core-line); border-radius: 9px; padding: 10px; background: var(--core-panel); }
 .activation-runbook-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .activation-runbook-head > div { min-width: 0; display: grid; gap: 3px; }
@@ -1359,6 +1367,9 @@ textarea { min-height: 72px; resize: vertical; }
   .plant-mes-strip { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .plant-mes-strip span:nth-child(2n) { border-right: 0; }
   .plant-mes-strip span:nth-child(-n+4) { border-bottom: 1px solid var(--core-line); }
+  .plant-agent-queue { grid-template-columns: 1fr; }
+  .plant-agent-queue .core-button { width: 100%; }
+  .plant-agent-queue > div:nth-child(2) { border-top: 1px solid var(--core-line); padding-top: 8px; }
   .production-history > .job-list, .production-history > .issue-list { max-height: 320px; }
   .trial-control-panel { display: grid; }
   .trial-actions { justify-content: flex-start; }
