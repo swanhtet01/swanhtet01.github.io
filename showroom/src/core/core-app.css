@@ -113,6 +113,16 @@ a { color: inherit; }
 .product-home-operating-model { min-height: 76px; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; align-items: center; gap: 14px; border: 1px solid rgba(11,116,94,.22); border-radius: var(--core-radius); padding: 12px 14px; background: linear-gradient(135deg, rgba(11,116,94,.08), #fff 52%); }
 .product-home-operating-model > div { min-width: 0; display: grid; gap: 4px; }
 .product-home-operating-model strong { color: var(--core-ink); font-size: 13px; line-height: 1.35; }
+.product-home-autopilot { display: grid; gap: 13px; border: 1px solid rgba(11,116,94,.22); border-radius: var(--core-radius); padding: 15px; background: var(--core-panel); box-shadow: 0 14px 38px rgba(25,54,42,.045); }
+.product-home-autopilot-head { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 16px; align-items: center; }
+.product-home-autopilot-head h2 { margin: 4px 0; font-size: 18px; line-height: 1.15; letter-spacing: -.01em; }
+.product-home-autopilot-head p { max-width: 780px; margin: 0; color: var(--core-muted); font-size: 12px; line-height: 1.45; }
+.product-home-autopilot-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 10px; background: var(--core-panel-raised); }
+.product-home-autopilot-grid span { min-width: 0; min-height: 82px; display: grid; align-content: center; gap: 4px; border-right: 1px solid var(--core-line); padding: 10px 12px; }
+.product-home-autopilot-grid span:last-child { border-right: 0; }
+.product-home-autopilot-grid small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.product-home-autopilot-grid strong { overflow: hidden; color: var(--core-ink); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.product-home-autopilot-grid em { overflow: hidden; color: var(--core-muted); font-size: 10px; font-style: normal; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .product-track-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; }
 .product-track-card { min-width: 0; min-height: 188px; display: grid; grid-template-rows: minmax(0,1fr) auto; gap: 14px; border: 1px solid var(--core-line); border-radius: var(--core-radius); padding: 18px; background: var(--core-panel); color: var(--core-ink); box-shadow: 0 14px 38px rgba(25,54,42,.052); }
 .product-track-card:hover { border-color: rgba(11,116,94,.38); background: var(--core-green-soft); transform: translateY(-1px); }
@@ -1139,6 +1149,11 @@ textarea { min-height: 72px; resize: vertical; }
   .home-products { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .product-home-operating-model { grid-template-columns: 1fr; align-items: stretch; }
   .product-home-operating-model .core-button { width: 100%; }
+  .product-home-autopilot-head { grid-template-columns: 1fr; align-items: stretch; }
+  .product-home-autopilot-head .core-button { width: 100%; }
+  .product-home-autopilot-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .product-home-autopilot-grid span:nth-child(2n) { border-right: 0; }
+  .product-home-autopilot-grid span:nth-child(-n+2) { border-bottom: 1px solid var(--core-line); }
   .product-track-grid { grid-template-columns: 1fr; }
   .product-track-card { min-height: 172px; }
   .ecommerce-product { overflow: visible; }
@@ -1211,6 +1226,11 @@ textarea { min-height: 72px; resize: vertical; }
   .next-task-card .core-button { width: 100%; }
   .product-home-screen .page-heading { min-height: 0; }
   .product-home-operating-model strong { font-size: 12px; }
+  .product-home-autopilot { padding: 13px; }
+  .product-home-autopilot-grid { grid-template-columns: 1fr; }
+  .product-home-autopilot-grid span { min-height: 72px; border-right: 0; border-bottom: 1px solid var(--core-line); }
+  .product-home-autopilot-grid span:last-child { border-bottom: 0; }
+  .product-home-autopilot-grid span:nth-child(-n+2) { border-bottom: 1px solid var(--core-line); }
   .product-track-card { min-height: 0; padding: 16px; }
   .product-track-card h2 { font-size: 22px; }
   .home-more > summary { min-height: 58px; padding-inline: 14px; }

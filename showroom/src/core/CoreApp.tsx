@@ -1575,6 +1575,24 @@ const customerTracks = [
 ] as const
 
 export function ProductHomePage() {
+  const [setup] = useSetupWorkspace()
+  const progress = pilotProgress(setup)
+  const ready = pilotReady(setup)
+  const contract = productContracts[setup.product]
+  const template = templateFor(setup.product, setup.templateId)
+  const sourceNamed = Boolean(setup.currentRecord.trim())
+  const proofNamed = Boolean(setup.acceptanceEvidence.trim())
+  const nextHref = ready ? '/settings/' : clientSetupPath(setup.product)
+  const nextAction = ready ? 'Export evidence' : 'Finish setup'
+  const nextDetail = ready
+    ? `${contract.name} is ready for managed data review.`
+    : `${contract.name} setup is ${progress}% complete.`
+  const autopilotRows = [
+    ['Track', contract.name, template.name],
+    ['Data', sourceNamed ? 'First source named' : 'Needs first source', sourceNamed ? setup.currentRecord : 'Upload, paste, or describe one real record.'],
+    ['Proof', proofNamed ? 'Acceptance proof named' : 'Needs acceptance proof', proofNamed ? setup.acceptanceEvidence : 'Define the evidence that proves the workflow works.'],
+    ['AI context', ready ? 'Ready for managed import' : 'Locked until evidence', ready ? 'Premium can learn from approved data, roles, and audit.' : 'Free stays local until the owner approves activation.'],
+  ] as const
   return (
     <div className="workspace-screen product-home-screen">
       <PageHeading copy="Use a local workspace first. Activate managed data and AI when ready." eyebrow="Products" title="Choose a product. Run work." />
@@ -1588,6 +1606,25 @@ export function ProductHomePage() {
           <strong>Managed data, AI context, roles, audit, and writes.</strong>
         </div>
         <Link className="core-button primary" to="/settings/">Check readiness</Link>
+      </section>
+      <section className="product-home-autopilot" aria-label="AI operating plan">
+        <div className="product-home-autopilot-head">
+          <div>
+            <span className="core-eyebrow">AI operating plan</span>
+            <h2>Recommended next move</h2>
+            <p>{nextDetail} No external send, publish, payment, or production write runs from this screen.</p>
+          </div>
+          <Link className="core-button primary" to={nextHref}>{nextAction}</Link>
+        </div>
+        <div className="product-home-autopilot-grid">
+          {autopilotRows.map(([label, value, detail]) => (
+            <span key={label}>
+              <small>{label}</small>
+              <strong>{value}</strong>
+              <em>{detail}</em>
+            </span>
+          ))}
+        </div>
       </section>
       <nav aria-label="Business tracks" className="product-track-grid">
         {customerTracks.map(([name, fit, outcome, path, product]) => (
