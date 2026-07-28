@@ -14,6 +14,7 @@ import { companyOperationsStatusView, platformStatusView } from '../kernel/tools
 import { SUPERMEGA_HQ_AUTHORITY, selectCeoOutcome } from '../kernel/supermega-hq-authority.mjs'
 import {
   CEO_OUTCOME_EVALUATION_CONTRACT,
+  CEO_OUTCOME_DELIVERY_CONTRACT,
   CEO_OUTCOME_OPERATION_CONTRACT,
   COMPANY_USAGE_UNITS,
 } from '../kernel/agent-company-operations.mjs'
@@ -23,7 +24,7 @@ import {
 } from '../kernel/gateway.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyCompanyCycleText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyCompanyCycleText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -46,6 +47,8 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'kernel', 'scripts', 'verify-function-footprint.mjs'), 'utf8'),
   readFile(resolve(root, 'kernel', 'api', 'brief.mjs'), 'utf8'),
   readFile(resolve(root, 'kernel', 'api', 'operator.mjs'), 'utf8'),
+  readFile(resolve(root, 'kernel', 'alert.mjs'), 'utf8'),
+  readFile(resolve(root, 'kernel', 'agent-company-operations.mjs'), 'utf8'),
 ])
 
 const manifest = JSON.parse(manifestText)
@@ -91,6 +94,9 @@ const ceoExecutionClaimIndex = kernelBriefText.indexOf('const executionClaim =',
 const ceoOperatorRunIndex = kernelBriefText.indexOf('result = await run({', ceoClientGateIndex)
 const hqEvidenceFailureIndex = kernelOperatorText.indexOf("reason: 'hq_evidence_unavailable'")
 const operatorSynthesisIndex = kernelOperatorText.indexOf('const rawContext = results.length')
+const ceoCompletionRecordIndex = kernelBriefText.indexOf('recorded = await recordOutcome({')
+const ceoOwnerSendIndex = kernelBriefText.indexOf('const delivery = await deliverSafely(send, `SuperMega')
+const ceoDeliveryRecordIndex = kernelBriefText.indexOf('deliveryRecord = await recordDelivery({')
 const failures = []
 const requireContract = (name, condition) => { if (!condition) failures.push(name) }
 const product = (id) => portfolio.products?.find((entry) => entry.id === id)
@@ -125,6 +131,7 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.ceoOutcomeAuthority === 'supermega.ceo-outcome-authority.v1'
   && portfolio.agentOperatingModel?.ceoOutcomeOperationsContract === CEO_OUTCOME_OPERATION_CONTRACT
   && portfolio.agentOperatingModel?.ceoOutcomeEvaluationContract === CEO_OUTCOME_EVALUATION_CONTRACT
+  && portfolio.agentOperatingModel?.ceoOutcomeDeliveryContract === CEO_OUTCOME_DELIVERY_CONTRACT
   && portfolio.agentOperatingModel?.companyOperationsStatusContract === 'supermega.company-operations-status.v1'
   && portfolio.agentOperatingModel?.companyOperationsWindowDays === 30
   && portfolio.agentOperatingModel?.weeklyReadOnlyOutcomeCount === 5
@@ -141,6 +148,9 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
   && portfolio.agentOperatingModel?.unavailableRequiredEvidenceConsumesModelCalls === false
+  && portfolio.agentOperatingModel?.deliveryAttemptMetadataOnly === true
+  && portfolio.agentOperatingModel?.deliveryFailureAutomaticRetry === false
+  && portfolio.agentOperatingModel?.deliveryTransportUncertaintyExplicit === true
   && portfolio.agentOperatingModel?.completionMustBeDurableBeforeNotification === true
   && portfolio.agentOperatingModel?.explicitOwnerOutcomeAcceptance === true
   && portfolio.agentOperatingModel?.acceptedOutcomeEfficiencyUnits === COMPANY_USAGE_UNITS
@@ -208,6 +218,18 @@ requireContract('unavailable fixed HQ evidence stops before synthesis and return
   && kernelOperatorText.includes("planningMode === 'hq_authority_fixed'")
   && kernelOperatorText.includes("String(result?.data?.status || '').toLowerCase() !== 'unavailable'")
   && kernelOperatorText.includes('results: hqEvidenceMetadata(results)'))
+requireContract('CEO owner delivery is durable, metadata-only, and never unsafely retried',
+  ceoCompletionRecordIndex >= 0
+  && ceoCompletionRecordIndex < ceoOwnerSendIndex
+  && ceoOwnerSendIndex < ceoDeliveryRecordIndex
+  && kernelBriefText.includes("retryable: false")
+  && kernelBriefText.includes("delivery.status === 'uncertain' ? 'owner_delivery_uncertain'")
+  && kernelAlertText.includes("response?.ok === true")
+  && kernelAlertText.includes("status: 'uncertain'")
+  && kernelOperationsText.includes("export const CEO_OUTCOME_DELIVERY_CONTRACT = 'supermega.ceo-outcome-delivery.v1'")
+  && kernelOperationsText.includes("const CEO_OUTCOME_DELIVERY_INPUT_FIELDS = new Set(['clientId', 'operationId', 'recordHash', 'deliveryClaimId', 'status'])")
+  && kernelOperationsText.includes("CEO_DELIVERY_STATUSES = new Set(['sent', 'failed', 'uncertain'])")
+  && !kernelOperationsText.includes("CEO_OUTCOME_DELIVERY_INPUT_FIELDS = new Set(['briefText'"))
 requireContract('CEO platform evidence is exact, bounded, and secret-safe',
   ceoPlatformEvidence.contract === 'supermega.platform-status.v1'
   && ceoPlatformEvidence.status === 'ready'
@@ -327,6 +349,8 @@ requireContract('agent roster consolidation is recorded',
   && workboard.includes('adds `supermega.company-ai-budget.v1`')
   && workboard.includes('| OPS-042 | CEO + Agent Operations / Cost Security Codex | done-local |')
   && workboard.includes('failed or `unavailable` required fixed-evidence result stops the remaining plan and synthesis')
+  && workboard.includes('| OPS-043 | CEO + Agent Operations / Delivery Security Codex | done-local |')
+  && workboard.includes('adds `supermega.ceo-outcome-delivery.v1`')
   && workboard.includes('Current accepted agent-operations checkpoint: `a2e1b89`')
   && now.includes('agent operations `a2e1b89`')
   && now.includes('operations `63a245f`')
@@ -336,8 +360,8 @@ requireContract('agent roster consolidation is recorded',
   && now.includes('YTF identities cannot render in core operations')
   && now.includes('Hosted scheduling remains deliberately dormant')
   && now.includes('flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation')
-  && now.includes('Each CEO cycle selects at most one HQ-authorized outcome')
-  && now.includes('Missing/invalid client IDs, blocked/duplicate work, or unavailable required evidence stop before claims, models, or sends')
+  && now.includes('Each CEO cycle selects one outcome')
+  && now.includes('each owner-send attempt gets an output-free `sent`/`failed`/`uncertain` receipt and is never auto-retried')
   && now.includes('Storage privacy now has a six-request owner-confirmed verifier')
   && now.includes('zero-network configuration preflight')
   && now.includes('overrides fail closed and duplicate ceilings are removed'))
@@ -364,6 +388,7 @@ requireContract('agent security brief is reconciled to current controls',
   && agentSecurity.includes('Every ready weekly CEO outcome now reads `supermega.company-operations-status.v1`')
   && agentSecurity.includes('Scheduled CEO startup now follows `supermega.kernel-function-footprint.v1`')
   && agentSecurity.includes('Scheduled CEO preflight now fails before spend (`f1328a0`)')
+  && agentSecurity.includes('CEO owner delivery now follows `supermega.ceo-outcome-delivery.v1` (`cafdafe`)')
   && agentSecurity.includes('Efficiency remains unavailable unless the tenant-bound records are durable')
   && agentSecurity.includes('Hosted cleanup still requires a protected deployment')
   && agentSecurity.includes('The unlinked claimable-preview service is retired')
@@ -465,7 +490,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && workboard.includes('Checkpoints `0831ad7` and `920c13d` add an immutable reviewed BOM/routing package')
   && workboard.includes('Checkpoints `0f3dc09` and `03e1f1b` add tenant-bound')
   && workboard.includes('Retain the completed Shop, Plant, Website, and Ecommerce checkpoints')
-  && now.includes('Current checkpoints: product `7ae8c80`, CEO preflight `f1328a0`, CEO operations `909807d`, CEO performance `6bad4e7`, release `39642eb`')
+  && now.includes('Current checkpoints: product `7ae8c80`, CEO preflight `f1328a0`, delivery `cafdafe`, CEO operations `909807d`, performance `6bad4e7`, release `39642eb`')
   && now.includes('First-action QA routes Shop, Plant, and Website blockers to the next task')
   && now.includes('The active delivery focus is:')
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
