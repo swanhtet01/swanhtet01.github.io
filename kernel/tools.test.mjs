@@ -1,7 +1,7 @@
 // AI Operator tool-belt — the safety boundary: only allow-listed read-only tools run. `node --test`.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { TOOLS, availableTools, runTool } from './tools.mjs'
+import { TOOLS, availableTools, platformStatusView, runTool } from './tools.mjs'
 
 test('the tool-belt exposes NO money/send/write capability', () => {
   const names = Object.keys(TOOLS)
@@ -28,7 +28,56 @@ test('external operator connectors are exposed only as bounded read tools', () =
 test('runTool executes an allow-listed local tool', async () => {
   const r = await runTool('platform_status', {})
   assert.equal(r.ok, true)
-  assert.ok(r.data.total > 0 && 'configured' in r.data && r.data.byCategory)
+  assert.equal(r.data.contract, 'supermega.platform-status.v1')
+  assert.ok(['ready', 'attention'].includes(r.data.status))
+  assert.ok(r.data.connectors.total > 0 && r.data.connectors.configured >= 0 && r.data.connectors.byCategory)
+  assert.ok(['memory', 'postgres', 'supabase', 'unavailable'].includes(r.data.persistence.mode))
+  assert.equal(r.data.persistence.durable, r.data.persistence.ready && r.data.persistence.mode !== 'memory' && r.data.persistence.mode !== 'unavailable')
+  assert.equal(r.data.agentCompany.dynamicDelegation, false)
+  assert.equal(r.data.agentCompany.recursiveDelegation, false)
+  assert.equal(r.data.agentCompany.modelRequest, false)
+  assert.ok(r.data.agentCompany.maxAgents <= 2)
+  assert.ok(r.data.agentCompany.maxRoleBudget > 0)
+  assert.ok(r.data.ai.configuredProviders >= 0)
+  assert.ok(r.data.paymentAdapters.configured <= r.data.paymentAdapters.total)
+  assert.ok(['local', 'development', 'preview', 'production', 'unknown'].includes(r.data.release.environment))
+  assert.equal(r.data.release.immutableCommit, r.data.release.commit !== null)
+  assert.doesNotMatch(JSON.stringify(r.data), /tenant|prompt|output|providerError|reservationId|secret|token/i)
+})
+
+test('platform status is exact, metadata-only, and fails malformed readiness closed', () => {
+  const ready = platformStatusView({
+    ok: true,
+    db: { ok: true, mode: 'supabase', detail: 'postgres://must-not-escape' },
+    connectors: { total: 69, configured: 4, registrationErrors: 0, byCategory: { data: 10, ai: 4 } },
+    ai: { providers: ['provider-one', 'provider-two'], failover: true },
+    agentCompany: { plannerReady: true, maxAgents: 2, maxRoleBudget: 8 },
+    money: { first: true, second: false },
+    tenant: 'must-not-escape',
+    prompt: 'must-not-escape',
+  })
+  assert.equal(ready.status, 'ready')
+  assert.deepEqual(ready.persistence, { ready: true, mode: 'supabase', durable: true })
+  assert.deepEqual(ready.ai, { configuredProviders: 2, failoverReady: true })
+  assert.deepEqual(ready.paymentAdapters, { configured: 1, total: 2 })
+  assert.equal(ready.agentCompany.externalWrites, false)
+  assert.doesNotMatch(JSON.stringify(ready), /must-not-escape|provider-one|provider-two/i)
+
+  const malformed = platformStatusView({
+    ok: true,
+    db: { ok: true, mode: 'other' },
+    connectors: { total: -1, configured: 'many', registrationErrors: -1, byCategory: null },
+    ai: { providers: 'configured', failover: true },
+    agentCompany: { plannerReady: false, maxAgents: 175, maxRoleBudget: 'large' },
+    money: null,
+  })
+  assert.equal(malformed.status, 'attention')
+  assert.deepEqual(malformed.persistence, { ready: true, mode: 'unavailable', durable: false })
+  assert.deepEqual(malformed.connectors, { total: 0, configured: 0, registrationErrors: 0, byCategory: {} })
+  assert.deepEqual(malformed.ai, { configuredProviders: 0, failoverReady: false })
+  assert.equal(malformed.agentCompany.maxAgents, 0)
+  assert.equal(malformed.agentCompany.maxRoleBudget, 0)
+  assert.equal(malformed.agentCompany.externalWrites, null)
 })
 
 test('runTool rejects an unknown tool (no arbitrary execution)', async () => {

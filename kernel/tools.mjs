@@ -1,7 +1,6 @@
 // SUPERMEGA AI Operator — the safe tool-belt. Curated, READ-ONLY capabilities the operator agent can
 // call to gather real data toward a goal. By design this exposes NO money/send/write capability — the
 // draft→approve→act gate stays on those. Each tool: { description, input_schema, available, run }.
-import connectors from './connectors/index.mjs'
 import infraHttp from './connectors/infra-http.mjs'
 import gmail from './connectors/data-gmail.mjs'
 import store from './store.mjs'
@@ -12,17 +11,88 @@ import pipedrive from './connectors/crm-pipedrive.mjs'
 import clickup from './connectors/data-clickup.mjs'
 import telegram from './connectors/messaging-telegram.mjs'
 import { ownerEvidenceConfigured, readOwnerEvidence } from './owner-evidence.mjs'
+import { buildStatus as buildKernelStatus } from './api/status.mjs'
+import { MAX_CYCLE_AGENTS, MAX_CYCLE_ROLE_BUDGET } from './agent-company.mjs'
+
+const PLATFORM_STATUS_CONTRACT = 'supermega.platform-status.v1'
+const STORE_MODES = new Set(['memory', 'postgres', 'supabase'])
+const RELEASE_ENVIRONMENTS = new Set(['local', 'development', 'preview', 'production'])
+
+function releaseIdentity() {
+  const candidate = String(process.env.SUPERMEGA_RELEASE_COMMIT || process.env.VERCEL_GIT_COMMIT_SHA || '').trim().toLowerCase()
+  const environment = String(process.env.VERCEL_ENV || 'local').trim().toLowerCase()
+  return {
+    environment: RELEASE_ENVIRONMENTS.has(environment) ? environment : 'unknown',
+    immutableCommit: /^[0-9a-f]{40}$/.test(candidate),
+    commit: /^[0-9a-f]{40}$/.test(candidate) ? candidate : null,
+  }
+}
+
+export function platformStatusView(status) {
+  const storeMode = STORE_MODES.has(status?.db?.mode) ? status.db.mode : 'unavailable'
+  const connectorTotal = Number.isSafeInteger(status?.connectors?.total) && status.connectors.total >= 0 ? status.connectors.total : 0
+  const connectorConfigured = Number.isSafeInteger(status?.connectors?.configured)
+    && status.connectors.configured >= 0
+    && status.connectors.configured <= connectorTotal
+    ? status.connectors.configured
+    : 0
+  const registrationErrors = Number.isSafeInteger(status?.connectors?.registrationErrors) && status.connectors.registrationErrors >= 0
+    ? status.connectors.registrationErrors
+    : 0
+  const providerCount = Array.isArray(status?.ai?.providers) ? status.ai.providers.length : 0
+  const moneyValues = status?.money && typeof status.money === 'object' ? Object.values(status.money) : []
+  const maxAgents = status?.agentCompany?.maxAgents === MAX_CYCLE_AGENTS ? MAX_CYCLE_AGENTS : 0
+  const maxRoleBudget = status?.agentCompany?.maxRoleBudget === MAX_CYCLE_ROLE_BUDGET ? MAX_CYCLE_ROLE_BUDGET : 0
+  const plannerReady = status?.agentCompany?.plannerReady === true && maxAgents > 0 && maxRoleBudget > 0
+  const persistenceReady = status?.db?.ok === true
+  const connectorInventoryReady = connectorTotal > 0 && connectorConfigured <= connectorTotal
+  const runtimeReady = status?.ok === true && persistenceReady && connectorInventoryReady && registrationErrors === 0 && plannerReady
+  return {
+    contract: PLATFORM_STATUS_CONTRACT,
+    status: runtimeReady ? 'ready' : 'attention',
+    persistence: {
+      ready: persistenceReady,
+      mode: storeMode,
+      durable: persistenceReady && storeMode !== 'memory' && storeMode !== 'unavailable',
+    },
+    connectors: {
+      total: connectorTotal,
+      configured: connectorConfigured,
+      registrationErrors,
+      byCategory: status?.connectors?.byCategory && typeof status.connectors.byCategory === 'object'
+        ? { ...status.connectors.byCategory }
+        : {},
+    },
+    ai: {
+      configuredProviders: providerCount,
+      failoverReady: providerCount > 1 && status?.ai?.failover === true,
+    },
+    agentCompany: {
+      plannerReady,
+      actionMode: plannerReady ? 'draft_only' : 'unavailable',
+      maxAgents,
+      maxRoleBudget,
+      dynamicDelegation: false,
+      recursiveDelegation: false,
+      modelRequest: false,
+      externalWrites: plannerReady ? false : null,
+    },
+    paymentAdapters: {
+      configured: moneyValues.filter((value) => value === true).length,
+      total: moneyValues.length,
+    },
+    release: releaseIdentity(),
+  }
+}
 
 export const TOOLS = {
   platform_status: {
-    description: 'Get SuperMega platform health: connector counts by category, configured count, registration faults, store mode. No args.',
+    description: 'Get a secret-safe SuperMega runtime readiness snapshot: persistence, connector registration, AI/provider availability, bounded Agent Company controls, payment-adapter count, and release identity. Read-only; no model or connector calls. No args.',
     input_schema: { type: 'object', properties: {}, additionalProperties: false },
     available: () => true,
     run: async () => {
-      const list = connectors.list()
-      const byCategory = {}
-      for (const c of list) byCategory[c.category] = (byCategory[c.category] || 0) + 1
-      return { total: list.length, configured: list.filter((c) => c.configured).length, byCategory }
+      const status = await buildKernelStatus()
+      return platformStatusView(status)
     },
   },
   web_get: {

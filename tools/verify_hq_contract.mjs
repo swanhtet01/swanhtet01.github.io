@@ -6,9 +6,11 @@ import {
   COMPANY_CAPACITY_CLAIM_TTL_SECONDS,
   listCompanyAgents,
   MAX_CYCLE_AGENTS,
+  MAX_CYCLE_ROLE_BUDGET,
   MAX_REGISTERED_COMPANY_AGENTS,
   MAX_RUNNING_COMPANY_CYCLES,
 } from '../kernel/agent-company.mjs'
+import { platformStatusView } from '../kernel/tools.mjs'
 import { SUPERMEGA_HQ_AUTHORITY, selectCeoOutcome } from '../kernel/supermega-hq-authority.mjs'
 import {
   CEO_OUTCOME_EVALUATION_CONTRACT,
@@ -55,6 +57,16 @@ const workboardExecutionOrder = workboard.includes(executionOrderMarker)
 const kernelRoster = listCompanyAgents()
 const kernelCrewCapabilities = kernelRoster.flatMap((agent) => [agent.crew, ...agent.capabilityCrews])
 const ceoOutcomeSelection = selectCeoOutcome()
+const ceoPlatformEvidence = platformStatusView({
+  ok: true,
+  db: { ok: true, mode: 'supabase', detail: 'must-not-escape' },
+  connectors: { total: 69, configured: 4, registrationErrors: 0, byCategory: { data: 10 } },
+  ai: { providers: ['must-not-escape-one', 'must-not-escape-two'], failover: true },
+  agentCompany: { plannerReady: true, maxAgents: MAX_CYCLE_AGENTS, maxRoleBudget: MAX_CYCLE_ROLE_BUDGET },
+  money: { stripe: true, manual: false },
+  tenant: 'must-not-escape',
+  prompt: 'must-not-escape',
+})
 const failures = []
 const requireContract = (name, condition) => { if (!condition) failures.push(name) }
 const product = (id) => portfolio.products?.find((entry) => entry.id === id)
@@ -142,6 +154,22 @@ requireContract('CEO outcome authority is bounded and reconciled to HQ',
   && ceoOutcomeSelection.skipped?.filter((item) => item.reason === 'authority_blocked').length === 3
   && SUPERMEGA_HQ_AUTHORITY.outcomes?.find((item) => item.id === 'managed-storage-privacy-proof')?.sourceRefs
     ?.includes('https://www.instagram.com/p/Da-NXcnkz8p/?img_index=8'))
+requireContract('CEO platform evidence is exact, bounded, and secret-safe',
+  ceoPlatformEvidence.contract === 'supermega.platform-status.v1'
+  && ceoPlatformEvidence.status === 'ready'
+  && ceoPlatformEvidence.persistence?.durable === true
+  && ceoPlatformEvidence.connectors?.total === 69
+  && ceoPlatformEvidence.ai?.configuredProviders === 2
+  && ceoPlatformEvidence.ai?.failoverReady === true
+  && ceoPlatformEvidence.agentCompany?.plannerReady === true
+  && ceoPlatformEvidence.agentCompany?.actionMode === 'draft_only'
+  && ceoPlatformEvidence.agentCompany?.maxAgents === MAX_CYCLE_AGENTS
+  && ceoPlatformEvidence.agentCompany?.maxRoleBudget === MAX_CYCLE_ROLE_BUDGET
+  && ceoPlatformEvidence.agentCompany?.dynamicDelegation === false
+  && ceoPlatformEvidence.agentCompany?.recursiveDelegation === false
+  && ceoPlatformEvidence.agentCompany?.modelRequest === false
+  && ceoPlatformEvidence.agentCompany?.externalWrites === false
+  && !/must-not-escape|tenant|prompt|providerError|reservationId|secret|token/i.test(JSON.stringify(ceoPlatformEvidence)))
 requireContract('workspace consumes one capacity authority without repeating ceilings',
   agentWorkspace.resource_id === 'supermega-core-agent-workspace-v3'
   && agentWorkspace.capacity_authority === 'repository://agent_os/workforce/supermega_build_workforce.json'
