@@ -6,7 +6,7 @@ const root = resolve(import.meta.dirname, '..')
 const normalizeSourceText = (value) => value.replace(/\r\n?/g, '\n')
 const read = async (path) => normalizeSourceText(await readRawFile(resolve(root, path), 'utf8'))
 const commerceWorkspace = await import(pathToFileURL(resolve(root, 'showroom/src/core/commerce-workspace.ts')).href)
-const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance, vercelEntry, portableEntry, trialRuntime, trialStore, commerceRuntime, productionRuntime, websiteRuntime, managedTrialClient, coreApp, websiteWorkspaceHook, rolePreflight, foundationMigration, decisionMigration, websiteMigration, hardeningMigration, readCapabilityMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment, storagePrivacyVerifier] = await Promise.all([
+const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance, vercelEntry, portableEntry, trialRuntime, trialStore, commerceRuntime, productionRuntime, websiteRuntime, managedTrialClient, coreApp, settingsPage, websiteWorkspaceHook, rolePreflight, foundationMigration, decisionMigration, websiteMigration, hardeningMigration, readCapabilityMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment, storagePrivacyVerifier] = await Promise.all([
   read('supermega_runtime/runtime.py'),
   read('supermega_runtime/supabase_auth.py'),
   read('supermega_runtime/cloud_runtime.py'),
@@ -21,6 +21,7 @@ const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance
   read('supermega_runtime/website_runtime.py'),
   read('showroom/src/core/managed-trial.ts'),
   read('showroom/src/core/CoreApp.tsx'),
+  read('showroom/src/core/SettingsPage.tsx'),
   read('showroom/src/products/website/useWebsiteWorkspace.ts'),
   read('supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql'),
   read('supabase/migrations/20260722005134_private_trial_backend_foundation.sql'),
@@ -339,8 +340,8 @@ requireContract('AI order intake provider cannot use tools, store responses, red
   && /else UnavailableOrderIntakeBudget\(\)/.test(orderIntakeProvider)
   && /order_intake_provider_quota_exhausted/.test(orderIntakeProvider))
 requireContract('runtime exposes bounded health truth', /"operating_mode": "managed_trial" if not requirements else "isolated_demo"/.test(runtime) && /"browser_service_role_exposed": False/.test(runtime))
-requireContract('managed browser auth is readiness gated and cannot accept a secret key', /runtime\.status === 'enterprise' && managedTrialAuthConfigured\(\)/.test(coreApp) && /validPublishableKey/.test(managedTrialClient) && !/VITE_SUPABASE_(?:SERVICE_ROLE|SECRET)/.test(managedTrialClient))
-requireContract('managed approval evidence is never persisted in demo storage', /localApprovalsOnly/.test(coreApp) && /persist \? persist\(normalizedState\)/.test(coreApp) && /current\.filter\(\(approval\) => !approval\.managed\)/.test(coreApp))
+requireContract('managed browser auth is readiness gated and cannot accept a secret key', /runtime\.status === 'enterprise' && managedTrialAuthConfigured\(\)/.test(settingsPage) && /validPublishableKey/.test(managedTrialClient) && !/VITE_SUPABASE_(?:SERVICE_ROLE|SECRET)/.test(managedTrialClient))
+requireContract('managed approval evidence is never persisted in demo storage', /localApprovalsOnly/.test(coreApp) && /persist \? persist\(normalizedState\)/.test(coreApp) && /current\.filter\(\(approval\) => !approval\.managed\)/.test(settingsPage))
 requireContract('production CORS is bounded', /https:\/\/app\.supermega\.dev,https:\/\/supermega\.dev/.test(runtime) && !/allow_origins=\["\*"\]/.test(runtime))
 requireContract('API documentation is not public', /docs_url=None/.test(runtime) && /openapi_url=None/.test(runtime))
 requireContract('surface commands use optimistic versions', /expected_version/.test(trialRuntime) && /TrialVersionConflict/.test(trialStore))
@@ -472,7 +473,7 @@ requireContract('managed schema contract advances through additive v2, v3, v4, a
 requireContract('managed database role collision is rejected before foundation grants', /pre-existing supermega trial backend role attributes are unsafe/.test(rolePreflight) && /dependency\.refclassid = 'pg_authid'::regclass/.test(rolePreflight) && migration.indexOf('backend_role_preflight') < migration.indexOf('create schema if not exists app_private'))
 requireContract('managed database readiness validator targets exact PostgreSQL and schema contracts', /CONTRACT = "supermega_private_trial_database_v5"/.test(databaseValidator) && /EXPECTED_POSTGRES_MAJOR = 17/.test(databaseValidator) && /pg_db_role_setting/.test(databaseValidator) && /SCHEMA_VERSION = 5/.test(databaseValidator) && /complete v5 schema contract/.test(databaseValidator) && /EXPECTED_POLICY_FINGERPRINTS/.test(databaseValidator) && /security_constraints_exact/.test(databaseValidator))
 requireContract('managed clients treat capability-filtered product states as partial', /states: Partial<Record<ManagedSurface, ManagedStateRecord>>/.test(managedTrialClient) && /requireManagedSurfaceState/.test(managedTrialClient) && /trial_capability_required/.test(managedTrialClient) && /requireManagedSurfaceState\(bootstrap, 'commerce', 'Shop'\)/.test(coreApp) && /requireManagedSurfaceState\(bootstrap, 'production', 'Plant'\)/.test(coreApp))
-requireContract('managed bootstrap responses stay bound to the exact actor', /export function sameManagedIdentity/.test(managedTrialClient) && /loadManagedBootstrap\(managedIdentity\)/.test(coreApp) && /loadManagedBootstrap\(identity\)/.test(coreApp) && !/loadManagedBootstrap\(\)/.test(coreApp) && /sameManagedIdentity\(identityRef\.current, managedIdentity\)/.test(coreApp))
+requireContract('managed bootstrap responses stay bound to the exact actor', /export function sameManagedIdentity/.test(managedTrialClient) && /loadManagedBootstrap\(managedIdentity\)/.test(coreApp) && /loadManagedBootstrap\(identity\)/.test(settingsPage) && !/loadManagedBootstrap\(\)/.test(`${coreApp}\n${settingsPage}`) && /sameManagedIdentity\(identityRef\.current, managedIdentity\)/.test(coreApp))
 requireContract('Website hides browser-local records from managed roles without Website access', /error instanceof ManagedTrialError && error\.code === 'trial_capability_required'/.test(websiteWorkspaceHook) && /Browser-local Website content is hidden while this managed account is connected/.test(websiteWorkspaceHook) && /setWorkspace\(hiddenLocalWorkspace\)/.test(websiteWorkspaceHook))
 requireContract('in-memory idempotent replay is actor-bound', /stored_actor_id != actor_id/.test(trialStore) && /stored_actor_kind != actor_kind/.test(trialStore))
 requireContract('Python runtime dependencies are minimal', !/beautifulsoup|google-cloud|sentry|sqlmodel|python-dotenv/i.test(requirements))
