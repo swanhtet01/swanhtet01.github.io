@@ -2068,7 +2068,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
     return <div className="workspace-screen product-catalog-screen">
       <PageHeading eyebrow="Products" title="Choose a product" copy="Open the product for the job you need to do." actions={<Link className="core-button" to="/settings/">Set up a client</Link>} />
       <nav aria-label="SuperMega apps" className="product-launcher product-catalog">
-        <Link to="/shop/?tab=orders"><span><strong>Shop</strong><small>Orders, payments, and stock</small></span><b>Open</b></Link>
+        <Link to="/shop/?tab=counter"><span><strong>Shop</strong><small>Sell, take payment, and manage stock</small></span><b>Open</b></Link>
         <Link to="/plant/?tab=production"><span><strong>Plant</strong><small>Jobs, output, and problems</small></span><b>Open</b></Link>
         <Link to="/website/"><span><strong>Website</strong><small>Build, preview, and review a site</small></span><b>Open</b></Link>
         <Link to="/ecommerce/"><span><strong>Ecommerce</strong><small>Build a storefront from Shop</small></span><b>Open</b></Link>
@@ -2163,7 +2163,7 @@ function ShopCounter({ disabled, items, lowStockCount, onReview, openOrderCount 
     <div className="shop-counter-grid">
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
-          <div><span className="core-eyebrow">Counter open</span><h2>Tap an item to add it</h2><div className="shop-counter-summary"><span>{openOrderCount} open orders</span><span>{lowStockCount} low stock</span></div></div>
+          <div><span className="core-eyebrow">Counter open</span><h2>Tap an item to add it</h2><nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
           <label className="shop-item-search"><span className="sr-only">Find an item</span><input autoComplete="off" onChange={(event) => setQuery(event.target.value)} placeholder="Find an item" type="search" value={query} /></label>
         </header>
         {visibleItems.length ? <div className="shop-item-grid">

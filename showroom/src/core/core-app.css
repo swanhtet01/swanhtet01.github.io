@@ -1091,7 +1091,9 @@ textarea { min-height: 72px; resize: vertical; }
 .shop-catalog-head { flex: 0 0 auto; display: flex; align-items: end; justify-content: space-between; gap: 18px; padding: 1px 1px 14px; }
 .shop-catalog-head h2 { margin: 4px 0 6px; font-size: 22px; letter-spacing: -.035em; }
 .shop-counter-summary { display: flex; gap: 12px; color: var(--core-quiet); font-family: var(--core-mono); font-size: 9px; text-transform: uppercase; }
-.shop-counter-summary span + span::before { margin-right: 12px; color: var(--core-line-strong); content: "/"; }
+.shop-counter-summary a { color: inherit; text-decoration: none; text-underline-offset: 3px; }
+.shop-counter-summary a:hover, .shop-counter-summary a:focus-visible { color: var(--core-green); text-decoration: underline; }
+.shop-counter-summary a + a { border-left: 1px solid var(--core-line-strong); padding-left: 12px; }
 .shop-item-search { width: min(260px,38%); }
 .shop-item-search input { min-height: 42px; border-radius: 12px; padding-left: 13px; }
 .shop-item-grid { min-height: 0; display: grid; grid-template-columns: repeat(auto-fill,minmax(155px,1fr)); align-content: start; gap: 10px; overflow-y: auto; padding: 1px 3px 8px 1px; scrollbar-color: rgba(86,240,193,.25) transparent; }
