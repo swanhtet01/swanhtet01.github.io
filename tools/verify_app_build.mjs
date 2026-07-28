@@ -28,6 +28,7 @@ let managedClientImportRuntimeChecks = 0
 let shopInventoryRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
 let websiteReleaseRuntimeChecks = 0
+let shopOperatingFlowRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
@@ -99,6 +100,19 @@ const websiteReleaseUiSource = await readFile(resolve(root, 'showroom', 'src', '
 const managedWebsitePythonRuntime = await readFile(resolve(root, 'supermega_runtime', 'website_runtime.py'), 'utf8')
 const ecommerceBuyingUiSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceBuyingWorkspace.tsx'), 'utf8')
 const ecommerceBuyingLifecycleSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-buying-lifecycle.ts'), 'utf8')
+const shopOperatingFlowSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-operating-flow.ts'), 'utf8')
+const shopOperatingFlowUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopOperatingFlow.tsx'), 'utf8')
+
+if (!shopOperatingFlowSource.includes("export type ShopOperatingStageId = 'intake' | 'accepted' | 'fulfilment' | 'money' | 'close'")
+  || !shopOperatingFlowSource.includes('export function buildShopOperatingFlow')
+  || !shopOperatingFlowUiSource.includes('aria-label="Shop operating flow"')
+  || !shopOperatingFlowUiSource.includes('Next work')
+  || !coreSource.includes('<ShopOperatingFlow')
+  || !coreSource.includes('id="shop-order-queue"')
+  || !coreSource.includes('id="shop-order-history"')
+  || !coreSource.includes('id="shop-close-controls"')
+  || !coreCssSource.includes('.shop-flow-stages')) fail('shop_operating_flow_contract_missing')
+if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopOperatingFlowSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_operating_flow_side_effect_added')
 
 if (!websiteReleaseSource.includes("supermega.website.release_foundation.v1")
   || !websiteReleaseSource.includes('buildWebsiteReleasePackage')
@@ -8449,6 +8463,36 @@ async function verifyProductionRuntime() {
   }
 }
 
+async function verifyShopOperatingFlowRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopOperatingFlowRuntimeChecks += 1
+  }
+  const input = (patch = {}) => ({ incomingOnline: 0, incomingWebsite: 0, confirmed: 0, preparing: 0, ready: 0, paymentPending: 0, refundDue: 0, closeReady: 0, overdue: 0, ...patch })
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-operating-flow.ts')).href}?shop-operating-flow-verify=${Date.now()}`)
+    const idle = model.buildShopOperatingFlow(input())
+    assert(idle.stages.length === 5 && idle.next.id === 'new_order' && idle.next.orderMode === 'manual', 'shop_operating_flow_idle_action_wrong')
+    const intake = model.buildShopOperatingFlow(input({ incomingOnline: 2, incomingWebsite: 1, overdue: 4 }))
+    assert(intake.next.id === 'review_intake' && intake.next.orderMode === 'online' && intake.stages[0].count === 3, 'shop_operating_flow_intake_priority_wrong')
+    const overdue = model.buildShopOperatingFlow(input({ confirmed: 2, overdue: 1 }))
+    assert(overdue.next.id === 'protect_promise' && overdue.next.target === '#shop-order-queue', 'shop_operating_flow_overdue_priority_wrong')
+    const refund = model.buildShopOperatingFlow(input({ refundDue: 1, paymentPending: 1, closeReady: 2 }))
+    assert(refund.next.id === 'reconcile_money' && refund.next.target === '#shop-order-history', 'shop_operating_flow_refund_priority_wrong')
+    const fulfilment = model.buildShopOperatingFlow(input({ confirmed: 1, preparing: 2, ready: 3 }))
+    assert(fulfilment.next.id === 'move_orders' && fulfilment.stages.find((stage) => stage.id === 'fulfilment')?.count === 5, 'shop_operating_flow_fulfilment_wrong')
+    const close = model.buildShopOperatingFlow(input({ closeReady: 3 }))
+    assert(close.next.id === 'close_day' && close.next.target === '#shop-close-controls', 'shop_operating_flow_close_wrong')
+    let rejected = false
+    try { model.buildShopOperatingFlow(input({ ready: -1 })) } catch { rejected = true }
+    assert(rejected, 'shop_operating_flow_negative_count_accepted')
+    assert(shopOperatingFlowSource.includes('Number.isSafeInteger') && !shopOperatingFlowSource.includes('Date.now('), 'shop_operating_flow_not_deterministic')
+  } catch (error) {
+    fail(`shop_operating_flow_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+await verifyShopOperatingFlowRuntime()
 await verifyChannelOrderRuntime()
 await verifyShopInventoryRuntime()
 await verifyPlantOrderRuntime()
@@ -8479,4 +8523,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

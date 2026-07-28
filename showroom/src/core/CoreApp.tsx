@@ -136,6 +136,7 @@ import {
 
 const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
 const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').then((module) => ({ default: module.ShopInventoryFoundation })))
+const ShopOperatingFlow = lazy(() => import('./ShopOperatingFlow').then((module) => ({ default: module.ShopOperatingFlow })))
 const PlantOrderFoundation = lazy(() => import('./PlantOrderFoundation').then((module) => ({ default: module.PlantOrderFoundation })))
 
 type DecisionClaim = {
@@ -2896,7 +2897,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     return removed
   }
 
-  function openOrderComposer() {
+  function openOrderComposer(mode: 'manual' | 'online' = 'manual') {
     if (!commerceCanWrite) {
       setNotice('Shop changes are paused. Open Settings before adding an order.')
       return
@@ -2914,6 +2915,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     setResumedOrderDraft(null)
     setOrderDraftConflict(false)
     setOrderDraftIssue('')
+    setOrderEntryMode(mode)
     showOrderComposer()
   }
 
@@ -4244,8 +4246,21 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
 
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
-    <section className="core-panel order-queue-panel order-workspace">
-      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span>{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={openOrderComposer} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
+    <Suspense fallback={null}><ShopOperatingFlow
+      closeReady={closableOrders.length}
+      confirmed={commerce.orders.filter((order) => order.status === 'confirmed').length}
+      disabled={commerceControlsDisabled || !orderDraftInitialized || orderDraftRecoveryBlocked}
+      incomingOnline={pendingStorefrontRequests.length}
+      incomingWebsite={managedIdentity ? websiteIntakes.filter((intake) => intake.status === 'pending_confirmation').length : Number(legacyWebsiteWorkWaiting)}
+      onOpenOrder={openOrderComposer}
+      overdue={actionOrders.filter((order) => commerceOrderPromiseUrgency(order, purchaseOrderClock) === 'late').length}
+      paymentPending={commerce.orders.filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending').length}
+      preparing={commerce.orders.filter((order) => order.status === 'preparing').length}
+      ready={commerce.orders.filter((order) => order.status === 'ready').length}
+      refundDue={commerce.orders.filter((order) => order.refundStatus === 'due').length}
+    /></Suspense>
+    <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
+      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span>{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftRecoveryWarning
@@ -4381,7 +4396,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     returnDraft={returnDraft}
     returnLocationPreview={returnLocationPreview}
   />
-  <details className="core-panel today-more order-daily-controls">
+  <details className="core-panel today-more order-daily-controls" id="shop-close-controls">
     <summary><span>Close and exceptions</span><small>{paymentReview.length + lowStock.length} {paymentReview.length + lowStock.length === 1 ? 'item needs' : 'items need'} attention</small></summary>
     <div className="today-more-content">
       <div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div>
@@ -4620,7 +4635,7 @@ function ClosedOrderHistory({
   const pageCount = Math.ceil(orders.length / pageSize)
   const currentPage = Math.min(page, pageCount - 1)
   const visibleOrders = orders.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
-  return <details className="order-archive">
+  return <details className="order-archive" id="shop-order-history">
     <summary><span>Completed and cancelled orders</span><small>{orders.length} {orders.length === 1 ? 'record' : 'records'} · returns here</small></summary>
     <div className="order-archive-list">{visibleOrders.map((order) => {
       const lines = commerceOrderReturnLines(order).map((line) => {
