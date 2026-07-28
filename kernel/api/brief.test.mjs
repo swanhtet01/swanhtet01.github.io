@@ -194,6 +194,36 @@ test('a failed owner send releases its claim so a manual retry can deliver', asy
   assert.equal(attempts, 2)
 })
 
+test('an uncertain workcell send retains both claims and cannot duplicate on replay', async () => {
+  const executions = durableClaimStore('execution')
+  const deliveries = durableClaimStore('delivery')
+  let runs = 0
+  let sends = 0
+  let releases = 0
+  const options = {
+    env: { SUPERMEGA_WORKCELL_SLUG: 'cash-close' },
+    now: NOW,
+    runWorkcell: async (slug) => { runs += 1; return workcell(slug) },
+    claimWorkcellExecution: executions.claim,
+    claimWorkcellDelivery: deliveries.claim,
+    releaseWorkcellDelivery: async () => { releases += 1; return true },
+    notify: async () => { sends += 1; return { ok: false, status: 'uncertain' } },
+  }
+
+  const uncertain = await runScheduledBrief(options)
+  const duplicate = await runScheduledBrief(options)
+
+  assert.equal(uncertain.ok, false)
+  assert.equal(uncertain.results[0].reason, 'owner_delivery_uncertain')
+  assert.equal(uncertain.results[0].retryable, false)
+  assert.equal(uncertain.results[0].deliveryStatus, 'uncertain')
+  assert.equal(duplicate.ok, true)
+  assert.equal(duplicate.results[0].duplicate, true)
+  assert.equal(runs, 1)
+  assert.equal(sends, 1)
+  assert.equal(releases, 0)
+})
+
 test('failed computation releases only the execution claim for an immediate retry', async () => {
   const executions = durableClaimStore('execution')
   const deliveries = durableClaimStore('delivery')

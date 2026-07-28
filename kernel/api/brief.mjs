@@ -128,7 +128,7 @@ export async function runScheduledBrief(options = {}) {
       const delivery = await deliverSafely(send, formatWorkcellNotification(workcell))
       const sent = delivery.ok
       let retryable
-      if (!sent) {
+      if (!sent && delivery.status === 'failed') {
         const deliveryReleased = await releaseClaimSafely(releaseDelivery, deliveryClaim)
         const executionReleased = await releaseClaimSafely(releaseDelivery, executionClaim)
         retryable = deliveryReleased && executionReleased
@@ -137,8 +137,9 @@ export async function runScheduledBrief(options = {}) {
         slug,
         ok: Boolean(sent),
         sent: Boolean(sent),
-        reason: sent ? undefined : 'owner_delivery_failed',
-        retryable,
+        reason: sent ? undefined : delivery.status === 'uncertain' ? 'owner_delivery_uncertain' : 'owner_delivery_failed',
+        retryable: sent ? undefined : delivery.status === 'uncertain' ? false : retryable,
+        deliveryStatus: delivery.status,
         sources: workcell.sources,
       })
     }
