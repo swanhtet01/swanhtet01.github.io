@@ -5378,6 +5378,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['WCM', openWcmCount ? `${openWcmCount} open` : 'Closed'],
     ['Cost gate', shiftHandoffIsCurrent && materialEntries.length && !heldJobs.length && !openQualityIssues.length && !openWcmCount ? 'Review only' : 'Blocked'],
   ] as const
+  const plantCostPacketReady = Boolean(completedJobs.length && productionGoodUnits && materialEntries.length && shiftHandoffIsCurrent && !heldJobs.length && !openQualityIssues.length && !openWcmCount)
+  const plantCostPacketRows = [
+    ['Batch', completedJobs.length ? `${completedJobs.length} finished` : activeJobs.length ? 'Still running' : 'No job'],
+    ['Output', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} good` : 'No output'],
+    ['Scrap', productionScrapUnits ? `${productionScrapUnits.toLocaleString()} scrap` : 'None'],
+    ['Materials', materialEntries.length ? `${materialEntries.length} trace rows` : 'Need trace'],
+    ['Release', heldJobs.length || openQualityIssues.length ? 'Quality blocked' : shiftHandoffIsCurrent ? 'Evidence ready' : 'Need handoff'],
+    ['ERP handoff', plantCostPacketReady ? 'Review package' : 'Blocked'],
+  ] as const
   const plantQualityReleaseNext = !productionCanWrite
     ? 'Restore Plant readiness'
     : pendingAction
@@ -6097,6 +6106,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div><span className="core-eyebrow">ERP cost readiness</span><strong>{plantCostReadinessNext}</strong><small>AI checks good output, scrap, material trace, quality release, WCM closure, and shift handoff before any costing package is reviewed. No costing, accounting, inventory, payroll, invoice, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantCostReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
+  const plantCostPacket = <section aria-label="Plant ERP cost package packet" className="plant-control">
+    <div><span className="core-eyebrow">Cost package packet</span><strong>{plantCostPacketReady ? 'Ready for cost review' : plantCostReadinessNext}</strong><small>AI packages finished batch output, scrap, material trace, quality release state, WCM closure, and handoff evidence for ERP cost review. No standard cost update, inventory valuation, journal, payroll, invoice, certificate, or production write runs from this packet.</small></div>
+    <div className="plant-control-rows">{plantCostPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
   const plantQualityRelease = <section aria-label="Plant quality release" className="plant-control">
     <div><span className="core-eyebrow">ISO release</span><strong>{plantQualityReleaseNext}</strong><small>AI checks quality holds, WCM closure, material trace, shift handoff, and owner release evidence before output can be treated as ready. No quality release, certificate, equipment command, material issue, costing, inventory, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantQualityReleaseRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
@@ -6114,6 +6127,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {plantLifecycle}
     {plantMrp}
     {plantCostReadiness}
+    {plantCostPacket}
     {plantQualityRelease}
     {plantInspectionControl}
     <div className="split-workspace production-view">
@@ -6204,6 +6218,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {plantLifecycle}
     {plantMrp}
     {plantCostReadiness}
+    {plantCostPacket}
     {plantQualityRelease}
     {plantInspectionControl}
     <div className="control-workspace">
