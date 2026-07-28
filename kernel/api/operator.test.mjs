@@ -174,3 +174,38 @@ test('invalid or unavailable HQ evidence plans fail before model or tool work', 
   assert.equal(modelCalls, 0)
   assert.equal(toolCalls, 0)
 })
+
+test('failed or unavailable fixed HQ evidence stops synthesis and redacts source details', async () => {
+  let modelCalls = 0
+  let toolCalls = 0
+  const tools = () => [
+    { name: 'company_operations_status', description: 'Operations', input_schema: { type: 'object', properties: {} } },
+    { name: 'pipeline_overview', description: 'Pipeline', input_schema: { type: 'object', properties: {} } },
+  ]
+  const input = {
+    goal: 'Prepare one checked owner decision',
+    approvedPlan: [
+      { tool: 'company_operations_status', args: {} },
+      { tool: 'pipeline_overview', args: {} },
+    ],
+  }
+
+  const failed = await runOperator(input, {
+    complete: async () => { modelCalls += 1; return { text: 'unused' } },
+    runTool: async () => { toolCalls += 1; return { ok: false, error: 'private database password' } },
+    availableTools: tools,
+  })
+  const unavailable = await runOperator(input, {
+    complete: async () => { modelCalls += 1; return { text: 'unused' } },
+    runTool: async () => { toolCalls += 1; return { ok: true, data: { status: 'unavailable', secret: 'private tenant row' } } },
+    availableTools: tools,
+  })
+
+  assert.equal(failed.reason, 'hq_evidence_unavailable')
+  assert.equal(unavailable.reason, 'hq_evidence_unavailable')
+  assert.equal(modelCalls, 0)
+  assert.equal(toolCalls, 2, 'each run must stop after its first unavailable required source')
+  assert.equal(failed.usage.modelCalls, 0)
+  assert.equal(unavailable.usage.modelCalls, 0)
+  assert.doesNotMatch(JSON.stringify({ failed, unavailable }), /password|tenant row/)
+})

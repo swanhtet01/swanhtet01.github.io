@@ -223,8 +223,9 @@ test('legacy CEO brief remains available and is also duplicate-safe', async () =
   let sends = 0
   let runs = 0
   const result = await runScheduledBrief({
-    env: {},
+    env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
     now: NOW,
+    completedOutcomeIds: [],
     runOperator: async () => { runs += 1; return { ok: true, answer: 'Real numbers', results: [{ tool: 'platform_status' }] } },
     claimWorkcellExecution: async () => ({ fresh: false, durable: true }),
     claimWorkcellDelivery: async () => ({ fresh: false, durable: true }),
@@ -361,7 +362,7 @@ test('blocked or completed HQ outcomes decline before claims, models, or sends',
   let runs = 0
   let sends = 0
   const result = await runScheduledBrief({
-    env: {},
+    env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
     now: NOW,
     completedOutcomeIds: SUPERMEGA_HQ_AUTHORITY.outcomes
       .filter((outcome) => outcome.state === 'ready')
@@ -383,7 +384,7 @@ test('blocked or completed HQ outcomes decline before claims, models, or sends',
 test('durable weekly CEO state rotates departments and exposes metadata only', async () => {
   const initial = SUPERMEGA_HQ_AUTHORITY.outcomes.find((outcome) => outcome.id === 'daily-company-control')
   const authorityProbe = await runScheduledBrief({
-    env: {},
+    env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
     now: NOW,
     completedOutcomeIds: SUPERMEGA_HQ_AUTHORITY.outcomes
       .filter((outcome) => outcome.state === 'ready')
@@ -479,7 +480,7 @@ test('durable weekly CEO state rotates departments and exposes metadata only', a
 test('invalid HQ authority fails closed before claims, models, or sends', async () => {
   let work = 0
   const result = await runScheduledBrief({
-    env: {},
+    env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
     now: NOW,
     ceoAuthority: {},
     runOperator: async () => { work += 1; return { ok: true } },
@@ -489,4 +490,26 @@ test('invalid HQ authority fails closed before claims, models, or sends', async 
   assert.equal(result.ok, false)
   assert.equal(result.reason, 'ceo_outcome_authority_invalid')
   assert.equal(work, 0)
+})
+
+test('missing or invalid CEO client identity stops before state, claims, tools, models, or sends', async () => {
+  let work = 0
+  const options = {
+    now: NOW,
+    selectCeoOutcome: () => { work += 1; return { ok: false } },
+    loadCeoOutcomeCycleState: async () => { work += 1; return { ok: false } },
+    runOperator: async () => { work += 1; return { ok: true } },
+    claimWorkcellExecution: async () => { work += 1; return { fresh: true, durable: true } },
+    claimWorkcellDelivery: async () => { work += 1; return { fresh: true, durable: true } },
+    recordCeoOutcomeCompletion: async () => { work += 1; return { ok: true } },
+    notify: async () => { work += 1; return true },
+  }
+
+  const missing = await runScheduledBrief({ ...options, env: {} })
+  const invalid = await runScheduledBrief({ ...options, env: { SUPERMEGA_CLIENT_ID: 'bad client/private-token' } })
+
+  assert.equal(missing.reason, 'company_client_id_missing')
+  assert.equal(invalid.reason, 'company_client_id_invalid')
+  assert.equal(work, 0)
+  assert.doesNotMatch(JSON.stringify(invalid), /bad client|private-token/)
 })

@@ -14,6 +14,8 @@ import {
   recordCeoOutcomeCompletion,
 } from '../agent-company-operations.mjs'
 
+const COMPANY_CLIENT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/
+
 function safeEq(a, b) {
   const left = crypto.createHash('sha256').update(String(a)).digest()
   const right = crypto.createHash('sha256').update(String(b)).digest()
@@ -133,6 +135,14 @@ export async function runScheduledBrief(options = {}) {
     }
   }
 
+  const clientId = String(options.clientId ?? env.SUPERMEGA_CLIENT_ID ?? '').trim()
+  if (!clientId) {
+    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: 'company_client_id_missing' }
+  }
+  if (!COMPANY_CLIENT_ID_PATTERN.test(clientId)) {
+    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: 'company_client_id_invalid' }
+  }
+
   const select = options.selectCeoOutcome || selectCeoOutcome
   let selection = select({
     authority: options.ceoAuthority,
@@ -140,9 +150,8 @@ export async function runScheduledBrief(options = {}) {
     inFlightOutcomeIds: options.inFlightOutcomeIds,
   })
   if (!selection?.ok) return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: selection?.reason || 'ceo_outcome_authority_invalid' }
-  const clientId = String(options.clientId ?? env.SUPERMEGA_CLIENT_ID ?? '').trim()
   let cycleState = null
-  if (options.completedOutcomeIds === undefined && clientId) {
+  if (options.completedOutcomeIds === undefined) {
     const loadCycleState = options.loadCeoOutcomeCycleState || loadCeoOutcomeCycleState
     try {
       cycleState = await loadCycleState({
@@ -224,10 +233,6 @@ export async function runScheduledBrief(options = {}) {
   if (!result.ok) {
     const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
     return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: result.reason || 'brief_failed', retryable, outcome, cycle }
-  }
-  if (!clientId) {
-    const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
-    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: 'company_client_id_missing', retryable, outcome, cycle }
   }
   const recordOutcome = options.recordCeoOutcomeCompletion || recordCeoOutcomeCompletion
   let recorded

@@ -108,6 +108,20 @@ function approvedToolPlan(value, tools) {
   return steps
 }
 
+function hqEvidenceReady(result) {
+  return result?.ok === true && String(result?.data?.status || '').toLowerCase() !== 'unavailable'
+}
+
+function hqEvidenceMetadata(results) {
+  return results.map((result) => ({
+    tool: result.tool,
+    ok: result.ok === true,
+    status: typeof result?.data?.status === 'string'
+      ? result.data.status.slice(0, 40)
+      : null,
+  }))
+}
+
 export async function runOperator({ goal, approvedPlan }, options = {}) {
   const complete = options.complete || gateway.complete
   const executeTool = options.runTool || runTool
@@ -154,7 +168,18 @@ export async function runOperator({ goal, approvedPlan }, options = {}) {
     let result
     try { result = await executeTool(tool, args) }
     catch { result = { ok: false, error: 'tool_execution_failed' } }
-    results.push({ tool, args, ...result })
+    const evidence = { tool, args, ...result }
+    results.push(evidence)
+    if (planningMode === 'hq_authority_fixed' && !hqEvidenceReady(evidence)) {
+      return {
+        ok: false,
+        reason: 'hq_evidence_unavailable',
+        planningMode,
+        plan,
+        results: hqEvidenceMetadata(results),
+        usage,
+      }
+    }
   }
 
   // 3) SYNTHESIZE - provider rows are untrusted data and never enter the system prompt.
