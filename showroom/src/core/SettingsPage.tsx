@@ -232,7 +232,7 @@ export function SettingsPage() {
     contract: 'supermega.ai_context_handoff.v1',
     version: 1,
     createdAt: new Date().toISOString(),
-    evidenceVersion: 21,
+    evidenceVersion: 22,
     product: selectedProduct.name,
     productSlug: selectedProduct.slug,
     templateId: selectedTemplate.id,
@@ -256,6 +256,35 @@ export function SettingsPage() {
     ['Forbidden', 'No send/write/train', 'Customer messages, payments, publishing, production writes, and model training stay blocked.'],
     ['Activation', contextHandoffManifest.activationRequired ? 'Required' : 'Ready', contextHandoffManifest.activationRequired ? 'Managed controls must pass before premium learns from customer data.' : 'Managed evidence gates are ready for import review.'],
     ['Owner action', contextHandoffReady ? 'Export context' : 'Collect proof', contextHandoffManifest.nextAction],
+  ] as const
+  const provisioningReady = isPilotReady && localRecordCount > 0 && managedApprovalRequests.length + approvals.length > 0
+  const managedWorkspaceProvisioningPacket = {
+    contract: 'supermega.managed_workspace_provisioning.v1',
+    version: 1,
+    createdAt: new Date().toISOString(),
+    evidenceVersion: 22,
+    workspace: setup.workspace || 'Workspace not named',
+    owner: setup.owner || 'Owner not assigned',
+    product: selectedProduct.name,
+    template: selectedTemplate.name,
+    tenantMode: runtime.status === 'enterprise' ? 'managed_ready' : 'managed_required',
+    dataPackage: {
+      evidenceFilename,
+      localRecords: localRecordCount,
+      productSources: Object.keys(localProductRecords),
+      approvalPackets: managedApprovalRequests.length || approvals.length,
+      behaviorSignals: behaviorSignalCount,
+    },
+    requiredControls: ['dedicated_postgres_rls', 'trusted_identity_gateway', 'private_storage', 'audit_trail', 'owner_write_approvals', 'scheduler_budget_limits'],
+    firstSafeActivation: provisioningReady ? 'Create managed tenant from exported evidence after activation gates pass.' : 'Finish trial evidence, local records, and owner-reviewed decisions before provisioning.',
+    forbiddenUntilProvisioned: ['copy_browser_storage_to_production', 'enable_hosted_scheduler', 'send_customer_messages', 'capture_payments', 'publish_domains'],
+  }
+  const provisioningRows = [
+    ['Tenant', managedWorkspaceProvisioningPacket.tenantMode === 'managed_ready' ? 'Ready' : 'Required', runtime.requirements[0] ?? 'Managed controls must be verified before customer data import.'],
+    ['Data package', `${localRecordCount} records`, localRecordCount ? 'Exported evidence can seed a reviewed managed workspace.' : 'Import or use a product workspace before provisioning.'],
+    ['Roles', managedApprovalRequests.length + approvals.length ? `${managedApprovalRequests.length + approvals.length} reviewed` : 'Need owner review', 'Owner decisions define who can approve writes after activation.'],
+    ['Controls', runtime.writesReady && evidencePlanReady ? 'Ready' : 'Locked', 'RLS, identity, storage privacy, audit, write approvals, and scheduler budgets are required.'],
+    ['First safe step', provisioningReady ? 'Create tenant' : 'Finish proof', managedWorkspaceProvisioningPacket.firstSafeActivation],
   ] as const
   const activationManifestRows = [
     ['Next action', runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Checking managed activation.'],
@@ -285,12 +314,13 @@ export function SettingsPage() {
     targetOutcome: setup.targetOutcome,
     acceptanceEvidence: setup.acceptanceEvidence,
     evidenceFilename,
-    evidenceVersion: 21,
+    evidenceVersion: 22,
     pilotReady: isPilotReady,
     localRecords: localRecordCount,
     approvalPackets: managedApprovalRequests.length || approvals.length,
     behaviorSignals: behaviorSignalCount,
     contextHandoffManifest,
+    managedWorkspaceProvisioningPacket,
     activationManifest: runtime.activationManifest,
     schedulerActivation,
     blockedGateIds: runtime.activationManifest?.blocked_gate_ids ?? [],
@@ -322,7 +352,7 @@ export function SettingsPage() {
       ]),
     ['Coverage', `${runtime.coverageScore}%`],
   ]
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 21, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, contextHandoffManifest, contextHandoffRows }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 22, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, contextHandoffManifest, contextHandoffRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
 
   useEffect(() => {
@@ -514,6 +544,10 @@ export function SettingsPage() {
               <div aria-label="AI context handoff manifest" className="learning-plan-agent context-quality-panel">
                 <div><span className="core-eyebrow">AI context handoff</span><h3>What premium receives</h3><p>This manifest tells support and the managed agent what it may use, what it must ignore, and which actions remain forbidden.</p></div>
                 <div className="context-quality-rows">{contextHandoffRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+              </div>
+              <div aria-label="Managed workspace provisioning packet" className="learning-plan-agent context-quality-panel">
+                <div><span className="core-eyebrow">Provisioning packet</span><h3>How this becomes a real workspace</h3><p>Premium activation creates a managed tenant from exported evidence only after roles, data, controls, and write gates are verified.</p></div>
+                <div className="context-quality-rows">{provisioningRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
               </div>
               <div aria-label="Agent behavior memory" className="learning-plan-agent">
                 <div><span className="core-eyebrow">Behavior memory</span><h3>What owners keep choosing</h3><p>Free mode keeps this local. Premium can use approved queue behavior after managed import.</p></div>
