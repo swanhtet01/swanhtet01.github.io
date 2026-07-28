@@ -110,6 +110,10 @@ function storefrontDisplayName(item: StorefrontPreviewItem) {
   return item.merchandising?.displayName || item.name
 }
 
+function safeEcommerceFilename(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'store'
+}
+
 function deliveryAreaFromCustomerReference(value: string) {
   const normalized = value.replace(/\s+/g, ' ').trim()
   const separatorIndex = normalized.lastIndexOf('·')
@@ -1127,6 +1131,70 @@ export function EcommerceProduct() {
     ['Shop gate', pendingManagedRequests.length ? `${pendingManagedRequests.length} owner review` : 'No queue'],
     ['Activation', managedIdentity ? 'Managed controls' : 'Free local only'],
   ] as const
+  function downloadManagedStoreActivationPacket() {
+    const packet = {
+      schema: 'supermega.ecommerce.managed_store_activation_packet.v1',
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      product: 'ecommerce',
+      storeName,
+      stage: managedStoreActivationStage,
+      operatingMode: managedIdentity ? 'managed_trial' : 'browser_local_trial',
+      source: {
+        catalogSource: catalog.source,
+        catalogItems: catalog.items.length,
+        selectedSkus: [...selectedSkus],
+        previewDigest: digest || null,
+        managedCatalogDigest: managedCatalogDigest || null,
+        savedRevision: savedDraft?.revision ?? null,
+        savedAt: savedDraft?.savedAt ?? null,
+      },
+      readiness: Object.fromEntries(managedStoreActivationRows),
+      orderQueue: {
+        pendingShopReviews: pendingManagedRequests.length,
+        stockRisk: orderOpsStockRiskCount,
+        expiringQuotes: orderOpsExpiringCount,
+        manualPaymentReview: orderOpsPaymentRiskCount,
+        deliveryReview: deliveryReviewCount,
+        pickupReview: pickupReviewCount,
+      },
+      supportHandoff: [
+        'Confirm catalog import and selected sellable SKUs.',
+        'Confirm storefront fingerprint and saved revision.',
+        'Confirm checkout quote controls before customer use.',
+        'Confirm manual payment and delivery review rules.',
+        'Clear the Shop review queue before managed activation.',
+        'Enable managed writes only after Postgres, RLS, auth, audit, and scheduler proof passes.',
+      ],
+      forbiddenActions: [
+        'product_publish',
+        'customer_message_send',
+        'payment_capture',
+        'wallet_debit',
+        'delivery_booking',
+        'stock_move',
+        'refund_write',
+        'shop_write',
+        'managed_activation',
+      ],
+    }
+    const url = URL.createObjectURL(new Blob([`${JSON.stringify(packet, null, 2)}\n`], { type: 'application/json' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `supermega-ecommerce-activation-${safeEcommerceFilename(storeName)}.json`
+    link.hidden = true
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'ecommerce',
+      route: location.pathname + location.search,
+      detail: 'Download Ecommerce managed store activation packet',
+    })
+    setDraftNotice('Ecommerce activation packet downloaded. No product, customer, payment, delivery, stock, Shop, or managed workspace state changed.')
+  }
   const setupRows = [
     ['Catalog', sourceLabel],
     ['Products', `${selectedSkus.length}/${Math.min(catalog.items.length, 8)} selected`],
@@ -1282,6 +1350,7 @@ export function EcommerceProduct() {
           <span className="core-eyebrow">Managed store activation packet</span>
           <h2>{managedStoreActivationStage}</h2>
           <p>AI packages catalog, storefront fingerprint, checkout quote controls, manual payment review, delivery template readiness, Shop review queue, and managed gate for store activation. No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or managed activation runs from this packet.</p>
+          <button className="text-link" onClick={downloadManagedStoreActivationPacket} type="button">Download activation packet</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows ecommerce-managed-activation-rows">
           {managedStoreActivationRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
