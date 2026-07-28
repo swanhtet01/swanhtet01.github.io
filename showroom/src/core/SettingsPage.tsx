@@ -51,7 +51,10 @@ import {
   signInManagedTrial,
   signOutManagedTrial,
 } from './managed-trial'
-import { validateEcommerceManagedStoreActivationPacket } from '../products/ecommerce/ecommerce-activation-packet'
+import {
+  buildEcommerceManagedStoreActivationPacket,
+  validateEcommerceManagedStoreActivationPacket,
+} from '../products/ecommerce/ecommerce-activation-packet'
 import { LEGACY_PRODUCTION_KEYS, PRODUCTION_KEY } from './production-workspace'
 import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } from './team-work'
 
@@ -474,6 +477,58 @@ export function SettingsPage() {
     }
   }
 
+  function loadSampleEcommerceActivationPacket() {
+    const packet = buildEcommerceManagedStoreActivationPacket({
+      generatedAt: new Date().toISOString(),
+      product: 'ecommerce',
+      storeName: 'Sample Ecommerce Store',
+      stage: 'Support review sample',
+      operatingMode: 'browser_local_trial',
+      source: {
+        catalogSource: 'sample',
+        catalogItems: 2,
+        selectedSkus: ['DEMO-SKU-01', 'DEMO-SKU-02'],
+        previewDigest: null,
+        managedCatalogDigest: null,
+        savedRevision: null,
+        savedAt: null,
+      },
+      readiness: {
+        Catalog: 'Sample catalog ready',
+        Storefront: 'Sample fingerprint',
+        Checkout: 'Quote review only',
+        Payments: 'Manual review only',
+        Delivery: 'Template review only',
+        'Shop gate': 'No live queue',
+        Activation: 'Free local only',
+      },
+      orderQueue: {
+        pendingShopReviews: 0,
+        stockRisk: 0,
+        expiringQuotes: 0,
+        manualPaymentReview: 0,
+        deliveryReview: 0,
+        pickupReview: 0,
+      },
+    })
+    setEcommerceActivationPacketText(`${JSON.stringify(packet, null, 2)}\n`)
+    setEcommerceActivationPacketReview([
+      ['Status', 'Sample loaded'],
+      ['Store', packet.storeName],
+      ['Boundary', 'Review only'],
+    ])
+    setNotice('Sample Ecommerce activation packet loaded locally. Review it to test the handoff gate.')
+  }
+
+  function clearEcommerceActivationPacketReview() {
+    setEcommerceActivationPacketText('')
+    setEcommerceActivationPacketReview([
+      ['Status', 'Waiting for packet'],
+      ['Boundary', 'Review only'],
+    ])
+    setNotice('Ecommerce activation packet review cleared locally.')
+  }
+
   async function resetDemoWorkspace() {
     setResetBusy(true)
     try {
@@ -607,7 +662,7 @@ export function SettingsPage() {
                 <div><span className="core-eyebrow">Ecommerce activation packet</span><h3>Review before managed setup</h3><p>Paste the downloaded Ecommerce activation JSON. The browser validates schema, source, queue, and forbidden actions locally; no import, managed activation, Shop write, payment, delivery, stock, or customer action runs.</p></div>
                 <label className="packet-review-field">Activation packet JSON<textarea maxLength={12000} onChange={(event) => setEcommerceActivationPacketText(event.target.value)} placeholder="Paste supermega.ecommerce.managed_store_activation_packet.v1 JSON" rows={5} value={ecommerceActivationPacketText} /></label>
                 <div className="context-quality-rows">{ecommerceActivationPacketReview.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{label === 'Boundary' ? 'Review only; production setup still requires managed proof.' : 'Local packet check'}</em></span>)}</div>
-                <button className="core-button" disabled={!ecommerceActivationPacketText.trim()} onClick={reviewEcommerceActivationPacket} type="button">Review packet locally</button>
+                <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceActivationPacket} type="button">Load sample packet</button><button className="core-button" disabled={!ecommerceActivationPacketText.trim()} onClick={reviewEcommerceActivationPacket} type="button">Review packet locally</button><button className="text-link" disabled={!ecommerceActivationPacketText.trim()} onClick={clearEcommerceActivationPacketReview} type="button">Clear packet</button></div>
               </div> : null}
               <div aria-label="Agent behavior memory" className="learning-plan-agent">
                 <div><span className="core-eyebrow">Behavior memory</span><h3>What owners keep choosing</h3><p>Free mode keeps this local. Premium can use approved queue behavior after managed import.</p></div>
