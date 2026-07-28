@@ -162,7 +162,7 @@ for (const required of ['Start guided sample', 'Request managed trial', 'Export 
 for (const required of ['Import autopilot', 'Import coach', 'Next action', 'Write boundary', 'Start with a CSV or sample so SuperMega can map columns and inspect rows locally.', 'Managed check before write', 'Local/export only']) {
   if (!clientDataOnboardingChunk.includes(required)) throw new Error(`missing_live_import_coach_context:${required}`)
 }
-for (const required of ['AI order desk', 'Recommended Ecommerce agent job', 'Agent job', 'Owner gate', 'Review Ecommerce requests in Shop', 'Prepare catalog import', 'Finish storefront setup', 'Review cart quote', 'Open storefront for ordering']) {
+for (const required of ['AI order desk', 'Recommended Ecommerce agent job', 'Agent job', 'Owner gate', 'Review Ecommerce requests in Shop', 'Prepare catalog import', 'Finish storefront setup', 'Review cart quote', 'Open storefront for ordering', 'Order autopilot', 'Repair checkout recovery', 'Confirm reviewed quote', 'Shop handoff', 'Needs owner check', 'Payment', 'Not charged', 'Browser-local quote only. No stock, delivery, message, payment, or Shop record changes here.']) {
   if (!ecommerceChunk.includes(required)) throw new Error(`missing_live_ecommerce_context:${required}`)
 }
 for (const required of ['Website agent queue', 'Recommended Website agent job', 'Agent job', 'Owner gate', 'Start from business brief', 'Review unsaved site edits', 'Fix content readiness', 'Record owner approval', 'Record release snapshot', 'Prepare rollout plan']) {
