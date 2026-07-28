@@ -214,6 +214,7 @@ export function EcommerceProduct() {
     error: '',
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
+  const [customerFollowUpDraft, setCustomerFollowUpDraft] = useState('')
   const storefrontSaveRef = useRef<HTMLButtonElement>(null)
   const storefrontPreviewHeadingRef = useRef<HTMLHeadingElement>(null)
 
@@ -679,6 +680,23 @@ export function EcommerceProduct() {
     addToCart(customerPreviewItems[0].sku)
   }
 
+  function prepareCustomerFollowUpDraft() {
+    if (!pendingManagedRequests.length) {
+      if (!buyingReady) {
+        finishStorefrontSetup()
+        return
+      }
+      setCustomerFollowUpDraft('Owner draft only: the storefront is ready. Wait for a reviewed customer quote request before sending any payment, delivery, discount, or availability message.')
+      return
+    }
+    const request = customerFollowUpRequest ?? pendingManagedRequests[0]
+    const lines = commerceStorefrontRequestLines(request)
+    const itemSummary = lines.length === 1 ? lines[0].name : `${lines.length} items`
+    const expiryText = 'quote' in request ? ` Quote expires ${new Date(request.quote.expiresAt).toLocaleString()}.` : ''
+    const fulfilmentText = request.fulfilment === 'delivery' ? 'delivery, availability, and payment' : 'pickup, availability, and payment'
+    setCustomerFollowUpDraft(`Owner draft only: Hi ${request.customerReference}, your ${itemSummary} request totals ${formatMmk(request.totalMmk)}. Shop is reviewing ${fulfilmentText} before anything is confirmed.${expiryText} Reference ${request.id}.`)
+  }
+
   async function recordManagedBuyingRequest(request: EcommerceOrderRequestV2) {
     const identity = managedIdentity
     if (!identity || !globalThis.crypto?.randomUUID) throw new Error('Managed Ecommerce request identity is unavailable. Nothing was sent to Shop.')
@@ -852,6 +870,41 @@ export function EcommerceProduct() {
     ['Aged', orderOpsAgingCount ? `${orderOpsAgingCount} request` : 'Inside SLA'],
     ['Draft', buyingCart.length ? `${buyingCart.length} cart lines` : buyingReady ? 'Ready' : 'Locked'],
     ['Boundary', pendingManagedRequests.length ? 'Shop review' : 'No customer send'],
+  ] as const
+  const customerFollowUpRequest = pendingManagedRequests.find((request) => commerceStorefrontRequestLines(request).some((line) => {
+    const item = catalog.items.find((candidate) => candidate.sku === line.sku)
+    return !item || item.onHand < line.quantity
+  }))
+    ?? pendingManagedRequests.find((request) => {
+      const minutes = minutesUntil('quote' in request ? request.quote.expiresAt : undefined, orderOpsNow)
+      return minutes !== null && minutes <= 15
+    })
+    ?? pendingManagedRequests.find((request) => Date.parse(request.createdAt) <= orderOpsNow - 30 * 60 * 1000)
+    ?? pendingManagedRequests[0]
+    ?? null
+  const customerFollowUpStage = importNeeded
+    ? 'Import catalog before follow-up'
+    : !savedDraftIsCurrent
+      ? 'Save storefront before follow-up'
+      : orderOpsStockRiskCount
+        ? 'Draft availability update'
+        : orderOpsExpiringCount
+          ? 'Draft quote refresh'
+          : orderOpsPaymentRiskCount
+            ? 'Draft payment clarification'
+            : deliveryReviewCount
+              ? 'Draft delivery confirmation'
+              : pendingManagedRequests.length
+                ? 'Draft Shop review update'
+                : buyingReady
+                  ? 'Follow-up ready when orders arrive'
+                  : 'Follow-up locked'
+  const customerFollowUpRows = [
+    ['Customer', customerFollowUpRequest?.customerReference ?? 'No request yet'],
+    ['Reason', orderOpsStockRiskCount ? 'Stock check' : orderOpsExpiringCount ? 'Quote expiry' : orderOpsPaymentRiskCount ? 'Payment review' : deliveryReviewCount ? 'Delivery review' : pendingManagedRequests.length ? 'Shop review' : 'Wait for order'],
+    ['Payment', orderOpsPaymentRiskCount ? 'Manual QR' : pendingManagedRequests.length ? 'Not authorized' : 'Locked'],
+    ['Delivery', deliveryReviewCount ? `${deliveryReviewCount} review` : pickupReviewCount ? 'Pickup allowed' : 'None yet'],
+    ['Boundary', 'Draft only'],
   ] as const
   const orderingReadinessStage = importNeeded
     ? 'Import Shop catalog'
@@ -1039,6 +1092,19 @@ export function EcommerceProduct() {
         <div className="ecommerce-ops-cockpit-rows">
           {quoteRecoveryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
+      </section>
+
+      <section aria-label="Customer follow-up controls" className="ecommerce-ops-cockpit ecommerce-customer-follow-up-cockpit">
+        <div>
+          <span className="core-eyebrow">Customer follow-up</span>
+          <h2>{customerFollowUpStage}</h2>
+          <p>AI prepares the next owner-reviewed customer update from quote expiry, stock risk, payment state, delivery mode, and Shop review status. No SMS, email, Viber, WhatsApp, discount, payment, delivery, refund, stock, or Shop write runs here.</p>
+          <button className="text-link" disabled={catalogHydrating || (!pendingManagedRequests.length && !buyingReady)} onClick={prepareCustomerFollowUpDraft} type="button">Prepare follow-up draft</button>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {customerFollowUpRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+        {customerFollowUpDraft ? <p className="ecommerce-follow-up-draft" role="status">{customerFollowUpDraft}</p> : null}
       </section>
 
       <div aria-label="Ecommerce workspace" className="ecommerce-mobile-switch" role="group">

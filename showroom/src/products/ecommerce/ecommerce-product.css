@@ -177,6 +177,22 @@
   background: #f2f8fb;
 }
 
+.ecommerce-customer-follow-up-cockpit {
+  border-color: rgba(79, 70, 229, .18);
+  background: #f7f7ff;
+}
+
+.ecommerce-follow-up-draft {
+  grid-column: 1 / -1;
+  border: 1px solid rgba(79, 70, 229, .16);
+  border-radius: 9px;
+  padding: 10px 12px;
+  background: #fff;
+  color: #293044;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .ecommerce-ops-cockpit h2 {
   margin: 2px 0 4px;
   color: #17231d;
