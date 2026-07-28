@@ -1602,6 +1602,10 @@ if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.orde
   || !plantOrderSource.includes('export function releasePlantOrder')
   || !plantOrderSource.includes('export function issuePlantOrderMaterial')
   || !plantOrderSource.includes('export function recordPlantOrderOperation')
+  || !plantOrderSource.includes("PLANT_ORDER_EFFECTIVENESS_CONTRACT = 'supermega.plant.order_effectiveness.v1'")
+  || !plantOrderSource.includes('export function projectPlantOrderEffectiveness')
+  || !plantOrderSource.includes("const missingEvidence = ['Order-bound planned productive time and downtime']")
+  || !plantOrderSource.includes('oeeBasisPoints: null')
   || !plantOrderSource.includes('export function inspectPlantOrderOutput')
   || !plantOrderSource.includes('export function releasePlantOrderBatch')
   || !plantOrderSource.includes('export async function mutatePlantOrderWorkspace')
@@ -1629,6 +1633,10 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || !plantOrderUiSource.includes('availableQuantity: milliInputValue(')
   || !plantOrderUiSource.includes('Review operation progress')
   || !plantOrderUiSource.includes('Routing progress')
+  || !plantOrderUiSource.includes('Effectiveness')
+  || !plantOrderUiSource.includes('Availability · Setup required')
+  || !plantOrderUiSource.includes('OEE · Not calculated')
+  || !plantOrderUiSource.includes('Available capacity is not substituted for actual productive time.')
   || !plantOrderUiSource.includes('aria-label="Plant operating flow"')
   || !plantOrderUiSource.includes('id="plant-operating-flow"')
   || !plantOrderUiSource.includes('Next required step')
@@ -3155,6 +3163,12 @@ async function verifyPlantOrderRuntime() {
     const plannedState = result.state
     const plannedProjection = model.projectPlantOrder(plannedState)
     assert(plannedProjection.status === 'planned' && plannedProjection.materials[0].requiredQuantityMilli === 15_000 && plannedProjection.materials[1].requiredQuantityMilli === 20_000, 'plant_order_bom_projection_wrong')
+    const unstartedEffectiveness = model.projectPlantOrderEffectiveness(model.projectPlantOrder(model.createEmptyPlantOrderState()))
+    assert(unstartedEffectiveness.contract === model.PLANT_ORDER_EFFECTIVENESS_CONTRACT
+      && unstartedEffectiveness.status === 'not_started'
+      && unstartedEffectiveness.oeeBasisPoints === null
+      && unstartedEffectiveness.missingEvidence.length === 3,
+    'plant_order_unstarted_effectiveness_invented_evidence')
     const replay = model.applyPlantOrderPlan(plannedState, plan, proof(1, 'approved BOM and routing'), model.EMPTY_PLANT_ORDER_DIGEST)
     assert(replay.replayed && JSON.stringify(replay.state) === JSON.stringify(plannedState), 'plant_order_plan_retry_not_idempotent')
 
@@ -3220,8 +3234,35 @@ async function verifyPlantOrderRuntime() {
       && operationProjection.metrics.actualOperationMinutesMilli === 6_200
       && operationProjection.metrics.completedOperationCount === 0,
     'plant_order_v2_operation_projection_wrong')
+    const collectingEffectiveness = model.projectPlantOrderEffectiveness(operationProjection)
+    assert(collectingEffectiveness.status === 'collecting'
+      && collectingEffectiveness.performance?.basisPoints === 9_677
+      && collectingEffectiveness.performance?.designedMinutesMilli === 6_000
+      && collectingEffectiveness.performance?.actualMinutesMilli === 6_200
+      && collectingEffectiveness.performance?.speedLossMinutesMilli === 200
+      && collectingEffectiveness.quality === null
+      && collectingEffectiveness.oeeBasisPoints === null
+      && collectingEffectiveness.missingEvidence.join('|') === 'Order-bound planned productive time and downtime|Current output inspection',
+    'plant_order_collecting_effectiveness_not_evidence_bound')
     executionResult = model.recordPlantOrderOutput(executionResult.state, { outputId: 'OUT-V2-TRANSFER-001', outputBatchId: 'BATCH-20260726-401', quantity: 4, proof: proof(8, 'recorded routed transfer output'), expectedHeadDigest: executionResult.state.headDigest })
     assert(model.projectPlantOrder(executionResult.state).totalOutput === 4, 'plant_order_v2_routed_output_not_recorded')
+    executionResult = model.recordPlantOrderOperation(executionResult.state, { operationRunId: 'OPRUN-V2-ASSEMBLY-002', operationId: 'OP-ASSEMBLY-10', quantity: 6, actualMinutesMilli: 3_300, proof: proof(9, 'completed assembly transfer quantity'), expectedHeadDigest: executionResult.state.headDigest })
+    executionResult = model.recordPlantOrderOperation(executionResult.state, { operationRunId: 'OPRUN-V2-TEST-002', operationId: 'OP-TEST-20', quantity: 6, actualMinutesMilli: 6_000, proof: proof(10, 'completed pressure-test transfer quantity'), expectedHeadDigest: executionResult.state.headDigest })
+    executionResult = model.recordPlantOrderOutput(executionResult.state, { outputId: 'OUT-V2-TRANSFER-002', outputBatchId: 'BATCH-20260726-401', quantity: 6, proof: proof(11, 'recorded remaining routed output'), expectedHeadDigest: executionResult.state.headDigest })
+    executionResult = model.inspectPlantOrderOutput(executionResult.state, { inspectionId: 'INSP-V2-001', outputBatchId: 'BATCH-20260726-401', inspectedQuantity: 10, acceptedQuantity: 8, rejectedQuantity: 2, result: 'fail', proof: proof(12, 'inspected routed output with rejects'), expectedHeadDigest: executionResult.state.headDigest })
+    const effectiveness = model.projectPlantOrderEffectiveness(model.projectPlantOrder(executionResult.state))
+    assert(effectiveness.status === 'availability_setup_required'
+      && effectiveness.availabilityBasisPoints === null
+      && effectiveness.performance?.basisPoints === 9_677
+      && effectiveness.performance?.designedMinutesMilli === 15_000
+      && effectiveness.performance?.actualMinutesMilli === 15_500
+      && effectiveness.performance?.speedLossMinutesMilli === 500
+      && effectiveness.quality?.basisPoints === 8_000
+      && effectiveness.quality?.acceptedQuantity === 8
+      && effectiveness.quality?.rejectedQuantity === 2
+      && effectiveness.oeeBasisPoints === null
+      && effectiveness.missingEvidence.join('|') === 'Order-bound planned productive time and downtime',
+    'plant_order_effectiveness_calculated_without_exact_factor_evidence')
 
     const heldOutput = model.recordPlantOrderOutput(issuedState, { outputId: 'OUT-HOLD-001', outputBatchId: 'BATCH-20260726-401', quantity: 5, proof: proof(6, 'partial output for hold test'), expectedHeadDigest: issuedState.headDigest })
     const held = model.inspectPlantOrderOutput(heldOutput.state, { inspectionId: 'INSP-HOLD-001', outputBatchId: 'BATCH-20260726-401', inspectedQuantity: 5, acceptedQuantity: 4, rejectedQuantity: 1, result: 'fail', proof: proof(7, 'held failed batch'), expectedHeadDigest: heldOutput.state.headDigest })

@@ -2,6 +2,7 @@ export const PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.order_foundation.v1' as
 export const PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1' as const
 export const PLANT_ORDER_EXECUTION_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v2' as const
 export const PLANT_ORDER_PROJECTION_CONTRACT = 'supermega.plant.order_projection.v1' as const
+export const PLANT_ORDER_EFFECTIVENESS_CONTRACT = 'supermega.plant.order_effectiveness.v1' as const
 export const EMPTY_PLANT_ORDER_DIGEST = `sha256:${'0'.repeat(64)}`
 export const PLANT_ORDER_STORAGE_PREFIX = 'supermega.plant.order-foundation.v1:'
 export const PLANT_ORDER_ADDITIONAL_MATERIAL_MAX = 11
@@ -128,6 +129,26 @@ export type PlantOrderProjection = {
   batchRelease: ReleaseBatchCommand | null
   genealogy: Array<{ materialId: string; inputLotId: string; outputBatchId: string; issuedQuantityMilli: number; unit: PlantOrderMaterial['unit'] }>
   metrics: { targetQuantity: number; issuedMaterialCount: number; completedOperationCount: number; actualOperationMinutesMilli: number; outputQuantity: number; acceptedQuantity: number }
+}
+
+export type PlantOrderEffectivenessProjection = {
+  contract: typeof PLANT_ORDER_EFFECTIVENESS_CONTRACT
+  status: 'not_started' | 'collecting' | 'availability_setup_required'
+  availabilityBasisPoints: null
+  performance: null | {
+    basisPoints: number
+    designedMinutesMilli: number
+    actualMinutesMilli: number
+    speedLossMinutesMilli: number
+  }
+  quality: null | {
+    basisPoints: number
+    inspectedQuantity: number
+    acceptedQuantity: number
+    rejectedQuantity: number
+  }
+  oeeBasisPoints: null
+  missingEvidence: string[]
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
@@ -663,6 +684,67 @@ export function validatePlantOrderState(value: unknown): PlantOrderState {
 export function projectPlantOrder(state: unknown): PlantOrderProjection {
   const current = validatePlantOrderState(state)
   return canonicalCopy({ contract: PLANT_ORDER_PROJECTION_CONTRACT, revision: current.revision, headDigest: current.headDigest, ...replayCommands(current.commands.map((command) => command.payload)) })
+}
+
+function ratioBasisPoints(numerator: number, denominator: number) {
+  if (!Number.isSafeInteger(numerator) || numerator < 0 || !Number.isSafeInteger(denominator) || denominator < 1) return null
+  const rounded = ((BigInt(numerator) * 10_000n) + (BigInt(denominator) / 2n)) / BigInt(denominator)
+  return rounded <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(rounded) : null
+}
+
+export function projectPlantOrderEffectiveness(projection: PlantOrderProjection): PlantOrderEffectivenessProjection {
+  const missingEvidence = ['Order-bound planned productive time and downtime']
+  if (!projection.plan) return {
+    contract: PLANT_ORDER_EFFECTIVENESS_CONTRACT,
+    status: 'not_started',
+    availabilityBasisPoints: null,
+    performance: null,
+    quality: null,
+    oeeBasisPoints: null,
+    missingEvidence: [...missingEvidence, 'Reviewed routing time', 'Current output inspection'],
+  }
+
+  let designedMinutes = 0n
+  for (const operation of projection.operations) {
+    designedMinutes += BigInt(operation.completedQuantity) * BigInt(operation.minutesPerUnitMilli)
+  }
+  const designedMinutesMilli = designedMinutes <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(designedMinutes) : null
+  const performanceBasisPoints = designedMinutesMilli === null
+    ? null
+    : ratioBasisPoints(designedMinutesMilli, projection.metrics.actualOperationMinutesMilli)
+  const performance = performanceBasisPoints === null || designedMinutesMilli === null
+    ? null
+    : {
+        basisPoints: performanceBasisPoints,
+        designedMinutesMilli,
+        actualMinutesMilli: projection.metrics.actualOperationMinutesMilli,
+        speedLossMinutesMilli: Math.max(projection.metrics.actualOperationMinutesMilli - designedMinutesMilli, 0),
+      }
+  if (!performance) missingEvidence.push('Reviewed routing time')
+
+  const inspection = projection.latestInspection
+  const qualityBasisPoints = inspection && inspection.inspectedQuantity === projection.totalOutput && inspection.inspectedQuantity > 0
+    ? ratioBasisPoints(inspection.acceptedQuantity, inspection.inspectedQuantity)
+    : null
+  const quality = inspection && qualityBasisPoints !== null
+    ? {
+        basisPoints: qualityBasisPoints,
+        inspectedQuantity: inspection.inspectedQuantity,
+        acceptedQuantity: inspection.acceptedQuantity,
+        rejectedQuantity: inspection.rejectedQuantity,
+      }
+    : null
+  if (!quality) missingEvidence.push('Current output inspection')
+
+  return {
+    contract: PLANT_ORDER_EFFECTIVENESS_CONTRACT,
+    status: performance && quality ? 'availability_setup_required' : 'collecting',
+    availabilityBasisPoints: null,
+    performance,
+    quality,
+    oeeBasisPoints: null,
+    missingEvidence,
+  }
 }
 
 function appendCommand(state: unknown, payload: unknown, expectedHeadDigest: unknown) {

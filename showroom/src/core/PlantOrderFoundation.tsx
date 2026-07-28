@@ -17,6 +17,7 @@ import {
   parsePlantOrderRoutingPaste,
   plantOrderEvidenceDigest,
   projectPlantOrder,
+  projectPlantOrderEffectiveness,
   recordPlantOrderOperation,
   recordPlantOrderOutput,
   releasePlantOrder,
@@ -131,6 +132,10 @@ function formatMilli(value: number) {
   return (value / 1_000).toLocaleString(undefined, { maximumFractionDigits: 3 })
 }
 
+function formatBasisPoints(value: number) {
+  return `${(value / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
+}
+
 function milliInputValue(value: number) {
   if (!Number.isSafeInteger(value) || value < 0) throw new Error('The required quantity exceeds the supported range.')
   const whole = Math.floor(value / 1_000)
@@ -226,6 +231,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
   const setupTriggerRef = useRef<HTMLButtonElement>(null)
   const reviewDialogRef = useRef<HTMLDialogElement>(null)
   const projection = useMemo(() => projectPlantOrder(state), [state])
+  const effectiveness = useMemo(() => projectPlantOrderEffectiveness(projection), [projection])
   const pendingWarehouseIssues = useMemo(
     () => pendingProductionMaterialHandoffs(state, commerceState),
     [commerceState, state],
@@ -581,6 +587,12 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
 
       {!bindingCurrent && projection.status !== 'released_to_stock' ? <p className="form-notice warning-text" role="alert">The bound Plant job changed after this execution plan was reviewed. This chain is paused; reconcile the job snapshot before continuing.</p> : null}
       {requiresOperationEvidence ? <details className="compact-disclosure production-history"><summary>Routing progress <span>{projection.metrics.completedOperationCount}/{projection.operations.length}</span></summary><div className="issue-list">{projection.operations.map((operation) => <article key={operation.operationId}><span aria-hidden="true" className={`issue-mark ${operation.status === 'complete' ? 'resolved' : ''}`}>{operation.sequence}</span><div><strong>{operation.name}</strong><small>{operation.completedQuantity.toLocaleString()} / {projection.metrics.targetQuantity.toLocaleString()} units · {formatMilli(operation.actualMinutesMilli)} actual / {formatMilli(operation.plannedMinutesMilli)} planned minutes · {operation.status.replace('_', ' ')}</small></div></article>)}</div></details> : null}
+      {projection.plan ? <details className="compact-disclosure production-history"><summary>Effectiveness <span>{effectiveness.status === 'availability_setup_required' ? 'Setup availability' : 'Collecting'}</span></summary><div className="issue-list">
+        <article><span aria-hidden="true" className="issue-mark">A</span><div><strong>Availability · Setup required</strong><small>Bind planned productive time and downtime to this order and work centre.</small></div></article>
+        <article><span aria-hidden="true" className={`issue-mark ${effectiveness.performance ? 'resolved' : ''}`}>P</span><div><strong>Performance · {effectiveness.performance ? formatBasisPoints(effectiveness.performance.basisPoints) : 'Collecting'}</strong><small>{effectiveness.performance ? `${formatMilli(effectiveness.performance.designedMinutesMilli)} designed / ${formatMilli(effectiveness.performance.actualMinutesMilli)} actual minutes · ${formatMilli(effectiveness.performance.speedLossMinutesMilli)} speed loss` : 'Record completed routing units and actual minutes.'}</small></div></article>
+        <article><span aria-hidden="true" className={`issue-mark ${effectiveness.quality ? 'resolved' : ''}`}>Q</span><div><strong>Quality · {effectiveness.quality ? formatBasisPoints(effectiveness.quality.basisPoints) : 'Collecting'}</strong><small>{effectiveness.quality ? `${effectiveness.quality.acceptedQuantity.toLocaleString()} accepted / ${effectiveness.quality.inspectedQuantity.toLocaleString()} inspected · ${effectiveness.quality.rejectedQuantity.toLocaleString()} rejected` : 'Complete the current output inspection.'}</small></div></article>
+        <article><span aria-hidden="true" className="issue-mark">OEE</span><div><strong>OEE · Not calculated</strong><small>Availability × Performance × Quality. Available capacity is not substituted for actual productive time.</small></div></article>
+      </div></details> : null}
       {projection.genealogy.length ? <details className="compact-disclosure production-history"><summary>Batch genealogy <span>{projection.genealogy.length}</span></summary><div className="issue-list">{projection.genealogy.map((row) => <article key={row.materialId}><span aria-hidden="true" className="issue-mark resolved">LOT</span><div><strong>{row.inputLotId} → {row.outputBatchId}</strong><small>{row.materialId} · {formatMilli(row.issuedQuantityMilli)} {row.unit}</small></div></article>)}</div></details> : null}
       <p aria-live="polite" className="form-notice">{error || notice || (projection.status === 'released_to_stock' ? 'Batch release is recorded. Post Shop receipt, costing, and accounting only through their own reviewed controls.' : `${managed ? 'Managed' : 'Local'} execution evidence only. No machine command, external send, inventory posting, payment, or accounting action occurs.`)}</p>
     </section>
