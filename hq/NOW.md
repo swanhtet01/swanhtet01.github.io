@@ -38,7 +38,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Seven jobs use Agent Operations or core GitHub; exact-tenant catalogs mean YTF identities cannot render in core operations (`b46c386`).
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation (`07dd959`).
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked (`be78a02`).
-- Each CEO cycle selects at most one HQ-authorized outcome; blocked, duplicate, or invalid work stops before model or send (`cdd925a`).
+- Each CEO cycle selects at most one HQ-authorized outcome. Missing/invalid client IDs, blocked/duplicate work, or unavailable required evidence stop before claims, models, or sends (`f1328a0`).
 - Model calls reserve before provider I/O under one atomic UTC-day ceiling; failures stay charged, cache hits reserve nothing, and the hard maximum is 2,000,000 units (`a2e1b89`).
 - Ecommerce uses versioned Shop data. Managed workspaces retain exact requests in the Shop inbox; only Shop confirmation creates an order (`aed737a`).
 - All four browser-local imports activate only after review: Shop stock, Plant jobs/BOM/routing, Website content, and Ecommerce merchandising through Shop authority (`7ae8c80`).
@@ -48,19 +48,19 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, release, replay, and rollback; operation/output requires exact authenticated Shop issue evidence (`3c885d8`).
 - Home keeps Shop and Plant exceptions above collapsed HQ work. When present, a Plant issue badge links to Problems and otherwise the card opens Jobs. `/work/` stays labelled HQ; bottom navigation reads Home, HQ, and Products.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
-- CEO `platform_status` now reports one exact secret-safe readiness contract; `company_operations_status` adds 30-day work, target, workforce, usage, evaluation, and accepted-outcome evidence to all five weekly briefs. Both are output-free and grant no write/model authority; daily control no longer fetches FX (`e8a3adb`, `909807d`).
-- CEO brief startup is capped at 30 eager files/409,600 bytes; current evidence is 26/380,626. The full 69-connector audit loads only for Engineering and Finance/Risk, not Daily, Product, or Growth (`6bad4e7`).
+- CEO status and 30-day operations evidence are secret-safe, output-free, and present in all five weekly briefs; daily control no longer fetches FX (`e8a3adb`, `909807d`).
+- CEO brief startup is capped at 30 eager files/409,600 bytes; current evidence is 26/381,411. The full 69-connector audit loads only for Engineering and Finance/Risk (`6bad4e7`).
 
 ## Verified baseline
 
-- Current checkpoints: product `7ae8c80`, CEO evidence `e8a3adb`, CEO operations `909807d`, CEO performance `6bad4e7`, release `39642eb`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
+- Current checkpoints: product `7ae8c80`, CEO preflight `f1328a0`, CEO operations `909807d`, CEO performance `6bad4e7`, release `39642eb`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
 - App/local gates pass: 329 Python tests, lint/build, 54 Shop inventory/226 Commerce/265 Production checks, 70 security checks, and the complete release/database/Vercel/HQ suite.
 - PostgreSQL 17.10 rehearsal passes twice: migrations, isolation, four-product journeys, human approvals, TLS, backup/restore, and cleanup. Hosted Storage privacy remains unproven (`2930ecf`).
 - At 390 px, Shop exact-lot flow and Plant output open/close pass without overflow; Plant passes both themes with focus return. Managed count/allocation remain model verified.
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
 - Both `supermega.dev` and `app.supermega.dev` serve exact remote `main` commit `af3f45c22b13e5edccdf87214608817fc3499e4d`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Paired release identity is current at catalog `2026-07-28.1`.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-- The latest post-gate Ally audit remains serially eligible at 83.8% RAM, zero loaded models, one worker, and one frontend. No process, task, or server was stopped.
+- The post-gate Ally audit is serially eligible at 81.5% RAM after one non-terminating trim released 1,836.3 MB; zero models, one worker, and one frontend remain. No process, task, or server was stopped.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 

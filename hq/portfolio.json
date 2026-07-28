@@ -29,6 +29,8 @@
     "maxOutcomesPerCeoCycle": 1,
     "fixedReadOnlyEvidencePlan": true,
     "blockedOrDuplicateOutcomesConsumeModelCalls": false,
+    "ceoClientIdentityRequiredBeforeClaims": true,
+    "unavailableRequiredEvidenceConsumesModelCalls": false,
     "completionMustBeDurableBeforeNotification": true,
     "explicitOwnerOutcomeAcceptance": true,
     "acceptedOutcomeEfficiencyUnits": "bulk_equivalent_tokens",
