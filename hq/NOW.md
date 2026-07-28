@@ -39,7 +39,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal 
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation (`07dd959`).
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked (`be78a02`).
 - Each CEO cycle selects one outcome. Invalid identity/evidence stops before spend; owner-send uncertainty is explicit, retains claims, and is never auto-retried (`f1328a0`, `cafdafe`, `f626ee7`).
-- Model calls reserve before provider I/O under one atomic UTC-day ceiling; failures stay charged, cache hits reserve nothing, and the hard maximum is 2,000,000 units (`a2e1b89`).
+- AI attempts reserve before provider I/O under a 2,000,000-unit hard daily cap; failures stay charged and cache hits spend zero (`a2e1b89`). A shared rejection records later specialists as `not_run`; replay spends zero (`44dfba9`).
 - Ecommerce uses versioned Shop data. Managed workspaces retain exact requests in the Shop inbox; only Shop confirmation creates an order (`aed737a`).
 - All four browser-local imports activate only after review: Shop stock, Plant jobs/BOM/routing, Website content, and Ecommerce merchandising through Shop authority (`7ae8c80`).
 - Client setup is two steps with one manifest-backed smart import; exact matches collapse and exceptions open for review (`ab9a89e`).
