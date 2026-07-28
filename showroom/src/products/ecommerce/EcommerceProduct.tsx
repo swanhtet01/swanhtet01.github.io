@@ -667,6 +667,18 @@ export function EcommerceProduct() {
     })
   }
 
+  function prepareQuoteRecovery() {
+    if (pendingManagedRequests[0]) {
+      navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(pendingManagedRequests[0].id)}`)
+      return
+    }
+    if (!buyingReady || !customerPreviewItems.length) {
+      finishStorefrontSetup()
+      return
+    }
+    addToCart(customerPreviewItems[0].sku)
+  }
+
   async function recordManagedBuyingRequest(request: EcommerceOrderRequestV2) {
     const identity = managedIdentity
     if (!identity || !globalThis.crypto?.randomUUID) throw new Error('Managed Ecommerce request identity is unavailable. Nothing was sent to Shop.')
@@ -820,6 +832,26 @@ export function EcommerceProduct() {
     ['Pickup', pickupReviewCount ? `${pickupReviewCount} review` : savedDraftIsCurrent ? 'Allowed' : 'Locked'],
     ['Expiry', orderOpsExpiringCount ? `${orderOpsExpiringCount} quote` : buyingReady ? '30 min quote' : 'No quote'],
     ['Control', pendingManagedRequests.length ? 'Shop confirms' : 'No customer send'],
+  ] as const
+  const quoteRecoveryStage = importNeeded
+    ? 'Import catalog before recovery'
+    : !savedDraftIsCurrent
+      ? 'Save storefront before recovery'
+      : orderOpsExpiringCount
+        ? 'Prepare quote refresh'
+        : orderOpsAgingCount
+          ? 'Recover aged request'
+          : pendingManagedRequests.length
+            ? 'Open Shop recovery'
+            : buyingCart.length
+              ? 'Review recovery quote'
+              : 'Prepare recovery cart'
+  const quoteRecoveryRows = [
+    ['Queue', pendingManagedRequests.length ? `${pendingManagedRequests.length} request` : 'No managed queue'],
+    ['Expiring', orderOpsExpiringCount ? `${orderOpsExpiringCount} quote` : 'Clear'],
+    ['Aged', orderOpsAgingCount ? `${orderOpsAgingCount} request` : 'Inside SLA'],
+    ['Draft', buyingCart.length ? `${buyingCart.length} cart lines` : buyingReady ? 'Ready' : 'Locked'],
+    ['Boundary', pendingManagedRequests.length ? 'Shop review' : 'No customer send'],
   ] as const
   const orderingReadinessStage = importNeeded
     ? 'Import Shop catalog'
@@ -994,6 +1026,18 @@ export function EcommerceProduct() {
         </div>
         <div className="ecommerce-ops-cockpit-rows">
           {paymentDeliveryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+      </section>
+
+      <section aria-label="Quote recovery controls" className="ecommerce-ops-cockpit ecommerce-quote-recovery-cockpit">
+        <div>
+          <span className="core-eyebrow">Quote recovery</span>
+          <h2>{quoteRecoveryStage}</h2>
+          <p>AI prepares stale quote review, aged request recovery, and a safe cart draft from the same Shop-controlled source. No customer message, discount, payment, delivery, refund, stock, or Shop write runs here.</p>
+          <button className="text-link" disabled={catalogHydrating || (!pendingManagedRequests.length && !buyingReady)} onClick={prepareQuoteRecovery} type="button">Prepare quote recovery</button>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {quoteRecoveryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
       </section>
 
