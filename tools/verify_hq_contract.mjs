@@ -124,6 +124,11 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.allWeeklyOutcomesObserveCompanyOperations === true
   && portfolio.agentOperatingModel?.dailyCompanyControlUsesFx === false
   && portfolio.agentOperatingModel?.companyOperationsRawEvidenceReturned === false
+  && portfolio.agentOperatingModel?.scheduledFunctionFootprintContract === 'supermega.kernel-function-footprint.v1'
+  && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerFiles === 30
+  && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerBytes === 409600
+  && portfolio.agentOperatingModel?.fullPlatformStatusTeams?.join(',') === 'engineering,finance-risk'
+  && portfolio.agentOperatingModel?.connectorFleetDeferredForDailyProductGrowth === true
   && portfolio.agentOperatingModel?.maxOutcomesPerCeoCycle === 1
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
@@ -332,6 +337,7 @@ requireContract('agent security brief is reconciled to current controls',
   && agentSecurity.includes('Daily AI-budget telemetry is already implemented')
   && agentSecurity.includes('CEO platform-status reads now follow `supermega.platform-status.v1`')
   && agentSecurity.includes('Every ready weekly CEO outcome now reads `supermega.company-operations-status.v1`')
+  && agentSecurity.includes('Scheduled CEO startup now follows `supermega.kernel-function-footprint.v1`')
   && agentSecurity.includes('Efficiency remains unavailable unless the tenant-bound records are durable')
   && agentSecurity.includes('Hosted cleanup still requires a protected deployment')
   && agentSecurity.includes('The unlinked claimable-preview service is retired')
@@ -433,7 +439,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && workboard.includes('Checkpoints `0831ad7` and `920c13d` add an immutable reviewed BOM/routing package')
   && workboard.includes('Checkpoints `0f3dc09` and `03e1f1b` add tenant-bound')
   && workboard.includes('Retain the completed Shop, Plant, Website, and Ecommerce checkpoints')
-  && now.includes('Current checkpoints: product `7ae8c80`, CEO evidence `e8a3adb`, CEO operations `909807d`, release `39642eb`')
+  && now.includes('Current checkpoints: product `7ae8c80`, CEO evidence `e8a3adb`, CEO operations `909807d`, CEO performance `6bad4e7`, release `39642eb`')
   && now.includes('First-action QA routes Shop, Plant, and Website blockers to the next task')
   && now.includes('The active delivery focus is:')
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
@@ -723,7 +729,11 @@ requireContract('scheduled CEO function keeps the full connector fleet deferred 
   && kernelFootprintVerifier.includes("fullStatusNotEager: !relativeFiles.includes('api/status.mjs')")
   && kernelFootprintVerifier.includes("connectorFleetNotEager: !relativeFiles.includes('connectors/index.mjs')")
   && kernelFootprintVerifier.includes("statusImportIsDeferred: toolsSource.includes(\"await import('./api/status.mjs')\")")
-  && kernelFootprintVerifier.includes('connectorInventoryComplete: connectorImports === EXPECTED_CONNECTORS'))
+  && kernelFootprintVerifier.includes('connectorInventoryComplete: connectorImports === EXPECTED_CONNECTORS')
+  && workboard.includes('| OPS-041 | CEO + Agent Operations / Vercel Efficiency Codex | done-local |')
+  && workboard.includes('Checkpoint `6bad4e7` defers full status from the operator tool import')
+  && now.includes('CEO brief startup is capped at 30 eager files/409,600 bytes')
+  && now.includes('full 69-connector audit loads only for Engineering and Finance/Risk'))
 
 for (const forbidden of ['Yangon Tyre', 'ytf.supermega.dev', 'pos.supermega.dev', 'twelve product']) {
   requireContract(`retired HQ context absent: ${forbidden}`,
