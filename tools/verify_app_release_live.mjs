@@ -118,6 +118,9 @@ const settingsChunk = (await get(`/${settingsChunkPath}`)).body
 const ecommerceChunkPath = /assets\/EcommerceProduct-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!ecommerceChunkPath) throw new Error('ecommerce_chunk_missing')
 const ecommerceChunk = (await get(`/${ecommerceChunkPath}`)).body
+const websiteChunkPath = /assets\/WebsiteProduct-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
+if (!websiteChunkPath) throw new Error('website_chunk_missing')
+const websiteChunk = (await get(`/${websiteChunkPath}`)).body
 const activationRunbookChunkPath = /assets\/ManagedActivationRunbook-[A-Za-z0-9_-]+\.js/.exec(settingsChunk)?.[0]
 if (!activationRunbookChunkPath) throw new Error('managed_activation_runbook_chunk_missing')
 const activationRunbookChunk = (await get(`/${activationRunbookChunkPath}`)).body
@@ -135,6 +138,9 @@ for (const required of ['Start guided sample', 'Request managed trial', 'Export 
 }
 for (const required of ['AI order desk', 'Recommended Ecommerce agent job', 'Agent job', 'Owner gate', 'Review Ecommerce requests in Shop', 'Prepare catalog import', 'Finish storefront setup', 'Review cart quote', 'Open storefront for ordering']) {
   if (!ecommerceChunk.includes(required)) throw new Error(`missing_live_ecommerce_context:${required}`)
+}
+for (const required of ['Website agent queue', 'Recommended Website agent job', 'Agent job', 'Owner gate', 'Start from business brief', 'Review unsaved site edits', 'Fix content readiness', 'Record owner approval', 'Record release snapshot', 'Prepare rollout plan']) {
+  if (!websiteChunk.includes(required)) throw new Error(`missing_live_website_context:${required}`)
 }
 for (const required of ['Managed activation evidence plan', 'Evidence to go live', 'proof gates ready']) {
   if (!activationRunbookChunk.includes(required)) throw new Error(`missing_live_activation_runbook_context:${required}`)

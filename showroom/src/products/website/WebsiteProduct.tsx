@@ -735,6 +735,92 @@ export function WebsiteProduct() {
     }
   }
 
+  const failingContentChecks = checks.filter((check) => !check.id.startsWith('evidence-') && !check.passed)
+  const websiteAgentJob = storageIssue || canRepairLocalStorage
+    ? 'Recover Website workspace'
+    : starterSetupActive
+      ? 'Complete business brief'
+      : starterAvailable
+        ? 'Start from business brief'
+        : hasUnsavedChanges
+          ? 'Review unsaved site edits'
+          : failingContentChecks.length
+            ? 'Fix content readiness'
+            : !approvalIsCurrent
+              ? 'Record owner approval'
+              : !publishIsCurrent
+                ? 'Record release snapshot'
+                : storageMode === 'managed'
+                  ? 'Prepare rollout plan'
+                  : 'Download site handoff'
+  const websiteAgentReason = storageIssue || canRepairLocalStorage
+    ? 'Saving or recovery needs attention before Website work can be trusted.'
+    : starterSetupActive
+      ? 'A short business brief can replace the sample with client-specific pages before anything is saved.'
+      : starterAvailable
+        ? 'The sample is still untouched, so the fastest path is to generate a client-specific draft.'
+        : hasUnsavedChanges
+          ? 'The preview has edits that must be saved or discarded before approval or release review.'
+          : failingContentChecks.length
+            ? `${failingContentChecks.length} readiness check${failingContentChecks.length === 1 ? '' : 's'} must pass before owner approval.`
+            : !approvalIsCurrent
+              ? 'The current Website revision needs named owner review before a release snapshot is recorded.'
+              : !publishIsCurrent
+                ? 'The approved revision needs an immutable static site package for handoff.'
+                : storageMode === 'managed'
+                  ? 'The managed release can prepare a rollout plan, but provider deployment still requires owner execution.'
+                  : 'The approved static site package is ready to download; no domain or deployment changes happen here.'
+  const websiteOwnerGate = storageIssue || canRepairLocalStorage
+    ? 'Owner exports backup or confirms repair before continuing.'
+    : starterSetupActive
+      ? 'Owner reviews the generated pages before saving.'
+      : starterAvailable
+        ? 'Owner chooses to reuse the sample or enter a real business brief.'
+        : hasUnsavedChanges
+          ? 'Owner saves or discards the preview.'
+          : failingContentChecks.length
+            ? 'Owner fixes content, navigation, proof, and CTA readiness.'
+            : !approvalIsCurrent
+              ? 'Owner records approval with evidence.'
+              : !publishIsCurrent
+                ? 'Owner records the release snapshot.'
+                : storageMode === 'managed'
+                  ? 'Owner approves release manager and reviewer before deployment planning.'
+                  : 'Owner downloads the package and decides where it goes live.'
+  const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
+    ? 'Open recovery'
+    : starterSetupActive || starterAvailable
+      ? 'Open brief'
+      : hasUnsavedChanges || failingContentChecks.length
+        ? 'Open editor'
+        : !approvalIsCurrent || !publishIsCurrent || storageMode === 'managed'
+          ? 'Open release'
+          : 'Get website'
+  const websiteAgentRows = [
+    ['Agent job', websiteAgentJob],
+    ['Reason', websiteAgentReason],
+    ['Owner gate', websiteOwnerGate],
+  ]
+  function runWebsiteAgentJob() {
+    if (storageIssue || canRepairLocalStorage) {
+      requestRecoveryFocus()
+      return
+    }
+    if (starterAvailable || starterSetupActive) {
+      openStarterSetup()
+      return
+    }
+    if (hasUnsavedChanges || failingContentChecks.length) {
+      openContentSurface('work')
+      return
+    }
+    if (!approvalIsCurrent || !publishIsCurrent || storageMode === 'managed') {
+      openWorkspaceView('publish')
+      return
+    }
+    downloadTrialSite()
+  }
+
   return (
     <div className="website-product">
       <div className="website-shell">
@@ -925,6 +1011,16 @@ export function WebsiteProduct() {
               <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
             ) : null}
           </header>
+
+          <section aria-label="Recommended Website agent job" className="website-agent-queue">
+            <div>
+              <span>Website agent queue</span>
+              <h2>{websiteAgentJob}</h2>
+              <p>AI prepares the next Website move. Owners approve every content, release, domain, and deployment step.</p>
+            </div>
+            <div>{websiteAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+            <button className="website-button is-primary is-compact" onClick={runWebsiteAgentJob} type="button">{websiteAgentActionLabel}</button>
+          </section>
 
           <div
             aria-label={view === 'content' ? 'Edit' : 'Publish'}
