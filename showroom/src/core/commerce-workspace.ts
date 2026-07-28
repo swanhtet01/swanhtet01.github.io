@@ -17,7 +17,7 @@ export const COMMERCE_WORKSPACE_SCHEMA = 'supermega.commerce.workspace.v2' as co
 export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as const
 export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calculation.v1' as const
 export const COMMERCE_ORDER_CALCULATION_V2_SCHEMA = 'supermega.commerce.order-calculation.v2' as const
-export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v2' as const
+export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v3' as const
 export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v2' as const
 const COMMERCE_STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
 export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
@@ -66,6 +66,8 @@ export type CommerceOrderCalculationV2 = {
   catalogRevision: number
   taxConfigurationRevision: number
   taxCode: string
+  taxJurisdictionCode?: string
+  taxEffectiveFrom?: string
   taxRateBasisPoints: number
   taxMode: CommerceTaxMode
   listedSubtotalMmk: number
@@ -82,6 +84,8 @@ export type CommerceTaxConfiguration = {
   label: string
   rateBasisPoints: number
   mode: CommerceTaxMode
+  jurisdictionCode?: string
+  effectiveFrom?: string
   proof: CommerceActionProof
 }
 
@@ -90,6 +94,8 @@ export type CommerceTaxConfigurationInput = {
   label: string
   rateBasisPoints: number
   mode: CommerceTaxMode
+  jurisdictionCode: string
+  effectiveFrom: string
 }
 
 export type CommerceAccountRole = 'payment_clearing' | 'sales_revenue' | 'sales_revenue_unverified' | 'tax_payable'
@@ -124,6 +130,8 @@ export type CommerceCorrectionCalculation = {
   currency: 'MMK'
   taxConfigurationRevision: number | null
   taxCode: string | null
+  taxJurisdictionCode?: string | null
+  taxEffectiveFrom?: string | null
   taxRateBasisPoints: number | null
   taxMode: 'not_configured' | CommerceTaxMode
   listedAmountMmk: number
@@ -285,6 +293,8 @@ export type CommerceDailyCloseExportOrder = {
   catalogRevision: number | null
   taxConfigurationRevision: number | null
   taxCode: string | null
+  taxJurisdictionCode: string | null
+  taxEffectiveFrom: string | null
   taxRateBasisPoints: number | null
   listedSubtotalMmk: number | null
   subtotalMmk: number | null
@@ -695,6 +705,7 @@ const closeActionIdPattern = /^ACT-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0
 const businessDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const purchaseOrderIdPattern = /^PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const taxCodePattern = /^[A-Z0-9][A-Z0-9_-]{0,11}$/
+const taxJurisdictionCodePattern = /^[A-Z0-9][A-Z0-9_-]{1,15}$/
 const externalAccountCodePattern = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,39}$/
 export const commerceAccountRoles: CommerceAccountRole[] = ['payment_clearing', 'sales_revenue', 'sales_revenue_unverified', 'tax_payable']
 const isoTimestampPattern = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
@@ -1403,10 +1414,15 @@ export function validateCommerceState(value: unknown): CommerceState {
 
   let newerTaxConfiguration: CommerceTaxConfiguration | null = null
   for (const [index, candidate] of taxConfigurations.entries()) {
-    if (!isRecord(candidate) || !hasExactKeys(
+    const legacyShape = isRecord(candidate) && hasExactKeys(
       candidate,
       ['revision', 'code', 'label', 'rateBasisPoints', 'mode', 'proof'],
-    )) throw new Error(`taxConfigurations[${index}] is invalid.`)
+    )
+    const scheduledShape = isRecord(candidate) && hasExactKeys(
+      candidate,
+      ['revision', 'code', 'label', 'rateBasisPoints', 'mode', 'jurisdictionCode', 'effectiveFrom', 'proof'],
+    )
+    if (!legacyShape && !scheduledShape) throw new Error(`taxConfigurations[${index}] is invalid.`)
     assertSafeInteger(candidate.revision, `taxConfigurations[${index}].revision`, 1)
     if (candidate.revision !== taxConfigurations.length - index) {
       throw new Error(`taxConfigurations[${index}].revision breaks the newest-first sequence.`)
@@ -1423,12 +1439,25 @@ export function validateCommerceState(value: unknown): CommerceState {
       throw new Error(`taxConfigurations[${index}].proof is invalid.`)
     }
     const configuration = candidate as unknown as CommerceTaxConfiguration
+    if (scheduledShape) {
+      const jurisdictionCode = canonicalText(configuration.jurisdictionCode, `taxConfigurations[${index}].jurisdictionCode`, 16)
+      if (!taxJurisdictionCodePattern.test(jurisdictionCode)) throw new Error(`taxConfigurations[${index}].jurisdictionCode is invalid.`)
+      if (!validTimestamp(configuration.effectiveFrom)
+        || (timestampMicros(configuration.effectiveFrom) as bigint) < (timestampMicros(configuration.proof.capturedAt) as bigint)) {
+        throw new Error(`taxConfigurations[${index}].effectiveFrom must be at or after its review proof.`)
+      }
+    }
     for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
       canonicalText(configuration.proof[field], `taxConfigurations[${index}].proof.${field}`, field === 'actionId' ? 160 : 180)
     }
     if (newerTaxConfiguration
       && (timestampMicros(newerTaxConfiguration.proof.capturedAt) as bigint) < (timestampMicros(configuration.proof.capturedAt) as bigint)) {
       throw new Error(`taxConfigurations[${index}] breaks the newest-first chronology.`)
+    }
+    if (newerTaxConfiguration
+      && (timestampMicros(newerTaxConfiguration.effectiveFrom ?? newerTaxConfiguration.proof.capturedAt) as bigint)
+        < (timestampMicros(configuration.effectiveFrom ?? configuration.proof.capturedAt) as bigint)) {
+      throw new Error(`taxConfigurations[${index}] breaks the newest-first effective schedule.`)
     }
     newerTaxConfiguration = configuration
     taxConfigurationActionIds.push(configuration.proof.actionId)
@@ -1632,21 +1661,23 @@ export function validateCommerceState(value: unknown): CommerceState {
       const calculation = candidate.calculation
       const v1 = calculation.schema === COMMERCE_ORDER_CALCULATION_SCHEMA
       const v2 = calculation.schema === COMMERCE_ORDER_CALCULATION_V2_SCHEMA
+      const v2BaseFields = [
+        'schema',
+        'currency',
+        'catalogRevision',
+        'taxConfigurationRevision',
+        'taxCode',
+        'taxRateBasisPoints',
+        'taxMode',
+        'listedSubtotalMmk',
+        'subtotalMmk',
+        'taxMmk',
+        'totalMmk',
+      ]
       const validShape = v1
         ? hasExactKeys(calculation, ['schema', 'currency', 'catalogRevision', 'subtotalMmk', 'taxMode', 'taxMmk', 'totalMmk'])
-        : v2 && hasExactKeys(calculation, [
-          'schema',
-          'currency',
-          'catalogRevision',
-          'taxConfigurationRevision',
-          'taxCode',
-          'taxRateBasisPoints',
-          'taxMode',
-          'listedSubtotalMmk',
-          'subtotalMmk',
-          'taxMmk',
-          'totalMmk',
-        ])
+        : v2 && (hasExactKeys(calculation, v2BaseFields)
+          || hasExactKeys(calculation, [...v2BaseFields, 'taxJurisdictionCode', 'taxEffectiveFrom']))
       if (!validShape) throw new Error(`orders[${index}].calculation is invalid.`)
       assertSafeInteger(calculation.catalogRevision, `orders[${index}].calculation.catalogRevision`)
       assertSafeInteger(calculation.subtotalMmk, `orders[${index}].calculation.subtotalMmk`, v1 ? 1 : 0)
@@ -1673,7 +1704,10 @@ export function validateCommerceState(value: unknown): CommerceState {
         if (!configuration
           || !expected
           || (timestampMicros(configuration.proof.capturedAt) as bigint) > (timestampMicros(candidate.createdAt) as bigint)
+          || (timestampMicros(configuration.effectiveFrom ?? configuration.proof.capturedAt) as bigint) > (timestampMicros(candidate.createdAt) as bigint)
           || calculation.taxCode !== expected.taxCode
+          || calculation.taxJurisdictionCode !== expected.taxJurisdictionCode
+          || calculation.taxEffectiveFrom !== expected.taxEffectiveFrom
           || calculation.taxRateBasisPoints !== expected.taxRateBasisPoints
           || calculation.taxMode !== expected.taxMode
           || calculation.listedSubtotalMmk !== expected.listedSubtotalMmk
@@ -2091,7 +2125,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       if (memberOrders.some((order) => order.status !== 'completed' || order.paymentStatus !== 'reconciled')
         || memberAdjustedTotals.some((total) => total === null)
         || candidate.orders !== orderIdsForClose.length
-        || candidate.total !== memberAdjustedTotals.reduce((sum, total) => sum + (total ?? 0), 0)) {
+        || candidate.total !== memberAdjustedTotals.reduce<number>((sum, total) => sum + (total ?? 0), 0)) {
         throw new Error(`closes[${index}] totals must match its completed, reconciled order membership.`)
       }
       if (!closeIdPattern.test(String(candidate.id))) throw new Error(`closes[${index}].id must be a full close UUID.`)
@@ -2581,6 +2615,8 @@ function sameTaxConfiguration(left: CommerceTaxConfiguration, right: CommerceTax
     && left.label === right.label
     && left.rateBasisPoints === right.rateBasisPoints
     && left.mode === right.mode
+    && left.jurisdictionCode === right.jurisdictionCode
+    && left.effectiveFrom === right.effectiveFrom
     && sameActionProof(left.proof, right.proof)
 }
 
@@ -2618,6 +2654,15 @@ export function commerceCurrentTaxConfiguration(state: CommerceState) {
   return commerceTaxConfigurations(state)[0] ?? null
 }
 
+export function commerceEffectiveTaxConfiguration(state: CommerceState, atTime: string) {
+  const atMicros = timestampMicros(atTime)
+  if (atMicros === null) return null
+  return commerceTaxConfigurations(state).find((configuration) => {
+    const effectiveMicros = timestampMicros(configuration.effectiveFrom ?? configuration.proof.capturedAt)
+    return effectiveMicros !== null && effectiveMicros <= atMicros
+  }) ?? null
+}
+
 export function commerceAccountMappingConfigurations(state: CommerceState) {
   return state.accountMappingConfigurations ?? []
 }
@@ -2650,6 +2695,10 @@ function configuredOrderCalculation(
     catalogRevision,
     taxConfigurationRevision: configuration.revision,
     taxCode: configuration.code,
+    ...(configuration.jurisdictionCode && configuration.effectiveFrom ? {
+      taxJurisdictionCode: configuration.jurisdictionCode,
+      taxEffectiveFrom: configuration.effectiveFrom,
+    } : {}),
     taxRateBasisPoints: configuration.rateBasisPoints,
     taxMode: configuration.mode,
     listedSubtotalMmk,
@@ -2662,9 +2711,12 @@ function configuredOrderCalculation(
 export function commerceOrderCalculation(
   state: CommerceState,
   listedSubtotalMmk: number,
+  atTime?: string,
 ): CommerceOrderCalculation | null {
   if (!Number.isSafeInteger(listedSubtotalMmk) || listedSubtotalMmk < 1) return null
-  const configuration = commerceCurrentTaxConfiguration(state)
+  const configuration = atTime
+    ? commerceEffectiveTaxConfiguration(state, atTime)
+    : commerceCurrentTaxConfiguration(state)
   if (configuration) return configuredOrderCalculation(configuration, listedSubtotalMmk, commerceCatalogChanges(state).length)
   return {
     schema: COMMERCE_ORDER_CALCULATION_SCHEMA,
@@ -2710,6 +2762,10 @@ export function commerceCorrectionCalculation(
     label: order.calculation.taxCode,
     rateBasisPoints: order.calculation.taxRateBasisPoints,
     mode: order.calculation.taxMode,
+    ...(order.calculation.taxJurisdictionCode && order.calculation.taxEffectiveFrom ? {
+      jurisdictionCode: order.calculation.taxJurisdictionCode,
+      effectiveFrom: order.calculation.taxEffectiveFrom,
+    } : {}),
     proof: order.completion ?? {
       actionId: 'calculation-only',
       capturedAt: order.createdAt,
@@ -2722,6 +2778,10 @@ export function commerceCorrectionCalculation(
     currency: configured.currency,
     taxConfigurationRevision: configured.taxConfigurationRevision,
     taxCode: configured.taxCode,
+    ...(configured.taxJurisdictionCode && configured.taxEffectiveFrom ? {
+      taxJurisdictionCode: configured.taxJurisdictionCode,
+      taxEffectiveFrom: configured.taxEffectiveFrom,
+    } : {}),
     taxRateBasisPoints: configured.taxRateBasisPoints,
     taxMode: configured.taxMode,
     listedAmountMmk: configured.listedSubtotalMmk,
@@ -3251,7 +3311,7 @@ export function convertCommerceWebsiteIntake(
     : input.paymentMethod === 'manual_qr'
       ? 'Manual QR review'
       : 'Manual bank transfer'
-  const calculation = commerceOrderCalculation(current, intake.total)
+  const calculation = commerceOrderCalculation(current, intake.total, proof.capturedAt)
   if (!calculation) return null
   const order: CommerceOrder = {
     id: orderId,
@@ -3466,7 +3526,12 @@ export function configureCommerceTax(
     || !Number.isSafeInteger(input.rateBasisPoints)
     || input.rateBasisPoints < 0
     || input.rateBasisPoints > 10_000
-    || (input.mode !== 'exclusive' && input.mode !== 'inclusive')) return null
+    || (input.mode !== 'exclusive' && input.mode !== 'inclusive')
+    || typeof input.jurisdictionCode !== 'string'
+    || input.jurisdictionCode !== input.jurisdictionCode.trim()
+    || !taxJurisdictionCodePattern.test(input.jurisdictionCode)
+    || !validTimestamp(input.effectiveFrom)
+    || (timestampMicros(input.effectiveFrom) as bigint) < (timestampMicros(proof.capturedAt) as bigint)) return null
   const current = validateCommerceState(state)
   const history = commerceTaxConfigurations(current)
   const replay = history.find((configuration) => configuration.proof.actionId === proof.actionId)
@@ -3483,14 +3548,20 @@ export function configureCommerceTax(
     || (latest && latest.code === input.code
       && latest.label === input.label
       && latest.rateBasisPoints === input.rateBasisPoints
-      && latest.mode === input.mode)
-    || (latest && (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(latest.proof.capturedAt) as bigint))) return null
+      && latest.mode === input.mode
+      && latest.jurisdictionCode === input.jurisdictionCode
+      && latest.effectiveFrom === input.effectiveFrom)
+    || (latest && (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(latest.proof.capturedAt) as bigint))
+    || (latest && (timestampMicros(input.effectiveFrom) as bigint)
+      < (timestampMicros(latest.effectiveFrom ?? latest.proof.capturedAt) as bigint))) return null
   const configuration: CommerceTaxConfiguration = {
     revision: history.length + 1,
     code: input.code,
     label: input.label,
     rateBasisPoints: input.rateBasisPoints,
     mode: input.mode,
+    jurisdictionCode: input.jurisdictionCode,
+    effectiveFrom: input.effectiveFrom,
     proof: { ...proof },
   }
   return validateCommerceState({
@@ -3655,7 +3726,7 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
     if (nextBalance === null) return null
     nextBalances.set(item.sku, nextBalance)
   }
-  const calculation = commerceOrderCalculation(state, order.total)
+  const calculation = commerceOrderCalculation(state, order.total, proof.capturedAt)
   if (!calculation) return null
   const authoritativeOrder: CommerceOrder = {
     ...order,
@@ -4560,7 +4631,7 @@ export function commerceCloseExpectation(state: CommerceState, capturedAt: strin
     .sort()
   const adjustedTotals = orderIds.map((orderId) => commerceOrderAdjustedTotal(current.orders.find((order) => order.id === orderId) as CommerceOrder))
   if (adjustedTotals.some((total) => total === null)) return null
-  const total = adjustedTotals.reduce((sum, value) => sum + (value ?? 0), 0)
+  const total = adjustedTotals.reduce<number>((sum, value) => sum + (value ?? 0), 0)
   if (!Number.isSafeInteger(total)) return null
   return {
     businessDate,
@@ -4636,6 +4707,8 @@ function commerceDailyCloseExportProjection(artifact: Omit<CommerceDailyCloseExp
       order.catalogRevision,
       order.taxConfigurationRevision,
       order.taxCode,
+      order.taxJurisdictionCode,
+      order.taxEffectiveFrom,
       order.taxRateBasisPoints,
       order.listedSubtotalMmk,
       order.subtotalMmk,
@@ -4711,6 +4784,8 @@ export function commerceDailyCloseExport(state: CommerceState, closeId: string):
       catalogRevision: calculation?.catalogRevision ?? null,
       taxConfigurationRevision: configured?.taxConfigurationRevision ?? null,
       taxCode: configured?.taxCode ?? null,
+      taxJurisdictionCode: configured?.taxJurisdictionCode ?? null,
+      taxEffectiveFrom: configured?.taxEffectiveFrom ?? null,
       taxRateBasisPoints: configured?.taxRateBasisPoints ?? null,
       listedSubtotalMmk: configured?.listedSubtotalMmk ?? calculation?.subtotalMmk ?? null,
       subtotalMmk: calculation?.subtotalMmk ?? null,
@@ -4767,6 +4842,8 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     'catalog_revision',
     'tax_configuration_revision',
     'tax_code',
+    'tax_jurisdiction_code',
+    'tax_effective_from',
     'tax_rate_basis_points',
     'listed_subtotal_mmk',
     'subtotal_mmk',
@@ -4803,6 +4880,8 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     null,
     null,
     null,
+    null,
+    null,
     artifact.totalMmk,
     null,
     null,
@@ -4827,6 +4906,8 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     order.catalogRevision,
     order.taxConfigurationRevision,
     order.taxCode,
+    order.taxJurisdictionCode,
+    order.taxEffectiveFrom,
     order.taxRateBasisPoints,
     order.listedSubtotalMmk,
     order.subtotalMmk,

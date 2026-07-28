@@ -200,6 +200,8 @@ def tax_configuration(
     mode: str = "exclusive",
     action_id: str | None = None,
     captured_at: str = NOW,
+    jurisdiction_code: str = "MM",
+    effective_from: str | None = None,
 ) -> dict[str, object]:
     return {
         "revision": revision,
@@ -207,6 +209,8 @@ def tax_configuration(
         "label": label,
         "rateBasisPoints": rate_basis_points,
         "mode": mode,
+        "jurisdictionCode": jurisdiction_code,
+        "effectiveFrom": effective_from or captured_at,
         "proof": action_evidence(
             action_id or f"ACT-TAX-R{revision}",
             captured_at=captured_at,
@@ -4468,7 +4472,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         export = commerce_daily_close_export(accepted_close, CLOSE_ID_2)
         self.assertIsNotNone(export)
         assert export is not None
-        self.assertEqual(export["schema"], "supermega.commerce.daily-close-export.v2")
+        self.assertEqual(export["schema"], "supermega.commerce.daily-close-export.v3")
         self.assertEqual(export["totalMmk"], 150)
         self.assertEqual(export["orders"][0]["originalTotalMmk"], 200)
         self.assertEqual(export["orders"][0]["totalMmk"], 150)
@@ -4594,6 +4598,35 @@ class CommerceRuntimeTests(unittest.TestCase):
 
     def test_tax_configuration_is_versioned_bound_and_freezes_order_calculation(self) -> None:
         current = catalog_state()
+        legacy_configuration = tax_configuration(1)
+        legacy_configuration.pop("jurisdictionCode")
+        legacy_configuration.pop("effectiveFrom")
+        legacy_state = deepcopy(current)
+        legacy_state["taxConfigurations"] = [legacy_configuration]
+        self.assertEqual(
+            validate_commerce_state(legacy_state)["taxConfigurations"],
+            [legacy_configuration],
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.tax_configuration.saved", legacy_state)
+
+        incomplete_schedule = deepcopy(current)
+        incomplete_schedule["taxConfigurations"] = [tax_configuration(1)]
+        incomplete_schedule["taxConfigurations"][0].pop("effectiveFrom")  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(incomplete_schedule)
+
+        backdated_schedule = deepcopy(current)
+        backdated_schedule["taxConfigurations"] = [
+            tax_configuration(
+                1,
+                captured_at="2026-07-23T09:05:00.000Z",
+                effective_from=NOW,
+            )
+        ]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(backdated_schedule)
+
         configured_state = deepcopy(current)
         configured_state["taxConfigurations"] = [tax_configuration(1)]
         configured = apply_event(
@@ -4642,10 +4675,13 @@ class CommerceRuntimeTests(unittest.TestCase):
             basis: dict[str, object],
             order_id: str,
             calculation: dict[str, object],
+            *,
+            created_at: str = NOW,
         ) -> dict[str, object]:
             state = deepcopy(basis)
             state["items"][0]["onHand"] -= 2  # type: ignore[index,operator]
             order = order_record(order_id)
+            order["createdAt"] = created_at
             order["lines"] = [
                 {
                     "sku": "SKU-1",
@@ -4658,7 +4694,13 @@ class CommerceRuntimeTests(unittest.TestCase):
             order["calculation"] = calculation
             state["orders"] = [order, *basis["orders"]]  # type: ignore[index]
             state["movements"] = [
-                movement("reserve", f"ACT-{order_id}", -2, order_id=order_id),
+                movement(
+                    "reserve",
+                    f"ACT-{order_id}",
+                    -2,
+                    order_id=order_id,
+                    created_at=created_at,
+                ),
                 *basis["movements"],  # type: ignore[index]
             ]
             return state
@@ -4669,6 +4711,8 @@ class CommerceRuntimeTests(unittest.TestCase):
             "catalogRevision": 0,
             "taxConfigurationRevision": 1,
             "taxCode": "CT5",
+            "taxJurisdictionCode": "MM",
+            "taxEffectiveFrom": NOW,
             "taxRateBasisPoints": 500,
             "taxMode": "exclusive",
             "listedSubtotalMmk": 200,
@@ -4684,7 +4728,14 @@ class CommerceRuntimeTests(unittest.TestCase):
 
         revision_two_state = deepcopy(first_order)
         revision_two_state["taxConfigurations"] = [  # type: ignore[index]
-            tax_configuration(2, code="CT5I", label="Commercial tax included", mode="inclusive"),
+            tax_configuration(
+                2,
+                code="CT5I",
+                label="Commercial tax included",
+                mode="inclusive",
+                jurisdiction_code="MM-YGN",
+                effective_from="2026-07-23T10:00:00.000Z",
+            ),
             *first_order["taxConfigurations"],  # type: ignore[index]
         ]
         revision_two = apply_event(
@@ -4697,13 +4748,20 @@ class CommerceRuntimeTests(unittest.TestCase):
             1,
         )
 
-        stale_order = order_state(
+        pre_effective_order = order_state(
             revision_two,
-            "ORD-TAX-STALE",
+            "ORD-TAX-PRE-EFFECTIVE",
             exclusive_calculation,
         )
-        with self.assertRaises(TrialValidationError):
-            apply_event(revision_two, "commerce.order.created", stale_order)
+        pre_effective = apply_event(
+            revision_two,
+            "commerce.order.created",
+            pre_effective_order,
+        )
+        self.assertEqual(
+            pre_effective["orders"][0]["calculation"]["taxConfigurationRevision"],  # type: ignore[index]
+            1,
+        )
 
         inclusive_calculation: dict[str, object] = {
             "schema": "supermega.commerce.order-calculation.v2",
@@ -4711,6 +4769,8 @@ class CommerceRuntimeTests(unittest.TestCase):
             "catalogRevision": 0,
             "taxConfigurationRevision": 2,
             "taxCode": "CT5I",
+            "taxJurisdictionCode": "MM-YGN",
+            "taxEffectiveFrom": "2026-07-23T10:00:00.000Z",
             "taxRateBasisPoints": 500,
             "taxMode": "inclusive",
             "listedSubtotalMmk": 200,
@@ -4719,13 +4779,18 @@ class CommerceRuntimeTests(unittest.TestCase):
             "totalMmk": 200,
         }
         second_order = apply_event(
-            revision_two,
+            pre_effective,
             "commerce.order.created",
-            order_state(revision_two, "ORD-TAX-2", inclusive_calculation),
+            order_state(
+                pre_effective,
+                "ORD-TAX-2",
+                inclusive_calculation,
+                created_at="2026-07-23T10:30:00.000Z",
+            ),
         )
         self.assertEqual(second_order["orders"][0]["calculation"], inclusive_calculation)  # type: ignore[index]
         self.assertEqual(
-            second_order["orders"][1]["calculation"]["taxConfigurationRevision"],  # type: ignore[index]
+            second_order["orders"][2]["calculation"]["taxConfigurationRevision"],  # type: ignore[index]
             1,
         )
 
@@ -4928,7 +4993,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIsNotNone(artifact)
         assert artifact is not None
         self.assertEqual(artifact, commerce_daily_close_export(closed, CLOSE_ID))
-        self.assertEqual(artifact["schema"], "supermega.commerce.daily-close-export.v2")
+        self.assertEqual(artifact["schema"], "supermega.commerce.daily-close-export.v3")
         self.assertEqual(artifact["orderCount"], 1)
         self.assertEqual(artifact["orders"][0]["calculationStatus"], "accepted")
         self.assertEqual(artifact["orders"][0]["subtotalMmk"], 200)
@@ -4936,7 +5001,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertNotIn("customer", json.dumps(artifact))
         self.assertEqual(
             artifact["digest"],
-            "sha256:f0d3d83368f9893efb39965a1376207e205fe2262a3aa624e23a23b95b5b7ec6",
+            "sha256:7365e864485958b4fa104d3d73f31102a4a4814d64d820afdafb28eb801dc8ce",
         )
 
         csv_text = commerce_daily_close_csv(closed, CLOSE_ID)

@@ -31,7 +31,7 @@ from supermega_runtime.trial_store import TrialValidationError
 
 
 COMMERCE_SCHEMA = "supermega.commerce.workspace.v2"
-COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v2"
+COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v3"
 COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v2"
 COMMERCE_EVENTS = frozenset(
     {
@@ -139,6 +139,7 @@ _PURCHASE_ORDER_ID_PATTERN = re.compile(
     r"PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
 _TAX_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{0,11}")
+_TAX_JURISDICTION_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{1,15}")
 _EXTERNAL_ACCOUNT_CODE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,39}")
 _ACCOUNT_ROLES = (
     "payment_clearing",
@@ -169,6 +170,7 @@ _CATALOG_BASELINE_FIELDS = frozenset(
 _TAX_CONFIGURATION_FIELDS = frozenset(
     {"revision", "code", "label", "rateBasisPoints", "mode", "proof"}
 )
+_TAX_CONFIGURATION_SCHEDULE_FIELDS = frozenset({"jurisdictionCode", "effectiveFrom"})
 _ACCOUNT_MAPPING_CONFIGURATION_FIELDS = frozenset({"revision", "mappings", "proof"})
 _ACCOUNT_MAPPING_FIELDS = frozenset({"accountRole", "externalAccountCode"})
 _ORDER_REQUIRED_FIELDS = frozenset(
@@ -243,6 +245,9 @@ _ORDER_CALCULATION_V2_FIELDS = frozenset(
         "totalMmk",
     }
 )
+_ORDER_CALCULATION_V2_SCHEDULE_FIELDS = frozenset(
+    {"taxJurisdictionCode", "taxEffectiveFrom"}
+)
 _ORDER_RETURN_FIELDS = frozenset(
     {
         "actionId",
@@ -285,6 +290,9 @@ _CORRECTION_CALCULATION_FIELDS = frozenset(
         "taxMmk",
         "totalMmk",
     }
+)
+_CORRECTION_CALCULATION_SCHEDULE_FIELDS = frozenset(
+    {"taxJurisdictionCode", "taxEffectiveFrom"}
 )
 _RECONCILIATION_FIELDS = frozenset(
     {
@@ -824,7 +832,12 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     for index, candidate in enumerate(tax_configurations):
         field = f"taxConfigurations[{index}]"
         configuration = _object(candidate, field)
-        _exact_fields(configuration, field, required=_TAX_CONFIGURATION_FIELDS)
+        _exact_fields(
+            configuration,
+            field,
+            required=_TAX_CONFIGURATION_FIELDS,
+            optional=_TAX_CONFIGURATION_SCHEDULE_FIELDS,
+        )
         revision = _integer(configuration["revision"], f"{field}.revision", minimum=1)
         if revision != len(tax_configurations) - index:
             raise TrialValidationError(
@@ -845,6 +858,34 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         if configuration["mode"] not in {"exclusive", "inclusive"}:
             raise TrialValidationError(f"{field}.mode is invalid.")
         proof = _action_proof(configuration["proof"], f"{field}.proof")
+        schedule_fields = _TAX_CONFIGURATION_SCHEDULE_FIELDS.intersection(configuration)
+        if schedule_fields and schedule_fields != _TAX_CONFIGURATION_SCHEDULE_FIELDS:
+            raise TrialValidationError(
+                f"{field} must include jurisdictionCode and effectiveFrom together."
+            )
+        effective_at = datetime.fromisoformat(
+            proof["capturedAt"].replace("Z", "+00:00")
+        )
+        if schedule_fields:
+            jurisdiction_code = _text(
+                configuration["jurisdictionCode"],
+                f"{field}.jurisdictionCode",
+                maximum=16,
+            )
+            if _TAX_JURISDICTION_CODE_PATTERN.fullmatch(jurisdiction_code) is None:
+                raise TrialValidationError(f"{field}.jurisdictionCode is invalid.")
+            effective_at = datetime.fromisoformat(
+                _timestamp(
+                    configuration["effectiveFrom"],
+                    f"{field}.effectiveFrom",
+                ).replace("Z", "+00:00")
+            )
+            if effective_at < datetime.fromisoformat(
+                proof["capturedAt"].replace("Z", "+00:00")
+            ):
+                raise TrialValidationError(
+                    f"{field}.effectiveFrom must be at or after its review proof."
+                )
         if newer_tax_configuration is not None:
             newer_captured_at = datetime.fromisoformat(
                 str(newer_tax_configuration["proof"]["capturedAt"]).replace("Z", "+00:00")
@@ -855,6 +896,18 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             if captured_at > newer_captured_at:
                 raise TrialValidationError(
                     f"{field} tax configurations must be newest first."
+                )
+            newer_effective_at = datetime.fromisoformat(
+                str(
+                    newer_tax_configuration.get(
+                        "effectiveFrom",
+                        newer_tax_configuration["proof"]["capturedAt"],
+                    )
+                ).replace("Z", "+00:00")
+            )
+            if effective_at > newer_effective_at:
+                raise TrialValidationError(
+                    f"{field} tax configurations must be newest first by effective time."
                 )
         newer_tax_configuration = configuration
         tax_configuration_action_ids.append(proof["actionId"])
@@ -1206,7 +1259,13 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     calculation,
                     f"orders[{index}].calculation",
                     required=_ORDER_CALCULATION_V2_FIELDS,
+                    optional=_ORDER_CALCULATION_V2_SCHEDULE_FIELDS,
                 )
+                schedule_fields = _ORDER_CALCULATION_V2_SCHEDULE_FIELDS.intersection(calculation)
+                if schedule_fields and schedule_fields != _ORDER_CALCULATION_V2_SCHEDULE_FIELDS:
+                    raise TrialValidationError(
+                        f"orders[{index}].calculation must retain jurisdiction and effective time together."
+                    )
             else:
                 raise TrialValidationError(
                     f"orders[{index}].calculation schema is invalid."
@@ -1283,6 +1342,17 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     expected is None
                     or datetime.fromisoformat(
                         str(configuration["proof"]["capturedAt"]).replace("Z", "+00:00")
+                    )
+                    > datetime.fromisoformat(
+                        str(order["createdAt"]).replace("Z", "+00:00")
+                    )
+                    or datetime.fromisoformat(
+                        str(
+                            configuration.get(
+                                "effectiveFrom",
+                                configuration["proof"]["capturedAt"],
+                            )
+                        ).replace("Z", "+00:00")
                     )
                     > datetime.fromisoformat(
                         str(order["createdAt"]).replace("Z", "+00:00")
@@ -1537,7 +1607,17 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                         f"{field}.sourceCalculationDigest does not bind the original order calculation."
                     )
                 calculation = _object(correction["calculation"], f"{field}.calculation")
-                _exact_fields(calculation, f"{field}.calculation", required=_CORRECTION_CALCULATION_FIELDS)
+                _exact_fields(
+                    calculation,
+                    f"{field}.calculation",
+                    required=_CORRECTION_CALCULATION_FIELDS,
+                    optional=_CORRECTION_CALCULATION_SCHEDULE_FIELDS,
+                )
+                schedule_fields = _CORRECTION_CALCULATION_SCHEDULE_FIELDS.intersection(calculation)
+                if schedule_fields and schedule_fields != _CORRECTION_CALCULATION_SCHEDULE_FIELDS:
+                    raise TrialValidationError(
+                        f"{field}.calculation must retain jurisdiction and effective time together."
+                    )
                 listed_amount = _integer(
                     calculation["listedAmountMmk"],
                     f"{field}.calculation.listedAmountMmk",
@@ -2864,6 +2944,27 @@ def _tax_configurations(state: Mapping[str, Any]) -> list[Any]:
     return state.get("taxConfigurations", [])
 
 
+def _effective_tax_configuration(
+    state: Mapping[str, Any],
+    at_time: str,
+) -> Mapping[str, Any] | None:
+    at = datetime.fromisoformat(at_time.replace("Z", "+00:00"))
+    for candidate in _tax_configurations(state):
+        if not isinstance(candidate, Mapping):
+            continue
+        effective_at = datetime.fromisoformat(
+            str(
+                candidate.get(
+                    "effectiveFrom",
+                    candidate["proof"]["capturedAt"],
+                )
+            ).replace("Z", "+00:00")
+        )
+        if effective_at <= at:
+            return candidate
+    return None
+
+
 def _account_mapping_configurations(state: Mapping[str, Any]) -> list[Any]:
     return state.get("accountMappingConfigurations", [])
 
@@ -2890,7 +2991,7 @@ def _configured_order_calculation(
     total_mmk = listed_subtotal_mmk + tax_mmk if mode == "exclusive" else listed_subtotal_mmk
     if subtotal_mmk < 0 or tax_mmk < 0 or not 1 <= total_mmk <= _MAX_SAFE_INTEGER:
         return None
-    return {
+    calculation = {
         "schema": _ORDER_CALCULATION_V2_SCHEMA,
         "currency": "MMK",
         "catalogRevision": catalog_revision,
@@ -2903,6 +3004,10 @@ def _configured_order_calculation(
         "taxMmk": tax_mmk,
         "totalMmk": total_mmk,
     }
+    if "jurisdictionCode" in configuration and "effectiveFrom" in configuration:
+        calculation["taxJurisdictionCode"] = configuration["jurisdictionCode"]
+        calculation["taxEffectiveFrom"] = configuration["effectiveFrom"]
+    return calculation
 
 
 def _catalog_baselines(state: Mapping[str, Any]) -> list[Any]:
@@ -2975,13 +3080,22 @@ def _correction_calculation(
             "code": calculation["taxCode"],
             "rateBasisPoints": calculation["taxRateBasisPoints"],
             "mode": calculation["taxMode"],
+            **(
+                {
+                    "jurisdictionCode": calculation["taxJurisdictionCode"],
+                    "effectiveFrom": calculation["taxEffectiveFrom"],
+                }
+                if "taxJurisdictionCode" in calculation
+                and "taxEffectiveFrom" in calculation
+                else {}
+            ),
         },
         listed_amount_mmk,
         int(calculation["catalogRevision"]),
     )
     if configured is None:
         return None
-    return {
+    result = {
         "currency": configured["currency"],
         "taxConfigurationRevision": configured["taxConfigurationRevision"],
         "taxCode": configured["taxCode"],
@@ -2992,6 +3106,10 @@ def _correction_calculation(
         "taxMmk": configured["taxMmk"],
         "totalMmk": configured["totalMmk"],
     }
+    if "taxJurisdictionCode" in configured and "taxEffectiveFrom" in configured:
+        result["taxJurisdictionCode"] = configured["taxJurisdictionCode"]
+        result["taxEffectiveFrom"] = configured["taxEffectiveFrom"]
+    return result
 
 
 def _order_adjusted_total(order: Mapping[str, Any]) -> int | None:
@@ -3127,6 +3245,16 @@ def commerce_daily_close_export(
                     else None
                 ),
                 "taxCode": calculation.get("taxCode") if accepted_calculation else None,
+                "taxJurisdictionCode": (
+                    calculation.get("taxJurisdictionCode")
+                    if accepted_calculation
+                    else None
+                ),
+                "taxEffectiveFrom": (
+                    calculation.get("taxEffectiveFrom")
+                    if accepted_calculation
+                    else None
+                ),
                 "taxRateBasisPoints": (
                     calculation.get("taxRateBasisPoints")
                     if accepted_calculation
@@ -3186,6 +3314,8 @@ def commerce_daily_close_export(
                     row["catalogRevision"],
                     row["taxConfigurationRevision"],
                     row["taxCode"],
+                    row["taxJurisdictionCode"],
+                    row["taxEffectiveFrom"],
                     row["taxRateBasisPoints"],
                     row["listedSubtotalMmk"],
                     row["subtotalMmk"],
@@ -3260,6 +3390,8 @@ def commerce_daily_close_csv(
         "catalog_revision",
         "tax_configuration_revision",
         "tax_code",
+        "tax_jurisdiction_code",
+        "tax_effective_from",
         "tax_rate_basis_points",
         "listed_subtotal_mmk",
         "subtotal_mmk",
@@ -3297,6 +3429,8 @@ def commerce_daily_close_csv(
             None,
             None,
             None,
+            None,
+            None,
             artifact["totalMmk"],
             None,
             None,
@@ -3323,6 +3457,8 @@ def commerce_daily_close_csv(
             row["catalogRevision"],
             row["taxConfigurationRevision"],
             row["taxCode"],
+            row["taxJurisdictionCode"],
+            row["taxEffectiveFrom"],
             row["taxRateBasisPoints"],
             row["listedSubtotalMmk"],
             row["subtotalMmk"],
@@ -4111,10 +4247,13 @@ def _validate_new_order_and_reservation(
     _require_unchanged(current, next_state, "closes")
     order = next_state["orders"][0]
     calculation = order.get("calculation")
-    current_tax_configurations = _tax_configurations(current)
+    effective_tax_configuration = _effective_tax_configuration(
+        current,
+        str(order["createdAt"]),
+    )
     expected_calculation_schema = (
         _ORDER_CALCULATION_V2_SCHEMA
-        if current_tax_configurations
+        if effective_tax_configuration is not None
         else _ORDER_CALCULATION_SCHEMA
     )
     if (
@@ -4122,9 +4261,9 @@ def _validate_new_order_and_reservation(
         or calculation.get("catalogRevision") != len(_catalog_changes(current))
         or calculation.get("schema") != expected_calculation_schema
         or (
-            current_tax_configurations
+            effective_tax_configuration is not None
             and calculation.get("taxConfigurationRevision")
-            != current_tax_configurations[0].get("revision")
+            != effective_tax_configuration.get("revision")
         )
     ):
         raise TrialValidationError(
@@ -5443,9 +5582,20 @@ def _validate_tax_configuration_saved(
     configuration = after[0]
     if configuration["revision"] != len(before) + 1:
         raise TrialValidationError("tax configuration revision must advance exactly once.")
+    if not _TAX_CONFIGURATION_SCHEDULE_FIELDS.issubset(configuration):
+        raise TrialValidationError(
+            "new tax configurations require reviewed jurisdiction and effective time."
+        )
     if before and all(
-        configuration[field] == before[0][field]
-        for field in ("code", "label", "rateBasisPoints", "mode")
+        configuration.get(field) == before[0].get(field)
+        for field in (
+            "code",
+            "label",
+            "rateBasisPoints",
+            "mode",
+            "jurisdictionCode",
+            "effectiveFrom",
+        )
     ):
         raise TrialValidationError("an unchanged tax configuration cannot advance.")
 

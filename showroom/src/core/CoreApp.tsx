@@ -270,6 +270,8 @@ type TaxConfigurationDraft = {
   label: string
   ratePercent: string
   mode: CommerceTaxMode
+  jurisdictionCode: string
+  effectiveFrom: string
 }
 
 type AccountMappingDraft = {
@@ -1401,7 +1403,8 @@ function formatCommerceCalculation(calculation: NonNullable<CommerceOrder['calcu
     return `Subtotal ${formatMoney(calculation.subtotalMmk)} · Tax not configured · Total ${formatMoney(calculation.totalMmk)}`
   }
   const treatment = calculation.taxMode === 'inclusive' ? 'included' : 'added'
-  return `Net ${formatMoney(calculation.subtotalMmk)} · Tax ${calculation.taxCode} ${formatTaxRate(calculation.taxRateBasisPoints)} ${treatment} ${formatMoney(calculation.taxMmk)} · Total ${formatMoney(calculation.totalMmk)}`
+  const jurisdiction = calculation.taxJurisdictionCode ? ` · ${calculation.taxJurisdictionCode}` : ''
+  return `Net ${formatMoney(calculation.subtotalMmk)} · Tax ${calculation.taxCode}${jurisdiction} ${formatTaxRate(calculation.taxRateBasisPoints)} ${treatment} ${formatMoney(calculation.taxMmk)} · Total ${formatMoney(calculation.totalMmk)}`
 }
 
 function taxConfigurationDraft(configuration: CommerceTaxConfiguration | null): TaxConfigurationDraft {
@@ -1410,6 +1413,8 @@ function taxConfigurationDraft(configuration: CommerceTaxConfiguration | null): 
     label: configuration?.label ?? '',
     ratePercent: configuration ? String(configuration.rateBasisPoints / 100) : '',
     mode: configuration?.mode ?? 'exclusive',
+    jurisdictionCode: configuration?.jurisdictionCode ?? '',
+    effectiveFrom: '',
   }
 }
 
@@ -3705,7 +3710,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         return
       }
     }
-    const calculationReview = commerceOrderCalculation(commerce, orderTotal)
+    const calculationReview = commerceOrderCalculation(commerce, orderTotal, reviewedAt.toISOString())
     if (!calculationReview) {
       setNotice('The order total cannot be calculated safely. Review item prices and tax setup before continuing.')
       return
@@ -4368,22 +4373,31 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     event.preventDefault()
     const code = effectiveTaxDraft.code.trim().toUpperCase()
     const label = effectiveTaxDraft.label.trim()
+    const jurisdictionCode = effectiveTaxDraft.jurisdictionCode.trim().toUpperCase()
     const rateBasisPoints = parseTaxRateBasisPoints(effectiveTaxDraft.ratePercent)
-    if (!/^[A-Z0-9][A-Z0-9_-]{0,11}$/.test(code) || !label || label.length > 80 || rateBasisPoints === null) {
-      setNotice('Enter an uppercase tax code, a short label, and a rate from 0 to 100 with at most two decimal places.')
+    const effectiveFromDate = new Date(effectiveTaxDraft.effectiveFrom)
+    if (!/^[A-Z0-9][A-Z0-9_-]{0,11}$/.test(code)
+      || !/^[A-Z0-9][A-Z0-9_-]{1,15}$/.test(jurisdictionCode)
+      || !label
+      || label.length > 80
+      || rateBasisPoints === null
+      || Number.isNaN(effectiveFromDate.getTime())
+      || effectiveFromDate.getTime() < purchaseOrderClock + 60_000) {
+      setNotice('Enter reviewed tax and jurisdiction codes, a short label, a valid rate, and an effective time at least one minute ahead.')
       return
     }
     const expectedRevision = currentTaxConfiguration?.revision ?? 0
-    const input = { code, label, rateBasisPoints, mode: effectiveTaxDraft.mode }
+    const effectiveFrom = effectiveFromDate.toISOString()
+    const input = { code, label, rateBasisPoints, mode: effectiveTaxDraft.mode, jurisdictionCode, effectiveFrom }
     const previous = currentTaxConfiguration
-      ? `${currentTaxConfiguration.code} · ${formatTaxRate(currentTaxConfiguration.rateBasisPoints)} · ${currentTaxConfiguration.mode} · revision ${currentTaxConfiguration.revision}`
+      ? `${currentTaxConfiguration.code} · ${currentTaxConfiguration.jurisdictionCode ?? 'legacy scope'} · ${formatTaxRate(currentTaxConfiguration.rateBasisPoints)} · ${currentTaxConfiguration.mode} · revision ${currentTaxConfiguration.revision}`
       : 'No Shop tax configuration'
     queueAction({
       kind: 'tax_configuration',
       subjectId: `SHOP-TAX-R${expectedRevision + 1}`,
       summary: `Set Shop tax code ${code}`,
       before: previous,
-      after: `${code} · ${label} · ${formatTaxRate(rateBasisPoints)} · ${effectiveTaxDraft.mode} · future orders only`,
+      after: `${code} · ${label} · ${jurisdictionCode} · ${formatTaxRate(rateBasisPoints)} · ${effectiveTaxDraft.mode} · effective ${formatTime(effectiveFrom)} · future orders only`,
       reasonSuggestion: 'Reviewed the Shop tax setup for future orders.',
       apply: async (action) => {
         await mutateCommerce(
@@ -4677,17 +4691,21 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       <div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/shop/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div>
       <p className="form-notice">Orders ready: {closePreview?.orderIds.length ? closePreview.orderIds.join(', ') : 'none'} · Payment exceptions: {paymentReview.length ? paymentReview.map((order) => order.id).join(', ') : 'none'} · Stock exceptions: {lowStock.length ? lowStock.map((item) => item.sku).join(', ') : 'none'}</p>
       <details className="compact-disclosure" data-tax-configuration="versioned">
-        <summary><span>Tax setup</span><small>{currentTaxConfiguration ? `${currentTaxConfiguration.code} · ${formatTaxRate(currentTaxConfiguration.rateBasisPoints)} · ${currentTaxConfiguration.mode}` : 'Not configured'}</small></summary>
+        <summary><span>Tax schedule</span><small>{currentTaxConfiguration ? `${currentTaxConfiguration.code} · ${currentTaxConfiguration.jurisdictionCode ?? 'legacy scope'} · ${formatTaxRate(currentTaxConfiguration.rateBasisPoints)}` : 'Not configured'}</small></summary>
         <form className="core-form compact-form" onSubmit={reviewTaxConfiguration}>
           <div className="form-row">
             <label>Tax code<input autoCapitalize="characters" disabled={commerceControlsDisabled} maxLength={12} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, code: event.target.value.toUpperCase() })} placeholder="Your configured code" required value={effectiveTaxDraft.code} /></label>
             <label>Rate (%)<input disabled={commerceControlsDisabled} inputMode="decimal" max="100" min="0" onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, ratePercent: event.target.value })} placeholder="Enter reviewed rate" required step="0.01" type="number" value={effectiveTaxDraft.ratePercent} /></label>
           </div>
           <label>Label<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, label: event.target.value })} placeholder="How staff recognize this code" required value={effectiveTaxDraft.label} /></label>
+          <div className="form-row">
+            <label>Jurisdiction code<input autoCapitalize="characters" disabled={commerceControlsDisabled} maxLength={16} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, jurisdictionCode: event.target.value.toUpperCase() })} placeholder="Reviewed scope, e.g. MM" required value={effectiveTaxDraft.jurisdictionCode} /></label>
+            <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, effectiveFrom: event.target.value })} required type="datetime-local" value={effectiveTaxDraft.effectiveFrom} /></label>
+          </div>
           <label>Price treatment<select disabled={commerceControlsDisabled} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, mode: event.target.value as CommerceTaxMode })} value={effectiveTaxDraft.mode}><option value="exclusive">Add tax to listed price</option><option value="inclusive">Tax included in listed price</option></select></label>
           <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review tax setup</button></div>
-          <p className="panel-copy">Applies only to future orders. Saved orders keep their original calculation. This does not file tax, choose a legal rate, map accounts, or post externally.</p>
-          {currentTaxConfiguration ? <p className="form-notice">Revision {currentTaxConfiguration.revision} · saved by {currentTaxConfiguration.proof.actor} · evidence {currentTaxConfiguration.proof.evidenceReference}</p> : null}
+          <p className="panel-copy">Takes effect only at the reviewed time. Earlier orders keep their original calculation. This does not choose a legal rate, determine branch tax, file, or post externally.</p>
+          {currentTaxConfiguration ? <p className="form-notice">Revision {currentTaxConfiguration.revision} · {currentTaxConfiguration.effectiveFrom ? `effective ${formatTime(currentTaxConfiguration.effectiveFrom)} · ` : ''}saved by {currentTaxConfiguration.proof.actor} · evidence {currentTaxConfiguration.proof.evidenceReference}</p> : null}
         </form>
       </details>
       <details className="compact-disclosure" data-account-mapping="versioned">

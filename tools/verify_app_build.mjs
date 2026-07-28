@@ -1451,12 +1451,16 @@ if (!coreSource.includes('data-tax-configuration="versioned"')
   || !coreSource.includes("kind: 'tax_configuration'")
   || !coreSource.includes("'commerce.tax_configuration.saved'")
   || !coreSource.includes('configureCommerceTax(current, input, commerceActionProof(action))')
-  || !coreSource.includes('Applies only to future orders. Saved orders keep their original calculation.')
+  || !coreSource.includes('Jurisdiction code')
+  || !coreSource.includes('Effective from')
+  || !coreSource.includes('Takes effect only at the reviewed time. Earlier orders keep their original calculation.')
+  || !commerceSource.includes('commerceEffectiveTaxConfiguration(state, atTime)')
+  || !managedCommerceRuntime.includes('def _effective_tax_configuration(')
   || !managedCommerceRuntime.includes('def _validate_tax_configuration_saved(')
   || !managedCommerceRuntime.includes('command evidence must match the saved tax configuration proof.')) fail('commerce_tax_configuration_ui_or_managed_boundary_missing')
 if (!coreSource.includes('data-close-export="accounting-csv-v1"')
   || !coreSource.includes('Download close CSV')
-  || !commerceSource.includes('supermega.commerce.daily-close-export.v2')
+  || !commerceSource.includes('supermega.commerce.daily-close-export.v3')
   || !commerceSource.includes("calculationStatus: calculation ? 'accepted' : 'legacy_unverified'")
   || !commerceSource.includes("taxMode: calculation?.taxMode ?? 'not_recorded'")
   || !commerceSource.includes("if (/^[=+@-]/.test(raw)) raw = `'${raw}`")
@@ -5811,7 +5815,14 @@ async function verifyCommerceRuntime() {
       && reserved.orders[0].calculation.totalMmk === 200,
     'new_order_calculation_not_bound_to_catalog_subtotal')
     const taxProof = proof('ACT-TAX-CONFIG-001', -1_000)
-    const exclusiveTaxInput = { code: 'CT5', label: 'Configured output tax', rateBasisPoints: 500, mode: 'exclusive' }
+    const exclusiveTaxInput = {
+      code: 'CT5',
+      label: 'Configured output tax',
+      rateBasisPoints: 500,
+      mode: 'exclusive',
+      jurisdictionCode: 'MM',
+      effectiveFrom: '2026-07-23T09:00:00.000Z',
+    }
     const exclusiveTaxBase = model.configureCommerceTax(base, exclusiveTaxInput, taxProof)
     assert(exclusiveTaxBase?.taxConfigurations.length === 1
       && exclusiveTaxBase.taxConfigurations[0].revision === 1
@@ -5824,6 +5835,8 @@ async function verifyCommerceRuntime() {
     assert(model.configureCommerceTax(exclusiveTaxBase, exclusiveTaxInput, proof('ACT-TAX-CONFIG-UNCHANGED')) === null, 'unchanged_tax_configuration_was_appended')
     assert(model.configureCommerceTax(base, { ...exclusiveTaxInput, code: 'ct5' }, proof('ACT-TAX-CONFIG-LOWER')) === null, 'noncanonical_tax_code_was_accepted')
     assert(model.configureCommerceTax(base, { ...exclusiveTaxInput, rateBasisPoints: 10_001 }, proof('ACT-TAX-CONFIG-RATE')) === null, 'unsafe_tax_rate_was_accepted')
+    assert(model.configureCommerceTax(base, { ...exclusiveTaxInput, jurisdictionCode: '' }, proof('ACT-TAX-CONFIG-SCOPE')) === null, 'blank_tax_jurisdiction_was_accepted')
+    assert(model.configureCommerceTax(base, { ...exclusiveTaxInput, effectiveFrom: '2026-07-23T08:59:58.000Z' }, taxProof) === null, 'backdated_tax_schedule_was_accepted')
     const exclusiveReserveProof = proof('ACT-TAX-ORDER-001', 1_000)
     const exclusiveOrder = {
       ...order,
@@ -5838,6 +5851,8 @@ async function verifyCommerceRuntime() {
     assert(exclusiveCalculation?.schema === 'supermega.commerce.order-calculation.v2'
       && exclusiveCalculation.taxConfigurationRevision === 1
       && exclusiveCalculation.taxCode === 'CT5'
+      && exclusiveCalculation.taxJurisdictionCode === 'MM'
+      && exclusiveCalculation.taxEffectiveFrom === exclusiveTaxInput.effectiveFrom
       && exclusiveCalculation.taxRateBasisPoints === 500
       && exclusiveCalculation.taxMode === 'exclusive'
       && exclusiveCalculation.listedSubtotalMmk === 200
@@ -5848,13 +5863,25 @@ async function verifyCommerceRuntime() {
     'exclusive_tax_determination_not_frozen_on_order')
     assert(model.reserveCommerceOrder(exclusiveReserved, exclusiveOrder, exclusiveReserveProof) === exclusiveReserved, 'taxed_order_retry_not_idempotent')
     const inclusiveTaxProof = proof('ACT-TAX-CONFIG-002', 2_000)
-    const inclusiveTaxInput = { code: 'CT5I', label: 'Configured tax included', rateBasisPoints: 500, mode: 'inclusive' }
+    const inclusiveTaxInput = {
+      code: 'CT5I',
+      label: 'Configured tax included',
+      rateBasisPoints: 500,
+      mode: 'inclusive',
+      jurisdictionCode: 'MM-YGN',
+      effectiveFrom: '2026-07-23T09:00:03.000Z',
+    }
     const inclusiveTaxBase = model.configureCommerceTax(exclusiveReserved, inclusiveTaxInput, inclusiveTaxProof)
     assert(inclusiveTaxBase?.taxConfigurations.length === 2
       && inclusiveTaxBase.taxConfigurations[0].revision === 2
       && inclusiveTaxBase.orders[0].calculation.taxConfigurationRevision === 1
       && inclusiveTaxBase.orders[0].total === 210,
     'tax_configuration_update_rewrote_prior_order')
+    const preEffectiveCalculation = model.commerceOrderCalculation(inclusiveTaxBase, 200, '2026-07-23T09:00:02.500Z')
+    assert(preEffectiveCalculation?.schema === 'supermega.commerce.order-calculation.v2'
+      && preEffectiveCalculation.taxConfigurationRevision === 1
+      && preEffectiveCalculation.taxJurisdictionCode === 'MM',
+    'future_tax_configuration_applied_before_effective_time')
     const inclusiveReserveProof = proof('ACT-TAX-ORDER-002', 4_000)
     const inclusiveOrder = {
       ...order,
@@ -5868,6 +5895,8 @@ async function verifyCommerceRuntime() {
     const inclusiveCalculation = inclusiveReserved?.orders[0].calculation
     assert(inclusiveCalculation?.schema === 'supermega.commerce.order-calculation.v2'
       && inclusiveCalculation.taxConfigurationRevision === 2
+      && inclusiveCalculation.taxJurisdictionCode === 'MM-YGN'
+      && inclusiveCalculation.taxEffectiveFrom === inclusiveTaxInput.effectiveFrom
       && inclusiveCalculation.taxMode === 'inclusive'
       && inclusiveCalculation.listedSubtotalMmk === 200
       && inclusiveCalculation.subtotalMmk === 190
@@ -6104,7 +6133,7 @@ async function verifyCommerceRuntime() {
     const accountingCloseExpectation = model.commerceCloseExpectation(completed, accountingCloseAt)
     const accountingClosed = model.saveCommerceClose(completed, accountingCloseId, accountingCloseProof, accountingCloseExpectation)
     const accountingExport = model.commerceDailyCloseExport(accountingClosed, accountingCloseId)
-    assert(accountingExport?.schema === 'supermega.commerce.daily-close-export.v2'
+    assert(accountingExport?.schema === 'supermega.commerce.daily-close-export.v3'
       && accountingExport.orderCount === 1
       && accountingExport.orders[0].calculationStatus === 'accepted'
       && accountingExport.orders[0].subtotalMmk === 200

@@ -80,6 +80,9 @@ export default defineConfig({
             || id.includes('/src/core/team-work.ts')) {
             return 'operating-models'
           }
+          if (id.includes('/src/core/CoreApp.tsx')) {
+            return 'core-app'
+          }
         },
       },
     },
