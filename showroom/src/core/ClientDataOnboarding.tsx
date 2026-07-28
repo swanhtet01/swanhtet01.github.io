@@ -9,6 +9,7 @@ import {
   createClientImportPreview,
   type ClientImportMapping,
   type ClientImportPreview,
+  type ClientDemoProductProgress,
   type ClientSolutionId,
 } from './client-onboarding'
 import {
@@ -35,6 +36,7 @@ type ClientDataOnboardingProps = {
   workspace: string
   owner: string
   managedIdentity: ManagedIdentity | null
+  onProgress?: (progress: ClientDemoProductProgress) => void
 }
 
 type ValidatedImport = {
@@ -138,7 +140,7 @@ function downloadFile(filename: string, content: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
-export function ClientDataOnboarding({ product, productName, productSlug, workflowTemplateId, workspace, owner, managedIdentity }: ClientDataOnboardingProps) {
+export function ClientDataOnboarding({ product, productName, productSlug, workflowTemplateId, workspace, owner, managedIdentity, onProgress }: ClientDataOnboardingProps) {
   const object = clientImportObject(product)
   const checklist = clientImportChecklist(product, workflowTemplateId)
   const requestRef = useRef(0)
@@ -149,11 +151,13 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   const ownerRef = useRef(owner)
   const managedIdentityRef = useRef(managedIdentity)
   const previewRef = useRef<HTMLDivElement>(null)
+  const onProgressRef = useRef(onProgress)
   productRef.current = product
   workflowTemplateRef.current = workflowTemplateId
   workspaceRef.current = workspace
   ownerRef.current = owner
   managedIdentityRef.current = managedIdentity
+  onProgressRef.current = onProgress
   const [state, setState] = useState<ImportState>(emptyImportState)
   const currentValidationContext = validationContextKey(
     product,
@@ -280,6 +284,26 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           ? 'Remove or rename duplicate keys so every imported record has one owner.'
           : 'Fix the row messages below; ready rows stay protected while you clean the rest.'
     : ''
+  const progressStatus: ClientDemoProductProgress['status'] = appliedIsCurrent
+    ? 'applied'
+    : validationIsCurrent
+      ? 'workspace_checked'
+      : state.preview?.readyForStaging
+        ? 'data_ready'
+        : state.preview
+          ? 'needs_fix'
+          : 'not_started'
+
+  useEffect(() => {
+    onProgressRef.current?.({
+      product,
+      status: progressStatus,
+      rows: state.preview?.totals.rows ?? 0,
+      readyRows: state.preview?.totals.ready ?? 0,
+      issueRows: state.preview?.totals.issueRows ?? 0,
+      updatedAt: null,
+    })
+  }, [product, progressStatus, state.preview?.totals.issueRows, state.preview?.totals.ready, state.preview?.totals.rows])
 
   useEffect(() => {
     requestRef.current += 1

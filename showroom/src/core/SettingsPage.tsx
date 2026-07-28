@@ -53,14 +53,33 @@ import { LEGACY_PRODUCTION_KEYS, PRODUCTION_KEY } from './production-workspace'
 import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } from './team-work'
 import {
   buildClientDemoBlueprint,
+  CLIENT_DEMO_WORKSPACE_STORAGE_KEY,
   clientDemoPresets,
   clientImportWorkflowTemplateIds,
+  createClientDemoWorkspace,
+  restoreClientDemoWorkspace,
+  updateClientDemoWorkspaceProgress,
   type ClientDemoBlueprint,
+  type ClientDemoProductProgress,
   type ClientDemoPresetId,
+  type ClientDemoWorkspace,
 } from './client-onboarding'
 
 const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding').then((module) => ({ default: module.ClientDataOnboarding })))
 const ManagedActivationRunbook = lazy(() => import('./ManagedActivationRunbook').then((module) => ({ default: module.ManagedActivationRunbook })))
+
+function loadClientDemoWorkspace() {
+  if (typeof window === 'undefined') return null
+  try { return restoreClientDemoWorkspace(JSON.parse(window.localStorage.getItem(CLIENT_DEMO_WORKSPACE_STORAGE_KEY) || 'null')) } catch { return null }
+}
+
+const demoProgressLabels: Record<ClientDemoProductProgress['status'], string> = {
+  not_started: 'Not started',
+  needs_fix: 'Needs fixes',
+  data_ready: 'Data ready',
+  workspace_checked: 'Workspace checked',
+  applied: 'Applied',
+}
 
 export function SettingsPage() {
   const runtime = useOutletContext<RuntimeHealth>()
@@ -83,9 +102,10 @@ export function SettingsPage() {
   const [managedWorkspace, setManagedWorkspace] = useState(currentManagedWorkspace())
   const [managedNotice, setManagedNotice] = useState('')
   const [managedBusy, setManagedBusy] = useState(false)
-  const [demoPresetId, setDemoPresetId] = useState<ClientDemoPresetId>('social-seller')
-  const [demoSelections, setDemoSelections] = useState<Partial<Record<SetupProductId, string>>>(() => Object.fromEntries(clientDemoPresets[0].selections.map((selection) => [selection.product, selection.templateId])))
-  const [demoBlueprint, setDemoBlueprint] = useState<ClientDemoBlueprint | null>(null)
+  const [demoWorkspace, setDemoWorkspace] = useState<ClientDemoWorkspace | null>(loadClientDemoWorkspace)
+  const [demoPresetId, setDemoPresetId] = useState<ClientDemoPresetId>(() => demoWorkspace?.blueprint.client.presetId ?? 'social-seller')
+  const [demoSelections, setDemoSelections] = useState<Partial<Record<SetupProductId, string>>>(() => Object.fromEntries((demoWorkspace?.blueprint.products ?? clientDemoPresets[0].selections).map((selection) => [selection.product, selection.templateId])))
+  const [demoBlueprint, setDemoBlueprint] = useState<ClientDemoBlueprint | null>(() => demoWorkspace?.blueprint ?? null)
   const completion = pilotProgress(setup)
   const isPilotReady = pilotReady(setup)
   const requestedProduct = setupProductFromQuery(setupSearchParams.get('product'))
@@ -104,6 +124,7 @@ export function SettingsPage() {
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
   const demoBlueprintFilename = `supermega-client-demo-${setup.workspace.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || evidenceDate}.json`
   const demoBlueprintHref = demoBlueprint ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ ...demoBlueprint, exportedAt: new Date().toISOString() }, null, 2))}` : ''
+  const demoReadyCount = demoWorkspace?.products.filter((product) => ['data_ready', 'workspace_checked', 'applied'].includes(product.status)).length ?? 0
   const managedApprovalRequests = approvals.map(toManagedApprovalRequest).filter((request): request is NonNullable<typeof request> => Boolean(request))
   const localProductRecords = collectLocalProductRecords(window.localStorage)
   const localRecordCount = Object.keys(localProductRecords).length
@@ -153,9 +174,19 @@ export function SettingsPage() {
     return () => window.clearTimeout(selectionTimer)
   }, [requestedProduct, setSetup, setup.product])
 
+  useEffect(() => {
+    try {
+      if (demoWorkspace) window.localStorage.setItem(CLIENT_DEMO_WORKSPACE_STORAGE_KEY, JSON.stringify(demoWorkspace))
+      else window.localStorage.removeItem(CLIENT_DEMO_WORKSPACE_STORAGE_KEY)
+    } catch {
+      setNotice('This browser could not save the client workspace. The current setup remains open for this session.')
+    }
+  }, [demoWorkspace])
+
   function updateSetup(patch: Partial<SetupState>) {
     setSetup((current) => ({ ...current, ...patch, savedAt: undefined }))
     setDemoBlueprint(null)
+    setDemoWorkspace(null)
   }
 
   function chooseDemoPreset(presetId: ClientDemoPresetId) {
@@ -163,6 +194,7 @@ export function SettingsPage() {
     setDemoPresetId(preset.id)
     setDemoSelections(Object.fromEntries(preset.selections.map((selection) => [selection.product, selection.templateId])))
     setDemoBlueprint(null)
+    setDemoWorkspace(null)
     setNotice(`${preset.name} modules selected. Adjust products only if this client needs a different operating loop.`)
   }
 
@@ -174,11 +206,13 @@ export function SettingsPage() {
       return next
     })
     setDemoBlueprint(null)
+    setDemoWorkspace(null)
   }
 
   function changeDemoTemplate(product: SetupProductId, templateId: string) {
     setDemoSelections((current) => ({ ...current, [product]: templateId }))
     setDemoBlueprint(null)
+    setDemoWorkspace(null)
   }
 
   function configureDemoProduct(product: SetupProductId, templateId: string, openProduct: boolean) {
@@ -204,12 +238,22 @@ export function SettingsPage() {
         selections: selectedDemoEntries.map(([product, templateId]) => ({ product, templateId })),
       })
       setDemoBlueprint(blueprint)
+      setDemoWorkspace(createClientDemoWorkspace(blueprint, new Date().toISOString()))
       const first = blueprint.products[0]
       if (first) configureDemoProduct(first.product, first.templateId, false)
       setNotice(`${blueprint.products.length}-product demo kit ready. Prepare data or open a product.`)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The client demo kit could not be prepared.')
     }
+  }
+
+  function recordDemoProductProgress(progress: ClientDemoProductProgress) {
+    setDemoWorkspace((current) => {
+      const previous = current?.products.find((product) => product.product === progress.product)
+      if (!current || !previous) return current
+      if (previous.status === progress.status && previous.rows === progress.rows && previous.readyRows === progress.readyRows && previous.issueRows === progress.issueRows) return current
+      try { return updateClientDemoWorkspaceProgress(current, progress, new Date().toISOString()) } catch { return current }
+    })
   }
 
   function chooseSettingsStep(step: 'workflow' | 'success') {
@@ -265,6 +309,7 @@ export function SettingsPage() {
         WEBSITE_STORAGE_KEY,
         LEGACY_WEBSITE_STORAGE_KEY,
         WEBSITE_ECOMMERCE_HANDOFF_KEY,
+        CLIENT_DEMO_WORKSPACE_STORAGE_KEY,
         LEGACY_STOREFRONT_DRAFT_RESET_KEY,
         ...retainedKeys,
         ...LEGACY_TEAM_WORK_KEYS,
@@ -340,12 +385,15 @@ export function SettingsPage() {
             })}</div>
             <div className="settings-step-actions"><span>Creates a local setup package. No client data is sent.</span><button className="core-button primary" disabled={!workflowReady} onClick={createDemoKit} type="button">Build client demo kit</button></div>
             {demoBlueprint ? <section aria-label="Client demo kit" className="demo-kit-result">
-              <div className="panel-head"><div><span className="core-eyebrow">Demo kit ready</span><h3>{demoBlueprint.client.workspace}</h3><p>{demoBlueprint.products.length} connected products · owner {demoBlueprint.client.owner}</p></div><a className="core-button" download={demoBlueprintFilename} href={demoBlueprintHref}>Download setup kit</a></div>
+              <div className="panel-head"><div><span className="core-eyebrow">Client workspace</span><h3>{demoBlueprint.client.workspace}</h3><p>{demoReadyCount} of {demoBlueprint.products.length} products have checked data · owner {demoBlueprint.client.owner}</p></div><a className="core-button" download={demoBlueprintFilename} href={demoBlueprintHref}>Download setup kit</a></div>
               {demoBlueprint.integrations.length ? <ol className="demo-integration-flow">{demoBlueprint.integrations.map((integration) => <li key={`${integration.from}-${integration.to}`}><strong>{productDisplayName(integration.from)} → {productDisplayName(integration.to)}</strong><span>{integration.outcome}</span></li>)}</ol> : <p className="form-notice">This demo has one standalone product.</p>}
-              <div className="demo-kit-products">{demoBlueprint.products.map((product) => <article key={product.product}><div><strong>{product.label}</strong><small>{templateFor(product.product, product.templateId).name} · {product.checklist.length} data fields</small></div><div><button className="text-link" onClick={() => configureDemoProduct(product.product, product.templateId, false)} type="button">Prepare data</button><button className="core-button" onClick={() => configureDemoProduct(product.product, product.templateId, true)} type="button">Open demo</button></div></article>)}</div>
+              <div className="demo-kit-products">{demoBlueprint.products.map((product) => {
+                const progress = demoWorkspace?.products.find((candidate) => candidate.product === product.product)
+                return <article key={product.product}><div><strong>{product.label}</strong><small>{templateFor(product.product, product.templateId).name} · {progress?.rows ? `${progress.readyRows}/${progress.rows} rows ready` : `${product.checklist.length} data fields`}</small></div><span className={`status-pill ${progress && ['data_ready', 'workspace_checked', 'applied'].includes(progress.status) ? 'approved' : progress?.status === 'needs_fix' ? 'pending' : 'bounded'}`}>{demoProgressLabels[progress?.status ?? 'not_started']}</span><div><button className="text-link" onClick={() => configureDemoProduct(product.product, product.templateId, false)} type="button">Prepare data</button><button className="core-button" onClick={() => configureDemoProduct(product.product, product.templateId, true)} type="button">Open demo</button></div></article>
+              })}</div>
             </section> : null}
           </>}
-          {requestedProduct || demoBlueprint ? <section className="demo-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Prepare {selectedProduct.name}</h3><p>Try the safe sample now or drop in the client's matching CSV for review.</p></div><Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding managedIdentity={managedIdentity} owner={setup.owner} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense></section> : null}
+          {requestedProduct || demoBlueprint ? <section className="demo-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Prepare {selectedProduct.name}</h3><p>Try the safe sample now or drop in the client's matching CSV for review.</p></div><Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding managedIdentity={managedIdentity} onProgress={recordDemoProductProgress} owner={setup.owner} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense></section> : null}
           <div className="settings-step-actions"><span>{requestedProduct ? 'Sample first. Plan when needed.' : 'Add measurable success criteria after the demo kit is ready.'}</span><div className="setup-action-group"><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Add trial plan</button>{requestedProduct ? <button className="core-button primary" disabled={!workflowReady} onClick={startGuidedTrial} type="button">Start guided sample</button> : null}</div></div>
           </fieldset>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'success'} hidden={settingsStep !== 'success'}>

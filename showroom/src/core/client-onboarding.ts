@@ -1,6 +1,8 @@
 export const CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1' as const
 export const CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1' as const
 export const CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v1' as const
+export const CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v1' as const
+export const CLIENT_DEMO_WORKSPACE_STORAGE_KEY = 'supermega.client-demo-workspace.v1'
 export const CLIENT_IMPORT_MAX_BYTES = 512 * 1024
 export const CLIENT_IMPORT_MAX_ROWS = 500
 
@@ -51,6 +53,24 @@ export type ClientDemoBlueprint = {
     humanReviewRequired: true
     externalWritesPerformed: false
   }
+}
+
+export type ClientDemoProductProgressStatus = 'not_started' | 'needs_fix' | 'data_ready' | 'workspace_checked' | 'applied'
+
+export type ClientDemoProductProgress = {
+  product: ClientSolutionId
+  status: ClientDemoProductProgressStatus
+  rows: number
+  readyRows: number
+  issueRows: number
+  updatedAt: string | null
+}
+
+export type ClientDemoWorkspace = {
+  schema: typeof CLIENT_DEMO_WORKSPACE_SCHEMA
+  blueprint: ClientDemoBlueprint
+  products: ClientDemoProductProgress[]
+  updatedAt: string
 }
 
 type ClientImportFieldKind = 'boolean' | 'date' | 'integer' | 'slug' | 'sku' | 'text' | 'url'
@@ -680,6 +700,99 @@ export function buildClientDemoBlueprint(input: {
       humanReviewRequired: true,
       externalWritesPerformed: false,
     },
+  }
+}
+
+function canonicalClientDemoBlueprint(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const source = value as Partial<ClientDemoBlueprint>
+  if (!source.client || !Array.isArray(source.products)) return null
+  try {
+    const rebuilt = buildClientDemoBlueprint({
+      workspace: source.client.workspace ?? '',
+      owner: source.client.owner ?? '',
+      presetId: source.client.presetId as ClientDemoPresetId,
+      selections: source.products.map((product) => ({ product: product.product, templateId: product.templateId })),
+    })
+    return JSON.stringify(rebuilt) === JSON.stringify(value) ? rebuilt : null
+  } catch {
+    return null
+  }
+}
+
+function canonicalTimestamp(value: unknown) {
+  if (typeof value !== 'string' || value.length > 32) return null
+  try { return new Date(value).toISOString() === value ? value : null } catch { return null }
+}
+
+function hasExactKeys(value: object, keys: readonly string[]) {
+  return JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...keys].sort())
+}
+
+function canonicalProgress(value: unknown, product: ClientSolutionId): ClientDemoProductProgress | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  if (!hasExactKeys(value, ['product', 'status', 'rows', 'readyRows', 'issueRows', 'updatedAt'])) return null
+  const source = value as Partial<ClientDemoProductProgress>
+  const statuses: readonly ClientDemoProductProgressStatus[] = ['not_started', 'needs_fix', 'data_ready', 'workspace_checked', 'applied']
+  const integers = [source.rows, source.readyRows, source.issueRows]
+  if (source.product !== product || !statuses.includes(source.status as ClientDemoProductProgressStatus)
+    || integers.some((entry) => !Number.isSafeInteger(entry) || Number(entry) < 0 || Number(entry) > CLIENT_IMPORT_MAX_ROWS)
+    || Number(source.readyRows) > Number(source.rows) || Number(source.issueRows) > Number(source.rows)) return null
+  const updatedAt = source.updatedAt === null ? null : canonicalTimestamp(source.updatedAt)
+  if (source.updatedAt !== null && !updatedAt) return null
+  return {
+    product,
+    status: source.status as ClientDemoProductProgressStatus,
+    rows: Number(source.rows),
+    readyRows: Number(source.readyRows),
+    issueRows: Number(source.issueRows),
+    updatedAt,
+  }
+}
+
+export function createClientDemoWorkspace(blueprintValue: unknown, updatedAtValue: unknown): ClientDemoWorkspace {
+  const blueprint = canonicalClientDemoBlueprint(blueprintValue)
+  const updatedAt = canonicalTimestamp(updatedAtValue)
+  if (!blueprint || !updatedAt) throw new Error('The client demo workspace package is invalid.')
+  return {
+    schema: CLIENT_DEMO_WORKSPACE_SCHEMA,
+    blueprint,
+    products: blueprint.products.map(({ product }) => ({ product, status: 'not_started', rows: 0, readyRows: 0, issueRows: 0, updatedAt: null })),
+    updatedAt,
+  }
+}
+
+export function restoreClientDemoWorkspace(value: unknown): ClientDemoWorkspace | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  if (!hasExactKeys(value, ['schema', 'blueprint', 'products', 'updatedAt'])) return null
+  const source = value as Partial<ClientDemoWorkspace>
+  const blueprint = canonicalClientDemoBlueprint(source.blueprint)
+  const updatedAt = canonicalTimestamp(source.updatedAt)
+  if (source.schema !== CLIENT_DEMO_WORKSPACE_SCHEMA || !blueprint || !updatedAt || !Array.isArray(source.products)
+    || source.products.length !== blueprint.products.length) return null
+  const products = blueprint.products.map(({ product }, index) => canonicalProgress(source.products?.[index], product))
+  if (products.some((product) => !product)) return null
+  return { schema: CLIENT_DEMO_WORKSPACE_SCHEMA, blueprint, products: products as ClientDemoProductProgress[], updatedAt }
+}
+
+export function updateClientDemoWorkspaceProgress(
+  workspaceValue: unknown,
+  progressValue: unknown,
+  updatedAtValue: unknown,
+): ClientDemoWorkspace {
+  const workspace = restoreClientDemoWorkspace(workspaceValue)
+  if (!workspace || !progressValue || typeof progressValue !== 'object' || Array.isArray(progressValue)) {
+    throw new Error('The client demo workspace progress is invalid.')
+  }
+  const product = (progressValue as Partial<ClientDemoProductProgress>).product as ClientSolutionId
+  const index = workspace.products.findIndex((candidate) => candidate.product === product)
+  const progress = index >= 0 ? canonicalProgress(progressValue, product) : null
+  const updatedAt = canonicalTimestamp(updatedAtValue)
+  if (!progress || !updatedAt) throw new Error('The client demo workspace progress is invalid.')
+  return {
+    ...workspace,
+    products: workspace.products.map((candidate, candidateIndex) => candidateIndex === index ? { ...progress, updatedAt } : candidate),
+    updatedAt,
   }
 }
 
