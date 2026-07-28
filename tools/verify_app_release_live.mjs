@@ -127,6 +127,9 @@ for (const required of ['SUPERMEGA', 'Choose a product. Run work.', 'Free worksp
 for (const required of ['Plant agent queue', 'Recommended Plant agent job', 'Agent job', 'Owner gate', 'Record next job output', 'Contain urgent Plant problems', 'Review quality holds', 'Close WCM records', 'Build shift handoff']) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_plant_context:${required}`)
 }
+for (const required of ['Shop agent queue', 'Recommended Shop agent job', 'Agent job', 'Owner gate', 'Restore Shop write readiness', 'Review online order requests', 'Finish fulfilment queue', 'Receive purchase orders', 'Reorder low stock', 'Set up stock locations']) {
+  if (!assetCorpus.includes(required)) throw new Error(`missing_live_shop_context:${required}`)
+}
 for (const required of ['Start guided sample', 'Request managed trial', 'Export evidence before managed import.', 'supermega_trial_evidence', 'activationRows', 'activationEvidencePlan', 'version:15', 'learningRows', 'learningPlanRows', 'agentPlanRows', 'behaviorTrail', 'Premium AI context', 'What the system can learn', 'Premium agent plan', 'What the agent can run', 'Export AI context package']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_settings_context:${required}`)
 }
