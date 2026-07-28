@@ -32,6 +32,10 @@ import {
   type EcommerceShopDraftV2,
 } from './ecommerce-buying-lifecycle'
 import {
+  buildEcommerceManagedStoreActivationPacket,
+  type EcommerceManagedStoreActivationReadiness,
+} from './ecommerce-activation-packet'
+import {
   acceptManagedStorefrontCommand,
   prepareManagedStorefrontSave,
   readManagedStorefront,
@@ -1132,9 +1136,7 @@ export function EcommerceProduct() {
     ['Activation', managedIdentity ? 'Managed controls' : 'Free local only'],
   ] as const
   function downloadManagedStoreActivationPacket() {
-    const packet = {
-      schema: 'supermega.ecommerce.managed_store_activation_packet.v1',
-      version: 1,
+    const packet = buildEcommerceManagedStoreActivationPacket({
       generatedAt: new Date().toISOString(),
       product: 'ecommerce',
       storeName,
@@ -1149,7 +1151,7 @@ export function EcommerceProduct() {
         savedRevision: savedDraft?.revision ?? null,
         savedAt: savedDraft?.savedAt ?? null,
       },
-      readiness: Object.fromEntries(managedStoreActivationRows),
+      readiness: Object.fromEntries(managedStoreActivationRows) as EcommerceManagedStoreActivationReadiness,
       orderQueue: {
         pendingShopReviews: pendingManagedRequests.length,
         stockRisk: orderOpsStockRiskCount,
@@ -1158,26 +1160,7 @@ export function EcommerceProduct() {
         deliveryReview: deliveryReviewCount,
         pickupReview: pickupReviewCount,
       },
-      supportHandoff: [
-        'Confirm catalog import and selected sellable SKUs.',
-        'Confirm storefront fingerprint and saved revision.',
-        'Confirm checkout quote controls before customer use.',
-        'Confirm manual payment and delivery review rules.',
-        'Clear the Shop review queue before managed activation.',
-        'Enable managed writes only after Postgres, RLS, auth, audit, and scheduler proof passes.',
-      ],
-      forbiddenActions: [
-        'product_publish',
-        'customer_message_send',
-        'payment_capture',
-        'wallet_debit',
-        'delivery_booking',
-        'stock_move',
-        'refund_write',
-        'shop_write',
-        'managed_activation',
-      ],
-    }
+    })
     const url = URL.createObjectURL(new Blob([`${JSON.stringify(packet, null, 2)}\n`], { type: 'application/json' }))
     const link = document.createElement('a')
     link.href = url

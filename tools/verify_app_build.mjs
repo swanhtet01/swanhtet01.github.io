@@ -20,6 +20,7 @@ let storefrontRequestRuntimeChecks = 0
 let commerceOrderDraftRuntimeChecks = 0
 let managedWebsiteRuntimeChecks = 0
 let managedStorefrontRuntimeChecks = 0
+let ecommerceActivationRuntimeChecks = 0
 let ecommerceHandoffRuntimeChecks = 0
 let ecommerceBuyingRuntimeChecks = 0
 let catalogImportRuntimeChecks = 0
@@ -32,7 +33,7 @@ let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
-const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productHomeReadinessSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productHomeReadinessSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -67,6 +68,7 @@ const [manifestText, appPackageText, appSource, coreSource, coreShellSource, pro
   readFile(resolve(root, 'showroom', 'src', 'products', 'WebsiteCommerceIntake.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'product-handoff.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceProduct.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-activation-packet.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'managed-storefront.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-model.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-draft.ts'), 'utf8'),
@@ -274,24 +276,32 @@ if (!ecommerceSource.includes('const orderOpsRows = [')
   || !ecommerceSource.includes("['Safety', managedIdentity ? 'Managed gate' : 'Local trial']")
   || !ecommerceSource.includes('const managedStoreActivationStage =')
   || !ecommerceSource.includes('const managedStoreActivationRows = [')
+  || !ecommerceSource.includes('buildEcommerceManagedStoreActivationPacket')
+  || !ecommerceSource.includes('type EcommerceManagedStoreActivationReadiness')
   || !ecommerceSource.includes('function safeEcommerceFilename(value: string)')
   || !ecommerceSource.includes('function downloadManagedStoreActivationPacket()')
-  || !ecommerceSource.includes("schema: 'supermega.ecommerce.managed_store_activation_packet.v1'")
-  || !ecommerceSource.includes('version: 1')
+  || !ecommerceSource.includes('const packet = buildEcommerceManagedStoreActivationPacket({')
   || !ecommerceSource.includes("operatingMode: managedIdentity ? 'managed_trial' : 'browser_local_trial'")
   || !ecommerceSource.includes('readiness: Object.fromEntries(managedStoreActivationRows)')
   || !ecommerceSource.includes('pendingShopReviews: pendingManagedRequests.length')
-  || !ecommerceSource.includes("'Enable managed writes only after Postgres, RLS, auth, audit, and scheduler proof passes.'")
-  || !ecommerceSource.includes('forbiddenActions: [')
-  || !ecommerceSource.includes("'product_publish'")
-  || !ecommerceSource.includes("'customer_message_send'")
-  || !ecommerceSource.includes("'payment_capture'")
-  || !ecommerceSource.includes("'wallet_debit'")
-  || !ecommerceSource.includes("'delivery_booking'")
-  || !ecommerceSource.includes("'stock_move'")
-  || !ecommerceSource.includes("'refund_write'")
-  || !ecommerceSource.includes("'shop_write'")
-  || !ecommerceSource.includes("'managed_activation'")
+  || !ecommerceActivationSource.includes("export const ECOMMERCE_MANAGED_STORE_ACTIVATION_PACKET_SCHEMA = 'supermega.ecommerce.managed_store_activation_packet.v1' as const")
+  || !ecommerceActivationSource.includes('export function buildEcommerceManagedStoreActivationPacket')
+  || !ecommerceActivationSource.includes('export function validateEcommerceManagedStoreActivationPacket')
+  || !ecommerceActivationSource.includes('hasExactKeys(value, [')
+  || !ecommerceActivationSource.includes("value.operatingMode === 'managed_trial' && value.source.catalogSource !== 'managed-shop'")
+  || !ecommerceActivationSource.includes('value.source.selectedSkus.length > Number(value.source.catalogItems)')
+  || !ecommerceActivationSource.includes('sameStringArray(value.forbiddenActions, ecommerceManagedStoreActivationForbiddenActions)')
+  || !ecommerceActivationSource.includes("'Enable managed writes only after Postgres, RLS, auth, audit, and scheduler proof passes.'")
+  || !ecommerceActivationSource.includes('forbiddenActions: [...ecommerceManagedStoreActivationForbiddenActions]')
+  || !ecommerceActivationSource.includes("'product_publish'")
+  || !ecommerceActivationSource.includes("'customer_message_send'")
+  || !ecommerceActivationSource.includes("'payment_capture'")
+  || !ecommerceActivationSource.includes("'wallet_debit'")
+  || !ecommerceActivationSource.includes("'delivery_booking'")
+  || !ecommerceActivationSource.includes("'stock_move'")
+  || !ecommerceActivationSource.includes("'refund_write'")
+  || !ecommerceActivationSource.includes("'shop_write'")
+  || !ecommerceActivationSource.includes("'managed_activation'")
   || !ecommerceSource.includes('supermega-ecommerce-activation-${safeEcommerceFilename(storeName)}.json')
   || !ecommerceSource.includes('Download Ecommerce managed store activation packet')
   || !ecommerceSource.includes('Ecommerce activation packet downloaded. No product, customer, payment, delivery, stock, Shop, or managed workspace state changed.')
@@ -8149,6 +8159,72 @@ async function verifyManagedStorefrontRuntime() {
   }
 }
 
+async function verifyEcommerceActivationRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    ecommerceActivationRuntimeChecks += 1
+  }
+  try {
+    const nonce = Date.now()
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-activation-packet.ts')).href}?ecommerce-activation=${nonce}`)
+    const packet = model.buildEcommerceManagedStoreActivationPacket({
+      generatedAt: '2026-07-29T00:00:00.000Z',
+      product: 'ecommerce',
+      storeName: 'Mingalar Market',
+      stage: 'Download activation packet',
+      operatingMode: 'browser_local_trial',
+      source: {
+        catalogSource: 'shop-local',
+        catalogItems: 3,
+        selectedSkus: ['SM-1001', 'SM-1002'],
+        previewDigest: `sha256:${'a'.repeat(64)}`,
+        managedCatalogDigest: null,
+        savedRevision: 2,
+        savedAt: '2026-07-29T00:00:00.000Z',
+      },
+      readiness: {
+        Catalog: '2 sellable',
+        Storefront: 'Saved fingerprint',
+        Checkout: 'Quote controlled',
+        Payments: 'Review only',
+        Delivery: 'Template ready',
+        'Shop gate': 'No queue',
+        Activation: 'Free local only',
+      },
+      orderQueue: {
+        pendingShopReviews: 0,
+        stockRisk: 0,
+        expiringQuotes: 0,
+        manualPaymentReview: 0,
+        deliveryReview: 0,
+        pickupReview: 0,
+      },
+    })
+    assert(packet.schema === model.ECOMMERCE_MANAGED_STORE_ACTIVATION_PACKET_SCHEMA
+      && packet.version === 1
+      && packet.supportHandoff.includes('Enable managed writes only after Postgres, RLS, auth, audit, and scheduler proof passes.')
+      && packet.forbiddenActions.join(',') === model.ecommerceManagedStoreActivationForbiddenActions.join(','),
+    'ecommerce_activation_packet_builder_missing_guardrails')
+    assert(model.validateEcommerceManagedStoreActivationPacket(JSON.parse(JSON.stringify(packet))).stage === packet.stage, 'ecommerce_activation_packet_roundtrip_rejected')
+    for (const [label, changed] of [
+      ['schema', { ...packet, schema: 'supermega.ecommerce.managed_store_activation_packet.v0' }],
+      ['extra', { ...packet, unexpected: true }],
+      ['managed_source', { ...packet, operatingMode: 'managed_trial', source: { ...packet.source, catalogSource: 'shop-local' } }],
+      ['too_many_skus', { ...packet, source: { ...packet.source, catalogItems: 1, selectedSkus: ['SM-1001', 'SM-1002'] } }],
+      ['forbidden_actions', { ...packet, forbiddenActions: packet.forbiddenActions.filter((action) => action !== 'payment_capture') }],
+      ['unsafe_digest', { ...packet, source: { ...packet.source, previewDigest: 'sha256:not-real' } }],
+    ]) {
+      let rejected = false
+      try {
+        model.validateEcommerceManagedStoreActivationPacket(changed)
+      } catch { rejected = true }
+      assert(rejected, `ecommerce_activation_${label}_accepted`)
+    }
+  } catch (error) {
+    fail(`ecommerce_activation_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 async function verifyProductionRuntime() {
   const assert = (condition, reason) => {
     if (!condition) throw new Error(reason)
@@ -9235,6 +9311,7 @@ await verifyStorefrontDraftRuntime()
 await verifyStorefrontRuntime()
 await verifyManagedWebsiteRuntime()
 await verifyManagedStorefrontRuntime()
+await verifyEcommerceActivationRuntime()
 await verifyCommerceRuntime()
 await verifyProductionRuntime()
 
@@ -9251,4 +9328,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
