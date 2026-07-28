@@ -4421,6 +4421,14 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     ['Write gate', commerceCanWrite && !pendingAction ? 'Ready' : 'Locked'],
   ] as const
   const shopOrderControlBoundary = 'Owner confirms every order, payment, refund, delivery, cancellation, and stock change before Shop writes.'
+  const shopOrderLifecycleRows = [
+    ['Capture', pendingStorefrontRequests.length || legacyWebsiteWorkWaiting ? `${pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)} online` : openOrders.length ? `${openOrders.length} open` : 'Ready'],
+    ['Reserve', managedInventoryProjection ? 'ATP active' : 'Catalog stock'],
+    ['Fulfil', actionOrders.length ? `${actionOrders.length} action` : openOrders.length ? 'In progress' : 'Ready'],
+    ['Collect', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
+    ['Replenish', activePurchaseOrders.length ? `${activePurchaseOrders.length} active PO` : lowStock.length ? `${lowStock.length} reorder` : 'Clear'],
+    ['Return', returnDraft ? 'Drafting' : commerce.orders.some((order) => order.returns?.length) ? 'Recorded' : 'Accountable'],
+  ] as const
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
@@ -4437,6 +4445,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       <section className="shop-order-control" aria-label="Shop order control">
         <div><span className="core-eyebrow">Order control</span><strong>{shopOrderControlNext}</strong><small>{shopOrderControlBoundary}</small></div>
         <div className="shop-order-control-rows">{shopOrderControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+      </section>
+      <section className="shop-order-control" aria-label="Shop order lifecycle">
+        <div><span className="core-eyebrow">Order lifecycle</span><strong>Capture to return</strong><small>AI guides capture, reservation, fulfilment, collection, replenishment, and returns from one Shop record. Owner confirms every order, payment, refund, delivery, cancellation, and stock write.</small></div>
+        <div className="shop-order-control-rows">{shopOrderLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
       </section>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
