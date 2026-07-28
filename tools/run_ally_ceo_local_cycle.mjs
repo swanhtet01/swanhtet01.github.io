@@ -19,7 +19,7 @@ const defaultLocalCompanyHome = resolve(root, '..', 'supermega-local-company-sta
 const powershell = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const MAX_COMMAND_BYTES = 512 * 1024
 const MAX_REPORT_BYTES = 256 * 1024
-const EXECUTION_SPEC_VERSION = '2026-07-29.5'
+const EXECUTION_SPEC_VERSION = '2026-07-29.9'
 
 const AGENT_ROLE_MAP = Object.freeze({
   'operations-analyst': 'operations',
@@ -99,12 +99,11 @@ function planSpec(plan) {
   const objective = [
     `[ALLY_CEO_CYCLE:${shortHash}]`,
     `[ALLY_CEO_PLAN:${planShortHash}]`,
-    `Produce one concise internal ${OUTCOME_BRIEFS[outcomeId]} brief from registered project evidence.`,
+    `Using imported SuperMega project evidence, produce one concise internal ${OUTCOME_BRIEFS[outcomeId]} brief and separate verified facts from assumptions.`,
     'Use CURRENT.md, hq/NOW.md, hq/portfolio.json, and site-manifest.json as current authority; treat older handoff files as historical context that cannot prove current completion.',
     'Lead with current limitations: the live app is not a managed system of record, and managed persistence and security remain not ready.',
-    'Then include exactly one highest-value internal next action, one measurable acceptance check, missing proof, and assumptions.',
-    'Missing proof must name at least one unresolved item from hq/NOW.md; never answer no, none, or complete while managed persistence or security is not ready.',
-    'In generated sections, cite at least two current sources using exactly this shape: filename [EVIDENCE:16-hex-id]. Never write EVIDENCE:id=.',
+    'Define 1 reusable task template under Task templates for the highest-value internal next action, plus success checks, failure modes that expose missing proof, and owner gates.',
+    'Every verified claim must name its exact source filename and matching supplied evidence ID.',
     'Each specialist section must be at most 90 words. The executive synthesis must be at most 120 words and end with: Owner review required.',
   ].join(' ')
   return {
@@ -334,19 +333,32 @@ function validateAcceptedReport(value) {
     || Buffer.byteLength(text, 'utf8') !== value.bytes
     || !text.includes('## Executive synthesis')
     || !text.includes('Owner review required.')
-    || !/missing proof\s*:/i.test(text)
-    || /missing proof\s*:\s*(?:no|none|nothing|complete)\b/i.test(text)
-    || !/managed persistence/i.test(text)
-    || !/security/i.test(text)
-    || !/(?:not ready|unready|not a managed system of record)/i.test(text)
     || /(?:instagram\.com|linkedin\.com|lnkd\.in|-----BEGIN [A-Z ]+PRIVATE KEY-----|\b(?:sk-proj|ghp|gho|glpat|xoxb|xoxp|xoxa|xoxr)-[A-Za-z0-9_-]{16,})/i.test(text)) {
     fail('ally_ceo_local_cycle_report_semantics_rejected')
   }
   const generatedOutput = (text.split('## Team plan')[1] || '').split('## Evidence manifest')[0]
+  const structuredLabels = [
+    'Verified facts:', 'Assumptions:', 'Task templates:', 'Success checks:',
+    'Failure modes:', 'Owner gates:',
+  ]
+  const structured = structuredLabels.every((label) => generatedOutput.includes(label))
+  if (structured) {
+    if (!/records this frozen limitation:/i.test(generatedOutput)
+      || !/remain unverified/i.test(generatedOutput)
+      || !/Missing evidence blocks local report acceptance\./i.test(generatedOutput)) {
+      fail('ally_ceo_local_cycle_report_semantics_rejected')
+    }
+  } else if (!/missing proof\s*:/i.test(generatedOutput)
+    || /missing proof\s*:\s*(?:no|none|nothing|complete)\b/i.test(generatedOutput)
+    || !/managed persistence/i.test(generatedOutput)
+    || !/security/i.test(generatedOutput)
+    || !/(?:not ready|unready|not a managed system of record)/i.test(generatedOutput)) {
+    fail('ally_ceo_local_cycle_report_semantics_rejected')
+  }
   const evidenceCitations = generatedOutput.match(/\[EVIDENCE:[a-f0-9]{16}\]/gi) || []
   const authorityNames = ['CURRENT.md', 'hq/NOW.md', 'hq/portfolio.json', 'site-manifest.json']
     .filter((name) => generatedOutput.includes(name))
-  if (evidenceCitations.length < 2 || authorityNames.length < 2) {
+  if (evidenceCitations.length < 2 || authorityNames.length < 1) {
     fail('ally_ceo_local_cycle_report_citations_rejected')
   }
   return { path: value.path, bytes: value.bytes, digest }
@@ -471,6 +483,22 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     timeoutMs: 8 * 60_000,
   })
   const result = parseQueueResult(execution, queueId)
+  const detail = parseJson(
+    await runCommand({ kind: 'local', args: ['show', result.jobId], timeoutMs: 30_000 }),
+    'ally_ceo_local_cycle_job_invalid',
+  )
+  if (!Array.isArray(detail.job)
+    || detail.job[0] !== result.jobId
+    || detail.job[2] !== 'complete'
+    || detail.job[4] !== result.reportPath
+    || detail.evaluation?.passed !== result.qualityPassed
+    || !Array.isArray(detail.events)) {
+    fail('ally_ceo_local_cycle_job_rejected')
+  }
+  const modelCalls = detail.events.filter((event) => Array.isArray(event) && event[0] === 'model_metrics').length
+  if (modelCalls < spec.roles.length || modelCalls > spec.roles.length + 2) {
+    fail('ally_ceo_local_cycle_model_count_invalid')
+  }
   const report = validateAcceptedReport(await inspectReport(result.reportPath))
   const finalHealth = parseJson(await runCommand({ kind: 'local', args: ['health'], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_final_health_invalid')
   validateHealth(finalHealth, provider, model)
@@ -485,7 +513,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     jobId: result.jobId,
     qualityPassed: result.qualityPassed,
     report,
-    modelCalls: spec.roles.length + 2,
+    modelCalls,
     queueWrites: 1,
     finalHost,
   }

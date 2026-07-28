@@ -95,11 +95,12 @@ function harness(overrides = {}) {
     })
     if (args[0] === 'queue' && args[1] === 'cancel') return `Queue item ${queueId} cancelled.\n`
     if (args[0] === 'queue' && args[1] === 'run-next') {
-      return `Queue item ${queueId} completed as job ${jobId}; quality=passed\nReport: C:\\state\\reports\\report.md\n`
+      return `Queue item ${queueId} completed as job ${jobId}; quality=passed\nReport: C:\\state\\outputs\\report.md\n`
     }
     if (args[0] === 'show') return JSON.stringify({
       job: [args[1], 'objective', 'complete', '2026-07-29T00:00:00Z', 'C:\\state\\outputs\\report.md'],
       evaluation: { passed: true },
+      events: Array.from({ length: overrides.modelEventCount ?? 3 }, () => ['model_metrics', '{}']),
     })
     throw new Error(`unexpected:${args.join(' ')}`)
   }
@@ -119,6 +120,23 @@ const acceptedReport = [
   'Owner review required.',
   '## Evidence manifest',
 ].join('\n')
+
+const acceptedStructuredReport = [
+  '# Local Agent Company Report',
+  '## Team plan',
+  '1. operations',
+  '## operations',
+  'Not verified or performed: review current operating limitations.',
+  '## Executive synthesis',
+  'Verified facts: CURRENT.md [EVIDENCE:1111111111111111] is verified as a frozen local source for this brief. hq/NOW.md [EVIDENCE:2222222222222222] records this frozen limitation: managed persistence is not ready.',
+  'Assumptions: Current operational readiness and adoption remain unverified pending owner review.',
+  'Task templates: 1. Proposed, not verified or performed: Review managed readiness evidence.',
+  'Success checks: Require a sealed local report, valid hashes, and every deterministic quality gate to pass.',
+  'Failure modes: Missing evidence blocks local report acceptance.',
+  'Owner gates: External actions require owner approval.',
+  'Owner review required.',
+  '## Evidence manifest',
+].join('\n\n')
 
 test('preflight binds the CEO plan to two local roles without queue or model work', async () => {
   const state = harness()
@@ -150,7 +168,7 @@ test('execution claims the exact reviewed mission once and accepts only a qualit
   assert.equal(result.queueId, state.queueId)
   assert.equal(result.jobId, state.jobId)
   assert.equal(result.qualityPassed, true)
-  assert.equal(result.modelCalls, 4)
+  assert.equal(result.modelCalls, 3)
   const add = state.calls.find((call) => call.args?.[1] === 'add')
   assert.equal(add.args.includes('--roles'), true)
   assert.equal(add.args.includes('operations,chief-of-staff'), true)
@@ -158,6 +176,25 @@ test('execution claims the exact reviewed mission once and accepts only a qualit
   assert.deepEqual(run.args.slice(0, 4), ['queue', 'run-next', '--queue-id', state.queueId])
   assert.equal(run.args.includes('0s'), true)
   assert.equal(run.args.includes('512'), true)
+})
+
+test('code-owned structured evidence and limitation sections satisfy CEO semantics', async () => {
+  const state = harness({ modelEventCount: 2 })
+  const result = await runAllyCeoLocalCycle(
+    { execute: true },
+    {
+      plan: plan(),
+      runCommand: state.runCommand,
+      inspectReport: async () => ({
+        path: 'C:\\state\\outputs\\structured.md',
+        bytes: Buffer.byteLength(acceptedStructuredReport),
+        digest: 'sha256:' + 'f'.repeat(64),
+        text: acceptedStructuredReport,
+      }),
+    },
+  )
+  assert.equal(result.ok, true)
+  assert.equal(result.modelCalls, 2)
 })
 
 test('a locally passed report is still rejected when it denies known missing proof', async () => {
