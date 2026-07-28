@@ -372,6 +372,23 @@ type RuntimeActivationManifest = {
   secret_values_exposed: boolean
 }
 
+type RuntimeImportProvisioningCheck = {
+  id: string
+  label: string
+  ready: boolean
+  action: string
+}
+
+export type RuntimeImportProvisioning = {
+  contract: string
+  status: string
+  ready: boolean
+  checks: RuntimeImportProvisioningCheck[]
+  forbidden_until_ready: string[]
+  next_action: string
+  secret_values_exposed: boolean
+}
+
 export type RuntimeHealth = {
   status: RuntimeStatus
   serviceStatus: string
@@ -385,6 +402,7 @@ export type RuntimeHealth = {
   activationSteps: RuntimeActivationStep[]
   evidencePlan: RuntimeEvidencePlanItem[]
   activationManifest: RuntimeActivationManifest | null
+  importProvisioning: RuntimeImportProvisioning | null
 }
 
 type CommerceTab = 'counter' | 'orders' | 'inventory'
@@ -568,6 +586,7 @@ const checkingRuntime: RuntimeHealth = {
   activationSteps: [],
   evidencePlan: [],
   activationManifest: null,
+  importProvisioning: null,
 }
 
 const navigation = [
@@ -1485,7 +1504,7 @@ function useRuntimeHealth() {
           coverage_score?: number
           authentication?: { trusted_gateway_ready?: boolean; supabase_user_tokens_ready?: boolean }
           trial_backend?: { audit_ready?: boolean; write_enabled?: boolean }
-          enterprise_activation?: { requirements?: string[]; steps?: RuntimeActivationStep[]; evidence_plan?: RuntimeEvidencePlanItem[]; manifest?: RuntimeActivationManifest }
+          enterprise_activation?: { requirements?: string[]; steps?: RuntimeActivationStep[]; evidence_plan?: RuntimeEvidencePlanItem[]; manifest?: RuntimeActivationManifest; import_provisioning?: RuntimeImportProvisioning }
         }
         const requirements = Array.isArray(body.enterprise_activation?.requirements) ? body.enterprise_activation.requirements : []
         const activationSteps = Array.isArray(body.enterprise_activation?.steps)
@@ -1505,6 +1524,21 @@ function useRuntimeHealth() {
           && typeof manifest.proof_commands === 'object'
           && manifest.secret_values_exposed === false
           ? manifest
+          : null
+        const importProvisioning = body.enterprise_activation?.import_provisioning
+        const managedImportProvisioning = importProvisioning
+          && importProvisioning.contract === 'supermega.import_provisioning_readiness.v1'
+          && typeof importProvisioning.status === 'string'
+          && typeof importProvisioning.ready === 'boolean'
+          && Array.isArray(importProvisioning.checks)
+          && Array.isArray(importProvisioning.forbidden_until_ready)
+          && typeof importProvisioning.next_action === 'string'
+          && importProvisioning.secret_values_exposed === false
+          ? {
+            ...importProvisioning,
+            checks: importProvisioning.checks.filter((check) => typeof check.id === 'string' && typeof check.label === 'string' && typeof check.ready === 'boolean' && typeof check.action === 'string'),
+            forbidden_until_ready: importProvisioning.forbidden_until_ready.filter((action) => typeof action === 'string'),
+          }
           : null
         const authReady = Boolean(body.authentication?.trusted_gateway_ready || body.authentication?.supabase_user_tokens_ready)
         const auditReady = body.trial_backend?.audit_ready === true
@@ -1530,6 +1564,7 @@ function useRuntimeHealth() {
           activationSteps,
           evidencePlan,
           activationManifest,
+          importProvisioning: managedImportProvisioning,
         })
       })
       .catch(() => {

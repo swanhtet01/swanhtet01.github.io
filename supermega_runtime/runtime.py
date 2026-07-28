@@ -363,6 +363,75 @@ def _activation_manifest(
     }
 
 
+def _import_provisioning_readiness(
+    *,
+    database_ready: bool,
+    role_ready: bool,
+    schema_ready: bool,
+    security_ready: bool,
+    audit_ready: bool,
+    writes_ready: bool,
+) -> dict[str, Any]:
+    checks = [
+        {
+            "id": "managed_identity_confirmed",
+            "label": "Managed identity",
+            "ready": security_ready,
+            "action": "Verify trusted gateway or Supabase named-user identity before import approval.",
+        },
+        {
+            "id": "private_workspace_schema",
+            "label": "Private workspace schema",
+            "ready": database_ready and role_ready and schema_ready,
+            "action": "Apply the private trial schema with a non-BYPASSRLS runtime role.",
+        },
+        {
+            "id": "zero_write_validation_receipt",
+            "label": "Zero-write validation",
+            "ready": database_ready and role_ready and schema_ready and audit_ready,
+            "action": "Run the managed import validation endpoint and prove external_writes_performed is false.",
+        },
+        {
+            "id": "owner_import_approval",
+            "label": "Owner approval",
+            "ready": security_ready and audit_ready,
+            "action": "Capture a named owner approval before any import apply request.",
+        },
+        {
+            "id": "atomic_adapter_receipt",
+            "label": "Atomic adapter",
+            "ready": database_ready and role_ready and schema_ready and audit_ready and writes_ready,
+            "action": "Confirm the product adapter can create one idempotent managed revision.",
+        },
+        {
+            "id": "durable_revision_confirmation",
+            "label": "Durable revision",
+            "ready": database_ready and role_ready and schema_ready and audit_ready and writes_ready,
+            "action": "Read back workspace state after apply and compare the revision digest.",
+        },
+    ]
+    ready = all(item["ready"] for item in checks)
+    return {
+        "contract": "supermega.import_provisioning_readiness.v1",
+        "status": "ready" if ready else "blocked",
+        "ready": ready,
+        "checks": checks,
+        "forbidden_until_ready": [
+            "copy_browser_storage_to_production",
+            "customer_message_send",
+            "payment_capture",
+            "domain_publish",
+            "scheduler_autopilot",
+        ],
+        "next_action": (
+            "Import provisioning is ready for one reviewed managed workspace."
+            if ready
+            else "Validate a staged client import package inside a managed workspace before any activation write."
+        ),
+        "secret_values_exposed": False,
+    }
+
+
 def create_app() -> FastAPI:
     database_url = _text(os.getenv("SUPERMEGA_DATABASE_URL"))
     store = PostgresTrialStore(
@@ -450,6 +519,14 @@ def create_app() -> FastAPI:
             requirements=requirements,
             coverage_score=coverage_score,
         )
+        import_provisioning = _import_provisioning_readiness(
+            database_ready=readiness.database_ready,
+            role_ready=readiness.role_ready,
+            schema_ready=readiness.schema_ready,
+            security_ready=security_ready,
+            audit_ready=readiness.audit_ready,
+            writes_ready=readiness.write_enabled,
+        )
         return {
             "status": "ready",
             "service": SERVICE_NAME,
@@ -484,6 +561,7 @@ def create_app() -> FastAPI:
                 "evidence_plan": evidence_plan,
                 "evidence_ready": all(item["ready"] for item in evidence_plan),
                 "manifest": activation_manifest,
+                "import_provisioning": import_provisioning,
                 "secret_values_exposed": False,
             },
         }
