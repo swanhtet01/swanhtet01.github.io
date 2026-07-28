@@ -154,7 +154,7 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerFiles === 30
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerBytes === 409600
   && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerFiles === 13
-  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 239618
+  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 240190
   && portfolio.agentOperatingModel?.companyOperationsDeferredForStartup === true
   && portfolio.agentOperatingModel?.optionalToolConnectorsDeferredForStartup === true
   && portfolio.agentOperatingModel?.fullPlatformStatusTeams?.join(',') === 'engineering,finance-risk'
@@ -182,6 +182,8 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.providerAttemptReservedBeforeNetwork === true
   && portfolio.agentOperatingModel?.providerFailuresRemainCharged === true
   && portfolio.agentOperatingModel?.cacheHitsReserveProviderBudget === false
+  && portfolio.agentOperatingModel?.fixedHqSynthesisIgnoresGeneratedAt === true
+  && portfolio.agentOperatingModel?.unchangedCeoEvidenceConsumesModelCalls === false
   && portfolio.agentOperatingModel?.hostedAiBudgetRequiresDurableStore === true
   && portfolio.agentOperatingModel?.scaleToZero === true
   && portfolio.agentOperatingModel?.idleCapabilitiesConsumeCompute === false
@@ -775,6 +777,11 @@ requireContract('source provenance retained',
   && workboard.includes('Checkpoint `006070f` defers the 66 KB company-operations reporter')
   && workboard.includes('| OPS-057 | CEO + Vercel Operations / Connector Efficiency Codex | done-local |')
   && workboard.includes('Checkpoint `c508983` defers public HTTP, CBM, Gmail, Sheets, PayPal, Pipedrive, ClickUp, and Telegram modules')
+  && workboard.includes('| OPS-058 | CEO + Agent Operations / Model Efficiency Codex | done-local |')
+  && workboard.includes('Checkpoint `1c62d45` removes only top-level `company_operations_status.generatedAt`')
+  && kernelOperatorText.includes("planningMode !== 'hq_authority_fixed'")
+  && kernelOperatorText.includes("result?.tool !== 'company_operations_status'")
+  && kernelOperatorText.includes('const { generatedAt: _generatedAt, ...stableData } = data')
   && !workboard.includes('The selected Instagram slide confirms'))
 requireContract('HQ stays concise',
   readme.length < 7000
@@ -899,8 +906,8 @@ requireContract('scheduled CEO function keeps the full connector fleet deferred 
   && kernelFootprintVerifier.includes('connectorInventoryComplete: connectorImports === EXPECTED_CONNECTORS')
   && workboard.includes('| OPS-041 | CEO + Agent Operations / Vercel Efficiency Codex | done-local |')
   && workboard.includes('Checkpoint `6bad4e7` defers full status from the operator tool import')
-  && now.includes('CEO brief startup is 13 files/239,618 bytes')
-  && now.includes('full 69-connector audit loads only for Engineering and Finance/Risk'))
+  && now.includes('CEO brief startup is 13 files/240,190 bytes')
+  && now.includes('unchanged evidence uses zero model work'))
 
 for (const forbidden of ['Yangon Tyre', 'ytf.supermega.dev', 'pos.supermega.dev', 'twelve product']) {
   requireContract(`retired HQ context absent: ${forbidden}`,

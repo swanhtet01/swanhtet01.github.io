@@ -49,7 +49,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal 
 - Home keeps Shop and Plant exceptions above collapsed HQ work. When present, a Plant issue badge links to Problems and otherwise the card opens Jobs. `/work/` stays labelled HQ; bottom navigation reads Home, HQ, and Products.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 - CEO status is output-free across weekly briefs. Company Week separates recorded from delivered and fails incomplete delivery to attention; Company Health shows receipt counts (`8d97d4d`, `ece46ce`).
-- CEO brief startup is 13 files/239,618 bytes. Company operations and eight optional connectors load on demand and fail closed (`006070f`, `c508983`). The full 69-connector audit loads only for Engineering and Finance/Risk.
+- CEO brief startup is 13 files/240,190 bytes; operations and eight connectors are deferred (`006070f`, `c508983`). Fixed HQ synthesis keeps report time in evidence but outside cache keys, so unchanged evidence uses zero model work (`1c62d45`).
 
 ## Verified baseline
 
@@ -59,7 +59,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal 
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
 - Both `supermega.dev` and `app.supermega.dev` serve exact remote `main` commit `af3f45c22b13e5edccdf87214608817fc3499e4d`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Paired release identity is current at catalog `2026-07-28.1`.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-- Ally: 81.9% RAM, zero models, one worker/frontend, eligible dispatch, and no process stops.
+- Ally: 80.0% RAM, zero models, one worker/frontend, eligible dispatch, and no process stops.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
