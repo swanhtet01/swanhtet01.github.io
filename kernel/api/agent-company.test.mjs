@@ -722,7 +722,7 @@ test('protected work-order actions delegate to the durable queue contract', asyn
     ['work-order-proof', { clientId: 'client-acme', workOrderId: 'company-order:abc' }],
     ['work-order-review', { clientId: 'client-acme', workOrderId: 'company-order:abc', resultHash: 'a'.repeat(64), decision: 'accepted', reviewerName: 'Aye Aye', source: 'chat', statement: 'Accepted.', recordedBy: 'Swan', confirmation: 'ACCEPT company-order:abc hash' }],
     ['work-order-evaluate', { clientId: 'client-acme', workOrderId: 'company-order:abc', planHash: 'a'.repeat(64), verdict: 'accepted', checks: { accurate: true, complete: true, usable: true, boundarySafe: true }, confirmation: 'EVALUATE company-order:abc' }],
-    ['ceo-outcome-evaluate', { clientId: 'client-acme', operationId: `ceo-outcome:${'a'.repeat(40)}`, recordHash: 'b'.repeat(64), verdict: 'accepted', confirmation: `EVALUATE ceo-outcome:${'a'.repeat(40)}` }],
+    ['ceo-outcome-evaluate', { clientId: 'client-acme', operationId: `ceo-outcome:${'a'.repeat(40)}`, recordHash: 'b'.repeat(64), successMeasureDigest: 'c'.repeat(64), verdict: 'accepted', confirmation: `EVALUATE ceo-outcome:${'a'.repeat(40)} ${'c'.repeat(64)}` }],
     ['operations-report', { clientId: 'client-acme', windowDays: 30 }],
   ]
   for (const [action, body] of actions) {

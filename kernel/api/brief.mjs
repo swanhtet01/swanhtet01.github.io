@@ -42,6 +42,7 @@ function ceoOutcomeView(selection) {
   return selected ? {
     authorityId: selection.authorityId,
     authorityDigest: selection.authorityDigest,
+    successMeasureDigest: selected.successMeasureDigest,
     id: selected.id,
     title: selected.title,
     team: selected.team,
@@ -257,6 +258,7 @@ export async function runScheduledBrief(options = {}) {
       clientId,
       outcomeId: selection.selected.id,
       authorityDigest: selection.authorityDigest,
+      successMeasureDigest: selection.selected.successMeasureDigest,
       completedAt: now.toISOString(),
       usage: result.usage,
     })

@@ -13,6 +13,7 @@ import {
 
 const HASH = 'a'.repeat(64)
 const AUTHORITY_DIGEST = 'c'.repeat(64)
+const SUCCESS_MEASURE_DIGEST = 'b'.repeat(64)
 const operatorUsage = (patch = {}) => ({
   contract: 'supermega.operator-usage.v1',
   units: 'bulk_equivalent_tokens',
@@ -126,6 +127,7 @@ const ceoOutcomeInput = (patch = {}) => ({
   clientId: 'client-acme',
   outcomeId: 'daily-company-control',
   authorityDigest: AUTHORITY_DIGEST,
+  successMeasureDigest: SUCCESS_MEASURE_DIGEST,
   completedAt: '2026-07-14T01:00:00.000Z',
   usage: operatorUsage(),
   ...patch,
@@ -209,6 +211,7 @@ test('CEO outcome completion and owner acceptance are immutable, tenant-bound, a
   const completed = await recordCeoOutcomeCompletion(ceoOutcomeInput(), state.options)
   assert.equal(completed.ok, true)
   assert.equal(completed.outcome.status, 'completed')
+  assert.equal(completed.outcome.successMeasureDigest, SUCCESS_MEASURE_DIGEST)
   assert.match(completed.outcome.operationId, /^ceo-outcome:[a-f0-9]{40}$/)
   assert.match(completed.outcome.recordHash, /^[a-f0-9]{64}$/)
   assert.equal(JSON.stringify(completed).includes('provider'), false)
@@ -220,20 +223,31 @@ test('CEO outcome completion and owner acceptance are immutable, tenant-bound, a
   const conflict = await recordCeoOutcomeCompletion(ceoOutcomeInput({ usage: operatorUsage({ weightedTotalUnits: 46 }) }), state.options)
   assert.equal(conflict.reason, 'ceo_outcome_record_conflict')
   assert.equal((await recordCeoOutcomeCompletion({ ...ceoOutcomeInput(), briefText: 'private answer' }, state.options)).reason, 'company_operations_unknown_field')
+  assert.equal((await recordCeoOutcomeCompletion({ ...ceoOutcomeInput(), successMeasure: 'private target text' }, state.options)).reason, 'company_operations_unknown_field')
+  assert.equal((await recordCeoOutcomeCompletion(ceoOutcomeInput({ successMeasureDigest: undefined }), state.options)).reason, 'ceo_outcome_invalid_success_measure_digest')
   assert.equal((await recordCeoOutcomeCompletion(ceoOutcomeInput({ usage: { ...operatorUsage(), provider: 'private-provider' } }), state.options)).reason, 'ceo_outcome_invalid_usage')
 
   const evaluationInput = {
     clientId: 'client-acme',
     operationId: completed.outcome.operationId,
     recordHash: completed.outcome.recordHash,
+    successMeasureDigest: completed.outcome.successMeasureDigest,
     verdict: 'accepted',
-    confirmation: `EVALUATE ${completed.outcome.operationId}`,
+    confirmation: `EVALUATE ${completed.outcome.operationId} ${completed.outcome.successMeasureDigest}`,
   }
   assert.equal((await evaluateCeoOutcomeDelivery({ ...evaluationInput, clientId: 'client-other' }, state.options)).reason, 'ceo_outcome_not_found')
   assert.equal((await evaluateCeoOutcomeDelivery({ ...evaluationInput, recordHash: 'd'.repeat(64) }, state.options)).reason, 'ceo_outcome_record_mismatch')
+  assert.equal((await evaluateCeoOutcomeDelivery({ ...evaluationInput, successMeasureDigest: undefined }, state.options)).reason, 'ceo_outcome_invalid_success_measure_digest')
+  assert.equal((await evaluateCeoOutcomeDelivery({
+    ...evaluationInput,
+    successMeasureDigest: 'd'.repeat(64),
+    confirmation: `EVALUATE ${completed.outcome.operationId} ${'d'.repeat(64)}`,
+  }, state.options)).reason, 'ceo_outcome_success_measure_mismatch')
+  assert.equal((await evaluateCeoOutcomeDelivery({ ...evaluationInput, confirmation: `EVALUATE ${completed.outcome.operationId}` }, state.options)).reason, 'ceo_outcome_evaluation_confirmation_required')
   const accepted = await evaluateCeoOutcomeDelivery(evaluationInput, state.options)
   assert.equal(accepted.ok, true)
   assert.equal(accepted.evaluation.verdict, 'accepted')
+  assert.equal(accepted.evaluation.successMeasureDigest, SUCCESS_MEASURE_DIGEST)
   assert.equal(JSON.stringify(accepted).includes('answer'), false)
   assert.equal((await evaluateCeoOutcomeDelivery(evaluationInput, state.options)).replayed, true)
   assert.equal((await evaluateCeoOutcomeDelivery({ ...evaluationInput, verdict: 'revision_required' }, state.options)).reason, 'ceo_outcome_evaluation_conflict')
@@ -349,8 +363,9 @@ test('accepted CEO outcomes per work unit require complete evaluation, valid usa
     clientId: 'client-acme',
     operationId: first.outcome.operationId,
     recordHash: first.outcome.recordHash,
+    successMeasureDigest: first.outcome.successMeasureDigest,
     verdict: 'accepted',
-    confirmation: `EVALUATE ${first.outcome.operationId}`,
+    confirmation: `EVALUATE ${first.outcome.operationId} ${first.outcome.successMeasureDigest}`,
   }, state.options)
   const listCeoOutcomeRecords = async () => ({
     durable: true,
@@ -381,8 +396,9 @@ test('accepted CEO outcomes per work unit require complete evaluation, valid usa
     clientId: 'client-acme',
     operationId: second.outcome.operationId,
     recordHash: second.outcome.recordHash,
+    successMeasureDigest: second.outcome.successMeasureDigest,
     verdict: 'revision_required',
-    confirmation: `EVALUATE ${second.outcome.operationId}`,
+    confirmation: `EVALUATE ${second.outcome.operationId} ${second.outcome.successMeasureDigest}`,
   }, state.options)
   const measured = await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 30 }, reportOptions)
   assert.equal(measured.outcomes.state, 'measured')

@@ -354,7 +354,10 @@ export function selectCeoOutcome(options = {}) {
       authorityId: authority.authorityId,
       authorityDigest,
       northStar: authority.northStar,
-      selected: outcome,
+      selected: {
+        ...outcome,
+        successMeasureDigest: createHash('sha256').update(outcome.successMeasure).digest('hex'),
+      },
       skipped,
       declined: false,
       controls: authority.controls,

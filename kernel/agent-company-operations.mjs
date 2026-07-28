@@ -30,8 +30,8 @@ import {
 
 export const COMPANY_OPERATIONS_WINDOWS = Object.freeze([7, 30, 90])
 export const COMPANY_USAGE_UNITS = 'bulk_equivalent_tokens'
-export const CEO_OUTCOME_OPERATION_CONTRACT = 'supermega.ceo-outcome-operation.v1'
-export const CEO_OUTCOME_EVALUATION_CONTRACT = 'supermega.ceo-outcome-evaluation.v1'
+export const CEO_OUTCOME_OPERATION_CONTRACT = 'supermega.ceo-outcome-operation.v2'
+export const CEO_OUTCOME_EVALUATION_CONTRACT = 'supermega.ceo-outcome-evaluation.v2'
 export const CEO_OUTCOME_CYCLE_STATE_CONTRACT = 'supermega.ceo-outcome-cycle-state.v1'
 export const CEO_OUTCOME_DELIVERY_CONTRACT = 'supermega.ceo-outcome-delivery.v1'
 export const MAX_CEO_OUTCOME_RECORDS = 90
@@ -60,15 +60,16 @@ const EVALUATION_FIELDS = new Set(['clientId', 'workOrderId', 'planHash', 'verdi
 const GET_EVALUATION_FIELDS = new Set(['clientId', 'workOrderId'])
 const REPORT_FIELDS = new Set(['clientId', 'windowDays'])
 const CEO_OUTCOME_CYCLE_STATE_FIELDS = new Set(['clientId', 'authorityDigest', 'asOf', 'includeDelivery'])
-const CEO_OUTCOME_RECORD_INPUT_FIELDS = new Set(['clientId', 'outcomeId', 'authorityDigest', 'completedAt', 'usage'])
+const CEO_OUTCOME_RECORD_INPUT_FIELDS = new Set(['clientId', 'outcomeId', 'authorityDigest', 'successMeasureDigest', 'completedAt', 'usage'])
 const CEO_OUTCOME_DELIVERY_INPUT_FIELDS = new Set(['clientId', 'operationId', 'recordHash', 'deliveryClaimId', 'status'])
-const CEO_OUTCOME_EVALUATION_INPUT_FIELDS = new Set(['clientId', 'operationId', 'recordHash', 'verdict', 'confirmation'])
+const CEO_OUTCOME_EVALUATION_INPUT_FIELDS = new Set(['clientId', 'operationId', 'recordHash', 'successMeasureDigest', 'verdict', 'confirmation'])
 const CEO_OUTCOME_RECORD_FIELDS = new Set([
   'contract',
   'operationId',
   'clientId',
   'outcomeId',
   'authorityDigest',
+  'successMeasureDigest',
   'status',
   'usage',
   'completedAt',
@@ -81,6 +82,7 @@ const CEO_OUTCOME_EVALUATION_FIELDS = new Set([
   'clientId',
   'outcomeId',
   'authorityDigest',
+  'successMeasureDigest',
   'operationHash',
   'verdict',
   'evaluatedAt',
@@ -191,6 +193,7 @@ function publicCeoOutcomeRecord(record) {
     clientId: record.clientId,
     outcomeId: record.outcomeId,
     authorityDigest: record.authorityDigest,
+    successMeasureDigest: record.successMeasureDigest,
     status: record.status,
     usage: { ...record.usage },
     completedAt: record.completedAt,
@@ -206,6 +209,7 @@ function publicCeoOutcomeEvaluation(record) {
     clientId: record.clientId,
     outcomeId: record.outcomeId,
     authorityDigest: record.authorityDigest,
+    successMeasureDigest: record.successMeasureDigest,
     operationHash: record.operationHash,
     verdict: record.verdict,
     evaluatedAt: record.evaluatedAt,
@@ -220,6 +224,7 @@ function validateCeoOutcomeRecord(value, expectedKey = '') {
     || !ID_RE.test(String(value.clientId || ''))
     || !CEO_OUTCOME_ID_RE.test(String(value.outcomeId || ''))
     || !HASH_RE.test(String(value.authorityDigest || ''))
+    || !HASH_RE.test(String(value.successMeasureDigest || ''))
     || value.status !== 'completed'
     || !exactIso(value.completedAt)
     || !HASH_RE.test(String(value.recordHash || ''))
@@ -232,6 +237,7 @@ function validateCeoOutcomeRecord(value, expectedKey = '') {
     clientId: value.clientId,
     outcomeId: value.outcomeId,
     authorityDigest: value.authorityDigest,
+    successMeasureDigest: value.successMeasureDigest,
     status: 'completed',
     usage,
     completedAt: value.completedAt,
@@ -247,6 +253,7 @@ function validateCeoOutcomeEvaluation(value, operation) {
     || value.clientId !== operation.clientId
     || value.outcomeId !== operation.outcomeId
     || value.authorityDigest !== operation.authorityDigest
+    || value.successMeasureDigest !== operation.successMeasureDigest
     || !sameHash(value.operationHash, operation.recordHash)
     || !VERDICTS.has(value.verdict)
     || !exactIso(value.evaluatedAt)
@@ -258,6 +265,7 @@ function validateCeoOutcomeEvaluation(value, operation) {
     clientId: value.clientId,
     outcomeId: value.outcomeId,
     authorityDigest: value.authorityDigest,
+    successMeasureDigest: value.successMeasureDigest,
     operationHash: value.operationHash,
     verdict: value.verdict,
     evaluatedAt: value.evaluatedAt,
@@ -433,10 +441,12 @@ export async function recordCeoOutcomeCompletion(input, options = {}) {
   if (isRecord(clientId)) return clientId
   const outcomeId = String(input.outcomeId || '').trim()
   const authorityDigest = String(input.authorityDigest || '').trim()
+  const successMeasureDigest = String(input.successMeasureDigest || '').trim()
   const completedAt = exactIso(input.completedAt)
   const usage = normalizeCeoUsage(input.usage)
   if (!CEO_OUTCOME_ID_RE.test(outcomeId)) return failure('ceo_outcome_invalid_id')
   if (!HASH_RE.test(authorityDigest)) return failure('ceo_outcome_invalid_authority_digest')
+  if (!HASH_RE.test(successMeasureDigest)) return failure('ceo_outcome_invalid_success_measure_digest')
   if (!completedAt) return failure('ceo_outcome_invalid_completed_at')
   if (usage.ok === false) return usage
 
@@ -444,6 +454,7 @@ export async function recordCeoOutcomeCompletion(input, options = {}) {
     clientId,
     outcomeId,
     authorityDigest,
+    successMeasureDigest,
     completedAt,
   })).slice(0, 40)
   const operationId = `ceo-outcome:${operationSuffix}`
@@ -453,6 +464,7 @@ export async function recordCeoOutcomeCompletion(input, options = {}) {
     clientId,
     outcomeId,
     authorityDigest,
+    successMeasureDigest,
     status: 'completed',
     usage,
     completedAt,
@@ -700,16 +712,12 @@ export async function evaluateCeoOutcomeDelivery(input, options = {}) {
   if (isRecord(clientId)) return clientId
   const operationId = String(input.operationId || '').trim()
   const recordHash = String(input.recordHash || '').trim()
+  const successMeasureDigest = String(input.successMeasureDigest || '').trim()
   const verdict = String(input.verdict || '').trim()
   if (!CEO_OPERATION_ID_RE.test(operationId)) return failure('ceo_outcome_invalid_operation_id')
   if (!HASH_RE.test(recordHash)) return failure('ceo_outcome_invalid_record_hash')
+  if (!HASH_RE.test(successMeasureDigest)) return failure('ceo_outcome_invalid_success_measure_digest')
   if (!VERDICTS.has(verdict)) return failure('ceo_outcome_invalid_verdict')
-  if (String(input.confirmation || '') !== `EVALUATE ${operationId}`) {
-    return failure('ceo_outcome_evaluation_confirmation_required', {
-      operationId,
-      confirmation: `EVALUATE ${operationId}`,
-    })
-  }
 
   const readRecord = options.getCeoOutcomeRecord || getCachedResponse
   let operation = null
@@ -718,6 +726,16 @@ export async function evaluateCeoOutcomeDelivery(input, options = {}) {
   if (!operation || operation.clientId !== clientId) return failure('ceo_outcome_not_found')
   if (!sameHash(operation.recordHash, recordHash)) {
     return failure('ceo_outcome_record_mismatch', { status: 'conflict', operationId })
+  }
+  if (!sameHash(operation.successMeasureDigest, successMeasureDigest)) {
+    return failure('ceo_outcome_success_measure_mismatch', { status: 'conflict', operationId })
+  }
+  const expectedConfirmation = `EVALUATE ${operationId} ${successMeasureDigest}`
+  if (String(input.confirmation || '') !== expectedConfirmation) {
+    return failure('ceo_outcome_evaluation_confirmation_required', {
+      operationId,
+      confirmation: expectedConfirmation,
+    })
   }
 
   const evaluationId = `ceo-outcome-evaluation:${operationId.split(':').pop()}`
@@ -730,6 +748,7 @@ export async function evaluateCeoOutcomeDelivery(input, options = {}) {
     clientId,
     outcomeId: operation.outcomeId,
     authorityDigest: operation.authorityDigest,
+    successMeasureDigest: operation.successMeasureDigest,
     operationHash: operation.recordHash,
     verdict,
     evaluatedAt,

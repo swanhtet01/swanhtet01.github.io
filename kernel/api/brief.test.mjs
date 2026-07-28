@@ -8,6 +8,7 @@ import { SUPERMEGA_HQ_AUTHORITY } from '../supermega-hq-authority.mjs'
 import { executionClaimId } from '../workcell-run.mjs'
 
 const NOW = new Date('2026-07-13T01:30:00.000Z')
+const SUCCESS_MEASURE_DIGEST = 'b'.repeat(64)
 
 function emptyCycleState(input, completedOutcomeIds = []) {
   return {
@@ -35,12 +36,13 @@ const CEO_USAGE = Object.freeze({
   weightedTotalUnits: 45,
 })
 
-async function makeCeoOutcomeRecord({ outcomeId, authorityDigest, completedAt }) {
+async function makeCeoOutcomeRecord({ outcomeId, authorityDigest, completedAt, successMeasureDigest = SUCCESS_MEASURE_DIGEST }) {
   let saved = null
   const result = await recordCeoOutcomeCompletion({
     clientId: 'client-acme',
     outcomeId,
     authorityDigest,
+    successMeasureDigest,
     completedAt,
     usage: CEO_USAGE,
   }, {
@@ -349,6 +351,7 @@ test('SuperMega CEO cycle selects one HQ outcome and uses its fixed evidence pla
     clientId: 'client-acme',
     outcomeId: 'daily-company-control',
     authorityDigest: result.outcome.authorityDigest,
+    successMeasureDigest: result.outcome.successMeasureDigest,
     completedAt: NOW.toISOString(),
     usage: {
       contract: 'supermega.operator-usage.v1',

@@ -32,6 +32,7 @@ test('HQ authority selects exactly one ready outcome after declining blocked wor
   assert.match(buildCeoOutcomeGoal(result), /Blocked context only - never execute/)
   assert.match(buildCeoOutcomeGoal(result), /Success measure: The output stays within six short lines/)
   assert.match(result.authorityDigest, /^[a-f0-9]{64}$/)
+  assert.match(result.selected.successMeasureDigest, /^[a-f0-9]{64}$/)
 })
 
 test('every weekly department brief observes bounded company operations without expanding model or write authority', () => {
