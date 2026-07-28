@@ -31,24 +31,32 @@ test('HQ authority selects exactly one ready outcome after declining blocked wor
 test('completed and in-flight outcomes are duplicate-safe and consume no selection slot', () => {
   const completed = selectCeoOutcome({ completedOutcomeIds: ['daily-company-control'] })
   assert.equal(completed.ok, true)
-  assert.equal(completed.declined, true)
-  assert.equal(completed.reason, 'no_authorized_ceo_outcome')
+  assert.equal(completed.selected.id, 'engineering-release-control')
   assert.equal(completed.skipped.at(-1).reason, 'already_completed')
 
   const inFlight = selectCeoOutcome({ inFlightOutcomeIds: ['daily-company-control'] })
   assert.equal(inFlight.ok, true)
-  assert.equal(inFlight.declined, true)
+  assert.equal(inFlight.selected.id, 'engineering-release-control')
   assert.equal(inFlight.skipped.at(-1).reason, 'duplicate_in_flight')
+
+  const allCompleted = selectCeoOutcome({
+    completedOutcomeIds: SUPERMEGA_HQ_AUTHORITY.outcomes
+      .filter((outcome) => outcome.state === 'ready')
+      .map((outcome) => outcome.id),
+  })
+  assert.equal(allCompleted.ok, true)
+  assert.equal(allCompleted.declined, true)
+  assert.equal(allCompleted.reason, 'no_authorized_ceo_outcome')
 })
 
 test('selection is deterministic by priority and then outcome id', () => {
   const authority = copyAuthority()
+  for (const outcome of authority.outcomes.filter((item) => item.state === 'ready')) outcome.priority = 50
+  const firstReady = authority.outcomes.find((outcome) => outcome.id === 'daily-company-control')
   authority.outcomes.push({
-    ...structuredClone(authority.outcomes.at(-1)),
+    ...structuredClone(firstReady),
     id: 'another-ready-brief',
   })
-  authority.outcomes.at(-2).priority = 50
-  authority.outcomes.at(-1).priority = 50
   const result = selectCeoOutcome({ authority })
   assert.equal(result.ok, true)
   assert.equal(result.selected.id, 'another-ready-brief')

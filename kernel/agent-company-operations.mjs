@@ -31,6 +31,7 @@ export const COMPANY_OPERATIONS_WINDOWS = Object.freeze([7, 30, 90])
 export const COMPANY_USAGE_UNITS = 'bulk_equivalent_tokens'
 export const CEO_OUTCOME_OPERATION_CONTRACT = 'supermega.ceo-outcome-operation.v1'
 export const CEO_OUTCOME_EVALUATION_CONTRACT = 'supermega.ceo-outcome-evaluation.v1'
+export const CEO_OUTCOME_CYCLE_STATE_CONTRACT = 'supermega.ceo-outcome-cycle-state.v1'
 export const MAX_CEO_OUTCOME_RECORDS = 90
 export const COMPANY_OPERATIONS_TARGETS = Object.freeze({
   minimumSamples: 5,
@@ -53,6 +54,7 @@ const VERDICTS = new Set(['accepted', 'revision_required'])
 const EVALUATION_FIELDS = new Set(['clientId', 'workOrderId', 'planHash', 'verdict', 'checks', 'confirmation'])
 const GET_EVALUATION_FIELDS = new Set(['clientId', 'workOrderId'])
 const REPORT_FIELDS = new Set(['clientId', 'windowDays'])
+const CEO_OUTCOME_CYCLE_STATE_FIELDS = new Set(['clientId', 'authorityDigest', 'asOf'])
 const CEO_OUTCOME_RECORD_INPUT_FIELDS = new Set(['clientId', 'outcomeId', 'authorityDigest', 'completedAt', 'usage'])
 const CEO_OUTCOME_EVALUATION_INPUT_FIELDS = new Set(['clientId', 'operationId', 'recordHash', 'verdict', 'confirmation'])
 const CEO_OUTCOME_RECORD_FIELDS = new Set([
@@ -444,6 +446,81 @@ export async function recordCeoOutcomeCompletion(input, options = {}) {
     return failure('ceo_outcome_store_unavailable', { status: 'blocked', operationId })
   }
   return { ok: true, mode: 'ceo_outcome_record', replayed: false, outcome: publicCeoOutcomeRecord(record) }
+}
+
+function utcWeekWindow(asOf) {
+  const value = new Date(asOf)
+  const daysSinceMonday = (value.getUTCDay() + 6) % 7
+  const startMs = Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate() - daysSinceMonday)
+  const endMs = startMs + (7 * 24 * 60 * 60 * 1000)
+  return {
+    cycleId: new Date(startMs).toISOString().slice(0, 10),
+    startsAt: new Date(startMs).toISOString(),
+    endsAt: new Date(endMs).toISOString(),
+    startMs,
+    endMs,
+  }
+}
+
+export async function loadCeoOutcomeCycleState(input, options = {}) {
+  const fields = onlyFields(input, CEO_OUTCOME_CYCLE_STATE_FIELDS)
+  if (!fields.ok) return fields
+  const clientId = normalizeId(input.clientId, 'company_invalid_client_id')
+  if (isRecord(clientId)) return clientId
+  const authorityDigest = String(input.authorityDigest || '').trim()
+  const asOf = exactIso(input.asOf)
+  if (!HASH_RE.test(authorityDigest)) return failure('ceo_outcome_invalid_authority_digest')
+  if (!asOf) return failure('ceo_outcome_cycle_clock_invalid')
+
+  const listRecords = options.listCeoOutcomeRecords || listCachedResponseRecords
+  let listed
+  try {
+    listed = await listRecords({
+      prefix: CEO_OUTCOME_RECORD_PREFIX,
+      clientId,
+      limit: MAX_CEO_OUTCOME_RECORDS,
+    })
+  } catch {
+    return failure('ceo_outcome_cycle_store_unavailable')
+  }
+  if (!listed || listed.durable !== true || !Array.isArray(listed.records)) {
+    return failure('ceo_outcome_cycle_store_unavailable')
+  }
+  if (listed.records.length >= MAX_CEO_OUTCOME_RECORDS) {
+    return failure('ceo_outcome_cycle_state_capped')
+  }
+
+  const window = utcWeekWindow(asOf)
+  const asOfMs = Date.parse(asOf)
+  const completed = new Map()
+  let matchedRecords = 0
+  for (const entry of listed.records) {
+    const key = String(entry?.key || '')
+    const record = validateCeoOutcomeRecord(entry?.payload, key)
+    if (!record || record.clientId !== clientId) return failure('ceo_outcome_cycle_record_invalid')
+    const completedMs = Date.parse(record.completedAt)
+    if (completedMs > asOfMs + 300_000) return failure('ceo_outcome_cycle_record_from_future')
+    if (record.authorityDigest !== authorityDigest
+      || completedMs < window.startMs
+      || completedMs >= window.endMs) continue
+    matchedRecords += 1
+    if (completed.has(record.outcomeId)) return failure('ceo_outcome_cycle_duplicate_completion')
+    completed.set(record.outcomeId, record.completedAt)
+  }
+
+  return {
+    ok: true,
+    contract: CEO_OUTCOME_CYCLE_STATE_CONTRACT,
+    durable: true,
+    clientId,
+    authorityDigest,
+    cycleId: window.cycleId,
+    startsAt: window.startsAt,
+    endsAt: window.endsAt,
+    completedOutcomeIds: [...completed.keys()].sort(),
+    completedCount: completed.size,
+    matchedRecords,
+  }
 }
 
 export async function evaluateCeoOutcomeDelivery(input, options = {}) {

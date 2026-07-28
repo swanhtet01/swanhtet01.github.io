@@ -8,7 +8,11 @@ import { notify } from '../alert.mjs'
 import { claimWorkcellDelivery, claimWorkcellExecution, formatWorkcellNotification, releaseWorkcellDelivery, runWorkcell } from '../workcell-run.mjs'
 import { resolveWorkcellConfig, scheduledWorkcellSlugs } from '../workcells.mjs'
 import { buildCeoOutcomeGoal, selectCeoOutcome } from '../supermega-hq-authority.mjs'
-import { recordCeoOutcomeCompletion } from '../agent-company-operations.mjs'
+import {
+  CEO_OUTCOME_CYCLE_STATE_CONTRACT,
+  loadCeoOutcomeCycleState,
+  recordCeoOutcomeCompletion,
+} from '../agent-company-operations.mjs'
 
 function safeEq(a, b) {
   const left = crypto.createHash('sha256').update(String(a)).digest()
@@ -40,6 +44,28 @@ function ceoOutcomeView(selection) {
     team: selected.team,
     actionMode: selected.actionMode,
   } : null
+}
+
+function validCycleState(value, expected) {
+  if (!value?.ok
+    || value.contract !== CEO_OUTCOME_CYCLE_STATE_CONTRACT
+    || value.durable !== true
+    || value.clientId !== expected.clientId
+    || value.authorityDigest !== expected.authorityDigest
+    || !/^\d{4}-\d{2}-\d{2}$/.test(String(value.cycleId || ''))
+    || !Array.isArray(value.completedOutcomeIds)
+    || value.completedOutcomeIds.length > 12
+    || new Set(value.completedOutcomeIds).size !== value.completedOutcomeIds.length
+    || !value.completedOutcomeIds.every((id) => /^[a-z0-9][a-z0-9-]{0,79}$/.test(String(id)))
+    || value.completedCount !== value.completedOutcomeIds.length) return false
+  const startsAt = Date.parse(value.startsAt)
+  const endsAt = Date.parse(value.endsAt)
+  const asOf = expected.asOf.getTime()
+  return Number.isFinite(startsAt)
+    && Number.isFinite(endsAt)
+    && endsAt - startsAt === 7 * 24 * 60 * 60 * 1000
+    && asOf >= startsAt
+    && asOf < endsAt
 }
 
 export async function runScheduledBrief(options = {}) {
@@ -108,12 +134,50 @@ export async function runScheduledBrief(options = {}) {
   }
 
   const select = options.selectCeoOutcome || selectCeoOutcome
-  const selection = select({
+  let selection = select({
     authority: options.ceoAuthority,
     completedOutcomeIds: options.completedOutcomeIds,
     inFlightOutcomeIds: options.inFlightOutcomeIds,
   })
   if (!selection?.ok) return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: selection?.reason || 'ceo_outcome_authority_invalid' }
+  const clientId = String(options.clientId ?? env.SUPERMEGA_CLIENT_ID ?? '').trim()
+  let cycleState = null
+  if (options.completedOutcomeIds === undefined && clientId) {
+    const loadCycleState = options.loadCeoOutcomeCycleState || loadCeoOutcomeCycleState
+    try {
+      cycleState = await loadCycleState({
+        clientId,
+        authorityDigest: selection.authorityDigest,
+        asOf: now.toISOString(),
+      })
+    } catch {
+      cycleState = { ok: false, reason: 'ceo_outcome_cycle_store_unavailable' }
+    }
+    if (!cycleState?.ok) {
+      return {
+        ok: false,
+        mode: 'legacy',
+        companyMode: 'supermega_hq',
+        reason: cycleState?.reason || 'ceo_outcome_cycle_store_unavailable',
+      }
+    }
+    if (!validCycleState(cycleState, { clientId, authorityDigest: selection.authorityDigest, asOf: now })) {
+      return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: 'ceo_outcome_cycle_state_invalid' }
+    }
+    selection = select({
+      authority: options.ceoAuthority,
+      completedOutcomeIds: cycleState.completedOutcomeIds,
+      inFlightOutcomeIds: options.inFlightOutcomeIds,
+    })
+    if (!selection?.ok) return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: selection?.reason || 'ceo_outcome_authority_invalid' }
+  }
+  const cycle = cycleState ? {
+    contract: cycleState.contract,
+    cycleId: cycleState.cycleId,
+    startsAt: cycleState.startsAt,
+    endsAt: cycleState.endsAt,
+    completedCount: cycleState.completedCount,
+  } : null
   if (selection.declined || !selection.selected) {
     return {
       ok: true,
@@ -124,6 +188,7 @@ export async function runScheduledBrief(options = {}) {
       reason: selection.reason || 'no_authorized_ceo_outcome',
       authorityId: selection.authorityId,
       authorityDigest: selection.authorityDigest,
+      cycle,
       skipped: selection.skipped,
     }
   }
@@ -142,10 +207,11 @@ export async function runScheduledBrief(options = {}) {
       sent: false,
       reason: 'ceo_outcome_duplicate',
       outcome,
+      cycle,
     }
   }
   if (!claimAccepted(executionClaim)) {
-    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: executionClaim?.reason || 'durable_execution_claim_unavailable', outcome }
+    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: executionClaim?.reason || 'durable_execution_claim_unavailable', outcome, cycle }
   }
   let result
   try {
@@ -157,12 +223,11 @@ export async function runScheduledBrief(options = {}) {
   catch { result = { ok: false, reason: 'brief_failed' } }
   if (!result.ok) {
     const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
-    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: result.reason || 'brief_failed', retryable, outcome }
+    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: result.reason || 'brief_failed', retryable, outcome, cycle }
   }
-  const clientId = String(options.clientId ?? env.SUPERMEGA_CLIENT_ID ?? '').trim()
   if (!clientId) {
     const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
-    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: 'company_client_id_missing', retryable, outcome }
+    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: 'company_client_id_missing', retryable, outcome, cycle }
   }
   const recordOutcome = options.recordCeoOutcomeCompletion || recordCeoOutcomeCompletion
   let recorded
@@ -186,6 +251,7 @@ export async function runScheduledBrief(options = {}) {
       reason: recorded?.reason || 'ceo_outcome_store_unavailable',
       retryable,
       outcome,
+      cycle,
     }
   }
   const outcomeMetrics = {
@@ -197,11 +263,11 @@ export async function runScheduledBrief(options = {}) {
   }
   const deliveryClaim = await claimSafely(claimDelivery, claimSlug, { env, now }, 'durable_delivery_claim_unavailable')
   if (!deliveryClaim?.fresh && deliveryClaim?.durable) {
-    return { ok: true, mode: 'legacy', companyMode: 'supermega_hq', declined: true, duplicate: true, sent: false, reason: 'ceo_outcome_duplicate', outcome }
+    return { ok: true, mode: 'legacy', companyMode: 'supermega_hq', declined: true, duplicate: true, sent: false, reason: 'ceo_outcome_duplicate', outcome, cycle }
   }
   if (!claimAccepted(deliveryClaim)) {
     const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
-    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: deliveryClaim?.reason || 'durable_delivery_claim_unavailable', retryable, outcome }
+    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: deliveryClaim?.reason || 'durable_delivery_claim_unavailable', retryable, outcome, cycle }
   }
   let sent = false
   try { sent = await send(`SuperMega | ${selection.selected.title}\n\n${result.answer}`) } catch { sent = false }
@@ -219,6 +285,7 @@ export async function runScheduledBrief(options = {}) {
     reason: sent ? undefined : 'owner_delivery_failed',
     retryable,
     outcome,
+    cycle,
     planningMode: result.planningMode || null,
     toolsUsed: (result.results || []).map((item) => item.tool),
     outcomeMetrics,
