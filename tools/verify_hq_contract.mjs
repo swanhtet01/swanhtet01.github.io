@@ -24,7 +24,7 @@ import {
 } from '../kernel/gateway.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyCompanyCycleText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyCompanyCycleText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -49,6 +49,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'kernel', 'api', 'operator.mjs'), 'utf8'),
   readFile(resolve(root, 'kernel', 'alert.mjs'), 'utf8'),
   readFile(resolve(root, 'kernel', 'agent-company-operations.mjs'), 'utf8'),
+  readFile(resolve(root, 'kernel', 'public', 'index.html'), 'utf8'),
 ])
 
 const manifest = JSON.parse(manifestText)
@@ -140,6 +141,7 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.companyOperationsRawEvidenceReturned === false
   && portfolio.agentOperatingModel?.companyOperationsDeliveryCoverage === true
   && portfolio.agentOperatingModel?.deliveryAttentionMetadataOnly === true
+  && portfolio.agentOperatingModel?.ownerConsoleDeliveryCoverage === true
   && portfolio.agentOperatingModel?.scheduledFunctionFootprintContract === 'supermega.kernel-function-footprint.v1'
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerFiles === 30
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerBytes === 409600
@@ -274,6 +276,13 @@ requireContract('CEO company-operations evidence is measured, bounded, and outpu
   && ceoOperationsEvidence.controls?.providerRowsReturned === false
   && ceoOperationsEvidence.controls?.ceoDeliveryContentReturned === false
   && !/must-not-escape|"clientId"|"agentId"|"briefText"|"deliveryId"/i.test(JSON.stringify(ceoOperationsEvidence)))
+requireContract('owner console presents delivery coverage without exposing receipt content',
+  kernelConsoleText.includes('function companyDeliverySection(delivery={})')
+  && kernelConsoleText.includes('Receipt coverage only; message content stays private')
+  && kernelConsoleText.includes('attention.deliveryFailed')
+  && kernelConsoleText.includes('attention.deliveryUncertain')
+  && kernelConsoleText.includes('attention.deliveryMissing')
+  && !/delivery\.records|deliveryId|deliveryClaimId/.test(kernelConsoleText))
 requireContract('workspace consumes one capacity authority without repeating ceilings',
   agentWorkspace.resource_id === 'supermega-core-agent-workspace-v3'
   && agentWorkspace.capacity_authority === 'repository://agent_os/workforce/supermega_build_workforce.json'
@@ -785,7 +794,9 @@ requireContract('current company-operations evidence is recorded without adding 
   && workboard.includes('All 291 Kernel tests, 69 connectors across 993 adversarial calls, 15 crews across 214 checks')
   && workboard.includes('| OPS-044 | CEO + Agent Operations / Delivery Evidence Codex | done-local |')
   && workboard.includes('Checkpoint `8d97d4d` reconciles each in-window completion')
-  && now.includes('Delivery receipts are reconciled; failed, uncertain, missing, non-durable, or invalid coverage raises owner attention'))
+  && workboard.includes('| OPS-045 | Owner Console + Agent Operations Codex | done-local |')
+  && workboard.includes('Checkpoint `2b24bbf` adds one receipt-only summary')
+  && now.includes('Company Health shows receipt coverage; failed, uncertain, missing, non-durable, or invalid delivery raises owner attention'))
 
 requireContract('scheduled CEO function keeps the full connector fleet deferred and budgeted',
   kernelPackageText.includes('"function:footprint": "node scripts/verify-function-footprint.mjs"')

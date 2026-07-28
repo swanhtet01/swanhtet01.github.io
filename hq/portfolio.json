@@ -24,6 +24,7 @@
     "companyOperationsRawEvidenceReturned": false,
     "companyOperationsDeliveryCoverage": true,
     "deliveryAttentionMetadataOnly": true,
+    "ownerConsoleDeliveryCoverage": true,
     "scheduledFunctionFootprintContract": "supermega.kernel-function-footprint.v1",
     "scheduledFunctionMaxEagerFiles": 30,
     "scheduledFunctionMaxEagerBytes": 409600,
