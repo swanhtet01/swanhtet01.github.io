@@ -52,6 +52,7 @@ import {
   commercePurchaseOrderArrivalUrgency,
   commercePurchaseOrderProgress,
   commercePurchaseOrders,
+  commerceSupplierPerformance,
   commerceStorefrontRequestLines,
   commerceStorefrontRequests,
   commerceWorkspaceCanWrite,
@@ -2450,6 +2451,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       item: commerce.items.find((item) => item.sku === purchaseOrder.sku),
     }))
     .sort(compareCommercePurchaseOrderAttention)
+  const supplierPerformance = commerceSupplierPerformance(commerce, purchaseOrderClock)
   const activePurchaseOrderBySku = new Map(
     purchaseOrderRows
       .filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received')
@@ -4705,6 +4707,14 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       </form> : null}
       <details className="compact-disclosure purchase-order-history" id="purchase-orders" ref={purchaseOrderHistoryRef}>
         <summary><span>Purchase orders</span><strong>{purchaseOrderRows.filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received').length} active · {purchaseOrderRows.length} total</strong></summary>
+        {supplierPerformance.length ? <section aria-label="Supplier performance" className="supplier-performance">
+          <div className="supplier-performance-heading"><span className="core-eyebrow">Supplier performance</span><small>Measured from Shop orders and receipts</small></div>
+          <div className="supplier-performance-grid">{supplierPerformance.map((supplier) => <article data-supplier-status={supplier.status} key={supplier.supplier}>
+            <div><strong>{supplier.supplier}</strong><small>{supplier.totalOrders} order{supplier.totalOrders === 1 ? '' : 's'} · {supplier.activeOrders} active</small></div>
+            <span><strong>{supplier.receivedUnits}/{supplier.orderedUnits}</strong><small>units received · {supplier.openUnits} open</small></span>
+            <span><strong>{supplier.onTimeRateBasisPoints === null ? 'Collecting' : formatTaxRate(supplier.onTimeRateBasisPoints)}</strong><small>{supplier.completedDeliveries ? `${supplier.onTimeDeliveries}/${supplier.completedDeliveries} on time` : 'No completed arrival yet'}{supplier.lateOpenOrders ? ` · ${supplier.lateOpenOrders} late open` : ''}</small></span>
+          </article>)}</div>
+        </section> : null}
         {purchaseOrderRows.length ? <div className="purchase-order-list">{purchaseOrderRows.map(({ purchaseOrder, progress, item }) => {
           const arrivalUrgency = commercePurchaseOrderArrivalUrgency(purchaseOrder, progress, purchaseOrderClock)
           return <article key={purchaseOrder.id}>

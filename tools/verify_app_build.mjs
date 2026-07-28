@@ -1363,6 +1363,13 @@ if (!commerceSource.includes("CommercePurchaseOrderArrivalUrgency = 'late' | 'du
   || !coreSource.includes("' · Due soon'")
   || !coreCssSource.includes('[data-arrival-risk=\"late\"]')
   || !coreCssSource.includes('[data-arrival-risk=\"unrecorded\"]')) fail('commerce_purchase_order_arrival_urgency_missing')
+if (!commerceSource.includes("CommerceSupplierPerformanceStatus = 'attention' | 'on_track' | 'collecting'")
+  || !commerceSource.includes('export function commerceSupplierPerformance')
+  || !coreSource.includes('aria-label=\"Supplier performance\"')
+  || !coreSource.includes('Measured from Shop orders and receipts')
+  || !coreSource.includes('data-supplier-status={supplier.status}')
+  || !coreCssSource.includes('[data-supplier-status=\"attention\"]')
+  || !coreCssSource.includes('[data-supplier-status=\"on_track\"]')) fail('commerce_supplier_performance_missing')
 if (!commerceSource.includes('commerceOrderHasReleasableReservation') || !commerceSource.includes("movement.kind === 'reserve'") || !commerceSource.includes("movement.kind === 'release'") || !commerceSource.includes("kind: 'receipt'") || !commerceSource.includes("kind: 'opening'")) fail('commerce_stock_ledger_contract_missing')
 if (!commerceSource.includes('export type CommerceOrderLine')
   || !commerceSource.includes('lines?: CommerceOrderLine[]')
@@ -6366,6 +6373,52 @@ async function verifyCommerceRuntime() {
     assert(purchaseFilled
       && model.commercePurchaseOrderProgress(purchaseFilled, purchaseFilled.purchaseOrders[0]).status === 'received'
       && model.cancelCommercePurchaseOrder(purchaseFilled, purchaseOrderId, proof('ACT-PURCHASE-CANCEL-FILLED', 180_000)) === null, 'completed_purchase_order_was_cancellable')
+    const openSupplierPerformance = model.commerceSupplierPerformance(
+      purchaseCreated,
+      Date.parse('2026-07-25T09:00:00.000Z'),
+    )
+    assert(openSupplierPerformance.length === 1
+      && openSupplierPerformance[0].supplier === 'Yangon Supply'
+      && openSupplierPerformance[0].totalOrders === 1
+      && openSupplierPerformance[0].activeOrders === 1
+      && openSupplierPerformance[0].orderedUnits === 10
+      && openSupplierPerformance[0].receivedUnits === 0
+      && openSupplierPerformance[0].openUnits === 10
+      && openSupplierPerformance[0].lateOpenOrders === 1
+      && openSupplierPerformance[0].completedDeliveries === 0
+      && openSupplierPerformance[0].receiptRateBasisPoints === 0
+      && openSupplierPerformance[0].onTimeRateBasisPoints === null
+      && openSupplierPerformance[0].status === 'attention', 'open_supplier_performance_not_exact')
+    const onTimeSupplierPerformance = model.commerceSupplierPerformance(
+      purchaseFilled,
+      Date.parse('2026-07-26T09:00:00.000Z'),
+    )
+    assert(onTimeSupplierPerformance.length === 1
+      && onTimeSupplierPerformance[0].activeOrders === 0
+      && onTimeSupplierPerformance[0].receivedUnits === 10
+      && onTimeSupplierPerformance[0].openUnits === 0
+      && onTimeSupplierPerformance[0].completedDeliveries === 1
+      && onTimeSupplierPerformance[0].onTimeDeliveries === 1
+      && onTimeSupplierPerformance[0].lateDeliveries === 0
+      && onTimeSupplierPerformance[0].receiptRateBasisPoints === 10_000
+      && onTimeSupplierPerformance[0].onTimeRateBasisPoints === 10_000
+      && onTimeSupplierPerformance[0].status === 'on_track', 'on_time_supplier_performance_not_exact')
+    const latePurchaseFilled = model.receiveCommercePurchaseOrder(
+      purchaseCreated,
+      purchaseOrderId,
+      10,
+      proof('ACT-PURCHASE-RECEIVE-LATE', 0, { capturedAt: '2026-07-25T09:00:00.000001Z' }),
+    )
+    const lateSupplierPerformance = model.commerceSupplierPerformance(
+      latePurchaseFilled,
+      Date.parse('2026-07-26T09:00:00.000Z'),
+    )
+    assert(lateSupplierPerformance.length === 1
+      && lateSupplierPerformance[0].completedDeliveries === 1
+      && lateSupplierPerformance[0].onTimeDeliveries === 0
+      && lateSupplierPerformance[0].lateDeliveries === 1
+      && lateSupplierPerformance[0].onTimeRateBasisPoints === 0
+      && lateSupplierPerformance[0].status === 'attention', 'late_supplier_delivery_not_detected')
     const precisePurchaseOrderId = 'PO-00000000-0000-4000-8000-000000000022'
     const precisePurchaseCreated = model.createCommercePurchaseOrder(base, {
       id: precisePurchaseOrderId,
@@ -6446,6 +6499,34 @@ async function verifyCommerceRuntime() {
       'PO-00000000-0000-4000-8000-000000000031',
       'PO-00000000-0000-4000-8000-000000000030',
     ]), 'purchase_order_attention_order_not_operational')
+    const groupedSupplierPerformance = model.commerceSupplierPerformance(
+      attentionState,
+      Date.parse('2026-07-23T12:00:00.000Z'),
+    )
+    assert(groupedSupplierPerformance.length === 1
+      && groupedSupplierPerformance[0].supplier === 'Attention supplier'
+      && groupedSupplierPerformance[0].totalOrders === 4
+      && groupedSupplierPerformance[0].activeOrders === 3
+      && groupedSupplierPerformance[0].orderedUnits === 8
+      && groupedSupplierPerformance[0].receivedUnits === 0
+      && groupedSupplierPerformance[0].openUnits === 6
+      && groupedSupplierPerformance[0].lateOpenOrders === 1
+      && groupedSupplierPerformance[0].status === 'attention', 'supplier_performance_grouping_not_exact')
+    const supplierOverflowState = model.validateCommerceState({
+      ...attentionState,
+      purchaseOrders: [
+        { ...attentionState.purchaseOrders[0], quantityOrdered: Number.MAX_SAFE_INTEGER },
+        {
+          ...attentionState.purchaseOrders[1],
+          quantityOrdered: Number.MAX_SAFE_INTEGER,
+          cancellation: proof('ACT-SUPPLIER-OVERFLOW-CANCEL', 60_000),
+        },
+      ],
+    })
+    assertThrows(
+      () => model.commerceSupplierPerformance(supplierOverflowState, Date.parse('2026-07-23T12:00:00.000Z')),
+      'supplier_performance_unsafe_aggregate_succeeded',
+    )
     const legacyPurchaseState = model.validateCommerceState({
       ...model.createEmptyCommerce(),
       items: attentionState.items,

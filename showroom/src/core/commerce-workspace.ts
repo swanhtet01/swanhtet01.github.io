@@ -434,6 +434,24 @@ export type CommercePurchaseOrderProgress = {
 
 export type CommercePurchaseOrderArrivalUrgency = 'late' | 'due_soon' | 'scheduled' | 'unrecorded' | 'closed'
 
+export type CommerceSupplierPerformanceStatus = 'attention' | 'on_track' | 'collecting'
+
+export type CommerceSupplierPerformance = {
+  supplier: string
+  totalOrders: number
+  activeOrders: number
+  orderedUnits: number
+  receivedUnits: number
+  openUnits: number
+  lateOpenOrders: number
+  completedDeliveries: number
+  onTimeDeliveries: number
+  lateDeliveries: number
+  receiptRateBasisPoints: number
+  onTimeRateBasisPoints: number | null
+  status: CommerceSupplierPerformanceStatus
+}
+
 export type CommerceCatalogChange = {
   sku: string
   previousPrice: number
@@ -2586,6 +2604,80 @@ export function commercePurchaseOrderArrivalUrgency(
   if (!Number.isFinite(expectedAt) || !Number.isFinite(now)) return 'unrecorded'
   if (expectedAt <= now) return 'late'
   return expectedAt - now <= 24 * 60 * 60 * 1000 ? 'due_soon' : 'scheduled'
+}
+
+export function commerceSupplierPerformance(state: CommerceState, now: number): CommerceSupplierPerformance[] {
+  const current = validateCommerceState(state)
+  const groups = new Map<string, CommerceSupplierPerformance>()
+  const addSafeUnits = (currentTotal: number, increment: number) => {
+    const nextTotal = currentTotal + increment
+    if (!Number.isSafeInteger(nextTotal)) throw new Error('Supplier performance totals exceed the supported safe integer range.')
+    return nextTotal
+  }
+  for (const purchaseOrder of commercePurchaseOrders(current)) {
+    const progress = commercePurchaseOrderProgress(current, purchaseOrder)
+    const active = progress.status === 'open' || progress.status === 'partially_received'
+    const receipts = current.movements.filter((movement) => (
+      movement.kind === 'receipt' && movement.purchaseOrderId === purchaseOrder.id
+    ))
+    const completedAt = receipts.reduce<bigint | null>((latest, receipt) => {
+      const capturedAt = timestampMicros(receipt.createdAt) as bigint
+      return latest === null || capturedAt > latest ? capturedAt : latest
+    }, null)
+    const promisedAt = purchaseOrder.expectedAt ? timestampMicros(purchaseOrder.expectedAt) : null
+    const deliveryMeasured = progress.status === 'received' && completedAt !== null && promisedAt !== null
+    const onTime = progress.status === 'received'
+      && completedAt !== null
+      && promisedAt !== null
+      && completedAt <= promisedAt
+    const lateDelivery = deliveryMeasured && !onTime
+    const lateOpen = active && commercePurchaseOrderArrivalUrgency(purchaseOrder, progress, now) === 'late'
+    const existing = groups.get(purchaseOrder.supplier) ?? {
+      supplier: purchaseOrder.supplier,
+      totalOrders: 0,
+      activeOrders: 0,
+      orderedUnits: 0,
+      receivedUnits: 0,
+      openUnits: 0,
+      lateOpenOrders: 0,
+      completedDeliveries: 0,
+      onTimeDeliveries: 0,
+      lateDeliveries: 0,
+      receiptRateBasisPoints: 0,
+      onTimeRateBasisPoints: null,
+      status: 'collecting' as CommerceSupplierPerformanceStatus,
+    }
+    existing.totalOrders += 1
+    existing.activeOrders += active ? 1 : 0
+    existing.orderedUnits = addSafeUnits(existing.orderedUnits, purchaseOrder.quantityOrdered)
+    existing.receivedUnits = addSafeUnits(existing.receivedUnits, progress.received)
+    existing.openUnits = addSafeUnits(existing.openUnits, active ? progress.remaining : 0)
+    existing.lateOpenOrders += lateOpen ? 1 : 0
+    existing.completedDeliveries += deliveryMeasured ? 1 : 0
+    existing.onTimeDeliveries += onTime ? 1 : 0
+    existing.lateDeliveries += lateDelivery ? 1 : 0
+    groups.set(purchaseOrder.supplier, existing)
+  }
+  const scored = [...groups.values()].map<CommerceSupplierPerformance>((supplier) => ({
+    ...supplier,
+    receiptRateBasisPoints: supplier.orderedUnits
+      ? Math.round((supplier.receivedUnits / supplier.orderedUnits) * 10_000)
+      : 0,
+    onTimeRateBasisPoints: supplier.completedDeliveries
+      ? Math.round((supplier.onTimeDeliveries / supplier.completedDeliveries) * 10_000)
+      : null,
+    status: supplier.lateOpenOrders || supplier.lateDeliveries
+      ? 'attention'
+      : supplier.completedDeliveries
+        ? 'on_track'
+        : 'collecting',
+  }))
+  return scored.sort((left, right) => {
+    const statusRank: Record<CommerceSupplierPerformanceStatus, number> = { attention: 0, collecting: 1, on_track: 2 }
+    if (statusRank[left.status] !== statusRank[right.status]) return statusRank[left.status] - statusRank[right.status]
+    if (left.openUnits !== right.openUnits) return right.openUnits - left.openUnits
+    return compareCanonicalText(left.supplier, right.supplier)
+  })
 }
 
 export function compareCommercePurchaseOrderAttention(
