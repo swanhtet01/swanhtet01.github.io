@@ -5,6 +5,7 @@ import assert from 'node:assert/strict'
 import { handleAgentCompany } from './agent-company.mjs'
 
 const KEY = 'ops-secret'
+const CYCLE_NOW = new Date('2026-07-14T09:00:00.000Z')
 const validBody = {
   action: 'plan',
   clientId: 'client-acme',
@@ -79,6 +80,84 @@ test('GET returns the protected fixed roster and hard limits', async () => {
   assert.equal(result.json.operations.modelOutputReturned, false)
   assert.equal(result.json.operations.workforceMetrics, true)
   assert.equal(result.json.operations.customerSlaClaimed, false)
+  assert.equal(result.json.ceoCycle.contract, 'supermega.ceo-cycle-view.v1')
+  assert.equal(result.json.ceoCycle.available, false)
+  assert.equal(result.json.ceoCycle.reason, 'company_client_id_missing')
+  assert.equal(result.json.ceoCycle.totalOutcomes, 5)
+})
+
+test('GET exposes one tenant-bound metadata-only company week', async () => {
+  const calls = []
+  const result = await handleAgentCompany(request({ method: 'GET', body: undefined }), {
+    opsKey: KEY,
+    clientId: 'client-acme',
+    now: CYCLE_NOW,
+    loadCeoOutcomeCycleState: async (input) => {
+      calls.push(input)
+      return {
+        ok: true,
+        contract: 'supermega.ceo-outcome-cycle-state.v1',
+        durable: true,
+        clientId: input.clientId,
+        authorityDigest: input.authorityDigest,
+        cycleId: '2026-07-13',
+        startsAt: '2026-07-13T00:00:00.000Z',
+        endsAt: '2026-07-20T00:00:00.000Z',
+        completedOutcomeIds: ['daily-company-control'],
+        completedCount: 1,
+        matchedRecords: 1,
+      }
+    },
+  })
+  assert.equal(result.status, 200)
+  assert.deepEqual(calls, [{
+    clientId: 'client-acme',
+    authorityDigest: result.json.ceoCycle.authorityDigest,
+    asOf: CYCLE_NOW.toISOString(),
+  }])
+  assert.equal(result.json.ceoCycle.available, true)
+  assert.equal(result.json.ceoCycle.durable, true)
+  assert.equal(result.json.ceoCycle.completedCount, 1)
+  assert.equal(result.json.ceoCycle.totalOutcomes, 5)
+  assert.equal(result.json.ceoCycle.nextOutcome.id, 'engineering-release-control')
+  assert.deepEqual(result.json.ceoCycle.outcomes.map((outcome) => outcome.status), [
+    'complete',
+    'next',
+    'queued',
+    'queued',
+    'queued',
+  ])
+  assert.equal(result.json.ceoCycle.blockedConsequentialCount, 3)
+  assert.deepEqual(result.json.ceoCycle.controls, {
+    maxOutcomesPerCycle: 1,
+    externalWrites: false,
+    dynamicDelegation: false,
+    recursiveDelegation: false,
+    humanApprovalForConsequentialActions: true,
+  })
+  const serialized = JSON.stringify(result.json.ceoCycle)
+  assert.doesNotMatch(serialized, /evidencePlan|objective|sourceRefs|blockers|usage|answer|output/)
+
+  const mismatched = await handleAgentCompany(request({ method: 'GET', body: undefined }), {
+    opsKey: KEY,
+    clientId: 'client-acme',
+    now: CYCLE_NOW,
+    loadCeoOutcomeCycleState: async () => ({
+      ok: true,
+      contract: 'supermega.ceo-outcome-cycle-state.v1',
+      durable: true,
+      clientId: 'client-other',
+      authorityDigest: 'a'.repeat(64),
+      cycleId: '2026-07-13',
+      startsAt: '2026-07-13T00:00:00.000Z',
+      endsAt: '2026-07-20T00:00:00.000Z',
+      completedOutcomeIds: [],
+      completedCount: 0,
+    }),
+  })
+  assert.equal(mismatched.status, 200)
+  assert.equal(mismatched.json.ceoCycle.available, false)
+  assert.equal(mismatched.json.ceoCycle.reason, 'ceo_outcome_cycle_state_invalid')
 })
 
 test('tenant sessions bind one client and enforce viewer, reviewer, and operator roles', async () => {
@@ -196,6 +275,7 @@ test('customer sessions expose and decide on one exact proof without workspace a
   assert.equal('agents' in customerGet.json, false)
   assert.equal('playbooks' in customerGet.json, false)
   assert.equal('missions' in customerGet.json, false)
+  assert.equal('ceoCycle' in customerGet.json, false)
 
   const reads = []
   const reviews = []

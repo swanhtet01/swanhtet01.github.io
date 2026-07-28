@@ -24,9 +24,15 @@ import {
   buildCompanyOperationsReport,
   COMPANY_OPERATIONS_TARGETS,
   COMPANY_OPERATIONS_WINDOWS,
+  CEO_OUTCOME_CYCLE_STATE_CONTRACT,
   evaluateCeoOutcomeDelivery,
   evaluateCompanyWorkOrder,
+  loadCeoOutcomeCycleState,
 } from '../agent-company-operations.mjs'
+import {
+  selectCeoOutcome,
+  SUPERMEGA_HQ_AUTHORITY,
+} from '../supermega-hq-authority.mjs'
 import {
   listCompanyPlaybooks,
   planCompanyPlaybook,
@@ -43,6 +49,110 @@ import {
   authorizeCompanyRequest,
   companyRoleAllows,
 } from '../agent-company-operator-auth.mjs'
+
+const CEO_CYCLE_VIEW_CONTRACT = 'supermega.ceo-cycle-view.v1'
+
+function unavailableCeoCycle(reason, extra = {}) {
+  return {
+    contract: CEO_CYCLE_VIEW_CONTRACT,
+    available: false,
+    durable: false,
+    reason,
+    ...extra,
+  }
+}
+
+function validCycleState(state, expected) {
+  if (!state?.ok
+    || state.contract !== CEO_OUTCOME_CYCLE_STATE_CONTRACT
+    || state.durable !== true
+    || state.clientId !== expected.clientId
+    || state.authorityDigest !== expected.authorityDigest
+    || !/^\d{4}-\d{2}-\d{2}$/.test(String(state.cycleId || ''))
+    || !Array.isArray(state.completedOutcomeIds)
+    || state.completedOutcomeIds.length > 12
+    || new Set(state.completedOutcomeIds).size !== state.completedOutcomeIds.length
+    || state.completedCount !== state.completedOutcomeIds.length) return false
+  const startsAt = Date.parse(state.startsAt)
+  const endsAt = Date.parse(state.endsAt)
+  const asOf = expected.asOf.getTime()
+  return Number.isFinite(startsAt)
+    && Number.isFinite(endsAt)
+    && endsAt - startsAt === 7 * 24 * 60 * 60 * 1000
+    && asOf >= startsAt
+    && asOf < endsAt
+}
+
+async function buildCeoCycleView({ clientId, now, loadCycleState }) {
+  const initial = selectCeoOutcome()
+  if (!initial.ok) return unavailableCeoCycle('ceo_outcome_authority_invalid')
+  const readyOutcomes = SUPERMEGA_HQ_AUTHORITY.outcomes
+    .filter((outcome) => outcome.state === 'ready')
+    .sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id))
+  const blockedConsequentialCount = SUPERMEGA_HQ_AUTHORITY.outcomes
+    .filter((outcome) => outcome.state === 'blocked').length
+  if (!clientId) {
+    return unavailableCeoCycle('company_client_id_missing', {
+      authorityId: initial.authorityId,
+      authorityDigest: initial.authorityDigest,
+      totalOutcomes: readyOutcomes.length,
+      blockedConsequentialCount,
+    })
+  }
+
+  let state
+  try {
+    state = await loadCycleState({
+      clientId,
+      authorityDigest: initial.authorityDigest,
+      asOf: now.toISOString(),
+    })
+  } catch {
+    return unavailableCeoCycle('ceo_outcome_cycle_store_unavailable')
+  }
+  if (!state?.ok) return unavailableCeoCycle(state?.reason || 'ceo_outcome_cycle_store_unavailable')
+  if (!validCycleState(state, { clientId, authorityDigest: initial.authorityDigest, asOf: now })) {
+    return unavailableCeoCycle('ceo_outcome_cycle_state_invalid')
+  }
+
+  const selection = selectCeoOutcome({ completedOutcomeIds: state.completedOutcomeIds })
+  if (!selection.ok) return unavailableCeoCycle(selection.reason || 'ceo_outcome_authority_invalid')
+  const completed = new Set(state.completedOutcomeIds)
+  const nextId = selection.selected?.id || ''
+  return {
+    contract: CEO_CYCLE_VIEW_CONTRACT,
+    available: true,
+    durable: true,
+    clientId,
+    authorityId: selection.authorityId,
+    authorityDigest: selection.authorityDigest,
+    cycleId: state.cycleId,
+    startsAt: state.startsAt,
+    endsAt: state.endsAt,
+    completedCount: state.completedCount,
+    totalOutcomes: readyOutcomes.length,
+    cycleComplete: selection.declined === true,
+    nextOutcome: selection.selected ? {
+      id: selection.selected.id,
+      title: selection.selected.title,
+      team: selection.selected.team,
+    } : null,
+    outcomes: readyOutcomes.map((outcome) => ({
+      id: outcome.id,
+      title: outcome.title,
+      team: outcome.team,
+      status: completed.has(outcome.id) ? 'complete' : outcome.id === nextId ? 'next' : 'queued',
+    })),
+    blockedConsequentialCount,
+    controls: {
+      maxOutcomesPerCycle: 1,
+      externalWrites: false,
+      dynamicDelegation: false,
+      recursiveDelegation: false,
+      humanApprovalForConsequentialActions: true,
+    },
+  }
+}
 
 function statusFor(result) {
   if (result.ok) return 200
@@ -202,12 +312,21 @@ export async function handleAgentCompany(request = {}, options = {}) {
         },
       }
     }
+    const configuredClientId = String(options.clientId ?? env.SUPERMEGA_CLIENT_ID ?? '').trim()
+    const protectedClientId = String(auth.clientId || configuredClientId).trim()
+    const now = options.now instanceof Date ? options.now : new Date()
+    const ceoCycle = await buildCeoCycleView({
+      clientId: protectedClientId,
+      now,
+      loadCycleState: options.loadCeoOutcomeCycleState || loadCeoOutcomeCycleState,
+    })
     return {
       status: 200,
       json: {
         ok: true,
         actionMode: 'draft_only',
         auth,
+        ceoCycle,
         agents: listCompanyAgents(),
         limits: {
           maxAgents: MAX_CYCLE_AGENTS,

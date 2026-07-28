@@ -15,7 +15,7 @@ test('console exposes one plan-first Agent Company workspace', async () => {
   assert.match(html, /if\(companyDraft\)invalidateCompanyPlan\('Inputs changed\. Plan the cycle again\.'\)/)
   assert.match(html, /let requestedConsoleView=location\.hash==='\#company'\?'company':location\.hash==='\#activation'\?'workcells':'overview'/)
   assert.match(html, /const view=requestedConsoleView\|\|document\.querySelector\('nav button\.active'\)\?\.dataset\.view\|\|'overview'/)
-  assert.match(html, /companyRoster=\[\]\s+companyWorkOrders=\[\]\s+companyOperations=null\s+companyOpenWorkOrder=null\s+companyMissions=\[\]\s+companyOpenMission=null\s+resetCompanyRosterTools\(\)\s+invalidateCompanyPlan\(\)/)
+  assert.match(html, /companyRoster=\[\]\s+companyWorkOrders=\[\]\s+companyOperations=null\s+companyCeoCycle=null\s+companyOpenWorkOrder=null\s+companyMissions=\[\]\s+companyOpenMission=null\s+resetCompanyRosterTools\(\)\s+invalidateCompanyPlan\(\)/)
   assert.doesNotMatch(html, /id="companyRunButton"|action:'run',\.\.\.companyDraft\.input/)
 })
 
@@ -43,7 +43,7 @@ test('Agent Company console queues, dispatches, and proves exact reviewed work o
   assert.match(html, /Work order cancelled\. Queued source evidence was scrubbed\./)
   assert.match(html, /order\.evidenceState==='scrubbed'\?'evidence scrubbed':'evidence retained'/)
   assert.doesNotMatch(html, /value="internal">Internal review/)
-  assert.match(html, /companyWorkOrders=\[\]\s+companyOperations=null\s+companyOpenWorkOrder=null/)
+  assert.match(html, /companyWorkOrders=\[\]\s+companyOperations=null\s+companyCeoCycle=null\s+companyOpenWorkOrder=null/)
   assert.match(html, /invalidateCompanyPlan\(\)\s+resetCompanyPlaybooks\(\)\s+\$\('#companyOrderDetail'\)\.hidden=true\s+\$\('#companyOrderDetail'\)\.innerHTML=''\s+\$\('#companyResults'\)\.innerHTML=''/)
   assert.doesNotMatch(html, /order\.input|workOrder\.input/)
 })
@@ -66,6 +66,24 @@ test('Agent Company console measures and immutably evaluates terminal work witho
   assert.match(html, /agent\.usedRoleCalls/)
   assert.match(html, /cancelled excluded from delivery metrics/)
   assert.doesNotMatch(html, /companyEvaluationNotes|evaluationNotes|evaluation\.output/i)
+})
+
+test('Agent Company presents one protected compact company week', async () => {
+  const html = await readConsole()
+  assert.match(html, /id="companyWeekTitle">Company week/)
+  assert.match(html, /One accountable outcome at a time across the company/)
+  assert.match(html, /id="companyWeekState" class="empty"/)
+  assert.match(html, /renderCompanyWeek\(response\.ceoCycle\)/)
+  assert.match(html, /cycle\.contract==='supermega\.ceo-cycle-view\.v1'/)
+  assert.match(html, /one outcome per run Â· no external writes/)
+  assert.match(html, /consequential outcomes remain behind managed-security and owner gates/)
+  assert.match(html, /companyCeoCycle\.completedCount.*companyCeoCycle\.totalOutcomes.*done/)
+  assert.match(html, /company-week-grid\{display:grid;grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/)
+  assert.match(html, /company-week-grid\{grid-template-columns:1fr\}/)
+  const panel = html.match(/<section class="company-week"[\s\S]*?<section class="company-playbook"/)?.[0] || ''
+  assert.ok(panel)
+  assert.doesNotMatch(panel, /<button|<input|<form|type="password"/)
+  assert.doesNotMatch(html, /setInterval\(.*CompanyWeek|companyCeoCycle\.(?:evidencePlan|objective|sourceRefs|usage|answer|output)/)
 })
 
 test('Agent Company roster remains usable as the fixed workforce expands', async () => {
