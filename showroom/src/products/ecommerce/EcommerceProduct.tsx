@@ -8,6 +8,7 @@ import {
   commerceCatalogDigestSource,
   commerceStorefrontConfiguration,
   commerceStorefrontRequestEquals,
+  commerceStorefrontRequestLines,
   commerceStorefrontRequests,
   recordCommerceStorefrontRequest,
   validateCommerceState,
@@ -86,6 +87,13 @@ const DEFAULT_STORE_SUMMARY = 'Everyday essentials for pickup or delivery, with 
 
 function formatMmk(value: number) {
   return `${value.toLocaleString()} MMK`
+}
+
+function minutesUntil(value: string | undefined, now: number) {
+  if (!value) return null
+  const timestamp = Date.parse(value)
+  if (!Number.isFinite(timestamp)) return null
+  return Math.ceil((timestamp - now) / 60000)
 }
 
 function defaultSelection(items: CommerceItem[]) {
@@ -756,6 +764,37 @@ export function EcommerceProduct() {
     ? commerceStorefrontRequests(managedInbox.state).filter((request) => request.state === 'pending_shop_review')
     : []
   const importNeeded = catalog.source === 'sample' || catalog.source === 'unavailable' || catalog.items.length === 0
+  const orderOpsNow = Date.now()
+  const orderOpsAgingCount = pendingManagedRequests.filter((request) => Date.parse(request.createdAt) <= orderOpsNow - 30 * 60 * 1000).length
+  const orderOpsExpiringCount = pendingManagedRequests.filter((request) => {
+    const minutes = minutesUntil('quote' in request ? request.quote.expiresAt : undefined, orderOpsNow)
+    return minutes !== null && minutes <= 15
+  }).length
+  const orderOpsStockRiskCount = pendingManagedRequests.filter((request) => commerceStorefrontRequestLines(request).some((line) => {
+    const item = catalog.items.find((candidate) => candidate.sku === line.sku)
+    return !item || item.onHand < line.quantity
+  })).length
+  const orderOpsPaymentRiskCount = pendingManagedRequests.filter((request) => 'quote' in request && request.quote.payment.adapter === 'kbzpay_manual').length
+  const orderOpsPriority = orderOpsStockRiskCount
+    ? 'Resolve stock risk'
+    : orderOpsExpiringCount
+      ? 'Refresh expiring quotes'
+      : orderOpsAgingCount
+        ? 'Clear aged requests'
+        : pendingManagedRequests.length
+          ? 'Review next request'
+          : importNeeded
+            ? 'Import sellable catalog'
+            : savedDraftIsCurrent
+              ? 'Keep storefront open'
+              : 'Save storefront'
+  const orderOpsRows = [
+    ['Priority', orderOpsPriority],
+    ['SLA', pendingManagedRequests.length ? orderOpsAgingCount ? `${orderOpsAgingCount} aging` : 'Inside window' : 'No queue'],
+    ['Stock risk', orderOpsStockRiskCount ? `${orderOpsStockRiskCount} blocked` : 'Clear'],
+    ['Payment', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} review` : 'Not charged'],
+    ['Handoff', pendingManagedRequests.length ? 'Shop owns writes' : buyingReady ? 'Ready for quote' : 'Setup first'],
+  ] as const
   const setupRows = [
     ['Catalog', sourceLabel],
     ['Products', `${selectedSkus.length}/${Math.min(catalog.items.length, 8)} selected`],
@@ -866,6 +905,17 @@ export function EcommerceProduct() {
               recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'ecommerce', route: location.pathname + location.search, detail: aiAgentJob })
               finishStorefrontSetup()
             }} type="button">Finish setup</button>}
+      </section>
+
+      <section aria-label="Order ops cockpit" className="ecommerce-ops-cockpit">
+        <div>
+          <span className="core-eyebrow">Order ops cockpit</span>
+          <h2>{orderOpsPriority}</h2>
+          <p>AI ranks order exceptions from the live queue, quote expiry, stock risk, and payment state. Shop still confirms every write.</p>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {orderOpsRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
       </section>
 
       <div aria-label="Ecommerce workspace" className="ecommerce-mobile-switch" role="group">

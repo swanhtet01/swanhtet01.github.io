@@ -161,6 +161,66 @@
   overflow-wrap: anywhere;
 }
 
+.ecommerce-ops-cockpit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, .95fr);
+  gap: 14px;
+  align-items: center;
+  border: 1px solid rgba(11, 116, 94, .18);
+  border-radius: 12px;
+  padding: 14px;
+  background: #f5faf6;
+}
+
+.ecommerce-ops-cockpit h2 {
+  margin: 2px 0 4px;
+  color: #17231d;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.ecommerce-ops-cockpit p {
+  margin: 0;
+  color: #526158;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ecommerce-ops-cockpit-rows {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.ecommerce-ops-cockpit-rows span {
+  min-width: 0;
+  min-height: 54px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 9px;
+  padding: 8px;
+  background: #fff;
+}
+
+.ecommerce-ops-cockpit-rows small {
+  color: #66746b;
+  font-size: 8px;
+  font-weight: 780;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.ecommerce-ops-cockpit-rows strong {
+  min-width: 0;
+  color: #17231d;
+  font-size: 11px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 @media (min-width: 841px) {
   .ecommerce-workspace {
     grid-template-columns: minmax(480px, 1.2fr) minmax(320px, .8fr);
@@ -174,6 +234,27 @@
   .ecommerce-setup {
     grid-column: 2;
     grid-row: 1;
+  }
+}
+
+@media (max-width: 920px) {
+  .ecommerce-ops-cockpit {
+    grid-template-columns: 1fr;
+  }
+
+  .ecommerce-ops-cockpit-rows {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .ecommerce-ops-cockpit {
+    border-radius: 10px;
+    padding: 11px;
+  }
+
+  .ecommerce-ops-cockpit-rows {
+    grid-template-columns: 1fr;
   }
 }
 
