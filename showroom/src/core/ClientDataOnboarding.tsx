@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   CLIENT_IMPORT_MAX_BYTES,
   buildClientImportStagingPackage,
+  clientImportChecklist,
   clientImportObject,
   clientImportTemplate,
   createClientImportPreview,
@@ -80,6 +81,11 @@ const rowStatusLabels: Record<string, string> = {
   conflict: 'Conflict',
 }
 
+function csvCell(value: string) {
+  const safe = value.replace(/"/g, '""')
+  return /[",\r\n]/.test(safe) ? `"${safe}"` : safe
+}
+
 function emptyImportState(): ImportState {
   return {
     sourceName: '',
@@ -134,6 +140,7 @@ function downloadFile(filename: string, content: string, type: string) {
 
 export function ClientDataOnboarding({ product, productName, productSlug, workflowTemplateId, workspace, owner, managedIdentity }: ClientDataOnboardingProps) {
   const object = clientImportObject(product)
+  const checklist = clientImportChecklist(product, workflowTemplateId)
   const requestRef = useRef(0)
   const validationRequestRef = useRef(0)
   const productRef = useRef(product)
@@ -353,6 +360,25 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     )
   }
 
+  function downloadChecklist() {
+    const rows = [
+      ['field', 'required', 'kind', 'accepted_headers', 'example', 'rule'],
+      ...checklist.map((row) => [
+        row.field,
+        row.required ? 'yes' : 'no',
+        row.kind,
+        row.acceptedHeaders.join(' | '),
+        row.example,
+        row.note,
+      ]),
+    ]
+    downloadFile(
+      `supermega-${productSlug}-${workflowTemplateId}-${object.id}-data-checklist-v1.csv`,
+      `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}\r\n`,
+      'text/csv;charset=utf-8',
+    )
+  }
+
   function previewSample() {
     const expectedProduct = product
     const expectedWorkflowTemplateId = workflowTemplateId
@@ -543,7 +569,13 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           </div>
           <div className="catalog-import-file-actions">
             <label htmlFor={`client-import-${product}`}>Choose your CSV<input accept=".csv,text/csv" disabled={state.busy} id={`client-import-${product}`} onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void chooseFile(file) }} type="file" /></label>
-            <div className="catalog-import-template-actions"><button className="core-button" disabled={state.busy} onClick={previewSample} type="button">Try sample</button><button className="core-button" disabled={state.busy} onClick={downloadTemplate} type="button">Download template</button></div>
+            <div className="catalog-import-template-actions"><button className="core-button" disabled={state.busy} onClick={previewSample} type="button">Try sample</button><button className="core-button" disabled={state.busy} onClick={downloadTemplate} type="button">Download template</button><button className="core-button" disabled={state.busy} onClick={downloadChecklist} type="button">Data checklist</button></div>
+          </div>
+        </div>
+        <div aria-label={`${productName} data checklist`} className="catalog-import-checklist">
+          <div><span className="core-eyebrow">What to prepare</span><strong>{object.label}</strong><small>{object.maximumRows} rows per reviewed import. {object.activationBoundary}</small></div>
+          <div className="catalog-import-checklist-grid">
+            {checklist.map((row) => <span data-required={row.required ? 'true' : 'false'} key={row.field}><small>{row.required ? 'Required' : 'Optional'} / {row.kind}</small><b>{row.field}</b><em>{row.acceptedHeaders.join(', ')}</em><code>{row.example || '-'}</code></span>)}
           </div>
         </div>
         <p className="catalog-import-boundary">{appliedIsCurrent && state.applied

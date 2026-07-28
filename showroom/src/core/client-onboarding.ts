@@ -31,6 +31,15 @@ export type ClientImportObject = {
   activationBoundary: string
 }
 
+export type ClientImportChecklistRow = {
+  field: string
+  required: boolean
+  kind: ClientImportFieldKind
+  acceptedHeaders: readonly string[]
+  example: string
+  note: string
+}
+
 export type ClientImportIssue = {
   code: string
   field: string | 'file' | 'row'
@@ -418,6 +427,42 @@ function resolveWorkflowTemplateId(product: ClientSolutionId, workflowTemplateId
 
 export function clientImportTemplate(product: ClientSolutionId, workflowTemplateId?: string) {
   return objects[product].workflowTemplates[resolveWorkflowTemplateId(product, workflowTemplateId)]
+}
+
+function exampleRows(product: ClientSolutionId, workflowTemplateId?: string) {
+  const template = clientImportTemplate(product, workflowTemplateId)
+  const parsed = parseCsv(template)
+  const headers = parsed.rows[0]?.cells ?? []
+  const sample = parsed.rows[1]?.cells ?? []
+  return { headers, sample }
+}
+
+function checklistNote(field: ClientImportField) {
+  if (field.kind === 'sku') return 'Use stable uppercase codes. Do not reuse one code for two records.'
+  if (field.kind === 'integer') return `Whole number${field.minimum !== undefined ? `, minimum ${field.minimum}` : ''}. No decimals or formulas.`
+  if (field.kind === 'date') return 'Use YYYY-MM-DD so schedules and approvals stay deterministic.'
+  if (field.kind === 'boolean') return 'Use true/false, yes/no, 1/0, or on/off.'
+  if (field.kind === 'slug') return 'Use lowercase URL-safe slugs, for example home or products.'
+  if (field.kind === 'url') return 'Use https:// links, /relative paths, or leave blank when optional.'
+  return `Text${field.maximum ? ` up to ${field.maximum} characters` : ''}. No spreadsheet formulas.`
+}
+
+export function clientImportChecklist(product: ClientSolutionId, workflowTemplateId?: string) {
+  const object = objects[product]
+  const { headers, sample } = exampleRows(product, workflowTemplateId)
+  return object.fields.map((field): ClientImportChecklistRow => {
+    const normalizedAliases = new Set([...field.aliases, field.id].map(normalizeHeader))
+    const templateHeader = headers.find((header) => normalizedAliases.has(normalizeHeader(header)))
+    const sampleIndex = templateHeader ? headers.indexOf(templateHeader) : -1
+    return {
+      field: field.label,
+      required: field.required,
+      kind: field.kind,
+      acceptedHeaders: [templateHeader || field.id, ...field.aliases].filter((value, index, source) => source.indexOf(value) === index).slice(0, 4),
+      example: sampleIndex >= 0 ? sample[sampleIndex] ?? '' : '',
+      note: checklistNote(field),
+    }
+  })
 }
 
 export async function createClientImportPreview(

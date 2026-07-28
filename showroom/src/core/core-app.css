@@ -750,6 +750,18 @@ textarea { min-height: 72px; resize: vertical; }
 .catalog-import-file-actions label { display: grid; gap: 4px; color: var(--core-muted); font-size: 11px; font-weight: 700; }
 .catalog-import-file-actions input { width: min(270px,100%); min-height: 44px; border: 1px solid var(--core-line-strong); border-radius: 5px; padding: 6px; background: #fff; color: var(--core-muted); font-size: 11px; }
 .catalog-import-file-actions input::file-selector-button { min-height: 30px; margin-right: 8px; border: 0; border-radius: 4px; padding: 0 10px; background: var(--core-green-soft); color: var(--core-ink); font: inherit; font-weight: 760; cursor: pointer; }
+.catalog-import-checklist { display: grid; gap: 9px; border: 1px solid var(--core-line); border-radius: 8px; padding: 10px; background: #fff; }
+.catalog-import-checklist > div:first-child { min-width: 0; display: grid; gap: 3px; }
+.catalog-import-checklist strong { color: var(--core-ink); font-size: 12px; }
+.catalog-import-checklist small { color: var(--core-muted); font-size: 10px; line-height: 1.45; }
+.catalog-import-checklist-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 7px; }
+.catalog-import-checklist-grid span { min-width: 0; min-height: 92px; display: grid; align-content: center; gap: 3px; border-right: 1px solid var(--core-line); padding: 8px; background: var(--core-panel); }
+.catalog-import-checklist-grid span:last-child { border-right: 0; }
+.catalog-import-checklist-grid small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 7px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.catalog-import-checklist-grid b { overflow: hidden; color: var(--core-ink); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.catalog-import-checklist-grid em { overflow: hidden; color: var(--core-muted); font-size: 8px; font-style: normal; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.catalog-import-checklist-grid code { overflow: hidden; color: var(--core-green); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.catalog-import-checklist-grid span[data-required="true"] { background: var(--core-green-soft); }
 .catalog-import-boundary { margin: 0; border-left: 2px solid var(--core-green); padding-left: 10px; color: var(--core-muted); font-size: 11px; line-height: 1.5; }
 .catalog-import-autopilot { display: grid; grid-template-columns: minmax(0,1fr) minmax(320px,.9fr); gap: 12px; align-items: center; border: 1px solid var(--core-line); border-radius: 8px; padding: 10px; background: #fff; }
 .catalog-import-autopilot > div:first-child { min-width: 0; display: grid; gap: 3px; }
@@ -1217,9 +1229,13 @@ textarea { min-height: 72px; resize: vertical; }
   .purchase-order-list article > button, .purchase-order-list article > .purchase-order-closed { grid-column: 1 / -1; justify-self: start; }
   .catalog-import-intro, .catalog-import-footer, .catalog-import-autopilot, .catalog-import-repair { grid-template-columns: 1fr; }
   .catalog-import-file-actions { justify-items: stretch; }
-  .catalog-import-template-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); width: 100%; }
+  .catalog-import-template-actions { display: grid; grid-template-columns: repeat(auto-fit,minmax(132px,1fr)); width: 100%; }
   .catalog-import-template-actions .core-button { width: 100%; }
   .catalog-import-file-actions label, .catalog-import-file-actions input { width: 100%; }
+  .catalog-import-checklist-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .catalog-import-checklist-grid span:nth-child(n) { border-right: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); }
+  .catalog-import-checklist-grid span:nth-child(2n) { border-right: 0; }
+  .catalog-import-checklist-grid span:last-child { grid-column: 1/-1; border-right: 0; border-bottom: 0; }
   .catalog-import-stage-list { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .catalog-import-stage-list span:nth-child(2n) { border-right: 0; }
   .catalog-import-stage-list span:nth-child(-n+2) { border-bottom: 1px solid var(--core-line); }
