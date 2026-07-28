@@ -317,6 +317,8 @@ if (!coreSource.includes('const authReady = Boolean(body.authentication?.trusted
   || !coreSource.includes('const activationSteps = Array.isArray(body.enterprise_activation?.steps)')
   || !coreSource.includes("runtime.activationSteps.map((step) => [step.label, step.ready ? 'Ready' : 'Needed'] as const)")
   || !coreSource.includes('activationSteps: runtime.activationSteps')
+  || !coreSource.includes('Export evidence before managed import.')
+  || !coreSource.includes('<a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a><a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id)}>Request managed trial</a>')
   || !coreSource.includes('aria-label="Managed activation readiness"')
   || !coreSource.includes('activationRows')
   || !managedActivationRunbookSource.includes('aria-label="Managed activation runbook"')
