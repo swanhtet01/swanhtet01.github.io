@@ -81,6 +81,15 @@ if (health.status !== 'ready' || health.service !== 'supermega-service') throw n
 if (!['isolated_demo', 'managed_trial'].includes(health.operating_mode)) throw new Error('unknown_operating_mode')
 if (health.trial_backend?.browser_service_role_exposed !== false) throw new Error('unsafe_browser_service_role_contract')
 if (typeof health.trial_backend?.role_ready !== 'boolean') throw new Error('runtime_database_role_contract_missing')
+const activationSteps = health.enterprise_activation?.steps
+if (!Array.isArray(activationSteps)
+  || JSON.stringify(activationSteps.map((step) => step.id)) !== JSON.stringify(['database', 'role', 'schema', 'identity', 'audit', 'writes'])
+  || activationSteps.some((step) => typeof step.ready !== 'boolean' || typeof step.action !== 'string' || step.action.length < 20)
+  || !Number.isInteger(health.coverage_score)
+  || health.coverage_score < 0
+  || health.coverage_score > 100) throw new Error('managed_activation_steps_contract_missing')
+const activationCoverage = Math.round((activationSteps.filter((step) => step.ready).length / activationSteps.length) * 100)
+if (activationCoverage !== health.coverage_score) throw new Error('managed_activation_coverage_mismatch')
 if (health.operating_mode === 'managed_trial' && (health.enterprise_db_ready !== true || health.security_ready !== true)) throw new Error('managed_trial_readiness_mismatch')
 if (health.operating_mode === 'managed_trial' && health.trial_backend.role_ready !== true) throw new Error('managed_trial_runtime_role_unsafe')
 

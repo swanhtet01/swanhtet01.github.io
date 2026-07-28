@@ -239,6 +239,55 @@ def _activation_requirements(*, database_ready: bool, role_ready: bool, schema_r
     return requirements
 
 
+def _activation_steps(
+    *,
+    database_ready: bool,
+    role_ready: bool,
+    schema_ready: bool,
+    security_ready: bool,
+    audit_ready: bool,
+    writes_ready: bool,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": "database",
+            "label": "Database",
+            "ready": database_ready,
+            "action": "Provision a dedicated, non-BYPASSRLS managed Postgres connection.",
+        },
+        {
+            "id": "role",
+            "label": "Role",
+            "ready": database_ready and role_ready,
+            "action": "Use an encrypted, dedicated non-BYPASSRLS login with only the trial backend role.",
+        },
+        {
+            "id": "schema",
+            "label": "Schema",
+            "ready": database_ready and schema_ready,
+            "action": "Apply and verify the private trial schema before enabling customer writes.",
+        },
+        {
+            "id": "identity",
+            "label": "Identity",
+            "ready": security_ready,
+            "action": "Configure trusted gateway signing or Supabase named-user authentication.",
+        },
+        {
+            "id": "audit",
+            "label": "Audit",
+            "ready": database_ready and audit_ready,
+            "action": "Verify immutable audit-event insert access through the runtime role.",
+        },
+        {
+            "id": "writes",
+            "label": "Writes",
+            "ready": database_ready and role_ready and schema_ready and security_ready and audit_ready and writes_ready,
+            "action": "Enable trial writes only after RLS, recovery, and acceptance tests pass.",
+        },
+    ]
+
+
 def create_app() -> FastAPI:
     database_url = _text(os.getenv("SUPERMEGA_DATABASE_URL"))
     store = PostgresTrialStore(
@@ -299,6 +348,17 @@ def create_app() -> FastAPI:
             schema_ready=readiness.schema_ready,
             audit_ready=readiness.audit_ready,
         )
+        activation_steps = _activation_steps(
+            database_ready=readiness.database_ready,
+            role_ready=readiness.role_ready,
+            schema_ready=readiness.schema_ready,
+            security_ready=security_ready,
+            audit_ready=readiness.audit_ready,
+            writes_ready=readiness.write_enabled,
+        )
+        coverage_score = round(
+            sum(1 for step in activation_steps if step["ready"]) / len(activation_steps) * 100
+        )
         return {
             "status": "ready",
             "service": SERVICE_NAME,
@@ -312,7 +372,7 @@ def create_app() -> FastAPI:
                 "anonymous_users_allowed": False,
                 "client_asserted_roles_allowed": False,
             },
-            "coverage_score": 0,
+            "coverage_score": coverage_score,
             "trial_backend": {
                 "database_ready": readiness.database_ready,
                 "role_ready": readiness.role_ready,
@@ -329,6 +389,7 @@ def create_app() -> FastAPI:
             "enterprise_activation": {
                 "status": "ready" if not requirements else "attention",
                 "requirements": requirements,
+                "steps": activation_steps,
                 "secret_values_exposed": False,
             },
         }
