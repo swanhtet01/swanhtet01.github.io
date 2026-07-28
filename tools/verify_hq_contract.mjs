@@ -25,7 +25,7 @@ import {
 } from '../kernel/gateway.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyCompanyCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -40,6 +40,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'hq', 'research', 'postgres17-rehearsal.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'research', 'release-reconciliation-2026-07-26.md'), 'utf8'),
   readFile(resolve(root, 'tools', 'audit_ally_runtime.ps1'), 'utf8'),
+  readFile(resolve(root, 'tools', 'trim_codex_working_sets.ps1'), 'utf8'),
   readFile(resolve(root, 'tools', 'invoke_supermega_company_cycle.ps1'), 'utf8'),
   readFile(resolve(root, 'tools', 'run_supermega_agent_jobs.py'), 'utf8'),
   readFile(resolve(root, 'package.json'), 'utf8'),
@@ -841,6 +842,26 @@ requireContract('Ally runtime audit is read-only and bounded',
   && packageText.includes('"audit:ally"')
   && packageText.includes('"audit:ally:self-test"')
   && !/\b(?:Stop-Process|Start-Process|taskkill|kill|Remove-Item|EmptyWorkingSet|SetProcessWorkingSetSize)\b/i.test(allyAuditText))
+
+requireContract('Ally working-set recovery is preview-first and non-terminating',
+  allyTrimText.includes("$Contract = 'supermega.ally-working-set-trim.v1'")
+  && allyTrimText.includes("$RootProcessName = 'ChatGPT.exe'")
+  && allyTrimText.includes("$RootExecutablePattern = 'C:\\Program Files\\WindowsApps\\OpenAI.Codex_*_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe'")
+  && allyTrimText.includes('$MaxTargetCount = 128')
+  && allyTrimText.includes('Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, Name, ExecutablePath, WorkingSetSize')
+  && allyTrimText.includes('Test-CodexLineage ([int]$_.ProcessId)')
+  && allyTrimText.includes('[SuperMegaWorkingSet]::EmptyWorkingSet($liveTarget.Handle)')
+  && allyTrimText.includes("mode = if ($Apply) { 'apply' } else { 'preview' }")
+  && allyTrimText.includes('processTerminationCalls = 0')
+  && allyTrimText.includes('commandLinesRead = $false')
+  && allyTrimText.includes('environmentRead = $false')
+  && allyTrimText.includes('secretValuesReturned = $false')
+  && packageText.includes('"optimize:ally:preview"')
+  && packageText.includes('"optimize:ally"')
+  && packageText.includes('"optimize:ally:self-test"')
+  && now.includes('supermega.ally-working-set-trim.v1')
+  && workboard.includes('| OPS-059 | CEO + Ally Operations / Memory Recovery Codex | done-local |')
+  && !/\b(?:Stop-Process|Start-Process|Stop-Service|Start-Service|Restart-Service|taskkill|kill|Remove-Item|SetProcessWorkingSetSize|Invoke-WebRequest|Invoke-RestMethod|curl(?:\.exe)?|wget(?:\.exe)?)\b/i.test(allyTrimText))
 
 requireContract('Ally company cycles are host-admitted and serial',
   allyCompanyCycleText.includes("$Contract = 'supermega.ally-company-cycle.v1'")
