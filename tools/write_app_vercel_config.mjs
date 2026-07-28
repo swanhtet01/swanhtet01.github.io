@@ -101,7 +101,6 @@ const generatedIgnore = [
   'config',
   'data',
   'docs',
-  'kernel',
   'mark1_pilot',
   'node_modules',
   'pilot-data',
