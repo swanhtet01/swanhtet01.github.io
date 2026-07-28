@@ -51,6 +51,144 @@ import {
 } from '../agent-company-operator-auth.mjs'
 
 const CEO_CYCLE_VIEW_CONTRACT = 'supermega.ceo-cycle-view.v1'
+const HOSTED_ACTIVATION_VIEW_CONTRACT = 'supermega.hosted-activation-view.v1'
+const HOSTED_STATUS_URL = 'https://app.supermega.dev/api/cloud-autonomy/status'
+const HOSTED_STATUS_TIMEOUT_MS = 2500
+const HOSTED_STATUS_MAX_BYTES = 64 * 1024
+const HOSTED_ACTIVATION_PROOFS = Object.freeze([
+  ['managed-database-tenant-isolation', 'Managed database tenant isolation'],
+  ['private-storage-privacy', 'Private storage privacy'],
+  ['protected-worker-egress', 'Protected worker egress'],
+  ['queue-recovery-side-effect-accounting', 'Queue recovery and side-effect accounting'],
+  ['protected-release-rollback-owner-decision', 'Protected release, rollback, and owner decision'],
+])
+
+function unavailableHostedActivation(reason) {
+  const proofs = HOSTED_ACTIVATION_PROOFS.map(([id, label]) => ({ id, label, status: 'unverified' }))
+  return {
+    contract: HOSTED_ACTIVATION_VIEW_CONTRACT,
+    authority: 'vercel',
+    environment: 'production',
+    declaredState: 'dormant',
+    liveState: 'unavailable',
+    source: { status: 'unavailable', reason },
+    activationReady: false,
+    proofs,
+    verifiedProofCount: 0,
+    requiredProofCount: proofs.length,
+    nextProof: proofs[0],
+    scheduler: {
+      configured: false,
+      activationRequested: false,
+      activationEnabled: false,
+      runtimeReady: false,
+      pcDependency: false,
+      currentInvocationsPerDay: 0,
+      plannedInvocationsPerDay: 25,
+      maxJobsPerRun: 2,
+      cadence: 'hourly_and_daily',
+      cadenceCompatibility: 'unverified',
+    },
+    nextAction: 'Restore the fixed hosted status read, then verify the signed activation evidence.',
+  }
+}
+
+async function buildHostedActivationView(fetchHostedStatus) {
+  if (typeof fetchHostedStatus !== 'function') return unavailableHostedActivation('hosted_status_not_checked')
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), HOSTED_STATUS_TIMEOUT_MS)
+  let response
+  try {
+    response = await fetchHostedStatus(HOSTED_STATUS_URL, {
+      method: 'GET',
+      headers: { accept: 'application/json' },
+      redirect: 'error',
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+  } catch (error) {
+    const reason = error?.name === 'AbortError' ? 'hosted_status_timeout' : 'hosted_status_unavailable'
+    return unavailableHostedActivation(reason)
+  } finally {
+    clearTimeout(timeout)
+  }
+  if (!response || response.status !== 200) return unavailableHostedActivation('hosted_status_rejected')
+  const contentType = String(response.headers?.get?.('content-type') || '').toLowerCase()
+  if (!contentType.includes('application/json')) return unavailableHostedActivation('hosted_status_content_type_invalid')
+  const declaredLength = Number(response.headers?.get?.('content-length') || 0)
+  if (Number.isFinite(declaredLength) && declaredLength > HOSTED_STATUS_MAX_BYTES) {
+    return unavailableHostedActivation('hosted_status_too_large')
+  }
+  let text
+  try {
+    text = await response.text()
+  } catch {
+    return unavailableHostedActivation('hosted_status_unreadable')
+  }
+  if (new TextEncoder().encode(text).byteLength > HOSTED_STATUS_MAX_BYTES) {
+    return unavailableHostedActivation('hosted_status_too_large')
+  }
+  let payload
+  try {
+    payload = JSON.parse(text)
+  } catch {
+    return unavailableHostedActivation('hosted_status_json_invalid')
+  }
+  const scheduler = payload?.scheduler
+  if (!payload || payload.runtime_target !== 'hosted_vercel_api' || payload.pc_dependency !== false
+    || !scheduler || typeof scheduler !== 'object' || Array.isArray(scheduler)) {
+    return unavailableHostedActivation('hosted_status_contract_invalid')
+  }
+  const evidenceCount = Number.isInteger(scheduler.activation_evidence_count)
+    && scheduler.activation_evidence_count >= 0
+    && scheduler.activation_evidence_count <= HOSTED_ACTIVATION_PROOFS.length
+    ? scheduler.activation_evidence_count
+    : 0
+  const evidenceValid = scheduler.activation_evidence_valid === true
+    && evidenceCount === HOSTED_ACTIVATION_PROOFS.length
+  const proofs = HOSTED_ACTIVATION_PROOFS.map(([id, label]) => ({
+    id,
+    label,
+    status: evidenceValid ? 'verified' : 'unverified',
+  }))
+  const activationRequested = scheduler.activation_requested === true
+  const activationEnabled = scheduler.activation_enabled === true
+  const configured = scheduler.configured === true
+  const runtimeReady = configured && activationEnabled && evidenceValid
+  const cadenceCompatibility = 'unverified'
+  const activationReady = runtimeReady && cadenceCompatibility === 'verified'
+  const liveState = runtimeReady ? 'enabled_unverified' : activationRequested ? 'blocked' : 'dormant'
+  return {
+    contract: HOSTED_ACTIVATION_VIEW_CONTRACT,
+    authority: 'vercel',
+    environment: 'production',
+    declaredState: 'dormant',
+    liveState,
+    source: { status: 'observed' },
+    activationReady,
+    proofs,
+    verifiedProofCount: evidenceValid ? proofs.length : 0,
+    requiredProofCount: proofs.length,
+    nextProof: evidenceValid ? null : proofs[0],
+    scheduler: {
+      configured,
+      activationRequested,
+      activationEnabled,
+      runtimeReady,
+      pcDependency: false,
+      currentInvocationsPerDay: 0,
+      plannedInvocationsPerDay: 25,
+      maxJobsPerRun: Number.isInteger(scheduler.max_jobs_per_run) ? scheduler.max_jobs_per_run : 2,
+      cadence: 'hourly_and_daily',
+      cadenceCompatibility,
+    },
+    nextAction: evidenceValid
+      ? configured
+        ? 'Confirm the Vercel plan supports the hourly cadence before any owner activation decision.'
+        : 'Finish the protected worker configuration before any owner activation decision.'
+      : `Verify ${proofs[0].label.toLowerCase()} in the signed activation bundle.`,
+  }
+}
 
 function unavailableCeoCycle(reason, extra = {}) {
   return {
@@ -315,11 +453,19 @@ export async function handleAgentCompany(request = {}, options = {}) {
     const configuredClientId = String(options.clientId ?? env.SUPERMEGA_CLIENT_ID ?? '').trim()
     const protectedClientId = String(auth.clientId || configuredClientId).trim()
     const now = options.now instanceof Date ? options.now : new Date()
-    const ceoCycle = await buildCeoCycleView({
-      clientId: protectedClientId,
-      now,
-      loadCycleState: options.loadCeoOutcomeCycleState || loadCeoOutcomeCycleState,
-    })
+    const fetchHostedStatus = Object.hasOwn(options, 'fetchHostedStatus')
+      ? options.fetchHostedStatus
+      : options.opsKey !== undefined || options.authorizeCompanyRequest !== undefined
+        ? null
+        : globalThis.fetch
+    const [ceoCycle, hostedActivation] = await Promise.all([
+      buildCeoCycleView({
+        clientId: protectedClientId,
+        now,
+        loadCycleState: options.loadCeoOutcomeCycleState || loadCeoOutcomeCycleState,
+      }),
+      buildHostedActivationView(fetchHostedStatus),
+    ])
     return {
       status: 200,
       json: {
@@ -327,6 +473,7 @@ export async function handleAgentCompany(request = {}, options = {}) {
         actionMode: 'draft_only',
         auth,
         ceoCycle,
+        hostedActivation,
         agents: listCompanyAgents(),
         limits: {
           maxAgents: MAX_CYCLE_AGENTS,

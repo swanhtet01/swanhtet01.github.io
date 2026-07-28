@@ -86,6 +86,25 @@ test('Agent Company presents one protected compact company week', async () => {
   assert.doesNotMatch(html, /setInterval\(.*CompanyWeek|companyCeoCycle\.(?:evidencePlan|objective|sourceRefs|usage|answer|output)/)
 })
 
+test('Agent Company presents read-only hosted activation proof gates', async () => {
+  const html = await readConsole()
+  assert.match(html, /id="hostedActivationTitle">Hosted activation/)
+  assert.match(html, /Read-only production proof gates; no activation controls/)
+  assert.match(html, /renderHostedActivation\(response\.hostedActivation\)/)
+  assert.match(html, /view\.contract!=='supermega\.hosted-activation-view\.v1'/)
+  assert.match(html, /proofs\.length===5/)
+  assert.match(html, /Current runs \/ day/)
+  assert.match(html, /Planned runs \/ day/)
+  assert.match(html, /Plan supports cadence/)
+  assert.match(html, /hosted-activation-layout\{display:grid;grid-template-columns:minmax\(0,1\.4fr\) minmax\(220px,\.6fr\)/)
+  assert.match(html, /hosted-activation-layout\{grid-template-columns:1fr\}/)
+  const panel = html.match(/<section class="hosted-activation"[\s\S]*?<section class="company-playbook"/)?.[0] || ''
+  assert.ok(panel)
+  assert.doesNotMatch(panel, /<button|<input|<form|type="password"/)
+  assert.doesNotMatch(html, /hostedActivation\.(?:secret|token|environmentKey|configurationErrors|evidenceDigest)/i)
+  assert.doesNotMatch(html, /setInterval\(.*HostedActivation/)
+})
+
 test('Agent Company roster remains usable as the fixed workforce expands', async () => {
   const html = await readConsole()
   assert.match(html, /id="companyRosterSearch" type="search"/)

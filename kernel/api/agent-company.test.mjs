@@ -20,6 +20,20 @@ const request = (patch = {}) => ({
   body: validBody,
   ...patch,
 })
+const hostedResponse = (payload, { status = 200, contentType = 'application/json', contentLength } = {}) => {
+  const body = typeof payload === 'string' ? payload : JSON.stringify(payload)
+  return {
+    status,
+    headers: {
+      get(name) {
+        if (String(name).toLowerCase() === 'content-type') return contentType
+        if (String(name).toLowerCase() === 'content-length') return contentLength ?? String(Buffer.byteLength(body))
+        return null
+      },
+    },
+    text: async () => body,
+  }
+}
 
 test('Agent Company API is ops-gated and method-restricted', async () => {
   assert.equal((await handleAgentCompany(request(), { env: {} })).status, 503)
@@ -84,6 +98,98 @@ test('GET returns the protected fixed roster and hard limits', async () => {
   assert.equal(result.json.ceoCycle.available, false)
   assert.equal(result.json.ceoCycle.reason, 'company_client_id_missing')
   assert.equal(result.json.ceoCycle.totalOutcomes, 5)
+  assert.equal(result.json.hostedActivation.contract, 'supermega.hosted-activation-view.v1')
+  assert.equal(result.json.hostedActivation.source.status, 'unavailable')
+  assert.equal(result.json.hostedActivation.source.reason, 'hosted_status_not_checked')
+  assert.equal(result.json.hostedActivation.activationReady, false)
+  assert.equal(result.json.hostedActivation.proofs.length, 5)
+  assert.equal(result.json.hostedActivation.scheduler.currentInvocationsPerDay, 0)
+  assert.equal(result.json.hostedActivation.scheduler.plannedInvocationsPerDay, 25)
+})
+
+test('GET observes fixed-origin hosted activation metadata without returning secrets', async () => {
+  const calls = []
+  const result = await handleAgentCompany(request({ method: 'GET', body: undefined }), {
+    opsKey: KEY,
+    fetchHostedStatus: async (url, init) => {
+      calls.push({ url, init })
+      return hostedResponse({
+        status: 'ready',
+        runtime_target: 'hosted_vercel_api',
+        pc_dependency: false,
+        scheduler: {
+          configured: true,
+          activation_requested: true,
+          activation_enabled: true,
+          activation_evidence_valid: true,
+          activation_evidence_count: 5,
+          activation_evidence_digest: 'private-evidence-digest',
+          activation_evidence_environment_key: 'PRIVATE_EVIDENCE_ENV',
+          configuration_errors: ['private-configuration-detail'],
+          max_jobs_per_run: 2,
+        },
+      })
+    },
+  })
+  assert.equal(result.status, 200)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, 'https://app.supermega.dev/api/cloud-autonomy/status')
+  assert.equal(calls[0].init.method, 'GET')
+  assert.equal(calls[0].init.redirect, 'error')
+  assert.equal(calls[0].init.cache, 'no-store')
+  assert.equal(calls[0].init.headers.accept, 'application/json')
+  assert.ok(calls[0].init.signal instanceof AbortSignal)
+  assert.equal(result.json.hostedActivation.liveState, 'enabled_unverified')
+  assert.equal(result.json.hostedActivation.activationReady, false)
+  assert.equal(result.json.hostedActivation.scheduler.runtimeReady, true)
+  assert.equal(result.json.hostedActivation.verifiedProofCount, 5)
+  assert.equal(result.json.hostedActivation.requiredProofCount, 5)
+  assert.equal(result.json.hostedActivation.nextProof, null)
+  assert.equal(result.json.hostedActivation.scheduler.cadenceCompatibility, 'unverified')
+  assert.match(result.json.hostedActivation.nextAction, /Confirm the Vercel plan/)
+  const serialized = JSON.stringify(result.json.hostedActivation)
+  assert.doesNotMatch(serialized, /private-evidence-digest|PRIVATE_EVIDENCE_ENV|private-configuration-detail/)
+
+  const authority = JSON.parse(await readFile(new URL('../../tools/supermega_scheduler_authority.json', import.meta.url), 'utf8'))
+  assert.deepEqual(
+    result.json.hostedActivation.proofs.map((proof) => proof.id),
+    authority.activation.required_evidence,
+  )
+  assert.equal(result.json.hostedActivation.declaredState, authority.activation.state)
+  assert.equal(result.json.hostedActivation.scheduler.currentInvocationsPerDay, authority.maximum_scheduler_invocations_per_day)
+  assert.equal(result.json.hostedActivation.scheduler.plannedInvocationsPerDay, authority.activation_plan.maximum_scheduler_invocations_per_day)
+})
+
+test('GET fails hosted observation closed without blocking protected company work', async () => {
+  const cases = [
+    async () => hostedResponse({}, { status: 503 }),
+    async () => hostedResponse('{}', { contentType: 'text/html' }),
+    async () => hostedResponse('{}', { contentLength: String(64 * 1024 + 1) }),
+    async () => hostedResponse('{bad json'),
+    async () => hostedResponse({ runtime_target: 'other', pc_dependency: false, scheduler: {} }),
+    async () => { throw new Error('dns unavailable') },
+  ]
+  const expectedReasons = [
+    'hosted_status_rejected',
+    'hosted_status_content_type_invalid',
+    'hosted_status_too_large',
+    'hosted_status_json_invalid',
+    'hosted_status_contract_invalid',
+    'hosted_status_unavailable',
+  ]
+  for (const [index, fetchHostedStatus] of cases.entries()) {
+    const result = await handleAgentCompany(request({ method: 'GET', body: undefined }), {
+      opsKey: KEY,
+      fetchHostedStatus,
+    })
+    assert.equal(result.status, 200)
+    assert.equal(result.json.ok, true)
+    assert.equal(result.json.hostedActivation.source.status, 'unavailable')
+    assert.equal(result.json.hostedActivation.source.reason, expectedReasons[index])
+    assert.equal(result.json.hostedActivation.activationReady, false)
+    assert.equal(result.json.hostedActivation.verifiedProofCount, 0)
+    assert.equal(result.json.hostedActivation.proofs.every((proof) => proof.status === 'unverified'), true)
+  }
 })
 
 test('GET exposes one tenant-bound metadata-only company week', async () => {
