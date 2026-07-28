@@ -16,7 +16,77 @@ Set-StrictMode -Version Latest
 
 $Contract = 'supermega.ally-runtime-audit.v1'
 $HostAdmissionContract = 'supermega.ally-host-admission.v1'
+$LocalCompanyHealthContract = 'local-company.health.v1'
+$MaxLocalCompanyHealthBytes = 65536
 $RepoMarker = 'supermega-platform'
+
+function Get-BoundedHealthCount {
+    param(
+        [object]$Value,
+        [string]$Field
+    )
+    if ($Value -isnot [int] -and $Value -isnot [long]) { throw "local_company_health_$($Field)_invalid" }
+    $count = [long]$Value
+    if ($count -lt 0 -or $count -gt 1000000) { throw "local_company_health_$($Field)_invalid" }
+    return $count
+}
+
+function ConvertTo-LocalCompanyHealthSummary {
+    param(
+        [pscustomobject]$Payload,
+        [int]$ExpectedProcessId
+    )
+    if ($null -eq $Payload -or [string]$Payload.schema -ne $LocalCompanyHealthContract) { throw 'local_company_health_contract_invalid' }
+    if ([string]$Payload.status -ne 'ready') { throw 'local_company_health_status_invalid' }
+    if ($Payload.pid -isnot [int] -and $Payload.pid -isnot [long]) { throw 'local_company_health_pid_invalid' }
+    if ([int]$Payload.pid -ne $ExpectedProcessId) { throw 'local_company_health_pid_mismatch' }
+    if ($null -eq $Payload.health -or $null -eq $Payload.worker) { throw 'local_company_health_shape_invalid' }
+    $workerStatus = [string]$Payload.worker.status
+    if ($workerStatus -notin @('idle', 'running', 'starting', 'stopping', 'failed', 'disabled')) { throw 'local_company_worker_status_invalid' }
+    [pscustomobject]@{
+        contract = $LocalCompanyHealthContract
+        activeJobs = Get-BoundedHealthCount $Payload.health.active_jobs 'active_jobs'
+        queuedMissions = Get-BoundedHealthCount $Payload.health.queued_missions 'queued_missions'
+        runningMissions = Get-BoundedHealthCount $Payload.health.running_missions 'running_missions'
+        pendingApprovals = Get-BoundedHealthCount $Payload.health.pending_approvals 'pending_approvals'
+        pendingReportFinalizations = Get-BoundedHealthCount $Payload.health.pending_report_finalizations 'pending_report_finalizations'
+        pendingEvaluations = Get-BoundedHealthCount $Payload.health.pending_evaluations 'pending_evaluations'
+        workerStatus = $workerStatus
+    }
+}
+
+function Get-LocalCompanyHealthPayload {
+    $request = [System.Net.HttpWebRequest]::Create('http://127.0.0.1:8765/health.json')
+    $request.Method = 'GET'
+    $request.Accept = 'application/json'
+    $request.AllowAutoRedirect = $false
+    $request.Proxy = $null
+    $request.Timeout = 2000
+    $request.ReadWriteTimeout = 2000
+    $response = $request.GetResponse()
+    try {
+        if ($response.StatusCode -ne [System.Net.HttpStatusCode]::OK) { throw 'local_company_health_http_invalid' }
+        if ([string]$response.ContentType -notmatch '^application/(?:[a-z0-9.+-]*\+)?json(?:\s*;|$)') { throw 'local_company_health_content_type_invalid' }
+        if ($response.ContentLength -gt $MaxLocalCompanyHealthBytes) { throw 'local_company_health_too_large' }
+        $stream = $response.GetResponseStream()
+        $memory = [System.IO.MemoryStream]::new()
+        try {
+            $buffer = [byte[]]::new(4096)
+            while (($read = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                if ($memory.Length + $read -gt $MaxLocalCompanyHealthBytes) { throw 'local_company_health_too_large' }
+                $memory.Write($buffer, 0, $read)
+            }
+            $text = [System.Text.Encoding]::UTF8.GetString($memory.ToArray())
+        }
+        finally {
+            $stream.Dispose()
+            $memory.Dispose()
+        }
+    }
+    finally { $response.Dispose() }
+    try { return $text | ConvertFrom-Json }
+    catch { throw 'local_company_health_json_invalid' }
+}
 
 function Get-AuditFindings {
     param(
@@ -24,7 +94,10 @@ function Get-AuditFindings {
         [double]$CodexWorkingSetMb,
         [int]$LoadedModelCount,
         [pscustomobject]$ListenerSummary,
-        [bool]$ListenerInventoryAvailable
+        [bool]$ListenerInventoryAvailable,
+        [pscustomobject]$LocalCompanySummary = $null,
+        [bool]$LocalCompanyHealthRequired = $false,
+        [bool]$LocalCompanyHealthAvailable = $false
     )
     $findings = [System.Collections.Generic.List[object]]::new()
     if ($UsedMemoryPercent -ge $MemoryWarningPercent) {
@@ -54,6 +127,15 @@ function Get-AuditFindings {
     if ($ListenerSummary.ambiguous -gt 0) {
         $findings.Add([pscustomobject]@{ code = 'ambiguous_listener_ownership'; severity = 'warning'; detail = "$($ListenerSummary.ambiguous) relevant listener(s) have ambiguous ownership." })
     }
+    if ($LocalCompanyHealthRequired -and -not $LocalCompanyHealthAvailable) {
+        $findings.Add([pscustomobject]@{ code = 'local_company_health_unavailable'; severity = 'blocker'; detail = 'The local company worker is present but its bounded health state could not be verified.' })
+    }
+    if ($LocalCompanyHealthAvailable) {
+        $activeWork = [long]$LocalCompanySummary.activeJobs + [long]$LocalCompanySummary.runningMissions + [long]$LocalCompanySummary.pendingReportFinalizations + [long]$LocalCompanySummary.pendingEvaluations
+        if ($activeWork -gt 0 -or [string]$LocalCompanySummary.workerStatus -ne 'idle') {
+            $findings.Add([pscustomobject]@{ code = 'local_company_work_active'; severity = 'blocker'; detail = 'The local company already has active or transitional work; another company cycle is paused.' })
+        }
+    }
     return @($findings)
 }
 
@@ -67,7 +149,9 @@ function Get-HostAdmission {
         'duplicate_frontend_listeners',
         'duplicate_backend_listeners',
         'duplicate_local_workers',
-        'ambiguous_listener_ownership'
+        'ambiguous_listener_ownership',
+        'local_company_health_unavailable',
+        'local_company_work_active'
     )
     $blockers = @($Findings | Where-Object { $blockingCodes -contains [string]$_.code } | ForEach-Object { [string]$_.code })
     [pscustomobject]@{
@@ -95,7 +179,23 @@ function Invoke-SelfTest {
     if (-not $warningAdmission.eligible -or $warningAdmission.maxConcurrentLocalRuns -ne 1) { throw 'warning_admission_failed' }
     $blockedAdmission = Get-HostAdmission @(Get-AuditFindings 90 500 0 $empty $true)
     if ($blockedAdmission.eligible -or $blockedAdmission.maxConcurrentLocalRuns -ne 0 -or $blockedAdmission.blockers -notcontains 'memory_pressure_critical') { throw 'blocked_admission_failed' }
-    [pscustomobject]@{ ok = $true; contract = $Contract; hostAdmissionContract = $HostAdmissionContract; checks = 8; processMutation = $false }
+    $healthFixture = [pscustomobject]@{
+        schema = $LocalCompanyHealthContract
+        status = 'ready'
+        pid = 123
+        health = [pscustomobject]@{ active_jobs = 0; queued_missions = 4; running_missions = 0; pending_approvals = 2; pending_report_finalizations = 0; pending_evaluations = 0 }
+        worker = [pscustomobject]@{ status = 'idle' }
+    }
+    $healthSummary = ConvertTo-LocalCompanyHealthSummary $healthFixture 123
+    if ($healthSummary.queuedMissions -ne 4 -or $healthSummary.pendingApprovals -ne 2 -or $healthSummary.workerStatus -ne 'idle') { throw 'local_company_health_fixture_failed' }
+    $busySummary = [pscustomobject]@{ activeJobs = 1; runningMissions = 1; pendingReportFinalizations = 0; pendingEvaluations = 0; workerStatus = 'running' }
+    $busyFindings = @(Get-AuditFindings 50 500 0 $empty $true $busySummary $true $true)
+    if ($busyFindings.code -notcontains 'local_company_work_active' -or (Get-HostAdmission $busyFindings).eligible) { throw 'local_company_busy_fixture_failed' }
+    $missingFindings = @(Get-AuditFindings 50 500 0 $empty $true $null $true $false)
+    if ($missingFindings.code -notcontains 'local_company_health_unavailable' -or (Get-HostAdmission $missingFindings).eligible) { throw 'local_company_missing_fixture_failed' }
+    try { ConvertTo-LocalCompanyHealthSummary $healthFixture 124 | Out-Null; throw 'fixture_should_reject' }
+    catch { if ($_.Exception.Message -ne 'local_company_health_pid_mismatch') { throw } }
+    [pscustomobject]@{ ok = $true; contract = $Contract; hostAdmissionContract = $HostAdmissionContract; localCompanyHealthContract = $LocalCompanyHealthContract; checks = 12; processMutation = $false }
 }
 
 if ($SelfTest) {
@@ -188,7 +288,21 @@ $listenerSummary = [pscustomobject]@{
     workers = @($listenerRecords | Where-Object { $_.role -eq 'worker' -and $_.ownership -eq 'owned' }).Count
     ambiguous = @($listenerRecords | Where-Object ownership -eq 'ambiguous').Count
 }
-$findings = @(Get-AuditFindings $usedMemoryPercent $codexWorkingSetMb $loadedModelCount $listenerSummary $listenerInventoryAvailable)
+$localCompanyHealthRequired = $listenerSummary.workers -eq 1 -and $listenerSummary.ambiguous -eq 0
+$localCompanyHealthAvailable = $false
+$localCompanySummary = $null
+if ($localCompanyHealthRequired) {
+    $workerListener = @($listenerRecords | Where-Object { $_.role -eq 'worker' -and $_.ownership -eq 'owned' })[0]
+    try {
+        $localCompanySummary = ConvertTo-LocalCompanyHealthSummary (Get-LocalCompanyHealthPayload) ([int]$workerListener.processId)
+        $localCompanyHealthAvailable = $true
+    }
+    catch {
+        $localCompanyHealthAvailable = $false
+        $localCompanySummary = $null
+    }
+}
+$findings = @(Get-AuditFindings $usedMemoryPercent $codexWorkingSetMb $loadedModelCount $listenerSummary $listenerInventoryAvailable $localCompanySummary $localCompanyHealthRequired $localCompanyHealthAvailable)
 $hostAdmission = Get-HostAdmission $findings
 $report = [ordered]@{
     ok = $findings.Count -eq 0
@@ -223,6 +337,18 @@ $report = [ordered]@{
         ambiguous = $listenerSummary.ambiguous
         records = @($listenerRecords)
     }
+    localCompany = [ordered]@{
+        contract = $LocalCompanyHealthContract
+        healthRequired = $localCompanyHealthRequired
+        healthAvailable = $localCompanyHealthAvailable
+        activeJobs = if ($localCompanyHealthAvailable) { $localCompanySummary.activeJobs } else { $null }
+        queuedMissions = if ($localCompanyHealthAvailable) { $localCompanySummary.queuedMissions } else { $null }
+        runningMissions = if ($localCompanyHealthAvailable) { $localCompanySummary.runningMissions } else { $null }
+        pendingApprovals = if ($localCompanyHealthAvailable) { $localCompanySummary.pendingApprovals } else { $null }
+        pendingReportFinalizations = if ($localCompanyHealthAvailable) { $localCompanySummary.pendingReportFinalizations } else { $null }
+        pendingEvaluations = if ($localCompanyHealthAvailable) { $localCompanySummary.pendingEvaluations } else { $null }
+        workerStatus = if ($localCompanyHealthAvailable) { $localCompanySummary.workerStatus } else { 'unavailable' }
+    }
     findings = $findings
     hostAdmission = $hostAdmission
     controls = [ordered]@{
@@ -231,6 +357,8 @@ $report = [ordered]@{
         commandLinesReturned = $false
         secretValuesReturned = $false
         environmentRead = $false
+        loopbackHealthRead = $true
+        loopbackHealthMaxBytes = $MaxLocalCompanyHealthBytes
         automaticCleanup = $false
     }
 }
