@@ -59,7 +59,7 @@
 
 .ecommerce-ai-desk {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, .85fr) auto;
+  grid-template-columns: minmax(0, .9fr) minmax(300px, .75fr) minmax(280px, .8fr) auto;
   align-items: center;
   gap: 12px;
   margin: 0 0 12px;
@@ -131,6 +131,34 @@
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ecommerce-ai-agent-queue {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.ecommerce-ai-agent-queue span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.ecommerce-ai-agent-queue small {
+  color: #66746b;
+  font-size: 8px;
+  font-weight: 780;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.ecommerce-ai-agent-queue strong {
+  min-width: 0;
+  color: #17231d;
+  font-size: 11px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 @media (min-width: 841px) {
@@ -675,6 +703,11 @@
 
   .ecommerce-ai-desk-queue {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ecommerce-ai-agent-queue {
+    border-top: 1px solid rgba(31, 68, 51, .1);
+    padding-top: 8px;
   }
 
   .ecommerce-ai-desk-queue span:nth-child(2n) {

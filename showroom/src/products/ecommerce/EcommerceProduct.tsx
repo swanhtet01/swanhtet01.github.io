@@ -766,6 +766,38 @@ export function EcommerceProduct() {
     ['Checkout', buyingReady ? 'Quote ready' : 'Save first'],
     ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : 'No queue'],
   ] as const
+  const aiAgentJob = pendingManagedRequests.length
+    ? 'Review Ecommerce requests in Shop'
+    : importNeeded
+      ? 'Prepare catalog import'
+      : !savedDraftIsCurrent
+        ? 'Finish storefront setup'
+        : buyingCart.length
+          ? 'Review cart quote'
+          : 'Open storefront for ordering'
+  const aiAgentReason = pendingManagedRequests.length
+    ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'} waiting for accountable Shop review.`
+    : importNeeded
+      ? 'The order desk needs a real Shop catalog before the storefront can sell.'
+      : !savedDraftIsCurrent
+        ? 'The customer view must be saved before quote and Shop handoff are trusted.'
+        : buyingCart.length
+          ? `${buyingCart.length} cart line${buyingCart.length === 1 ? '' : 's'} ready for quote review.`
+          : 'The storefront is saved and ready for a customer request.'
+  const aiOwnerGate = pendingManagedRequests.length
+    ? 'Shop confirms stock, delivery, payment, and customer contact.'
+    : importNeeded
+      ? 'Owner approves the imported catalog before managed activation.'
+      : !savedDraftIsCurrent
+        ? 'Owner saves the exact storefront fingerprint first.'
+        : buyingCart.length
+          ? 'Owner reviews the quote before sending to Shop.'
+          : 'Owner keeps payment and customer messages locked.'
+  const aiAgentQueueRows = [
+    ['Agent job', aiAgentJob],
+    ['Reason', aiAgentReason],
+    ['Owner gate', aiOwnerGate],
+  ] as const
   const aiDeskAction = pendingManagedRequests.length
     ? { label: 'Review requests', to: '/shop/?tab=orders&source=ecommerce' }
     : importNeeded
@@ -811,6 +843,9 @@ export function EcommerceProduct() {
         </div>
         <div className="ecommerce-ai-desk-queue">
           {aiDeskRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+        <div className="ecommerce-ai-agent-queue" aria-label="Recommended Ecommerce agent job">
+          {aiAgentQueueRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
         {aiDeskAction
           ? <Link className="core-button primary compact" to={aiDeskAction.to}>{aiDeskAction.label}</Link>

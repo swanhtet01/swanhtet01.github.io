@@ -115,6 +115,9 @@ const assetCorpus = (await Promise.all([...scriptPaths, ...cssPaths].map(async (
 const settingsChunkPath = /assets\/SettingsPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!settingsChunkPath) throw new Error('settings_chunk_missing')
 const settingsChunk = (await get(`/${settingsChunkPath}`)).body
+const ecommerceChunkPath = /assets\/EcommerceProduct-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
+if (!ecommerceChunkPath) throw new Error('ecommerce_chunk_missing')
+const ecommerceChunk = (await get(`/${ecommerceChunkPath}`)).body
 const activationRunbookChunkPath = /assets\/ManagedActivationRunbook-[A-Za-z0-9_-]+\.js/.exec(settingsChunk)?.[0]
 if (!activationRunbookChunkPath) throw new Error('managed_activation_runbook_chunk_missing')
 const activationRunbookChunk = (await get(`/${activationRunbookChunkPath}`)).body
@@ -123,6 +126,9 @@ for (const required of ['SUPERMEGA', 'Choose a product. Run work.', 'Free worksp
 }
 for (const required of ['Start guided sample', 'Request managed trial', 'Export evidence before managed import.', 'supermega_trial_evidence', 'activationRows', 'activationEvidencePlan', 'version:15', 'learningRows', 'learningPlanRows', 'agentPlanRows', 'behaviorTrail', 'Premium AI context', 'What the system can learn', 'Premium agent plan', 'What the agent can run', 'Export AI context package']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_settings_context:${required}`)
+}
+for (const required of ['AI order desk', 'Recommended Ecommerce agent job', 'Agent job', 'Owner gate', 'Review Ecommerce requests in Shop', 'Prepare catalog import', 'Finish storefront setup', 'Review cart quote', 'Open storefront for ordering']) {
+  if (!ecommerceChunk.includes(required)) throw new Error(`missing_live_ecommerce_context:${required}`)
 }
 for (const required of ['Managed activation evidence plan', 'Evidence to go live', 'proof gates ready']) {
   if (!activationRunbookChunk.includes(required)) throw new Error(`missing_live_activation_runbook_context:${required}`)
