@@ -53,8 +53,8 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal 
 
 ## Verified baseline
 
-- Current checkpoints: product `7ae8c80`, CEO preflight `f1328a0`, delivery `cafdafe`/`f626ee7`, CEO operations `909807d`, performance `6bad4e7`, release `39642eb`; Shop `b738d05`/`d47f5d9`/`39b7fc2`/`369cb2b`, Plant OEE `5cb85db`, agent operations `a2e1b89`, operations `63a245f`, security `98b8044`, and Ally `21afe44`.
-- App gates pass: 335 Python, production build, 54 Shop inventory/257 Commerce/265 Production, 70 security, and release/database/Vercel/HQ checks.
+- Current checkpoints: product `7ae8c80`, CEO preflight `f1328a0`, delivery `cafdafe`/`f626ee7`, CEO operations `909807d`, performance `6bad4e7`, release `39642eb`; Shop `479802b`, Plant `5cb85db`, agent operations `a2e1b89`, operations `63a245f`.
+- App gates pass: 335 Python, production build, 54 Shop inventory/260 Commerce/265 Production, 70 security, and release/database/Vercel/HQ checks.
 - PostgreSQL 17.10 rehearsal passes twice: migrations, isolation, four-product journeys, human approvals, TLS, backup/restore, and cleanup. Hosted Storage privacy remains unproven (`2930ecf`).
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
 - Both `supermega.dev` and `app.supermega.dev` serve exact remote `main` commit `af3f45c22b13e5edccdf87214608817fc3499e4d`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Paired release identity is current at catalog `2026-07-28.1`.
@@ -75,7 +75,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - The four live products are isolated samples; managed persistence and tenant security are unproven.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling stays blocked: no signed bundle, cron credentials, worker URL, or allowlist exists. Activate only after managed storage, security, recovery, and owner evidence pass.
-- Enterprise gaps: Shop jurisdiction/effective-date and duplicate-safe posting adapters; Plant operator-validated OEE, costing, calibration; Website hosted CMS/release; Ecommerce payment/shipping/tax/returns.
+- Enterprise gaps: Shop company/location tax conditions, correction settlement accounts, and duplicate-safe posting adapters; Plant operator-validated OEE, costing, calibration; Website hosted CMS/release; Ecommerce payment/shipping/tax/returns.
 
 ## Decisions in force
 
