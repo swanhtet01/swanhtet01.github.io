@@ -49,7 +49,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal 
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 - CEO status is output-free across weekly briefs. Company Week separates recorded from delivered and fails incomplete delivery to attention; Company Health shows receipt counts (`8d97d4d`, `ece46ce`).
-- CEO brief startup is 13 files/240,190 bytes; operations and eight connectors are deferred (`006070f`, `c508983`). Fixed HQ synthesis keeps report time in evidence but outside cache keys, so unchanged evidence uses zero model work (`1c62d45`).
+- CEO brief startup is 13 files/245,202 bytes; operations and eight connectors are deferred (`006070f`, `c508983`). Fixed HQ synthesis keeps report time in evidence but outside cache keys, so unchanged evidence uses zero model work (`1c62d45`).
 
 ## Verified baseline
 

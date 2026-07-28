@@ -25,7 +25,7 @@ import {
 } from '../kernel/gateway.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -54,6 +54,10 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'kernel', 'agent-company-operations.mjs'), 'utf8'),
   readFile(resolve(root, 'kernel', 'public', 'index.html'), 'utf8'),
   readFile(resolve(root, 'kernel', 'api', 'agent-company.mjs'), 'utf8'),
+  readFile(resolve(root, 'kernel', 'gateway.mjs'), 'utf8'),
+  readFile(resolve(root, 'kernel', 'gateway.test.mjs'), 'utf8'),
+  readFile(resolve(root, 'kernel', 'console', 'api.mjs'), 'utf8'),
+  readFile(resolve(root, 'kernel', 'README.md'), 'utf8'),
 ])
 const enterpriseRoadmap = await readFile(resolve(root, 'hq', 'research', 'enterprise-product-roadmap-2026-07-28.md'), 'utf8')
 
@@ -155,7 +159,7 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerFiles === 30
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerBytes === 409600
   && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerFiles === 13
-  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 240190
+  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 245202
   && portfolio.agentOperatingModel?.companyOperationsDeferredForStartup === true
   && portfolio.agentOperatingModel?.optionalToolConnectorsDeferredForStartup === true
   && portfolio.agentOperatingModel?.fullPlatformStatusTeams?.join(',') === 'engineering,finance-risk'
@@ -191,6 +195,38 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.dynamicDelegation === false
   && portfolio.agentOperatingModel?.recursiveDelegation === false
   && portfolio.agentOperatingModel?.consequentialAuthority === 'founder')
+requireContract('local inference is explicit, loopback-only, budgeted, and scale-to-zero',
+  portfolio.agentOperatingModel?.localInferenceProvider === 'ollama-local'
+  && portfolio.agentOperatingModel?.localInferenceDefaultEnabled === false
+  && portfolio.agentOperatingModel?.localInferenceExplicitModelRequired === true
+  && portfolio.agentOperatingModel?.localInferenceLoopbackOnly === true
+  && portfolio.agentOperatingModel?.localInferenceHostedAllowed === false
+  && portfolio.agentOperatingModel?.localInferenceMaxAttempts === 1
+  && portfolio.agentOperatingModel?.localInferenceResponseMaxBytes === 1048576
+  && portfolio.agentOperatingModel?.localInferenceUnloadAfterResponse === true
+  && portfolio.agentOperatingModel?.localInferenceUsesCompanyBudget === true
+  && kernelGatewayText.includes("const OLLAMA_API_URL = 'http://127.0.0.1:11434/api/chat'")
+  && kernelGatewayText.includes('const OLLAMA_RESPONSE_MAX_BYTES = 1024 * 1024')
+  && kernelGatewayText.includes("process.env.SUPERMEGA_OLLAMA_ENABLED === '1'")
+  && kernelGatewayText.includes('!hostedRuntime()')
+  && kernelGatewayText.includes("name: 'ollama-local'")
+  && kernelGatewayText.includes('maxAttempts: 1')
+  && kernelGatewayText.includes('keep_alive: 0')
+  && kernelGatewayText.includes("redirect: 'error'")
+  && kernelGatewayText.includes('readBoundedResponseText')
+  && kernelGatewayText.includes('await reader.cancel()')
+  && kernelGatewayText.includes('return [OLLAMA, ANTHROPIC, OPENROUTER]')
+  && kernelGatewayTestText.includes('hosted runtimes never admit the loopback provider')
+  && kernelGatewayTestText.includes('local inference never retries on this constrained host')
+  && kernelGatewayTestText.includes('oversized local response streams are cancelled immediately')
+  && kernelConsoleApiText.includes('const aiConfigured = () => providerChain().length > 0')
+  && kernelReadmeText.includes('SUPERMEGA_OLLAMA_ENABLED=1')
+  && kernelReadmeText.includes('Never set these as Vercel production configuration.')
+  && workboard.includes('| OPS-060 | CEO + Agent Operations / Local Inference Codex | done-local |')
+  && workboard.includes('Live plain and schema-bound generation both succeeded with `qwen3.5:0.8b`')
+  && workboard.includes('one non-terminating Codex-tree trim released 2,099.8 MB')
+  && !kernelGatewayText.includes('SUPERMEGA_OLLAMA_URL')
+  && !/\b(?:child_process|spawn|execFile|cluster)\b/.test(kernelGatewayText))
 requireContract('agent capacity agrees across HQ, coordinator, and Kernel',
   workforce.runtime_policy?.max_registered_specialists === portfolio.agentOperatingModel?.registeredRoleLimit
   && workforce.runtime_policy?.max_running === portfolio.agentOperatingModel?.activeAssignmentLimit
@@ -948,7 +984,7 @@ requireContract('scheduled CEO function keeps the full connector fleet deferred 
   && kernelFootprintVerifier.includes('connectorInventoryComplete: connectorImports === EXPECTED_CONNECTORS')
   && workboard.includes('| OPS-041 | CEO + Agent Operations / Vercel Efficiency Codex | done-local |')
   && workboard.includes('Checkpoint `6bad4e7` defers full status from the operator tool import')
-  && now.includes('CEO brief startup is 13 files/240,190 bytes')
+  && now.includes('CEO brief startup is 13 files/245,202 bytes')
   && now.includes('unchanged evidence uses zero model work'))
 
 for (const forbidden of ['Yangon Tyre', 'ytf.supermega.dev', 'pos.supermega.dev', 'twelve product']) {

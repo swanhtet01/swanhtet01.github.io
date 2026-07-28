@@ -206,6 +206,11 @@ allowed source.
 ## Core Environment
 
 - `ANTHROPIC_API_KEY` or another configured gateway provider.
+- On the Ally only, set `SUPERMEGA_OLLAMA_ENABLED=1` and an installed model name in
+  `SUPERMEGA_OLLAMA_MODEL` to use local inference before paid providers. The gateway fixes this lane
+  to `127.0.0.1:11434`, ignores it in hosted/production runtimes, makes one bounded attempt, applies
+  the same company AI budget, and sends `keep_alive: 0` so the model unloads after every response.
+  Never set these as Vercel production configuration.
 - `SUPERMEGA_OPS_KEY` for protected APIs and the console.
 - `CRON_SECRET` for Vercel cron authentication.
 - `SUPABASE_URL` plus `SUPABASE_SERVICE_ROLE_KEY`, or a supported Postgres URL.
