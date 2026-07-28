@@ -114,6 +114,19 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     const locationTotal = projection.balances.filter((row) => row.sku === item.sku).reduce((sum, row) => sum + row.availableToPromise, 0)
     return locationTotal !== catalogBySku.get(item.sku)?.onHand
   }))
+  const inventoryAutopilotRows = [
+    ['Locations', state.revision ? `${projection.locations.length} active` : 'Set up'],
+    ['ATP', state.revision ? projection.metrics.totalAvailableToPromise.toLocaleString() : 'Locked'],
+    ['Reserved', state.revision ? projection.metrics.totalReserved.toLocaleString() : activeAggregateOrders.length ? 'Finish orders' : 'None'],
+    ['Health', inventoryDrift ? 'Reconcile' : state.revision ? 'Ready' : setupBlockedByOrders ? 'Blocked' : 'Ready'],
+  ] as const
+  const inventoryAutopilotMessage = inventoryDrift
+    ? 'Catalog available stock and location ATP disagree. Reconcile before another move, count, or production issue.'
+    : state.revision
+      ? 'SuperMega can suggest the next stock move or count from available-to-promise, reservations, lots, and locations.'
+      : setupBlockedByOrders
+        ? 'Finish or cancel open aggregate-stock orders before creating location history.'
+        : 'Set up locations once so orders, returns, production issues, counts, and transfers share the same stock truth.'
 
   function reviewSetup(event: FormEvent) {
     event.preventDefault()
@@ -239,6 +252,12 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
   }
 
   return <><ShopProductionHandoff commerce={commerce} disabled={disabled} identity={identity} onIssue={onIssue} /><section aria-labelledby="location-stock-title" className="catalog-onboarding-bridge">
+    <div aria-label="Inventory autopilot" className="inventory-autopilot">
+      <div><span className="core-eyebrow">Inventory autopilot</span><strong>{state.revision ? inventoryDrift ? 'Reconcile stock truth' : 'Location stock is active' : 'Start location stock'}</strong><small>{inventoryAutopilotMessage}</small></div>
+      <div className="inventory-autopilot-rows">
+        {inventoryAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
+      </div>
+    </div>
     <div>
       <span className="core-eyebrow">Location stock</span>
       <h3 id="location-stock-title">{state.revision ? `${projection.metrics.totalAvailableToPromise.toLocaleString()} available to promise` : 'Set up two locations'}</h3>
