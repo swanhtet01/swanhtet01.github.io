@@ -95,7 +95,7 @@
       "job": "Run jobs, accountable short closes, output, job-linked material use, quality, equipment observations, maintenance, and shift exceptions from one plant record.",
       "surfaces": ["Jobs", "Problems"],
       "templateContract": { "file": "../site-manifest.json", "productId": "production" },
-      "nextGate": "Validate one line, maintenance, or quality workflow with an operator and supervisor, then bind planned productive time and downtime to the exact order and work centre before calculating OEE."
+      "nextGate": "Validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant, reconcile the exact work-centre downtime source, and measure correction effort before adding costing or calibration adapters."
     },
     {
       "id": "website",

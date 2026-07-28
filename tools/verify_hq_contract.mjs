@@ -555,7 +555,8 @@ requireContract('accepted core checkpoints lead directly to real work',
   && now.includes('The active delivery focus is:')
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
   && now.includes('operation/output requires exact authenticated Shop issue evidence')
-  && now.includes('Controlled batches derive Performance and Quality but withhold OEE')
+  && now.includes('Controlled batches bind reviewed productive time and closed downtime')
+  && now.includes('before Availability and OEE')
   && now.includes('one manifest-backed smart import')
   && now.includes('The public site exposes four direct product links with no template catalogue')
   && now.includes('Shop Stock has one Commerce authority')
@@ -627,10 +628,13 @@ requireContract('Plant uses the stable production runtime',
   && product('plant')?.compatibilityPath === '/operations/production/'
   && product('plant')?.surfaces?.join(',') === 'Jobs,Problems'
   && product('plant')?.templateContract?.productId === 'production'
-  && product('plant')?.nextGate?.includes('bind planned productive time and downtime to the exact order and work centre')
+  && product('plant')?.nextGate?.includes('Validate one order-bound OEE window')
   && workboard.includes('| ENG-102 | Plant + Manufacturing Performance Codex | done-local |')
   && workboard.includes('adds `supermega.plant.order_effectiveness.v1`')
   && workboard.includes('96.77% Performance, 80% Quality')
+  && workboard.includes('| ENG-103 | Plant + Manufacturing Performance Codex | done-local |')
+  && workboard.includes('upgrades the projection to `supermega.plant.order_effectiveness.v2`')
+  && workboard.includes('75% Availability, 96.77% Performance, 80% Quality, and 58.06% OEE')
   && research.includes('https://help.sap.com/docs/sap-digital-manufacturing/insights/oee-calculations')
   && research.includes('must not calculate OEE until planned productive time and downtime are bound'))
 requireContract('Website remains truthful',
