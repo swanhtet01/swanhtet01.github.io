@@ -51,6 +51,18 @@ test('every weekly department brief observes bounded company operations without 
   assert.equal(SUPERMEGA_HQ_AUTHORITY.controls.recursiveDelegation, false)
 })
 
+test('executable HQ authority uses governed evidence instead of social-media signals', () => {
+  const storage = SUPERMEGA_HQ_AUTHORITY.outcomes.find((outcome) => outcome.id === 'managed-storage-privacy-proof')
+  assert.ok(storage.sourceRefs.includes('tools/verify_private_storage_privacy.py'))
+  assert.equal(storage.sourceRefs.some((source) => /(?:instagram|linkedin)\.com/i.test(source)), false)
+
+  for (const host of ['instagram.com', 'm.instagram.com', 'linkedin.com', 'www.linkedin.com', 'lnkd.in']) {
+    const authority = copyAuthority()
+    authority.outcomes[0].sourceRefs = [`https://${host}/unverified-signal`]
+    assert.equal(selectCeoOutcome({ authority }).reason, 'ceo_outcome_authority_invalid')
+  }
+})
+
 test('completed and in-flight outcomes are duplicate-safe and consume no selection slot', () => {
   const completed = selectCeoOutcome({ completedOutcomeIds: ['daily-company-control'] })
   assert.equal(completed.ok, true)

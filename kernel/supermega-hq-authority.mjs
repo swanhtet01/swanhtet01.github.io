@@ -6,6 +6,11 @@ const ID_RE = /^[a-z0-9][a-z0-9-]{0,79}$/
 const OUTCOME_STATES = new Set(['ready', 'blocked', 'done'])
 const ACTION_MODES = new Set(['read_only_brief', 'credentialed_provider_read', 'protected_preview', 'managed_pilot'])
 const SAFE_EVIDENCE_TOOLS = new Set(['platform_status', 'company_operations_status', 'leads_overview', 'pipeline_overview', 'fx_rate'])
+const NON_AUTHORITATIVE_SOCIAL_DOMAINS = Object.freeze([
+  'instagram.com',
+  'linkedin.com',
+  'lnkd.in',
+])
 const AUTHORITY_FIELDS = new Set([
   'contract',
   'authorityId',
@@ -54,6 +59,15 @@ function unknownFields(value, allowed) {
 function boundedText(value, max) {
   const text = typeof value === 'string' ? value.trim() : ''
   return text && text.length <= max && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(text) ? text : ''
+}
+
+function isNonAuthoritativeSocialRef(value) {
+  if (!/^https:\/\//i.test(value)) return false
+  try {
+    const host = new URL(value).hostname.toLowerCase()
+    return NON_AUTHORITATIVE_SOCIAL_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`))
+  }
+  catch { return false }
 }
 
 function normalizedIds(value) {
@@ -123,7 +137,7 @@ function normalizeAuthority(value) {
 
     if (!Array.isArray(candidate.sourceRefs) || candidate.sourceRefs.length < 1 || candidate.sourceRefs.length > 4) return null
     const sourceRefs = candidate.sourceRefs.map((item) => boundedText(item, 240))
-    if (sourceRefs.some((item) => !item) || new Set(sourceRefs).size !== sourceRefs.length) return null
+    if (sourceRefs.some((item) => !item || isNonAuthoritativeSocialRef(item)) || new Set(sourceRefs).size !== sourceRefs.length) return null
     outcomes.push({
       id,
       title,
@@ -188,7 +202,7 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
       sourceRefs: Object.freeze([
         'hq/NOW.md',
         'hq/research/agent-operations-security-2026-07-26.md',
-        'https://www.instagram.com/p/Da-NXcnkz8p/?img_index=8',
+        'tools/verify_private_storage_privacy.py',
       ]),
     }),
     Object.freeze({

@@ -215,7 +215,9 @@ requireContract('CEO outcome authority is bounded and reconciled to HQ',
     && item.evidencePlan.filter((step) => step.tool === 'company_operations_status').length === 1)
   && ceoOutcomeSelection.skipped?.filter((item) => item.reason === 'authority_blocked').length === 3
   && SUPERMEGA_HQ_AUTHORITY.outcomes?.find((item) => item.id === 'managed-storage-privacy-proof')?.sourceRefs
-    ?.includes('https://www.instagram.com/p/Da-NXcnkz8p/?img_index=8'))
+    ?.includes('tools/verify_private_storage_privacy.py')
+  && SUPERMEGA_HQ_AUTHORITY.outcomes?.every((item) =>
+    item.sourceRefs.every((source) => !/(?:instagram\.com|linkedin\.com|lnkd\.in)/i.test(source))))
 requireContract('CEO client identity fails before state, claims, tools, models, or sends',
   ceoClientGateIndex >= 0
   && ceoClientGateIndex < ceoExecutionClaimIndex
