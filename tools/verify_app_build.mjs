@@ -32,11 +32,12 @@ let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
-const [manifestText, appPackageText, appSource, coreSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, productHomeReadinessSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'CoreApp.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'ProductHomeReadiness.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'behavior-trail.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'shop-catalog-import.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts'), 'utf8'),
@@ -283,12 +284,8 @@ if (!productHomePageContract.includes('title="Choose a product. Run work."')
   || !productHomePageContract.includes('Free stays local until the owner approves activation.')
   || !productHomePageContract.includes('Premium can learn from approved data, roles, and audit.')
   || !productHomePageContract.includes("ready ? 'Export evidence' : 'Finish setup'")
-  || !productHomePageContract.includes('const launchReadinessRows = [')
-  || !productHomePageContract.includes('Launch readiness')
-  || !productHomePageContract.includes('Free proves value. Premium activates controls.')
-  || !productHomePageContract.includes('Use Activation handoff')
-  || !productHomePageContract.includes('Premium can learn only from approved data and behavior memory.')
-  || !productHomePageContract.includes('Open activation')
+  || !coreSource.includes("lazy(() => import('./ProductHomeReadiness')")
+  || !productHomePageContract.includes('<ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={progress} ready={ready} />')
   || !productHomePageContract.includes('runtime.activationManifest?.next_action')
   || !productHomePageContract.includes('pilotProgress(setup)')
   || !productHomePageContract.includes("'/shop/?tab=counter'")
@@ -311,6 +308,14 @@ if (!productHomePageContract.includes('title="Choose a product. Run work."')
   || productHomePageContract.includes('product-home-setup')
   || productHomePageContract.includes('HQ')
   || productHomePageContract.includes('Operations')) fail('first_run_product_launcher_missing')
+if (!productHomeReadinessSource.includes('const launchReadinessRows = [')
+  || !productHomeReadinessSource.includes('Launch readiness')
+  || !productHomeReadinessSource.includes('Free proves value. Premium activates controls.')
+  || !productHomeReadinessSource.includes('Use Activation handoff')
+  || !productHomeReadinessSource.includes('Premium can learn only from approved data and behavior memory.')
+  || !productHomeReadinessSource.includes('Open activation')
+  || productHomeReadinessSource.includes('useOutletContext')
+  || productHomeReadinessSource.includes('./CoreApp')) fail('product_home_readiness_lazy_contract_missing')
 if (!coreCssSource.includes('.product-home-autopilot')
   || !coreCssSource.includes('.product-home-autopilot-grid')
   || !coreCssSource.includes('.product-home-autopilot-head')
