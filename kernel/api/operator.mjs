@@ -122,6 +122,22 @@ function hqEvidenceMetadata(results) {
   }))
 }
 
+function synthesisEvidenceData(result, planningMode) {
+  const data = result?.data
+  if (
+    planningMode !== 'hq_authority_fixed' ||
+    result?.tool !== 'company_operations_status' ||
+    !data ||
+    typeof data !== 'object' ||
+    Array.isArray(data)
+  ) return data
+
+  // Keep response freshness metadata for callers, but exclude this volatile field from the
+  // fixed-plan synthesis prompt so unchanged operational evidence can reuse the gateway cache.
+  const { generatedAt: _generatedAt, ...stableData } = data
+  return stableData
+}
+
 export async function runOperator({ goal, approvedPlan }, options = {}) {
   const complete = options.complete || gateway.complete
   const executeTool = options.runTool || runTool
@@ -184,7 +200,7 @@ export async function runOperator({ goal, approvedPlan }, options = {}) {
 
   // 3) SYNTHESIZE - provider rows are untrusted data and never enter the system prompt.
   const rawContext = results.length
-    ? results.map((r) => `[${r.tool}] ${r.ok ? safeJson(r.data).slice(0, 1500) : 'error: ' + r.error}`).join('\n')
+    ? results.map((r) => `[${r.tool}] ${r.ok ? safeJson(synthesisEvidenceData(r, planningMode)).slice(0, 1500) : 'error: ' + r.error}`).join('\n')
     : '(no tools were run)'
   const context = stripInjectionFrames(rawContext)
   let answer = ''
