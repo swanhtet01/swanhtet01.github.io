@@ -965,7 +965,14 @@ if (!websiteSource.includes('starterSetupActive')
   || !websiteStarterSource.includes("stage: 'draft'")
   || !websiteStarterSource.includes('websiteStarterBriefIssues')
   || ['fetch(', 'localStorage', 'sessionStorage', 'XMLHttpRequest'].some((marker) => websiteStarterSource.includes(marker) || websiteStarterSetupSource.includes(marker))) fail('website_named_business_starter_missing_or_side_effectful')
-if (!websiteModelSource.includes("supermega.website.workspace.v2") || !websiteModelSource.includes('LEGACY_WEBSITE_STORAGE_KEY') || !websiteModelSource.includes('mutateWebsiteWorkspace') || !websiteModelSource.includes('WEBSITE_MUTATION_LOCK') || !websiteModelSource.includes('preservesAppendOnlyHistory') || !websiteModelSource.includes('canonicalJson')) fail('website_v2_locked_store_missing')
+if (!websiteModelSource.includes("supermega.website.workspace.v2")
+  || !websiteModelSource.includes('LEGACY_WEBSITE_STORAGE_KEY')
+  || !websiteModelSource.includes('mutateWebsiteWorkspace')
+  || !websiteModelSource.includes('WEBSITE_MUTATION_LOCK')
+  || !websiteModelSource.includes('preservesAppendOnlyHistory')
+  || !websiteModelSource.includes('canonicalJson')
+  || !websiteModelSource.includes('export function importWebsitePageDrafts')
+  || !websiteModelSource.includes('export async function activateLocalWebsitePageDrafts')) fail('website_v2_locked_store_missing')
 if (!websiteModelSource.includes('contentRevision') || !websiteModelSource.includes('evidenceIds') || !websiteModelSource.includes('migratedFromV1') || !websiteModelSource.includes('getCurrentApproval') || !websiteModelSource.includes('getCurrentPublish')) fail('website_release_provenance_missing')
 if (!websiteModelSource.includes("supermega.website.artifact.v1")
   || !websiteModelSource.includes('createWebsiteArtifact')
@@ -1722,12 +1729,13 @@ if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !clientOnboardingUiSource.includes('workspace.trim() && owner.trim()')
   || !clientOnboardingUiSource.includes('Download prepared file')
   || !clientOnboardingUiSource.includes('canApplyLocalImport')
-  || !clientOnboardingUiSource.includes("product === 'commerce' || product === 'production'")
+  || !clientOnboardingUiSource.includes("product === 'commerce' || product === 'production' || product === 'website'")
   || !clientOnboardingUiSource.includes('importCommerceCatalog(current')
   || !clientOnboardingUiSource.includes('importProductionJobs(current')
+  || !clientOnboardingUiSource.includes('activateLocalWebsitePageDrafts({')
   || !clientOnboardingUiSource.includes("approve adding them to this browser's {productName} demo")
-  || !clientOnboardingUiSource.includes("'items to Shop' : 'jobs to Plant'")
-  || !clientOnboardingUiSource.includes("'catalog in a real sale' : 'jobs in production control'")
+  || !clientOnboardingUiSource.includes("'pages to Website'")
+  || !clientOnboardingUiSource.includes("'page drafts in the Website editor'")
   || !clientOnboardingUiSource.includes('Your source CSV was not retained or sent to AI.')
   || !clientOnboardingUiSource.includes('nothing is written until you confirm the import')
   || !clientOnboardingUiSource.includes('productRef.current !== expectedProduct')
@@ -4250,6 +4258,61 @@ async function verifyWebsiteRuntime() {
       && committedBrief.workspace.revision === 1
       && committedBrief.workspace.contentRevision === 1
       && committedBrief.workspace.pages[0].stage === 'draft', 'website_starter_preview_did_not_save_as_one_draft_revision')
+    const websiteImportDigest = `sha256:${'b'.repeat(64)}`
+    const websiteImportInput = {
+      siteName: 'Golden Valley Services',
+      pages: [
+        { slug: 'home', title: 'Home', headline: 'Clear help for your customers', body: 'Explain the main service and strongest proof.', contactUrl: 'https://example.com/contact' },
+        { slug: 'about', title: 'About', headline: 'Why customers trust us', body: 'Add the approved company story and team.', contactUrl: 'https://example.com/contact' },
+      ],
+      sourceDigest: websiteImportDigest,
+      capturedAt: at(60),
+    }
+    const websitePageImport = model.importWebsitePageDrafts(seed, websiteImportInput)
+    assert(websitePageImport?.created === 2
+      && websitePageImport.alreadyPresent === 0
+      && websitePageImport.workspace.revision === 0
+      && websitePageImport.workspace.contentRevision === 0
+      && websitePageImport.workspace.siteName === websiteImportInput.siteName
+      && websitePageImport.workspace.pages.every((page) => page.stage === 'draft' && page.id.includes('bbbbbbbbbbbb'))
+      && websitePageImport.workspace.pages[0].slug === '/'
+      && websitePageImport.workspace.pages[1].slug === '/about',
+    'website_client_pages_not_prepared_as_bounded_drafts')
+    const committedWebsiteImport = model.applyWebsiteWorkspaceUpdate(seed, () => websitePageImport.workspace)
+    assert(committedWebsiteImport.ok
+      && committedWebsiteImport.changed
+      && committedWebsiteImport.workspace.revision === 1
+      && committedWebsiteImport.workspace.contentRevision === 1,
+    'website_client_pages_not_committed_as_one_content_revision')
+    const websiteImportReplay = model.importWebsitePageDrafts(committedWebsiteImport.workspace, { ...websiteImportInput, capturedAt: at(61) })
+    assert(websiteImportReplay?.replayed
+      && websiteImportReplay.created === 0
+      && websiteImportReplay.alreadyPresent === 2
+      && websiteImportReplay.workspace === committedWebsiteImport.workspace,
+    'website_client_page_retry_changed_exact_drafts')
+    assert(model.importWebsitePageDrafts({ ...committedWebsiteImport.workspace, siteName: 'Owner edited Website' }, websiteImportInput) === null, 'website_client_import_overwrote_edited_workspace')
+    assert(model.importWebsitePageDrafts(seed, { ...websiteImportInput, sourceDigest: 'bad-digest' }) === null, 'website_client_import_accepted_unbound_source')
+    assert(model.importWebsitePageDrafts(seed, { ...websiteImportInput, pages: [websiteImportInput.pages[0], websiteImportInput.pages[0]] }) === null, 'website_client_import_accepted_duplicate_slug')
+    assert(model.importWebsitePageDrafts(seed, { ...websiteImportInput, pages: [{ ...websiteImportInput.pages[0], contactUrl: 'javascript:alert(1)' }] }) === null, 'website_client_import_accepted_unsafe_destination')
+    const websiteImportValues = new Map()
+    const websiteImportStorage = {
+      getItem: (key) => websiteImportValues.get(key) ?? null,
+      setItem: (key, value) => websiteImportValues.set(key, String(value)),
+    }
+    const activatedWebsiteImport = await model.activateLocalWebsitePageDrafts(websiteImportInput, websiteImportStorage, locks)
+    const activatedWebsiteState = model.loadWebsiteWorkspace(websiteImportStorage)
+    assert(activatedWebsiteImport.ok
+      && activatedWebsiteState.ok
+      && activatedWebsiteState.workspace.revision === 1
+      && activatedWebsiteState.workspace.contentRevision === 1
+      && activatedWebsiteState.workspace.pages.length === 2,
+    'website_client_pages_not_persisted_atomically')
+    const activatedWebsiteRaw = websiteImportValues.get(model.WEBSITE_STORAGE_KEY)
+    const replayedWebsiteActivation = await model.activateLocalWebsitePageDrafts({ ...websiteImportInput, capturedAt: at(62) }, websiteImportStorage, locks)
+    assert(replayedWebsiteActivation.ok
+      && replayedWebsiteActivation.import.replayed
+      && websiteImportValues.get(model.WEBSITE_STORAGE_KEY) === activatedWebsiteRaw,
+    'website_client_page_activation_retry_changed_storage')
     let editSession = model.createWebsiteEditSession(seed)
     for (let index = 0; index < 20; index += 1) {
       const staged = model.updateWebsiteEditSession(editSession, (current) => ({
