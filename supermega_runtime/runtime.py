@@ -336,6 +336,33 @@ def _activation_evidence_plan(
     ]
 
 
+def _activation_manifest(
+    *,
+    operating_mode: str,
+    activation_steps: list[dict[str, Any]],
+    evidence_plan: list[dict[str, Any]],
+    requirements: list[str],
+    coverage_score: int,
+) -> dict[str, Any]:
+    blocked_steps = [str(step["id"]) for step in activation_steps if not step["ready"]]
+    next_step = next((step for step in activation_steps if not step["ready"]), None)
+    proof_commands = {str(item["id"]): str(item["verifier"]) for item in evidence_plan}
+    safe_enable: list[str] = ["browser_local_trial", "evidence_export"]
+    if not requirements:
+        safe_enable.extend(["managed_workspace_login", "managed_trial_writes"])
+    return {
+        "contract": "supermega.activation_manifest.v1",
+        "mode": operating_mode,
+        "ready_percent": coverage_score,
+        "next_action": str(next_step["action"]) if next_step else "Managed activation is ready for paid workspaces.",
+        "blocked_gate_ids": blocked_steps,
+        "proof_commands": proof_commands,
+        "safe_enable": safe_enable,
+        "automation_boundary": "Agents may prepare evidence and drafts; customer writes, payments, messages, deployments, and production changes require managed controls plus human approval.",
+        "secret_values_exposed": False,
+    }
+
+
 def create_app() -> FastAPI:
     database_url = _text(os.getenv("SUPERMEGA_DATABASE_URL"))
     store = PostgresTrialStore(
@@ -415,11 +442,19 @@ def create_app() -> FastAPI:
         coverage_score = round(
             sum(1 for step in activation_steps if step["ready"]) / len(activation_steps) * 100
         )
+        operating_mode = "managed_trial" if not requirements else "isolated_demo"
+        activation_manifest = _activation_manifest(
+            operating_mode=operating_mode,
+            activation_steps=activation_steps,
+            evidence_plan=evidence_plan,
+            requirements=requirements,
+            coverage_score=coverage_score,
+        )
         return {
             "status": "ready",
             "service": SERVICE_NAME,
             "version": SERVICE_VERSION,
-            "operating_mode": "managed_trial" if not requirements else "isolated_demo",
+            "operating_mode": operating_mode,
             "enterprise_db_ready": enterprise_db_ready,
             "security_ready": security_ready,
             "authentication": {
@@ -448,6 +483,7 @@ def create_app() -> FastAPI:
                 "steps": activation_steps,
                 "evidence_plan": evidence_plan,
                 "evidence_ready": all(item["ready"] for item in evidence_plan),
+                "manifest": activation_manifest,
                 "secret_values_exposed": False,
             },
         }

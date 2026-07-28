@@ -359,6 +359,18 @@ type RuntimeEvidencePlanItem = {
   verifier: string
 }
 
+type RuntimeActivationManifest = {
+  contract: string
+  mode: string
+  ready_percent: number
+  next_action: string
+  blocked_gate_ids: string[]
+  proof_commands: Record<string, string>
+  safe_enable: string[]
+  automation_boundary: string
+  secret_values_exposed: boolean
+}
+
 export type RuntimeHealth = {
   status: RuntimeStatus
   serviceStatus: string
@@ -371,6 +383,7 @@ export type RuntimeHealth = {
   requirements: string[]
   activationSteps: RuntimeActivationStep[]
   evidencePlan: RuntimeEvidencePlanItem[]
+  activationManifest: RuntimeActivationManifest | null
 }
 
 type CommerceTab = 'counter' | 'orders' | 'inventory'
@@ -553,6 +566,7 @@ const checkingRuntime: RuntimeHealth = {
   requirements: [],
   activationSteps: [],
   evidencePlan: [],
+  activationManifest: null,
 }
 
 const navigation = [
@@ -1470,7 +1484,7 @@ function useRuntimeHealth() {
           coverage_score?: number
           authentication?: { trusted_gateway_ready?: boolean; supabase_user_tokens_ready?: boolean }
           trial_backend?: { audit_ready?: boolean; write_enabled?: boolean }
-          enterprise_activation?: { requirements?: string[]; steps?: RuntimeActivationStep[]; evidence_plan?: RuntimeEvidencePlanItem[] }
+          enterprise_activation?: { requirements?: string[]; steps?: RuntimeActivationStep[]; evidence_plan?: RuntimeEvidencePlanItem[]; manifest?: RuntimeActivationManifest }
         }
         const requirements = Array.isArray(body.enterprise_activation?.requirements) ? body.enterprise_activation.requirements : []
         const activationSteps = Array.isArray(body.enterprise_activation?.steps)
@@ -1479,6 +1493,18 @@ function useRuntimeHealth() {
         const evidencePlan = Array.isArray(body.enterprise_activation?.evidence_plan)
           ? body.enterprise_activation.evidence_plan.filter((item) => typeof item.id === 'string' && typeof item.label === 'string' && typeof item.ready === 'boolean' && typeof item.proof === 'string' && typeof item.verifier === 'string')
           : []
+        const manifest = body.enterprise_activation?.manifest
+        const activationManifest = manifest
+          && manifest.contract === 'supermega.activation_manifest.v1'
+          && typeof manifest.mode === 'string'
+          && typeof manifest.ready_percent === 'number'
+          && typeof manifest.next_action === 'string'
+          && Array.isArray(manifest.blocked_gate_ids)
+          && Array.isArray(manifest.safe_enable)
+          && typeof manifest.proof_commands === 'object'
+          && manifest.secret_values_exposed === false
+          ? manifest
+          : null
         const authReady = Boolean(body.authentication?.trusted_gateway_ready || body.authentication?.supabase_user_tokens_ready)
         const auditReady = body.trial_backend?.audit_ready === true
         const writesReady = body.trial_backend?.write_enabled === true
@@ -1502,6 +1528,7 @@ function useRuntimeHealth() {
           requirements,
           activationSteps,
           evidencePlan,
+          activationManifest,
         })
       })
       .catch(() => {

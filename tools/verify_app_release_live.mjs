@@ -96,6 +96,23 @@ if (!Array.isArray(activationEvidencePlan)
   || activationEvidencePlan.some((item) => typeof item.ready !== 'boolean' || typeof item.proof !== 'string' || item.proof.length < 30 || typeof item.verifier !== 'string' || item.verifier.length < 10)
   || health.enterprise_activation?.evidence_ready !== activationEvidencePlan.every((item) => item.ready)
   || JSON.stringify(activationEvidencePlan).toLowerCase().includes('secret')) throw new Error('managed_activation_evidence_plan_contract_missing')
+const activationManifest = health.enterprise_activation?.manifest
+if (!activationManifest
+  || activationManifest.contract !== 'supermega.activation_manifest.v1'
+  || activationManifest.mode !== health.operating_mode
+  || activationManifest.ready_percent !== health.coverage_score
+  || typeof activationManifest.next_action !== 'string'
+  || activationManifest.next_action.length < 20
+  || !Array.isArray(activationManifest.blocked_gate_ids)
+  || !Array.isArray(activationManifest.safe_enable)
+  || !activationManifest.safe_enable.includes('browser_local_trial')
+  || !activationManifest.safe_enable.includes('evidence_export')
+  || typeof activationManifest.proof_commands !== 'object'
+  || activationEvidencePlan.some((item) => activationManifest.proof_commands[item.id] !== item.verifier)
+  || typeof activationManifest.automation_boundary !== 'string'
+  || !activationManifest.automation_boundary.includes('human approval')
+  || activationManifest.secret_values_exposed !== false
+  || JSON.stringify(activationManifest).toLowerCase().includes('secret=')) throw new Error('managed_activation_manifest_contract_missing')
 if (health.operating_mode === 'managed_trial' && (health.enterprise_db_ready !== true || health.security_ready !== true)) throw new Error('managed_trial_readiness_mismatch')
 if (health.operating_mode === 'managed_trial' && health.trial_backend.role_ready !== true) throw new Error('managed_trial_runtime_role_unsafe')
 
@@ -136,7 +153,7 @@ for (const required of ['Plant agent queue', 'Recommended Plant agent job', 'Age
 for (const required of ['Shop agent queue', 'Recommended Shop agent job', 'Agent job', 'Owner gate', 'Restore Shop write readiness', 'Review online order requests', 'Finish fulfilment queue', 'Receive purchase orders', 'Reorder low stock', 'Set up stock locations']) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_shop_context:${required}`)
 }
-for (const required of ['Start guided sample', 'Request managed trial', 'Export evidence before managed import.', 'supermega_trial_evidence', 'activationRows', 'activationEvidencePlan', 'version:16', 'learningRows', 'learningPlanRows', 'agentPlanRows', 'behaviorTrail', 'agentBehaviorRows', 'Premium AI context', 'What the system can learn', 'Premium agent plan', 'What the agent can run', 'Agent behavior memory', 'Behavior memory', 'What owners keep choosing', 'Export AI context package']) {
+for (const required of ['Start guided sample', 'Request managed trial', 'Export evidence before managed import.', 'supermega_trial_evidence', 'activationRows', 'activationEvidencePlan', 'activationManifest', 'activationManifestRows', 'version:17', 'learningRows', 'learningPlanRows', 'agentPlanRows', 'behaviorTrail', 'agentBehaviorRows', 'Premium AI context', 'What the system can learn', 'Premium agent plan', 'What the agent can run', 'Agent behavior memory', 'Behavior memory', 'What owners keep choosing', 'Activation manifest', 'What automation may do next', 'Export AI context package']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_settings_context:${required}`)
 }
 for (const required of ['AI order desk', 'Recommended Ecommerce agent job', 'Agent job', 'Owner gate', 'Review Ecommerce requests in Shop', 'Prepare catalog import', 'Finish storefront setup', 'Review cart quote', 'Open storefront for ordering']) {
