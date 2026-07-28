@@ -1721,11 +1721,13 @@ if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !clientOnboardingUiSource.includes('canPrepareImport')
   || !clientOnboardingUiSource.includes('workspace.trim() && owner.trim()')
   || !clientOnboardingUiSource.includes('Download prepared file')
-  || !clientOnboardingUiSource.includes('canApplyLocalShopImport')
+  || !clientOnboardingUiSource.includes('canApplyLocalImport')
+  || !clientOnboardingUiSource.includes("product === 'commerce' || product === 'production'")
   || !clientOnboardingUiSource.includes('importCommerceCatalog(current')
-  || !clientOnboardingUiSource.includes("approve adding them to this browser's demo catalog")
-  || !clientOnboardingUiSource.includes('Add ${state.preview.totals.ready} items to Shop')
-  || !clientOnboardingUiSource.includes('Open Shop to use the imported catalog in a real sale.')
+  || !clientOnboardingUiSource.includes('importProductionJobs(current')
+  || !clientOnboardingUiSource.includes("approve adding them to this browser's {productName} demo")
+  || !clientOnboardingUiSource.includes("'items to Shop' : 'jobs to Plant'")
+  || !clientOnboardingUiSource.includes("'catalog in a real sale' : 'jobs in production control'")
   || !clientOnboardingUiSource.includes('Your source CSV was not retained or sent to AI.')
   || !clientOnboardingUiSource.includes('nothing is written until you confirm the import')
   || !clientOnboardingUiSource.includes('productRef.current !== expectedProduct')
@@ -1968,7 +1970,13 @@ if (!openPurchaseOrderContract.includes('Your count draft was preserved.')
   || openPurchaseOrderContract.includes('setStockCountDraft(null)')
   || !openStockCountContract.includes('Your stock-order draft was preserved.')
   || openStockCountContract.includes('setPurchaseOrderDraft(null)')) fail('commerce_stock_editor_switch_discards_draft')
-if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('productionWorkspaceCanWrite') || !productionSource.includes('.write-probe.') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
+if (!productionSource.includes("supermega.production.workspace.v2")
+  || !productionSource.includes('mutateProductionWorkspace')
+  || !productionSource.includes('productionWorkspaceCanWrite')
+  || !productionSource.includes('.write-probe.')
+  || !productionSource.includes('lockManager.request')
+  || !productionSource.includes('eventDelta !== revisionDelta')
+  || !productionSource.includes('revisionDelta > 100')) fail('production_v2_locked_store_missing')
 if (!productionSource.includes("owner: 'Line 01 lead'")
   || !productionSource.includes("owner: 'Line 02 lead'")
   || !productionSource.includes("owner: 'Line 03 lead'")) fail('production_sample_jobs_lack_clear_owners')
@@ -2064,7 +2072,12 @@ if (!productionSource.includes('buildProductionShiftHandoff')
   || !coreSource.includes('It creates no event, message, or saved copy.')
   || !coreSource.includes('Plant records or the shift reference changed after this handoff was built.')
   || !coreSource.includes('No Plant record changed.')) fail('production_shift_handoff_contract_missing')
-if (!productionSource.includes('registerProductionJob') || !coreSource.includes('production.job.created') || !coreSource.includes('<summary>Add job</summary>') || !coreSource.includes('Review job')) fail('production_recurring_job_workflow_missing')
+if (!productionSource.includes('registerProductionJob')
+  || !productionSource.includes('export function importProductionJobs')
+  || !productionSource.includes('ACT-CLIENT-PLAN-')
+  || !coreSource.includes('production.job.created')
+  || !coreSource.includes('<summary>Add job</summary>')
+  || !coreSource.includes('Review job')) fail('production_recurring_job_workflow_missing')
 if (!productionSource.includes('updateProductionJobPlan')
   || !productionSource.includes("kind: 'job_schedule_updated'")
   || !productionSource.includes('jobOwner: owner')
@@ -7677,6 +7690,49 @@ async function verifyProductionRuntime() {
     assert(model.registerProductionJob(base, { ...newJob, owner: undefined }, proof('ACT-JOB-UNOWNED')) === null, 'production_unowned_job_succeeded')
     assert(model.registerProductionJob(base, { ...newJob, priority: 'invalid' }, proof('ACT-JOB-PRIORITY')) === null, 'production_invalid_job_priority_succeeded')
     assert(model.registerProductionJob(base, { ...newJob, dueAt: jobProof.capturedAt }, proof('ACT-JOB-OVERDUE')) === null, 'production_nonfuture_job_due_succeeded')
+    const clientPlanDigest = `sha256:${'d'.repeat(64)}`
+    const clientPlanJobs = [
+      { id: 'JOB-CLIENT-1', line: 'Line A', product: 'Client batch one', target: 50, output: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2026-08-15T00:00:00.000Z' },
+      { id: 'JOB-CLIENT-2', line: 'Line B', product: 'Client batch two', target: 75, output: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2026-08-16T00:00:00.000Z' },
+    ]
+    const clientPlanImport = model.importProductionJobs(base, {
+      jobs: clientPlanJobs,
+      sourceDigest: clientPlanDigest,
+      capturedAt: '2026-07-28T09:00:00.000Z',
+      actor: 'Plant owner',
+    })
+    assert(clientPlanImport?.created === 2
+      && clientPlanImport.alreadyPresent === 0
+      && clientPlanImport.state.revision === 2
+      && clientPlanImport.state.events.length === 2
+      && clientPlanImport.state.jobs.slice(0, 2).map((job) => job.id).join(',') === 'JOB-CLIENT-2,JOB-CLIENT-1',
+    'client_production_plan_import_not_atomic_or_attributable')
+    const clientPlanReplay = model.importProductionJobs(clientPlanImport.state, {
+      jobs: clientPlanJobs,
+      sourceDigest: clientPlanDigest,
+      capturedAt: '2026-07-28T10:00:00.000Z',
+      actor: 'Plant owner',
+    })
+    assert(clientPlanReplay?.replayed && clientPlanReplay.created === 0 && clientPlanReplay.alreadyPresent === 2 && clientPlanReplay.state === clientPlanImport.state, 'client_production_plan_retry_not_idempotent')
+    assert(model.importProductionJobs(clientPlanImport.state, {
+      jobs: [{ ...clientPlanJobs[0], target: 51 }],
+      sourceDigest: clientPlanDigest,
+      capturedAt: '2026-07-28T10:00:00.000Z',
+      actor: 'Plant owner',
+    }) === null, 'client_production_plan_overwrote_conflicting_job')
+    const atomicClientPlanBase = model.createEmptyProduction()
+    assert(model.importProductionJobs(atomicClientPlanBase, {
+      jobs: [clientPlanJobs[0], { ...clientPlanJobs[1], dueAt: '2026-07-28T09:00:00.000Z' }],
+      sourceDigest: clientPlanDigest,
+      capturedAt: '2026-07-28T09:00:00.000Z',
+      actor: 'Plant owner',
+    }) === null && atomicClientPlanBase.jobs.length === 0 && atomicClientPlanBase.events.length === 0, 'client_production_plan_partially_mutated_after_invalid_job')
+    assert(model.importProductionJobs(atomicClientPlanBase, {
+      jobs: clientPlanJobs,
+      sourceDigest: 'not-a-digest',
+      capturedAt: '2026-07-28T09:00:00.000Z',
+      actor: 'Plant owner',
+    }) === null, 'client_production_plan_unbound_source_accepted')
     assertThrows(() => model.validateProductionState({
       ...withJob,
       jobs: [{ ...withJob.jobs[0], priority: 'low' }, ...withJob.jobs.slice(1)],
@@ -8546,6 +8602,23 @@ async function verifyProductionRuntime() {
     values.clear()
     values.set(model.PRODUCTION_KEY, JSON.stringify(base))
     lockRequests = 0
+    const persistedClientPlan = await model.mutateProductionWorkspace((state) => model.importProductionJobs(state, {
+      jobs: clientPlanJobs,
+      sourceDigest: clientPlanDigest,
+      capturedAt: '2026-07-28T09:00:00.000Z',
+      actor: 'Plant owner',
+    })?.state ?? null, storage, locks)
+    const persistedClientPlanState = JSON.parse(values.get(model.PRODUCTION_KEY))
+    assert(persistedClientPlan.ok
+      && lockRequests === 1
+      && persistedClientPlanState.revision === 2
+      && persistedClientPlanState.events.length === 2
+      && persistedClientPlanState.jobs.length === base.jobs.length + 2,
+    'client_production_plan_locked_batch_not_persisted_atomically')
+
+    values.clear()
+    values.set(model.PRODUCTION_KEY, JSON.stringify(base))
+    lockRequests = 0
     const concurrentJobs = await Promise.all([
       model.mutateProductionWorkspace((state) => model.registerProductionJob(state, { id: 'JOB-2', line: 'Line 02', product: 'Second batch', target: 250, output: 0, owner: 'Line 02 lead', priority: 'urgent', dueAt: '2026-07-24T10:00:00.000Z' }, proof('ACT-CONCURRENT-JOB-2')), storage, locks),
       model.mutateProductionWorkspace((state) => model.registerProductionJob(state, { id: 'JOB-3', line: 'Line 03', product: 'Third batch', target: 300, output: 0, owner: 'Line 03 lead', priority: 'normal', dueAt: '2026-07-25T10:00:00.000Z' }, proof('ACT-CONCURRENT-JOB-3')), storage, locks),
@@ -8584,6 +8657,12 @@ async function verifyProductionRuntime() {
     assert(!failedWrite.ok && values.get(model.PRODUCTION_KEY) === beforeFailure, 'production_storage_failure_advanced_state')
     const invalidMutation = await model.mutateProductionWorkspace((state) => ({ ...state, revision: state.revision + 1 }), storage, locks)
     assert(!invalidMutation.ok && values.get(model.PRODUCTION_KEY) === beforeFailure, 'production_non_append_mutation_succeeded')
+    const mismatchedBatchMutation = await model.mutateProductionWorkspace((state) => ({
+      ...state,
+      revision: state.revision + 2,
+      events: [{ ...state.events[0], actionId: 'ACT-MALFORMED-BATCH' }, ...state.events],
+    }), storage, locks)
+    assert(!mismatchedBatchMutation.ok && values.get(model.PRODUCTION_KEY) === beforeFailure, 'production_mismatched_batch_mutation_succeeded')
     const throwingMutation = await model.mutateProductionWorkspace(() => { throw new Error('transition') }, storage, locks)
     assert(!throwingMutation.ok && throwingMutation.error.includes('transition failed') && values.get(model.PRODUCTION_KEY) === beforeFailure, 'production_transition_failure_was_misclassified')
     const unlocked = await model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 1, '2026-07-24 Day', proof('ACT-NO-LOCK')), storage, {})

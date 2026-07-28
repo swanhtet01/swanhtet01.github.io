@@ -1329,10 +1329,14 @@ export async function mutateProductionWorkspace(
       try { next = transition(current) } catch { return { ok: false, error: 'The Production transition failed integrity checks. Nothing was written.' } as const }
       if (!next) return { ok: false, error: 'The Production state changed or the requested transition is not valid. Nothing was written.' } as const
       if (next === current) return { ok: true, state: current, replayed: true } as const
-      if (next.revision !== current.revision + 1
-        || next.events.length !== current.events.length + 1
-        || JSON.stringify(next.events.slice(1)) !== JSON.stringify(current.events)) {
-        return { ok: false, error: 'Production changes must append one event and advance one revision. Nothing was written.' } as const
+      const revisionDelta = next.revision - current.revision
+      const eventDelta = next.events.length - current.events.length
+      if (!Number.isSafeInteger(revisionDelta)
+        || revisionDelta < 1
+        || revisionDelta > 100
+        || eventDelta !== revisionDelta
+        || JSON.stringify(next.events.slice(eventDelta)) !== JSON.stringify(current.events)) {
+        return { ok: false, error: 'Production changes must append one event per revision, with at most 100 events in one locked transaction. Nothing was written.' } as const
       }
       let serialized: string
       try { serialized = JSON.stringify(validateProductionState(next)) } catch { return { ok: false, error: 'The proposed Production state failed integrity checks. Nothing was written.' } as const }
@@ -1675,6 +1679,61 @@ export function registerProductionJob(state: ProductionState, job: ProductionJob
     jobs: [job, ...state.jobs],
     events: [event, ...state.events],
   })
+}
+
+export type ProductionJobsImportResult = {
+  state: ProductionState
+  created: number
+  alreadyPresent: number
+  replayed: boolean
+}
+
+export function importProductionJobs(stateValue: ProductionState, input: {
+  jobs: ProductionJob[]
+  sourceDigest: string
+  capturedAt: string
+  actor: string
+}): ProductionJobsImportResult | null {
+  if (!Array.isArray(input?.jobs) || input.jobs.length < 1 || input.jobs.length > 100
+    || typeof input.sourceDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(input.sourceDigest)
+    || typeof input.capturedAt !== 'string' || !validTimestamp(input.capturedAt)
+    || typeof input.actor !== 'string' || !validCanonicalText(input.actor, 80)) return null
+  const sourceState = validateProductionState(stateValue)
+  const uniqueJobIds = new Set(input.jobs.map((job) => job.id))
+  if (uniqueJobIds.size !== input.jobs.length) return null
+  let state = sourceState
+  let created = 0
+  let alreadyPresent = 0
+  for (const [index, job] of input.jobs.entries()) {
+    const existing = state.jobs.find((candidate) => candidate.id === job.id)
+    if (existing) {
+      if (existing.line !== job.line
+        || existing.product !== job.product
+        || existing.target !== job.target
+        || existing.output !== job.output
+        || existing.owner !== job.owner
+        || existing.priority !== job.priority
+        || existing.dueAt !== job.dueAt
+        || existing.scrap !== job.scrap
+        || existing.qualityHold !== job.qualityHold
+        || existing.closure !== job.closure) return null
+      alreadyPresent += 1
+      continue
+    }
+    const sourceId = input.sourceDigest.slice(7, 19).toUpperCase()
+    const proof: ProductionActionProof = {
+      actionId: `ACT-CLIENT-PLAN-${sourceId}-${String(index + 1).padStart(3, '0')}`,
+      capturedAt: input.capturedAt,
+      actor: input.actor,
+      reason: `Approved client production plan row ${index + 1}.`,
+      evidenceReference: `CLIENT-PLAN-${sourceId}-${job.id}`,
+    }
+    const next = registerProductionJob(state, job, proof)
+    if (!next) return null
+    state = next
+    created += 1
+  }
+  return { state, created, alreadyPresent, replayed: created === 0 }
 }
 
 export function updateProductionJobPlan(
