@@ -134,6 +134,7 @@ class TrialOrderIntakeDraftRequest(_StrictRequest):
 class TrialServiceScheduleSaveRequest(_StrictRequest):
     command_id: UUID
     expected_version: int = Field(ge=1)
+    captured_at: str = Field(min_length=20, max_length=40)
     schedule: dict[str, Any]
 
 
@@ -790,7 +791,21 @@ def create_trial_router(
         schedule = deepcopy(body.schedule)
         events = schedule.get("events")
         revision = schedule.get("revision")
-        if (
+        initializing = (
+            revision == 0
+            and events == []
+        )
+        if initializing:
+            pack_id = schedule.get("industryPackId")
+            event_type = "commerce.service_schedule.initialized"
+            evidence = {
+                "actionId": f"ACT-SERVICE-SCHEDULE-INIT-{str(pack_id).upper()}",
+                "capturedAt": body.captured_at,
+                "actor": principal.actor_id,
+                "reason": f"Initialize the reviewed {pack_id} Shop industry pack.",
+                "evidenceReference": f"SHOP-SERVICE-SCHEDULE:{pack_id}:R0",
+            }
+        elif (
             not isinstance(events, list)
             or not events
             or not isinstance(revision, int)
@@ -799,23 +814,25 @@ def create_trial_router(
             or not isinstance(events[-1], Mapping)
         ):
             raise _error(422, "service_schedule_evidence_required")
-        latest_event = dict(events[-1])
-        latest_event["actor"] = principal.actor_id
-        events[-1] = latest_event
+        else:
+            latest_event = dict(events[-1])
+            latest_event["actor"] = principal.actor_id
+            events[-1] = latest_event
+            event_type = "commerce.service_schedule.saved"
+            evidence = {
+                "actionId": f"ACT-SERVICE-SCHEDULE-R{revision}",
+                "capturedAt": latest_event.get("happenedAt"),
+                "actor": principal.actor_id,
+                "reason": latest_event.get("reason"),
+                "evidenceReference": f"SHOP-SERVICE-SCHEDULE:R{revision}",
+            }
         next_state = {**current_state, "serviceSchedule": schedule}
-        evidence = {
-            "actionId": f"ACT-SERVICE-SCHEDULE-R{revision}",
-            "capturedAt": latest_event.get("happenedAt"),
-            "actor": principal.actor_id,
-            "reason": latest_event.get("reason"),
-            "evidenceReference": f"SHOP-SERVICE-SCHEDULE:R{revision}",
-        }
         result = _invoke(
             lambda: store.apply_command(
                 principal,
                 command_id=body.command_id,
                 surface="commerce",
-                event_type="commerce.service_schedule.saved",
+                event_type=event_type,
                 expected_version=body.expected_version,
                 payload={"state": next_state, "evidence": evidence},
             )

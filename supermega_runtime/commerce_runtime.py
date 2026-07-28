@@ -61,6 +61,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.storefront.configuration.saved",
         "commerce.storefront.merchandising.imported",
         "commerce.storefront_request.received",
+        "commerce.service_schedule.initialized",
         "commerce.service_schedule.saved",
     }
 )
@@ -90,6 +91,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
         "commerce.storefront.merchandising.imported",
+        "commerce.service_schedule.initialized",
         "commerce.service_schedule.saved",
     }
 )
@@ -2797,6 +2799,17 @@ def _validate_event_evidence(
         if not _proof_matches_evidence(proof, evidence):
             raise TrialValidationError(
                 "command evidence must match the saved account mapping proof."
+            )
+    elif event_type == "commerce.service_schedule.initialized":
+        schedule = next_state["serviceSchedule"]
+        pack_id = schedule["industryPackId"]
+        if (
+            evidence["actionId"] != f"ACT-SERVICE-SCHEDULE-INIT-{pack_id.upper()}"
+            or evidence["reason"] != f"Initialize the reviewed {pack_id} Shop industry pack."
+            or evidence["evidenceReference"] != f"SHOP-SERVICE-SCHEDULE:{pack_id}:R0"
+        ):
+            raise TrialValidationError(
+                "command evidence must match the initialized service schedule pack."
             )
     elif event_type == "commerce.service_schedule.saved":
         schedule = next_state["serviceSchedule"]
@@ -5911,6 +5924,31 @@ def _validate_service_schedule_saved(
         )
 
 
+def _validate_service_schedule_initialized(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _service_schedule(current) is not None:
+        raise TrialValidationError("managed Commerce already has a service schedule.")
+    current_without_schedule = dict(current)
+    current_without_schedule.pop("serviceSchedule", None)
+    next_without_schedule = dict(next_state)
+    next_without_schedule.pop("serviceSchedule", None)
+    if current_without_schedule != next_without_schedule:
+        raise TrialValidationError(
+            "commerce.service_schedule.initialized cannot change other Commerce records."
+        )
+    schedule = _service_schedule(next_state)
+    if schedule is None or schedule["revision"] != 0 or schedule["events"]:
+        raise TrialValidationError(
+            "service schedule initialization requires a clean industry pack without operating evidence."
+        )
+    if not schedule["services"] or not schedule["resources"] or schedule["bookings"]:
+        raise TrialValidationError(
+            "service schedule initialization requires services and resources but no bookings."
+        )
+
+
 _TRANSITION_VALIDATORS = {
     "commerce.item.created": _validate_item_created,
     "commerce.item.updated": _validate_item_updated,
@@ -5936,6 +5974,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.storefront_request.received": _validate_storefront_request_received,
     "commerce.tax_configuration.saved": _validate_tax_configuration_saved,
     "commerce.account_mapping.saved": _validate_account_mapping_saved,
+    "commerce.service_schedule.initialized": _validate_service_schedule_initialized,
     "commerce.service_schedule.saved": _validate_service_schedule_saved,
 }
 
@@ -5984,7 +6023,10 @@ def reduce_commerce_state(
         _require_tax_configurations_unchanged(current_state, next_state)
     if event_type != "commerce.account_mapping.saved":
         _require_account_mapping_configurations_unchanged(current_state, next_state)
-    if event_type != "commerce.service_schedule.saved":
+    if event_type not in {
+        "commerce.service_schedule.initialized",
+        "commerce.service_schedule.saved",
+    }:
         _require_service_schedule_unchanged(current_state, next_state)
     if event_type not in {
         "commerce.purchase_order.created",

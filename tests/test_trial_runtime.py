@@ -504,6 +504,13 @@ class TrialRuntimeTests(unittest.TestCase):
             "revision": 1,
             "services": [
                 {
+                    "id": "service-consultation",
+                    "name": "Consultation",
+                    "durationMinutes": 30,
+                    "priceMmk": 20000,
+                    "active": True,
+                },
+                {
                     "id": "service-session",
                     "name": "Standard treatment",
                     "durationMinutes": 60,
@@ -531,9 +538,39 @@ class TrialRuntimeTests(unittest.TestCase):
                 }
             ],
         }
-        command = {
+        clean_schedule = {
+            **schedule,
+            "revision": 0,
+            "services": schedule["services"][:1],
+            "events": [],
+        }
+        initialize_command = {
             "command_id": str(uuid4()),
             "expected_version": 1,
+            "captured_at": "2026-07-29T04:00:00.000Z",
+            "schedule": clean_schedule,
+        }
+        initialized_schedule = client.post(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+            json=initialize_command,
+        )
+        initialize_replay = client.post(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+            json=initialize_command,
+        )
+        self.assertEqual(initialized_schedule.status_code, 200, initialized_schedule.text)
+        self.assertEqual(initialized_schedule.json()["result"]["version"], 2)
+        self.assertEqual(
+            initialized_schedule.json()["result"]["event_type"],
+            "commerce.service_schedule.initialized",
+        )
+        self.assertTrue(initialize_replay.json()["result"]["idempotent_replay"])
+        command = {
+            "command_id": str(uuid4()),
+            "expected_version": 2,
+            "captured_at": "2026-07-29T04:05:00.000Z",
             "schedule": schedule,
         }
         first = client.post(
@@ -547,7 +584,7 @@ class TrialRuntimeTests(unittest.TestCase):
             json=command,
         )
         self.assertEqual(first.status_code, 200, first.text)
-        self.assertEqual(first.json()["result"]["version"], 2)
+        self.assertEqual(first.json()["result"]["version"], 3)
         self.assertEqual(
             first.json()["result"]["state"]["serviceSchedule"]["events"][-1]["actor"],
             "actor-operator",
@@ -640,6 +677,8 @@ class TrialRuntimeTests(unittest.TestCase):
             "commerce.stock.received",
             "commerce.close.saved",
             "commerce.website_intake.converted",
+            "commerce.service_schedule.initialized",
+            "commerce.service_schedule.saved",
         )
         for event_type in human_only_events:
             with self.subTest(event_type=event_type):

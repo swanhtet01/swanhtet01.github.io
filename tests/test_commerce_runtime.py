@@ -2351,6 +2351,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.storefront.merchandising.imported",
                     "commerce.tax_configuration.saved",
                     "commerce.account_mapping.saved",
+                    "commerce.service_schedule.initialized",
                     "commerce.service_schedule.saved",
                 }
             ),
@@ -2359,6 +2360,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIn("commerce.storefront.merchandising.imported", COMMERCE_EVENTS)
         self.assertIn("commerce.tax_configuration.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.account_mapping.saved", COMMERCE_EVENTS)
+        self.assertIn("commerce.service_schedule.initialized", COMMERCE_EVENTS)
         self.assertIn("commerce.service_schedule.saved", COMMERCE_EVENTS)
 
     def test_website_intake_creation_records_no_order_or_stock_movement(self) -> None:
@@ -5881,7 +5883,38 @@ class CommerceRuntimeTests(unittest.TestCase):
                 }
             ],
         }
-        first = {**current, "serviceSchedule": schedule}
+        clean_schedule = deepcopy(schedule)
+        clean_schedule["revision"] = 0
+        clean_schedule["bookings"] = []
+        clean_schedule["events"] = []
+        initialized = apply_event(
+            current,
+            "commerce.service_schedule.initialized",
+            {**current, "serviceSchedule": clean_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-INIT-SPA",
+                "capturedAt": "2026-07-29T03:59:00.000Z",
+                "actor": "operator-1",
+                "reason": "Initialize the reviewed spa Shop industry pack.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:spa:R0",
+            },
+        )
+        self.assertEqual(initialized["serviceSchedule"], clean_schedule)
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                initialized,
+                "commerce.service_schedule.initialized",
+                initialized,
+                {
+                    "actionId": "ACT-SERVICE-SCHEDULE-INIT-SPA",
+                    "capturedAt": "2026-07-29T03:59:00.000Z",
+                    "actor": "operator-1",
+                    "reason": "Initialize the reviewed spa Shop industry pack.",
+                    "evidenceReference": "SHOP-SERVICE-SCHEDULE:spa:R0",
+                },
+            )
+
+        first = {**initialized, "serviceSchedule": schedule}
         first_evidence = {
             "actionId": "ACT-SERVICE-SCHEDULE-R1",
             "capturedAt": "2026-07-29T04:00:00.000Z",
@@ -5890,7 +5923,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             "evidenceReference": "SHOP-SERVICE-SCHEDULE:R1",
         }
         accepted = apply_event(
-            current,
+            initialized,
             "commerce.service_schedule.saved",
             first,
             first_evidence,

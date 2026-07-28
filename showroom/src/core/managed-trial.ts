@@ -62,6 +62,7 @@ export type ManagedCommerceEvent =
   | 'commerce.storefront.configuration.saved'
   | 'commerce.tax_configuration.saved'
   | 'commerce.account_mapping.saved'
+  | 'commerce.service_schedule.initialized'
   | 'commerce.service_schedule.saved'
   | 'commerce.storefront.merchandising.imported'
   | 'commerce.storefront_request.received'
@@ -1215,6 +1216,7 @@ export async function saveManagedServiceSchedule(request: {
       body: JSON.stringify({
         command_id: request.commandId,
         expected_version: request.expectedVersion,
+        captured_at: new Date().toISOString(),
         schedule: request.schedule,
       }),
     },
@@ -1224,9 +1226,12 @@ export async function saveManagedServiceSchedule(request: {
   const result = isRecord(response) && isRecord(response.result) ? response.result : null
   const state = result && isRecord(result.state) ? result.state : null
   const nextSchedule = state ? managedServiceSchedule(state.serviceSchedule) : null
+  const expectedEvent = request.schedule.revision === 0
+    ? 'commerce.service_schedule.initialized'
+    : 'commerce.service_schedule.saved'
   if (!result
     || result.surface !== 'commerce'
-    || result.event_type !== 'commerce.service_schedule.saved'
+    || result.event_type !== expectedEvent
     || typeof result.version !== 'number'
     || !Number.isSafeInteger(result.version)
     || result.version !== request.expectedVersion + 1

@@ -278,6 +278,7 @@ const expectedHumanCommerceEvents = [
   'commerce.purchase_order.created',
   'commerce.purchase_order.received',
   'commerce.refund.settled',
+  'commerce.service_schedule.initialized',
   'commerce.service_schedule.saved',
   'commerce.stock.counted',
   'commerce.stock.received',
@@ -354,8 +355,12 @@ requireContract('managed Shop appointments are tenant-scoped, human-only, identi
   && /principal\.actor_kind != "human"/.test(serviceScheduleRoute)
   && /_reject_client_identity\(body\.schedule/.test(serviceScheduleRoute)
   && /expected_version=body\.expected_version/.test(serviceScheduleRoute)
-  && /event_type="commerce\.service_schedule\.saved"/.test(serviceScheduleRoute)
-  && /event_type == "commerce\.service_schedule\.saved"/.test(trialStore)
+  && /event_type\s*=\s*"commerce\.service_schedule\.initialized"/.test(serviceScheduleRoute)
+  && /event_type\s*=\s*"commerce\.service_schedule\.saved"/.test(serviceScheduleRoute)
+  && /event_type=event_type/.test(serviceScheduleRoute)
+  && /commerce\.service_schedule\.initialized/.test(trialStore)
+  && /commerce\.service_schedule\.saved/.test(trialStore)
+  && /_validate_service_schedule_initialized/.test(commerceRuntime)
   && /service schedule evidence history is immutable/.test(commerceRuntime)
   && /contains overlapping bookings/.test(commerceRuntime))
 requireContract('runtime exposes bounded health truth', /"operating_mode": "managed_trial" if not requirements else "isolated_demo"/.test(runtime) && /"browser_service_role_exposed": False/.test(runtime))

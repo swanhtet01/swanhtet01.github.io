@@ -51,6 +51,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.storefront.merchandising.imported",
         "commerce.tax_configuration.saved",
         "commerce.account_mapping.saved",
+        "commerce.service_schedule.initialized",
         "commerce.service_schedule.saved",
         "production.workspace.initialized",
         "production.job.created",
@@ -1681,7 +1682,14 @@ def _require_command_evidence_actor(
     if (
         surface != "production"
         and not (surface == "website" and event_type in HUMAN_COMMAND_EVENTS)
-        and not (surface == "commerce" and event_type == "commerce.service_schedule.saved")
+        and not (
+            surface == "commerce"
+            and event_type
+            in {
+                "commerce.service_schedule.initialized",
+                "commerce.service_schedule.saved",
+            }
+        )
     ):
         return
     evidence = payload.get("evidence")
