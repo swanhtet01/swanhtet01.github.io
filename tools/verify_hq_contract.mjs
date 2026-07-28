@@ -153,9 +153,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.scheduledFunctionFootprintContract === 'supermega.kernel-function-footprint.v1'
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerFiles === 30
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerBytes === 409600
-  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerFiles === 24
-  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 306087
+  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerFiles === 13
+  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 239618
   && portfolio.agentOperatingModel?.companyOperationsDeferredForStartup === true
+  && portfolio.agentOperatingModel?.optionalToolConnectorsDeferredForStartup === true
   && portfolio.agentOperatingModel?.fullPlatformStatusTeams?.join(',') === 'engineering,finance-risk'
   && portfolio.agentOperatingModel?.connectorFleetDeferredForDailyProductGrowth === true
   && portfolio.agentOperatingModel?.maxOutcomesPerCeoCycle === 1
@@ -772,6 +773,8 @@ requireContract('source provenance retained',
   && workboard.includes('Checkpoint `f4aa81e` derives two concurrent company cycles from four active assignments')
   && workboard.includes('| OPS-056 | CEO + Vercel Operations / Startup Efficiency Codex | done-local |')
   && workboard.includes('Checkpoint `006070f` defers the 66 KB company-operations reporter')
+  && workboard.includes('| OPS-057 | CEO + Vercel Operations / Connector Efficiency Codex | done-local |')
+  && workboard.includes('Checkpoint `c508983` defers public HTTP, CBM, Gmail, Sheets, PayPal, Pipedrive, ClickUp, and Telegram modules')
   && !workboard.includes('The selected Instagram slide confirms'))
 requireContract('HQ stays concise',
   readme.length < 7000
@@ -896,7 +899,7 @@ requireContract('scheduled CEO function keeps the full connector fleet deferred 
   && kernelFootprintVerifier.includes('connectorInventoryComplete: connectorImports === EXPECTED_CONNECTORS')
   && workboard.includes('| OPS-041 | CEO + Agent Operations / Vercel Efficiency Codex | done-local |')
   && workboard.includes('Checkpoint `6bad4e7` defers full status from the operator tool import')
-  && now.includes('CEO brief startup is 24 files/306,087 bytes under the 30/409,600 cap')
+  && now.includes('CEO brief startup is 13 files/239,618 bytes')
   && now.includes('full 69-connector audit loads only for Engineering and Finance/Risk'))
 
 for (const forbidden of ['Yangon Tyre', 'ytf.supermega.dev', 'pos.supermega.dev', 'twelve product']) {
