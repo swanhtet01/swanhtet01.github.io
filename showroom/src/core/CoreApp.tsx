@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- Lazy route modules import this file's shared application contracts and hooks. */
 import { lazy, Suspense, type Dispatch, type FormEvent, type MouseEvent, type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
