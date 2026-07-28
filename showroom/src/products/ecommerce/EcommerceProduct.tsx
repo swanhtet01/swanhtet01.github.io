@@ -802,6 +802,26 @@ export function EcommerceProduct() {
     ['Fulfil', pendingManagedRequests.length ? 'Shop queue' : savedDraftIsCurrent ? 'Pickup/delivery ready' : 'Setup first'],
     ['Return', 'Shop accountable'],
   ] as const
+  const orderingReadinessStage = importNeeded
+    ? 'Import Shop catalog'
+    : !selectedSkus.length
+      ? 'Choose sellable products'
+      : !previewResult.preview
+        ? 'Repair storefront preview'
+        : !savedDraftIsCurrent
+          ? 'Save ordering setup'
+          : pendingManagedRequests.length
+            ? 'Clear Shop review queue'
+            : buyingReady
+              ? 'Ready for reviewed orders'
+              : 'Check ordering controls'
+  const orderingReadinessRows = [
+    ['Catalog', importNeeded ? 'Needed' : `${catalog.items.length} items`],
+    ['Storefront', previewResult.preview ? savedDraftIsCurrent ? 'Saved' : 'Draft ready' : 'Blocked'],
+    ['Checkout', buyingReady ? 'Quote ready' : 'Locked'],
+    ['Queue', pendingManagedRequests.length ? `${pendingManagedRequests.length} Shop review` : 'Clear'],
+    ['Safety', managedIdentity ? 'Managed gate' : 'Local trial'],
+  ] as const
   const setupRows = [
     ['Catalog', sourceLabel],
     ['Products', `${selectedSkus.length}/${Math.min(catalog.items.length, 8)} selected`],
@@ -922,6 +942,17 @@ export function EcommerceProduct() {
         </div>
         <div className="ecommerce-ops-cockpit-rows">
           {orderOpsRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+      </section>
+
+      <section aria-label="Ordering readiness" className="ecommerce-ops-cockpit">
+        <div>
+          <span className="core-eyebrow">Ordering readiness</span>
+          <h2>{orderingReadinessStage}</h2>
+          <p>AI checks catalog, storefront fingerprint, quote readiness, Shop review queue, and safety mode before a customer request can move forward. No customer message, payment, delivery, stock, refund, or Shop write runs from this panel.</p>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {orderingReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
       </section>
 
