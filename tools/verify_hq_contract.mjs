@@ -765,6 +765,8 @@ requireContract('source provenance retained',
   && workboard.includes('Checkpoint `72059a8` replaces the inaccessible Instagram reference')
   && workboard.includes('| OPS-054 | CEO + Agent Operations / Crew Authority Codex | done-local |')
   && workboard.includes('Checkpoint `02cb277` keeps the caller\'s role budget as a maximum admission ceiling')
+  && workboard.includes('| OPS-055 | CEO + Agent Operations / Assignment Capacity Codex | done-local |')
+  && workboard.includes('Checkpoint `f4aa81e` derives two concurrent company cycles from four active assignments')
   && !workboard.includes('The selected Instagram slide confirms'))
 requireContract('HQ stays concise',
   readme.length < 7000
