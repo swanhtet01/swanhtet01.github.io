@@ -44,7 +44,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - All four browser-local imports activate only after review: Shop stock, Plant jobs/BOM/routing, Website content, and Ecommerce merchandising through Shop authority (`7ae8c80`).
 - Client setup is two steps with one manifest-backed smart import; exact matches collapse and exceptions open for review (`ab9a89e`).
 - Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancel releases, complete consumes, and sellable returns restore the exact fulfilled location/lot (`3cd4825`).
-- Shop close keeps a balanced accounting-review CSV grouped by payment method and freezes a human-approved versioned tax code, rate, and inclusive/exclusive treatment into future orders; history stays unchanged and no filing or posting occurs (`39b7fc2`, `369cb2b`).
+- Shop close keeps a balanced accounting-review CSV grouped by payment method and freezes a human-approved versioned tax code, rate, and inclusive/exclusive treatment into future orders. Owner-reviewed account mappings apply only to later closes; history stays unchanged and no filing or posting occurs (`d47f5d9`, `39b7fc2`, `369cb2b`).
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, release, replay, and rollback; operation/output requires exact authenticated Shop issue evidence (`3c885d8`).
 - Home keeps Shop and Plant exceptions above collapsed HQ work. When present, a Plant issue badge links to Problems and otherwise the card opens Jobs. `/work/` stays labelled HQ; bottom navigation reads Home, HQ, and Products.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
@@ -53,14 +53,14 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- Current checkpoints: product `7ae8c80`, CEO preflight `f1328a0`, delivery `cafdafe`/`f626ee7`, CEO operations `909807d`, performance `6bad4e7`, release `39642eb`, Shop finance `39b7fc2`/`369cb2b`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
-- App gates pass: 331 Python, production build, 54 Shop inventory/242 Commerce/265 Production, 70 security, and release/database/Vercel/HQ checks.
+- Current checkpoints: product `7ae8c80`, CEO preflight `f1328a0`, delivery `cafdafe`/`f626ee7`, CEO operations `909807d`, performance `6bad4e7`, release `39642eb`, Shop finance `d47f5d9`/`39b7fc2`/`369cb2b`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
+- App gates pass: 332 Python, production build, 54 Shop inventory/245 Commerce/265 Production, 70 security, and release/database/Vercel/HQ checks.
 - PostgreSQL 17.10 rehearsal passes twice: migrations, isolation, four-product journeys, human approvals, TLS, backup/restore, and cleanup. Hosted Storage privacy remains unproven (`2930ecf`).
-- At 390 px, Shop exact-lot and compact tax setup plus Plant output open/close pass without overflow; Plant passes both themes with focus return. Managed count/allocation remain model verified.
+- At 390 px, Shop finance review has no overflow/errors; Plant passes both themes.
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
 - Both `supermega.dev` and `app.supermega.dev` serve exact remote `main` commit `af3f45c22b13e5edccdf87214608817fc3499e4d`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Paired release identity is current at catalog `2026-07-28.1`.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-- Ally: 80.0% RAM, zero models, one worker/frontend; 1,781.3 MB trimmed. No process, task, or server was stopped.
+- Ally: 81.1% RAM, zero models, one worker/frontend, one-run admission; a non-terminating trim released 1,726.5 MB. No process, task, or server was stopped.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
@@ -76,7 +76,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - The four live products are isolated samples; managed persistence and tenant security are unproven.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling stays blocked: no signed bundle, cron credentials, worker URL, or allowlist exists. Activate only after managed storage, security, recovery, and owner evidence pass.
-- Enterprise gaps remain: Shop chart-of-accounts mappings, correction documents, jurisdiction packs, and approved posting adapters; Plant costing/OEE/calibration; Website hosted CMS/release; Ecommerce payment/shipping/tax/returns.
+- Enterprise gaps: Shop corrections, jurisdiction packs, condition rules, and approved posting adapters; Plant costing/OEE/calibration; Website hosted CMS/release; Ecommerce payment/shipping/tax/returns.
 
 ## Decisions in force
 
