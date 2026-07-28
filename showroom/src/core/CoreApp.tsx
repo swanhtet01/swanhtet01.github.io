@@ -4546,6 +4546,18 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     <div><span className="core-eyebrow">Accounting readiness</span><strong>{shopAccountingNext}</strong><small>AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and owner approval before any accounting export is reviewed. No ledger, tax, payment, payable, refund, inventory, or Shop write runs from this panel.</small></div>
     <div className="shop-order-control-rows">{shopAccountingRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
+  const shopAccountingPacketRows = [
+    ['Close', latestCloseDownload ? 'CSV ready' : closePreview ? `${closableOrders.length} ready` : 'Close first'],
+    ['Ledger', latestCloseDownload ? 'Review import' : 'Not posted'],
+    ['Tax', 'Not configured'],
+    ['Payables', activePurchaseOrders.length ? `${activePurchaseOrders.length} supplier review` : 'None created'],
+    ['Settlement', paymentReview.length ? `${paymentReview.length} exception` : 'External proof only'],
+    ['Audit', latestClose?.evidenceReference ? 'Evidence linked' : 'Need close evidence'],
+  ] as const
+  const shopAccountingPacket = <section className="shop-order-control" aria-label="Shop accounting export packet">
+    <div><span className="core-eyebrow">Accounting export packet</span><strong>{latestCloseDownload ? 'Ready for accountant review' : closePreview ? 'Close before export' : 'No export package yet'}</strong><small>AI packages the reviewed daily close, payment proof, refund evidence, stock exceptions, supplier receipt exposure, and tax status for accounting review. No ledger post, tax filing, payable creation, bank settlement, refund, payment, inventory, or Shop write runs from this packet.</small></div>
+    <div className="shop-order-control-rows">{shopAccountingPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
@@ -4568,6 +4580,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         <div className="shop-order-control-rows">{shopOrderLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
       </section>
       {shopAccountingReadiness}
+      {shopAccountingPacket}
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftRecoveryWarning
