@@ -376,6 +376,41 @@ test('company budget admission failures are blocked, durable, and replay without
   }
 })
 
+test('a shared company budget block stops the remaining specialists before another crew attempt', async () => {
+  for (const reason of ['crew_company_budget_exhausted', 'crew_company_budget_unavailable']) {
+    const claims = durableClaimHarness()
+    const records = new Map()
+    const calls = []
+    const input = cycle({ cycleId: `shared-budget-stop-${reason}` })
+    const options = {
+      ...claims,
+      getRunResult: async (key) => records.get(key) || null,
+      putRunResult: async (key, payload) => { records.set(key, structuredClone(payload)); return true },
+      runCrew: async (slug) => {
+        calls.push(slug)
+        return { ok: false, reason, role: 'ranker', usageByRole: [], trace: [] }
+      },
+    }
+
+    const result = await runCompanyCycle(input, options)
+    assert.equal(result.ok, false)
+    assert.equal(result.status, 'blocked')
+    assert.deepEqual(calls, ['daily-operator-brief'])
+    assert.deepEqual(result.results.map((item) => item.status), ['blocked', 'not_run'])
+    assert.equal(result.results[1].reason, 'company_shared_budget_blocked')
+    assert.equal(result.results[1].blockedBy, reason)
+    assert.equal(result.results[1].usedRoleCalls, 0)
+    assert.equal(result.budget.usedRoleCalls, 0)
+    assert.equal(result.persistedAgentResults, 2)
+    assert.equal(result.durableResultStored, true)
+
+    const replay = await runCompanyCycle(input, options)
+    assert.equal(replay.replayed, true)
+    assert.equal(replay.status, 'blocked')
+    assert.deepEqual(calls, ['daily-operator-brief'])
+  }
+})
+
 test('runner fails closed without durable idempotency and releases only the unused claim', async () => {
   let released = ''
   let runs = 0

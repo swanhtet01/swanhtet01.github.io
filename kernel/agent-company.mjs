@@ -515,17 +515,39 @@ export async function runCompanyCycle(input, options = {}) {
     const executeCrew = options.runCrew || runCrew
     const results = []
     let persistedAgentResults = 0
+    let sharedBudgetBlock = null
     for (let index = 0; index < plan.assignments.length; index++) {
       const assignment = plan.assignments[index]
       let result
-      try {
-        result = await executeCrew(assignment.crew, normalizedEvidence.get(assignment.agentId), {
-          clientId: plan.clientId,
-        })
-      } catch {
-        result = { ok: false, reason: 'company_agent_failed' }
+      let normalized
+      if (sharedBudgetBlock) {
+        normalized = {
+          ok: false,
+          status: 'not_run',
+          agentId: assignment.agentId,
+          department: assignment.department,
+          crew: assignment.crew,
+          reason: 'company_shared_budget_blocked',
+          blockedBy: sharedBudgetBlock,
+          usedRoleCalls: 0,
+          usageByRole: [],
+          trace: [],
+          guardrails: null,
+        }
+      } else {
+        try {
+          result = await executeCrew(assignment.crew, normalizedEvidence.get(assignment.agentId), {
+            clientId: plan.clientId,
+          })
+        } catch {
+          result = { ok: false, reason: 'company_agent_failed' }
+        }
+        normalized = normalizeCrewResult(assignment, result)
+        if (normalized.status === 'blocked'
+          && ['crew_company_budget_exhausted', 'crew_company_budget_unavailable'].includes(normalized.reason)) {
+          sharedBudgetBlock = normalized.reason
+        }
       }
-      const normalized = normalizeCrewResult(assignment, result)
       results.push(normalized)
       try {
         const stored = await saveResult(agentResultKey(plan.runId, index), {
@@ -542,10 +564,11 @@ export async function runCompanyCycle(input, options = {}) {
     const completed = results.filter((result) => result.status === 'completed').length
     const gated = results.filter((result) => result.status === 'gated').length
     const blocked = results.filter((result) => result.status === 'blocked').length
-    const failed = results.length - completed - gated - blocked
+    const notRun = results.filter((result) => result.status === 'not_run').length
+    const failed = results.length - completed - gated - blocked - notRun
     const status = completed === results.length ? 'completed'
       : completed > 0 ? 'partial'
-        : (gated > 0 || blocked > 0) && failed === 0 ? 'blocked'
+        : (gated > 0 || blocked > 0 || notRun > 0) && failed === 0 ? 'blocked'
           : 'failed'
     const usedRoleCalls = results.reduce((total, result) => total + result.usedRoleCalls, 0)
 
