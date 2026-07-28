@@ -59,7 +59,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal 
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
 - Both `supermega.dev` and `app.supermega.dev` serve exact remote `main` commit `af3f45c22b13e5edccdf87214608817fc3499e4d`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Paired release identity is current at catalog `2026-07-28.1`.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-- Ally: 81.1% RAM, zero models, one worker/frontend; cross-process contention and recovery pass with zero network or process mutation. No process, task, or server was stopped.
+- Ally: 81.5% RAM, zero models, one worker/frontend; dispatch is eligible. A non-terminating trim released 1,872.4 MB. No process, task, or server was stopped.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
