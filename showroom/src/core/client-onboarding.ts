@@ -257,9 +257,9 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     maximumRows: 8,
     activationBoundary: 'Every SKU must match the current Shop catalog before a storefront draft can be approved.',
     workflowTemplates: {
-      'social-storefront': 'sku,featured,collection,display_name,merchandising_note\r\nCOFFEE-250,true,Best sellers,Myanmar coffee 250g,Lead with the locally sourced proof.\r\nTEA-20,false,Tea,Green tea 20 pack,Keep the Messenger order path visible.\r\n',
-      'pickup-preorder': 'sku,featured,collection,display_name,merchandising_note\r\nRICE-25KG,true,Pickup this week,Premium rice 25kg,Show the pickup promise before request.\r\nOIL-1L,false,Pantry,Cooking oil 1L,Confirm availability before collection.\r\n',
-      'wholesale-request': 'sku,featured,collection,display_name,merchandising_note\r\nCASE-COFFEE,true,Wholesale,Myanmar coffee case,Ask for quantity and delivery area.\r\nCASE-TEA,false,Wholesale,Green tea case,Keep trade pricing under review.\r\n',
+      'social-storefront': 'sku,featured,collection,display_name,merchandising_note\r\nSM-1001,true,Best sellers,Daily essentials basket,Lead with the everyday value and Messenger order path.\r\nSM-1003,false,Home care,Household refill,Keep local availability visible before checkout.\r\n',
+      'pickup-preorder': 'sku,featured,collection,display_name,merchandising_note\r\nSM-1002,true,Pickup this week,Cold drink pack,Show the pickup promise before request.\r\nSM-1003,false,Home care,Household refill,Confirm availability before collection.\r\n',
+      'wholesale-request': 'sku,featured,collection,display_name,merchandising_note\r\nSM-1001,true,Trade essentials,Daily essentials basket,Ask for quantity and delivery area.\r\nSM-CARE-01,false,Trade bundles,Family care set,Keep trade pricing under review.\r\n',
     },
     fields: [
       { id: 'sku', label: 'Shop SKU', required: true, kind: 'sku', aliases: ['sku', 'shop_sku', 'item_sku', 'product_code', 'ပစ္စည်းကုဒ်'], maximum: 80 },

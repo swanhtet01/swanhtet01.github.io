@@ -120,6 +120,7 @@ function savedLocalDraft(draft: StorefrontDraft | LegacyStorefrontDraft | null):
     storeName: draft.storeName,
     summary: draft.summary,
     selectedSkus: [...draft.selectedSkus],
+    ...('merchandising' in draft && draft.merchandising ? { merchandising: cloneMerchandising(draft.merchandising) ?? undefined } : {}),
     ...('sourcePreviewDigest' in draft ? { localPreviewDigest: draft.sourcePreviewDigest } : {}),
   }
 }
@@ -301,8 +302,9 @@ export function EcommerceProduct() {
         && event.key !== null) return
       const latest = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE)
       if (event.key === legacyDraftKey && latest.status === 'ready') return
-      setSavedDraft(savedLocalDraft(latest.draft))
-      setMerchandising(null)
+      const latestDraft = savedLocalDraft(latest.draft)
+      setSavedDraft(latestDraft)
+      setMerchandising(cloneMerchandising(latestDraft?.merchandising))
       setDraftReadStatus(latest.status)
       setDraftIssue(latest.error)
       setMissingSelectionReviewed(false)
@@ -581,7 +583,7 @@ export function EcommerceProduct() {
         return
       }
       const saved = await saveStorefrontDraft(
-        { storeName, summary, selectedSkus, sourcePreviewDigest: digest },
+        { storeName, summary, selectedSkus, sourcePreviewDigest: digest, ...(merchandising ? { merchandising } : {}) },
         savedDraft?.revision ?? 0,
         LOCAL_STOREFRONT_DRAFT_SCOPE,
       )
@@ -591,7 +593,7 @@ export function EcommerceProduct() {
       setStoreName(saved.storeName)
       setSummary(saved.summary)
       setSelectedSkus(saved.selectedSkus)
-      setMerchandising(null)
+      setMerchandising(cloneMerchandising(saved.merchandising))
       setMissingSelectionReviewed(false)
       setBuyingCart([])
       setDraftNotice(`Storefront saved on this device as revision ${saved.revision}.`)
@@ -619,8 +621,9 @@ export function EcommerceProduct() {
         setDraftNotice(error instanceof Error ? error.message : 'The managed storefront was not confirmed. Current edits were kept.')
       } else {
         const latest = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE)
-        setSavedDraft(savedLocalDraft(latest.draft))
-        setMerchandising(null)
+        const latestDraft = savedLocalDraft(latest.draft)
+        setSavedDraft(latestDraft)
+        setMerchandising(cloneMerchandising(latestDraft?.merchandising))
         setDraftReadStatus(latest.status)
         setDraftIssue(latest.error)
         setDraftNotice(error instanceof Error ? error.message : 'Storefront setup was not saved.')

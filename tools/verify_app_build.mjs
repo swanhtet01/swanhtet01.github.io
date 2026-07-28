@@ -1729,13 +1729,15 @@ if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !clientOnboardingUiSource.includes('workspace.trim() && owner.trim()')
   || !clientOnboardingUiSource.includes('Download prepared file')
   || !clientOnboardingUiSource.includes('canApplyLocalImport')
-  || !clientOnboardingUiSource.includes("product === 'commerce' || product === 'production' || product === 'website'")
+  || !clientOnboardingUiSource.includes('const localActivationAvailable = !managedIdentity')
   || !clientOnboardingUiSource.includes('importCommerceCatalog(current')
   || !clientOnboardingUiSource.includes('importProductionJobs(current')
   || !clientOnboardingUiSource.includes('activateLocalWebsitePageDrafts({')
+  || !clientOnboardingUiSource.includes('activateLocalEcommerceMerchandising({')
   || !clientOnboardingUiSource.includes("approve adding them to this browser's {productName} demo")
   || !clientOnboardingUiSource.includes("'pages to Website'")
   || !clientOnboardingUiSource.includes("'page drafts in the Website editor'")
+  || !clientOnboardingUiSource.includes("'reviewed merchandising in the customer storefront'")
   || !clientOnboardingUiSource.includes('Your source CSV was not retained or sent to AI.')
   || !clientOnboardingUiSource.includes('nothing is written until you confirm the import')
   || !clientOnboardingUiSource.includes('productRef.current !== expectedProduct')
@@ -4023,7 +4025,10 @@ async function verifyManagedClientImportRuntime() {
       ecommercePackageDigest,
     ) === ecommerceReceipt, 'managed_client_import_ecommerce_receipt_rejected')
     const priorCommerceBase = {
-      ...importedState,
+      ...commerceWorkspace.createSeedCommerce(),
+      orders: [],
+      movements: [],
+      closes: [],
       catalogBaselines: [],
       catalogChanges: [],
       websiteIntakes: [],
@@ -6597,6 +6602,8 @@ async function verifyStorefrontDraftRuntime() {
   }
   try {
     const draftModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-draft.ts')).href}?storefront-draft=${Date.now()}`)
+    const localMerchandisingImport = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'local-merchandising-import.ts')).href}?local-merchandising=${Date.now()}`)
+    const commerceModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?local-merchandising-commerce=${Date.now()}`)
     const values = new Map()
     const storage = {
       getItem: (key) => values.get(key) ?? null,
@@ -6789,6 +6796,63 @@ async function verifyStorefrontDraftRuntime() {
       removeItem: storage.removeItem,
     })
     assert(unavailable.status === 'unavailable' && unavailable.draft === null, 'storefront_draft_unreadable_storage_not_reported')
+
+    const importValues = new Map()
+    const importStorage = {
+      getItem: (key) => importValues.get(key) ?? null,
+      setItem: (key, value) => importValues.set(key, String(value)),
+      removeItem: (key) => importValues.delete(key),
+    }
+    const merchandisingRows = [
+      { sku: 'SM-1003', featured: false, collection: 'Home care', displayName: 'Household refill', note: 'Confirm local availability.' },
+      { sku: 'SM-1001', featured: true, collection: 'Best sellers', displayName: 'Daily essentials basket', note: 'Lead with everyday value.' },
+    ]
+    const localImport = await localMerchandisingImport.activateLocalEcommerceMerchandising({
+      storeName: 'Example Storefront',
+      rows: merchandisingRows,
+      sourceDigest: previewDigestA,
+    }, {
+      catalog: commerceModel.createSeedCommerce().items,
+      storage: importStorage,
+      locks,
+      now: () => '2026-07-24T10:06:30.000Z',
+    })
+    const importedDraft = draftModel.readStorefrontDraft(localScope, importStorage).draft
+    assert(localImport.created === 2
+      && localImport.alreadyPresent === 0
+      && localImport.revision === 1
+      && importedDraft?.merchandising?.map((row) => row.sku).join(',') === 'SM-1001,SM-1003'
+      && importedDraft?.sourcePreviewDigest.startsWith('sha256:'),
+    'local_ecommerce_merchandising_import_not_persisted')
+    const importReplay = await localMerchandisingImport.activateLocalEcommerceMerchandising({
+      storeName: 'Example Storefront',
+      rows: [...merchandisingRows].reverse(),
+      sourceDigest: previewDigestA,
+    }, {
+      catalog: commerceModel.createSeedCommerce().items,
+      storage: importStorage,
+      locks,
+      now: () => '2026-07-24T10:06:31.000Z',
+    })
+    assert(importReplay.created === 0
+      && importReplay.alreadyPresent === 2
+      && importReplay.revision === 1,
+    'local_ecommerce_merchandising_exact_replay_advanced_revision')
+    const beforeImportConflict = importValues.get(localKey)
+    let importConflictRejected = false
+    try {
+      await localMerchandisingImport.activateLocalEcommerceMerchandising({
+        storeName: 'Example Storefront',
+        rows: [{ sku: 'SM-1002', featured: true, collection: 'Pickup', displayName: 'Cold drink pack', note: '' }],
+        sourceDigest: previewDigestB,
+      }, {
+        catalog: commerceModel.createSeedCommerce().items,
+        storage: importStorage,
+        locks,
+        now: () => '2026-07-24T10:06:32.000Z',
+      })
+    } catch { importConflictRejected = true }
+    assert(importConflictRejected && importValues.get(localKey) === beforeImportConflict, 'local_ecommerce_merchandising_conflict_changed_draft')
 
     values.clear()
     lockRequests = 0

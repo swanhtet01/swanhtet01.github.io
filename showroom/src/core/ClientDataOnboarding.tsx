@@ -13,13 +13,17 @@ import {
   type ClientDemoProductProgress,
   type ClientSolutionId,
 } from './client-onboarding'
-import { importCommerceCatalog, mutateCommerceWorkspace, type CommerceCatalogImportResult, type CommerceItem } from './commerce-workspace'
+import { importCommerceCatalog, mutateCommerceWorkspace, type CommerceCatalogImportResult, type CommerceItem, type CommerceStorefrontMerchandising } from './commerce-workspace'
 import { importProductionJobs, mutateProductionWorkspace, type ProductionJob, type ProductionJobsImportResult } from './production-workspace'
 import {
   activateLocalWebsitePageDrafts,
   type WebsitePageDraftsImportResult,
   type WebsitePageImportDraft,
 } from '../products/website/website-model'
+import {
+  activateLocalEcommerceMerchandising,
+  type LocalEcommerceMerchandisingImport,
+} from '../products/ecommerce/local-merchandising-import'
 import {
   ManagedTrialError,
   applyManagedClientImport,
@@ -62,7 +66,7 @@ type AppliedImport = {
 }
 
 type LocalAppliedImport = {
-  product: 'commerce' | 'production' | 'website'
+  product: 'commerce' | 'production' | 'website' | 'ecommerce'
   contextKey: string
   created: number
   alreadyPresent: number
@@ -201,11 +205,11 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     && state.localApplied.product === product
     && state.localApplied.contextKey === currentValidationContext,
   )
-  const localActivationAvailable = !managedIdentity && (product === 'commerce' || product === 'production' || product === 'website')
-  const localRecordLabel = product === 'commerce' ? 'Shop items' : product === 'production' ? 'Plant jobs' : 'Website pages'
-  const localActionLabel = product === 'commerce' ? 'items to Shop' : product === 'production' ? 'jobs to Plant' : 'pages to Website'
-  const localUseLabel = product === 'commerce' ? 'catalog in a real sale' : product === 'production' ? 'jobs in production control' : 'page drafts in the Website editor'
-  const localOpenPath = product === 'commerce' ? '/shop/?tab=counter' : product === 'production' ? '/plant/?tab=production' : '/website/'
+  const localActivationAvailable = !managedIdentity
+  const localRecordLabel = product === 'commerce' ? 'Shop items' : product === 'production' ? 'Plant jobs' : product === 'website' ? 'Website pages' : 'Ecommerce display rows'
+  const localActionLabel = product === 'commerce' ? 'items to Shop' : product === 'production' ? 'jobs to Plant' : product === 'website' ? 'pages to Website' : 'display rows to Ecommerce'
+  const localUseLabel = product === 'commerce' ? 'catalog in a real sale' : product === 'production' ? 'jobs in production control' : product === 'website' ? 'page drafts in the Website editor' : 'reviewed merchandising in the customer storefront'
+  const localOpenPath = product === 'commerce' ? '/shop/?tab=counter' : product === 'production' ? '/plant/?tab=production' : product === 'website' ? '/website/' : '/ecommerce/'
   const visibleRows = state.preview
     ? [
         ...state.preview.rows.filter((row) => row.status !== 'ready'),
@@ -300,7 +304,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         : state.preview.readyForStaging
           ? managedIdentity
             ? 'The file is clean. Check it with the workspace, then confirm the final import.'
-            : 'The file is clean. Download the prepared import file or connect a managed workspace.'
+            : `The file is clean. Review it once, then confirm it into this browser's ${productName} demo.`
           : 'Fix the highlighted rows before this can become a managed import.'
       : `Drop in a CSV or try the sample. SuperMega reads, maps, and checks ${object.label.toLowerCase()} before any write.`
   const missingRequiredColumns = state.preview
@@ -548,7 +552,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     const expectedContextKey = currentValidationContext
     const expectedPreviewDigest = state.preview.previewDigest
     const expectedProduct = product
-    const expectedLocalProduct: LocalAppliedImport['product'] = product === 'commerce' ? 'commerce' : product === 'production' ? 'production' : 'website'
+    const expectedLocalProduct: LocalAppliedImport['product'] = product
     const expectedWorkflowTemplateId = workflowTemplateId
     const expectedWorkspace = workspace
     const expectedOwner = owner
@@ -566,7 +570,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     setState((current) => ({ ...current, applying: true, localApplied: null, error: '' }))
     try {
       const capturedAt = new Date().toISOString()
-      let activation: CommerceCatalogImportResult | ProductionJobsImportResult | WebsitePageDraftsImportResult | null = null
+      let activation: CommerceCatalogImportResult | ProductionJobsImportResult | WebsitePageDraftsImportResult | LocalEcommerceMerchandisingImport | null = null
       let mutationOk = false
       let mutationError = ''
       if (expectedLocalProduct === 'commerce') {
@@ -610,7 +614,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         })
         mutationOk = result.ok
         mutationError = result.ok ? '' : result.error
-      } else {
+      } else if (expectedLocalProduct === 'website') {
         const pages: WebsitePageImportDraft[] = stagingPackage.rows.map((row) => ({
           slug: row.values.slug,
           title: row.values.title,
@@ -627,10 +631,24 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         activation = result.ok ? result.import : null
         mutationOk = result.ok
         mutationError = result.ok ? '' : result.error
+      } else {
+        const rows: CommerceStorefrontMerchandising[] = stagingPackage.rows.map((row) => ({
+          sku: row.values.sku,
+          featured: row.values.featured === 'true',
+          collection: row.values.collection,
+          displayName: row.values.displayName,
+          note: row.values.note,
+        }))
+        activation = await activateLocalEcommerceMerchandising({
+          storeName: expectedWorkspace.trim(),
+          rows,
+          sourceDigest: expectedPreviewDigest,
+        })
+        mutationOk = true
       }
       if (contextChanged()) return
       if (!mutationOk || !activation) throw new Error(mutationOk ? `The ${productName} import could not be confirmed.` : mutationError)
-      const confirmed = activation as CommerceCatalogImportResult | ProductionJobsImportResult | WebsitePageDraftsImportResult
+      const confirmed = activation as CommerceCatalogImportResult | ProductionJobsImportResult | WebsitePageDraftsImportResult | LocalEcommerceMerchandisingImport
       setState((current) => current.preview?.previewDigest === expectedPreviewDigest
         ? {
             ...current,
