@@ -278,6 +278,20 @@ test('accepted CEO outcomes per work unit require complete evaluation, valid usa
     completedAt: '2026-07-15T01:00:00.000Z',
     usage: operatorUsage({ weightedTotalUnits: 30 }),
   }), state.options)
+  await recordCeoOutcomeDeliveryResult({
+    clientId: 'client-acme',
+    operationId: first.outcome.operationId,
+    recordHash: first.outcome.recordHash,
+    deliveryClaimId: `workcell:${'d'.repeat(40)}`,
+    status: 'sent',
+  }, state.options)
+  await recordCeoOutcomeDeliveryResult({
+    clientId: 'client-acme',
+    operationId: second.outcome.operationId,
+    recordHash: second.outcome.recordHash,
+    deliveryClaimId: `workcell:${'e'.repeat(40)}`,
+    status: 'sent',
+  }, state.options)
   await evaluateCeoOutcomeDelivery({
     clientId: 'client-acme',
     operationId: first.outcome.operationId,
@@ -291,9 +305,16 @@ test('accepted CEO outcomes per work unit require complete evaluation, valid usa
       .filter(([key]) => key.startsWith('ceo-outcome-operation:'))
       .map(([key, payload]) => ({ key, payload: structuredClone(payload) })),
   })
+  const listCeoOutcomeDeliveryRecords = async () => ({
+    durable: true,
+    records: [...state.cache.entries()]
+      .filter(([key]) => key.startsWith('ceo-outcome-delivery:'))
+      .map(([key, payload]) => ({ key, payload: structuredClone(payload) })),
+  })
   const reportOptions = {
     listCompanyWorkOrders: async () => ({ ok: true, workOrders: [] }),
     listCeoOutcomeRecords,
+    listCeoOutcomeDeliveryRecords,
     getCeoOutcomeEvaluation: state.options.getCeoOutcomeEvaluation,
     now: () => '2026-07-16T02:00:00.000Z',
   }
@@ -324,7 +345,13 @@ test('accepted CEO outcomes per work unit require complete evaluation, valid usa
   assert.equal(measured.outcomes.efficiency.available, true)
   assert.equal(measured.outcomes.efficiency.acceptedOutcomesPer1000WorkUnits, 13.333333)
   assert.equal(measured.outcomes.efficiency.workUnitsPerAcceptedOutcome, 75)
+  assert.deepEqual(measured.outcomes.delivery.counts, { completed: 2, recorded: 2, sent: 2, failed: 0, uncertain: 0, missing: 0 })
+  assert.equal(measured.outcomes.delivery.state, 'ready')
+  assert.equal(measured.attention.deliveryFailed, 0)
+  assert.equal(measured.attention.deliveryUncertain, 0)
+  assert.equal(measured.attention.deliveryMissing, 0)
   assert.equal(measured.exposure.ceoBriefTextReturned, false)
+  assert.equal(measured.exposure.ceoDeliveryContentReturned, false)
   assert.equal(measured.exposure.providerRowsReturned, false)
   assert.equal(JSON.stringify(measured.outcomes).includes('private-provider'), false)
 
@@ -356,6 +383,81 @@ test('accepted CEO outcomes per work unit require complete evaluation, valid usa
   assert.equal(invalidCoverage.outcomes.coverage.invalidRecords, 2)
   assert.equal(invalidCoverage.outcomes.efficiency.available, false)
   assert.equal(JSON.stringify(invalidCoverage.outcomes).includes('private-'), false)
+})
+
+test('CEO delivery coverage surfaces failed, uncertain, missing, non-durable, and invalid receipts without content', async () => {
+  const state = ceoOutcomeHarness()
+  const statuses = ['failed', 'uncertain', 'sent']
+  const completed = []
+  for (let index = 0; index < statuses.length; index += 1) {
+    const operation = await recordCeoOutcomeCompletion(ceoOutcomeInput({
+      completedAt: `2026-07-${14 + index}T01:00:00.000Z`,
+      usage: operatorUsage({ weightedTotalUnits: 40 + index }),
+    }), state.options)
+    completed.push(operation)
+    await recordCeoOutcomeDeliveryResult({
+      clientId: 'client-acme',
+      operationId: operation.outcome.operationId,
+      recordHash: operation.outcome.recordHash,
+      deliveryClaimId: `workcell:${String.fromCharCode(100 + index).repeat(40)}`,
+      status: statuses[index],
+    }, state.options)
+  }
+  const operationRows = [...state.cache.entries()]
+    .filter(([key]) => key.startsWith('ceo-outcome-operation:'))
+    .map(([key, payload]) => ({ key, payload: structuredClone(payload) }))
+  const deliveryRows = [...state.cache.entries()]
+    .filter(([key]) => key.startsWith('ceo-outcome-delivery:'))
+    .map(([key, payload]) => ({ key, payload: structuredClone(payload) }))
+  const options = {
+    listCompanyWorkOrders: async () => ({ ok: true, workOrders: [] }),
+    listCeoOutcomeRecords: async () => ({ durable: true, records: operationRows.slice(0, 2) }),
+    listCeoOutcomeDeliveryRecords: async () => ({ durable: true, records: deliveryRows.slice(0, 2) }),
+    now: () => '2026-07-16T02:00:00.000Z',
+  }
+
+  const attention = await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 30 }, options)
+  assert.equal(attention.outcomes.delivery.state, 'attention')
+  assert.deepEqual(attention.outcomes.delivery.counts, { completed: 2, recorded: 2, sent: 0, failed: 1, uncertain: 1, missing: 0 })
+  assert.equal(attention.attention.deliveryFailed, 1)
+  assert.equal(attention.attention.deliveryUncertain, 1)
+
+  const missing = await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 30 }, {
+    ...options,
+    listCeoOutcomeDeliveryRecords: async () => ({ durable: true, records: deliveryRows.slice(0, 1) }),
+  })
+  assert.equal(missing.outcomes.delivery.state, 'missing')
+  assert.equal(missing.outcomes.delivery.counts.missing, 1)
+  assert.equal(missing.attention.deliveryMissing, 1)
+
+  const nonDurable = await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 30 }, {
+    ...options,
+    listCeoOutcomeDeliveryRecords: async () => ({ durable: false, records: deliveryRows.slice(0, 2) }),
+  })
+  assert.equal(nonDurable.outcomes.delivery.state, 'non_durable')
+
+  const tampered = structuredClone(deliveryRows[0])
+  tampered.payload.briefText = 'private delivery content'
+  const invalid = await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 30 }, {
+    ...options,
+    listCeoOutcomeDeliveryRecords: async () => ({
+      durable: true,
+      records: [...deliveryRows.slice(0, 2), structuredClone(deliveryRows[0]), tampered, deliveryRows[2]],
+    }),
+  })
+  assert.equal(invalid.outcomes.delivery.state, 'invalid_coverage')
+  assert.equal(invalid.outcomes.delivery.coverage.duplicateRecords, 1)
+  assert.equal(invalid.outcomes.delivery.coverage.invalidRecords, 1)
+  assert.equal(invalid.outcomes.delivery.coverage.orphanRecords, 1)
+  assert.doesNotMatch(JSON.stringify(invalid.outcomes.delivery), /private|operationId|deliveryId|claim/i)
+
+  const unavailable = await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 30 }, {
+    ...options,
+    listCeoOutcomeDeliveryRecords: async () => { throw new Error('private store failure') },
+  })
+  assert.equal(unavailable.outcomes.delivery.state, 'store_unavailable')
+  assert.equal(unavailable.outcomes.delivery.counts.missing, 2)
+  assert.doesNotMatch(JSON.stringify(unavailable.outcomes.delivery), /private store failure/)
 })
 
 test('operations report remains usable when CEO outcome metadata storage is unavailable', async () => {

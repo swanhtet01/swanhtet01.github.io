@@ -265,7 +265,7 @@ function validateCeoOutcomeEvaluation(value, operation) {
   return sameHash(value.evaluationHash, sha256(stableStringify(payload))) ? { ...payload, evaluationHash: value.evaluationHash } : null
 }
 
-function validateCeoOutcomeDelivery(value, operation = null) {
+function validateCeoOutcomeDelivery(value, operation = null, expectedKey = '') {
   if (!isRecord(value) || Object.keys(value).some((field) => !CEO_OUTCOME_DELIVERY_FIELDS.has(field))) return null
   if (value.contract !== CEO_OUTCOME_DELIVERY_CONTRACT
     || !CEO_DELIVERY_ID_RE.test(String(value.deliveryId || ''))
@@ -277,7 +277,8 @@ function validateCeoOutcomeDelivery(value, operation = null) {
     || !CEO_DELIVERY_STATUSES.has(value.status)
     || !exactIso(value.recordedAt)
     || !HASH_RE.test(String(value.deliveryHash || ''))
-    || value.deliveryId !== ceoDeliveryKey(value.operationId)) return null
+    || value.deliveryId !== ceoDeliveryKey(value.operationId)
+    || (expectedKey && expectedKey !== value.deliveryId)) return null
   if (operation && (value.operationId !== operation.operationId
     || value.clientId !== operation.clientId
     || value.outcomeId !== operation.outcomeId
@@ -1148,6 +1149,7 @@ function unavailableCeoOutcomeOperations(reason) {
       acceptedOutcomesPer1000WorkUnits: null,
       workUnitsPerAcceptedOutcome: null,
     },
+    delivery: unavailableCeoOutcomeDelivery(reason),
     coverage: {
       listedRecords: 0,
       includedRecords: 0,
@@ -1161,6 +1163,109 @@ function unavailableCeoOutcomeOperations(reason) {
       capped: false,
     },
     records: [],
+  }
+}
+
+function unavailableCeoOutcomeDelivery(reason, completed = 0) {
+  return {
+    contract: CEO_OUTCOME_DELIVERY_CONTRACT,
+    available: false,
+    durable: false,
+    state: reason,
+    counts: { completed, recorded: 0, sent: 0, failed: 0, uncertain: 0, missing: completed },
+    coverage: {
+      listedRecords: 0,
+      includedRecords: 0,
+      invalidRecords: 0,
+      duplicateRecords: 0,
+      orphanRecords: 0,
+      outOfWindowRecords: 0,
+      capped: false,
+    },
+  }
+}
+
+async function buildCeoOutcomeDelivery(records, knownOperationIds, clientId, options = {}) {
+  if (!records.length) {
+    return {
+      ...unavailableCeoOutcomeDelivery('no_outcomes'),
+      available: true,
+      durable: true,
+      state: 'no_outcomes',
+    }
+  }
+  const listDeliveries = options.listCeoOutcomeDeliveryRecords || listCachedResponseRecords
+  let listed
+  try {
+    listed = await listDeliveries({
+      prefix: CEO_OUTCOME_DELIVERY_PREFIX,
+      clientId,
+      limit: MAX_CEO_OUTCOME_RECORDS,
+    })
+  } catch {
+    return unavailableCeoOutcomeDelivery('store_unavailable', records.length)
+  }
+  if (!listed || !Array.isArray(listed.records)) {
+    return unavailableCeoOutcomeDelivery('store_unavailable', records.length)
+  }
+
+  const includedOperations = new Map(records.map((record) => [record.operationId, record]))
+  const deliveries = new Map()
+  let invalidRecords = 0
+  let duplicateRecords = 0
+  let orphanRecords = 0
+  let outOfWindowRecords = 0
+  for (const entry of listed.records) {
+    const key = String(entry?.key || '')
+    const delivery = validateCeoOutcomeDelivery(entry?.payload, null, key)
+    if (!delivery || delivery.clientId !== clientId) {
+      invalidRecords += 1
+      continue
+    }
+    const operation = includedOperations.get(delivery.operationId)
+    if (!operation) {
+      if (knownOperationIds.has(delivery.operationId)) outOfWindowRecords += 1
+      else orphanRecords += 1
+      continue
+    }
+    if (!validateCeoOutcomeDelivery(delivery, operation, key)) {
+      invalidRecords += 1
+      continue
+    }
+    if (deliveries.has(delivery.operationId)) {
+      duplicateRecords += 1
+      continue
+    }
+    deliveries.set(delivery.operationId, delivery)
+  }
+
+  const values = [...deliveries.values()]
+  const sent = values.filter((delivery) => delivery.status === 'sent').length
+  const failed = values.filter((delivery) => delivery.status === 'failed').length
+  const uncertain = values.filter((delivery) => delivery.status === 'uncertain').length
+  const missing = records.length - values.length
+  const capped = listed.records.length >= MAX_CEO_OUTCOME_RECORDS
+  const invalidCoverage = invalidRecords + duplicateRecords + orphanRecords > 0 || capped
+  let state = 'ready'
+  if (invalidCoverage) state = 'invalid_coverage'
+  else if (listed.durable !== true) state = 'non_durable'
+  else if (missing > 0) state = 'missing'
+  else if (failed + uncertain > 0) state = 'attention'
+  return {
+    contract: CEO_OUTCOME_DELIVERY_CONTRACT,
+    available: true,
+    durable: listed.durable === true,
+    state,
+    counts: { completed: records.length, recorded: values.length, sent, failed, uncertain, missing },
+    coverage: {
+      listedRecords: listed.records.length,
+      includedRecords: values.length,
+      invalidRecords,
+      duplicateRecords,
+      orphanRecords,
+      outOfWindowRecords,
+      capped,
+    },
   }
 }
 
@@ -1215,6 +1320,7 @@ async function buildCeoOutcomeOperations(clientId, cutoff, nowMs, options = {}) 
     })
   }
   records.sort((left, right) => right.completedAt.localeCompare(left.completedAt) || left.operationId.localeCompare(right.operationId))
+  const delivery = await buildCeoOutcomeDelivery(records, seen, clientId, options)
 
   const evaluated = records.filter((record) => record.evaluation)
   const accepted = evaluated.filter((record) => record.evaluation.verdict === 'accepted').length
@@ -1264,6 +1370,7 @@ async function buildCeoOutcomeOperations(clientId, cutoff, nowMs, options = {}) 
       acceptedOutcomesPer1000WorkUnits,
       workUnitsPerAcceptedOutcome,
     },
+    delivery,
     coverage: {
       listedRecords: listed.records.length,
       includedRecords: records.length,
@@ -1369,6 +1476,9 @@ export async function buildCompanyOperationsReport(input, options = {}) {
       failedOrBlocked: counts.failed + counts.blocked,
       revisionRequired: counts.revisionRequired,
       missingEvaluation: counts.missingEvaluation,
+      deliveryFailed: outcomes.delivery.counts.failed,
+      deliveryUncertain: outcomes.delivery.counts.uncertain,
+      deliveryMissing: outcomes.delivery.counts.missing,
     },
     coverage: {
       scope: 'durable_work_orders_only',
@@ -1388,6 +1498,7 @@ export async function buildCompanyOperationsReport(input, options = {}) {
       currencyCostClaimed: false,
       ceoBriefTextReturned: false,
       providerRowsReturned: false,
+      ceoDeliveryContentReturned: false,
     },
     orders,
   }

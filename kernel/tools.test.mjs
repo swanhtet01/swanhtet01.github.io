@@ -90,7 +90,7 @@ test('company operations status exposes measured control metadata and strips wor
     windowDays: 30,
     readiness: 'meeting_targets',
     counts: { total: 5, planned: 0, running: 0, cancelled: 0, terminal: 5, completed: 5, partial: 0, blocked: 0, failed: 0, evaluated: 5, accepted: 5, revisionRequired: 0, missingEvaluation: 0 },
-    attention: { overduePlanned: 0, overdueRunning: 0, failedOrBlocked: 0, revisionRequired: 0, missingEvaluation: 0 },
+    attention: { overduePlanned: 0, overdueRunning: 0, failedOrBlocked: 0, revisionRequired: 0, missingEvaluation: 0, deliveryFailed: 0, deliveryUncertain: 0, deliveryMissing: 0 },
     targets: Array.from({ length: 8 }, (_, index) => ({ id: `private-target-${index}`, state: 'met' })),
     workforce: { availableAgents: 12, utilizedAgents: 2, totalAssignments: 5, activeAssignments: 0, usedRoleCalls: 15, modelCalls: 3, cacheHits: 2, weightedTotalUnits: 1200, agents: [{ agentId: 'must-not-escape-agent' }] },
     outcomes: {
@@ -99,10 +99,17 @@ test('company operations status exposes measured control metadata and strips wor
       state: 'measured',
       counts: { completed: 5, evaluated: 5, accepted: 5, revisionRequired: 0 },
       efficiency: { available: true, acceptedOutcomesPer1000WorkUnits: 4.166667 },
+      delivery: {
+        available: true,
+        durable: true,
+        state: 'ready',
+        counts: { completed: 5, recorded: 5, sent: 5, failed: 0, uncertain: 0, missing: 0 },
+        records: [{ deliveryId: 'must-not-escape-delivery', briefText: 'must-not-escape-delivery-output' }],
+      },
       records: [{ briefText: 'must-not-escape-output' }],
     },
     coverage: { directCyclesExcluded: true },
-    exposure: { rawEvidenceReturned: false, modelOutputReturned: false, specialistOutputReturned: false, providerRowsReturned: false },
+    exposure: { rawEvidenceReturned: false, modelOutputReturned: false, specialistOutputReturned: false, providerRowsReturned: false, ceoDeliveryContentReturned: false },
     provider: 'must-not-escape-provider',
   }
   const ready = companyOperationsStatusView(report, 30)
@@ -112,8 +119,37 @@ test('company operations status exposes measured control metadata and strips wor
   assert.equal(ready.workforce.availableAgents, 12)
   assert.equal(ready.workforce.utilizedAgents, 2)
   assert.equal(ready.outcomes.efficiencyAvailable, true)
+  assert.equal(ready.delivery.state, 'ready')
+  assert.equal(ready.delivery.sent, 5)
+  assert.equal(ready.attention.deliveryFailed, 0)
   assert.equal(ready.controls.metadataOnly, true)
-  assert.doesNotMatch(JSON.stringify(ready), /must-not-escape|"clientId"|"agentId"|"briefText"/i)
+  assert.doesNotMatch(JSON.stringify(ready), /must-not-escape|"clientId"|"agentId"|"briefText"|"deliveryId"/i)
+
+  for (const [state, counts] of [
+    ['attention', { completed: 5, recorded: 5, sent: 4, failed: 1, uncertain: 0, missing: 0 }],
+    ['attention', { completed: 5, recorded: 5, sent: 4, failed: 0, uncertain: 1, missing: 0 }],
+    ['missing', { completed: 5, recorded: 4, sent: 4, failed: 0, uncertain: 0, missing: 1 }],
+  ]) {
+    const deliveryAttention = companyOperationsStatusView({
+      ...report,
+      attention: {
+        ...report.attention,
+        deliveryFailed: counts.failed,
+        deliveryUncertain: counts.uncertain,
+        deliveryMissing: counts.missing,
+      },
+      outcomes: { ...report.outcomes, delivery: { ...report.outcomes.delivery, state, counts } },
+    }, 30)
+    assert.equal(deliveryAttention.status, 'attention')
+    assert.equal(deliveryAttention.delivery.state, state)
+  }
+
+  const nonDurableDelivery = companyOperationsStatusView({
+    ...report,
+    outcomes: { ...report.outcomes, delivery: { ...report.outcomes.delivery, durable: false, state: 'non_durable' } },
+  }, 30)
+  assert.equal(nonDurableDelivery.status, 'attention')
+  assert.equal(nonDurableDelivery.delivery.durable, false)
 
   const malformed = companyOperationsStatusView({
     ...report,
