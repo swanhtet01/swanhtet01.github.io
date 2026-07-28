@@ -948,6 +948,20 @@ export function EcommerceProduct() {
     ['Payment', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} review` : 'Not charged'],
     ['Handoff', pendingManagedRequests.length ? 'Shop owns writes' : buyingReady ? 'Ready for quote' : 'Setup first'],
   ] as const
+  const orderImportStage = importNeeded
+    ? 'Upload catalog first'
+    : pendingManagedRequests.length
+      ? 'Review imported orders'
+      : buyingReady
+        ? 'Ready for order upload'
+        : 'Save storefront first'
+  const orderImportRows = [
+    ['Input', catalog.source === 'managed-shop' ? 'Managed catalog' : catalog.source === 'shop-local' ? 'Local catalog' : 'Sample/import'],
+    ['Bulk', importNeeded ? 'Need products' : 'CSV or messages'],
+    ['Mapping', selectedSkus.length ? `${selectedSkus.length} SKUs` : 'No SKUs'],
+    ['Queue', pendingManagedRequests.length ? `${pendingManagedRequests.length} review` : 'No pending'],
+    ['Boundary', 'No auto submit'],
+  ] as const
   const lifecycleRows = [
     ['Capture', pendingManagedRequests.length ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'}` : buyingCart.length ? `${buyingCart.length} cart lines` : 'Ready'],
     ['Price', buyingReady ? 'Quote controlled' : 'Save store first'],
@@ -1318,6 +1332,18 @@ export function EcommerceProduct() {
               recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'ecommerce', route: location.pathname + location.search, detail: aiAgentJob })
               finishStorefrontSetup()
             }} type="button">Finish setup</button>}
+      </section>
+
+      <section aria-label="Order import autopilot" className="ecommerce-ops-cockpit ecommerce-order-import-cockpit">
+        <div>
+          <span className="core-eyebrow">Order import autopilot</span>
+          <h2>{orderImportStage}</h2>
+          <p>AI prepares CSV, Viber, LINE, WeChat, email, and form order batches against the saved Shop catalog so owners review one clean Shop queue. No customer message, payment, delivery booking, stock move, refund, or Shop write runs from this importer.</p>
+          <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {orderImportRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
       </section>
 
       <section aria-label="Ecommerce request inbox" className="ecommerce-ops-cockpit ecommerce-request-inbox-cockpit">

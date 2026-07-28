@@ -182,6 +182,11 @@
   background: #f4fbf8;
 }
 
+.ecommerce-order-import-cockpit {
+  border-color: rgba(70, 85, 165, .18);
+  background: #f7f8ff;
+}
+
 .ecommerce-request-filter {
   display: flex;
   flex-wrap: wrap;
