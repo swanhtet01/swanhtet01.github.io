@@ -6,6 +6,7 @@ type ActivationRuntime = {
   auditReady: boolean
   writesReady: boolean
   requirements: string[]
+  activationSteps: Array<{ id: string; label: string; ready: boolean; action: string }>
 }
 
 type ManagedActivationRunbookProps = {
@@ -14,7 +15,7 @@ type ManagedActivationRunbookProps = {
 
 export function ManagedActivationRunbook({ runtime }: ManagedActivationRunbookProps) {
   const hasRequirement = (text: string) => runtime.requirements.some((requirement) => requirement.toLowerCase().includes(text))
-  const activationLabels = [
+  const fallbackSteps = [
     ['Database', runtime.enterpriseDbReady && !hasRequirement('postgres'), 'Provision non-BYPASSRLS Postgres.'],
     ['Role', runtime.status === 'enterprise' || (runtime.enterpriseDbReady && !hasRequirement('login')), 'Use a dedicated trial backend login.'],
     ['Schema', runtime.status === 'enterprise' || (runtime.enterpriseDbReady && !hasRequirement('schema')), 'Apply private trial migrations.'],
@@ -22,10 +23,13 @@ export function ManagedActivationRunbook({ runtime }: ManagedActivationRunbookPr
     ['Audit', runtime.auditReady, 'Verify immutable event inserts.'],
     ['Writes', runtime.writesReady, 'Enable writes after acceptance tests.'],
   ] as const
-  const blockers = activationLabels.filter(([, ready]) => !ready)
-  const readyCount = activationLabels.length - blockers.length
+  const activationSteps = runtime.activationSteps.length
+    ? runtime.activationSteps.map((step) => [step.label, step.ready, step.action] as const)
+    : fallbackSteps
+  const blockers = activationSteps.filter(([, ready]) => !ready)
+  const readyCount = activationSteps.length - blockers.length
   const next = blockers[0]
-  const percent = Math.round((readyCount / activationLabels.length) * 100)
+  const percent = Math.round((readyCount / activationSteps.length) * 100)
   const nextRequirement = runtime.requirements[0] ?? next?.[2] ?? 'Managed activation is ready for workspace sign-in.'
 
   return <section aria-label="Managed activation runbook" className="activation-runbook">
@@ -34,7 +38,7 @@ export function ManagedActivationRunbook({ runtime }: ManagedActivationRunbookPr
       <span className={`status-pill ${runtime.status === 'enterprise' ? 'approved' : 'pending'}`}>{percent}% ready</span>
     </div>
     <div className="activation-runbook-steps">
-      {activationLabels.map(([label, ready, action]) => <span data-ready={ready ? 'true' : 'false'} key={label}><small>{label}</small><b>{ready ? 'Ready' : 'Needed'}</b><em>{action}</em></span>)}
+      {activationSteps.map(([label, ready, action]) => <span data-ready={ready ? 'true' : 'false'} key={label}><small>{label}</small><b>{ready ? 'Ready' : 'Needed'}</b><em>{action}</em></span>)}
     </div>
     <p className="authority-note">Mode: {runtime.operatingMode.replace('_', ' ')}. Keep client imports, AI learning, and operational writes locked until every activation gate is ready.</p>
   </section>
