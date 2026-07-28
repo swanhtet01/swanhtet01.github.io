@@ -848,6 +848,25 @@ export function WebsiteProduct() {
     ['Approval', approvalIsCurrent ? 'Recorded' : 'Needed'],
     ['Handoff', publishIsCurrent ? 'Package ready' : 'No send here'],
   ]
+  const managedRolloutNext = storageIssue || canRepairLocalStorage
+    ? 'Recover Website workspace'
+    : failingContentChecks.length
+      ? 'Fix rollout blockers'
+      : !approvalIsCurrent
+        ? 'Record approval evidence'
+        : !publishIsCurrent
+          ? 'Build static package'
+          : storageMode === 'managed'
+            ? 'Prepare managed rollout'
+            : 'Download activation packet'
+  const managedRolloutRows = [
+    ['Domain', storageMode === 'managed' ? 'Owner maps DNS' : 'Not connected'],
+    ['Forms', readyBuyerCtaPages.length ? 'Route planned' : 'Need CTA'],
+    ['Analytics', publishIsCurrent ? 'Plan ready' : 'Needs package'],
+    ['Content', failingContentChecks.length ? `${failingContentChecks.length} blocker` : 'Approved proof'],
+    ['Package', publishIsCurrent ? 'Static snapshot' : 'Needed'],
+    ['Gate', storageMode === 'managed' ? 'Owner rollout' : 'Free local only'],
+  ]
   useEffect(() => {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_seen',
@@ -1103,6 +1122,17 @@ export function WebsiteProduct() {
             </div>
             <div className="website-lead-capture-cockpit-rows">
               {websiteLeadCaptureRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            </div>
+          </section>
+
+          <section aria-label="Website managed rollout packet" className="website-rollout-packet">
+            <div>
+              <span className="website-kicker">Managed rollout packet</span>
+              <h2>{managedRolloutNext}</h2>
+              <p>AI packages domain setup, form routing, analytics plan, approved content, static snapshot, and owner rollout gate for managed activation. No DNS change, publish, form send, analytics install, CRM write, Shop write, or deployment action runs from this packet.</p>
+            </div>
+            <div className="website-rollout-packet-rows">
+              {managedRolloutRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
             </div>
           </section>
 
