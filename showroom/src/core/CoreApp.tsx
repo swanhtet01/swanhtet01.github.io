@@ -5175,6 +5175,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Handoff', shiftHandoffIsCurrent ? 'Ready' : 'Build'],
     ['Write gate', productionCanWrite && !pendingAction ? 'Ready' : 'Locked'],
   ] as const
+  const plantLifecycleRows = [
+    ['Plan', activeJobs.length ? `${activeJobs.length} active` : 'Add job'],
+    ['Execute', activeJobs[0] ? `${activeJobs[0].id} next` : 'No active job'],
+    ['Quality', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
+    ['WCM', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
+    ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'No trace'],
+    ['Handoff', shiftHandoffIsCurrent ? 'Ready' : 'Build'],
+  ] as const
   const plantControlBoundary = 'Owner confirms every production, quality, WCM, maintenance, material, and shift-handoff write before Plant changes.'
 
   useEffect(() => {
@@ -5829,12 +5837,17 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div><span className="core-eyebrow">Plant control</span><strong>{plantControlNext}</strong><small>{plantControlBoundary}</small></div>
     <div className="plant-control-rows">{plantControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
+  const plantLifecycle = <section aria-label="Plant lifecycle control" className="plant-control">
+    <div><span className="core-eyebrow">MES lifecycle</span><strong>Plan to handoff</strong><small>AI guides plan, execution, quality, WCM, traceability, and handoff from one Plant record. No equipment command or production write runs without owner approval.</small></div>
+    <div className="plant-control-rows">{plantLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
 
   if (tab === 'production') return <div className="operation-module">
     {productionBoundary}
     {plantStatus}
     {plantAgentQueue}
     {plantControl}
+    {plantLifecycle}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
@@ -5920,6 +5933,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {plantStatus}
     {plantAgentQueue}
     {plantControl}
+    {plantLifecycle}
     <div className="control-workspace">
       <div className="split-workspace">
         <section className="core-panel production-issue-launcher">
