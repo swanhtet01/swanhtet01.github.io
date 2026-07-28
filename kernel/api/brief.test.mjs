@@ -294,7 +294,6 @@ test('SuperMega CEO cycle selects one HQ outcome and uses its fixed evidence pla
   assert.deepEqual(operatorInputs[0].approvedPlan.map((step) => step.tool), [
     'leads_overview',
     'pipeline_overview',
-    'platform_status',
     'company_operations_status',
   ])
   assert.match(operatorInputs[0].goal, /Blocked context only - never execute/)

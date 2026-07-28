@@ -23,7 +23,7 @@ import {
 } from '../kernel/gateway.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyCompanyCycleText, packageText, storageAuditHandoff, hqLiveStateVerifier] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyCompanyCycleText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -42,6 +42,8 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'package.json'), 'utf8'),
   readFile(resolve(root, 'hq', 'pilots', 'private-storage-privacy-audit.md'), 'utf8'),
   readFile(resolve(root, 'tools', 'verify_hq_live_state.mjs'), 'utf8'),
+  readFile(resolve(root, 'kernel', 'package.json'), 'utf8'),
+  readFile(resolve(root, 'kernel', 'scripts', 'verify-function-footprint.mjs'), 'utf8'),
 ])
 
 const manifest = JSON.parse(manifestText)
@@ -171,7 +173,7 @@ requireContract('CEO outcome authority is bounded and reconciled to HQ',
   && SUPERMEGA_HQ_AUTHORITY.northStar === portfolio.northStar
   && ceoOutcomeSelection.ok === true
   && ceoOutcomeSelection.selected?.id === 'daily-company-control'
-  && ceoOutcomeSelection.selected?.evidencePlan?.map((step) => step.tool).join(',') === 'leads_overview,pipeline_overview,platform_status,company_operations_status'
+  && ceoOutcomeSelection.selected?.evidencePlan?.map((step) => step.tool).join(',') === 'leads_overview,pipeline_overview,company_operations_status'
   && SUPERMEGA_HQ_AUTHORITY.outcomes?.filter((item) => item.state === 'ready').length === 5
   && SUPERMEGA_HQ_AUTHORITY.outcomes?.filter((item) => item.state === 'ready').every((item) =>
     item.evidencePlan.length <= 4
@@ -712,6 +714,16 @@ requireContract('current company-operations evidence is recorded without adding 
   && workboard.includes('All 291 Kernel tests, 69 connectors across 993 adversarial calls, 15 crews across 214 checks')
   && now.includes('`company_operations_status` adds 30-day work, target, workforce, usage, evaluation, and accepted-outcome evidence to all five weekly briefs')
   && now.includes('daily control no longer fetches FX'))
+
+requireContract('scheduled CEO function keeps the full connector fleet deferred and budgeted',
+  kernelPackageText.includes('"function:footprint": "node scripts/verify-function-footprint.mjs"')
+  && kernelPackageText.includes('npm run function:footprint')
+  && kernelFootprintVerifier.includes("const MAX_EAGER_FILES = 30")
+  && kernelFootprintVerifier.includes('const MAX_EAGER_BYTES = 400 * 1024')
+  && kernelFootprintVerifier.includes("fullStatusNotEager: !relativeFiles.includes('api/status.mjs')")
+  && kernelFootprintVerifier.includes("connectorFleetNotEager: !relativeFiles.includes('connectors/index.mjs')")
+  && kernelFootprintVerifier.includes("statusImportIsDeferred: toolsSource.includes(\"await import('./api/status.mjs')\")")
+  && kernelFootprintVerifier.includes('connectorInventoryComplete: connectorImports === EXPECTED_CONNECTORS'))
 
 for (const forbidden of ['Yangon Tyre', 'ytf.supermega.dev', 'pos.supermega.dev', 'twelve product']) {
   requireContract(`retired HQ context absent: ${forbidden}`,

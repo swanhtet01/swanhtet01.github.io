@@ -18,11 +18,10 @@ test('HQ authority selects exactly one ready outcome after declining blocked wor
   assert.equal(result.contract, CEO_OUTCOME_AUTHORITY_CONTRACT)
   assert.equal(result.selected.id, 'daily-company-control')
   assert.equal(result.selected.actionMode, 'read_only_brief')
-  assert.equal(result.selected.evidencePlan.length, 4)
+  assert.equal(result.selected.evidencePlan.length, 3)
   assert.deepEqual(result.selected.evidencePlan.map((step) => step.tool), [
     'leads_overview',
     'pipeline_overview',
-    'platform_status',
     'company_operations_status',
   ])
   assert.deepEqual(result.skipped.map((item) => item.reason), [

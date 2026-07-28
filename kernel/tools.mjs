@@ -11,7 +11,6 @@ import pipedrive from './connectors/crm-pipedrive.mjs'
 import clickup from './connectors/data-clickup.mjs'
 import telegram from './connectors/messaging-telegram.mjs'
 import { ownerEvidenceConfigured, readOwnerEvidence } from './owner-evidence.mjs'
-import { buildStatus as buildKernelStatus } from './api/status.mjs'
 import { MAX_CYCLE_AGENTS, MAX_CYCLE_ROLE_BUDGET, MAX_REGISTERED_COMPANY_AGENTS } from './agent-company.mjs'
 import { buildCompanyOperationsReport, COMPANY_OPERATIONS_WINDOWS } from './agent-company-operations.mjs'
 
@@ -259,6 +258,7 @@ export const TOOLS = {
     input_schema: { type: 'object', properties: {}, additionalProperties: false },
     available: () => true,
     run: async () => {
+      const { buildStatus: buildKernelStatus } = await import('./api/status.mjs')
       const status = await buildKernelStatus()
       return platformStatusView(status)
     },
