@@ -419,6 +419,13 @@ test('accepted CEO outcomes per work unit require complete evaluation, valid usa
   assert.equal(measured.attention.deliveryFailed, 0)
   assert.equal(measured.attention.deliveryUncertain, 0)
   assert.equal(measured.attention.deliveryMissing, 0)
+  assert.deepEqual(measured.attentionQueue, {
+    contract: 'supermega.company-attention-queue.v1',
+    state: 'clear',
+    requiredActions: 0,
+    signals: 0,
+    items: [],
+  })
   assert.equal(measured.exposure.ceoBriefTextReturned, false)
   assert.equal(measured.exposure.ceoDeliveryContentReturned, false)
   assert.equal(measured.exposure.providerRowsReturned, false)
@@ -490,6 +497,10 @@ test('CEO delivery coverage surfaces failed, uncertain, missing, non-durable, an
   assert.deepEqual(attention.outcomes.delivery.counts, { completed: 2, recorded: 2, sent: 0, failed: 1, uncertain: 1, missing: 0 })
   assert.equal(attention.attention.deliveryFailed, 1)
   assert.equal(attention.attention.deliveryUncertain, 1)
+  assert.equal(attention.attentionQueue.state, 'action_required')
+  assert.equal(attention.attentionQueue.requiredActions, 2)
+  assert.equal(attention.attentionQueue.signals, 2)
+  assert.deepEqual(attention.attentionQueue.items.map((item) => item.id), ['delivery_uncertain', 'delivery_failed'])
 
   const missing = await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 30 }, {
     ...options,
@@ -581,6 +592,9 @@ test('operations report measures five durable accepted orders without exposing e
   assert.equal(report.targets.every((target) => target.state === 'met'), true)
   assert.equal(report.workforce.availableAgents, 12)
   assert.equal(report.workforce.utilizedAgents, 1)
+  assert.equal(report.workforce.dormantAgents, 12)
+  assert.equal(report.workforce.queuedAssignments, 0)
+  assert.equal(report.workforce.runningAssignments, 0)
   assert.equal(report.workforce.totalAssignments, 5)
   assert.equal(report.workforce.usedRoleCalls, 15)
   assert.equal(report.workforce.modelCalls, 10)
@@ -766,6 +780,10 @@ test('operations report distinguishes no evidence, collecting evidence, and boun
     now: () => '2026-07-15T00:00:00.000Z',
   })
   assert.equal(attention.attention.overdueRunning, 1)
+  assert.equal(attention.attentionQueue.state, 'action_required')
+  assert.equal(attention.attentionQueue.requiredActions, 1)
+  assert.equal(attention.attentionQueue.signals, 1)
+  assert.equal(attention.attentionQueue.items[0].id, 'overdue_running')
   assert.equal((await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 31 })).reason, 'company_operations_invalid_window')
   assert.equal((await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 30, raw: true })).reason, 'company_operations_unknown_field')
 })

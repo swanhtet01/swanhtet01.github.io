@@ -128,7 +128,7 @@ test('company operations status exposes measured control metadata and strips wor
     counts: { total: 5, planned: 0, running: 0, cancelled: 0, terminal: 5, completed: 5, partial: 0, blocked: 0, failed: 0, evaluated: 5, accepted: 5, revisionRequired: 0, missingEvaluation: 0 },
     attention: { overduePlanned: 0, overdueRunning: 0, failedOrBlocked: 0, revisionRequired: 0, missingEvaluation: 0, deliveryFailed: 0, deliveryUncertain: 0, deliveryMissing: 0 },
     targets: Array.from({ length: 8 }, (_, index) => ({ id: `private-target-${index}`, state: 'met' })),
-    workforce: { availableAgents: 12, utilizedAgents: 2, totalAssignments: 5, activeAssignments: 0, usedRoleCalls: 15, modelCalls: 3, cacheHits: 2, weightedTotalUnits: 1200, agents: [{ agentId: 'must-not-escape-agent' }] },
+    workforce: { availableAgents: 12, utilizedAgents: 2, dormantAgents: 12, totalAssignments: 5, activeAssignments: 0, queuedAssignments: 0, runningAssignments: 0, usedRoleCalls: 15, modelCalls: 3, cacheHits: 2, weightedTotalUnits: 1200, agents: [{ agentId: 'must-not-escape-agent' }] },
     outcomes: {
       available: true,
       durable: true,
@@ -158,6 +158,8 @@ test('company operations status exposes measured control metadata and strips wor
   assert.equal(ready.delivery.state, 'ready')
   assert.equal(ready.delivery.sent, 5)
   assert.equal(ready.attention.deliveryFailed, 0)
+  assert.deepEqual(ready.attentionQueue, { state: 'clear', requiredActions: 0, signals: 0 })
+  assert.equal(ready.workforce.dormantAgents, 12)
   assert.equal(ready.controls.metadataOnly, true)
   assert.doesNotMatch(JSON.stringify(ready), /must-not-escape|"clientId"|"agentId"|"briefText"|"deliveryId"/i)
 

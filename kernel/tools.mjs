@@ -138,8 +138,9 @@ function operationsUnavailable(windowDays) {
     generatedAt: null,
     counts: { total: 0, planned: 0, running: 0, cancelled: 0, terminal: 0, completed: 0, partial: 0, blocked: 0, failed: 0, evaluated: 0, accepted: 0, revisionRequired: 0, missingEvaluation: 0 },
     attention: { overduePlanned: 0, overdueRunning: 0, failedOrBlocked: 0, revisionRequired: 0, missingEvaluation: 0, deliveryFailed: 0, deliveryUncertain: 0, deliveryMissing: 0 },
+    attentionQueue: { state: 'unavailable', requiredActions: 0, signals: 0 },
     targets: { met: 0, atRisk: 0, collecting: 0 },
-    workforce: { availableAgents: MAX_REGISTERED_COMPANY_AGENTS, utilizedAgents: 0, totalAssignments: 0, activeAssignments: 0, usedRoleCalls: 0, modelCalls: 0, cacheHits: 0, weightedTotalUnits: 0 },
+    workforce: { availableAgents: MAX_REGISTERED_COMPANY_AGENTS, utilizedAgents: 0, dormantAgents: MAX_REGISTERED_COMPANY_AGENTS, totalAssignments: 0, activeAssignments: 0, queuedAssignments: 0, runningAssignments: 0, usedRoleCalls: 0, modelCalls: 0, cacheHits: 0, weightedTotalUnits: 0 },
     outcomes: { available: false, durable: false, state: 'unavailable', completed: 0, evaluated: 0, accepted: 0, revisionRequired: 0, efficiencyAvailable: false, acceptedPer1000WorkUnits: null },
     delivery: { available: false, durable: false, state: 'unavailable', completed: 0, recorded: 0, sent: 0, failed: 0, uncertain: 0, missing: 0 },
     controls: { metadataOnly: true, directCyclesExcluded: true, rawEvidenceReturned: false, modelOutputReturned: false, specialistOutputReturned: false, providerRowsReturned: false, ceoDeliveryContentReturned: false },
@@ -177,6 +178,9 @@ export function companyOperationsStatusView(report, requestedWindowDays = 30) {
   const utilizedAgents = exactCount(report.workforce?.utilizedAgents, MAX_REGISTERED_COMPANY_AGENTS)
   const totalAssignments = exactCount(report.workforce?.totalAssignments)
   const activeAssignments = exactCount(report.workforce?.activeAssignments)
+  const dormantAgents = exactCount(report.workforce?.dormantAgents, MAX_REGISTERED_COMPANY_AGENTS)
+  const queuedAssignments = exactCount(report.workforce?.queuedAssignments)
+  const runningAssignments = exactCount(report.workforce?.runningAssignments)
   const usedRoleCalls = exactCount(report.workforce?.usedRoleCalls)
   const modelCalls = exactCount(report.workforce?.modelCalls)
   const cacheHits = exactCount(report.workforce?.cacheHits)
@@ -186,6 +190,11 @@ export function companyOperationsStatusView(report, requestedWindowDays = 30) {
     && totalAssignments === report.workforce?.totalAssignments
     && activeAssignments === report.workforce?.activeAssignments
     && activeAssignments <= totalAssignments
+    && dormantAgents === report.workforce?.dormantAgents
+    && dormantAgents <= availableAgents
+    && queuedAssignments === report.workforce?.queuedAssignments
+    && runningAssignments === report.workforce?.runningAssignments
+    && queuedAssignments + runningAssignments === activeAssignments
     && usedRoleCalls === report.workforce?.usedRoleCalls
     && usedRoleCalls <= totalAssignments * MAX_CYCLE_ROLE_BUDGET
     && modelCalls === report.workforce?.modelCalls
@@ -261,12 +270,20 @@ export function companyOperationsStatusView(report, requestedWindowDays = 30) {
       deliveryUncertain: attention('deliveryUncertain'),
       deliveryMissing: attention('deliveryMissing'),
     },
+    attentionQueue: {
+      state: attentionTotal > 0 ? 'action_required' : 'clear',
+      requiredActions: attentionKeys.filter((key) => attention(key) > 0).length,
+      signals: attentionTotal,
+    },
     targets: targetSummary,
     workforce: {
       availableAgents,
       utilizedAgents: workforceValid ? utilizedAgents : 0,
+      dormantAgents: workforceValid ? dormantAgents : 0,
       totalAssignments: workforceValid ? totalAssignments : 0,
       activeAssignments: workforceValid ? activeAssignments : 0,
+      queuedAssignments: workforceValid ? queuedAssignments : 0,
+      runningAssignments: workforceValid ? runningAssignments : 0,
       usedRoleCalls: workforceValid ? usedRoleCalls : 0,
       modelCalls: workforceValid ? modelCalls : 0,
       cacheHits: workforceValid ? cacheHits : 0,

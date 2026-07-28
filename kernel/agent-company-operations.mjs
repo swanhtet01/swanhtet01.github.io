@@ -34,6 +34,7 @@ export const CEO_OUTCOME_OPERATION_CONTRACT = 'supermega.ceo-outcome-operation.v
 export const CEO_OUTCOME_EVALUATION_CONTRACT = 'supermega.ceo-outcome-evaluation.v2'
 export const CEO_OUTCOME_CYCLE_STATE_CONTRACT = 'supermega.ceo-outcome-cycle-state.v1'
 export const CEO_OUTCOME_DELIVERY_CONTRACT = 'supermega.ceo-outcome-delivery.v1'
+export const COMPANY_ATTENTION_QUEUE_CONTRACT = 'supermega.company-attention-queue.v1'
 export const MAX_CEO_OUTCOME_RECORDS = 90
 export const COMPANY_OPERATIONS_TARGETS = Object.freeze({
   minimumSamples: 5,
@@ -1065,6 +1066,8 @@ function buildWorkforce(orders) {
     crew: agent.crew,
     assignedOrders: 0,
     activeAssignments: 0,
+    queuedAssignments: 0,
+    runningAssignments: 0,
     terminalAssignments: 0,
     completedAssignments: 0,
     usedRoleCalls: 0,
@@ -1082,6 +1085,8 @@ function buildWorkforce(orders) {
         crew: agent.crew || null,
         assignedOrders: 0,
         activeAssignments: 0,
+        queuedAssignments: 0,
+        runningAssignments: 0,
         terminalAssignments: 0,
         completedAssignments: 0,
         usedRoleCalls: 0,
@@ -1092,6 +1097,8 @@ function buildWorkforce(orders) {
       }
       current.assignedOrders += 1
       if (['planned', 'running'].includes(order.status)) current.activeAssignments += 1
+      if (order.status === 'planned') current.queuedAssignments += 1
+      if (order.status === 'running') current.runningAssignments += 1
       if (TERMINAL_STATUSES.has(order.status)) current.terminalAssignments += 1
       if (agent.status === 'completed') current.completedAssignments += 1
       if (Number.isFinite(agent.usedRoleCalls)) current.usedRoleCalls += agent.usedRoleCalls
@@ -1112,8 +1119,11 @@ function buildWorkforce(orders) {
   return {
     availableAgents: catalog.length,
     utilizedAgents: utilized.length,
+    dormantAgents: catalog.length - utilized.filter((agent) => agent.activeAssignments > 0).length,
     totalAssignments: utilized.reduce((total, agent) => total + agent.assignedOrders, 0),
     activeAssignments: utilized.reduce((total, agent) => total + agent.activeAssignments, 0),
+    queuedAssignments: utilized.reduce((total, agent) => total + agent.queuedAssignments, 0),
+    runningAssignments: utilized.reduce((total, agent) => total + agent.runningAssignments, 0),
     usedRoleCalls: utilized.reduce((total, agent) => total + agent.usedRoleCalls, 0),
     modelCalls: utilized.reduce((total, agent) => total + agent.modelCalls, 0),
     cacheHits: utilized.reduce((total, agent) => total + agent.cacheHits, 0),
@@ -1196,6 +1206,29 @@ function unavailableCeoOutcomeOperations(reason) {
       capped: false,
     },
     records: [],
+  }
+}
+
+function buildAttentionQueue(attention) {
+  const definitions = [
+    ['delivery_uncertain', 'critical', attention.deliveryUncertain, 'Resolve uncertain owner deliveries before retrying.'],
+    ['failed_or_blocked', 'high', attention.failedOrBlocked, 'Review failed or blocked work and choose retry, revise, or stop.'],
+    ['overdue_running', 'high', attention.overdueRunning, 'Inspect overdue running work and stop stale execution.'],
+    ['delivery_failed', 'high', attention.deliveryFailed, 'Review failed owner deliveries before sending again.'],
+    ['delivery_missing', 'normal', attention.deliveryMissing, 'Record the missing owner-delivery receipt.'],
+    ['overdue_planned', 'normal', attention.overduePlanned, 'Reprioritize or cancel queued work that missed dispatch target.'],
+    ['revision_required', 'normal', attention.revisionRequired, 'Create a bounded revision cycle from the rejected outcome.'],
+    ['missing_evaluation', 'normal', attention.missingEvaluation, 'Evaluate terminal work before treating it as accepted.'],
+  ]
+  const items = definitions
+    .filter(([, , count]) => Number(count) > 0)
+    .map(([id, priority, count, action]) => ({ id, priority, count: Number(count), action }))
+  return {
+    contract: COMPANY_ATTENTION_QUEUE_CONTRACT,
+    state: items.length ? 'action_required' : 'clear',
+    requiredActions: items.length,
+    signals: items.reduce((total, item) => total + item.count, 0),
+    items,
   }
 }
 
@@ -1512,6 +1545,16 @@ export async function buildCompanyOperationsReport(input, options = {}) {
   const readiness = !orders.length ? 'no_orders'
     : !sampleReady ? 'collecting'
       : requiredTargets.every((target) => target.state === 'met') ? 'meeting_targets' : 'at_risk'
+  const attention = {
+    overduePlanned,
+    overdueRunning,
+    failedOrBlocked: counts.failed + counts.blocked,
+    revisionRequired: counts.revisionRequired,
+    missingEvaluation: counts.missingEvaluation,
+    deliveryFailed: outcomes.delivery.counts.failed,
+    deliveryUncertain: outcomes.delivery.counts.uncertain,
+    deliveryMissing: outcomes.delivery.counts.missing,
+  }
 
   return {
     ok: true,
@@ -1526,16 +1569,8 @@ export async function buildCompanyOperationsReport(input, options = {}) {
     workforce,
     usage,
     outcomes,
-    attention: {
-      overduePlanned,
-      overdueRunning,
-      failedOrBlocked: counts.failed + counts.blocked,
-      revisionRequired: counts.revisionRequired,
-      missingEvaluation: counts.missingEvaluation,
-      deliveryFailed: outcomes.delivery.counts.failed,
-      deliveryUncertain: outcomes.delivery.counts.uncertain,
-      deliveryMissing: outcomes.delivery.counts.missing,
-    },
+    attention,
+    attentionQueue: buildAttentionQueue(attention),
     coverage: {
       scope: 'durable_work_orders_only',
       listedOrders: listedOrders.length,

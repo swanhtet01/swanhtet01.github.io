@@ -89,7 +89,7 @@ const ceoOperationsEvidence = companyOperationsStatusView({
   counts: { total: 5, planned: 0, running: 0, cancelled: 0, terminal: 5, completed: 5, partial: 0, blocked: 0, failed: 0, evaluated: 5, accepted: 5, revisionRequired: 0, missingEvaluation: 0 },
   attention: { overduePlanned: 0, overdueRunning: 0, failedOrBlocked: 0, revisionRequired: 0, missingEvaluation: 0, deliveryFailed: 0, deliveryUncertain: 0, deliveryMissing: 0 },
   targets: Array.from({ length: 8 }, () => ({ state: 'met' })),
-  workforce: { availableAgents: 12, utilizedAgents: 2, totalAssignments: 5, activeAssignments: 0, usedRoleCalls: 15, modelCalls: 3, cacheHits: 2, weightedTotalUnits: 1200, agents: [{ agentId: 'must-not-escape' }] },
+  workforce: { availableAgents: 12, utilizedAgents: 2, dormantAgents: 12, totalAssignments: 5, activeAssignments: 0, queuedAssignments: 0, runningAssignments: 0, usedRoleCalls: 15, modelCalls: 3, cacheHits: 2, weightedTotalUnits: 1200, agents: [{ agentId: 'must-not-escape' }] },
   outcomes: { available: true, durable: true, state: 'measured', counts: { completed: 5, evaluated: 5, accepted: 5, revisionRequired: 0 }, efficiency: { available: true, acceptedOutcomesPer1000WorkUnits: 4.166667 }, delivery: { available: true, durable: true, state: 'ready', counts: { completed: 5, recorded: 5, sent: 5, failed: 0, uncertain: 0, missing: 0 }, records: [{ deliveryId: 'must-not-escape-delivery' }] }, records: [{ output: 'must-not-escape' }] },
   coverage: { directCyclesExcluded: true },
   exposure: { rawEvidenceReturned: false, modelOutputReturned: false, specialistOutputReturned: false, providerRowsReturned: false, ceoDeliveryContentReturned: false },
@@ -289,6 +289,10 @@ requireContract('CEO company-operations evidence is measured, bounded, and outpu
   && ceoOperationsEvidence.attention?.deliveryFailed === 0
   && ceoOperationsEvidence.attention?.deliveryUncertain === 0
   && ceoOperationsEvidence.attention?.deliveryMissing === 0
+  && ceoOperationsEvidence.attentionQueue?.state === 'clear'
+  && ceoOperationsEvidence.attentionQueue?.requiredActions === 0
+  && ceoOperationsEvidence.attentionQueue?.signals === 0
+  && ceoOperationsEvidence.workforce?.dormantAgents === 12
   && ceoOperationsEvidence.controls?.metadataOnly === true
   && ceoOperationsEvidence.controls?.rawEvidenceReturned === false
   && ceoOperationsEvidence.controls?.modelOutputReturned === false
@@ -299,9 +303,9 @@ requireContract('CEO company-operations evidence is measured, bounded, and outpu
 requireContract('owner console presents delivery coverage without exposing receipt content',
   kernelConsoleText.includes('function companyDeliverySection(delivery={})')
   && kernelConsoleText.includes('Receipt coverage only; message content stays private')
-  && kernelConsoleText.includes('attention.deliveryFailed')
-  && kernelConsoleText.includes('attention.deliveryUncertain')
-  && kernelConsoleText.includes('attention.deliveryMissing')
+  && kernelConsoleText.includes('function companyAttentionSection(queue={})')
+  && kernelConsoleText.includes('Only exceptions that need a decision')
+  && kernelConsoleText.includes('No owner action needed in this window')
   && !/delivery\.records|deliveryId|deliveryClaimId/.test(kernelConsoleText))
 requireContract('weekly CEO completion remains distinct from durable owner delivery',
   kernelOperationsText.includes("CEO_OUTCOME_CYCLE_STATE_FIELDS = new Set(['clientId', 'authorityDigest', 'asOf', 'includeDelivery'])")
