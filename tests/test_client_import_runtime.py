@@ -21,10 +21,11 @@ from supermega_runtime.client_import_runtime import (
     ClientImportValidationError,
     validate_client_import_staging_package,
 )
-from supermega_runtime.commerce_runtime import commerce_catalog_digest
+from supermega_runtime.commerce_runtime import commerce_catalog_digest, validate_commerce_state
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_runtime import create_trial_router
-from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal
+from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal, TrialValidationError
+from supermega_runtime.website_runtime import validate_website_state
 
 
 PRODUCT_FIXTURES: dict[str, dict[str, object]] = {
@@ -857,6 +858,20 @@ class ClientImportRouteTests(unittest.TestCase):
             .isoformat(timespec="milliseconds")
             .replace("+00:00", "Z")
         )
+        self.assertEqual(
+            state["openingPlan"],
+            {
+                "contract": "supermega.website.opening-plan.v1",
+                "packageDigest": validation.package_digest,
+                "workflowTemplateId": "business-presence",
+                "confirmedAt": canonical_updated_at,
+                "pageIds": ["page-import-1", "page-import-2"],
+            },
+        )
+        tampered_opening_plan = deepcopy(state)
+        tampered_opening_plan["openingPlan"]["workflowTemplateId"] = "unknown-template"
+        with self.assertRaises(TrialValidationError):
+            validate_website_state(tampered_opening_plan)
         self.assertTrue(
             all(page["updatedAt"] == canonical_updated_at for page in state["pages"])
         )
@@ -1123,6 +1138,20 @@ class ClientImportRouteTests(unittest.TestCase):
                 }
             ],
         )
+        self.assertEqual(
+            configuration["activation"],
+            {
+                "contract": "supermega.ecommerce.activation.v1",
+                "packageDigest": ecommerce_validation.package_digest,
+                "workflowTemplateId": "social-storefront",
+                "confirmedAt": configuration["saved"]["capturedAt"],
+                "skus": ["COFFEE-250"],
+            },
+        )
+        tampered_activation = deepcopy(state)
+        tampered_activation["storefrontConfiguration"]["activation"]["skus"] = ["UNKNOWN-SKU"]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(tampered_activation)
         self.assertEqual(configuration["saved"]["actor"], "setup-writer")
         self.assertRegex(
             configuration["saved"]["capturedAt"],

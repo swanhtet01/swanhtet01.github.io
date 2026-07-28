@@ -424,6 +424,18 @@ requireContract('Plant client packs are package-bound, tenant-retained, fail-clo
   && /plantIndustryPackIdRef\.current !== expectedPlantIndustryPackId/.test(clientOnboardingUi)
   && /standardCostPerUnitMmk: ''/.test(plantIndustryPacks)
   && /standardCostPerMinuteMmk: ''/.test(plantIndustryPacks))
+requireContract('Website and Ecommerce client activation provenance is package-bound and server-stamped',
+  /supermega\.website\.opening-plan\.v1/.test(websiteRuntime)
+  && /Website opening plan is immutable after activation/.test(websiteRuntime)
+  && /"workflowTemplateId": package\["workflowTemplateId"\]/.test(trialRuntime)
+  && /authoritative_state\["openingPlan"\]/.test(trialStore)
+  && /openingPlan\.packageDigest !== expectedPackageDigest/.test(managedTrialClient)
+  && /supermega\.ecommerce\.activation\.v1/.test(commerceRuntime)
+  && /"packageDigest": validation\.package_digest/.test(commerceRuntime)
+  && /Ecommerce activation provenance is immutable while imported content is retained/.test(commerceRuntime)
+  && /Ecommerce activation provenance must be cleared when imported content changes/.test(commerceRuntime)
+  && /activation\.packageDigest !== expectedPackageDigest/.test(managedTrialClient)
+  && /activation\.skus/.test(managedTrialClient))
 requireContract('managed Shop location inventory and order allocation are human-only, server-stamped, and digest-chained',
   /commerce\.inventory\.initialized/.test(managedTrialClient)
   && /commerce\.inventory\.transferred/.test(managedTrialClient)

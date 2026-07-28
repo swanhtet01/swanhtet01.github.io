@@ -71,7 +71,14 @@ _STATE_FIELDS = frozenset(
         "events",
     }
 )
-_STATE_OPTIONAL_FIELDS = frozenset({"releaseRecords"})
+_STATE_OPTIONAL_FIELDS = frozenset({"openingPlan", "releaseRecords"})
+_OPENING_PLAN_FIELDS = frozenset(
+    {"contract", "packageDigest", "workflowTemplateId", "confirmedAt", "pageIds"}
+)
+_OPENING_PLAN_CONTRACT = "supermega.website.opening-plan.v1"
+_WEBSITE_TEMPLATE_IDS = frozenset(
+    {"business-presence", "lead-generation", "catalog-showcase"}
+)
 _MAX_RELEASE_RECORDS = 50
 _MAX_RELEASE_COMMANDS = 500
 _PAGE_FIELDS = frozenset(
@@ -511,11 +518,46 @@ def _validate_release_records(value: object) -> list[dict[str, Any]]:
     return records
 
 
+def _validate_opening_plan(value: object) -> dict[str, Any]:
+    plan = _object(value, "website state.openingPlan")
+    _exact(plan, "website state.openingPlan", _OPENING_PLAN_FIELDS)
+    if plan["contract"] != _OPENING_PLAN_CONTRACT:
+        raise TrialValidationError(
+            f"website state.openingPlan.contract must be {_OPENING_PLAN_CONTRACT}."
+        )
+    package_digest = _text(
+        plan["packageDigest"], "website state.openingPlan.packageDigest", maximum=71
+    )
+    if re.fullmatch(r"sha256:[0-9a-f]{64}", package_digest) is None:
+        raise TrialValidationError(
+            "website state.openingPlan.packageDigest must use SHA-256."
+        )
+    template_id = _text(
+        plan["workflowTemplateId"],
+        "website state.openingPlan.workflowTemplateId",
+        maximum=60,
+    )
+    if template_id not in _WEBSITE_TEMPLATE_IDS:
+        raise TrialValidationError(
+            "website state.openingPlan.workflowTemplateId is unsupported."
+        )
+    _timestamp(plan["confirmedAt"], "website state.openingPlan.confirmedAt")
+    page_ids = _array(plan["pageIds"], "website state.openingPlan.pageIds")
+    if not 1 <= len(page_ids) <= _MAX_PAGES:
+        raise TrialValidationError(
+            f"website state.openingPlan.pageIds requires between 1 and {_MAX_PAGES} entries."
+        )
+    for index, page_id in enumerate(page_ids):
+        _text(page_id, f"website state.openingPlan.pageIds[{index}]", maximum=80)
+    _unique(page_ids, "website state.openingPlan.pageIds")
+    return plan
+
+
 def validate_website_state(value: object) -> dict[str, Any]:
     """Validate one Website snapshot structurally; command history establishes managed provenance."""
 
     state = _object(value, "website state")
-    optional = _STATE_OPTIONAL_FIELDS if "releaseRecords" in state else frozenset()
+    optional = frozenset(field for field in _STATE_OPTIONAL_FIELDS if field in state)
     _exact(state, "website state", _STATE_FIELDS | optional)
     if state["schema"] != WEBSITE_SCHEMA or state["version"] != 2:
         raise TrialValidationError(f"website state must use {WEBSITE_SCHEMA} version 2.")
@@ -625,6 +667,8 @@ def validate_website_state(value: object) -> dict[str, Any]:
             raise TrialValidationError("Website snapshot must bind its approval, evidence, and workflow event.")
     validated = deepcopy(state)
     validated["localPublishes"] = deepcopy(publishes)
+    if "openingPlan" in state:
+        validated["openingPlan"] = _validate_opening_plan(state["openingPlan"])
     if "releaseRecords" in state:
         validated["releaseRecords"] = _validate_release_records(state["releaseRecords"])
     return validated
@@ -929,6 +973,8 @@ def reduce_website_state(
         raise TrialValidationError("Website revision must advance exactly once per event.")
     if next_state["schema"] != current_state["schema"] or next_state["version"] != current_state["version"]:
         raise TrialValidationError("Website schema identity is immutable.")
+    if current_state.get("openingPlan") != next_state.get("openingPlan"):
+        raise TrialValidationError("Website opening plan is immutable after activation.")
     if event_type != "website.release.recorded" and current_state.get("releaseRecords", []) != next_state.get("releaseRecords", []):
         raise TrialValidationError("Website release records can change only through their dedicated event.")
 

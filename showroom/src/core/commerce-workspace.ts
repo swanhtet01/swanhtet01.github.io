@@ -465,6 +465,14 @@ export type CommerceStorefrontMerchandising = {
   note: string
 }
 
+export type CommerceStorefrontActivation = {
+  contract: 'supermega.ecommerce.activation.v1'
+  packageDigest: string
+  workflowTemplateId: 'social-storefront' | 'pickup-preorder' | 'wholesale-request'
+  confirmedAt: string
+  skus: string[]
+}
+
 export type CommerceStorefrontConfiguration = {
   schema: typeof COMMERCE_STOREFRONT_SCHEMA
   revision: number
@@ -474,6 +482,7 @@ export type CommerceStorefrontConfiguration = {
   summary: string
   selectedSkus: string[]
   merchandising?: CommerceStorefrontMerchandising[]
+  activation?: CommerceStorefrontActivation
   saved: CommerceActionProof
 }
 
@@ -1550,7 +1559,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!hasExactKeys(
       storefrontConfiguration,
       ['schema', 'revision', 'shopCatalogSnapshotRevision', 'shopCatalogDigest', 'storeName', 'summary', 'selectedSkus', 'saved'],
-      ['merchandising'],
+      ['activation', 'merchandising'],
     ) || storefrontConfiguration.schema !== COMMERCE_STOREFRONT_SCHEMA) {
       throw new Error('storefrontConfiguration is invalid.')
     }
@@ -1595,6 +1604,21 @@ export function validateCommerceState(value: unknown): CommerceState {
       })
       if (!sameStringArray(merchandisingSkus, selectedSkus)) {
         throw new Error('storefrontConfiguration.merchandising must follow the canonical selected SKU order.')
+      }
+    }
+    if (storefrontConfiguration.activation !== undefined) {
+      const activation = storefrontConfiguration.activation
+      if (!isRecord(activation)
+        || !hasExactKeys(activation, ['contract', 'packageDigest', 'workflowTemplateId', 'confirmedAt', 'skus'])
+        || activation.contract !== 'supermega.ecommerce.activation.v1'
+        || typeof activation.packageDigest !== 'string'
+        || !sha256DigestPattern.test(activation.packageDigest)
+        || !['social-storefront', 'pickup-preorder', 'wholesale-request'].includes(String(activation.workflowTemplateId))
+        || !validTimestamp(activation.confirmedAt)
+        || !Array.isArray(activation.skus)
+        || !activation.skus.every((sku) => typeof sku === 'string')
+        || !sameStringArray(activation.skus as string[], selectedSkus)) {
+        throw new Error('storefrontConfiguration.activation is invalid.')
       }
     }
     if (!isRecord(storefrontConfiguration.saved)
@@ -3058,6 +3082,9 @@ export async function saveCommerceStorefrontConfiguration(
   if (input.merchandising === undefined && existing?.merchandising
     && !sameStringArray(existing.selectedSkus, selectedSkus)) return null
   const sameMerchandising = JSON.stringify(existing?.merchandising ?? null) === JSON.stringify(merchandising ?? null)
+  const retainsActivation = Boolean(existing?.activation
+    && sameStringArray(existing.selectedSkus, selectedSkus)
+    && sameMerchandising)
   if (existing
     && existing.storeName === storeName
     && existing.summary === summary
@@ -3087,6 +3114,7 @@ export async function saveCommerceStorefrontConfiguration(
       summary,
       selectedSkus,
       ...(merchandising ? { merchandising: merchandising.map((entry) => ({ ...entry })) } : {}),
+      ...(retainsActivation ? { activation: structuredClone(existing?.activation) } : {}),
       saved: { ...proof },
     },
   })

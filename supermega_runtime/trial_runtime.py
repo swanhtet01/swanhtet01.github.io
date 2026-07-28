@@ -570,6 +570,13 @@ def _website_pages_import_payload(
             "approvals": [],
             "localPublishes": [],
             "events": [],
+            "openingPlan": {
+                "contract": "supermega.website.opening-plan.v1",
+                "packageDigest": package_digest,
+                "workflowTemplateId": package["workflowTemplateId"],
+                "confirmedAt": "server-assigned",
+                "pageIds": [page["id"] for page in pages],
+            },
         },
         "evidence": {
             "actionId": f"ACT-IMPORT-{command_id}",

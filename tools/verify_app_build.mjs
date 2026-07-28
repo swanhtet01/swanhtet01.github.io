@@ -4289,6 +4289,13 @@ async function verifyManagedClientImportRuntime() {
       approvals: [],
       localPublishes: [],
       events: [],
+      openingPlan: {
+        contract: 'supermega.website.opening-plan.v1',
+        packageDigest: websitePackageDigest,
+        workflowTemplateId: websiteStaged.workflowTemplateId,
+        confirmedAt: websiteTimestamp,
+        pageIds: websiteStaged.rows.map((_, index) => `page-import-${index + 1}`),
+      },
     }
     const websiteCommandId = '00000000-0000-4000-8000-000000000202'
     const websiteActivationResponse = {
@@ -4321,13 +4328,14 @@ async function verifyManagedClientImportRuntime() {
       0,
     )
     assert(activatedWebsite === websiteActivationResponse, 'managed_client_import_valid_website_activation_rejected')
-    assert(managedTrial.assertManagedWebsiteImportState(websiteState, websiteStaged) === websiteState, 'managed_client_import_valid_website_state_rejected')
+    assert(managedTrial.assertManagedWebsiteImportState(websiteState, websiteStaged, websitePackageDigest) === websiteState, 'managed_client_import_valid_website_state_rejected')
     for (const [label, response] of [
       ['surface', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, surface: 'commerce' } }],
       ['history', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, evidence: [{}] } } }],
       ['stage', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, pages: [{ ...websiteState.pages[0], stage: 'ready' }, ...websiteState.pages.slice(1)] } } }],
       ['timestamp', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, pages: [{ ...websiteState.pages[0], updatedAt: 'server-assigned' }, ...websiteState.pages.slice(1)] } } }],
       ['copy', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, pages: [{ ...websiteState.pages[0], sections: [{ ...websiteState.pages[0].sections[0], body: 'Changed' }] }, ...websiteState.pages.slice(1)] } } }],
+      ['opening_plan', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, openingPlan: { ...websiteState.openingPlan, packageDigest: `sha256:${'0'.repeat(64)}` } } } }],
       ['extra', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, untrusted: true } } }],
     ]) {
       await rejectsAsync(
@@ -4461,6 +4469,13 @@ async function verifyManagedClientImportRuntime() {
         revision: 2,
         selectedSkus: ecommerceMerchandising.map((row) => row.sku),
         merchandising: ecommerceMerchandising,
+        activation: {
+          contract: 'supermega.ecommerce.activation.v1',
+          packageDigest: ecommercePackageDigest,
+          workflowTemplateId: ecommerceStaged.workflowTemplateId,
+          confirmedAt: ecommerceTimestamp,
+          skus: ecommerceMerchandising.map((row) => row.sku),
+        },
         saved: {
           actionId: commerceWorkspace.commerceStorefrontConfigurationActionId(2, ecommerceCatalogDigest),
           capturedAt: ecommerceTimestamp,
@@ -4507,6 +4522,7 @@ async function verifyManagedClientImportRuntime() {
       priorCommerceState,
       ecommerceStaged,
       identity,
+      ecommercePackageDigest,
     ) === ecommerceState, 'managed_client_import_valid_ecommerce_state_rejected')
     for (const [label, response] of [
       ['version', { ...ecommerceActivationResponse, result: { ...ecommerceActivationResponse.result, version: 6 } }],
@@ -4515,6 +4531,7 @@ async function verifyManagedClientImportRuntime() {
       ['history', { ...ecommerceActivationResponse, result: { ...ecommerceActivationResponse.result, state: { ...ecommerceState, orders: [{}] } } }],
       ['actor', { ...ecommerceActivationResponse, result: { ...ecommerceActivationResponse.result, state: { ...ecommerceState, storefrontConfiguration: { ...ecommerceState.storefrontConfiguration, saved: { ...ecommerceState.storefrontConfiguration.saved, actor: 'OP-OTHER' } } } } }],
       ['merchandising', { ...ecommerceActivationResponse, result: { ...ecommerceActivationResponse.result, state: { ...ecommerceState, storefrontConfiguration: { ...ecommerceState.storefrontConfiguration, merchandising: [{ ...ecommerceMerchandising[0], collection: 'Changed' }, ...ecommerceMerchandising.slice(1)] } } } }],
+      ['activation', { ...ecommerceActivationResponse, result: { ...ecommerceActivationResponse.result, state: { ...ecommerceState, storefrontConfiguration: { ...ecommerceState.storefrontConfiguration, activation: { ...ecommerceState.storefrontConfiguration.activation, packageDigest: `sha256:${'0'.repeat(64)}` } } } } }],
       ['extra', { ...ecommerceActivationResponse, activation: { ...ecommerceActivationResponse.activation, untrusted: true } }],
     ]) {
       await rejectsAsync(

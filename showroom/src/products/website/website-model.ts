@@ -148,6 +148,14 @@ export type WebsiteWorkflowEvent = {
   source: WebsiteSourceRef
 }
 
+export type WebsiteOpeningPlan = {
+  contract: 'supermega.website.opening-plan.v1'
+  packageDigest: string
+  workflowTemplateId: 'business-presence' | 'lead-generation' | 'catalog-showcase'
+  confirmedAt: string
+  pageIds: string[]
+}
+
 export type WebsiteWorkspace = {
   schema: typeof WEBSITE_SCHEMA
   version: 2
@@ -160,6 +168,7 @@ export type WebsiteWorkspace = {
   approvals: PublishApproval[]
   localPublishes: LocalPublishRecord[]
   events: WebsiteWorkflowEvent[]
+  openingPlan?: WebsiteOpeningPlan
   releaseRecords?: WebsiteReleaseState[]
 }
 
@@ -1360,6 +1369,7 @@ function isWebsiteWorkspace(value: unknown, pendingReleaseRecords = 0): value is
     'schema', 'version', 'revision', 'contentRevision', 'siteName', 'pages', 'selectedPageId',
     'evidence', 'approvals', 'localPublishes', 'events',
   ]
+  if (Object.hasOwn(value, 'openingPlan')) workspaceKeys.push('openingPlan')
   if (Object.hasOwn(value, 'releaseRecords')) workspaceKeys.push('releaseRecords')
   if (!hasExactKeys(value, workspaceKeys)) return false
   if (value.schema !== WEBSITE_SCHEMA || value.version !== 2) return false
@@ -1372,6 +1382,20 @@ function isWebsiteWorkspace(value: unknown, pendingReleaseRecords = 0): value is
   if (!Array.isArray(value.evidence) || !value.evidence.every(isPublishEvidence) || !hasUniqueIds(value.evidence)) return false
   if (!Array.isArray(value.approvals) || !value.approvals.every(isPublishApproval) || !hasUniqueIds(value.approvals)) return false
   if (!Array.isArray(value.localPublishes) || !value.localPublishes.every(isLocalPublishRecord) || !hasUniqueIds(value.localPublishes)) return false
+  if (Object.hasOwn(value, 'openingPlan')) {
+    if (!isRecord(value.openingPlan)
+      || !hasExactKeys(value.openingPlan, ['contract', 'packageDigest', 'workflowTemplateId', 'confirmedAt', 'pageIds'])
+      || value.openingPlan.contract !== 'supermega.website.opening-plan.v1'
+      || typeof value.openingPlan.packageDigest !== 'string'
+      || !/^sha256:[0-9a-f]{64}$/.test(value.openingPlan.packageDigest)
+      || !['business-presence', 'lead-generation', 'catalog-showcase'].includes(String(value.openingPlan.workflowTemplateId))
+      || !isIsoTimestamp(value.openingPlan.confirmedAt)
+      || !Array.isArray(value.openingPlan.pageIds)
+      || value.openingPlan.pageIds.length < 1
+      || value.openingPlan.pageIds.length > MAX_WEBSITE_PAGES
+      || !value.openingPlan.pageIds.every((pageId) => isText(pageId, 80))
+      || !hasUniqueStrings(value.openingPlan.pageIds)) return false
+  }
   if (Object.hasOwn(value, 'releaseRecords')) {
     if (!Array.isArray(value.releaseRecords)
       || value.releaseRecords.length > MAX_WEBSITE_RELEASE_RECORDS

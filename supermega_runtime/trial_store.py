@@ -583,7 +583,12 @@ def _authoritative_command_payload(
         evidence = authoritative.get("evidence")
         state = authoritative.get("state")
         pages = state.get("pages") if isinstance(state, Mapping) else None
-        if not isinstance(evidence, Mapping) or not isinstance(pages, list):
+        opening_plan = state.get("openingPlan") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(pages, list)
+            or not isinstance(opening_plan, Mapping)
+        ):
             return authoritative
         authoritative_state = dict(state)
         authoritative_pages: list[object] = []
@@ -592,6 +597,10 @@ def _authoritative_command_payload(
                 return authoritative
             authoritative_pages.append({**dict(page), "updatedAt": website_captured_at})
         authoritative_state["pages"] = authoritative_pages
+        authoritative_state["openingPlan"] = {
+            **dict(opening_plan),
+            "confirmedAt": website_captured_at,
+        }
         authoritative["state"] = authoritative_state
         authoritative["evidence"] = {
             **dict(evidence),

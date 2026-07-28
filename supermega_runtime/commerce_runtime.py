@@ -431,9 +431,15 @@ _STOREFRONT_CONFIGURATION_FIELDS = frozenset(
         "saved",
     }
 )
-_STOREFRONT_CONFIGURATION_OPTIONAL_FIELDS = frozenset({"merchandising"})
+_STOREFRONT_CONFIGURATION_OPTIONAL_FIELDS = frozenset({"activation", "merchandising"})
 _STOREFRONT_MERCHANDISING_FIELDS = frozenset(
     {"sku", "featured", "collection", "displayName", "note"}
+)
+_STOREFRONT_ACTIVATION_FIELDS = frozenset(
+    {"contract", "packageDigest", "workflowTemplateId", "confirmedAt", "skus"}
+)
+_ECOMMERCE_TEMPLATE_IDS = frozenset(
+    {"social-storefront", "pickup-preorder", "wholesale-request"}
 )
 
 
@@ -1293,6 +1299,50 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             if merchandising_skus != normalized_selected_skus:
                 raise TrialValidationError(
                     "commerce state.storefrontConfiguration.merchandising must follow the canonical selected SKU order."
+                )
+        if "activation" in configuration:
+            activation = _object(
+                configuration["activation"],
+                "commerce state.storefrontConfiguration.activation",
+            )
+            _exact_fields(
+                activation,
+                "commerce state.storefrontConfiguration.activation",
+                required=_STOREFRONT_ACTIVATION_FIELDS,
+            )
+            if activation["contract"] != "supermega.ecommerce.activation.v1":
+                raise TrialValidationError(
+                    "commerce state.storefrontConfiguration.activation.contract is invalid."
+                )
+            package_digest = _text(
+                activation["packageDigest"],
+                "commerce state.storefrontConfiguration.activation.packageDigest",
+                maximum=71,
+            )
+            if _SHA256_DIGEST_PATTERN.fullmatch(package_digest) is None:
+                raise TrialValidationError(
+                    "commerce state.storefrontConfiguration.activation.packageDigest is invalid."
+                )
+            template_id = _text(
+                activation["workflowTemplateId"],
+                "commerce state.storefrontConfiguration.activation.workflowTemplateId",
+                maximum=60,
+            )
+            if template_id not in _ECOMMERCE_TEMPLATE_IDS:
+                raise TrialValidationError(
+                    "commerce state.storefrontConfiguration.activation.workflowTemplateId is invalid."
+                )
+            _timestamp(
+                activation["confirmedAt"],
+                "commerce state.storefrontConfiguration.activation.confirmedAt",
+            )
+            activation_skus = _list(
+                activation["skus"],
+                "commerce state.storefrontConfiguration.activation.skus",
+            )
+            if activation_skus != normalized_selected_skus:
+                raise TrialValidationError(
+                    "commerce state.storefrontConfiguration.activation.skus must match the current imported storefront."
                 )
         saved = _action_proof(
             configuration["saved"],
@@ -2713,6 +2763,13 @@ def _apply_storefront_merchandising_import(
         "summary": configuration["summary"],
         "selectedSkus": selected_skus,
         "merchandising": merchandising,
+        "activation": {
+            "contract": "supermega.ecommerce.activation.v1",
+            "packageDigest": validation.package_digest,
+            "workflowTemplateId": validation.workflow_template_id,
+            "confirmedAt": validated_evidence["capturedAt"],
+            "skus": selected_skus,
+        },
         "saved": {
             "actionId": _storefront_configuration_action_id(revision, catalog_digest),
             "capturedAt": validated_evidence["capturedAt"],
@@ -5736,6 +5793,18 @@ def _validate_storefront_configuration_saved(
     if after["shopCatalogSnapshotRevision"] != expected_catalog_revision:
         raise TrialValidationError(
             "Shop catalog snapshot revision must advance only when its digest changes."
+        )
+    same_imported_content = (
+        before["selectedSkus"] == after["selectedSkus"]
+        and before.get("merchandising") == after.get("merchandising")
+    )
+    if same_imported_content and before.get("activation") != after.get("activation"):
+        raise TrialValidationError(
+            "Ecommerce activation provenance is immutable while imported content is retained."
+        )
+    if not same_imported_content and "activation" in after:
+        raise TrialValidationError(
+            "Ecommerce activation provenance must be cleared when imported content changes."
         )
 
 

@@ -590,8 +590,9 @@ export function assertManagedPlantImportState(
 export function assertManagedWebsiteImportState(
   state: unknown,
   stagingPackage: ManagedClientImportPackage,
+  expectedPackageDigest: string,
 ) {
-  const stateKeys = ['approvals', 'contentRevision', 'events', 'evidence', 'localPublishes', 'pages', 'revision', 'schema', 'selectedPageId', 'siteName', 'version'] as const
+  const stateKeys = ['approvals', 'contentRevision', 'events', 'evidence', 'localPublishes', 'openingPlan', 'pages', 'revision', 'schema', 'selectedPageId', 'siteName', 'version'] as const
   const pageKeys = ['hero', 'id', 'internalName', 'navigation', 'sections', 'seo', 'slug', 'stage', 'updatedAt'] as const
   const heroKeys = ['ctaHref', 'ctaLabel', 'eyebrow', 'headline', 'summary'] as const
   if (stagingPackage.product !== 'website'
@@ -602,6 +603,14 @@ export function assertManagedWebsiteImportState(
     || state.revision !== 0
     || state.contentRevision !== 0
     || state.siteName !== stagingPackage.workspace
+    || !isRecord(state.openingPlan)
+    || !hasExactKeys(state.openingPlan, ['confirmedAt', 'contract', 'packageDigest', 'pageIds', 'workflowTemplateId'])
+    || state.openingPlan.contract !== 'supermega.website.opening-plan.v1'
+    || state.openingPlan.packageDigest !== expectedPackageDigest
+    || state.openingPlan.workflowTemplateId !== stagingPackage.workflowTemplateId
+    || !isCanonicalManagedImportTimestamp(state.openingPlan.confirmedAt)
+    || !Array.isArray(state.openingPlan.pageIds)
+    || state.openingPlan.pageIds.length !== stagingPackage.rows.length
     || state.selectedPageId !== 'page-import-1'
     || !Array.isArray(state.pages)
     || state.pages.length !== stagingPackage.rows.length
@@ -626,6 +635,7 @@ export function assertManagedWebsiteImportState(
     if (!isRecord(page)
       || !hasExactKeys(page, pageKeys)
       || page.id !== expectedId
+      || state.openingPlan.pageIds[index] !== expectedId
       || page.internalName !== row.values.title
       || page.slug !== expectedSlug
       || page.stage !== 'draft'
@@ -668,6 +678,7 @@ export async function assertManagedEcommerceImportState(
   priorState: unknown,
   stagingPackage: ManagedClientImportPackage,
   expectedIdentity: ManagedIdentity,
+  expectedPackageDigest: string,
 ) {
   if (stagingPackage.product !== 'ecommerce') {
     throw new ManagedTrialError('The Ecommerce import state has the wrong product boundary.', {
@@ -725,6 +736,7 @@ export async function assertManagedEcommerceImportState(
     ? previousConfiguration.shopCatalogSnapshotRevision
     : previousConfiguration.shopCatalogSnapshotRevision + 1
   const saved = acceptedConfiguration.saved
+  const activation = acceptedConfiguration.activation
   if (acceptedConfiguration.revision !== expectedRevision
     || acceptedConfiguration.shopCatalogSnapshotRevision !== expectedCatalogRevision
     || acceptedConfiguration.shopCatalogDigest !== catalogDigest
@@ -732,6 +744,12 @@ export async function assertManagedEcommerceImportState(
     || acceptedConfiguration.summary !== previousConfiguration.summary
     || JSON.stringify(acceptedConfiguration.selectedSkus) !== JSON.stringify(expectedSelectedSkus)
     || JSON.stringify(acceptedConfiguration.merchandising) !== JSON.stringify(expectedMerchandising)
+    || !activation
+    || activation.contract !== 'supermega.ecommerce.activation.v1'
+    || activation.packageDigest !== expectedPackageDigest
+    || activation.workflowTemplateId !== stagingPackage.workflowTemplateId
+    || !isCanonicalManagedImportTimestamp(activation.confirmedAt)
+    || JSON.stringify(activation.skus) !== JSON.stringify(expectedSelectedSkus)
     || saved.actionId !== commerceStorefrontConfigurationActionId(expectedRevision, catalogDigest)
     || saved.actor !== expectedIdentity.userId
     || saved.reason !== 'Apply the reviewed Ecommerce merchandising import.'
@@ -754,9 +772,9 @@ export async function assertManagedClientImportState(
 ) {
   if (stagingPackage.product === 'commerce') return assertManagedShopImportState(state, stagingPackage)
   if (stagingPackage.product === 'production') return assertManagedPlantImportState(state, stagingPackage, expectedPackageDigest)
-  if (stagingPackage.product === 'website') return assertManagedWebsiteImportState(state, stagingPackage)
+  if (stagingPackage.product === 'website') return assertManagedWebsiteImportState(state, stagingPackage, expectedPackageDigest)
   if (stagingPackage.product === 'ecommerce' && context?.expectedIdentity && context.priorState) {
-    return assertManagedEcommerceImportState(state, context.priorState, stagingPackage, context.expectedIdentity)
+    return assertManagedEcommerceImportState(state, context.priorState, stagingPackage, context.expectedIdentity, expectedPackageDigest)
   }
   throw new ManagedTrialError('This managed import does not have an atomic product adapter.', {
     code: 'managed_client_import_activation_invalid',
