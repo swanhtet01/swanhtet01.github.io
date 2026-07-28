@@ -803,6 +803,26 @@ export function WebsiteProduct() {
     ['Reason', websiteAgentReason],
     ['Owner gate', websiteOwnerGate],
   ]
+  const websiteLaunchPriority = storageIssue || canRepairLocalStorage
+    ? 'Recover workspace'
+    : hasUnsavedChanges
+      ? 'Save current edits'
+      : failingContentChecks.length
+        ? 'Clear readiness gaps'
+        : !approvalIsCurrent
+          ? 'Record owner approval'
+          : !publishIsCurrent
+            ? 'Package release'
+            : storageMode === 'managed'
+              ? 'Plan deployment'
+              : 'Download handoff'
+  const websiteLaunchRows = [
+    ['Priority', websiteLaunchPriority],
+    ['Readiness', failingContentChecks.length ? `${failingContentChecks.length} blocked` : 'Passed'],
+    ['Approval', approvalIsCurrent ? 'Recorded' : 'Needed'],
+    ['Package', publishIsCurrent ? 'Retained' : 'Needed'],
+    ['Publish gate', storageMode === 'managed' ? 'Owner-run rollout' : 'No deploy here'],
+  ]
   useEffect(() => {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_seen',
@@ -1037,6 +1057,17 @@ export function WebsiteProduct() {
             </div>
             <div>{websiteAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
             <button className="website-button is-primary is-compact" onClick={runWebsiteAgentJob} type="button">{websiteAgentActionLabel}</button>
+          </section>
+
+          <section aria-label="Website launch cockpit" className="website-launch-cockpit">
+            <div>
+              <span className="website-kicker">Website launch cockpit</span>
+              <h2>{websiteLaunchPriority}</h2>
+              <p>AI turns content checks, owner approval, static package, and rollout boundary into one launch queue. No domain, publish, or deployment action runs here.</p>
+            </div>
+            <div className="website-launch-cockpit-rows">
+              {websiteLaunchRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            </div>
           </section>
 
           <div
