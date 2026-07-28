@@ -783,10 +783,17 @@ requireContract('Ally runtime audit is read-only and bounded',
 requireContract('Ally company cycles are host-admitted and serial',
   allyCompanyCycleText.includes("$Contract = 'supermega.ally-company-cycle.v1'")
   && allyCompanyCycleText.includes("$HostAdmissionContract = 'supermega.ally-host-admission.v1'")
+  && allyCompanyCycleText.includes("$LeaseContract = 'supermega.ally-company-cycle-lease.v1'")
+  && allyCompanyCycleText.includes("$LeaseName = 'Local\\SuperMega.AllyCompanyCycle.v1'")
+  && allyCompanyCycleText.includes('Enter-LocalCycleLease')
+  && allyCompanyCycleText.includes("throw 'ally_local_cycle_busy'")
+  && allyCompanyCycleText.includes('finally {')
+  && allyCompanyCycleText.includes('Exit-LocalCycleLease $cycleLease')
   && allyCompanyCycleText.includes("throw 'ally_local_job_limit_exceeded'")
   && allyCompanyCycleText.includes('ally_host_admission_blocked:')
   && allyCompanyCycleText.includes("'--job-type', $JobType")
   && allyCompanyCycleText.includes('scale to zero after completion')
+  && packageText.includes('"company:ally:self-test"')
   && !/\b(?:Stop-Process|Start-Process|taskkill|kill|Remove-Item|EmptyWorkingSet|SetProcessWorkingSetSize)\b/i.test(allyCompanyCycleText))
 
 requireContract('live HQ state is machine-verifiable and read-only',
