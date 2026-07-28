@@ -149,6 +149,14 @@ export function SettingsPage() {
     ['Blocked gates', runtime.activationManifest?.blocked_gate_ids.length ? runtime.activationManifest.blocked_gate_ids.join(', ') : 'No blocked gates'],
     ['Safe enables', runtime.activationManifest?.safe_enable.length ? runtime.activationManifest.safe_enable.join(', ') : 'Browser-local trial only'],
   ] as const
+  const schedulerActivationRows = [
+    ['Scheduler', runtime.schedulerActivation?.configured ? 'Ready' : runtime.schedulerActivation?.status ?? 'Blocked'],
+    ['Evidence', runtime.schedulerActivation?.activationEvidenceCount ? `${runtime.schedulerActivation.activationEvidenceCount} signed proofs` : runtime.schedulerActivation?.activationEvidenceContract ?? 'Evidence contract unavailable'],
+    ['Queue jobs', runtime.schedulerActivation?.queueJobTypes.length ? runtime.schedulerActivation.queueJobTypes.join(', ') : 'task_triage, ops_watch'],
+    ['Daily jobs', runtime.schedulerActivation?.dailyJobTypes.length ? runtime.schedulerActivation.dailyJobTypes.join(', ') : 'founder_brief, github_release_watch'],
+    ['Run limit', runtime.schedulerActivation ? `${runtime.schedulerActivation.maxJobsPerRun} jobs per invocation` : '2 jobs per invocation'],
+    ['Next action', runtime.schedulerActivation?.nextAction ?? 'Restore cloud status before enabling scheduler autopilot.'],
+  ] as const
   const managedTrialRequest = {
     contract: 'supermega.managed_trial_request.v1',
     version: 1,
@@ -164,12 +172,13 @@ export function SettingsPage() {
     targetOutcome: setup.targetOutcome,
     acceptanceEvidence: setup.acceptanceEvidence,
     evidenceFilename,
-    evidenceVersion: 18,
+    evidenceVersion: 19,
     pilotReady: isPilotReady,
     localRecords: localRecordCount,
     approvalPackets: managedApprovalRequests.length || approvals.length,
     behaviorSignals: behaviorSignalCount,
     activationManifest: runtime.activationManifest,
+    schedulerActivation: runtime.schedulerActivation,
     blockedGateIds: runtime.activationManifest?.blocked_gate_ids ?? [],
     safeEnable: runtime.activationManifest?.safe_enable ?? ['browser_local_trial', 'evidence_export'],
     nextHostedBlocker: runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Configure managed activation.',
@@ -180,6 +189,7 @@ export function SettingsPage() {
     ['Workspace', managedTrialRequest.workspace],
     ['Product', `${managedTrialRequest.product} / ${managedTrialRequest.templateName}`],
     ['Evidence', `${managedTrialRequest.evidenceFilename} v${managedTrialRequest.evidenceVersion}`],
+    ['Scheduler', runtime.schedulerActivation?.configured ? 'Ready for bounded autopilot' : runtime.schedulerActivation?.nextAction ?? 'Scheduler proof required'],
     ['Hosted blocker', managedTrialRequest.nextHostedBlocker],
     ['Safe enables', managedTrialRequest.safeEnable.join(', ')],
     ['Write boundary', 'No external send or managed write from this packet'],
@@ -198,7 +208,7 @@ export function SettingsPage() {
       ]),
     ['Coverage', `${runtime.coverageScore}%`],
   ]
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 18, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 19, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, schedulerActivation: runtime.schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
 
   useEffect(() => {
@@ -390,6 +400,10 @@ export function SettingsPage() {
               <div aria-label="Activation automation manifest" className="learning-plan-agent">
                 <div><span className="core-eyebrow">Activation manifest</span><h3>What automation may do next</h3><p>{runtime.activationManifest?.automation_boundary ?? 'Agents may prepare evidence and drafts; managed writes stay locked until runtime health confirms activation.'}</p></div>
                 <div className="learning-plan-rows">{activationManifestRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+              </div>
+              <div aria-label="Scheduler activation packet" className="learning-plan-agent managed-request-panel">
+                <div><span className="core-eyebrow">Scheduler activation</span><h3>Autopilot stays blocked until proof passes</h3><p>Hosted agents can run only after signed evidence, protected secrets, worker allowlist, budget grants, and no-redirect checks are ready.</p></div>
+                <div className="managed-request-rows">{schedulerActivationRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
               </div>
               <div aria-label="Managed trial request packet" className="learning-plan-agent managed-request-panel">
                 <div><span className="core-eyebrow">Managed trial request</span><h3>What support needs</h3><p>This packet is local. It packages the workspace, product, evidence file, blocked gates, and safe automation boundary for handoff.</p></div>
