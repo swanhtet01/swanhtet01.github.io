@@ -150,6 +150,11 @@ import {
   type ProductionShiftHandoff,
   type ProductionState,
 } from './production-workspace'
+import {
+  projectShopProductionDemand,
+  shopProductionDemandIsCurrent,
+  type ShopProductionDemandSignal,
+} from './shop-production-demand'
 
 const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
 const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').then((module) => ({ default: module.ShopInventoryFoundation })))
@@ -5186,6 +5191,10 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
 function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIdentity | null; tab: ProductionTab }) {
   const [production, mutateProduction, productionStorageError, workspaceMode, managedVersion, managedWorkspaceId, productionCanWrite] = useProductionWorkspace(managedIdentity)
   const [relatedCommerce] = useCommerceWorkspace(managedIdentity)
+  const relatedCommerceRef = useRef(relatedCommerce)
+  const productionRef = useRef(production)
+  relatedCommerceRef.current = relatedCommerce
+  productionRef.current = production
   const [localPlantIndustryPackId] = useState(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
   const plantIndustryPackId = production.openingPlan?.industryPackId ?? localPlantIndustryPackId
   const [, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
@@ -5229,6 +5238,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     priority: 'normal',
     dueAt: defaultJobDueInput(),
   })
+  const [shopDemandSignals, setShopDemandSignals] = useState<ShopProductionDemandSignal[]>([])
+  const [shopDemandIssue, setShopDemandIssue] = useState('')
+  const [selectedShopDemandDigest, setSelectedShopDemandDigest] = useState('')
+  const jobDisclosureRef = useRef<HTMLDetailsElement>(null)
   const [scheduleDraft, setScheduleDraft] = useState<{ jobId: string; owner: string; priority: ProductionJobPriority; dueAt: string } | null>(null)
   const [notice, setNotice] = useState('')
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
@@ -5320,14 +5333,34 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ? maintenanceMachineId
     : availableMaintenanceMachines[0]?.id ?? ''
   const selectedMaintenanceMachine = availableMaintenanceMachines.find((machine) => machine.id === selectedMaintenanceMachineId)
+  const selectedShopDemand = shopDemandSignals.find((signal) => signal.sourceDigest === selectedShopDemandDigest)
+  const nextShopDemand = shopDemandSignals.find((signal) => !signal.existingActiveJobIds.length) ?? shopDemandSignals[0]
   const plantRows = [
     ['Jobs', `${activeJobs.length} active`],
     ['Output', `${production.jobs.reduce((total, job) => total + job.output, 0).toLocaleString()} good`],
     ['Quality', `${heldJobs.length} held`],
     ['WCM', `${openDowntimeIntervals.length + openMaintenanceRecords.length} open`],
     ['Trace', `${materialEntries.length} material`],
-    ['Handoff', shiftHandoffIsCurrent ? 'Ready' : 'Build'],
+    ['Demand', shopDemandSignals.length ? `${shopDemandSignals.length} from Shop` : 'Current'],
   ] as const
+
+  useEffect(() => {
+    let current = true
+    void projectShopProductionDemand(relatedCommerce, production.jobs)
+      .then((signals) => {
+        if (!current) return
+        setShopDemandSignals(signals)
+        setShopDemandIssue('')
+        setSelectedShopDemandDigest((digest) => digest && signals.some((signal) => signal.sourceDigest === digest) ? digest : '')
+      })
+      .catch((error) => {
+        if (!current) return
+        setShopDemandSignals([])
+        setShopDemandIssue(error instanceof Error ? error.message : 'Shop demand could not be verified.')
+        setSelectedShopDemandDigest('')
+      })
+    return () => { current = false }
+  }, [production.jobs, relatedCommerce])
 
   useEffect(() => {
     const timer = window.setInterval(() => setIssueClock(Date.now()), 60_000)
@@ -5616,24 +5649,69 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     const owner = jobDraft.owner.trim()
     const jobTarget = Number(jobDraft.target)
     const dueAt = new Date(jobDraft.dueAt)
+    if (selectedShopDemandDigest && !selectedShopDemand) {
+      setNotice('Shop demand changed after selection. Choose the current signal again before review.')
+      return
+    }
+    if (selectedShopDemand && (product !== selectedShopDemand.productName
+      || jobTarget !== selectedShopDemand.recommendedBatchUnits
+      || selectedShopDemand.existingActiveJobIds.length)) {
+      setNotice('The Shop-bound product, quantity, or existing Plant coverage changed. Reopen the current demand signal.')
+      return
+    }
     if (!id || !line || !product || !owner || owner.length > 120 || !Number.isSafeInteger(jobTarget) || jobTarget < 1 || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= Date.now()) {
       setNotice('Enter a unique job ID, line or team, product or batch, responsible owner, whole-number target, and future due time.')
       return
     }
     const canonicalDueAt = dueAt.toISOString()
+    const demandSignal = selectedShopDemand
     const job: ProductionJob = { id, line, product, target: jobTarget, output: 0, owner, priority: jobDraft.priority, dueAt: canonicalDueAt }
     queueAction({
       kind: 'production_job',
       subjectId: id,
       summary: `Create ${id} for ${product}`,
-      before: 'No production job',
-      after: `${line} · owner ${owner} · ${productionJobPriorityLabels[jobDraft.priority]} · due ${formatIssueDue(canonicalDueAt)} · target ${jobTarget.toLocaleString()}`,
+      before: demandSignal ? `Shop ${demandSignal.operatingContext.operatingUnitLocationId} · ${demandSignal.activeDemandUnits} active demand · ${demandSignal.replenishmentGapUnits} replenishment gap · ${demandSignal.sourceOrderIds.length || 'reorder'} source ${demandSignal.sourceOrderIds.length === 1 ? 'order' : 'orders'}` : 'No production job',
+      after: `${line} · owner ${owner} · ${productionJobPriorityLabels[jobDraft.priority]} · due ${formatIssueDue(canonicalDueAt)} · target ${jobTarget.toLocaleString()}${demandSignal ? ' · governed Shop demand' : ''}`,
       apply: async (record) => {
-        await mutateProduction('production.job.created', record.commandId, productionActionProof(record), (current) => registerProductionJob(current, job, productionActionProof(record)))
+        if (demandSignal && !await shopProductionDemandIsCurrent(demandSignal, relatedCommerceRef.current, productionRef.current.jobs)) {
+          throw new PlantReviewRequiredError('Shop orders, stock, reorder level, or Plant coverage changed. Nothing was written; review the current demand again.')
+        }
+        const confirmedProof = productionActionProof(record)
+        const boundProof = demandSignal ? { ...confirmedProof, evidenceReference: demandSignal.evidenceReference } : confirmedProof
+        await mutateProduction('production.job.created', record.commandId, boundProof, (current) => {
+          if (demandSignal && current.jobs.some((candidate) => !candidate.closure
+            && !candidate.qualityHold
+            && candidate.output + (candidate.scrap ?? 0) < candidate.target
+            && (candidate.product.toLocaleLowerCase('en-US') === demandSignal.productName.toLocaleLowerCase('en-US')
+              || candidate.product.toLocaleUpperCase('en-US') === demandSignal.sku.toLocaleUpperCase('en-US')))) return null
+          return registerProductionJob(current, job, boundProof)
+        })
         setJobId(id)
         setJobDraft({ id: '', line: '', product: '', target: '', owner: '', priority: 'normal', dueAt: defaultJobDueInput() })
+        setSelectedShopDemandDigest('')
       },
     })
+  }
+
+  function selectShopDemand(signal: ShopProductionDemandSignal) {
+    if (signal.existingActiveJobIds.length) {
+      setJobId(signal.existingActiveJobIds[0])
+      setNotice(`${signal.productName} is already covered by ${signal.existingActiveJobIds.join(', ')}.`)
+      return
+    }
+    setSelectedShopDemandDigest(signal.sourceDigest)
+    setJobDraft({
+      id: signal.suggestedJobId,
+      line: production.jobs[0]?.line ?? 'Line 01',
+      product: signal.productName,
+      target: String(signal.recommendedBatchUnits),
+      owner: production.jobs.find((job) => job.owner)?.owner ?? managedIdentity?.email ?? '',
+      priority: signal.activeDemandUnits ? 'urgent' : 'normal',
+      dueAt: defaultJobDueInput(),
+    })
+    if (jobDisclosureRef.current) jobDisclosureRef.current.open = true
+    requestAnimationFrame(() => jobDisclosureRef.current?.querySelector<HTMLInputElement>('input')?.focus())
+    setNotice('Shop demand is bound to this draft. Review the owner, line, due time, and accountable action before creating the job.')
   }
 
   function openJobSchedule(job: ProductionJob, trigger: HTMLButtonElement) {
@@ -5962,21 +6040,23 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   </>
   const plantStatus = <div aria-label="Plant MES status" className="readiness-list plant-mes-strip">{plantRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
 
-  if (tab === 'production') return <div className="operation-module">
+  if (tab === 'production') return <div className="operation-module production-operation-module">
     {productionBoundary}
     {plantStatus}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
+        {nextShopDemand ? <section aria-label="Shop demand to Plant" className="stock-receipt-preview" data-selected={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? 'true' : 'false'}><small>Shop demand · {nextShopDemand.operatingContext.operatingUnitLocationId}</small><strong>{nextShopDemand.productName} · {nextShopDemand.recommendedBatchUnits.toLocaleString()} suggested</strong><span>{nextShopDemand.activeDemandUnits.toLocaleString()} active order units · {nextShopDemand.availableToPromiseUnits.toLocaleString()} available · {nextShopDemand.replenishmentGapUnits.toLocaleString()} below reorder · {nextShopDemand.sourceOrderIds.length || 'no'} source {nextShopDemand.sourceOrderIds.length === 1 ? 'order' : 'orders'}</span>{nextShopDemand.existingActiveJobIds.length ? <button className="core-button compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">Open {nextShopDemand.existingActiveJobIds[0]}</button> : <button aria-pressed={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest} className="core-button primary compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">{selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? 'Shop demand selected' : 'Use Shop demand'}</button>}</section> : shopDemandIssue ? <p className="form-notice" role="alert">{shopDemandIssue}</p> : null}
         <JobList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onOutput={openJobOutput} onSchedule={openJobSchedule} />
         <CompletedJobHistory jobs={completedJobs} now={issueClock} />
-        <details className="compact-disclosure catalog-disclosure">
-          <summary>Add job</summary>
+        <details className="compact-disclosure catalog-disclosure" ref={jobDisclosureRef}>
+          <summary>{selectedShopDemand ? 'Add Shop-demand job' : 'Add job'}</summary>
           <form className="core-form compact-form" onSubmit={createJob}>
             <div className="form-row"><label>Job ID<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={80} onChange={(event) => setJobDraft((current) => ({ ...current, id: event.target.value }))} placeholder="JOB-002" required value={jobDraft.id} /></label><label>Line or team<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setJobDraft((current) => ({ ...current, line: event.target.value }))} placeholder="Line 02" required value={jobDraft.line} /></label></div>
-            <div className="form-row"><label>Product or batch<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={180} onChange={(event) => setJobDraft((current) => ({ ...current, product: event.target.value }))} placeholder="Product name" required value={jobDraft.product} /></label><label>Target units<input disabled={!productionCanWrite || Boolean(pendingAction)} min="1" onChange={(event) => setJobDraft((current) => ({ ...current, target: event.target.value }))} required step="1" type="number" value={jobDraft.target} /></label></div>
+            <div className="form-row"><label>Product or batch<input disabled={!productionCanWrite || Boolean(pendingAction) || Boolean(selectedShopDemand)} maxLength={180} onChange={(event) => setJobDraft((current) => ({ ...current, product: event.target.value }))} placeholder="Product name" required value={jobDraft.product} /></label><label>Target units<input disabled={!productionCanWrite || Boolean(pendingAction) || Boolean(selectedShopDemand)} min="1" onChange={(event) => setJobDraft((current) => ({ ...current, target: event.target.value }))} required step="1" type="number" value={jobDraft.target} /></label></div>
             <div className="form-row"><label>Priority<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setJobDraft((current) => ({ ...current, priority: event.target.value as ProductionJobPriority }))} value={jobDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} min={localDateTimeInputValue(new Date())} onChange={(event) => setJobDraft((current) => ({ ...current, dueAt: event.target.value }))} required type="datetime-local" value={jobDraft.dueAt} /></label></div>
             <label>Responsible owner<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setJobDraft((current) => ({ ...current, owner: event.target.value }))} placeholder="Named person or role" required value={jobDraft.owner} /></label>
+            {selectedShopDemand ? <div className="form-notice" role="status"><strong>Governed Shop source.</strong> {selectedShopDemand.evidenceReference} · {selectedShopDemand.sourceOrderIds.join(', ') || 'reorder threshold'}<button className="text-link" disabled={Boolean(pendingAction)} onClick={() => setSelectedShopDemandDigest('')} type="button">Remove source</button></div> : null}
             <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} type="submit">Review job</button>
             <p className="panel-copy">Owner, priority, and due time make responsibility and run order visible. The accountable operator, reason, and source record are confirmed in the next step.</p>
           </form>

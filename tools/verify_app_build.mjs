@@ -32,6 +32,7 @@ let websiteReleaseRuntimeChecks = 0
 let shopOperatingFlowRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
+let shopProductionDemandRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
 const [manifestText, appPackageText, appSource, coreSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
@@ -108,6 +109,7 @@ const shopOperatingFlowSource = await readFile(resolve(root, 'showroom', 'src', 
 const shopOperatingFlowUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopOperatingFlow.tsx'), 'utf8')
 const shopServiceScheduleSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-service-scheduling.ts'), 'utf8')
 const shopServiceScheduleUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopServiceSchedule.tsx'), 'utf8')
+const shopProductionDemandSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-production-demand.ts'), 'utf8')
 
 if (!shopOperatingFlowSource.includes("export type ShopOperatingStageId = 'intake' | 'accepted' | 'fulfilment' | 'money' | 'close'")
   || !shopOperatingFlowSource.includes('export function buildShopOperatingFlow')
@@ -1771,6 +1773,36 @@ if (!shopInventoryUiSource.includes("import { ShopProductionHandoff } from './Sh
   || !plantOrderUiSource.includes('Shop must issue every linked material request before operation progress')
   || !plantOrderUiSource.includes('Review in Shop')
   || shopProductionHandoffUiSource.includes('fetch(')) fail('plant_shop_material_handoff_ui_boundary_missing')
+if (!shopProductionDemandSource.includes("SHOP_PRODUCTION_DEMAND_SCHEMA = 'supermega.shop_production_demand.v1'")
+  || !shopProductionDemandSource.includes('globalThis.crypto?.subtle')
+  || !shopProductionDemandSource.includes('validateCommerceState')
+  || !shopProductionDemandSource.includes("operatingUnitLocationId: 'LOC-MAIN'")
+  || !shopProductionDemandSource.includes("sourceAuthority: 'commerce'")
+  || !shopProductionDemandSource.includes("targetAuthority: 'production'")
+  || !shopProductionDemandSource.includes("writePolicy: 'human_review_required'")
+  || !shopProductionDemandSource.includes('sourceDigest')
+  || !shopProductionDemandSource.includes('uncoveredDemandUnits')
+  || !shopProductionDemandSource.includes('if (!uncoveredDemandUnits && !replenishmentGapUnits) return null')
+  || !shopProductionDemandSource.includes('evidenceReference: `SHOP-DEMAND:')
+  || !shopProductionDemandSource.includes('shopProductionDemandIsCurrent')
+  || !shopProductionDemandSource.includes('existingJobIds')
+  || !shopProductionDemandSource.includes('while (jobs.some((job) => job.id === suggestedJobId))')
+  || shopProductionDemandSource.includes('fetch(')
+  || shopProductionDemandSource.includes('localStorage')
+  || shopProductionDemandSource.includes('sessionStorage')) fail('shop_production_demand_contract_missing')
+if (!coreSource.includes('projectShopProductionDemand')
+  || !coreSource.includes('shopProductionDemandIsCurrent')
+  || !coreSource.includes('aria-label="Shop demand to Plant"')
+  || !coreSource.includes('Use Shop demand')
+  || !coreSource.includes('operation-module production-operation-module')
+  || !coreSource.includes('Shop orders, stock, reorder level, or Plant coverage changed. Nothing was written; review the current demand again.')
+  || !coreSource.includes('evidenceReference: demandSignal.evidenceReference')
+  || !coreSource.includes("mutateProduction('production.job.created'")
+  || !coreSource.includes('registerProductionJob')
+  || !coreCssSource.includes('.production-operation-module > .production-view { min-height: clamp(420px,62vh,620px); flex: 0 0 auto; }')
+  || !coreCssSource.includes('.production-operation-module > .production-view > .output-panel { position: sticky; top: 0; height: min(620px,calc(100svh - 240px)); max-height: 620px; align-self: start; }')
+  || !coreCssSource.includes('.job-panel > .stock-receipt-preview > button { grid-column: 2; grid-row: 1 / 4; align-self: center; }')
+  || !coreCssSource.includes('.job-panel > .stock-receipt-preview > button { width: 100%; grid-column: 1; grid-row: auto; margin-top: 6px; }')) fail('shop_production_demand_ui_boundary_missing')
 if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1'")
   || !clientOnboardingSource.includes("CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1'")
   || !clientOnboardingSource.includes("CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v3'")
@@ -2261,7 +2293,7 @@ if (!productionSource.includes('registerProductionJob')
   || !productionSource.includes('export function importProductionJobs')
   || !productionSource.includes('ACT-CLIENT-PLAN-')
   || !coreSource.includes('production.job.created')
-  || !coreSource.includes('<summary>Add job</summary>')
+  || !coreSource.includes("<summary>{selectedShopDemand ? 'Add Shop-demand job' : 'Add job'}</summary>")
   || !coreSource.includes('Review job')) fail('production_recurring_job_workflow_missing')
 if (!productionSource.includes('updateProductionJobPlan')
   || !productionSource.includes("kind: 'job_schedule_updated'")
@@ -3283,6 +3315,64 @@ async function verifyShopServiceScheduleRuntime() {
     assertThrows(() => model.readShopServiceSchedule('{"schema":"wrong"}'), 'shop_service_invalid_storage_accepted')
   } catch (error) {
     fail(`shop_service_schedule_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyShopProductionDemandRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopProductionDemandRuntimeChecks += 1
+  }
+  try {
+    const nonce = Date.now()
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-production-demand.ts')).href}?shop-production-demand-verify=${nonce}`)
+    const commerceModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-production-demand-commerce-verify=${nonce}`)
+    const commerce = commerceModel.createSeedCommerce(Date.parse('2026-07-29T08:00:00.000Z'))
+    const signals = await model.projectShopProductionDemand(commerce, [])
+    assert(signals.length >= 1, 'shop_production_demand_seed_projection_missing')
+    const signal = signals.find((candidate) => candidate.sku === 'SM-1002') ?? signals[0]
+    assert(signal.schema === 'supermega.shop_production_demand.v1'
+      && signal.operatingContext.operatingUnitLocationId === 'LOC-MAIN'
+      && signal.operatingContext.sourceAuthority === 'commerce'
+      && signal.operatingContext.targetAuthority === 'production'
+      && signal.operatingContext.writePolicy === 'human_review_required', 'shop_production_demand_authority_wrong')
+    assert(/^sha256:[0-9a-f]{64}$/.test(signal.sourceDigest)
+      && signal.evidenceReference === `SHOP-DEMAND:${signal.sourceDigest}:LOC-MAIN`
+      && signal.suggestedJobId.startsWith('JOB-SHOP-'), 'shop_production_demand_evidence_wrong')
+    assert(signal.recommendedBatchUnits >= Math.max(1, signal.uncoveredDemandUnits, signal.replenishmentGapUnits), 'shop_production_demand_quantity_understated')
+    assert(!signals.some((candidate) => candidate.sku === 'SM-1001'), 'shop_production_demand_covered_order_created_overproduction')
+    assert(await model.shopProductionDemandIsCurrent(signal, commerce, []), 'shop_production_demand_fresh_signal_rejected')
+
+    const tampered = { ...signal, recommendedBatchUnits: signal.recommendedBatchUnits + 1 }
+    assert(!await model.shopProductionDemandIsCurrent(tampered, commerce, []), 'shop_production_demand_tamper_accepted')
+    const changedStock = {
+      ...commerce,
+      items: commerce.items.map((item) => item.sku === signal.sku ? { ...item, onHand: item.onHand + 1 } : item),
+    }
+    assert(!await model.shopProductionDemandIsCurrent(signal, changedStock, []), 'shop_production_demand_stale_stock_accepted')
+
+    const coveringJob = { id: 'JOB-COVER-001', line: 'Line 01', product: signal.productName, target: signal.recommendedBatchUnits, output: 0, owner: 'Plant planner', priority: 'normal', dueAt: '2026-07-30T08:00:00.000Z' }
+    const coveredSignals = await model.projectShopProductionDemand(commerce, [coveringJob])
+    const covered = coveredSignals.find((candidate) => candidate.sku === signal.sku)
+    assert(covered?.existingActiveJobIds.includes(coveringJob.id), 'shop_production_demand_active_coverage_missing')
+    assert(!await model.shopProductionDemandIsCurrent(signal, commerce, [coveringJob]), 'shop_production_demand_duplicate_coverage_accepted')
+
+    const completedJob = {
+      ...coveringJob,
+      id: signal.suggestedJobId,
+      output: signal.recommendedBatchUnits,
+      closure: { actionId: 'ACT-CLOSED-001', closedAt: '2026-07-29T09:00:00.000Z', closedBy: 'Plant planner', reason: 'Completed reviewed demand.', evidenceReference: signal.evidenceReference, shiftRef: '2026-07-29 Day', remainingUnits: 0 },
+    }
+    const nextCycleSignals = await model.projectShopProductionDemand(commerce, [completedJob])
+    const nextCycle = nextCycleSignals.find((candidate) => candidate.sku === signal.sku)
+    assert(nextCycle?.existingJobIds.includes(completedJob.id)
+      && nextCycle.existingActiveJobIds.length === 0
+      && nextCycle.suggestedJobId === `${signal.suggestedJobId}-02`, 'shop_production_demand_repeat_cycle_id_not_unique')
+    assert(!await model.shopProductionDemandIsCurrent(signal, commerce, [completedJob]), 'shop_production_demand_historical_job_drift_accepted')
+    const unrelatedJob = { ...coveringJob, id: 'JOB-OTHER-001', product: 'Unrelated product' }
+    assert(await model.shopProductionDemandIsCurrent(signal, commerce, [unrelatedJob]), 'shop_production_demand_unrelated_job_invalidated_signal')
+  } catch (error) {
+    fail(`shop_production_demand_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
@@ -9731,6 +9821,7 @@ await verifyShopOperatingFlowRuntime()
 await verifyChannelOrderRuntime()
 await verifyShopInventoryRuntime()
 await verifyShopServiceScheduleRuntime()
+await verifyShopProductionDemandRuntime()
 await verifyPlantOrderRuntime()
 await verifyWebsiteReleaseRuntime()
 await verifyCatalogImportRuntime()
@@ -9761,4 +9852,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

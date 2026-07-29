@@ -174,6 +174,9 @@ a { color: inherit; }
 .workspace-view { min-height: 0; flex: 1; }
 .operation-module { height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 11px; }
 .operation-module > .split-workspace, .operation-module > .module-today, .operation-module > .control-workspace, .operation-module > .inventory-panel { height: auto; min-height: 0; flex: 1; }
+.production-operation-module { overflow-y: auto; padding-right: 2px; scrollbar-gutter: stable; }
+.production-operation-module > .production-view { min-height: clamp(420px,62vh,620px); flex: 0 0 auto; }
+.production-operation-module > .production-view > .output-panel { position: sticky; top: 0; height: min(620px,calc(100svh - 240px)); max-height: 620px; align-self: start; }
 .split-workspace { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(300px,.85fr) minmax(0,1.15fr); gap: 11px; }
 .core-panel { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--core-line); border-radius: var(--core-radius); padding: 18px; background: var(--core-panel); box-shadow: 0 10px 28px rgba(25,54,42,.055); }
 .panel-head { min-height: 35px; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
@@ -534,6 +537,10 @@ textarea { min-height: 72px; resize: vertical; }
 .stock-receipt-preview { min-height: 44px; display: grid; align-content: center; gap: 3px; border-left: 1px solid rgba(11,116,94,.2); padding-left: 12px; }
 .stock-receipt-preview small { color: var(--core-quiet); font-size: 8px; text-transform: uppercase; }
 .stock-receipt-preview strong { color: var(--core-ink); font-size: 13px; }
+.job-panel > .stock-receipt-preview { min-height: 72px; flex: 0 0 auto; grid-template-columns: minmax(0,1fr) auto; grid-template-rows: repeat(3,auto); column-gap: 14px; margin-bottom: 8px; border: 1px solid rgba(11,116,94,.22); border-left: 3px solid var(--core-green); border-radius: 10px; padding: 10px 12px; background: var(--core-green-soft); }
+.job-panel > .stock-receipt-preview > :not(button) { min-width: 0; grid-column: 1; }
+.job-panel > .stock-receipt-preview > span { overflow: hidden; color: var(--core-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.job-panel > .stock-receipt-preview > button { grid-column: 2; grid-row: 1 / 4; align-self: center; }
 .stock-receipt-editor .form-actions { align-self: end; }
 .purchase-order-editor[data-mode="receive"] { grid-template-columns: repeat(3,minmax(0,1fr)); }
 .purchase-order-editor[data-mode="receive"] .stock-receipt-copy { grid-column: 1/3; }
@@ -1240,6 +1247,9 @@ textarea { min-height: 72px; resize: vertical; }
   .queue-panel .record-list, .decision-list-panel .decision-list, .order-queue-panel .order-list, .job-panel .job-list { flex: none; }
   .workspace-view { overflow: visible !important; }
   .operation-module { height: auto; }
+  .production-operation-module { overflow: visible; padding-right: 0; scrollbar-gutter: auto; }
+  .production-operation-module > .production-view { min-height: 0; }
+  .production-operation-module > .production-view > .output-panel { height: auto; max-height: calc(100svh - 78px - env(safe-area-inset-bottom)); }
   .operation-module > .split-workspace, .operation-module > .module-today, .operation-module > .control-workspace, .operation-module > .inventory-panel { flex: none; }
   .production-view .output-panel { position: fixed; right: 6px; bottom: calc(67px + env(safe-area-inset-bottom)); z-index: 72; width: min(480px,calc(100% - 12px)); max-height: calc(100svh - 78px - env(safe-area-inset-bottom)); overflow-y: auto; border-radius: 18px 18px 8px 8px; padding: 16px; opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(24px) scale(.985); transition: opacity .18s ease, transform .18s ease, visibility .18s; }
   .production-view .output-panel.is-open { opacity: 1; visibility: visible; pointer-events: auto; transform: none; }
@@ -1315,6 +1325,8 @@ textarea { min-height: 72px; resize: vertical; }
   .purchase-order-editor[data-mode="receive"] { grid-template-columns: 1fr; }
   .purchase-order-editor[data-mode="receive"] .stock-receipt-copy, .purchase-order-editor[data-mode="receive"] .stock-receipt-preview, .purchase-order-editor[data-mode="receive"] .form-actions { grid-column: auto; grid-row: auto; }
   .stock-receipt-preview { border-top: 1px solid rgba(11,116,94,.2); border-left: 0; padding-top: 10px; padding-left: 0; }
+  .job-panel > .stock-receipt-preview { grid-template-columns: 1fr; grid-template-rows: auto; border-top: 1px solid rgba(11,116,94,.22); border-left: 3px solid var(--core-green); padding: 12px; }
+  .job-panel > .stock-receipt-preview > button { width: 100%; grid-column: 1; grid-row: auto; margin-top: 6px; }
   .stock-receipt-editor .form-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
   .stock-receipt-editor .core-button { width: 100%; }
   .purchase-order-list article { grid-template-columns: minmax(0,1fr) auto; gap: 8px 12px; padding: 10px 0; }
