@@ -547,14 +547,25 @@ export function clientSetupPath(product: SetupProductId) {
   return `/settings/?product=${encodeURIComponent(productContracts[product].slug)}`
 }
 
-export function managedTrialRequestUrl(product: SetupProductId, templateId: string) {
+export type ManagedTrialRequestPrefill = {
+  company?: string
+  goal?: string
+}
+
+export function managedTrialRequestUrl(product: SetupProductId, templateId: string, prefill?: ManagedTrialRequestPrefill) {
   const query = new URLSearchParams({
     product: productContracts[product].slug,
     template: templateId,
     utm_source: 'app',
     utm_medium: 'guided_trial',
   })
-  return `https://supermega.dev/contact/?${query.toString()}`
+  const fragment = new URLSearchParams()
+  const company = prefill?.company?.trim().slice(0, 180)
+  const goal = prefill?.goal?.trim().slice(0, 4_000)
+  if (company) fragment.set('company', company)
+  if (goal) fragment.set('goal', goal)
+  const handoff = fragment.toString()
+  return `https://supermega.dev/contact/?${query.toString()}${handoff ? `#${handoff}` : ''}`
 }
 
 function productFromPathname(pathname: string): SetupProductId | null {
