@@ -6,7 +6,7 @@ import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-export const CLIENT_DEMO_PREPARATION_CONTRACT = 'supermega.client_demo_preparation.v1'
+export const CLIENT_DEMO_PREPARATION_CONTRACT = 'supermega.client_demo_preparation.v2'
 export const CLIENT_DEMO_PREPARATION_VALIDATION_CONTRACT = 'supermega.client_demo_preparation_validation.v1'
 export const CLIENT_DEMO_PREPARATION_MAX_BYTES = 5 * 1024 * 1024
 const CLIENT_DEMO_KIT_MAX_BYTES = 128 * 1024
@@ -19,6 +19,15 @@ const PRODUCT_PATHS = Object.freeze({
   production: { demoPath: '/plant/?tab=production', setupPath: '/settings/?product=plant' },
   website: { demoPath: '/website/', setupPath: '/settings/?product=website' },
   ecommerce: { demoPath: '/ecommerce/', setupPath: '/settings/?product=ecommerce' },
+})
+const CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v2'
+const CLIENT_OPERATING_FOUNDATION_SCHEMA = 'supermega.client_operating_foundation.v1'
+const OPERATING_UNIT_KIND = Object.freeze({
+  'social-seller': 'digital-commerce',
+  'retail-network': 'retail',
+  'food-service': 'food-service',
+  manufacturing: 'plant',
+  'service-business': 'service',
 })
 const REVIEW_CHECKLIST = Object.freeze([
   'Confirm the workspace, owner, selected templates, and industry packs.',
@@ -60,6 +69,30 @@ function canonicalIntegrations(products) {
 function canonicalTimestamp(value) {
   if (typeof value !== 'string' || value.length > 32) return null
   try { return new Date(value).toISOString() === value ? value : null } catch { return null }
+}
+
+function operatingFoundationValid(value, client) {
+  const kind = OPERATING_UNIT_KIND[client?.presetId]
+  return Boolean(kind
+    && hasExactKeys(value, ['schema', 'organization', 'operatingUnit', 'localization', 'controls'])
+    && value.schema === CLIENT_OPERATING_FOUNDATION_SCHEMA
+    && hasExactKeys(value.organization, ['displayName', 'verification'])
+    && value.organization.displayName === client.workspace
+    && value.organization.verification === 'client_review_required'
+    && hasExactKeys(value.operatingUnit, ['code', 'name', 'kind'])
+    && value.operatingUnit.code === 'MAIN'
+    && value.operatingUnit.name === 'Main operating unit'
+    && value.operatingUnit.kind === kind
+    && hasExactKeys(value.localization, ['countryCode', 'currency', 'locale', 'timeZone'])
+    && value.localization.countryCode === 'MM'
+    && value.localization.currency === 'MMK'
+    && value.localization.locale === 'my-MM'
+    && value.localization.timeZone === 'Asia/Yangon'
+    && hasExactKeys(value.controls, ['sharedAcrossProducts', 'clientReviewRequired', 'externalRegistryChecked', 'managedIdentityRequiredBeforeActivation'])
+    && value.controls.sharedAcrossProducts === true
+    && value.controls.clientReviewRequired === true
+    && value.controls.externalRegistryChecked === false
+    && value.controls.managedIdentityRequiredBeforeActivation === true)
 }
 
 function pythonExecutable() {
@@ -201,6 +234,7 @@ export async function prepareClientDemo({ kitPath, dataDirectory, preparedAt = n
     preparedAt: timestamp,
     kit: { schema: kit.schema, digest: sha256(kitText), exportedAt: kit.exportedAt },
     client: { ...kit.blueprint.client },
+    foundation: structuredClone(kit.blueprint.foundation),
     products,
     integrations: kit.blueprint.integrations,
     checks,
@@ -232,12 +266,13 @@ export async function prepareClientDemo({ kitPath, dataDirectory, preparedAt = n
 }
 
 export function verifyClientDemoPreparation(value) {
-  if (!hasExactKeys(value, ['contract', 'preparedAt', 'kit', 'client', 'products', 'integrations', 'checks', 'controls', 'bundleDigest', 'review'])
+  if (!hasExactKeys(value, ['contract', 'preparedAt', 'kit', 'client', 'foundation', 'products', 'integrations', 'checks', 'controls', 'bundleDigest', 'review'])
     || value.contract !== CLIENT_DEMO_PREPARATION_CONTRACT || !canonicalTimestamp(value.preparedAt)
     || !hasExactKeys(value.kit, ['schema', 'digest', 'exportedAt'])
-    || value.kit.schema !== 'supermega.client_demo_kit.v1'
+    || value.kit.schema !== CLIENT_DEMO_KIT_SCHEMA
     || !/^sha256:[0-9a-f]{64}$/.test(value.kit.digest) || !canonicalTimestamp(value.kit.exportedAt)
     || !hasExactKeys(value.client, ['workspace', 'owner', 'presetId', 'shopIndustryPackId', 'plantIndustryPackId'])
+    || !operatingFoundationValid(value.foundation, value.client)
     || !Array.isArray(value.products) || value.products.length < 1 || value.products.length > PRODUCT_ORDER.length
     || !Array.isArray(value.integrations) || !hasExactKeys(value.checks, ['ecommerceCatalogAligned', 'websiteHomePresent', 'plantLinesPresent', 'oneWorkspaceAndOwner'])
     || !hasExactKeys(value.controls, ['localArtifactOnly', 'containsNormalizedClientData', 'containsSampleFixtures', 'safeToShareExternally', 'humanReviewRequired', 'externalWritesPerformed', 'hostedWritesPerformed', 'connectorCallsPerformed', 'modelCallsPerformed', 'activationStatus'])
@@ -288,6 +323,7 @@ export function verifyClientDemoPreparation(value) {
     preparedAt: value.preparedAt,
     kit: value.kit,
     client: value.client,
+    foundation: value.foundation,
     products: value.products,
     integrations: value.integrations,
     checks: value.checks,

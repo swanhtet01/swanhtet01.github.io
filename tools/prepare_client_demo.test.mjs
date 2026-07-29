@@ -65,6 +65,13 @@ test('client preparation compiles one validated four-product founder-review arti
     assert.equal(artifact.products.every((product) => product.sourceMode === 'kit_sample_fixture'), true)
     assert.equal(artifact.products.every((product) => product.stagingPackage.controls.activationStatus === 'staged_not_applied'), true)
     assert.equal(artifact.products.every((product) => product.packageDigest.startsWith('sha256:')), true)
+    assert.deepEqual(artifact.foundation, {
+      schema: 'supermega.client_operating_foundation.v1',
+      organization: { displayName: 'Confidential client workspace', verification: 'client_review_required' },
+      operatingUnit: { code: 'MAIN', name: 'Main operating unit', kind: 'plant' },
+      localization: { countryCode: 'MM', currency: 'MMK', locale: 'my-MM', timeZone: 'Asia/Yangon' },
+      controls: { sharedAcrossProducts: true, clientReviewRequired: true, externalRegistryChecked: false, managedIdentityRequiredBeforeActivation: true },
+    })
     assert.deepEqual(artifact.checks, {
       ecommerceCatalogAligned: true,
       websiteHomePresent: true,
@@ -99,6 +106,30 @@ test('client preparation compiles one validated four-product founder-review arti
     const tampered = structuredClone(artifact)
     tampered.products[0].stagingPackage.rows[0].values.name = 'Changed after review'
     assert.throws(() => verifyClientDemoPreparation(tampered), /client_demo_product_validation_drift|client_demo_bundle_digest_invalid/)
+    const foundationTamper = structuredClone(artifact)
+    foundationTamper.foundation.localization.currency = 'USD'
+    assert.throws(() => verifyClientDemoPreparation(foundationTamper), /client_demo_preparation_contract_invalid/)
+  } finally {
+    await rm(source.directory, { recursive: true, force: true })
+  }
+})
+
+test('legacy v1 setup kits migrate to the canonical shared operating foundation', async () => {
+  const source = await fixture()
+  try {
+    const legacy = structuredClone(source.kit)
+    legacy.schema = 'supermega.client_demo_kit.v1'
+    legacy.blueprint.schema = 'supermega.client_demo_blueprint.v1'
+    delete legacy.blueprint.foundation
+    const legacyPath = resolve(source.directory, 'legacy-kit.json')
+    await writeFile(legacyPath, JSON.stringify(legacy), 'utf8')
+
+    const artifact = await prepareClientDemo({ kitPath: legacyPath, preparedAt: PREPARED_AT })
+
+    assert.equal(artifact.kit.schema, 'supermega.client_demo_kit.v2')
+    assert.equal(artifact.foundation.organization.displayName, source.blueprint.client.workspace)
+    assert.equal(artifact.foundation.operatingUnit.kind, 'plant')
+    assert.deepEqual(verifyClientDemoPreparation(artifact).status, 'verified_not_applied')
   } finally {
     await rm(source.directory, { recursive: true, force: true })
   }

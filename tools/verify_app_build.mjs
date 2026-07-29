@@ -1763,7 +1763,8 @@ if (!shopInventoryUiSource.includes("import { ShopProductionHandoff } from './Sh
   || shopProductionHandoffUiSource.includes('fetch(')) fail('plant_shop_material_handoff_ui_boundary_missing')
 if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1'")
   || !clientOnboardingSource.includes("CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1'")
-  || !clientOnboardingSource.includes("CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v1'")
+  || !clientOnboardingSource.includes("CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v2'")
+  || !clientOnboardingSource.includes("CLIENT_OPERATING_FOUNDATION_SCHEMA = 'supermega.client_operating_foundation.v1'")
   || !clientOnboardingSource.includes('CLIENT_IMPORT_MAX_BYTES = 512 * 1024')
   || !clientOnboardingSource.includes('CLIENT_IMPORT_MAX_ROWS = 500')
   || !clientOnboardingSource.includes("type ClientSolutionId = 'commerce' | 'production' | 'website' | 'ecommerce'")
@@ -1786,8 +1787,8 @@ if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_i
   || !clientOnboardingSource.includes('plantIndustryPackId: PlantIndustryPackId')
   || !clientOnboardingSource.includes("...(plantPackId ? { plantIndustryPackId: plantPackId } : {})")
   || !clientOnboardingSource.includes('export function buildClientDemoBlueprint')
-  || !clientOnboardingSource.includes("CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v1'")
-  || !clientOnboardingSource.includes("CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v1'")
+  || !clientOnboardingSource.includes("CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v2'")
+  || !clientOnboardingSource.includes("CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v2'")
   || !clientOnboardingSource.includes('CLIENT_DEMO_KIT_MAX_BYTES = 128 * 1024')
   || !clientOnboardingSource.includes("CLIENT_DEMO_RUNBOOK_SCHEMA = 'supermega.client_demo_runbook.v1'")
   || !clientOnboardingSource.includes("CLIENT_DEMO_WORKSPACE_STORAGE_KEY = 'supermega.client-demo-workspace.v1'")
@@ -1815,7 +1816,7 @@ if (manifestPlantPackIds.join(',') !== 'general-manufacturing,batch-process,food
   || !settingsPageSource.includes('Plant industry pack')
   || !settingsPageSource.includes('plantIndustryPacks.map((pack)')) fail('plant_industry_pack_contract_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => clientOnboardingSource.toLowerCase().includes(marker.toLowerCase()))) fail('client_import_external_or_persistent_side_effect_added')
-if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermega.client_demo_preparation.v1'")
+if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermega.client_demo_preparation.v2'")
   || !clientOnboardingSource.includes('CLIENT_DEMO_PREPARATION_MAX_BYTES = 5 * 1024 * 1024')
   || !clientOnboardingSource.includes('export async function restoreClientDemoPreparationArtifact')
   || !clientOnboardingSource.includes("await sha256(JSON.stringify(stagingPackage)) !== product.packageDigest")
@@ -1828,6 +1829,8 @@ if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermeg
   || ['applyManagedClientImport', 'validateManagedClientImport', 'fetch(', 'supabase'].some((marker) => localClientImportSource.includes(marker))
   || !settingsPageSource.includes('Load private package')
   || !settingsPageSource.includes('Private client rows stay in this browser. Nothing is uploaded, shared, or installed automatically.')
+  || !settingsPageSource.includes('aria-label="Shared operating foundation"')
+  || !settingsPageSource.includes('Managed identity required before activation')
   || !settingsPageSource.includes('Install real demo data, one product at a time.')
   || !settingsPageSource.includes('preparedArtifact.products.map((product)')
   || !settingsPageSource.includes("product.product === 'ecommerce' && preparedArtifact.products.some((entry) => entry.product === 'commerce')")
@@ -3871,6 +3874,14 @@ async function verifyClientOnboardingRuntime() {
     for (const preset of model.clientDemoPresets) {
       const blueprint = model.buildClientDemoBlueprint({ workspace: 'Golden Valley Trading', owner: 'Operations lead', presetId: preset.id, selections: preset.selections })
       assert(blueprint.schema === model.CLIENT_DEMO_BLUEPRINT_SCHEMA && blueprint.client.presetId === preset.id && blueprint.client.shopIndustryPackId === preset.shopIndustryPackId && blueprint.client.plantIndustryPackId === preset.plantIndustryPackId, `client_demo_${preset.id}_identity_wrong`)
+      assert(blueprint.foundation.schema === model.CLIENT_OPERATING_FOUNDATION_SCHEMA
+        && blueprint.foundation.organization.displayName === 'Golden Valley Trading'
+        && blueprint.foundation.organization.verification === 'client_review_required'
+        && blueprint.foundation.operatingUnit.code === 'MAIN'
+        && blueprint.foundation.localization.currency === 'MMK'
+        && blueprint.foundation.localization.timeZone === 'Asia/Yangon'
+        && blueprint.foundation.controls.sharedAcrossProducts === true
+        && blueprint.foundation.controls.managedIdentityRequiredBeforeActivation === true, `client_demo_${preset.id}_foundation_wrong`)
       assert(blueprint.products.length === preset.selections.length && blueprint.products.every((product) => product.sampleCsv && product.checklist.length === 5), `client_demo_${preset.id}_data_plan_incomplete`)
       assert(blueprint.controls.localDemoOnly === true && blueprint.controls.humanReviewRequired === true && blueprint.controls.externalWritesPerformed === false, `client_demo_${preset.id}_controls_weakened`)
     }
@@ -3892,9 +3903,19 @@ async function verifyClientOnboardingRuntime() {
       && demoKit.controls.clientRecordsIncluded === false
       && demoKit.controls.productProgressIncluded === false
       && JSON.stringify(model.restoreClientDemoKit(JSON.parse(JSON.stringify(demoKit)))) === JSON.stringify(demoKit), 'client_demo_kit_not_safely_restorable')
+    const legacyDemoKit = structuredClone(demoKit)
+    legacyDemoKit.schema = 'supermega.client_demo_kit.v1'
+    legacyDemoKit.blueprint.schema = 'supermega.client_demo_blueprint.v1'
+    delete legacyDemoKit.blueprint.foundation
+    const migratedDemoKit = model.restoreClientDemoKit(legacyDemoKit)
+    assert(migratedDemoKit?.schema === model.CLIENT_DEMO_KIT_SCHEMA
+      && migratedDemoKit.blueprint.foundation.operatingUnit.kind === 'plant', 'client_demo_v1_kit_not_migrated')
     const tamperedDemoKit = structuredClone(demoKit)
     tamperedDemoKit.blueprint.products[0].demoPath = 'https://attacker.example/'
     assert(model.restoreClientDemoKit(tamperedDemoKit) === null, 'client_demo_kit_blueprint_tamper_accepted')
+    const tamperedFoundationKit = structuredClone(demoKit)
+    tamperedFoundationKit.blueprint.foundation.localization.currency = 'USD'
+    assert(model.restoreClientDemoKit(tamperedFoundationKit) === null, 'client_demo_kit_foundation_tamper_accepted')
     const recordBearingDemoKit = structuredClone(demoKit)
     recordBearingDemoKit.controls.clientRecordsIncluded = true
     assert(model.restoreClientDemoKit(recordBearingDemoKit) === null, 'client_demo_kit_record_claim_accepted')
@@ -3934,6 +3955,7 @@ async function verifyClientOnboardingRuntime() {
       preparedAt: workspaceCreatedAt,
       kit: { schema: model.CLIENT_DEMO_KIT_SCHEMA, digest: await digest(JSON.stringify(demoKit)), exportedAt: workspaceCreatedAt },
       client: manufacturingBlueprint.client,
+      foundation: manufacturingBlueprint.foundation,
       products: preparedProducts,
       integrations: manufacturingBlueprint.integrations,
       checks: { ecommerceCatalogAligned: true, websiteHomePresent: true, plantLinesPresent: true, oneWorkspaceAndOwner: true },
@@ -3981,6 +4003,9 @@ async function verifyClientOnboardingRuntime() {
     const packageDigestTamper = structuredClone(preparedArtifact)
     packageDigestTamper.products[1].packageDigest = await digest('wrong-package')
     assert(await model.restoreClientDemoPreparationArtifact(packageDigestTamper) === null, 'client_demo_preparation_package_digest_tamper_accepted')
+    const foundationTamper = structuredClone(preparedArtifact)
+    foundationTamper.foundation.controls.externalRegistryChecked = true
+    assert(await model.restoreClientDemoPreparationArtifact(foundationTamper) === null, 'client_demo_preparation_foundation_tamper_accepted')
     const unsafeControl = structuredClone(preparedArtifact)
     unsafeControl.controls.safeToShareExternally = true
     assert(await model.restoreClientDemoPreparationArtifact(unsafeControl) === null, 'client_demo_preparation_unsafe_control_accepted')
@@ -3994,6 +4019,8 @@ async function verifyClientOnboardingRuntime() {
     extraPreparationField.customerSecret = 'must-not-load'
     assert(await model.restoreClientDemoPreparationArtifact(extraPreparationField) === null, 'client_demo_preparation_extra_field_accepted')
     const legacyBlueprint = structuredClone(manufacturingBlueprint)
+    legacyBlueprint.schema = 'supermega.client_demo_blueprint.v1'
+    delete legacyBlueprint.foundation
     delete legacyBlueprint.client.shopIndustryPackId
     const migratedLegacyWorkspace = model.createClientDemoWorkspace(legacyBlueprint, workspaceCreatedAt)
     assert(migratedLegacyWorkspace.blueprint.client.shopIndustryPackId === 'retail', 'client_demo_legacy_shop_pack_not_migrated')
