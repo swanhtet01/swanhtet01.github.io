@@ -45,6 +45,7 @@ import {
   type SetupProductId,
 } from './CoreApp'
 import {
+  buildManagedEcommerceOrderQueueValidation,
   currentManagedWorkspace,
   loadManagedBootstrap,
   managedTrialAuthConfigured,
@@ -404,6 +405,20 @@ export function SettingsPage() {
   const ecommerceOrderQueueReadinessFilename = ecommerceOrderQueueReadinessPacket
     ? `supermega-ecommerce-order-queue-${safePacketFilename(ecommerceOrderQueueReadinessPacket.storeName)}.json`
     : 'supermega-ecommerce-order-queue.json'
+  const ecommerceOrderQueueManagedValidation = ecommerceOrderQueueReadinessPacket && managedIdentity
+    ? buildManagedEcommerceOrderQueueValidation(ecommerceOrderQueueReadinessPacket, managedIdentity)
+    : null
+  const ecommerceOrderQueueManagedRows: Array<readonly [string, string, string]> = ecommerceOrderQueueReadinessPacket
+    ? [
+        ['Workspace', managedIdentity?.workspaceId ?? 'Connect workspace', managedIdentity ? 'Identity selected for zero-write check.' : 'Premium check waits for managed sign-in.'],
+        ['Rows', `${ecommerceOrderQueueReadinessPacket.sourceReview.readyRows}/${ecommerceOrderQueueReadinessPacket.sourceReview.totalRows} ready`, `${ecommerceOrderQueueReadinessPacket.sourceReview.blockedRows} blocked rows.`],
+        ['Managed check', ecommerceOrderQueueManagedValidation?.status ?? 'Waiting', ecommerceOrderQueueManagedValidation ? 'Zero-write receipt can be reviewed before owner approval.' : 'No managed request or write has run.'],
+        ['Boundary', ecommerceOrderQueueManagedValidation?.external_writes_performed === false ? 'Zero write' : 'Locked', 'Order import, customer send, payment, delivery, stock, and Shop writes remain blocked.'],
+      ]
+    : [
+        ['Workspace', managedIdentity?.workspaceId ?? 'Connect workspace', 'Validate an order packet first.'],
+        ['Managed check', 'Waiting', 'No managed request or write has run.'],
+      ]
 
   useEffect(() => {
     if (!requestedProduct || requestedProduct === setup.product) return
@@ -770,6 +785,7 @@ export function SettingsPage() {
                   <div><span className="core-eyebrow">Order review packet</span><h3>Check before Shop queue</h3><p>Paste the Ecommerce order review JSON. The browser checks schema, row counts, catalog source, source CSV, and forbidden actions locally; no order import, customer message, payment, delivery, stock, Shop write, or managed activation runs.</p></div>
                   <label className="packet-review-field">Order review packet JSON<textarea maxLength={24000} onChange={(event) => setEcommerceOrderReviewPacketText(event.target.value)} placeholder="Paste supermega.ecommerce.order_import_review_packet.v1 JSON" rows={5} value={ecommerceOrderReviewPacketText} /></label>
                   <div className="context-quality-rows">{ecommerceOrderReviewPacketReview.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{label === 'Boundary' ? 'Review only; Shop queue still requires managed proof.' : 'Local order packet check'}</em></span>)}</div>
+                  <div aria-label="Managed order queue check" className="context-quality-rows">{ecommerceOrderQueueManagedRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
                   <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceOrderReviewPacket} type="button">Load sample order packet</button><button className="core-button" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={reviewEcommerceOrderReviewPacket} type="button">Check order packet locally</button><button className="core-button" disabled={!ecommerceOrderQueueReadinessPacket} onClick={downloadEcommerceOrderQueueReadinessPacket} type="button">Download queue packet</button><button className="text-link" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={clearEcommerceOrderReviewPacketReview} type="button">Clear order packet</button></div>
                 </div>
                 <div aria-label="Ecommerce activation packet review" className="learning-plan-agent context-quality-panel">

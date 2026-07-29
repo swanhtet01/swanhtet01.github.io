@@ -704,9 +704,15 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !settingsPageSource.includes('validateEcommerceOrderImportReviewPacket')
   || !settingsPageSource.includes('buildEcommerceOrderImportReviewPacket')
   || !settingsPageSource.includes('buildEcommerceOrderQueueReadinessPacket')
+  || !settingsPageSource.includes('buildManagedEcommerceOrderQueueValidation')
   || !settingsPageSource.includes('type EcommerceOrderQueueReadinessPacket')
   || !settingsPageSource.includes('const [ecommerceOrderQueueReadinessPacket, setEcommerceOrderQueueReadinessPacket] = useState')
   || !settingsPageSource.includes('const ecommerceOrderQueueReadinessFilename =')
+  || !settingsPageSource.includes('const ecommerceOrderQueueManagedValidation =')
+  || !settingsPageSource.includes('const ecommerceOrderQueueManagedRows')
+  || !settingsPageSource.includes('aria-label="Managed order queue check"')
+  || !settingsPageSource.includes('Zero-write receipt can be reviewed before owner approval.')
+  || !settingsPageSource.includes('No managed request or write has run.')
   || !settingsPageSource.includes('supermega-ecommerce-order-queue-${safePacketFilename(ecommerceOrderQueueReadinessPacket.storeName)}.json')
   || !settingsPageSource.includes('function downloadJsonPacket(packet: unknown, filename: string)')
   || !settingsPageSource.includes('function downloadEcommerceOrderQueueReadinessPacket()')
@@ -2623,6 +2629,14 @@ if (!managedTrialSource.includes('export async function validateManagedClientImp
   || !managedTrialSource.includes('export type ManagedClientImportProvisioningPlan = {')
   || !managedTrialSource.includes("contract: 'supermega.client_import_provisioning_plan.v1'")
   || !managedTrialSource.includes('export function buildManagedClientImportProvisioningPlan')
+  || !managedTrialSource.includes('export type ManagedEcommerceOrderQueueValidation = {')
+  || !managedTrialSource.includes("contract: 'supermega.ecommerce.order_queue_readiness_validation.v1'")
+  || !managedTrialSource.includes('export function buildManagedEcommerceOrderQueueValidation')
+  || !managedTrialSource.includes('export function assertManagedEcommerceOrderQueueValidation')
+  || !managedTrialSource.includes("'production_queue_write'")
+  || !managedTrialSource.includes("'managed_postgres_rls'")
+  || !managedTrialSource.includes('external_writes_performed: false')
+  || !managedTrialSource.includes('Owner reviews this zero-write receipt')
   || !managedTrialSource.includes('zero_write_validation_receipt')
   || !managedTrialSource.includes('durable_revision_confirmation')
   || !managedTrialSource.includes('forbidden_until_applied')
@@ -4422,6 +4436,7 @@ async function verifyManagedClientImportRuntime() {
     const onboarding = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?managed-client-import-onboarding=${nonce}`)
     const managedTrial = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'managed-trial.ts')).href}?managed-client-import-trial=${nonce}`)
     const commerceWorkspace = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?managed-client-import-commerce=${nonce}`)
+    const orderPacketModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-order-review-packet.ts')).href}?managed-client-import-order-packet=${nonce}`)
     const identity = { userId: 'OP-IMPORT', email: 'operator@example.test', workspaceId: 'workspace-import' }
     const preview = await onboarding.createClientImportPreview(
       onboarding.clientImportTemplate('commerce', 'social-commerce'),
@@ -4486,6 +4501,73 @@ async function verifyManagedClientImportRuntime() {
     )
     assert(blockedProvisioningPlan.status === 'blocked', 'managed_client_import_blocked_provisioning_plan_marked_ready')
     managedClientImportRuntimeChecks += 2
+    const orderReviewPacket = orderPacketModel.buildEcommerceOrderImportReviewPacket({
+      generatedAt: '2026-07-29T01:00:00.000Z',
+      product: 'ecommerce',
+      storeName: 'Managed Queue Shop',
+      operatingMode: 'browser_local_trial',
+      catalog: {
+        source: 'shop-local',
+        items: 2,
+        selectedSkus: ['SM-1001', 'SM-1002'],
+      },
+      review: {
+        status: 'ready',
+        totalRows: 2,
+        readyRows: 2,
+        blockedRows: 0,
+        summary: '2 rows ready for owner review.',
+      },
+      sourceCsv: 'customer_reference,channel,sku,quantity,fulfilment,payment,source_message\nDaw Mya,viber,SM-1001,1,delivery,manual_review,Viber retained\nKo Min,line,SM-1002,2,pickup,cash_on_pickup,LINE retained\n',
+    })
+    const orderQueuePacket = orderPacketModel.buildEcommerceOrderQueueReadinessPacket({
+      generatedAt: '2026-07-29T01:01:00.000Z',
+      reviewPacket: orderReviewPacket,
+    })
+    const orderQueueValidation = managedTrial.buildManagedEcommerceOrderQueueValidation(orderQueuePacket, identity)
+    assert(orderQueueValidation.contract === 'supermega.ecommerce.order_queue_readiness_validation.v1'
+      && orderQueueValidation.status === 'ready_for_owner_review'
+      && orderQueueValidation.workspace_id === identity.workspaceId
+      && orderQueueValidation.row_count === 2
+      && orderQueueValidation.ready_rows === 2
+      && orderQueueValidation.blocked_rows === 0
+      && orderQueueValidation.required_controls.includes('managed_postgres_rls')
+      && orderQueueValidation.required_controls.includes('owner_queue_approval')
+      && orderQueueValidation.forbidden_until_applied.includes('production_queue_write')
+      && orderQueueValidation.forbidden_until_applied.includes('managed_activation')
+      && orderQueueValidation.external_writes_performed === false, 'managed_ecommerce_order_queue_validation_invalid')
+    assert(managedTrial.assertManagedEcommerceOrderQueueValidation(
+      { validation: orderQueueValidation },
+      orderQueuePacket,
+      identity,
+    ) === orderQueueValidation, 'managed_ecommerce_order_queue_validation_rejected')
+    const blockedOrderReviewPacket = orderPacketModel.buildEcommerceOrderImportReviewPacket({
+      ...orderReviewPacket,
+      review: {
+        status: 'blocked',
+        totalRows: 2,
+        readyRows: 1,
+        blockedRows: 1,
+        summary: '1 row needs repair.',
+      },
+    })
+    const blockedOrderQueuePacket = orderPacketModel.buildEcommerceOrderQueueReadinessPacket({
+      generatedAt: '2026-07-29T01:02:00.000Z',
+      reviewPacket: blockedOrderReviewPacket,
+    })
+    assert(managedTrial.buildManagedEcommerceOrderQueueValidation(blockedOrderQueuePacket, identity).status === 'blocked', 'managed_ecommerce_order_queue_blocked_packet_marked_ready')
+    for (const [label, changed] of [
+      ['workspace', { ...orderQueueValidation, workspace_id: 'workspace-other' }],
+      ['writes', { ...orderQueueValidation, external_writes_performed: true }],
+      ['rows', { ...orderQueueValidation, row_count: 3 }],
+      ['control', { ...orderQueueValidation, required_controls: orderQueueValidation.required_controls.filter((control) => control !== 'audit_log') }],
+      ['forbidden', { ...orderQueueValidation, forbidden_until_applied: orderQueueValidation.forbidden_until_applied.filter((action) => action !== 'managed_activation') }],
+    ]) {
+      rejects(
+        () => managedTrial.assertManagedEcommerceOrderQueueValidation({ validation: changed }, orderQueuePacket, identity),
+        `managed_ecommerce_order_queue_${label}_tamper_accepted`,
+      )
+    }
     assert(await managedTrial.managedClientImportPackageDigest(staged) === packageDigest, 'managed_client_import_package_digest_not_deterministic')
     assert(await managedTrial.managedClientImportPackageDigest({ ...staged, owner: 'Different owner' }) !== packageDigest, 'managed_client_import_context_not_digest_bound')
 
