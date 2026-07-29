@@ -1,4 +1,5 @@
 export const ECOMMERCE_ORDER_IMPORT_REVIEW_PACKET_SCHEMA = 'supermega.ecommerce.order_import_review_packet.v1' as const
+export const ECOMMERCE_ORDER_QUEUE_READINESS_PACKET_SCHEMA = 'supermega.ecommerce.order_queue_readiness.v1' as const
 
 export const ecommerceOrderImportReviewForbiddenActions = [
   'order_import',
@@ -17,7 +18,32 @@ export const ecommerceOrderImportReviewSupportHandoff = [
   'Enable Shop writes only after Postgres, RLS, auth, audit, and scheduler proof passes.',
 ] as const
 
+export const ecommerceOrderQueueReadinessRequiredControls = [
+  'managed_postgres_rls',
+  'workspace_identity',
+  'shop_catalog_match',
+  'source_message_retention',
+  'owner_queue_approval',
+  'audit_log',
+  'scheduler_proof',
+] as const
+
+export const ecommerceOrderQueueReadinessForbiddenActions = [
+  'order_import',
+  'production_queue_write',
+  'customer_message_send',
+  'payment_capture',
+  'wallet_debit',
+  'delivery_booking',
+  'stock_move',
+  'refund_write',
+  'shop_write',
+  'managed_activation',
+] as const
+
 export type EcommerceOrderImportReviewForbiddenAction = typeof ecommerceOrderImportReviewForbiddenActions[number]
+export type EcommerceOrderQueueReadinessRequiredControl = typeof ecommerceOrderQueueReadinessRequiredControls[number]
+export type EcommerceOrderQueueReadinessForbiddenAction = typeof ecommerceOrderQueueReadinessForbiddenActions[number]
 export type EcommerceOrderImportReviewMode = 'browser_local_trial' | 'managed_trial'
 export type EcommerceOrderImportReview = {
   status: 'ready' | 'blocked'
@@ -43,6 +69,30 @@ export type EcommerceOrderImportReviewPacket = {
   sourceCsv: string
   supportHandoff: string[]
   forbiddenActions: EcommerceOrderImportReviewForbiddenAction[]
+}
+
+export type EcommerceOrderQueueReadinessPacket = {
+  schema: typeof ECOMMERCE_ORDER_QUEUE_READINESS_PACKET_SCHEMA
+  version: 1
+  generatedAt: string
+  product: 'ecommerce'
+  storeName: string
+  sourceReview: {
+    schema: typeof ECOMMERCE_ORDER_IMPORT_REVIEW_PACKET_SCHEMA
+    generatedAt: string
+    operatingMode: EcommerceOrderImportReviewMode
+    catalogSource: EcommerceOrderImportReviewPacket['catalog']['source']
+    selectedSkus: string[]
+    totalRows: number
+    readyRows: number
+    blockedRows: number
+  }
+  readiness: {
+    status: 'ready_for_support' | 'blocked_for_repair'
+    nextAction: string
+  }
+  requiredControls: EcommerceOrderQueueReadinessRequiredControl[]
+  forbiddenUntilReady: EcommerceOrderQueueReadinessForbiddenAction[]
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -129,5 +179,77 @@ export function buildEcommerceOrderImportReviewPacket(input: Omit<EcommerceOrder
     version: 1,
     supportHandoff: [...ecommerceOrderImportReviewSupportHandoff],
     forbiddenActions: [...ecommerceOrderImportReviewForbiddenActions],
+  })
+}
+
+export function validateEcommerceOrderQueueReadinessPacket(value: unknown): EcommerceOrderQueueReadinessPacket {
+  if (!isRecord(value)
+    || !hasExactKeys(value, ['schema', 'version', 'generatedAt', 'product', 'storeName', 'sourceReview', 'readiness', 'requiredControls', 'forbiddenUntilReady'])
+    || value.schema !== ECOMMERCE_ORDER_QUEUE_READINESS_PACKET_SCHEMA
+    || value.version !== 1
+    || !isIsoTimestamp(value.generatedAt)
+    || value.product !== 'ecommerce'
+    || !isCanonicalText(value.storeName, 60)
+    || !isRecord(value.sourceReview)
+    || !hasExactKeys(value.sourceReview, ['schema', 'generatedAt', 'operatingMode', 'catalogSource', 'selectedSkus', 'totalRows', 'readyRows', 'blockedRows'])
+    || value.sourceReview.schema !== ECOMMERCE_ORDER_IMPORT_REVIEW_PACKET_SCHEMA
+    || !isIsoTimestamp(value.sourceReview.generatedAt)
+    || value.sourceReview.operatingMode !== 'browser_local_trial' && value.sourceReview.operatingMode !== 'managed_trial'
+    || !['shop-local', 'sample', 'unavailable', 'managed-shop'].includes(String(value.sourceReview.catalogSource))
+    || !Array.isArray(value.sourceReview.selectedSkus)
+    || value.sourceReview.selectedSkus.length > 8
+    || !value.sourceReview.selectedSkus.every((sku) => isCanonicalText(sku, 80))
+    || !isSafeNonNegativeInteger(value.sourceReview.totalRows)
+    || !isSafeNonNegativeInteger(value.sourceReview.readyRows)
+    || !isSafeNonNegativeInteger(value.sourceReview.blockedRows)
+    || !isRecord(value.readiness)
+    || !hasExactKeys(value.readiness, ['status', 'nextAction'])
+    || value.readiness.status !== 'ready_for_support' && value.readiness.status !== 'blocked_for_repair'
+    || !isCanonicalText(value.readiness.nextAction, 160)
+    || !Array.isArray(value.requiredControls)
+    || !sameStringArray(value.requiredControls, ecommerceOrderQueueReadinessRequiredControls)
+    || !Array.isArray(value.forbiddenUntilReady)
+    || !sameStringArray(value.forbiddenUntilReady, ecommerceOrderQueueReadinessForbiddenActions)) {
+    throw new Error('Ecommerce order queue readiness packet failed validation.')
+  }
+  if (Number(value.sourceReview.readyRows) + Number(value.sourceReview.blockedRows) !== Number(value.sourceReview.totalRows)) {
+    throw new Error('Ecommerce order queue readiness packet row counts do not reconcile.')
+  }
+  if (value.readiness.status === 'ready_for_support' && Number(value.sourceReview.blockedRows) !== 0) {
+    throw new Error('Ready Ecommerce order queue packets cannot include blocked rows.')
+  }
+  if (value.readiness.status === 'blocked_for_repair' && Number(value.sourceReview.blockedRows) === 0) {
+    throw new Error('Blocked Ecommerce order queue packets must include blocked rows.')
+  }
+  return value as EcommerceOrderQueueReadinessPacket
+}
+
+export function buildEcommerceOrderQueueReadinessPacket(input: { generatedAt: string; reviewPacket: EcommerceOrderImportReviewPacket }): EcommerceOrderQueueReadinessPacket {
+  const reviewPacket = validateEcommerceOrderImportReviewPacket(input.reviewPacket)
+  const blockedRows = reviewPacket.review.blockedRows
+  return validateEcommerceOrderQueueReadinessPacket({
+    schema: ECOMMERCE_ORDER_QUEUE_READINESS_PACKET_SCHEMA,
+    version: 1,
+    generatedAt: input.generatedAt,
+    product: 'ecommerce',
+    storeName: reviewPacket.storeName,
+    sourceReview: {
+      schema: reviewPacket.schema,
+      generatedAt: reviewPacket.generatedAt,
+      operatingMode: reviewPacket.operatingMode,
+      catalogSource: reviewPacket.catalog.source,
+      selectedSkus: [...reviewPacket.catalog.selectedSkus],
+      totalRows: reviewPacket.review.totalRows,
+      readyRows: reviewPacket.review.readyRows,
+      blockedRows,
+    },
+    readiness: {
+      status: blockedRows ? 'blocked_for_repair' : 'ready_for_support',
+      nextAction: blockedRows
+        ? 'Repair blocked order rows before support prepares a managed Shop queue.'
+        : 'Support can compare this packet with the managed Shop catalog before queue import approval.',
+    },
+    requiredControls: [...ecommerceOrderQueueReadinessRequiredControls],
+    forbiddenUntilReady: [...ecommerceOrderQueueReadinessForbiddenActions],
   })
 }

@@ -57,7 +57,9 @@ import {
 } from '../products/ecommerce/ecommerce-activation-packet'
 import {
   buildEcommerceOrderImportReviewPacket,
+  buildEcommerceOrderQueueReadinessPacket,
   validateEcommerceOrderImportReviewPacket,
+  type EcommerceOrderQueueReadinessPacket,
 } from '../products/ecommerce/ecommerce-order-review-packet'
 import { LEGACY_PRODUCTION_KEYS, PRODUCTION_KEY } from './production-workspace'
 import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } from './team-work'
@@ -119,6 +121,10 @@ function normalizeSchedulerActivation(body: unknown): SchedulerActivation | null
   }
 }
 
+function safePacketFilename(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'store'
+}
+
 function useSchedulerActivation() {
   const [schedulerActivation, setSchedulerActivation] = useState<SchedulerActivation | null>(null)
 
@@ -171,6 +177,7 @@ export function SettingsPage() {
     ['Status', 'Waiting for packet'],
     ['Boundary', 'Review only'],
   ])
+  const [ecommerceOrderQueueReadinessPacket, setEcommerceOrderQueueReadinessPacket] = useState<EcommerceOrderQueueReadinessPacket | null>(null)
   const completion = pilotProgress(setup)
   const isPilotReady = pilotReady(setup)
   const workflowReady = Boolean(setup.workspace.trim() && setup.owner.trim() && setup.entryPoint.trim())
@@ -394,6 +401,9 @@ export function SettingsPage() {
   ]
   const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 23, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, contextHandoffManifest, contextHandoffRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
+  const ecommerceOrderQueueReadinessFilename = ecommerceOrderQueueReadinessPacket
+    ? `supermega-ecommerce-order-queue-${safePacketFilename(ecommerceOrderQueueReadinessPacket.storeName)}.json`
+    : 'supermega-ecommerce-order-queue.json'
 
   useEffect(() => {
     if (!requestedProduct || requestedProduct === setup.product) return
@@ -538,19 +548,38 @@ export function SettingsPage() {
     setNotice('Ecommerce activation packet review cleared locally.')
   }
 
+  function downloadJsonPacket(packet: unknown, filename: string) {
+    const url = URL.createObjectURL(new Blob([`${JSON.stringify(packet, null, 2)}\n`], { type: 'application/json' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.hidden = true
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+
   function reviewEcommerceOrderReviewPacket() {
     try {
       const packet = validateEcommerceOrderImportReviewPacket(JSON.parse(ecommerceOrderReviewPacketText))
+      const queueReadinessPacket = buildEcommerceOrderQueueReadinessPacket({
+        generatedAt: new Date().toISOString(),
+        reviewPacket: packet,
+      })
+      setEcommerceOrderQueueReadinessPacket(queueReadinessPacket)
       setEcommerceOrderReviewPacketReview([
         ['Status', packet.review.status === 'ready' ? 'Ready packet' : 'Blocked packet'],
         ['Schema', packet.schema],
         ['Store', packet.storeName],
         ['Rows', `${packet.review.readyRows} ready / ${packet.review.blockedRows} blocked`],
         ['Catalog', `${packet.catalog.source} / ${packet.catalog.selectedSkus.length} SKUs`],
+        ['Queue handoff', queueReadinessPacket.readiness.status === 'ready_for_support' ? 'Ready to package' : 'Repair first'],
         ['Boundary', packet.forbiddenActions.includes('order_import') && packet.forbiddenActions.includes('managed_activation') ? 'Import and activation blocked' : 'Unsafe'],
       ])
       setNotice('Ecommerce order review packet checked locally. No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.')
     } catch (error) {
+      setEcommerceOrderQueueReadinessPacket(null)
       setEcommerceOrderReviewPacketReview([
         ['Status', 'Rejected'],
         ['Reason', error instanceof Error ? error.message : 'Invalid order review packet'],
@@ -587,16 +616,24 @@ export function SettingsPage() {
       ['Rows', `${packet.review.readyRows} ready / ${packet.review.blockedRows} blocked`],
       ['Boundary', 'Review only'],
     ])
+    setEcommerceOrderQueueReadinessPacket(null)
     setNotice('Sample Ecommerce order review packet loaded locally. Review it to test the order handoff gate.')
   }
 
   function clearEcommerceOrderReviewPacketReview() {
     setEcommerceOrderReviewPacketText('')
+    setEcommerceOrderQueueReadinessPacket(null)
     setEcommerceOrderReviewPacketReview([
       ['Status', 'Waiting for packet'],
       ['Boundary', 'Review only'],
     ])
     setNotice('Ecommerce order review packet cleared locally.')
+  }
+
+  function downloadEcommerceOrderQueueReadinessPacket() {
+    if (!ecommerceOrderQueueReadinessPacket) return
+    downloadJsonPacket(ecommerceOrderQueueReadinessPacket, ecommerceOrderQueueReadinessFilename)
+    setNotice('Ecommerce order queue readiness packet downloaded. No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.')
   }
 
   async function resetDemoWorkspace() {
@@ -733,7 +770,7 @@ export function SettingsPage() {
                   <div><span className="core-eyebrow">Order review packet</span><h3>Check before Shop queue</h3><p>Paste the Ecommerce order review JSON. The browser checks schema, row counts, catalog source, source CSV, and forbidden actions locally; no order import, customer message, payment, delivery, stock, Shop write, or managed activation runs.</p></div>
                   <label className="packet-review-field">Order review packet JSON<textarea maxLength={24000} onChange={(event) => setEcommerceOrderReviewPacketText(event.target.value)} placeholder="Paste supermega.ecommerce.order_import_review_packet.v1 JSON" rows={5} value={ecommerceOrderReviewPacketText} /></label>
                   <div className="context-quality-rows">{ecommerceOrderReviewPacketReview.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{label === 'Boundary' ? 'Review only; Shop queue still requires managed proof.' : 'Local order packet check'}</em></span>)}</div>
-                  <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceOrderReviewPacket} type="button">Load sample order packet</button><button className="core-button" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={reviewEcommerceOrderReviewPacket} type="button">Check order packet locally</button><button className="text-link" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={clearEcommerceOrderReviewPacketReview} type="button">Clear order packet</button></div>
+                  <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceOrderReviewPacket} type="button">Load sample order packet</button><button className="core-button" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={reviewEcommerceOrderReviewPacket} type="button">Check order packet locally</button><button className="core-button" disabled={!ecommerceOrderQueueReadinessPacket} onClick={downloadEcommerceOrderQueueReadinessPacket} type="button">Download queue packet</button><button className="text-link" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={clearEcommerceOrderReviewPacketReview} type="button">Clear order packet</button></div>
                 </div>
                 <div aria-label="Ecommerce activation packet review" className="learning-plan-agent context-quality-panel">
                   <div><span className="core-eyebrow">Ecommerce activation packet</span><h3>Review before managed setup</h3><p>Paste the downloaded Ecommerce activation JSON. The browser validates schema, source, queue, and forbidden actions locally; no import, managed activation, Shop write, payment, delivery, stock, or customer action runs.</p></div>
