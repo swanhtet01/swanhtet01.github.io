@@ -6,6 +6,7 @@ import {
   planShopInventoryOrderReturn,
   projectShopInventory,
   receiveShopInventory,
+  receiveShopInventoryFromProduction,
   releaseShopInventoryOrder,
   reserveShopInventoryOrder,
   returnShopInventoryOrder,
@@ -215,7 +216,17 @@ export type CommerceProductionMaterialRequest = {
   unit: CommerceProductionMaterialUnit
 }
 
-export type CommerceStockMovementKind = 'opening' | 'reserve' | 'release' | 'receipt' | 'count' | 'return' | 'production_issue'
+export type CommerceProductionBatchReceipt = {
+  releaseId: string
+  sourceCommandDigest: string
+  jobId: string
+  outputBatchId: string
+  releasedAt: string
+  sku: string
+  quantity: number
+}
+
+export type CommerceStockMovementKind = 'opening' | 'reserve' | 'release' | 'receipt' | 'count' | 'return' | 'production_issue' | 'production_receipt'
 
 export type CommerceStockMovement = {
   id: string
@@ -239,6 +250,9 @@ export type CommerceStockMovement = {
   productionQuantityMilli?: number
   productionUnit?: CommerceProductionMaterialUnit
   conversionNote?: string
+  productionReleaseId?: string
+  productionOutputBatchId?: string
+  productionReleasedAt?: string
 }
 
 export type CommerceClose = {
@@ -676,7 +690,7 @@ export type CommerceMutationResult =
 const orderStatuses: CommerceOrderStatus[] = ['confirmed', 'preparing', 'ready', 'completed', 'cancelled']
 const paymentStatuses: CommercePaymentStatus[] = ['pending', 'reconciled']
 const refundStatuses: CommerceRefundStatus[] = ['none', 'due', 'settled']
-const movementKinds: CommerceStockMovementKind[] = ['opening', 'reserve', 'release', 'receipt', 'count', 'return', 'production_issue']
+const movementKinds: CommerceStockMovementKind[] = ['opening', 'reserve', 'release', 'receipt', 'count', 'return', 'production_issue', 'production_receipt']
 const productionMaterialUnits = new Set<CommerceProductionMaterialUnit>(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
 const productionIssueFields = [
   'productionRequestId',
@@ -688,6 +702,15 @@ const productionIssueFields = [
   'productionUnit',
   'conversionNote',
 ] as const
+const productionReceiptFields = [
+  'productionReleaseId',
+  'productionCommandDigest',
+  'productionJobId',
+  'productionOutputBatchId',
+  'productionReleasedAt',
+] as const
+const productionIssueExclusiveFields = ['productionRequestId', 'productionMaterialId', 'productionInputLotId', 'productionQuantityMilli', 'productionUnit', 'conversionNote'] as const
+const productionReceiptExclusiveFields = ['productionReleaseId', 'productionOutputBatchId', 'productionReleasedAt'] as const
 const returnDispositions: CommerceReturnDisposition[] = ['restock', 'not_restocked']
 const correctionKinds: CommerceCorrectionKind[] = ['credit', 'debit']
 const correctionReasonCodes: CommerceCorrectionReasonCode[] = ['pricing_error', 'service_recovery', 'fee_adjustment', 'other']
@@ -1917,11 +1940,12 @@ export function validateCommerceState(value: unknown): CommerceState {
   const receiptQuantityByPurchaseOrder = new Map<string, number>()
   const latestReceiptAtByPurchaseOrder = new Map<string, bigint>()
   const productionRequestIds: string[] = []
+  const productionReleaseIds: string[] = []
   for (const [index, candidate] of movements.entries()) {
     if (!isRecord(candidate) || !hasExactKeys(
       candidate,
       ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'sku', 'quantityDelta'],
-      ['orderId', 'purchaseOrderId', 'expectedQuantity', 'countedQuantity', ...productionIssueFields],
+      ['orderId', 'purchaseOrderId', 'expectedQuantity', 'countedQuantity', ...productionIssueFields, ...productionReceiptExclusiveFields],
     )) throw new Error(`movements[${index}] is invalid.`)
     movementIds.push(requiredText(candidate.id, `movements[${index}].id`))
     movementActionIds.push(requiredText(candidate.actionId, `movements[${index}].actionId`))
@@ -1930,8 +1954,10 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!itemSkus.includes(candidate.sku as string)) throw new Error(`movements[${index}].sku is unknown.`)
     if (!movementKinds.includes(candidate.kind as CommerceStockMovementKind)) throw new Error(`movements[${index}].kind is invalid.`)
     const retainedProductionFields = productionIssueFields.filter((field) => candidate[field] !== undefined)
+    const retainedProductionReceiptFields = productionReceiptFields.filter((field) => candidate[field] !== undefined)
     if (candidate.kind === 'production_issue') {
       if (retainedProductionFields.length !== productionIssueFields.length
+        || productionReceiptExclusiveFields.some((field) => candidate[field] !== undefined)
         || candidate.orderId !== undefined
         || candidate.purchaseOrderId !== undefined
         || candidate.expectedQuantity !== undefined
@@ -1945,8 +1971,21 @@ export function validateCommerceState(value: unknown): CommerceState {
       assertSafeInteger(candidate.productionQuantityMilli, `movements[${index}].productionQuantityMilli`, 1)
       if (!productionMaterialUnits.has(candidate.productionUnit as CommerceProductionMaterialUnit)) throw new Error(`movements[${index}].productionUnit is invalid.`)
       canonicalText(candidate.conversionNote, `movements[${index}].conversionNote`, 240)
-    } else if (retainedProductionFields.length) {
-      throw new Error(`movements[${index}] production issue fields are unsupported for ${String(candidate.kind)}.`)
+    } else if (candidate.kind === 'production_receipt') {
+      if (retainedProductionReceiptFields.length !== productionReceiptFields.length
+        || productionIssueExclusiveFields.some((field) => candidate[field] !== undefined)
+        || candidate.orderId !== undefined
+        || candidate.purchaseOrderId !== undefined
+        || candidate.expectedQuantity !== undefined
+        || candidate.countedQuantity !== undefined) throw new Error(`movements[${index}] production receipt fields are incomplete.`)
+      productionReleaseIds.push(canonicalText(candidate.productionReleaseId, `movements[${index}].productionReleaseId`, 80))
+      if (typeof candidate.productionCommandDigest !== 'string' || !sha256DigestPattern.test(candidate.productionCommandDigest)) throw new Error(`movements[${index}].productionCommandDigest is invalid.`)
+      canonicalText(candidate.productionJobId, `movements[${index}].productionJobId`, 80)
+      canonicalText(candidate.productionOutputBatchId, `movements[${index}].productionOutputBatchId`, 80)
+      if (!validTimestamp(candidate.productionReleasedAt)) throw new Error(`movements[${index}].productionReleasedAt is invalid.`)
+      if ((timestampMicros(candidate.createdAt) as bigint) < (timestampMicros(candidate.productionReleasedAt) as bigint)) throw new Error(`movements[${index}] predates its Plant release.`)
+    } else if (retainedProductionFields.length || retainedProductionReceiptFields.length) {
+      throw new Error(`movements[${index}] production fields are unsupported for ${String(candidate.kind)}.`)
     }
     const actionMovements = movementsByAction.get(candidate.actionId as string) ?? []
     actionMovements.push(candidate as unknown as CommerceStockMovement)
@@ -1970,6 +2009,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if ((candidate.kind === 'reserve' || candidate.kind === 'production_issue') && Number(candidate.quantityDelta) >= 0) throw new Error(`movements[${index}] ${String(candidate.kind)} must be negative.`)
     if (candidate.kind !== 'reserve' && candidate.kind !== 'production_issue' && Number(candidate.quantityDelta) <= 0) throw new Error(`movements[${index}] release, receipt, or return must be positive.`)
     if (candidate.kind === 'production_issue') continue
+    if (candidate.kind === 'production_receipt') continue
     if (candidate.kind === 'receipt') {
       if (candidate.orderId !== undefined) throw new Error(`movements[${index}] receipt cannot reference an order.`)
       if (candidate.purchaseOrderId !== undefined) {
@@ -2022,6 +2062,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   }
   assertUnique(movementIds, 'Stock movement ID')
   assertUnique(productionRequestIds, 'Production material request ID')
+  assertUnique(productionReleaseIds, 'Production batch release ID')
   const validatedMovements = movements as unknown as CommerceStockMovement[]
   for (const { orderId, record } of orderReturns) {
     const order = orderById.get(orderId) as unknown as CommerceOrder | undefined
@@ -4068,6 +4109,107 @@ export function issueCommerceStockToProduction(
   return validateCommerceState({
     ...current,
     items: current.items.map((candidate) => candidate.sku === checkedSku ? { ...candidate, onHand: nextBalance } : candidate),
+    movements: [movement, ...current.movements],
+    ...(inventoryFoundation ? { inventoryFoundation } : {}),
+  })
+}
+
+export function receiveCommerceProductionBatch(
+  state: CommerceState,
+  receipt: CommerceProductionBatchReceipt,
+  proof: CommerceActionProof,
+  locationReceipt?: { locationId: string; expectedHeadDigest: string },
+) {
+  if (!validProof(proof)) return null
+  let checkedReceipt: CommerceProductionBatchReceipt
+  try {
+    checkedReceipt = {
+      releaseId: canonicalText(receipt.releaseId, 'production release ID', 80),
+      sourceCommandDigest: receipt.sourceCommandDigest,
+      jobId: canonicalText(receipt.jobId, 'production job ID', 80),
+      outputBatchId: canonicalText(receipt.outputBatchId, 'production output batch ID', 80),
+      releasedAt: canonicalText(receipt.releasedAt, 'production release time', 40),
+      sku: canonicalText(receipt.sku, 'production receipt SKU', 80),
+      quantity: receipt.quantity,
+    }
+    if (!/^QREL-[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(checkedReceipt.releaseId)
+      || !/^BATCH-[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(checkedReceipt.outputBatchId)
+      || !sha256DigestPattern.test(checkedReceipt.sourceCommandDigest)
+      || !validTimestamp(checkedReceipt.releasedAt)
+      || !Number.isSafeInteger(checkedReceipt.quantity)
+      || checkedReceipt.quantity < 1
+      || (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(checkedReceipt.releasedAt) as bigint)) return null
+  } catch {
+    return null
+  }
+  const locationId = locationReceipt?.locationId ?? 'LOC-MAIN'
+  if (!/^LOC-[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(locationId)
+    || proof.evidenceReference !== `PLANT-BATCH:${checkedReceipt.releaseId}:${checkedReceipt.sourceCommandDigest}:${locationId}`) return null
+  const current = validateCommerceState(state)
+  const movementMatches = (movement: CommerceStockMovement) => movement.kind === 'production_receipt'
+    && movement.sku === checkedReceipt.sku
+    && movement.quantityDelta === checkedReceipt.quantity
+    && movement.productionReleaseId === checkedReceipt.releaseId
+    && movement.productionCommandDigest === checkedReceipt.sourceCommandDigest
+    && movement.productionJobId === checkedReceipt.jobId
+    && movement.productionOutputBatchId === checkedReceipt.outputBatchId
+    && movement.productionReleasedAt === checkedReceipt.releasedAt
+  const replayMovement = current.movements.find((movement) => movement.actionId === proof.actionId)
+  if (replayMovement) {
+    if (!movementMatches(replayMovement) || !sameProof(replayMovement, proof)) return null
+    if (!current.inventoryFoundation) return locationReceipt ? null : current
+    if (!locationReceipt) return null
+    try {
+      const replay = receiveShopInventoryFromProduction(current.inventoryFoundation, {
+        receipt: checkedReceipt,
+        locationId,
+        proof,
+        catalogSkus: current.items.map((item) => item.sku).sort(),
+        expectedHeadDigest: current.inventoryFoundation.headDigest,
+      })
+      return replay.replayed && shopInventoryMatchesItems(replay.state, current.items) ? current : null
+    } catch {
+      return null
+    }
+  }
+  if (actionIdIsUsed(current, proof.actionId)
+    || current.movements.some((movement) => movement.productionReleaseId === checkedReceipt.releaseId)) return null
+  const matchingItems = current.items.filter((candidate) => candidate.sku === checkedReceipt.sku)
+  const item = matchingItems.length === 1 ? matchingItems[0] : undefined
+  if (!item) return null
+  const nextBalance = safeBalance(item.onHand, checkedReceipt.quantity)
+  if (nextBalance === null) return null
+  const nextItems = current.items.map((candidate) => candidate.sku === checkedReceipt.sku ? { ...candidate, onHand: nextBalance } : candidate)
+  let inventoryFoundation = current.inventoryFoundation
+  if (inventoryFoundation) {
+    if (!locationReceipt || !shopInventoryMatchesItems(inventoryFoundation, current.items)) return null
+    try {
+      const locationResult = receiveShopInventoryFromProduction(inventoryFoundation, {
+        receipt: checkedReceipt,
+        locationId,
+        proof,
+        catalogSkus: current.items.map((candidate) => candidate.sku).sort(),
+        expectedHeadDigest: locationReceipt.expectedHeadDigest,
+      })
+      if (locationResult.replayed || !shopInventoryMatchesItems(locationResult.state, nextItems)) return null
+      inventoryFoundation = locationResult.state
+    } catch {
+      return null
+    }
+  } else if (locationReceipt) return null
+  const movement = movementFor(proof, {
+    kind: 'production_receipt',
+    sku: checkedReceipt.sku,
+    quantityDelta: checkedReceipt.quantity,
+    productionReleaseId: checkedReceipt.releaseId,
+    productionCommandDigest: checkedReceipt.sourceCommandDigest,
+    productionJobId: checkedReceipt.jobId,
+    productionOutputBatchId: checkedReceipt.outputBatchId,
+    productionReleasedAt: checkedReceipt.releasedAt,
+  })
+  return validateCommerceState({
+    ...current,
+    items: nextItems,
     movements: [movement, ...current.movements],
     ...(inventoryFoundation ? { inventoryFoundation } : {}),
   })

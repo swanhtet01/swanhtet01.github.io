@@ -431,6 +431,26 @@ def _production_inventory_command_id(request_id: str) -> str:
     return f"PIS-{identity[7:39].upper()}"
 
 
+def _production_receipt_command_id(release_id: str) -> str:
+    identity = _canonical_digest(
+        {
+            "contract": "supermega.shop.production-receipt-inventory-command.v1",
+            "releaseId": release_id,
+        }
+    )
+    return f"PRC-{identity[7:39].upper()}"
+
+
+def _production_receipt_stock_unit_id(release_id: str) -> str:
+    identity = _canonical_digest(
+        {
+            "contract": "supermega.shop.production-receipt-stock-unit.v1",
+            "releaseId": release_id,
+        }
+    )
+    return f"LOT-PLANT-{identity[7:31].upper()}"
+
+
 def _order_inventory_reservation_id(
     order_id: str, allocation: Mapping[str, Any]
 ) -> str:
@@ -529,6 +549,83 @@ def _payload(value: object, field: str, catalog_skus: list[str]) -> dict[str, An
             "trackingCode": _text(
                 row["trackingCode"], f"{field}.trackingCode", 80
             ),
+            "locationId": _identifier(
+                row["locationId"], f"{field}.locationId", "LOC"
+            ),
+            "quantity": _integer(row["quantity"], f"{field}.quantity", 1),
+            "proof": _proof(row["proof"], f"{field}.proof"),
+        }
+    if kind == "production_receipt":
+        row = _exact(
+            row,
+            field,
+            {
+                "kind",
+                "id",
+                "productionReleaseId",
+                "productionCommandDigest",
+                "productionJobId",
+                "productionOutputBatchId",
+                "productionReleasedAt",
+                "stockUnitId",
+                "sku",
+                "trackingCode",
+                "locationId",
+                "quantity",
+                "proof",
+            },
+        )
+        release_id = _identifier(
+            row["productionReleaseId"], f"{field}.productionReleaseId", "QREL"
+        )
+        command_id = _identifier(row["id"], f"{field}.id", "PRC")
+        if command_id != _production_receipt_command_id(release_id):
+            raise ShopInventoryValidationError(
+                f"{field}.id is not deterministic for its Plant release."
+            )
+        stock_unit_id = _identifier(
+            row["stockUnitId"], f"{field}.stockUnitId", "LOT"
+        )
+        if stock_unit_id != _production_receipt_stock_unit_id(release_id):
+            raise ShopInventoryValidationError(
+                f"{field}.stockUnitId is not deterministic for its Plant release."
+            )
+        output_batch_id = _identifier(
+            row["productionOutputBatchId"],
+            f"{field}.productionOutputBatchId",
+            "BATCH",
+        )
+        released_at, _ = _timestamp(
+            row["productionReleasedAt"], f"{field}.productionReleasedAt"
+        )
+        tracking_code = _text(
+            row["trackingCode"], f"{field}.trackingCode", 80
+        )
+        if tracking_code != output_batch_id:
+            raise ShopInventoryValidationError(
+                f"{field}.trackingCode must equal its released Plant output batch."
+            )
+        sku = _text(row["sku"], f"{field}.sku", 80)
+        if sku not in catalog_skus:
+            raise ShopInventoryValidationError(
+                f"{field}.sku is not in the Shop catalog."
+            )
+        return {
+            "kind": "production_receipt",
+            "id": command_id,
+            "productionReleaseId": release_id,
+            "productionCommandDigest": _digest(
+                row["productionCommandDigest"],
+                f"{field}.productionCommandDigest",
+            ),
+            "productionJobId": _text(
+                row["productionJobId"], f"{field}.productionJobId", 80
+            ),
+            "productionOutputBatchId": output_batch_id,
+            "productionReleasedAt": released_at,
+            "stockUnitId": stock_unit_id,
+            "sku": sku,
+            "trackingCode": tracking_code,
             "locationId": _identifier(
                 row["locationId"], f"{field}.locationId", "LOC"
             ),
@@ -900,7 +997,7 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
                     field=field,
                 )
             continue
-        if command["kind"] == "receipt":
+        if command["kind"] in {"receipt", "production_receipt"}:
             if command["locationId"] not in locations:
                 raise ShopInventoryValidationError(
                     "receipt references an unknown location."

@@ -107,6 +107,7 @@ _MOVEMENT_KINDS = (
     "count",
     "return",
     "production_issue",
+    "production_receipt",
 )
 _PRODUCTION_MATERIAL_UNITS = frozenset(
     {"kg", "g", "l", "ml", "pcs", "pack", "bag", "roll", "sheet", "m", "cm"}
@@ -341,6 +342,9 @@ _MOVEMENT_FIELDS = frozenset(
         "productionQuantityMilli",
         "productionUnit",
         "conversionNote",
+        "productionReleaseId",
+        "productionOutputBatchId",
+        "productionReleasedAt",
     }
 )
 _PRODUCTION_ISSUE_FIELDS = frozenset(
@@ -434,6 +438,28 @@ _STOREFRONT_CONFIGURATION_FIELDS = frozenset(
 _STOREFRONT_CONFIGURATION_OPTIONAL_FIELDS = frozenset({"activation", "merchandising"})
 _STOREFRONT_MERCHANDISING_FIELDS = frozenset(
     {"sku", "featured", "collection", "displayName", "note"}
+)
+_PRODUCTION_RECEIPT_FIELDS = frozenset(
+    {
+        "productionReleaseId",
+        "productionCommandDigest",
+        "productionJobId",
+        "productionOutputBatchId",
+        "productionReleasedAt",
+    }
+)
+_PRODUCTION_ISSUE_EXCLUSIVE_FIELDS = frozenset(
+    {
+        "productionRequestId",
+        "productionMaterialId",
+        "productionInputLotId",
+        "productionQuantityMilli",
+        "productionUnit",
+        "conversionNote",
+    }
+)
+_PRODUCTION_RECEIPT_EXCLUSIVE_FIELDS = frozenset(
+    {"productionReleaseId", "productionOutputBatchId", "productionReleasedAt"}
 )
 _STOREFRONT_ACTIVATION_FIELDS = frozenset(
     {"contract", "packageDigest", "workflowTemplateId", "confirmedAt", "skus"}
@@ -1870,6 +1896,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     receipt_quantity_by_purchase_order: dict[str, int] = {}
     latest_receipt_at_by_purchase_order: dict[str, datetime] = {}
     production_request_ids: list[str] = []
+    production_release_ids: list[str] = []
     for index, candidate in enumerate(movements):
         movement = _object(candidate, f"movements[{index}]")
         _exact_fields(
@@ -1884,6 +1911,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     "countedQuantity",
                 }
                 | _PRODUCTION_ISSUE_FIELDS
+                | _PRODUCTION_RECEIPT_EXCLUSIVE_FIELDS
             ),
             optional=frozenset(
                 {
@@ -1893,7 +1921,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     "countedQuantity",
                 }
             )
-            | _PRODUCTION_ISSUE_FIELDS,
+            | _PRODUCTION_ISSUE_FIELDS
+            | _PRODUCTION_RECEIPT_EXCLUSIVE_FIELDS,
         )
         movement_id = _text(
             movement["id"],
@@ -1911,9 +1940,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         if kind not in _MOVEMENT_KINDS:
             raise TrialValidationError(f"movements[{index}].kind is invalid.")
         retained_production_fields = _PRODUCTION_ISSUE_FIELDS.intersection(movement)
+        retained_production_receipt_fields = _PRODUCTION_RECEIPT_FIELDS.intersection(movement)
         if kind == "production_issue":
             if (
                 retained_production_fields != _PRODUCTION_ISSUE_FIELDS
+                or _PRODUCTION_RECEIPT_EXCLUSIVE_FIELDS.intersection(movement)
                 or "orderId" in movement
                 or "purchaseOrderId" in movement
                 or "expectedQuantity" in movement
@@ -1958,9 +1989,62 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 f"movements[{index}].conversionNote",
                 maximum=240,
             )
-        elif retained_production_fields:
+        elif kind == "production_receipt":
+            if (
+                retained_production_receipt_fields != _PRODUCTION_RECEIPT_FIELDS
+                or _PRODUCTION_ISSUE_EXCLUSIVE_FIELDS.intersection(movement)
+                or "orderId" in movement
+                or "purchaseOrderId" in movement
+                or "expectedQuantity" in movement
+                or "countedQuantity" in movement
+            ):
+                raise TrialValidationError(
+                    f"movements[{index}] production receipt fields are incomplete."
+                )
+            production_release_ids.append(
+                _text(
+                    movement["productionReleaseId"],
+                    f"movements[{index}].productionReleaseId",
+                    maximum=80,
+                )
+            )
+            production_command_digest = _text(
+                movement["productionCommandDigest"],
+                f"movements[{index}].productionCommandDigest",
+                maximum=71,
+            )
+            if _SHA256_DIGEST_PATTERN.fullmatch(production_command_digest) is None:
+                raise TrialValidationError(
+                    f"movements[{index}].productionCommandDigest is invalid."
+                )
+            _text(
+                movement["productionJobId"],
+                f"movements[{index}].productionJobId",
+                maximum=80,
+            )
+            _text(
+                movement["productionOutputBatchId"],
+                f"movements[{index}].productionOutputBatchId",
+                maximum=80,
+            )
+            released_at = datetime.fromisoformat(
+                _timestamp(
+                    movement["productionReleasedAt"],
+                    f"movements[{index}].productionReleasedAt",
+                ).replace("Z", "+00:00")
+            )
+            received_at = datetime.fromisoformat(
+                _timestamp(
+                    movement["createdAt"], f"movements[{index}].createdAt"
+                ).replace("Z", "+00:00")
+            )
+            if received_at < released_at:
+                raise TrialValidationError(
+                    f"movements[{index}] predates its Plant release."
+                )
+        elif retained_production_fields or retained_production_receipt_fields:
             raise TrialValidationError(
-                f"movements[{index}] production issue fields are unsupported for {kind}."
+                f"movements[{index}] production fields are unsupported for {kind}."
             )
         movements_by_action.setdefault(action_id, []).append(movement)
         if kind == "count":
@@ -2004,7 +2088,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 raise TrialValidationError(
                     f"movements[{index}] release, receipt, or return must be positive."
                 )
-        if kind == "production_issue":
+        if kind in {"production_issue", "production_receipt"}:
             movement_ids.append(movement_id)
             movement_action_ids.append(action_id)
             continue
@@ -2121,6 +2205,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         movement_action_ids.append(action_id)
     _unique(movement_ids, "Stock movement ID")
     _unique(production_request_ids, "Production material request ID")
+    _unique(production_release_ids, "Production batch release ID")
     for order_id, return_record in order_returns:
         order = order_by_id.get(order_id)
         lines = _reservation_lines(order) if order else []

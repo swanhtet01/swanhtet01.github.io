@@ -48,6 +48,15 @@ export type ShopInventoryProductionRequest = {
   quantityMilli: number
   unit: ShopInventoryProductionUnit
 }
+export type ShopInventoryProductionReceipt = {
+  releaseId: string
+  sourceCommandDigest: string
+  jobId: string
+  outputBatchId: string
+  releasedAt: string
+  sku: string
+  quantity: number
+}
 export type ShopInventoryProductionAllocation = {
   stockUnitId: string
   locationId: string
@@ -70,6 +79,7 @@ export type ShopInventoryCommandPayload =
   | { kind: 'import'; id: string; package: ShopInventoryImportPackage; proof: ShopInventoryProof }
   | { kind: 'transfer'; id: string; stockUnitId: string; fromLocationId: string; toLocationId: string; quantity: number; proof: ShopInventoryProof }
   | { kind: 'receipt'; id: string; purchaseOrderId: string; stockUnitId: string; sku: string; trackingCode: string; locationId: string; quantity: number; proof: ShopInventoryProof }
+  | { kind: 'production_receipt'; id: string; productionReleaseId: string; productionCommandDigest: string; productionJobId: string; productionOutputBatchId: string; productionReleasedAt: string; stockUnitId: string; sku: string; trackingCode: string; locationId: string; quantity: number; proof: ShopInventoryProof }
   | { kind: 'count'; id: string; stockUnitId: string; locationId: string; expectedQuantity: number; countedQuantity: number; proof: ShopInventoryProof }
   | { kind: 'production_issue'; id: string; productionRequestId: string; productionCommandDigest: string; productionJobId: string; productionMaterialId: string; productionInputLotId: string; productionQuantityMilli: number; productionUnit: ShopInventoryProductionUnit; sku: string; stockQuantity: number; conversionNote: string; allocations: ShopInventoryProductionAllocation[]; proof: ShopInventoryProof }
   | { kind: 'reserve'; id: string; clientId: string; stockUnitId: string; locationId: string; quantity: number; proof: ShopInventoryProof }
@@ -132,7 +142,7 @@ export type ShopInventoryProjection = {
 const digestPattern = /^sha256:[0-9a-f]{64}$/
 const businessIdPattern = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$/
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
-const commandKinds = new Set(['import', 'transfer', 'receipt', 'count', 'production_issue', 'reserve', 'release', 'fulfil', 'order_reserve', 'order_release', 'order_fulfil', 'order_return'])
+const commandKinds = new Set(['import', 'transfer', 'receipt', 'production_receipt', 'count', 'production_issue', 'reserve', 'release', 'fulfil', 'order_reserve', 'order_release', 'order_fulfil', 'order_return'])
 const productionUnits = new Set<ShopInventoryProductionUnit>(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -480,6 +490,34 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
       proof: proof(source.proof, `${field}.proof`),
     }
   }
+  if (value.kind === 'production_receipt') {
+    const source = exact(value, field, ['kind', 'id', 'productionReleaseId', 'productionCommandDigest', 'productionJobId', 'productionOutputBatchId', 'productionReleasedAt', 'stockUnitId', 'sku', 'trackingCode', 'locationId', 'quantity', 'proof'])
+    const productionReleaseId = identifier(source.productionReleaseId, `${field}.productionReleaseId`, 'QREL')
+    const id = identifier(source.id, `${field}.id`, 'PRC')
+    if (id !== inventoryProductionReceiptCommandId(productionReleaseId)) throw new Error(`${field}.id is not deterministic for its Plant release.`)
+    const productionOutputBatchId = identifier(source.productionOutputBatchId, `${field}.productionOutputBatchId`, 'BATCH')
+    const stockUnitId = identifier(source.stockUnitId, `${field}.stockUnitId`, 'LOT')
+    if (stockUnitId !== inventoryProductionReceiptStockUnitId(productionReleaseId)) throw new Error(`${field}.stockUnitId is not deterministic for its Plant release.`)
+    const sku = text(source.sku, `${field}.sku`, 80)
+    if (!catalog.includes(sku)) throw new Error(`${field}.sku is not present in the trusted Shop catalog.`)
+    const trackingCode = text(source.trackingCode, `${field}.trackingCode`, 80)
+    if (trackingCode !== productionOutputBatchId) throw new Error(`${field}.trackingCode must equal its released Plant output batch.`)
+    return {
+      kind: 'production_receipt',
+      id,
+      productionReleaseId,
+      productionCommandDigest: digest(source.productionCommandDigest, `${field}.productionCommandDigest`),
+      productionJobId: text(source.productionJobId, `${field}.productionJobId`, 80),
+      productionOutputBatchId,
+      productionReleasedAt: timestampMicros(source.productionReleasedAt, `${field}.productionReleasedAt`).value,
+      stockUnitId,
+      sku,
+      trackingCode,
+      locationId: identifier(source.locationId, `${field}.locationId`, 'LOC'),
+      quantity: quantity(source.quantity, `${field}.quantity`, 1),
+      proof: proof(source.proof, `${field}.proof`),
+    }
+  }
   if (value.kind === 'count') {
     const source = exact(value, field, ['kind', 'id', 'stockUnitId', 'locationId', 'expectedQuantity', 'countedQuantity', 'proof'])
     return {
@@ -625,6 +663,10 @@ function ledgerEvent(input: {
   productionJobId?: string
   productionMaterialId?: string
   productionInputLotId?: string
+  productionReleaseId?: string
+  productionOutputBatchId?: string
+  productionReleasedAt?: string
+  productionCommandDigest?: string
 }) {
   const record: Record<string, unknown> = {
     id: input.id,
@@ -653,6 +695,10 @@ function ledgerEvent(input: {
   if (input.productionJobId !== undefined) record.productionJobId = input.productionJobId
   if (input.productionMaterialId !== undefined) record.productionMaterialId = input.productionMaterialId
   if (input.productionInputLotId !== undefined) record.productionInputLotId = input.productionInputLotId
+  if (input.productionReleaseId !== undefined) record.productionReleaseId = input.productionReleaseId
+  if (input.productionOutputBatchId !== undefined) record.productionOutputBatchId = input.productionOutputBatchId
+  if (input.productionReleasedAt !== undefined) record.productionReleasedAt = input.productionReleasedAt
+  if (input.productionCommandDigest !== undefined) record.productionCommandDigest = input.productionCommandDigest
   return record
 }
 
@@ -759,7 +805,7 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
       })
       return
     }
-    if (command.kind === 'receipt') {
+    if (command.kind === 'receipt' || command.kind === 'production_receipt') {
       if (!locations.has(command.locationId)) throw new Error(`${field}.locationId is unknown.`)
       if (stockUnits.has(command.stockUnitId)) throw new Error(`${field}.stockUnitId is already recorded.`)
       const traceIdentity = `${command.sku}|lot|${command.trackingCode}`
@@ -776,7 +822,14 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
       ledger.push(ledgerEvent({
         id: `LED-${command.id}-RECEIPT`, kind: 'receipt', command, stockUnitId: command.stockUnitId,
         locationId: command.locationId, onHandDelta: command.quantity, reservedDelta: 0,
-        referenceId: command.purchaseOrderId,
+        referenceId: command.kind === 'receipt' ? command.purchaseOrderId : command.productionReleaseId,
+        ...(command.kind === 'production_receipt' ? {
+          productionReleaseId: command.productionReleaseId,
+          productionOutputBatchId: command.productionOutputBatchId,
+          productionReleasedAt: command.productionReleasedAt,
+          productionCommandDigest: command.productionCommandDigest,
+          productionJobId: command.productionJobId,
+        } : {}),
       }))
       return
     }
@@ -1135,6 +1188,42 @@ export function receiveShopInventory(state: unknown, input: {
     kind: 'receipt', id: input.receiptId, purchaseOrderId: input.purchaseOrderId,
     stockUnitId: input.stockUnitId, sku: input.sku, trackingCode: input.trackingCode,
     locationId: input.locationId, quantity: input.quantity, proof: proof(input.proof, 'proof'),
+  }, input.catalogSkus, input.expectedHeadDigest)
+}
+
+function inventoryProductionReceiptCommandId(releaseId: string) {
+  const identity = canonicalDigest({ contract: 'supermega.shop.production-receipt-inventory-command.v1', releaseId })
+  return `PRC-${identity.slice(7, 39).toUpperCase()}`
+}
+
+function inventoryProductionReceiptStockUnitId(releaseId: string) {
+  const identity = canonicalDigest({ contract: 'supermega.shop.production-receipt-stock-unit.v1', releaseId })
+  return `LOT-PLANT-${identity.slice(7, 31).toUpperCase()}`
+}
+
+export function receiveShopInventoryFromProduction(state: unknown, input: {
+  receipt: ShopInventoryProductionReceipt
+  locationId: unknown
+  proof: unknown
+  catalogSkus: unknown
+  expectedHeadDigest: unknown
+}) {
+  const releaseId = identifier(input.receipt.releaseId, 'production receipt.releaseId', 'QREL')
+  const outputBatchId = identifier(input.receipt.outputBatchId, 'production receipt.outputBatchId', 'BATCH')
+  return appendCommand(state, {
+    kind: 'production_receipt',
+    id: inventoryProductionReceiptCommandId(releaseId),
+    productionReleaseId: releaseId,
+    productionCommandDigest: digest(input.receipt.sourceCommandDigest, 'production receipt.sourceCommandDigest'),
+    productionJobId: text(input.receipt.jobId, 'production receipt.jobId', 80),
+    productionOutputBatchId: outputBatchId,
+    productionReleasedAt: timestampMicros(input.receipt.releasedAt, 'production receipt.releasedAt').value,
+    stockUnitId: inventoryProductionReceiptStockUnitId(releaseId),
+    sku: text(input.receipt.sku, 'production receipt.sku', 80),
+    trackingCode: outputBatchId,
+    locationId: input.locationId,
+    quantity: quantity(input.receipt.quantity, 'production receipt.quantity', 1),
+    proof: proof(input.proof, 'proof'),
   }, input.catalogSkus, input.expectedHeadDigest)
 }
 
