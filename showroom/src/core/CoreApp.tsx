@@ -823,6 +823,12 @@ function uid(prefix: string) {
   return `${prefix}-${commandUuid()}`.toUpperCase()
 }
 
+function commerceOrderDisplayReference(orderId: string) {
+  const canonical = orderId.trim().toUpperCase()
+  const match = /^ORD-([A-F0-9]{8})(?:-[A-F0-9-]+)?$/.exec(canonical)
+  return match ? `#${match[1]}` : canonical
+}
+
 function commandUuid() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16))
@@ -4055,14 +4061,15 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       const item = commerce.items.find((candidate) => candidate.sku === line.sku)
       return `${line.sku} ${item?.onHand ?? 0} → ${(item?.onHand ?? 0) - line.quantity}`
     }).join(', ')
+    const displayReference = commerceOrderDisplayReference(order.id)
     queueAction({
       kind: 'order_create',
       subjectId: order.id,
       summary: `Complete ${formatMoney(order.total)} sale`,
       before: `${lineReview} · ${review.payment}`,
-      after: `Order ${order.id} · Stock ${stockReview}`,
+      after: `Sale ${displayReference} · Stock ${stockReview}`,
       presentation: 'counter',
-      evidenceReferenceSuggestion: `${order.id} counter receipt`,
+      evidenceReferenceSuggestion: `Counter receipt ${displayReference}`,
       evidenceReferenceLocked: true,
       reasonSuggestion: 'Walk-in sale reviewed at the Shop counter.',
       apply: async (action) => {
