@@ -581,6 +581,15 @@ export type CommerceStorefrontRequestV2 = {
 
 export type CommerceStorefrontRequest = CommerceStorefrontRequestV1 | CommerceStorefrontRequestV2
 
+export type CommerceStorefrontOrderStage = 'waiting_shop_review' | CommerceOrderStatus
+
+export type CommerceStorefrontOrderTimelineEntry = {
+  request: CommerceStorefrontRequest
+  order: CommerceOrder | null
+  stage: CommerceStorefrontOrderStage
+  paymentStatus: 'not_authorized' | CommercePaymentStatus
+}
+
 export type CommerceStorefrontMerchandising = {
   sku: string
   featured: boolean
@@ -3110,6 +3119,33 @@ export function commerceOrderAdjustedTotal(order: CommerceOrder) {
 
 export function commerceStorefrontRequests(state: CommerceState) {
   return state.storefrontRequests ?? []
+}
+
+export function commerceStorefrontOrderTimeline(
+  state: CommerceState,
+  requests: CommerceStorefrontRequest[] = commerceStorefrontRequests(state),
+): CommerceStorefrontOrderTimelineEntry[] {
+  const current = validateCommerceState(structuredClone(state))
+  const seenIds = new Set<string>()
+  for (const request of requests) {
+    if (seenIds.has(request.id)) throw new Error(`Duplicate Ecommerce request ${request.id} cannot be projected.`)
+    seenIds.add(request.id)
+  }
+  const validatedRequests = commerceStorefrontRequests(validateCommerceState({
+    ...current,
+    storefrontRequests: structuredClone(requests),
+  }))
+  return validatedRequests.map((request): CommerceStorefrontOrderTimelineEntry => {
+    const matchingOrders = current.orders.filter((order) => order.sourceRecordId === request.id)
+    if (matchingOrders.length > 1) throw new Error(`Ecommerce request ${request.id} has multiple Shop orders.`)
+    const order = matchingOrders[0] ? structuredClone(matchingOrders[0]) : null
+    return {
+      request: structuredClone(request),
+      order,
+      stage: order?.status ?? 'waiting_shop_review',
+      paymentStatus: order?.paymentStatus ?? 'not_authorized',
+    }
+  }).sort((left, right) => Date.parse(right.request.createdAt) - Date.parse(left.request.createdAt))
 }
 
 export function commerceStorefrontConfiguration(state: CommerceState) {

@@ -892,6 +892,99 @@
   margin: 0;
 }
 
+.ecommerce-order-tracking {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 9px;
+  border: 1px solid rgba(31, 68, 51, .12);
+  border-radius: 12px;
+  padding: 11px;
+  background: rgba(255, 255, 255, .7);
+}
+
+.ecommerce-order-tracking-head,
+.ecommerce-order-tracking-head > span,
+.ecommerce-order-history,
+.ecommerce-order-history article,
+.ecommerce-order-history article > span,
+.ecommerce-order-history article > div {
+  display: flex;
+}
+
+.ecommerce-order-tracking-head {
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ecommerce-order-tracking-head > span,
+.ecommerce-order-history,
+.ecommerce-order-history article > span {
+  flex-direction: column;
+}
+
+.ecommerce-order-tracking-head strong,
+.ecommerce-order-history article strong {
+  color: #17231d;
+  font-size: 12px;
+}
+
+.ecommerce-order-tracking-head small,
+.ecommerce-order-tracking > p,
+.ecommerce-order-history article small {
+  color: #66746b;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.ecommerce-order-tracking-head b {
+  color: #0b745e;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.ecommerce-order-tracking > p {
+  margin: 0;
+}
+
+.ecommerce-order-history {
+  gap: 7px;
+}
+
+.ecommerce-order-history article {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  border-top: 1px solid rgba(31, 68, 51, .1);
+  padding-top: 8px;
+}
+
+.ecommerce-order-history article > span {
+  min-width: 0;
+}
+
+.ecommerce-order-history article > span > small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ecommerce-order-history article > span > b {
+  color: #17231d;
+  font-size: 11px;
+}
+
+.ecommerce-order-history article > div {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+}
+
+.ecommerce-order-history article .core-button {
+  flex: 0 0 auto;
+  min-height: 44px;
+}
+
 .ecommerce-after-purchase {
   margin-top: 8px;
   border-top: 1px solid rgba(31, 68, 51, .12);
@@ -1078,6 +1171,16 @@
   .ecommerce-after-purchase > div {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .ecommerce-order-tracking-head,
+  .ecommerce-order-history article {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ecommerce-order-history article .core-button {
+    width: 100%;
   }
 
   .ecommerce-after-purchase .core-button {

@@ -9418,6 +9418,54 @@ async function verifyStorefrontRuntime() {
       && commerce.commerceStorefrontRequestEquals(commerce.commerceStorefrontRequests(managedBuyingState)[0], buyingRequest)
       && commerce.commerceStorefrontRequestLines(buyingRequest).length === 2,
     'ecommerce_buying_multiline_request_not_retained_in_managed_shop')
+    const waitingTimeline = commerce.commerceStorefrontOrderTimeline(managedBuyingState)
+    buyingAssert(waitingTimeline.length === 1
+      && waitingTimeline[0].request.id === buyingRequest.id
+      && waitingTimeline[0].order === null
+      && waitingTimeline[0].stage === 'waiting_shop_review'
+      && waitingTimeline[0].paymentStatus === 'not_authorized',
+    'ecommerce_request_timeline_did_not_show_shop_review_boundary')
+    const linkedOrderProof = {
+      actionId: 'ACT-ECOMMERCE-ORDER-1',
+      capturedAt: '2026-07-24T09:10:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Confirm reviewed Ecommerce request in Shop.',
+      evidenceReference: `ECOMMERCE:${buyingRequest.id}:ORDER`,
+    }
+    const linkedOrderLines = buyingRequest.lines.map((line) => ({
+      sku: line.sku,
+      name: line.name,
+      ...(line.variant ? { variant: line.variant } : {}),
+      quantity: line.quantity,
+      unitPriceMmk: line.unitPriceMmk,
+    }))
+    const linkedOrderState = commerce.reserveCommerceOrder(managedBuyingState, {
+      id: 'ORD-ECOMMERCE-1',
+      createdAt: linkedOrderProof.capturedAt,
+      customer: buyingRequest.customerReference,
+      owner: linkedOrderProof.actor,
+      channel: 'Ecommerce',
+      item: commerce.commerceOrderItemSummary(linkedOrderLines),
+      quantity: linkedOrderLines.reduce((total, line) => total + line.quantity, 0),
+      payment: 'KBZPay',
+      paymentStatus: 'pending',
+      refundStatus: 'none',
+      fulfilment: buyingRequest.fulfilment,
+      fulfilmentReference: buyingRequest.id,
+      promisedAt: '2026-07-24T10:00:00.000Z',
+      paymentDueAt: '2026-07-24T10:00:00.000Z',
+      sourceRecordId: buyingRequest.id,
+      evidenceReference: linkedOrderProof.evidenceReference,
+      lines: linkedOrderLines,
+      total: buyingRequest.totalMmk,
+      status: 'confirmed',
+    }, linkedOrderProof)
+    const confirmedTimeline = linkedOrderState ? commerce.commerceStorefrontOrderTimeline(linkedOrderState) : []
+    buyingAssert(confirmedTimeline.length === 1
+      && confirmedTimeline[0].order?.id === 'ORD-ECOMMERCE-1'
+      && confirmedTimeline[0].stage === 'confirmed'
+      && confirmedTimeline[0].paymentStatus === 'pending',
+    'ecommerce_request_timeline_did_not_follow_linked_shop_order')
     buyingAssert(await commerce.recordCommerceStorefrontRequest(managedBuyingState, structuredClone(buyingRequest), managedRequestProof) === managedBuyingState,
       'ecommerce_buying_managed_request_retry_not_idempotent')
     buyingAssert(await commerce.recordCommerceStorefrontRequest(managedPreviewState, {

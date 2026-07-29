@@ -16,11 +16,18 @@ import {
   type EcommercePaymentAdapter,
   type EcommerceShopDraftV2,
 } from './ecommerce-buying-lifecycle'
-import type { CommerceItem } from '../../core/commerce-workspace'
+import {
+  commerceStorefrontOrderTimeline,
+  commerceStorefrontRequests,
+  type CommerceItem,
+  type CommerceState,
+  type CommerceStorefrontOrderTimelineEntry,
+} from '../../core/commerce-workspace'
 import type { StorefrontPreview } from './storefront-model'
 
 type EcommerceBuyingWorkspaceProps = {
   cart: EcommerceCartLine[]
+  commerceState: CommerceState
   currentCatalog: CommerceItem[]
   disabled: boolean
   onCartChange: (cart: EcommerceCartLine[]) => void
@@ -59,6 +66,7 @@ function cartMatchesRequest(cart: EcommerceCartLine[], request: EcommerceBuyingS
 
 export function EcommerceBuyingWorkspace({
   cart,
+  commerceState,
   currentCatalog,
   disabled,
   onCartChange,
@@ -164,6 +172,16 @@ export function EcommerceBuyingWorkspace({
   }, [activeBuyingState.requests, freshQuoteId])
 
   const latestRequest = activeBuyingState.requests[0] ?? null
+  const combinedOrderTimeline = useMemo(() => {
+    const sharedRequests = commerceStorefrontRequests(commerceState)
+    const sharedRequestIds = new Set(sharedRequests.map((request) => request.id))
+    const localOnlyRequests = activeBuyingState.requests.filter((request) => !sharedRequestIds.has(request.id))
+    return commerceStorefrontOrderTimeline(commerceState, [...sharedRequests, ...localOnlyRequests])
+  }, [activeBuyingState.requests, commerceState])
+  const trackedCustomerReference = customerReference.trim() || latestRequest?.customerReference || ''
+  const customerOrderTimeline = combinedOrderTimeline.filter((entry) => (
+    trackedCustomerReference && entry.request.customerReference === trackedCustomerReference
+  ))
   const quoteCurrent = Boolean(latestRequest
     && latestRequest.id === freshQuoteId
     && latestRequest.scope === scope
@@ -221,6 +239,40 @@ export function EcommerceBuyingWorkspace({
       ? current
       : next === 'delivery' ? 'cash_on_delivery' : 'pay_on_pickup')
     setHandoffConfirmed(false)
+  }
+
+  function reorder(entry: CommerceStorefrontOrderTimelineEntry) {
+    const requestedLines = entry.request.schema === 'supermega.ecommerce.order_request.v2'
+      ? entry.request.lines
+      : [entry.request.line]
+    const nextCart = requestedLines.flatMap((line) => {
+      const item = currentCatalog.find((candidate) => candidate.sku === line.sku)
+      return item && item.onHand >= line.quantity ? [{ sku: line.sku, quantity: line.quantity }] : []
+    })
+    const blockedCount = requestedLines.length - nextCart.length
+    if (!nextCart.length) {
+      setNotice('That order cannot be reordered from current stock. Nothing changed.')
+      return
+    }
+    onCartChange(nextCart)
+    setCustomerReference(entry.request.customerReference)
+    changeFulfilment(entry.request.fulfilment)
+    setPromotionCode('')
+    setHandoffConfirmed(false)
+    setFreshQuoteId('')
+    setOpen(true)
+    setNotice(blockedCount
+      ? `${nextCart.length} available line${nextCart.length === 1 ? '' : 's'} added at current prices; ${blockedCount} unavailable line${blockedCount === 1 ? '' : 's'} skipped. Review a new quote.`
+      : 'Previous items added at current prices. Review a new quote; no Shop order, stock, message, or payment changed.')
+  }
+
+  function orderStageLabel(entry: CommerceStorefrontOrderTimelineEntry) {
+    if (entry.stage === 'waiting_shop_review') return 'Waiting for Shop review'
+    if (entry.stage === 'confirmed') return 'Confirmed'
+    if (entry.stage === 'preparing') return 'Preparing'
+    if (entry.stage === 'ready') return entry.request.fulfilment === 'pickup' ? 'Ready for pickup' : 'Ready for delivery'
+    if (entry.stage === 'completed') return 'Completed'
+    return 'Cancelled'
   }
 
   async function reviewOrder(event: FormEvent<HTMLFormElement>) {
@@ -414,6 +466,32 @@ export function EcommerceBuyingWorkspace({
               </button>
             </article>
           ) : null}
+
+          <section className="ecommerce-order-tracking" aria-label="Customer order tracking">
+            <div className="ecommerce-order-tracking-head">
+              <span><strong>Your orders</strong><small>One request, followed through Shop</small></span>
+              <b>{customerOrderTimeline.length ? `${customerOrderTimeline.length} found` : 'Enter contact above'}</b>
+            </div>
+            {customerOrderTimeline.length ? (
+              <div className="ecommerce-order-history">
+                {customerOrderTimeline.slice(0, 5).map((entry) => (
+                  <article key={entry.request.id}>
+                    <span>
+                      <small>{entry.request.id}</small>
+                      <strong>{orderStageLabel(entry)}</strong>
+                      <b>{formatMmk(entry.order?.total ?? entry.request.totalMmk)}</b>
+                    </span>
+                    <div>
+                      <small>{entry.request.fulfilment === 'pickup' ? 'Pickup' : 'Delivery'}</small>
+                      <small>{entry.paymentStatus === 'reconciled' ? 'Payment confirmed' : entry.paymentStatus === 'pending' ? 'Payment pending' : 'Payment not charged'}</small>
+                      {entry.order?.promisedAt ? <small>Promise {new Date(entry.order.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small> : <small>Shop confirms the promise</small>}
+                    </div>
+                    <button className="core-button secondary" disabled={disabled} onClick={() => reorder(entry)} type="button">Reorder</button>
+                  </article>
+                ))}
+              </div>
+            ) : <p>Use the same name and phone as checkout to see request, fulfilment, and payment status here.</p>}
+          </section>
 
           <p className="form-notice ecommerce-buying-notice" aria-live="polite">{recoveryStatus === 'checking'
             ? 'Checking saved checkout recovery…'

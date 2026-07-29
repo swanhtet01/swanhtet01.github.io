@@ -10,6 +10,7 @@ import {
   commerceStorefrontRequestEquals,
   commerceStorefrontRequestLines,
   commerceStorefrontRequests,
+  loadCommerceWorkspace,
   recordCommerceStorefrontRequest,
   validateCommerceState,
   type CommerceItem,
@@ -196,8 +197,10 @@ function resolveManagedStorefront(
 
 function initialEcommerceState() {
   const catalog = readStorefrontCatalog()
+  const commerceState = loadCommerceWorkspace().state
   return {
     catalog,
+    commerceState,
     storeName: DEFAULT_STORE_NAME,
     summary: DEFAULT_STORE_SUMMARY,
     selectedSkus: defaultSelection(catalog.items),
@@ -210,6 +213,7 @@ export function EcommerceProduct() {
   const location = useLocation()
   const [initialState] = useState(initialEcommerceState)
   const [catalog, setCatalog] = useState<EcommerceCatalog>(initialState.catalog)
+  const [localCommerceState, setLocalCommerceState] = useState<CommerceState>(initialState.commerceState)
   const [catalogHydrating, setCatalogHydrating] = useState(true)
   const [managedIdentity, setManagedIdentity] = useState<ManagedIdentity | null>(null)
   const [managedInbox, setManagedInbox] = useState<ManagedInboxContext | null>(null)
@@ -322,6 +326,7 @@ export function EcommerceProduct() {
     function refreshLocalStorefront(event: StorageEvent) {
       if (event.key === COMMERCE_KEY || event.key === null) {
         const latestCatalog = readStorefrontCatalog()
+        setLocalCommerceState(loadCommerceWorkspace().state)
         setCatalog(latestCatalog)
         setBuyingCart((current) => current.filter((line) => (
           latestCatalog.items.some((item) => item.sku === line.sku && item.onHand >= line.quantity)
@@ -874,6 +879,7 @@ export function EcommerceProduct() {
     })
     : []
   const buyingReady = Boolean(previewResult.preview && digest && (savedDraftIsCurrent || !managedIdentity))
+  const activeCommerceState = managedIdentity ? managedInbox?.state ?? null : localCommerceState
   const pendingManagedRequests = managedInbox
     ? commerceStorefrontRequests(managedInbox.state).filter((request) => request.state === 'pending_shop_review')
     : []
@@ -1651,9 +1657,10 @@ export function EcommerceProduct() {
             )}
           </div>
 
-          {buyingReady && previewResult.preview && digest ? (
+          {buyingReady && previewResult.preview && digest && activeCommerceState ? (
             <EcommerceBuyingWorkspace
               cart={buyingCart}
+              commerceState={activeCommerceState}
               currentCatalog={catalog.items}
               disabled={catalogHydrating}
               onCartChange={setBuyingCart}
