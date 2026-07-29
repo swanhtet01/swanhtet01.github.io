@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
@@ -275,6 +275,7 @@ export function EcommerceProduct() {
   const [orderImportText, setOrderImportText] = useState('')
   const [orderImportReview, setOrderImportReview] = useState<EcommerceOrderImportReview | null>(null)
   const [orderImportNotice, setOrderImportNotice] = useState('')
+  const [orderImportSourceName, setOrderImportSourceName] = useState('')
   const [customerFollowUpDraft, setCustomerFollowUpDraft] = useState('')
   const [deliveryReviewDraft, setDeliveryReviewDraft] = useState('')
   const [deliveryAreaTemplateDraft, setDeliveryAreaTemplateDraft] = useState('')
@@ -569,42 +570,45 @@ export function EcommerceProduct() {
     setDraftNotice(notice)
   }
 
+  function buildOrderImportReview(csvText: string): EcommerceOrderImportReview {
+    const parsed = parseOrderImportCsv(csvText)
+    if (parsed.length < 2) throw new Error('Paste or upload the order CSV header and at least one order row.')
+    if (parsed.length > 52) throw new Error('Review at most 50 order rows at a time.')
+    const [header, ...rows] = parsed
+    const normalizedHeaders = header.map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''))
+    const required = ['customer_reference', 'channel', 'sku', 'quantity', 'fulfilment', 'payment', 'source_message']
+    const missing = required.filter((field) => !normalizedHeaders.includes(field))
+    if (missing.length) throw new Error(`Missing columns: ${missing.join(', ')}.`)
+    const indexes = Object.fromEntries(required.map((field) => [field, normalizedHeaders.indexOf(field)]))
+    const allowedSkus = new Set(catalog.items.map((item) => item.sku))
+    const selected = new Set(selectedSkus)
+    let readyRows = 0
+    let blockedRows = 0
+    for (const row of rows) {
+      const sku = row[indexes.sku]?.trim() ?? ''
+      const quantity = Number(row[indexes.quantity])
+      const fulfilment = (row[indexes.fulfilment] ?? '').toLowerCase()
+      const payment = (row[indexes.payment] ?? '').toLowerCase()
+      const customer = row[indexes.customer_reference]?.trim() ?? ''
+      const sourceMessage = row[indexes.source_message]?.trim() ?? ''
+      const ready = Boolean(customer && sourceMessage && allowedSkus.has(sku) && selected.has(sku) && Number.isInteger(quantity) && quantity > 0 && quantity <= 50 && ['pickup', 'delivery'].includes(fulfilment) && ['manual_review', 'cash_on_pickup', 'cash_on_delivery'].includes(payment))
+      if (ready) readyRows += 1
+      else blockedRows += 1
+    }
+    return {
+      status: blockedRows ? 'blocked' : 'ready',
+      totalRows: rows.length,
+      readyRows,
+      blockedRows,
+      summary: blockedRows
+        ? `${blockedRows} row${blockedRows === 1 ? '' : 's'} need SKU, quantity, fulfilment, payment, customer, or source-message repair.`
+        : `${readyRows} order row${readyRows === 1 ? '' : 's'} ready for owner review.`,
+    }
+  }
+
   function reviewOrderImportBatch() {
     try {
-      const parsed = parseOrderImportCsv(orderImportText)
-      if (parsed.length < 2) throw new Error('Paste the order CSV header and at least one order row.')
-      if (parsed.length > 52) throw new Error('Review at most 50 order rows at a time.')
-      const [header, ...rows] = parsed
-      const normalizedHeaders = header.map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''))
-      const required = ['customer_reference', 'channel', 'sku', 'quantity', 'fulfilment', 'payment', 'source_message']
-      const missing = required.filter((field) => !normalizedHeaders.includes(field))
-      if (missing.length) throw new Error(`Missing columns: ${missing.join(', ')}.`)
-      const indexes = Object.fromEntries(required.map((field) => [field, normalizedHeaders.indexOf(field)]))
-      const allowedSkus = new Set(catalog.items.map((item) => item.sku))
-      const selected = new Set(selectedSkus)
-      let readyRows = 0
-      let blockedRows = 0
-      for (const row of rows) {
-        const sku = row[indexes.sku]?.trim() ?? ''
-        const quantity = Number(row[indexes.quantity])
-        const fulfilment = (row[indexes.fulfilment] ?? '').toLowerCase()
-        const payment = (row[indexes.payment] ?? '').toLowerCase()
-        const customer = row[indexes.customer_reference]?.trim() ?? ''
-        const sourceMessage = row[indexes.source_message]?.trim() ?? ''
-        const ready = Boolean(customer && sourceMessage && allowedSkus.has(sku) && selected.has(sku) && Number.isInteger(quantity) && quantity > 0 && quantity <= 50 && ['pickup', 'delivery'].includes(fulfilment) && ['manual_review', 'cash_on_pickup', 'cash_on_delivery'].includes(payment))
-        if (ready) readyRows += 1
-        else blockedRows += 1
-      }
-      const review: EcommerceOrderImportReview = {
-        status: blockedRows ? 'blocked' : 'ready',
-        totalRows: rows.length,
-        readyRows,
-        blockedRows,
-        summary: blockedRows
-          ? `${blockedRows} row${blockedRows === 1 ? '' : 's'} need SKU, quantity, fulfilment, payment, customer, or source-message repair.`
-          : `${readyRows} order row${readyRows === 1 ? '' : 's'} ready for owner review.`,
-      }
-      setOrderImportReview(review)
+      setOrderImportReview(buildOrderImportReview(orderImportText))
       setOrderImportNotice('Order import batch reviewed locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.')
     } catch (error) {
       setOrderImportReview({
@@ -615,6 +619,42 @@ export function EcommerceProduct() {
         summary: error instanceof Error ? error.message : 'Order CSV could not be reviewed locally.',
       })
       setOrderImportNotice('Order import batch rejected locally. No Shop or customer action ran.')
+    }
+  }
+
+  async function uploadOrderImportCsv(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setOrderImportSourceName(file.name)
+    setOrderImportReview(null)
+    if (file.size > 180_000) {
+      setOrderImportNotice('Order CSV is too large. Upload at most 180 KB or split the file into 50-row batches. No Shop or customer action ran.')
+      return
+    }
+    try {
+      const text = await file.text()
+      if (!text.trim()) throw new Error('Uploaded file is empty.')
+      const review = buildOrderImportReview(text)
+      setOrderImportText(text)
+      setOrderImportReview(review)
+      recordBehaviorSignal(window.localStorage, {
+        event: 'agent_job_chosen',
+        product: 'ecommerce',
+        route: location.pathname + location.search,
+        detail: 'Upload Ecommerce order CSV for local review',
+      })
+      setOrderImportNotice(`Uploaded ${file.name} and reviewed it locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.`)
+    } catch (error) {
+      setOrderImportText('')
+      setOrderImportReview({
+        status: 'blocked',
+        totalRows: 0,
+        readyRows: 0,
+        blockedRows: 0,
+        summary: error instanceof Error ? error.message : 'Uploaded order CSV could not be reviewed locally.',
+      })
+      setOrderImportNotice('Uploaded order CSV was rejected locally. No Shop or customer action ran.')
     }
   }
 
@@ -1571,12 +1611,15 @@ export function EcommerceProduct() {
             <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
             <button className="text-link" onClick={downloadOrderImportTemplate} type="button">Download order template</button>
           </div>
+          <label className="ecommerce-order-import-upload">Upload order CSV<input accept=".csv,text/csv,text/plain" onChange={uploadOrderImportCsv} type="file" /></label>
           <label className="ecommerce-order-import-field">Order batch CSV<textarea onChange={(event) => {
             setOrderImportText(event.target.value)
             setOrderImportReview(null)
+            setOrderImportSourceName('')
           }} placeholder="Paste customer_reference, channel, sku, quantity, fulfilment, payment, source_message rows" value={orderImportText} /></label>
           <button className="text-link" disabled={!orderImportText.trim()} onClick={reviewOrderImportBatch} type="button">Review order batch</button>
           {orderImportReview ? <div className={`ecommerce-order-import-review ${orderImportReview.status}`} role="status"><strong>{orderImportReview.status === 'ready' ? 'Ready for owner review' : 'Repair before handoff'}</strong><span>{orderImportReview.summary}</span><small>{orderImportReview.readyRows} ready · {orderImportReview.blockedRows} blocked · no Shop write</small><button className="text-link" onClick={downloadOrderImportReviewPacket} type="button">Download review packet</button></div> : null}
+          {orderImportSourceName ? <p className="ecommerce-order-import-source">Local file: {orderImportSourceName}</p> : null}
           {orderImportNotice ? <p className="ecommerce-order-import-notice" role="status">{orderImportNotice}</p> : null}
         </div>
         <div className="ecommerce-ops-cockpit-rows">

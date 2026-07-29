@@ -288,6 +288,43 @@
   font-size: 12px;
 }
 
+.ecommerce-order-import-upload {
+  width: fit-content;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(70, 85, 165, .22);
+  border-radius: 8px;
+  margin-top: 8px;
+  padding: 0 10px;
+  background: #fff;
+  color: #4655a5;
+  font-size: 11px;
+  font-weight: 780;
+  cursor: pointer;
+}
+
+.ecommerce-order-import-upload:hover {
+  border-color: rgba(70, 85, 165, .42);
+  background: #f2f4ff;
+}
+
+.ecommerce-order-import-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ecommerce-order-import-source {
+  margin: 6px 0 0 !important;
+  overflow-wrap: anywhere;
+  color: #4655a5 !important;
+  font-size: 11px !important;
+}
+
 .ecommerce-order-import-review {
   display: grid;
   gap: 3px;
