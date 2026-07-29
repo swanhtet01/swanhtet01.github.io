@@ -23,10 +23,11 @@ This roadmap is now split between controls that exist in the product and capabil
 - **Plant:** reviewed BOM/routing, material and capacity checks, exact Shop issue handoff, routed WIP/time, output/scrap, inspection/hold, attributed rework/corrective action, reinspection/release, genealogy, effectiveness/OEE, standard-versus-actual MMK cost, and versioned work-centre calibration evidence are implemented. New v3 controlled plans block release, routed work, direct reinspection after failure, and rework without current calibration; legacy v1/v2 plans remain readable.
 - **Website:** structured local editing, responsive preview, evidence review, approval, artifact binding, and local release history exist. A hosted domain/TLS promotion and measured live lead-analytics loop are not proven.
 - **Ecommerce:** Shop-backed catalog projection, merchandising, cart/quote, customer and delivery intent, request receipt, and Shop confirmation exist. Provider payment, carrier shipping, tax adapter, customer account, and return-status loops are not proven.
+- **Workspace recovery control:** `supermega.workspace_recovery.v1` now creates one read-only, workspace-scoped, deterministic package for memberships, product state, immutable events, and approvals. It requires an explicit recovery-admin role, rejects cross-workspace rows and credential-shaped fields, refuses overwrite races, verifies per-section and whole-package digests offline, and produces a no-write restore plan. Hosted restore execution, encrypted portable custody, retention, and recovery-time evidence remain unproven.
 
 The next enterprise slices must close the following true gaps inside existing task surfaces:
 
-1. **Shared managed foundation:** isolated tenant, RLS, durable commands, backup/restore, observability, and role/capability proof. This gates every hosted integration claim.
+1. **Shared managed foundation:** isolated tenant, RLS, durable commands, hosted restore execution, encrypted custody/retention, observability, and role/capability proof. The local workspace export and restore-plan contract is implemented, but these hosted proofs still gate every integration claim.
 2. **Shop control depth:** company/location account determination, correction settlement accounts, supplier debit/physical-return execution, receivables aging, warranty/service case, and an owner-approved duplicate-safe posting adapter.
 3. **Plant control depth:** item/BOM/routing effective dates, material return/substitution, broader CAPA recurrence control, maintenance-to-order linkage, WIP valuation projection, training/document control, and recall search/export.
 4. **Website hosted lifecycle:** exact-domain preview promotion, TLS/domain proof, rollback execution, consented lead attribution, and privacy-safe conversion reporting.
@@ -181,7 +182,7 @@ No module moves up a level until its data authority, lifecycle, failure path, re
 
 1. Use the implemented internal client-demo blueprint and private-package path with founder-selected CSVs; do not build another setup surface.
 2. Complete one measured quote-to-close pilot across Website/Ecommerce/Shop and one plan-to-stock pilot across Shop/Plant.
-3. Prove isolated managed tenant security, recovery, and durable commands before provider, hosted publish, or external posting work.
+3. Use the implemented workspace package to rehearse an owner-approved isolated restore, then prove tenant security, recovery-time/point evidence, and durable commands before provider, hosted publish, or external posting work.
 4. Add the true Shop and Plant control gaps listed above inside current Counter/Orders/Stock/Jobs/Problems surfaces.
 5. Add shared master data and reporting before adding navigation or products.
 6. Add Website hosted release/lead analytics and Ecommerce customer/shipping/returns only after managed tenant security is proven.

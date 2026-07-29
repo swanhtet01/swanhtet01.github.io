@@ -72,7 +72,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
-- Remaining gaps: managed security/recovery; Shop conditional accounting, receivables, supplier-return execution, service; Plant engineering, material returns, broader CAPA, maintenance/WIP, compliance; Website hosting/analytics; Ecommerce provider/shipping/returns.
+- Gaps: hosted restore/custody/recovery-time proof; Shop finance/returns/service; Plant engineering/CAPA/maintenance/WIP/compliance; Website hosting/analytics; Ecommerce providers/shipping/returns. Local workspace recovery is preflight only.
 
 ## Decisions in force
 
@@ -88,7 +88,7 @@ Every slice must keep one primary action, progressive disclosure, mobile accepta
 ## Next evidence
 
 1. Repeat the proven private-package path with founder-selected client CSVs for all four products and validate reconciliation, correction, and rollback evidence.
-2. On approved isolated Supabase, prove private Storage, RLS, isolation, recovery, and one tenant before writes.
+2. On approved isolated Supabase, use the workspace package to prove Storage, RLS, isolation, exact restore, and one tenant before writes.
 3. Repeat all 12 profiles live, including mobile, reload, import repair, duplicate handoff, export, and reset.
 4. Recruit one founder-approved Shop design partner with a named operator, baseline, five-day evidence plan, and explicit acceptance criteria.
 5. Keep AI and hosted scheduling dormant until the managed-security, durable-budget, recovery, and owner-approval gates pass; registered roles must continue to consume zero idle compute.
