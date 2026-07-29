@@ -19,7 +19,7 @@ const defaultLocalCompanyHome = resolve(root, '..', 'supermega-local-company-sta
 const powershell = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const MAX_COMMAND_BYTES = 512 * 1024
 const MAX_REPORT_BYTES = 256 * 1024
-const EXECUTION_SPEC_VERSION = '2026-07-29.9'
+const EXECUTION_SPEC_VERSION = '2026-07-29.10'
 
 const AGENT_ROLE_MAP = Object.freeze({
   'operations-analyst': 'operations',
@@ -182,19 +182,57 @@ function validateHealth(health, provider, model) {
   }
 }
 
-function validateKnowledge(knowledge) {
+function knowledgeStatus(knowledge) {
+  const counts = knowledge?.status_counts
   if (knowledge?.schema !== 'local-company.knowledge-freshness.v1'
-    || knowledge.ready_for_use !== true
+    || !/^[a-f0-9]{12}$/.test(String(knowledge.project_id || ''))
+    || typeof knowledge.ready_for_use !== 'boolean'
     || !Number.isInteger(knowledge.source_count)
     || knowledge.source_count < 1
-    || knowledge.status_counts?.changed !== 0
-    || knowledge.status_counts?.missing !== 0
-    || knowledge.status_counts?.unavailable !== 0
+    || !['current', 'changed', 'missing', 'unavailable'].every((key) => Number.isInteger(counts?.[key]) && counts[key] >= 0)
+    || counts.current + counts.changed + counts.missing + counts.unavailable !== knowledge.source_count
+    || knowledge.ready_for_use !== (counts.changed === 0 && counts.missing === 0 && counts.unavailable === 0)
+    || knowledge.effects?.knowledge_records_mutated !== false
     || knowledge.effects?.model_called !== false
     || knowledge.effects?.work_started !== false) {
+    fail('ally_ceo_local_cycle_knowledge_invalid')
+  }
+  return {
+    projectId: knowledge.project_id,
+    sourceCount: knowledge.source_count,
+    current: counts.current,
+    changed: counts.changed,
+    missing: counts.missing,
+    unavailable: counts.unavailable,
+    ready: knowledge.ready_for_use,
+  }
+}
+
+function validateCurrentKnowledge(knowledge) {
+  const status = knowledgeStatus(knowledge)
+  if (!status.ready || status.changed !== 0 || status.missing !== 0 || status.unavailable !== 0) {
     fail('ally_ceo_local_cycle_knowledge_not_current')
   }
-  return knowledge.source_count
+  return status
+}
+
+function validateKnowledgeRefresh(receipt, before) {
+  const refreshedIds = receipt?.refreshed_ids
+  if (receipt?.schema !== 'local-company.knowledge-refresh.v1'
+    || receipt.project_id !== before.projectId
+    || receipt.source_count !== before.sourceCount
+    || receipt.refreshed_count !== before.changed
+    || receipt.unchanged_count !== before.current
+    || !Array.isArray(refreshedIds)
+    || refreshedIds.length !== before.changed
+    || new Set(refreshedIds).size !== refreshedIds.length
+    || !refreshedIds.every((id) => /^[a-f0-9]{12}$/.test(String(id)))
+    || receipt.effects?.knowledge_records_mutated !== true
+    || receipt.effects?.model_called !== false
+    || receipt.effects?.work_started !== false) {
+    fail('ally_ceo_local_cycle_knowledge_refresh_rejected')
+  }
+  return receipt.refreshed_count
 }
 
 function findExistingCycle(queueText, shortHash) {
@@ -366,8 +404,10 @@ function validateAcceptedReport(value) {
 
 export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   const execute = input.execute === true
+  const refreshKnowledge = input.refreshKnowledge === true
   const provider = input.provider || 'ollama'
   const model = input.model || 'qwen3.5:0.8b'
+  if (refreshKnowledge && !execute) fail('ally_ceo_local_cycle_knowledge_refresh_requires_execution')
   if (!['ollama', 'mock'].includes(provider) || !/^[a-zA-Z0-9._:-]{1,80}$/.test(model)) {
     fail('ally_ceo_local_cycle_provider_invalid')
   }
@@ -383,7 +423,33 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   const health = parseJson(await runCommand({ kind: 'local', args: ['health'], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_health_invalid')
   validateHealth(health, provider, model)
   const knowledge = parseJson(await runCommand({ kind: 'local', args: ['knowledge', 'audit', '--project', 'SuperMega'], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_knowledge_invalid')
-  const sourceCount = validateKnowledge(knowledge)
+  const initialKnowledge = knowledgeStatus(knowledge)
+  if (initialKnowledge.missing > 0 || initialKnowledge.unavailable > 0) {
+    fail('ally_ceo_local_cycle_knowledge_source_unavailable')
+  }
+  let refreshedSources = 0
+  let currentKnowledge
+  if (initialKnowledge.changed > 0) {
+    if (!refreshKnowledge) fail('ally_ceo_local_cycle_knowledge_not_current')
+    const refreshReceipt = parseJson(
+      await runCommand({ kind: 'local', args: ['knowledge', 'refresh', '--project', 'SuperMega'], timeoutMs: 30_000 }),
+      'ally_ceo_local_cycle_knowledge_refresh_invalid',
+    )
+    refreshedSources = validateKnowledgeRefresh(refreshReceipt, initialKnowledge)
+    const refreshedAudit = parseJson(
+      await runCommand({ kind: 'local', args: ['knowledge', 'audit', '--project', 'SuperMega'], timeoutMs: 30_000 }),
+      'ally_ceo_local_cycle_knowledge_invalid',
+    )
+    currentKnowledge = validateCurrentKnowledge(refreshedAudit)
+  } else {
+    currentKnowledge = validateCurrentKnowledge(knowledge)
+  }
+  const sourceCount = currentKnowledge.sourceCount
+  const knowledgeRefresh = {
+    requested: refreshKnowledge,
+    performed: refreshedSources > 0,
+    refreshedSources,
+  }
   const queueText = await runCommand({ kind: 'local', args: ['queue', 'list'], timeoutMs: 30_000 })
   const existing = findExistingCycle(queueText, spec.shortHash)
   if (existing) {
@@ -428,6 +494,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
       reason: existingRejectedReason,
       host,
       sourceCount,
+      knowledgeRefresh,
       modelCalls: 0,
       queueWrites: 0,
       controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
@@ -448,6 +515,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     objectiveDigest: spec.objectiveDigest,
     host,
     sourceCount,
+    knowledgeRefresh,
     controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
   }
   if (!execute) return { ...base, status: 'ready', modelCalls: 0, queueWrites: 0 }
@@ -520,10 +588,11 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
 }
 
 function parseArgs(argv) {
-  const result = { execute: false, provider: 'ollama' }
+  const result = { execute: false, refreshKnowledge: false, provider: 'ollama' }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--execute') result.execute = true
+    else if (arg === '--refresh-knowledge') result.refreshKnowledge = true
     else if (arg === '--provider') result.provider = argv[++index]
     else if (arg === '--help' || arg === '-h') result.help = true
     else fail(`ally_ceo_local_cycle_unknown_argument:${arg}`)
@@ -540,7 +609,8 @@ async function main() {
       '  npm run company:ally:preflight',
       '  npm run company:ally:run',
       '',
-      'Preflight is read-only. Run queues and executes one exact local mission.',
+      'Preflight is read-only. Run refreshes changed registered sources, then queues and executes one exact local mission.',
+      'Missing, unavailable, unstable, or malformed source evidence fails before queue or model work.',
       'No connector, deployment, payment, message, or customer action is available.',
     ].join('\n') + '\n')
     return

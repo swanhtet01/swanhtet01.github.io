@@ -53,7 +53,7 @@
     "company:ally:plan": "node kernel/scripts/plan-ally-ceo-company.mjs",
     "company:ally:plan:verify": "node kernel/scripts/plan-ally-ceo-company.mjs --verify",
     "company:ally:preflight": "node tools/run_ally_ceo_local_cycle.mjs",
-    "company:ally:run": "node tools/run_ally_ceo_local_cycle.mjs --execute",
+    "company:ally:run": "node tools/run_ally_ceo_local_cycle.mjs --execute --refresh-knowledge",
     "verify:app-deploy-workflow": "node tools/verify_app_deploy_workflow.mjs",
     "hq:verify": "node tools/verify_hq_contract.mjs",
     "hq:verify:live": "node tools/verify_hq_live_state.mjs",

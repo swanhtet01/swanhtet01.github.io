@@ -58,14 +58,44 @@ const health = JSON.stringify({
 
 const knowledge = JSON.stringify({
   schema: 'local-company.knowledge-freshness.v1',
+  project_id: '9fb0ee15570b',
   ready_for_use: true,
   source_count: 17,
   status_counts: { current: 17, changed: 0, missing: 0, unavailable: 0 },
-  effects: { model_called: false, work_started: false },
+  effects: { knowledge_records_mutated: false, model_called: false, work_started: false },
+})
+
+const changedKnowledge = JSON.stringify({
+  schema: 'local-company.knowledge-freshness.v1',
+  project_id: '9fb0ee15570b',
+  ready_for_use: false,
+  source_count: 17,
+  status_counts: { current: 16, changed: 1, missing: 0, unavailable: 0 },
+  effects: { knowledge_records_mutated: false, model_called: false, work_started: false },
+})
+
+const missingKnowledge = JSON.stringify({
+  schema: 'local-company.knowledge-freshness.v1',
+  project_id: '9fb0ee15570b',
+  ready_for_use: false,
+  source_count: 17,
+  status_counts: { current: 16, changed: 0, missing: 1, unavailable: 0 },
+  effects: { knowledge_records_mutated: false, model_called: false, work_started: false },
+})
+
+const knowledgeRefresh = JSON.stringify({
+  schema: 'local-company.knowledge-refresh.v1',
+  project_id: '9fb0ee15570b',
+  source_count: 17,
+  refreshed_count: 1,
+  unchanged_count: 16,
+  refreshed_ids: ['123456789abc'],
+  effects: { knowledge_records_mutated: true, model_called: false, work_started: false },
 })
 
 function harness(overrides = {}) {
   const calls = []
+  let knowledgeAuditIndex = 0
   const queueId = '123456789abc'
   const jobId = 'abcdef123456'
   const runCommand = async (request) => {
@@ -73,7 +103,13 @@ function harness(overrides = {}) {
     const args = request.args
     if (request.kind === 'audit') return overrides.audit || audit()
     if (args[0] === 'health') return health
-    if (args[0] === 'knowledge') return overrides.knowledge || knowledge
+    if (args[0] === 'knowledge' && args[1] === 'audit') {
+      const sequence = overrides.knowledgeSequence || [overrides.knowledge || knowledge]
+      const response = sequence[Math.min(knowledgeAuditIndex, sequence.length - 1)]
+      knowledgeAuditIndex += 1
+      return response
+    }
+    if (args[0] === 'knowledge' && args[1] === 'refresh') return overrides.refreshReceipt || knowledgeRefresh
     if (args.join(' ') === 'queue list') return overrides.queueList || 'No queue items found.\n'
     if (args[0] === 'queue' && args[1] === 'add') return `Queued mission ${queueId}; nothing was executed.\n`
     if (args[0] === 'queue' && args[1] === 'preflight') return overrides.preflight || JSON.stringify({
@@ -176,6 +212,66 @@ test('execution claims the exact reviewed mission once and accepts only a qualit
   assert.deepEqual(run.args.slice(0, 4), ['queue', 'run-next', '--queue-id', state.queueId])
   assert.equal(run.args.includes('0s'), true)
   assert.equal(run.args.includes('512'), true)
+})
+
+test('execution can atomically refresh changed registered evidence before queue or model work', async () => {
+  const state = harness({ knowledgeSequence: [changedKnowledge, knowledge], modelEventCount: 2 })
+  const result = await runAllyCeoLocalCycle(
+    { execute: true, refreshKnowledge: true },
+    {
+      plan: plan(),
+      runCommand: state.runCommand,
+      inspectReport: async () => ({
+        path: 'C:\\state\\outputs\\refreshed.md',
+        bytes: Buffer.byteLength(acceptedStructuredReport),
+        digest: 'sha256:' + '9'.repeat(64),
+        text: acceptedStructuredReport,
+      }),
+    },
+  )
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.knowledgeRefresh, { requested: true, performed: true, refreshedSources: 1 })
+  const localCalls = state.calls.filter((call) => call.kind === 'local').map((call) => call.args.slice(0, 2).join(' '))
+  assert.deepEqual(localCalls.slice(1, 5), ['knowledge audit', 'knowledge refresh', 'knowledge audit', 'queue list'])
+})
+
+test('knowledge refresh is execution-only and stale evidence still fails without the explicit control', async () => {
+  const preflight = harness()
+  await assert.rejects(
+    runAllyCeoLocalCycle({ execute: false, refreshKnowledge: true }, { plan: plan(), runCommand: preflight.runCommand }),
+    /ally_ceo_local_cycle_knowledge_refresh_requires_execution/,
+  )
+  assert.equal(preflight.calls.length, 0)
+
+  const stale = harness({ knowledge: changedKnowledge })
+  await assert.rejects(
+    runAllyCeoLocalCycle({ execute: true }, { plan: plan(), runCommand: stale.runCommand }),
+    /ally_ceo_local_cycle_knowledge_not_current/,
+  )
+  assert.equal(stale.calls.some((call) => call.args?.[1] === 'refresh'), false)
+  assert.equal(stale.calls.some((call) => call.args?.[1] === 'add'), false)
+})
+
+test('missing sources and forged refresh receipts fail before a queue write', async () => {
+  const missing = harness({ knowledge: missingKnowledge })
+  await assert.rejects(
+    runAllyCeoLocalCycle({ execute: true, refreshKnowledge: true }, { plan: plan(), runCommand: missing.runCommand }),
+    /ally_ceo_local_cycle_knowledge_source_unavailable/,
+  )
+  assert.equal(missing.calls.some((call) => call.args?.[1] === 'refresh'), false)
+
+  const forged = harness({
+    knowledge: changedKnowledge,
+    refreshReceipt: JSON.stringify({
+      ...JSON.parse(knowledgeRefresh),
+      refreshed_ids: ['123456789abc', 'abcdef123456'],
+    }),
+  })
+  await assert.rejects(
+    runAllyCeoLocalCycle({ execute: true, refreshKnowledge: true }, { plan: plan(), runCommand: forged.runCommand }),
+    /ally_ceo_local_cycle_knowledge_refresh_rejected/,
+  )
+  assert.equal(forged.calls.some((call) => call.args?.[1] === 'add'), false)
 })
 
 test('code-owned structured evidence and limitation sections satisfy CEO semantics', async () => {
