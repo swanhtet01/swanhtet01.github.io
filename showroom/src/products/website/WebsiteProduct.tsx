@@ -212,7 +212,7 @@ export function WebsiteProduct() {
         copy: hasUnsavedChanges
           ? 'This preview is not saved yet. Return to edit, then save or discard it.'
           : selectedPage.stage === 'draft'
-            ? 'This page is saved as a draft. Return to edit and mark it ready.'
+            ? 'This page is saved as a draft. Select Edit site to update it and mark it ready.'
             : 'Check the selected page at desktop, tablet, or mobile size.',
       }
     : view === 'publish' && storageMode !== 'managed'
@@ -1043,8 +1043,7 @@ export function WebsiteProduct() {
                   </details>
                 ) : null}
                 <button
-                  aria-pressed={surface === 'preview'}
-                  className="website-button is-secondary"
+                  className={`website-button ${surface === 'preview' ? 'is-primary' : 'is-secondary'}`}
                   onClick={() => {
                     if (surface === 'preview') openContentSurface('work')
                     else previewPage()
