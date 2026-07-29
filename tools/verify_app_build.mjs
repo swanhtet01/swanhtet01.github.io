@@ -2,6 +2,8 @@ import { readdir, readFile as readRawFile, stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { validateSchedulerExecutionBudget } from './scheduler_authority_contract.mjs'
+
 const normalizeSourceText = (value) => value.replace(/\r\n?/g, '\n')
 const readFile = async (...args) => {
   const value = await readRawFile(...args)
@@ -87,6 +89,8 @@ const [manifestText, appPackageText, appSource, coreSource, coreShellSource, pro
 const manifest = JSON.parse(manifestText)
 const appPackage = JSON.parse(appPackageText)
 const schedulerAuthority = JSON.parse(await readFile(resolve(root, 'tools', 'supermega_scheduler_authority.json'), 'utf8'))
+let schedulerExecutionBudget
+try { schedulerExecutionBudget = validateSchedulerExecutionBudget(schedulerAuthority) } catch { fail('scheduler_execution_budget_invalid') }
 const indexSource = await readFile(resolve(root, 'showroom', 'index.html'), 'utf8')
 const viteConfigSource = await readFile(resolve(root, 'showroom', 'vite.config.ts'), 'utf8')
 const websiteStarterSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-starter.ts'), 'utf8')
@@ -3604,6 +3608,8 @@ if (schedulerAuthority.contract !== 'supermega.scheduler-authority.v2'
   || JSON.stringify(schedulerAuthority.activation?.required_evidence) !== JSON.stringify(expectedSchedulerActivationEvidence)
   || JSON.stringify(schedulerAuthority.crons?.map(({ path, schedule }) => ({ path, schedule }))) !== JSON.stringify(expectedSchedulerCrons)
   || schedulerAuthority.maximum_scheduler_invocations_per_day !== 0
+  || schedulerExecutionBudget?.maxClaimsPerInvocation !== 2
+  || schedulerExecutionBudget?.maximumActivationInvocationsPerDay !== 25
   || JSON.stringify(schedulerAuthority.activation_plan?.crons?.map(({ path, schedule }) => ({ path, schedule }))) !== JSON.stringify(expectedSchedulerActivationPlan)
   || schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day !== 25
   || JSON.stringify(schedulerAuthority.migration?.preflight_retiring_crons?.map(({ path, schedule }) => ({ path, schedule }))) !== JSON.stringify([

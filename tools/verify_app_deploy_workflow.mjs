@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
+import { validateSchedulerExecutionBudget } from './scheduler_authority_contract.mjs'
+
 const normalizeSourceText = (value) => value.replace(/\r\n?/g, '\n')
 const readFile = async (...args) => {
   const value = await readRawFile(...args)
@@ -31,6 +33,7 @@ const previewLauncher = await readFile(resolve(root, 'tools/deploy_preview.sh'),
 const retiredClaimableLauncher = await readFile(resolve(root, 'tools/deploy_claimable_preview.sh'), 'utf8')
 const config = JSON.parse(await readFile(resolve(root, 'vercel.json'), 'utf8'))
 const schedulerAuthority = JSON.parse(await readFile(resolve(root, 'tools/supermega_scheduler_authority.json'), 'utf8'))
+const schedulerExecutionBudget = validateSchedulerExecutionBudget(schedulerAuthority)
 const kernelConfig = JSON.parse(await readFile(resolve(root, 'kernel/vercel.json'), 'utf8'))
 const agentConnectorMap = previewServer.slice(
   previewServer.indexOf('AGENT_JOB_CONNECTOR_MAP:'),
@@ -163,7 +166,7 @@ requireContract('app build contract',
 requireContract('remote dependency install contract', config.installCommand === 'npm --prefix showroom ci' && generator.includes("installCommand: 'npm --prefix showroom ci'"))
 requireContract('remote security inputs are included', generator.includes("'!.env.app.example'"))
 requireContract('canonical output directory', config.outputDirectory === 'showroom/dist')
-requireContract('canonical API function', config.routes?.[0]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes("includeFiles: 'supermega_runtime/**'"))
+requireContract('canonical API function', config.routes?.[0]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.maxDuration === 60 && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes('maxDuration: 60') && generator.includes("includeFiles: 'supermega_runtime/**'"))
 requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))
 requireContract('deployment control files trigger coordinated release', workflow.includes('- vercel.json') && workflow.includes('- .vercelignore'))
@@ -349,6 +352,8 @@ requireContract('single production scheduler authority',
   && schedulerAuthority.activation?.required_evidence?.length === 5
   && schedulerAuthority.crons?.length === 0
   && schedulerAuthority.maximum_scheduler_invocations_per_day === 0
+  && schedulerExecutionBudget.maxClaimsPerInvocation === 2
+  && schedulerExecutionBudget.maximumActivationInvocationsPerDay === 25
   && schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day === 25
   && JSON.stringify(normalizeCrons(schedulerAuthority.activation_plan?.crons)) === JSON.stringify(normalizeCrons([
     { path: '/api/cron/supermega/agent-queue', schedule: '5 * * * *' },
@@ -374,9 +379,12 @@ requireContract('company automation events stay tenant-scoped and off YTF connec
   && previewServer.indexOf('connectors = _scope_connector_catalog(connectors, expected_tenant_key)') < previewServer.indexOf('connector_lookup = {'))
 requireContract('Vercel config is generated from scheduler authority',
   generator.includes("readFileSync('tools/supermega_scheduler_authority.json'")
+  && generator.includes('validateSchedulerExecutionBudget(schedulerAuthority)')
   && generator.includes('const canonicalCrons = schedulerAuthority.crons.map')
   && generator.includes("schedulerAuthority.activation?.state !== 'dormant'")
-  && generator.includes('schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day !== 25'))
+  && generator.includes('schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day !== 25')
+  && packageJson.scripts?.['vercel:contracts:test']?.includes('scheduler_authority_contract.test.mjs')
+  && packageJson.scripts?.['vercel:contracts:test']?.includes('write_app_vercel_config.test.mjs'))
 requireContract('public live health follows the canonical release workflow',
   publicHealthWorkflow.includes('SuperMega - Coordinated Verified Release')
   && !publicHealthWorkflow.includes('SuperMega Public - Verified Prebuilt Release'))
