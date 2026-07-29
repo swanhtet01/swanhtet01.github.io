@@ -207,6 +207,8 @@ export type CommerceCollectionAction = {
 
 export type CommerceSupportCategory = 'order_status' | 'delivery_issue' | 'payment_question' | 'item_issue' | 'other'
 export type CommerceSupportResolutionOutcome = 'information_provided' | 'replacement_review_required' | 'refund_review_required' | 'no_action'
+export type CommerceSupportPriority = 'urgent' | 'high' | 'normal' | 'low'
+export type CommerceSupportUrgency = 'overdue' | 'due_soon' | 'scheduled' | 'untriaged' | 'resolved'
 
 export type CommerceOrderSupportResolution = {
   outcome: CommerceSupportResolutionOutcome
@@ -222,6 +224,9 @@ export type CommerceOrderSupportCase = {
   category: CommerceSupportCategory
   customerDescription: string
   status: 'open' | 'resolved'
+  priority?: CommerceSupportPriority
+  owner?: string
+  dueAt?: string
   opening: CommerceActionProof
   resolution?: CommerceOrderSupportResolution
   externalMessageSent: false
@@ -857,6 +862,9 @@ export type CommerceOrderSupportOpenInput = {
   customerRequestedAt: string
   category: CommerceSupportCategory
   customerDescription: string
+  priority: CommerceSupportPriority
+  owner: string
+  dueAt: string
   externalMessageSent: false
   refundStarted: false
 }
@@ -993,6 +1001,7 @@ const productionReceiptExclusiveFields = ['productionReleaseId', 'productionOutp
 const returnDispositions: CommerceReturnDisposition[] = ['restock', 'not_restocked']
 const supportCategories: CommerceSupportCategory[] = ['delivery_issue', 'item_issue', 'order_status', 'other', 'payment_question']
 const supportResolutionOutcomes: CommerceSupportResolutionOutcome[] = ['information_provided', 'replacement_review_required', 'refund_review_required', 'no_action']
+const supportPriorities: CommerceSupportPriority[] = ['urgent', 'high', 'normal', 'low']
 const correctionKinds: CommerceCorrectionKind[] = ['credit', 'debit']
 const correctionReasonCodes: CommerceCorrectionReasonCode[] = ['pricing_error', 'service_recovery', 'fee_adjustment', 'other']
 const websiteIntakeStatuses: CommerceWebsiteIntakeStatus[] = ['pending_confirmation', 'converted']
@@ -2417,7 +2426,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         if (!isRecord(caseCandidate) || !hasExactKeys(
           caseCandidate,
           ['caseId', 'sourceIntentId', 'sourceRequestId', 'customerRequestedAt', 'category', 'customerDescription', 'status', 'opening', 'externalMessageSent', 'refundStarted'],
-          ['resolution'],
+          ['resolution', 'priority', 'owner', 'dueAt'],
         )) throw new Error(`${field} is invalid.`)
         const caseId = canonicalText(caseCandidate.caseId, `${field}.caseId`, 41)
         const sourceIntentId = canonicalText(caseCandidate.sourceIntentId, `${field}.sourceIntentId`, 40)
@@ -2443,6 +2452,20 @@ export function validateCommerceState(value: unknown): CommerceState {
         const requestedAt = timestampMicros(caseCandidate.customerRequestedAt) as bigint
         const opening = caseCandidate.opening as CommerceActionProof
         const openingAt = timestampMicros(opening.capturedAt) as bigint
+        const hasPriority = caseCandidate.priority !== undefined
+        const hasOwner = caseCandidate.owner !== undefined
+        const hasDueAt = caseCandidate.dueAt !== undefined
+        if ((hasPriority || hasOwner || hasDueAt) && !(hasPriority && hasOwner && hasDueAt)) {
+          throw new Error(`${field} service triage must include priority, owner, and due time together.`)
+        }
+        if (hasPriority && hasOwner && hasDueAt) {
+          if (!supportPriorities.includes(caseCandidate.priority as CommerceSupportPriority)
+            || !validTimestamp(caseCandidate.dueAt)
+            || (timestampMicros(caseCandidate.dueAt) as bigint) <= openingAt) {
+            throw new Error(`${field} service triage is invalid.`)
+          }
+          canonicalText(caseCandidate.owner, `${field}.owner`, 120)
+        }
         if (openingAt < requestedAt
           || openingAt < (timestampMicros((candidate.completion as CommerceActionProof).capturedAt) as bigint)
           || (newerOpeningAt !== null && openingAt > newerOpeningAt)) {
@@ -5560,6 +5583,18 @@ export function commerceOrderSupportOpenExpectation(
   }
 }
 
+export function commerceSupportCaseUrgency(
+  supportCase: CommerceOrderSupportCase,
+  now: number,
+): CommerceSupportUrgency {
+  if (supportCase.status === 'resolved') return 'resolved'
+  if (!supportCase.priority || !supportCase.owner || !supportCase.dueAt || !Number.isFinite(now)) return 'untriaged'
+  const dueTime = Date.parse(supportCase.dueAt)
+  if (!Number.isFinite(dueTime)) return 'untriaged'
+  if (dueTime <= now) return 'overdue'
+  return dueTime - now <= 60 * 60 * 1000 ? 'due_soon' : 'scheduled'
+}
+
 export function recordCommerceOrderSupportCase(
   state: CommerceState,
   input: CommerceOrderSupportOpenInput,
@@ -5574,6 +5609,12 @@ export function recordCommerceOrderSupportCase(
     || !supportIntentIdPattern.test(input.sourceIntentId)
     || !storefrontRequestIdPattern.test(input.sourceRequestId)
     || !supportCategories.includes(input.category)
+    || !supportPriorities.includes(input.priority)
+    || typeof input.owner !== 'string'
+    || !input.owner
+    || input.owner !== input.owner.trim()
+    || input.owner.length > 120
+    || !validTimestamp(input.dueAt)
     || input.externalMessageSent !== false
     || input.refundStarted !== false
     || !validTimestamp(input.customerRequestedAt)
@@ -5594,6 +5635,9 @@ export function recordCommerceOrderSupportCase(
       customerRequestedAt: input.customerRequestedAt,
       category: input.category,
       customerDescription: input.customerDescription,
+      priority: input.priority,
+      owner: input.owner,
+      dueAt: input.dueAt,
       status: 'open',
       opening: proof,
       externalMessageSent: false,
@@ -5608,7 +5652,8 @@ export function recordCommerceOrderSupportCase(
   if (!order
     || !order.completion
     || order.sourceRecordId !== input.sourceRequestId
-    || proof.evidenceReference !== evidenceReference) return null
+    || proof.evidenceReference !== evidenceReference
+    || (timestampMicros(input.dueAt) as bigint) <= (timestampMicros(proof.capturedAt) as bigint)) return null
   const latest = [
     order.completion.capturedAt,
     input.customerRequestedAt,
@@ -5622,6 +5667,9 @@ export function recordCommerceOrderSupportCase(
     customerRequestedAt: input.customerRequestedAt,
     category: input.category,
     customerDescription: input.customerDescription,
+    priority: input.priority,
+    owner: input.owner,
+    dueAt: input.dueAt,
     status: 'open',
     opening: proof,
     externalMessageSent: false,

@@ -75,6 +75,7 @@ import {
   commerceOrderReturnExpectation,
   commerceOrderSupportOpenExpectation,
   commerceOrderSupportResolveExpectation,
+  commerceSupportCaseUrgency,
   commerceOrderItemSummary,
   commerceOrderLocationAllocationPreview,
   commerceOrderNeedsAction,
@@ -120,6 +121,7 @@ import {
   type CommercePurchaseOrderDiscrepancyCode,
   type CommerceReturnDisposition,
   type CommerceSupportResolutionOutcome,
+  type CommerceSupportPriority,
   type CommerceStockMovement,
   type CommerceTaxConfiguration,
   type CommerceTaxMode,
@@ -254,6 +256,13 @@ type CommerceSupportResolutionDraft = {
   caseId: string
   outcome: CommerceSupportResolutionOutcome
   note: string
+}
+
+type CommerceSupportOpenDraft = {
+  intent: EcommerceSupportIntent
+  priority: CommerceSupportPriority
+  owner: string
+  dueAt: string
 }
 
 type ProductId = 'commerce' | 'production'
@@ -1590,7 +1599,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
-  const [supportDraft, setSupportDraft] = useState<EcommerceSupportIntent | null>(null)
+  const [supportDraft, setSupportDraft] = useState<CommerceSupportOpenDraft | null>(null)
   const [supportResolutionDraft, setSupportResolutionDraft] = useState<CommerceSupportResolutionDraft | null>(null)
   const [correctionDraft, setCorrectionDraft] = useState<CommerceCorrectionDraft | null>(null)
   const [taxDraft, setTaxDraft] = useState<TaxConfigurationDraft | null>(null)
@@ -2264,8 +2273,13 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
           return
         }
         setReturnDraft(null)
-        setSupportDraft(intent)
-        setNotice(`${intent.id} is ready for Shop review. Open one trackable case; no message or refund is sent.`)
+        setSupportDraft({
+          intent,
+          priority: 'normal',
+          owner: managedIdentity?.email ?? order.owner ?? '',
+          dueAt: defaultIssueDueInput(),
+        })
+        setNotice(`${intent.id} is ready for Shop review. Assign priority, owner, and due time before opening it; no message or refund is sent.`)
         requestAnimationFrame(() => document.getElementById('shop-support-open-review')?.focus())
       })
       .catch(() => {
@@ -3721,19 +3735,29 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
   function reviewSupportCaseOpen(event: FormEvent) {
     event.preventDefault()
     if (!supportDraft) return
-    const expected = commerceOrderSupportOpenExpectation(commerce, supportDraft.orderId, supportDraft.id)
+    const intent = supportDraft.intent
+    const dueAt = new Date(supportDraft.dueAt)
+    const owner = supportDraft.owner.trim()
+    const expected = commerceOrderSupportOpenExpectation(commerce, intent.orderId, intent.id)
     if (!expected) {
       setSupportDraft(null)
       setNotice('This help request was already handled or its Shop order changed. Nothing was queued.')
       return
     }
+    if (!owner || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= purchaseOrderClock) {
+      setNotice('Choose one accountable owner and a future due time for this support case.')
+      return
+    }
     const input = {
-      orderId: supportDraft.orderId,
-      sourceIntentId: supportDraft.id,
-      sourceRequestId: supportDraft.sourceRequestId,
-      customerRequestedAt: supportDraft.createdAt,
-      category: supportDraft.category,
-      customerDescription: supportDraft.description,
+      orderId: intent.orderId,
+      sourceIntentId: intent.id,
+      sourceRequestId: intent.sourceRequestId,
+      customerRequestedAt: intent.createdAt,
+      category: intent.category,
+      customerDescription: intent.description,
+      priority: supportDraft.priority,
+      owner,
+      dueAt: dueAt.toISOString(),
       externalMessageSent: false,
       refundStarted: false,
     } as const
@@ -3742,9 +3766,9 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
       subjectId: `${input.orderId}:${input.sourceIntentId}`,
       summary: `Open support case for ${input.orderId}`,
       before: `${input.category.replaceAll('_', ' ')} request waiting for Shop review`,
-      after: 'Accountable Shop case open · no message or refund sent',
+      after: `${input.priority} · owner ${input.owner} · due ${formatTime(input.dueAt)} · no message or refund sent`,
       reasonSuggestion: `Customer requested help: ${input.customerDescription}`,
-      evidenceReferenceSuggestion: supportDraft.evidenceReference,
+      evidenceReferenceSuggestion: intent.evidenceReference,
       evidenceReferenceLocked: true,
       apply: async (action) => {
         const proof = commerceActionProof(action)
@@ -4686,6 +4710,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
     onReviewSupportResolution={reviewSupportCaseResolution}
     onOpenSupportResolution={openSupportResolution}
     onCancelSupportOpen={() => { setSupportDraft(null); setNotice('Support review closed. Nothing changed.') }}
+    onChangeSupportOpen={(patch) => setSupportDraft((current) => current ? { ...current, ...patch } : current)}
     onCancelSupportResolution={() => { setSupportResolutionDraft(null); setNotice('Support resolution closed. Nothing changed.') }}
     onChangeSupportResolution={(patch) => setSupportResolutionDraft((current) => current ? { ...current, ...patch } : current)}
     onCorrectionEditor={(node) => { correctionEditorRef.current = node }}
@@ -5064,6 +5089,7 @@ function ClosedOrderHistory({
   onOpenSupportResolution,
   onCancelSupportOpen,
   onCancelSupportResolution,
+  onChangeSupportOpen,
   onChangeSupportResolution,
   onCorrectionEditor,
   onCorrectionTrigger,
@@ -5093,6 +5119,7 @@ function ClosedOrderHistory({
   onOpenSupportResolution: (orderId: string, caseId: string) => void
   onCancelSupportOpen: () => void
   onCancelSupportResolution: () => void
+  onChangeSupportOpen: (patch: Partial<Omit<CommerceSupportOpenDraft, 'intent'>>) => void
   onChangeSupportResolution: (patch: Partial<CommerceSupportResolutionDraft>) => void
   onCorrectionEditor: (node: HTMLFormElement | null) => void
   onCorrectionTrigger: (orderId: string, node: HTMLButtonElement | null) => void
@@ -5101,21 +5128,24 @@ function ClosedOrderHistory({
   orders: CommerceOrder[]
   returnDraft: CommerceReturnDraft | null
   returnLocationPreview: string
-  supportDraft: EcommerceSupportIntent | null
+  supportDraft: CommerceSupportOpenDraft | null
   supportResolutionDraft: CommerceSupportResolutionDraft | null
 }) {
   const [page, setPage] = useState(0)
+  const supportClock = useMinuteClock()
   const pageSize = 8
   if (!orders.length) return null
   const pageCount = Math.ceil(orders.length / pageSize)
   const returnOrderIndex = returnDraft ? orders.findIndex((order) => order.id === returnDraft.orderId) : -1
-  const supportOrderId = supportDraft?.orderId ?? supportResolutionDraft?.orderId
+  const supportOrderId = supportDraft?.intent.orderId ?? supportResolutionDraft?.orderId
   const supportOrderIndex = supportOrderId ? orders.findIndex((order) => order.id === supportOrderId) : -1
   const focusedOrderIndex = returnOrderIndex >= 0 ? returnOrderIndex : supportOrderIndex
   const currentPage = focusedOrderIndex >= 0 ? Math.floor(focusedOrderIndex / pageSize) : Math.min(page, pageCount - 1)
   const visibleOrders = orders.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+  const openSupportCases = orders.flatMap((order) => order.supportCases ?? []).filter((supportCase) => supportCase.status === 'open')
+  const overdueSupportCases = openSupportCases.filter((supportCase) => commerceSupportCaseUrgency(supportCase, supportClock) === 'overdue')
   return <details className="order-archive" id="shop-order-history" open={Boolean(returnDraft || supportDraft || supportResolutionDraft) || undefined}>
-    <summary><span>Completed and cancelled orders</span><small>{orders.length} {orders.length === 1 ? 'record' : 'records'} · returns, help, and corrections</small></summary>
+    <summary><span>Completed and cancelled orders</span><small>{openSupportCases.length ? `${openSupportCases.length} help open · ${overdueSupportCases.length} overdue · ` : ''}{orders.length} {orders.length === 1 ? 'record' : 'records'}</small></summary>
     <div className="order-archive-list">{visibleOrders.map((order) => {
       const lines = commerceOrderReturnLines(order).map((line) => {
         const returned = (order.returns ?? [])
@@ -5131,7 +5161,7 @@ function ClosedOrderHistory({
       const editing = activeReturnDraft !== null
       const activeCorrectionDraft = correctionDraft?.orderId === order.id ? correctionDraft : null
       const correcting = activeCorrectionDraft !== null
-      const activeSupportDraft = supportDraft?.orderId === order.id ? supportDraft : null
+      const activeSupportDraft = supportDraft?.intent.orderId === order.id ? supportDraft : null
       const activeSupportResolution = supportResolutionDraft?.orderId === order.id ? supportResolutionDraft : null
       const selectedLine = draftedLine ?? availableLines[0]
       const returnable = canReturn(order.id)
@@ -5179,13 +5209,19 @@ function ClosedOrderHistory({
         </div>)}
       </div> : null}
       {order.supportCases?.length ? <div className="order-return-records" role="list">
-        {order.supportCases.map((supportCase) => <div key={supportCase.caseId} role="listitem">
-          <strong>{supportCase.status === 'resolved' ? 'Resolved help case' : 'Open help case'} · {supportCase.category.replaceAll('_', ' ')}</strong>
-          <small>{supportCase.caseId} · requested {formatTime(supportCase.customerRequestedAt)} · opened by {supportCase.opening.actor}</small>
-          <small>{supportCase.customerDescription}</small>
-          {supportCase.resolution ? <small>{supportCase.resolution.outcome.replaceAll('_', ' ')} · {supportCase.resolution.note} · {supportCase.resolution.proof.actor}</small> : <button className="text-link" disabled={disabled || Boolean(activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve case</button>}
-          <small>No external message or refund performed</small>
-        </div>)}
+        {order.supportCases.map((supportCase) => {
+          const urgency = commerceSupportCaseUrgency(supportCase, supportClock)
+          return <div data-support-urgency={urgency} key={supportCase.caseId} role="listitem">
+            <strong>{urgency === 'overdue' ? 'OVERDUE · ' : ''}{supportCase.status === 'resolved' ? 'Resolved help case' : 'Open help case'} · {supportCase.category.replaceAll('_', ' ')}</strong>
+            <small>{supportCase.caseId} · requested {formatTime(supportCase.customerRequestedAt)} · opened by {supportCase.opening.actor}</small>
+            {supportCase.priority && supportCase.owner && supportCase.dueAt
+              ? <small>{supportCase.priority} priority · owner {supportCase.owner} · {urgency === 'overdue' ? 'overdue since' : 'due'} {formatTime(supportCase.dueAt)}</small>
+              : <small>Legacy case · priority, owner, and due time were not recorded</small>}
+            <small>{supportCase.customerDescription}</small>
+            {supportCase.resolution ? <small>{supportCase.resolution.outcome.replaceAll('_', ' ')} · {supportCase.resolution.note} · {supportCase.resolution.proof.actor}</small> : <button className="text-link" disabled={disabled || Boolean(activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve case</button>}
+            <small>No external message or refund performed</small>
+          </div>
+        })}
       </div> : null}
       {order.corrections?.length ? <div className="order-return-records" role="list">
         {order.corrections.map((record) => <div key={record.documentId} role="listitem">
@@ -5203,7 +5239,9 @@ function ClosedOrderHistory({
         <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review return</button><button className="core-button compact" disabled={disabled} onClick={onCancelReturn} type="button">Cancel</button></div>
       </form> : null}
       {activeSupportDraft ? <form aria-label={`Open support case for ${order.id}`} className="order-return-editor" onSubmit={onReviewSupportOpen}>
-        <div className="order-return-copy"><span className="core-eyebrow">Customer help</span><strong>{activeSupportDraft.category.replaceAll('_', ' ')}</strong><small>{activeSupportDraft.description}</small><small>Creates one accountable Shop case. It does not send a message or start a refund.</small></div>
+        <div className="order-return-copy"><span className="core-eyebrow">Customer help</span><strong>{activeSupportDraft.intent.category.replaceAll('_', ' ')}</strong><small>{activeSupportDraft.intent.description}</small><small>Assign service responsibility before opening. This does not send a message or start a refund.</small></div>
+        <div className="form-row"><label>Priority<select disabled={disabled} onChange={(event) => onChangeSupportOpen({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportDraft.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label><label>Owner<input disabled={disabled} maxLength={120} onChange={(event) => onChangeSupportOpen({ owner: event.target.value })} required value={activeSupportDraft.owner} /></label></div>
+        <label>Due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportOpen({ dueAt: event.target.value })} required type="datetime-local" value={activeSupportDraft.dueAt} /></label>
         <div className="form-actions"><button className="core-button primary compact" disabled={disabled} id="shop-support-open-review" type="submit">Review case opening</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportOpen} type="button">Cancel</button></div>
       </form> : null}
       {activeSupportResolution ? <form aria-label={`Resolve support case ${activeSupportResolution.caseId}`} className="order-return-editor" onSubmit={onReviewSupportResolution}>

@@ -133,6 +133,7 @@ _SUPPORT_CATEGORIES = frozenset(
 _SUPPORT_RESOLUTION_OUTCOMES = frozenset(
     {"information_provided", "replacement_review_required", "refund_review_required", "no_action"}
 )
+_SUPPORT_PRIORITIES = frozenset({"urgent", "high", "normal", "low"})
 _PURCHASE_DISCREPANCY_CODES = frozenset({"damaged", "wrong_item", "quality_failed"})
 _PURCHASE_DISCREPANCY_FIELDS = frozenset(
     {"rejectedQuantity", "discrepancyCode", "discrepancyDisposition"}
@@ -344,7 +345,9 @@ _ORDER_SUPPORT_CASE_REQUIRED_FIELDS = frozenset(
         "externalMessageSent", "refundStarted",
     }
 )
-_ORDER_SUPPORT_CASE_OPTIONAL_FIELDS = frozenset({"resolution"})
+_ORDER_SUPPORT_CASE_OPTIONAL_FIELDS = frozenset(
+    {"resolution", "priority", "owner", "dueAt"}
+)
 _ORDER_SUPPORT_RESOLUTION_FIELDS = frozenset({"outcome", "note", "proof"})
 _ORDER_CORRECTION_FIELDS = frozenset(
     {
@@ -2083,6 +2086,21 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     ).replace("Z", "+00:00")
                 )
                 opening_at = datetime.fromisoformat(opening["capturedAt"].replace("Z", "+00:00"))
+                triage_fields = tuple(
+                    field_name in support_case
+                    for field_name in ("priority", "owner", "dueAt")
+                )
+                if any(triage_fields) and not all(triage_fields):
+                    raise TrialValidationError(
+                        f"{field} service triage must include priority, owner, and due time together."
+                    )
+                if all(triage_fields):
+                    due_at = datetime.fromisoformat(
+                        _timestamp(support_case["dueAt"], f"{field}.dueAt").replace("Z", "+00:00")
+                    )
+                    _text(support_case["owner"], f"{field}.owner", maximum=120)
+                    if support_case["priority"] not in _SUPPORT_PRIORITIES or due_at <= opening_at:
+                        raise TrialValidationError(f"{field} service triage is invalid.")
                 if (
                     _SUPPORT_CASE_ID_PATTERN.fullmatch(case_id) is None
                     or _SUPPORT_INTENT_ID_PATTERN.fullmatch(source_intent_id) is None
@@ -5755,6 +5773,7 @@ def _validate_support_case_opened(
         or _without(before_order, frozenset({"supportCases"}))
         != _without(after_order, frozenset({"supportCases"}))
         or after_cases[0].get("status") != "open"
+        or not all(field in after_cases[0] for field in ("priority", "owner", "dueAt"))
         or "resolution" in after_cases[0]
     ):
         raise TrialValidationError(

@@ -2802,10 +2802,15 @@ if (!commerceSource.includes('export type CommerceOrderReturn')
   || !managedCommerceRuntime.includes('"commerce.order.return_recorded"')) fail('commerce_order_return_contract_missing')
 if (!commerceSource.includes('export type CommerceOrderSupportCase')
   || !commerceSource.includes('export function commerceOrderSupportOpenExpectation')
+  || !commerceSource.includes('export function commerceSupportCaseUrgency')
   || !commerceSource.includes('export function recordCommerceOrderSupportCase')
   || !commerceSource.includes('export function resolveCommerceOrderSupportCase')
   || !commerceSource.includes('externalMessageSent: false')
   || !commerceSource.includes('refundStarted: false')
+  || !commerceSource.includes("export type CommerceSupportPriority = 'urgent' | 'high' | 'normal' | 'low'")
+  || !coreSource.includes('Assign service responsibility before opening.')
+  || !coreSource.includes('data-support-urgency={urgency}')
+  || !coreSource.includes('Choose one accountable owner and a future due time for this support case.')
   || !managedCommerceRuntime.includes('def _validate_support_case_opened')
   || !managedCommerceRuntime.includes('def _validate_support_case_resolved')) fail('commerce_order_support_contract_missing')
 if (!commerceSource.includes('export type CommerceOrderCorrection')
@@ -10680,6 +10685,9 @@ async function verifyStorefrontRuntime() {
         customerRequestedAt: supportIntent.createdAt,
         category: supportIntent.category,
         customerDescription: supportIntent.description,
+        priority: 'high',
+        owner: 'Support owner',
+        dueAt: '2026-07-24T13:46:00.000Z',
         externalMessageSent: false,
         refundStarted: false,
       },
@@ -10694,11 +10702,39 @@ async function verifyStorefrontRuntime() {
     )
     const supportCase = openedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
     buyingAssert(supportCase?.status === 'open'
+      && supportCase.priority === 'high'
+      && supportCase.owner === 'Support owner'
+      && supportCase.dueAt === '2026-07-24T13:46:00.000Z'
+      && commerce.commerceSupportCaseUrgency(supportCase, Date.parse('2026-07-24T13:47:00.000Z')) === 'overdue'
       && supportCase.externalMessageSent === false
       && supportCase.refundStarted === false
       && JSON.stringify(openedSupportState?.items) === JSON.stringify(completedOrderState.items)
       && JSON.stringify(openedSupportState?.movements) === JSON.stringify(completedOrderState.movements),
     'ecommerce_support_case_opening_claimed_side_effects')
+    const missingSupportOwner = commerce.recordCommerceOrderSupportCase(
+      completedOrderState,
+      {
+        orderId: supportIntent.orderId,
+        sourceIntentId: supportIntent.id,
+        sourceRequestId: supportIntent.sourceRequestId,
+        customerRequestedAt: supportIntent.createdAt,
+        category: supportIntent.category,
+        customerDescription: supportIntent.description,
+        priority: 'high',
+        dueAt: '2026-07-24T13:46:00.000Z',
+        externalMessageSent: false,
+        refundStarted: false,
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-MISSING-OWNER',
+        capturedAt: '2026-07-24T09:46:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Attempt support opening without accountable ownership.',
+        evidenceReference: supportIntent.evidenceReference,
+      },
+      supportOpenExpectation,
+    )
+    buyingAssert(missingSupportOwner === null, 'ecommerce_support_case_missing_owner_accepted')
     const supportResolveExpectation = supportCase && commerce.commerceOrderSupportResolveExpectation(
       openedSupportState,
       completedOrder.id,

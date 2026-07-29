@@ -4470,6 +4470,9 @@ class CommerceRuntimeTests(unittest.TestCase):
             "customerRequestedAt": requested_at,
             "category": "delivery_issue",
             "customerDescription": "Delivery arrived later than the promised time.",
+            "priority": "high",
+            "owner": "Support owner",
+            "dueAt": "2026-07-23T13:30:00.000Z",
             "status": "open",
             "opening": opening,
             "externalMessageSent": False,
@@ -4482,6 +4485,8 @@ class CommerceRuntimeTests(unittest.TestCase):
         )
         support_case = opened["orders"][0]["supportCases"][0]  # type: ignore[index]
         self.assertEqual(support_case["status"], "open")
+        self.assertEqual(support_case["priority"], "high")
+        self.assertEqual(support_case["owner"], "Support owner")
         self.assertFalse(support_case["externalMessageSent"])
         self.assertFalse(support_case["refundStarted"])
         self.assertEqual(opened["items"], current["items"])
@@ -4517,6 +4522,11 @@ class CommerceRuntimeTests(unittest.TestCase):
         forged["orders"][0]["supportCases"][0]["refundStarted"] = True  # type: ignore[index]
         with self.assertRaises(TrialValidationError):
             validate_commerce_state(forged)
+
+        missing_triage = deepcopy(opened_candidate)
+        del missing_triage["orders"][0]["supportCases"][0]["owner"]  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.order.support_case_opened", missing_triage)
 
     def test_completed_order_accepts_multiple_partial_returns_with_explicit_stock_disposition(self) -> None:
         current = validate_commerce_state(completed_state())
