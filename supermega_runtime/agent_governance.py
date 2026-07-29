@@ -17,6 +17,7 @@ AGENT_CADENCE_ADMISSION_CONTRACT = "supermega.agent-cadence-admission.v1"
 AGENT_RETRY_POLICY_CONTRACT = "supermega.agent-retry-policy.v1"
 AGENT_BUDGET_GRANT_CONTRACT = "supermega.agent-budget-grant.v1"
 AGENT_BUDGET_ACCOUNTING_CONTRACT = "supermega.agent-budget-accounting.v1"
+AGENT_FAILURE_CONTRACT = "supermega.agent-run-failure.v1"
 AGENT_BUDGET_AUDIENCE = "supermega-agent-runtime"
 AGENT_ACTIVE_ASSIGNMENT_LIMIT = 4
 AGENT_ROSTER_LIMIT = 12
@@ -107,6 +108,60 @@ if (
 
 _GRANT_ID = re.compile(r"^[a-f0-9]{32}$")
 _GRANT_SIGNATURE = re.compile(r"^[a-f0-9]{64}$")
+_AGENT_FAILURE_ID = re.compile(r"^[A-Za-z0-9_-]{12,48}$")
+
+_AGENT_FAILURE_SPECS: dict[str, tuple[str, bool, str]] = {
+    "agent_execution_failed": (
+        "internal",
+        False,
+        "Agent execution failed. Review the protected failure reference.",
+    ),
+    "agent_policy_blocked": (
+        "policy",
+        False,
+        "Agent execution stopped at a runtime policy boundary.",
+    ),
+    "agent_dependency_temporarily_unavailable": (
+        "transient",
+        True,
+        "A required dependency was temporarily unavailable. Review telemetry before a bounded retry.",
+    ),
+    "agent_dependency_denied": (
+        "configuration",
+        False,
+        "A required dependency denied the request. Review protected configuration.",
+    ),
+    "agent_dependency_rejected": (
+        "configuration",
+        False,
+        "A required dependency rejected the request. Review protected configuration.",
+    ),
+    "agent_input_or_state_invalid": (
+        "invalid_state",
+        False,
+        "Agent input or runtime state was invalid. Review the protected failure reference.",
+    ),
+}
+
+
+def build_agent_failure(*, code: str = "", failure_id: str = "") -> dict[str, Any]:
+    """Return the complete allowlisted failure envelope used on durable surfaces."""
+
+    normalized_code = str(code or "").strip().lower()
+    if normalized_code not in _AGENT_FAILURE_SPECS:
+        normalized_code = "agent_execution_failed"
+    category, retryable, detail = _AGENT_FAILURE_SPECS[normalized_code]
+    reference = str(failure_id or "").strip()
+    if not _AGENT_FAILURE_ID.fullmatch(reference):
+        reference = secrets.token_urlsafe(12)
+    return {
+        "contract": AGENT_FAILURE_CONTRACT,
+        "failure_id": reference,
+        "category": category,
+        "code": normalized_code,
+        "retryable": retryable,
+        "detail": detail,
+    }
 
 
 class AgentGovernanceError(RuntimeError):
