@@ -391,6 +391,47 @@ export function selectCeoOutcome(options = {}) {
   }
 }
 
+export function resolveCeoOutcomeActionAuthority(input = {}, options = {}) {
+  const authority = normalizeAuthority(options.authority ?? SUPERMEGA_HQ_AUTHORITY)
+  if (!authority) return { ok: false, reason: 'ceo_outcome_authority_invalid' }
+  const outcomeId = boundedText(input.outcomeId, 80)
+  const authorityDigest = boundedText(input.authorityDigest, 64)
+  const successMeasureDigest = boundedText(input.successMeasureDigest, 64)
+  if (!ID_RE.test(outcomeId)
+    || !/^[a-f0-9]{64}$/.test(authorityDigest)
+    || !/^[a-f0-9]{64}$/.test(successMeasureDigest)) {
+    return { ok: false, reason: 'ceo_outcome_action_authority_invalid' }
+  }
+  const currentAuthorityDigest = createHash('sha256').update(stableStringify(authority)).digest('hex')
+  if (authorityDigest !== currentAuthorityDigest) {
+    return { ok: false, reason: 'ceo_outcome_action_authority_stale' }
+  }
+  const outcome = authority.outcomes.find((candidate) => candidate.id === outcomeId)
+  if (!outcome || outcome.state !== 'ready' || outcome.actionMode !== 'read_only_brief') {
+    return { ok: false, reason: 'ceo_outcome_action_not_authorized' }
+  }
+  const currentSuccessMeasureDigest = createHash('sha256').update(outcome.successMeasure).digest('hex')
+  if (successMeasureDigest !== currentSuccessMeasureDigest) {
+    return { ok: false, reason: 'ceo_outcome_action_success_measure_stale' }
+  }
+  return {
+    ok: true,
+    authorityDigest: currentAuthorityDigest,
+    outcome: {
+      id: outcome.id,
+      title: outcome.title,
+      team: outcome.team,
+      successMeasureDigest: currentSuccessMeasureDigest,
+    },
+    controls: {
+      externalWrites: false,
+      dynamicDelegation: false,
+      recursiveDelegation: false,
+      humanApprovalForConsequentialActions: true,
+    },
+  }
+}
+
 export function buildCeoOutcomeGoal(selection) {
   if (!selection?.ok || !selection.selected || selection.declined) return ''
   const blocked = selection.skipped
@@ -408,4 +449,9 @@ export function buildCeoOutcomeGoal(selection) {
   ].join('\n')
 }
 
-export default { SUPERMEGA_HQ_AUTHORITY, selectCeoOutcome, buildCeoOutcomeGoal }
+export default {
+  SUPERMEGA_HQ_AUTHORITY,
+  selectCeoOutcome,
+  resolveCeoOutcomeActionAuthority,
+  buildCeoOutcomeGoal,
+}

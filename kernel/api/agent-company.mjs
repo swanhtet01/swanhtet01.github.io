@@ -30,6 +30,7 @@ import {
   evaluateCeoOutcomeDelivery,
   evaluateCompanyWorkOrder,
   loadCeoOutcomeCycleState,
+  promoteAcceptedCeoOutcomeAction,
 } from '../agent-company-operations.mjs'
 import {
   selectCeoOutcome,
@@ -389,6 +390,11 @@ function statusFor(result) {
     'ceo_outcome_record_mismatch',
     'ceo_outcome_evaluation_already_claimed',
     'ceo_outcome_evaluation_conflict',
+    'ceo_outcome_action_already_claimed',
+    'ceo_outcome_action_conflict',
+    'ceo_outcome_action_evaluation_mismatch',
+    'ceo_outcome_action_authority_stale',
+    'ceo_outcome_action_success_measure_stale',
     'company_mission_already_claimed',
     'company_mission_conflict',
     'company_mission_handoff_mismatch',
@@ -420,6 +426,9 @@ function statusFor(result) {
     'ceo_outcome_durable_claim_required',
     'ceo_outcome_evaluation_store_unavailable',
     'ceo_outcome_evaluation_durable_claim_required',
+    'ceo_outcome_action_store_unavailable',
+    'ceo_outcome_action_durable_claim_required',
+    'ceo_outcome_action_authority_unavailable',
     'company_mission_durable_claim_required',
     'company_mission_store_unavailable',
     'company_mission_work_order_unavailable',
@@ -636,6 +645,7 @@ export async function handleAgentCompany(request = {}, options = {}) {
     'work-order-review',
     'work-order-evaluate',
     'ceo-outcome-evaluate',
+    'ceo-outcome-promote',
     'operations-report',
   ].includes(action)) {
     return { status: 400, json: { ok: false, reason: 'company_invalid_action' } }
@@ -689,6 +699,7 @@ export async function handleAgentCompany(request = {}, options = {}) {
   const reviewOrder = options.reviewCompanyWorkOrder || reviewCompanyWorkOrder
   const evaluateOrder = options.evaluateCompanyWorkOrder || evaluateCompanyWorkOrder
   const evaluateOutcome = options.evaluateCeoOutcomeDelivery || evaluateCeoOutcomeDelivery
+  const promoteOutcome = options.promoteAcceptedCeoOutcomeAction || promoteAcceptedCeoOutcomeAction
   const operationsReport = options.buildCompanyOperationsReport || buildCompanyOperationsReport
   let customerScopedOrder = null
   if (auth.role === 'customer') {
@@ -737,7 +748,8 @@ export async function handleAgentCompany(request = {}, options = {}) {
                                 : {})
                                 : action === 'work-order-evaluate' ? await evaluateOrder(body)
                                   : action === 'ceo-outcome-evaluate' ? await evaluateOutcome(body)
-                                    : await operationsReport(body)
+                                    : action === 'ceo-outcome-promote' ? await promoteOutcome(body)
+                                      : await operationsReport(body)
   if (auth.role === 'customer' && action === 'work-order-review' && result.ok) {
     return {
       status: 200,

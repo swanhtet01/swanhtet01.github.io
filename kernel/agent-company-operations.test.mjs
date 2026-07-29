@@ -7,9 +7,15 @@ import {
   evaluateCompanyWorkOrder,
   getCompanyWorkOrderEvaluation,
   loadCeoOutcomeCycleState,
+  promoteAcceptedCeoOutcomeAction,
   recordCeoOutcomeCompletion,
   recordCeoOutcomeDeliveryResult,
 } from './agent-company-operations.mjs'
+import {
+  resolveCeoOutcomeActionAuthority,
+  selectCeoOutcome,
+  SUPERMEGA_HQ_AUTHORITY,
+} from './supermega-hq-authority.mjs'
 
 const HASH = 'a'.repeat(64)
 const AUTHORITY_DIGEST = 'c'.repeat(64)
@@ -114,6 +120,19 @@ function ceoOutcomeHarness() {
       getCeoOutcomeEvaluation: async (key) => structuredClone(cache.get(key) || null),
       putCeoOutcomeDeliveryRecord: async (key, value) => { cache.set(key, structuredClone(value)); return true },
       getCeoOutcomeDeliveryRecord: async (key) => structuredClone(cache.get(key) || null),
+      putCeoOutcomeAction: async (key, value) => { cache.set(key, structuredClone(value)); return true },
+      getCeoOutcomeAction: async (key) => structuredClone(cache.get(key) || null),
+      resolveCeoOutcomeActionAuthority: async ({ outcomeId, authorityDigest, successMeasureDigest }) => ({
+        ok: true,
+        authorityDigest,
+        outcome: { id: outcomeId, team: 'product', successMeasureDigest },
+        controls: {
+          externalWrites: false,
+          dynamicDelegation: false,
+          recursiveDelegation: false,
+          humanApprovalForConsequentialActions: true,
+        },
+      }),
       getActivityClaim: async (id) => ({
         durable: true,
         claim: { id, kind: 'workcell_delivery', ref: 'ceo-daily-company-control:2026-07-14' },
@@ -248,9 +267,36 @@ test('CEO outcome completion and owner acceptance are immutable, tenant-bound, a
   assert.equal(accepted.ok, true)
   assert.equal(accepted.evaluation.verdict, 'accepted')
   assert.equal(accepted.evaluation.successMeasureDigest, SUCCESS_MEASURE_DIGEST)
+  assert.equal(accepted.action.status, 'proposed')
+  assert.equal(accepted.action.ownerRole, 'milestone-builder')
+  assert.equal(accepted.action.actionMode, 'internal_draft_only')
   assert.equal(JSON.stringify(accepted).includes('answer'), false)
   assert.equal((await evaluateCeoOutcomeDelivery(evaluationInput, state.options)).replayed, true)
   assert.equal((await evaluateCeoOutcomeDelivery({ ...evaluationInput, verdict: 'revision_required' }, state.options)).reason, 'ceo_outcome_evaluation_conflict')
+})
+
+test('accepted outcome action authority fails closed on stale or blocked definitions', () => {
+  const selected = selectCeoOutcome()
+  const resolved = resolveCeoOutcomeActionAuthority({
+    outcomeId: selected.selected.id,
+    authorityDigest: selected.authorityDigest,
+    successMeasureDigest: selected.selected.successMeasureDigest,
+  })
+  assert.equal(resolved.ok, true)
+  assert.equal(resolved.outcome.team, 'product')
+  assert.equal(resolved.controls.externalWrites, false)
+  assert.equal(resolved.controls.dynamicDelegation, false)
+  assert.equal(resolveCeoOutcomeActionAuthority({
+    outcomeId: selected.selected.id,
+    authorityDigest: 'a'.repeat(64),
+    successMeasureDigest: selected.selected.successMeasureDigest,
+  }).reason, 'ceo_outcome_action_authority_stale')
+  const blocked = SUPERMEGA_HQ_AUTHORITY.outcomes.find((outcome) => outcome.state === 'blocked')
+  assert.equal(resolveCeoOutcomeActionAuthority({
+    outcomeId: blocked.id,
+    authorityDigest: selected.authorityDigest,
+    successMeasureDigest: 'a'.repeat(64),
+  }).reason, 'ceo_outcome_action_not_authorized')
 })
 
 test('CEO owner-delivery result is durable, idempotent, claim-bound, and metadata-only', async () => {
@@ -284,6 +330,123 @@ test('CEO owner-delivery result is durable, idempotent, claim-bound, and metadat
     ...state.options,
     getActivityClaim: async () => ({ durable: false, claim: null }),
   })).reason, 'ceo_outcome_delivery_store_unavailable')
+})
+
+test('accepted CEO outcome promotes to one durable internal draft action', async () => {
+  const state = ceoOutcomeHarness()
+  const completed = await recordCeoOutcomeCompletion(ceoOutcomeInput(), state.options)
+  const evaluated = await evaluateCeoOutcomeDelivery({
+    clientId: 'client-acme',
+    operationId: completed.outcome.operationId,
+    recordHash: completed.outcome.recordHash,
+    successMeasureDigest: completed.outcome.successMeasureDigest,
+    verdict: 'accepted',
+    confirmation: `EVALUATE ${completed.outcome.operationId} ${completed.outcome.successMeasureDigest}`,
+  }, state.options)
+  const input = {
+    clientId: 'client-acme',
+    operationId: completed.outcome.operationId,
+    evaluationHash: evaluated.evaluation.evaluationHash,
+    confirmation: `PROMOTE ${completed.outcome.operationId} ${evaluated.evaluation.evaluationHash}`,
+  }
+  const promoted = await promoteAcceptedCeoOutcomeAction(input, state.options)
+  assert.equal(promoted.ok, true)
+  assert.equal(promoted.action.status, 'proposed')
+  assert.equal(promoted.action.actionMode, 'internal_draft_only')
+  assert.equal(promoted.action.ownerRole, 'milestone-builder')
+  assert.equal(promoted.action.team, 'product')
+  assert.match(promoted.action.actionId, /^ceo-outcome-action:[a-f0-9]{40}$/)
+  assert.match(promoted.action.actionHash, /^[a-f0-9]{64}$/)
+  assert.doesNotMatch(JSON.stringify(promoted), /provider|model output|private answer/)
+  const replay = await promoteAcceptedCeoOutcomeAction(input, {
+    ...state.options,
+    now: () => '2026-07-17T01:00:00.000Z',
+  })
+  assert.equal(replay.ok, true)
+  assert.equal(replay.replayed, true)
+  assert.equal(replay.action.actionHash, promoted.action.actionHash)
+  assert.equal((await promoteAcceptedCeoOutcomeAction({
+    ...input,
+    confirmation: `PROMOTE ${completed.outcome.operationId}`,
+  }, state.options)).reason, 'ceo_outcome_action_confirmation_required')
+  assert.equal((await promoteAcceptedCeoOutcomeAction({
+    ...input,
+    evaluationHash: 'd'.repeat(64),
+    confirmation: `PROMOTE ${completed.outcome.operationId} ${'d'.repeat(64)}`,
+  }, state.options)).reason, 'ceo_outcome_action_evaluation_mismatch')
+})
+
+test('CEO outcome action promotion fails closed without accepted durable authority', async () => {
+  const state = ceoOutcomeHarness()
+  const completed = await recordCeoOutcomeCompletion(ceoOutcomeInput(), state.options)
+  const revised = await evaluateCeoOutcomeDelivery({
+    clientId: 'client-acme',
+    operationId: completed.outcome.operationId,
+    recordHash: completed.outcome.recordHash,
+    successMeasureDigest: completed.outcome.successMeasureDigest,
+    verdict: 'revision_required',
+    confirmation: `EVALUATE ${completed.outcome.operationId} ${completed.outcome.successMeasureDigest}`,
+  }, state.options)
+  const input = {
+    clientId: 'client-acme',
+    operationId: completed.outcome.operationId,
+    evaluationHash: revised.evaluation.evaluationHash,
+    confirmation: `PROMOTE ${completed.outcome.operationId} ${revised.evaluation.evaluationHash}`,
+  }
+  assert.equal((await promoteAcceptedCeoOutcomeAction(input, state.options)).reason, 'ceo_outcome_action_accepted_evaluation_required')
+
+  const acceptedState = ceoOutcomeHarness()
+  const acceptedOperation = await recordCeoOutcomeCompletion(ceoOutcomeInput(), acceptedState.options)
+  const accepted = await evaluateCeoOutcomeDelivery({
+    clientId: 'client-acme',
+    operationId: acceptedOperation.outcome.operationId,
+    recordHash: acceptedOperation.outcome.recordHash,
+    successMeasureDigest: acceptedOperation.outcome.successMeasureDigest,
+    verdict: 'accepted',
+    confirmation: `EVALUATE ${acceptedOperation.outcome.operationId} ${acceptedOperation.outcome.successMeasureDigest}`,
+  }, acceptedState.options)
+  const acceptedInput = {
+    clientId: 'client-acme',
+    operationId: acceptedOperation.outcome.operationId,
+    evaluationHash: accepted.evaluation.evaluationHash,
+    confirmation: `PROMOTE ${acceptedOperation.outcome.operationId} ${accepted.evaluation.evaluationHash}`,
+  }
+  assert.equal((await promoteAcceptedCeoOutcomeAction(acceptedInput, {
+    ...acceptedState.options,
+    resolveCeoOutcomeActionAuthority: async () => ({ ok: false, reason: 'ceo_outcome_action_authority_stale' }),
+  })).reason, 'ceo_outcome_action_authority_stale')
+  let released = ''
+  assert.equal((await promoteAcceptedCeoOutcomeAction(acceptedInput, {
+    ...acceptedState.options,
+    claimActivity: async () => ({ fresh: true, durable: false }),
+    releaseActivityClaim: async (id) => { released = id; return true },
+  })).reason, 'ceo_outcome_action_durable_claim_required')
+  assert.match(released, /^ceo-outcome-action-record:/)
+})
+
+test('accepted evaluation reports action persistence failure and recovers on exact replay', async () => {
+  const state = ceoOutcomeHarness()
+  const completed = await recordCeoOutcomeCompletion(ceoOutcomeInput(), state.options)
+  const input = {
+    clientId: 'client-acme',
+    operationId: completed.outcome.operationId,
+    recordHash: completed.outcome.recordHash,
+    successMeasureDigest: completed.outcome.successMeasureDigest,
+    verdict: 'accepted',
+    confirmation: `EVALUATE ${completed.outcome.operationId} ${completed.outcome.successMeasureDigest}`,
+  }
+  const failed = await evaluateCeoOutcomeDelivery(input, {
+    ...state.options,
+    putCeoOutcomeAction: async () => false,
+  })
+  assert.equal(failed.ok, false)
+  assert.equal(failed.reason, 'ceo_outcome_action_store_unavailable')
+  assert.equal(failed.evaluationRecorded, true)
+  const recovered = await evaluateCeoOutcomeDelivery(input, state.options)
+  assert.equal(recovered.ok, true)
+  assert.equal(recovered.replayed, true)
+  assert.equal(recovered.action.status, 'proposed')
+  assert.equal(recovered.actionReplayed, false)
 })
 
 test('weekly CEO state reconciles delivery only for the protected console and returns no receipt identity', async () => {
