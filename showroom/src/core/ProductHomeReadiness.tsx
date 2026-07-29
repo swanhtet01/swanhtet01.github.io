@@ -48,6 +48,12 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
     ['First sale motion', 'Prepared template demo', 'Create a client-specific starter workspace before outreach so the buyer sees their own products, jobs, site, or orders.'],
     ['Operator promise', 'Minimal controls', 'The owner chooses a track and approves packets; AI handles cleanup, ranking, drafts, checks, and handoff preparation.'],
   ] as const
+  const trackActionRows = [
+    ['Retail launch pack', '/settings/?product=shop', '/ecommerce/'],
+    ['Factory launch pack', '/settings/?product=plant', '/plant/?tab=production'],
+    ['Brand launch pack', '/settings/?product=website', '/website/'],
+    ['Branch launch pack', '/settings/#controls', '/shop/?tab=inventory'],
+  ] as const
   const learningCockpitRows = [
     ['Behavior memory', behaviorTrail.length ? `${behaviorTrail.length} local signals` : 'No signals yet', behaviorTrail.length ? 'Owner navigation and agent queue choices are ready for evidence export.' : 'Open products and choose agent jobs to create local memory.'],
     ['Queue choices', behaviorChoices ? `${behaviorChoices} chosen` : 'No choices yet', behaviorChoices ? 'Premium can rank repeated owner preferences after managed import.' : 'The system waits for explicit owner choices before ranking work.'],
@@ -125,6 +131,15 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
               <small>{label}</small>
               <strong>{value}</strong>
               <em>{detail}</em>
+            </span>
+          ))}
+        </div>
+        <div className="product-home-track-actions" aria-label="Track launch pack actions">
+          {trackActionRows.map(([label, setupPath, workPath]) => (
+            <span key={label}>
+              <strong>{label}</strong>
+              <Link to={setupPath}>Prepare data</Link>
+              <Link to={workPath}>Open workspace</Link>
             </span>
           ))}
         </div>
