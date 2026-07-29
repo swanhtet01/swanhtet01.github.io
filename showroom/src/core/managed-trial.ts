@@ -148,6 +148,48 @@ export type ManagedBootstrap = {
   approvals: ManagedApprovalRecord[]
 }
 
+export type ManagedCompanyBriefIntent =
+  | 'attention'
+  | 'shop_inventory'
+  | 'plant_control'
+  | 'website_readiness'
+  | 'ecommerce_readiness'
+
+export type ManagedCompanyBrief = {
+  contract: 'supermega.managed_company_brief.v1'
+  intent: ManagedCompanyBriefIntent
+  sourceCount: number
+  title: string
+  summary: string
+  facts: Array<{ label: string; value: string; detail: string }>
+  nextAction: {
+    product: 'shop' | 'plant' | 'website' | 'ecommerce'
+    path: string
+    label: string
+  }
+  boundary: string
+  sourceVersions: Array<{
+    surface: 'commerce' | 'production' | 'website'
+    version: number
+    updatedAt: string
+    stateDigest: string
+  }>
+  approvalSummary: { pending: number; approved: number; declined: number }
+  briefDigest: string
+  companyVersion: number
+  retention: 'reproducible_not_persisted' | 'persisted_managed_audit'
+  externalWritesPerformed: false
+}
+
+export type ManagedCompanyBriefRetention = {
+  contract: 'supermega.managed_company_brief_retention.v1'
+  status: 'retained'
+  briefDigest: string
+  internalWritePerformed: true
+  externalWritesPerformed: false
+  idempotentReplay: boolean
+}
+
 export type ManagedClientImportPackage = ReturnType<typeof buildClientImportStagingPackage>
 
 export type ManagedClientImportValidation = {
@@ -314,6 +356,109 @@ export function sameManagedIdentity(left: ManagedIdentity, right: ManagedIdentit
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+const MANAGED_COMPANY_BRIEF_INTENTS = new Set<ManagedCompanyBriefIntent>([
+  'attention',
+  'shop_inventory',
+  'plant_control',
+  'website_readiness',
+  'ecommerce_readiness',
+])
+const MANAGED_COMPANY_BRIEF_ROUTES = new Map([
+  ['shop', new Set(['/shop/?tab=inventory', '/settings/?product=shop'])],
+  ['plant', new Set(['/plant/?tab=production', '/settings/?product=plant'])],
+  ['website', new Set(['/website/', '/settings/?product=website'])],
+  ['ecommerce', new Set(['/ecommerce/', '/settings/?product=ecommerce'])],
+] as const)
+const SHA256_DIGEST = /^sha256:[0-9a-f]{64}$/
+
+function boundedManagedBriefText(value: unknown, maximum: number) {
+  return typeof value === 'string' && value === value.trim() && value.length > 0 && value.length <= maximum
+}
+
+function managedBriefCount(value: unknown, maximum = Number.MAX_SAFE_INTEGER) {
+  return Number.isSafeInteger(value) && Number(value) >= 0 && Number(value) <= maximum
+}
+
+function assertManagedCompanyBrief(value: unknown, expectedIdentity: ManagedIdentity): ManagedCompanyBrief {
+  if (!isRecord(value) || !isRecord(value.brief) || !isRecord(value.identity)) {
+    throw new ManagedTrialError('Managed Company Brief response is invalid.', { code: 'managed_company_brief_invalid' })
+  }
+  const brief = value.brief
+  const responseIdentity = value.identity
+  const nextAction = brief.nextAction
+  const approvalSummary = brief.approvalSummary
+  const sourceVersions = brief.sourceVersions
+  const facts = brief.facts
+  const actionRoutes = isRecord(nextAction) && typeof nextAction.product === 'string'
+    ? MANAGED_COMPANY_BRIEF_ROUTES.get(nextAction.product as 'shop' | 'plant' | 'website' | 'ecommerce')
+    : undefined
+  const validSources = Array.isArray(sourceVersions)
+    && sourceVersions.length <= 3
+    && new Set(sourceVersions.map((source) => isRecord(source) ? source.surface : '')).size === sourceVersions.length
+    && sourceVersions.every((source) => isRecord(source)
+      && ['commerce', 'production', 'website'].includes(String(source.surface))
+      && managedBriefCount(source.version)
+      && typeof source.updatedAt === 'string'
+      && source.updatedAt.length <= 64
+      && typeof source.stateDigest === 'string'
+      && SHA256_DIGEST.test(source.stateDigest))
+  const validFacts = Array.isArray(facts)
+    && facts.length === 4
+    && facts.every((fact) => isRecord(fact)
+      && boundedManagedBriefText(fact.label, 80)
+      && boundedManagedBriefText(fact.value, 120)
+      && boundedManagedBriefText(fact.detail, 240))
+  if (brief.contract !== 'supermega.managed_company_brief.v1'
+    || !MANAGED_COMPANY_BRIEF_INTENTS.has(brief.intent as ManagedCompanyBriefIntent)
+    || !managedBriefCount(brief.sourceCount, 4)
+    || !boundedManagedBriefText(brief.title, 180)
+    || !boundedManagedBriefText(brief.summary, 500)
+    || !validFacts
+    || !isRecord(nextAction)
+    || !actionRoutes?.has(String(nextAction.path) as never)
+    || !boundedManagedBriefText(nextAction.label, 80)
+    || !boundedManagedBriefText(brief.boundary, 600)
+    || !validSources
+    || !isRecord(approvalSummary)
+    || !managedBriefCount(approvalSummary.pending)
+    || !managedBriefCount(approvalSummary.approved)
+    || !managedBriefCount(approvalSummary.declined)
+    || typeof brief.briefDigest !== 'string'
+    || !SHA256_DIGEST.test(brief.briefDigest)
+    || !managedBriefCount(brief.companyVersion)
+    || !['reproducible_not_persisted', 'persisted_managed_audit'].includes(String(brief.retention))
+    || brief.externalWritesPerformed !== false
+    || responseIdentity.workspace_id !== expectedIdentity.workspaceId
+    || responseIdentity.actor_id !== expectedIdentity.userId
+    || responseIdentity.actor_kind !== 'human') {
+    throw new ManagedTrialError('Managed Company Brief failed its tenant and evidence checks.', { code: 'managed_company_brief_invalid' })
+  }
+  return brief as unknown as ManagedCompanyBrief
+}
+
+function assertManagedCompanyBriefRetention(
+  value: unknown,
+  expectedIdentity: ManagedIdentity,
+  expectedDigest: string,
+) {
+  if (!isRecord(value) || !isRecord(value.retention)) {
+    throw new ManagedTrialError('Managed Company Brief retention response is invalid.', { code: 'managed_company_brief_retention_invalid' })
+  }
+  const retention = value.retention
+  const brief = assertManagedCompanyBrief({ brief: value.brief, identity: value.identity }, expectedIdentity)
+  if (retention.contract !== 'supermega.managed_company_brief_retention.v1'
+    || retention.status !== 'retained'
+    || retention.briefDigest !== expectedDigest
+    || retention.internalWritePerformed !== true
+    || retention.externalWritesPerformed !== false
+    || typeof retention.idempotentReplay !== 'boolean'
+    || brief.briefDigest !== expectedDigest
+    || brief.retention !== 'persisted_managed_audit') {
+    throw new ManagedTrialError('Managed Company Brief receipt failed verification.', { code: 'managed_company_brief_retention_invalid' })
+  }
+  return { brief, retention: retention as unknown as ManagedCompanyBriefRetention }
 }
 
 const CLIENT_IMPORT_VALIDATION_CHECKS = [
@@ -1537,6 +1682,44 @@ export async function loadManagedBootstrap(expectedIdentity?: ManagedIdentity) {
     expectedIdentity,
   )
   return expectedIdentity ? assertManagedBootstrapIdentity(bootstrap, expectedIdentity) : bootstrap
+}
+
+export async function loadManagedCompanyBrief(
+  intent: ManagedCompanyBriefIntent,
+  expectedIdentity: ManagedIdentity,
+) {
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/company-brief',
+    { method: 'POST', body: JSON.stringify({ intent }) },
+    true,
+    expectedIdentity,
+  )
+  return assertManagedCompanyBrief(response, expectedIdentity)
+}
+
+export async function retainManagedCompanyBrief(request: {
+  brief: ManagedCompanyBrief
+  commandId: string
+  identity: ManagedIdentity
+}) {
+  if (!CLIENT_IMPORT_COMMAND_ID.test(request.commandId)) {
+    throw new ManagedTrialError('Managed Company Brief command ID is invalid.', { code: 'managed_company_brief_command_invalid' })
+  }
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/company-brief/receipts',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        command_id: request.commandId,
+        intent: request.brief.intent,
+        brief_digest: request.brief.briefDigest,
+        expected_company_version: request.brief.companyVersion,
+      }),
+    },
+    true,
+    request.identity,
+  )
+  return assertManagedCompanyBriefRetention(response, request.identity, request.brief.briefDigest)
 }
 
 export async function prepareManagedOrderIntakeDraft(request: {

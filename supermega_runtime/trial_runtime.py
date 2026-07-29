@@ -16,6 +16,12 @@ from supermega_runtime.client_import_runtime import (
     ClientImportValidationError,
     validate_client_import_staging_package,
 )
+from supermega_runtime.company_brief import (
+    assert_brief_sources_unchanged,
+    build_managed_company_brief,
+    company_brief_receipt,
+    company_state_with_receipt,
+)
 from supermega_runtime.production_runtime import PRODUCTION_HUMAN_EVENTS
 from supermega_runtime.order_intake import (
     MAX_ORDER_MESSAGE_LENGTH,
@@ -128,6 +134,22 @@ class TrialOrderIntakeDraftRequest(_StrictRequest):
         if not value.strip():
             raise ValueError("order message must contain visible characters")
         return value
+
+
+class TrialCompanyBriefRequest(_StrictRequest):
+    intent: Literal[
+        "attention",
+        "shop_inventory",
+        "plant_control",
+        "website_readiness",
+        "ecommerce_readiness",
+    ]
+
+
+class TrialCompanyBriefReceiptRequest(TrialCompanyBriefRequest):
+    command_id: UUID
+    brief_digest: str = Field(min_length=71, max_length=71, pattern=r"^sha256:[0-9a-f]{64}$")
+    expected_company_version: int = Field(ge=0)
 
 
 class TrialDecisionSubject(_StrictRequest):
@@ -367,6 +389,27 @@ def _approval_response(approval: ApprovalRecord) -> dict[str, Any]:
 
 def _command_response(result: CommandResult) -> dict[str, Any]:
     return {"result": result.to_dict()}
+
+
+def _company_brief_context(
+    store: TrialStore,
+    principal: TrialPrincipal,
+    readiness: TrialReadiness,
+) -> tuple[dict[str, Any], list[ApprovalRecord], int]:
+    states = {
+        surface: _invoke(lambda surface=surface: store.get_state(principal, surface))
+        for surface in ("commerce", "production", "website")
+        if has_surface_read_capability(readiness.capabilities, surface)
+    }
+    approvals = (
+        _invoke(lambda: store.list_approvals(principal))
+        if has_approval_read_capability(readiness.capabilities)
+        else []
+    )
+    company_version = 0
+    if has_surface_read_capability(readiness.capabilities, "company"):
+        company_version = _invoke(lambda: store.get_state(principal, "company")).version
+    return states, approvals, company_version
 
 
 def _shop_catalog_import_payload(
@@ -690,6 +733,98 @@ def create_trial_router(
             "approvals": [approval.to_dict() for approval in approvals],
         }
 
+    @router.post("/company-brief")
+    def trial_company_brief(request: Request, body: TrialCompanyBriefRequest) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_read_ready(readiness)
+        states, approvals, company_version = _company_brief_context(store, principal, readiness)
+        brief = _invoke(
+            lambda: build_managed_company_brief(
+                workspace_id=principal.workspace_id,
+                intent=body.intent,
+                states=states,
+                approvals=approvals,
+            )
+        )
+        return {
+            "brief": {**brief, "companyVersion": company_version},
+            "identity": {
+                "workspace_id": principal.workspace_id,
+                "actor_id": principal.actor_id,
+                "actor_kind": principal.actor_kind,
+            },
+        }
+
+    @router.post("/company-brief/receipts")
+    def trial_company_brief_receipt(
+        request: Request,
+        body: TrialCompanyBriefReceiptRequest,
+    ) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        readiness = _readiness(store, principal)
+        _require_write_ready(readiness, "company.write")
+        states, approvals, _ = _company_brief_context(store, principal, readiness)
+        brief = _invoke(
+            lambda: build_managed_company_brief(
+                workspace_id=principal.workspace_id,
+                intent=body.intent,
+                states=states,
+                approvals=approvals,
+            )
+        )
+        if body.brief_digest != brief["briefDigest"]:
+            raise _error(409, "company_brief_changed")
+        company = _invoke(lambda: store.get_state(principal, "company"))
+        receipt = company_brief_receipt(brief)
+        next_company = _invoke(lambda: company_state_with_receipt(company.state, receipt))
+        source_versions = brief["sourceVersions"]
+        related_surfaces = tuple(str(source["surface"]) for source in source_versions)
+
+        def require_same_brief_sources(
+            current_company: Mapping[str, Any],
+            related_states: Mapping[str, Mapping[str, Any]],
+        ) -> None:
+            if current_company != company.state:
+                raise TrialValidationError("Company brief history changed before retention.")
+            assert_brief_sources_unchanged(source_versions, related_states)
+
+        result = _invoke(
+            lambda: store.apply_command(
+                principal,
+                command_id=body.command_id,
+                surface="company",
+                event_type="company.snapshot.saved",
+                expected_version=body.expected_company_version,
+                payload={"state": next_company},
+                related_surfaces=related_surfaces,
+                state_precondition=require_same_brief_sources,
+            )
+        )
+        return {
+            "brief": {
+                **brief,
+                "companyVersion": result.version,
+                "retention": "persisted_managed_audit",
+            },
+            "retention": {
+                "contract": "supermega.managed_company_brief_retention.v1",
+                "status": "retained",
+                "briefDigest": brief["briefDigest"],
+                "internalWritePerformed": True,
+                "externalWritesPerformed": False,
+                "idempotentReplay": result.idempotent_replay,
+            },
+            "identity": {
+                "workspace_id": principal.workspace_id,
+                "actor_id": principal.actor_id,
+                "actor_kind": principal.actor_kind,
+            },
+            **_command_response(result),
+        }
+
     @router.post("/commerce/order-intake/drafts")
     async def trial_order_intake_draft(request: Request) -> dict[str, Any]:
         principal = _resolve_principal(request, resolve_principal)
@@ -865,6 +1000,8 @@ def create_trial_router(
     @router.post("/commands")
     def trial_command(request: Request, body: TrialCommandRequest) -> dict[str, Any]:
         principal = _resolve_principal(request, resolve_principal)
+        if body.surface == "company":
+            raise _error(409, "company_write_requires_dedicated_workflow")
         _reject_client_identity(body.payload, path="payload")
         if body.surface == "commerce":
             evidence = body.payload.get("evidence")
