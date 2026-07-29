@@ -19,8 +19,8 @@ const defaultLocalCompanyHome = resolve(root, '..', 'supermega-local-company-sta
 const powershell = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const MAX_COMMAND_BYTES = 512 * 1024
 const MAX_REPORT_BYTES = 256 * 1024
-const EXECUTION_SPEC_VERSION = '2026-07-29.20'
-const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
+const EXECUTION_SPEC_VERSION = '2026-07-29.21'
+const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
 const MEMORY_RECOVERY_BLOCKERS = Object.freeze(new Set(['memory_pressure_critical', 'codex_working_set_high']))
 
 const AGENT_ROLE_MAP = Object.freeze({
@@ -58,6 +58,8 @@ const LEGACY_REPAIRABLE_REASONS = Object.freeze(new Set([
   'ally_ceo_local_cycle_report_citations_rejected',
   'ally_ceo_local_cycle_specialist_section_rejected',
 ]))
+const SPECIALIST_SECTION_CONTRACT = 'Each specialist section must be at most 90 words and contain exactly these advisory labels: Proposed next action, Assumption, and Missing proof. Specialists must not claim execution or verified facts; the evidence-grounded executive synthesis remains code-owned. The executive synthesis must be at most 120 words and end with: Owner review required.'
+const SPECIALIST_OUTPUT_GRAMMAR = 'Write each specialist section as complete sentences on one line. The Proposed next action must begin with review, inspect, compare, or draft; never begin it with execute, deploy, publish, send, pay, purchase, migrate, or enable. Do not end a clause with a conjunction, helper verb, or unfinished phrase, and do not append canned scope warnings after a semicolon.'
 
 function fail(reason) {
   throw new Error(reason)
@@ -143,7 +145,8 @@ function planSpec(plan) {
     'Lead with current limitations: the live app is not a managed system of record, and managed persistence and security remain not ready.',
     'Define 1 reusable task template under Task templates for the highest-value internal next action, plus success checks, failure modes that expose missing proof, and owner gates.',
     'Every verified claim must name its exact source filename and matching supplied evidence ID.',
-    'Each specialist section must be at most 90 words and contain exactly these advisory labels: Proposed next action, Assumption, and Missing proof. Specialists must not claim execution or verified facts; the evidence-grounded executive synthesis remains code-owned. The executive synthesis must be at most 120 words and end with: Owner review required.',
+    SPECIALIST_SECTION_CONTRACT,
+    SPECIALIST_OUTPUT_GRAMMAR,
   ]
   const objective = [outcomeMarker, `[ALLY_CEO_CYCLE:${shortHash}]`, `[ALLY_CEO_PLAN:${planShortHash}]`, ...objectiveBody].join(' ')
   const repairObjective = [
@@ -661,7 +664,14 @@ async function inspectExistingCycle(existing, spec, runCommand, inspectReport) {
         || typeof detail.job[4] !== 'string') {
         fail('ally_ceo_local_cycle_existing_job_rejected')
       }
-      legacyExecution = spec.legacyShortHashes.some((hash) => detail.job[1].includes(`[ALLY_CEO_CYCLE:${hash}]`))
+      const objective = detail.job[1]
+      const hasLegacyHash = spec.legacyShortHashes.some((hash) => objective.includes(`[ALLY_CEO_CYCLE:${hash}]`))
+      const hasLegacyGrammar = objective.includes(spec.outcomeMarker)
+        && /\[ALLY_CEO_CYCLE:[a-f0-9]{12}\]/.test(objective)
+        && /\[ALLY_CEO_PLAN:[a-f0-9]{12}\]/.test(objective)
+        && objective.includes(SPECIALIST_SECTION_CONTRACT)
+        && !objective.includes(SPECIALIST_OUTPUT_GRAMMAR)
+      legacyExecution = hasLegacyHash || hasLegacyGrammar
       report = validateAcceptedReport(await inspectReport(detail.job[4]), spec.roles)
     } catch (error) {
       reason = String(error?.message || 'ally_ceo_local_cycle_existing_job_rejected').slice(0, 160)
@@ -675,10 +685,11 @@ async function inspectExistingCycle(existing, spec, runCommand, inspectReport) {
   }
 }
 
-async function selectRotatingPlan({ buildPlan, queueText, runCommand, inspectReport }) {
+async function selectRotatingPlan({ buildPlan, queueText, runCommand, inspectReport, repairRejected = false }) {
   const completedOutcomeIds = []
   const processedOutcomeIds = []
   const rejectedOutcomes = []
+  const repairCandidates = []
   let period = null
   for (const expectedOutcomeId of OUTCOME_SEQUENCE) {
     const plan = await buildPlan([...processedOutcomeIds])
@@ -691,13 +702,22 @@ async function selectRotatingPlan({ buildPlan, queueText, runCommand, inspectRep
     if (!existing) return { allDone: false, periodIncomplete: false, plan, spec, existing: null, inspection: null, completedOutcomeIds, rejectedOutcomes }
     const inspection = await inspectExistingCycle(existing, spec, runCommand, inspectReport)
     if (inspection.accepted) completedOutcomeIds.push(spec.outcomeId)
-    else rejectedOutcomes.push({
-      outcomeId: spec.outcomeId,
-      queueId: existing.queueId,
-      jobId: existing.jobId ?? null,
-      status: existing.status,
-      reason: inspection.reason || `queue_${existing.status}`,
-    })
+    else {
+      rejectedOutcomes.push({
+        outcomeId: spec.outcomeId,
+        queueId: existing.queueId,
+        jobId: existing.jobId ?? null,
+        status: existing.status,
+        reason: inspection.reason || `queue_${existing.status}`,
+      })
+      if (repairRejected
+        && existing.status === 'complete'
+        && existing.jobId
+        && inspection.legacyExecution
+        && LEGACY_REPAIRABLE_REASONS.has(inspection.reason)) {
+        repairCandidates.push({ plan, spec, existing, inspection })
+      }
+    }
     processedOutcomeIds.push(spec.outcomeId)
   }
 
@@ -709,6 +729,20 @@ async function selectRotatingPlan({ buildPlan, queueText, runCommand, inspectRep
     || declined.manifest !== null
     || declined.plan !== null) {
     fail('ally_ceo_local_cycle_rotation_completion_invalid')
+  }
+  if (repairCandidates.length > 0) {
+    const selected = repairCandidates[0]
+    return {
+      allDone: false,
+      periodIncomplete: false,
+      period,
+      plan: selected.plan,
+      spec: selected.spec,
+      existing: selected.existing,
+      inspection: selected.inspection,
+      completedOutcomeIds,
+      rejectedOutcomes,
+    }
   }
   return {
     allDone: rejectedOutcomes.length === 0,
@@ -772,7 +806,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
           completedOutcomeIds: [],
         }
       })()
-    : await selectRotatingPlan({ buildPlan, queueText, runCommand, inspectReport })
+    : await selectRotatingPlan({ buildPlan, queueText, runCommand, inspectReport, repairRejected })
   if (rotation.periodIncomplete || rotation.allDone) {
     return {
       ok: rotation.allDone,

@@ -433,6 +433,91 @@ test('a fully attempted period with rejected outcomes closes incomplete without 
   assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)
 })
 
+test('a closed period permits exactly one explicit legacy repair and remains closed without it', async () => {
+  const firstJobId = '000000000065'
+  const firstReportPath = 'C:\\state\\outputs\\legacy-rejected.md'
+  const queueList = outcomeSequence.map((outcomeId, index) => completedOutcomeLine(outcomeId, index)).join('')
+  const withheldReport = acceptedStructuredReport.replace(
+    'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
+    'Not verified or performed: specialist draft withheld after incomplete model output.',
+  )
+  const options = {
+    queueList,
+    jobObjectives: {
+      [firstJobId]: '[ALLY_CEO_OUTCOME:2026-07-29:daily-company-control] [ALLY_CEO_CYCLE:7f6fa5f49409] [ALLY_CEO_PLAN:1680d458f8e4] Each specialist section must be at most 90 words and contain exactly these advisory labels: Proposed next action, Assumption, and Missing proof. Specialists must not claim execution or verified facts; the evidence-grounded executive synthesis remains code-owned. The executive synthesis must be at most 120 words and end with: Owner review required.',
+    },
+    reportPaths: { [firstJobId]: firstReportPath },
+  }
+  const inspectReport = async (path) => {
+    const text = path === firstReportPath ? withheldReport : acceptedStructuredReport
+    return { path, bytes: Buffer.byteLength(text), digest: 'sha256:' + '4'.repeat(64), text }
+  }
+
+  const closed = harness(options)
+  const closedResult = await runAllyCeoLocalCycle(
+    { execute: true },
+    {
+      buildPlan: async (completedOutcomeIds) => rotatingPlan(completedOutcomeIds),
+      runCommand: closed.runCommand,
+      inspectReport,
+    },
+  )
+  assert.equal(closedResult.status, 'period_incomplete')
+  assert.equal(closedResult.queueWrites, 0)
+  assert.equal(closedResult.modelCalls, 0)
+  assert.equal(closed.calls.some((call) => call.args?.[1] === 'add'), false)
+
+  const repair = harness(options)
+  const repaired = await runAllyCeoLocalCycle(
+    { execute: true, repairRejected: true },
+    {
+      buildPlan: async (completedOutcomeIds) => rotatingPlan(completedOutcomeIds),
+      runCommand: repair.runCommand,
+      inspectReport,
+    },
+  )
+  assert.equal(repaired.status, 'accepted')
+  assert.equal(repaired.outcomeId, 'daily-company-control')
+  assert.equal(repaired.repair.jobId, firstJobId)
+  assert.equal(repaired.queueWrites, 1)
+  assert.equal(repair.calls.filter((call) => call.args?.[1] === 'add').length, 1)
+  assert.match(repair.calls.find((call) => call.args?.[1] === 'add').args[2], /\[ALLY_CEO_REPAIR:2026-07-29:daily-company-control:[a-f0-9]{12}\]/)
+})
+
+test('a closed period never repairs a rejected current-version outcome', async () => {
+  const firstJobId = '000000000065'
+  const firstReportPath = 'C:\\state\\outputs\\current-rejected.md'
+  const queueList = outcomeSequence.map((outcomeId, index) => completedOutcomeLine(outcomeId, index)).join('')
+  const withheldReport = acceptedStructuredReport.replace(
+    'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
+    'Not verified or performed: specialist draft withheld after incomplete model output.',
+  )
+  const state = harness({
+    queueList,
+    jobObjectives: {
+      [firstJobId]: '[ALLY_CEO_OUTCOME:2026-07-29:daily-company-control] [ALLY_CEO_CYCLE:0123456789ab] [ALLY_CEO_PLAN:fedcba987654] Each specialist section must be at most 90 words and contain exactly these advisory labels: Proposed next action, Assumption, and Missing proof. Specialists must not claim execution or verified facts; the evidence-grounded executive synthesis remains code-owned. The executive synthesis must be at most 120 words and end with: Owner review required. Write each specialist section as complete sentences on one line. The Proposed next action must begin with review, inspect, compare, or draft; never begin it with execute, deploy, publish, send, pay, purchase, migrate, or enable. Do not end a clause with a conjunction, helper verb, or unfinished phrase, and do not append canned scope warnings after a semicolon.',
+    },
+    reportPaths: { [firstJobId]: firstReportPath },
+  })
+  const result = await runAllyCeoLocalCycle(
+    { execute: true, repairRejected: true },
+    {
+      buildPlan: async (completedOutcomeIds) => rotatingPlan(completedOutcomeIds),
+      runCommand: state.runCommand,
+      inspectReport: async (path) => ({
+        path,
+        bytes: Buffer.byteLength(withheldReport),
+        digest: 'sha256:' + '6'.repeat(64),
+        text: withheldReport,
+      }),
+    },
+  )
+  assert.equal(result.status, 'period_incomplete')
+  assert.equal(result.queueWrites, 0)
+  assert.equal(result.modelCalls, 0)
+  assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)
+})
+
 test('a period marker from another project cannot satisfy SuperMega rotation', async () => {
   const foreign = harness({
     queueList: completedOutcomeLine('daily-company-control').replace('project=SuperMega', 'project=Other'),
@@ -471,6 +556,9 @@ test('execution claims the exact reviewed mission once and accepts only a qualit
   assert.equal(add.args.includes('--roles'), true)
   assert.equal(add.args.includes('operations'), true)
   assert.match(add.args[2], /Proposed next action, Assumption, and Missing proof/)
+  assert.match(add.args[2], /must begin with review, inspect, compare, or draft/)
+  assert.match(add.args[2], /never begin it with execute, deploy, publish, send, pay, purchase, migrate, or enable/)
+  assert.match(add.args[2], /Do not end a clause with a conjunction, helper verb, or unfinished phrase/)
   const run = state.calls.find((call) => call.args?.[1] === 'run-next')
   assert.deepEqual(run.args.slice(0, 4), ['queue', 'run-next', '--queue-id', state.queueId])
   assert.equal(run.args.includes('0s'), true)
