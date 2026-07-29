@@ -45,6 +45,8 @@ import {
   commerceCorrectionCalculation,
   commerceCurrentTaxConfiguration,
   commerceCurrentAccountMappingConfiguration,
+  commerceCurrentCustomerCreditPolicy,
+  commerceCustomerCreditReview,
   commerceOrderCalculation,
   commerceOrderCorrectionExpectation,
   commerceOrderAdjustedTotal,
@@ -67,6 +69,7 @@ import {
   convertCommerceWebsiteIntake,
   configureCommerceTax,
   configureCommerceAccountMapping,
+  configureCommerceCustomerCreditPolicy,
   createCommerceCatalogBaseline,
   createCommercePurchaseOrder,
   createEmptyCommerce,
@@ -98,6 +101,7 @@ import {
   type CommerceStockMovement,
   type CommerceTaxConfiguration,
   type CommerceTaxMode,
+  type CommerceCustomerCreditPolicyStatus,
   type CommerceWebsiteOrderInput,
 } from './commerce-workspace'
 import { projectShopInventory } from './shop-inventory-foundation'
@@ -254,6 +258,7 @@ type ActionKind =
   | 'daily_close'
   | 'tax_configuration'
   | 'account_mapping'
+  | 'customer_credit_policy'
   | 'production_job'
   | 'production_job_schedule'
   | 'production_job_close'
@@ -295,6 +300,13 @@ type AccountMappingDraft = {
   salesRevenue: string
   taxPayable: string
   legacyRevenue: string
+}
+
+type CustomerCreditPolicyDraft = {
+  customer: string
+  creditLimitMmk: string
+  maxPaymentTermsDays: 0 | 7 | 30
+  status: CommerceCustomerCreditPolicyStatus
 }
 
 type CloseSettlementDraftLine = {
@@ -2545,6 +2557,12 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [correctionDraft, setCorrectionDraft] = useState<CommerceCorrectionDraft | null>(null)
   const [taxDraft, setTaxDraft] = useState<TaxConfigurationDraft | null>(null)
   const [accountMapping, setAccountMapping] = useState<AccountMappingDraft | null>(null)
+  const [creditPolicyDraft, setCreditPolicyDraft] = useState<CustomerCreditPolicyDraft>({
+    customer: '',
+    creditLimitMmk: '',
+    maxPaymentTermsDays: 30,
+    status: 'active',
+  })
   const [closeSettlementDraft, setCloseSettlementDraft] = useState<CloseSettlementDraftLine[]>([])
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [catalogError, setCatalogError] = useState('')
@@ -2561,6 +2579,21 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   }))
   const manualOrderQuantity = manualOrderLineDrafts.reduce((total, line) => total + Math.max(line.quantity, 0), 0)
   const manualOrderTotal = manualOrderLineItems.reduce((total, line) => total + (line.item?.price ?? 0) * Math.max(line.quantity, 0), 0)
+  const orderCreditCalculation = commerceOrderCalculation(commerce, manualOrderTotal, new Date(purchaseOrderClock).toISOString())
+  const orderCreditReview = orderCreditCalculation
+    ? commerceCustomerCreditReview(
+      commerce,
+      customer.trim() || 'Guest',
+      orderCreditCalculation.totalMmk,
+      paymentTermsDays,
+      new Date(purchaseOrderClock).toISOString(),
+    )
+    : null
+  const orderCreditBlocked = paymentTermsDays !== 0 && orderCreditReview?.allowed !== true
+  const creditPolicyCustomer = creditPolicyDraft.customer.trim()
+  const currentCreditPolicy = creditPolicyCustomer
+    ? commerceCurrentCustomerCreditPolicy(commerce, creditPolicyCustomer)
+    : null
   const orderDraftHasMeaningfulFields = Boolean(customer.trim()
     || channel !== 'Messenger'
     || payment
@@ -4005,7 +4038,6 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       fulfilment: 'pickup',
       fulfilmentReference: `Counter ${orderId}`,
       promisedAt,
-      paymentDueAt: promisedAt,
       lines: orderLines,
       total: orderTotal,
       status: 'confirmed',
@@ -4220,12 +4252,29 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       setNotice('The order total cannot be calculated safely. Review item prices and tax setup before continuing.')
       return
     }
+    const creditReview = commerceCustomerCreditReview(
+      commerce,
+      order.customer,
+      calculationReview.totalMmk,
+      paymentTermsDays,
+      order.createdAt,
+    )
+    if (!creditReview.allowed) {
+      setNotice(creditReview.reason === 'policy_missing'
+        ? `Set a customer credit policy for ${order.customer} before offering payment terms.`
+        : creditReview.reason === 'customer_hold'
+          ? `${order.customer} is on credit hold. Choose payment at handoff or review the policy.`
+          : creditReview.reason === 'terms_exceeded'
+            ? `${order.customer} is not approved for ${paymentTermsDays}-day terms.`
+            : `This order would exceed ${order.customer}'s ${formatMoney(creditReview.policy?.creditLimitMmk ?? 0)} credit limit.`)
+      return
+    }
     queueAction({
       kind: 'order_create',
       subjectId: order.id,
       summary: ecommerceDraft ? 'Review Ecommerce order' : `Confirm order for ${order.customer}`,
       before: `${sourceRecordId ? `Request ${sourceRecordId} · ` : ''}Customer ${order.customer} · ${lineReview}`,
-      after: `Order ${order.id} · ${formatCommerceCalculation(calculationReview)} · Payment ${payment} · due ${formatIssueDue(paymentDueAt)} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
+      after: `Order ${order.id} · ${formatCommerceCalculation(calculationReview)} · Payment ${payment} · due ${formatIssueDue(paymentDueAt)}${paymentTermsDays ? ` · credit ${formatMoney(creditReview.exposureBeforeMmk)} → ${formatMoney(creditReview.exposureAfterMmk)} under policy R${creditReview.policy?.revision}` : ''} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
       evidenceReferenceSuggestion: confirmationEvidence,
       evidenceReferenceLocked: Boolean(sourceRecordId),
       reasonSuggestion: ecommerceDraft
@@ -4331,7 +4380,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       fulfilment: orderFulfilment,
       fulfilmentReference: record.id,
       promisedAt: canonicalPromisedAt,
-      paymentDueAt: canonicalPromisedAt,
+      paymentDueAt: record.createdAt,
       sourceRecordId: record.id,
       evidenceReference: record.completion.evidenceReference,
       total: record.totalMmk,
@@ -5014,6 +5063,49 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
   }
 
+  function reviewCustomerCreditPolicy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const customer = creditPolicyDraft.customer.trim()
+    const limitText = creditPolicyDraft.creditLimitMmk.trim()
+    const creditLimitMmk = /^(?:0|[1-9]\d*)$/.test(limitText) ? Number(limitText) : Number.NaN
+    if (!customer
+      || customer.length > 120
+      || !Number.isSafeInteger(creditLimitMmk)
+      || creditLimitMmk < 0) {
+      setNotice('Enter a customer name and a non-negative whole-MMK credit limit.')
+      return
+    }
+    const input = {
+      customer,
+      creditLimitMmk,
+      maxPaymentTermsDays: creditPolicyDraft.maxPaymentTermsDays,
+      status: creditPolicyDraft.status,
+    }
+    const expectedRevision = commerce.customerCreditPolicies?.length ?? 0
+    const previous = commerceCurrentCustomerCreditPolicy(commerce, customer)
+    queueAction({
+      kind: 'customer_credit_policy',
+      subjectId: `SHOP-CREDIT-${customer}-R${expectedRevision + 1}`,
+      summary: `${input.status === 'hold' ? 'Hold' : 'Set'} credit for ${customer}`,
+      before: previous
+        ? `${formatMoney(previous.creditLimitMmk)} limit · ${previous.maxPaymentTermsDays}-day terms · ${previous.status}`
+        : 'No customer credit policy',
+      after: `${formatMoney(input.creditLimitMmk)} limit · ${input.maxPaymentTermsDays}-day maximum · ${input.status} · future credit orders only`,
+      reasonSuggestion: 'Reviewed the customer credit boundary for future Shop orders.',
+      apply: async (action) => {
+        await mutateCommerce(
+          'commerce.customer_credit_policy.saved',
+          action.commandId,
+          commerceActionProof(action),
+          (current) => {
+            if ((current.customerCreditPolicies?.length ?? 0) !== expectedRevision) return null
+            return configureCommerceCustomerCreditPolicy(current, input, commerceActionProof(action))
+          },
+        )
+      },
+    }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
+  }
+
   function closeDay() {
     const queuedAt = new Date().toISOString()
     const expected = commerceCloseExpectation(commerce, queuedAt)
@@ -5287,6 +5379,17 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
             <label>{extraOrderLines.length ? 'Quantity 1' : 'Quantity'}<input disabled={commerceControlsDisabled} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); detachPreparedOrderSources() }} /></label>
             <div className="order-total"><span>{manualOrderLineDrafts.length} {manualOrderLineDrafts.length === 1 ? 'item' : 'items'} · {manualOrderQuantity} units</span><strong>{formatMoney(manualOrderTotal)}</strong></div>
           </div>
+          {paymentTermsDays !== 0 ? <p className="form-notice" data-customer-credit-review={orderCreditReview?.reason ?? 'calculation_unavailable'}>
+            {orderCreditReview?.allowed
+              ? `Credit ready · ${formatMoney(orderCreditReview.exposureBeforeMmk)} → ${formatMoney(orderCreditReview.exposureAfterMmk)} exposure · ${formatMoney(orderCreditReview.policy?.creditLimitMmk ?? 0)} limit`
+              : orderCreditReview?.reason === 'customer_hold'
+                ? 'Credit blocked · this customer is on hold. Choose payment at handoff or review the policy.'
+                : orderCreditReview?.reason === 'terms_exceeded'
+                  ? `Credit blocked · the current policy does not allow ${paymentTermsDays}-day terms.`
+                  : orderCreditReview?.reason === 'limit_exceeded'
+                    ? `Credit blocked · this order would exceed the ${formatMoney(orderCreditReview.policy?.creditLimitMmk ?? 0)} limit.`
+                    : 'Credit blocked · set a policy for this exact customer under Close and exceptions.'}
+          </p> : null}
           {extraOrderLines.map((line, index) => {
             const item = commerce.items.find((candidate) => candidate.sku === line.sku)
             const lineNumber = index + 2
@@ -5308,7 +5411,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         </div>
         <div className="order-submit-bar" data-ecommerce-payment={preparedEcommerceDraft ? 'true' : 'false'}>
           {preparedEcommerceDraft ? <label className="order-ecommerce-payment"><span>Payment</span><select disabled={commerceControlsDisabled} form="commerce-manual-order-form" ref={orderPaymentRef} required value={payment} onChange={(event) => { setPayment(event.target.value); setPreparedChannelDraft(null) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label> : null}
-          <button aria-controls={!promisedAt ? 'commerce-order-promise' : !payment && !preparedEcommerceDraft ? 'commerce-order-options' : undefined} className="core-button primary" disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))} form="commerce-manual-order-form" onClick={!preparedEcommerceDraft && (!promisedAt || !payment) ? focusNextOrderRequirement : undefined} ref={orderReviewRef} type={!preparedEcommerceDraft && (!promisedAt || !payment) ? 'button' : 'submit'}>{!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : resumedOrderNeedsReview ? 'Review current Shop values' : orderDraftConflict ? 'Reload saved draft' : 'Review order'}</button>
+          <button aria-controls={!promisedAt ? 'commerce-order-promise' : !payment && !preparedEcommerceDraft ? 'commerce-order-options' : undefined} className="core-button primary" disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || orderCreditBlocked || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))} form="commerce-manual-order-form" onClick={!preparedEcommerceDraft && (!promisedAt || !payment) ? focusNextOrderRequirement : undefined} ref={orderReviewRef} type={!preparedEcommerceDraft && (!promisedAt || !payment) ? 'button' : 'submit'}>{!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : orderCreditBlocked ? 'Credit policy required' : resumedOrderNeedsReview ? 'Review current Shop values' : orderDraftConflict ? 'Reload saved draft' : 'Review order'}</button>
         </div>
       </> : null}
     </dialog>
@@ -5346,6 +5449,20 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       <div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div>
       <div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/shop/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div>
       <p className="form-notice">Orders ready: {closePreview?.orderIds.length ? closePreview.orderIds.join(', ') : 'none'} · Payment exceptions: {paymentReview.length ? paymentReview.map((order) => order.id).join(', ') : 'none'} · Stock exceptions: {lowStock.length ? lowStock.map((item) => item.sku).join(', ') : 'none'}</p>
+      <details className="compact-disclosure" data-customer-credit-policy="versioned">
+        <summary><span>Customer credit</span><small>{commerce.customerCreditPolicies?.length ? `${commerce.customerCreditPolicies.length} reviewed ${commerce.customerCreditPolicies.length === 1 ? 'policy' : 'revisions'}` : 'Cash terms only'}</small></summary>
+        <form className="core-form compact-form" onSubmit={reviewCustomerCreditPolicy}>
+          <label>Customer<input disabled={commerceControlsDisabled} list={managedInventoryProjection?.clients.length ? 'shop-client-master-options' : undefined} maxLength={120} onChange={(event) => setCreditPolicyDraft((current) => ({ ...current, customer: event.target.value }))} placeholder="Exact customer name or reference" required value={creditPolicyDraft.customer} /></label>
+          <div className="form-row">
+            <label>Credit limit (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="0" onChange={(event) => setCreditPolicyDraft((current) => ({ ...current, creditLimitMmk: event.target.value }))} placeholder="500000" required step="1" type="number" value={creditPolicyDraft.creditLimitMmk} /></label>
+            <label>Maximum terms<select disabled={commerceControlsDisabled} onChange={(event) => setCreditPolicyDraft((current) => ({ ...current, maxPaymentTermsDays: Number(event.target.value) as 0 | 7 | 30 }))} value={creditPolicyDraft.maxPaymentTermsDays}><option value="0">Payment at handoff</option><option value="7">Up to 7 days</option><option value="30">Up to 30 days</option></select></label>
+          </div>
+          <label>Account status<select disabled={commerceControlsDisabled} onChange={(event) => setCreditPolicyDraft((current) => ({ ...current, status: event.target.value as CommerceCustomerCreditPolicyStatus }))} value={creditPolicyDraft.status}><option value="active">Active · allow within boundary</option><option value="hold">Hold · block new credit</option></select></label>
+          {currentCreditPolicy ? <p className="form-notice"><strong>Current revision {currentCreditPolicy.revision}</strong> · {formatMoney(currentCreditPolicy.creditLimitMmk)} limit · {currentCreditPolicy.maxPaymentTermsDays}-day maximum · {currentCreditPolicy.status} · evidence {currentCreditPolicy.proof.evidenceReference}</p> : creditPolicyCustomer ? <p className="form-notice">No policy exists for this exact customer. New 7/30-day orders remain blocked.</p> : null}
+          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review credit policy</button></div>
+          <p className="panel-copy">Future credit orders must fit the active limit and terms. A hold stops new credit. This records an internal approval boundary only; it never collects, lends, charges, or contacts the customer.</p>
+        </form>
+      </details>
       <details className="compact-disclosure" data-tax-configuration="versioned">
         <summary><span>Tax schedule</span><small>{currentTaxConfiguration ? `${currentTaxConfiguration.code} · ${currentTaxConfiguration.jurisdictionCode ?? 'legacy scope'} · ${formatTaxRate(currentTaxConfiguration.rateBasisPoints)}` : 'Not configured'}</small></summary>
         <form className="core-form compact-form" onSubmit={reviewTaxConfiguration}>

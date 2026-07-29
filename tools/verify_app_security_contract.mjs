@@ -268,6 +268,7 @@ const expectedHumanCommerceEvents = [
   'commerce.account_mapping.saved',
   'commerce.close.saved',
   'commerce.collection_action.recorded',
+  'commerce.customer_credit_policy.saved',
   'commerce.inventory.initialized',
   'commerce.inventory.master_created',
   'commerce.inventory.transferred',

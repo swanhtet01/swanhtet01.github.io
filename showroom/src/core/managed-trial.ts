@@ -63,6 +63,7 @@ export type ManagedCommerceEvent =
   | 'commerce.storefront.configuration.saved'
   | 'commerce.tax_configuration.saved'
   | 'commerce.account_mapping.saved'
+  | 'commerce.customer_credit_policy.saved'
   | 'commerce.service_schedule.initialized'
   | 'commerce.service_schedule.saved'
   | 'commerce.storefront.merchandising.imported'

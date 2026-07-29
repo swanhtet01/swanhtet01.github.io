@@ -117,6 +117,47 @@ export type CommerceAccountMappingInput = {
   mappings: CommerceAccountMappingEntry[]
 }
 
+export type CommerceCustomerCreditPolicyStatus = 'active' | 'hold'
+
+export type CommerceCustomerCreditPolicy = {
+  revision: number
+  customer: string
+  creditLimitMmk: number
+  maxPaymentTermsDays: 0 | 7 | 30
+  status: CommerceCustomerCreditPolicyStatus
+  proof: CommerceActionProof
+}
+
+export type CommerceCustomerCreditPolicyInput = {
+  customer: string
+  creditLimitMmk: number
+  maxPaymentTermsDays: 0 | 7 | 30
+  status: CommerceCustomerCreditPolicyStatus
+}
+
+export type CommerceOrderCreditDecision = {
+  policyRevision: number
+  policyActionId: string
+  creditLimitMmk: number
+  exposureBeforeMmk: number
+  orderAmountMmk: number
+  exposureAfterMmk: number
+  maxPaymentTermsDays: 0 | 7 | 30
+  paymentTermsDays: 7 | 30
+  status: 'approved'
+}
+
+export type CommerceCustomerCreditReview = {
+  customer: string
+  policy: CommerceCustomerCreditPolicy | null
+  paymentTermsDays: 0 | 7 | 30
+  exposureBeforeMmk: number
+  orderAmountMmk: number
+  exposureAfterMmk: number
+  allowed: boolean
+  reason: 'cash_terms' | 'policy_missing' | 'customer_hold' | 'terms_exceeded' | 'limit_exceeded' | 'approved'
+}
+
 export type CommerceOrderReturn = {
   actionId: string
   createdAt: string
@@ -191,6 +232,7 @@ export type CommerceOrder = {
   promisedAt?: string
   paymentDueAt?: string
   collectionActions?: CommerceCollectionAction[]
+  creditDecision?: CommerceOrderCreditDecision
   sourceRecordId?: string
   evidenceReference?: string
   lines?: CommerceOrderLine[]
@@ -695,6 +737,7 @@ export type CommerceState = {
   catalogChanges?: CommerceCatalogChange[]
   taxConfigurations?: CommerceTaxConfiguration[]
   accountMappingConfigurations?: CommerceAccountMappingConfiguration[]
+  customerCreditPolicies?: CommerceCustomerCreditPolicy[]
   websiteIntakes?: CommerceWebsiteIntake[]
   storefrontRequests?: CommerceStorefrontRequest[]
   storefrontConfiguration?: CommerceStorefrontConfiguration
@@ -863,6 +906,8 @@ const maxCatalogBaselines = 500
 const maxCatalogChanges = 500
 const maxTaxConfigurations = 100
 const maxAccountMappingConfigurations = 100
+const maxCustomerCreditPolicies = 500
+const customerCreditTerms = new Set([0, 7, 30])
 const maxOrderLines = 20
 const maxReturnsPerOrder = 100
 const maxCorrectionsPerOrder = 100
@@ -1399,6 +1444,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (value.catalogChanges !== undefined && !Array.isArray(value.catalogChanges)) throw new Error('Commerce catalog changes must be an array when present.')
   if (value.taxConfigurations !== undefined && !Array.isArray(value.taxConfigurations)) throw new Error('Commerce tax configurations must be an array when present.')
   if (value.accountMappingConfigurations !== undefined && !Array.isArray(value.accountMappingConfigurations)) throw new Error('Commerce account mapping configurations must be an array when present.')
+  if (value.customerCreditPolicies !== undefined && !Array.isArray(value.customerCreditPolicies)) throw new Error('Commerce customer credit policies must be an array when present.')
   if (value.websiteIntakes !== undefined && !Array.isArray(value.websiteIntakes)) throw new Error('Commerce Website intakes must be an array when present.')
   if (value.storefrontRequests !== undefined && !Array.isArray(value.storefrontRequests)) throw new Error('Commerce storefront requests must be an array when present.')
   if (value.storefrontConfiguration !== undefined && !isRecord(value.storefrontConfiguration)) throw new Error('Commerce storefront configuration must be an object when present.')
@@ -1427,6 +1473,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const catalogChanges = (value.catalogChanges ?? []) as unknown[]
   const taxConfigurations = (value.taxConfigurations ?? []) as unknown[]
   const accountMappingConfigurations = (value.accountMappingConfigurations ?? []) as unknown[]
+  const customerCreditPolicies = (value.customerCreditPolicies ?? []) as unknown[]
   const websiteIntakes = (value.websiteIntakes ?? []) as unknown[]
   const storefrontRequests = (value.storefrontRequests ?? []) as unknown[]
   const storefrontConfiguration = value.storefrontConfiguration
@@ -1435,6 +1482,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (catalogChanges.length > maxCatalogChanges) throw new Error(`Commerce catalog changes cannot exceed ${maxCatalogChanges}.`)
   if (taxConfigurations.length > maxTaxConfigurations) throw new Error(`Commerce tax configurations cannot exceed ${maxTaxConfigurations}.`)
   if (accountMappingConfigurations.length > maxAccountMappingConfigurations) throw new Error(`Commerce account mapping configurations cannot exceed ${maxAccountMappingConfigurations}.`)
+  if (customerCreditPolicies.length > maxCustomerCreditPolicies) throw new Error(`Commerce customer credit policies cannot exceed ${maxCustomerCreditPolicies}.`)
   if (storefrontRequests.length > maxStorefrontRequests) throw new Error(`Commerce storefront requests cannot exceed ${maxStorefrontRequests}.`)
   if (purchaseOrders.length > maxPurchaseOrders) throw new Error(`Commerce purchase orders cannot exceed ${maxPurchaseOrders}.`)
   const itemSkus: string[] = []
@@ -1461,6 +1509,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const catalogChangeActionIds: string[] = []
   const taxConfigurationActionIds: string[] = []
   const accountMappingConfigurationActionIds: string[] = []
+  const customerCreditPolicyActionIds: string[] = []
   const purchaseOrderActionIds: string[] = []
   const purchaseOrderIds: string[] = []
   const activePurchaseOrderSkus: string[] = []
@@ -1667,6 +1716,30 @@ export function validateCommerceState(value: unknown): CommerceState {
     }
     newerAccountMappingConfiguration = configuration
     accountMappingConfigurationActionIds.push(configuration.proof.actionId)
+  }
+
+  let newerCustomerCreditPolicy: CommerceCustomerCreditPolicy | null = null
+  for (const [index, candidate] of customerCreditPolicies.entries()) {
+    const field = `customerCreditPolicies[${index}]`
+    if (!isRecord(candidate) || !hasExactKeys(candidate, ['revision', 'customer', 'creditLimitMmk', 'maxPaymentTermsDays', 'status', 'proof'])) {
+      throw new Error(`${field} is invalid.`)
+    }
+    assertSafeInteger(candidate.revision, `${field}.revision`, 1)
+    if (candidate.revision !== customerCreditPolicies.length - index) throw new Error(`${field}.revision breaks the newest-first sequence.`)
+    canonicalText(candidate.customer, `${field}.customer`, 120)
+    assertSafeInteger(candidate.creditLimitMmk, `${field}.creditLimitMmk`)
+    if (!customerCreditTerms.has(Number(candidate.maxPaymentTermsDays))) throw new Error(`${field}.maxPaymentTermsDays is invalid.`)
+    if (candidate.status !== 'active' && candidate.status !== 'hold') throw new Error(`${field}.status is invalid.`)
+    if (!isRecord(candidate.proof)
+      || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !validProof(candidate.proof as CommerceActionProof)) throw new Error(`${field}.proof is invalid.`)
+    const policy = candidate as unknown as CommerceCustomerCreditPolicy
+    if (newerCustomerCreditPolicy
+      && (timestampMicros(newerCustomerCreditPolicy.proof.capturedAt) as bigint) < (timestampMicros(policy.proof.capturedAt) as bigint)) {
+      throw new Error(`${field} breaks the newest-first chronology.`)
+    }
+    newerCustomerCreditPolicy = policy
+    customerCreditPolicyActionIds.push(policy.proof.actionId)
   }
 
   for (const [index, candidate] of purchaseOrders.entries()) {
@@ -2013,11 +2086,51 @@ export function validateCommerceState(value: unknown): CommerceState {
         correctionActionIds.push(actionId)
       }
     }
+    let paymentTermsDays: 0 | 7 | 30 = 0
     if (candidate.paymentDueAt !== undefined) {
       const paymentDueAt = timestampMicros(candidate.paymentDueAt)
       const createdAt = timestampMicros(candidate.createdAt)
       if (paymentDueAt === null || createdAt === null || paymentDueAt < createdAt) {
         throw new Error(`orders[${index}].paymentDueAt cannot be before its creation time.`)
+      }
+      const paymentTermMicros = paymentDueAt - createdAt
+      const dayMicros = 86_400_000_000n
+      const supportedTerm = ([0, 7, 30] as const).find((days) => paymentTermMicros === BigInt(days) * dayMicros)
+      if (supportedTerm === undefined) throw new Error(`orders[${index}].paymentDueAt must use a supported customer credit term.`)
+      paymentTermsDays = supportedTerm
+    }
+    if (candidate.creditDecision !== undefined) {
+      const field = `orders[${index}].creditDecision`
+      if (!isRecord(candidate.creditDecision) || !hasExactKeys(candidate.creditDecision, [
+        'policyRevision', 'policyActionId', 'creditLimitMmk', 'exposureBeforeMmk', 'orderAmountMmk',
+        'exposureAfterMmk', 'maxPaymentTermsDays', 'paymentTermsDays', 'status',
+      ])) throw new Error(`${field} is invalid.`)
+      const decision = candidate.creditDecision
+      assertSafeInteger(decision.policyRevision, `${field}.policyRevision`, 1)
+      canonicalText(decision.policyActionId, `${field}.policyActionId`, 160)
+      for (const numberField of ['creditLimitMmk', 'exposureBeforeMmk', 'orderAmountMmk', 'exposureAfterMmk'] as const) {
+        assertSafeInteger(decision[numberField], `${field}.${numberField}`)
+      }
+      if ((decision.paymentTermsDays !== 7 && decision.paymentTermsDays !== 30)
+        || !customerCreditTerms.has(Number(decision.maxPaymentTermsDays))
+        || decision.status !== 'approved'
+        || paymentTermsDays !== decision.paymentTermsDays
+        || decision.orderAmountMmk !== candidate.total
+        || decision.exposureAfterMmk !== Number(decision.exposureBeforeMmk) + Number(decision.orderAmountMmk)) {
+        throw new Error(`${field} arithmetic or payment terms are invalid.`)
+      }
+      const policy = (customerCreditPolicies as CommerceCustomerCreditPolicy[]).find((entry) => (
+        entry.revision === decision.policyRevision && entry.proof.actionId === decision.policyActionId
+      ))
+      if (!policy
+        || policy.customer !== candidate.customer
+        || policy.status !== 'active'
+        || policy.creditLimitMmk !== decision.creditLimitMmk
+        || policy.maxPaymentTermsDays !== decision.maxPaymentTermsDays
+        || decision.paymentTermsDays > policy.maxPaymentTermsDays
+        || decision.exposureAfterMmk > policy.creditLimitMmk
+        || (timestampMicros(policy.proof.capturedAt) as bigint) > (timestampMicros(candidate.createdAt) as bigint)) {
+        throw new Error(`${field} does not match an effective approved customer policy.`)
       }
     }
     if (candidate.collectionActions !== undefined) {
@@ -2668,6 +2781,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     ...catalogBaselineActionSet,
     ...taxConfigurationActionIds,
     ...accountMappingConfigurationActionIds,
+    ...customerCreditPolicyActionIds,
     ...websiteIntakeCreationActionIds,
     ...closeActionIds,
     ...purchaseOrderActionIds,
@@ -2886,6 +3000,7 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || commerceCatalogChanges(state).some((change) => change.proof.actionId === actionId)
     || commerceTaxConfigurations(state).some((configuration) => configuration.proof.actionId === actionId)
     || commerceAccountMappingConfigurations(state).some((configuration) => configuration.proof.actionId === actionId)
+    || commerceCustomerCreditPolicies(state).some((policy) => policy.proof.actionId === actionId)
     || commerceWebsiteIntakes(state).some((intake) => intake.creation.actionId === actionId || intake.conversion?.actionId === actionId)
     || commercePurchaseOrders(state).some((purchaseOrder) => purchaseOrder.creation.actionId === actionId || purchaseOrder.cancellation?.actionId === actionId)
     || state.storefrontConfiguration?.saved.actionId === actionId
@@ -2986,6 +3101,73 @@ export function commerceAccountMappingConfigurations(state: CommerceState) {
 
 export function commerceCurrentAccountMappingConfiguration(state: CommerceState) {
   return commerceAccountMappingConfigurations(state)[0] ?? null
+}
+
+export function commerceCustomerCreditPolicies(state: CommerceState) {
+  return state.customerCreditPolicies ?? []
+}
+
+export function commerceCurrentCustomerCreditPolicy(state: CommerceState, customer: string, atTime?: string) {
+  const atMicros = atTime === undefined ? null : timestampMicros(atTime)
+  if (atTime !== undefined && atMicros === null) return null
+  return commerceCustomerCreditPolicies(state).find((policy) => (
+    policy.customer === customer
+    && (atMicros === null || (timestampMicros(policy.proof.capturedAt) as bigint) <= atMicros)
+  )) ?? null
+}
+
+export function commerceCustomerCreditExposure(state: CommerceState, customer: string) {
+  let exposure = 0
+  for (const order of state.orders) {
+    if (order.customer !== customer || order.status === 'cancelled' || order.paymentStatus !== 'pending') continue
+    const next = exposure + order.total
+    if (!Number.isSafeInteger(next)) throw new Error('Customer credit exposure exceeds the supported MMK range.')
+    exposure = next
+  }
+  return exposure
+}
+
+export function commerceOrderPaymentTermsDays(order: Pick<CommerceOrder, 'createdAt' | 'paymentDueAt'>): 0 | 7 | 30 | null {
+  if (order.paymentDueAt === undefined) return 0
+  const createdAt = timestampMicros(order.createdAt)
+  const paymentDueAt = timestampMicros(order.paymentDueAt)
+  if (createdAt === null || paymentDueAt === null || paymentDueAt < createdAt) return null
+  const delta = paymentDueAt - createdAt
+  const dayMicros = 86_400_000_000n
+  return ([0, 7, 30] as const).find((days) => delta === BigInt(days) * dayMicros) ?? null
+}
+
+export function commerceCustomerCreditReview(
+  state: CommerceState,
+  customer: string,
+  orderAmountMmk: number,
+  paymentTermsDays: 0 | 7 | 30,
+  atTime?: string,
+): CommerceCustomerCreditReview {
+  const exposureBeforeMmk = commerceCustomerCreditExposure(state, customer)
+  const exposureAfterMmk = exposureBeforeMmk + orderAmountMmk
+  const policy = commerceCurrentCustomerCreditPolicy(state, customer, atTime)
+  const reason = paymentTermsDays === 0
+    ? 'cash_terms'
+    : !policy
+      ? 'policy_missing'
+      : policy.status === 'hold'
+        ? 'customer_hold'
+        : paymentTermsDays > policy.maxPaymentTermsDays
+          ? 'terms_exceeded'
+          : !Number.isSafeInteger(exposureAfterMmk) || exposureAfterMmk > policy.creditLimitMmk
+            ? 'limit_exceeded'
+            : 'approved'
+  return {
+    customer,
+    policy,
+    paymentTermsDays,
+    exposureBeforeMmk,
+    orderAmountMmk,
+    exposureAfterMmk,
+    allowed: reason === 'cash_terms' || reason === 'approved',
+    reason,
+  }
 }
 
 function roundedTax(numerator: bigint, denominator: bigint) {
@@ -3685,7 +3867,7 @@ export function convertCommerceWebsiteIntake(
     fulfilment,
     fulfilmentReference: intake.id,
     promisedAt: input.promisedAt,
-    paymentDueAt: input.promisedAt,
+    paymentDueAt: proof.capturedAt,
     sourceRecordId: intake.id,
     evidenceReference: proof.evidenceReference,
     calculation,
@@ -3970,6 +4152,53 @@ export function configureCommerceAccountMapping(
   })
 }
 
+export function configureCommerceCustomerCreditPolicy(
+  state: CommerceState,
+  input: CommerceCustomerCreditPolicyInput,
+  proof: CommerceActionProof,
+) {
+  if (!validProof(proof)
+    || typeof input?.customer !== 'string'
+    || input.customer !== input.customer.trim()
+    || !input.customer
+    || input.customer.length > 120
+    || !Number.isSafeInteger(input.creditLimitMmk)
+    || input.creditLimitMmk < 0
+    || !customerCreditTerms.has(input.maxPaymentTermsDays)
+    || (input.status !== 'active' && input.status !== 'hold')) return null
+  const current = validateCommerceState(state)
+  const history = commerceCustomerCreditPolicies(current)
+  const replay = history.find((policy) => policy.proof.actionId === proof.actionId)
+  if (replay) {
+    return replay.customer === input.customer
+      && replay.creditLimitMmk === input.creditLimitMmk
+      && replay.maxPaymentTermsDays === input.maxPaymentTermsDays
+      && replay.status === input.status
+      && sameActionProof(replay.proof, proof) ? current : null
+  }
+  const currentPolicy = commerceCurrentCustomerCreditPolicy(current, input.customer)
+  const latest = history[0]
+  if (history.length >= maxCustomerCreditPolicies
+    || actionIdIsUsed(current, proof.actionId)
+    || (currentPolicy
+      && currentPolicy.creditLimitMmk === input.creditLimitMmk
+      && currentPolicy.maxPaymentTermsDays === input.maxPaymentTermsDays
+      && currentPolicy.status === input.status)
+    || (latest && (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(latest.proof.capturedAt) as bigint))) return null
+  const policy: CommerceCustomerCreditPolicy = {
+    revision: history.length + 1,
+    customer: input.customer,
+    creditLimitMmk: input.creditLimitMmk,
+    maxPaymentTermsDays: input.maxPaymentTermsDays,
+    status: input.status,
+    proof: { ...proof },
+  }
+  return validateCommerceState({
+    ...current,
+    customerCreditPolicies: [policy, ...history],
+  })
+}
+
 function validatedOrderLineSnapshots(order: CommerceOrder): CommerceOrderLine[] | null {
   if (!Array.isArray(order.lines) || order.lines.length < 1 || order.lines.length > maxOrderLines) return null
   const skus = new Set<string>()
@@ -4006,6 +4235,7 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
   const createdAt = timestampMicros(order.createdAt)
   const confirmedAt = timestampMicros(proof.capturedAt)
   if (!validProof(proof)
+    || order.creditDecision !== undefined
     || order.status !== 'confirmed'
     || order.owner !== proof.actor
     || !['pickup', 'delivery'].includes(order.fulfilment ?? '')
@@ -4036,6 +4266,7 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
       storedBusinessOrder.total = storedOrder.calculation.listedSubtotalMmk
     }
     delete storedBusinessOrder.calculation
+    delete storedBusinessOrder.creditDecision
     const requestedBusinessOrder = { ...order }
     delete requestedBusinessOrder.calculation
     if (requestedBusinessOrder.lines === undefined) delete storedBusinessOrder.lines
@@ -4086,11 +4317,35 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
   }
   const calculation = commerceOrderCalculation(state, order.total, proof.capturedAt)
   if (!calculation) return null
+  const paymentTermsDays = commerceOrderPaymentTermsDays(order)
+  if (paymentTermsDays === null) return null
+  const creditReview = commerceCustomerCreditReview(
+    state,
+    order.customer,
+    calculation.totalMmk,
+    paymentTermsDays,
+    order.createdAt,
+  )
+  if (!creditReview.allowed) return null
+  const creditDecision: CommerceOrderCreditDecision | undefined = paymentTermsDays === 0
+    ? undefined
+    : {
+      policyRevision: (creditReview.policy as CommerceCustomerCreditPolicy).revision,
+      policyActionId: (creditReview.policy as CommerceCustomerCreditPolicy).proof.actionId,
+      creditLimitMmk: (creditReview.policy as CommerceCustomerCreditPolicy).creditLimitMmk,
+      exposureBeforeMmk: creditReview.exposureBeforeMmk,
+      orderAmountMmk: creditReview.orderAmountMmk,
+      exposureAfterMmk: creditReview.exposureAfterMmk,
+      maxPaymentTermsDays: (creditReview.policy as CommerceCustomerCreditPolicy).maxPaymentTermsDays,
+      paymentTermsDays,
+      status: 'approved',
+    }
   const authoritativeOrder: CommerceOrder = {
     ...order,
     lines,
     calculation,
     total: calculation.totalMmk,
+    ...(creditDecision ? { creditDecision } : {}),
   }
   const movements = lines.map((line, index) => movementFor(
     proof,

@@ -2250,9 +2250,9 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || ecommerceReviewPosition < ecommercePaymentPosition
   || !ecommerceOrderSubmit.includes("data-ecommerce-payment={preparedEcommerceDraft ? 'true' : 'false'}")
   || !ecommerceOrderSubmit.includes('form="commerce-manual-order-form" ref={orderPaymentRef} required value={payment}')
-  || !ecommerceOrderSubmit.includes('disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))}')
+  || !ecommerceOrderSubmit.includes('disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || orderCreditBlocked || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))}')
   || !ecommerceOrderSubmit.includes('ref={orderReviewRef}')
-  || !ecommerceOrderSubmit.includes("!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : resumedOrderNeedsReview ? 'Review current Shop values'")
+  || !ecommerceOrderSubmit.includes("!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : orderCreditBlocked ? 'Credit policy required'")
   || !coreSource.includes('orderPaymentRef.current?.focus({ preventScroll: true })')
   || !coreSource.includes('const orderReviewRef = useRef<HTMLButtonElement>(null)')
   || !coreSource.includes('preparedEcommerceDraft && orderReviewRef.current?.isConnected')
@@ -2261,7 +2261,8 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !coreSource.includes('Review cancelled. The prepared Ecommerce request and Payment are unchanged; Shop data was not modified.')
   || !coreSource.includes("summary: ecommerceDraft ? 'Review Ecommerce order'")
   || !coreSource.includes('Customer ${order.customer} · ${lineReview}')
-  || !coreSource.includes('Payment ${payment} · due ${formatIssueDue(paymentDueAt)} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)}')
+  || !coreSource.includes('Payment ${payment} · due ${formatIssueDue(paymentDueAt)}${paymentTermsDays ?')
+  || !coreSource.includes('credit ${formatMoney(creditReview.exposureBeforeMmk)} → ${formatMoney(creditReview.exposureAfterMmk)} under policy R${creditReview.policy?.revision}')
   || !coreSource.includes('Stock ${reservationReview}')
   || !coreCssSource.includes('.order-ecommerce-payment')
   || !ecommerceBuyingLifecycleSource.includes("ECOMMERCE_SHOP_DRAFT_SCHEMA_V3 = 'supermega.ecommerce.shop_draft.v3'")
@@ -2838,7 +2839,7 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${shopInventoryUiSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.collection_action.recorded', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.collection_action.recorded', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved', 'commerce.customer_credit_policy.saved']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.storefront_request.received')
@@ -2912,6 +2913,19 @@ if (!coreSource.includes('data-accounting-handoff="review-required"')
   || !commerceSource.includes('if (totalDebitMmk !== closeExport.totalMmk || totalCreditMmk !== closeExport.totalMmk) return null')
   || !managedCommerceRuntime.includes('def _validate_account_mapping_saved(')
   || !managedCommerceRuntime.includes('def commerce_accounting_handoff(')) fail('commerce_accounting_handoff_missing_or_unsafe')
+if (!coreSource.includes('data-customer-credit-policy="versioned"')
+  || !coreSource.includes("kind: 'customer_credit_policy'")
+  || !coreSource.includes("'commerce.customer_credit_policy.saved'")
+  || !coreSource.includes('configureCommerceCustomerCreditPolicy(current, input, commerceActionProof(action))')
+  || !coreSource.includes('Credit policy required')
+  || !coreSource.includes('This records an internal approval boundary only; it never collects, lends, charges, or contacts the customer.')
+  || !commerceSource.includes('export function commerceCustomerCreditReview(')
+  || !commerceSource.includes('export function configureCommerceCustomerCreditPolicy(')
+  || !commerceSource.includes('order.creditDecision !== undefined')
+  || !managedCommerceRuntime.includes('def _effective_customer_credit_policy(')
+  || !managedCommerceRuntime.includes('def _validate_customer_credit_policy_saved(')
+  || !managedCommerceRuntime.includes('a new credit order requires the exact active customer policy, terms, and exposure decision.')
+  || !managedCommerceRuntime.includes('command evidence must match the saved customer credit policy proof.')) fail('commerce_customer_credit_policy_ui_or_managed_boundary_missing')
 if (!coreSource.includes("'commerce.order.return_recorded'")
   || !coreSource.includes("kind: 'order_return'")
   || !coreSource.includes('Record return')
@@ -8232,6 +8246,17 @@ async function verifyCommerceRuntime() {
       sku: 'SKU-LONG-NAME',
       name: 'x'.repeat(181),
     }, proof('ACT-ITEM-LONG-NAME')) === null, 'oversized_catalog_item_was_registered')
+    const creditPolicyProof = proof('ACT-CREDIT-CUSTOMER', -2_000)
+    const creditBase = model.configureCommerceCustomerCreditPolicy(base, {
+      customer: 'Customer',
+      creditLimitMmk: 1_000,
+      maxPaymentTermsDays: 30,
+      status: 'active',
+    }, creditPolicyProof)
+    assert(creditBase?.customerCreditPolicies.length === 1
+      && creditBase.customerCreditPolicies[0].revision === 1
+      && creditBase.customerCreditPolicies[0].proof.actionId === creditPolicyProof.actionId,
+    'customer_credit_policy_not_versioned_or_attributed')
     const reserveProof = proof('ACT-RESERVE')
     const order = {
       id: 'ORD-1',
@@ -8254,8 +8279,60 @@ async function verifyCommerceRuntime() {
       total: 200,
       status: 'confirmed',
     }
-    const reserved = model.reserveCommerceOrder(base, order, reserveProof)
-    assert(reserved?.items[0].onHand === 8 && reserved.orders.length === 1 && reserved.movements.length === 1, 'reservation_did_not_apply_once')
+    assert(model.reserveCommerceOrder(base, order, reserveProof) === null, 'credit_order_without_policy_succeeded')
+    const reserved = model.reserveCommerceOrder(creditBase, order, reserveProof)
+    assert(reserved?.items[0].onHand === 8
+      && reserved.orders.length === 1
+      && reserved.movements.length === 1
+      && reserved.orders[0].creditDecision?.policyActionId === creditPolicyProof.actionId
+      && reserved.orders[0].creditDecision?.exposureBeforeMmk === 0
+      && reserved.orders[0].creditDecision?.exposureAfterMmk === 200,
+    'reservation_did_not_apply_once_with_customer_credit_decision')
+    assert(model.configureCommerceCustomerCreditPolicy(creditBase, {
+      customer: 'Customer', creditLimitMmk: 1_000, maxPaymentTermsDays: 30, status: 'active',
+    }, creditPolicyProof) === creditBase, 'customer_credit_policy_retry_not_idempotent')
+    assert(model.configureCommerceCustomerCreditPolicy(creditBase, {
+      customer: 'Customer', creditLimitMmk: 999, maxPaymentTermsDays: 30, status: 'active',
+    }, creditPolicyProof) === null, 'customer_credit_policy_conflicting_retry_succeeded')
+    assertThrows(() => model.validateCommerceState({
+      ...reserved,
+      orders: [{
+        ...reserved.orders[0],
+        creditDecision: { ...reserved.orders[0].creditDecision, exposureBeforeMmk: 1 },
+      }],
+    }), 'forged_customer_credit_decision_loaded')
+    const legacyCreditOrder = { ...reserved.orders[0] }
+    delete legacyCreditOrder.creditDecision
+    assert(model.validateCommerceState({ ...reserved, orders: [legacyCreditOrder] }).orders[0].creditDecision === undefined,
+      'legacy_credit_order_without_decision_not_readable')
+    const limitedBase = model.configureCommerceCustomerCreditPolicy(base, {
+      customer: 'Customer', creditLimitMmk: 250, maxPaymentTermsDays: 30, status: 'active',
+    }, proof('ACT-CREDIT-LIMITED', -2_000))
+    const limitedReserved = model.reserveCommerceOrder(limitedBase, order, reserveProof)
+    const secondCreditProof = proof('ACT-CREDIT-SECOND', 1_000)
+    const secondCreditOrder = {
+      ...order,
+      id: 'ORD-CREDIT-SECOND',
+      createdAt: secondCreditProof.capturedAt,
+      owner: secondCreditProof.actor,
+      quantity: 1,
+      total: 100,
+      paymentDueAt: '2026-08-22T09:00:01.000Z',
+      sourceRecordId: 'WEB-CREDIT-SECOND',
+      evidenceReference: secondCreditProof.evidenceReference,
+    }
+    assert(limitedReserved && model.reserveCommerceOrder(limitedReserved, secondCreditOrder, secondCreditProof) === null,
+      'customer_credit_limit_did_not_block_accumulated_exposure')
+    const shortTermsBase = model.configureCommerceCustomerCreditPolicy(base, {
+      customer: 'Customer', creditLimitMmk: 1_000, maxPaymentTermsDays: 7, status: 'active',
+    }, proof('ACT-CREDIT-SHORT-TERMS', -2_000))
+    assert(model.reserveCommerceOrder(shortTermsBase, order, reserveProof) === null,
+      'customer_credit_terms_boundary_not_enforced')
+    const heldBase = model.configureCommerceCustomerCreditPolicy(base, {
+      customer: 'Customer', creditLimitMmk: 1_000, maxPaymentTermsDays: 30, status: 'hold',
+    }, proof('ACT-CREDIT-HOLD', -2_000))
+    assert(model.reserveCommerceOrder(heldBase, order, reserveProof) === null,
+      'customer_credit_hold_not_enforced')
     assert(reserved.orders[0].calculation?.schema === 'supermega.commerce.order-calculation.v1'
       && reserved.orders[0].calculation.currency === 'MMK'
       && reserved.orders[0].calculation.catalogRevision === 0
@@ -8273,7 +8350,7 @@ async function verifyCommerceRuntime() {
       jurisdictionCode: 'MM',
       effectiveFrom: '2026-07-23T09:00:00.000Z',
     }
-    const exclusiveTaxBase = model.configureCommerceTax(base, exclusiveTaxInput, taxProof)
+    const exclusiveTaxBase = model.configureCommerceTax(creditBase, exclusiveTaxInput, taxProof)
     assert(exclusiveTaxBase?.taxConfigurations.length === 1
       && exclusiveTaxBase.taxConfigurations[0].revision === 1
       && exclusiveTaxBase.taxConfigurations[0].code === 'CT5'
@@ -8337,6 +8414,7 @@ async function verifyCommerceRuntime() {
       ...order,
       id: 'ORD-TAX-2',
       createdAt: '2026-07-23T09:00:03.000Z',
+      paymentDueAt: '2026-08-22T09:00:03.000Z',
       owner: inclusiveReserveProof.actor,
       sourceRecordId: 'WEB-TAX-2',
       evidenceReference: inclusiveReserveProof.evidenceReference,
@@ -8859,7 +8937,7 @@ async function verifyCommerceRuntime() {
 
     const cancelReserveProof = proof('ACT-RESERVE-CANCEL')
     const cancelOrder = { ...order, id: 'ORD-CANCEL', sourceRecordId: 'WEB-CANCEL', evidenceReference: cancelReserveProof.evidenceReference }
-    const cancelReserved = model.reserveCommerceOrder(base, cancelOrder, cancelReserveProof)
+    const cancelReserved = model.reserveCommerceOrder(creditBase, cancelOrder, cancelReserveProof)
     const cancelProof = proof('ACT-CANCEL', 2_000)
     const cancelled = model.cancelCommerceOrder(cancelReserved, cancelOrder.id, cancelProof)
     assert(cancelled?.items[0].onHand === 10 && cancelled.orders[0].status === 'cancelled' && cancelled.movements.filter((movement) => movement.kind === 'release').length === 1, 'cancellation_did_not_release_once')
@@ -8869,7 +8947,7 @@ async function verifyCommerceRuntime() {
 
     const paidReserveProof = proof('ACT-RESERVE-PAID')
     const paidOrder = { ...order, id: 'ORD-PAID-CANCEL', sourceRecordId: 'WEB-PAID-CANCEL', evidenceReference: paidReserveProof.evidenceReference }
-    const paidReserved = model.reserveCommerceOrder(base, paidOrder, paidReserveProof)
+    const paidReserved = model.reserveCommerceOrder(creditBase, paidOrder, paidReserveProof)
     const paid = model.reconcileCommercePayment(paidReserved, paidOrder.id, proof('ACT-PAY-PAID'))
     const paidCancelled = model.cancelCommerceOrder(paid, paidOrder.id, proof('ACT-CANCEL-PAID'))
     assert(paidCancelled?.orders[0].paymentStatus === 'reconciled' && paidCancelled.orders[0].refundStatus === 'due', 'paid_cancellation_erased_reconciliation_or_refund_exception')
@@ -9312,7 +9390,7 @@ async function verifyCommerceRuntime() {
     values.clear()
     const concurrentReserveProof = proof('ACT-CONCURRENT-RESERVE')
     const concurrentOrder = { ...cancelOrder, evidenceReference: concurrentReserveProof.evidenceReference }
-    const concurrentReserved = model.reserveCommerceOrder(base, concurrentOrder, concurrentReserveProof)
+    const concurrentReserved = model.reserveCommerceOrder(creditBase, concurrentOrder, concurrentReserveProof)
     values.set(model.COMMERCE_KEY, JSON.stringify(concurrentReserved))
     const concurrentResults = await Promise.all([
       model.mutateCommerceWorkspace((state) => model.cancelCommerceOrder(state, concurrentOrder.id, proof('ACT-CONCURRENT-CANCEL-A')), storage, locks),
@@ -10327,7 +10405,7 @@ async function verifyStorefrontRuntime() {
       fulfilment: buyingRequest.fulfilment,
       fulfilmentReference: buyingRequest.id,
       promisedAt: '2026-07-24T10:00:00.000Z',
-      paymentDueAt: '2026-07-24T10:00:00.000Z',
+      paymentDueAt: linkedOrderProof.capturedAt,
       sourceRecordId: buyingRequest.id,
       evidenceReference: linkedOrderProof.evidenceReference,
       lines: linkedOrderLines,

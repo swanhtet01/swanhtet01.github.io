@@ -54,6 +54,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.storefront.merchandising.imported",
         "commerce.tax_configuration.saved",
         "commerce.account_mapping.saved",
+        "commerce.customer_credit_policy.saved",
         "commerce.service_schedule.initialized",
         "commerce.service_schedule.saved",
         "production.workspace.initialized",
@@ -1730,6 +1731,34 @@ def _authoritative_command_payload(
         authoritative_state["accountMappingConfigurations"] = [
             authoritative_configuration,
             *deepcopy(configurations[1:]),
+        ]
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.customer_credit_policy.saved":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        policies = state.get("customerCreditPolicies") if isinstance(state, Mapping) else None
+        policy = policies[0] if isinstance(policies, list) and policies else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(policy, Mapping)
+        ):
+            return authoritative
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": captured_at,
+        }
+        authoritative_policy = {
+            **dict(policy),
+            "proof": deepcopy(authoritative_evidence),
+        }
+        authoritative_state = dict(state)
+        authoritative_state["customerCreditPolicies"] = [
+            authoritative_policy,
+            *deepcopy(policies[1:]),
         ]
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state

@@ -42,6 +42,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.item.updated",
         "commerce.tax_configuration.saved",
         "commerce.account_mapping.saved",
+        "commerce.customer_credit_policy.saved",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
@@ -77,6 +78,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.item.updated",
         "commerce.tax_configuration.saved",
         "commerce.account_mapping.saved",
+        "commerce.customer_credit_policy.saved",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
@@ -148,6 +150,7 @@ _MAX_CATALOG_BASELINES = 500
 _MAX_CATALOG_CHANGES = 500
 _MAX_TAX_CONFIGURATIONS = 100
 _MAX_ACCOUNT_MAPPING_CONFIGURATIONS = 100
+_MAX_CUSTOMER_CREDIT_POLICIES = 500
 _MAX_ORDER_LINES = 20
 _MAX_RETURNS_PER_ORDER = 100
 _MAX_CORRECTIONS_PER_ORDER = 100
@@ -202,6 +205,23 @@ _TAX_CONFIGURATION_FIELDS = frozenset(
 _TAX_CONFIGURATION_SCHEDULE_FIELDS = frozenset({"jurisdictionCode", "effectiveFrom"})
 _ACCOUNT_MAPPING_CONFIGURATION_FIELDS = frozenset({"revision", "mappings", "proof"})
 _ACCOUNT_MAPPING_FIELDS = frozenset({"accountRole", "externalAccountCode"})
+_CUSTOMER_CREDIT_POLICY_FIELDS = frozenset(
+    {"revision", "customer", "creditLimitMmk", "maxPaymentTermsDays", "status", "proof"}
+)
+_ORDER_CREDIT_DECISION_FIELDS = frozenset(
+    {
+        "policyRevision",
+        "policyActionId",
+        "creditLimitMmk",
+        "exposureBeforeMmk",
+        "orderAmountMmk",
+        "exposureAfterMmk",
+        "maxPaymentTermsDays",
+        "paymentTermsDays",
+        "status",
+    }
+)
+_CUSTOMER_CREDIT_TERMS = frozenset({0, 7, 30})
 _ORDER_REQUIRED_FIELDS = frozenset(
     {
         "id",
@@ -235,6 +255,7 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "promisedAt",
         "paymentDueAt",
         "collectionActions",
+        "creditDecision",
         "owner",
         "sourceRecordId",
         "evidenceReference",
@@ -822,6 +843,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "catalogChanges",
                 "taxConfigurations",
                 "accountMappingConfigurations",
+                "customerCreditPolicies",
                 "inventoryFoundation",
                 "serviceSchedule",
             }
@@ -859,6 +881,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         state.get("accountMappingConfigurations", []),
         "commerce state.accountMappingConfigurations",
     )
+    customer_credit_policies = _list(
+        state.get("customerCreditPolicies", []),
+        "commerce state.customerCreditPolicies",
+    )
     if "serviceSchedule" in state:
         _validate_service_schedule(state["serviceSchedule"])
     if "storefrontConfiguration" in state and state["storefrontConfiguration"] is None:
@@ -890,6 +916,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         raise TrialValidationError(
             "commerce state.accountMappingConfigurations cannot exceed "
             f"{_MAX_ACCOUNT_MAPPING_CONFIGURATIONS}."
+        )
+    if len(customer_credit_policies) > _MAX_CUSTOMER_CREDIT_POLICIES:
+        raise TrialValidationError(
+            "commerce state.customerCreditPolicies cannot exceed "
+            f"{_MAX_CUSTOMER_CREDIT_POLICIES}."
         )
 
     item_skus: list[str] = []
@@ -1178,6 +1209,36 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 )
         newer_account_mapping_configuration = configuration
         account_mapping_configuration_action_ids.append(proof["actionId"])
+
+    customer_credit_policy_action_ids: list[str] = []
+    newer_customer_credit_policy: dict[str, Any] | None = None
+    for index, candidate in enumerate(customer_credit_policies):
+        field = f"customerCreditPolicies[{index}]"
+        policy = _object(candidate, field)
+        _exact_fields(policy, field, required=_CUSTOMER_CREDIT_POLICY_FIELDS)
+        revision = _integer(policy["revision"], f"{field}.revision", minimum=1)
+        if revision != len(customer_credit_policies) - index:
+            raise TrialValidationError(
+                f"{field}.revision breaks the newest-first sequence."
+            )
+        _text(policy["customer"], f"{field}.customer", maximum=120)
+        _integer(policy["creditLimitMmk"], f"{field}.creditLimitMmk")
+        if policy["maxPaymentTermsDays"] not in _CUSTOMER_CREDIT_TERMS:
+            raise TrialValidationError(f"{field}.maxPaymentTermsDays is invalid.")
+        if policy["status"] not in {"active", "hold"}:
+            raise TrialValidationError(f"{field}.status is invalid.")
+        proof = _action_proof(policy["proof"], f"{field}.proof")
+        if newer_customer_credit_policy is not None:
+            newer_captured_at = datetime.fromisoformat(
+                str(newer_customer_credit_policy["proof"]["capturedAt"]).replace("Z", "+00:00")
+            )
+            captured_at = datetime.fromisoformat(proof["capturedAt"].replace("Z", "+00:00"))
+            if captured_at > newer_captured_at:
+                raise TrialValidationError(
+                    f"{field} customer credit policies must be newest first."
+                )
+        newer_customer_credit_policy = policy
+        customer_credit_policy_action_ids.append(proof["actionId"])
 
     purchase_order_ids: list[str] = []
     purchase_order_action_ids: list[str] = []
@@ -1690,6 +1751,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 raise TrialValidationError(
                     f"orders[{index}].promisedAt must be after its creation time."
                 )
+        payment_terms_days = 0
         if "paymentDueAt" in order:
             payment_due_at = datetime.fromisoformat(
                 _timestamp(
@@ -1700,6 +1762,70 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             if payment_due_at < order_created_at:
                 raise TrialValidationError(
                     f"orders[{index}].paymentDueAt cannot be before its creation time."
+                )
+            payment_delta = payment_due_at - order_created_at
+            supported_terms = {
+                timedelta(days=days): days for days in _CUSTOMER_CREDIT_TERMS
+            }
+            if payment_delta not in supported_terms:
+                raise TrialValidationError(
+                    f"orders[{index}].paymentDueAt must use a supported customer credit term."
+                )
+            payment_terms_days = supported_terms[payment_delta]
+        if "creditDecision" in order:
+            field = f"orders[{index}].creditDecision"
+            decision = _object(order["creditDecision"], field)
+            _exact_fields(decision, field, required=_ORDER_CREDIT_DECISION_FIELDS)
+            policy_revision = _integer(
+                decision["policyRevision"], f"{field}.policyRevision", minimum=1
+            )
+            policy_action_id = _text(
+                decision["policyActionId"], f"{field}.policyActionId", maximum=160
+            )
+            for number_field in (
+                "creditLimitMmk",
+                "exposureBeforeMmk",
+                "orderAmountMmk",
+                "exposureAfterMmk",
+            ):
+                _integer(decision[number_field], f"{field}.{number_field}")
+            if (
+                decision["paymentTermsDays"] not in {7, 30}
+                or decision["maxPaymentTermsDays"] not in _CUSTOMER_CREDIT_TERMS
+                or decision["status"] != "approved"
+                or payment_terms_days != decision["paymentTermsDays"]
+                or decision["orderAmountMmk"] != order["total"]
+                or decision["exposureAfterMmk"]
+                != decision["exposureBeforeMmk"] + decision["orderAmountMmk"]
+            ):
+                raise TrialValidationError(
+                    f"{field} arithmetic or payment terms are invalid."
+                )
+            policy = next(
+                (
+                    row
+                    for row in customer_credit_policies
+                    if isinstance(row, Mapping)
+                    and row.get("revision") == policy_revision
+                    and row.get("proof", {}).get("actionId") == policy_action_id
+                ),
+                None,
+            )
+            if (
+                policy is None
+                or policy["customer"] != order["customer"]
+                or policy["status"] != "active"
+                or policy["creditLimitMmk"] != decision["creditLimitMmk"]
+                or policy["maxPaymentTermsDays"] != decision["maxPaymentTermsDays"]
+                or decision["paymentTermsDays"] > policy["maxPaymentTermsDays"]
+                or decision["exposureAfterMmk"] > policy["creditLimitMmk"]
+                or datetime.fromisoformat(
+                    str(policy["proof"]["capturedAt"]).replace("Z", "+00:00")
+                )
+                > order_created_at
+            ):
+                raise TrialValidationError(
+                    f"{field} does not match an effective approved customer policy."
                 )
         if "collectionActions" in order:
             collection_actions = _list(
@@ -2911,6 +3037,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *catalog_baseline_action_set,
             *tax_configuration_action_ids,
             *account_mapping_configuration_action_ids,
+            *customer_credit_policy_action_ids,
             *storefront_action_ids,
             *(
                 [storefront_configuration_action_id]
@@ -3129,6 +3256,12 @@ def _validate_event_evidence(
         if not _proof_matches_evidence(proof, evidence):
             raise TrialValidationError(
                 "command evidence must match the saved account mapping proof."
+            )
+    elif event_type == "commerce.customer_credit_policy.saved":
+        proof = next_state["customerCreditPolicies"][0]["proof"]
+        if not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the saved customer credit policy proof."
             )
     elif event_type == "commerce.service_schedule.initialized":
         schedule = next_state["serviceSchedule"]
@@ -3494,6 +3627,52 @@ def _effective_tax_configuration(
 
 def _account_mapping_configurations(state: Mapping[str, Any]) -> list[Any]:
     return state.get("accountMappingConfigurations", [])
+
+
+def _customer_credit_policies(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("customerCreditPolicies", [])
+
+
+def _effective_customer_credit_policy(
+    state: Mapping[str, Any],
+    customer: str,
+    at_time: str,
+) -> Mapping[str, Any] | None:
+    at = datetime.fromisoformat(at_time.replace("Z", "+00:00"))
+    for candidate in _customer_credit_policies(state):
+        if not isinstance(candidate, Mapping) or candidate.get("customer") != customer:
+            continue
+        proof = candidate.get("proof")
+        if isinstance(proof, Mapping) and datetime.fromisoformat(
+            str(proof["capturedAt"]).replace("Z", "+00:00")
+        ) <= at:
+            return candidate
+    return None
+
+
+def _order_payment_terms_days(order: Mapping[str, Any]) -> int | None:
+    if "paymentDueAt" not in order:
+        return 0
+    created_at = datetime.fromisoformat(str(order["createdAt"]).replace("Z", "+00:00"))
+    payment_due_at = datetime.fromisoformat(str(order["paymentDueAt"]).replace("Z", "+00:00"))
+    delta = payment_due_at - created_at
+    return next(
+        (days for days in _CUSTOMER_CREDIT_TERMS if delta == timedelta(days=days)),
+        None,
+    )
+
+
+def _customer_credit_exposure(state: Mapping[str, Any], customer: str) -> int:
+    exposure = sum(
+        int(order["total"])
+        for order in state["orders"]
+        if order.get("customer") == customer
+        and order.get("status") != "cancelled"
+        and order.get("paymentStatus") == "pending"
+    )
+    if exposure > _MAX_SAFE_INTEGER:
+        raise TrialValidationError("customer credit exposure exceeds the safe integer limit.")
+    return exposure
 
 
 def _round_tax(numerator: int, denominator: int) -> int:
@@ -4338,6 +4517,16 @@ def _require_account_mapping_configurations_unchanged(
         )
 
 
+def _require_customer_credit_policies_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _customer_credit_policies(current) != _customer_credit_policies(next_state):
+        raise TrialValidationError(
+            "event cannot change: customerCreditPolicies."
+        )
+
+
 def _inventory_foundation(state: Mapping[str, Any]) -> Mapping[str, Any] | None:
     foundation = state.get("inventoryFoundation")
     return foundation if isinstance(foundation, Mapping) else None
@@ -4855,6 +5044,44 @@ def _validate_new_order_and_reservation(
         )
     if order.get("status") != "confirmed" or order.get("paymentStatus") != "pending" or order.get("refundStatus") != "none":
         raise TrialValidationError("a new order must start confirmed with pending payment and no refund exception.")
+    payment_terms_days = _order_payment_terms_days(order)
+    if payment_terms_days is None:
+        raise TrialValidationError("a new order requires a supported customer credit term.")
+    credit_decision = order.get("creditDecision")
+    if payment_terms_days == 0:
+        if credit_decision is not None:
+            raise TrialValidationError("cash-term orders cannot carry a customer credit decision.")
+    else:
+        policy = _effective_customer_credit_policy(
+            current,
+            str(order["customer"]),
+            str(order["createdAt"]),
+        )
+        exposure_before = _customer_credit_exposure(current, str(order["customer"]))
+        exposure_after = exposure_before + int(order["total"])
+        expected_decision = (
+            {
+                "policyRevision": policy["revision"],
+                "policyActionId": policy["proof"]["actionId"],
+                "creditLimitMmk": policy["creditLimitMmk"],
+                "exposureBeforeMmk": exposure_before,
+                "orderAmountMmk": order["total"],
+                "exposureAfterMmk": exposure_after,
+                "maxPaymentTermsDays": policy["maxPaymentTermsDays"],
+                "paymentTermsDays": payment_terms_days,
+                "status": "approved",
+            }
+            if policy is not None
+            and policy["status"] == "active"
+            and payment_terms_days <= policy["maxPaymentTermsDays"]
+            and exposure_after <= _MAX_SAFE_INTEGER
+            and exposure_after <= policy["creditLimitMmk"]
+            else None
+        )
+        if expected_decision is None or credit_decision != expected_decision:
+            raise TrialValidationError(
+                "a new credit order requires the exact active customer policy, terms, and exposure decision."
+            )
     if order.get("fulfilment") not in {"pickup", "delivery"}:
         raise TrialValidationError("a new order requires pickup or delivery fulfilment.")
     _text(order.get("owner"), "new order.owner", maximum=120)
@@ -6398,6 +6625,51 @@ def _validate_account_mapping_saved(
         )
 
 
+def _validate_customer_credit_policy_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    current_without_policies = dict(current)
+    current_without_policies.pop("customerCreditPolicies", None)
+    next_without_policies = dict(next_state)
+    next_without_policies.pop("customerCreditPolicies", None)
+    if current_without_policies != next_without_policies:
+        raise TrialValidationError(
+            "commerce.customer_credit_policy.saved may change only customerCreditPolicies."
+        )
+    before = _customer_credit_policies(current)
+    after = _customer_credit_policies(next_state)
+    if len(after) != len(before) + 1 or after[1:] != before:
+        raise TrialValidationError(
+            "commerce.customer_credit_policy.saved must prepend exactly one customer credit policy."
+        )
+    policy = after[0]
+    if policy["revision"] != len(before) + 1:
+        raise TrialValidationError(
+            "customer credit policy revision must advance exactly once."
+        )
+    prior = next(
+        (
+            candidate
+            for candidate in before
+            if candidate.get("customer") == policy["customer"]
+        ),
+        None,
+    )
+    if prior is not None and all(
+        prior[field] == policy[field]
+        for field in (
+            "customer",
+            "creditLimitMmk",
+            "maxPaymentTermsDays",
+            "status",
+        )
+    ):
+        raise TrialValidationError(
+            "an unchanged customer credit policy cannot advance."
+        )
+
+
 def _service_schedule(state: Mapping[str, Any]) -> dict[str, Any] | None:
     value = state.get("serviceSchedule")
     return _validate_service_schedule(value) if value is not None else None
@@ -6567,6 +6839,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.storefront_request.received": _validate_storefront_request_received,
     "commerce.tax_configuration.saved": _validate_tax_configuration_saved,
     "commerce.account_mapping.saved": _validate_account_mapping_saved,
+    "commerce.customer_credit_policy.saved": _validate_customer_credit_policy_saved,
     "commerce.service_schedule.initialized": _validate_service_schedule_initialized,
     "commerce.service_schedule.saved": _validate_service_schedule_saved,
 }
@@ -6599,6 +6872,7 @@ def reduce_commerce_state(
             or _catalog_changes(next_state)
             or _tax_configurations(next_state)
             or _account_mapping_configurations(next_state)
+            or _customer_credit_policies(next_state)
         ):
             raise TrialValidationError("Commerce initialization requires a non-empty catalog and no operating history.")
         return next_state
@@ -6616,6 +6890,8 @@ def reduce_commerce_state(
         _require_tax_configurations_unchanged(current_state, next_state)
     if event_type != "commerce.account_mapping.saved":
         _require_account_mapping_configurations_unchanged(current_state, next_state)
+    if event_type != "commerce.customer_credit_policy.saved":
+        _require_customer_credit_policies_unchanged(current_state, next_state)
     if event_type not in {
         "commerce.service_schedule.initialized",
         "commerce.service_schedule.saved",

@@ -851,6 +851,8 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         return dict(next_state["taxConfigurations"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.account_mapping.saved":
         return dict(next_state["accountMappingConfigurations"][0]["proof"])  # type: ignore[index,arg-type]
+    if event_type == "commerce.customer_credit_policy.saved":
+        return dict(next_state["customerCreditPolicies"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.order.advanced":
         completed_orders = [
             order
@@ -2367,6 +2369,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.storefront.merchandising.imported",
                     "commerce.tax_configuration.saved",
                     "commerce.account_mapping.saved",
+                    "commerce.customer_credit_policy.saved",
                     "commerce.service_schedule.initialized",
                     "commerce.service_schedule.saved",
                 }
@@ -2376,6 +2379,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIn("commerce.storefront.merchandising.imported", COMMERCE_EVENTS)
         self.assertIn("commerce.tax_configuration.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.account_mapping.saved", COMMERCE_EVENTS)
+        self.assertIn("commerce.customer_credit_policy.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.service_schedule.initialized", COMMERCE_EVENTS)
         self.assertIn("commerce.service_schedule.saved", COMMERCE_EVENTS)
 
@@ -4752,6 +4756,225 @@ class CommerceRuntimeTests(unittest.TestCase):
             boundary_next,
         )
         self.assertEqual(accepted_boundary["closes"][0]["businessDate"], "2026-07-24")  # type: ignore[index]
+
+    def test_customer_credit_policy_is_versioned_and_gates_new_credit_orders(self) -> None:
+        current = catalog_state()
+        policy = {
+            "revision": 1,
+            "customer": "Customer ref",
+            "creditLimitMmk": 250,
+            "maxPaymentTermsDays": 30,
+            "status": "active",
+            "proof": action_evidence(
+                "ACT-CREDIT-R1",
+                reason="Reviewed the customer credit boundary for future Shop orders.",
+            ),
+        }
+        configured_state = deepcopy(current)
+        configured_state["customerCreditPolicies"] = [policy]
+        configured = apply_event(
+            current,
+            "commerce.customer_credit_policy.saved",
+            configured_state,
+        )
+        self.assertEqual(configured["customerCreditPolicies"], [policy])
+        self.assertEqual(
+            apply_event(
+                current,
+                "commerce.customer_credit_policy.saved",
+                configured_state,
+            ),
+            configured,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.customer_credit_policy.saved",
+                configured_state,
+                action_evidence("ACT-WRONG-CREDIT-EVIDENCE"),
+            )
+
+        unchanged = deepcopy(configured)
+        unchanged["customerCreditPolicies"] = [  # type: ignore[index]
+            {
+                **policy,
+                "revision": 2,
+                "proof": action_evidence("ACT-CREDIT-R2"),
+            },
+            policy,
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                configured,
+                "commerce.customer_credit_policy.saved",
+                unchanged,
+            )
+
+        order = order_record("ORD-CREDIT-1")
+        order["paymentDueAt"] = "2026-08-22T09:00:00.000Z"
+        order["lines"] = [
+            {
+                "sku": "SKU-1",
+                "name": "Test item",
+                "quantity": 2,
+                "unitPriceMmk": 100,
+            }
+        ]
+        order["creditDecision"] = {
+            "policyRevision": 1,
+            "policyActionId": "ACT-CREDIT-R1",
+            "creditLimitMmk": 250,
+            "exposureBeforeMmk": 0,
+            "orderAmountMmk": 200,
+            "exposureAfterMmk": 200,
+            "maxPaymentTermsDays": 30,
+            "paymentTermsDays": 30,
+            "status": "approved",
+        }
+        ordered_state = deepcopy(configured)
+        ordered_state["items"][0]["onHand"] = 8  # type: ignore[index]
+        ordered_state["orders"] = [order]
+        ordered_state["movements"] = [
+            movement("reserve", "ACT-CREDIT-ORDER-1", -2, order_id="ORD-CREDIT-1")
+        ]
+        accepted = apply_event(
+            configured,
+            "commerce.order.created",
+            ordered_state,
+        )
+        self.assertEqual(
+            accepted["orders"][0]["creditDecision"]["exposureAfterMmk"],  # type: ignore[index]
+            200,
+        )
+
+        missing_decision = deepcopy(ordered_state)
+        missing_decision["orders"][0].pop("creditDecision")  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                configured,
+                "commerce.order.created",
+                missing_decision,
+            )
+
+        forged_decision = deepcopy(ordered_state)
+        forged_decision["orders"][0]["creditDecision"]["exposureBeforeMmk"] = 1  # type: ignore[index]
+        forged_decision["orders"][0]["creditDecision"]["exposureAfterMmk"] = 201  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                configured,
+                "commerce.order.created",
+                forged_decision,
+            )
+
+        legacy_credit = deepcopy(accepted)
+        legacy_credit["orders"][0].pop("creditDecision")  # type: ignore[index]
+        self.assertNotIn(
+            "creditDecision",
+            validate_commerce_state(legacy_credit)["orders"][0],
+        )
+
+        over_limit = deepcopy(accepted)
+        second_order = order_record("ORD-CREDIT-2")
+        second_order.update(
+            {
+                "quantity": 1,
+                "total": 100,
+                "paymentDueAt": "2026-08-22T09:00:00.000Z",
+                "lines": [
+                    {
+                        "sku": "SKU-1",
+                        "name": "Test item",
+                        "quantity": 1,
+                        "unitPriceMmk": 100,
+                    }
+                ],
+                "creditDecision": {
+                    "policyRevision": 1,
+                    "policyActionId": "ACT-CREDIT-R1",
+                    "creditLimitMmk": 250,
+                    "exposureBeforeMmk": 200,
+                    "orderAmountMmk": 100,
+                    "exposureAfterMmk": 300,
+                    "maxPaymentTermsDays": 30,
+                    "paymentTermsDays": 30,
+                    "status": "approved",
+                },
+            }
+        )
+        over_limit["items"][0]["onHand"] = 7  # type: ignore[index]
+        over_limit["orders"] = [second_order, *accepted["orders"]]  # type: ignore[index]
+        over_limit["movements"] = [  # type: ignore[index]
+            movement("reserve", "ACT-CREDIT-ORDER-2", -1, order_id="ORD-CREDIT-2"),
+            *accepted["movements"],  # type: ignore[index]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(accepted, "commerce.order.created", over_limit)
+
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-credit", "operator-credit", "human")
+        agent = TrialPrincipal("workspace-credit", "credit-agent", "agent")
+        for principal in (operator, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={
+                "state": catalog_state(),
+                "evidence": action_evidence("ACT-INIT-CREDIT"),
+            },
+        )
+        forged_policy = {
+            **policy,
+            "proof": action_evidence(
+                "ACT-CREDIT-SERVER",
+                captured_at="2099-01-01T00:00:00.000Z",
+                actor="forged-actor",
+            ),
+        }
+        forged_state = deepcopy(initialized.state)
+        forged_state["customerCreditPolicies"] = [forged_policy]
+        payload = {
+            "state": forged_state,
+            "evidence": dict(forged_policy["proof"]),
+        }
+        command_id = str(uuid4())
+        saved = store.apply_command(
+            operator,
+            command_id=command_id,
+            surface="commerce",
+            event_type="commerce.customer_credit_policy.saved",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        replay = store.apply_command(
+            operator,
+            command_id=command_id,
+            surface="commerce",
+            event_type="commerce.customer_credit_policy.saved",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        saved_proof = saved.state["customerCreditPolicies"][0]["proof"]  # type: ignore[index]
+        self.assertEqual(saved_proof["actor"], operator.actor_id)
+        self.assertNotEqual(saved_proof["capturedAt"], "2099-01-01T00:00:00.000Z")
+        self.assertTrue(replay.idempotent_replay)
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.customer_credit_policy.saved",
+                expected_version=saved.version,
+                payload=payload,
+            )
 
     def test_tax_configuration_is_versioned_bound_and_freezes_order_calculation(self) -> None:
         current = catalog_state()
