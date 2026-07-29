@@ -1,4 +1,7 @@
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
+
+import { readBehaviorTrail, type BehaviorTrailEntry } from './behavior-trail'
 
 type ProductHomeReadinessProps = {
   activationCoverage: number
@@ -9,6 +12,12 @@ type ProductHomeReadinessProps = {
 }
 
 export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHostedAction, progress, ready }: ProductHomeReadinessProps) {
+  const [behaviorTrail, setBehaviorTrail] = useState<BehaviorTrailEntry[]>([])
+  useEffect(() => {
+    setBehaviorTrail(readBehaviorTrail(window.localStorage))
+  }, [])
+  const behaviorProducts = useMemo(() => new Set(behaviorTrail.map((entry) => entry.product).filter((product) => product !== 'unknown')).size, [behaviorTrail])
+  const behaviorChoices = useMemo(() => behaviorTrail.filter((entry) => entry.event === 'agent_job_chosen').length, [behaviorTrail])
   const launchReadinessRows = [
     ['Local setup', ready ? 'Ready' : `${progress}%`, ready ? 'Evidence can be exported for review.' : 'Finish baseline, owner, source, and acceptance proof.'],
     ['Import package', ready ? 'Use Activation handoff' : 'Prepare after setup', ready ? 'Upload CSV, clean rows, then export or validate one package.' : 'Import is safest after the workspace has one named owner.'],
@@ -20,6 +29,12 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
     ['Learn', 'Use approved context', 'CSV data, workspace behavior, decisions, roles, and evidence are packaged before premium learning.'],
     ['Guard', 'Approval before impact', 'Customer contact, payment, stock, publish, and production changes stay behind the owner gate.'],
     ['Scale', 'One control model', 'Shop, Plant, Website, and Ecommerce share the same setup, evidence, audit, and handoff pattern.'],
+  ] as const
+  const learningCockpitRows = [
+    ['Behavior memory', behaviorTrail.length ? `${behaviorTrail.length} local signals` : 'No signals yet', behaviorTrail.length ? 'Owner navigation and agent queue choices are ready for evidence export.' : 'Open products and choose agent jobs to create local memory.'],
+    ['Queue choices', behaviorChoices ? `${behaviorChoices} chosen` : 'No choices yet', behaviorChoices ? 'Premium can rank repeated owner preferences after managed import.' : 'The system waits for explicit owner choices before ranking work.'],
+    ['Product coverage', behaviorProducts ? `${behaviorProducts}/4 products` : 'Start anywhere', behaviorProducts ? 'Behavior memory is split by Shop, Plant, Website, and Ecommerce.' : 'Use any product track to begin the learning trail.'],
+    ['Learning boundary', 'No model training', 'Free keeps behavior local. Premium uses exported, approved context only after managed activation.'],
   ] as const
 
   return (
@@ -35,6 +50,25 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
         </div>
         <div className="product-home-readiness-grid">
           {enterpriseAutopilotRows.map(([label, value, detail]) => (
+            <span key={label}>
+              <small>{label}</small>
+              <strong>{value}</strong>
+              <em>{detail}</em>
+            </span>
+          ))}
+        </div>
+      </section>
+      <section className="product-home-readiness" aria-label="AI learning cockpit">
+        <div className="product-home-readiness-head">
+          <div>
+            <span className="core-eyebrow">AI learning cockpit</span>
+            <h2>Learn from use, not guesswork.</h2>
+            <p>SuperMega records lightweight local behavior so premium can later rank next actions from approved evidence. No customer message, payment, stock move, production write, publish action, or model training runs here.</p>
+          </div>
+          <Link className="core-button" to="/settings/#controls">Export context</Link>
+        </div>
+        <div className="product-home-readiness-grid">
+          {learningCockpitRows.map(([label, value, detail]) => (
             <span key={label}>
               <small>{label}</small>
               <strong>{value}</strong>
