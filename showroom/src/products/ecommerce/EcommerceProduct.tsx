@@ -541,15 +541,7 @@ export function EcommerceProduct() {
   }
 
   function downloadOrderImportTemplate() {
-    const suggestedSku = selectedSkus.find((sku) => catalog.items.some((item) => item.sku === sku && item.onHand > 0))
-      ?? catalog.items.find((item) => item.onHand > 0)?.sku
-      ?? 'SKU-001'
-    const rows = [
-      ['customer_reference', 'channel', 'sku', 'quantity', 'fulfilment', 'payment', 'source_message'],
-      ['Daw Mya / 09 xxx xxx xxx / Bahan', 'Viber', suggestedSku, 1, 'delivery', 'manual_review', 'Paste original customer message here'],
-      ['Walk-in customer', 'Shop form', suggestedSku, 1, 'pickup', 'cash_on_pickup', 'Owner-entered sample row'],
-    ]
-    const csv = rows.map((row) => row.map(csvCell).join(',')).join('\r\n')
+    const csv = buildSampleOrderImportCsv()
     const url = URL.createObjectURL(new Blob([`${csv}\r\n`], { type: 'text/csv' }))
     const link = document.createElement('a')
     link.href = url
@@ -566,6 +558,35 @@ export function EcommerceProduct() {
       detail: 'Download Ecommerce order import template',
     })
     const notice = 'Order import template downloaded. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.'
+    setOrderImportNotice(notice)
+    setDraftNotice(notice)
+  }
+
+  function buildSampleOrderImportCsv() {
+    const suggestedSku = selectedSkus.find((sku) => catalog.items.some((item) => item.sku === sku && item.onHand > 0))
+      ?? catalog.items.find((item) => item.onHand > 0)?.sku
+      ?? 'SKU-001'
+    const rows = [
+      ['customer_reference', 'channel', 'sku', 'quantity', 'fulfilment', 'payment', 'source_message'],
+      ['Daw Mya / 09 xxx xxx xxx / Bahan', 'Viber', suggestedSku, 1, 'delivery', 'manual_review', 'Paste original customer message here'],
+      ['Walk-in customer', 'Shop form', suggestedSku, 1, 'pickup', 'cash_on_pickup', 'Owner-entered sample row'],
+    ]
+    return rows.map((row) => row.map(csvCell).join(',')).join('\r\n')
+  }
+
+  function loadSampleOrderImportBatch() {
+    const csv = buildSampleOrderImportCsv()
+    const review = buildOrderImportReview(csv)
+    setOrderImportText(csv)
+    setOrderImportReview(review)
+    setOrderImportSourceName('sample-order-batch.csv')
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'ecommerce',
+      route: location.pathname + location.search,
+      detail: 'Load sample Ecommerce order batch',
+    })
+    const notice = 'Sample Ecommerce order batch loaded and reviewed locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.'
     setOrderImportNotice(notice)
     setDraftNotice(notice)
   }
@@ -1159,6 +1180,17 @@ export function EcommerceProduct() {
     ['Review', orderImportReview ? `${orderImportReview.readyRows}/${orderImportReview.totalRows} ready` : 'Paste CSV'],
     ['Boundary', 'No auto submit'],
   ] as const
+  const orderRepairRows = orderImportReview
+    ? [
+        ['Ready rows', `${orderImportReview.readyRows}`],
+        ['Blocked rows', `${orderImportReview.blockedRows}`],
+        ['Next fix', orderImportReview.status === 'ready' ? 'Download packet' : 'Repair SKU, quantity, fulfilment, payment, customer, source proof'],
+      ] as const
+    : [
+        ['Step 1', 'Load sample or upload CSV'],
+        ['Step 2', 'AI checks fields locally'],
+        ['Step 3', 'Download reviewed packet'],
+      ] as const
   const orderIntakeGuideRows = [
     ['Channels', 'CSV, Viber, LINE, WeChat, email, form'],
     ['AI prepares', 'Customer, SKU, quantity, fulfilment, payment, source proof'],
@@ -1644,9 +1676,13 @@ export function EcommerceProduct() {
           <div className="ecommerce-inline-actions">
             <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
             <button className="text-link" onClick={downloadOrderImportTemplate} type="button">Download order template</button>
+            <button className="text-link" onClick={loadSampleOrderImportBatch} type="button">Load sample order batch</button>
           </div>
           <div aria-label="Order intake guide" className="ecommerce-order-intake-guide">
             {orderIntakeGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          </div>
+          <div aria-label="AI order repair checklist" className="ecommerce-order-repair-checklist">
+            {orderRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
           </div>
           <label className="ecommerce-order-import-upload">Upload order CSV<input accept=".csv,text/csv,text/plain" onChange={uploadOrderImportCsv} type="file" /></label>
           <label className="ecommerce-order-import-field">Order batch CSV<textarea onChange={(event) => {
