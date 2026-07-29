@@ -120,6 +120,7 @@ export function buildReleaseHandoff(input) {
 
   const body = {
     contract: RELEASE_HANDOFF_CONTRACT,
+    digestScope: 'utf8_compact_json_without_digest',
     generatedAt,
     repository: REPOSITORY,
     mode: 'owner_review_only',
@@ -251,7 +252,12 @@ export async function writeExclusiveJson(outputPath, packet) {
   if (Buffer.byteLength(payload) > MAX_OUTPUT_BYTES) fail('release_handoff_output_too_large')
   const handle = await open(absolute, 'wx', 0o600)
   try { await handle.writeFile(payload, 'utf8') } finally { await handle.close() }
-  return { path: absolute, bytes: Buffer.byteLength(payload), digest: packet.digest }
+  return {
+    path: absolute,
+    bytes: Buffer.byteLength(payload),
+    digest: `sha256:${sha256(payload)}`,
+    packetDigest: packet.digest,
+  }
 }
 
 function parseArgs(argv) {

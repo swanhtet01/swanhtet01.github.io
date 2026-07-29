@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -50,6 +51,7 @@ function valid(overrides = {}) {
 test('release handoff is immutable, review-only, and exact-commit bound', () => {
   const packet = buildReleaseHandoff(valid())
   assert.equal(packet.contract, 'supermega.release-handoff.v1')
+  assert.equal(packet.digestScope, 'utf8_compact_json_without_digest')
   assert.equal(packet.mode, 'owner_review_only')
   assert.equal(packet.candidate.commit, candidate)
   assert.equal(packet.remote.candidateBranchState, 'unpublished')
@@ -60,6 +62,8 @@ test('release handoff is immutable, review-only, and exact-commit bound', () => 
   assert.equal(packet.nextAction.kind, 'owner_review_initial_branch_push')
   assert.equal(packet.nextAction.forcePushAllowed, false)
   assert.match(packet.digest, /^sha256:[a-f0-9]{64}$/)
+  const { digest, ...body } = packet
+  assert.equal(digest, `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`)
   assert.doesNotMatch(JSON.stringify(packet), /token|secret|password|customer/i)
 })
 
@@ -84,8 +88,10 @@ test('release handoff output is exclusive and non-overwriting', async () => {
   const output = join(directory, 'packet.json')
   const packet = buildReleaseHandoff(valid())
   const receipt = await writeExclusiveJson(output, packet)
+  const payload = await readFile(output, 'utf8')
   assert.equal(receipt.bytes > 0, true)
-  assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), packet)
+  assert.equal(receipt.digest, `sha256:${createHash('sha256').update(payload).digest('hex')}`)
+  assert.equal(receipt.packetDigest, packet.digest)
+  assert.deepEqual(JSON.parse(payload), packet)
   await assert.rejects(writeExclusiveJson(output, packet), /release_handoff_output_exists/)
 })
-
