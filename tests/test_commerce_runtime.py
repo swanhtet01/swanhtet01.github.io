@@ -234,15 +234,23 @@ def account_mapping_configuration(
     sales_revenue: str = "4100-SALES",
     legacy_revenue: str = "4190-REVIEW",
     tax_payable: str = "2100-TAX",
+    sales_adjustment: str = "4200-ADJUST",
+    correction_receivable: str = "1200-CORR-AR",
+    correction_payable: str = "2200-CORR-AP",
+    legacy: bool = False,
 ) -> dict[str, object]:
+    mappings = [
+        {"accountRole": "payment_clearing", "externalAccountCode": payment_clearing},
+        {"accountRole": "sales_revenue", "externalAccountCode": sales_revenue},
+        {"accountRole": "sales_revenue_unverified", "externalAccountCode": legacy_revenue},
+        {"accountRole": "tax_payable", "externalAccountCode": tax_payable},
+        {"accountRole": "sales_adjustment", "externalAccountCode": sales_adjustment},
+        {"accountRole": "correction_receivable", "externalAccountCode": correction_receivable},
+        {"accountRole": "correction_payable", "externalAccountCode": correction_payable},
+    ]
     return {
         "revision": revision,
-        "mappings": [
-            {"accountRole": "payment_clearing", "externalAccountCode": payment_clearing},
-            {"accountRole": "sales_revenue", "externalAccountCode": sales_revenue},
-            {"accountRole": "sales_revenue_unverified", "externalAccountCode": legacy_revenue},
-            {"accountRole": "tax_payable", "externalAccountCode": tax_payable},
-        ],
+        "mappings": mappings[:4] if legacy else mappings,
         "proof": action_evidence(
             action_id or f"ACT-ACCOUNT-MAPPING-R{revision}",
             captured_at=captured_at,
@@ -4577,7 +4585,58 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertEqual(export["orders"][0]["originalTotalMmk"], 200)
         self.assertEqual(export["orders"][0]["totalMmk"], 150)
         self.assertEqual(export["orders"][0]["corrections"][0]["documentId"], record["documentId"])
-        self.assertIsNone(commerce_accounting_handoff(accepted_close, CLOSE_ID_2))
+        handoff = commerce_accounting_handoff(accepted_close, CLOSE_ID_2)
+        self.assertIsNotNone(handoff)
+        assert handoff is not None
+        self.assertEqual(handoff["schema"], "supermega.commerce.accounting-handoff.v3")
+        self.assertEqual(handoff["originalOrderTotalMmk"], 200)
+        self.assertEqual(handoff["netOrderTotalMmk"], 150)
+        self.assertEqual(handoff["correctionCount"], 1)
+        self.assertEqual(handoff["creditCorrectionMmk"], 50)
+        self.assertEqual(handoff["debitCorrectionMmk"], 0)
+        self.assertEqual(handoff["totalDebitMmk"], 250)
+        self.assertEqual(handoff["totalCreditMmk"], 250)
+        correction_entries = [
+            entry for entry in handoff["entries"]
+            if entry["sourceDocumentId"] == record["documentId"]
+        ]
+        self.assertEqual(
+            [(entry["side"], entry["accountRole"], entry["amountMmk"]) for entry in correction_entries],
+            [("debit", "sales_adjustment", 50), ("credit", "correction_payable", 50)],
+        )
+        self.assertTrue(
+            all(entry["sourceOrderId"] == current["orders"][0]["id"] for entry in correction_entries)  # type: ignore[index]
+        )
+        self.assertTrue(all(entry["mappingStatus"] == "unmapped" for entry in correction_entries))
+        correction_csv = commerce_accounting_handoff_csv(handoff)
+        self.assertIn('"source_document_id"', correction_csv)
+        self.assertIn(f'"{record["documentId"]}"', correction_csv)
+        self.assertEqual(handoff, commerce_accounting_handoff(accepted_close, CLOSE_ID_2))
+        legacy_mapped_close = deepcopy(accepted_close)
+        legacy_mapped_close["accountMappingConfigurations"] = [
+            account_mapping_configuration(1, legacy=True)
+        ]
+        legacy_mapped_handoff = commerce_accounting_handoff(
+            validate_commerce_state(legacy_mapped_close), CLOSE_ID_2
+        )
+        self.assertIsNotNone(legacy_mapped_handoff)
+        assert legacy_mapped_handoff is not None
+        self.assertTrue(
+            all(
+                entry["mappingStatus"] == "mapped"
+                for entry in legacy_mapped_handoff["entries"]
+                if entry["accountRole"] in {
+                    "payment_clearing", "sales_revenue", "tax_payable"
+                }
+            )
+        )
+        self.assertTrue(
+            all(
+                entry["mappingStatus"] == "unmapped"
+                for entry in legacy_mapped_handoff["entries"]
+                if entry["accountRole"] in {"sales_adjustment", "correction_payable"}
+            )
+        )
 
         forged_total = corrected_state(current)
         forged_total["orders"][0]["total"] = 150  # type: ignore[index]
@@ -5395,7 +5454,12 @@ class CommerceRuntimeTests(unittest.TestCase):
         unmapped_handoff = commerce_accounting_handoff(closed, CLOSE_ID)
         self.assertIsNotNone(unmapped_handoff)
         assert unmapped_handoff is not None
-        self.assertEqual(unmapped_handoff["schema"], "supermega.commerce.accounting-handoff.v2")
+        self.assertEqual(unmapped_handoff["schema"], "supermega.commerce.accounting-handoff.v3")
+        self.assertEqual(unmapped_handoff["originalOrderTotalMmk"], 200)
+        self.assertEqual(unmapped_handoff["netOrderTotalMmk"], 200)
+        self.assertEqual(unmapped_handoff["correctionCount"], 0)
+        self.assertEqual(unmapped_handoff["creditCorrectionMmk"], 0)
+        self.assertEqual(unmapped_handoff["debitCorrectionMmk"], 0)
         self.assertIsNone(unmapped_handoff["accountMappingRevision"])
         self.assertTrue(
             all(
@@ -5405,6 +5469,19 @@ class CommerceRuntimeTests(unittest.TestCase):
             )
         )
         self.assertEqual(unmapped_handoff["totalDebitMmk"], unmapped_handoff["totalCreditMmk"])
+        self.assertTrue(
+            all(
+                entry["sourceOrderId"] is None and entry["sourceDocumentId"] is None
+                for entry in unmapped_handoff["entries"]
+            )
+        )
+
+        legacy_mapping = deepcopy(current)
+        legacy_mapping["accountMappingConfigurations"] = [
+            account_mapping_configuration(1, legacy=True)
+        ]
+        legacy_mapping = validate_commerce_state(legacy_mapping)
+        self.assertEqual(len(legacy_mapping["accountMappingConfigurations"][0]["mappings"]), 4)  # type: ignore[index]
 
         late_mapping = deepcopy(closed)
         late_mapping["accountMappingConfigurations"] = [

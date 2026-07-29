@@ -2869,12 +2869,15 @@ if (!coreSource.includes('data-accounting-handoff="review-required"')
   || !coreSource.includes('data-account-mapping="versioned"')
   || !coreSource.includes("kind: 'account_mapping'")
   || !coreSource.includes("'commerce.account_mapping.saved'")
-  || !commerceSource.includes('supermega.commerce.accounting-handoff.v2')
+  || !commerceSource.includes('supermega.commerce.accounting-handoff.v3')
   || !commerceSource.includes("postingAuthority: 'none'")
   || !commerceSource.includes('externalPostingPerformed: false')
   || !commerceSource.includes("accountRole: 'payment_clearing'")
   || !commerceSource.includes("accountRole: 'sales_revenue_unverified'")
-  || !commerceSource.includes('if (totalDebitMmk !== closeExport.totalMmk || totalCreditMmk !== closeExport.totalMmk) return null')
+  || !commerceSource.includes("accountRole: 'sales_adjustment'")
+  || !commerceSource.includes("accountRole: 'correction_receivable'")
+  || !commerceSource.includes("accountRole: 'correction_payable'")
+  || !commerceSource.includes('expectedControlTotalMmk = originalOrderTotalMmk + creditCorrectionMmk + debitCorrectionMmk')
   || !managedCommerceRuntime.includes('def _validate_account_mapping_saved(')
   || !managedCommerceRuntime.includes('def commerce_accounting_handoff(')) fail('commerce_accounting_handoff_missing_or_unsafe')
 if (!coreSource.includes('data-customer-credit-policy="versioned"')
@@ -8820,13 +8823,18 @@ async function verifyCommerceRuntime() {
       && accountingCsv.split('\r\n').length - 1 === 3,
     'daily_close_csv_not_complete_or_minimal')
     const accountingHandoff = model.commerceAccountingHandoff(accountingClosed, accountingCloseId)
-    assert(accountingHandoff?.schema === 'supermega.commerce.accounting-handoff.v2'
+    assert(accountingHandoff?.schema === 'supermega.commerce.accounting-handoff.v3'
       && accountingHandoff.status === 'review_required'
       && accountingHandoff.postingAuthority === 'none'
       && accountingHandoff.externalPostingPerformed === false
       && accountingHandoff.sourceCloseDigest === accountingExport.digest
       && accountingHandoff.accountMappingRevision === null
       && accountingHandoff.accountMappingEvidenceReference === null
+      && accountingHandoff.originalOrderTotalMmk === 200
+      && accountingHandoff.netOrderTotalMmk === 200
+      && accountingHandoff.correctionCount === 0
+      && accountingHandoff.creditCorrectionMmk === 0
+      && accountingHandoff.debitCorrectionMmk === 0
       && accountingHandoff.totalDebitMmk === 200
       && accountingHandoff.totalCreditMmk === 200
       && accountingHandoff.acceptedOrderCount === 1
@@ -8837,6 +8845,8 @@ async function verifyCommerceRuntime() {
       && accountingHandoff.entries[0].accountRole === 'payment_clearing'
       && accountingHandoff.entries[0].externalAccountCode === null
       && accountingHandoff.entries[0].mappingStatus === 'unmapped'
+      && accountingHandoff.entries[0].sourceOrderId === null
+      && accountingHandoff.entries[0].sourceDocumentId === null
       && accountingHandoff.entries[1].side === 'credit'
       && accountingHandoff.entries[1].accountRole === 'sales_revenue'
       && accountingHandoff.digest === model.commerceAccountingHandoff(accountingClosed, accountingCloseId).digest
@@ -8886,16 +8896,53 @@ async function verifyCommerceRuntime() {
       && correctedExport.orders[0].totalMmk === 150
       && correctedExport.orders[0].corrections[0].documentId === corrected.orders[0].corrections[0].documentId
       && model.commerceDailyCloseCsv(correctedExport).includes('"corrections_json"')
-      && model.commerceAccountingHandoff(correctedClosed, correctedCloseId) === null
       && model.commerceOrderCorrectionExpectation(correctedClosed, order.id) === null,
-    'corrected_close_overclaimed_accounting_or_lost_correction_evidence')
+    'corrected_close_lost_correction_evidence')
+    const correctedHandoff = model.commerceAccountingHandoff(correctedClosed, correctedCloseId)
+    const correctedDocumentId = corrected.orders[0].corrections[0].documentId
+    const correctedEntries = correctedHandoff?.entries.filter((entry) => entry.sourceDocumentId === correctedDocumentId) ?? []
+    assert(correctedHandoff?.schema === 'supermega.commerce.accounting-handoff.v3'
+      && correctedHandoff.originalOrderTotalMmk === 200
+      && correctedHandoff.netOrderTotalMmk === 150
+      && correctedHandoff.correctionCount === 1
+      && correctedHandoff.creditCorrectionMmk === 50
+      && correctedHandoff.debitCorrectionMmk === 0
+      && correctedHandoff.totalDebitMmk === 250
+      && correctedHandoff.totalCreditMmk === 250
+      && correctedEntries.length === 2
+      && correctedEntries[0].side === 'debit'
+      && correctedEntries[0].accountRole === 'sales_adjustment'
+      && correctedEntries[0].amountMmk === 50
+      && correctedEntries[1].side === 'credit'
+      && correctedEntries[1].accountRole === 'correction_payable'
+      && correctedEntries[1].amountMmk === 50
+      && correctedEntries.every((entry) => entry.sourceOrderId === order.id && entry.mappingStatus === 'unmapped')
+      && correctedHandoff.digest === model.commerceAccountingHandoff(correctedClosed, correctedCloseId).digest
+      && model.commerceAccountingHandoffCsv(correctedHandoff).includes('"source_document_id"')
+      && model.commerceAccountingHandoffCsv(correctedHandoff).includes(`"${correctedDocumentId}"`),
+    'corrected_accounting_handoff_not_balanced_traceable_or_deterministic')
     const mappingProof = proof('ACT-ACCOUNT-MAPPING', 600)
     const mappingInput = { mappings: [
       { accountRole: 'payment_clearing', externalAccountCode: '1100-CLEAR' },
       { accountRole: 'sales_revenue', externalAccountCode: '4100-SALES' },
       { accountRole: 'sales_revenue_unverified', externalAccountCode: '4190-REVIEW' },
       { accountRole: 'tax_payable', externalAccountCode: '2100-TAX' },
+      { accountRole: 'sales_adjustment', externalAccountCode: '4200-ADJUST' },
+      { accountRole: 'correction_receivable', externalAccountCode: '1200-CORR-AR' },
+      { accountRole: 'correction_payable', externalAccountCode: '2200-CORR-AP' },
     ] }
+    const legacyMappedCorrected = model.validateCommerceState({
+      ...correctedClosed,
+      accountMappingConfigurations: [{ revision: 1, mappings: mappingInput.mappings.slice(0, 4), proof: mappingProof }],
+    })
+    const legacyMappedCorrectedHandoff = model.commerceAccountingHandoff(legacyMappedCorrected, correctedCloseId)
+    assert(legacyMappedCorrectedHandoff?.entries
+      .filter((entry) => ['payment_clearing', 'sales_revenue', 'tax_payable'].includes(entry.accountRole))
+      .every((entry) => entry.mappingStatus === 'mapped')
+      && legacyMappedCorrectedHandoff.entries
+        .filter((entry) => ['sales_adjustment', 'correction_payable'].includes(entry.accountRole))
+        .every((entry) => entry.mappingStatus === 'unmapped'),
+    'legacy_account_mapping_not_readable_for_corrected_close')
     const mappedBeforeClose = model.configureCommerceAccountMapping(completed, mappingInput, mappingProof)
     const mappedCloseExpectation = model.commerceCloseExpectation(mappedBeforeClose, accountingCloseAt)
     const mappedClosed = model.saveCommerceClose(mappedBeforeClose, accountingCloseId, accountingCloseProof, mappedCloseExpectation)

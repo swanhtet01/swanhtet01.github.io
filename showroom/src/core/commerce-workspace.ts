@@ -19,7 +19,7 @@ export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as
 export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calculation.v1' as const
 export const COMMERCE_ORDER_CALCULATION_V2_SCHEMA = 'supermega.commerce.order-calculation.v2' as const
 export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v3' as const
-export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v2' as const
+export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v3' as const
 export const COMMERCE_CLOSE_SETTLEMENT_SCHEMA = 'supermega.commerce.close-settlement.v1' as const
 const COMMERCE_STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
 export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
@@ -100,7 +100,7 @@ export type CommerceTaxConfigurationInput = {
   effectiveFrom: string
 }
 
-export type CommerceAccountRole = 'payment_clearing' | 'sales_revenue' | 'sales_revenue_unverified' | 'tax_payable'
+export type CommerceAccountRole = 'payment_clearing' | 'sales_revenue' | 'sales_revenue_unverified' | 'tax_payable' | 'sales_adjustment' | 'correction_receivable' | 'correction_payable'
 
 export type CommerceAccountMappingEntry = {
   accountRole: CommerceAccountRole
@@ -495,6 +495,8 @@ export type CommerceAccountingHandoffEntry = {
   accountRole: CommerceAccountRole
   externalAccountCode: string | null
   paymentMethod: string | null
+  sourceOrderId: string | null
+  sourceDocumentId: string | null
   calculationStatus: 'accepted' | 'legacy_unverified' | 'mixed'
   amountMmk: number
   mappingStatus: 'mapped' | 'unmapped'
@@ -512,6 +514,11 @@ export type CommerceAccountingHandoff = {
   sourceCloseDigest: string
   accountMappingRevision: number | null
   accountMappingEvidenceReference: string | null
+  originalOrderTotalMmk: number
+  netOrderTotalMmk: number
+  correctionCount: number
+  creditCorrectionMmk: number
+  debitCorrectionMmk: number
   totalDebitMmk: number
   totalCreditMmk: number
   acceptedOrderCount: number
@@ -931,7 +938,8 @@ const purchaseOrderIdPattern = /^PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][
 const taxCodePattern = /^[A-Z0-9][A-Z0-9_-]{0,11}$/
 const taxJurisdictionCodePattern = /^[A-Z0-9][A-Z0-9_-]{1,15}$/
 const externalAccountCodePattern = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,39}$/
-export const commerceAccountRoles: CommerceAccountRole[] = ['payment_clearing', 'sales_revenue', 'sales_revenue_unverified', 'tax_payable']
+const legacyCommerceAccountRoles: CommerceAccountRole[] = ['payment_clearing', 'sales_revenue', 'sales_revenue_unverified', 'tax_payable']
+export const commerceAccountRoles: CommerceAccountRole[] = [...legacyCommerceAccountRoles, 'sales_adjustment', 'correction_receivable', 'correction_payable']
 const isoTimestampPattern = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
 const myanmarUtcOffsetMs = (6 * 60 + 30) * 60 * 1000
 const deterministicSeedNow = Date.parse('2026-07-23T08:00:00.000Z')
@@ -1701,13 +1709,18 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (candidate.revision !== accountMappingConfigurations.length - index) {
       throw new Error(`accountMappingConfigurations[${index}].revision breaks the newest-first sequence.`)
     }
-    if (!Array.isArray(candidate.mappings) || candidate.mappings.length !== commerceAccountRoles.length) {
+    if (!Array.isArray(candidate.mappings)
+      || (candidate.mappings.length !== legacyCommerceAccountRoles.length
+        && candidate.mappings.length !== commerceAccountRoles.length)) {
       throw new Error(`accountMappingConfigurations[${index}].mappings must cover every account role exactly once.`)
     }
+    const expectedAccountRoles = candidate.mappings.length === legacyCommerceAccountRoles.length
+      ? legacyCommerceAccountRoles
+      : commerceAccountRoles
     for (const [mappingIndex, mapping] of candidate.mappings.entries()) {
       const field = `accountMappingConfigurations[${index}].mappings[${mappingIndex}]`
       if (!isRecord(mapping) || !hasExactKeys(mapping, ['accountRole', 'externalAccountCode'])
-        || mapping.accountRole !== commerceAccountRoles[mappingIndex]) {
+        || mapping.accountRole !== expectedAccountRoles[mappingIndex]) {
         throw new Error(`${field} must use the canonical account role order.`)
       }
       const code = canonicalText(mapping.externalAccountCode, `${field}.externalAccountCode`, 40)
@@ -5811,6 +5824,11 @@ function commerceAccountingHandoffProjection(artifact: Omit<CommerceAccountingHa
     artifact.sourceCloseDigest,
     artifact.accountMappingRevision,
     artifact.accountMappingEvidenceReference,
+    artifact.originalOrderTotalMmk,
+    artifact.netOrderTotalMmk,
+    artifact.correctionCount,
+    artifact.creditCorrectionMmk,
+    artifact.debitCorrectionMmk,
     artifact.totalDebitMmk,
     artifact.totalCreditMmk,
     artifact.acceptedOrderCount,
@@ -5824,6 +5842,8 @@ function commerceAccountingHandoffProjection(artifact: Omit<CommerceAccountingHa
       entry.accountRole,
       entry.externalAccountCode,
       entry.paymentMethod,
+      entry.sourceOrderId,
+      entry.sourceDocumentId,
       entry.calculationStatus,
       entry.amountMmk,
       entry.mappingStatus,
@@ -5834,7 +5854,6 @@ function commerceAccountingHandoffProjection(artifact: Omit<CommerceAccountingHa
 export function commerceAccountingHandoff(state: CommerceState, closeId: string): CommerceAccountingHandoff | null {
   const closeExport = commerceDailyCloseExport(state, closeId)
   if (!closeExport) return null
-  if (closeExport.orders.some((order) => order.corrections.length)) return null
   const closeAt = timestampMicros(closeExport.closedAt) as bigint
   const accountMapping = commerceAccountMappingConfigurations(validateCommerceState(state)).find(
     (configuration) => (timestampMicros(configuration.proof.capturedAt) as bigint) <= closeAt,
@@ -5843,6 +5862,10 @@ export function commerceAccountingHandoff(state: CommerceState, closeId: string)
     accountMapping?.mappings.map((mapping) => [mapping.accountRole, mapping.externalAccountCode]) ?? [],
   )
   const mappedAccount = (accountRole: CommerceAccountRole) => externalAccountCodeByRole.get(accountRole) ?? null
+  const mappedEntry = (accountRole: CommerceAccountRole) => {
+    const externalAccountCode = mappedAccount(accountRole)
+    return { externalAccountCode, mappingStatus: externalAccountCode ? 'mapped' as const : 'unmapped' as const }
+  }
   const paymentGroups = new Map<string, { amountMmk: number; statuses: Set<CommerceDailyCloseExportOrder['calculationStatus']> }>()
   let acceptedSubtotalMmk = 0
   let acceptedTaxMmk = 0
@@ -5850,11 +5873,16 @@ export function commerceAccountingHandoff(state: CommerceState, closeId: string)
   let acceptedOrderCount = 0
   let legacyUnverifiedOrderCount = 0
   let taxConfiguredOrderCount = 0
+  let correctionCount = 0
+  let creditCorrectionMmk = 0
+  let debitCorrectionMmk = 0
+  let originalOrderTotalMmk = 0
   for (const order of closeExport.orders) {
     const payment = paymentGroups.get(order.paymentMethod) ?? { amountMmk: 0, statuses: new Set() }
-    payment.amountMmk += order.totalMmk
+    payment.amountMmk += order.originalTotalMmk
     payment.statuses.add(order.calculationStatus)
     paymentGroups.set(order.paymentMethod, payment)
+    originalOrderTotalMmk += order.originalTotalMmk
     if (order.calculationStatus === 'accepted' && order.subtotalMmk !== null && order.taxMmk !== null) {
       acceptedOrderCount += 1
       acceptedSubtotalMmk += order.subtotalMmk
@@ -5862,7 +5890,7 @@ export function commerceAccountingHandoff(state: CommerceState, closeId: string)
       if (order.taxMode !== 'not_configured') taxConfiguredOrderCount += 1
     } else {
       legacyUnverifiedOrderCount += 1
-      legacyUnverifiedMmk += order.totalMmk
+      legacyUnverifiedMmk += order.originalTotalMmk
     }
   }
   const entries: CommerceAccountingHandoffEntry[] = [...paymentGroups.entries()]
@@ -5871,44 +5899,92 @@ export function commerceAccountingHandoff(state: CommerceState, closeId: string)
       lineId: `DEBIT-${String(index + 1).padStart(3, '0')}`,
       side: 'debit',
       accountRole: 'payment_clearing',
-      externalAccountCode: mappedAccount('payment_clearing'),
+      ...mappedEntry('payment_clearing'),
       paymentMethod,
+      sourceOrderId: null,
+      sourceDocumentId: null,
       calculationStatus: group.statuses.size > 1 ? 'mixed' : [...group.statuses][0],
       amountMmk: group.amountMmk,
-      mappingStatus: accountMapping ? 'mapped' : 'unmapped',
     }))
   const credits: Array<Omit<CommerceAccountingHandoffEntry, 'lineId'>> = []
   if (acceptedSubtotalMmk) credits.push({
     side: 'credit',
     accountRole: 'sales_revenue',
-    externalAccountCode: mappedAccount('sales_revenue'),
+    ...mappedEntry('sales_revenue'),
     paymentMethod: null,
+    sourceOrderId: null,
+    sourceDocumentId: null,
     calculationStatus: 'accepted',
     amountMmk: acceptedSubtotalMmk,
-    mappingStatus: accountMapping ? 'mapped' : 'unmapped',
   })
   if (acceptedTaxMmk) credits.push({
     side: 'credit',
     accountRole: 'tax_payable',
-    externalAccountCode: mappedAccount('tax_payable'),
+    ...mappedEntry('tax_payable'),
     paymentMethod: null,
+    sourceOrderId: null,
+    sourceDocumentId: null,
     calculationStatus: 'accepted',
     amountMmk: acceptedTaxMmk,
-    mappingStatus: accountMapping ? 'mapped' : 'unmapped',
   })
   if (legacyUnverifiedMmk) credits.push({
     side: 'credit',
     accountRole: 'sales_revenue_unverified',
-    externalAccountCode: mappedAccount('sales_revenue_unverified'),
+    ...mappedEntry('sales_revenue_unverified'),
     paymentMethod: null,
+    sourceOrderId: null,
+    sourceDocumentId: null,
     calculationStatus: 'legacy_unverified',
     amountMmk: legacyUnverifiedMmk,
-    mappingStatus: accountMapping ? 'mapped' : 'unmapped',
   })
   entries.push(...credits.map((entry, index) => ({ ...entry, lineId: `CREDIT-${String(index + 1).padStart(3, '0')}` })))
+  const corrections = closeExport.orders.flatMap((order) => order.corrections.map((correction) => ({ order, correction })))
+    .sort((left, right) => left.correction.createdAt.localeCompare(right.correction.createdAt)
+      || left.order.orderId.localeCompare(right.order.orderId)
+      || left.correction.documentId.localeCompare(right.correction.documentId))
+  for (const [index, { order, correction }] of corrections.entries()) {
+    correctionCount += 1
+    const base = {
+      paymentMethod: null,
+      sourceOrderId: order.orderId,
+      sourceDocumentId: correction.documentId,
+      calculationStatus: order.calculationStatus,
+    } as const
+    const suffix = String(index + 1).padStart(3, '0')
+    if (correction.kind === 'credit') {
+      creditCorrectionMmk += correction.totalMmk
+      if (correction.subtotalMmk) entries.push({
+        lineId: `CORR-${suffix}-ADJ-D`, side: 'debit', accountRole: 'sales_adjustment',
+        ...mappedEntry('sales_adjustment'), ...base, amountMmk: correction.subtotalMmk,
+      })
+      if (correction.taxMmk) entries.push({
+        lineId: `CORR-${suffix}-TAX-D`, side: 'debit', accountRole: 'tax_payable',
+        ...mappedEntry('tax_payable'), ...base, amountMmk: correction.taxMmk,
+      })
+      entries.push({
+        lineId: `CORR-${suffix}-PAY-C`, side: 'credit', accountRole: 'correction_payable',
+        ...mappedEntry('correction_payable'), ...base, amountMmk: correction.totalMmk,
+      })
+    } else {
+      debitCorrectionMmk += correction.totalMmk
+      entries.push({
+        lineId: `CORR-${suffix}-REC-D`, side: 'debit', accountRole: 'correction_receivable',
+        ...mappedEntry('correction_receivable'), ...base, amountMmk: correction.totalMmk,
+      })
+      if (correction.subtotalMmk) entries.push({
+        lineId: `CORR-${suffix}-ADJ-C`, side: 'credit', accountRole: 'sales_adjustment',
+        ...mappedEntry('sales_adjustment'), ...base, amountMmk: correction.subtotalMmk,
+      })
+      if (correction.taxMmk) entries.push({
+        lineId: `CORR-${suffix}-TAX-C`, side: 'credit', accountRole: 'tax_payable',
+        ...mappedEntry('tax_payable'), ...base, amountMmk: correction.taxMmk,
+      })
+    }
+  }
   const totalDebitMmk = entries.filter((entry) => entry.side === 'debit').reduce((total, entry) => total + entry.amountMmk, 0)
   const totalCreditMmk = entries.filter((entry) => entry.side === 'credit').reduce((total, entry) => total + entry.amountMmk, 0)
-  if (totalDebitMmk !== closeExport.totalMmk || totalCreditMmk !== closeExport.totalMmk) return null
+  const expectedControlTotalMmk = originalOrderTotalMmk + creditCorrectionMmk + debitCorrectionMmk
+  if (totalDebitMmk !== expectedControlTotalMmk || totalCreditMmk !== expectedControlTotalMmk) return null
   const artifact: Omit<CommerceAccountingHandoff, 'digest'> = {
     schema: COMMERCE_ACCOUNTING_HANDOFF_SCHEMA,
     status: 'review_required',
@@ -5921,6 +5997,11 @@ export function commerceAccountingHandoff(state: CommerceState, closeId: string)
     sourceCloseDigest: closeExport.digest,
     accountMappingRevision: accountMapping?.revision ?? null,
     accountMappingEvidenceReference: accountMapping?.proof.evidenceReference ?? null,
+    originalOrderTotalMmk,
+    netOrderTotalMmk: closeExport.totalMmk,
+    correctionCount,
+    creditCorrectionMmk,
+    debitCorrectionMmk,
     totalDebitMmk,
     totalCreditMmk,
     acceptedOrderCount,
@@ -5949,11 +6030,18 @@ export function commerceAccountingHandoffCsv(artifact: CommerceAccountingHandoff
     'source_close_digest',
     'account_mapping_revision',
     'account_mapping_evidence_reference',
+    'original_order_total_mmk',
+    'net_order_total_mmk',
+    'correction_count',
+    'credit_correction_mmk',
+    'debit_correction_mmk',
     'line_id',
     'side',
     'account_role',
     'external_account_code',
     'payment_method',
+    'source_order_id',
+    'source_document_id',
     'calculation_status',
     'amount_mmk',
     'mapping_status',
@@ -5976,11 +6064,18 @@ export function commerceAccountingHandoffCsv(artifact: CommerceAccountingHandoff
     artifact.sourceCloseDigest,
     artifact.accountMappingRevision,
     artifact.accountMappingEvidenceReference,
+    artifact.originalOrderTotalMmk,
+    artifact.netOrderTotalMmk,
+    artifact.correctionCount,
+    artifact.creditCorrectionMmk,
+    artifact.debitCorrectionMmk,
     entry.lineId,
     entry.side,
     entry.accountRole,
     entry.externalAccountCode,
     entry.paymentMethod,
+    entry.sourceOrderId,
+    entry.sourceDocumentId,
     entry.calculationStatus,
     entry.amountMmk,
     entry.mappingStatus,

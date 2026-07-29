@@ -208,6 +208,9 @@ type AccountMappingDraft = {
   salesRevenue: string
   taxPayable: string
   legacyRevenue: string
+  salesAdjustment: string
+  correctionReceivable: string
+  correctionPayable: string
 }
 
 type CustomerCreditPolicyDraft = {
@@ -567,6 +570,9 @@ function accountMappingDraft(configuration: ReturnType<typeof commerceCurrentAcc
     salesRevenue: mappings.get('sales_revenue') ?? '',
     taxPayable: mappings.get('tax_payable') ?? '',
     legacyRevenue: mappings.get('sales_revenue_unverified') ?? '',
+    salesAdjustment: mappings.get('sales_adjustment') ?? '',
+    correctionReceivable: mappings.get('correction_receivable') ?? '',
+    correctionPayable: mappings.get('correction_payable') ?? '',
   }
 }
 
@@ -4039,9 +4045,12 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       salesRevenue: effectiveAccountMapping.salesRevenue.trim(),
       taxPayable: effectiveAccountMapping.taxPayable.trim(),
       legacyRevenue: effectiveAccountMapping.legacyRevenue.trim(),
+      salesAdjustment: effectiveAccountMapping.salesAdjustment.trim(),
+      correctionReceivable: effectiveAccountMapping.correctionReceivable.trim(),
+      correctionPayable: effectiveAccountMapping.correctionPayable.trim(),
     }
     if (Object.values(values).some((value) => !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,39}$/.test(value))) {
-      setNotice('Enter all four reviewed account codes using letters, numbers, dot, underscore, slash, or hyphen.')
+      setNotice('Enter all seven reviewed account codes using letters, numbers, dot, underscore, slash, or hyphen.')
       return
     }
     const expectedRevision = currentAccountMappingConfiguration?.revision ?? 0
@@ -4050,6 +4059,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       { accountRole: 'sales_revenue' as const, externalAccountCode: values.salesRevenue },
       { accountRole: 'sales_revenue_unverified' as const, externalAccountCode: values.legacyRevenue },
       { accountRole: 'tax_payable' as const, externalAccountCode: values.taxPayable },
+      { accountRole: 'sales_adjustment' as const, externalAccountCode: values.salesAdjustment },
+      { accountRole: 'correction_receivable' as const, externalAccountCode: values.correctionReceivable },
+      { accountRole: 'correction_payable' as const, externalAccountCode: values.correctionPayable },
     ]
     const previous = currentAccountMappingConfiguration
       ? `Account mapping revision ${currentAccountMappingConfiguration.revision}`
@@ -4059,7 +4071,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       subjectId: `SHOP-ACCOUNTS-R${expectedRevision + 1}`,
       summary: 'Set Shop accounting handoff mapping',
       before: previous,
-      after: `clearing ${values.paymentClearing} · revenue ${values.salesRevenue} · tax ${values.taxPayable} · legacy ${values.legacyRevenue} · future closes only`,
+      after: `clearing ${values.paymentClearing} · revenue ${values.salesRevenue} · tax ${values.taxPayable} · adjustment ${values.salesAdjustment} · correction receivable/payable ${values.correctionReceivable}/${values.correctionPayable} · future closes only`,
       reasonSuggestion: 'Reviewed the Shop account mapping for future closes.',
       apply: async (action) => {
         await mutateCommerce(
@@ -4495,7 +4507,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         </form>
       </details>
       <details className="compact-disclosure" data-account-mapping="versioned">
-        <summary><span>Account mapping</span><small>{currentAccountMappingConfiguration ? `Revision ${currentAccountMappingConfiguration.revision} · 4 roles mapped` : 'Required for mapped exports'}</small></summary>
+        <summary><span>Account mapping</span><small>{currentAccountMappingConfiguration ? `Revision ${currentAccountMappingConfiguration.revision} · ${currentAccountMappingConfiguration.mappings.length}/7 roles mapped` : 'Required for mapped exports'}</small></summary>
         <form className="core-form compact-form" onSubmit={reviewAccountMapping}>
           <div className="form-row">
             <label>Payment clearing<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, paymentClearing: event.target.value })} placeholder="Reviewed account code" required value={effectiveAccountMapping.paymentClearing} /></label>
@@ -4505,8 +4517,13 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
             <label>Tax payable<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, taxPayable: event.target.value })} placeholder="Reviewed account code" required value={effectiveAccountMapping.taxPayable} /></label>
             <label>Legacy / unverified revenue<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, legacyRevenue: event.target.value })} placeholder="Reviewed account code" required value={effectiveAccountMapping.legacyRevenue} /></label>
           </div>
+          <div className="form-row">
+            <label>Sales adjustment<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, salesAdjustment: event.target.value })} placeholder="Credit/debit adjustment account" required value={effectiveAccountMapping.salesAdjustment} /></label>
+            <label>Correction receivable<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, correctionReceivable: event.target.value })} placeholder="Customer amount due" required value={effectiveAccountMapping.correctionReceivable} /></label>
+          </div>
+          <label>Correction payable<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, correctionPayable: event.target.value })} placeholder="Customer refund or credit due" required value={effectiveAccountMapping.correctionPayable} /></label>
           <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review account mapping</button></div>
-          <p className="panel-copy">Applies only to closes saved after this mapping. Historical exports do not change. Every accounting CSV remains review-only and never posts externally.</p>
+          <p className="panel-copy">Applies only to closes saved after this mapping. Corrections retain their source order and document, and split reviewed receivable, payable, tax, and sales adjustment lines. Historical exports do not change. Every accounting CSV remains review-only and never posts externally.</p>
           {currentAccountMappingConfiguration ? <p className="form-notice">Revision {currentAccountMappingConfiguration.revision} · saved by {currentAccountMappingConfiguration.proof.actor} · evidence {currentAccountMappingConfiguration.proof.evidenceReference}</p> : null}
         </form>
       </details>
@@ -4546,7 +4563,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         {latestClose.settlement ? <p className="form-notice" data-close-settlement-status={latestClose.settlement.status}><strong>Settlement {latestClose.settlement.status === 'matched' ? 'matched' : 'variance under review'}</strong> · expected {formatMoney(latestClose.settlement.totalExpectedMmk)} · counted {formatMoney(latestClose.settlement.totalCountedMmk)} · variance {latestClose.settlement.totalVarianceMmk > 0 ? '+' : ''}{formatMoney(latestClose.settlement.totalVarianceMmk)}</p> : <p className="form-notice">Legacy close · settlement count not recorded</p>}
         {latestCloseDownload ? <a className="core-button" data-close-export="accounting-csv-v1" download={latestCloseDownload.filename} href={latestCloseDownload.href}>Download close CSV</a> : null}
         {latestAccountingDownload ? <div className="form-notice" data-accounting-handoff="review-required">
-          <strong>Accounting review</strong> · balanced {formatMoney(latestAccountingDownload.artifact.totalDebitMmk)} debit / credit · {latestAccountingDownload.artifact.accountMappingRevision ? `mapping revision ${latestAccountingDownload.artifact.accountMappingRevision}` : 'account mapping required'} · no external posting
+          <strong>Accounting review</strong> · balanced {formatMoney(latestAccountingDownload.artifact.totalDebitMmk)} debit / credit · net orders {formatMoney(latestAccountingDownload.artifact.netOrderTotalMmk)} · {latestAccountingDownload.artifact.correctionCount ? `${latestAccountingDownload.artifact.correctionCount} correction ${latestAccountingDownload.artifact.correctionCount === 1 ? 'document' : 'documents'} · ` : ''}{latestAccountingDownload.artifact.accountMappingRevision ? `mapping revision ${latestAccountingDownload.artifact.accountMappingRevision}` : 'account mapping required'} · no external posting
           <br /><a className="text-link" download={latestAccountingDownload.filename} href={latestAccountingDownload.href}>Download accounting CSV</a>
         </div> : null}
       </details> : null}

@@ -33,7 +33,7 @@ from supermega_runtime.trial_store import TrialValidationError
 
 COMMERCE_SCHEMA = "supermega.commerce.workspace.v2"
 COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v3"
-COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v2"
+COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v3"
 COMMERCE_CLOSE_SETTLEMENT_SCHEMA = "supermega.commerce.close-settlement.v1"
 COMMERCE_EVENTS = frozenset(
     {
@@ -170,11 +170,17 @@ _PURCHASE_ORDER_ID_PATTERN = re.compile(
 _TAX_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{0,11}")
 _TAX_JURISDICTION_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{1,15}")
 _EXTERNAL_ACCOUNT_CODE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,39}")
-_ACCOUNT_ROLES = (
+_LEGACY_ACCOUNT_ROLES = (
     "payment_clearing",
     "sales_revenue",
     "sales_revenue_unverified",
     "tax_payable",
+)
+_ACCOUNT_ROLES = (
+    *_LEGACY_ACCOUNT_ROLES,
+    "sales_adjustment",
+    "correction_receivable",
+    "correction_payable",
 )
 _ISO_TIMESTAMP_PATTERN = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}:[0-9]{2}"
@@ -1176,11 +1182,16 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 f"{field}.revision breaks the newest-first sequence."
             )
         mappings = _list(configuration["mappings"], f"{field}.mappings")
-        if len(mappings) != len(_ACCOUNT_ROLES):
+        if len(mappings) not in {len(_LEGACY_ACCOUNT_ROLES), len(_ACCOUNT_ROLES)}:
             raise TrialValidationError(
                 f"{field}.mappings must cover every account role exactly once."
             )
-        for mapping_index, account_role in enumerate(_ACCOUNT_ROLES):
+        expected_account_roles = (
+            _LEGACY_ACCOUNT_ROLES
+            if len(mappings) == len(_LEGACY_ACCOUNT_ROLES)
+            else _ACCOUNT_ROLES
+        )
+        for mapping_index, account_role in enumerate(expected_account_roles):
             mapping_field = f"{field}.mappings[{mapping_index}]"
             mapping = _object(mappings[mapping_index], mapping_field)
             _exact_fields(mapping, mapping_field, required=_ACCOUNT_MAPPING_FIELDS)
@@ -4190,13 +4201,11 @@ def commerce_accounting_handoff(
     state: Mapping[str, Any],
     close_id: str,
 ) -> dict[str, Any] | None:
-    """Create a balanced, review-only accounting handoff using close-effective mappings."""
+    """Create a balanced, review-only handoff with correction settlement traceability."""
 
     current = validate_commerce_state(state)
     close_export = commerce_daily_close_export(current, close_id)
     if close_export is None:
-        return None
-    if any(order["corrections"] for order in close_export["orders"]):
         return None
     closed_at = datetime.fromisoformat(close_export["closedAt"].replace("Z", "+00:00"))
     account_mapping = next(
@@ -4205,8 +4214,7 @@ def commerce_accounting_handoff(
             for configuration in _account_mapping_configurations(current)
             if datetime.fromisoformat(
                 configuration["proof"]["capturedAt"].replace("Z", "+00:00")
-            )
-            <= closed_at
+            ) <= closed_at
         ),
         None,
     )
@@ -4214,7 +4222,14 @@ def commerce_accounting_handoff(
         mapping["accountRole"]: mapping["externalAccountCode"]
         for mapping in account_mapping["mappings"]
     } if account_mapping is not None else {}
-    mapping_status = "mapped" if account_mapping is not None else "unmapped"
+
+    def mapping_for(account_role: str) -> dict[str, Any]:
+        code = account_code_by_role.get(account_role)
+        return {
+            "externalAccountCode": code,
+            "mappingStatus": "mapped" if code else "unmapped",
+        }
+
     payment_groups: dict[str, dict[str, Any]] = {}
     accepted_subtotal_mmk = 0
     accepted_tax_mmk = 0
@@ -4222,13 +4237,14 @@ def commerce_accounting_handoff(
     accepted_order_count = 0
     legacy_unverified_order_count = 0
     tax_configured_order_count = 0
+    original_order_total_mmk = 0
     for order in close_export["orders"]:
         payment = payment_groups.setdefault(
-            order["paymentMethod"],
-            {"amountMmk": 0, "statuses": set()},
+            order["paymentMethod"], {"amountMmk": 0, "statuses": set()}
         )
-        payment["amountMmk"] += order["totalMmk"]
+        payment["amountMmk"] += order["originalTotalMmk"]
         payment["statuses"].add(order["calculationStatus"])
+        original_order_total_mmk += order["originalTotalMmk"]
         if (
             order["calculationStatus"] == "accepted"
             and order["subtotalMmk"] is not None
@@ -4241,68 +4257,114 @@ def commerce_accounting_handoff(
                 tax_configured_order_count += 1
         else:
             legacy_unverified_order_count += 1
-            legacy_unverified_mmk += order["totalMmk"]
+            legacy_unverified_mmk += order["originalTotalMmk"]
 
     entries: list[dict[str, Any]] = []
     for index, payment_method in enumerate(sorted(payment_groups), start=1):
         group = payment_groups[payment_method]
         statuses = group["statuses"]
-        entries.append(
-            {
-                "lineId": f"DEBIT-{index:03d}",
-                "side": "debit",
-                "accountRole": "payment_clearing",
-                "externalAccountCode": account_code_by_role.get("payment_clearing"),
-                "paymentMethod": payment_method,
-                "calculationStatus": "mixed" if len(statuses) > 1 else next(iter(statuses)),
-                "amountMmk": group["amountMmk"],
-                "mappingStatus": mapping_status,
-            }
-        )
+        entries.append({
+            "lineId": f"DEBIT-{index:03d}",
+            "side": "debit",
+            "accountRole": "payment_clearing",
+            **mapping_for("payment_clearing"),
+            "paymentMethod": payment_method,
+            "sourceOrderId": None,
+            "sourceDocumentId": None,
+            "calculationStatus": "mixed" if len(statuses) > 1 else next(iter(statuses)),
+            "amountMmk": group["amountMmk"],
+        })
     credits: list[dict[str, Any]] = []
-    if accepted_subtotal_mmk:
-        credits.append(
-            {
+    for account_role, amount_mmk, status in (
+        ("sales_revenue", accepted_subtotal_mmk, "accepted"),
+        ("tax_payable", accepted_tax_mmk, "accepted"),
+        ("sales_revenue_unverified", legacy_unverified_mmk, "legacy_unverified"),
+    ):
+        if amount_mmk:
+            credits.append({
                 "side": "credit",
-                "accountRole": "sales_revenue",
-                "externalAccountCode": account_code_by_role.get("sales_revenue"),
+                "accountRole": account_role,
+                **mapping_for(account_role),
                 "paymentMethod": None,
-                "calculationStatus": "accepted",
-                "amountMmk": accepted_subtotal_mmk,
-                "mappingStatus": mapping_status,
-            }
-        )
-    if accepted_tax_mmk:
-        credits.append(
-            {
-                "side": "credit",
-                "accountRole": "tax_payable",
-                "externalAccountCode": account_code_by_role.get("tax_payable"),
-                "paymentMethod": None,
-                "calculationStatus": "accepted",
-                "amountMmk": accepted_tax_mmk,
-                "mappingStatus": mapping_status,
-            }
-        )
-    if legacy_unverified_mmk:
-        credits.append(
-            {
-                "side": "credit",
-                "accountRole": "sales_revenue_unverified",
-                "externalAccountCode": account_code_by_role.get("sales_revenue_unverified"),
-                "paymentMethod": None,
-                "calculationStatus": "legacy_unverified",
-                "amountMmk": legacy_unverified_mmk,
-                "mappingStatus": mapping_status,
-            }
-        )
+                "sourceOrderId": None,
+                "sourceDocumentId": None,
+                "calculationStatus": status,
+                "amountMmk": amount_mmk,
+            })
     entries.extend(
         {**entry, "lineId": f"CREDIT-{index:03d}"}
         for index, entry in enumerate(credits, start=1)
     )
-    total_debit_mmk = sum(entry["amountMmk"] for entry in entries if entry["side"] == "debit")
-    total_credit_mmk = sum(entry["amountMmk"] for entry in entries if entry["side"] == "credit")
-    if total_debit_mmk != close_export["totalMmk"] or total_credit_mmk != close_export["totalMmk"]:
+
+    corrections = sorted(
+        (
+            (order, correction)
+            for order in close_export["orders"]
+            for correction in order["corrections"]
+        ),
+        key=lambda pair: (
+            pair[1]["createdAt"], pair[0]["orderId"], pair[1]["documentId"]
+        ),
+    )
+    credit_correction_mmk = 0
+    debit_correction_mmk = 0
+    for index, (order, correction) in enumerate(corrections, start=1):
+        suffix = f"{index:03d}"
+        base = {
+            "paymentMethod": None,
+            "sourceOrderId": order["orderId"],
+            "sourceDocumentId": correction["documentId"],
+            "calculationStatus": order["calculationStatus"],
+        }
+        if correction["kind"] == "credit":
+            credit_correction_mmk += correction["totalMmk"]
+            if correction["subtotalMmk"]:
+                entries.append({
+                    "lineId": f"CORR-{suffix}-ADJ-D", "side": "debit",
+                    "accountRole": "sales_adjustment", **mapping_for("sales_adjustment"),
+                    **base, "amountMmk": correction["subtotalMmk"],
+                })
+            if correction["taxMmk"]:
+                entries.append({
+                    "lineId": f"CORR-{suffix}-TAX-D", "side": "debit",
+                    "accountRole": "tax_payable", **mapping_for("tax_payable"),
+                    **base, "amountMmk": correction["taxMmk"],
+                })
+            entries.append({
+                "lineId": f"CORR-{suffix}-PAY-C", "side": "credit",
+                "accountRole": "correction_payable", **mapping_for("correction_payable"),
+                **base, "amountMmk": correction["totalMmk"],
+            })
+        else:
+            debit_correction_mmk += correction["totalMmk"]
+            entries.append({
+                "lineId": f"CORR-{suffix}-REC-D", "side": "debit",
+                "accountRole": "correction_receivable", **mapping_for("correction_receivable"),
+                **base, "amountMmk": correction["totalMmk"],
+            })
+            if correction["subtotalMmk"]:
+                entries.append({
+                    "lineId": f"CORR-{suffix}-ADJ-C", "side": "credit",
+                    "accountRole": "sales_adjustment", **mapping_for("sales_adjustment"),
+                    **base, "amountMmk": correction["subtotalMmk"],
+                })
+            if correction["taxMmk"]:
+                entries.append({
+                    "lineId": f"CORR-{suffix}-TAX-C", "side": "credit",
+                    "accountRole": "tax_payable", **mapping_for("tax_payable"),
+                    **base, "amountMmk": correction["taxMmk"],
+                })
+
+    total_debit_mmk = sum(
+        entry["amountMmk"] for entry in entries if entry["side"] == "debit"
+    )
+    total_credit_mmk = sum(
+        entry["amountMmk"] for entry in entries if entry["side"] == "credit"
+    )
+    expected_control_total_mmk = (
+        original_order_total_mmk + credit_correction_mmk + debit_correction_mmk
+    )
+    if total_debit_mmk != expected_control_total_mmk or total_credit_mmk != expected_control_total_mmk:
         return None
     artifact: dict[str, Any] = {
         "schema": COMMERCE_ACCOUNTING_HANDOFF_SCHEMA,
@@ -4316,6 +4378,11 @@ def commerce_accounting_handoff(
         "sourceCloseDigest": close_export["digest"],
         "accountMappingRevision": account_mapping["revision"] if account_mapping else None,
         "accountMappingEvidenceReference": account_mapping["proof"]["evidenceReference"] if account_mapping else None,
+        "originalOrderTotalMmk": original_order_total_mmk,
+        "netOrderTotalMmk": close_export["totalMmk"],
+        "correctionCount": len(corrections),
+        "creditCorrectionMmk": credit_correction_mmk,
+        "debitCorrectionMmk": debit_correction_mmk,
         "totalDebitMmk": total_debit_mmk,
         "totalCreditMmk": total_credit_mmk,
         "acceptedOrderCount": accepted_order_count,
@@ -4325,41 +4392,24 @@ def commerce_accounting_handoff(
         "stockExceptionSkus": list(close_export["stockExceptionSkus"]),
         "entries": entries,
     }
-    artifact["digest"] = _projection_digest(
-        [
-            artifact["schema"],
-            artifact["status"],
-            artifact["postingAuthority"],
-            artifact["externalPostingPerformed"],
-            artifact["currency"],
-            artifact["closeId"],
-            artifact["businessDate"],
-            artifact["closedAt"],
-            artifact["sourceCloseDigest"],
-            artifact["accountMappingRevision"],
-            artifact["accountMappingEvidenceReference"],
-            artifact["totalDebitMmk"],
-            artifact["totalCreditMmk"],
-            artifact["acceptedOrderCount"],
-            artifact["legacyUnverifiedOrderCount"],
-            artifact["taxConfiguredOrderCount"],
-            artifact["paymentExceptionOrderIds"],
-            artifact["stockExceptionSkus"],
-            [
-                [
-                    entry["lineId"],
-                    entry["side"],
-                    entry["accountRole"],
-                    entry["externalAccountCode"],
-                    entry["paymentMethod"],
-                    entry["calculationStatus"],
-                    entry["amountMmk"],
-                    entry["mappingStatus"],
-                ]
-                for entry in entries
-            ],
-        ]
-    )
+    artifact["digest"] = _projection_digest([
+        artifact["schema"], artifact["status"], artifact["postingAuthority"],
+        artifact["externalPostingPerformed"], artifact["currency"], artifact["closeId"],
+        artifact["businessDate"], artifact["closedAt"], artifact["sourceCloseDigest"],
+        artifact["accountMappingRevision"], artifact["accountMappingEvidenceReference"],
+        artifact["originalOrderTotalMmk"], artifact["netOrderTotalMmk"],
+        artifact["correctionCount"], artifact["creditCorrectionMmk"],
+        artifact["debitCorrectionMmk"], artifact["totalDebitMmk"],
+        artifact["totalCreditMmk"], artifact["acceptedOrderCount"],
+        artifact["legacyUnverifiedOrderCount"], artifact["taxConfiguredOrderCount"],
+        artifact["paymentExceptionOrderIds"], artifact["stockExceptionSkus"],
+        [[
+            entry["lineId"], entry["side"], entry["accountRole"],
+            entry["externalAccountCode"], entry["paymentMethod"],
+            entry["sourceOrderId"], entry["sourceDocumentId"],
+            entry["calculationStatus"], entry["amountMmk"], entry["mappingStatus"],
+        ] for entry in entries],
+    ])
     return artifact
 
 
@@ -4369,9 +4419,12 @@ def commerce_accounting_handoff_csv(artifact: Mapping[str, Any]) -> str:
     header = [
         "schema", "status", "posting_authority", "external_posting_performed",
         "close_id", "business_date", "closed_at", "currency", "source_close_digest",
-        "account_mapping_revision", "account_mapping_evidence_reference", "line_id",
+        "account_mapping_revision", "account_mapping_evidence_reference",
+        "original_order_total_mmk", "net_order_total_mmk", "correction_count",
+        "credit_correction_mmk", "debit_correction_mmk", "line_id",
         "side", "account_role", "external_account_code", "payment_method",
-        "calculation_status", "amount_mmk", "mapping_status", "accepted_order_count",
+        "source_order_id", "source_document_id", "calculation_status", "amount_mmk",
+        "mapping_status", "accepted_order_count",
         "legacy_unverified_order_count", "tax_configured_order_count",
         "payment_exception_order_ids", "stock_exception_skus", "artifact_digest",
     ]
@@ -4381,9 +4434,13 @@ def commerce_accounting_handoff_csv(artifact: Mapping[str, Any]) -> str:
             str(artifact["externalPostingPerformed"]).lower(), artifact["closeId"],
             artifact["businessDate"], artifact["closedAt"], artifact["currency"],
             artifact["sourceCloseDigest"], artifact["accountMappingRevision"],
-            artifact["accountMappingEvidenceReference"], entry["lineId"], entry["side"],
+            artifact["accountMappingEvidenceReference"], artifact["originalOrderTotalMmk"],
+            artifact["netOrderTotalMmk"], artifact["correctionCount"],
+            artifact["creditCorrectionMmk"], artifact["debitCorrectionMmk"],
+            entry["lineId"], entry["side"],
             entry["accountRole"], entry["externalAccountCode"], entry["paymentMethod"],
-            entry["calculationStatus"], entry["amountMmk"], entry["mappingStatus"],
+            entry["sourceOrderId"], entry["sourceDocumentId"], entry["calculationStatus"],
+            entry["amountMmk"], entry["mappingStatus"],
             artifact["acceptedOrderCount"], artifact["legacyUnverifiedOrderCount"],
             artifact["taxConfiguredOrderCount"], artifact["paymentExceptionOrderIds"],
             artifact["stockExceptionSkus"], artifact["digest"],
