@@ -5,6 +5,7 @@ import { planCompanyCycle } from './agent-company.mjs'
 import { selectCeoOutcome } from './supermega-hq-authority.mjs'
 
 export const ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'
+export const ALLY_CEO_CYCLE_EXPERIMENT_CONTRACT = 'supermega.ally-ceo-cycle-experiment.v1'
 
 const MAX_SOURCE_BYTES = 256 * 1024
 const REQUIRED_PRODUCTS = ['shop', 'plant', 'website', 'ecommerce']
@@ -118,6 +119,44 @@ function assertSafePlan(plan, expectedAgents) {
   }
 }
 
+function buildCycleExperiment(selection, agentId) {
+  const definition = {
+    contract: ALLY_CEO_CYCLE_EXPERIMENT_CONTRACT,
+    outcomeId: selection.selected.id,
+    successMeasureDigest: selection.selected.successMeasureDigest,
+    hypothesis: 'One specialist preserves owner-accepted outcome quality with fewer work units than the latest accepted two-specialist artifact.',
+    treatment: {
+      specialists: 1,
+      agentId,
+      maxRuns: 1,
+    },
+    baseline: 'latest accepted two-specialist artifact for the same outcome and success measure',
+    primaryMetric: 'accepted_outcomes_per_1000_work_units',
+    requiredQualityGates: [
+      'sealed_report_integrity',
+      'source_receipt_integrity',
+      'success_measure_addressed',
+      'owner_evaluation_recorded',
+      'no_consequential_action',
+    ],
+    decisionRule: {
+      promote: 'accepted, all quality gates pass, and treatment work units do not exceed baseline',
+      revise: 'owner requests revision while integrity and safety gates pass',
+      reject: 'any integrity or safety gate fails',
+      inconclusive: 'no comparable accepted baseline exists',
+    },
+    controls: {
+      planningOnly: true,
+      automaticExecution: false,
+      automaticPromotion: false,
+      modelCalls: 0,
+      connectorRequests: 0,
+      externalWrites: false,
+    },
+  }
+  return { ...definition, experimentDigest: `sha256:${digest(stableStringify(definition))}` }
+}
+
 export async function buildAllyCeoCompanyPlan(input = {}) {
   const generatedAt = canonicalInstant(input.now ?? new Date())
   const hqNow = boundedSource(input.hqNow, 'hq_now')
@@ -215,6 +254,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
     || preflight.controls?.externalWrites !== false) {
     fail('ally_ceo_company_plan_preflight_mismatch')
   }
+  const experiment = buildCycleExperiment(selection, agents[0])
 
   return {
     ok: true,
@@ -228,6 +268,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
     manifest,
     preflight,
     plan,
+    experiment,
     controls: {
       planningModelCalls: 0,
       planningConnectorRequests: 0,
@@ -240,4 +281,8 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
   }
 }
 
-export default { ALLY_CEO_COMPANY_PLAN_CONTRACT, buildAllyCeoCompanyPlan }
+export default {
+  ALLY_CEO_COMPANY_PLAN_CONTRACT,
+  ALLY_CEO_CYCLE_EXPERIMENT_CONTRACT,
+  buildAllyCeoCompanyPlan,
+}
