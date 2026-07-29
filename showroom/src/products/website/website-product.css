@@ -2386,6 +2386,7 @@
   overflow-wrap: anywhere;
 }
 
+.website-autopilot,
 .website-launch-cockpit,
 .website-lead-capture-cockpit,
 .website-rollout-packet {
@@ -2399,6 +2400,12 @@
   background: rgba(11, 116, 94, .08);
 }
 
+.website-autopilot {
+  grid-template-columns: minmax(0, .88fr) minmax(360px, 1.02fr) auto;
+  border-color: rgba(96, 165, 250, .26);
+  background: linear-gradient(135deg, rgba(14, 55, 87, .2), rgba(11, 116, 94, .1));
+}
+
 .website-lead-capture-cockpit {
   border-color: rgba(96, 165, 250, .24);
   background: rgba(14, 55, 87, .18);
@@ -2409,6 +2416,7 @@
   background: rgba(73, 47, 8, .16);
 }
 
+.website-autopilot > div:first-child,
 .website-launch-cockpit > div:first-child,
 .website-lead-capture-cockpit > div:first-child,
 .website-rollout-packet > div:first-child {
@@ -2417,6 +2425,7 @@
   gap: 4px;
 }
 
+.website-autopilot h2,
 .website-launch-cockpit h2,
 .website-lead-capture-cockpit h2,
 .website-rollout-packet h2 {
@@ -2426,6 +2435,7 @@
   line-height: 1.18;
 }
 
+.website-autopilot p,
 .website-launch-cockpit p,
 .website-lead-capture-cockpit p,
 .website-rollout-packet p {
@@ -2435,6 +2445,7 @@
   line-height: 1.45;
 }
 
+.website-autopilot-rows,
 .website-launch-cockpit-rows,
 .website-lead-capture-cockpit-rows,
 .website-rollout-packet-rows {
@@ -2451,6 +2462,7 @@
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
+.website-autopilot-rows span,
 .website-launch-cockpit-rows span,
 .website-lead-capture-cockpit-rows span,
 .website-rollout-packet-rows span {
@@ -2463,12 +2475,14 @@
   padding: 8px;
 }
 
+.website-autopilot-rows span:last-child,
 .website-launch-cockpit-rows span:last-child,
 .website-lead-capture-cockpit-rows span:last-child,
 .website-rollout-packet-rows span:last-child {
   border-right: 0;
 }
 
+.website-autopilot-rows small,
 .website-launch-cockpit-rows small,
 .website-lead-capture-cockpit-rows small,
 .website-rollout-packet-rows small {
@@ -2483,6 +2497,7 @@
   white-space: nowrap;
 }
 
+.website-autopilot-rows strong,
 .website-launch-cockpit-rows strong,
 .website-lead-capture-cockpit-rows strong,
 .website-rollout-packet-rows strong {
@@ -2949,18 +2964,21 @@
     grid-template-columns: 1fr;
   }
 
+  .website-autopilot,
   .website-launch-cockpit,
   .website-lead-capture-cockpit,
   .website-rollout-packet {
     grid-template-columns: 1fr;
   }
 
+  .website-autopilot-rows,
   .website-launch-cockpit-rows,
   .website-lead-capture-cockpit-rows,
   .website-rollout-packet-rows {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .website-autopilot-rows span,
   .website-launch-cockpit-rows span,
   .website-lead-capture-cockpit-rows span,
   .website-rollout-packet-rows span {
@@ -2968,12 +2986,14 @@
     border-bottom: 1px solid rgba(255, 255, 255, .08);
   }
 
+  .website-autopilot-rows span:nth-child(2n),
   .website-launch-cockpit-rows span:nth-child(2n),
   .website-lead-capture-cockpit-rows span:nth-child(2n),
   .website-rollout-packet-rows span:nth-child(2n) {
     border-right: 0;
   }
 
+  .website-autopilot-rows span:last-child,
   .website-launch-cockpit-rows span:last-child,
   .website-lead-capture-cockpit-rows span:last-child,
   .website-rollout-packet-rows span:last-child {
@@ -2988,6 +3008,10 @@
   }
 
   .website-agent-queue .website-button {
+    width: 100%;
+  }
+
+  .website-autopilot .website-button {
     width: 100%;
   }
 

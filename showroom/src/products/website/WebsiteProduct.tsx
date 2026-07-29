@@ -803,6 +803,24 @@ export function WebsiteProduct() {
     ['Reason', websiteAgentReason],
     ['Owner gate', websiteOwnerGate],
   ]
+  const websiteAutopilotTrack = storageIssue || canRepairLocalStorage
+    ? 'Recovery'
+    : starterSetupActive || starterAvailable
+      ? 'Brief'
+      : hasUnsavedChanges || failingContentChecks.length
+        ? 'Content'
+        : !approvalIsCurrent || !publishIsCurrent
+          ? 'Release'
+          : storageMode === 'managed'
+            ? 'Rollout'
+            : 'Handoff'
+  const websiteAutopilotRows = [
+    ['Track', websiteAutopilotTrack],
+    ['Stage', websiteAgentJob],
+    ['Next', websiteAgentActionLabel],
+    ['Learning', 'Records behavior only'],
+    ['Boundary', 'No auto deploy'],
+  ]
   const websiteLaunchPriority = storageIssue || canRepairLocalStorage
     ? 'Recover workspace'
     : hasUnsavedChanges
@@ -875,6 +893,32 @@ export function WebsiteProduct() {
       detail: websiteAgentJob,
     })
   }, [location.pathname, location.search, websiteAgentJob])
+
+  function runWebsiteAutopilot() {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'website',
+      route: location.pathname + location.search,
+      detail: `Website autopilot: ${websiteAgentJob}`,
+    })
+    if (storageIssue || canRepairLocalStorage) {
+      requestRecoveryFocus()
+      return
+    }
+    if (starterAvailable || starterSetupActive) {
+      openStarterSetup()
+      return
+    }
+    if (hasUnsavedChanges || failingContentChecks.length) {
+      openContentSurface('work')
+      return
+    }
+    if (!approvalIsCurrent || !publishIsCurrent || storageMode === 'managed') {
+      openWorkspaceView('publish')
+      return
+    }
+    downloadTrialSite()
+  }
 
   function runWebsiteAgentJob() {
     recordBehaviorSignal(window.localStorage, {
@@ -1092,6 +1136,18 @@ export function WebsiteProduct() {
               <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
             ) : null}
           </header>
+
+          <section aria-label="Website Autopilot" className="website-autopilot">
+            <div>
+              <span className="website-kicker">Website Autopilot</span>
+              <h2>{websiteAgentJob}</h2>
+              <p>One button chooses the next safe owner action from recovery, business brief, content proof, lead capture, owner approval, release package, and rollout-readiness state. AI may prepare pages and packets; it does not publish, change DNS, send forms, install analytics, write CRM, write Shop, or deploy from here.</p>
+            </div>
+            <div className="website-autopilot-rows">
+              {websiteAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            </div>
+            <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">Run next step</button>
+          </section>
 
           <section aria-label="Recommended Website agent job" className="website-agent-queue">
             <div>
