@@ -36,6 +36,12 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
     ['Website', 'AI site builder', 'Converts business facts, proof, offers, and owner approval into a publish-ready website package without changing DNS.'],
     ['Ecommerce', 'AI order desk', 'Builds a catalog, reviews incoming orders, matches Shop stock, and prepares delivery/payment handoff for approval.'],
   ] as const
+  const businessTrackRows = [
+    ['Retail or distributor', 'Shop + Ecommerce', 'Free imports products and reviews orders locally. Premium activates managed stock, approvals, branches, and audit.'],
+    ['Factory or workshop', 'Plant + Shop', 'Free prepares jobs, quality, maintenance, WCM, and material evidence. Premium adds MES, MRP, ISO, roles, and cost handoff.'],
+    ['Service or local brand', 'Website + Ecommerce', 'Free creates a reviewed website/store package. Premium connects lead capture, order intake, data history, and agent follow-up.'],
+    ['Multi-branch operator', 'All products', 'Free proves one branch. Premium scales shared roles, import checks, approvals, evidence export, and AI context across branches.'],
+  ] as const
   const learningCockpitRows = [
     ['Behavior memory', behaviorTrail.length ? `${behaviorTrail.length} local signals` : 'No signals yet', behaviorTrail.length ? 'Owner navigation and agent queue choices are ready for evidence export.' : 'Open products and choose agent jobs to create local memory.'],
     ['Queue choices', behaviorChoices ? `${behaviorChoices} chosen` : 'No choices yet', behaviorChoices ? 'Premium can rank repeated owner preferences after managed import.' : 'The system waits for explicit owner choices before ranking work.'],
@@ -81,6 +87,25 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
         </div>
         <div className="product-home-readiness-grid">
           {enterpriseAutopilotRows.map(([label, value, detail]) => (
+            <span key={label}>
+              <small>{label}</small>
+              <strong>{value}</strong>
+              <em>{detail}</em>
+            </span>
+          ))}
+        </div>
+      </section>
+      <section className="product-home-readiness product-home-business-tracks" aria-label="Business starter tracks">
+        <div className="product-home-readiness-head">
+          <div>
+            <span className="core-eyebrow">Business starter tracks</span>
+            <h2>Pick the business type. SuperMega picks the modules.</h2>
+            <p>Clients should not learn every enterprise feature on day one. Each track starts with the smallest useful workflow, then premium unlocks managed data, approvals, branch scale, and AI context after evidence review.</p>
+          </div>
+          <Link className="core-button" to="/settings/">Choose track</Link>
+        </div>
+        <div className="product-home-readiness-grid">
+          {businessTrackRows.map(([label, value, detail]) => (
             <span key={label}>
               <small>{label}</small>
               <strong>{value}</strong>
