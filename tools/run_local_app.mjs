@@ -183,7 +183,7 @@ async function postJson(url, body, state, accept, timeoutMs = 10_000) {
       const type = response.headers.get('content-type') ?? ''
       const payload = type.includes('application/json') ? await response.json() : null
       if (accept(response, payload)) return { body: payload, response }
-      lastIssue = `${url} returned HTTP ${response.status}.`
+      lastIssue = `${url} returned HTTP ${response.status}${payload ? `: ${JSON.stringify(payload).slice(0, 500)}` : ''}.`
     } catch (error) {
       lastIssue = error instanceof Error ? error.message : String(error)
     }
@@ -351,6 +351,60 @@ async function run() {
       (response, payload) => response.status === 422
         && String(payload?.detail ?? '').includes('failed validation'),
     )
+    const ecommerceOrderQueueApprovalPacket = {
+      contract: 'supermega.ecommerce.order_queue_owner_approval.v1',
+      version: 1,
+      createdAt: '2026-07-29T00:00:00.000Z',
+      product: 'ecommerce',
+      workspaceId: 'verify-workspace',
+      storeName: ecommerceOrderQueuePacket.storeName,
+      queuePacketSchema: ecommerceOrderQueuePacket.schema,
+      validationContract: 'supermega.ecommerce.order_queue_readiness_validation.v1',
+      validationStatus: 'ready_for_owner_review',
+      targetSurface: 'commerce',
+      requiredCapability: 'commerce.write',
+      rowCount: 1,
+      readyRows: 1,
+      blockedRows: 0,
+      selectedSkus: ['SKU-001'],
+      sourceEvidence: {
+        sourceReviewGeneratedAt: ecommerceOrderQueuePacket.sourceReview.generatedAt,
+        sourceCatalog: ecommerceOrderQueuePacket.sourceReview.catalogSource,
+        sourceMessagesRetained: true,
+      },
+      ownerDecision: 'Approve one managed Shop queue import after reviewing source messages, catalog match, and zero-write receipt.',
+      ownerApprovalRequired: true,
+      forbiddenUntilApproved: ecommerceOrderQueuePacket.forbiddenUntilReady,
+      externalWritesPerformed: false,
+      nextAction: 'Owner reviews this packet, then support records a named approval before one idempotent Shop queue import.',
+    }
+    const orderQueueImportPlan = await postJson(
+      `${uiUrl}/api/trial/v1/ecommerce/order-queue/import-plan`,
+      {
+        workspace_id: 'verify-workspace',
+        packet: ecommerceOrderQueuePacket,
+        approval_packet: ecommerceOrderQueueApprovalPacket,
+      },
+      uiState,
+      (response, payload) => response.ok
+        && payload?.plan?.contract === 'supermega.ecommerce.shop_queue_import_plan.v1'
+        && payload.plan.status === 'ready_for_managed_apply'
+        && payload.plan.target_adapter === 'shop_order_queue'
+        && String(payload.plan.idempotency_key || '').startsWith('ecommerce-shop-queue:')
+        && payload.plan.external_writes_performed === false
+        && payload.external_writes_performed === false,
+    )
+    const tamperedOrderQueueImportPlan = await postJson(
+      `${uiUrl}/api/trial/v1/ecommerce/order-queue/import-plan`,
+      {
+        workspace_id: 'verify-workspace',
+        packet: ecommerceOrderQueuePacket,
+        approval_packet: { ...ecommerceOrderQueueApprovalPacket, selectedSkus: ['SKU-OTHER'] },
+      },
+      uiState,
+      (response, payload) => response.status === 422
+        && String(payload?.detail ?? '').includes('does not match'),
+    )
 
     const body = proxiedHealth.body
     const report = {
@@ -387,6 +441,13 @@ async function run() {
         status: orderQueueValidation.body.validation.status,
         writesPerformed: orderQueueValidation.body.validation.external_writes_performed,
         tamperRejected: tamperedOrderQueueValidation.response.status === 422,
+      },
+      ecommerceOrderQueueImportPlan: {
+        contract: orderQueueImportPlan.body.plan.contract,
+        status: orderQueueImportPlan.body.plan.status,
+        targetAdapter: orderQueueImportPlan.body.plan.target_adapter,
+        writesPerformed: orderQueueImportPlan.body.plan.external_writes_performed,
+        tamperRejected: tamperedOrderQueueImportPlan.response.status === 422,
       },
     }
 

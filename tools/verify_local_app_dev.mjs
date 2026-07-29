@@ -29,6 +29,13 @@ requireContract('runner proves ecommerce order queue validation through the app 
   && runnerSource.includes('payload.validation.external_writes_performed === false')
   && runnerSource.includes("forbiddenUntilReady: ['order_import']")
   && runnerSource.includes('response.status === 422'))
+requireContract('runner proves ecommerce Shop queue import plan through the app proxy',
+  runnerSource.includes('/api/trial/v1/ecommerce/order-queue/import-plan')
+  && runnerSource.includes("contract === 'supermega.ecommerce.shop_queue_import_plan.v1'")
+  && runnerSource.includes("payload.plan.status === 'ready_for_managed_apply'")
+  && runnerSource.includes("payload.plan.target_adapter === 'shop_order_queue'")
+  && runnerSource.includes('payload.plan.external_writes_performed === false')
+  && runnerSource.includes('tamperedOrderQueueImportPlan.response.status === 422'))
 requireContract('runner is loopback-only and connects Vite explicitly',
   runnerSource.includes("const loopbackHost = '127.0.0.1'")
   && runnerSource.includes('SUPERMEGA_LOCAL_API: apiUrl')
@@ -169,6 +176,12 @@ requireContract('full stack proves zero-write ecommerce queue validation',
   && report.ecommerceOrderQueueValidation?.status === 'ready_for_owner_review'
   && report.ecommerceOrderQueueValidation?.writesPerformed === false
   && report.ecommerceOrderQueueValidation?.tamperRejected === true)
+requireContract('full stack proves zero-write ecommerce Shop queue import plan',
+  report.ecommerceOrderQueueImportPlan?.contract === 'supermega.ecommerce.shop_queue_import_plan.v1'
+  && report.ecommerceOrderQueueImportPlan?.status === 'ready_for_managed_apply'
+  && report.ecommerceOrderQueueImportPlan?.targetAdapter === 'shop_order_queue'
+  && report.ecommerceOrderQueueImportPlan?.writesPerformed === false
+  && report.ecommerceOrderQueueImportPlan?.tamperRejected === true)
 
 if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_local_full_stack', failures, report }, null, 2))

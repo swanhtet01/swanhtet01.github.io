@@ -238,6 +238,29 @@ export type ManagedEcommerceOrderQueueValidation = {
   next_step: string
 }
 
+export type ManagedEcommerceOrderQueueImportPlan = {
+  contract: 'supermega.ecommerce.shop_queue_import_plan.v1'
+  status: 'ready_for_managed_apply' | 'blocked'
+  workspace_id: string
+  product: 'ecommerce'
+  target_surface: 'commerce'
+  target_adapter: 'shop_order_queue'
+  required_capability: 'commerce.write'
+  idempotency_key: string
+  plan_digest: string
+  store_name: string
+  row_count: number
+  ready_rows: number
+  blocked_rows: number
+  selected_skus: string[]
+  required_controls: string[]
+  required_approval_contract: 'supermega.ecommerce.order_queue_owner_approval.v1'
+  external_writes_performed: false
+  forbidden_until_applied: string[]
+  apply_boundary: string
+  next_step: string
+}
+
 type ManagedApprovalRequest = {
   command_id: string
   title: string
@@ -519,6 +542,51 @@ export function assertManagedEcommerceOrderQueueValidation(
     })
   }
   return validation as unknown as ManagedEcommerceOrderQueueValidation
+}
+
+export function assertManagedEcommerceOrderQueueImportPlan(
+  response: unknown,
+  packet: EcommerceOrderQueueReadinessPacket,
+  approvalPacket: Record<string, unknown>,
+  expectedIdentity: ManagedIdentity,
+): ManagedEcommerceOrderQueueImportPlan {
+  if (!isRecord(response) || !isRecord(response.plan)) {
+    throw new ManagedTrialError('The managed workspace returned an invalid Ecommerce import plan.', {
+      code: 'managed_ecommerce_order_queue_import_plan_invalid',
+    })
+  }
+  const plan = response.plan as Record<string, unknown>
+  const validation = buildManagedEcommerceOrderQueueValidation(packet, expectedIdentity)
+  const selectedSkus = Array.isArray(approvalPacket.selectedSkus) ? approvalPacket.selectedSkus : []
+  const ready = validation.status === 'ready_for_owner_review' && validation.blocked_rows === 0
+  if (plan.contract !== 'supermega.ecommerce.shop_queue_import_plan.v1'
+    || plan.status !== (ready ? 'ready_for_managed_apply' : 'blocked')
+    || plan.workspace_id !== expectedIdentity.workspaceId
+    || plan.product !== 'ecommerce'
+    || plan.target_surface !== 'commerce'
+    || plan.target_adapter !== 'shop_order_queue'
+    || plan.required_capability !== 'commerce.write'
+    || typeof plan.idempotency_key !== 'string'
+    || !plan.idempotency_key.startsWith('ecommerce-shop-queue:')
+    || typeof plan.plan_digest !== 'string'
+    || !plan.plan_digest.startsWith('sha256:')
+    || plan.store_name !== packet.storeName
+    || plan.row_count !== validation.row_count
+    || plan.ready_rows !== validation.ready_rows
+    || plan.blocked_rows !== validation.blocked_rows
+    || JSON.stringify(plan.selected_skus) !== JSON.stringify(selectedSkus)
+    || JSON.stringify(plan.required_controls) !== JSON.stringify([...ECOMMERCE_ORDER_QUEUE_REQUIRED_CONTROLS])
+    || plan.required_approval_contract !== 'supermega.ecommerce.order_queue_owner_approval.v1'
+    || plan.external_writes_performed !== false
+    || JSON.stringify(plan.forbidden_until_applied) !== JSON.stringify([...ECOMMERCE_ORDER_QUEUE_FORBIDDEN_UNTIL_APPLIED])
+    || typeof plan.apply_boundary !== 'string'
+    || !plan.apply_boundary.includes('Apply requires a decided human approval record')
+    || typeof plan.next_step !== 'string') {
+    throw new ManagedTrialError('The managed Ecommerce import plan does not match the approved queue packet.', {
+      code: 'managed_ecommerce_order_queue_import_plan_invalid',
+    })
+  }
+  return plan as unknown as ManagedEcommerceOrderQueueImportPlan
 }
 
 async function sha256Text(value: string) {
@@ -1277,6 +1345,27 @@ export async function validateManagedEcommerceOrderQueue(
     expectedIdentity,
   )
   return assertManagedEcommerceOrderQueueValidation(response, packet, expectedIdentity)
+}
+
+export async function planManagedEcommerceOrderQueueImport(request: {
+  approvalPacket: Record<string, unknown>
+  identity: ManagedIdentity
+  packet: EcommerceOrderQueueReadinessPacket
+}) {
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/ecommerce/order-queue/import-plan',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        workspace_id: request.identity.workspaceId,
+        packet: request.packet,
+        approval_packet: request.approvalPacket,
+      }),
+    },
+    true,
+    request.identity,
+  )
+  return assertManagedEcommerceOrderQueueImportPlan(response, request.packet, request.approvalPacket, request.identity)
 }
 
 export async function applyManagedClientImport(request: {
