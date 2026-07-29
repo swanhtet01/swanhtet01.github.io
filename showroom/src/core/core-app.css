@@ -683,6 +683,18 @@ textarea { min-height: 72px; resize: vertical; }
 .plant-agent-queue span { min-width: 0; display: grid; gap: 2px; }
 .plant-agent-queue small { color: var(--core-quiet); font-family: var(--core-mono); font-size: 7px; text-transform: uppercase; }
 .plant-agent-queue strong { min-width: 0; color: var(--core-ink); font-size: 11px; line-height: 1.28; overflow-wrap: anywhere; }
+.plant-job-import { display: grid; grid-template-columns: minmax(0,.9fr) minmax(280px,1fr); gap: 10px; align-items: start; margin: 8px 0 12px; border: 1px solid var(--core-line); border-radius: 8px; padding: 10px; background: var(--core-panel-raised); }
+.plant-job-import > div:first-child { min-width: 0; display: grid; gap: 4px; }
+.plant-job-import strong { color: var(--core-ink); font-size: 12px; }
+.plant-job-import small { color: var(--core-muted); font-size: 10px; line-height: 1.45; }
+.plant-job-import-actions { min-width: 0; display: grid; gap: 7px; }
+.plant-job-import-upload { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; border: 1px dashed rgba(29,78,216,.42); border-radius: 7px; padding: 8px 10px; color: var(--core-ink); background: #fff; font-size: 11px; font-weight: 760; cursor: pointer; }
+.plant-job-import-upload input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
+.plant-job-import-review { display: grid; gap: 3px; border: 1px solid var(--core-line); border-radius: 7px; padding: 8px; background: #fff; }
+.plant-job-import-review.ready { border-color: rgba(5,150,105,.35); background: rgba(5,150,105,.07); }
+.plant-job-import-review.blocked { border-color: rgba(217,119,6,.35); background: rgba(217,119,6,.07); }
+.plant-job-import-review span { color: var(--core-muted); font-size: 11px; line-height: 1.45; }
+.plant-job-import-source { margin: 0; color: var(--core-quiet); font-family: var(--core-mono); font-size: 9px; overflow-wrap: anywhere; }
 .shop-agent-queue { display: grid; grid-template-columns: minmax(0,.95fr) minmax(300px,1fr) auto; align-items: center; gap: 12px; margin: 10px 0; border: 1px solid var(--core-line); border-radius: 9px; padding: 11px; background: var(--core-panel); }
 .shop-command-center { display: grid; grid-template-columns: minmax(0,.92fr) minmax(360px,1.08fr) auto; align-items: center; gap: 12px; margin: 10px 0; border: 1px solid rgba(11,116,94,.22); border-radius: 9px; padding: 12px; background: linear-gradient(135deg, rgba(11,116,94,.08), rgba(21,94,117,.08)), var(--core-panel-raised); }
 .shop-command-center > div:first-child { min-width: 0; display: grid; gap: 4px; }
@@ -1500,6 +1512,8 @@ textarea { min-height: 72px; resize: vertical; }
   .plant-agent-queue { grid-template-columns: 1fr; }
   .plant-agent-queue .core-button { width: 100%; }
   .plant-agent-queue > div:nth-child(2) { border-top: 1px solid var(--core-line); padding-top: 8px; }
+  .plant-job-import { grid-template-columns: 1fr; }
+  .plant-job-import-upload { width: 100%; }
   .shop-agent-queue { grid-template-columns: 1fr; }
   .shop-command-center { grid-template-columns: 1fr; }
   .shop-command-center .core-button { width: 100%; }
