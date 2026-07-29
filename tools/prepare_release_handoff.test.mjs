@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { buildReleaseHandoff, validateWorkflowAuthority, writeExclusiveJson } from './prepare_release_handoff.mjs'
+import { buildReleaseHandoff, validateReleaseHandoffPacket, validateWorkflowAuthority, writeExclusiveJson } from './prepare_release_handoff.mjs'
 
 const candidate = 'a'.repeat(40)
 const main = 'b'.repeat(40)
@@ -65,6 +65,7 @@ test('release handoff is immutable, review-only, and exact-commit bound', () => 
   const { digest, ...body } = packet
   assert.equal(digest, `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`)
   assert.doesNotMatch(JSON.stringify(packet), /token|secret|password|customer/i)
+  assert.deepEqual(validateReleaseHandoffPacket(packet), packet)
 })
 
 test('release handoff fails closed on drift, dirty state, weak ancestry, or invented verification', () => {
@@ -74,6 +75,12 @@ test('release handoff fails closed on drift, dirty state, weak ancestry, or inve
   assert.throws(() => buildReleaseHandoff(valid({ verification: { ...valid().verification, verifiedCommit: main } })), /release_handoff_verification_invalid/)
   assert.throws(() => buildReleaseHandoff(valid({ live: { app: identity, public: { ...identity, commit: main } } })), /release_handoff_live_pair_mismatch/)
   assert.throws(() => buildReleaseHandoff(valid({ remote: { ...valid().remote, candidateCommit: legacy }, relations: { ...valid().relations, remoteCandidateIsAncestor: false } })), /release_handoff_candidate_push_not_fast_forward/)
+  assert.throws(() => buildReleaseHandoff(valid({ verification: { ...valid().verification, workflowAuthority: { ...valid().verification.workflowAuthority, appProjectId: 'prj_forged' } } })), /release_handoff_workflow_authority_invalid/)
+  const tampered = buildReleaseHandoff(valid())
+  tampered.authority.pushApproved = true
+  assert.throws(() => validateReleaseHandoffPacket(tampered), /release_handoff_packet_invalid/)
+  const extra = { ...buildReleaseHandoff(valid()), inventedAuthority: true }
+  assert.throws(() => validateReleaseHandoffPacket(extra), /release_handoff_packet_invalid/)
 })
 
 test('workflow authority rejects missing production and rollback controls', () => {

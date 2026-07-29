@@ -80,6 +80,30 @@ export function validateWorkflowAuthority(source) {
   }
 }
 
+function releaseWorkflowAuthority(value) {
+  const workflowDigest = String(value?.workflowDigest || '')
+  if (value?.workflow !== '.github/workflows/supermega-public-release.yml'
+    || value.productionEnvironment !== 'production'
+    || value.sourceBranch !== 'main'
+    || value.concurrency !== 'supermega-coordinated-production'
+    || value.appProjectId !== 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'
+    || value.publicProjectId !== 'prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR'
+    || value.rollbackRequired !== true
+    || !/^sha256:[a-f0-9]{64}$/.test(workflowDigest)) {
+    fail('release_handoff_workflow_authority_invalid')
+  }
+  return {
+    workflow: value.workflow,
+    productionEnvironment: value.productionEnvironment,
+    sourceBranch: value.sourceBranch,
+    concurrency: value.concurrency,
+    appProjectId: value.appProjectId,
+    publicProjectId: value.publicProjectId,
+    rollbackRequired: true,
+    workflowDigest,
+  }
+}
+
 export function buildReleaseHandoff(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) fail('release_handoff_input_invalid')
   const candidateCommit = exactSha(input.candidate?.commit, 'release_handoff_candidate_invalid')
@@ -104,6 +128,7 @@ export function buildReleaseHandoff(input) {
   const candidateAheadOfLive = exactCount(input.relations?.candidateAheadOfLive, 'release_handoff_live_count_invalid')
   const legacyOnly = exactCount(input.legacyReleaseBranch?.legacyOnlyCommits ?? 0, 'release_handoff_legacy_count_invalid')
   const candidateOnly = exactCount(input.legacyReleaseBranch?.candidateOnlyCommits ?? 0, 'release_handoff_candidate_count_invalid')
+  const workflowAuthority = releaseWorkflowAuthority(input.verification?.workflowAuthority)
   if (candidateAheadOfMain < 1 || candidateAheadOfLive < 1) fail('release_handoff_no_release_delta')
 
   const remoteBranchState = remoteCandidateCommit === null
@@ -154,7 +179,7 @@ export function buildReleaseHandoff(input) {
       command: 'npm run app:verify',
       passed: true,
       verifiedCommit: candidateCommit,
-      workflowAuthority: input.verification.workflowAuthority,
+      workflowAuthority,
     },
     authority: {
       pushApproved: false,
@@ -178,6 +203,31 @@ export function buildReleaseHandoff(input) {
     },
   }
   return { ...body, digest: `sha256:${sha256(JSON.stringify(body))}` }
+}
+
+export function validateReleaseHandoffPacket(packet) {
+  if (!packet || typeof packet !== 'object' || Array.isArray(packet)) fail('release_handoff_packet_invalid')
+  const rebuilt = buildReleaseHandoff({
+    generatedAt: packet.generatedAt,
+    repository: packet.repository,
+    candidate: packet.candidate,
+    remote: {
+      origin: packet.remote?.origin,
+      mainCommit: packet.remote?.mainCommit,
+      candidateCommit: packet.remote?.candidateCommit,
+    },
+    live: { app: packet.live?.identity, public: packet.live?.identity },
+    relations: packet.relations,
+    legacyReleaseBranch: {
+      commit: packet.legacyReleaseBranch?.commit,
+      isAncestorOfCandidate: false,
+      legacyOnlyCommits: packet.legacyReleaseBranch?.legacyOnlyCommits,
+      candidateOnlyCommits: packet.legacyReleaseBranch?.candidateOnlyCommits,
+    },
+    verification: packet.verification,
+  })
+  if (JSON.stringify(rebuilt) !== JSON.stringify(packet)) fail('release_handoff_packet_invalid')
+  return rebuilt
 }
 
 function run(file, args, { inherit = false, allowFailure = false } = {}) {
@@ -261,12 +311,13 @@ export async function writeExclusiveJson(outputPath, packet) {
 }
 
 function parseArgs(argv) {
-  if (argv.length !== 2 || argv[0] !== '--output' || !argv[1]) fail('release_handoff_output_required')
-  return { output: argv[1] }
+  if (argv.length !== 2 || !argv[1]) fail('release_handoff_path_required')
+  if (argv[0] === '--output') return { mode: 'prepare', path: argv[1] }
+  if (argv[0] === '--verify') return { mode: 'verify', path: argv[1] }
+  fail('release_handoff_mode_invalid')
 }
 
-async function main() {
-  const { output } = parseArgs(process.argv.slice(2))
+async function prepareReleaseHandoff(output) {
   const branch = git('symbolic-ref', '--short', 'HEAD')
   const candidateCommit = exactSha(git('rev-parse', 'HEAD'), 'release_handoff_candidate_invalid')
   const origin = git('remote', 'get-url', 'origin')
@@ -308,7 +359,98 @@ async function main() {
     verification: { passed: true, verifiedCommit: candidateCommit, workflowAuthority },
   })
   const receipt = await writeExclusiveJson(output, packet)
-  process.stdout.write(`${JSON.stringify({ ok: true, contract: RELEASE_HANDOFF_CONTRACT, ...receipt })}\n`)
+  return { ok: true, contract: RELEASE_HANDOFF_CONTRACT, ...receipt }
+}
+
+export async function verifyCurrentReleaseHandoff(inputPath) {
+  const absolute = resolve(inputPath)
+  const metadata = await lstat(absolute).catch(() => null)
+  if (!metadata || !metadata.isFile() || metadata.isSymbolicLink() || metadata.size < 1 || metadata.size > MAX_OUTPUT_BYTES) {
+    fail('release_handoff_file_invalid')
+  }
+  const payload = await readFile(absolute, 'utf8')
+  if (Buffer.byteLength(payload) !== metadata.size) fail('release_handoff_file_changed')
+  let packet
+  try { packet = validateReleaseHandoffPacket(JSON.parse(payload)) } catch (error) {
+    if (String(error?.message || '').startsWith('release_handoff_')) throw error
+    fail('release_handoff_packet_invalid')
+  }
+
+  const branch = git('symbolic-ref', '--short', 'HEAD')
+  const head = exactSha(git('rev-parse', 'HEAD'), 'release_handoff_candidate_invalid')
+  const origin = git('remote', 'get-url', 'origin')
+  if (git('status', '--porcelain=v1')) fail('release_handoff_worktree_dirty')
+  if (branch !== packet.candidate.branch || head !== packet.candidate.commit || origin !== packet.remote.origin) {
+    fail('release_handoff_local_state_changed')
+  }
+
+  const remoteMainCommit = remoteHead('main')
+  const remoteCandidateCommit = remoteHead(branch)
+  const legacyCommit = remoteHead(LEGACY_RELEASE_BRANCH)
+  if (remoteMainCommit !== packet.remote.mainCommit
+    || remoteCandidateCommit !== packet.remote.candidateCommit
+    || legacyCommit !== packet.legacyReleaseBranch.commit) {
+    fail('release_handoff_remote_state_changed')
+  }
+
+  const workflowSource = await readFile(resolve(root, '.github/workflows/supermega-public-release.yml'), 'utf8')
+  const workflowAuthority = validateWorkflowAuthority(workflowSource.replace(/\r\n?/g, '\n'))
+  if (JSON.stringify(workflowAuthority) !== JSON.stringify(packet.verification.workflowAuthority)) {
+    fail('release_handoff_workflow_state_changed')
+  }
+
+  const [app, publicRelease] = await Promise.all([boundedJson(APP_RELEASE_URL), boundedJson(PUBLIC_RELEASE_URL)])
+  const appIdentity = releaseIdentity(app, 'release_handoff_live_app_invalid')
+  const publicIdentity = releaseIdentity(publicRelease, 'release_handoff_live_public_invalid')
+  if (JSON.stringify(appIdentity) !== JSON.stringify(packet.live.identity)
+    || JSON.stringify(publicIdentity) !== JSON.stringify(packet.live.identity)) {
+    fail('release_handoff_live_state_changed')
+  }
+
+  const legacyCounts = legacyCommit ? git('rev-list', '--left-right', '--count', `${legacyCommit}...${head}`).split(/\s+/).map(Number) : [0, 0]
+  const currentRelations = {
+    mainIsAncestor: isAncestor(remoteMainCommit, head),
+    liveIsAncestor: isAncestor(appIdentity.commit, head),
+    candidateAheadOfMain: Number(git('rev-list', '--count', `${remoteMainCommit}..${head}`)),
+    candidateAheadOfLive: Number(git('rev-list', '--count', `${appIdentity.commit}..${head}`)),
+    remoteCandidateIsAncestor: remoteCandidateCommit && remoteCandidateCommit !== head ? isAncestor(remoteCandidateCommit, head) : null,
+  }
+  if (JSON.stringify(currentRelations) !== JSON.stringify(packet.relations)
+    || legacyCounts[0] !== packet.legacyReleaseBranch.legacyOnlyCommits
+    || legacyCounts[1] !== packet.legacyReleaseBranch.candidateOnlyCommits
+    || (legacyCommit ? isAncestor(legacyCommit, head) : false)) {
+    fail('release_handoff_relation_state_changed')
+  }
+
+  return {
+    ok: true,
+    contract: RELEASE_HANDOFF_CONTRACT,
+    mode: 'owner_review_only',
+    path: absolute,
+    bytes: Buffer.byteLength(payload),
+    digest: `sha256:${sha256(payload)}`,
+    packetDigest: packet.digest,
+    candidate: packet.candidate,
+    liveCommit: packet.live.identity.commit,
+    remoteMainCommit: packet.remote.mainCommit,
+    remoteCandidateState: packet.remote.candidateBranchState,
+    nextAction: {
+      kind: packet.nextAction.kind,
+      exactCommit: packet.nextAction.exactCommit,
+      forcePushAllowed: false,
+      mergeIncluded: false,
+      deploymentIncluded: false,
+    },
+    authority: packet.authority,
+  }
+}
+
+async function main() {
+  const request = parseArgs(process.argv.slice(2))
+  const receipt = request.mode === 'prepare'
+    ? await prepareReleaseHandoff(request.path)
+    : await verifyCurrentReleaseHandoff(request.path)
+  process.stdout.write(`${JSON.stringify(receipt)}\n`)
 }
 
 const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href
