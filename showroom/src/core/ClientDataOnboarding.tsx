@@ -47,6 +47,7 @@ type ClientDataOnboardingProps = {
   plantIndustryPackId?: PlantIndustryPackId
   managedIdentity: ManagedIdentity | null
   onProgress?: (progress: ClientDemoProductProgress) => void
+  initiallyOpen?: boolean
 }
 
 type ValidatedImport = {
@@ -173,7 +174,7 @@ function downloadFile(filename: string, content: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
-export function ClientDataOnboarding({ product, productName, productSlug, workflowTemplateId, workspace, owner, shopIndustryPackId, plantIndustryPackId, managedIdentity, onProgress }: ClientDataOnboardingProps) {
+export function ClientDataOnboarding({ product, productName, productSlug, workflowTemplateId, workspace, owner, shopIndustryPackId, plantIndustryPackId, managedIdentity, onProgress, initiallyOpen = false }: ClientDataOnboardingProps) {
   const object = clientImportObject(product)
   const checklist = clientImportChecklist(product, workflowTemplateId)
   const requestRef = useRef(0)
@@ -830,7 +831,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   }
 
   return (
-    <details className="compact-disclosure catalog-import-disclosure">
+    <details className="compact-disclosure catalog-import-disclosure" open={initiallyOpen || undefined}>
       <summary><span>Bring existing data</span><small>Optional for {productName}</small></summary>
       <div className="catalog-import-workspace">
         <div className="catalog-import-intro">

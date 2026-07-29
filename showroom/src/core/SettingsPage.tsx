@@ -268,6 +268,7 @@ export function SettingsPage() {
   const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => demoWorkspace?.blueprint.client.plantIndustryPackId ?? readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
   const [demoSelections, setDemoSelections] = useState<Partial<Record<SetupProductId, string>>>(() => Object.fromEntries((demoWorkspace?.blueprint.products ?? clientDemoPresets[0].selections).map((selection) => [selection.product, selection.templateId])))
   const [demoBlueprint, setDemoBlueprint] = useState<ClientDemoBlueprint | null>(() => demoWorkspace?.blueprint ?? null)
+  const [demoDataSetupOpen, setDemoDataSetupOpen] = useState(false)
   const [preparedArtifact, setPreparedArtifact] = useState<ClientDemoPreparationArtifact | null>(null)
   const [preparedConfirmation, setPreparedConfirmation] = useState('')
   const [preparedBusyProduct, setPreparedBusyProduct] = useState<SetupProductId | null>(null)
@@ -890,6 +891,7 @@ export function SettingsPage() {
 
   function prepareDemoProduct(product: SetupProductId, templateId: string) {
     configureDemoProduct(product, templateId, false)
+    setDemoDataSetupOpen(true)
     window.requestAnimationFrame(() => document.getElementById('client-data-setup')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
 
@@ -915,6 +917,7 @@ export function SettingsPage() {
     setDemoSelections(Object.fromEntries(blueprint.products.map((product) => [product.product, product.templateId])))
     setDemoBlueprint(blueprint)
     setDemoWorkspace(createClientDemoWorkspace(blueprint, new Date().toISOString()))
+    setDemoDataSetupOpen(false)
     if (first) {
       const template = templateFor(first.product, first.templateId)
       setSetup((current) => ({
@@ -1562,8 +1565,8 @@ export function SettingsPage() {
               })}</div></details>
             </section> : null}
           </>}
-          {requestedProduct || demoBlueprint ? <section className="demo-data-setup" id="client-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Prepare {selectedProduct.name}</h3><p>Try the safe sample now or drop in the client's matching CSV for review.</p></div><Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding managedIdentity={managedIdentity} onProgress={recordDemoProductProgress} owner={setup.owner} plantIndustryPackId={setup.product === 'production' ? plantIndustryPackId : undefined} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} shopIndustryPackId={setup.product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense></section> : null}
-          {requestedProduct || demoBlueprint ? <div className="settings-step-actions"><span>{requestedProduct ? 'Sample first. Plan when needed.' : 'Optional: add measurable success criteria after the demo works.'}</span><div className="setup-action-group"><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Add success criteria</button>{requestedProduct ? <button className="core-button primary" disabled={!workflowReady} onClick={startGuidedTrial} type="button">Start guided sample</button> : null}</div></div> : null}
+          {requestedProduct || (demoBlueprint && demoDataSetupOpen) ? <section className="demo-data-setup" id="client-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Prepare {selectedProduct.name}</h3><p>Try the safe sample now or drop in the client's matching CSV for review.</p></div><Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding managedIdentity={managedIdentity} initiallyOpen={!requestedProduct} onProgress={recordDemoProductProgress} owner={setup.owner} plantIndustryPackId={setup.product === 'production' ? plantIndustryPackId : undefined} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} shopIndustryPackId={setup.product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense></section> : null}
+          {requestedProduct || (demoBlueprint && demoDataSetupOpen) ? <div className="settings-step-actions"><span>{requestedProduct ? 'Sample first. Plan when needed.' : 'Optional: add measurable success criteria after the demo works.'}</span><div className="setup-action-group"><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Add success criteria</button>{requestedProduct ? <button className="core-button primary" disabled={!workflowReady} onClick={startGuidedTrial} type="button">Start guided sample</button> : null}</div></div> : null}
           </fieldset>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'success'} hidden={settingsStep !== 'success'}>
           <div className="template-contract settings-workflow-summary"><span>{productDisplayName(setup.product)}</span><strong>{setup.workspace || 'Unnamed workspace'}</strong><small>{selectedTemplate.name} - {setup.owner || 'Owner needed'}</small></div>
