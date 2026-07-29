@@ -72,6 +72,23 @@ test('client preparation compiles one validated four-product founder-review arti
       localization: { countryCode: 'MM', currency: 'MMK', locale: 'my-MM', timeZone: 'Asia/Yangon' },
       controls: { sharedAcrossProducts: true, clientReviewRequired: true, externalRegistryChecked: false, managedIdentityRequiredBeforeActivation: true },
     })
+    assert.deepEqual(artifact.topology, {
+      schema: 'supermega.client_operational_topology.v1',
+      locations: [{ id: 'main', code: 'MAIN', name: 'Main operating unit', kind: 'plant', timeZone: 'Asia/Yangon', active: true }],
+      channels: [
+        { id: 'shop-counter', label: 'Counter and assisted orders', kind: 'assisted-sales', locationId: 'main', owningProduct: 'commerce' },
+        { id: 'plant-execution', label: 'Production execution', kind: 'production-execution', locationId: 'main', owningProduct: 'production' },
+        { id: 'website-inquiry', label: 'Website inquiries', kind: 'lead-capture', locationId: 'main', owningProduct: 'website' },
+        { id: 'ecommerce-storefront', label: 'Digital storefront', kind: 'digital-sales', locationId: 'main', owningProduct: 'ecommerce' },
+      ],
+      recordAuthorities: [
+        { product: 'commerce', label: 'Shop', locationIds: ['main'], owns: ['catalog', 'inventory', 'orders', 'payments', 'customer_accounts'], consumesFrom: ['production'], writePolicy: 'human_review_required' },
+        { product: 'production', label: 'Plant', locationIds: ['main'], owns: ['materials', 'work_orders', 'quality', 'maintenance', 'released_stock'], consumesFrom: ['commerce'], writePolicy: 'human_review_required' },
+        { product: 'website', label: 'Website', locationIds: ['main'], owns: ['pages', 'content', 'releases', 'lead_intake'], consumesFrom: [], writePolicy: 'human_review_required' },
+        { product: 'ecommerce', label: 'Ecommerce', locationIds: ['main'], owns: ['storefront', 'collections', 'carts', 'quotes', 'order_requests'], consumesFrom: ['commerce', 'website'], writePolicy: 'human_review_required' },
+      ],
+      controls: { canonicalLocationRequired: true, crossProductReferencesRequired: true, unmanagedWritesAllowed: false },
+    })
     assert.deepEqual(artifact.checks, {
       ecommerceCatalogAligned: true,
       websiteHomePresent: true,
@@ -109,27 +126,42 @@ test('client preparation compiles one validated four-product founder-review arti
     const foundationTamper = structuredClone(artifact)
     foundationTamper.foundation.localization.currency = 'USD'
     assert.throws(() => verifyClientDemoPreparation(foundationTamper), /client_demo_preparation_contract_invalid/)
+    const topologyTamper = structuredClone(artifact)
+    topologyTamper.topology.recordAuthorities[3].consumesFrom = []
+    assert.throws(() => verifyClientDemoPreparation(topologyTamper), /client_demo_topology_drift/)
   } finally {
     await rm(source.directory, { recursive: true, force: true })
   }
 })
 
-test('legacy v1 setup kits migrate to the canonical shared operating foundation', async () => {
+test('legacy v1 and v2 setup kits migrate to the canonical shared operating foundation and topology', async () => {
   const source = await fixture()
   try {
     const legacy = structuredClone(source.kit)
     legacy.schema = 'supermega.client_demo_kit.v1'
     legacy.blueprint.schema = 'supermega.client_demo_blueprint.v1'
     delete legacy.blueprint.foundation
+    delete legacy.blueprint.topology
     const legacyPath = resolve(source.directory, 'legacy-kit.json')
     await writeFile(legacyPath, JSON.stringify(legacy), 'utf8')
 
     const artifact = await prepareClientDemo({ kitPath: legacyPath, preparedAt: PREPARED_AT })
 
-    assert.equal(artifact.kit.schema, 'supermega.client_demo_kit.v2')
+    assert.equal(artifact.kit.schema, 'supermega.client_demo_kit.v3')
     assert.equal(artifact.foundation.organization.displayName, source.blueprint.client.workspace)
     assert.equal(artifact.foundation.operatingUnit.kind, 'plant')
+    assert.equal(artifact.topology.recordAuthorities.length, 4)
     assert.deepEqual(verifyClientDemoPreparation(artifact).status, 'verified_not_applied')
+
+    const legacyV2 = structuredClone(source.kit)
+    legacyV2.schema = 'supermega.client_demo_kit.v2'
+    legacyV2.blueprint.schema = 'supermega.client_demo_blueprint.v2'
+    delete legacyV2.blueprint.topology
+    const legacyV2Path = resolve(source.directory, 'legacy-v2-kit.json')
+    await writeFile(legacyV2Path, JSON.stringify(legacyV2), 'utf8')
+    const migratedV2 = await prepareClientDemo({ kitPath: legacyV2Path, preparedAt: PREPARED_AT })
+    assert.equal(migratedV2.kit.schema, 'supermega.client_demo_kit.v3')
+    assert.deepEqual(migratedV2.topology, source.blueprint.topology)
   } finally {
     await rm(source.directory, { recursive: true, force: true })
   }

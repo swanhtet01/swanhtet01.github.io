@@ -6,7 +6,7 @@ import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-export const CLIENT_DEMO_PREPARATION_CONTRACT = 'supermega.client_demo_preparation.v2'
+export const CLIENT_DEMO_PREPARATION_CONTRACT = 'supermega.client_demo_preparation.v3'
 export const CLIENT_DEMO_PREPARATION_VALIDATION_CONTRACT = 'supermega.client_demo_preparation_validation.v1'
 export const CLIENT_DEMO_PREPARATION_MAX_BYTES = 5 * 1024 * 1024
 const CLIENT_DEMO_KIT_MAX_BYTES = 128 * 1024
@@ -20,14 +20,27 @@ const PRODUCT_PATHS = Object.freeze({
   website: { demoPath: '/website/', setupPath: '/settings/?product=website' },
   ecommerce: { demoPath: '/ecommerce/', setupPath: '/settings/?product=ecommerce' },
 })
-const CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v2'
+const CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v3'
 const CLIENT_OPERATING_FOUNDATION_SCHEMA = 'supermega.client_operating_foundation.v1'
+const CLIENT_OPERATIONAL_TOPOLOGY_SCHEMA = 'supermega.client_operational_topology.v1'
 const OPERATING_UNIT_KIND = Object.freeze({
   'social-seller': 'digital-commerce',
   'retail-network': 'retail',
   'food-service': 'food-service',
   manufacturing: 'plant',
   'service-business': 'service',
+})
+const CHANNEL_BY_PRODUCT = Object.freeze({
+  commerce: { id: 'shop-counter', label: 'Counter and assisted orders', kind: 'assisted-sales' },
+  production: { id: 'plant-execution', label: 'Production execution', kind: 'production-execution' },
+  website: { id: 'website-inquiry', label: 'Website inquiries', kind: 'lead-capture' },
+  ecommerce: { id: 'ecommerce-storefront', label: 'Digital storefront', kind: 'digital-sales' },
+})
+const RECORDS_BY_PRODUCT = Object.freeze({
+  commerce: ['catalog', 'inventory', 'orders', 'payments', 'customer_accounts'],
+  production: ['materials', 'work_orders', 'quality', 'maintenance', 'released_stock'],
+  website: ['pages', 'content', 'releases', 'lead_intake'],
+  ecommerce: ['storefront', 'collections', 'carts', 'quotes', 'order_requests'],
 })
 const REVIEW_CHECKLIST = Object.freeze([
   'Confirm the workspace, owner, selected templates, and industry packs.',
@@ -93,6 +106,36 @@ function operatingFoundationValid(value, client) {
     && value.controls.clientReviewRequired === true
     && value.controls.externalRegistryChecked === false
     && value.controls.managedIdentityRequiredBeforeActivation === true)
+}
+
+function canonicalOperationalTopology(client, products) {
+  const selected = new Set(products)
+  const dependencies = (product) => PRODUCT_ORDER.filter((candidate) => (
+    (product === 'commerce' && candidate === 'production' && selected.has(candidate))
+    || (product === 'production' && candidate === 'commerce' && selected.has(candidate))
+    || (product === 'ecommerce' && candidate === 'commerce' && selected.has(candidate))
+    || (product === 'ecommerce' && candidate === 'website' && selected.has(candidate))
+  ))
+  return {
+    schema: CLIENT_OPERATIONAL_TOPOLOGY_SCHEMA,
+    locations: [{ id: 'main', code: 'MAIN', name: 'Main operating unit', kind: OPERATING_UNIT_KIND[client.presetId], timeZone: 'Asia/Yangon', active: true }],
+    channels: products.map((product) => ({ ...CHANNEL_BY_PRODUCT[product], locationId: 'main', owningProduct: product })),
+    recordAuthorities: products.map((product) => ({
+      product,
+      label: PRODUCT_LABEL[product],
+      locationIds: ['main'],
+      owns: [...RECORDS_BY_PRODUCT[product]],
+      consumesFrom: dependencies(product),
+      writePolicy: 'human_review_required',
+    })),
+    controls: { canonicalLocationRequired: true, crossProductReferencesRequired: true, unmanagedWritesAllowed: false },
+  }
+}
+
+function operationalTopologyValid(value, client, products) {
+  return Boolean(OPERATING_UNIT_KIND[client?.presetId]
+    && products.every((product) => PRODUCT_ORDER.includes(product))
+    && JSON.stringify(value) === JSON.stringify(canonicalOperationalTopology(client, products)))
 }
 
 function pythonExecutable() {
@@ -235,6 +278,7 @@ export async function prepareClientDemo({ kitPath, dataDirectory, preparedAt = n
     kit: { schema: kit.schema, digest: sha256(kitText), exportedAt: kit.exportedAt },
     client: { ...kit.blueprint.client },
     foundation: structuredClone(kit.blueprint.foundation),
+    topology: structuredClone(kit.blueprint.topology),
     products,
     integrations: kit.blueprint.integrations,
     checks,
@@ -266,7 +310,7 @@ export async function prepareClientDemo({ kitPath, dataDirectory, preparedAt = n
 }
 
 export function verifyClientDemoPreparation(value) {
-  if (!hasExactKeys(value, ['contract', 'preparedAt', 'kit', 'client', 'foundation', 'products', 'integrations', 'checks', 'controls', 'bundleDigest', 'review'])
+  if (!hasExactKeys(value, ['contract', 'preparedAt', 'kit', 'client', 'foundation', 'topology', 'products', 'integrations', 'checks', 'controls', 'bundleDigest', 'review'])
     || value.contract !== CLIENT_DEMO_PREPARATION_CONTRACT || !canonicalTimestamp(value.preparedAt)
     || !hasExactKeys(value.kit, ['schema', 'digest', 'exportedAt'])
     || value.kit.schema !== CLIENT_DEMO_KIT_SCHEMA
@@ -283,6 +327,7 @@ export function verifyClientDemoPreparation(value) {
   if (JSON.stringify(selectedProducts) !== JSON.stringify(PRODUCT_ORDER.filter((product) => selectedProducts.includes(product)))) {
     fail('client_demo_product_order_invalid')
   }
+  if (!operationalTopologyValid(value.topology, value.client, selectedProducts)) fail('client_demo_topology_drift')
   const packages = value.products.map((product) => {
     if (!hasExactKeys(product, ['product', 'label', 'templateId', 'sourceMode', 'sourceName', 'rowCount', 'previewDigest', 'packageDigest', 'demoPath', 'setupPath', 'stagingPackage'])
       || PRODUCT_LABEL[product.product] !== product.label || !['client_csv', 'kit_sample_fixture'].includes(product.sourceMode)
@@ -324,6 +369,7 @@ export function verifyClientDemoPreparation(value) {
     kit: value.kit,
     client: value.client,
     foundation: value.foundation,
+    topology: value.topology,
     products: value.products,
     integrations: value.integrations,
     checks: value.checks,

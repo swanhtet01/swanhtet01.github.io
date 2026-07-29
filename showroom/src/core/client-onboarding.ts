@@ -3,15 +3,19 @@ import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-pa
 
 export const CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1' as const
 export const CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1' as const
-export const CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v2' as const
-export const CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v2' as const
-export const CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v2' as const
+export const CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v3' as const
+export const CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v3' as const
+export const CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v3' as const
 export const CLIENT_DEMO_RUNBOOK_SCHEMA = 'supermega.client_demo_runbook.v1' as const
-export const CLIENT_DEMO_PREPARATION_SCHEMA = 'supermega.client_demo_preparation.v2' as const
+export const CLIENT_DEMO_PREPARATION_SCHEMA = 'supermega.client_demo_preparation.v3' as const
 export const CLIENT_OPERATING_FOUNDATION_SCHEMA = 'supermega.client_operating_foundation.v1' as const
+export const CLIENT_OPERATIONAL_TOPOLOGY_SCHEMA = 'supermega.client_operational_topology.v1' as const
 const LEGACY_CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v1' as const
+const LEGACY_V2_CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v2' as const
 const LEGACY_CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v1' as const
+const LEGACY_V2_CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v2' as const
 const LEGACY_CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v1' as const
+const LEGACY_V2_CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v2' as const
 export const CLIENT_DEMO_WORKSPACE_STORAGE_KEY = 'supermega.client-demo-workspace.v1'
 export const CLIENT_DEMO_KIT_MAX_BYTES = 128 * 1024
 export const CLIENT_DEMO_PREPARATION_MAX_BYTES = 5 * 1024 * 1024
@@ -65,6 +69,40 @@ export type ClientOperatingFoundation = {
   }
 }
 
+export type ClientChannelKind = 'assisted-sales' | 'production-execution' | 'lead-capture' | 'digital-sales'
+
+export type ClientOperationalTopology = {
+  schema: typeof CLIENT_OPERATIONAL_TOPOLOGY_SCHEMA
+  locations: Array<{
+    id: 'main'
+    code: 'MAIN'
+    name: 'Main operating unit'
+    kind: ClientOperatingUnitKind
+    timeZone: 'Asia/Yangon'
+    active: true
+  }>
+  channels: Array<{
+    id: string
+    label: string
+    kind: ClientChannelKind
+    locationId: 'main'
+    owningProduct: ClientSolutionId
+  }>
+  recordAuthorities: Array<{
+    product: ClientSolutionId
+    label: string
+    locationIds: ['main']
+    owns: string[]
+    consumesFrom: ClientSolutionId[]
+    writePolicy: 'human_review_required'
+  }>
+  controls: {
+    canonicalLocationRequired: true
+    crossProductReferencesRequired: true
+    unmanagedWritesAllowed: false
+  }
+}
+
 export type ClientDemoBlueprint = {
   schema: typeof CLIENT_DEMO_BLUEPRINT_SCHEMA
   client: {
@@ -75,6 +113,7 @@ export type ClientDemoBlueprint = {
     plantIndustryPackId: PlantIndustryPackId
   }
   foundation: ClientOperatingFoundation
+  topology: ClientOperationalTopology
   products: Array<{
     product: ClientSolutionId
     label: string
@@ -362,6 +401,7 @@ export type ClientDemoPreparationArtifact = {
   }
   client: ClientDemoBlueprint['client']
   foundation: ClientOperatingFoundation
+  topology: ClientOperationalTopology
   products: Array<{
     product: ClientSolutionId
     label: string
@@ -866,6 +906,33 @@ const operatingUnitKindByPreset: Readonly<Record<ClientDemoPresetId, ClientOpera
   'service-business': 'service',
 }
 
+const clientChannelByProduct: Readonly<Record<ClientSolutionId, {
+  id: string
+  label: string
+  kind: ClientChannelKind
+}>> = {
+  commerce: { id: 'shop-counter', label: 'Counter and assisted orders', kind: 'assisted-sales' },
+  production: { id: 'plant-execution', label: 'Production execution', kind: 'production-execution' },
+  website: { id: 'website-inquiry', label: 'Website inquiries', kind: 'lead-capture' },
+  ecommerce: { id: 'ecommerce-storefront', label: 'Digital storefront', kind: 'digital-sales' },
+}
+
+const clientRecordsOwnedByProduct: Readonly<Record<ClientSolutionId, readonly string[]>> = {
+  commerce: ['catalog', 'inventory', 'orders', 'payments', 'customer_accounts'],
+  production: ['materials', 'work_orders', 'quality', 'maintenance', 'released_stock'],
+  website: ['pages', 'content', 'releases', 'lead_intake'],
+  ecommerce: ['storefront', 'collections', 'carts', 'quotes', 'order_requests'],
+}
+
+function clientProductDependencies(product: ClientSolutionId, selected: ReadonlySet<ClientSolutionId>) {
+  const dependencies: ClientSolutionId[] = []
+  if (product === 'commerce' && selected.has('production')) dependencies.push('production')
+  if (product === 'production' && selected.has('commerce')) dependencies.push('commerce')
+  if (product === 'ecommerce' && selected.has('commerce')) dependencies.push('commerce')
+  if (product === 'ecommerce' && selected.has('website')) dependencies.push('website')
+  return clientDemoProductOrder.filter((candidate) => dependencies.includes(candidate))
+}
+
 export function buildClientOperatingFoundation(workspaceValue: string, presetId: ClientDemoPresetId): ClientOperatingFoundation {
   const workspace = boundedContext(workspaceValue, 'Client name', 60)
   clientDemoPreset(presetId)
@@ -883,8 +950,54 @@ export function buildClientOperatingFoundation(workspaceValue: string, presetId:
   }
 }
 
+export function buildClientOperationalTopology(
+  presetId: ClientDemoPresetId,
+  productsValue: readonly ClientSolutionId[],
+): ClientOperationalTopology {
+  clientDemoPreset(presetId)
+  const products = clientDemoProductOrder.filter((product) => productsValue.includes(product))
+  if (products.length !== productsValue.length || new Set(productsValue).size !== productsValue.length || products.length < 1) {
+    throw new Error('Choose a canonical set of products before building the operating topology.')
+  }
+  const selected = new Set(products)
+  return {
+    schema: CLIENT_OPERATIONAL_TOPOLOGY_SCHEMA,
+    locations: [{
+      id: 'main',
+      code: 'MAIN',
+      name: 'Main operating unit',
+      kind: operatingUnitKindByPreset[presetId],
+      timeZone: 'Asia/Yangon',
+      active: true,
+    }],
+    channels: products.map((product) => ({
+      ...clientChannelByProduct[product],
+      locationId: 'main' as const,
+      owningProduct: product,
+    })),
+    recordAuthorities: products.map((product) => ({
+      product,
+      label: clientDemoProductDetails[product].label,
+      locationIds: ['main'] as ['main'],
+      owns: [...clientRecordsOwnedByProduct[product]],
+      consumesFrom: clientProductDependencies(product, selected),
+      writePolicy: 'human_review_required' as const,
+    })),
+    controls: {
+      canonicalLocationRequired: true,
+      crossProductReferencesRequired: true,
+      unmanagedWritesAllowed: false,
+    },
+  }
+}
+
 function canonicalClientOperatingFoundation(value: unknown, workspace: string, presetId: ClientDemoPresetId) {
   const expected = buildClientOperatingFoundation(workspace, presetId)
+  return JSON.stringify(value) === JSON.stringify(expected) ? expected : null
+}
+
+function canonicalClientOperationalTopology(value: unknown, presetId: ClientDemoPresetId, products: readonly ClientSolutionId[]) {
+  const expected = buildClientOperationalTopology(presetId, products)
   return JSON.stringify(value) === JSON.stringify(expected) ? expected : null
 }
 
@@ -937,6 +1050,7 @@ export function buildClientDemoBlueprint(input: {
     schema: CLIENT_DEMO_BLUEPRINT_SCHEMA,
     client: { workspace, owner, presetId: preset.id, shopIndustryPackId: industryPack.id, plantIndustryPackId: plantPack.id },
     foundation: buildClientOperatingFoundation(workspace, preset.id),
+    topology: buildClientOperationalTopology(preset.id, products.map((product) => product.product)),
     products,
     integrations,
     controls: {
@@ -961,7 +1075,12 @@ function canonicalClientDemoBlueprint(value: unknown) {
       selections: source.products.map((product) => ({ product: product.product, templateId: product.templateId })),
     })
     if (JSON.stringify(rebuilt) === JSON.stringify(value)) return rebuilt
-    if ((source.schema as string | undefined) === LEGACY_CLIENT_DEMO_BLUEPRINT_SCHEMA && source.foundation === undefined) {
+    if ((source.schema as string | undefined) === LEGACY_V2_CLIENT_DEMO_BLUEPRINT_SCHEMA && source.topology === undefined) {
+      const legacyV2 = { ...rebuilt, schema: LEGACY_V2_CLIENT_DEMO_BLUEPRINT_SCHEMA } as Record<string, unknown>
+      delete legacyV2.topology
+      if (JSON.stringify(legacyV2) === JSON.stringify(value)) return rebuilt
+    }
+    if ((source.schema as string | undefined) === LEGACY_CLIENT_DEMO_BLUEPRINT_SCHEMA && source.foundation === undefined && source.topology === undefined) {
       const legacyClientVariants = [
         rebuilt.client,
         { workspace: rebuilt.client.workspace, owner: rebuilt.client.owner, presetId: rebuilt.client.presetId, shopIndustryPackId: rebuilt.client.shopIndustryPackId },
@@ -1022,7 +1141,7 @@ export function restoreClientDemoKit(value: unknown): ClientDemoKit | null {
   const blueprint = canonicalClientDemoBlueprint(source.blueprint)
   const exportedAt = canonicalTimestamp(source.exportedAt)
   const sourceSchema = source.schema as string | undefined
-  if ((sourceSchema !== CLIENT_DEMO_KIT_SCHEMA && sourceSchema !== LEGACY_CLIENT_DEMO_KIT_SCHEMA) || !blueprint || !exportedAt || !source.controls
+  if ((sourceSchema !== CLIENT_DEMO_KIT_SCHEMA && sourceSchema !== LEGACY_V2_CLIENT_DEMO_KIT_SCHEMA && sourceSchema !== LEGACY_CLIENT_DEMO_KIT_SCHEMA) || !blueprint || !exportedAt || !source.controls
     || !hasExactKeys(source.controls, ['clientRecordsIncluded', 'productProgressIncluded', 'humanReviewRequired'])
     || source.controls.clientRecordsIncluded !== false
     || source.controls.productProgressIncluded !== false
@@ -1071,7 +1190,7 @@ export async function restoreClientDemoPreparationArtifact(value: unknown): Prom
     source = JSON.parse(serialized) as ClientDemoPreparationArtifact
   } catch { return null }
   if (!source || typeof source !== 'object' || Array.isArray(source)
-    || !hasExactKeys(source, ['contract', 'preparedAt', 'kit', 'client', 'foundation', 'products', 'integrations', 'checks', 'controls', 'bundleDigest', 'review'])
+    || !hasExactKeys(source, ['contract', 'preparedAt', 'kit', 'client', 'foundation', 'topology', 'products', 'integrations', 'checks', 'controls', 'bundleDigest', 'review'])
     || source.contract !== CLIENT_DEMO_PREPARATION_SCHEMA
     || !canonicalTimestamp(source.preparedAt)
     || !source.kit || typeof source.kit !== 'object' || Array.isArray(source.kit)
@@ -1098,6 +1217,8 @@ export async function restoreClientDemoPreparationArtifact(value: unknown): Prom
   let blueprint: ClientDemoBlueprint
   try { blueprint = clientDemoPreparationBlueprintFromSource(source) } catch { return null }
   if (JSON.stringify(source.foundation) !== JSON.stringify(blueprint.foundation)) return null
+  if (!canonicalClientOperationalTopology(source.topology, source.client.presetId, selectedProducts)
+    || JSON.stringify(source.topology) !== JSON.stringify(blueprint.topology)) return null
   const packages: ClientImportStagingPackage[] = []
   for (let index = 0; index < source.products.length; index += 1) {
     const product = source.products[index]
@@ -1198,6 +1319,7 @@ export async function restoreClientDemoPreparationArtifact(value: unknown): Prom
     kit: source.kit,
     client: source.client,
     foundation: source.foundation,
+    topology: source.topology,
     products: source.products,
     integrations: source.integrations,
     checks: source.checks,
@@ -1250,7 +1372,7 @@ export function restoreClientDemoWorkspace(value: unknown): ClientDemoWorkspace 
   const blueprint = canonicalClientDemoBlueprint(source.blueprint)
   const updatedAt = canonicalTimestamp(source.updatedAt)
   const sourceSchema = source.schema as string | undefined
-  if ((sourceSchema !== CLIENT_DEMO_WORKSPACE_SCHEMA && sourceSchema !== LEGACY_CLIENT_DEMO_WORKSPACE_SCHEMA) || !blueprint || !updatedAt || !Array.isArray(source.products)
+  if ((sourceSchema !== CLIENT_DEMO_WORKSPACE_SCHEMA && sourceSchema !== LEGACY_V2_CLIENT_DEMO_WORKSPACE_SCHEMA && sourceSchema !== LEGACY_CLIENT_DEMO_WORKSPACE_SCHEMA) || !blueprint || !updatedAt || !Array.isArray(source.products)
     || source.products.length !== blueprint.products.length) return null
   const products = blueprint.products.map(({ product }, index) => canonicalProgress(source.products?.[index], product))
   if (products.some((product) => !product)) return null
