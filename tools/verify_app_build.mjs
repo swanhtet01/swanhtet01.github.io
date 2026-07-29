@@ -1661,6 +1661,11 @@ if (!commerceSource.includes('inventoryFoundation?: ShopInventoryState')
   || !managedTrialStoreRuntime.includes('restamp_latest_shop_inventory_command')
   || !shopInventoryPythonSource.includes('validate_shop_inventory_state')
   || !shopInventoryPythonSource.includes('inventory command digest is invalid')) fail('managed_shop_inventory_foundation_missing')
+if (!shopInventoryPythonSource.includes('def shop_inventory_business_partners')
+  || !commerceSource.includes('inventory.vendors.filter((vendor) => vendor.name === supplier).length !== 1')
+  || !managedCommerceRuntime.includes('a location-managed purchase order must use one retained supplier master.')
+  || !coreSource.includes("list={managedInventoryProjection?.clients.length ? 'shop-client-master-options' : undefined}")
+  || !coreSource.includes('<option value="">Choose supplier</option>')) fail('shop_business_partner_operating_link_missing')
 if (!commerceSource.includes('CommercePurchaseOrderLocationReceipt')
   || !commerceSource.includes('receiveShopInventory(current.inventoryFoundation')
   || !commerceSource.includes('locationResult.replayed')
@@ -3322,8 +3327,11 @@ async function verifyShopInventoryRuntime() {
       'managed_sellable_return_accepted_forged_location_allocation')
     const managedPurchaseOrderId = 'PO-00000000-0000-4000-8000-000000000072'
     const managedOrdered = commerce.createCommercePurchaseOrder(managedBase, {
-      id: managedPurchaseOrderId, expectedAt: '2026-07-28T05:00:00.000Z', supplier: 'Yangon Supply', sku: 'SKU-1', quantityOrdered: 6,
+      id: managedPurchaseOrderId, expectedAt: '2026-07-28T05:00:00.000Z', supplier: 'Opening source', sku: 'SKU-1', quantityOrdered: 6,
     }, proof(2, 'managed-order'))
+    assert(commerce.createCommercePurchaseOrder(managedBase, {
+      id: 'PO-00000000-0000-4000-8000-000000000073', expectedAt: '2026-07-28T05:00:00.000Z', supplier: 'Unregistered supplier', sku: 'SKU-1', quantityOrdered: 6,
+    }, proof(2, 'unregistered-supplier')) === null, 'location_purchase_order_accepted_unregistered_supplier')
     const managedReceiptProof = proof(3, 'managed-receipt')
     const managedLocationReceipt = {
       receiptId: 'RCV-MANAGED-001', stockUnitId: 'LOT-MANAGED-001', trackingCode: 'MANAGED-BATCH-001',

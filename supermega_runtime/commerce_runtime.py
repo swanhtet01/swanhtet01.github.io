@@ -23,6 +23,7 @@ from supermega_runtime.shop_inventory_runtime import (
     ShopInventoryValidationError,
     shop_inventory_available_balances,
     shop_inventory_balances,
+    shop_inventory_business_partners,
     shop_inventory_sku_available_to_promise,
     shop_inventory_sku_totals,
     validate_shop_inventory_state,
@@ -5656,6 +5657,21 @@ def _validate_purchase_order_created(
         )
     if "cancellation" in next_orders[0]:
         raise TrialValidationError("a new purchase order cannot start cancelled.")
+    foundation = _inventory_foundation(current)
+    if foundation is not None:
+        catalog_skus = [str(item["sku"]) for item in current["items"]]
+        try:
+            partners = shop_inventory_business_partners(foundation, catalog_skus)
+        except ShopInventoryValidationError as exc:
+            raise TrialValidationError(str(exc)) from exc
+        supplier = str(next_orders[0]["supplier"])
+        matching_vendors = [
+            vendor for vendor in partners["vendors"] if vendor["name"] == supplier
+        ]
+        if len(matching_vendors) != 1:
+            raise TrialValidationError(
+                "a location-managed purchase order must use one retained supplier master."
+            )
 
 
 def _validate_purchase_order_received(

@@ -1321,6 +1321,8 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
             - balance["reserved"]
         )
     return {
+        "clients": [clients[key] for key in sorted(clients)],
+        "vendors": [vendors[key] for key in sorted(vendors)],
         "skuTotals": {sku: value for sku, value in sku_totals.items() if value > 0},
         "skuAvailableToPromise": {
             sku: value for sku, value in sku_available.items() if value > 0
@@ -1408,6 +1410,17 @@ def shop_inventory_sku_totals(
 ) -> dict[str, int]:
     state = validate_shop_inventory_state(value, catalog_skus)
     return dict(_project([command["payload"] for command in state["commands"]])["skuTotals"])
+
+
+def shop_inventory_business_partners(
+    value: object, catalog_skus: Sequence[str]
+) -> dict[str, list[dict[str, str]]]:
+    state = validate_shop_inventory_state(value, catalog_skus)
+    projection = _project([command["payload"] for command in state["commands"]])
+    return {
+        "clients": deepcopy(projection["clients"]),
+        "vendors": deepcopy(projection["vendors"]),
+    }
 
 
 def shop_inventory_sku_available_to_promise(
@@ -1508,6 +1521,7 @@ __all__ = [
     "restamp_latest_shop_inventory_command",
     "shop_inventory_available_balances",
     "shop_inventory_balances",
+    "shop_inventory_business_partners",
     "shop_inventory_catalog_digest",
     "shop_inventory_sku_available_to_promise",
     "shop_inventory_sku_totals",

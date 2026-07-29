@@ -3874,6 +3874,13 @@ export function createCommercePurchaseOrder(
       && sameActionProof(existing.creation, proof) ? current : null
   }
   if (actionIdIsUsed(current, proof.actionId)) return null
+  if (current.inventoryFoundation) {
+    const inventory = projectShopInventory(
+      current.inventoryFoundation,
+      current.items.map((item) => item.sku).sort(),
+    )
+    if (inventory.vendors.filter((vendor) => vendor.name === supplier).length !== 1) return null
+  }
   const matchingItems = current.items.filter((item) => item.sku === input.sku)
   if (matchingItems.length !== 1) return null
   if (commercePurchaseOrders(current).some((purchaseOrder) => (

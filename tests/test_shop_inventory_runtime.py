@@ -599,7 +599,7 @@ def purchase_order(proof: dict[str, str] | None = None) -> dict[str, object]:
         "id": PURCHASE_ORDER_ID,
         "createdAt": creation["capturedAt"],
         "expectedAt": "2026-07-28T05:00:00.000Z",
-        "supplier": "Yangon Supply",
+        "supplier": "Opening source",
         "sku": "SKU-1",
         "quantityOrdered": 4,
         "creation": creation,
@@ -710,6 +710,17 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
                 "evidence": opening["commands"][-1]["payload"]["proof"],  # type: ignore[index]
             },
         )
+        unmastered_order = purchase_order()
+        unmastered_order["supplier"] = "Unregistered supplier"
+        with self.assertRaisesRegex(TrialValidationError, "retained supplier master"):
+            reduce_commerce_state(
+                "commerce.purchase_order.created",
+                initialized,
+                {
+                    "state": {**initialized, "purchaseOrders": [unmastered_order]},
+                    "evidence": unmastered_order["creation"],
+                },
+            )
         order = purchase_order()
         ordered = reduce_commerce_state(
             "commerce.purchase_order.created",
