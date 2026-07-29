@@ -44,6 +44,15 @@ const localProductLabels: Record<ClientSolutionId, string> = {
   ecommerce: 'Ecommerce',
 }
 
+const localClientDemoInstallSequence: readonly ClientSolutionId[] = ['commerce', 'production', 'website', 'ecommerce']
+
+export async function preparedLocalClientDemoInstallOrder(artifactValue: unknown): Promise<ClientSolutionId[]> {
+  const artifact = await restoreClientDemoPreparationArtifact(artifactValue)
+  if (!artifact) throw new Error('The private client package is invalid or has changed. Load it again.')
+  const included = new Set(artifact.products.map((product) => product.product))
+  return localClientDemoInstallSequence.filter((product) => included.has(product))
+}
+
 export async function activateLocalStagingPackage(
   stagingPackage: ManagedClientImportPackage,
   options: LocalClientDemoActivationOptions = {},

@@ -154,6 +154,7 @@ export function SettingsPage() {
   const [preparedArtifact, setPreparedArtifact] = useState<ClientDemoPreparationArtifact | null>(null)
   const [preparedConfirmation, setPreparedConfirmation] = useState('')
   const [preparedBusyProduct, setPreparedBusyProduct] = useState<SetupProductId | null>(null)
+  const [preparedInstallStep, setPreparedInstallStep] = useState('')
   const [preparedNotice, setPreparedNotice] = useState('')
   const completion = pilotProgress(setup)
   const isPilotReady = pilotReady(setup)
@@ -181,6 +182,8 @@ export function SettingsPage() {
   const demoBlueprintHref = demoBlueprint ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(buildClientDemoKit(demoBlueprint, new Date().toISOString()), null, 2))}` : ''
   const demoReadyCount = demoWorkspace?.products.filter((product) => ['data_ready', 'workspace_checked', 'applied'].includes(product.status)).length ?? 0
   const preparedApprovalReady = Boolean(preparedArtifact && clientDemoPreparationConfirmationMatches(preparedArtifact, preparedConfirmation))
+  const preparedAppliedProducts = new Set(demoWorkspace?.products.filter((product) => product.status === 'applied').map((product) => product.product) ?? [])
+  const preparedRemainingCount = preparedArtifact?.products.filter((product) => !preparedAppliedProducts.has(product.product)).length ?? 0
   const plantReleasedBatches = (() => {
     try { return production.orderExecution && projectPlantOrder(production.orderExecution).status === 'released_to_stock' ? 1 : 0 } catch { return 0 }
   })()
@@ -389,7 +392,7 @@ export function SettingsPage() {
       installDemoBlueprint(clientDemoPreparationBlueprint(artifact), 'loaded')
       setPreparedArtifact(artifact)
       setPreparedConfirmation('')
-      setPreparedNotice(`${artifact.products.length}-product private package verified. Review it, then approve and install one product at a time.`)
+      setPreparedNotice(`${artifact.products.length}-product private package verified. Review it, then approve one serial installation.`)
     } catch (error) {
       setPreparedArtifact(null)
       setPreparedConfirmation('')
@@ -397,39 +400,55 @@ export function SettingsPage() {
     }
   }
 
-  async function installPreparedProduct(product: SetupProductId) {
+  async function installPreparedProducts() {
     const artifact = preparedArtifact
-    if (!artifact || preparedBusyProduct || managedIdentity) return
-    setPreparedBusyProduct(product)
-    setPreparedNotice(`Rechecking and installing ${productDisplayName(product)} locally...`)
+    if (!artifact || preparedBusyProduct || managedIdentity || !preparedApprovalReady) return
+    const installedBeforeRun = new Set(demoWorkspace?.products.filter((product) => product.status === 'applied').map((product) => product.product) ?? [])
+    let activeProduct: SetupProductId | null = null
     try {
-      const { applyPreparedLocalClientDemoProduct } = await import('./local-client-import')
-      const installed = await applyPreparedLocalClientDemoProduct(artifact, product, preparedConfirmation)
-      let packNotice = ''
-      if (product === 'commerce') {
-        try {
-          const schedule = provisionLocalShopIndustryPack(artifact.client.shopIndustryPackId)
-          packNotice = ` ${shopIndustryPack(schedule.industryPackId).name} Shop pack is active.`
-        } catch { packNotice = ' Existing Shop appointment data was preserved.' }
-      } else if (product === 'production') {
-        try {
-          savePlantIndustryPackId(artifact.client.plantIndustryPackId, window.localStorage)
-          packNotice = ` ${plantIndustryPack(artifact.client.plantIndustryPackId).name} Plant pack is active.`
-        } catch { packNotice = ' Existing Plant pack was preserved.' }
+      const { applyPreparedLocalClientDemoProduct, preparedLocalClientDemoInstallOrder } = await import('./local-client-import')
+      const installOrder = (await preparedLocalClientDemoInstallOrder(artifact)).filter((product) => !installedBeforeRun.has(product))
+      if (!installOrder.length) {
+        setPreparedNotice('All products in this private package are already installed and current.')
+        return
       }
-      recordDemoProductProgress({
-        product,
-        status: 'applied',
-        rows: installed.created + installed.alreadyPresent,
-        readyRows: installed.created + installed.alreadyPresent,
-        issueRows: 0,
-        updatedAt: null,
-      })
-      setPreparedNotice(`${productDisplayName(product)} installed: ${installed.created} new, ${installed.alreadyPresent} already current.${packNotice}`)
+      const summaries: string[] = []
+      for (const [index, product] of installOrder.entries()) {
+        activeProduct = product
+        setPreparedBusyProduct(product)
+        setPreparedInstallStep(`Installing ${index + 1} of ${installOrder.length}: ${productDisplayName(product)}`)
+        setPreparedNotice(`Rechecking and installing ${productDisplayName(product)} locally...`)
+        const installed = await applyPreparedLocalClientDemoProduct(artifact, product, preparedConfirmation)
+        let packNotice = ''
+        if (product === 'commerce') {
+          try {
+            const schedule = provisionLocalShopIndustryPack(artifact.client.shopIndustryPackId)
+            packNotice = ` ${shopIndustryPack(schedule.industryPackId).name} Shop pack is active.`
+          } catch { packNotice = ' Existing Shop appointment data was preserved.' }
+        } else if (product === 'production') {
+          try {
+            savePlantIndustryPackId(artifact.client.plantIndustryPackId, window.localStorage)
+            packNotice = ` ${plantIndustryPack(artifact.client.plantIndustryPackId).name} Plant pack is active.`
+          } catch { packNotice = ' Existing Plant pack was preserved.' }
+        }
+        recordDemoProductProgress({
+          product,
+          status: 'applied',
+          rows: installed.created + installed.alreadyPresent,
+          readyRows: installed.created + installed.alreadyPresent,
+          issueRows: 0,
+          updatedAt: null,
+        })
+        summaries.push(`${productDisplayName(product)} ${installed.created ? `${installed.created} new` : 'current'}`)
+        setPreparedNotice(`${productDisplayName(product)} installed.${packNotice}`)
+      }
+      setPreparedNotice(`Demo ready: ${summaries.join(' · ')}. Open each product below and run its proof workflow.`)
     } catch (error) {
-      setPreparedNotice(error instanceof Error ? error.message : `${productDisplayName(product)} was not installed.`)
+      const detail = error instanceof Error ? error.message : 'The product could not be installed.'
+      setPreparedNotice(`Stopped${activeProduct ? ` at ${productDisplayName(activeProduct)}` : ''}: ${detail} Products already installed are preserved; fix the issue and run the remaining installation again.`)
     } finally {
       setPreparedBusyProduct(null)
+      setPreparedInstallStep('')
     }
   }
 
@@ -603,19 +622,17 @@ export function SettingsPage() {
               <div className="panel-head"><div><span className="core-eyebrow">Client workspace</span><h3>{demoBlueprint.client.workspace}</h3><p>{demoRunbook?.provenCount ?? 0} proven · {demoReadyCount} data-ready · owner {demoBlueprint.client.owner}</p></div><a className="core-button" download={demoBlueprintFilename} href={demoBlueprintHref}>Download setup kit</a></div>
               <div aria-label="Shared operating foundation" className="readiness-list client-foundation-summary"><span><small>Operating unit</small><strong>{demoBlueprint.foundation.operatingUnit.name}</strong><em>{demoBlueprint.foundation.operatingUnit.code} · {demoBlueprint.foundation.operatingUnit.kind}</em></span><span><small>Market</small><strong>{demoBlueprint.foundation.localization.countryCode} · {demoBlueprint.foundation.localization.currency}</strong><em>{demoBlueprint.foundation.localization.locale}</em></span><span><small>Topology</small><strong>{demoBlueprint.topology.locations.length} location · {demoBlueprint.topology.channels.length} channels</strong><em>{demoBlueprint.topology.recordAuthorities.length} product authorities</em></span><span><small>Timezone</small><strong>{demoBlueprint.foundation.localization.timeZone}</strong><em>Shared by all selected products</em></span><span><small>Authority</small><strong>Client review required</strong><em>Managed identity required before activation</em></span></div>
               {preparedArtifact ? <section aria-label="Private client package installer" className="setup-template-summary">
-                <div><span className="core-eyebrow">Verified private package</span><strong>Install real demo data, one product at a time.</strong><small>Private client rows stay in this browser. Nothing is uploaded, shared, or installed automatically.</small></div>
+                <div><span className="core-eyebrow">Verified private package</span><strong>Install one connected local demo.</strong><small>Private client rows stay in this browser. Nothing is uploaded, shared, or installed automatically.</small></div>
                 <div className="template-contract"><span>Founder approval</span><strong>{preparedArtifact.products.length} products · {preparedArtifact.products.reduce((total, product) => total + product.rowCount, 0)} reviewed rows</strong><small>{preparedArtifact.controls.containsNormalizedClientData ? 'Includes normalized client CSV data.' : 'Uses prepared sample fixtures.'}</small></div>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <details className="compact-disclosure"><summary><span>Review exact package</span><small>{preparedArtifact.bundleDigest.slice(0, 22)}...</small></summary><ol>{preparedArtifact.review.checklist.map((item) => <li key={item}>{item}</li>)}</ol><code>{preparedArtifact.review.confirmation}</code></details>
                   <label>Paste the exact approval phrase<input autoComplete="off" disabled={Boolean(managedIdentity || preparedBusyProduct)} onChange={(event) => setPreparedConfirmation(event.target.value)} spellCheck={false} value={preparedConfirmation} /></label>
                   {managedIdentity ? <p className="form-notice">Disconnect the managed account to use this browser-local installer. Managed imports keep their separate server validation and approval flow.</p> : null}
+                  <div className="settings-step-actions"><span>{preparedRemainingCount ? `${preparedRemainingCount} product${preparedRemainingCount === 1 ? '' : 's'} remaining · Shop installs before Ecommerce.` : 'All package products are installed.'}</span><button className="core-button primary" disabled={!preparedApprovalReady || Boolean(preparedBusyProduct) || Boolean(managedIdentity) || preparedRemainingCount === 0} onClick={() => void installPreparedProducts()} type="button">{preparedBusyProduct ? preparedInstallStep : `Install remaining ${preparedRemainingCount}`}</button></div>
                   <div aria-label="Install prepared products" className="demo-solution-grid">{preparedArtifact.products.map((product) => {
                     const applied = demoWorkspace?.products.find((entry) => entry.product === product.product)?.status === 'applied'
-                    const requiresShopFirst = product.product === 'ecommerce' && preparedArtifact.products.some((entry) => entry.product === 'commerce')
-                    const shopApplied = demoWorkspace?.products.find((entry) => entry.product === 'commerce')?.status === 'applied'
                     const busy = preparedBusyProduct === product.product
-                    const dependencyBlocked = requiresShopFirst && !shopApplied
-                    return <section className="demo-solution-card" data-selected key={product.product}><div><strong>{product.label}</strong><small>{product.rowCount} rows · {product.sourceMode === 'client_csv' ? 'client CSV' : 'prepared sample'}</small></div><div className="setup-action-group"><button className="core-button primary" disabled={!preparedApprovalReady || Boolean(preparedBusyProduct) || Boolean(managedIdentity) || applied || dependencyBlocked} onClick={() => void installPreparedProduct(product.product)} type="button">{busy ? 'Installing...' : applied ? 'Installed' : dependencyBlocked ? 'Install Shop first' : 'Install locally'}</button>{applied ? <Link className="core-button" to={product.demoPath}>Open</Link> : null}</div></section>
+                    return <section className="demo-solution-card" data-selected key={product.product}><div><strong>{product.label}</strong><small>{busy ? 'Installing now...' : applied ? 'Installed and ready' : `${product.rowCount} rows · ${product.sourceMode === 'client_csv' ? 'client CSV' : 'prepared sample'}`}</small></div>{applied ? <Link className="core-button" to={product.demoPath}>Open</Link> : null}</section>
                   })}</div>
                   <p className="form-notice" aria-live="polite">{preparedNotice}</p>
                 </div>
