@@ -49,13 +49,20 @@ if ($packageState) {
 }
 $package = Get-Content -Raw -LiteralPath $PackagePath | ConvertFrom-Json
 $TrustedProductionProjectRef = [string]$package.supermega.productionSupabaseProjectRef
+$TrustedProductionTargetStatus = [string]$package.supermega.productionSupabaseTargetStatus
 if ($TrustedProductionProjectRef -notmatch $ProjectRefPattern) {
   throw 'Configure supermega.productionSupabaseProjectRef in package.json and commit the reviewed value first.'
+}
+if ($TrustedProductionTargetStatus -notin @('protected-unapproved', 'activation-approved')) {
+  throw 'Configure supermega.productionSupabaseTargetStatus as protected-unapproved or activation-approved and commit it first.'
 }
 
 if ($ProductionHandoff) {
   if ($ExpectedProjectRef -ne $TrustedProductionProjectRef) {
     throw 'ProductionHandoff requires the exact reviewed production Supabase project ref.'
+  }
+  if ($TrustedProductionTargetStatus -ne 'activation-approved') {
+    throw 'ProductionHandoff is blocked until the committed Supabase target status is activation-approved.'
   }
 }
 elseif ($ExpectedProjectRef -eq $TrustedProductionProjectRef) {

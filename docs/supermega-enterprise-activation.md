@@ -19,7 +19,7 @@ The current sanitized proof is `hq/research/postgres17-rehearsal.json`. It recor
 
 ## One-time non-production proof
 
-1. Record the approved production project's exact 20-character ref in `supermega.productionSupabaseProjectRef` in `package.json`, review it, and commit it before the rehearsal. The preflight rejects an unconfigured value or any uncommitted change to that file. A project ref is a public identifier, not a credential. If there is no approved production project, stop here rather than guessing a ref.
+1. Record the protected production project's exact 20-character ref in `supermega.productionSupabaseProjectRef` in `package.json`, keep `supermega.productionSupabaseTargetStatus` at `protected-unapproved`, review both, and commit them before the rehearsal. The ref is an exclusion boundary, not activation approval: non-production preflight must reject it, while production handoff must remain impossible. The preflight rejects an unconfigured value or any uncommitted change to that file. A project ref is a public identifier, not a credential. If there is no known production project to protect, stop here rather than guessing a ref.
 2. Create a Supabase branch or separate non-production project and confirm backup and restore responsibilities. Record its different 20-character ref. If a branch is used, remember that [custom roles are not captured when a branch is created](https://supabase.com/docs/guides/deployment/branching/dashboard), so this rehearsal must recreate and verify the SuperMega roles explicitly.
 3. Download that project's CA certificate from the dashboard SSL Configuration panel and save it in an ignored local file such as `.tmp/supermega-rehearsal-ca.crt`. Save an administrative URL for the empty rehearsal target in `.tmp/supermega-rehearsal-admin-url.txt` with `sslmode=verify-full`. Prefer the [direct connection](https://supabase.com/docs/guides/database/connecting-to-postgres) on port `5432`; on an IPv4-only machine, the shared session pooler on port `5432` is accepted. The transaction-mode pooler on port `6543` is for serverless runtime traffic and is deliberately rejected for migrations. Never put a database URL in a command argument, source file, issue, task, or chat. Supabase documents that [`verify-full` verifies both the CA and hostname](https://supabase.com/docs/guides/platform/ssl-enforcement), while `require` encrypts without authenticating either.
 4. Before applying SQL, bind the URL to the explicit non-production ref and run the clean-target preflight:
@@ -44,14 +44,14 @@ The audit must prove PostgreSQL major 17, reject extensions that Supabase remove
 
 ## Production handoff
 
-1. Repeat the migration and read-only audit against the approved production project while `SUPERMEGA_TRIAL_WRITES_ENABLED=0`.
+1. Repeat the migration and read-only audit against the approved production project while `SUPERMEGA_TRIAL_WRITES_ENABLED=0`. Confirm database, private-Storage, backup/restore, Security Advisor, identity, recovery, Vercel, and exact-release evidence. Only after owner review, change `supermega.productionSupabaseTargetStatus` to `activation-approved` in a separate reviewed commit; never change the ref and status in the same activation decision.
 2. Store or atomically replace the Vercel production runtime secret:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/activate_supermega_database.ps1 -DatabaseUrlFile .tmp\supermega-production-database-url.txt -StorageAuditDatabaseUrlFile .tmp\supermega-production-storage-audit-url.txt -ExpectedProjectRef <REVIEWED_PRODUCTION_PROJECT_REF> -ProductionHandoff -ApprovalId <REVIEWED_APPROVAL_ID> -Replace
 ```
 
-The wrapper refuses every Vercel mutation unless the target matches the committed production ref, `-ProductionHandoff` is explicit, and a concrete reviewed approval ID is supplied. Validation-only runs must use a different project ref, so the currently protected production project cannot be mistaken for an isolated rehearsal target.
+The wrapper refuses the production-handoff path unless the target matches the committed production ref and the separately committed target status is `activation-approved`. It then still requires `-ProductionHandoff`, successful read-only validation, and a concrete reviewed approval ID before any Vercel mutation. Validation-only rehearsal runs must use a different project ref, so the protected production project cannot be mistaken for an isolated rehearsal target.
 
 3. Configure the server-only identity control and set `SUPERMEGA_TRIAL_WRITES_ENABLED=0` in the same Vercel production project. Do not use a duplicate GitHub database secret as release authority: the coordinated workflow validates `SUPERMEGA_DATABASE_URL` from the exact linked Vercel app environment before creating either production candidate.
 4. Redeploy the exact reviewed `megaos` commit. Require `/api/health` to report `enterprise_db_ready=true`, while writes remain disabled.

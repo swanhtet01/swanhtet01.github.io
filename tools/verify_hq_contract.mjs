@@ -821,7 +821,9 @@ requireContract('local PostgreSQL rehearsal remains bounded',
 requireContract('current Supabase compatibility is a release gate',
   packageText.includes('"database:supabase:compatibility": "node tools/verify_supabase_compatibility.mjs"')
   && packageText.includes('npm run database:supabase:compatibility && npm run database:migrations:verify')
-  && workboard.includes('| OPS-084 | CEO + Supabase Compatibility Codex | done-local |'))
+  && packageText.includes('"productionSupabaseTargetStatus": "protected-unapproved"')
+  && workboard.includes('| OPS-084 | CEO + Supabase Compatibility Codex | done-local |')
+  && workboard.includes('| OPS-085 | CEO + Supabase Target Authority Codex | done-local |'))
 
 requireContract('current authority includes HQ',
   current.includes('hq/portfolio.json')
