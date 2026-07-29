@@ -7,7 +7,12 @@ import {
 } from './commerce-workspace'
 import { planShopInventoryProductionAllocation, projectShopInventory } from './shop-inventory-foundation'
 import { pendingProductionMaterialHandoffs, type ProductionMaterialHandoff } from './production-material-handoff'
-import { loadPlantOrderWorkspace, type PlantOrderState } from './plant-order-foundation'
+import {
+  PLANT_ORDER_WORKSPACE_UPDATED_EVENT,
+  loadPlantOrderWorkspace,
+  plantOrderStorageKey,
+  type PlantOrderState,
+} from './plant-order-foundation'
 import { loadManagedBootstrap, requireManagedSurfaceState, type ManagedIdentity } from './managed-trial'
 import { validateProductionState } from './production-workspace'
 
@@ -54,18 +59,59 @@ function defaultStockQuantity(request: ProductionMaterialHandoff, available: num
   return String(Math.max(1, Math.min(exactWholeUnits, Math.max(available, 1))))
 }
 
+function defaultConversionNote(request: ProductionMaterialHandoff, available: number) {
+  const exactWholeUnits = request.quantityMilli % 1_000 === 0 ? request.quantityMilli / 1_000 : 0
+  return request.unit === 'pcs' && exactWholeUnits > 0 && exactWholeUnits <= available
+    ? 'One Shop stock unit equals one Plant piece.'
+    : ''
+}
+
 function formatPlantQuantity(request: ProductionMaterialHandoff) {
   return `${(request.quantityMilli / 1_000).toLocaleString(undefined, { maximumFractionDigits: 3 })} ${request.unit}`
+}
+
+const LOCAL_PLANT_SCOPE = 'plant:local-sample'
+const LEGACY_LOCAL_PLANT_SCOPE = 'plant:'
+
+function loadLocalPlantExecution() {
+  const snapshot = loadPlantOrderWorkspace(localStorage, LOCAL_PLANT_SCOPE)
+  if (snapshot.source !== 'empty') return snapshot
+  return loadPlantOrderWorkspace(localStorage, LEGACY_LOCAL_PLANT_SCOPE)
 }
 
 export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }: ShopProductionHandoffProps) {
   const actor = identity?.userId ?? 'Local Shop operator'
   const [execution, setExecution] = useState<PlantOrderState | null>(() => {
     if (identity || typeof localStorage === 'undefined') return null
-    const snapshot = loadPlantOrderWorkspace(localStorage, 'plant:local-sample')
+    const snapshot = loadLocalPlantExecution()
     return snapshot.error ? null : snapshot.state
   })
   const [loadError, setLoadError] = useState('')
+  useEffect(() => {
+    if (identity || typeof localStorage === 'undefined') return undefined
+    const refresh = () => {
+      const snapshot = loadLocalPlantExecution()
+      setExecution(snapshot.error ? null : snapshot.state)
+      setLoadError(snapshot.error)
+    }
+    const handleWorkspaceUpdate = (event: Event) => {
+      const eventScope = event instanceof CustomEvent && typeof event.detail?.scope === 'string'
+        ? event.detail.scope
+        : ''
+      if (!eventScope || eventScope === LOCAL_PLANT_SCOPE) refresh()
+    }
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === plantOrderStorageKey(LOCAL_PLANT_SCOPE)
+        || event.key === plantOrderStorageKey(LEGACY_LOCAL_PLANT_SCOPE)) refresh()
+    }
+    refresh()
+    window.addEventListener(PLANT_ORDER_WORKSPACE_UPDATED_EVENT, handleWorkspaceUpdate)
+    window.addEventListener('storage', handleStorage)
+    return () => {
+      window.removeEventListener(PLANT_ORDER_WORKSPACE_UPDATED_EVENT, handleWorkspaceUpdate)
+      window.removeEventListener('storage', handleStorage)
+    }
+  }, [identity])
   useEffect(() => {
     if (!identity) return undefined
     let active = true
@@ -135,9 +181,7 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
     setOpenRequestId(request.requestId)
     setSku(item?.sku ?? '')
     setStockQuantity(item ? defaultStockQuantity(request, item.onHand) : '1')
-    setConversionNote(request.unit === 'pcs' && request.quantityMilli % 1_000 === 0
-      ? 'One Shop stock unit equals one Plant piece.'
-      : '')
+    setConversionNote(item ? defaultConversionNote(request, item.onHand) : '')
     setReview(null)
     setError('')
     setNotice('')

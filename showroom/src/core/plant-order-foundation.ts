@@ -8,6 +8,7 @@ export const PLANT_ORDER_COST_DRIVER_CONTRACT = 'supermega.plant.cost_driver_var
 export const PLANT_ORDER_FINANCIAL_COST_CONTRACT = 'supermega.plant.financial_job_cost.v1' as const
 export const EMPTY_PLANT_ORDER_DIGEST = `sha256:${'0'.repeat(64)}`
 export const PLANT_ORDER_STORAGE_PREFIX = 'supermega.plant.order-foundation.v1:'
+export const PLANT_ORDER_WORKSPACE_UPDATED_EVENT = 'supermega:plant-order-workspace-updated'
 export const PLANT_ORDER_ADDITIONAL_MATERIAL_MAX = 11
 export const PLANT_ORDER_ADDITIONAL_OPERATION_MAX = 11
 

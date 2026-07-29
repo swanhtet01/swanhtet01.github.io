@@ -5,6 +5,7 @@ import {
   PLANT_ORDER_ADDITIONAL_OPERATION_MAX,
   PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
   PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
+  PLANT_ORDER_WORKSPACE_UPDATED_EVENT,
   applyPlantOrderPlan,
   buildPlantOrderControlledPlan,
   checkPlantOrderAvailability,
@@ -222,6 +223,10 @@ function availabilityDefaults(state: PlantOrderState) {
 function loadState(scope: string) {
   if (typeof localStorage === 'undefined') return { state: createEmptyPlantOrderState(), error: '' }
   const snapshot = loadPlantOrderWorkspace(localStorage, scope)
+  if (scope === 'plant:local-sample' && snapshot.source === 'empty') {
+    const legacySnapshot = loadPlantOrderWorkspace(localStorage, 'plant:')
+    if (legacySnapshot.source === 'current') return { state: legacySnapshot.state, error: '' }
+  }
   return { state: snapshot.state, error: snapshot.error }
 }
 
@@ -418,6 +423,9 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         ? { state: result.state, replayed: result.replayed }
         : result
       setState(accepted.state); setEvaluationTime(Date.now()); setReview(null); setSetupOpen(false)
+      if (!managed && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(PLANT_ORDER_WORKSPACE_UPDATED_EVENT, { detail: { scope } }))
+      }
       setNotice(accepted.replayed ? 'The exact command was already recorded.' : `${review.title} recorded with attributed evidence.`)
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Plant execution was not confirmed.')
