@@ -213,6 +213,37 @@ export type ManagedClientImportValidation = {
   }
 }
 
+export const MANAGED_CLIENT_IMPORT_PREFLIGHT_CHECKS = [
+  'trusted_managed_identity',
+  'human_actor',
+  'setup_write_capability',
+  'product_write_capability',
+  'package_digest_bound',
+  'current_revision_bound',
+  'atomic_adapter_ready',
+] as const
+
+export type ManagedClientImportApplyPreflight = {
+  contract: 'supermega.client_import_apply_preflight.v1'
+  status: 'ready_for_owner_confirmation'
+  workspace_id: string
+  actor_id: string
+  product: ManagedClientImportPackage['product']
+  object: string
+  workflow_template_id: string
+  target_surface: 'commerce' | 'production' | 'website'
+  required_capability: 'commerce.write' | 'production.write' | 'website.write'
+  package_digest: string
+  row_count: number
+  expected_version: number
+  current_version: number
+  preflight_digest: string
+  confirmation: string
+  checks: typeof MANAGED_CLIENT_IMPORT_PREFLIGHT_CHECKS
+  external_writes_performed: false
+  next_step: string
+}
+
 export type ManagedClientImportActivation = {
   contract: 'supermega.client_import_activation.v1'
   status: 'applied'
@@ -824,6 +855,28 @@ export async function managedClientImportPackageDigest(stagingPackage: ManagedCl
   return sha256Text(serializeManagedClientImportPackage(stagingPackage))
 }
 
+export async function managedClientImportApplyPreflightDigest(input: {
+  expectedVersion: number
+  identity: ManagedIdentity
+  validation: ManagedClientImportValidation
+}) {
+  const projection = [
+    'supermega.client_import_apply_preflight.v1',
+    1,
+    input.identity.workspaceId,
+    input.identity.userId,
+    input.validation.product,
+    input.validation.object,
+    input.validation.workflow_template_id,
+    input.validation.activation.target_surface,
+    input.validation.activation.required_capability,
+    input.validation.package_digest,
+    input.validation.row_count,
+    input.expectedVersion,
+  ]
+  return sha256Text(JSON.stringify(projection))
+}
+
 export function assertManagedClientImportValidation(
   response: unknown,
   stagingPackage: ManagedClientImportPackage,
@@ -878,6 +931,77 @@ export function assertManagedClientImportValidation(
 function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]) {
   const actual = Object.keys(value).sort()
   return actual.length === expected.length && expected.every((key, index) => actual[index] === key)
+}
+
+export async function assertManagedClientImportApplyPreflight(
+  response: unknown,
+  stagingPackage: ManagedClientImportPackage,
+  validation: ManagedClientImportValidation,
+  expectedIdentity: ManagedIdentity,
+  expectedVersion: number,
+): Promise<ManagedClientImportApplyPreflight> {
+  if (!isRecord(response)
+    || !isRecord(response.preflight)
+    || response.identity_authority !== 'trusted_managed_identity'
+    || response.external_writes_performed !== false
+    || response.secret_values_exposed !== false) {
+    throw new ManagedTrialError('The managed import preflight was not bound to trusted workspace authority.', {
+      code: 'managed_client_import_apply_preflight_invalid',
+    })
+  }
+  const preflight = response.preflight
+  const expectedDigest = await managedClientImportApplyPreflightDigest({
+    expectedVersion,
+    identity: expectedIdentity,
+    validation,
+  })
+  const checks = preflight.checks
+  if (!hasExactKeys(preflight, [
+    'actor_id',
+    'checks',
+    'confirmation',
+    'contract',
+    'current_version',
+    'expected_version',
+    'external_writes_performed',
+    'next_step',
+    'object',
+    'package_digest',
+    'preflight_digest',
+    'product',
+    'required_capability',
+    'row_count',
+    'status',
+    'target_surface',
+    'workflow_template_id',
+    'workspace_id',
+  ])
+    || preflight.contract !== 'supermega.client_import_apply_preflight.v1'
+    || preflight.status !== 'ready_for_owner_confirmation'
+    || preflight.workspace_id !== expectedIdentity.workspaceId
+    || preflight.actor_id !== expectedIdentity.userId
+    || preflight.product !== stagingPackage.product
+    || preflight.object !== stagingPackage.object
+    || preflight.workflow_template_id !== stagingPackage.workflowTemplateId
+    || preflight.target_surface !== validation.activation.target_surface
+    || preflight.required_capability !== validation.activation.required_capability
+    || preflight.package_digest !== validation.package_digest
+    || preflight.row_count !== stagingPackage.rows.length
+    || preflight.expected_version !== expectedVersion
+    || preflight.current_version !== expectedVersion
+    || preflight.preflight_digest !== expectedDigest
+    || preflight.confirmation !== `APPLY ${validation.package_digest}`
+    || !Array.isArray(checks)
+    || checks.length !== MANAGED_CLIENT_IMPORT_PREFLIGHT_CHECKS.length
+    || !MANAGED_CLIENT_IMPORT_PREFLIGHT_CHECKS.every((check, index) => checks[index] === check)
+    || preflight.external_writes_performed !== false
+    || typeof preflight.next_step !== 'string'
+    || !preflight.next_step.includes('idempotent managed import')) {
+    throw new ManagedTrialError('The managed import preflight does not match the reviewed package and workspace revision.', {
+      code: 'managed_client_import_apply_preflight_invalid',
+    })
+  }
+  return preflight as unknown as ManagedClientImportApplyPreflight
 }
 
 function canonicalManagedStateValue(value: unknown): unknown {
@@ -1537,6 +1661,43 @@ export async function validateManagedClientImport(
   )
 }
 
+export async function preflightManagedClientImport(request: {
+  expectedVersion: number
+  identity: ManagedIdentity
+  stagingPackage: ManagedClientImportPackage
+  validation: ManagedClientImportValidation
+}) {
+  const body = serializeManagedClientImportPackage(request.stagingPackage)
+  const submittedPackage = JSON.parse(body) as ManagedClientImportPackage
+  const currentDigest = await sha256Text(body)
+  if (request.validation.workspace_id !== request.identity.workspaceId
+    || request.validation.package_digest !== currentDigest
+    || request.validation.product !== submittedPackage.product) {
+    throw new ManagedTrialError('The validated import changed before preflight.', {
+      code: 'managed_client_import_package_changed',
+    })
+  }
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/imports/apply-preflight',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        expected_version: request.expectedVersion,
+        package: submittedPackage,
+      }),
+    },
+    true,
+    request.identity,
+  )
+  return await assertManagedClientImportApplyPreflight(
+    response,
+    submittedPackage,
+    request.validation,
+    request.identity,
+    request.expectedVersion,
+  )
+}
+
 export async function validateManagedEcommerceOrderQueue(
   packet: EcommerceOrderQueueReadinessPacket,
   expectedIdentity: ManagedIdentity,
@@ -1601,6 +1762,7 @@ export async function applyManagedClientImport(request: {
   commandId: string
   expectedVersion: number
   identity: ManagedIdentity
+  preflight: ManagedClientImportApplyPreflight
   priorState?: CommerceState
   stagingPackage: ManagedClientImportPackage
   validation: ManagedClientImportValidation
@@ -1621,12 +1783,26 @@ export async function applyManagedClientImport(request: {
   const activationVersionIsValid = submittedPackage.product === 'ecommerce'
     ? Number.isSafeInteger(request.expectedVersion) && request.expectedVersion >= 1 && Boolean(request.priorState)
     : request.expectedVersion === 0 && request.priorState === undefined
+  const expectedPreflightDigest = await managedClientImportApplyPreflightDigest({
+    expectedVersion: request.expectedVersion,
+    identity: request.identity,
+    validation: request.validation,
+  })
   if (!clientImportAtomicAdapter(submittedPackage.product)
     || !activationVersionIsValid
     || request.validation.product !== submittedPackage.product
     || request.validation.activation.atomic_adapter_ready !== true
     || request.validation.workspace_id !== request.identity.workspaceId
     || request.validation.package_digest !== currentDigest
+    || request.preflight.contract !== 'supermega.client_import_apply_preflight.v1'
+    || request.preflight.workspace_id !== request.identity.workspaceId
+    || request.preflight.actor_id !== request.identity.userId
+    || request.preflight.product !== submittedPackage.product
+    || request.preflight.package_digest !== currentDigest
+    || request.preflight.expected_version !== request.expectedVersion
+    || request.preflight.current_version !== request.expectedVersion
+    || request.preflight.preflight_digest !== expectedPreflightDigest
+    || request.preflight.external_writes_performed !== false
     || !CLIENT_IMPORT_COMMAND_ID.test(request.commandId)) {
     throw new ManagedTrialError('The validated import changed before activation.', {
       code: 'managed_client_import_package_changed',
@@ -1656,6 +1832,7 @@ export async function applyManagedClientImport(request: {
       body: JSON.stringify({
         command_id: request.commandId,
         expected_version: request.expectedVersion,
+        preflight_digest: request.preflight.preflight_digest,
         confirmation: `APPLY ${request.validation.package_digest}`,
         package: submittedPackage,
       }),
