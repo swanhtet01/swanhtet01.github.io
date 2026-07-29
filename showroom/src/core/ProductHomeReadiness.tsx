@@ -1,7 +1,15 @@
-import { useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 
 import { readBehaviorTrail, recordBehaviorSignal, summarizeBehaviorPreferences, type BehaviorProductId, type BehaviorTrailEntry } from './behavior-trail'
+import {
+  BUSINESS_COMMAND_PROMPTS,
+  buildBusinessCommandAnswer,
+  classifyBusinessQuestion,
+  readLocalBusinessSnapshot,
+  type BusinessCommandAnswer,
+  type BusinessCommandIntent,
+} from './business-command'
 
 type ProductHomeReadinessProps = {
   activationCoverage: number
@@ -19,7 +27,10 @@ const productContinuations = {
 } satisfies Record<Exclude<BehaviorProductId, 'unknown'>, { label: string; path: string }>
 
 export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHostedAction, progress, ready }: ProductHomeReadinessProps) {
+  const commandInputRef = useRef<HTMLInputElement>(null)
   const [behaviorTrail] = useState<BehaviorTrailEntry[]>(() => readBehaviorTrail(window.localStorage))
+  const [question, setQuestion] = useState('')
+  const [answer, setAnswer] = useState<BusinessCommandAnswer>(() => buildBusinessCommandAnswer(readLocalBusinessSnapshot(window.localStorage), 'attention'))
   const behaviorProducts = useMemo(() => new Set(behaviorTrail.map((entry) => entry.product).filter((product) => product !== 'unknown')).size, [behaviorTrail])
   const behaviorPreference = useMemo(() => summarizeBehaviorPreferences(behaviorTrail), [behaviorTrail])
   const preferredContinuation = behaviorPreference.preferred ? productContinuations[behaviorPreference.preferred.product] : null
@@ -50,6 +61,57 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
     ['Operate products', behaviorProducts ? `${behaviorProducts}/4 touched` : 'Pick one product', 'Shop, Plant, Website, and Ecommerce stay separate apps but share one evidence and approval system.'],
   ] as const
 
+  useEffect(() => {
+    if (window.location.hash !== '#command-center') return
+    window.requestAnimationFrame(() => {
+      document.getElementById('command-center')?.scrollIntoView({ block: 'start' })
+      commandInputRef.current?.focus()
+    })
+  }, [])
+
+  function runBusinessCommand(intent: BusinessCommandIntent) {
+    setAnswer(buildBusinessCommandAnswer(readLocalBusinessSnapshot(window.localStorage), intent))
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: intent === 'shop_inventory'
+        ? 'commerce'
+        : intent === 'plant_control'
+          ? 'production'
+          : intent === 'website_readiness'
+            ? 'website'
+            : intent === 'ecommerce_readiness'
+              ? 'ecommerce'
+              : 'unknown',
+      route: window.location.pathname + window.location.search + window.location.hash,
+      detail: `Ask SuperMega: ${intent}`,
+    })
+  }
+
+  function submitBusinessQuestion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    runBusinessCommand(classifyBusinessQuestion(question))
+  }
+
+  function chooseBusinessPrompt(intent: BusinessCommandIntent, prompt: string) {
+    setQuestion(prompt)
+    runBusinessCommand(intent)
+  }
+
+  function recordAnswerFollow() {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: answer.nextAction.product === 'shop'
+        ? 'commerce'
+        : answer.nextAction.product === 'plant'
+          ? 'production'
+          : answer.nextAction.product === 'settings'
+            ? 'unknown'
+            : answer.nextAction.product,
+      route: window.location.pathname + window.location.search + window.location.hash,
+      detail: `Follow SuperMega answer: ${answer.intent}`,
+    })
+  }
+
   return (
     <>
       <section className="product-home-readiness product-home-business-tracks" aria-label="Product starter paths">
@@ -71,24 +133,69 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
           ))}
         </div>
       </section>
-      <section className="product-home-readiness product-home-command-queue" aria-label="AI command queue">
+      <section className="product-home-readiness product-home-command-queue" id="command-center" aria-label="Ask SuperMega business command center">
         <div className="product-home-readiness-head">
           <div>
-            <span className="core-eyebrow">AI command queue</span>
-            <h2>One queue tells the owner what to do next.</h2>
-            <p>Current data and safety gates choose urgent work first. When no higher-priority blocker exists, repeated owner choices select the safe product to continue. It prepares the work; it does not send, publish, charge, move stock, write production, or train models from this queue.</p>
+            <span className="core-eyebrow">Ask SuperMega</span>
+            <h2>Ask what needs attention.</h2>
+            <p>Free mode answers from validated local Shop, Plant, Website, and Ecommerce records. Premium can add approved managed history and cross-workflow context.</p>
           </div>
-          <Link className="core-button primary" to={commandPath}>{commandLabel}</Link>
         </div>
-        <div className="product-home-readiness-grid">
-          {agentCommandQueueRows.map(([label, value, detail]) => (
-            <span key={label}>
-              <small>{label}</small>
-              <strong>{value}</strong>
-              <em>{detail}</em>
-            </span>
+        <form className="business-command-form" onSubmit={submitBusinessQuestion}>
+          <label htmlFor="business-command-question">Business question</label>
+          <div>
+            <input
+              aria-label="Ask a business question"
+              id="business-command-question"
+              maxLength={240}
+              onChange={(event) => setQuestion(event.target.value)}
+              placeholder="What needs attention today?"
+              ref={commandInputRef}
+              type="text"
+              value={question}
+            />
+            <button className="core-button primary" type="submit">Ask</button>
+          </div>
+          <small>Raw questions stay in this field and are not written to behavior memory.</small>
+        </form>
+        <div className="business-command-prompts" aria-label="Suggested business questions">
+          {BUSINESS_COMMAND_PROMPTS.map((prompt) => (
+            <button key={prompt.intent} onClick={() => chooseBusinessPrompt(prompt.intent, prompt.question)} type="button">{prompt.label}</button>
           ))}
         </div>
+        <div className="business-command-answer" aria-live="polite">
+          <div className="business-command-answer-head">
+            <div>
+              <span>{answer.sourceCount}/4 validated product sources</span>
+              <h3>{answer.title}</h3>
+              <p>{answer.summary}</p>
+            </div>
+            <Link className="core-button primary" onClick={recordAnswerFollow} to={answer.nextAction.path}>{answer.nextAction.label}</Link>
+          </div>
+          <div className="business-command-facts">
+            {answer.facts.map((fact) => (
+              <span key={fact.label}>
+                <small>{fact.label}</small>
+                <strong>{fact.value}</strong>
+                <em>{fact.detail}</em>
+              </span>
+            ))}
+          </div>
+          <p className="business-command-boundary">{answer.boundary}</p>
+        </div>
+        <details className="business-command-evidence">
+          <summary><span>Why this answer</span><small>Setup, owner behavior, managed gates, and product coverage</small></summary>
+          <div className="product-home-readiness-grid">
+            {agentCommandQueueRows.map(([label, value, detail]) => (
+              <span key={label}>
+                <small>{label}</small>
+                <strong>{value}</strong>
+                <em>{detail}</em>
+              </span>
+            ))}
+          </div>
+          <Link className="text-link" to={commandPath}>{commandLabel}</Link>
+        </details>
       </section>
     </>
   )
