@@ -19,8 +19,8 @@ const defaultLocalCompanyHome = resolve(root, '..', 'supermega-local-company-sta
 const powershell = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const MAX_COMMAND_BYTES = 512 * 1024
 const MAX_REPORT_BYTES = 256 * 1024
-const EXECUTION_SPEC_VERSION = '2026-07-29.16'
-const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
+const EXECUTION_SPEC_VERSION = '2026-07-29.18'
+const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
 
 const AGENT_ROLE_MAP = Object.freeze({
   'operations-analyst': 'operations',
@@ -459,7 +459,9 @@ function validateSpecialistSections(text, requiredRoles) {
       || !/Assumption\s*:/i.test(section)
       || !/Missing proof\s*:/i.test(section)
       || /specialist draft withheld|incomplete model output|no substantive specialist draft/i.test(section)
-      || /\b(?:and|or|to|for|with|using|before|after|the|a|an|of|in|on|at|from|does|is|are|has|have|can|will|must|should|could|would|may|might|verify|confirm)\.?$/i.test(section)
+      || /Proposed next action\s*:\s*(?:execute|deploy|publish|send|pay|purchase|migrate|enable)\b/i.test(section)
+      || /\b(?:and|or|to|for|with|using|before|after|the|a|an|of|in|on|at|from|does|is|are|has|have|can|will|must|should|could|would|may|might|verify|confirm|assuming|currently|whether)\.?$/i.test(section)
+      || /\b(?:and|or|to|for|with|using|before|after|the|a|an|of|in|on|at|from|does|is|are|has|have|can|will|must|should|could|would|may|might|verify|confirm|assuming|currently|whether|not|state|reusable|consequential)\s*;\s*(?:Keep the scope local|Treat this as unverified|Require evidence before consequential action)\b/i.test(section)
       || !balancedSpecialistDelimiters(section)
       || /\[EVIDENCE:/i.test(section)) {
       fail('ally_ceo_local_cycle_specialist_section_rejected')

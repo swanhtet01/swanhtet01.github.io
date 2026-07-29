@@ -463,7 +463,7 @@ test('quality-passed reports with withheld specialist work cannot advance CEO co
 })
 
 test('quality-passed reports ending in a dangling specialist clause cannot advance', async () => {
-  for (const ending of ['or', 'does']) {
+  for (const ending of ['or', 'does', 'currently']) {
     const state = harness({ modelEventCount: 2 })
     const danglingReport = acceptedStructuredReport.replace(
       'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
@@ -506,6 +506,38 @@ test('quality-passed reports with unbalanced specialist markdown cannot advance'
             bytes: Buffer.byteLength(malformedReport),
             digest: 'sha256:' + '7'.repeat(64),
             text: malformedReport,
+          }),
+        },
+      ),
+      /ally_ceo_local_cycle_specialist_section_rejected/,
+    )
+  }
+})
+
+test('consequential proposals and dangling words before code-owned closings cannot advance', async () => {
+  const unsafeSections = [
+    'Not verified or performed: Proposed next action: Execute the hosted migration. Assumption: readiness is unconfirmed. Missing proof: owner-reviewed evidence.',
+    ...['currently', 'state', 'not', 'reusable', 'consequential'].map((word) =>
+      `Not verified or performed: Proposed next action: review one bounded local gap ending ${word}; Keep the scope local. Assumption: readiness is unconfirmed. Missing proof: owner-reviewed evidence.`
+    ),
+  ]
+  for (const unsafeSection of unsafeSections) {
+    const state = harness({ modelEventCount: 2 })
+    const unsafeReport = acceptedStructuredReport.replace(
+      'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
+      unsafeSection,
+    )
+    await assert.rejects(
+      runAllyCeoLocalCycle(
+        { execute: true },
+        {
+          plan: plan(),
+          runCommand: state.runCommand,
+          inspectReport: async () => ({
+            path: 'C:\\state\\outputs\\unsafe-action.md',
+            bytes: Buffer.byteLength(unsafeReport),
+            digest: 'sha256:' + 'a'.repeat(64),
+            text: unsafeReport,
           }),
         },
       ),
