@@ -248,6 +248,22 @@ export function SettingsPage() {
           ['First proof', 'One Shop-ready order packet', 'Show ready/blocked order rows and the owner handoff before customer contact or fulfilment.'],
           ['Gate', 'Owner approves fulfilment', 'No customer message, payment capture, delivery booking, stock move, refund, or Shop write runs from setup.'],
         ]
+  const launchPackManifest = {
+    contract: 'supermega.launch_pack_manifest.v1',
+    version: 1,
+    createdAt: new Date().toISOString(),
+    product: selectedProduct.name,
+    productSlug: selectedProduct.slug,
+    templateId: selectedTemplate.id,
+    templateName: selectedTemplate.name,
+    workspace: setup.workspace || 'Workspace not named',
+    owner: setup.owner || 'Owner not assigned',
+    rows: launchPackRows.map(([label, value, detail]) => ({ label, value, detail })),
+    allowedAiUses: ['map_starting_data', 'rank_first_workflow', 'draft_review_packet', 'summarize_missing_proof'],
+    ownerGate: launchPackRows.find(([label]) => label === 'Gate')?.[1] ?? 'Owner approval required',
+    forbiddenActions: ['customer_message_send', 'payment_capture', 'wallet_debit', 'delivery_booking', 'stock_move', 'supplier_message', 'quality_release', 'production_write', 'domain_publish', 'crm_write', 'accounting_post', 'model_training_without_owner_approval'],
+    activationRequired: true,
+  }
   const evidenceDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date())
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
   const managedTrialRequestFilename = `supermega-managed-trial-request-${evidenceDate}.json`
@@ -505,6 +521,7 @@ export function SettingsPage() {
     localRecords: localRecordCount,
     approvalPackets: managedApprovalRequests.length || approvals.length,
     behaviorSignals: behaviorSignalCount,
+    launchPackManifest,
     productSourceMap: aiProductSourceMap,
     contextHandoffManifest,
     managedWorkspaceProvisioningPacket,
@@ -541,7 +558,7 @@ export function SettingsPage() {
       ]),
     ['Coverage', `${runtime.coverageScore}%`],
   ]
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 23, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 23, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
   const ecommerceOrderQueueReadinessFilename = ecommerceOrderQueueReadinessPacket
     ? `supermega-ecommerce-order-queue-${safePacketFilename(ecommerceOrderQueueReadinessPacket.storeName)}.json`
