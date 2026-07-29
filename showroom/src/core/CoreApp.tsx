@@ -28,6 +28,7 @@ import {
   type ManagedProductionEvent,
   type ManagedStateRecord,
 } from './managed-trial'
+import { recordBehaviorSignal } from './behavior-trail'
 import { formatTime, teamDefinitions, useTeamWorkspace } from './team-work'
 import { readPlantIndustryPackId } from './plant-industry-packs'
 import {
@@ -159,12 +160,14 @@ import {
   shopProductionDemandIsCurrent,
   type ShopProductionDemandSignal,
 } from './shop-production-demand'
+import { projectPlantOrder } from './plant-order-foundation'
 
 const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
 const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').then((module) => ({ default: module.ShopInventoryFoundation })))
 const ShopOperatingFlow = lazy(() => import('./ShopOperatingFlow').then((module) => ({ default: module.ShopOperatingFlow })))
 const ShopServiceSchedule = lazy(() => import('./ShopServiceSchedule').then((module) => ({ default: module.ShopServiceSchedule })))
 const PlantOrderFoundation = lazy(() => import('./PlantOrderFoundation').then((module) => ({ default: module.PlantOrderFoundation })))
+const ProductHomeReadiness = lazy(() => import('./ProductHomeReadiness').then((module) => ({ default: module.ProductHomeReadiness })))
 
 type DecisionClaim = {
   id: string
@@ -412,6 +415,35 @@ type RuntimeEvidencePlanItem = {
   verifier: string
 }
 
+type RuntimeActivationManifest = {
+  contract: string
+  mode: string
+  ready_percent: number
+  next_action: string
+  blocked_gate_ids: string[]
+  proof_commands: Record<string, string>
+  safe_enable: string[]
+  automation_boundary: string
+  secret_values_exposed: boolean
+}
+
+type RuntimeImportProvisioningCheck = {
+  id: string
+  label: string
+  ready: boolean
+  action: string
+}
+
+export type RuntimeImportProvisioning = {
+  contract: string
+  status: string
+  ready: boolean
+  checks: RuntimeImportProvisioningCheck[]
+  forbidden_until_ready: string[]
+  next_action: string
+  secret_values_exposed: boolean
+}
+
 export type RuntimeHealth = {
   status: RuntimeStatus
   serviceStatus: string
@@ -424,6 +456,8 @@ export type RuntimeHealth = {
   requirements: string[]
   activationSteps: RuntimeActivationStep[]
   evidencePlan: RuntimeEvidencePlanItem[]
+  activationManifest: RuntimeActivationManifest | null
+  importProvisioning: RuntimeImportProvisioning | null
 }
 
 type CommerceTab = 'counter' | 'orders' | 'inventory'
@@ -606,6 +640,8 @@ const checkingRuntime: RuntimeHealth = {
   requirements: [],
   activationSteps: [],
   evidencePlan: [],
+  activationManifest: null,
+  importProvisioning: null,
 }
 
 const navigation = [
@@ -1571,7 +1607,7 @@ function useRuntimeHealth() {
           coverage_score?: number
           authentication?: { trusted_gateway_ready?: boolean; supabase_user_tokens_ready?: boolean }
           trial_backend?: { audit_ready?: boolean; write_enabled?: boolean }
-          enterprise_activation?: { requirements?: string[]; steps?: RuntimeActivationStep[]; evidence_plan?: RuntimeEvidencePlanItem[] }
+          enterprise_activation?: { requirements?: string[]; steps?: RuntimeActivationStep[]; evidence_plan?: RuntimeEvidencePlanItem[]; manifest?: RuntimeActivationManifest; import_provisioning?: RuntimeImportProvisioning }
         }
         const requirements = Array.isArray(body.enterprise_activation?.requirements) ? body.enterprise_activation.requirements : []
         const activationSteps = Array.isArray(body.enterprise_activation?.steps)
@@ -1580,6 +1616,33 @@ function useRuntimeHealth() {
         const evidencePlan = Array.isArray(body.enterprise_activation?.evidence_plan)
           ? body.enterprise_activation.evidence_plan.filter((item) => typeof item.id === 'string' && typeof item.label === 'string' && typeof item.ready === 'boolean' && typeof item.proof === 'string' && typeof item.verifier === 'string')
           : []
+        const manifest = body.enterprise_activation?.manifest
+        const activationManifest = manifest
+          && manifest.contract === 'supermega.activation_manifest.v1'
+          && typeof manifest.mode === 'string'
+          && typeof manifest.ready_percent === 'number'
+          && typeof manifest.next_action === 'string'
+          && Array.isArray(manifest.blocked_gate_ids)
+          && Array.isArray(manifest.safe_enable)
+          && typeof manifest.proof_commands === 'object'
+          && manifest.secret_values_exposed === false
+          ? manifest
+          : null
+        const importProvisioning = body.enterprise_activation?.import_provisioning
+        const managedImportProvisioning = importProvisioning
+          && importProvisioning.contract === 'supermega.import_provisioning_readiness.v1'
+          && typeof importProvisioning.status === 'string'
+          && typeof importProvisioning.ready === 'boolean'
+          && Array.isArray(importProvisioning.checks)
+          && Array.isArray(importProvisioning.forbidden_until_ready)
+          && typeof importProvisioning.next_action === 'string'
+          && importProvisioning.secret_values_exposed === false
+          ? {
+            ...importProvisioning,
+            checks: importProvisioning.checks.filter((check) => typeof check.id === 'string' && typeof check.label === 'string' && typeof check.ready === 'boolean' && typeof check.action === 'string'),
+            forbidden_until_ready: importProvisioning.forbidden_until_ready.filter((action) => typeof action === 'string'),
+          }
+          : null
         const authReady = Boolean(body.authentication?.trusted_gateway_ready || body.authentication?.supabase_user_tokens_ready)
         const auditReady = body.trial_backend?.audit_ready === true
         const writesReady = body.trial_backend?.write_enabled === true
@@ -1603,6 +1666,8 @@ function useRuntimeHealth() {
           requirements,
           activationSteps,
           evidencePlan,
+          activationManifest,
+          importProvisioning: managedImportProvisioning,
         })
       })
       .catch(() => {
@@ -1624,6 +1689,7 @@ export function CoreLayout() {
   const [theme, setTheme] = useState<InterfaceTheme>(initialInterfaceTheme)
   const workspaceMainRef = useRef<HTMLElement>(null)
   const routeProduct = productFromPathname(location.pathname)
+  const settingsProduct = location.pathname.startsWith('/settings/') ? setupProductFromQuery(new URLSearchParams(location.search).get('product')) : null
   const routeName = location.pathname.startsWith('/website/')
       ? 'Website'
     : location.pathname.startsWith('/ecommerce/')
@@ -1641,6 +1707,23 @@ export function CoreLayout() {
     document.title = `${routeName} | SuperMega`
     window.scrollTo({ top: 0, behavior: 'instant' })
   }, [location.pathname, location.search, routeName])
+
+  useEffect(() => {
+    const route = `${location.pathname}${location.search}`
+    const product = routeProduct ?? settingsProduct ?? 'unknown'
+    recordBehaviorSignal(window.localStorage, {
+      event: location.pathname === '/'
+        ? 'home_opened'
+        : location.pathname.startsWith('/settings/')
+          ? (settingsProduct ? 'setup_opened' : 'settings_opened')
+          : routeProduct
+            ? 'product_opened'
+            : 'settings_opened',
+      product,
+      route,
+      detail: routeProduct ? `${productDisplayName(routeProduct)} workspace viewed.` : location.pathname.startsWith('/settings/') ? 'Setup and activation controls viewed.' : 'Product launcher viewed.',
+    })
+  }, [location.pathname, location.search, routeProduct, settingsProduct])
 
   useEffect(() => {
     document.documentElement.dataset.supermegaTheme = theme
@@ -1691,6 +1774,7 @@ const customerTracks = [
 ] as const
 
 export function ProductHomePage() {
+  const runtime = useOutletContext<RuntimeHealth>()
   const [setup] = useSetupWorkspace()
   const progress = pilotProgress(setup)
   const ready = pilotReady(setup)
@@ -1698,6 +1782,8 @@ export function ProductHomePage() {
   const template = templateFor(setup.product, setup.templateId)
   const sourceNamed = Boolean(setup.currentRecord.trim())
   const proofNamed = Boolean(setup.acceptanceEvidence.trim())
+  const activationCoverage = runtime.activationManifest?.ready_percent ?? runtime.coverageScore
+  const hostedReady = runtime.operatingMode === 'managed_trial' && runtime.writesReady && runtime.requirements.length === 0
   const nextHref = ready ? '/settings/' : clientSetupPath(setup.product)
   const nextAction = ready ? 'Export evidence' : 'Finish setup'
   const nextDetail = ready
@@ -1709,6 +1795,7 @@ export function ProductHomePage() {
     ['Proof', proofNamed ? 'Acceptance proof named' : 'Needs acceptance proof', proofNamed ? setup.acceptanceEvidence : 'Define the evidence that proves the workflow works.'],
     ['AI context', ready ? 'Ready for managed import' : 'Locked until evidence', ready ? 'Premium can learn from approved data, roles, and audit.' : 'Free stays local until the owner approves activation.'],
   ] as const
+  const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Managed activation proof is still required.'
   return (
     <div className="workspace-screen product-home-screen">
       <PageHeading copy="Use a local workspace first. Activate managed data and AI when ready." eyebrow="Products" title="Choose a product. Run work." />
@@ -1742,6 +1829,9 @@ export function ProductHomePage() {
           ))}
         </div>
       </section>
+      <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
+        <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={progress} ready={ready} />
+      </Suspense>
       <nav aria-label="Business tracks" className="product-track-grid">
         {customerTracks.map(([name, fit, outcome, path, product]) => (
           <article className="product-track-card" key={name}>
@@ -3041,6 +3131,147 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   </div>
   const orderNotice = notice || commerceStorageError
   const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)
+  const activePurchaseOrders = purchaseOrderRows.filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received')
+  const procurementArrivalRows = activePurchaseOrders.map((row) => ({
+    ...row,
+    urgency: commercePurchaseOrderArrivalUrgency(row.purchaseOrder, row.progress, purchaseOrderClock),
+  }))
+  const overduePurchaseOrders = procurementArrivalRows.filter(({ urgency }) => urgency === 'late')
+  const dueSoonPurchaseOrders = procurementArrivalRows.filter(({ urgency }) => urgency === 'due_soon')
+  const uncoveredReorderItems = lowStock.filter((item) => !activePurchaseOrderBySku.has(item.sku))
+  const openPurchaseRemainingUnits = activePurchaseOrders.reduce((total, { progress }) => total + progress.remaining, 0)
+  const activeSupplierCount = new Set(activePurchaseOrders.map(({ purchaseOrder }) => purchaseOrder.supplier)).size
+  const partiallyReceivedPurchaseOrders = activePurchaseOrders.filter(({ progress }) => progress.status === 'partially_received')
+  const shopProcurementNext = !commerceCanWrite
+    ? 'Restore Shop readiness'
+    : pendingAction
+      ? 'Approve pending stock action'
+      : overduePurchaseOrders.length
+        ? 'Receive or cancel late PO'
+        : dueSoonPurchaseOrders.length
+          ? 'Check arriving PO'
+          : uncoveredReorderItems.length
+            ? 'Order uncovered stock'
+            : activePurchaseOrders.length
+              ? 'Track open supply'
+              : !commerce.inventoryFoundation || !managedInventoryProjection
+                ? 'Set up stock foundation'
+                : 'Supply ready'
+  const shopProcurementRows = [
+    ['Need', uncoveredReorderItems.length ? `${uncoveredReorderItems.length} SKU` : 'Covered'],
+    ['On order', activePurchaseOrders.length ? `${activePurchaseOrders.length} PO` : 'None'],
+    ['Remaining', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} units` : 'Clear'],
+    ['Arrival', overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : dueSoonPurchaseOrders.length ? `${dueSoonPurchaseOrders.length} due soon` : 'Scheduled'],
+    ['Receipt', commerce.inventoryFoundation && managedInventoryProjection ? 'Location + lot' : 'Simple stock'],
+    ['Owner gate', commerceCanWrite && !pendingAction ? 'Required' : 'Locked'],
+  ] as const
+  const supplierControlNext = !commerceCanWrite
+    ? 'Restore purchasing readiness'
+    : pendingAction
+      ? 'Approve pending supplier action'
+      : overduePurchaseOrders.length
+        ? 'Resolve late supplier order'
+        : dueSoonPurchaseOrders.length
+          ? 'Prepare receiving evidence'
+          : partiallyReceivedPurchaseOrders.length
+            ? 'Close partial receipt'
+            : uncoveredReorderItems.length
+              ? 'Choose supplier and arrival'
+              : activePurchaseOrders.length
+                ? 'Monitor supplier promise'
+                : 'Supplier controls ready'
+  const supplierControlRows = [
+    ['Suppliers', activeSupplierCount ? `${activeSupplierCount} active` : uncoveredReorderItems.length ? 'Choose one' : 'None needed'],
+    ['Arrival', overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : dueSoonPurchaseOrders.length ? `${dueSoonPurchaseOrders.length} due` : activePurchaseOrders.length ? 'Scheduled' : 'Clear'],
+    ['Open units', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} remaining` : 'Clear'],
+    ['Receipt', commerce.inventoryFoundation && managedInventoryProjection ? 'Lot evidence' : 'Simple count'],
+    ['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Owner confirms' : 'Locked'],
+  ] as const
+  const shopProcurement = <section className="shop-order-control" aria-label="Shop procurement readiness">
+    <div><span className="core-eyebrow">Procurement readiness</span><strong>{shopProcurementNext}</strong><small>AI checks reorder demand, open POs, arrival risk, receipt evidence, and location/lot readiness. No supplier message, payment, receipt, stock, costing, or accounting write runs from this panel.</small></div>
+    <div className="shop-order-control-rows">{shopProcurementRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
+  const supplierControl = <section className="shop-order-control supplier-control" aria-label="Supplier control">
+    <div><span className="core-eyebrow">Supplier control</span><strong>{supplierControlNext}</strong><small>AI turns supplier reference, promised arrival, open quantity, receipt evidence, and owner approval into one purchasing queue. No RFQ, supplier send, payment, payable, costing, or inventory write runs from this panel.</small><button className="text-link" disabled={commerceControlsDisabled || !uncoveredReorderItems.length} onClick={startSupplierRequest} type="button">Start supplier request</button></div>
+    <div className="shop-order-control-rows">{supplierControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
+  const shopAgentJob = !commerceCanWrite
+    ? 'Restore Shop write readiness'
+    : pendingAction
+      ? 'Approve pending Shop change'
+      : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
+        ? 'Review online order requests'
+        : actionOrders.length
+          ? 'Finish fulfilment queue'
+          : activePurchaseOrders.length
+            ? 'Receive purchase orders'
+            : lowStock.length
+              ? 'Reorder low stock'
+              : !commerce.inventoryFoundation || !managedInventoryProjection
+                ? 'Set up stock locations'
+                : 'Open counter for next sale'
+  const shopAgentReason = !commerceCanWrite
+    ? 'Writes are paused until durable storage or managed workspace readiness is confirmed.'
+    : pendingAction
+      ? 'A reviewed Shop change is waiting for a named human confirmation.'
+      : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
+        ? `${pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)} online request${pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0) === 1 ? '' : 's'} need Shop review before order, stock, payment, or delivery changes.`
+        : actionOrders.length
+          ? `${actionOrders.length} order${actionOrders.length === 1 ? '' : 's'} need fulfilment, payment, return, or cancellation handling.`
+          : activePurchaseOrders.length
+            ? `${activePurchaseOrders.length} purchase order${activePurchaseOrders.length === 1 ? '' : 's'} can be checked against received stock evidence.`
+            : lowStock.length
+              ? `${lowStock.length} SKU${lowStock.length === 1 ? '' : 's'} are at or below reorder level.`
+              : !commerce.inventoryFoundation || !managedInventoryProjection
+                ? 'Stock can move from simple on-hand counts to location, lot, ATP, reservation, and count evidence.'
+                : 'Orders, inventory, purchase orders, and stock foundation are ready for front-counter work.'
+  const shopOwnerGate = !commerceCanWrite
+    ? 'Owner opens Settings before any Shop write is allowed.'
+    : pendingAction
+      ? 'Owner approves or cancels the pending accountable action.'
+      : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
+        ? 'Owner chooses whether each online request becomes a Shop order.'
+        : actionOrders.length
+          ? 'Owner confirms fulfilment, payment, return, cancellation, or settlement.'
+          : activePurchaseOrders.length
+            ? 'Owner confirms received quantity, location, lot, and evidence.'
+            : lowStock.length
+              ? 'Owner confirms supplier reference, expected arrival, and quantity.'
+              : !commerce.inventoryFoundation || !managedInventoryProjection
+                ? 'Owner enables the inventory foundation before location-level stock control.'
+                : 'Owner confirms each sale before stock or cash records change.'
+  const shopAgentPath = !commerceCanWrite
+    ? '/settings/#controls'
+    : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting || actionOrders.length || pendingAction
+      ? '/shop/?tab=orders'
+      : activePurchaseOrders.length || lowStock.length || !commerce.inventoryFoundation || !managedInventoryProjection
+        ? '/shop/?tab=inventory'
+        : '/shop/?tab=counter'
+  const shopAgentRows = [
+    ['Agent job', shopAgentJob],
+    ['Reason', shopAgentReason],
+    ['Owner gate', shopOwnerGate],
+  ]
+  const shopAgentQueue = <section aria-label="Recommended Shop agent job" className="shop-agent-queue">
+    <div>
+      <span className="core-eyebrow">Shop agent queue</span>
+      <h2>{shopAgentJob}</h2>
+      <p>AI prepares the next Shop move. Humans approve every consequential action.</p>
+    </div>
+    <div>{shopAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+    <Link className="core-button compact" onClick={() => {
+      recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'commerce', route: commerceLocation.pathname + commerceLocation.search, detail: shopAgentJob })
+    }} to={shopAgentPath}>{shopAgentPath.includes('settings') ? 'Open Settings' : shopAgentPath.includes('inventory') ? 'Open Inventory' : shopAgentPath.includes('orders') ? 'Open Orders' : 'Open Counter'}</Link>
+  </section>
+
+  useEffect(() => {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_seen',
+      product: 'commerce',
+      route: commerceLocation.pathname + commerceLocation.search,
+      detail: shopAgentJob,
+    })
+  }, [commerceLocation.pathname, commerceLocation.search, shopAgentJob])
 
   function showOrderComposer() {
     const dialog = orderComposerRef.current
@@ -4187,6 +4418,29 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       : `Create an internal order for ${item.name}. This does not contact a supplier or create a payment.`)
   }
 
+  function startSupplierRequest() {
+    const item = uncoveredReorderItems[0]
+    if (!item) {
+      setNotice('Supplier request is clear. No uncovered reorder item needs a draft.')
+      return
+    }
+    if (catalogEditDraft) {
+      requestAnimationFrame(() => catalogEditEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
+      setNotice('Finish or cancel the catalog edit before starting a supplier request. Your catalog draft was preserved.')
+      return
+    }
+    if (stockCountDraft) {
+      const selector = stockCountTargetSelected ? '#stock-count-quantity' : '#stock-count-sku'
+      requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(selector)?.focus())
+      setNotice('Finish or cancel the stock count before starting a supplier request. Your count draft was preserved.')
+      return
+    }
+    const reorderQuantity = Math.max(item.reorderAt * 2 - item.onHand, 1)
+    setPurchaseOrderDraft({ mode: 'create', sku: item.sku, supplier: 'Preferred supplier', expectedAt: defaultPurchaseOrderExpectedInput(), quantity: String(reorderQuantity) })
+    setNotice(`Supplier request drafted for ${item.name}. Review supplier, arrival, and quantity; no RFQ, message, payment, payable, costing, or stock write is created.`)
+    requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
+  }
+
   function cancelPurchaseOrderEditor() {
     const itemSku = purchaseOrderDraft?.mode === 'create'
       ? purchaseOrderDraft.sku
@@ -4595,15 +4849,86 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const orderDraftRecoveryVisible = !orderDraftActive
     && !pendingAction
     && (orderDraftRead.status === 'ready' || orderDraftRecoveryBlocked)
+  const shopOrderControlNext = orderDraftRecoveryBlocked
+    ? 'Repair saved order draft'
+    : pendingStorefrontRequests.length
+      ? 'Review Ecommerce inbox'
+      : actionOrders.length
+        ? 'Finish fulfilment queue'
+        : paymentReview.length
+          ? 'Reconcile payment exceptions'
+          : closableOrders.length
+            ? 'Save daily close'
+            : 'Ready for new orders'
+  const shopOrderControlRows = [
+    ['Online inbox', pendingStorefrontRequests.length ? `${pendingStorefrontRequests.length} waiting` : 'Clear'],
+    ['Fulfilment', actionOrders.length ? `${actionOrders.length} needs action` : 'Clear'],
+    ['Payment', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
+    ['Recovery', orderDraftRecoveryBlocked ? 'Blocked' : orderDraftRecoveryVisible ? 'Resume available' : 'Ready'],
+    ['Write gate', commerceCanWrite && !pendingAction ? 'Ready' : 'Locked'],
+  ] as const
+  const shopOrderControlBoundary = 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock changes.'
+  const shopOrderLifecycleRows = [
+    ['Capture', pendingStorefrontRequests.length || legacyWebsiteWorkWaiting ? `${pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)} online` : openOrders.length ? `${openOrders.length} open` : 'Ready'],
+    ['Reserve', managedInventoryProjection ? 'ATP active' : 'Catalog stock'],
+    ['Fulfil', actionOrders.length ? `${actionOrders.length} action` : openOrders.length ? 'In progress' : 'Ready'],
+    ['Collect', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
+    ['Replenish', activePurchaseOrders.length ? `${activePurchaseOrders.length} active PO` : lowStock.length ? `${lowStock.length} reorder` : 'Clear'],
+    ['Return', returnDraft ? 'Drafting' : commerce.orders.some((order) => order.returns?.length) ? 'Recorded' : 'Accountable'],
+  ] as const
+  const pendingPaymentOrders = commerce.orders.filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending')
+  const refundExposureOrders = commerce.orders.filter((order) => order.refundStatus === 'due')
+  const supplierReceiptExposure = overduePurchaseOrders.length + dueSoonPurchaseOrders.length + partiallyReceivedPurchaseOrders.length
+  const shopAccountingNext = !commerceCanWrite
+    ? 'Restore accounting readiness'
+    : pendingAction
+      ? 'Approve pending Shop action'
+      : pendingPaymentOrders.length
+        ? 'Review payment exceptions'
+        : refundExposureOrders.length
+          ? 'Review refund exposure'
+          : supplierReceiptExposure
+            ? 'Receive supplier evidence'
+            : lowStock.length
+              ? 'Reconcile stock evidence'
+              : closableOrders.length
+                ? 'Save daily close'
+                : 'Accounting package ready'
+  const shopAccountingRows = [
+    ['Sales', closableOrders.length ? `${closableOrders.length} ready` : latestClose ? 'Closed today' : 'No close'],
+    ['Payments', pendingPaymentOrders.length ? `${pendingPaymentOrders.length} exception` : 'Clear'],
+    ['Refunds', refundExposureOrders.length ? `${refundExposureOrders.length} due` : commerce.orders.some((order) => order.refundStatus === 'settled') ? 'Settled evidence' : 'Clear'],
+    ['Receipts', supplierReceiptExposure ? `${supplierReceiptExposure} review` : activePurchaseOrders.length ? 'Open supply' : 'Clear'],
+    ['Inventory', lowStock.length ? `${lowStock.length} reconcile` : managedInventoryProjection ? 'ATP evidence' : 'Catalog evidence'],
+    ['Export gate', commerceCanWrite && !pendingAction ? 'Review only' : 'Locked'],
+  ] as const
+  const shopAccountingReadiness = <section className="shop-order-control" aria-label="Shop accounting readiness">
+    <div><span className="core-eyebrow">Accounting readiness</span><strong>{shopAccountingNext}</strong><small>AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and owner approval before any accounting export is reviewed. No ledger, tax, payment, payable, refund, inventory, or Shop write runs from this panel.</small></div>
+    <div className="shop-order-control-rows">{shopAccountingRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
+  const shopAccountingPacketRows = [
+    ['Close', latestCloseDownload ? 'CSV ready' : closePreview ? `${closableOrders.length} ready` : 'Close first'],
+    ['Ledger', latestCloseDownload ? 'Review import' : 'Not posted'],
+    ['Tax', 'Not configured'],
+    ['Payables', activePurchaseOrders.length ? `${activePurchaseOrders.length} supplier review` : 'None created'],
+    ['Settlement', paymentReview.length ? `${paymentReview.length} exception` : 'External proof only'],
+    ['Audit', latestClose?.evidenceReference ? 'Evidence linked' : 'Need close evidence'],
+  ] as const
+  const shopAccountingPacket = <section className="shop-order-control" aria-label="Shop accounting export packet">
+    <div><span className="core-eyebrow">Accounting export packet</span><strong>{latestCloseDownload ? 'Ready for accountant review' : closePreview ? 'Close before export' : 'No export package yet'}</strong><small>AI packages the reviewed daily close, payment proof, refund evidence, stock exceptions, supplier receipt exposure, and tax status for accounting review. No ledger post, tax filing, payable creation, bank settlement, refund, payment, inventory, or Shop write runs from this packet.</small></div>
+    <div className="shop-order-control-rows">{shopAccountingPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
+    {shopAgentQueue}
     <ShopCounter disabled={commerceControlsDisabled} items={commerce.items} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} />
     {actionGate}
   </div>
 
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
+    {shopAgentQueue}
     <Suspense fallback={null}><ShopOperatingFlow
       closeReady={closableOrders.length}
       confirmed={commerce.orders.filter((order) => order.status === 'confirmed').length}
@@ -4620,6 +4945,16 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     <ReceivablesAging aging={receivablesAging} />
     <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
       <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span>{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
+      <section className="shop-order-control" aria-label="Shop order control">
+        <div><span className="core-eyebrow">Order control</span><strong>{shopOrderControlNext}</strong><small>{shopOrderControlBoundary}</small></div>
+        <div className="shop-order-control-rows">{shopOrderControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+      </section>
+      <section className="shop-order-control" aria-label="Shop order lifecycle">
+        <div><span className="core-eyebrow">Order lifecycle</span><strong>Capture to return</strong><small>AI guides capture, reserve, fulfil, collect, replenish, and returns. Owner confirms orders, payments, refunds, deliveries, cancellations, and stock writes.</small></div>
+        <div className="shop-order-control-rows">{shopOrderLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+      </section>
+      {shopAccountingReadiness}
+      {shopAccountingPacket}
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftRecoveryWarning
@@ -4856,8 +5191,11 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
 
   if (tab === 'inventory') return <div className="operation-module">
     {commerceBoundary}
+    {shopAgentQueue}
     <section className="core-panel inventory-panel">
       <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : 'Count stock'}</button></div></div>
+      {shopProcurement}
+      {supplierControl}
       {stockCountDraft ? <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">Stock check</span>
@@ -5308,6 +5646,7 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
 }
 
 function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIdentity | null; tab: ProductionTab }) {
+  const productionLocation = useLocation()
   const [production, mutateProduction, productionStorageError, workspaceMode, managedVersion, managedWorkspaceId, productionCanWrite] = useProductionWorkspace(managedIdentity)
   const [relatedCommerce] = useCommerceWorkspace(managedIdentity)
   const relatedCommerceRef = useRef(relatedCommerce)
@@ -5465,6 +5804,186 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Trace', `${materialEntries.length} material`],
     ['Demand', shopDemandSignals.length ? `${shopDemandSignals.length} from Shop` : 'Current'],
   ] as const
+  const plantAgentJob = !productionCanWrite
+    ? 'Restore Plant write readiness'
+    : urgentIssueCount
+      ? 'Contain urgent Plant problems'
+      : heldJobs.length
+        ? 'Review quality holds'
+        : openDowntimeIntervals.length + openMaintenanceRecords.length
+          ? 'Close WCM records'
+          : activeJobs.length
+            ? 'Record next job output'
+            : !shiftHandoffIsCurrent
+              ? 'Build shift handoff'
+              : 'Add next Plant job'
+  const plantAgentReason = !productionCanWrite
+    ? 'The workspace must confirm durable storage or managed writes before records can change.'
+    : urgentIssueCount
+      ? `${urgentIssueCount} urgent issue${urgentIssueCount === 1 ? '' : 's'} need owner-reviewed containment.`
+      : heldJobs.length
+        ? `${heldJobs.length} job${heldJobs.length === 1 ? '' : 's'} held by quality need evidence review.`
+        : openDowntimeIntervals.length + openMaintenanceRecords.length
+          ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} WCM record${openDowntimeIntervals.length + openMaintenanceRecords.length === 1 ? '' : 's'} remain open.`
+          : activeJobs.length
+            ? `${activeJobs[0].id} is the next active job by priority and due time.`
+            : !shiftHandoffIsCurrent
+              ? 'The latest Plant revision needs a shift handoff before the next operator relies on it.'
+              : 'No active production job is waiting, so the next controlled step is planning.'
+  const plantOwnerGate = !productionCanWrite
+    ? 'Owner opens Settings or reloads before retrying.'
+    : urgentIssueCount
+      ? 'Human confirms problem, containment, reason, and evidence.'
+      : heldJobs.length
+        ? 'Quality owner releases or keeps the hold with evidence.'
+        : openDowntimeIntervals.length + openMaintenanceRecords.length
+          ? 'Maintenance owner records outcome; no equipment command is sent.'
+          : activeJobs.length
+            ? 'Operator reviews output, shift, reason, and evidence before posting.'
+            : !shiftHandoffIsCurrent
+              ? 'Supervisor reviews the read-only handoff before use.'
+              : 'Owner approves the job plan before Plant records change.'
+  const plantAgentAction = !productionCanWrite
+    ? { label: 'Open Settings', to: '/settings/#controls' }
+    : urgentIssueCount || heldJobs.length || openDowntimeIntervals.length + openMaintenanceRecords.length || !shiftHandoffIsCurrent
+      ? { label: 'Open control', to: '/plant/?tab=control' }
+      : { label: activeJobs.length ? 'Open jobs' : 'Plan job', to: '/plant/?tab=production' }
+  const plantAgentRows = [
+    ['Agent job', plantAgentJob],
+    ['Reason', plantAgentReason],
+    ['Owner gate', plantOwnerGate],
+  ] as const
+  const plantControlNext = !productionCanWrite
+    ? 'Restore write readiness'
+    : urgentIssueCount
+      ? 'Contain urgent problems'
+      : heldJobs.length
+        ? 'Clear quality holds'
+        : openDowntimeIntervals.length + openMaintenanceRecords.length
+          ? 'Close WCM work'
+          : activeJobs.length
+            ? 'Record next output'
+            : !shiftHandoffIsCurrent
+              ? 'Build shift handoff'
+              : 'Plan next job'
+  const plantControlRows = [
+    ['Jobs', activeJobs.length ? `${activeJobs.length} active` : 'Plan'],
+    ['Quality', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
+    ['WCM', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
+    ['Materials', materialEntries.length ? `${materialEntries.length} traced` : 'No trace'],
+    ['Handoff', shiftHandoffIsCurrent ? 'Ready' : 'Build'],
+    ['Write gate', productionCanWrite && !pendingAction ? 'Ready' : 'Locked'],
+  ] as const
+  const plantLifecycleRows = [
+    ['Plan', activeJobs.length ? `${activeJobs.length} active` : 'Add job'],
+    ['Execute', activeJobs[0] ? `${activeJobs[0].id} next` : 'No active job'],
+    ['Quality', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
+    ['WCM', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
+    ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'No trace'],
+    ['Handoff', shiftHandoffIsCurrent ? 'Ready' : 'Build'],
+  ] as const
+  const plantControlBoundary = 'Owner confirms production, quality, WCM, maintenance, material, and handoff writes.'
+  const openMaterialIssues = openIssues.filter((issue) => issue.kind === 'materials')
+  const shopLowStock = relatedCommerce.items.filter((item) => item.onHand <= item.reorderAt)
+  const orderExecutionProjection = production.orderExecution ? projectPlantOrder(production.orderExecution) : null
+  const plantMrpNext = !productionCanWrite
+    ? 'Restore Plant readiness'
+    : openMaterialIssues.length
+      ? 'Resolve material blockers'
+      : orderExecutionProjection?.latestAvailability?.shortfalls.length
+        ? 'Check BOM shortfalls'
+        : shopLowStock.length
+          ? 'Review Shop supply'
+          : activeJobs.length && !materialEntries.length
+            ? 'Record first material use'
+            : 'Materials ready for review'
+  const plantMrpRows = [
+    ['Demand', activeJobs.length ? `${activeJobs.length} active jobs` : 'No active job'],
+    ['BOM', orderExecutionProjection?.plan ? `${orderExecutionProjection.materials.length} materials` : 'Use order plan'],
+    ['Availability', orderExecutionProjection?.latestAvailability ? orderExecutionProjection.latestAvailability.passed ? 'Checked clear' : `${orderExecutionProjection.latestAvailability.shortfalls.length} short` : 'Needs check'],
+    ['Shop supply', shopLowStock.length ? `${shopLowStock.length} low SKU` : 'Clear'],
+    ['Issue gate', openMaterialIssues.length ? `${openMaterialIssues.length} open` : 'Clear'],
+    ['Trace', materialEntries.length ? `${materialEntries.length} consumed` : 'Not started'],
+  ] as const
+  const openQualityIssues = openIssues.filter((issue) => issue.kind === 'quality')
+  const openWcmCount = openDowntimeIntervals.length + openMaintenanceRecords.length
+  const productionGoodUnits = production.jobs.reduce((total, job) => total + job.output, 0)
+  const productionScrapUnits = production.jobs.reduce((total, job) => total + (job.scrap ?? 0), 0)
+  const plantCostReadinessNext = !productionCanWrite
+    ? 'Restore cost evidence readiness'
+    : pendingAction
+      ? 'Approve pending Plant action'
+      : !materialEntries.length
+        ? 'Record material trace before cost'
+        : heldJobs.length || openQualityIssues.length
+          ? 'Resolve quality before cost'
+          : openWcmCount
+            ? 'Close WCM before cost'
+            : !shiftHandoffIsCurrent
+              ? 'Build cost handoff'
+              : completedJobs.length
+                ? 'Cost package ready for review'
+                : 'Run evidence ready'
+  const plantCostReadinessRows = [
+    ['Good', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} units` : 'No output'],
+    ['Scrap', productionScrapUnits ? `${productionScrapUnits.toLocaleString()} units` : 'None'],
+    ['Materials', materialEntries.length ? `${materialEntries.length} traced` : 'Missing'],
+    ['Quality', heldJobs.length || openQualityIssues.length ? 'Blocked' : 'Clear'],
+    ['WCM', openWcmCount ? `${openWcmCount} open` : 'Closed'],
+    ['Cost gate', shiftHandoffIsCurrent && materialEntries.length && !heldJobs.length && !openQualityIssues.length && !openWcmCount ? 'Review only' : 'Blocked'],
+  ] as const
+  const plantCostPacketReady = Boolean(completedJobs.length && productionGoodUnits && materialEntries.length && shiftHandoffIsCurrent && !heldJobs.length && !openQualityIssues.length && !openWcmCount)
+  const plantCostPacketRows = [
+    ['Batch', completedJobs.length ? `${completedJobs.length} finished` : activeJobs.length ? 'Still running' : 'No job'],
+    ['Output', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} good` : 'No output'],
+    ['Scrap', productionScrapUnits ? `${productionScrapUnits.toLocaleString()} scrap` : 'None'],
+    ['Materials', materialEntries.length ? `${materialEntries.length} trace rows` : 'Need trace'],
+    ['Release', heldJobs.length || openQualityIssues.length ? 'Quality blocked' : shiftHandoffIsCurrent ? 'Evidence ready' : 'Need handoff'],
+    ['ERP handoff', plantCostPacketReady ? 'Review package' : 'Blocked'],
+  ] as const
+  const plantQualityReleaseNext = !productionCanWrite
+    ? 'Restore Plant readiness'
+    : pendingAction
+      ? 'Approve pending Plant action'
+      : heldJobs.length || openQualityIssues.length
+        ? 'Resolve quality holds'
+        : openWcmCount
+          ? 'Close WCM work'
+          : openMaterialIssues.length || !materialEntries.length
+            ? 'Complete trace evidence'
+            : !shiftHandoffIsCurrent
+              ? 'Build release handoff'
+              : 'Release package ready'
+  const plantQualityReleaseRows = [
+    ['Holds', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
+    ['Quality', openQualityIssues.length ? `${openQualityIssues.length} open` : 'Clear'],
+    ['WCM', openWcmCount ? `${openWcmCount} open` : 'Closed'],
+    ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'Missing'],
+    ['Handoff', shiftHandoffIsCurrent ? 'Current' : 'Needed'],
+    ['Gate', productionCanWrite && !pendingAction ? 'Owner release' : 'Locked'],
+  ] as const
+  const qualityIssuesWithContainment = openQualityIssues.filter((issue) => Boolean(issue.owner && issue.dueAt && issue.containment))
+  const plantInspectionNext = !productionCanWrite
+    ? 'Restore inspection readiness'
+    : pendingAction
+      ? 'Approve pending quality action'
+      : heldJobs.length
+        ? 'Inspect held batches'
+        : openQualityIssues.length > qualityIssuesWithContainment.length
+          ? 'Assign NCR containment'
+          : openQualityIssues.length
+            ? 'Close CAPA evidence'
+            : activeJobs.length && !materialEntries.length
+              ? 'Sample first production run'
+              : 'Inspection queue clear'
+  const plantInspectionRows = [
+    ['Sample', activeJobs.length ? `${activeJobs.length} jobs` : 'No job'],
+    ['NCR', openQualityIssues.length ? `${openQualityIssues.length} open` : 'Clear'],
+    ['Containment', qualityIssuesWithContainment.length === openQualityIssues.length ? 'Owned' : `${openQualityIssues.length - qualityIssuesWithContainment.length} missing`],
+    ['CAPA', resolvedIssues.filter((issue) => issue.kind === 'quality').length ? `${resolvedIssues.filter((issue) => issue.kind === 'quality').length} closed` : 'None yet'],
+    ['Evidence', heldJobs.length || openQualityIssues.length || materialEntries.length ? 'Required' : 'Ready'],
+    ['Release', productionCanWrite && !pendingAction && !heldJobs.length && !openQualityIssues.length ? 'Owner review' : 'Blocked'],
+  ] as const
 
   useEffect(() => {
     let current = true
@@ -5538,6 +6057,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
     if (!scheduleDraft && dialog.open) dialog.close()
   }, [scheduleDraft, tab])
+
+  useEffect(() => {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_seen',
+      product: 'production',
+      route: productionLocation.pathname + productionLocation.search,
+      detail: plantAgentJob,
+    })
+  }, [plantAgentJob, productionLocation.pathname, productionLocation.search])
 
   async function initializeManagedProduction(event: FormEvent) {
     event.preventDefault()
@@ -5947,6 +6475,17 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }, issueTriggerRef.current)
   }
 
+  function startInspectionNcr() {
+    setKind('quality')
+    setArea('Quality')
+    setSeverity('high')
+    setIssueOwner(managedIdentity?.userId ?? 'Quality owner')
+    setSummary('Inspection sample needs NCR review')
+    setContainment('Hold affected output until sample evidence, root cause, and corrective action are reviewed.')
+    setIssueDueInput(defaultIssueDueInput())
+    setIssueDialogOpen(true)
+  }
+
   function resolveIssue(issueId: string) {
     const issue = production.issues.find((candidate) => candidate.id === issueId)
     if (!issue || issue.status === 'resolved') return
@@ -6161,10 +6700,53 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <ProductionEventHistory events={production.events} />
   </>
   const plantStatus = <div aria-label="Plant MES status" className="readiness-list plant-mes-strip">{plantRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+  const plantAgentQueue = <section aria-label="Recommended Plant agent job" className="plant-agent-queue">
+    <div><span className="core-eyebrow">Plant agent queue</span><h2>{plantAgentJob}</h2><p>AI prepares the next Plant record from live jobs, quality, WCM, trace, and handoff state. Humans still approve every consequential action.</p></div>
+    <div>{plantAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+    <Link className="core-button primary compact" onClick={() => {
+      recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'production', route: productionLocation.pathname + productionLocation.search, detail: plantAgentJob })
+    }} to={plantAgentAction.to}>{plantAgentAction.label}</Link>
+  </section>
+  const plantControl = <section aria-label="Plant control" className="plant-control">
+    <div><span className="core-eyebrow">Plant control</span><strong>{plantControlNext}</strong><small>{plantControlBoundary}</small></div>
+    <div className="plant-control-rows">{plantControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
+  const plantLifecycle = <section aria-label="Plant lifecycle control" className="plant-control">
+    <div><span className="core-eyebrow">MES lifecycle</span><strong>Plan to handoff</strong><small>AI guides plan, execution, quality, WCM, trace, and handoff. No equipment or production write runs without owner approval.</small></div>
+    <div className="plant-control-rows">{plantLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
+  const plantMrp = <section aria-label="Plant MRP readiness" className="plant-control">
+    <div><span className="core-eyebrow">MRP readiness</span><strong>{plantMrpNext}</strong><small>AI reviews job demand, BOM, availability, Shop supply, material blockers, and trace evidence. No purchase, issue, costing, inventory, or production write runs from this panel.</small></div>
+    <div className="plant-control-rows">{plantMrpRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
+  const plantCostReadiness = <section aria-label="Plant ERP cost readiness" className="plant-control">
+    <div><span className="core-eyebrow">ERP cost readiness</span><strong>{plantCostReadinessNext}</strong><small>AI checks good output, scrap, material trace, quality release, WCM closure, and shift handoff before any costing package is reviewed. No costing, accounting, inventory, payroll, invoice, or production write runs from this panel.</small></div>
+    <div className="plant-control-rows">{plantCostReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
+  const plantCostPacket = <section aria-label="Plant ERP cost package packet" className="plant-control">
+    <div><span className="core-eyebrow">Cost package packet</span><strong>{plantCostPacketReady ? 'Ready for cost review' : plantCostReadinessNext}</strong><small>AI packages finished batch output, scrap, material trace, quality release state, WCM closure, and handoff evidence for ERP cost review. No standard cost update, inventory valuation, journal, payroll, invoice, certificate, or production write runs from this packet.</small></div>
+    <div className="plant-control-rows">{plantCostPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
+  const plantQualityRelease = <section aria-label="Plant quality release" className="plant-control">
+    <div><span className="core-eyebrow">ISO release</span><strong>{plantQualityReleaseNext}</strong><small>AI checks quality holds, WCM closure, material trace, shift handoff, and owner release evidence before output can be treated as ready. No quality release, certificate, equipment command, material issue, costing, inventory, or production write runs from this panel.</small></div>
+    <div className="plant-control-rows">{plantQualityReleaseRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
+  const plantInspectionControl = <section aria-label="Plant inspection and CAPA" className="plant-control">
+    <div><span className="core-eyebrow">Inspection + CAPA</span><strong>{plantInspectionNext}</strong><small>AI turns sampling, NCR containment, corrective action, evidence, and release review into one quality queue. No certificate, CAPA closure, customer claim, inventory block, costing, or production write runs from this panel.</small>{tab === 'control' ? <button className="text-link" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={startInspectionNcr} type="button">Start inspection NCR</button> : <Link className="text-link" to="/plant/?tab=control">Open inspection queue</Link>}</div>
+    <div className="plant-control-rows">{plantInspectionRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
 
   if (tab === 'production') return <div className="operation-module production-operation-module">
     {productionBoundary}
     {plantStatus}
+    {plantAgentQueue}
+    {plantControl}
+    {plantLifecycle}
+    {plantMrp}
+    {plantCostReadiness}
+    {plantCostPacket}
+    {plantQualityRelease}
+    {plantInspectionControl}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
@@ -6247,6 +6829,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   if (tab === 'control') return <div className="operation-module">
     {productionBoundary}
     {plantStatus}
+    {plantAgentQueue}
+    {plantControl}
+    {plantLifecycle}
+    {plantMrp}
+    {plantCostReadiness}
+    {plantCostPacket}
+    {plantQualityRelease}
+    {plantInspectionControl}
     <div className="control-workspace">
       <div className="split-workspace">
         <section className="core-panel production-issue-launcher">

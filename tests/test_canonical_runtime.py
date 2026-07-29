@@ -53,6 +53,16 @@ class CanonicalRuntimeTests(unittest.TestCase):
         self.assertFalse(body["authentication"]["anonymous_users_allowed"])
         self.assertFalse(body["trial_backend"]["browser_service_role_exposed"])
         self.assertGreater(len(body["enterprise_activation"]["requirements"]), 0)
+        manifest = body["enterprise_activation"]["manifest"]
+        self.assertEqual(manifest["contract"], "supermega.activation_manifest.v1")
+        self.assertEqual(manifest["mode"], "isolated_demo")
+        self.assertIsInstance(manifest["ready_percent"], int)
+        self.assertIn("database", manifest["blocked_gate_ids"])
+        self.assertIn("browser_local_trial", manifest["safe_enable"])
+        self.assertIn("evidence_export", manifest["safe_enable"])
+        self.assertNotIn("managed_trial_writes", manifest["safe_enable"])
+        self.assertIn("postgres17_rehearsal", manifest["proof_commands"])
+        self.assertFalse(manifest["secret_values_exposed"])
         self.assertEqual(response.headers["x-content-type-options"], "nosniff")
 
     def test_trial_identity_fails_closed_without_a_valid_gateway_signature(self) -> None:

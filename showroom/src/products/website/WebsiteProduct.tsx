@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { useLocation, useSearchParams } from 'react-router'
 
+import { recordBehaviorSignal } from '../../core/behavior-trail'
 import { ContentWorkspace } from './ContentWorkspace'
 import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
@@ -136,6 +137,7 @@ function editSessionStorageKey(scope: string) {
 }
 
 export function WebsiteProduct() {
+  const location = useLocation()
   const {
     workspace,
     mutateWorkspace,
@@ -735,6 +737,171 @@ export function WebsiteProduct() {
     }
   }
 
+  const failingContentChecks = checks.filter((check) => !check.id.startsWith('evidence-') && !check.passed)
+  const websiteAgentJob = storageIssue || canRepairLocalStorage
+    ? 'Recover Website workspace'
+    : starterSetupActive
+      ? 'Complete business brief'
+      : starterAvailable
+        ? 'Start from business brief'
+        : hasUnsavedChanges
+          ? 'Review unsaved site edits'
+          : failingContentChecks.length
+            ? 'Fix content readiness'
+            : !approvalIsCurrent
+              ? 'Record owner approval'
+              : !publishIsCurrent
+                ? 'Record release snapshot'
+                : storageMode === 'managed'
+                  ? 'Prepare rollout plan'
+                  : 'Download site handoff'
+  const websiteAgentReason = storageIssue || canRepairLocalStorage
+    ? 'Saving or recovery needs attention before Website work can be trusted.'
+    : starterSetupActive
+      ? 'A short business brief can replace the sample with client-specific pages before anything is saved.'
+      : starterAvailable
+        ? 'The sample is still untouched, so the fastest path is to generate a client-specific draft.'
+        : hasUnsavedChanges
+          ? 'The preview has edits that must be saved or discarded before approval or release review.'
+          : failingContentChecks.length
+            ? `${failingContentChecks.length} readiness check${failingContentChecks.length === 1 ? '' : 's'} must pass before owner approval.`
+            : !approvalIsCurrent
+              ? 'The current Website revision needs named owner review before a release snapshot is recorded.'
+              : !publishIsCurrent
+                ? 'The approved revision needs an immutable static site package for handoff.'
+                : storageMode === 'managed'
+                  ? 'The managed release can prepare a rollout plan, but provider deployment still requires owner execution.'
+                  : 'The approved static site package is ready to download; no domain or deployment changes happen here.'
+  const websiteOwnerGate = storageIssue || canRepairLocalStorage
+    ? 'Owner exports backup or confirms repair before continuing.'
+    : starterSetupActive
+      ? 'Owner reviews the generated pages before saving.'
+      : starterAvailable
+        ? 'Owner chooses to reuse the sample or enter a real business brief.'
+        : hasUnsavedChanges
+          ? 'Owner saves or discards the preview.'
+          : failingContentChecks.length
+            ? 'Owner fixes content, navigation, proof, and CTA readiness.'
+            : !approvalIsCurrent
+              ? 'Owner records approval with evidence.'
+              : !publishIsCurrent
+                ? 'Owner records the release snapshot.'
+                : storageMode === 'managed'
+                  ? 'Owner approves release manager and reviewer before deployment planning.'
+                  : 'Owner downloads the package and decides where it goes live.'
+  const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
+    ? 'Open recovery'
+    : starterSetupActive || starterAvailable
+      ? 'Open brief'
+      : hasUnsavedChanges || failingContentChecks.length
+        ? 'Open editor'
+        : !approvalIsCurrent || !publishIsCurrent || storageMode === 'managed'
+          ? 'Open release'
+          : 'Get website'
+  const websiteAgentRows = [
+    ['Agent job', websiteAgentJob],
+    ['Reason', websiteAgentReason],
+    ['Owner gate', websiteOwnerGate],
+  ]
+  const websiteLaunchPriority = storageIssue || canRepairLocalStorage
+    ? 'Recover workspace'
+    : hasUnsavedChanges
+      ? 'Save current edits'
+      : failingContentChecks.length
+        ? 'Clear readiness gaps'
+        : !approvalIsCurrent
+          ? 'Record owner approval'
+          : !publishIsCurrent
+            ? 'Package release'
+            : storageMode === 'managed'
+              ? 'Plan deployment'
+              : 'Download handoff'
+  const websiteLaunchRows = [
+    ['Priority', websiteLaunchPriority],
+    ['Readiness', failingContentChecks.length ? `${failingContentChecks.length} blocked` : 'Passed'],
+    ['Approval', approvalIsCurrent ? 'Recorded' : 'Needed'],
+    ['Package', publishIsCurrent ? 'Retained' : 'Needed'],
+    ['Publish gate', storageMode === 'managed' ? 'Owner-run rollout' : 'No deploy here'],
+  ]
+  const readyBuyerCtaPages = workspace.pages.filter((page) => page.stage === 'ready'
+    && Boolean(page.hero.ctaLabel.trim())
+    && Boolean(page.hero.ctaHref.trim()))
+  const websiteLeadCaptureNext = storageIssue || canRepairLocalStorage
+    ? 'Recover Website workspace'
+    : starterSetupActive || starterAvailable
+      ? 'Start business brief'
+      : hasUnsavedChanges
+        ? 'Save site edits'
+        : failingContentChecks.length
+          ? 'Fix capture blockers'
+          : !readyBuyerCtaPages.length
+            ? 'Add contact path'
+            : !approvalIsCurrent
+              ? 'Record owner approval'
+              : !publishIsCurrent
+                ? 'Build release package'
+                : 'Lead capture ready'
+  const websiteLeadCaptureRows = [
+    ['Brief', starterAvailable ? 'Sample only' : 'Saved'],
+    ['Contact', readyBuyerCtaPages.length ? `${readyBuyerCtaPages.length} CTA ready` : 'Missing'],
+    ['Content', failingContentChecks.length ? `${failingContentChecks.length} fixes` : 'Passed'],
+    ['Approval', approvalIsCurrent ? 'Recorded' : 'Needed'],
+    ['Handoff', publishIsCurrent ? 'Package ready' : 'No send here'],
+  ]
+  const managedRolloutNext = storageIssue || canRepairLocalStorage
+    ? 'Recover Website workspace'
+    : failingContentChecks.length
+      ? 'Fix rollout blockers'
+      : !approvalIsCurrent
+        ? 'Record approval evidence'
+        : !publishIsCurrent
+          ? 'Build static package'
+          : storageMode === 'managed'
+            ? 'Prepare managed rollout'
+            : 'Download activation packet'
+  const managedRolloutRows = [
+    ['Domain', storageMode === 'managed' ? 'Owner maps DNS' : 'Not connected'],
+    ['Forms', readyBuyerCtaPages.length ? 'Route planned' : 'Need CTA'],
+    ['Analytics', publishIsCurrent ? 'Plan ready' : 'Needs package'],
+    ['Content', failingContentChecks.length ? `${failingContentChecks.length} blocker` : 'Approved proof'],
+    ['Package', publishIsCurrent ? 'Static snapshot' : 'Needed'],
+    ['Gate', storageMode === 'managed' ? 'Owner rollout' : 'Free local only'],
+  ]
+  useEffect(() => {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_seen',
+      product: 'website',
+      route: location.pathname + location.search,
+      detail: websiteAgentJob,
+    })
+  }, [location.pathname, location.search, websiteAgentJob])
+
+  function runWebsiteAgentJob() {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'website',
+      route: location.pathname + location.search,
+      detail: websiteAgentJob,
+    })
+    if (storageIssue || canRepairLocalStorage) {
+      requestRecoveryFocus()
+      return
+    }
+    if (starterAvailable || starterSetupActive) {
+      openStarterSetup()
+      return
+    }
+    if (hasUnsavedChanges || failingContentChecks.length) {
+      openContentSurface('work')
+      return
+    }
+    if (!approvalIsCurrent || !publishIsCurrent || storageMode === 'managed') {
+      openWorkspaceView('publish')
+      return
+    }
+    downloadTrialSite()
+  }
+
   return (
     <div className="website-product">
       <div className="website-shell">
@@ -925,6 +1092,49 @@ export function WebsiteProduct() {
               <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
             ) : null}
           </header>
+
+          <section aria-label="Recommended Website agent job" className="website-agent-queue">
+            <div>
+              <span>Website agent queue</span>
+              <h2>{websiteAgentJob}</h2>
+              <p>AI prepares the next Website move. Owners approve every content, release, domain, and deployment step.</p>
+            </div>
+            <div>{websiteAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+            <button className="website-button is-primary is-compact" onClick={runWebsiteAgentJob} type="button">{websiteAgentActionLabel}</button>
+          </section>
+
+          <section aria-label="Website launch cockpit" className="website-launch-cockpit">
+            <div>
+              <span className="website-kicker">Website launch cockpit</span>
+              <h2>{websiteLaunchPriority}</h2>
+              <p>AI turns content checks, owner approval, static package, and rollout boundary into one launch queue. No domain, publish, or deployment action runs here.</p>
+            </div>
+            <div className="website-launch-cockpit-rows">
+              {websiteLaunchRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            </div>
+          </section>
+
+          <section aria-label="Website lead capture readiness" className="website-lead-capture-cockpit">
+            <div>
+              <span className="website-kicker">Website lead capture readiness</span>
+              <h2>{websiteLeadCaptureNext}</h2>
+              <p>AI checks business brief, contact path, content proof, owner approval, and release package before the site can capture a real customer request. No form send, customer message, domain, publish, CRM, or Shop write runs from this panel.</p>
+            </div>
+            <div className="website-lead-capture-cockpit-rows">
+              {websiteLeadCaptureRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            </div>
+          </section>
+
+          <section aria-label="Website managed rollout packet" className="website-rollout-packet">
+            <div>
+              <span className="website-kicker">Managed rollout packet</span>
+              <h2>{managedRolloutNext}</h2>
+              <p>AI packages domain setup, form routing, analytics plan, approved content, static snapshot, and owner rollout gate for managed activation. No DNS change, publish, form send, analytics install, CRM write, Shop write, or deployment action runs from this packet.</p>
+            </div>
+            <div className="website-rollout-packet-rows">
+              {managedRolloutRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            </div>
+          </section>
 
           <div
             aria-label={view === 'content' ? 'Edit' : 'Publish'}

@@ -18,6 +18,7 @@ import {
   ManagedTrialError,
   applyManagedClientImport,
   assertManagedClientImportState,
+  buildManagedClientImportProvisioningPlan,
   loadManagedBootstrap,
   loadManagedServiceSchedule,
   managedClientImportActivationContext,
@@ -28,6 +29,7 @@ import {
   type ManagedClientImportActivationContext,
   type ManagedClientImportActivationResult,
   type ManagedClientImportPackage,
+  type ManagedClientImportProvisioningPlan,
   type ManagedClientImportValidation,
   type ManagedIdentity,
 } from './managed-trial'
@@ -51,6 +53,7 @@ type ValidatedImport = {
   activationContext: ManagedClientImportActivationContext
   commandId: string
   contextKey: string
+  provisioningPlan: ManagedClientImportProvisioningPlan
   receipt: ManagedClientImportValidation
   stagingPackage: ManagedClientImportPackage
 }
@@ -361,6 +364,87 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       updatedAt: null,
     })
   }, [product, progressStatus, state.preview?.totals.issueRows, state.preview?.totals.ready, state.preview?.totals.rows])
+  const importCoachAction = appliedIsCurrent
+    ? 'Handoff ready'
+    : state.applying
+      ? 'Confirming import'
+      : canApplyManagedImport
+        ? `Import ${state.validation?.stagingPackage.rows.length ?? 0} reviewed rows`
+        : validationIsCurrent
+          ? 'Approve checked import'
+          : state.validating
+            ? 'Checking workspace'
+            : state.preview
+              ? mappingNeedsReview
+                ? 'Match required columns'
+                : state.preview.totals.duplicates
+                  ? 'Fix duplicate keys'
+                  : state.preview.totals.issueRows
+                    ? 'Fix row issues'
+                    : !importContextReady
+                      ? 'Add workspace and owner'
+                      : managedIdentity
+                        ? 'Check with workspace'
+                        : 'Prepare import file'
+              : 'Upload or try sample'
+  const importCoachReason = appliedIsCurrent
+    ? 'The managed result is confirmed and ready for handoff.'
+    : canApplyManagedImport
+      ? 'The workspace check passed and the owner approval box is ticked.'
+      : validationIsCurrent
+        ? 'The server checked the file. Owner approval is still required before writing records.'
+        : state.preview
+          ? state.preview.readyForStaging
+            ? 'The file is clean; the next step is accountable preparation or managed validation.'
+            : importRepairMessage
+          : 'Start with a CSV or sample so SuperMega can map columns and inspect rows locally.'
+  const importCoachRows = [
+    ['Next action', importCoachAction],
+    ['Reason', importCoachReason],
+    ['Write boundary', managedIdentity ? 'Managed check before write' : 'Local/export only'],
+  ] as const
+  const activationHandoffAction = appliedIsCurrent
+    ? 'Hand off live workspace'
+    : canApplyManagedImport
+      ? 'Owner can activate import'
+      : validationIsCurrent
+        ? 'Owner approval required'
+        : state.preview?.readyForStaging
+          ? managedIdentity
+            ? 'Run managed check'
+            : 'Download activation package'
+          : state.preview
+            ? 'Clean package first'
+            : 'Prepare first package'
+  const activationHandoffReason = appliedIsCurrent
+    ? `${managedIdentity?.workspaceId ?? 'Managed workspace'} has a confirmed import receipt.`
+    : canApplyManagedImport
+      ? 'The package is checked, the adapter is ready, and the owner approval box is selected.'
+      : validationIsCurrent
+        ? 'Server validation passed with zero records written; approve the import before activation.'
+        : state.preview?.readyForStaging
+          ? managedIdentity
+            ? 'The clean package can be checked against the managed workspace before any write.'
+            : 'Free mode can export the package for support review without sending data from the browser.'
+          : state.preview
+            ? 'The handoff stays locked until required columns, row issues, and duplicate keys are clear.'
+            : 'Start with the sample or a CSV so SuperMega can build one accountable activation package.'
+  const activationHandoffRows = [
+    ['Package', state.preview ? `${state.preview.totals.ready}/${state.preview.totals.rows} ready` : 'Waiting'],
+    ['Workspace', importContextReady ? workspace.trim() : 'Missing'],
+    ['Owner', importContextReady ? owner.trim() : 'Missing'],
+    ['Review', appliedIsCurrent ? 'Receipt ready' : canApplyManagedImport ? 'Approved' : validationIsCurrent ? 'Approve' : state.preview?.readyForStaging ? 'Prepare' : 'Locked'],
+  ] as const
+  const provisioningPlan = validationIsCurrent ? state.validation?.provisioningPlan : null
+  const provisioningPlanRows = provisioningPlan
+    ? [
+        ['Status', provisioningPlan.status === 'ready_for_owner_review' ? 'Owner review' : 'Blocked'],
+        ['Target', provisioningPlan.target_surface],
+        ['Rows', `${provisioningPlan.row_count}`],
+        ['Version', `${provisioningPlan.expected_version}`],
+        ['Controls', `${provisioningPlan.required_controls.length}`],
+      ] as const
+    : []
 
   useEffect(() => {
     requestRef.current += 1
@@ -536,6 +620,12 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         : undefined
       if (validationRequestRef.current !== validationRequestId || validationContextChanged()) return
       const activationContext = managedClientImportActivationContext(stagingPackage, activationBootstrap)
+      const provisioningPlan = buildManagedClientImportProvisioningPlan(
+        stagingPackage,
+        receipt,
+        expectedIdentity,
+        activationContext,
+      )
       const commandId = receipt.activation.atomic_adapter_ready ? importCommandId() : ''
       setState((current) => current.preview?.previewDigest === expectedPreviewDigest
         ? {
@@ -548,6 +638,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
               activationContext,
               commandId,
               contextKey: expectedContextKey,
+              provisioningPlan,
               receipt,
               stagingPackage,
             },
@@ -772,6 +863,24 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             {importStageRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
           </div>
         </div>
+        <div aria-label={`${productName} import coach`} className="catalog-import-coach">
+          <div><span className="core-eyebrow">Import coach</span><strong>{importCoachAction}</strong><small>{importCoachReason}</small></div>
+          <div className="catalog-import-coach-list">
+            {importCoachRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
+          </div>
+        </div>
+        <div aria-label={`${productName} activation handoff`} className="catalog-import-handoff">
+          <div><span className="core-eyebrow">Activation handoff</span><strong>{activationHandoffAction}</strong><small>{activationHandoffReason}</small></div>
+          <div className="catalog-import-handoff-list">
+            {activationHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
+          </div>
+        </div>
+        {provisioningPlan ? <div aria-label={`${productName} managed provisioning plan`} className="catalog-import-handoff">
+          <div><span className="core-eyebrow">Provisioning plan</span><strong>{provisioningPlan.next_step}</strong><small>No browser storage, customer message, payment, domain publish, or scheduler autopilot is allowed from this validation.</small></div>
+          <div className="catalog-import-handoff-list">
+            {provisioningPlanRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
+          </div>
+        </div> : null}
         {state.busy ? <p className="form-notice" role="status">Matching columns and checking every row...</p> : null}
         {state.validating ? <p className="form-notice" role="status">Checking the prepared import with your workspace...</p> : null}
         {state.applying ? <p className="form-notice" role="status">{managedActivation?.progressLabel ?? 'Confirming the import...'}</p> : null}

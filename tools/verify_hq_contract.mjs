@@ -596,7 +596,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && now.includes('Current local checkpoints: workspace recovery `81c1db0`, database contracts `dd0d84a`, and Shop receivables `8402162`')
   && now.includes('First-action QA routes Shop, Plant, and Website blockers to the next task')
   && now.includes('The active delivery focus is:')
-  && now.includes('this checkout has Settings evidence v13 while deployed `d38cdbb` has v23 on a 59-commit production-only line')
+  && now.includes('Local integration now combines deployed `d38cdbb` Settings v23 and richer product controls')
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
   && now.includes('operation/output requires exact authenticated Shop issue evidence')
   && now.includes('Controlled batches bind reviewed productive time and closed downtime')

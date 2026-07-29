@@ -8,6 +8,7 @@ import {
 } from '../products/product-handoff'
 import { getCurrentPublish, loadWebsiteWorkspace } from '../products/website/website-model'
 import { COMMERCE_KEY, LEGACY_COMMERCE_KEYS } from './commerce-workspace'
+import { BEHAVIOR_TRAIL_KEY, readBehaviorTrail } from './behavior-trail'
 import {
   ACTION_KEY,
   APPROVAL_KEY,
@@ -124,8 +125,83 @@ const demoRunbookLabels = {
   proven: 'Evidence proven',
 } as const
 
+type SchedulerActivation = {
+  status: string
+  configured: boolean
+  activationRequested: boolean
+  activationEnabled: boolean
+  activationEvidenceContract: string
+  activationEvidenceEnvironmentKey: string
+  activationEvidenceCount: number
+  activationEvidenceDigest: string | null
+  configurationErrors: string[]
+  queueJobTypes: string[]
+  dailyJobTypes: string[]
+  maxJobsPerRun: number
+  budgetGrantsRequired: boolean
+  redirectsAllowed: boolean
+  nextAction: string
+}
+
+function normalizeSchedulerActivation(body: unknown): SchedulerActivation | null {
+  if (!body || typeof body !== 'object') return null
+  const cloud = body as { status?: unknown; scheduler?: Record<string, unknown> }
+  const scheduler = cloud.scheduler
+  if (!scheduler
+    || typeof cloud.status !== 'string'
+    || typeof scheduler.configured !== 'boolean'
+    || typeof scheduler.activation_requested !== 'boolean'
+    || typeof scheduler.activation_enabled !== 'boolean'
+    || typeof scheduler.activation_evidence_contract !== 'string'
+    || typeof scheduler.activation_evidence_environment_key !== 'string'
+    || !Array.isArray(scheduler.configuration_errors)
+    || !Array.isArray(scheduler.queue_job_types)
+    || !Array.isArray(scheduler.daily_job_types)
+    || typeof scheduler.max_jobs_per_run !== 'number'
+    || typeof scheduler.budget_grants_required !== 'boolean'
+    || scheduler.redirects_allowed !== false) return null
+  return {
+    status: cloud.status,
+    configured: scheduler.configured,
+    activationRequested: scheduler.activation_requested,
+    activationEnabled: scheduler.activation_enabled,
+    activationEvidenceContract: scheduler.activation_evidence_contract,
+    activationEvidenceEnvironmentKey: scheduler.activation_evidence_environment_key,
+    activationEvidenceCount: Number.isFinite(scheduler.activation_evidence_count) ? Number(scheduler.activation_evidence_count) : 0,
+    activationEvidenceDigest: typeof scheduler.activation_evidence_digest === 'string' ? scheduler.activation_evidence_digest : null,
+    configurationErrors: scheduler.configuration_errors.filter((item): item is string => typeof item === 'string'),
+    queueJobTypes: scheduler.queue_job_types.filter((item): item is string => typeof item === 'string'),
+    dailyJobTypes: scheduler.daily_job_types.filter((item): item is string => typeof item === 'string'),
+    maxJobsPerRun: Number.isFinite(scheduler.max_jobs_per_run) ? Number(scheduler.max_jobs_per_run) : 0,
+    budgetGrantsRequired: scheduler.budget_grants_required,
+    redirectsAllowed: scheduler.redirects_allowed,
+    nextAction: scheduler.configured ? 'Hosted scheduler can run bounded queues.' : 'Attach signed scheduler evidence, protected cron secret, worker URL, and host allowlist before autopilot runs.',
+  }
+}
+
+function useSchedulerActivation() {
+  const [schedulerActivation, setSchedulerActivation] = useState<SchedulerActivation | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch('/api/cloud-autonomy/status', { headers: { accept: 'application/json' }, signal: controller.signal })
+      .then(async (response) => {
+        const type = response.headers.get('content-type') ?? ''
+        if (!response.ok || !type.includes('application/json')) throw new Error('cloud_status_unavailable')
+        setSchedulerActivation(normalizeSchedulerActivation(await response.json()))
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSchedulerActivation(null)
+      })
+    return () => controller.abort()
+  }, [])
+
+  return schedulerActivation
+}
+
 export function SettingsPage() {
   const runtime = useOutletContext<RuntimeHealth>()
+  const schedulerActivation = useSchedulerActivation()
   const location = useLocation()
   const navigate = useNavigate()
   const [setupSearchParams] = useSearchParams()
@@ -204,20 +280,201 @@ export function SettingsPage() {
     },
   }) : null
   const nextDemoMission = demoRunbook?.products.find((product) => product.product === demoRunbook.nextProduct) ?? null
+  const managedTrialRequestFilename = `supermega-managed-trial-request-${evidenceDate}.json`
   const managedApprovalRequests = approvals.map(toManagedApprovalRequest).filter((request): request is NonNullable<typeof request> => Boolean(request))
   const localProductRecords = collectLocalProductRecords(window.localStorage)
   const localRecordCount = Object.keys(localProductRecords).length
+  const behaviorTrail = readBehaviorTrail(window.localStorage)
+  const behaviorSignalCount = behaviorTrail.length
+  const agentBehaviorSignals = behaviorTrail.filter((entry) => entry.event === 'agent_job_seen' || entry.event === 'agent_job_chosen')
+  const chosenAgentSignals = agentBehaviorSignals.filter((entry) => entry.event === 'agent_job_chosen')
+  const agentJobCounts = new Map<string, { product: string; job: string; seen: number; chosen: number; lastAt: string }>()
+  agentBehaviorSignals.forEach((entry) => {
+    const key = `${entry.product}:${entry.detail}`
+    const current = agentJobCounts.get(key) ?? { product: entry.product, job: entry.detail, seen: 0, chosen: 0, lastAt: entry.createdAt }
+    if (entry.event === 'agent_job_seen') current.seen += 1
+    if (entry.event === 'agent_job_chosen') current.chosen += 1
+    if (entry.createdAt > current.lastAt) current.lastAt = entry.createdAt
+    agentJobCounts.set(key, current)
+  })
+  const rankedAgentJobs = [...agentJobCounts.values()].sort((left, right) => (
+    right.chosen - left.chosen
+    || right.seen - left.seen
+    || right.lastAt.localeCompare(left.lastAt)
+  ))
+  const agentProductName = (product: string) => (
+    product === 'commerce'
+    || product === 'production'
+    || product === 'website'
+    || product === 'ecommerce'
+      ? productDisplayName(product)
+      : productDisplayName(setup.product)
+  )
+  const topAgentJob = rankedAgentJobs[0]
+  const lastChosenAgentJob = chosenAgentSignals.at(-1)
+  const agentBehaviorRows = [
+    ['Signals', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} queue signals` : 'No queue signals', agentBehaviorSignals.length ? 'Seen and chosen recommendations are saved locally for export.' : 'Open a product queue to start behavior memory.'],
+    ['Top job', topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.job}` : 'No pattern yet', topAgentJob ? `${topAgentJob.seen} seen - ${topAgentJob.chosen} chosen.` : 'The system waits for repeated owner behavior before ranking work.'],
+    ['Last chosen', lastChosenAgentJob ? `${agentProductName(lastChosenAgentJob.product)}: ${lastChosenAgentJob.detail}` : 'Nothing chosen yet', lastChosenAgentJob ? `Captured ${formatTime(lastChosenAgentJob.createdAt)}.` : 'Click a recommended agent job to teach the next handoff.'],
+  ] as const
   const learningRows = [
     ['Data', localRecordCount ? `${localRecordCount} records` : 'Import'],
     ['Trust', `${runtime.coverageScore}%`],
     ['Review', `${managedApprovalRequests.length || approvals.length} packets`],
-    ['AI', runtime.enterpriseDbReady && runtime.writesReady ? 'Ready' : 'Locked'],
+    ['Behavior', behaviorSignalCount ? `${behaviorSignalCount} signals` : 'Local only'],
   ] as const
   const learningPlanRows = [
     ['Source graph', localRecordCount ? `${localRecordCount} local records prepared` : 'No local records yet', localRecordCount ? 'Exported evidence keeps the browser-local source package for managed validation.' : 'Use Shop, Plant, Website, Ecommerce, or import setup to create the first record.'],
-    ['Behavior trail', actions.length ? `${actions.length} accountable actions` : 'No accountable actions yet', actions.length ? 'Premium can rank next actions from reviewed operator behavior after import.' : 'Use the product sample so the system can capture local action history.'],
+    ['Behavior trail', behaviorSignalCount ? `${behaviorSignalCount} local signals` : 'No local signals yet', behaviorSignalCount ? 'Premium can rank next actions from reviewed workspace behavior after import.' : 'Open Shop, Plant, Website, Ecommerce, or setup so the system can capture local activity history.'],
     ['Decision memory', managedApprovalRequests.length || approvals.length ? `${managedApprovalRequests.length || approvals.length} review packets` : 'No review packets yet', managedApprovalRequests.length || approvals.length ? 'Human approvals become reusable context after managed activation.' : 'Approve or decline at least one prepared decision before relying on AI context.'],
     ['Owner gate', isPilotReady ? 'Ready for managed review' : `${completion}% trial evidence`, isPilotReady ? 'Export evidence, then request managed trial; writes stay locked until server controls pass.' : 'Complete baseline, target, authority boundary, and acceptance evidence first.'],
+  ] as const
+  const agentPlanRows = [
+    ['Agent worker', `${selectedProduct.name} operator`, `Prepares ${selectedTemplate.name.toLowerCase()} from approved sources.`],
+    ['First job', selectedTemplate.workflow[0] ?? selectedTemplate.outcome, selectedTemplate.outcome],
+    ['Tool boundary', runtime.writesReady ? 'Write gate ready' : 'Writes locked', 'Drafts, imports, messages, publishes, payments, and production changes wait for human approval.'],
+    ['Learning loop', localRecordCount || actions.length || behaviorSignalCount ? `${localRecordCount + actions.length + behaviorSignalCount} signals` : 'No signals yet', 'Premium learns only from exported records, local behavior, accountable actions, and reviewed decisions.'],
+  ] as const
+  const evidencePlanReady = runtime.evidencePlan.length > 0 && runtime.evidencePlan.every((item) => item.ready)
+  const aiContextQualityRows = [
+    ['Source data', localRecordCount ? `${localRecordCount} prepared` : 'Need records', localRecordCount ? 'Local product records are ready for managed validation.' : 'Import or use a product workspace before premium learning.'],
+    ['Behavior', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} signals` : 'Need usage', agentBehaviorSignals.length ? 'Agent queue views and choices can teach ranking after approval.' : 'Open and choose product agent jobs to create behavior memory.'],
+    ['Decisions', managedApprovalRequests.length || approvals.length ? `${managedApprovalRequests.length || approvals.length} reviewed` : 'Need review', managedApprovalRequests.length || approvals.length ? 'Human decisions can become reusable context.' : 'Record at least one approval or decline before learning from decisions.'],
+    ['Controls', runtime.writesReady && evidencePlanReady ? 'Ready' : 'Locked', runtime.writesReady && evidencePlanReady ? 'Managed writes and evidence gates are ready.' : 'Managed activation gates must pass before AI can learn from customer data.'],
+    ['Next handoff', localRecordCount && agentBehaviorSignals.length && (managedApprovalRequests.length || approvals.length) ? 'Export context' : 'Collect proof', 'Export stays browser-local until the owner requests managed activation.'],
+  ] as const
+  const contextHandoffReady = localRecordCount > 0 && agentBehaviorSignals.length > 0 && (managedApprovalRequests.length > 0 || approvals.length > 0)
+  const contextHandoffManifest = {
+    contract: 'supermega.ai_context_handoff.v1',
+    version: 1,
+    createdAt: new Date().toISOString(),
+    evidenceVersion: 23,
+    product: selectedProduct.name,
+    productSlug: selectedProduct.slug,
+    templateId: selectedTemplate.id,
+    templateName: selectedTemplate.name,
+    workspace: setup.workspace || 'Workspace not named',
+    owner: setup.owner || 'Owner not assigned',
+    sourceCounts: {
+      localRecords: localRecordCount,
+      behaviorSignals: agentBehaviorSignals.length,
+      approvalPackets: managedApprovalRequests.length || approvals.length,
+      accountableActions: actions.length,
+    },
+    allowedUses: ['rank_next_actions', 'draft_internal_recommendations', 'prepare_import_mapping', 'summarize_workspace_evidence'],
+    forbiddenActions: ['customer_message_send', 'payment_capture', 'domain_deploy', 'production_write', 'training_without_owner_approval'],
+    activationRequired: !runtime.writesReady || !evidencePlanReady,
+    nextAction: contextHandoffReady ? (runtime.writesReady && evidencePlanReady ? 'Ready for managed import review.' : 'Request managed activation with this context package.') : 'Collect records, behavior, and reviewed decisions before premium activation.',
+  }
+  const contextHandoffRows = [
+    ['Package', `${localRecordCount} records / ${agentBehaviorSignals.length} signals`, contextHandoffReady ? 'Enough context exists for a support review.' : 'Use the product and review at least one decision first.'],
+    ['Allowed use', 'Draft and rank only', 'AI may summarize, map imports, and recommend next actions after import.'],
+    ['Forbidden', 'No send/write/train', 'Customer messages, payments, publishing, production writes, and model training stay blocked.'],
+    ['Activation', contextHandoffManifest.activationRequired ? 'Required' : 'Ready', contextHandoffManifest.activationRequired ? 'Managed controls must pass before premium learns from customer data.' : 'Managed evidence gates are ready for import review.'],
+    ['Owner action', contextHandoffReady ? 'Export context' : 'Collect proof', contextHandoffManifest.nextAction],
+  ] as const
+  const provisioningReady = isPilotReady && localRecordCount > 0 && managedApprovalRequests.length + approvals.length > 0
+  const managedWorkspaceProvisioningPacket = {
+    contract: 'supermega.managed_workspace_provisioning.v1',
+    version: 1,
+    createdAt: new Date().toISOString(),
+    evidenceVersion: 23,
+    workspace: setup.workspace || 'Workspace not named',
+    owner: setup.owner || 'Owner not assigned',
+    product: selectedProduct.name,
+    template: selectedTemplate.name,
+    tenantMode: runtime.status === 'enterprise' ? 'managed_ready' : 'managed_required',
+    dataPackage: {
+      evidenceFilename,
+      localRecords: localRecordCount,
+      productSources: Object.keys(localProductRecords),
+      approvalPackets: managedApprovalRequests.length || approvals.length,
+      behaviorSignals: behaviorSignalCount,
+    },
+    requiredControls: ['dedicated_postgres_rls', 'trusted_identity_gateway', 'private_storage', 'audit_trail', 'owner_write_approvals', 'scheduler_budget_limits'],
+    firstSafeActivation: provisioningReady ? 'Create managed tenant from exported evidence after activation gates pass.' : 'Finish trial evidence, local records, and owner-reviewed decisions before provisioning.',
+    forbiddenUntilProvisioned: ['copy_browser_storage_to_production', 'enable_hosted_scheduler', 'send_customer_messages', 'capture_payments', 'publish_domains'],
+  }
+  const importProvisioningRows = runtime.importProvisioning?.checks.length
+    ? runtime.importProvisioning.checks.map((check) => [check.label, check.ready ? 'Ready' : 'Blocked', check.action] as const)
+    : [
+      ['Managed identity', runtime.authReady ? 'Ready' : 'Blocked', 'Verify trusted gateway or Supabase named-user identity before import approval.'] as const,
+      ['Private workspace schema', runtime.enterpriseDbReady ? 'Ready' : 'Blocked', 'Apply the private trial schema with a non-BYPASSRLS runtime role.'] as const,
+      ['Zero-write validation', runtime.auditReady ? 'Ready' : 'Blocked', 'Run the managed import validation endpoint and prove external_writes_performed is false.'] as const,
+      ['Owner approval', managedApprovalRequests.length || approvals.length ? 'Ready' : 'Blocked', 'Capture a named owner approval before any import apply request.'] as const,
+      ['Atomic adapter', runtime.writesReady ? 'Ready' : 'Blocked', 'Confirm the product adapter can create one idempotent managed revision.'] as const,
+      ['Durable revision', runtime.writesReady ? 'Ready' : 'Blocked', 'Read back workspace state after apply and compare the revision digest.'] as const,
+    ]
+  const importProvisioningPacket = {
+    contract: runtime.importProvisioning?.contract ?? 'supermega.import_provisioning_readiness.v1',
+    evidenceVersion: 23,
+    status: runtime.importProvisioning?.status ?? 'blocked',
+    ready: runtime.importProvisioning?.ready === true,
+    checks: runtime.importProvisioning?.checks ?? [],
+    forbiddenUntilReady: runtime.importProvisioning?.forbidden_until_ready ?? ['copy_browser_storage_to_production', 'customer_message_send', 'payment_capture', 'domain_publish', 'scheduler_autopilot'],
+    nextAction: runtime.importProvisioning?.next_action ?? 'Validate a staged client import package inside a managed workspace before any activation write.',
+    secretValuesExposed: false,
+  }
+  const provisioningRows = [
+    ['Tenant', managedWorkspaceProvisioningPacket.tenantMode === 'managed_ready' ? 'Ready' : 'Required', runtime.requirements[0] ?? 'Managed controls must be verified before customer data import.'],
+    ['Data package', `${localRecordCount} records`, localRecordCount ? 'Exported evidence can seed a reviewed managed workspace.' : 'Import or use a product workspace before provisioning.'],
+    ['Roles', managedApprovalRequests.length + approvals.length ? `${managedApprovalRequests.length + approvals.length} reviewed` : 'Need owner review', 'Owner decisions define who can approve writes after activation.'],
+    ['Controls', runtime.writesReady && evidencePlanReady ? 'Ready' : 'Locked', 'RLS, identity, storage privacy, audit, write approvals, and scheduler budgets are required.'],
+    ['First safe step', provisioningReady ? 'Create tenant' : 'Finish proof', managedWorkspaceProvisioningPacket.firstSafeActivation],
+  ] as const
+  const activationManifestRows = [
+    ['Next action', runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Checking managed activation.'],
+    ['Blocked gates', runtime.activationManifest?.blocked_gate_ids.length ? runtime.activationManifest.blocked_gate_ids.join(', ') : 'No blocked gates'],
+    ['Safe enables', runtime.activationManifest?.safe_enable.length ? runtime.activationManifest.safe_enable.join(', ') : 'Browser-local trial only'],
+  ] as const
+  const schedulerActivationRows = [
+    ['Scheduler', schedulerActivation?.configured ? 'Ready' : schedulerActivation?.status ?? 'Blocked'],
+    ['Evidence', schedulerActivation?.activationEvidenceCount ? `${schedulerActivation.activationEvidenceCount} signed proofs` : schedulerActivation?.activationEvidenceContract ?? 'Evidence contract unavailable'],
+    ['Queue jobs', schedulerActivation?.queueJobTypes.length ? schedulerActivation.queueJobTypes.join(', ') : 'task_triage, ops_watch'],
+    ['Daily jobs', schedulerActivation?.dailyJobTypes.length ? schedulerActivation.dailyJobTypes.join(', ') : 'founder_brief, github_release_watch'],
+    ['Run limit', schedulerActivation ? `${schedulerActivation.maxJobsPerRun} jobs per invocation` : '2 jobs per invocation'],
+    ['Next action', schedulerActivation?.nextAction ?? 'Restore cloud status before enabling scheduler autopilot.'],
+  ] as const
+  const managedTrialRequest = {
+    contract: 'supermega.managed_trial_request.v1',
+    version: 1,
+    createdAt: new Date().toISOString(),
+    product: selectedProduct.name,
+    productSlug: selectedProduct.slug,
+    templateId: selectedTemplate.id,
+    templateName: selectedTemplate.name,
+    workspace: setup.workspace || 'Workspace not named',
+    owner: setup.owner || 'Owner not assigned',
+    entryPoint: setup.entryPoint || selectedTemplate.entryPoints[0] || '',
+    currentRecord: setup.currentRecord,
+    targetOutcome: setup.targetOutcome,
+    acceptanceEvidence: setup.acceptanceEvidence,
+    evidenceFilename,
+    evidenceVersion: 23,
+    pilotReady: isPilotReady,
+    localRecords: localRecordCount,
+    approvalPackets: managedApprovalRequests.length || approvals.length,
+    behaviorSignals: behaviorSignalCount,
+    contextHandoffManifest,
+    managedWorkspaceProvisioningPacket,
+    importProvisioningPacket,
+    activationManifest: runtime.activationManifest,
+    importProvisioning: runtime.importProvisioning,
+    schedulerActivation,
+    blockedGateIds: runtime.activationManifest?.blocked_gate_ids ?? [],
+    safeEnable: runtime.activationManifest?.safe_enable ?? ['browser_local_trial', 'evidence_export'],
+    nextHostedBlocker: runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Configure managed activation.',
+    automationBoundary: runtime.activationManifest?.automation_boundary ?? 'Human approval is required before external sends, payments, publishing, imports, or managed writes.',
+    noExternalSend: true,
+  }
+  const managedTrialRequestRows = [
+    ['Workspace', managedTrialRequest.workspace],
+    ['Product', `${managedTrialRequest.product} / ${managedTrialRequest.templateName}`],
+    ['Evidence', `${managedTrialRequest.evidenceFilename} v${managedTrialRequest.evidenceVersion}`],
+    ['Scheduler', schedulerActivation?.configured ? 'Ready for bounded autopilot' : schedulerActivation?.nextAction ?? 'Scheduler proof required'],
+    ['Hosted blocker', managedTrialRequest.nextHostedBlocker],
+    ['Safe enables', managedTrialRequest.safeEnable.join(', ')],
+    ['Write boundary', 'No external send or managed write from this packet'],
   ] as const
   const activationRows: Array<readonly [string, string]> = [
     ['Trial', isPilotReady ? 'Ready' : `${completion}%`],
@@ -233,7 +490,8 @@ export function SettingsPage() {
       ]),
     ['Coverage', `${runtime.coverageScore}%`],
   ]
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 13, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, learningRows, learningPlanRows }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 23, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, contextHandoffManifest, contextHandoffRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
+  const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
 
   useEffect(() => {
     if (!requestedProduct || requestedProduct === setup.product) return
@@ -555,6 +813,7 @@ export function SettingsPage() {
         APPROVAL_KEY,
         SETUP_KEY,
         ACTION_KEY,
+        BEHAVIOR_TRAIL_KEY,
         SHOP_ORDER_DRAFT_RESET_EPOCH_KEY,
         TEAM_WORK_KEY,
         WEBSITE_STORAGE_KEY,
@@ -679,7 +938,7 @@ export function SettingsPage() {
           <div className="form-row pilot-text-row"><label>Baseline<textarea maxLength={240} required value={setup.baseline} onChange={(event) => updateSetup({ baseline: event.target.value })} placeholder="Current time, error rate, backlog, output." /></label><label>Target outcome<textarea maxLength={240} required value={setup.targetOutcome} onChange={(event) => updateSetup({ targetOutcome: event.target.value })} placeholder={`Target for ${selectedTemplate.metric.toLowerCase()}.`} /></label></div>
           <div className="form-row pilot-text-row"><label>Human authority boundary<textarea maxLength={240} required value={setup.authorityBoundary} onChange={(event) => updateSetup({ authorityBoundary: event.target.value })} placeholder="Which actions need owner approval?" /></label><label>Acceptance evidence<textarea maxLength={240} required value={setup.acceptanceEvidence} onChange={(event) => updateSetup({ acceptanceEvidence: event.target.value })} placeholder="What proves the pilot works?" /></label></div>
           <div className="settings-step-actions"><button className="text-link" onClick={() => chooseSettingsStep('workflow')} type="button">Back</button><button className="core-button primary" type="submit">Save client setup</button></div>
-          {setup.savedAt ? <div className="setup-complete"><div><strong>Trial plan saved.</strong><small>Export evidence before managed import.</small></div><div className="setup-complete-actions"><Link className="core-button" to={setupProductPreviewPath(setup.product)}>Open {productDisplayName(setup.product)}</Link><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a><a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id)}>Request managed trial</a></div></div> : null}
+          {setup.savedAt ? <div className="setup-complete"><div><strong>Trial plan saved.</strong><small>Export evidence before managed import.</small></div><div className="setup-complete-actions"><Link className="core-button" to={setupProductPreviewPath(setup.product)}>Open {productDisplayName(setup.product)}</Link><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a><a className="core-button" download={managedTrialRequestFilename} href={managedTrialRequestHref}>Download request packet</a><a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id)}>Request managed trial</a></div></div> : null}
           </fieldset>
           <p className="form-notice" aria-live="polite">{notice || (setup.savedAt ? `Last saved ${formatTime(setup.savedAt)}` : setup.startedAt ? `Guided ${selectedTemplate.name} sample started.` : 'Draft stays local.')}</p>
         </form>
@@ -696,7 +955,43 @@ export function SettingsPage() {
             <div className="learning-plan" aria-label="Premium AI context plan">
               <div><span className="core-eyebrow">Premium AI context</span><h3>What the system can learn</h3><p>Free mode prepares the evidence package. Premium imports approved data, behavior, and decisions only after managed controls pass.</p></div>
               <div className="learning-plan-rows">{learningPlanRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
-              <div className="learning-plan-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export AI context package</a>{setup.savedAt ? <a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id)}>Request managed trial</a> : <button className="core-button primary" disabled type="button">Save trial first</button>}</div>
+              <div aria-label="Premium agent operating plan" className="learning-plan-agent">
+                <div><span className="core-eyebrow">Premium agent plan</span><h3>What the agent can run</h3><p>The agent prepares the next workflow from this product setup; managed writes stay locked until the activation gates pass.</p></div>
+                <div className="learning-plan-rows">{agentPlanRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+              </div>
+              <div aria-label="AI context quality cockpit" className="learning-plan-agent context-quality-panel">
+                <div><span className="core-eyebrow">AI context quality</span><h3>What premium can safely use</h3><p>Premium learning starts only when source records, behavior, decisions, and managed controls are present in the exported evidence.</p></div>
+                <div className="context-quality-rows">{aiContextQualityRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+              </div>
+              <div aria-label="AI context handoff manifest" className="learning-plan-agent context-quality-panel">
+                <div><span className="core-eyebrow">AI context handoff</span><h3>What premium receives</h3><p>This manifest tells support and the managed agent what it may use, what it must ignore, and which actions remain forbidden.</p></div>
+                <div className="context-quality-rows">{contextHandoffRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+              </div>
+              <div aria-label="Managed workspace provisioning packet" className="learning-plan-agent context-quality-panel">
+                <div><span className="core-eyebrow">Provisioning packet</span><h3>How this becomes a real workspace</h3><p>Premium activation creates a managed tenant from exported evidence only after roles, data, controls, and write gates are verified.</p></div>
+                <div className="context-quality-rows">{provisioningRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+              </div>
+              <div aria-label="Managed import provisioning readiness" className="learning-plan-agent context-quality-panel">
+                <div><span className="core-eyebrow">Import provisioning</span><h3>What must pass before real imports</h3><p>Backend health owns this checklist. Uploaded files stay local or export-only until identity, schema, validation, approval, adapter, and revision proof are ready.</p></div>
+                <div className="context-quality-rows">{importProvisioningRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+              </div>
+              <div aria-label="Agent behavior memory" className="learning-plan-agent">
+                <div><span className="core-eyebrow">Behavior memory</span><h3>What owners keep choosing</h3><p>Free mode keeps this local. Premium can use approved queue behavior after managed import.</p></div>
+                <div className="learning-plan-rows">{agentBehaviorRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+              </div>
+              <div aria-label="Activation automation manifest" className="learning-plan-agent">
+                <div><span className="core-eyebrow">Activation manifest</span><h3>What automation may do next</h3><p>{runtime.activationManifest?.automation_boundary ?? 'Agents may prepare evidence and drafts; managed writes stay locked until runtime health confirms activation.'}</p></div>
+                <div className="learning-plan-rows">{activationManifestRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+              </div>
+              <div aria-label="Scheduler activation packet" className="learning-plan-agent managed-request-panel">
+                <div><span className="core-eyebrow">Scheduler activation</span><h3>Autopilot stays blocked until proof passes</h3><p>Hosted agents can run only after signed evidence, protected secrets, worker allowlist, budget grants, and no-redirect checks are ready.</p></div>
+                <div className="managed-request-rows">{schedulerActivationRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+              </div>
+              <div aria-label="Managed trial request packet" className="learning-plan-agent managed-request-panel">
+                <div><span className="core-eyebrow">Managed trial request</span><h3>What support needs</h3><p>This packet is local. It packages the workspace, product, evidence file, blocked gates, and safe automation boundary for handoff.</p></div>
+                <div className="managed-request-rows">{managedTrialRequestRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+              </div>
+              <div className="learning-plan-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export AI context package</a>{setup.savedAt ? <><a className="core-button" download={managedTrialRequestFilename} href={managedTrialRequestHref}>Download request packet</a><a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id)}>Request managed trial</a></> : <button className="core-button primary" disabled type="button">Save trial first</button>}</div>
             </div>
             <Suspense fallback={<p className="form-notice" role="status">Loading managed activation plan...</p>}><ManagedActivationRunbook runtime={runtime} /></Suspense>
             {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}

@@ -208,6 +208,33 @@ export type ManagedClientImportActivationContext = {
   priorState?: CommerceState
 }
 
+export type ManagedClientImportProvisioningPlan = {
+  contract: 'supermega.client_import_provisioning_plan.v1'
+  status: 'ready_for_owner_review' | 'blocked'
+  product: ManagedClientImportPackage['product']
+  target_surface: 'commerce' | 'production' | 'website'
+  workspace_id: string
+  package_digest: string
+  row_count: number
+  expected_version: number
+  required_controls: readonly [
+    'managed_identity_confirmed',
+    'package_digest_bound',
+    'zero_write_validation_receipt',
+    'owner_import_approval',
+    'atomic_adapter_receipt',
+    'durable_revision_confirmation',
+  ]
+  forbidden_until_applied: readonly [
+    'copy_browser_storage_to_production',
+    'customer_message_send',
+    'payment_capture',
+    'domain_publish',
+    'scheduler_autopilot',
+  ]
+  next_step: string
+}
+
 type ManagedApprovalRequest = {
   command_id: string
   title: string
@@ -341,6 +368,56 @@ export function managedClientImportActivationContext(
     })
   }
   return { expectedVersion: record.version, priorState }
+}
+
+export function buildManagedClientImportProvisioningPlan(
+  stagingPackage: ManagedClientImportPackage,
+  validation: ManagedClientImportValidation,
+  expectedIdentity: ManagedIdentity,
+  activationContext: ManagedClientImportActivationContext,
+): ManagedClientImportProvisioningPlan {
+  const expectedActivation = CLIENT_IMPORT_ACTIVATION[stagingPackage.product]
+  const adapterReady = validation.activation.atomic_adapter_ready === true
+  const identityReady = validation.workspace_id === expectedIdentity.workspaceId
+  const digestReady = validation.package_digest.length === 71
+    && validation.package_digest.startsWith('sha256:')
+  const versionReady = stagingPackage.product === 'ecommerce'
+    ? activationContext.expectedVersion >= 1 && Boolean(activationContext.priorState)
+    : activationContext.expectedVersion === 0 && activationContext.priorState === undefined
+  const ready = validation.status === 'valid'
+    && identityReady
+    && digestReady
+    && adapterReady
+    && versionReady
+    && validation.activation.external_writes_performed === false
+  return {
+    contract: 'supermega.client_import_provisioning_plan.v1',
+    status: ready ? 'ready_for_owner_review' : 'blocked',
+    product: stagingPackage.product,
+    target_surface: expectedActivation.target,
+    workspace_id: expectedIdentity.workspaceId,
+    package_digest: validation.package_digest,
+    row_count: stagingPackage.rows.length,
+    expected_version: activationContext.expectedVersion,
+    required_controls: [
+      'managed_identity_confirmed',
+      'package_digest_bound',
+      'zero_write_validation_receipt',
+      'owner_import_approval',
+      'atomic_adapter_receipt',
+      'durable_revision_confirmation',
+    ],
+    forbidden_until_applied: [
+      'copy_browser_storage_to_production',
+      'customer_message_send',
+      'payment_capture',
+      'domain_publish',
+      'scheduler_autopilot',
+    ],
+    next_step: ready
+      ? 'Owner reviews the checked package, confirms approval, then SuperMega applies one idempotent managed revision.'
+      : 'Resolve identity, digest, adapter, or version blockers before asking the owner to approve.',
+  }
 }
 
 async function sha256Text(value: string) {

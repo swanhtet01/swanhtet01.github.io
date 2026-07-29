@@ -181,6 +181,28 @@ export function EcommerceBuyingWorkspace({
     total + (line.item?.unitPriceMmk ?? 0) * line.quantity
   ), 0)
   const recoveryBlocked = recoveryStatus !== 'empty' && recoveryStatus !== 'ready'
+  const quoteMinutesRemaining = latestRequest
+    ? Math.max(0, Math.ceil((Date.parse(latestRequest.quote.expiresAt) - Date.now()) / 60000))
+    : 0
+  const orderAutopilotNext = recoveryBlocked
+    ? 'Repair checkout recovery'
+    : !cart.length
+      ? 'Add product'
+      : !quoteCurrent
+        ? 'Review order'
+        : !handoffConfirmed
+          ? 'Confirm reviewed quote'
+          : 'Open in Shop'
+  const orderAutopilotBoundary = onRecordManagedRequest
+    ? 'Managed Shop inbox only. Stock, delivery, message, and payment still need Shop review.'
+    : 'Browser-local quote only. No stock, delivery, message, payment, or Shop record changes here.'
+  const orderAutopilotRows = [
+    ['Cart', cart.length ? `${cart.length} ${cart.length === 1 ? 'item' : 'items'}` : 'Empty'],
+    ['Quote', quoteCurrent ? `${quoteMinutesRemaining} min left` : latestRequest ? 'Review again' : 'Not quoted'],
+    ['Recovery', recoveryBlocked ? 'Blocked' : recoveryStatus === 'ready' ? 'Ready' : 'Local'],
+    ['Shop handoff', quoteCurrent ? handoffConfirmed ? 'Approved to open' : 'Needs owner check' : 'Locked'],
+    ['Payment', 'Not charged'],
+  ] as const
 
   function updateCart(sku: string, quantity: number) {
     if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 99) return
@@ -313,6 +335,10 @@ export function EcommerceBuyingWorkspace({
           <b>{cart.length ? `${cart.length} ${cart.length === 1 ? 'item' : 'items'}` : latestRequest ? 'Recovered' : 'Empty'}</b>
         </summary>
         <div className="ecommerce-buying-body">
+          <section className="ecommerce-order-autopilot" aria-label="Order autopilot">
+            <div><span>Order autopilot</span><strong>{orderAutopilotNext}</strong><small>{orderAutopilotBoundary}</small></div>
+            <div className="ecommerce-order-autopilot-rows">{orderAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+          </section>
           {cart.length ? (
             <div className="ecommerce-cart" aria-label="Cart items">
               {cartItems.map(({ item, quantity, sku }) => (

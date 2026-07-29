@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 
+import { recordBehaviorSignal } from '../../core/behavior-trail'
 import {
   COMMERCE_KEY,
   commerceCatalogDigest,
   commerceCatalogDigestSource,
   commerceStorefrontConfiguration,
   commerceStorefrontRequestEquals,
+  commerceStorefrontRequestLines,
   commerceStorefrontRequests,
   recordCommerceStorefrontRequest,
   validateCommerceState,
@@ -29,6 +31,10 @@ import {
   type EcommerceOrderRequestV2,
   type EcommerceShopDraftV2,
 } from './ecommerce-buying-lifecycle'
+import {
+  buildEcommerceManagedStoreActivationPacket,
+  type EcommerceManagedStoreActivationReadiness,
+} from './ecommerce-activation-packet'
 import {
   acceptManagedStorefrontCommand,
   prepareManagedStorefrontSave,
@@ -55,6 +61,8 @@ import {
 import './ecommerce-product.css'
 
 type PreviewDevice = 'phone' | 'desktop'
+type RequestInboxFilter = 'all' | 'stock' | 'expiring' | 'payment' | 'delivery'
+type ReplyChannelTemplate = 'viber' | 'line' | 'wechat' | 'email'
 type EcommerceCatalog = {
   source: 'shop-local' | 'sample' | 'unavailable' | 'managed-shop'
   items: CommerceItem[]
@@ -87,6 +95,13 @@ function formatMmk(value: number) {
   return `${value.toLocaleString()} MMK`
 }
 
+function minutesUntil(value: string | undefined, now: number) {
+  if (!value) return null
+  const timestamp = Date.parse(value)
+  if (!Number.isFinite(timestamp)) return null
+  return Math.ceil((timestamp - now) / 60000)
+}
+
 function defaultSelection(items: CommerceItem[]) {
   return items.filter((item) => item.onHand > 0).slice(0, 4).map((item) => item.sku)
 }
@@ -97,6 +112,17 @@ function cloneMerchandising(value: CommerceStorefrontMerchandising[] | undefined
 
 function storefrontDisplayName(item: StorefrontPreviewItem) {
   return item.merchandising?.displayName || item.name
+}
+
+function safeEcommerceFilename(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'store'
+}
+
+function deliveryAreaFromCustomerReference(value: string) {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  const separatorIndex = normalized.lastIndexOf('·')
+  const candidate = separatorIndex >= 0 ? normalized.slice(separatorIndex + 1).trim() : ''
+  return candidate || 'Customer area'
 }
 
 function storefrontArtworkKind(sku: string) {
@@ -181,6 +207,7 @@ function initialEcommerceState() {
 
 export function EcommerceProduct() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [initialState] = useState(initialEcommerceState)
   const [catalog, setCatalog] = useState<EcommerceCatalog>(initialState.catalog)
   const [catalogHydrating, setCatalogHydrating] = useState(true)
@@ -205,6 +232,12 @@ export function EcommerceProduct() {
     error: '',
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
+  const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
+  const [customerFollowUpDraft, setCustomerFollowUpDraft] = useState('')
+  const [deliveryReviewDraft, setDeliveryReviewDraft] = useState('')
+  const [deliveryAreaTemplateDraft, setDeliveryAreaTemplateDraft] = useState('')
+  const [replyChannelTemplate, setReplyChannelTemplate] = useState<ReplyChannelTemplate>('viber')
+  const [channelReplyDraft, setChannelReplyDraft] = useState('')
   const storefrontSaveRef = useRef<HTMLButtonElement>(null)
   const storefrontPreviewHeadingRef = useRef<HTMLHeadingElement>(null)
 
@@ -660,6 +693,94 @@ export function EcommerceProduct() {
     })
   }
 
+  function prepareQuoteRecovery() {
+    if (pendingManagedRequests[0]) {
+      navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(pendingManagedRequests[0].id)}`)
+      return
+    }
+    if (!buyingReady || !customerPreviewItems.length) {
+      finishStorefrontSetup()
+      return
+    }
+    addToCart(customerPreviewItems[0].sku)
+  }
+
+  function prepareCustomerFollowUpDraft() {
+    if (!pendingManagedRequests.length) {
+      if (!buyingReady) {
+        finishStorefrontSetup()
+        return
+      }
+      setCustomerFollowUpDraft('Owner draft only: the storefront is ready. Wait for a reviewed customer quote request before sending any payment, delivery, discount, or availability message.')
+      return
+    }
+    const request = customerFollowUpRequest ?? pendingManagedRequests[0]
+    const lines = commerceStorefrontRequestLines(request)
+    const itemSummary = lines.length === 1 ? lines[0].name : `${lines.length} items`
+    const expiryText = 'quote' in request ? ` Quote expires ${new Date(request.quote.expiresAt).toLocaleString()}.` : ''
+    const fulfilmentText = request.fulfilment === 'delivery' ? 'delivery, availability, and payment' : 'pickup, availability, and payment'
+    setCustomerFollowUpDraft(`Owner draft only: Hi ${request.customerReference}, your ${itemSummary} request totals ${formatMmk(request.totalMmk)}. Shop is reviewing ${fulfilmentText} before anything is confirmed.${expiryText} Reference ${request.id}.`)
+  }
+
+  function prepareChannelReplyTemplate() {
+    if (!customerFollowUpRequest) {
+      if (!buyingReady) {
+        finishStorefrontSetup()
+        return
+      }
+      setChannelReplyDraft('Owner draft only: channel reply templates are ready. Wait for a reviewed customer request, then approve the channel, source evidence, payment boundary, and Shop review status before sending.')
+      return
+    }
+    const lines = commerceStorefrontRequestLines(customerFollowUpRequest)
+    const itemSummary = lines.length === 1 ? lines[0].name : `${lines.length} items`
+    const reason = requestHasStockRisk(customerFollowUpRequest)
+      ? 'availability check'
+      : requestIsExpiring(customerFollowUpRequest)
+        ? 'quote refresh'
+        : requestNeedsPaymentReview(customerFollowUpRequest)
+          ? 'manual payment review'
+          : customerFollowUpRequest.fulfilment === 'delivery'
+            ? 'delivery confirmation'
+            : 'Shop review update'
+    setChannelReplyDraft(`Owner draft only: ${replyChannelTemplate.toUpperCase()} reply for ${customerFollowUpRequest.customerReference}: Shop is reviewing ${itemSummary} for ${reason}. Confirm stock, payment, delivery, and owner approval before any send. Reference ${customerFollowUpRequest.id}.`)
+  }
+
+  function prepareDeliveryFeeReview() {
+    if (!deliveryReviewRequest) {
+      if (!buyingReady) {
+        finishStorefrontSetup()
+        return
+      }
+      setDeliveryReviewDraft('Owner draft only: delivery review is ready. Wait for a delivery request, then confirm zone, fee, rider handoff, and payment in Shop before quoting a customer.')
+      return
+    }
+    const lines = commerceStorefrontRequestLines(deliveryReviewRequest)
+    const zoneHint = deliveryAreaFromCustomerReference(deliveryReviewRequest.customerReference)
+    const itemSummary = lines.length === 1 ? lines[0].name : `${lines.length} items`
+    setDeliveryReviewDraft(`Owner draft only: review ${zoneHint} as the delivery zone for ${deliveryReviewRequest.customerReference}. Quote ${itemSummary} at ${formatMmk(deliveryReviewRequest.totalMmk)} before delivery fee. Shop must confirm fee, rider handoff, payment, and stock before any customer message or booking. Reference ${deliveryReviewRequest.id}.`)
+  }
+
+  function prepareDeliveryAreaTemplate() {
+    if (!deliveryReviewRequest) {
+      if (!buyingReady) {
+        finishStorefrontSetup()
+        return
+      }
+      setDeliveryAreaTemplateDraft('Owner draft only: delivery-area templates are ready. Wait for a reviewed delivery request, then approve area, fee rule, rider handoff, payment policy, and cut-off before reuse.')
+      return
+    }
+    const area = deliveryAreaFromCustomerReference(deliveryReviewRequest.customerReference)
+    const paymentPolicy = 'quote' in deliveryReviewRequest && deliveryReviewRequest.quote.payment.adapter === 'kbzpay_manual'
+      ? 'manual QR review'
+      : 'cash-on-delivery review'
+    setDeliveryAreaTemplateDraft(`Owner draft only: save ${area} as a delivery-area template after Shop approves fee, rider handoff, ${paymentPolicy}, cut-off, and stock confirmation. Reuse stays locked until managed activation proves audit, roles, and write controls. Reference ${deliveryReviewRequest.id}.`)
+  }
+
+  function openFilteredRequestInShop() {
+    if (!requestInboxNextRequest) return
+    navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestInboxNextRequest.id)}`)
+  }
+
   async function recordManagedBuyingRequest(request: EcommerceOrderRequestV2) {
     const identity = managedIdentity
     if (!identity || !globalThis.crypto?.randomUUID) throw new Error('Managed Ecommerce request identity is unavailable. Nothing was sent to Shop.')
@@ -757,6 +878,309 @@ export function EcommerceProduct() {
     ? commerceStorefrontRequests(managedInbox.state).filter((request) => request.state === 'pending_shop_review')
     : []
   const importNeeded = catalog.source === 'sample' || catalog.source === 'unavailable' || catalog.items.length === 0
+  const orderOpsNow = Date.now()
+  const orderOpsAgingCount = pendingManagedRequests.filter((request) => Date.parse(request.createdAt) <= orderOpsNow - 30 * 60 * 1000).length
+  const orderOpsExpiringCount = pendingManagedRequests.filter((request) => {
+    const minutes = minutesUntil('quote' in request ? request.quote.expiresAt : undefined, orderOpsNow)
+    return minutes !== null && minutes <= 15
+  }).length
+  const orderOpsStockRiskCount = pendingManagedRequests.filter((request) => commerceStorefrontRequestLines(request).some((line) => {
+    const item = catalog.items.find((candidate) => candidate.sku === line.sku)
+    return !item || item.onHand < line.quantity
+  })).length
+  const orderOpsPaymentRiskCount = pendingManagedRequests.filter((request) => 'quote' in request && request.quote.payment.adapter === 'kbzpay_manual').length
+  const deliveryReviewCount = pendingManagedRequests.filter((request) => request.fulfilment === 'delivery').length
+  const pickupReviewCount = pendingManagedRequests.filter((request) => request.fulfilment === 'pickup').length
+  const controlPaymentsVisible = buyingReady || pendingManagedRequests.length > 0
+  const paymentDeliveryStage = importNeeded
+    ? 'Import catalog before checkout'
+    : !savedDraftIsCurrent
+      ? 'Save storefront before checkout'
+      : pendingManagedRequests.length
+        ? 'Review payment and delivery'
+        : buyingCart.length
+          ? 'Quote payment and delivery'
+          : 'Checkout controls ready'
+  const orderOpsPriority = orderOpsStockRiskCount
+    ? 'Resolve stock risk'
+    : orderOpsExpiringCount
+      ? 'Refresh expiring quotes'
+      : orderOpsAgingCount
+        ? 'Clear aged requests'
+        : pendingManagedRequests.length
+          ? 'Review next request'
+          : importNeeded
+            ? 'Import sellable catalog'
+            : savedDraftIsCurrent
+              ? 'Keep storefront open'
+              : 'Save storefront'
+  const orderOpsRows = [
+    ['Priority', orderOpsPriority],
+    ['SLA', pendingManagedRequests.length ? orderOpsAgingCount ? `${orderOpsAgingCount} aging` : 'Inside window' : 'No queue'],
+    ['Stock risk', orderOpsStockRiskCount ? `${orderOpsStockRiskCount} blocked` : 'Clear'],
+    ['Payment', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} review` : 'Not charged'],
+    ['Handoff', pendingManagedRequests.length ? 'Shop owns writes' : buyingReady ? 'Ready for quote' : 'Setup first'],
+  ] as const
+  const lifecycleRows = [
+    ['Capture', pendingManagedRequests.length ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'}` : buyingCart.length ? `${buyingCart.length} cart lines` : 'Ready'],
+    ['Price', buyingReady ? 'Quote controlled' : 'Save store first'],
+    ['ATP', orderOpsStockRiskCount ? `${orderOpsStockRiskCount} risk` : catalog.items.length ? 'Shop stock' : 'Need catalog'],
+    ['Fulfil', pendingManagedRequests.length ? 'Shop queue' : savedDraftIsCurrent ? 'Pickup/delivery ready' : 'Setup first'],
+    ['Return', 'Shop accountable'],
+  ] as const
+  const paymentDeliveryRows = [
+    ['Payment', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} manual QR` : controlPaymentsVisible ? 'Not authorized' : 'Locked'],
+    ['Delivery', deliveryReviewCount ? `${deliveryReviewCount} review` : savedDraftIsCurrent ? 'Owner priced' : 'Locked'],
+    ['Pickup', pickupReviewCount ? `${pickupReviewCount} review` : savedDraftIsCurrent ? 'Allowed' : 'Locked'],
+    ['Expiry', orderOpsExpiringCount ? `${orderOpsExpiringCount} quote` : buyingReady ? '30 min quote' : 'No quote'],
+    ['Control', pendingManagedRequests.length ? 'Shop confirms' : 'No customer send'],
+  ] as const
+  const requestHasStockRisk = (request: typeof pendingManagedRequests[number]) => commerceStorefrontRequestLines(request).some((line) => {
+    const item = catalog.items.find((candidate) => candidate.sku === line.sku)
+    return !item || item.onHand < line.quantity
+  })
+  const requestIsExpiring = (request: typeof pendingManagedRequests[number]) => {
+    const minutes = minutesUntil('quote' in request ? request.quote.expiresAt : undefined, orderOpsNow)
+    return minutes !== null && minutes <= 15
+  }
+  const requestNeedsPaymentReview = (request: typeof pendingManagedRequests[number]) => 'quote' in request && request.quote.payment.adapter === 'kbzpay_manual'
+  const requestInboxFilteredRequests = pendingManagedRequests.filter((request) => (
+    requestInboxFilter === 'all'
+      || (requestInboxFilter === 'stock' && requestHasStockRisk(request))
+      || (requestInboxFilter === 'expiring' && requestIsExpiring(request))
+      || (requestInboxFilter === 'payment' && requestNeedsPaymentReview(request))
+      || (requestInboxFilter === 'delivery' && request.fulfilment === 'delivery')
+  ))
+  const requestInboxNextRequest = requestInboxFilteredRequests[0] ?? null
+  const requestInboxStage = importNeeded
+    ? 'Import catalog before request review'
+    : !savedDraftIsCurrent
+      ? 'Save storefront before request review'
+      : requestInboxFilteredRequests.length
+        ? 'Open filtered Shop review'
+        : pendingManagedRequests.length
+          ? 'Switch filter to find requests'
+          : buyingReady
+            ? 'Inbox ready for requests'
+            : 'Request inbox locked'
+  const requestInboxRows = [
+    ['All', `${pendingManagedRequests.length}`],
+    ['Stock', `${orderOpsStockRiskCount}`],
+    ['Expiring', `${orderOpsExpiringCount}`],
+    ['Payment', `${orderOpsPaymentRiskCount}`],
+    ['Delivery', `${deliveryReviewCount}`],
+  ] as const
+  const requestInboxFilterButtons = [
+    ['all', 'All'],
+    ['stock', 'Stock'],
+    ['expiring', 'Expiring'],
+    ['payment', 'Payment'],
+    ['delivery', 'Delivery'],
+  ] as const
+  const requestInboxNextSummary = requestInboxNextRequest
+    ? `${requestInboxNextRequest.customerReference} · ${commerceStorefrontRequestLines(requestInboxNextRequest).length} line${commerceStorefrontRequestLines(requestInboxNextRequest).length === 1 ? '' : 's'} · ${formatMmk(requestInboxNextRequest.totalMmk)}`
+    : pendingManagedRequests.length
+      ? 'No request matches this filter.'
+      : 'No customer request is waiting.'
+  const quoteRecoveryStage = importNeeded
+    ? 'Import catalog before recovery'
+    : !savedDraftIsCurrent
+      ? 'Save storefront before recovery'
+      : orderOpsExpiringCount
+        ? 'Prepare quote refresh'
+        : orderOpsAgingCount
+          ? 'Recover aged request'
+          : pendingManagedRequests.length
+            ? 'Open Shop recovery'
+            : buyingCart.length
+              ? 'Review recovery quote'
+              : 'Prepare recovery cart'
+  const quoteRecoveryRows = [
+    ['Queue', pendingManagedRequests.length ? `${pendingManagedRequests.length} request` : 'No managed queue'],
+    ['Expiring', orderOpsExpiringCount ? `${orderOpsExpiringCount} quote` : 'Clear'],
+    ['Aged', orderOpsAgingCount ? `${orderOpsAgingCount} request` : 'Inside SLA'],
+    ['Draft', buyingCart.length ? `${buyingCart.length} cart lines` : buyingReady ? 'Ready' : 'Locked'],
+    ['Boundary', pendingManagedRequests.length ? 'Shop review' : 'No customer send'],
+  ] as const
+  const customerFollowUpRequest = pendingManagedRequests.find((request) => commerceStorefrontRequestLines(request).some((line) => {
+    const item = catalog.items.find((candidate) => candidate.sku === line.sku)
+    return !item || item.onHand < line.quantity
+  }))
+    ?? pendingManagedRequests.find((request) => {
+      const minutes = minutesUntil('quote' in request ? request.quote.expiresAt : undefined, orderOpsNow)
+      return minutes !== null && minutes <= 15
+    })
+    ?? pendingManagedRequests.find((request) => Date.parse(request.createdAt) <= orderOpsNow - 30 * 60 * 1000)
+    ?? pendingManagedRequests[0]
+    ?? null
+  const customerFollowUpStage = importNeeded
+    ? 'Import catalog before follow-up'
+    : !savedDraftIsCurrent
+      ? 'Save storefront before follow-up'
+      : orderOpsStockRiskCount
+        ? 'Draft availability update'
+        : orderOpsExpiringCount
+          ? 'Draft quote refresh'
+          : orderOpsPaymentRiskCount
+            ? 'Draft payment clarification'
+            : deliveryReviewCount
+              ? 'Draft delivery confirmation'
+              : pendingManagedRequests.length
+                ? 'Draft Shop review update'
+                : buyingReady
+                  ? 'Follow-up ready when orders arrive'
+                  : 'Follow-up locked'
+  const customerFollowUpRows = [
+    ['Customer', customerFollowUpRequest?.customerReference ?? 'No request yet'],
+    ['Reason', orderOpsStockRiskCount ? 'Stock check' : orderOpsExpiringCount ? 'Quote expiry' : orderOpsPaymentRiskCount ? 'Payment review' : deliveryReviewCount ? 'Delivery review' : pendingManagedRequests.length ? 'Shop review' : 'Wait for order'],
+    ['Payment', orderOpsPaymentRiskCount ? 'Manual QR' : pendingManagedRequests.length ? 'Not authorized' : 'Locked'],
+    ['Delivery', deliveryReviewCount ? `${deliveryReviewCount} review` : pickupReviewCount ? 'Pickup allowed' : 'None yet'],
+    ['Boundary', 'Draft only'],
+  ] as const
+  const replyChannelButtons = [
+    ['viber', 'Viber'],
+    ['line', 'LINE'],
+    ['wechat', 'WeChat'],
+    ['email', 'Email'],
+  ] as const
+  const channelReplyStage = importNeeded
+    ? 'Import catalog before reply templates'
+    : !savedDraftIsCurrent
+      ? 'Save storefront before reply templates'
+      : customerFollowUpRequest
+        ? 'Prepare reviewed channel reply'
+        : buyingReady
+          ? 'Reply templates ready'
+          : 'Reply templates locked'
+  const channelReplyRows = [
+    ['Channel', replyChannelButtons.find(([value]) => value === replyChannelTemplate)?.[1] ?? 'Viber'],
+    ['Intent', customerFollowUpRequest ? customerFollowUpStage.replace('Draft ', '') : 'Wait for request'],
+    ['Evidence', customerFollowUpRequest ? customerFollowUpRequest.id : 'No request yet'],
+    ['Review', customerFollowUpRequest ? 'Owner approves' : 'Locked'],
+    ['Boundary', 'No send'],
+  ] as const
+  const deliveryReviewRequest = pendingManagedRequests.find((request) => request.fulfilment === 'delivery')
+    ?? null
+  const deliveryZoneHint = deliveryReviewRequest ? deliveryAreaFromCustomerReference(deliveryReviewRequest.customerReference) : ''
+  const deliveryAreaTemplateStage = importNeeded
+    ? 'Import catalog before delivery templates'
+    : !savedDraftIsCurrent
+      ? 'Save storefront before delivery templates'
+      : deliveryReviewRequest
+        ? 'Prepare delivery-area template'
+        : buyingReady
+          ? 'Template ready when requests arrive'
+          : 'Delivery templates locked'
+  const deliveryAreaTemplateRows = [
+    ['Area', deliveryZoneHint || 'No request yet'],
+    ['Rule', deliveryReviewRequest ? 'Owner fee review' : savedDraftIsCurrent ? 'Template shell' : 'Locked'],
+    ['Rider', deliveryReviewRequest ? 'Handoff review' : 'Not assigned'],
+    ['Payment', deliveryReviewRequest && 'quote' in deliveryReviewRequest ? deliveryReviewRequest.quote.payment.adapter === 'kbzpay_manual' ? 'Manual QR' : 'COD review' : 'No charge'],
+    ['Reuse', deliveryReviewRequest ? 'After approval' : 'Managed gate'],
+  ] as const
+  const deliveryFeeStage = importNeeded
+    ? 'Import catalog before delivery setup'
+    : !savedDraftIsCurrent
+      ? 'Save storefront before delivery setup'
+      : deliveryReviewCount
+        ? 'Review delivery zone and fee'
+        : buyingReady
+          ? 'Delivery template ready'
+          : 'Delivery setup locked'
+  const deliveryFeeRows = [
+    ['Zone', deliveryZoneHint || (deliveryReviewCount ? 'Review area' : 'No request yet')],
+    ['Fee', deliveryReviewCount ? 'Shop confirms' : savedDraftIsCurrent ? 'Template only' : 'Locked'],
+    ['Rider', deliveryReviewCount ? 'Assign in Shop' : 'Not booked'],
+    ['Payment', deliveryReviewRequest && 'quote' in deliveryReviewRequest ? deliveryReviewRequest.quote.payment.adapter === 'kbzpay_manual' ? 'Manual QR' : 'COD' : 'Not charged'],
+    ['Boundary', 'No booking'],
+  ] as const
+  const orderingReadinessStage = importNeeded
+    ? 'Import Shop catalog'
+    : !selectedSkus.length
+      ? 'Choose sellable products'
+      : !previewResult.preview
+        ? 'Repair storefront preview'
+        : !savedDraftIsCurrent
+          ? 'Save ordering setup'
+          : pendingManagedRequests.length
+            ? 'Clear Shop review queue'
+            : buyingReady
+              ? 'Ready for reviewed orders'
+              : 'Check ordering controls'
+  const orderingReadinessRows = [
+    ['Catalog', importNeeded ? 'Needed' : `${catalog.items.length} items`],
+    ['Storefront', previewResult.preview ? savedDraftIsCurrent ? 'Saved' : 'Draft ready' : 'Blocked'],
+    ['Checkout', buyingReady ? 'Quote ready' : 'Locked'],
+    ['Queue', pendingManagedRequests.length ? `${pendingManagedRequests.length} Shop review` : 'Clear'],
+    ['Safety', managedIdentity ? 'Managed gate' : 'Local trial'],
+  ] as const
+  const managedStoreActivationStage = importNeeded
+    ? 'Import catalog for activation'
+    : !savedDraftIsCurrent
+      ? 'Save storefront for activation'
+      : !buyingReady
+        ? 'Repair checkout activation'
+        : pendingManagedRequests.length
+          ? 'Clear Shop activation queue'
+          : orderOpsPaymentRiskCount
+            ? 'Review payment activation'
+            : deliveryReviewCount
+              ? 'Review delivery activation'
+              : managedIdentity
+                ? 'Managed store activation ready'
+                : 'Download activation packet'
+  const managedStoreActivationRows = [
+    ['Catalog', importNeeded ? 'Needed' : `${selectedSkus.length} sellable`],
+    ['Storefront', savedDraftIsCurrent ? 'Saved fingerprint' : 'Save required'],
+    ['Checkout', buyingReady ? 'Quote controlled' : 'Locked'],
+    ['Payments', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} manual QR` : 'Review only'],
+    ['Delivery', deliveryReviewCount ? `${deliveryReviewCount} review` : savedDraftIsCurrent ? 'Template ready' : 'Locked'],
+    ['Shop gate', pendingManagedRequests.length ? `${pendingManagedRequests.length} owner review` : 'No queue'],
+    ['Activation', managedIdentity ? 'Managed controls' : 'Free local only'],
+  ] as const
+  function downloadManagedStoreActivationPacket() {
+    const packet = buildEcommerceManagedStoreActivationPacket({
+      generatedAt: new Date().toISOString(),
+      product: 'ecommerce',
+      storeName,
+      stage: managedStoreActivationStage,
+      operatingMode: managedIdentity ? 'managed_trial' : 'browser_local_trial',
+      source: {
+        catalogSource: catalog.source,
+        catalogItems: catalog.items.length,
+        selectedSkus: [...selectedSkus],
+        previewDigest: digest || null,
+        managedCatalogDigest: managedCatalogDigest || null,
+        savedRevision: savedDraft?.revision ?? null,
+        savedAt: savedDraft?.savedAt ?? null,
+      },
+      readiness: Object.fromEntries(managedStoreActivationRows) as EcommerceManagedStoreActivationReadiness,
+      orderQueue: {
+        pendingShopReviews: pendingManagedRequests.length,
+        stockRisk: orderOpsStockRiskCount,
+        expiringQuotes: orderOpsExpiringCount,
+        manualPaymentReview: orderOpsPaymentRiskCount,
+        deliveryReview: deliveryReviewCount,
+        pickupReview: pickupReviewCount,
+      },
+    })
+    const url = URL.createObjectURL(new Blob([`${JSON.stringify(packet, null, 2)}\n`], { type: 'application/json' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `supermega-ecommerce-activation-${safeEcommerceFilename(storeName)}.json`
+    link.hidden = true
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'ecommerce',
+      route: location.pathname + location.search,
+      detail: 'Download Ecommerce managed store activation packet',
+    })
+    setDraftNotice('Ecommerce activation packet downloaded. No product, customer, payment, delivery, stock, Shop, or managed workspace state changed.')
+  }
   const setupRows = [
     ['Catalog', sourceLabel],
     ['Products', `${selectedSkus.length}/${Math.min(catalog.items.length, 8)} selected`],
@@ -769,13 +1193,54 @@ export function EcommerceProduct() {
     ['Checkout', buyingReady ? 'Quote ready' : 'Save first'],
     ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : 'No queue'],
   ] as const
+  const aiAgentJob = pendingManagedRequests.length
+    ? 'Review Ecommerce requests in Shop'
+    : importNeeded
+      ? 'Prepare catalog import'
+      : !savedDraftIsCurrent
+        ? 'Finish storefront setup'
+        : buyingCart.length
+          ? 'Review cart quote'
+          : 'Open storefront for ordering'
+  const aiAgentReason = pendingManagedRequests.length
+    ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'} waiting for accountable Shop review.`
+    : importNeeded
+      ? 'The order desk needs a real Shop catalog before the storefront can sell.'
+      : !savedDraftIsCurrent
+        ? 'The customer view must be saved before quote and Shop handoff are trusted.'
+        : buyingCart.length
+          ? `${buyingCart.length} cart line${buyingCart.length === 1 ? '' : 's'} ready for quote review.`
+          : 'The storefront is saved and ready for a customer request.'
+  const aiOwnerGate = pendingManagedRequests.length
+    ? 'Shop confirms stock, delivery, payment, and customer contact.'
+    : importNeeded
+      ? 'Owner approves the imported catalog before managed activation.'
+      : !savedDraftIsCurrent
+        ? 'Owner saves the exact storefront fingerprint first.'
+        : buyingCart.length
+          ? 'Owner reviews the quote before sending to Shop.'
+          : 'Owner keeps payment and customer messages locked.'
+  const aiAgentQueueRows = [
+    ['Agent job', aiAgentJob],
+    ['Reason', aiAgentReason],
+    ['Owner gate', aiOwnerGate],
+  ] as const
   const aiDeskAction = pendingManagedRequests.length
     ? { label: 'Review requests', to: '/shop/?tab=orders&source=ecommerce' }
     : importNeeded
       ? { label: 'Import catalog', to: '/settings/?product=ecommerce' }
       : !savedDraftIsCurrent
         ? null
-        : { label: 'Open storefront', to: '#ecommerce-preview-panel' }
+      : { label: 'Open storefront', to: '#ecommerce-preview-panel' }
+
+  useEffect(() => {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_seen',
+      product: 'ecommerce',
+      route: location.pathname + location.search,
+      detail: aiAgentJob,
+    })
+  }, [aiAgentJob, location.pathname, location.search])
 
   return (
     <div className="workspace-screen ecommerce-product">
@@ -815,9 +1280,156 @@ export function EcommerceProduct() {
         <div className="ecommerce-ai-desk-queue">
           {aiDeskRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
+        <div className="ecommerce-ai-agent-queue" aria-label="Recommended Ecommerce agent job">
+          {aiAgentQueueRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
         {aiDeskAction
-          ? <Link className="core-button primary compact" to={aiDeskAction.to}>{aiDeskAction.label}</Link>
-          : <button className="core-button primary compact" onClick={finishStorefrontSetup} type="button">Finish setup</button>}
+          ? <Link className="core-button primary compact" onClick={() => {
+              recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'ecommerce', route: location.pathname + location.search, detail: aiAgentJob })
+            }} to={aiDeskAction.to}>{aiDeskAction.label}</Link>
+          : <button className="core-button primary compact" onClick={() => {
+              recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'ecommerce', route: location.pathname + location.search, detail: aiAgentJob })
+              finishStorefrontSetup()
+            }} type="button">Finish setup</button>}
+      </section>
+
+      <section aria-label="Ecommerce request inbox" className="ecommerce-ops-cockpit ecommerce-request-inbox-cockpit">
+        <div>
+          <span className="core-eyebrow">Request inbox</span>
+          <h2>{requestInboxStage}</h2>
+          <p>AI filters customer requests by stock risk, quote expiry, manual QR review, and delivery mode so the owner opens the right Shop review first. No customer message, payment, delivery booking, stock move, refund, or Shop write runs here.</p>
+          <div className="ecommerce-request-filter" role="group" aria-label="Request inbox filter">
+            {requestInboxFilterButtons.map(([value, label]) => <button aria-pressed={requestInboxFilter === value} key={value} onClick={() => setRequestInboxFilter(value)} type="button">{label}</button>)}
+          </div>
+          <button className="text-link" disabled={!requestInboxNextRequest} onClick={openFilteredRequestInShop} type="button">Open filtered request</button>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {requestInboxRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+        <p className="ecommerce-request-inbox-summary" role="status">{requestInboxNextSummary}</p>
+      </section>
+
+      <section aria-label="Order ops cockpit" className="ecommerce-ops-cockpit">
+        <div>
+          <span className="core-eyebrow">Order ops cockpit</span>
+          <h2>{orderOpsPriority}</h2>
+          <p>AI ranks order exceptions from the live queue, quote expiry, stock risk, and payment state. Shop still confirms every write.</p>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {orderOpsRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+      </section>
+
+      <section aria-label="Ordering readiness" className="ecommerce-ops-cockpit">
+        <div>
+          <span className="core-eyebrow">Ordering readiness</span>
+          <h2>{orderingReadinessStage}</h2>
+          <p>AI checks catalog, storefront fingerprint, quote readiness, Shop review queue, and safety mode before a customer request can move forward. No customer message, payment, delivery, stock, refund, or Shop write runs from this panel.</p>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {orderingReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+      </section>
+
+      <section aria-label="Ecommerce managed store activation packet" className="ecommerce-ops-cockpit ecommerce-managed-activation-cockpit">
+        <div>
+          <span className="core-eyebrow">Managed store activation packet</span>
+          <h2>{managedStoreActivationStage}</h2>
+          <p>AI packages catalog, storefront fingerprint, checkout quote controls, manual payment review, delivery template readiness, Shop review queue, and managed gate for store activation. No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or managed activation runs from this packet.</p>
+          <button className="text-link" onClick={downloadManagedStoreActivationPacket} type="button">Download activation packet</button>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows ecommerce-managed-activation-rows">
+          {managedStoreActivationRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+      </section>
+
+      <section aria-label="Order lifecycle control" className="ecommerce-ops-cockpit">
+        <div>
+          <span className="core-eyebrow">Order lifecycle</span>
+          <h2>One path from cart to return</h2>
+          <p>AI guides capture, pricing, available-to-promise, fulfilment, and returns from the same Shop-controlled source. No charge, message, refund, or stock write starts here.</p>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {lifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+      </section>
+
+      <section aria-label="Payment and delivery controls" className="ecommerce-ops-cockpit ecommerce-payment-delivery-cockpit">
+        <div>
+          <span className="core-eyebrow">Payment and delivery controls</span>
+          <h2>{paymentDeliveryStage}</h2>
+          <p>AI prepares pickup, local delivery, manual QR review, quote expiry, and Shop confirmation from the same checkout request. No card charge, wallet debit, driver booking, customer message, or settlement write runs here.</p>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {paymentDeliveryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+      </section>
+
+      <section aria-label="Delivery fee review controls" className="ecommerce-ops-cockpit ecommerce-delivery-fee-cockpit">
+        <div>
+          <span className="core-eyebrow">Delivery fee review</span>
+          <h2>{deliveryFeeStage}</h2>
+          <p>AI prepares a local delivery zone, fee, rider handoff, and payment review packet from the customer request. No rider booking, fee charge, customer message, payment capture, stock move, refund, or Shop write runs here.</p>
+          <button className="text-link" disabled={catalogHydrating || (!deliveryReviewRequest && !buyingReady)} onClick={prepareDeliveryFeeReview} type="button">Prepare delivery review</button>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {deliveryFeeRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+        {deliveryReviewDraft ? <p className="ecommerce-delivery-review-draft" role="status">{deliveryReviewDraft}</p> : null}
+      </section>
+
+      <section aria-label="Delivery-area template controls" className="ecommerce-ops-cockpit ecommerce-delivery-template-cockpit">
+        <div>
+          <span className="core-eyebrow">Delivery-area templates</span>
+          <h2>{deliveryAreaTemplateStage}</h2>
+          <p>AI turns repeated delivery requests into reusable area, fee, rider, payment, and cut-off templates. No saved template, customer message, rider booking, fee charge, settlement write, stock move, or Shop write runs here.</p>
+          <button className="text-link" disabled={catalogHydrating || (!deliveryReviewRequest && !buyingReady)} onClick={prepareDeliveryAreaTemplate} type="button">Prepare area template</button>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {deliveryAreaTemplateRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+        {deliveryAreaTemplateDraft ? <p className="ecommerce-delivery-template-draft" role="status">{deliveryAreaTemplateDraft}</p> : null}
+      </section>
+
+      <section aria-label="Quote recovery controls" className="ecommerce-ops-cockpit ecommerce-quote-recovery-cockpit">
+        <div>
+          <span className="core-eyebrow">Quote recovery</span>
+          <h2>{quoteRecoveryStage}</h2>
+          <p>AI prepares stale quote review, aged request recovery, and a safe cart draft from the same Shop-controlled source. No customer message, discount, payment, delivery, refund, stock, or Shop write runs here.</p>
+          <button className="text-link" disabled={catalogHydrating || (!pendingManagedRequests.length && !buyingReady)} onClick={prepareQuoteRecovery} type="button">Prepare quote recovery</button>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {quoteRecoveryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+      </section>
+
+      <section aria-label="Customer follow-up controls" className="ecommerce-ops-cockpit ecommerce-customer-follow-up-cockpit">
+        <div>
+          <span className="core-eyebrow">Customer follow-up</span>
+          <h2>{customerFollowUpStage}</h2>
+          <p>AI prepares the next owner-reviewed customer update from quote expiry, stock risk, payment state, delivery mode, and Shop review status. No SMS, email, Viber, WhatsApp, discount, payment, delivery, refund, stock, or Shop write runs here.</p>
+          <button className="text-link" disabled={catalogHydrating || (!pendingManagedRequests.length && !buyingReady)} onClick={prepareCustomerFollowUpDraft} type="button">Prepare follow-up draft</button>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {customerFollowUpRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+        {customerFollowUpDraft ? <p className="ecommerce-follow-up-draft" role="status">{customerFollowUpDraft}</p> : null}
+      </section>
+
+      <section aria-label="Channel reply template controls" className="ecommerce-ops-cockpit ecommerce-channel-reply-cockpit">
+        <div>
+          <span className="core-eyebrow">Channel reply templates</span>
+          <h2>{channelReplyStage}</h2>
+          <p>AI prepares owner-reviewed Viber, LINE, WeChat, and email reply templates from the same customer request evidence. No message send, clipboard copy, discount, payment, delivery booking, refund, stock move, or Shop write runs here.</p>
+          <div className="ecommerce-request-filter" role="group" aria-label="Reply channel template">
+            {replyChannelButtons.map(([value, label]) => <button aria-pressed={replyChannelTemplate === value} key={value} onClick={() => setReplyChannelTemplate(value)} type="button">{label}</button>)}
+          </div>
+          <button className="text-link" disabled={catalogHydrating || (!customerFollowUpRequest && !buyingReady)} onClick={prepareChannelReplyTemplate} type="button">Prepare reply template</button>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {channelReplyRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+        {channelReplyDraft ? <p className="ecommerce-channel-reply-draft" role="status">{channelReplyDraft}</p> : null}
       </section>
 
       <div aria-label="Ecommerce workspace" className="ecommerce-mobile-switch" role="group">

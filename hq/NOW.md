@@ -70,7 +70,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
 - `supermegabase` is not a trial target: it has existing records, one recorded migration, and 27 public RLS tables without policies. No isolated branch is verified, so managed writes remain off.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
-- Release integration is blocked: this checkout has Settings evidence v13 while deployed `d38cdbb` has v23 on a 59-commit production-only line; reconcile source and behavior before claiming readiness.
+- Local integration now combines deployed `d38cdbb` Settings v23 and richer product controls with recovery, Shop operating flow, receivables, service scheduling, production demand, and settlement work; it is verified locally but not released.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 - Gaps: hosted restore/custody/recovery-time proof; Shop finance/returns/service; Plant engineering/CAPA/maintenance/WIP/compliance; Website hosting/analytics; Ecommerce providers/shipping/returns. Local workspace recovery is preflight only.
