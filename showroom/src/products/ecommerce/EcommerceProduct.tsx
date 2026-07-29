@@ -1297,6 +1297,34 @@ export function EcommerceProduct() {
     ['Review', customerFollowUpRequest ? 'Owner approves' : 'Locked'],
     ['Boundary', 'No send'],
   ] as const
+  const fulfillmentHandoffStage = importNeeded
+    ? 'Import catalog before fulfillment'
+    : !savedDraftIsCurrent
+      ? 'Save storefront before fulfillment'
+      : orderImportReview?.status === 'blocked'
+        ? 'Repair imported orders'
+        : orderImportReview?.status === 'ready'
+          ? 'Package orders for Shop'
+          : orderOpsStockRiskCount
+            ? 'Resolve stock before handoff'
+            : orderOpsPaymentRiskCount
+              ? 'Review payment before handoff'
+              : deliveryReviewCount
+                ? 'Review delivery before handoff'
+                : pendingManagedRequests.length
+                  ? 'Open Shop fulfillment queue'
+                  : buyingReady
+                    ? 'Fulfillment handoff ready'
+                    : 'Fulfillment handoff locked'
+  const fulfillmentHandoffRows = [
+    ['Source', orderImportReview ? `${orderImportReview.readyRows}/${orderImportReview.totalRows} import` : pendingManagedRequests.length ? 'Managed queue' : buyingCart.length ? 'Cart quote' : 'No request yet'],
+    ['Stock', orderOpsStockRiskCount ? `${orderOpsStockRiskCount} risk` : catalog.items.length ? 'ATP check' : 'Need catalog'],
+    ['Payment', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} manual` : pendingManagedRequests.length || buyingReady ? 'Not charged' : 'Locked'],
+    ['Fulfilment', deliveryReviewCount ? `${deliveryReviewCount} delivery` : pickupReviewCount ? `${pickupReviewCount} pickup` : savedDraftIsCurrent ? 'Pickup/delivery' : 'Locked'],
+    ['Reply', customerFollowUpRequest ? 'Draftable' : buyingReady ? 'Template ready' : 'Locked'],
+    ['Shop handoff', pendingManagedRequests.length ? 'Owner queue' : orderImportReview?.status === 'ready' ? 'Packet ready' : buyingReady ? 'Quote only' : 'Setup first'],
+    ['Boundary', 'No auto fulfill'],
+  ] as const
   const deliveryReviewRequest = pendingManagedRequests.find((request) => request.fulfilment === 'delivery')
     ?? null
   const deliveryZoneHint = deliveryReviewRequest ? deliveryAreaFromCustomerReference(deliveryReviewRequest.customerReference) : ''
@@ -1674,6 +1702,17 @@ export function EcommerceProduct() {
         </div>
         <div className="ecommerce-ops-cockpit-rows ecommerce-managed-activation-rows">
           {managedStoreActivationRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+      </section>
+
+      <section aria-label="Ecommerce fulfillment handoff" className="ecommerce-ops-cockpit ecommerce-fulfillment-handoff-cockpit">
+        <div>
+          <span className="core-eyebrow">Fulfillment handoff</span>
+          <h2>{fulfillmentHandoffStage}</h2>
+          <p>AI summarizes the exact customer/order handoff across source evidence, ATP, payment review, pickup or delivery, reply draft, and Shop queue ownership. No customer message, payment capture, wallet debit, rider booking, stock move, refund, Shop write, or fulfillment confirmation runs from this panel.</p>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows ecommerce-fulfillment-handoff-rows">
+          {fulfillmentHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
       </section>
 
