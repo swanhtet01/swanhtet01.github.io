@@ -3173,6 +3173,14 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     ['Owner gate', 'Review package'],
     ['Boundary', 'No Shop write'],
   ] as const
+  const shopSetupGuideRows = [
+    ['Products', commerce.items.length ? `${commerce.items.length} current SKU` : 'Import catalog'],
+    ['Stock', commerce.inventoryFoundation && managedInventoryProjection ? 'Location + ATP' : 'Simple count first'],
+    ['Orders', pendingStorefrontRequests.length || legacyWebsiteWorkWaiting ? 'Online review' : actionOrders.length ? 'Queue active' : 'Counter ready'],
+    ['Payments', paymentReview.length ? `${paymentReview.length} exception` : 'Review only'],
+    ['Accounting', latestCloseDownload ? 'Export ready' : 'Close later'],
+    ['Boundary', 'Owner approves writes'],
+  ] as const
   function runShopAutopilot() {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
@@ -3194,6 +3202,14 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     </div>
     <div className="shop-command-center-rows">{shopAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <button className="core-button primary compact" onClick={runShopAutopilot} type="button">Run next step</button>
+  </section>
+  const shopSetupGuide = <section aria-label="Shop setup guide" className="shop-order-control shop-setup-guide">
+    <div>
+      <span className="core-eyebrow">Shop setup guide</span>
+      <strong>Import products once. Let AI run the daily queue.</strong>
+      <small>AI prepares catalog import, stock foundation, online order review, payment exceptions, supplier receiving, and accounting packets. The owner confirms every sale, payment, stock, supplier, refund, and accounting handoff.</small>
+    </div>
+    <div className="shop-order-control-rows">{shopSetupGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const shopAgentQueue = <section aria-label="Recommended Shop agent job" className="shop-agent-queue">
     <div>
@@ -4687,6 +4703,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
     {shopCommandCenter}
+    {shopSetupGuide}
     {shopAgentQueue}
     <ShopCounter disabled={commerceControlsDisabled} items={commerce.items} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} />
     {actionGate}
@@ -4695,6 +4712,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
     {shopCommandCenter}
+    {shopSetupGuide}
     {shopAgentQueue}
     <section className="core-panel order-queue-panel order-workspace">
       <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span>{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={openOrderComposer} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
@@ -4865,6 +4883,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   if (tab === 'inventory') return <div className="operation-module">
     {commerceBoundary}
     {shopCommandCenter}
+    {shopSetupGuide}
     {shopAgentQueue}
     <section className="core-panel inventory-panel">
       <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : 'Count stock'}</button></div></div>
