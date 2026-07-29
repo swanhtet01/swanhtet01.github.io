@@ -63,6 +63,8 @@
     "company:ally:preflight": "node tools/run_ally_ceo_local_cycle.mjs",
     "company:ally:run": "node tools/run_ally_ceo_local_cycle.mjs --execute --refresh-knowledge",
     "company:ally:repair": "node tools/run_ally_ceo_local_cycle.mjs --execute --refresh-knowledge --repair-rejected",
+    "release:handoff:prepare": "node tools/prepare_release_handoff.mjs",
+    "release:handoff:self-test": "node --test tools/prepare_release_handoff.test.mjs",
     "verify:app-deploy-workflow": "node tools/verify_app_deploy_workflow.mjs",
     "hq:verify": "node tools/verify_hq_contract.mjs",
     "hq:verify:live": "node tools/verify_hq_live_state.mjs",

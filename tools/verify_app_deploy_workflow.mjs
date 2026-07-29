@@ -24,6 +24,7 @@ const releaseBarrier = await readFile(resolve(root, 'tools/verify_coordinated_re
 const databaseValidator = await readFile(resolve(root, 'tools/validate_supermega_database_url.py'), 'utf8')
 const migrationVerifier = await readFile(resolve(root, 'tools/verify_private_trial_migrations.mjs'), 'utf8')
 const rollbackResolver = await readFile(resolve(root, 'tools/resolve_vercel_rollback_target.mjs'), 'utf8')
+const releaseHandoff = await readFile(resolve(root, 'tools/prepare_release_handoff.mjs'), 'utf8')
 const retiredAliasVerifier = await readFile(resolve(root, 'tools/verify_retired_vercel_alias_state.mjs'), 'utf8')
 const previewServer = await readFile(resolve(root, 'tools/serve_solution.py'), 'utf8')
 const previewLauncher = await readFile(resolve(root, 'tools/deploy_preview.sh'), 'utf8')
@@ -45,6 +46,19 @@ function requireContract(name, condition) {
 
 requireContract('source line endings normalize across platforms',
   normalizeSourceText('line one\r\nline two\rline three') === 'line one\nline two\nline three')
+requireContract('release handoff is exact, review-only, and cannot deploy',
+  packageJson.scripts?.['release:handoff:prepare'] === 'node tools/prepare_release_handoff.mjs'
+  && packageJson.scripts?.['release:handoff:self-test'] === 'node --test tools/prepare_release_handoff.test.mjs'
+  && releaseHandoff.includes("export const RELEASE_HANDOFF_CONTRACT = 'supermega.release-handoff.v1'")
+  && releaseHandoff.includes("mode: 'owner_review_only'")
+  && releaseHandoff.includes('pushApproved: false')
+  && releaseHandoff.includes('mergeApproved: false')
+  && releaseHandoff.includes('workflowDispatchApproved: false')
+  && releaseHandoff.includes('deploymentApproved: false')
+  && releaseHandoff.includes('remoteWritesPerformed: false')
+  && releaseHandoff.includes("git('ls-remote', '--heads', 'origin', ref)")
+  && releaseHandoff.includes("run(npm, ['run', 'app:verify']")
+  && !/\b(?:vercel|gh)\s+(?:deploy|promote|rollback|workflow|api)\b/i.test(releaseHandoff))
 
 function runRollbackResolver(args, payload) {
   return spawnSync(
