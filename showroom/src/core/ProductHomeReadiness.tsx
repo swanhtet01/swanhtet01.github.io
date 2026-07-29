@@ -30,6 +30,12 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
     ['Guard', 'Approval before impact', 'Customer contact, payment, stock, publish, and production changes stay behind the owner gate.'],
     ['Scale', 'One control model', 'Shop, Plant, Website, and Ecommerce share the same setup, evidence, audit, and handoff pattern.'],
   ] as const
+  const operatingTrackRows = [
+    ['Shop', 'AI inventory operator', 'Imports products, flags reorder risk, drafts purchase/order reviews, and keeps payments tied to accountable receipts.'],
+    ['Plant', 'AI MES coordinator', 'Turns demand, shifts, quality issues, maintenance, WCM checks, and ISO evidence into prioritized work packets.'],
+    ['Website', 'AI site builder', 'Converts business facts, proof, offers, and owner approval into a publish-ready website package without changing DNS.'],
+    ['Ecommerce', 'AI order desk', 'Builds a catalog, reviews incoming orders, matches Shop stock, and prepares delivery/payment handoff for approval.'],
+  ] as const
   const learningCockpitRows = [
     ['Behavior memory', behaviorTrail.length ? `${behaviorTrail.length} local signals` : 'No signals yet', behaviorTrail.length ? 'Owner navigation and agent queue choices are ready for evidence export.' : 'Open products and choose agent jobs to create local memory.'],
     ['Queue choices', behaviorChoices ? `${behaviorChoices} chosen` : 'No choices yet', behaviorChoices ? 'Premium can rank repeated owner preferences after managed import.' : 'The system waits for explicit owner choices before ranking work.'],
@@ -75,6 +81,25 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
         </div>
         <div className="product-home-readiness-grid">
           {enterpriseAutopilotRows.map(([label, value, detail]) => (
+            <span key={label}>
+              <small>{label}</small>
+              <strong>{value}</strong>
+              <em>{detail}</em>
+            </span>
+          ))}
+        </div>
+      </section>
+      <section className="product-home-readiness product-home-operating-tracks" aria-label="AI operating tracks">
+        <div className="product-home-readiness-head">
+          <div>
+            <span className="core-eyebrow">AI operating tracks</span>
+            <h2>Separate products, one simple operating model.</h2>
+            <p>Each app gives the owner a narrow command surface while AI prepares the repetitive work behind it. Free mode proves the workflow locally; premium adds managed data, roles, audit, and approved learning.</p>
+          </div>
+          <Link className="core-button" to="/settings/">Set up products</Link>
+        </div>
+        <div className="product-home-readiness-grid">
+          {operatingTrackRows.map(([label, value, detail]) => (
             <span key={label}>
               <small>{label}</small>
               <strong>{value}</strong>
