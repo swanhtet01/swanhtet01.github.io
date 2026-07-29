@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import sys
+import tempfile
 from collections.abc import Mapping, Sequence
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -23,6 +24,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 CONTRACT = "supermega_private_trial_database_v5"
 REHEARSAL_PREFLIGHT_CONTRACT = "supermega_supabase_rehearsal_preflight_v1"
 ACTIVATION_TARGET_CONTRACT = "supermega_supabase_activation_target_v1"
+ACTIVATION_EVIDENCE_CONTRACT = "supermega_managed_activation_evidence_v1"
 SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
 TRUSTED_OWNER = "postgres"
@@ -30,6 +32,9 @@ SCHEMA_COMPONENT = "private_trial_backend"
 SCHEMA_VERSION = 5
 EXPECTED_POSTGRES_MAJOR = 17
 SAFE_SSL_MODES = frozenset({"require", "verify-ca", "verify-full"})
+UNSUPPORTED_SUPABASE_POSTGRES17_EXTENSIONS = frozenset(
+    {"timescaledb", "plv8", "pls", "plcoffee", "pgjwt"}
+)
 EXPECTED_TABLES = frozenset(
     {
         "trial_schema_meta",
@@ -504,6 +509,21 @@ def _run_policy_self_test() -> dict[str, Any]:
         "and (status = 'active'))"
     )
     expected = EXPECTED_POLICY_FINGERPRINTS["workspace_memberships_self_read"]["qual"]
+    sample_report = {
+        "ok": False,
+        "ready": False,
+        "status": "attention",
+        "activation_contract": ACTIVATION_TARGET_CONTRACT,
+        "secret_values_exposed": False,
+    }
+    with tempfile.TemporaryDirectory(prefix="supermega-activation-evidence-") as directory:
+        evidence_path = Path(directory) / "receipt.json"
+        _write_activation_evidence(sample_report, str(evidence_path))
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    expected_report_digest = sha256(
+        json.dumps(sample_report, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
     cases = {
         "canonical_membership": _policy_expression_matches(membership, expected),
         "reject_dead_case_wrapper": not _policy_expression_matches(
@@ -526,6 +546,18 @@ def _run_policy_self_test() -> dict[str, Any]:
             expected,
         ),
         "null_expression_is_exact": _policy_expression_matches(None, None),
+        "accept_supported_extensions": not _unsupported_postgres17_extensions(
+            [{"extension_name": "plpgsql"}, {"extension_name": "pgcrypto"}]
+        ),
+        "reject_removed_postgres17_extension": _unsupported_postgres17_extensions(
+            [{"extension_name": "plv8"}, {"extension_name": "plpgsql"}]
+        ) == ["plv8"],
+        "activation_receipt_is_sanitized_and_digest_bound": (
+            evidence.get("contract") == ACTIVATION_EVIDENCE_CONTRACT
+            and evidence.get("report") == sample_report
+            and evidence.get("report_sha256") == expected_report_digest
+            and evidence.get("secret_values_exposed") is False
+        ),
     }
     failed = [name for name, passed in cases.items() if not passed]
     return {
@@ -554,6 +586,41 @@ def _function_settings(value: Any) -> frozenset[str]:
     if isinstance(value, Sequence):
         return frozenset(str(part).strip() for part in value if str(part).strip())
     return frozenset()
+
+
+def _unsupported_postgres17_extensions(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    installed = {
+        str(row.get("extension_name", "")).strip().lower()
+        for row in rows
+        if str(row.get("extension_name", "")).strip()
+    }
+    return sorted(installed.intersection(UNSUPPORTED_SUPABASE_POSTGRES17_EXTENSIONS))
+
+
+def _write_activation_evidence(report: Mapping[str, Any], output_path: str) -> None:
+    """Atomically persist only the already-sanitized activation report."""
+
+    destination = Path(output_path).expanduser().resolve()
+    if destination.suffix.lower() != ".json":
+        raise AuditConfigurationError("activation_evidence_path_must_be_json")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    report_payload = json.dumps(report, sort_keys=True, separators=(",", ":"))
+    envelope = {
+        "contract": ACTIVATION_EVIDENCE_CONTRACT,
+        "report_contract": report.get("activation_contract", report.get("contract")),
+        "report_sha256": sha256(report_payload.encode("utf-8")).hexdigest(),
+        "report": report,
+        "secret_values_exposed": False,
+    }
+    temporary = destination.with_name(f".{destination.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(
+            json.dumps(envelope, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def validate_database_url(database_url: str) -> None:
@@ -843,6 +910,16 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
             """
         )
         engine = _mapping(cursor.fetchone())
+
+        extensions = _execute_rows(
+            cursor,
+            """
+            select extname as extension_name,
+                   extversion as extension_version
+            from pg_extension
+            order by extname
+            """,
+        )
 
         cursor.execute(
             """
@@ -1266,6 +1343,7 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
 
     return {
         "engine": engine,
+        "extensions": extensions,
         "identity": identity,
         "backend_role": backend_role,
         "backend_acl_dependencies": backend_acl_dependencies,
@@ -1394,6 +1472,8 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     ]
     backend_member_rows = [_mapping(row) for row in snapshot.get("backend_members", [])]
     role_setting_rows = [_mapping(row) for row in snapshot.get("role_settings", [])]
+    extension_rows = [_mapping(row) for row in snapshot.get("extensions", [])]
+    unsupported_extensions = _unsupported_postgres17_extensions(extension_rows)
 
     try:
         server_version_num = int(engine.get("server_version_num", 0))
@@ -1646,6 +1726,7 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
 
     checks = {
         "postgres_major_supported": postgres_major == EXPECTED_POSTGRES_MAJOR,
+        "supabase_postgres17_unsupported_extensions_absent": not unsupported_extensions,
         "read_only_encrypted_connection": all(
             _bool(identity.get(key)) for key in ("transaction_read_only", "tls_active")
         ),
@@ -1687,6 +1768,12 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         "evidence": {
             "engine": {
                 "postgres_major": postgres_major,
+                "installed_extensions": sorted(
+                    str(row.get("extension_name", "")).strip().lower()
+                    for row in extension_rows
+                    if str(row.get("extension_name", "")).strip()
+                ),
+                "unsupported_extensions": unsupported_extensions,
             },
             "schema": {
                 "name": SCHEMA,
@@ -1902,6 +1989,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Bind both read-only readiness URLs to one explicit Supabase project.",
     )
     parser.add_argument(
+        "--evidence-output",
+        default="",
+        help="Write a sanitized, digest-bound JSON activation receipt to this path.",
+    )
+    parser.add_argument(
         "--expected-project-ref-env-key",
         default="SUPERMEGA_REHEARSAL_PROJECT_REF",
     )
@@ -1977,6 +2069,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
 
+    if args.evidence_output and not args.activation_target:
+        print(
+            json.dumps(
+                _safe_failure(
+                    "activation_evidence_requires_activation_target",
+                    contract=mode_contract,
+                ),
+                sort_keys=True,
+            )
+        )
+        return 2
+
     if args.rehearsal_preflight and (args.ensure_schema or args.require_ready):
         print(
             json.dumps(
@@ -2027,6 +2131,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             contract=mode_contract,
         )
 
+    if args.evidence_output:
+        try:
+            _write_activation_evidence(report, args.evidence_output)
+        except (AuditConfigurationError, OSError) as exc:
+            code = exc.code if isinstance(exc, AuditConfigurationError) else "activation_evidence_write_failed"
+            report = _safe_failure(code, contract=mode_contract)
     print(json.dumps(report, sort_keys=True))
     if args.rehearsal_preflight:
         return 0 if report.get("ready") is True else 1

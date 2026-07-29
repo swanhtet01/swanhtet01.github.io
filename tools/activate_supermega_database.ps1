@@ -2,6 +2,7 @@ param(
   [string]$DatabaseUrlFile = '',
   [string]$StorageAuditDatabaseUrlFile = '',
   [string]$ExpectedProjectRef = '',
+  [string]$EvidenceOutputFile = '',
   [string]$ApprovalId = '',
   [switch]$ProductionHandoff,
   [switch]$Replace,
@@ -95,13 +96,18 @@ try {
   $env:SUPERMEGA_STORAGE_AUDIT_DATABASE_URL = $resolvedStorageAudit
   $env:SUPERMEGA_ACTIVATION_PROJECT_REF = $ExpectedProjectRef
   Write-Output '==> validate exact-project managed Postgres, private Storage, and SuperMega schema'
-  & uv run python $ValidatorPath `
-    --env-key SUPERMEGA_DATABASE_URL `
-    --storage-audit-env-key SUPERMEGA_STORAGE_AUDIT_DATABASE_URL `
-    --activation-target `
-    --expected-project-ref-env-key SUPERMEGA_ACTIVATION_PROJECT_REF `
-    --ensure-schema `
-    --require-ready
+  $validatorArguments = @(
+    '--env-key', 'SUPERMEGA_DATABASE_URL',
+    '--storage-audit-env-key', 'SUPERMEGA_STORAGE_AUDIT_DATABASE_URL',
+    '--activation-target',
+    '--expected-project-ref-env-key', 'SUPERMEGA_ACTIVATION_PROJECT_REF',
+    '--ensure-schema',
+    '--require-ready'
+  )
+  if ($EvidenceOutputFile.Trim()) {
+    $validatorArguments += @('--evidence-output', $EvidenceOutputFile)
+  }
+  & uv run python $ValidatorPath @validatorArguments
   if ($LASTEXITCODE -ne 0) {
     throw 'Database validation failed; Supabase and Vercel were not changed.'
   }
