@@ -245,6 +245,11 @@
   overflow-wrap: anywhere;
 }
 
+.ecommerce-order-import-review .text-link {
+  width: fit-content;
+  margin-top: 3px;
+}
+
 .ecommerce-request-filter {
   display: flex;
   flex-wrap: wrap;

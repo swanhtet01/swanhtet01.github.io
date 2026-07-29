@@ -95,6 +95,19 @@ type OrderImportReview = {
   summary: string
 }
 
+const ORDER_IMPORT_REVIEW_PACKET_SCHEMA = 'supermega.ecommerce.order_import_review_packet.v1' as const
+const orderImportForbiddenActions = [
+  'order_import',
+  'customer_message_send',
+  'payment_capture',
+  'wallet_debit',
+  'delivery_booking',
+  'stock_move',
+  'refund_write',
+  'shop_write',
+  'managed_activation',
+] as const
+
 const DEFAULT_STORE_NAME = 'Mingalar Market'
 const DEFAULT_STORE_SUMMARY = 'Everyday essentials for pickup or delivery, with clear local pricing.'
 
@@ -620,6 +633,45 @@ export function EcommerceProduct() {
       })
       setOrderImportNotice('Order import batch rejected locally. No Shop or customer action ran.')
     }
+  }
+
+  function downloadOrderImportReviewPacket() {
+    if (!orderImportReview) return
+    const packet = {
+      schema: ORDER_IMPORT_REVIEW_PACKET_SCHEMA,
+      generatedAt: new Date().toISOString(),
+      product: 'ecommerce',
+      storeName,
+      operatingMode: managedIdentity ? 'managed_trial' : 'browser_local_trial',
+      catalog: {
+        source: catalog.source,
+        items: catalog.items.length,
+        selectedSkus: [...selectedSkus],
+      },
+      review: orderImportReview,
+      sourceCsv: orderImportText,
+      supportHandoff: [
+        'Review this packet against the saved Shop catalog before any managed queue import.',
+        'Enable Shop writes only after Postgres, RLS, auth, audit, and scheduler proof passes.',
+      ],
+      forbiddenActions: [...orderImportForbiddenActions],
+    }
+    const url = URL.createObjectURL(new Blob([`${JSON.stringify(packet, null, 2)}\n`], { type: 'application/json' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `supermega-ecommerce-order-review-${safeEcommerceFilename(storeName)}.json`
+    link.hidden = true
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'ecommerce',
+      route: location.pathname + location.search,
+      detail: 'Download Ecommerce order import review packet',
+    })
+    setOrderImportNotice('Order import review packet downloaded. No order import, customer message, payment, delivery booking, stock move, refund, Shop write, or managed activation ran.')
   }
 
   function showMobileWorkspace(view: 'setup' | 'preview') {
@@ -1476,7 +1528,7 @@ export function EcommerceProduct() {
             setOrderImportReview(null)
           }} placeholder="Paste customer_reference, channel, sku, quantity, fulfilment, payment, source_message rows" value={orderImportText} /></label>
           <button className="text-link" disabled={!orderImportText.trim()} onClick={reviewOrderImportBatch} type="button">Review order batch</button>
-          {orderImportReview ? <div className={`ecommerce-order-import-review ${orderImportReview.status}`} role="status"><strong>{orderImportReview.status === 'ready' ? 'Ready for owner review' : 'Repair before handoff'}</strong><span>{orderImportReview.summary}</span><small>{orderImportReview.readyRows} ready · {orderImportReview.blockedRows} blocked · no Shop write</small></div> : null}
+          {orderImportReview ? <div className={`ecommerce-order-import-review ${orderImportReview.status}`} role="status"><strong>{orderImportReview.status === 'ready' ? 'Ready for owner review' : 'Repair before handoff'}</strong><span>{orderImportReview.summary}</span><small>{orderImportReview.readyRows} ready · {orderImportReview.blockedRows} blocked · no Shop write</small><button className="text-link" onClick={downloadOrderImportReviewPacket} type="button">Download review packet</button></div> : null}
           {orderImportNotice ? <p className="ecommerce-order-import-notice" role="status">{orderImportNotice}</p> : null}
         </div>
         <div className="ecommerce-ops-cockpit-rows">
