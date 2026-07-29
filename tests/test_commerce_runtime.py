@@ -909,18 +909,32 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
             order for order in next_state["orders"] if order.get("supportCases")  # type: ignore[union-attr]
         )
         return dict(support_order["supportCases"][0]["opening"])
+    if event_type == "commerce.order.support_case_reopened":
+        support_order = next(
+            order for order in next_state["orders"] if order.get("supportCases")  # type: ignore[union-attr]
+        )
+        support_case = next(case for case in support_order["supportCases"] if case.get("reopen"))
+        return dict(support_case["reopen"]["proof"])
     if event_type == "commerce.order.support_case_service_recorded":
         support_order = next(
             order for order in next_state["orders"] if order.get("supportCases")  # type: ignore[union-attr]
         )
-        support_case = next(case for case in support_order["supportCases"] if case.get("serviceEvents"))
-        return dict(support_case["serviceEvents"][0]["proof"])
+        support_case = next(
+            case for case in support_order["supportCases"]
+            if case.get("followUpServiceEvents") or case.get("serviceEvents")
+        )
+        events = support_case.get("followUpServiceEvents") or support_case["serviceEvents"]
+        return dict(events[0]["proof"])
     if event_type == "commerce.order.support_case_resolved":
         support_order = next(
             order for order in next_state["orders"] if order.get("supportCases")  # type: ignore[union-attr]
         )
-        support_case = next(case for case in support_order["supportCases"] if case.get("resolution"))
-        return dict(support_case["resolution"]["proof"])
+        support_case = next(
+            case for case in support_order["supportCases"]
+            if case.get("followUpResolution") or case.get("resolution")
+        )
+        resolution = support_case.get("followUpResolution") or support_case["resolution"]
+        return dict(resolution["proof"])
     if event_type == "commerce.order.correction_recorded":
         corrected_orders = [
             order
@@ -2399,6 +2413,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.order.cancelled",
                     "commerce.order.return_recorded",
                     "commerce.order.support_case_opened",
+                    "commerce.order.support_case_reopened",
                     "commerce.order.support_case_service_recorded",
                     "commerce.order.support_case_resolved",
                     "commerce.order.correction_recorded",
@@ -4682,6 +4697,101 @@ class CommerceRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(resolved["items"], current["items"])
         self.assertEqual(resolved["movements"], current["movements"])
+
+        reopened_candidate = deepcopy(resolved)
+        reopened_case = reopened_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        reopened_case["status"] = "open"
+        reopened_case["reopen"] = {
+            "sourceResolutionActionId": "ACT-SUPPORT-RESOLVE",
+            "owner": "Follow-up owner",
+            "priority": "high",
+            "dueAt": "2026-07-23T14:00:00.000Z",
+            "note": "Customer issue recurred after the retained resolution.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-REOPEN",
+                captured_at="2026-07-23T10:00:00.000Z",
+                reason="Reopen one linked follow-up without sending a message.",
+                evidence_reference=f"SUPPORT-REOPEN:{case_id}:ACT-SUPPORT-RESOLVE",
+            ),
+        }
+        reopened = apply_event(
+            resolved,
+            "commerce.order.support_case_reopened",
+            reopened_candidate,
+        )
+        active_reopen = reopened["orders"][0]["supportCases"][0]  # type: ignore[index]
+        self.assertEqual(active_reopen["status"], "open")
+        self.assertEqual(active_reopen["resolution"], resolution)
+        self.assertEqual(active_reopen["reopen"]["owner"], "Follow-up owner")
+
+        follow_up_ack_candidate = deepcopy(reopened)
+        follow_up_ack_case = follow_up_ack_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        follow_up_ack_case["followUpServiceEvents"] = [{
+            "kind": "acknowledged",
+            "owner": "Follow-up owner",
+            "priority": "high",
+            "dueAt": "2026-07-23T14:00:00.000Z",
+            "note": "Follow-up owner accepted the reopened case.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-FOLLOWUP-ACK",
+                captured_at="2026-07-23T10:01:00.000Z",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }]
+        follow_up_acknowledged = apply_event(
+            reopened,
+            "commerce.order.support_case_service_recorded",
+            follow_up_ack_candidate,
+        )
+
+        follow_up_response_candidate = deepcopy(follow_up_acknowledged)
+        follow_up_response_case = follow_up_response_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        follow_up_response_case["followUpServiceEvents"] = [{
+            "kind": "first_response_ready",
+            "owner": "Follow-up owner",
+            "priority": "high",
+            "dueAt": "2026-07-23T14:00:00.000Z",
+            "note": "Follow-up response is ready for independent delivery.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-FOLLOWUP-RESPONSE",
+                captured_at="2026-07-23T10:02:00.000Z",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }, *follow_up_response_case["followUpServiceEvents"]]
+        follow_up_response_ready = apply_event(
+            follow_up_acknowledged,
+            "commerce.order.support_case_service_recorded",
+            follow_up_response_candidate,
+        )
+
+        follow_up_resolved_candidate = deepcopy(follow_up_response_ready)
+        follow_up_resolved_case = follow_up_resolved_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        follow_up_resolved_case["status"] = "resolved"
+        follow_up_resolved_case["followUpResolution"] = {
+            "outcome": "information_provided",
+            "note": "Follow-up was reviewed and closed separately.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-FOLLOWUP-RESOLVE",
+                captured_at="2026-07-23T10:03:00.000Z",
+                evidence_reference=f"SUPPORT-RESOLUTION:{case_id}",
+            ),
+        }
+        follow_up_resolved = apply_event(
+            follow_up_response_ready,
+            "commerce.order.support_case_resolved",
+            follow_up_resolved_candidate,
+        )
+        retained_case = follow_up_resolved["orders"][0]["supportCases"][0]  # type: ignore[index]
+        self.assertEqual(retained_case["resolution"], resolution)
+        self.assertEqual(retained_case["followUpResolution"]["proof"]["actionId"], "ACT-SUPPORT-FOLLOWUP-RESOLVE")
+        self.assertFalse(retained_case["externalMessageSent"])
+
+        forged_reopen = deepcopy(resolved)
+        forged_case = forged_reopen["orders"][0]["supportCases"][0]  # type: ignore[index]
+        forged_case["status"] = "open"
+        forged_case["reopen"] = {**reopened_case["reopen"], "sourceResolutionActionId": "ACT-WRONG"}
+        with self.assertRaises(TrialValidationError):
+            apply_event(resolved, "commerce.order.support_case_reopened", forged_reopen)
 
         forged = deepcopy(opened_candidate)
         forged["orders"][0]["supportCases"][0]["refundStarted"] = True  # type: ignore[index]

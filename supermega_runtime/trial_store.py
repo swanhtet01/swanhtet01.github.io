@@ -35,6 +35,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.order.cancelled",
         "commerce.order.return_recorded",
         "commerce.order.support_case_opened",
+        "commerce.order.support_case_reopened",
         "commerce.order.support_case_service_recorded",
         "commerce.order.support_case_resolved",
         "commerce.order.correction_recorded",
@@ -1398,6 +1399,7 @@ def _authoritative_command_payload(
         return authoritative
     if event_type in {
         "commerce.order.support_case_opened",
+        "commerce.order.support_case_reopened",
         "commerce.order.support_case_service_recorded",
         "commerce.order.support_case_resolved",
     }:
@@ -1416,11 +1418,17 @@ def _authoritative_command_payload(
                     continue
                 if event_type == "commerce.order.support_case_opened":
                     proof = support_case.get("opening")
+                elif event_type == "commerce.order.support_case_reopened":
+                    reopen = support_case.get("reopen")
+                    proof = reopen.get("proof") if isinstance(reopen, Mapping) else None
                 elif event_type == "commerce.order.support_case_service_recorded":
                     proof = next(
                         (
                             service_event.get("proof")
-                            for service_event in support_case.get("serviceEvents", [])
+                            for service_event in [
+                                *support_case.get("serviceEvents", []),
+                                *support_case.get("followUpServiceEvents", []),
+                            ]
                             if isinstance(service_event, Mapping)
                             and isinstance(service_event.get("proof"), Mapping)
                             and service_event["proof"].get("actionId") == evidence.get("actionId")
@@ -1428,8 +1436,17 @@ def _authoritative_command_payload(
                         None,
                     )
                 else:
-                    resolution = support_case.get("resolution")
-                    proof = resolution.get("proof") if isinstance(resolution, Mapping) else None
+                    resolutions = [support_case.get("resolution"), support_case.get("followUpResolution")]
+                    proof = next(
+                        (
+                            resolution.get("proof")
+                            for resolution in resolutions
+                            if isinstance(resolution, Mapping)
+                            and isinstance(resolution.get("proof"), Mapping)
+                            and resolution["proof"].get("actionId") == evidence.get("actionId")
+                        ),
+                        None,
+                    )
                 if isinstance(proof, Mapping) and proof.get("actionId") == evidence.get("actionId"):
                     target_order = order
                     target_case = support_case
@@ -1440,7 +1457,12 @@ def _authoritative_command_payload(
         if isinstance(target_order, Mapping) and isinstance(target_case, Mapping):
             completion = target_order.get("completion")
             opening = target_case.get("opening")
-            service_events = target_case.get("serviceEvents", [])
+            service_events = [
+                *target_case.get("serviceEvents", []),
+                *target_case.get("followUpServiceEvents", []),
+            ]
+            original_resolution = target_case.get("resolution")
+            reopen = target_case.get("reopen")
             effective_captured_at = _not_before(
                 captured_at,
                 target_order.get("createdAt"),
@@ -1453,6 +1475,14 @@ def _authoritative_command_payload(
                     if isinstance(service_event, Mapping)
                     and isinstance(service_event.get("proof"), Mapping)
                 ),
+                original_resolution.get("proof", {}).get("capturedAt")
+                if isinstance(original_resolution, Mapping)
+                and isinstance(original_resolution.get("proof"), Mapping)
+                else None,
+                reopen.get("proof", {}).get("capturedAt")
+                if isinstance(reopen, Mapping)
+                and isinstance(reopen.get("proof"), Mapping)
+                else None,
             )
         authoritative_evidence = dict(evidence)
         authoritative_evidence["actor"] = principal.actor_id
@@ -1478,8 +1508,24 @@ def _authoritative_command_payload(
                     changed_proof["actor"] = principal.actor_id
                     changed_proof["capturedAt"] = effective_captured_at
                     changed_case["opening"] = changed_proof
+                elif event_type == "commerce.order.support_case_reopened":
+                    reopen = support_case.get("reopen")
+                    proof = reopen.get("proof") if isinstance(reopen, Mapping) else None
+                    if not isinstance(proof, Mapping) or proof.get("actionId") != evidence.get("actionId"):
+                        continue
+                    changed_proof = dict(proof)
+                    changed_proof["actor"] = principal.actor_id
+                    changed_proof["capturedAt"] = effective_captured_at
+                    changed_reopen = dict(reopen)
+                    changed_reopen["proof"] = changed_proof
+                    changed_case["reopen"] = changed_reopen
                 elif event_type == "commerce.order.support_case_service_recorded":
-                    service_events = support_case.get("serviceEvents")
+                    event_field = (
+                        "followUpServiceEvents"
+                        if isinstance(support_case.get("reopen"), Mapping)
+                        else "serviceEvents"
+                    )
+                    service_events = support_case.get(event_field)
                     if not isinstance(service_events, list):
                         continue
                     changed_events = deepcopy(service_events)
@@ -1500,9 +1546,14 @@ def _authoritative_command_payload(
                         break
                     if not event_changed:
                         continue
-                    changed_case["serviceEvents"] = changed_events
+                    changed_case[event_field] = changed_events
                 else:
-                    resolution = support_case.get("resolution")
+                    resolution_field = (
+                        "followUpResolution"
+                        if isinstance(support_case.get("reopen"), Mapping)
+                        else "resolution"
+                    )
+                    resolution = support_case.get(resolution_field)
                     proof = resolution.get("proof") if isinstance(resolution, Mapping) else None
                     if not isinstance(proof, Mapping) or proof.get("actionId") != evidence.get("actionId"):
                         continue
@@ -1511,7 +1562,7 @@ def _authoritative_command_payload(
                     changed_proof["capturedAt"] = effective_captured_at
                     changed_resolution = dict(resolution)
                     changed_resolution["proof"] = changed_proof
-                    changed_case["resolution"] = changed_resolution
+                    changed_case[resolution_field] = changed_resolution
                 changed_cases[case_index] = changed_case
                 changed = True
                 break

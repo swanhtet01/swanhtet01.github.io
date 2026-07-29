@@ -74,6 +74,7 @@ import {
   commerceOrderAdjustedTotal,
   commerceOrderReturnExpectation,
   commerceOrderSupportOpenExpectation,
+  commerceOrderSupportReopenExpectation,
   commerceOrderSupportResolveExpectation,
   commerceOrderSupportServiceExpectation,
   commerceSupportCaseUrgency,
@@ -107,6 +108,7 @@ import {
   recordCommerceOrderReturn,
   recordCommerceOrderSupportCase,
   recordCommerceOrderSupportServiceEvent,
+  reopenCommerceOrderSupportCase,
   resolveCommerceOrderSupportCase,
   recordCommerceOrderCorrection,
   registerCommerceItem,
@@ -270,6 +272,16 @@ type CommerceSupportOpenDraft = {
   priority: CommerceSupportPriority
   owner: string
   dueAt: string
+}
+
+type CommerceSupportReopenDraft = {
+  orderId: string
+  caseId: string
+  sourceResolutionActionId: string
+  priority: CommerceSupportPriority
+  owner: string
+  dueAt: string
+  note: string
 }
 
 type CommerceSupportServiceDraft = {
@@ -1625,6 +1637,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
   const [supportDraft, setSupportDraft] = useState<CommerceSupportOpenDraft | null>(null)
+  const [supportReopenDraft, setSupportReopenDraft] = useState<CommerceSupportReopenDraft | null>(null)
   const [supportServiceDraft, setSupportServiceDraft] = useState<CommerceSupportServiceDraft | null>(null)
   const [supportResolutionDraft, setSupportResolutionDraft] = useState<CommerceSupportResolutionDraft | null>(null)
   const [correctionDraft, setCorrectionDraft] = useState<CommerceCorrectionDraft | null>(null)
@@ -3679,7 +3692,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
   }
 
   function openReturnEditor(orderId: string) {
-    if (pendingAction || supportDraft || supportServiceDraft || supportResolutionDraft) {
+    if (pendingAction || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) {
       setNotice('Finish or cancel the current Shop help action before recording a return.')
       return
     }
@@ -3810,7 +3823,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
   }
 
   function openSupportResolution(orderId: string, caseId: string) {
-    if (pendingAction || returnDraft || correctionDraft || supportDraft || supportServiceDraft) {
+    if (pendingAction || returnDraft || correctionDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) {
       setNotice('Finish or close the current Shop action before resolving a support case.')
       return
     }
@@ -3822,8 +3835,79 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
     requestAnimationFrame(() => document.getElementById(`support-resolution-${caseId}`)?.focus())
   }
 
+  function openSupportReopen(orderId: string, caseId: string) {
+    if (pendingAction || returnDraft || correctionDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) {
+      setNotice('Finish or close the current Shop action before reopening a support case.')
+      return
+    }
+    const expected = commerceOrderSupportReopenExpectation(commerce, orderId, caseId)
+    const order = commerce.orders.find((candidate) => candidate.id === orderId)
+    const supportCase = order?.supportCases?.find((candidate) => candidate.caseId === caseId)
+    const service = supportCase ? commerceSupportServiceState(supportCase) : null
+    if (!expected || !supportCase?.resolution || !service) {
+      setNotice('Only one resolved, attributable support case can enter follow-up review.')
+      return
+    }
+    setSupportReopenDraft({
+      orderId,
+      caseId,
+      sourceResolutionActionId: supportCase.resolution.proof.actionId,
+      priority: service.priority,
+      owner: service.owner,
+      dueAt: localDateTimeInputValue(new Date(purchaseOrderClock + 4 * 60 * 60 * 1000)),
+      note: '',
+    })
+    requestAnimationFrame(() => document.getElementById(`support-reopen-${caseId}`)?.focus())
+  }
+
+  function reviewSupportReopen(event: FormEvent) {
+    event.preventDefault()
+    if (!supportReopenDraft) return
+    const expected = commerceOrderSupportReopenExpectation(
+      commerce,
+      supportReopenDraft.orderId,
+      supportReopenDraft.caseId,
+    )
+    const owner = supportReopenDraft.owner.trim()
+    const note = supportReopenDraft.note.trim()
+    const dueAt = new Date(supportReopenDraft.dueAt)
+    if (!expected || !owner || !note || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= purchaseOrderClock) {
+      setNotice('Choose one accountable owner, a future due time, and the linked follow-up reason.')
+      return
+    }
+    const input = {
+      orderId: supportReopenDraft.orderId,
+      caseId: supportReopenDraft.caseId,
+      sourceResolutionActionId: supportReopenDraft.sourceResolutionActionId,
+      priority: supportReopenDraft.priority,
+      owner,
+      dueAt: dueAt.toISOString(),
+      note,
+    }
+    queueAction({
+      kind: 'order_support_reopen',
+      subjectId: `${input.orderId}:${input.caseId}`,
+      summary: `Reopen ${input.caseId}`,
+      before: `Resolved by action ${input.sourceResolutionActionId}`,
+      after: `${input.priority} · owner ${input.owner} · due ${formatTime(input.dueAt)} · original resolution retained`,
+      reasonSuggestion: input.note,
+      evidenceReferenceSuggestion: `SUPPORT-REOPEN:${input.caseId}:${input.sourceResolutionActionId}`,
+      evidenceReferenceLocked: true,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce(
+          'commerce.order.support_case_reopened',
+          action.commandId,
+          proof,
+          (current) => reopenCommerceOrderSupportCase(current, input, proof, expected),
+        )
+        setSupportReopenDraft(null)
+      },
+    })
+  }
+
   function openSupportService(orderId: string, caseId: string, kind: CommerceSupportServiceEventKind) {
-    if (pendingAction || returnDraft || correctionDraft || supportDraft || supportServiceDraft || supportResolutionDraft) {
+    if (pendingAction || returnDraft || correctionDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) {
       setNotice('Finish or close the current Shop action before changing support responsibility.')
       return
     }
@@ -4013,7 +4097,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
   }
 
   function openCorrectionEditor(orderId: string) {
-    if (pendingAction || returnDraft || supportDraft || supportServiceDraft || supportResolutionDraft) {
+    if (pendingAction || returnDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) {
       setNotice('Finish or close the current Shop action before recording a correction.')
       return
     }
@@ -4879,12 +4963,16 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
     onReviewCorrection={reviewOrderCorrection}
     onReviewReturn={reviewOrderReturn}
     onReviewSupportOpen={reviewSupportCaseOpen}
+    onReviewSupportReopen={reviewSupportReopen}
     onReviewSupportService={reviewSupportService}
     onReviewSupportResolution={reviewSupportCaseResolution}
     onOpenSupportService={openSupportService}
     onOpenSupportResolution={openSupportResolution}
+    onOpenSupportReopen={openSupportReopen}
     onCancelSupportOpen={() => { setSupportDraft(null); setNotice('Support review closed. Nothing changed.') }}
     onChangeSupportOpen={(patch) => setSupportDraft((current) => current ? { ...current, ...patch } : current)}
+    onCancelSupportReopen={() => { setSupportReopenDraft(null); setNotice('Support follow-up review closed. Nothing changed.') }}
+    onChangeSupportReopen={(patch) => setSupportReopenDraft((current) => current ? { ...current, ...patch } : current)}
     onCancelSupportService={() => { setSupportServiceDraft(null); setNotice('Support service review closed. Nothing changed.') }}
     onChangeSupportService={(patch) => setSupportServiceDraft((current) => current ? { ...current, ...patch } : current)}
     onCancelSupportResolution={() => { setSupportResolutionDraft(null); setNotice('Support resolution closed. Nothing changed.') }}
@@ -4903,6 +4991,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
     returnDraft={returnDraft}
     returnLocationPreview={returnLocationPreview}
     supportDraft={supportDraft}
+    supportReopenDraft={supportReopenDraft}
     supportServiceDraft={supportServiceDraft}
     supportResolutionDraft={supportResolutionDraft}
   />
@@ -5262,14 +5351,18 @@ function ClosedOrderHistory({
   onReviewCorrection,
   onReviewReturn,
   onReviewSupportOpen,
+  onReviewSupportReopen,
   onReviewSupportService,
   onReviewSupportResolution,
   onOpenSupportService,
   onOpenSupportResolution,
+  onOpenSupportReopen,
   onCancelSupportOpen,
+  onCancelSupportReopen,
   onCancelSupportResolution,
   onCancelSupportService,
   onChangeSupportOpen,
+  onChangeSupportReopen,
   onChangeSupportService,
   onChangeSupportResolution,
   onCorrectionEditor,
@@ -5280,6 +5373,7 @@ function ClosedOrderHistory({
   returnDraft,
   returnLocationPreview,
   supportDraft,
+  supportReopenDraft,
   supportServiceDraft,
   supportResolutionDraft,
 }: {
@@ -5297,14 +5391,18 @@ function ClosedOrderHistory({
   onReviewCorrection: (event: FormEvent) => void
   onReviewReturn: (event: FormEvent) => void
   onReviewSupportOpen: (event: FormEvent) => void
+  onReviewSupportReopen: (event: FormEvent) => void
   onReviewSupportService: (event: FormEvent) => void
   onReviewSupportResolution: (event: FormEvent) => void
   onOpenSupportService: (orderId: string, caseId: string, kind: CommerceSupportServiceEventKind) => void
   onOpenSupportResolution: (orderId: string, caseId: string) => void
+  onOpenSupportReopen: (orderId: string, caseId: string) => void
   onCancelSupportOpen: () => void
+  onCancelSupportReopen: () => void
   onCancelSupportResolution: () => void
   onCancelSupportService: () => void
   onChangeSupportOpen: (patch: Partial<Omit<CommerceSupportOpenDraft, 'intent'>>) => void
+  onChangeSupportReopen: (patch: Partial<CommerceSupportReopenDraft>) => void
   onChangeSupportService: (patch: Partial<CommerceSupportServiceDraft>) => void
   onChangeSupportResolution: (patch: Partial<CommerceSupportResolutionDraft>) => void
   onCorrectionEditor: (node: HTMLFormElement | null) => void
@@ -5315,6 +5413,7 @@ function ClosedOrderHistory({
   returnDraft: CommerceReturnDraft | null
   returnLocationPreview: string
   supportDraft: CommerceSupportOpenDraft | null
+  supportReopenDraft: CommerceSupportReopenDraft | null
   supportServiceDraft: CommerceSupportServiceDraft | null
   supportResolutionDraft: CommerceSupportResolutionDraft | null
 }) {
@@ -5324,14 +5423,14 @@ function ClosedOrderHistory({
   if (!orders.length) return null
   const pageCount = Math.ceil(orders.length / pageSize)
   const returnOrderIndex = returnDraft ? orders.findIndex((order) => order.id === returnDraft.orderId) : -1
-  const supportOrderId = supportDraft?.intent.orderId ?? supportServiceDraft?.orderId ?? supportResolutionDraft?.orderId
+  const supportOrderId = supportDraft?.intent.orderId ?? supportReopenDraft?.orderId ?? supportServiceDraft?.orderId ?? supportResolutionDraft?.orderId
   const supportOrderIndex = supportOrderId ? orders.findIndex((order) => order.id === supportOrderId) : -1
   const focusedOrderIndex = returnOrderIndex >= 0 ? returnOrderIndex : supportOrderIndex
   const currentPage = focusedOrderIndex >= 0 ? Math.floor(focusedOrderIndex / pageSize) : Math.min(page, pageCount - 1)
   const visibleOrders = orders.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
   const supportWorkQueue = commerceSupportQueue(orders, supportClock)
   const supportSla = commerceSupportSlaSummary(orders, supportClock)
-  return <details className="order-archive" id="shop-order-history" open={Boolean(returnDraft || supportDraft || supportServiceDraft || supportResolutionDraft) || undefined}>
+  return <details className="order-archive" id="shop-order-history" open={Boolean(returnDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) || undefined}>
     <summary><span>Completed and cancelled orders</span><small>{supportWorkQueue.length ? `${supportSla.openCases} help open · ${supportSla.overdueCases} overdue · ` : ''}{orders.length} {orders.length === 1 ? 'record' : 'records'}</small></summary>
     {supportWorkQueue.length ? <section aria-label="Open support queue" className="order-return-records" data-support-queue="ordered">
       <div><strong>Support queue · next work first</strong><small>Overdue, priority, due time, request time</small></div>
@@ -5339,7 +5438,7 @@ function ClosedOrderHistory({
       {supportWorkQueue.slice(0, 6).map((row) => <div data-support-urgency={row.urgency} key={`queue-${row.supportCase.caseId}`}>
         <strong>{row.urgency === 'overdue' ? 'OVERDUE · ' : ''}{row.customer} · {row.supportCase.category.replaceAll('_', ' ')}</strong>
         <small>{row.service ? `${row.service.priority} · ${row.service.owner} · due ${formatTime(row.service.dueAt)}` : 'Legacy untriaged case'} · {row.supportCase.caseId}</small>
-        {row.service ? <button className="text-link" disabled={disabled || Boolean(supportDraft || supportServiceDraft || supportResolutionDraft || returnDraft || correctionDraft)} onClick={() => row.checkpoints.acknowledged
+        {row.service ? <button className="text-link" disabled={disabled || Boolean(supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || returnDraft || correctionDraft)} onClick={() => row.checkpoints.acknowledged
           ? row.checkpoints.firstResponseReady
             ? onOpenSupportResolution(row.orderId, row.supportCase.caseId)
             : onOpenSupportService(row.orderId, row.supportCase.caseId, 'first_response_ready')
@@ -5363,6 +5462,7 @@ function ClosedOrderHistory({
       const activeCorrectionDraft = correctionDraft?.orderId === order.id ? correctionDraft : null
       const correcting = activeCorrectionDraft !== null
       const activeSupportDraft = supportDraft?.intent.orderId === order.id ? supportDraft : null
+      const activeSupportReopen = supportReopenDraft?.orderId === order.id ? supportReopenDraft : null
       const activeSupportService = supportServiceDraft?.orderId === order.id ? supportServiceDraft : null
       const activeSupportResolution = supportResolutionDraft?.orderId === order.id ? supportResolutionDraft : null
       const selectedLine = draftedLine ?? availableLines[0]
@@ -5415,6 +5515,8 @@ function ClosedOrderHistory({
           const urgency = commerceSupportCaseUrgency(supportCase, supportClock)
           const service = commerceSupportServiceState(supportCase)
           const checkpoints = commerceSupportCheckpointState(supportCase)
+          const serviceEvents = [...(supportCase.followUpServiceEvents ?? []), ...(supportCase.serviceEvents ?? [])]
+          const finalResolution = supportCase.followUpResolution ?? supportCase.resolution
           return <div data-support-urgency={urgency} key={supportCase.caseId} role="listitem">
             <strong>{urgency === 'overdue' ? 'OVERDUE · ' : ''}{supportCase.status === 'resolved' ? 'Resolved help case' : 'Open help case'} · {supportCase.category.replaceAll('_', ' ')}</strong>
             <small>{supportCase.caseId} · requested {formatTime(supportCase.customerRequestedAt)} · opened by {supportCase.opening.actor}</small>
@@ -5422,9 +5524,11 @@ function ClosedOrderHistory({
               ? <small>{service.priority} priority · owner {service.owner} · {urgency === 'overdue' ? 'overdue since' : 'due'} {formatTime(service.dueAt)}</small>
               : <small>Legacy case · priority, owner, and due time were not recorded</small>}
             <small>{supportCase.customerDescription}</small>
+            {supportCase.reopen ? <small>Follow-up opened by {supportCase.reopen.proof.actor} · {formatTime(supportCase.reopen.proof.capturedAt)} · linked to resolution {supportCase.reopen.sourceResolutionActionId} · {supportCase.reopen.note}</small> : null}
+            {supportCase.reopen && supportCase.resolution ? <small>Original resolution retained · {supportCase.resolution.outcome.replaceAll('_', ' ')} · {supportCase.resolution.note}</small> : null}
             {checkpoints.acknowledged ? <small>Acknowledged by {checkpoints.acknowledged.proof.actor} · {formatTime(checkpoints.acknowledged.proof.capturedAt)}{checkpoints.firstResponseReady ? ` · first response ready ${formatTime(checkpoints.firstResponseReady.proof.capturedAt)}` : ' · first response pending'}</small> : service ? <small>Acknowledgement pending</small> : null}
-            {supportCase.serviceEvents?.length ? <details className="compact-disclosure"><summary><span>Service history</span><small>{supportCase.serviceEvents.length} {supportCase.serviceEvents.length === 1 ? 'event' : 'events'}</small></summary><div className="boundary-list">{supportCase.serviceEvents.map((serviceEvent) => <div key={serviceEvent.proof.actionId}><strong>{serviceEvent.kind.replaceAll('_', ' ')} · {serviceEvent.priority} · {serviceEvent.owner}</strong><small>{formatTime(serviceEvent.proof.capturedAt)} · due {formatTime(serviceEvent.dueAt)} · {serviceEvent.note}</small></div>)}</div></details> : null}
-            {supportCase.resolution ? <small>{supportCase.resolution.outcome.replaceAll('_', ' ')} · {supportCase.resolution.note} · {supportCase.resolution.proof.actor}</small> : service ? <div className="form-actions">{!checkpoints.acknowledged ? <button className="text-link" disabled={disabled || Boolean(activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'acknowledged')} type="button">Acknowledge</button> : !checkpoints.firstResponseReady ? <button className="text-link" disabled={disabled || Boolean(activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'first_response_ready')} type="button">Response ready</button> : <button className="text-link" disabled={disabled || Boolean(activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve case</button>}<button className="text-link" disabled={disabled || Boolean(activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'reassigned')} type="button">Reassign</button><button className="text-link" disabled={disabled || Boolean(activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'escalated')} type="button">Escalate</button></div> : <button className="text-link" disabled={disabled || Boolean(activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve legacy case</button>}
+            {serviceEvents.length ? <details className="compact-disclosure"><summary><span>Service history</span><small>{serviceEvents.length} {serviceEvents.length === 1 ? 'event' : 'events'}</small></summary><div className="boundary-list">{serviceEvents.map((serviceEvent) => <div key={serviceEvent.proof.actionId}><strong>{serviceEvent.kind.replaceAll('_', ' ')} · {serviceEvent.priority} · {serviceEvent.owner}</strong><small>{formatTime(serviceEvent.proof.capturedAt)} · due {formatTime(serviceEvent.dueAt)} · {serviceEvent.note}</small></div>)}</div></details> : null}
+            {supportCase.status === 'resolved' && finalResolution ? <><small>{finalResolution.outcome.replaceAll('_', ' ')} · {finalResolution.note} · {finalResolution.proof.actor}</small>{!supportCase.reopen ? <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportReopen(order.id, supportCase.caseId)} type="button">Reopen case</button> : null}</> : service ? <div className="form-actions">{!checkpoints.acknowledged ? <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'acknowledged')} type="button">Acknowledge</button> : !checkpoints.firstResponseReady ? <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'first_response_ready')} type="button">Response ready</button> : <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve case</button>}<button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'reassigned')} type="button">Reassign</button><button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'escalated')} type="button">Escalate</button></div> : <button className="text-link" disabled={disabled || Boolean(activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve legacy case</button>}
             <small>No external message or refund performed</small>
           </div>
         })}
@@ -5449,6 +5553,13 @@ function ClosedOrderHistory({
         <div className="form-row"><label>Priority<select disabled={disabled} onChange={(event) => onChangeSupportOpen({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportDraft.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label><label>Owner<input disabled={disabled} maxLength={120} onChange={(event) => onChangeSupportOpen({ owner: event.target.value })} required value={activeSupportDraft.owner} /></label></div>
         <label>Due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportOpen({ dueAt: event.target.value })} required type="datetime-local" value={activeSupportDraft.dueAt} /></label>
         <div className="form-actions"><button className="core-button primary compact" disabled={disabled} id="shop-support-open-review" type="submit">Review case opening</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportOpen} type="button">Cancel</button></div>
+      </form> : null}
+      {activeSupportReopen ? <form aria-label={`Reopen support case ${activeSupportReopen.caseId}`} className="order-return-editor" onSubmit={onReviewSupportReopen}>
+        <div className="order-return-copy"><span className="core-eyebrow">Follow-up</span><strong>{activeSupportReopen.caseId}</strong><small>Retain resolution {activeSupportReopen.sourceResolutionActionId} and start one linked service cycle. This does not send a message or start a refund.</small></div>
+        <div className="form-row"><label>Priority<select disabled={disabled} onChange={(event) => onChangeSupportReopen({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportReopen.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label><label>Owner<input disabled={disabled} id={`support-reopen-${activeSupportReopen.caseId}`} maxLength={120} onChange={(event) => onChangeSupportReopen({ owner: event.target.value })} required value={activeSupportReopen.owner} /></label></div>
+        <label>Due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportReopen({ dueAt: event.target.value })} required type="datetime-local" value={activeSupportReopen.dueAt} /></label>
+        <label>Follow-up reason<textarea disabled={disabled} maxLength={300} onChange={(event) => onChangeSupportReopen({ note: event.target.value })} required rows={2} value={activeSupportReopen.note} /></label>
+        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review follow-up</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportReopen} type="button">Cancel</button></div>
       </form> : null}
       {activeSupportService ? <form aria-label={`${commerceSupportServiceActionLabels[activeSupportService.kind]} ${activeSupportService.caseId}`} className="order-return-editor" onSubmit={onReviewSupportService}>
         <div className="order-return-copy"><span className="core-eyebrow">{commerceSupportServiceActionLabels[activeSupportService.kind]}</span><strong>{activeSupportService.caseId}</strong><small>{activeSupportService.kind === 'reassigned' ? 'Change only the accountable owner. Priority and due time stay immutable.' : activeSupportService.kind === 'escalated' ? 'Keep the owner and raise priority or bring a future due time forward.' : activeSupportService.kind === 'acknowledged' ? 'Record that the accountable owner accepted this case internally.' : 'Record that a first response is ready for independent delivery.'} No message, refund, or payment action runs.</small></div>

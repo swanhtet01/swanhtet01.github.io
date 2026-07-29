@@ -228,6 +228,15 @@ export type CommerceOrderSupportResolution = {
   proof: CommerceActionProof
 }
 
+export type CommerceOrderSupportReopen = {
+  sourceResolutionActionId: string
+  owner: string
+  priority: CommerceSupportPriority
+  dueAt: string
+  note: string
+  proof: CommerceActionProof
+}
+
 export type CommerceOrderSupportCase = {
   caseId: string
   sourceIntentId: string
@@ -242,6 +251,9 @@ export type CommerceOrderSupportCase = {
   opening: CommerceActionProof
   serviceEvents?: CommerceOrderSupportServiceEvent[]
   resolution?: CommerceOrderSupportResolution
+  reopen?: CommerceOrderSupportReopen
+  followUpServiceEvents?: CommerceOrderSupportServiceEvent[]
+  followUpResolution?: CommerceOrderSupportResolution
   externalMessageSent: false
   refundStarted: false
 }
@@ -893,6 +905,23 @@ export type CommerceOrderSupportResolveInput = {
   caseId: string
   outcome: CommerceSupportResolutionOutcome
   note: string
+}
+
+export type CommerceOrderSupportReopenInput = {
+  orderId: string
+  caseId: string
+  sourceResolutionActionId: string
+  owner: string
+  priority: CommerceSupportPriority
+  dueAt: string
+  note: string
+}
+
+export type CommerceOrderSupportReopenExpectation = {
+  orderId: string
+  caseId: string
+  orderSnapshot: string
+  caseSnapshot: string
 }
 
 export type CommerceOrderSupportServiceInput = {
@@ -2460,7 +2489,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         if (!isRecord(caseCandidate) || !hasExactKeys(
           caseCandidate,
           ['caseId', 'sourceIntentId', 'sourceRequestId', 'customerRequestedAt', 'category', 'customerDescription', 'status', 'opening', 'externalMessageSent', 'refundStarted'],
-          ['resolution', 'serviceEvents', 'priority', 'owner', 'dueAt'],
+          ['resolution', 'serviceEvents', 'priority', 'owner', 'dueAt', 'reopen', 'followUpServiceEvents', 'followUpResolution'],
         )) throw new Error(`${field} is invalid.`)
         const caseId = canonicalText(caseCandidate.caseId, `${field}.caseId`, 41)
         const sourceIntentId = canonicalText(caseCandidate.sourceIntentId, `${field}.sourceIntentId`, 40)
@@ -2506,101 +2535,64 @@ export function validateCommerceState(value: unknown): CommerceState {
           throw new Error(`${field} is outside the order chronology.`)
         }
         newerOpeningAt = openingAt
-        let effectiveService = hasPriority && hasOwner && hasDueAt
+        const initialService = hasPriority && hasOwner && hasDueAt
           ? { priority: caseCandidate.priority as CommerceSupportPriority, owner: caseCandidate.owner as string, dueAt: caseCandidate.dueAt as string }
           : null
-        let latestServiceAt = openingAt
-        let acknowledged = false
-        let firstResponseReady = false
-        if (caseCandidate.serviceEvents !== undefined) {
-          if (!effectiveService
-            || !Array.isArray(caseCandidate.serviceEvents)
-            || caseCandidate.serviceEvents.length < 1
-            || caseCandidate.serviceEvents.length > maxSupportServiceEventsPerCase) {
-            throw new Error(`${field}.serviceEvents requires attributable opening triage and 1 to ${maxSupportServiceEventsPerCase} records.`)
-          }
-          for (const [serviceIndex, serviceCandidate] of [...caseCandidate.serviceEvents].reverse().entries()) {
-            const serviceField = `${field}.serviceEvents[${caseCandidate.serviceEvents.length - serviceIndex - 1}]`
-            if (!isRecord(serviceCandidate)
-              || !hasExactKeys(serviceCandidate, ['kind', 'owner', 'priority', 'dueAt', 'note', 'proof'])
-              || !supportServiceEventKinds.includes(serviceCandidate.kind as CommerceSupportServiceEventKind)
-              || !supportPriorities.includes(serviceCandidate.priority as CommerceSupportPriority)
-              || !validTimestamp(serviceCandidate.dueAt)
-              || !isRecord(serviceCandidate.proof)
-              || !hasExactKeys(serviceCandidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
-              || !validProof(serviceCandidate.proof as CommerceActionProof)
-              || serviceCandidate.proof.evidenceReference !== `SUPPORT-SERVICE:${caseId}`) {
-              throw new Error(`${serviceField} is invalid.`)
-            }
-            const serviceProof = serviceCandidate.proof as CommerceActionProof
-            const serviceAt = timestampMicros(serviceProof.capturedAt) as bigint
-            const dueAt = timestampMicros(serviceCandidate.dueAt) as bigint
-            const previousDueAt = timestampMicros(effectiveService.dueAt) as bigint
-            const previousPriority = supportPriorities.indexOf(effectiveService.priority)
-            const nextPriority = supportPriorities.indexOf(serviceCandidate.priority as CommerceSupportPriority)
-            canonicalText(serviceCandidate.owner, `${serviceField}.owner`, 120)
-            canonicalText(serviceCandidate.note, `${serviceField}.note`, 300)
-            if (serviceAt < latestServiceAt) throw new Error(`${serviceField} chronology is invalid.`)
-            if (serviceCandidate.kind === 'reassigned') {
-              if (serviceCandidate.owner === effectiveService.owner
-                || serviceCandidate.priority !== effectiveService.priority
-                || serviceCandidate.dueAt !== effectiveService.dueAt) throw new Error(`${serviceField} must change only the accountable owner.`)
-            } else if (serviceCandidate.kind === 'escalated') {
-              if (serviceCandidate.owner !== effectiveService.owner
-                || nextPriority > previousPriority
-                || dueAt > previousDueAt
-                || (nextPriority === previousPriority && dueAt === previousDueAt)
-                || (serviceCandidate.dueAt !== effectiveService.dueAt && dueAt <= serviceAt)) {
-                throw new Error(`${serviceField} must increase priority or bring a future due time forward without changing owner.`)
-              }
-            } else if (serviceCandidate.kind === 'acknowledged') {
-              if (acknowledged
-                || firstResponseReady
-                || serviceCandidate.owner !== effectiveService.owner
-                || serviceCandidate.priority !== effectiveService.priority
-                || serviceCandidate.dueAt !== effectiveService.dueAt) {
-                throw new Error(`${serviceField} must acknowledge the current service state exactly once.`)
-              }
-              acknowledged = true
-            } else {
-              if (!acknowledged
-                || firstResponseReady
-                || serviceCandidate.owner !== effectiveService.owner
-                || serviceCandidate.priority !== effectiveService.priority
-                || serviceCandidate.dueAt !== effectiveService.dueAt) {
-                throw new Error(`${serviceField} must record one first response after acknowledgement without changing service state.`)
-              }
-              firstResponseReady = true
-            }
-            effectiveService = {
-              priority: serviceCandidate.priority as CommerceSupportPriority,
-              owner: serviceCandidate.owner as string,
-              dueAt: serviceCandidate.dueAt as string,
-            }
-            latestServiceAt = serviceAt
-            supportActionIds.push(serviceProof.actionId)
-          }
-        }
+        if (caseCandidate.serviceEvents !== undefined && !initialService) throw new Error(`${field}.serviceEvents requires attributable opening triage.`)
+        const originalTimeline = initialService
+          ? validateSupportServiceTimeline(caseCandidate.serviceEvents, `${field}.serviceEvents`, caseId, initialService, openingAt, supportActionIds)
+          : null
         for (const proofField of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
           canonicalText(opening[proofField], `${field}.opening.${proofField}`, proofField === 'actionId' ? 160 : 300)
         }
-        if (caseCandidate.status === 'open') {
-          if (caseCandidate.resolution !== undefined) throw new Error(`${field} open case cannot have resolution evidence.`)
-        } else if (caseCandidate.status === 'resolved') {
-          if (!isRecord(caseCandidate.resolution)
-            || !hasExactKeys(caseCandidate.resolution, ['outcome', 'note', 'proof'])
-            || !supportResolutionOutcomes.includes(caseCandidate.resolution.outcome as CommerceSupportResolutionOutcome)
-            || !isRecord(caseCandidate.resolution.proof)
-            || !hasExactKeys(caseCandidate.resolution.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
-            || !validProof(caseCandidate.resolution.proof as CommerceActionProof)) {
-            throw new Error(`${field}.resolution is invalid.`)
+        const originalResolution = caseCandidate.resolution === undefined
+          ? null
+          : validateSupportResolution(caseCandidate.resolution, `${field}.resolution`, originalTimeline?.latestAt ?? openingAt, supportActionIds)
+        if (caseCandidate.reopen !== undefined) {
+          if (!originalResolution
+            || !initialService
+            || !isRecord(caseCandidate.reopen)
+            || !hasExactKeys(caseCandidate.reopen, ['sourceResolutionActionId', 'owner', 'priority', 'dueAt', 'note', 'proof'])
+            || caseCandidate.reopen.sourceResolutionActionId !== originalResolution.proof.actionId
+            || !supportPriorities.includes(caseCandidate.reopen.priority as CommerceSupportPriority)
+            || !validTimestamp(caseCandidate.reopen.dueAt)
+            || !isRecord(caseCandidate.reopen.proof)
+            || !hasExactKeys(caseCandidate.reopen.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+            || !validProof(caseCandidate.reopen.proof as CommerceActionProof)
+            || caseCandidate.reopen.proof.evidenceReference !== `SUPPORT-REOPEN:${caseId}:${originalResolution.proof.actionId}`) {
+            throw new Error(`${field}.reopen is invalid.`)
           }
-          canonicalText(caseCandidate.resolution.note, `${field}.resolution.note`, 300)
-          const resolutionProof = caseCandidate.resolution.proof as CommerceActionProof
-          if ((timestampMicros(resolutionProof.capturedAt) as bigint) < latestServiceAt) throw new Error(`${field}.resolution predates its latest service event.`)
-          supportActionIds.push(resolutionProof.actionId)
-        } else {
-          throw new Error(`${field}.status is invalid.`)
+          canonicalText(caseCandidate.reopen.owner, `${field}.reopen.owner`, 120)
+          canonicalText(caseCandidate.reopen.note, `${field}.reopen.note`, 300)
+          const reopenProof = caseCandidate.reopen.proof as CommerceActionProof
+          const reopenAt = timestampMicros(reopenProof.capturedAt) as bigint
+          if (reopenAt <= (timestampMicros(originalResolution.proof.capturedAt) as bigint)
+            || (timestampMicros(caseCandidate.reopen.dueAt) as bigint) <= reopenAt) throw new Error(`${field}.reopen chronology is invalid.`)
+          supportActionIds.push(reopenProof.actionId)
+          const followUpTimeline = validateSupportServiceTimeline(
+            caseCandidate.followUpServiceEvents,
+            `${field}.followUpServiceEvents`,
+            caseId,
+            {
+              owner: caseCandidate.reopen.owner as string,
+              priority: caseCandidate.reopen.priority as CommerceSupportPriority,
+              dueAt: caseCandidate.reopen.dueAt as string,
+            },
+            reopenAt,
+            supportActionIds,
+          )
+          const followUpResolution = caseCandidate.followUpResolution === undefined
+            ? null
+            : validateSupportResolution(caseCandidate.followUpResolution, `${field}.followUpResolution`, followUpTimeline.latestAt, supportActionIds)
+          if ((caseCandidate.status === 'open' && followUpResolution)
+            || (caseCandidate.status === 'resolved' && !followUpResolution)
+            || (caseCandidate.status !== 'open' && caseCandidate.status !== 'resolved')) throw new Error(`${field} follow-up status is invalid.`)
+        } else if (caseCandidate.followUpServiceEvents !== undefined || caseCandidate.followUpResolution !== undefined) {
+          throw new Error(`${field} follow-up evidence requires a retained reopen.`)
+        } else if ((caseCandidate.status === 'open' && originalResolution)
+          || (caseCandidate.status === 'resolved' && !originalResolution)
+          || (caseCandidate.status !== 'open' && caseCandidate.status !== 'resolved')) {
+          throw new Error(`${field} status is invalid.`)
         }
         supportSourceIntentIds.push(sourceIntentId)
         supportActionIds.push(opening.actionId)
@@ -3397,7 +3389,10 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || state.orders.some((order) => order.returns?.some((record) => record.actionId === actionId))
     || state.orders.some((order) => order.supportCases?.some((record) => record.opening.actionId === actionId
       || record.serviceEvents?.some((serviceEvent) => serviceEvent.proof.actionId === actionId)
-      || record.resolution?.proof.actionId === actionId))
+      || record.resolution?.proof.actionId === actionId
+      || record.reopen?.proof.actionId === actionId
+      || record.followUpServiceEvents?.some((serviceEvent) => serviceEvent.proof.actionId === actionId)
+      || record.followUpResolution?.proof.actionId === actionId))
     || state.orders.some((order) => order.corrections?.some((record) => record.actionId === actionId))
     || state.orders.some((order) => order.collectionActions?.some((record) => record.proof.actionId === actionId))
     || state.closes.some((close) => close.actionId === actionId)
@@ -3444,6 +3439,117 @@ function sameCatalogBaseline(left: CommerceCatalogBaseline, right: CommerceCatal
     && left.reorderAt === right.reorderAt
     && left.anchorDigest === right.anchorDigest
     && sameActionProof(left.proof, right.proof)
+}
+
+type ValidatedSupportServiceTimeline = {
+  effectiveService: CommerceSupportServiceState
+  latestAt: bigint
+  acknowledged: boolean
+  firstResponseReady: boolean
+}
+
+function validateSupportServiceTimeline(
+  value: unknown,
+  field: string,
+  caseId: string,
+  initialService: CommerceSupportServiceState,
+  initialAt: bigint,
+  supportActionIds: string[],
+): ValidatedSupportServiceTimeline {
+  let effectiveService = initialService
+  let latestAt = initialAt
+  let acknowledged = false
+  let firstResponseReady = false
+  if (value === undefined) return { effectiveService, latestAt, acknowledged, firstResponseReady }
+  if (!Array.isArray(value) || value.length < 1 || value.length > maxSupportServiceEventsPerCase) {
+    throw new Error(`${field} requires 1 to ${maxSupportServiceEventsPerCase} records.`)
+  }
+  for (const [reverseIndex, serviceCandidate] of [...value].reverse().entries()) {
+    const serviceIndex = value.length - reverseIndex - 1
+    const serviceField = `${field}[${serviceIndex}]`
+    if (!isRecord(serviceCandidate)
+      || !hasExactKeys(serviceCandidate, ['kind', 'owner', 'priority', 'dueAt', 'note', 'proof'])
+      || !supportServiceEventKinds.includes(serviceCandidate.kind as CommerceSupportServiceEventKind)
+      || !supportPriorities.includes(serviceCandidate.priority as CommerceSupportPriority)
+      || !validTimestamp(serviceCandidate.dueAt)
+      || !isRecord(serviceCandidate.proof)
+      || !hasExactKeys(serviceCandidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !validProof(serviceCandidate.proof as CommerceActionProof)
+      || serviceCandidate.proof.evidenceReference !== `SUPPORT-SERVICE:${caseId}`) {
+      throw new Error(`${serviceField} is invalid.`)
+    }
+    const serviceProof = serviceCandidate.proof as CommerceActionProof
+    const serviceAt = timestampMicros(serviceProof.capturedAt) as bigint
+    const dueAt = timestampMicros(serviceCandidate.dueAt) as bigint
+    const previousDueAt = timestampMicros(effectiveService.dueAt) as bigint
+    const previousPriority = supportPriorities.indexOf(effectiveService.priority)
+    const nextPriority = supportPriorities.indexOf(serviceCandidate.priority as CommerceSupportPriority)
+    canonicalText(serviceCandidate.owner, `${serviceField}.owner`, 120)
+    canonicalText(serviceCandidate.note, `${serviceField}.note`, 300)
+    if (serviceAt < latestAt) throw new Error(`${serviceField} chronology is invalid.`)
+    if (serviceCandidate.kind === 'reassigned') {
+      if (serviceCandidate.owner === effectiveService.owner
+        || serviceCandidate.priority !== effectiveService.priority
+        || serviceCandidate.dueAt !== effectiveService.dueAt) throw new Error(`${serviceField} must change only the accountable owner.`)
+    } else if (serviceCandidate.kind === 'escalated') {
+      if (serviceCandidate.owner !== effectiveService.owner
+        || nextPriority > previousPriority
+        || dueAt > previousDueAt
+        || (nextPriority === previousPriority && dueAt === previousDueAt)
+        || (serviceCandidate.dueAt !== effectiveService.dueAt && dueAt <= serviceAt)) {
+        throw new Error(`${serviceField} must increase priority or bring a future due time forward without changing owner.`)
+      }
+    } else if (serviceCandidate.kind === 'acknowledged') {
+      if (acknowledged
+        || firstResponseReady
+        || serviceCandidate.owner !== effectiveService.owner
+        || serviceCandidate.priority !== effectiveService.priority
+        || serviceCandidate.dueAt !== effectiveService.dueAt) {
+        throw new Error(`${serviceField} must acknowledge the current service state exactly once.`)
+      }
+      acknowledged = true
+    } else {
+      if (!acknowledged
+        || firstResponseReady
+        || serviceCandidate.owner !== effectiveService.owner
+        || serviceCandidate.priority !== effectiveService.priority
+        || serviceCandidate.dueAt !== effectiveService.dueAt) {
+        throw new Error(`${serviceField} must record one first response after acknowledgement without changing service state.`)
+      }
+      firstResponseReady = true
+    }
+    effectiveService = {
+      priority: serviceCandidate.priority as CommerceSupportPriority,
+      owner: serviceCandidate.owner as string,
+      dueAt: serviceCandidate.dueAt as string,
+    }
+    latestAt = serviceAt
+    supportActionIds.push(serviceProof.actionId)
+  }
+  return { effectiveService, latestAt, acknowledged, firstResponseReady }
+}
+
+function validateSupportResolution(
+  value: unknown,
+  field: string,
+  minimumAt: bigint,
+  supportActionIds: string[],
+): CommerceOrderSupportResolution {
+  if (!isRecord(value)
+    || !hasExactKeys(value, ['outcome', 'note', 'proof'])
+    || !supportResolutionOutcomes.includes(value.outcome as CommerceSupportResolutionOutcome)
+    || !isRecord(value.proof)
+    || !hasExactKeys(value.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+    || !validProof(value.proof as CommerceActionProof)) {
+    throw new Error(`${field} is invalid.`)
+  }
+  canonicalText(value.note, `${field}.note`, 300)
+  const resolution = value as CommerceOrderSupportResolution
+  if ((timestampMicros(resolution.proof.capturedAt) as bigint) < minimumAt) {
+    throw new Error(`${field} predates its latest service event.`)
+  }
+  supportActionIds.push(resolution.proof.actionId)
+  return resolution
 }
 
 function sameTaxConfiguration(left: CommerceTaxConfiguration, right: CommerceTaxConfiguration) {
@@ -5739,8 +5845,9 @@ export type CommerceSupportSlaSummary = {
 export function commerceSupportServiceState(
   supportCase: CommerceOrderSupportCase,
 ): CommerceSupportServiceState | null {
-  const latest = supportCase.serviceEvents?.[0]
+  const latest = supportCase.reopen ? supportCase.followUpServiceEvents?.[0] : supportCase.serviceEvents?.[0]
   if (latest) return { owner: latest.owner, priority: latest.priority, dueAt: latest.dueAt }
+  if (supportCase.reopen) return { owner: supportCase.reopen.owner, priority: supportCase.reopen.priority, dueAt: supportCase.reopen.dueAt }
   return supportCase.owner && supportCase.priority && supportCase.dueAt
     ? { owner: supportCase.owner, priority: supportCase.priority, dueAt: supportCase.dueAt }
     : null
@@ -5749,7 +5856,7 @@ export function commerceSupportServiceState(
 export function commerceSupportCheckpointState(
   supportCase: CommerceOrderSupportCase,
 ): CommerceSupportCheckpointState {
-  const chronological = [...(supportCase.serviceEvents ?? [])].reverse()
+  const chronological = [...(supportCase.reopen ? supportCase.followUpServiceEvents ?? [] : supportCase.serviceEvents ?? [])].reverse()
   return {
     acknowledged: chronological.find((event) => event.kind === 'acknowledged') ?? null,
     firstResponseReady: chronological.find((event) => event.kind === 'first_response_ready') ?? null,
@@ -5879,6 +5986,9 @@ export function recordCommerceOrderSupportCase(
       entry.opening.capturedAt,
       ...(entry.serviceEvents ?? []).map((serviceEvent) => serviceEvent.proof.capturedAt),
       ...(entry.resolution ? [entry.resolution.proof.capturedAt] : []),
+      ...(entry.reopen ? [entry.reopen.proof.capturedAt] : []),
+      ...(entry.followUpServiceEvents ?? []).map((serviceEvent) => serviceEvent.proof.capturedAt),
+      ...(entry.followUpResolution ? [entry.followUpResolution.proof.capturedAt] : []),
     ]),
   ].map((value) => timestampMicros(value) as bigint).reduce((maximum, value) => value > maximum ? value : maximum, 0n)
   if ((timestampMicros(proof.capturedAt) as bigint) < latest) return null
@@ -5942,7 +6052,10 @@ export function recordCommerceOrderSupportServiceEvent(
     || input.note.length > 300
     || proof.evidenceReference !== `SUPPORT-SERVICE:${input.caseId}`) return null
   const current = validateCommerceState(state)
-  const replay = current.orders.flatMap((order) => (order.supportCases ?? []).flatMap((supportCase) => (supportCase.serviceEvents ?? []).map((serviceEvent) => ({ order, supportCase, serviceEvent }))))
+  const replay = current.orders.flatMap((order) => (order.supportCases ?? []).flatMap((supportCase) => [
+    ...(supportCase.serviceEvents ?? []),
+    ...(supportCase.followUpServiceEvents ?? []),
+  ].map((serviceEvent) => ({ order, supportCase, serviceEvent }))))
     .find(({ serviceEvent }) => serviceEvent.proof.actionId === proof.actionId)
   if (replay) {
     const expectedEvent: CommerceOrderSupportServiceEvent = {
@@ -5971,7 +6084,8 @@ export function recordCommerceOrderSupportServiceEvent(
   const previousPriority = supportPriorities.indexOf(service.priority)
   const nextPriority = supportPriorities.indexOf(input.priority)
   const checkpoints = commerceSupportCheckpointState(supportCase)
-  const latestAt = [supportCase.opening.capturedAt, ...(supportCase.serviceEvents ?? []).map((entry) => entry.proof.capturedAt)]
+  const currentServiceEvents = supportCase.reopen ? supportCase.followUpServiceEvents ?? [] : supportCase.serviceEvents ?? []
+  const latestAt = [supportCase.reopen?.proof.capturedAt ?? supportCase.opening.capturedAt, ...currentServiceEvents.map((entry) => entry.proof.capturedAt)]
     .map((value) => timestampMicros(value) as bigint)
     .reduce((maximum, value) => value > maximum ? value : maximum, 0n)
   if (proofAt < latestAt) return null
@@ -6008,7 +6122,9 @@ export function recordCommerceOrderSupportServiceEvent(
       ? {
           ...candidate,
           supportCases: candidate.supportCases?.map((entry) => entry.caseId === input.caseId
-            ? { ...entry, serviceEvents: [serviceEvent, ...(entry.serviceEvents ?? [])] }
+            ? supportCase.reopen
+              ? { ...entry, followUpServiceEvents: [serviceEvent, ...(entry.followUpServiceEvents ?? [])] }
+              : { ...entry, serviceEvents: [serviceEvent, ...(entry.serviceEvents ?? [])] }
             : entry),
         }
       : candidate),
@@ -6023,9 +6139,103 @@ export function commerceOrderSupportResolveExpectation(
   const current = validateCommerceState(state)
   const order = current.orders.find((candidate) => candidate.id === orderId)
   const supportCase = order?.supportCases?.find((candidate) => candidate.caseId === caseId)
-  if (!order || !supportCase || supportCase.status !== 'open' || supportCase.resolution) return null
+  if (!order
+    || !supportCase
+    || supportCase.status !== 'open'
+    || (supportCase.reopen ? supportCase.followUpResolution !== undefined : supportCase.resolution !== undefined)) return null
   if (commerceSupportServiceState(supportCase) && !commerceSupportCheckpointState(supportCase).firstResponseReady) return null
   return { orderId, caseId, orderSnapshot: JSON.stringify(order), caseSnapshot: JSON.stringify(supportCase) }
+}
+
+export function commerceOrderSupportReopenExpectation(
+  state: CommerceState,
+  orderId: string,
+  caseId: string,
+): CommerceOrderSupportReopenExpectation | null {
+  const current = validateCommerceState(state)
+  const order = current.orders.find((candidate) => candidate.id === orderId)
+  const supportCase = order?.supportCases?.find((candidate) => candidate.caseId === caseId)
+  if (!order
+    || !supportCase
+    || supportCase.status !== 'resolved'
+    || !supportCase.resolution
+    || supportCase.reopen
+    || supportCase.followUpServiceEvents
+    || supportCase.followUpResolution) return null
+  return { orderId, caseId, orderSnapshot: JSON.stringify(order), caseSnapshot: JSON.stringify(supportCase) }
+}
+
+export function reopenCommerceOrderSupportCase(
+  state: CommerceState,
+  input: CommerceOrderSupportReopenInput,
+  proof: CommerceActionProof,
+  expected: CommerceOrderSupportReopenExpectation,
+) {
+  if (!validProof(proof)
+    || typeof input.orderId !== 'string'
+    || !input.orderId
+    || input.orderId !== input.orderId.trim()
+    || input.orderId.length > 160
+    || !supportCaseIdPattern.test(input.caseId)
+    || typeof input.sourceResolutionActionId !== 'string'
+    || !input.sourceResolutionActionId
+    || !supportPriorities.includes(input.priority)
+    || typeof input.owner !== 'string'
+    || !input.owner
+    || input.owner !== input.owner.trim()
+    || input.owner.length > 120
+    || !validTimestamp(input.dueAt)
+    || typeof input.note !== 'string'
+    || !input.note
+    || input.note !== input.note.trim()
+    || input.note.length > 300
+    || proof.evidenceReference !== `SUPPORT-REOPEN:${input.caseId}:${input.sourceResolutionActionId}`) return null
+  const current = validateCommerceState(state)
+  const replay = current.orders.flatMap((order) => (order.supportCases ?? []).map((supportCase) => ({ order, supportCase })))
+    .find(({ supportCase }) => supportCase.reopen?.proof.actionId === proof.actionId)
+  if (replay) {
+    const expectedReopen: CommerceOrderSupportReopen = {
+      sourceResolutionActionId: input.sourceResolutionActionId,
+      owner: input.owner,
+      priority: input.priority,
+      dueAt: input.dueAt,
+      note: input.note,
+      proof,
+    }
+    return replay.order.id === input.orderId
+      && replay.supportCase.caseId === input.caseId
+      && JSON.stringify(replay.supportCase.reopen) === JSON.stringify(expectedReopen)
+      ? current : null
+  }
+  if (actionIdIsUsed(current, proof.actionId)) return null
+  const actual = commerceOrderSupportReopenExpectation(current, input.orderId, input.caseId)
+  if (!actual || !expected || JSON.stringify(actual) !== JSON.stringify(expected)) return null
+  const order = current.orders.find((candidate) => candidate.id === input.orderId)
+  const supportCase = order?.supportCases?.find((candidate) => candidate.caseId === input.caseId)
+  if (!order
+    || !supportCase?.resolution
+    || supportCase.resolution.proof.actionId !== input.sourceResolutionActionId
+    || (timestampMicros(proof.capturedAt) as bigint) <= (timestampMicros(supportCase.resolution.proof.capturedAt) as bigint)
+    || (timestampMicros(input.dueAt) as bigint) <= (timestampMicros(proof.capturedAt) as bigint)) return null
+  const reopen: CommerceOrderSupportReopen = {
+    sourceResolutionActionId: input.sourceResolutionActionId,
+    owner: input.owner,
+    priority: input.priority,
+    dueAt: input.dueAt,
+    note: input.note,
+    proof,
+  }
+  return validateCommerceState({
+    ...current,
+    orders: current.orders.map((candidate) => candidate.id === input.orderId
+      ? {
+          ...candidate,
+          supportCases: candidate.supportCases?.map((entry) => entry.caseId === input.caseId
+            ? { ...entry, status: 'open' as const, reopen }
+            : entry),
+        }
+      : candidate),
+  })
 }
 
 export function resolveCommerceOrderSupportCase(
@@ -6046,14 +6256,16 @@ export function resolveCommerceOrderSupportCase(
     || input.note !== input.note.trim()
     || input.note.length > 300) return null
   const current = validateCommerceState(state)
-  const replay = current.orders.flatMap((order) => (order.supportCases ?? []).map((entry) => ({ order, entry })))
-    .find(({ entry }) => entry.resolution?.proof.actionId === proof.actionId)
+  const replay = current.orders.flatMap((order) => (order.supportCases ?? []).flatMap((entry) => [entry.resolution, entry.followUpResolution]
+    .filter((resolution): resolution is CommerceOrderSupportResolution => Boolean(resolution))
+    .map((resolution) => ({ order, entry, resolution }))))
+    .find(({ resolution }) => resolution.proof.actionId === proof.actionId)
   if (replay) {
     return replay.order.id === input.orderId
       && replay.entry.caseId === input.caseId
-      && replay.entry.resolution?.outcome === input.outcome
-      && replay.entry.resolution.note === input.note
-      && sameActionProof(replay.entry.resolution.proof, proof)
+      && replay.resolution.outcome === input.outcome
+      && replay.resolution.note === input.note
+      && sameActionProof(replay.resolution.proof, proof)
       ? current : null
   }
   if (actionIdIsUsed(current, proof.actionId)) return null
@@ -6066,7 +6278,11 @@ export function resolveCommerceOrderSupportCase(
   return validateCommerceState({
     ...current,
     orders: current.orders.map((candidate) => candidate.id === input.orderId
-      ? { ...candidate, supportCases: candidate.supportCases?.map((entry) => entry.caseId === input.caseId ? { ...entry, status: 'resolved' as const, resolution } : entry) }
+      ? { ...candidate, supportCases: candidate.supportCases?.map((entry) => entry.caseId === input.caseId
+        ? entry.reopen
+          ? { ...entry, status: 'resolved' as const, followUpResolution: resolution }
+          : { ...entry, status: 'resolved' as const, resolution }
+        : entry) }
       : candidate),
   })
 }

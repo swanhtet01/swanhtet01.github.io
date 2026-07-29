@@ -48,6 +48,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.order.cancelled",
         "commerce.order.return_recorded",
         "commerce.order.support_case_opened",
+        "commerce.order.support_case_reopened",
         "commerce.order.support_case_service_recorded",
         "commerce.order.support_case_resolved",
         "commerce.order.correction_recorded",
@@ -87,6 +88,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.order.cancelled",
         "commerce.order.return_recorded",
         "commerce.order.support_case_opened",
+        "commerce.order.support_case_reopened",
         "commerce.order.support_case_service_recorded",
         "commerce.order.support_case_resolved",
         "commerce.order.correction_recorded",
@@ -353,12 +355,18 @@ _ORDER_SUPPORT_CASE_REQUIRED_FIELDS = frozenset(
     }
 )
 _ORDER_SUPPORT_CASE_OPTIONAL_FIELDS = frozenset(
-    {"resolution", "serviceEvents", "priority", "owner", "dueAt"}
+    {
+        "resolution", "serviceEvents", "priority", "owner", "dueAt",
+        "reopen", "followUpServiceEvents", "followUpResolution",
+    }
 )
 _ORDER_SUPPORT_SERVICE_EVENT_FIELDS = frozenset(
     {"kind", "owner", "priority", "dueAt", "note", "proof"}
 )
 _ORDER_SUPPORT_RESOLUTION_FIELDS = frozenset({"outcome", "note", "proof"})
+_ORDER_SUPPORT_REOPEN_FIELDS = frozenset(
+    {"sourceResolutionActionId", "owner", "priority", "dueAt", "note", "proof"}
+)
 _ORDER_CORRECTION_FIELDS = frozenset(
     {
         "documentId",
@@ -675,6 +683,128 @@ def _action_proof(value: object, field: str, *, with_order_id: bool = False) -> 
     if with_order_id:
         _text(proof["orderId"], f"{field}.orderId", maximum=160)
     return proof
+
+
+def _validate_support_service_timeline(
+    value: object,
+    field: str,
+    case_id: str,
+    initial_service: Mapping[str, Any],
+    initial_at: datetime,
+    support_action_ids: list[str],
+) -> tuple[dict[str, Any], datetime, bool, bool]:
+    service_events = _list(value, field)
+    if not 1 <= len(service_events) <= _MAX_SUPPORT_SERVICE_EVENTS_PER_CASE:
+        raise TrialValidationError(
+            f"{field} requires 1 to {_MAX_SUPPORT_SERVICE_EVENTS_PER_CASE} records."
+        )
+    effective_service = dict(initial_service)
+    latest_service_at = initial_at
+    acknowledged = False
+    first_response_ready = False
+    for reverse_index, service_candidate in enumerate(reversed(service_events)):
+        service_index = len(service_events) - reverse_index - 1
+        service_field = f"{field}[{service_index}]"
+        service_event = _object(service_candidate, service_field)
+        _exact_fields(
+            service_event,
+            service_field,
+            required=_ORDER_SUPPORT_SERVICE_EVENT_FIELDS,
+        )
+        if (
+            service_event["kind"] not in _SUPPORT_SERVICE_EVENT_KINDS
+            or service_event["priority"] not in _SUPPORT_PRIORITIES
+        ):
+            raise TrialValidationError(f"{service_field} is invalid.")
+        owner = _text(service_event["owner"], f"{service_field}.owner", maximum=120)
+        _text(service_event["note"], f"{service_field}.note", maximum=300)
+        service_proof = _action_proof(service_event["proof"], f"{service_field}.proof")
+        service_at = datetime.fromisoformat(service_proof["capturedAt"].replace("Z", "+00:00"))
+        service_due_at = datetime.fromisoformat(
+            _timestamp(service_event["dueAt"], f"{service_field}.dueAt").replace("Z", "+00:00")
+        )
+        previous_due_at = datetime.fromisoformat(str(effective_service["dueAt"]).replace("Z", "+00:00"))
+        previous_priority = _SUPPORT_PRIORITY_ORDER.index(str(effective_service["priority"]))
+        next_priority = _SUPPORT_PRIORITY_ORDER.index(str(service_event["priority"]))
+        if (
+            service_proof["evidenceReference"] != f"SUPPORT-SERVICE:{case_id}"
+            or service_at < latest_service_at
+        ):
+            raise TrialValidationError(f"{service_field} chronology is invalid.")
+        if service_event["kind"] == "reassigned":
+            if (
+                owner == effective_service["owner"]
+                or service_event["priority"] != effective_service["priority"]
+                or service_event["dueAt"] != effective_service["dueAt"]
+            ):
+                raise TrialValidationError(f"{service_field} must change only the accountable owner.")
+        elif service_event["kind"] == "escalated":
+            if (
+                owner != effective_service["owner"]
+                or next_priority > previous_priority
+                or service_due_at > previous_due_at
+                or (next_priority == previous_priority and service_due_at == previous_due_at)
+                or (
+                    service_event["dueAt"] != effective_service["dueAt"]
+                    and service_due_at <= service_at
+                )
+            ):
+                raise TrialValidationError(
+                    f"{service_field} must increase priority or bring a future due time forward "
+                    "without changing owner."
+                )
+        elif service_event["kind"] == "acknowledged":
+            if (
+                acknowledged
+                or first_response_ready
+                or owner != effective_service["owner"]
+                or service_event["priority"] != effective_service["priority"]
+                or service_event["dueAt"] != effective_service["dueAt"]
+            ):
+                raise TrialValidationError(
+                    f"{service_field} must acknowledge the current service state exactly once."
+                )
+            acknowledged = True
+        else:
+            if (
+                not acknowledged
+                or first_response_ready
+                or owner != effective_service["owner"]
+                or service_event["priority"] != effective_service["priority"]
+                or service_event["dueAt"] != effective_service["dueAt"]
+            ):
+                raise TrialValidationError(
+                    f"{service_field} must record one first response after acknowledgement "
+                    "without changing service state."
+                )
+            first_response_ready = True
+        effective_service = {
+            "priority": service_event["priority"],
+            "owner": owner,
+            "dueAt": service_event["dueAt"],
+        }
+        latest_service_at = service_at
+        support_action_ids.append(service_proof["actionId"])
+    return effective_service, latest_service_at, acknowledged, first_response_ready
+
+
+def _validate_support_resolution(
+    value: object,
+    field: str,
+    minimum_at: datetime,
+    support_action_ids: list[str],
+) -> tuple[dict[str, Any], datetime]:
+    resolution = _object(value, field)
+    _exact_fields(resolution, field, required=_ORDER_SUPPORT_RESOLUTION_FIELDS)
+    if resolution["outcome"] not in _SUPPORT_RESOLUTION_OUTCOMES:
+        raise TrialValidationError(f"{field}.outcome is invalid.")
+    _text(resolution["note"], f"{field}.note", maximum=300)
+    resolution_proof = _action_proof(resolution["proof"], f"{field}.proof")
+    resolution_at = datetime.fromisoformat(resolution_proof["capturedAt"].replace("Z", "+00:00"))
+    if resolution_at < minimum_at:
+        raise TrialValidationError(f"{field} predates its latest service event.")
+    support_action_ids.append(resolution_proof["actionId"])
+    return resolution, resolution_at
 
 
 def _storefront_request(value: object, field: str) -> dict[str, Any]:
@@ -2131,7 +2261,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     maximum=300,
                 )
                 newer_opening_at = opening_at
-                effective_service = (
+                initial_service = (
                     {
                         "priority": support_case["priority"],
                         "owner": support_case["owner"],
@@ -2140,144 +2270,84 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     if all(triage_fields)
                     else None
                 )
-                latest_service_at = opening_at
-                acknowledged = False
-                first_response_ready = False
                 if "serviceEvents" in support_case:
-                    service_events = _list(
-                        support_case["serviceEvents"], f"{field}.serviceEvents"
-                    )
-                    if (
-                        effective_service is None
-                        or not 1 <= len(service_events) <= _MAX_SUPPORT_SERVICE_EVENTS_PER_CASE
-                    ):
+                    if initial_service is None:
                         raise TrialValidationError(
-                            f"{field}.serviceEvents requires attributable opening triage and 1 to "
-                            f"{_MAX_SUPPORT_SERVICE_EVENTS_PER_CASE} records."
+                            f"{field}.serviceEvents requires attributable opening triage."
                         )
-                    for reverse_index, service_candidate in enumerate(reversed(service_events)):
-                        service_index = len(service_events) - reverse_index - 1
-                        service_field = f"{field}.serviceEvents[{service_index}]"
-                        service_event = _object(service_candidate, service_field)
-                        _exact_fields(
-                            service_event,
-                            service_field,
-                            required=_ORDER_SUPPORT_SERVICE_EVENT_FIELDS,
-                        )
-                        if (
-                            service_event["kind"] not in _SUPPORT_SERVICE_EVENT_KINDS
-                            or service_event["priority"] not in _SUPPORT_PRIORITIES
-                        ):
-                            raise TrialValidationError(f"{service_field} is invalid.")
-                        owner = _text(service_event["owner"], f"{service_field}.owner", maximum=120)
-                        _text(service_event["note"], f"{service_field}.note", maximum=300)
-                        service_proof = _action_proof(
-                            service_event["proof"], f"{service_field}.proof"
-                        )
-                        service_at = datetime.fromisoformat(
-                            service_proof["capturedAt"].replace("Z", "+00:00")
-                        )
-                        service_due_at = datetime.fromisoformat(
-                            _timestamp(service_event["dueAt"], f"{service_field}.dueAt").replace("Z", "+00:00")
-                        )
-                        previous_due_at = datetime.fromisoformat(
-                            str(effective_service["dueAt"]).replace("Z", "+00:00")
-                        )
-                        previous_priority = _SUPPORT_PRIORITY_ORDER.index(
-                            str(effective_service["priority"])
-                        )
-                        next_priority = _SUPPORT_PRIORITY_ORDER.index(
-                            str(service_event["priority"])
-                        )
-                        if (
-                            service_proof["evidenceReference"] != f"SUPPORT-SERVICE:{case_id}"
-                            or service_at < latest_service_at
-                        ):
-                            raise TrialValidationError(f"{service_field} chronology is invalid.")
-                        if service_event["kind"] == "reassigned":
-                            if (
-                                owner == effective_service["owner"]
-                                or service_event["priority"] != effective_service["priority"]
-                                or service_event["dueAt"] != effective_service["dueAt"]
-                            ):
-                                raise TrialValidationError(
-                                    f"{service_field} must change only the accountable owner."
-                                )
-                        elif service_event["kind"] == "escalated":
-                            if (
-                                owner != effective_service["owner"]
-                                or next_priority > previous_priority
-                                or service_due_at > previous_due_at
-                                or (
-                                    next_priority == previous_priority
-                                    and service_due_at == previous_due_at
-                                )
-                                or (
-                                    service_event["dueAt"] != effective_service["dueAt"]
-                                    and service_due_at <= service_at
-                                )
-                            ):
-                                raise TrialValidationError(
-                                    f"{service_field} must increase priority or bring a future due "
-                                    "time forward without changing owner."
-                                )
-                        elif service_event["kind"] == "acknowledged":
-                            if (
-                                acknowledged
-                                or first_response_ready
-                                or owner != effective_service["owner"]
-                                or service_event["priority"] != effective_service["priority"]
-                                or service_event["dueAt"] != effective_service["dueAt"]
-                            ):
-                                raise TrialValidationError(
-                                    f"{service_field} must acknowledge the current service state exactly once."
-                                )
-                            acknowledged = True
-                        else:
-                            if (
-                                not acknowledged
-                                or first_response_ready
-                                or owner != effective_service["owner"]
-                                or service_event["priority"] != effective_service["priority"]
-                                or service_event["dueAt"] != effective_service["dueAt"]
-                            ):
-                                raise TrialValidationError(
-                                    f"{service_field} must record one first response after acknowledgement "
-                                    "without changing service state."
-                                )
-                            first_response_ready = True
-                        effective_service = {
-                            "priority": service_event["priority"],
-                            "owner": owner,
-                            "dueAt": service_event["dueAt"],
-                        }
-                        latest_service_at = service_at
-                        support_action_ids.append(service_proof["actionId"])
-                if support_case["status"] == "open":
-                    if "resolution" in support_case:
-                        raise TrialValidationError(f"{field} open case cannot have resolution evidence.")
-                elif support_case["status"] == "resolved":
-                    resolution = _object(support_case.get("resolution"), f"{field}.resolution")
-                    _exact_fields(
-                        resolution,
-                        f"{field}.resolution",
-                        required=_ORDER_SUPPORT_RESOLUTION_FIELDS,
+                    _, original_latest_at, _, _ = _validate_support_service_timeline(
+                        support_case["serviceEvents"],
+                        f"{field}.serviceEvents",
+                        case_id,
+                        initial_service,
+                        opening_at,
+                        support_action_ids,
                     )
-                    if resolution["outcome"] not in _SUPPORT_RESOLUTION_OUTCOMES:
-                        raise TrialValidationError(f"{field}.resolution.outcome is invalid.")
-                    _text(resolution["note"], f"{field}.resolution.note", maximum=300)
-                    resolution_proof = _action_proof(
-                        resolution["proof"], f"{field}.resolution.proof"
-                    )
-                    if datetime.fromisoformat(
-                        resolution_proof["capturedAt"].replace("Z", "+00:00")
-                    ) < latest_service_at:
-                        raise TrialValidationError(
-                            f"{field}.resolution predates its latest service event."
-                        )
-                    support_action_ids.append(resolution_proof["actionId"])
                 else:
-                    raise TrialValidationError(f"{field}.status is invalid.")
+                    original_latest_at = opening_at
+                original_resolution = None
+                original_resolution_at = None
+                if "resolution" in support_case:
+                    original_resolution, original_resolution_at = _validate_support_resolution(
+                        support_case["resolution"],
+                        f"{field}.resolution",
+                        original_latest_at,
+                        support_action_ids,
+                    )
+                if "reopen" in support_case:
+                    if original_resolution is None or original_resolution_at is None or initial_service is None:
+                        raise TrialValidationError(f"{field}.reopen requires a retained triaged resolution.")
+                    reopen = _object(support_case["reopen"], f"{field}.reopen")
+                    _exact_fields(reopen, f"{field}.reopen", required=_ORDER_SUPPORT_REOPEN_FIELDS)
+                    reopen_proof = _action_proof(reopen["proof"], f"{field}.reopen.proof")
+                    reopen_at = datetime.fromisoformat(reopen_proof["capturedAt"].replace("Z", "+00:00"))
+                    reopen_due_at = datetime.fromisoformat(
+                        _timestamp(reopen["dueAt"], f"{field}.reopen.dueAt").replace("Z", "+00:00")
+                    )
+                    owner = _text(reopen["owner"], f"{field}.reopen.owner", maximum=120)
+                    _text(reopen["note"], f"{field}.reopen.note", maximum=300)
+                    if (
+                        reopen["sourceResolutionActionId"] != original_resolution["proof"]["actionId"]
+                        or reopen["priority"] not in _SUPPORT_PRIORITIES
+                        or reopen_proof["evidenceReference"]
+                        != f"SUPPORT-REOPEN:{case_id}:{original_resolution['proof']['actionId']}"
+                        or reopen_at <= original_resolution_at
+                        or reopen_due_at <= reopen_at
+                    ):
+                        raise TrialValidationError(f"{field}.reopen chronology or linkage is invalid.")
+                    support_action_ids.append(reopen_proof["actionId"])
+                    follow_up_latest_at = reopen_at
+                    if "followUpServiceEvents" in support_case:
+                        _, follow_up_latest_at, _, _ = _validate_support_service_timeline(
+                            support_case["followUpServiceEvents"],
+                            f"{field}.followUpServiceEvents",
+                            case_id,
+                            {"priority": reopen["priority"], "owner": owner, "dueAt": reopen["dueAt"]},
+                            reopen_at,
+                            support_action_ids,
+                        )
+                    follow_up_resolution = None
+                    if "followUpResolution" in support_case:
+                        follow_up_resolution, _ = _validate_support_resolution(
+                            support_case["followUpResolution"],
+                            f"{field}.followUpResolution",
+                            follow_up_latest_at,
+                            support_action_ids,
+                        )
+                    if (
+                        (support_case["status"] == "open" and follow_up_resolution is not None)
+                        or (support_case["status"] == "resolved" and follow_up_resolution is None)
+                        or support_case["status"] not in {"open", "resolved"}
+                    ):
+                        raise TrialValidationError(f"{field} follow-up status is invalid.")
+                elif "followUpServiceEvents" in support_case or "followUpResolution" in support_case:
+                    raise TrialValidationError(f"{field} follow-up evidence requires a retained reopen.")
+                elif (
+                    (support_case["status"] == "open" and original_resolution is not None)
+                    or (support_case["status"] == "resolved" and original_resolution is None)
+                    or support_case["status"] not in {"open", "resolved"}
+                ):
+                    raise TrialValidationError(f"{field} status is invalid.")
                 support_source_intent_ids.append(source_intent_id)
                 support_action_ids.append(opening["actionId"])
         if "corrections" in order:
@@ -3645,6 +3715,24 @@ def _validate_event_evidence(
             raise TrialValidationError(
                 "command evidence must match the support case opening proof."
             )
+    elif event_type == "commerce.order.support_case_reopened":
+        before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
+        before_by_id = {
+            case.get("caseId"): case
+            for case in before_order.get("supportCases", [])
+            if isinstance(case, Mapping)
+        }
+        changed = [
+            case
+            for case in after_order.get("supportCases", [])
+            if isinstance(case, Mapping) and case != before_by_id.get(case.get("caseId"))
+        ]
+        reopen = changed[0].get("reopen") if len(changed) == 1 else None
+        proof = reopen.get("proof") if isinstance(reopen, Mapping) else None
+        if not isinstance(proof, Mapping) or not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the support case reopen proof."
+            )
     elif event_type == "commerce.order.support_case_service_recorded":
         before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
         before_by_id = {
@@ -3657,7 +3745,12 @@ def _validate_event_evidence(
             for case in after_order.get("supportCases", [])
             if isinstance(case, Mapping) and case != before_by_id.get(case.get("caseId"))
         ]
-        service_events = changed[0].get("serviceEvents") if len(changed) == 1 else None
+        event_field = (
+            "followUpServiceEvents"
+            if len(changed) == 1 and isinstance(changed[0].get("reopen"), Mapping)
+            else "serviceEvents"
+        )
+        service_events = changed[0].get(event_field) if len(changed) == 1 else None
         proof = (
             service_events[0].get("proof")
             if isinstance(service_events, list)
@@ -3681,7 +3774,12 @@ def _validate_event_evidence(
             for case in after_order.get("supportCases", [])
             if isinstance(case, Mapping) and case != before_by_id.get(case.get("caseId"))
         ]
-        resolution = changed[0].get("resolution") if len(changed) == 1 else None
+        resolution_field = (
+            "followUpResolution"
+            if len(changed) == 1 and isinstance(changed[0].get("reopen"), Mapping)
+            else "resolution"
+        )
+        resolution = changed[0].get(resolution_field) if len(changed) == 1 else None
         proof = resolution.get("proof") if isinstance(resolution, Mapping) else None
         if not isinstance(proof, Mapping) or not _proof_matches_evidence(proof, evidence):
             raise TrialValidationError(
@@ -5971,22 +6069,80 @@ def _validate_support_case_resolved(
             "commerce.order.support_case_resolved must resolve exactly one case."
         )
     before_case, after_case = changed[0]
+    reopened = isinstance(before_case.get("reopen"), Mapping)
     triaged = all(field in before_case for field in ("priority", "owner", "dueAt"))
     response_ready = any(
         isinstance(event, Mapping) and event.get("kind") == "first_response_ready"
-        for event in before_case.get("serviceEvents", [])
+        for event in before_case.get(
+            "followUpServiceEvents" if reopened else "serviceEvents", []
+        )
     )
-    if (
-        before_case.get("status") != "open"
-        or "resolution" in before_case
-        or (triaged and not response_ready)
-        or after_case.get("status") != "resolved"
+    invalid_resolution = (
+        not isinstance(after_case.get("followUpResolution"), Mapping)
+        or _without(before_case, frozenset({"status"}))
+        != _without(after_case, frozenset({"status", "followUpResolution"}))
+    ) if reopened else (
+        "resolution" in before_case
         or not isinstance(after_case.get("resolution"), Mapping)
         or _without(before_case, frozenset({"status", "resolution"}))
         != _without(after_case, frozenset({"status", "resolution"}))
+    )
+    if (
+        before_case.get("status") != "open"
+        or (triaged and not response_ready)
+        or after_case.get("status") != "resolved"
+        or invalid_resolution
     ):
         raise TrialValidationError(
             "commerce.order.support_case_resolved must preserve the immutable opened case."
+        )
+
+
+def _validate_support_case_reopened(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
+    before_cases = before_order.get("supportCases")
+    after_cases = after_order.get("supportCases")
+    if (
+        not isinstance(before_cases, list)
+        or not isinstance(after_cases, list)
+        or len(after_cases) != len(before_cases)
+        or _without(before_order, frozenset({"supportCases"}))
+        != _without(after_order, frozenset({"supportCases"}))
+    ):
+        raise TrialValidationError(
+            "commerce.order.support_case_reopened may change only one existing support case."
+        )
+    changed = [
+        (before, after)
+        for before, after in zip(before_cases, after_cases, strict=True)
+        if before != after
+    ]
+    if len(changed) != 1:
+        raise TrialValidationError(
+            "commerce.order.support_case_reopened must reopen exactly one case."
+        )
+    before_case, after_case = changed[0]
+    if (
+        before_case.get("status") != "resolved"
+        or not isinstance(before_case.get("resolution"), Mapping)
+        or "reopen" in before_case
+        or "followUpServiceEvents" in before_case
+        or "followUpResolution" in before_case
+        or after_case.get("status") != "open"
+        or not isinstance(after_case.get("reopen"), Mapping)
+        or _without(before_case, frozenset({"status"}))
+        != _without(after_case, frozenset({"status", "reopen"}))
+    ):
+        raise TrialValidationError(
+            "commerce.order.support_case_reopened must retain the original resolution and add one linked reopen."
         )
 
 
@@ -6022,17 +6178,17 @@ def _validate_support_case_service_recorded(
             "commerce.order.support_case_service_recorded must append exactly one event."
         )
     before_case, after_case = changed[0]
-    before_events = before_case.get("serviceEvents", [])
-    after_events = after_case.get("serviceEvents")
+    event_field = "followUpServiceEvents" if isinstance(before_case.get("reopen"), Mapping) else "serviceEvents"
+    before_events = before_case.get(event_field, [])
+    after_events = after_case.get(event_field)
     if (
         before_case.get("status") != "open"
-        or "resolution" in before_case
         or not isinstance(before_events, list)
         or not isinstance(after_events, list)
         or len(after_events) != len(before_events) + 1
         or after_events[1:] != before_events
-        or _without(before_case, frozenset({"serviceEvents"}))
-        != _without(after_case, frozenset({"serviceEvents"}))
+        or _without(before_case, frozenset({event_field}))
+        != _without(after_case, frozenset({event_field}))
     ):
         raise TrialValidationError(
             "commerce.order.support_case_service_recorded must prepend one immutable service event."
@@ -7325,6 +7481,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.order.cancelled": _validate_cancelled,
     "commerce.order.return_recorded": _validate_return_recorded,
     "commerce.order.support_case_opened": _validate_support_case_opened,
+    "commerce.order.support_case_reopened": _validate_support_case_reopened,
     "commerce.order.support_case_service_recorded": _validate_support_case_service_recorded,
     "commerce.order.support_case_resolved": _validate_support_case_resolved,
     "commerce.order.correction_recorded": _validate_correction_recorded,

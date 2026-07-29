@@ -2808,6 +2808,8 @@ if (!commerceSource.includes('export type CommerceOrderSupportCase')
   || !commerceSource.includes('export function commerceSupportSlaSummary')
   || !commerceSource.includes('export function commerceOrderSupportServiceExpectation')
   || !commerceSource.includes('export function recordCommerceOrderSupportServiceEvent')
+  || !commerceSource.includes('export function commerceOrderSupportReopenExpectation')
+  || !commerceSource.includes('export function reopenCommerceOrderSupportCase')
   || !commerceSource.includes('export function recordCommerceOrderSupportCase')
   || !commerceSource.includes('export function resolveCommerceOrderSupportCase')
   || !commerceSource.includes('externalMessageSent: false')
@@ -2820,8 +2822,11 @@ if (!commerceSource.includes('export type CommerceOrderSupportCase')
   || !coreSource.includes('First response ready for independent delivery')
   || !coreSource.includes("onOpenSupportService(order.id, supportCase.caseId, 'acknowledged')")
   || !coreSource.includes("onOpenSupportService(order.id, supportCase.caseId, 'first_response_ready')")
+  || !coreSource.includes('Reopen case')
+  || !coreSource.includes('Review follow-up')
   || !coreSource.includes('Choose one accountable owner and a future due time for this support case.')
   || !managedCommerceRuntime.includes('def _validate_support_case_opened')
+  || !managedCommerceRuntime.includes('def _validate_support_case_reopened')
   || !managedCommerceRuntime.includes('def _validate_support_case_service_recorded')
   || !managedCommerceRuntime.includes('def _validate_support_case_resolved')) fail('commerce_order_support_contract_missing')
 if (!commerceSource.includes('export type CommerceOrderCorrection')
@@ -2843,7 +2848,7 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${shopInventoryUiSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.support_case_opened', 'commerce.order.support_case_service_recorded', 'commerce.order.support_case_resolved', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.collection_action.recorded', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved', 'commerce.customer_credit_policy.saved']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.support_case_opened', 'commerce.order.support_case_reopened', 'commerce.order.support_case_service_recorded', 'commerce.order.support_case_resolved', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.collection_action.recorded', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved', 'commerce.customer_credit_policy.saved']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.storefront_request.received')
@@ -10979,6 +10984,121 @@ async function verifyStorefrontRuntime() {
     )
     buyingAssert(resolvedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]?.status === 'resolved',
       'ecommerce_support_case_did_not_resolve')
+    const resolvedSupportCase = resolvedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    const supportReopenExpectation = resolvedSupportCase && commerce.commerceOrderSupportReopenExpectation(
+      resolvedSupportState,
+      completedOrder.id,
+      resolvedSupportCase.caseId,
+    )
+    const reopenedSupportState = supportReopenExpectation && commerce.reopenCommerceOrderSupportCase(
+      resolvedSupportState,
+      {
+        orderId: completedOrder.id,
+        caseId: resolvedSupportCase.caseId,
+        sourceResolutionActionId: resolvedSupportCase.resolution.proof.actionId,
+        owner: 'Follow-up owner',
+        priority: 'high',
+        dueAt: '2026-07-24T14:00:00.000Z',
+        note: 'Customer issue recurred after the retained resolution.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-REOPEN-1',
+        capturedAt: '2026-07-24T10:00:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Reopen one linked follow-up without sending a message.',
+        evidenceReference: `SUPPORT-REOPEN:${resolvedSupportCase.caseId}:${resolvedSupportCase.resolution.proof.actionId}`,
+      },
+      supportReopenExpectation,
+    )
+    const reopenedSupportCase = reopenedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    const reopenedService = reopenedSupportCase && commerce.commerceSupportServiceState(reopenedSupportCase)
+    const reopenedCheckpoints = reopenedSupportCase && commerce.commerceSupportCheckpointState(reopenedSupportCase)
+    buyingAssert(reopenedSupportCase?.status === 'open'
+      && reopenedSupportCase.resolution?.proof.actionId === 'ACT-ECOMMERCE-SUPPORT-RESOLVE-1'
+      && reopenedService?.owner === 'Follow-up owner'
+      && reopenedCheckpoints?.acknowledged === null
+      && reopenedSupportCase.externalMessageSent === false,
+    'ecommerce_support_reopen_did_not_reset_retained_followup')
+    const followUpAckExpectation = commerce.commerceOrderSupportServiceExpectation(
+      reopenedSupportState,
+      completedOrder.id,
+      reopenedSupportCase.caseId,
+    )
+    const followUpAcknowledgedState = commerce.recordCommerceOrderSupportServiceEvent(
+      reopenedSupportState,
+      {
+        orderId: completedOrder.id,
+        caseId: reopenedSupportCase.caseId,
+        kind: 'acknowledged',
+        owner: 'Follow-up owner',
+        priority: 'high',
+        dueAt: '2026-07-24T14:00:00.000Z',
+        note: 'Follow-up owner accepted the reopened case.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-FOLLOWUP-ACK-1',
+        capturedAt: '2026-07-24T10:01:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Acknowledge the linked follow-up.',
+        evidenceReference: `SUPPORT-SERVICE:${reopenedSupportCase.caseId}`,
+      },
+      followUpAckExpectation,
+    )
+    const followUpAckCase = followUpAcknowledgedState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    const followUpResponseExpectation = followUpAckCase && commerce.commerceOrderSupportServiceExpectation(
+      followUpAcknowledgedState,
+      completedOrder.id,
+      followUpAckCase.caseId,
+    )
+    const followUpResponseState = followUpResponseExpectation && commerce.recordCommerceOrderSupportServiceEvent(
+      followUpAcknowledgedState,
+      {
+        orderId: completedOrder.id,
+        caseId: followUpAckCase.caseId,
+        kind: 'first_response_ready',
+        owner: 'Follow-up owner',
+        priority: 'high',
+        dueAt: '2026-07-24T14:00:00.000Z',
+        note: 'Follow-up response is ready for independent delivery.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-FOLLOWUP-RESPONSE-1',
+        capturedAt: '2026-07-24T10:02:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Record follow-up response readiness without sending a message.',
+        evidenceReference: `SUPPORT-SERVICE:${followUpAckCase.caseId}`,
+      },
+      followUpResponseExpectation,
+    )
+    const followUpResponseCase = followUpResponseState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    const followUpResolveExpectation = followUpResponseCase && commerce.commerceOrderSupportResolveExpectation(
+      followUpResponseState,
+      completedOrder.id,
+      followUpResponseCase.caseId,
+    )
+    const followUpResolvedState = followUpResolveExpectation && commerce.resolveCommerceOrderSupportCase(
+      followUpResponseState,
+      {
+        orderId: completedOrder.id,
+        caseId: followUpResponseCase.caseId,
+        outcome: 'information_provided',
+        note: 'Follow-up was reviewed and closed separately.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-FOLLOWUP-RESOLVE-1',
+        capturedAt: '2026-07-24T10:03:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Close the retained follow-up cycle.',
+        evidenceReference: `SUPPORT-RESOLUTION:${followUpResponseCase.caseId}`,
+      },
+      followUpResolveExpectation,
+    )
+    const followUpResolvedCase = followUpResolvedState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    buyingAssert(followUpResolvedCase?.status === 'resolved'
+      && followUpResolvedCase.resolution?.proof.actionId === 'ACT-ECOMMERCE-SUPPORT-RESOLVE-1'
+      && followUpResolvedCase.followUpResolution?.proof.actionId === 'ACT-ECOMMERCE-SUPPORT-FOLLOWUP-RESOLVE-1'
+      && commerce.commerceOrderSupportReopenExpectation(followUpResolvedState, completedOrder.id, followUpResolvedCase.caseId) === null,
+    'ecommerce_support_followup_did_not_retain_both_resolutions')
     const paidConfirmedState = linkedOrderState && commerce.reconcileCommercePayment(linkedOrderState, 'ORD-ECOMMERCE-1', {
       actionId: 'ACT-ECOMMERCE-PAID-CANCEL-1',
       capturedAt: '2026-07-24T09:20:00.000Z',
