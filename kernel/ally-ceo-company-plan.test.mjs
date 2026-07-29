@@ -53,7 +53,7 @@ function portfolio(overrides = {}) {
   })
 }
 
-test('CEO planning selects one two-specialist daily control manifest with zero planning side effects', async () => {
+test('CEO planning selects one scale-to-zero specialist with deterministic control and zero planning side effects', async () => {
   const result = await buildAllyCeoCompanyPlan({
     now: '2026-07-29T00:00:00.000Z',
     hqNow: now,
@@ -63,7 +63,7 @@ test('CEO planning selects one two-specialist daily control manifest with zero p
 
   assert.equal(result.ok, true)
   assert.equal(result.outcomeId, 'daily-company-control')
-  assert.deepEqual(result.manifest.agents, ['operations-analyst', 'project-controller'])
+  assert.deepEqual(result.manifest.agents, ['operations-analyst'])
   assert.equal(result.manifest.cycleId, 'ally-ceo-20260729-daily-company-control')
   assert.equal(result.manifest.roleBudget, result.plan.budget.plannedRoles)
   assert.equal(result.plan.budget.remainingRoles, 0)
@@ -74,6 +74,7 @@ test('CEO planning selects one two-specialist daily control manifest with zero p
   assert.equal(result.controls.planningModelCalls, 0)
   assert.equal(result.controls.planningConnectorRequests, 0)
   assert.equal(result.controls.maxConcurrentAllyRuns, 1)
+  assert.equal(result.controls.maxAgents, 1)
   assert.equal(result.controls.scaleToZero, true)
   assert.equal(result.preflight.expectedRunId, result.plan.runId)
   assert.equal(result.preflight.controls.planOnlyDefault, true)
@@ -82,11 +83,11 @@ test('CEO planning selects one two-specialist daily control manifest with zero p
 
 test('completed outcomes rotate through all five fixed teams and then stop', async () => {
   const sequence = [
-    ['daily-company-control', ['operations-analyst', 'project-controller']],
-    ['engineering-release-control', ['proof-builder', 'quality-reviewer']],
-    ['product-portfolio-control', ['operations-analyst', 'quality-reviewer']],
-    ['growth-pipeline-control', ['sales-qualifier', 'project-controller']],
-    ['finance-risk-control', ['operations-analyst', 'cash-reconciler']],
+    ['daily-company-control', ['operations-analyst']],
+    ['engineering-release-control', ['proof-builder']],
+    ['product-portfolio-control', ['operations-analyst']],
+    ['growth-pipeline-control', ['sales-qualifier']],
+    ['finance-risk-control', ['cash-reconciler']],
   ]
   const completedOutcomeIds = []
   for (const [outcomeId, agents] of sequence) {

@@ -19,8 +19,8 @@ const defaultLocalCompanyHome = resolve(root, '..', 'supermega-local-company-sta
 const powershell = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const MAX_COMMAND_BYTES = 512 * 1024
 const MAX_REPORT_BYTES = 256 * 1024
-const EXECUTION_SPEC_VERSION = '2026-07-29.19'
-const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
+const EXECUTION_SPEC_VERSION = '2026-07-29.20'
+const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
 const MEMORY_RECOVERY_BLOCKERS = Object.freeze(new Set(['memory_pressure_critical', 'codex_working_set_high']))
 
 const AGENT_ROLE_MAP = Object.freeze({
@@ -46,6 +46,13 @@ const OUTCOME_SEQUENCE = Object.freeze([
   'growth-pipeline-control',
   'finance-risk-control',
 ])
+const LEGACY_OUTCOME_ROLES = Object.freeze({
+  'daily-company-control': Object.freeze(['operations', 'chief-of-staff']),
+  'engineering-release-control': Object.freeze(['engineering', 'quality']),
+  'product-portfolio-control': Object.freeze(['operations', 'quality']),
+  'growth-pipeline-control': Object.freeze(['sales', 'chief-of-staff']),
+  'finance-risk-control': Object.freeze(['operations', 'finance']),
+})
 const LEGACY_REPAIRABLE_REASONS = Object.freeze(new Set([
   'ally_ceo_local_cycle_report_semantics_rejected',
   'ally_ceo_local_cycle_report_citations_rejected',
@@ -87,14 +94,14 @@ function planSpec(plan) {
     || plan.declined !== false
     || !/^[a-f0-9]{64}$/.test(hash)
     || !Array.isArray(agents)
-    || agents.length !== 2
-    || new Set(agents).size !== 2
+    || agents.length !== 1
+    || new Set(agents).size !== 1
     || plan.manifest?.roleBudget !== plan.plan?.budget?.plannedRoles
     || plan.plan?.budget?.remainingRoles !== 0
     || plan.controls?.planningModelCalls !== 0
     || plan.controls?.planningConnectorRequests !== 0
     || plan.controls?.planningExternalWrites !== false
-    || plan.controls?.maxAgents !== 2
+    || plan.controls?.maxAgents !== 1
     || plan.controls?.maxConcurrentAllyRuns !== 1
     || plan.controls?.scaleToZero !== true
     || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(generatedAt)
@@ -103,7 +110,7 @@ function planSpec(plan) {
     fail('ally_ceo_local_cycle_plan_invalid')
   }
   const roles = agents.map((agent) => AGENT_ROLE_MAP[agent])
-  if (roles.some((role) => !role) || new Set(roles).size !== 2 || !OUTCOME_BRIEFS[outcomeId]) {
+  if (roles.some((role) => !role) || new Set(roles).size !== 1 || !OUTCOME_BRIEFS[outcomeId]) {
     fail('ally_ceo_local_cycle_team_invalid')
   }
   const planShortHash = hash.slice(0, 12)
@@ -114,12 +121,14 @@ function planSpec(plan) {
     outcomeId,
     roles.join(','),
   ].join('|'))
+  const legacyRoles = LEGACY_OUTCOME_ROLES[outcomeId]
+  if (!legacyRoles) fail('ally_ceo_local_cycle_legacy_team_invalid')
   const legacyShortHashes = LEGACY_EXECUTION_SPEC_VERSIONS.map((version) => sha256([
     ALLY_CEO_LOCAL_CYCLE_CONTRACT,
     version,
     hash,
     outcomeId,
-    roles.join(','),
+    legacyRoles.join(','),
   ].join('|')).slice(0, 12))
   const shortHash = cycleHash.slice(0, 12)
   const outcomeMarker = `[ALLY_CEO_OUTCOME:${period}:${outcomeId}]`
@@ -514,7 +523,7 @@ function balancedSpecialistDelimiters(text) {
 }
 
 function validateSpecialistSections(text, requiredRoles) {
-  if (!Array.isArray(requiredRoles) || requiredRoles.length !== 2 || new Set(requiredRoles).size !== 2) {
+  if (!Array.isArray(requiredRoles) || requiredRoles.length !== 1 || new Set(requiredRoles).size !== 1) {
     fail('ally_ceo_local_cycle_specialist_roles_invalid')
   }
   for (const role of requiredRoles) {

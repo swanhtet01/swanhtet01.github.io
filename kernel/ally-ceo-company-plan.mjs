@@ -12,11 +12,11 @@ const SOCIAL_SIGNAL_RE = /(?:https?:\/\/)?(?:[^\s/]+\.)?(?:instagram\.com|linked
 const SENSITIVE_VALUE_RE = /(?:-----BEGIN [A-Z ]+PRIVATE KEY-----|\b(?:sk-proj|ghp|gho|glpat|xoxb|xoxp|xoxa|xoxr)-[A-Za-z0-9_-]{16,})/i
 
 const OUTCOME_AGENTS = Object.freeze({
-  'daily-company-control': Object.freeze(['operations-analyst', 'project-controller']),
-  'engineering-release-control': Object.freeze(['proof-builder', 'quality-reviewer']),
-  'product-portfolio-control': Object.freeze(['operations-analyst', 'quality-reviewer']),
-  'growth-pipeline-control': Object.freeze(['sales-qualifier', 'project-controller']),
-  'finance-risk-control': Object.freeze(['operations-analyst', 'cash-reconciler']),
+  'daily-company-control': Object.freeze(['operations-analyst']),
+  'engineering-release-control': Object.freeze(['proof-builder']),
+  'product-portfolio-control': Object.freeze(['operations-analyst']),
+  'growth-pipeline-control': Object.freeze(['sales-qualifier']),
+  'finance-risk-control': Object.freeze(['cash-reconciler']),
 })
 
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value)
@@ -152,7 +152,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
   }
 
   const agents = OUTCOME_AGENTS[selection.selected.id]
-  if (!agents || agents.length !== 2) fail('ally_ceo_company_plan_outcome_unmapped')
+  if (!agents || agents.length !== 1) fail('ally_ceo_company_plan_outcome_unmapped')
   const currentState = [
     markdownSection(hqNow, 'North-star outcome'),
     markdownSection(hqNow, 'Portfolio correction'),
@@ -187,19 +187,6 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
       successMeasure: selection.selected.successMeasure,
       currentState,
       portfolio,
-      sourceReceipts,
-      controls: sharedControls,
-    },
-    [agents[1]]: {
-      acceptedOutcome: selection.selected.deliverable,
-      successMeasure: selection.selected.successMeasure,
-      executionOrder,
-      reviewRules: [
-        'Use only the supplied source receipts and evidence.',
-        'Name missing proof instead of inventing completion.',
-        'Return one bounded next action and its acceptance check.',
-        'Do not send, publish, deploy, pay, change access, or mutate a customer record.',
-      ],
       sourceReceipts,
       controls: sharedControls,
     },
@@ -245,7 +232,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
       planningModelCalls: 0,
       planningConnectorRequests: 0,
       planningExternalWrites: false,
-      maxAgents: 2,
+      maxAgents: 1,
       maxConcurrentAllyRuns: 1,
       scaleToZero: true,
       executionRequiresSeparateApproval: true,

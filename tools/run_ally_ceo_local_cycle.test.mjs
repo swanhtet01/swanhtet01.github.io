@@ -5,11 +5,11 @@ import test from 'node:test'
 import { runAllyCeoLocalCycle } from './run_ally_ceo_local_cycle.mjs'
 
 const outcomeAgents = {
-  'daily-company-control': ['operations-analyst', 'project-controller'],
-  'engineering-release-control': ['proof-builder', 'quality-reviewer'],
-  'product-portfolio-control': ['operations-analyst', 'quality-reviewer'],
-  'growth-pipeline-control': ['sales-qualifier', 'project-controller'],
-  'finance-risk-control': ['operations-analyst', 'cash-reconciler'],
+  'daily-company-control': ['operations-analyst'],
+  'engineering-release-control': ['proof-builder'],
+  'product-portfolio-control': ['operations-analyst'],
+  'growth-pipeline-control': ['sales-qualifier'],
+  'finance-risk-control': ['cash-reconciler'],
 }
 const outcomeSequence = Object.keys(outcomeAgents)
 
@@ -24,15 +24,15 @@ function plan({ outcomeId = 'daily-company-control', hashCharacter = 'a' } = {})
     manifest: {
       cycleId: `ally-ceo-20260729-${outcomeId}`,
       agents: outcomeAgents[outcomeId],
-      roleBudget: 6,
+      roleBudget: 3,
     },
     preflight: { expectedPlanHash: hashCharacter.repeat(64), expectedWorkOrderId: 'company-order:' + 'b'.repeat(40) },
-    plan: { budget: { plannedRoles: 6, remainingRoles: 0 } },
+    plan: { budget: { plannedRoles: 3, remainingRoles: 0 } },
     controls: {
       planningModelCalls: 0,
       planningConnectorRequests: 0,
       planningExternalWrites: false,
-      maxAgents: 2,
+      maxAgents: 1,
       maxConcurrentAllyRuns: 1,
       scaleToZero: true,
     },
@@ -198,7 +198,7 @@ function harness(overrides = {}) {
       model_execution_ready: true,
       blockers: [],
       owner_gate_categories: [],
-      team: { selection: 'explicit', roles: ['operations', 'chief-of-staff'] },
+      team: { selection: 'explicit', roles: ['operations'] },
       knowledge: {
         status: 'ready',
         source_count: 17,
@@ -261,12 +261,12 @@ const acceptedStructuredReport = [
   '## Evidence manifest',
 ].join('\n\n')
 
-test('preflight binds the CEO plan to two local roles without queue or model work', async () => {
+test('preflight binds the CEO plan to one local specialist without queue or model work', async () => {
   const state = harness()
   const result = await runAllyCeoLocalCycle({ execute: false }, { plan: plan(), runCommand: state.runCommand })
   assert.equal(result.ok, true)
   assert.equal(result.status, 'ready')
-  assert.deepEqual(result.roles, ['operations', 'chief-of-staff'])
+  assert.deepEqual(result.roles, ['operations'])
   assert.equal(result.modelCalls, 0)
   assert.equal(result.queueWrites, 0)
   assert.equal(state.calls.some((call) => call.args?.includes('add')), false)
@@ -290,7 +290,7 @@ test('accepted daily evidence rotates the next serial run to Engineering despite
   assert.equal(result.status, 'ready')
   assert.equal(result.outcomeId, 'engineering-release-control')
   assert.deepEqual(result.completedOutcomeIds, ['daily-company-control'])
-  assert.deepEqual(result.roles, ['engineering', 'quality'])
+  assert.deepEqual(result.roles, ['engineering'])
   assert.equal(result.modelCalls, 0)
   assert.equal(state.calls.filter((call) => call.args?.[0] === 'show').length, 1)
 })
@@ -417,7 +417,7 @@ test('execution claims the exact reviewed mission once and accepts only a qualit
   assert.equal(result.modelCalls, 3)
   const add = state.calls.find((call) => call.args?.[1] === 'add')
   assert.equal(add.args.includes('--roles'), true)
-  assert.equal(add.args.includes('operations,chief-of-staff'), true)
+  assert.equal(add.args.includes('operations'), true)
   assert.match(add.args[2], /Proposed next action, Assumption, and Missing proof/)
   const run = state.calls.find((call) => call.args?.[1] === 'run-next')
   assert.deepEqual(run.args.slice(0, 4), ['queue', 'run-next', '--queue-id', state.queueId])
