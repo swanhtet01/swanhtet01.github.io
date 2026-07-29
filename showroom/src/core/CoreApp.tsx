@@ -82,6 +82,8 @@ import {
   commerceSupportQueue,
   commerceSupportSlaSummary,
   commerceSupportServiceState,
+  commerceSupportWorkloadCsv,
+  commerceSupportWorkloadExport,
   commerceOrderItemSummary,
   commerceOrderLocationAllocationPreview,
   commerceOrderNeedsAction,
@@ -1783,6 +1785,19 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
       artifact,
     }
   }, [commerce, latestClose])
+  const supportWorkloadDownload = useMemo(() => {
+    try {
+      const artifact = commerceSupportWorkloadExport(commerce, new Date(purchaseOrderClock).toISOString())
+      if (!artifact.rows.length) return null
+      return {
+        filename: `supermega-shop-support-${artifact.asOf.slice(0, 10)}-${artifact.digest.slice(7, 15)}.csv`,
+        href: `data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${commerceSupportWorkloadCsv(artifact)}`)}`,
+        artifact,
+      }
+    } catch {
+      return null
+    }
+  }, [commerce, purchaseOrderClock])
   const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
   const websiteIntakes = commerceWebsiteIntakes(commerce)
   const localWebsiteIntake = managedIdentity ? null : readWebsiteEcommerceHandoff()
@@ -4994,6 +5009,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
     supportReopenDraft={supportReopenDraft}
     supportServiceDraft={supportServiceDraft}
     supportResolutionDraft={supportResolutionDraft}
+    supportWorkloadDownload={supportWorkloadDownload}
   />
   <details className="core-panel today-more order-daily-controls" id="shop-close-controls">
     <summary><span>Close and exceptions</span><small>{paymentReview.length + lowStock.length} {paymentReview.length + lowStock.length === 1 ? 'item needs' : 'items need'} attention</small></summary>
@@ -5376,6 +5392,7 @@ function ClosedOrderHistory({
   supportReopenDraft,
   supportServiceDraft,
   supportResolutionDraft,
+  supportWorkloadDownload,
 }: {
   canCorrect: (orderId: string) => boolean
   canReturn: (orderId: string) => boolean
@@ -5416,6 +5433,11 @@ function ClosedOrderHistory({
   supportReopenDraft: CommerceSupportReopenDraft | null
   supportServiceDraft: CommerceSupportServiceDraft | null
   supportResolutionDraft: CommerceSupportResolutionDraft | null
+  supportWorkloadDownload: {
+    filename: string
+    href: string
+    artifact: ReturnType<typeof commerceSupportWorkloadExport>
+  } | null
 }) {
   const [page, setPage] = useState(0)
   const supportClock = useMinuteClock()
@@ -5432,6 +5454,10 @@ function ClosedOrderHistory({
   const supportSla = commerceSupportSlaSummary(orders, supportClock)
   return <details className="order-archive" id="shop-order-history" open={Boolean(returnDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) || undefined}>
     <summary><span>Completed and cancelled orders</span><small>{supportWorkQueue.length ? `${supportSla.openCases} help open · ${supportSla.overdueCases} overdue · ` : ''}{orders.length} {orders.length === 1 ? 'record' : 'records'}</small></summary>
+    {supportWorkloadDownload ? <section aria-label="Support workload export" className="order-return-records" data-support-workload="privacy-minimal">
+      <div><strong>Support workload record</strong><small>{supportWorkloadDownload.artifact.summary.totalCases} cases · {supportWorkloadDownload.artifact.summary.reopenedCases} repeat contacts · {supportWorkloadDownload.artifact.summary.responseTargetMisses} target misses</small></div>
+      <div><small>Case and order references, aging, ownership, lifecycle, and service counts only. Customer names, contact details, descriptions, notes, and evidence text are excluded.</small><a className="text-link" download={supportWorkloadDownload.filename} href={supportWorkloadDownload.href}>Download workload CSV</a></div>
+    </section> : null}
     {supportWorkQueue.length ? <section aria-label="Open support queue" className="order-return-records" data-support-queue="ordered">
       <div><strong>Support queue · next work first</strong><small>Overdue, priority, due time, request time</small></div>
       <div data-support-sla="bounded"><strong>Service level</strong><small>{supportSla.awaitingAcknowledgement} awaiting acknowledgement · {supportSla.awaitingFirstResponse} awaiting first response · {supportSla.firstResponseReady} response ready · {supportSla.responseTargetMisses} target missed</small></div>

@@ -21,6 +21,7 @@ export const COMMERCE_ORDER_CALCULATION_V2_SCHEMA = 'supermega.commerce.order-ca
 export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v3' as const
 export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v3' as const
 export const COMMERCE_CLOSE_SETTLEMENT_SCHEMA = 'supermega.commerce.close-settlement.v1' as const
+export const COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA = 'supermega.commerce.support-workload.v1' as const
 const COMMERCE_STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
 export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
 export const LEGACY_COMMERCE_KEYS = ['supermega.commerce.workspace.v1', 'supermega.shop.workspace.v2']
@@ -5842,6 +5843,64 @@ export type CommerceSupportSlaSummary = {
   responseTargetMisses: number
 }
 
+export type CommerceSupportAgeBucket = 'under_4h' | '4_24h' | '1_3d' | 'over_3d'
+
+export type CommerceSupportWorkloadOwner = {
+  owner: string
+  openCases: number
+  overdueCases: number
+}
+
+export type CommerceSupportWorkloadRow = {
+  orderId: string
+  caseId: string
+  category: CommerceSupportCategory
+  status: CommerceOrderSupportCase['status']
+  cycle: 'initial' | 'follow_up'
+  repeatContact: boolean
+  linkedResolutionActionId: string | null
+  priority: CommerceSupportPriority | null
+  owner: string | null
+  dueAt: string | null
+  urgency: CommerceSupportUrgency
+  customerRequestedAt: string
+  cycleOpenedAt: string
+  acknowledgedAt: string | null
+  firstResponseReadyAt: string | null
+  resolvedAt: string | null
+  caseAgeMinutes: number
+  cycleAgeMinutes: number
+  ageBucket: CommerceSupportAgeBucket
+  responseTargetMissed: boolean
+  serviceEventCount: number
+  reassignmentCount: number
+  escalationCount: number
+  initialResolutionOutcome: CommerceSupportResolutionOutcome | null
+  followUpResolutionOutcome: CommerceSupportResolutionOutcome | null
+}
+
+export type CommerceSupportWorkloadExport = {
+  schema: typeof COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA
+  asOf: string
+  digest: string
+  controls: {
+    customerDataIncluded: false
+    freeTextIncluded: false
+    externalActionsPerformed: false
+  }
+  summary: {
+    totalCases: number
+    openCases: number
+    resolvedCases: number
+    reopenedCases: number
+    overdueCases: number
+    responseTargetMisses: number
+    ageBuckets: Record<CommerceSupportAgeBucket, number>
+    ownerWorkload: CommerceSupportWorkloadOwner[]
+  }
+  rows: CommerceSupportWorkloadRow[]
+}
+
 export function commerceSupportServiceState(
   supportCase: CommerceOrderSupportCase,
 ): CommerceSupportServiceState | null {
@@ -5918,6 +5977,127 @@ export function commerceSupportSlaSummary(
     firstResponseReady: 0,
     responseTargetMisses: 0,
   })
+}
+
+function commerceSupportAgeBucket(ageMinutes: number): CommerceSupportAgeBucket {
+  if (ageMinutes < 4 * 60) return 'under_4h'
+  if (ageMinutes < 24 * 60) return '4_24h'
+  if (ageMinutes < 3 * 24 * 60) return '1_3d'
+  return 'over_3d'
+}
+
+function commerceSupportWorkloadDigest(artifact: Omit<CommerceSupportWorkloadExport, 'digest'>) {
+  return `sha256:${sha256Hex(JSON.stringify(artifact))}`
+}
+
+export function commerceSupportWorkloadExport(
+  state: CommerceState,
+  asOf: string,
+): CommerceSupportWorkloadExport {
+  const current = validateCommerceState(state)
+  const asOfMs = Date.parse(asOf)
+  if (!Number.isFinite(asOfMs) || new Date(asOfMs).toISOString() !== asOf) {
+    throw new Error('Support workload as-of time must be one exact UTC timestamp.')
+  }
+  const urgencyRank: Record<CommerceSupportUrgency, number> = {
+    overdue: 0,
+    due_soon: 1,
+    scheduled: 2,
+    untriaged: 3,
+    resolved: 4,
+  }
+  const rows = current.orders.flatMap((order): CommerceSupportWorkloadRow[] => (order.supportCases ?? []).map((supportCase) => {
+    const allEvents = [...(supportCase.serviceEvents ?? []), ...(supportCase.followUpServiceEvents ?? [])]
+    const service = commerceSupportServiceState(supportCase)
+    const checkpoints = commerceSupportCheckpointState(supportCase)
+    const currentResolution = supportCase.reopen ? supportCase.followUpResolution : supportCase.resolution
+    const resolvedAt = supportCase.status === 'resolved' ? currentResolution?.proof.capturedAt ?? null : null
+    const cycleOpenedAt = supportCase.reopen?.proof.capturedAt ?? supportCase.opening.capturedAt
+    const retainedEventTimes = [
+      supportCase.customerRequestedAt,
+      supportCase.opening.capturedAt,
+      ...(supportCase.serviceEvents ?? []).map((event) => event.proof.capturedAt),
+      ...(supportCase.resolution ? [supportCase.resolution.proof.capturedAt] : []),
+      ...(supportCase.reopen ? [supportCase.reopen.proof.capturedAt] : []),
+      ...(supportCase.followUpServiceEvents ?? []).map((event) => event.proof.capturedAt),
+      ...(supportCase.followUpResolution ? [supportCase.followUpResolution.proof.capturedAt] : []),
+    ]
+    if (retainedEventTimes.some((timestamp) => Date.parse(timestamp) > asOfMs)) {
+      throw new Error(`Support workload as-of time precedes retained evidence for ${supportCase.caseId}.`)
+    }
+    const caseEndMs = resolvedAt ? Date.parse(resolvedAt) : asOfMs
+    const cycleEndMs = resolvedAt ? Date.parse(resolvedAt) : asOfMs
+    const caseAgeMinutes = Math.max(0, Math.floor((caseEndMs - Date.parse(supportCase.customerRequestedAt)) / 60_000))
+    const cycleAgeMinutes = Math.max(0, Math.floor((cycleEndMs - Date.parse(cycleOpenedAt)) / 60_000))
+    const responseTargetMissed = checkpoints.firstResponseReady
+      ? Date.parse(checkpoints.firstResponseReady.proof.capturedAt) > Date.parse(checkpoints.firstResponseReady.dueAt)
+      : service !== null && Date.parse(service.dueAt) <= asOfMs
+    return {
+      orderId: order.id,
+      caseId: supportCase.caseId,
+      category: supportCase.category,
+      status: supportCase.status,
+      cycle: supportCase.reopen ? 'follow_up' : 'initial',
+      repeatContact: Boolean(supportCase.reopen),
+      linkedResolutionActionId: supportCase.reopen?.sourceResolutionActionId ?? null,
+      priority: service?.priority ?? null,
+      owner: service?.owner ?? null,
+      dueAt: service?.dueAt ?? null,
+      urgency: commerceSupportCaseUrgency(supportCase, asOfMs),
+      customerRequestedAt: supportCase.customerRequestedAt,
+      cycleOpenedAt,
+      acknowledgedAt: checkpoints.acknowledged?.proof.capturedAt ?? null,
+      firstResponseReadyAt: checkpoints.firstResponseReady?.proof.capturedAt ?? null,
+      resolvedAt,
+      caseAgeMinutes,
+      cycleAgeMinutes,
+      ageBucket: commerceSupportAgeBucket(caseAgeMinutes),
+      responseTargetMissed,
+      serviceEventCount: allEvents.length,
+      reassignmentCount: allEvents.filter((event) => event.kind === 'reassigned').length,
+      escalationCount: allEvents.filter((event) => event.kind === 'escalated').length,
+      initialResolutionOutcome: supportCase.resolution?.outcome ?? null,
+      followUpResolutionOutcome: supportCase.followUpResolution?.outcome ?? null,
+    }
+  }))
+    .sort((left, right) => Number(left.status === 'resolved') - Number(right.status === 'resolved')
+      || urgencyRank[left.urgency] - urgencyRank[right.urgency]
+      || (left.dueAt ?? '9999').localeCompare(right.dueAt ?? '9999')
+      || left.customerRequestedAt.localeCompare(right.customerRequestedAt)
+      || left.caseId.localeCompare(right.caseId))
+  const ageBuckets: Record<CommerceSupportAgeBucket, number> = { under_4h: 0, '4_24h': 0, '1_3d': 0, over_3d: 0 }
+  const ownerMap = new Map<string, CommerceSupportWorkloadOwner>()
+  for (const row of rows) {
+    ageBuckets[row.ageBucket] += 1
+    if (row.status !== 'open' || !row.owner) continue
+    const owner = ownerMap.get(row.owner) ?? { owner: row.owner, openCases: 0, overdueCases: 0 }
+    owner.openCases += 1
+    if (row.urgency === 'overdue') owner.overdueCases += 1
+    ownerMap.set(row.owner, owner)
+  }
+  const unsigned: Omit<CommerceSupportWorkloadExport, 'digest'> = {
+    schema: COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA,
+    asOf,
+    controls: {
+      customerDataIncluded: false,
+      freeTextIncluded: false,
+      externalActionsPerformed: false,
+    },
+    summary: {
+      totalCases: rows.length,
+      openCases: rows.filter((row) => row.status === 'open').length,
+      resolvedCases: rows.filter((row) => row.status === 'resolved').length,
+      reopenedCases: rows.filter((row) => row.repeatContact).length,
+      overdueCases: rows.filter((row) => row.urgency === 'overdue').length,
+      responseTargetMisses: rows.filter((row) => row.responseTargetMissed).length,
+      ageBuckets,
+      ownerWorkload: [...ownerMap.values()].sort((left, right) => right.overdueCases - left.overdueCases
+        || right.openCases - left.openCases
+        || left.owner.localeCompare(right.owner)),
+    },
+    rows,
+  }
+  return { ...unsigned, digest: commerceSupportWorkloadDigest(unsigned) }
 }
 
 export function recordCommerceOrderSupportCase(
@@ -6712,6 +6892,96 @@ function commerceCsvCell(value: string | number | null | string[]) {
   let raw = Array.isArray(value) ? value.join(';') : value === null ? '' : String(value)
   if (/^[=+@-]/.test(raw)) raw = `'${raw}`
   return `"${raw.replace(/"/g, '""')}"`
+}
+
+export function commerceSupportWorkloadCsv(artifact: CommerceSupportWorkloadExport) {
+  const { digest, ...unsigned } = artifact
+  if (artifact.schema !== COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA
+    || digest !== commerceSupportWorkloadDigest(unsigned)) {
+    throw new Error('Support workload export integrity check failed.')
+  }
+  const header = [
+    'schema',
+    'digest',
+    'as_of',
+    'total_cases',
+    'open_cases',
+    'resolved_cases',
+    'reopened_cases',
+    'overdue_cases',
+    'response_target_misses',
+    'owner_workload_json',
+    'case_id',
+    'order_id',
+    'category',
+    'status',
+    'cycle',
+    'repeat_contact',
+    'linked_resolution_action_id',
+    'priority',
+    'owner',
+    'due_at',
+    'urgency',
+    'customer_requested_at',
+    'cycle_opened_at',
+    'acknowledged_at',
+    'first_response_ready_at',
+    'resolved_at',
+    'case_age_minutes',
+    'cycle_age_minutes',
+    'age_bucket',
+    'response_target_missed',
+    'service_event_count',
+    'reassignment_count',
+    'escalation_count',
+    'initial_resolution_outcome',
+    'follow_up_resolution_outcome',
+    'customer_data_included',
+    'free_text_included',
+    'external_actions_performed',
+  ]
+  const sourceRows: Array<CommerceSupportWorkloadRow | null> = artifact.rows.length ? artifact.rows : [null]
+  const rows = sourceRows.map((row) => [
+    artifact.schema,
+    artifact.digest,
+    artifact.asOf,
+    artifact.summary.totalCases,
+    artifact.summary.openCases,
+    artifact.summary.resolvedCases,
+    artifact.summary.reopenedCases,
+    artifact.summary.overdueCases,
+    artifact.summary.responseTargetMisses,
+    JSON.stringify(artifact.summary.ownerWorkload),
+    row?.caseId ?? null,
+    row?.orderId ?? null,
+    row?.category ?? null,
+    row?.status ?? null,
+    row?.cycle ?? null,
+    row ? String(row.repeatContact) : null,
+    row?.linkedResolutionActionId ?? null,
+    row?.priority ?? null,
+    row?.owner ?? null,
+    row?.dueAt ?? null,
+    row?.urgency ?? null,
+    row?.customerRequestedAt ?? null,
+    row?.cycleOpenedAt ?? null,
+    row?.acknowledgedAt ?? null,
+    row?.firstResponseReadyAt ?? null,
+    row?.resolvedAt ?? null,
+    row?.caseAgeMinutes ?? null,
+    row?.cycleAgeMinutes ?? null,
+    row?.ageBucket ?? null,
+    row ? String(row.responseTargetMissed) : null,
+    row?.serviceEventCount ?? null,
+    row?.reassignmentCount ?? null,
+    row?.escalationCount ?? null,
+    row?.initialResolutionOutcome ?? null,
+    row?.followUpResolutionOutcome ?? null,
+    String(artifact.controls.customerDataIncluded),
+    String(artifact.controls.freeTextIncluded),
+    String(artifact.controls.externalActionsPerformed),
+  ].map(commerceCsvCell).join(','))
+  return [header.map(commerceCsvCell).join(','), ...rows].join('\r\n')
 }
 
 export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {

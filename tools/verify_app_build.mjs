@@ -2806,6 +2806,9 @@ if (!commerceSource.includes('export type CommerceOrderSupportCase')
   || !commerceSource.includes('export function commerceSupportCheckpointState')
   || !commerceSource.includes('export function commerceSupportQueue')
   || !commerceSource.includes('export function commerceSupportSlaSummary')
+  || !commerceSource.includes('export function commerceSupportWorkloadExport')
+  || !commerceSource.includes('export function commerceSupportWorkloadCsv')
+  || !commerceSource.includes("COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA = 'supermega.commerce.support-workload.v1'")
   || !commerceSource.includes('export function commerceOrderSupportServiceExpectation')
   || !commerceSource.includes('export function recordCommerceOrderSupportServiceEvent')
   || !commerceSource.includes('export function commerceOrderSupportReopenExpectation')
@@ -2818,6 +2821,8 @@ if (!commerceSource.includes('export type CommerceOrderSupportCase')
   || !coreSource.includes('Assign service responsibility before opening.')
   || !coreSource.includes('data-support-urgency={urgency}')
   || !coreSource.includes('data-support-sla="bounded"')
+  || !coreSource.includes('data-support-workload="privacy-minimal"')
+  || !coreSource.includes('Download workload CSV')
   || !coreSource.includes('Support queue · next work first')
   || !coreSource.includes('First response ready for independent delivery')
   || !coreSource.includes("onOpenSupportService(order.id, supportCase.caseId, 'acknowledged')")
@@ -11099,6 +11104,70 @@ async function verifyStorefrontRuntime() {
       && followUpResolvedCase.followUpResolution?.proof.actionId === 'ACT-ECOMMERCE-SUPPORT-FOLLOWUP-RESOLVE-1'
       && commerce.commerceOrderSupportReopenExpectation(followUpResolvedState, completedOrder.id, followUpResolvedCase.caseId) === null,
     'ecommerce_support_followup_did_not_retain_both_resolutions')
+    const openSupportWorkload = commerce.commerceSupportWorkloadExport(
+      reopenedSupportState,
+      '2026-07-24T15:00:00.000Z',
+    )
+    buyingAssert(openSupportWorkload.schema === 'supermega.commerce.support-workload.v1'
+      && openSupportWorkload.summary.totalCases === 1
+      && openSupportWorkload.summary.openCases === 1
+      && openSupportWorkload.summary.reopenedCases === 1
+      && openSupportWorkload.summary.overdueCases === 1
+      && openSupportWorkload.summary.responseTargetMisses === 1
+      && openSupportWorkload.summary.ownerWorkload[0]?.owner === 'Follow-up owner'
+      && openSupportWorkload.summary.ownerWorkload[0]?.openCases === 1,
+    'ecommerce_support_workload_summary_not_operational')
+    const openSupportWorkloadRow = openSupportWorkload.rows[0]
+    buyingAssert(openSupportWorkloadRow?.caseId === reopenedSupportCase.caseId
+      && openSupportWorkloadRow.orderId === completedOrder.id
+      && openSupportWorkloadRow.cycle === 'follow_up'
+      && openSupportWorkloadRow.linkedResolutionActionId === 'ACT-ECOMMERCE-SUPPORT-RESOLVE-1'
+      && openSupportWorkloadRow.urgency === 'overdue'
+      && openSupportWorkloadRow.resolvedAt === null,
+    'ecommerce_support_workload_row_not_linked_or_aged')
+    buyingAssert(openSupportWorkload.controls.customerDataIncluded === false
+      && openSupportWorkload.controls.freeTextIncluded === false
+      && openSupportWorkload.controls.externalActionsPerformed === false
+      && !JSON.stringify(openSupportWorkload).includes(supportIntent.description)
+      && !JSON.stringify(openSupportWorkload).includes('Customer issue recurred after the retained resolution.')
+      && !JSON.stringify(openSupportWorkload).includes('OP-OWNER'),
+    'ecommerce_support_workload_retained_private_or_free_text_data')
+    const supportWorkloadCsv = commerce.commerceSupportWorkloadCsv(openSupportWorkload)
+    buyingAssert(supportWorkloadCsv.includes('customer_data_included')
+      && supportWorkloadCsv.includes(reopenedSupportCase.caseId)
+      && !supportWorkloadCsv.includes(supportIntent.description)
+      && !supportWorkloadCsv.includes('Customer issue recurred after the retained resolution.')
+      && !supportWorkloadCsv.includes('OP-OWNER'),
+    'ecommerce_support_workload_csv_not_privacy_minimal')
+    const formulaSupportState = structuredClone(reopenedSupportState)
+    formulaSupportState.orders.find((order) => order.id === completedOrder.id).supportCases[0].reopen.owner = '=CMD()'
+    const formulaSupportCsv = commerce.commerceSupportWorkloadCsv(commerce.commerceSupportWorkloadExport(
+      formulaSupportState,
+      '2026-07-24T15:00:00.000Z',
+    ))
+    buyingAssert(formulaSupportCsv.includes('"\'=CMD()"'), 'ecommerce_support_workload_formula_cell_not_neutralized')
+    let supportWorkloadTamperRejected = false
+    try {
+      commerce.commerceSupportWorkloadCsv({
+        ...structuredClone(openSupportWorkload),
+        summary: { ...openSupportWorkload.summary, openCases: 2 },
+      })
+    } catch { supportWorkloadTamperRejected = true }
+    buyingAssert(supportWorkloadTamperRejected, 'ecommerce_support_workload_csv_tamper_accepted')
+    let supportWorkloadBackdatedRejected = false
+    try {
+      commerce.commerceSupportWorkloadExport(reopenedSupportState, '2026-07-24T09:59:00.000Z')
+    } catch { supportWorkloadBackdatedRejected = true }
+    buyingAssert(supportWorkloadBackdatedRejected, 'ecommerce_support_workload_backdated_asof_accepted')
+    const resolvedSupportWorkload = commerce.commerceSupportWorkloadExport(
+      followUpResolvedState,
+      '2026-07-24T15:00:00.000Z',
+    )
+    buyingAssert(resolvedSupportWorkload.summary.resolvedCases === 1
+      && resolvedSupportWorkload.rows[0]?.initialResolutionOutcome === 'information_provided'
+      && resolvedSupportWorkload.rows[0]?.followUpResolutionOutcome === 'information_provided'
+      && resolvedSupportWorkload.rows[0]?.resolvedAt === '2026-07-24T10:03:00.000Z',
+    'ecommerce_support_workload_did_not_retain_both_resolution_outcomes')
     const paidConfirmedState = linkedOrderState && commerce.reconcileCommercePayment(linkedOrderState, 'ORD-ECOMMERCE-1', {
       actionId: 'ACT-ECOMMERCE-PAID-CANCEL-1',
       capturedAt: '2026-07-24T09:20:00.000Z',
