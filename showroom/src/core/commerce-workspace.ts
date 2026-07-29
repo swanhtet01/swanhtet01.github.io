@@ -205,6 +205,72 @@ export function commerceOrderPromiseUrgency(order: CommerceOrder, now: number): 
   return promisedAt - now <= 60 * 60 * 1000 ? 'due_soon' : 'scheduled'
 }
 
+export type CommerceReceivableAgingBucket = 'current' | '1_7' | '8_30' | '31_60' | 'over_60'
+
+export type CommerceReceivableAgingRow = {
+  orderId: string
+  customer: string
+  paymentMethod: string
+  dueAt: string
+  balanceMmk: number
+  daysPastDue: number
+  bucket: CommerceReceivableAgingBucket
+}
+
+export type CommerceReceivablesAging = {
+  asOf: string
+  rows: CommerceReceivableAgingRow[]
+  totalsMmk: Record<CommerceReceivableAgingBucket, number>
+  totalOutstandingMmk: number
+  overdueOrders: number
+  overdueMmk: number
+}
+
+const receivableBuckets: CommerceReceivableAgingBucket[] = ['current', '1_7', '8_30', '31_60', 'over_60']
+const dayMilliseconds = 24 * 60 * 60 * 1000
+
+function receivableBucket(daysPastDue: number): CommerceReceivableAgingBucket {
+  if (daysPastDue <= 0) return 'current'
+  if (daysPastDue <= 7) return '1_7'
+  if (daysPastDue <= 30) return '8_30'
+  if (daysPastDue <= 60) return '31_60'
+  return 'over_60'
+}
+
+export function commerceReceivablesAging(state: CommerceState, now: number): CommerceReceivablesAging {
+  const safeNow = Number.isFinite(now) ? now : 0
+  const rows = state.orders
+    .filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending')
+    .flatMap((order): CommerceReceivableAgingRow[] => {
+      const dueAt = order.promisedAt ?? order.createdAt
+      const dueTime = Date.parse(dueAt)
+      if (!Number.isFinite(dueTime) || !Number.isSafeInteger(order.total) || order.total < 0) return []
+      const daysPastDue = safeNow > dueTime ? Math.ceil((safeNow - dueTime) / dayMilliseconds) : 0
+      return [{
+        orderId: order.id,
+        customer: order.customer,
+        paymentMethod: order.payment,
+        dueAt,
+        balanceMmk: order.total,
+        daysPastDue,
+        bucket: receivableBucket(daysPastDue),
+      }]
+    })
+    .sort((left, right) => right.daysPastDue - left.daysPastDue || left.dueAt.localeCompare(right.dueAt) || left.orderId.localeCompare(right.orderId))
+  const totalsMmk = Object.fromEntries(receivableBuckets.map((bucket) => [
+    bucket,
+    rows.filter((row) => row.bucket === bucket).reduce((sum, row) => sum + row.balanceMmk, 0),
+  ])) as Record<CommerceReceivableAgingBucket, number>
+  return {
+    asOf: new Date(safeNow).toISOString(),
+    rows,
+    totalsMmk,
+    totalOutstandingMmk: rows.reduce((sum, row) => sum + row.balanceMmk, 0),
+    overdueOrders: rows.filter((row) => row.daysPastDue > 0).length,
+    overdueMmk: rows.filter((row) => row.daysPastDue > 0).reduce((sum, row) => sum + row.balanceMmk, 0),
+  }
+}
+
 export type CommerceProductionMaterialUnit = 'kg' | 'g' | 'l' | 'ml' | 'pcs' | 'pack' | 'bag' | 'roll' | 'sheet' | 'm' | 'cm'
 
 export type CommerceProductionMaterialRequest = {

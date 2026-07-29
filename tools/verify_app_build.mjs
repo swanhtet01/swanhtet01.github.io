@@ -1501,6 +1501,9 @@ if (!coreSource.includes('Record a refund already completed with the external pa
 if (!coreSource.includes("'commerce.refund.settled'")
   || !coreSource.includes('settleCommerceRefund(current, orderId, commerceActionProof(action))')
   || !coreSource.includes("kind: 'refund_settle'")) fail('commerce_refund_settlement_gate_missing')
+if (!coreSource.includes('Payment follow-up')
+  || !coreSource.includes('Until customer credit terms are configured, the promised fulfilment time is the payment due time.')
+  || !commerceSource.includes('export function commerceReceivablesAging')) fail('commerce_receivables_aging_ui_contract_missing')
 if (!coreSource.includes('data-order-calculation-note="true"')
   || !coreSource.includes('Recorded total {formatMoney(order.total)} · Tax status not recorded')
   || !coreSource.includes('formatCommerceCalculation(calculationReview)')
@@ -6866,10 +6869,23 @@ async function verifyCommerceRuntime() {
       && ready?.orders[0].status === 'ready'
       && JSON.stringify(ready.orders[0].advancementActionIds) === JSON.stringify([preparingProof.actionId, readyProof.actionId]),
     'fulfilment_progression_failed')
+    const currentReceivables = model.commerceReceivablesAging(ready, Date.parse('2026-07-23T10:00:00.000Z'))
+    assert(currentReceivables.rows.length === 1
+      && currentReceivables.rows[0].bucket === 'current'
+      && currentReceivables.totalsMmk.current === 200
+      && currentReceivables.overdueMmk === 0,
+    'current_receivable_aging_projection_invalid')
+    const overdueReceivables = model.commerceReceivablesAging(ready, Date.parse('2026-07-23T11:00:01.000Z'))
+    assert(overdueReceivables.rows[0].bucket === '1_7'
+      && overdueReceivables.rows[0].daysPastDue === 1
+      && overdueReceivables.overdueOrders === 1
+      && overdueReceivables.overdueMmk === 200,
+    'overdue_receivable_aging_projection_invalid')
     assert(model.advanceCommerceOrder(ready, order.id, 'ready') === null, 'pending_payment_completed_order')
     const paymentProof = proof('ACT-PAYMENT', 1_000)
     const reconciled = model.reconcileCommercePayment(ready, order.id, paymentProof)
     assert(reconciled?.orders[0].paymentStatus === 'reconciled' && reconciled.orders[0].paymentReconciledBy === paymentProof.actor && reconciled.orders[0].paymentEvidenceReference === paymentProof.evidenceReference, 'payment_reconciliation_lost_human_evidence')
+    assert(model.commerceReceivablesAging(reconciled, Date.parse('2026-07-24T11:00:00.000Z')).rows.length === 0, 'reconciled_payment_remained_receivable')
     assert(model.reconcileCommercePayment(reconciled, order.id, paymentProof) === reconciled, 'exact_payment_retry_not_idempotent')
     assert(model.reconcileCommercePayment(reconciled, order.id, { ...paymentProof, evidenceReference: 'EV-CONFLICT' }) === null, 'conflicting_payment_retry_succeeded')
     const completionProof = proof('ACT-COMPLETE', 2_000)

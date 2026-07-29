@@ -53,6 +53,7 @@ import {
   commerceOrderNeedsAction,
   commerceOrderHasReleasableReservation,
   commerceOrderPromiseUrgency,
+  commerceReceivablesAging,
   compareCommercePurchaseOrderAttention,
   commercePurchaseOrderArrivalUrgency,
   commercePurchaseOrderProgress,
@@ -2469,6 +2470,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     })
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
   const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
+  const receivablesAging = commerceReceivablesAging(commerce, purchaseOrderClock)
   const actionOrders = commerce.orders.filter(commerceOrderNeedsAction).sort(compareCommerceOrderPromise)
   const actionOrderIds = new Set(actionOrders.map((order) => order.id))
   const closedOrders = commerce.orders.filter((order) => !actionOrderIds.has(order.id))
@@ -4615,6 +4617,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       ready={commerce.orders.filter((order) => order.status === 'ready').length}
       refundDue={commerce.orders.filter((order) => order.refundStatus === 'due').length}
     /></Suspense>
+    <ReceivablesAging aging={receivablesAging} />
     <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
       <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span>{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
@@ -4985,6 +4988,36 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   </div>
 
   return null
+}
+
+function ReceivablesAging({ aging }: { aging: ReturnType<typeof commerceReceivablesAging> }) {
+  if (!aging.rows.length) return null
+  const bucketLabels = [
+    ['current', 'Not overdue'],
+    ['1_7', '1-7 days'],
+    ['8_30', '8-30 days'],
+    ['31_60', '31-60 days'],
+    ['over_60', 'Over 60 days'],
+  ] as const
+  return <details className="core-panel receivables-aging" data-overdue-orders={aging.overdueOrders}>
+    <summary>
+      <span><span className="core-eyebrow">Payment follow-up</span><strong>{aging.overdueOrders ? `${aging.overdueOrders} overdue` : 'No overdue orders'}</strong></span>
+      <small>{formatMoney(aging.overdueMmk)} overdue · {formatMoney(aging.totalOutstandingMmk)} pending</small>
+    </summary>
+    <div className="receivables-aging-buckets" aria-label="Receivables aging buckets">
+      {bucketLabels.map(([bucket, label]) => <div key={bucket}>
+        <small>{label}</small>
+        <strong>{formatMoney(aging.totalsMmk[bucket])}</strong>
+      </div>)}
+    </div>
+    <div className="receivables-aging-list">
+      {aging.rows.slice(0, 5).map((row) => <div key={row.orderId}>
+        <span><strong>{row.customer}</strong><small>{row.orderId} · {row.paymentMethod} · due {formatTime(row.dueAt)}</small></span>
+        <span><strong>{formatMoney(row.balanceMmk)}</strong><small>{row.daysPastDue ? `${row.daysPastDue} days overdue` : 'not overdue'}</small></span>
+      </div>)}
+    </div>
+    <p className="form-notice">Until customer credit terms are configured, the promised fulfilment time is the payment due time. Reconcile payment on the order only after evidence is available.</p>
+  </details>
 }
 
 function OrderCalculationNote({ order }: { order: CommerceOrder }) {
