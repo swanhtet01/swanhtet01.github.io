@@ -10,9 +10,12 @@ import { getCurrentPublish, loadWebsiteWorkspace } from '../products/website/web
 import { COMMERCE_KEY, LEGACY_COMMERCE_KEYS } from './commerce-workspace'
 import { BEHAVIOR_TRAIL_KEY, readBehaviorTrail } from './behavior-trail'
 import {
-  mergeManagedApprovals,
   PageHeading,
   RuntimeBadge,
+  type RuntimeHealth,
+} from './CoreApp'
+import {
+  mergeManagedApprovals,
   toManagedApprovalRequest,
   useAccountableActions,
   useApprovalWorkspace,
@@ -20,8 +23,7 @@ import {
   useManagedIdentity,
   useProductionWorkspace,
   useSetupWorkspace,
-  type RuntimeHealth,
-} from './CoreApp'
+} from './workspace-runtime'
 import {
   ACTION_KEY,
   APPROVAL_KEY,
