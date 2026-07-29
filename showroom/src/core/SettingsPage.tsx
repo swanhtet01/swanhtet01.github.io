@@ -1,4 +1,4 @@
-import { lazy, Suspense, type FormEvent, useEffect, useState } from 'react'
+import { lazy, Suspense, type FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
 import {
@@ -73,11 +73,11 @@ import { LEGACY_PRODUCTION_KEYS, PRODUCTION_KEY } from './production-workspace'
 import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } from './team-work'
 import {
   buildClientDemoBlueprint,
-  buildClientDemoKit,
   buildClientDemoRunbook,
   CLIENT_DEMO_KIT_MAX_BYTES,
   CLIENT_DEMO_PREPARATION_MAX_BYTES,
   CLIENT_DEMO_WORKSPACE_STORAGE_KEY,
+  clientDemoKitReadiness,
   clientDemoPreparationBlueprint,
   clientDemoPreparationConfirmationMatches,
   clientDemoPresets,
@@ -262,12 +262,16 @@ export function SettingsPage() {
   const [managedWorkspace, setManagedWorkspace] = useState(currentManagedWorkspace())
   const [managedNotice, setManagedNotice] = useState('')
   const [managedBusy, setManagedBusy] = useState(false)
-  const [demoWorkspace, setDemoWorkspace] = useState<ClientDemoWorkspace | null>(loadClientDemoWorkspace)
+  const [demoWorkspaceSource, setDemoWorkspace] = useState<ClientDemoWorkspace | null>(loadClientDemoWorkspace)
+  const demoWorkspace = useMemo(() => restoreClientDemoWorkspace(demoWorkspaceSource), [demoWorkspaceSource])
   const [demoPresetId, setDemoPresetId] = useState<ClientDemoPresetId>(() => demoWorkspace?.blueprint.client.presetId ?? 'social-seller')
   const [shopIndustryPackId, setShopIndustryPackId] = useState<ShopIndustryPackId>(() => demoWorkspace?.blueprint.client.shopIndustryPackId ?? clientDemoPresets[0].shopIndustryPackId)
   const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => demoWorkspace?.blueprint.client.plantIndustryPackId ?? readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
   const [demoSelections, setDemoSelections] = useState<Partial<Record<SetupProductId, string>>>(() => Object.fromEntries((demoWorkspace?.blueprint.products ?? clientDemoPresets[0].selections).map((selection) => [selection.product, selection.templateId])))
-  const [demoBlueprint, setDemoBlueprint] = useState<ClientDemoBlueprint | null>(() => demoWorkspace?.blueprint ?? null)
+  const [demoBlueprintSource, setDemoBlueprint] = useState<ClientDemoBlueprint | null>(() => demoWorkspace?.blueprint ?? null)
+  const demoKitReadiness = useMemo(() => demoBlueprintSource ? clientDemoKitReadiness(demoBlueprintSource, new Date().toISOString()) : null, [demoBlueprintSource])
+  const demoBlueprint = demoKitReadiness?.kit?.blueprint ?? null
+  const demoRecoveryNeeded = Boolean((demoWorkspaceSource || demoBlueprintSource) && (!demoWorkspace || !demoBlueprint))
   const [demoDataSetupOpen, setDemoDataSetupOpen] = useState(false)
   const [preparedArtifact, setPreparedArtifact] = useState<ClientDemoPreparationArtifact | null>(null)
   const [preparedConfirmation, setPreparedConfirmation] = useState('')
@@ -358,7 +362,7 @@ export function SettingsPage() {
   const evidenceDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date())
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
   const demoBlueprintFilename = `supermega-client-demo-${setup.workspace.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || evidenceDate}.json`
-  const demoBlueprintHref = demoBlueprint ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(buildClientDemoKit(demoBlueprint, new Date().toISOString()), null, 2))}` : ''
+  const demoBlueprintHref = demoKitReadiness?.ready ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(demoKitReadiness.kit, null, 2))}` : ''
   const privatePreparationCommand = `npm run client:prepare -- --kit "${demoBlueprintFilename}" --data-dir "client-data" --out "private-review.json"`
   const demoReadyCount = demoWorkspace?.products.filter((product) => ['data_ready', 'workspace_checked', 'applied'].includes(product.status)).length ?? 0
   const preparedApprovalReady = Boolean(preparedArtifact && clientDemoPreparationConfirmationMatches(preparedArtifact, preparedConfirmation))
@@ -1526,6 +1530,7 @@ export function SettingsPage() {
               })}</div>
             </details>
             <div className="settings-step-actions"><span>Creates a local setup package. No client data is sent.</span><button className="core-button primary" disabled={!demoInputReady} onClick={createDemoKit} type="button">Create client demo</button></div>
+            {demoRecoveryNeeded ? <section aria-label="Client demo recovery" className="demo-kit-result"><div className="panel-head"><div><span className="core-eyebrow">Recovery needed</span><h3>Rebuild the saved client demo</h3><p>{demoKitReadiness?.reason ?? 'The saved workspace no longer matches the current setup contract.'}</p></div><button className="core-button primary" disabled={!demoInputReady} onClick={createDemoKit} type="button">Rebuild demo</button></div></section> : null}
             {demoBlueprint ? <section aria-label="Client demo kit" className="demo-kit-result">
               <div className="panel-head"><div><span className="core-eyebrow">Client workspace</span><h3>{demoBlueprint.client.workspace}</h3><p>{demoRunbook?.provenCount ?? 0} proven · {demoReadyCount} data-ready · owner {demoBlueprint.client.owner}</p></div><a className="core-button" download={demoBlueprintFilename} href={demoBlueprintHref}>Download setup kit</a></div>
               <div aria-label="Shared operating foundation" className="readiness-list client-foundation-summary"><span><small>Operating unit</small><strong>{demoBlueprint.foundation.operatingUnit.name}</strong><em>{demoBlueprint.foundation.operatingUnit.code} · {demoBlueprint.foundation.operatingUnit.kind}</em></span><span><small>Market</small><strong>{demoBlueprint.foundation.localization.countryCode} · {demoBlueprint.foundation.localization.currency}</strong><em>{demoBlueprint.foundation.localization.locale}</em></span><span><small>Topology</small><strong>{demoBlueprint.topology.locations.length} location · {demoBlueprint.topology.channels.length} channels</strong><em>{demoBlueprint.topology.recordAuthorities.length} product authorities</em></span><span><small>Timezone</small><strong>{demoBlueprint.foundation.localization.timeZone}</strong><em>Shared by all selected products</em></span><span><small>Authority</small><strong>Client review required</strong><em>Managed identity required before activation</em></span></div>

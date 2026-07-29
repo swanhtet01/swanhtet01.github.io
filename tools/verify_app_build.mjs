@@ -3467,6 +3467,9 @@ if (!coreSource.includes('templateId: string')
   || !settingsPageSource.includes('<summary><span>All product missions</span><small>{demoRunbook?.products.length ?? 0} workflows</small></summary>')
   || !settingsPageSource.includes('const demoInputReady = Boolean(')
   || !settingsPageSource.includes(': Boolean(demoWorkspace)')
+  || !settingsPageSource.includes('clientDemoKitReadiness(demoBlueprintSource')
+  || !settingsPageSource.includes('The saved workspace no longer matches the current setup contract.')
+  || settingsPageSource.includes('JSON.stringify(buildClientDemoKit(demoBlueprint')
   || !settingsPageSource.includes('{requestedProduct ? <nav aria-label="Setup steps"')
   || !settingsPageSource.includes('Download setup kit')
   || !settingsPageSource.includes('Load setup kit')
@@ -5804,6 +5807,12 @@ async function verifyClientOnboardingRuntime() {
     assert(demoWorkspace.schema === model.CLIENT_DEMO_WORKSPACE_SCHEMA && demoWorkspace.products.length === 4 && demoWorkspace.products.every((product) => product.status === 'not_started'), 'client_demo_workspace_not_initialized')
     assert(JSON.stringify(model.restoreClientDemoWorkspace(JSON.parse(JSON.stringify(demoWorkspace)))) === JSON.stringify(demoWorkspace), 'client_demo_workspace_not_restorable')
     const demoKit = model.buildClientDemoKit(manufacturingBlueprint, workspaceCreatedAt)
+    const readyDemoKit = model.clientDemoKitReadiness(manufacturingBlueprint, workspaceCreatedAt)
+    const invalidDemoBlueprint = structuredClone(manufacturingBlueprint)
+    invalidDemoBlueprint.products[0].demoPath = 'https://attacker.example/'
+    const rejectedDemoKit = model.clientDemoKitReadiness(invalidDemoBlueprint, workspaceCreatedAt)
+    assert(readyDemoKit.ready === true && JSON.stringify(readyDemoKit.kit) === JSON.stringify(demoKit), 'client_demo_kit_readiness_rejected_valid_blueprint')
+    assert(rejectedDemoKit.ready === false && rejectedDemoKit.kit === null && rejectedDemoKit.reason.includes('Rebuild'), 'client_demo_kit_readiness_threw_or_accepted_invalid_blueprint')
     assert(demoKit.schema === model.CLIENT_DEMO_KIT_SCHEMA
       && demoKit.controls.clientRecordsIncluded === false
       && demoKit.controls.productProgressIncluded === false

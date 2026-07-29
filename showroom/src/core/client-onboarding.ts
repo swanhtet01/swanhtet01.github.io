@@ -1187,6 +1187,18 @@ export function buildClientDemoKit(blueprintValue: unknown, exportedAtValue: unk
   return kit
 }
 
+export function clientDemoKitReadiness(blueprintValue: unknown, exportedAtValue: unknown) {
+  try {
+    return { ready: true as const, kit: buildClientDemoKit(blueprintValue, exportedAtValue), reason: null }
+  } catch {
+    return {
+      ready: false as const,
+      kit: null,
+      reason: 'The saved client demo no longer matches the current setup contract. Rebuild it before downloading or preparing client files.',
+    }
+  }
+}
+
 export function restoreClientDemoKit(value: unknown): ClientDemoKit | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   try {
