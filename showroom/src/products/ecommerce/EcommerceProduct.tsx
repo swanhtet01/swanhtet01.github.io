@@ -118,6 +118,11 @@ function safeEcommerceFilename(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'store'
 }
 
+function csvCell(value: string | number) {
+  const text = String(value)
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+}
+
 function deliveryAreaFromCustomerReference(value: string) {
   const normalized = value.replace(/\s+/g, ' ').trim()
   const separatorIndex = normalized.lastIndexOf('·')
@@ -232,6 +237,7 @@ export function EcommerceProduct() {
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
   const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
+  const [orderImportNotice, setOrderImportNotice] = useState('')
   const [customerFollowUpDraft, setCustomerFollowUpDraft] = useState('')
   const [deliveryReviewDraft, setDeliveryReviewDraft] = useState('')
   const [deliveryAreaTemplateDraft, setDeliveryAreaTemplateDraft] = useState('')
@@ -494,6 +500,36 @@ export function EcommerceProduct() {
     setBuyingCart([])
     if (missingSavedSkus.length) setMissingSelectionReviewed(true)
     setDraftNotice(`Product autopilot selected ${nextSkus.length} in-stock products. Save to confirm the storefront; no catalog, order, payment, delivery, stock, or Shop write ran.`)
+  }
+
+  function downloadOrderImportTemplate() {
+    const suggestedSku = selectedSkus.find((sku) => catalog.items.some((item) => item.sku === sku && item.onHand > 0))
+      ?? catalog.items.find((item) => item.onHand > 0)?.sku
+      ?? 'SKU-001'
+    const rows = [
+      ['customer_reference', 'channel', 'sku', 'quantity', 'fulfilment', 'payment', 'source_message'],
+      ['Daw Mya / 09 xxx xxx xxx / Bahan', 'Viber', suggestedSku, 1, 'delivery', 'manual_review', 'Paste original customer message here'],
+      ['Walk-in customer', 'Shop form', suggestedSku, 1, 'pickup', 'cash_on_pickup', 'Owner-entered sample row'],
+    ]
+    const csv = rows.map((row) => row.map(csvCell).join(',')).join('\r\n')
+    const url = URL.createObjectURL(new Blob([`${csv}\r\n`], { type: 'text/csv' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `supermega-ecommerce-order-import-${safeEcommerceFilename(storeName)}.csv`
+    link.hidden = true
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'ecommerce',
+      route: location.pathname + location.search,
+      detail: 'Download Ecommerce order import template',
+    })
+    const notice = 'Order import template downloaded. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.'
+    setOrderImportNotice(notice)
+    setDraftNotice(notice)
   }
 
   function showMobileWorkspace(view: 'setup' | 'preview') {
@@ -960,6 +996,7 @@ export function EcommerceProduct() {
     ['Bulk', importNeeded ? 'Need products' : 'CSV or messages'],
     ['Mapping', selectedSkus.length ? `${selectedSkus.length} SKUs` : 'No SKUs'],
     ['Queue', pendingManagedRequests.length ? `${pendingManagedRequests.length} review` : 'No pending'],
+    ['Template', 'Download CSV'],
     ['Boundary', 'No auto submit'],
   ] as const
   const lifecycleRows = [
@@ -1339,7 +1376,11 @@ export function EcommerceProduct() {
           <span className="core-eyebrow">Order import autopilot</span>
           <h2>{orderImportStage}</h2>
           <p>AI prepares CSV, Viber, LINE, WeChat, email, and form order batches against the saved Shop catalog so owners review one clean Shop queue. No customer message, payment, delivery booking, stock move, refund, or Shop write runs from this importer.</p>
-          <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
+          <div className="ecommerce-inline-actions">
+            <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
+            <button className="text-link" onClick={downloadOrderImportTemplate} type="button">Download order template</button>
+          </div>
+          {orderImportNotice ? <p className="ecommerce-order-import-notice" role="status">{orderImportNotice}</p> : null}
         </div>
         <div className="ecommerce-ops-cockpit-rows">
           {orderImportRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}

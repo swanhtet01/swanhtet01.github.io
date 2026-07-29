@@ -187,6 +187,19 @@
   background: #f7f8ff;
 }
 
+.ecommerce-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.ecommerce-order-import-notice {
+  margin-top: 8px !important;
+  color: #4655a5 !important;
+  font-size: 12px !important;
+}
+
 .ecommerce-request-filter {
   display: flex;
   flex-wrap: wrap;
