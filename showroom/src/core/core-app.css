@@ -124,6 +124,8 @@ a { color: inherit; }
 .product-home-autopilot-grid strong { overflow: hidden; color: var(--core-ink); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .product-home-autopilot-grid em { overflow: hidden; color: var(--core-muted); font-size: 10px; font-style: normal; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .product-home-readiness { display: grid; gap: 13px; border: 1px solid rgba(11,116,94,.22); border-radius: var(--core-radius); padding: 15px; background: var(--core-green-soft); box-shadow: 0 14px 38px rgba(25,54,42,.04); }
+.product-home-agent-contract { display: grid; gap: 13px; border: 1px solid rgba(11,116,94,.22); border-radius: var(--core-radius); padding: 15px; background: var(--core-panel); box-shadow: 0 14px 38px rgba(25,54,42,.045); }
+.product-home-agent-contract .product-home-readiness-grid { background: var(--core-panel-raised); }
 .product-home-readiness-head { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 16px; align-items: center; }
 .product-home-readiness-head h2 { margin: 4px 0; font-size: 18px; line-height: 1.15; letter-spacing: -.01em; }
 .product-home-readiness-head p { max-width: 780px; margin: 0; color: var(--core-muted); font-size: 12px; line-height: 1.45; }
