@@ -22,6 +22,7 @@ from mark1_pilot.agent_governance import (
     agent_job_daily_limit,
     agent_job_max_attempts,
     agent_job_units,
+    build_agent_failure,
     load_agent_workforce_policy,
     normalize_agent_job_types,
     plan_agent_capacity,
@@ -3160,11 +3161,22 @@ def complete_agent_run(
             if reconciled_expired:
                 session.commit()
             raise AgentGovernanceError("agent_claim_invalid", "The run claim is stale, consumed, or does not own this execution.")
+        normalized_result = result or {}
+        normalized_summary = str(summary or "").strip()
+        normalized_error_text = ""
+        if normalized_status == "error":
+            raw_failure = normalized_result.get("failure") if isinstance(normalized_result, dict) else None
+            safe_failure = build_agent_failure(
+                code=str((raw_failure or {}).get("code", "")) if isinstance(raw_failure, dict) else "",
+            )
+            normalized_result = {"job_type": row.job_type, "failure": safe_failure}
+            normalized_summary = f"{row.job_type} failed"
+            normalized_error_text = f"{safe_failure['detail']} Reference {safe_failure['failure_id']}."
         row.status = normalized_status
         row.finished_at = now
-        row.summary = str(summary or "").strip()
-        row.result_json = json.dumps(result or {}, ensure_ascii=False)
-        row.error_text = str(error_text or "").strip()
+        row.summary = normalized_summary
+        row.result_json = json.dumps(normalized_result, ensure_ascii=False)
+        row.error_text = normalized_error_text
         row.updated_at = now
         reservation.status = "consumed"
         reservation.consumed_at = now

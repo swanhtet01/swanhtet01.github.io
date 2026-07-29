@@ -158,6 +158,7 @@ from mark1_pilot.agent_governance import (  # noqa: E402
     AGENT_AUTOMATED_JOB_TYPES,
     AGENT_BUDGET_ACCOUNTING_CONTRACT,
     AgentGovernanceError,
+    build_agent_failure,
     load_agent_workforce_policy,
 )
 from mark1_pilot.lead_finder import run_lead_finder  # noqa: E402
@@ -1563,6 +1564,62 @@ AGENT_TEAM_RUNTIME_JOB_MAP: dict[str, tuple[str, ...]] = {
 }
 
 
+def _safe_agent_failure(error: BaseException, *, failure_id: str = "") -> dict[str, Any]:
+    """Classify one failure without retaining its exception text or external data."""
+
+    code = "agent_execution_failed"
+
+    if isinstance(error, AgentGovernanceError):
+        code = "agent_policy_blocked"
+    elif isinstance(error, HTTPError):
+        try:
+            status_code = int(getattr(error, "code", 0))
+        except (TypeError, ValueError):
+            status_code = 0
+        if status_code in {408, 425, 429} or status_code >= 500:
+            code = "agent_dependency_temporarily_unavailable"
+        elif status_code in {401, 403}:
+            code = "agent_dependency_denied"
+        else:
+            code = "agent_dependency_rejected"
+    elif isinstance(error, (TimeoutError, ConnectionError, URLError)):
+        code = "agent_dependency_temporarily_unavailable"
+    elif isinstance(error, PermissionError):
+        code = "agent_dependency_denied"
+    elif isinstance(error, (ValueError, TypeError, KeyError)):
+        code = "agent_input_or_state_invalid"
+    return build_agent_failure(code=code, failure_id=failure_id)
+
+
+def _log_safe_agent_failure(*, run_id: str, job_type: str, failure: dict[str, Any]) -> None:
+    print(
+        json.dumps(
+            {
+                "level": "error",
+                "message": "agent_job_failed",
+                "run_id": str(run_id or "").strip(),
+                "job_type": str(job_type or "").strip(),
+                "failure": failure,
+            },
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ),
+        flush=True,
+    )
+
+
+def _completed_agent_failure(row: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
+    result = row.get("result") if isinstance(row, dict) else None
+    raw_failure = result.get("failure") if isinstance(result, dict) else None
+    if not isinstance(raw_failure, dict):
+        return fallback
+    return build_agent_failure(
+        code=str(raw_failure.get("code", "")),
+        failure_id=str(raw_failure.get("failure_id", "")),
+    )
+
+
 def _group_agent_runs_by_job_type(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
     for row in rows:
@@ -2035,6 +2092,8 @@ def _run_and_persist_agent_job(
             payload=payload,
         )
     except Exception as exc:
+        failure = _safe_agent_failure(exc)
+        failure_text = f"{failure['detail']} Reference {failure['failure_id']}."
         try:
             failed = enterprise_complete_agent_run(
                 enterprise_db_url,
@@ -2043,15 +2102,19 @@ def _run_and_persist_agent_job(
                 claim_token=claim_token,
                 status="error",
                 summary=f"{job_type} failed",
-                result={"job_type": job_type},
-                error_text=str(exc),
+                result={"job_type": job_type, "failure": failure},
+                error_text=failure_text,
             ) or safe_row
         except AgentGovernanceError as completion_error:
+            _log_safe_agent_failure(run_id=run_id, job_type=job_type, failure=failure)
             return _agent_completion_rejected_row(
                 run_id=run_id,
                 job_type=job_type,
                 error=completion_error,
             )
+        failure = _completed_agent_failure(failed, failure)
+        failure_text = f"{failure['detail']} Reference {failure['failure_id']}."
+        _log_safe_agent_failure(run_id=run_id, job_type=job_type, failure=failure)
         if job_defaults:
             _emit_connector_event(
                 enterprise_db_url=enterprise_db_url,
@@ -2059,7 +2122,7 @@ def _run_and_persist_agent_job(
                 actor=triggered_by,
                 connector_id=str(job_defaults.get("connector_id", "")).strip(),
                 title=f"{job_label} failed.",
-                detail=str(exc),
+                detail=failure_text,
                 source=str(job_defaults.get("source", "")).strip() or "Agent runtime",
                 kind=str(job_type or "").strip() or "agent_run",
                 route=str(job_defaults.get("route", "")).strip(),
@@ -2070,7 +2133,7 @@ def _run_and_persist_agent_job(
                     "job_type": job_type,
                     "status": str(failed.get("status", "")).strip() or "error",
                     "source": str(source or "").strip() or "manual",
-                    "error_text": str(exc),
+                    "failure": failure,
                 },
                 created_at=_runtime_run_timestamp(failed),
             )
@@ -2138,6 +2201,8 @@ def _complete_existing_agent_run(
             payload=payload,
         )
     except Exception as exc:
+        failure = _safe_agent_failure(exc)
+        failure_text = f"{failure['detail']} Reference {failure['failure_id']}."
         try:
             failed = enterprise_complete_agent_run(
                 enterprise_db_url,
@@ -2146,15 +2211,19 @@ def _complete_existing_agent_run(
                 claim_token=claim_token,
                 status="error",
                 summary=f"{job_type} failed",
-                result={"job_type": job_type},
-                error_text=str(exc),
-            ) or {"run_id": run_id, "job_type": job_type, "status": "error", "error_text": str(exc)}
+                result={"job_type": job_type, "failure": failure},
+                error_text=failure_text,
+            ) or {"run_id": run_id, "job_type": job_type, "status": "error", "error_text": failure_text, "result": {"job_type": job_type, "failure": failure}}
         except AgentGovernanceError as completion_error:
+            _log_safe_agent_failure(run_id=run_id, job_type=job_type, failure=failure)
             return _agent_completion_rejected_row(
                 run_id=run_id,
                 job_type=job_type,
                 error=completion_error,
             )
+        failure = _completed_agent_failure(failed, failure)
+        failure_text = f"{failure['detail']} Reference {failure['failure_id']}."
+        _log_safe_agent_failure(run_id=run_id, job_type=job_type, failure=failure)
         if job_defaults:
             _emit_connector_event(
                 enterprise_db_url=enterprise_db_url,
@@ -2162,7 +2231,7 @@ def _complete_existing_agent_run(
                 actor=triggered_by,
                 connector_id=str(job_defaults.get("connector_id", "")).strip(),
                 title=f"{str(job_type or '').replace('_', ' ').title() or 'Agent job'} failed.",
-                detail=str(exc),
+                detail=failure_text,
                 source=str(job_defaults.get("source", "")).strip() or "Agent runtime",
                 kind=str(job_type or "").strip() or "agent_run",
                 route=str(job_defaults.get("route", "")).strip(),
@@ -2173,7 +2242,7 @@ def _complete_existing_agent_run(
                     "job_type": job_type,
                     "status": str(failed.get("status", "")).strip() or "error",
                     "mode": "queued",
-                    "error_text": str(exc),
+                    "failure": failure,
                 },
                 created_at=_runtime_run_timestamp(failed),
             )

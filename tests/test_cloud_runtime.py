@@ -39,6 +39,7 @@ from mark1_pilot.agent_governance import (
     AGENT_BUDGET_GRANT_CONTRACT,
     AGENT_CADENCE_ADMISSION_CONTRACT,
     AGENT_CAPACITY_PLAN_CONTRACT,
+    AGENT_FAILURE_CONTRACT,
     AGENT_JOB_CADENCE_SECONDS,
     AGENT_JOB_MAX_ATTEMPTS,
     AGENT_JOB_PRIORITIES,
@@ -47,6 +48,7 @@ from mark1_pilot.agent_governance import (
     AgentGovernanceError,
     AgentWorkforcePolicy,
     agent_job_cadence_state,
+    build_agent_failure,
     issue_agent_budget_grant,
     load_agent_workforce_policy,
     plan_agent_capacity,
@@ -451,6 +453,124 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["suppressed_duplicate_task_count"], 1)
         self.assertEqual(added, [])
 
+    def test_agent_failures_are_classified_without_persisting_exception_text(self) -> None:
+        server_path = Path(__file__).resolve().parents[1] / "tools" / "serve_solution.py"
+        source = server_path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        helper = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_safe_agent_failure"
+        )
+        module = ast.Module(body=[helper], type_ignores=[])
+        ast.fix_missing_locations(module)
+        namespace: dict[str, object] = {
+            "Any": Any,
+            "AgentGovernanceError": AgentGovernanceError,
+            "HTTPError": urllib.error.HTTPError,
+            "URLError": urllib.error.URLError,
+            "build_agent_failure": build_agent_failure,
+        }
+        exec(compile(module, str(server_path), "exec", dont_inherit=True), namespace)
+        classify = namespace["_safe_agent_failure"]
+        exposed = "postgresql://owner:super-secret@db.example/customer"
+
+        internal = classify(RuntimeError(exposed), failure_id="failure-test-001")
+        transient = classify(TimeoutError(f"Bearer {exposed}"), failure_id="failure-test-002")
+        policy = classify(
+            AgentGovernanceError("agent_queue_full", exposed),
+            failure_id="failure-test-003",
+        )
+
+        self.assertEqual(
+            set(internal),
+            {"contract", "failure_id", "category", "code", "retryable", "detail"},
+        )
+        self.assertEqual(internal["contract"], "supermega.agent-run-failure.v1")
+        self.assertEqual(internal["category"], "internal")
+        self.assertFalse(internal["retryable"])
+        self.assertEqual(transient["category"], "transient")
+        self.assertTrue(transient["retryable"])
+        self.assertEqual(policy["category"], "policy")
+        self.assertEqual(policy["code"], "agent_policy_blocked")
+        self.assertNotIn("super-secret", json.dumps([internal, transient, policy]))
+        self.assertNotIn("db.example", json.dumps([internal, transient, policy]))
+
+        for function_name in ("_run_and_persist_agent_job", "_complete_existing_agent_run"):
+            function = next(
+                node for node in tree.body
+                if isinstance(node, ast.FunctionDef) and node.name == function_name
+            )
+            function_source = ast.get_source_segment(source, function) or ""
+            self.assertIn("_safe_agent_failure(exc)", function_source)
+            self.assertIn("_completed_agent_failure(failed, failure)", function_source)
+            self.assertIn('"failure": failure', function_source)
+            self.assertNotIn("str(exc)", function_source)
+
+        persisted: dict[str, object] = {}
+        connector_events: list[dict[str, object]] = []
+        safe_logs: list[dict[str, object]] = []
+
+        def fail_job(**_: object) -> dict[str, object]:
+            raise RuntimeError(exposed)
+
+        def persist_failure(*_: object, **kwargs: object) -> dict[str, object]:
+            persisted.update(kwargs)
+            return {
+                "run_id": kwargs["run_id"],
+                "job_type": "ops_watch",
+                "status": "error",
+                "error_text": kwargs["error_text"],
+                "result": kwargs["result"],
+            }
+
+        completed_failure_helper = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_completed_agent_failure"
+        )
+        queued_function = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_complete_existing_agent_run"
+        )
+        queued_module = ast.Module(body=[completed_failure_helper, queued_function], type_ignores=[])
+        ast.fix_missing_locations(queued_module)
+        namespace.update(
+            {
+                "AGENT_JOB_CONNECTOR_MAP": {
+                    "ops_watch": {
+                        "connector_id": "core-agent-operations",
+                        "source": "SuperMega Agent Operations",
+                        "route": "/work/?team=engineering&view=agents",
+                    }
+                },
+                "_execute_agent_job": fail_job,
+                "_log_safe_agent_failure": lambda **kwargs: safe_logs.append(kwargs),
+                "enterprise_complete_agent_run": persist_failure,
+                "_agent_completion_rejected_row": lambda **kwargs: kwargs,
+                "_emit_connector_event": lambda **kwargs: connector_events.append(kwargs),
+                "_runtime_run_timestamp": lambda row: "2026-07-28T00:00:00Z",
+            }
+        )
+        exec(compile(queued_module, str(server_path), "exec", dont_inherit=True), namespace)
+        failed = namespace["_complete_existing_agent_run"](
+            state_db="state.db",
+            enterprise_db_url="sqlite://",
+            workspace_id="supermega",
+            run_id="run-redaction-001",
+            job_type="ops_watch",
+            claim_token="private-claim",
+        )
+        public_failure_surface = json.dumps(
+            [persisted, connector_events, safe_logs, failed],
+            sort_keys=True,
+        )
+        self.assertIn("supermega.agent-run-failure.v1", public_failure_surface)
+        self.assertNotIn("super-secret", public_failure_surface)
+        self.assertNotIn("db.example", public_failure_surface)
+        self.assertNotIn("postgresql://", public_failure_surface)
+        self.assertEqual(persisted["status"], "error")
+        self.assertEqual(connector_events[0]["payload"]["failure"]["category"], "internal")
+        self.assertEqual(safe_logs[0]["failure"]["code"], "agent_execution_failed")
+
     def test_company_agent_connectors_are_core_only_and_catalogs_are_tenant_scoped(self) -> None:
         server_path = Path(__file__).resolve().parents[1] / "tools" / "serve_solution.py"
         tree = ast.parse(server_path.read_text(encoding="utf-8"))
@@ -665,6 +785,43 @@ class AgentGovernanceTests(unittest.TestCase):
             database_url = f"sqlite:///{database_path.as_posix()}"
             workspace = ensure_workspace(database_url, slug="governance-test", name="Governance Test")
             yield database_url, str(workspace["workspace_id"]), database_path
+
+    def test_error_completion_persists_only_the_safe_failure_contract(self) -> None:
+        exposed = "postgresql://owner:super-secret@db.example/customer"
+        exposed_reference = "super_secret_token_123456"
+        with self._database() as (database_url, workspace_id, _):
+            reserved = create_and_reserve_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                job_type="ops_watch",
+            )
+            stored = complete_agent_run(
+                database_url,
+                workspace_id=workspace_id,
+                run_id=reserved["run_id"],
+                claim_token=reserved["claim_token"],
+                status="error",
+                summary=exposed,
+                result={
+                    "secret": exposed,
+                    "failure": {
+                        "contract": AGENT_FAILURE_CONTRACT,
+                        "failure_id": exposed_reference,
+                        "code": exposed,
+                        "detail": exposed,
+                    },
+                },
+                error_text=exposed,
+            )
+            stored_surface = json.dumps(stored, sort_keys=True)
+            self.assertIn(AGENT_FAILURE_CONTRACT, stored_surface)
+            self.assertEqual(stored["summary"], "ops_watch failed")
+            self.assertEqual(stored["result"]["job_type"], "ops_watch")
+            self.assertEqual(stored["result"]["failure"]["code"], "agent_execution_failed")
+            self.assertNotIn("super-secret", stored_surface)
+            self.assertNotIn("db.example", stored_surface)
+            self.assertNotIn("postgresql://", stored_surface)
+            self.assertNotIn(exposed_reference, stored_surface)
 
     def test_signed_grants_are_bounded_tamper_evident_and_expiring(self) -> None:
         observed_at = datetime(2026, 7, 26, 6, 0, tzinfo=timezone.utc)

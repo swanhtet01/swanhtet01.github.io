@@ -86,6 +86,7 @@ export function EcommerceBuyingWorkspace({
   const [handoffBusy, setHandoffBusy] = useState(false)
   const [handoffConfirmed, setHandoffConfirmed] = useState(false)
   const [freshQuoteId, setFreshQuoteId] = useState('')
+  const [quoteClockMs, setQuoteClockMs] = useState(Date.now)
   const [notice, setNotice] = useState('')
   const confirmationRef = useRef<HTMLInputElement>(null)
 
@@ -163,6 +164,12 @@ export function EcommerceBuyingWorkspace({
     return () => window.clearTimeout(timeoutId)
   }, [activeBuyingState.requests, freshQuoteId])
 
+  useEffect(() => {
+    if (!freshQuoteId) return
+    const intervalId = window.setInterval(() => setQuoteClockMs(Date.now()), 1_000)
+    return () => window.clearInterval(intervalId)
+  }, [freshQuoteId])
+
   const latestRequest = activeBuyingState.requests[0] ?? null
   const quoteCurrent = Boolean(latestRequest
     && latestRequest.id === freshQuoteId
@@ -182,7 +189,7 @@ export function EcommerceBuyingWorkspace({
   ), 0)
   const recoveryBlocked = recoveryStatus !== 'empty' && recoveryStatus !== 'ready'
   const quoteMinutesRemaining = latestRequest
-    ? Math.max(0, Math.ceil((Date.parse(latestRequest.quote.expiresAt) - Date.now()) / 60000))
+    ? Math.max(0, Math.ceil((Date.parse(latestRequest.quote.expiresAt) - quoteClockMs) / 60000))
     : 0
   const orderAutopilotNext = recoveryBlocked
     ? 'Repair checkout recovery'
@@ -252,6 +259,7 @@ export function EcommerceBuyingWorkspace({
       if (retainedMatches && retained && onRecordManagedRequest) {
         await onRecordManagedRequest(retained)
         setHandoffConfirmed(false)
+        setQuoteClockMs(quotedAt.getTime())
         setFreshQuoteId(retained.id)
         setNotice('This quote is confirmed in the managed Shop inbox. No order, stock, message, or charge changed.')
         requestAnimationFrame(() => {
@@ -276,6 +284,7 @@ export function EcommerceBuyingWorkspace({
       setBuyingState(saved)
       setRecoveryRead({ scope, status: 'ready', issue: '' })
       setHandoffConfirmed(false)
+      setQuoteClockMs(quotedAt.getTime())
       setFreshQuoteId('')
       if (onRecordManagedRequest) await onRecordManagedRequest(request)
       setFreshQuoteId(request.id)
