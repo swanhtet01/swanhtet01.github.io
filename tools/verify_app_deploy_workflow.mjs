@@ -182,6 +182,14 @@ requireContract('cross-domain barrier validates complete release identity', rele
 requireContract('release barrier fixtures pass', releaseBarrierSelfTest.status === 0 && releaseBarrierSelfTest.stdout.includes('"ok": true') && releaseBarrierSelfTest.stdout.includes('reject_catalog_drift'))
 requireContract('cross-platform protected deployment requests', !appVerifier.includes("'--silent'") && !appVerifier.includes("'--show-error'") && !appVerifier.includes("'--location'") && !appVerifier.includes("'--token'") && appVerifier.includes('describeCliFailure'))
 requireContract('both project controls are verified', workflow.includes('verify_vercel_project_state.mjs app') && workflow.includes('verify_vercel_project_state.mjs public') && workflow.includes('verify_vercel_domain_state.mjs app') && workflow.includes('verify_vercel_domain_state.mjs public') && workflow.includes('verify_vercel_environment_state.mjs app') && workflow.includes('verify_vercel_environment_state.mjs public'))
+requireContract('canonical domains are reasserted before domain verification',
+  workflow.includes('Reassert canonical app domain ownership')
+  && workflow.includes('vercel@56.1.0 domains add app.supermega.dev megaos --force --token="$VERCEL_TOKEN"')
+  && workflow.includes('Reassert canonical public domain ownership')
+  && workflow.includes('vercel@56.1.0 domains add supermega.dev supermega-public --force --token="$VERCEL_TOKEN"')
+  && workflow.includes('vercel@56.1.0 domains add www.supermega.dev supermega-public --force --token="$VERCEL_TOKEN"')
+  && workflow.indexOf('Reassert canonical app domain ownership') < workflow.indexOf('verify_vercel_domain_state.mjs app')
+  && workflow.indexOf('Reassert canonical public domain ownership') < workflow.indexOf('verify_vercel_domain_state.mjs public'))
 requireContract('retired POS alias blocks release before and after promotion', (workflow.match(/api "\/v4\/aliases\?domain=pos\.supermega\.dev&teamId=\$VERCEL_ORG_ID"/g) || []).length === 2
   && (workflow.match(/verify_retired_vercel_alias_state\.mjs pos\.supermega\.dev/g) || []).length === 2
   && retiredAliasVerifier.includes("failures = liveRetiredAliases.length ? ['retired_alias_still_live'] : []")

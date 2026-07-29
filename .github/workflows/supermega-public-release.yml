@@ -145,6 +145,11 @@ jobs:
           VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}
         run: npx --yes vercel@56.1.0 pull --yes --environment=production --token="$VERCEL_TOKEN"
 
+      - name: Reassert canonical app domain ownership
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes vercel@56.1.0 domains add app.supermega.dev megaos --force --token="$VERCEL_TOKEN"
+
       - name: Verify app project and select operating mode
         id: app-environment
         env:
@@ -229,6 +234,13 @@ jobs:
         run: |
           rm -rf -- .vercel
           npx --yes vercel@56.1.0 pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Reassert canonical public domain ownership
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          npx --yes vercel@56.1.0 domains add supermega.dev supermega-public --force --token="$VERCEL_TOKEN"
+          npx --yes vercel@56.1.0 domains add www.supermega.dev supermega-public --force --token="$VERCEL_TOKEN"
 
       - name: Verify release authority
         env:
