@@ -5,6 +5,7 @@ import './core-app.css'
 import { recordBehaviorSignal } from './behavior-trail'
 
 const ProductHomeReadiness = lazy(() => import('./ProductHomeReadiness').then((module) => ({ default: module.ProductHomeReadiness })))
+const ProductHomeToday = lazy(() => import('./ProductHomeToday').then((module) => ({ default: module.ProductHomeToday })))
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
 
@@ -322,43 +323,10 @@ export function ProductHomePage() {
   const activationCoverage = runtime.activationManifest?.ready_percent ?? runtime.coverageScore
   const hostedReady = runtime.operatingMode === 'managed_trial' && runtime.writesReady && runtime.requirements.length === 0
   const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Managed activation proof is still required.'
-  const autopilotRows = [
-    ['Track', 'Pick one product', 'Shop, Plant, Website, or Ecommerce.'],
-    ['Data', 'Local first', 'Upload, paste, or describe one real record.'],
-    ['Proof', 'Evidence before premium', 'Define what proves the workflow works.'],
-    ['AI context', 'Locked until approval', 'Premium can learn from approved data, roles, and audit.'],
-  ] as const
-
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Use a local workspace first. Activate managed data and AI when ready." eyebrow="Products" title="Choose a product. Run work." />
-      <section className="product-home-operating-model" aria-label="SuperMega operating model">
-        <div>
-          <span className="core-eyebrow">Free workspace</span>
-          <strong>Sample data, imports, review, and evidence.</strong>
-        </div>
-        <div>
-          <span className="core-eyebrow">Premium activation</span>
-          <strong>Managed data, AI context, roles, audit, and writes.</strong>
-        </div>
-        <Link className="core-button primary" to="/settings/">Check readiness</Link>
-      </section>
-      <section className="product-home-autopilot" aria-label="AI operating plan">
-        <div className="product-home-autopilot-head">
-          <div>
-            <span className="core-eyebrow">AI operating plan</span>
-            <h2>Recommended next move</h2>
-            <p>Choose a product, bring in real records, then export evidence for managed activation. No external send, publish, payment, or production write runs from this screen.</p>
-          </div>
-          <Link className="core-button primary" to="/settings/">Check readiness</Link>
-        </div>
-        <div className="product-home-autopilot-grid">
-          {autopilotRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}
-        </div>
-      </section>
-      <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
-        <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={hostedReady ? 100 : activationCoverage} ready={hostedReady} />
-      </Suspense>
+      <PageHeading copy="Four products, one operating system. Start with the most important work." eyebrow="SuperMega" title="What needs attention?" />
+      <Suspense fallback={<p className="form-notice" role="status">Loading today...</p>}><ProductHomeToday /></Suspense>
       <nav aria-label="Business tracks" className="product-track-grid">
         {customerTracks.map(([name, fit, outcome, path, setupPath]) => (
           <article className="product-track-card" key={name}>
@@ -374,6 +342,19 @@ export function ProductHomePage() {
           </article>
         ))}
       </nav>
+      <details className="product-home-setup">
+        <summary><span><strong>Setup and activation</strong><small>Imports, evidence, roles, and managed readiness</small></span><b>Open when needed</b></summary>
+        <div>
+          <section className="product-home-operating-model" aria-label="SuperMega operating model">
+            <div><span className="core-eyebrow">Local workspace</span><strong>Sample data, imports, review, and evidence.</strong></div>
+            <div><span className="core-eyebrow">Managed activation</span><strong>Tenant data, AI context, roles, audit, and controlled writes.</strong></div>
+            <Link className="core-button primary" to="/settings/">Open setup</Link>
+          </section>
+          <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
+            <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={hostedReady ? 100 : activationCoverage} ready={hostedReady} />
+          </Suspense>
+        </div>
+      </details>
     </div>
   )
 }

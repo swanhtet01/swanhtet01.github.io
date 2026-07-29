@@ -24,6 +24,7 @@ This roadmap is now split between controls that exist in the product and capabil
 - **Website:** structured local editing, responsive preview, evidence review, approval, artifact binding, and local release history exist. A hosted domain/TLS promotion and measured live lead-analytics loop are not proven.
 - **Ecommerce:** Shop-backed catalog projection, merchandising, cart/quote, customer and delivery intent, request receipt, Shop confirmation, request-to-order status, exact-contact order history, payment state, and safe reorder-at-current-catalog are implemented. Reorder only prepares a cart; it does not create an order, reserve stock, send a message, or authorize payment. Provider payment, carrier shipping, tax adapter, durable customer account/address, and return/support status loops are not proven.
 - **Workspace recovery control:** `supermega.workspace_recovery.v1` now creates one read-only, workspace-scoped, deterministic package for memberships, product state, immutable events, and approvals. It requires an explicit recovery-admin role, rejects cross-workspace rows and credential-shaped fields, refuses overwrite races, verifies per-section and whole-package digests offline, and produces a no-write restore plan. Hosted restore execution, encrypted portable custody, retention, and recovery-time evidence remain unproven.
+- **Cross-product Home:** one read-only Today queue projects real local Shop balances/orders/stock, Plant issues/holds/jobs, Website readiness, and Ecommerce requests into one ranked next action per product. Product records retain all write authority; setup and activation controls are collapsed until requested.
 
 The next enterprise slices must close the following true gaps inside existing task surfaces:
 
@@ -32,7 +33,7 @@ The next enterprise slices must close the following true gaps inside existing ta
 3. **Plant control depth:** item/BOM/routing effective dates, material return/substitution, broader CAPA recurrence control, maintenance-to-order linkage, WIP valuation projection, training/document control, and recall search/export.
 4. **Website hosted lifecycle:** exact-domain preview promotion, TLS/domain proof, rollback execution, consented lead attribution, and privacy-safe conversion reporting.
 5. **Ecommerce post-request lifecycle:** Shop-reviewed shipping/tax/payment adapters, durable customer/address identity, return/support request, and abuse/rate-limit recovery. Shared request/order status and safe reorder are implemented and should not become another module.
-6. **Cross-product reporting:** shared master-data dimensions, exception inbox, saved views, and source-backed operational reports without adding top-level navigation.
+6. **Cross-product reporting:** the four-product Today queue is implemented. Shared master-data dimensions, managed-state projection, permission-filtered exceptions, saved views, and source-backed operational reports remain; add them without new top-level navigation.
 
 ## Shared enterprise foundation
 
