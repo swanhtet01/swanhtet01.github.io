@@ -326,7 +326,7 @@ export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
       <PageHeading copy="Four products, one operating system. Start with the most important work." eyebrow="SuperMega" title="What needs attention?" />
-      <Suspense fallback={<p className="form-notice" role="status">Loading today...</p>}><ProductHomeToday /></Suspense>
+      <Suspense fallback={<p className="form-notice" role="status">Loading today...</p>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense>
       <nav aria-label="Business tracks" className="product-track-grid">
         {customerTracks.map(([name, fit, outcome, path, setupPath]) => (
           <article className="product-track-card" key={name}>

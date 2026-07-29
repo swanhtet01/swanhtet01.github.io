@@ -33,6 +33,7 @@ let shopServiceScheduleRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
 let websiteReleaseRuntimeChecks = 0
 let shopOperatingFlowRuntimeChecks = 0
+let operationalReportRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 let shopProductionDemandRuntimeChecks = 0
@@ -101,6 +102,7 @@ const shopInventoryPythonSource = await readFile(resolve(root, 'supermega_runtim
 const managedActivationRunbookSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedActivationRunbook.tsx'), 'utf8')
 const localClientImportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'local-client-import.ts'), 'utf8')
 const settingsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'SettingsPage.tsx'), 'utf8')
+const operationalReportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'operational-report.ts'), 'utf8')
 const channelOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ChannelOrderIntake.tsx'), 'utf8')
 const plantOrderSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts'), 'utf8')
 const plantOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantOrderFoundation.tsx'), 'utf8')
@@ -726,7 +728,7 @@ if (!productHomePageContract.includes('title="What needs attention?"')
   || !productHomePageContract.includes('Setup and activation')
   || !productHomePageContract.includes('Open when needed')
   || !coreShellSource.includes("lazy(() => import('./ProductHomeToday')")
-  || !productHomePageContract.includes('<ProductHomeToday />')
+  || !productHomePageContract.includes('<ProductHomeToday runtimeStatus={runtime.status} />')
   || !coreShellSource.includes("lazy(() => import('./ProductHomeReadiness')")
   || !productHomePageContract.includes('<ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={hostedReady ? 100 : activationCoverage} ready={hostedReady} />')
   || !productHomePageContract.includes('runtime.activationManifest?.next_action')
@@ -749,18 +751,26 @@ if (!productHomePageContract.includes('title="What needs attention?"')
   || productHomePageContract.includes('templatesFor(product.setupProduct)')
   || productHomePageContract.includes('HQ')
   || productHomePageContract.includes('Operations')) fail('first_run_product_launcher_missing')
-if (!productHomeTodaySource.includes('commerceReceivablesAging')
-  || !productHomeTodaySource.includes('commerceStorefrontRequests')
+if (!productHomeTodaySource.includes('buildOperationalReport')
+  || !productHomeTodaySource.includes('loadManagedBootstrap')
+  || !productHomeTodaySource.includes('filterOperationalReport')
+  || !productHomeTodaySource.includes('exportOperationalReport')
   || !productHomeTodaySource.includes('validateProductionState')
-  || !productHomeTodaySource.includes('readinessChecks')
-  || !productHomeTodaySource.includes("product: 'Shop'")
-  || !productHomeTodaySource.includes("product: 'Plant'")
-  || !productHomeTodaySource.includes("product: 'Website'")
-  || !productHomeTodaySource.includes("product: 'Ecommerce'")
-  || !productHomeTodaySource.includes('This queue is read-only')
+  || !operationalReportSource.includes('The source failed validation; no sample values were substituted.')
+  || !productHomeTodaySource.includes('permissions always come from the managed bootstrap')
+  || !productHomeTodaySource.includes('No customer values or external writes were included.')
+  || !productHomeTodaySource.includes('This queue and report are read-only')
   || !productHomeTodaySource.includes("window.addEventListener('storage', refresh)")
-  || productHomeTodaySource.includes('setItem(')
-  || productHomeTodaySource.includes('removeItem(')) fail('product_home_today_read_only_integration_missing')
+  || !productHomeTodaySource.includes('window.localStorage.setItem(OPERATIONAL_REPORT_VIEW_KEY, JSON.stringify(view))')
+  || productHomeTodaySource.includes('saveManaged')
+  || productHomeTodaySource.includes('mutateCommerce')
+  || productHomeTodaySource.includes('mutateProduction')
+  || productHomeTodaySource.includes('removeItem(')
+  || !operationalReportSource.includes("OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v1'")
+  || !operationalReportSource.includes('permissionFiltered: true')
+  || !operationalReportSource.includes('containsCustomerValues: false')
+  || !operationalReportSource.includes('safeToShareExternally: false')
+  || !operationalReportSource.includes("globalThis.crypto.subtle.digest('SHA-256'")) fail('product_home_today_read_only_integration_missing')
 if (!productHomeReadinessSource.includes('const launchReadinessRows = [')
   || !productHomeReadinessSource.includes('const enterpriseAutopilotRows = [')
   || !productHomeReadinessSource.includes('const [behaviorTrail, setBehaviorTrail] = useState<BehaviorTrailEntry[]>([])')
@@ -12144,6 +12154,83 @@ async function verifyProductionRuntime() {
   }
 }
 
+async function verifyOperationalReportRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    operationalReportRuntimeChecks += 1
+  }
+  try {
+    const nonce = Date.now()
+    const [model, commerce, production, website] = await Promise.all([
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'operational-report.ts')).href}?operational-report=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?operational-report-commerce=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts')).href}?operational-report-production=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?operational-report-website=${nonce}`),
+    ])
+    const now = Date.parse('2026-07-29T12:00:00.000Z')
+    const commerceState = commerce.createSeedCommerce()
+    const productionState = production.createSeedProduction()
+    const websiteState = website.createInitialWorkspace()
+    const report = model.buildOperationalReport({
+      mode: 'local',
+      allowedProducts: model.operationalProducts,
+      sources: [
+        { surface: 'commerce', mode: 'sample', revision: null, updatedAt: null },
+        { surface: 'production', mode: 'sample', revision: productionState.revision, updatedAt: null },
+        { surface: 'website', mode: 'sample', revision: websiteState.revision, updatedAt: null },
+      ],
+      commerce: commerceState,
+      production: productionState,
+      website: websiteState,
+      now,
+    })
+    assert(report.contract === model.OPERATIONAL_REPORT_CONTRACT && report.controls.permissionFiltered && report.controls.readOnly, 'operational_report_contract_invalid')
+    assert(new Set(report.entries.map((entry) => entry.product)).size === 4 && report.allowedProducts.length === 4, 'operational_report_product_coverage_incomplete')
+    assert(!JSON.stringify(report).includes('May') && !JSON.stringify(report).includes('Ko Aung'), 'operational_report_exposed_customer_value')
+    assert(report.entries.every((entry, index, entries) => !index || ({ critical: 4, warning: 3, action: 2, ready: 1 })[entries[index - 1].severity] >= ({ critical: 4, warning: 3, action: 2, ready: 1 })[entry.severity]), 'operational_report_priority_order_invalid')
+
+    const websiteOnly = model.buildOperationalReport({
+      mode: 'managed',
+      allowedProducts: ['website'],
+      sources: [{ surface: 'website', mode: 'managed', revision: 3, updatedAt: '2026-07-29T11:00:00.000Z' }],
+      website: websiteState,
+      now,
+    })
+    assert(websiteOnly.entries.every((entry) => entry.product === 'website') && websiteOnly.sources.length === 1, 'operational_report_permission_filter_failed')
+    assert(!JSON.stringify(websiteOnly).includes('commerce') && !JSON.stringify(websiteOnly).includes('production'), 'operational_report_hidden_product_metadata_leaked')
+
+    const unprovisioned = model.buildOperationalReport({
+      mode: 'managed',
+      allowedProducts: ['commerce', 'ecommerce'],
+      sources: [{ surface: 'commerce', mode: 'managed', revision: 0, updatedAt: '2026-07-29T11:00:00.000Z' }],
+      now,
+    })
+    assert(unprovisioned.entries.length === 2 && unprovisioned.entries.every((entry) => entry.id.endsWith('.managed_setup')), 'operational_report_unprovisioned_state_not_explicit')
+    const corrupt = model.buildOperationalReport({
+      mode: 'local',
+      allowedProducts: ['commerce', 'ecommerce'],
+      sources: [{ surface: 'commerce', mode: 'error', revision: null, updatedAt: null }],
+      now,
+    })
+    assert(corrupt.entries.every((entry) => entry.severity === 'critical' && entry.id.endsWith('.source_recovery')), 'operational_report_corrupt_source_used_sample')
+
+    let permissionOrderRejected = false
+    try {
+      model.buildOperationalReport({ mode: 'managed', allowedProducts: ['website', 'commerce'], sources: [{ surface: 'commerce', mode: 'managed', revision: 1, updatedAt: null }, { surface: 'website', mode: 'managed', revision: 1, updatedAt: null }], now })
+    } catch { permissionOrderRejected = true }
+    assert(permissionOrderRejected, 'operational_report_noncanonical_permissions_accepted')
+    const restoredView = model.restoreOperationalReportView({ product: 'commerce', urgency: 'critical' }, ['website'])
+    assert(restoredView.product === 'all' && restoredView.urgency === 'attention', 'operational_report_saved_view_bypassed_permissions')
+    const criticalOnly = model.filterOperationalReport(report, { product: 'all', urgency: 'critical' })
+    assert(criticalOnly.every((entry) => entry.severity === 'critical'), 'operational_report_critical_filter_failed')
+    const exported = await model.exportOperationalReport(websiteOnly, { product: 'website', urgency: 'all' })
+    assert(exported.contract === model.OPERATIONAL_REPORT_EXPORT_CONTRACT && /^sha256:[0-9a-f]{64}$/.test(exported.digest), 'operational_report_export_not_digest_bound')
+    assert(exported.entries.every((entry) => entry.product === 'website') && exported.controls.externalWritesPerformed === false, 'operational_report_export_broadened_scope')
+  } catch (error) {
+    fail(`operational_report_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 async function verifyShopOperatingFlowRuntime() {
   const assert = (condition, reason) => {
     if (!condition) throw new Error(reason)
@@ -12173,6 +12260,7 @@ async function verifyShopOperatingFlowRuntime() {
   }
 }
 
+await verifyOperationalReportRuntime()
 await verifyShopOperatingFlowRuntime()
 await verifyChannelOrderRuntime()
 await verifyShopInventoryRuntime()
@@ -12209,4 +12297,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
