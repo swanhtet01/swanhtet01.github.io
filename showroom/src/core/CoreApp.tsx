@@ -2838,9 +2838,19 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       || consumedEcommerceDraftId.current === ecommerceNavigationDraft.id) return
     let current = true
     void import('../products/ecommerce/ecommerce-shop-handoff')
-      .then(({ ecommerceShopDraftLines, ecommerceShopDraftMatchesCatalog, ecommerceShopDraftPayment }) => {
+      .then(({ ecommerceShopDraftLines, ecommerceShopDraftMatchesCatalog, ecommerceShopDraftMatchesOperatingContext, ecommerceShopDraftPayment }) => {
         if (!current) return
         const navigationDraftId = ecommerceNavigationDraft.id
+        const availableLocationIds = commerce.inventoryFoundation
+          ? managedInventoryProjection?.locations.map((candidate) => candidate.id) ?? []
+          : null
+        if (!ecommerceShopDraftMatchesOperatingContext(ecommerceNavigationDraft, availableLocationIds)) {
+          consumedEcommerceDraftId.current = navigationDraftId
+          setPreparedEcommerceDraft(null)
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+          setNotice('The Ecommerce request has no valid Shop operating authority. Nothing was prepared.')
+          return
+        }
         if (!ecommerceShopDraftMatchesCatalog(ecommerceNavigationDraft, commerce.items)) {
           consumedEcommerceDraftId.current = navigationDraftId
           if (preparedEcommerceDraft) {
@@ -2878,7 +2888,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         if (current) setNotice('The Ecommerce request guard could not load. Nothing was prepared.')
       })
     return () => { current = false }
-  }, [commerce.items, ecommerceNavigationDraft, managedIdentity, navigate, preparedEcommerceDraft, workspaceMode])
+  }, [commerce.inventoryFoundation, commerce.items, ecommerceNavigationDraft, managedIdentity, managedInventoryProjection, navigate, preparedEcommerceDraft, workspaceMode])
 
   useEffect(() => {
     const sourceKey = requestedRequestId || 'ecommerce-inbox'
@@ -3632,17 +3642,24 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       return
     }
     const ecommerceLines = ecommerceDraft
-      ? ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v2'
+      ? ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v3'
         ? ecommerceDraft.lines
         : [ecommerceDraft.line]
       : []
-    const ecommercePayment = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v2'
+    const ecommercePayment = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v3'
       ? ecommerceDraft.pricing.payment.adapter === 'cash_on_delivery'
         ? 'Cash on delivery'
         : ecommerceDraft.pricing.payment.adapter === 'kbzpay_manual'
           ? 'KBZPay'
           : 'Cash'
       : ''
+    if (ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v3'
+      && commerce.inventoryFoundation
+      && !managedInventoryProjection?.locations.some((candidate) => candidate.id === ecommerceDraft.operatingContext.operatingUnitLocationId)) {
+      detachPreparedOrderSources({ ecommerce: true })
+      setNotice('The Shop operating location changed after Ecommerce review. Reopen the request; no order was prepared.')
+      return
+    }
     if (ecommerceDraft && (customer.trim() !== ecommerceDraft.customerReference
       || channel !== 'Ecommerce'
       || fulfilment !== ecommerceDraft.fulfilment
@@ -4611,7 +4628,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       {orderEntryMode === 'manual' ? <>
         <div className="order-entry-panel" data-mode="manual">
         {preparedEcommerceDraft ? <div className="channel-source-ready">
-          <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.fulfilment} · price locked · no stock reserved</small></div>
+          <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.schema === 'supermega.ecommerce.shop_draft.v3' ? `${preparedEcommerceDraft.operatingContext.operatingUnitLocationId} · governed handoff · ` : ''}{preparedEcommerceDraft.fulfilment} · price locked · no stock reserved</small></div>
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ channel: false }); setNotice('Ecommerce source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
         </div> : null}
         {preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? <div className="channel-source-ready" ref={preparedChannelRef} tabIndex={-1}>

@@ -8,7 +8,8 @@ import {
 export const ECOMMERCE_PIM_SCHEMA = 'supermega.ecommerce.pim_projection.v1' as const
 export const ECOMMERCE_QUOTE_SCHEMA = 'supermega.ecommerce.checkout_quote.v1' as const
 export const ECOMMERCE_REQUEST_SCHEMA_V2 = 'supermega.ecommerce.order_request.v2' as const
-export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V2 = 'supermega.ecommerce.shop_draft.v2' as const
+export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V3 = 'supermega.ecommerce.shop_draft.v3' as const
+export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V2 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V3
 export const ECOMMERCE_RETURN_INTENT_SCHEMA = 'supermega.ecommerce.return_intent.v1' as const
 export const ECOMMERCE_BUYING_STATE_SCHEMA = 'supermega.ecommerce.buying_lifecycle.v1' as const
 export const ECOMMERCE_BUYING_EVENT_SCHEMA = 'supermega.ecommerce.buying_event.v1' as const
@@ -108,7 +109,7 @@ export type EcommerceOrderRequestV2 = {
 }
 
 export type EcommerceShopDraftV2 = {
-  schema: typeof ECOMMERCE_SHOP_DRAFT_SCHEMA_V2
+  schema: typeof ECOMMERCE_SHOP_DRAFT_SCHEMA_V3
   mode: 'browser-memory-shop-draft'
   state: 'review_required'
   id: string
@@ -121,6 +122,14 @@ export type EcommerceShopDraftV2 = {
   customerReference: string
   fulfilment: EcommerceFulfilment
   currency: 'MMK'
+  operatingContext: {
+    organizationScope: string
+    operatingUnitLocationId: 'LOC-MAIN'
+    sourceAuthority: 'ecommerce'
+    targetAuthority: 'commerce'
+    recordType: 'order_request'
+    writePolicy: 'human_review_required'
+  }
   lines: EcommerceQuoteLine[]
   pricing: {
     subtotalMmk: number
@@ -921,7 +930,7 @@ export async function prepareEcommerceShopDraftV2(input: {
       || item.onHand < line.quantity) throw new Error('A quoted item, variant, price, or availability changed.')
   })
   return {
-    schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V2,
+    schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V3,
     mode: 'browser-memory-shop-draft',
     state: 'review_required',
     id: `ESD-${request.id.slice(4)}`,
@@ -934,6 +943,14 @@ export async function prepareEcommerceShopDraftV2(input: {
     customerReference: request.customerReference,
     fulfilment: request.fulfilment,
     currency: 'MMK',
+    operatingContext: {
+      organizationScope: request.scope,
+      operatingUnitLocationId: 'LOC-MAIN',
+      sourceAuthority: 'ecommerce',
+      targetAuthority: 'commerce',
+      recordType: 'order_request',
+      writePolicy: 'human_review_required',
+    },
     lines: canonicalCopy(request.lines),
     pricing: {
       subtotalMmk: request.quote.subtotalMmk,
@@ -944,7 +961,7 @@ export async function prepareEcommerceShopDraftV2(input: {
       totalMmk: request.quote.totalMmk,
     },
     totalMmk: request.totalMmk,
-    evidenceReference: `ECOMMERCE:${request.id}:${request.sourcePreviewDigest}:${request.quote.quoteDigest}`,
+    evidenceReference: `ECOMMERCE:${request.id}:${request.sourcePreviewDigest}:${request.quote.quoteDigest}:${request.scope}:LOC-MAIN:ecommerce>commerce:human_review_required`,
   }
 }
 
@@ -982,9 +999,9 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
   const source = exactObject(value, 'Shop draft', [
     'schema', 'mode', 'state', 'id', 'sourceRequestId', 'sourcePreviewDigest',
     'quoteDigest', 'quoteExpiresAt', 'createdAt', 'confirmedAt', 'customerReference',
-    'fulfilment', 'currency', 'lines', 'pricing', 'totalMmk', 'evidenceReference',
+    'fulfilment', 'currency', 'operatingContext', 'lines', 'pricing', 'totalMmk', 'evidenceReference',
   ])
-  if (source.schema !== ECOMMERCE_SHOP_DRAFT_SCHEMA_V2
+  if (source.schema !== ECOMMERCE_SHOP_DRAFT_SCHEMA_V3
     || source.mode !== 'browser-memory-shop-draft'
     || source.state !== 'review_required'
     || !Array.isArray(source.lines)
@@ -1006,6 +1023,15 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
   const fulfilment = source.fulfilment
   if (!fulfilmentMethods.includes(fulfilment as EcommerceFulfilment)) throw new Error('Shop draft fulfilment is invalid.')
   if (source.currency !== 'MMK') throw new Error('Shop draft currency is invalid.')
+  const operatingContext = exactObject(source.operatingContext, 'Shop draft.operatingContext', [
+    'organizationScope', 'operatingUnitLocationId', 'sourceAuthority', 'targetAuthority', 'recordType', 'writePolicy',
+  ])
+  const organizationScope = canonicalToken(operatingContext.organizationScope, 'Shop draft.operatingContext.organizationScope')
+  if (operatingContext.operatingUnitLocationId !== 'LOC-MAIN'
+    || operatingContext.sourceAuthority !== 'ecommerce'
+    || operatingContext.targetAuthority !== 'commerce'
+    || operatingContext.recordType !== 'order_request'
+    || operatingContext.writePolicy !== 'human_review_required') throw new Error('Shop draft operating authority is invalid.')
   const lines = source.lines.map((line, index) => quoteLine(line, `Shop draft.lines[${index}]`))
   if (lines.some((line, index) => index > 0 && lines[index - 1].sku >= line.sku)) {
     throw new Error('Shop draft lines must use unique canonical SKU order.')
@@ -1039,10 +1065,10 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
   if (!paymentAdapters.includes(payment.adapter as EcommercePaymentAdapter)
     || payment.status !== 'not_authorized'
     || payment.amountMmk !== 0) throw new Error('Shop draft payment boundary is invalid.')
-  const evidenceReference = `ECOMMERCE:${sourceRequestId}:${sourcePreviewDigest}:${quoteDigest}`
+  const evidenceReference = `ECOMMERCE:${sourceRequestId}:${sourcePreviewDigest}:${quoteDigest}:${organizationScope}:LOC-MAIN:ecommerce>commerce:human_review_required`
   if (source.evidenceReference !== evidenceReference) throw new Error('Shop draft evidence reference is invalid.')
   return {
-    schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V2,
+    schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V3,
     mode: 'browser-memory-shop-draft',
     state: 'review_required',
     id,
@@ -1055,6 +1081,14 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
     customerReference: canonicalText(source.customerReference, 'Shop draft.customerReference', 80),
     fulfilment: fulfilment as EcommerceFulfilment,
     currency: 'MMK',
+    operatingContext: {
+      organizationScope,
+      operatingUnitLocationId: 'LOC-MAIN',
+      sourceAuthority: 'ecommerce',
+      targetAuthority: 'commerce',
+      recordType: 'order_request',
+      writePolicy: 'human_review_required',
+    },
     lines,
     pricing: {
       subtotalMmk,

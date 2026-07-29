@@ -20,7 +20,7 @@ from typing import Any
 ECOMMERCE_PIM_SCHEMA = "supermega.ecommerce.pim_projection.v1"
 ECOMMERCE_QUOTE_SCHEMA = "supermega.ecommerce.checkout_quote.v1"
 ECOMMERCE_REQUEST_SCHEMA = "supermega.ecommerce.order_request.v2"
-ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v2"
+ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v3"
 ECOMMERCE_RETURN_INTENT_SCHEMA = "supermega.ecommerce.return_intent.v1"
 ECOMMERCE_LIFECYCLE_STATE_SCHEMA = "supermega.ecommerce.buying_lifecycle.v1"
 ECOMMERCE_LIFECYCLE_EVENT_SCHEMA = "supermega.ecommerce.buying_event.v1"
@@ -761,6 +761,14 @@ def prepare_ecommerce_shop_handoff(
         "customerReference": request["customerReference"],
         "fulfilment": request["fulfilment"],
         "currency": "MMK",
+        "operatingContext": {
+            "organizationScope": request["scope"],
+            "operatingUnitLocationId": "LOC-MAIN",
+            "sourceAuthority": "ecommerce",
+            "targetAuthority": "commerce",
+            "recordType": "order_request",
+            "writePolicy": "human_review_required",
+        },
         "lines": _canonical_copy(request["lines"]),
         "pricing": {
             "subtotalMmk": quote["subtotalMmk"],
@@ -773,7 +781,8 @@ def prepare_ecommerce_shop_handoff(
         "totalMmk": request["totalMmk"],
         "evidenceReference": (
             f"ECOMMERCE:{request['id']}:{request['sourcePreviewDigest']}:"
-            f"{quote['quoteDigest']}"
+            f"{quote['quoteDigest']}:{request['scope']}:LOC-MAIN:"
+            "ecommerce>commerce:human_review_required"
         ),
     }
     return _canonical_copy(draft)

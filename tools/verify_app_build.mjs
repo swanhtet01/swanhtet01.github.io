@@ -103,6 +103,7 @@ const websiteReleaseUiSource = await readFile(resolve(root, 'showroom', 'src', '
 const managedWebsitePythonRuntime = await readFile(resolve(root, 'supermega_runtime', 'website_runtime.py'), 'utf8')
 const ecommerceBuyingUiSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceBuyingWorkspace.tsx'), 'utf8')
 const ecommerceBuyingLifecycleSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-buying-lifecycle.ts'), 'utf8')
+const managedEcommerceBuyingLifecycleSource = await readFile(resolve(root, 'supermega_runtime', 'ecommerce_buying_lifecycle.py'), 'utf8')
 const shopOperatingFlowSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-operating-flow.ts'), 'utf8')
 const shopOperatingFlowUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopOperatingFlow.tsx'), 'utf8')
 const shopServiceScheduleSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-service-scheduling.ts'), 'utf8')
@@ -889,6 +890,7 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !ecommerceHandoffSource.includes("supermega.ecommerce.shop_draft.v1")
   || !ecommerceHandoffSource.includes("state: 'review_required'")
   || !ecommerceHandoffSource.includes('ecommerceShopDraftMatchesCatalog')
+  || !ecommerceHandoffSource.includes('ecommerceShopDraftMatchesOperatingContext')
   || !ecommerceHandoffSource.includes('validateEcommerceShopDraftV2')
   || !ecommerceHandoffSource.includes('ecommerceShopDraftLines')
   || !ecommerceHandoffSource.includes('ecommerceShopDraftPayment')
@@ -898,11 +900,14 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !ecommerceBuyingUiSource.includes('Payment remains unauthorized.')
   || !ecommerceSource.includes('state: { ecommerceShopDraft: draft }')
   || !coreSource.includes('Ecommerce request')
-  || !coreSource.includes('ecommerceShopDraftLines, ecommerceShopDraftMatchesCatalog, ecommerceShopDraftPayment')
+  || !coreSource.includes('ecommerceShopDraftLines, ecommerceShopDraftMatchesCatalog, ecommerceShopDraftMatchesOperatingContext, ecommerceShopDraftPayment')
   || !coreSource.includes('const draftLines = ecommerceShopDraftLines(ecommerceNavigationDraft)')
   || !coreSource.includes('setExtraOrderLines(draftLines.slice(1).map')
   || !coreSource.includes('setPayment(ecommerceShopDraftPayment(ecommerceNavigationDraft))')
-  || !coreSource.includes("ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v2'")
+  || !coreSource.includes("ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v3'")
+  || !coreSource.includes("setNotice('The Ecommerce request has no valid Shop operating authority. Nothing was prepared.')")
+  || !coreSource.includes("setNotice('The Shop operating location changed after Ecommerce review. Reopen the request; no order was prepared.')")
+  || !coreSource.includes('governed handoff')
   || !coreSource.includes('? ecommerceDraft.lines')
   || !coreSource.includes('orderLines.length !== ecommerceLines.length')
   || !coreSource.includes('orderTotal !== ecommerceDraft.totalMmk')
@@ -928,6 +933,11 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !coreSource.includes('Payment ${payment} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)}')
   || !coreSource.includes('Stock ${reservationReview}')
   || !coreCssSource.includes('.order-ecommerce-payment')
+  || !ecommerceBuyingLifecycleSource.includes("ECOMMERCE_SHOP_DRAFT_SCHEMA_V3 = 'supermega.ecommerce.shop_draft.v3'")
+  || !ecommerceBuyingLifecycleSource.includes("operatingUnitLocationId: 'LOC-MAIN'")
+  || !ecommerceBuyingLifecycleSource.includes("writePolicy: 'human_review_required'")
+  || !managedEcommerceBuyingLifecycleSource.includes('ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v3"')
+  || !managedEcommerceBuyingLifecycleSource.includes('"operatingUnitLocationId": "LOC-MAIN"')
   || !coreSource.includes("import('../products/ecommerce/ecommerce-shop-handoff')")
   || ['setItem(', 'removeItem(', 'localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest', 'navigator.locks', 'convertCommerceWebsiteIntake', 'reserveCommerceOrder', 'mutateCommerceWorkspace'].some((marker) => ecommerceConfirmSource.includes(marker) || ecommerceHandoffSource.includes(marker))) fail('ecommerce_shop_handoff_contract_missing_or_mutating')
 if (!ecommerceSource.includes('{!savedDraftIsCurrent ? <div className="ecommerce-save-actions">')
@@ -8145,7 +8155,10 @@ async function verifyStorefrontRuntime() {
       currentCatalog: catalog,
       confirmedAt: '2026-07-24T09:10:00.000Z',
     })
-    buyingAssert(managedBuyingDraft.lines.length === 2 && buyingModel.ecommerceShopDraftV2MatchesCatalog(managedBuyingDraft, catalog),
+    buyingAssert(managedBuyingDraft.lines.length === 2
+      && managedBuyingDraft.operatingContext.operatingUnitLocationId === 'LOC-MAIN'
+      && managedBuyingDraft.operatingContext.targetAuthority === 'commerce'
+      && buyingModel.ecommerceShopDraftV2MatchesCatalog(managedBuyingDraft, catalog),
       'ecommerce_buying_managed_inbox_draft_not_catalog_bound')
     const emptyBuying = buyingModel.createEmptyEcommerceBuyingState(buyingScope)
     const recordedBuying = await buyingModel.recordEcommerceOrderRequestV2(emptyBuying, buyingRequest, emptyBuying.headDigest)
@@ -8168,11 +8181,29 @@ async function verifyStorefrontRuntime() {
       currentCatalog: catalog,
       confirmedAt: '2026-07-24T09:10:00.000Z',
     })
-    buyingAssert(buyingDraft.schema === 'supermega.ecommerce.shop_draft.v2'
+    buyingAssert(buyingDraft.schema === 'supermega.ecommerce.shop_draft.v3'
       && buyingDraft.lines.length === 2
       && buyingDraft.pricing.payment.status === 'not_authorized'
+      && buyingDraft.operatingContext.organizationScope === buyingScope
+      && buyingDraft.operatingContext.operatingUnitLocationId === 'LOC-MAIN'
+      && buyingDraft.operatingContext.sourceAuthority === 'ecommerce'
+      && buyingDraft.operatingContext.targetAuthority === 'commerce'
+      && buyingDraft.operatingContext.writePolicy === 'human_review_required'
       && buyingModel.ecommerceShopDraftV2MatchesCatalog(buyingDraft, catalog),
     'ecommerce_buying_shop_draft_not_review_only_or_catalog_bound')
+    buyingAssert(handoffModel.ecommerceShopDraftMatchesOperatingContext(buyingDraft, ['LOC-MAIN'])
+      && !handoffModel.ecommerceShopDraftMatchesOperatingContext(buyingDraft, ['LOC-BRANCH']),
+    'ecommerce_buying_shop_draft_operating_location_not_enforced')
+    const authorityTamper = structuredClone(buyingDraft)
+    authorityTamper.operatingContext.targetAuthority = 'production'
+    let authorityTamperRejected = false
+    try { buyingModel.validateEcommerceShopDraftV2(authorityTamper) } catch { authorityTamperRejected = true }
+    buyingAssert(authorityTamperRejected, 'ecommerce_buying_shop_draft_authority_tamper_accepted')
+    const scopeTamper = structuredClone(buyingDraft)
+    scopeTamper.operatingContext.organizationScope = 'different-scope'
+    let scopeTamperRejected = false
+    try { buyingModel.validateEcommerceShopDraftV2(scopeTamper) } catch { scopeTamperRejected = true }
+    buyingAssert(scopeTamperRejected, 'ecommerce_buying_shop_draft_scope_tamper_accepted')
     let expiredBuyingRejected = false
     try {
       await buyingModel.prepareEcommerceShopDraftV2({
