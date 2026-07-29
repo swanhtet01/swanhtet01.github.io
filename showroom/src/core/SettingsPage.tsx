@@ -221,6 +221,33 @@ export function SettingsPage() {
   const requestedProduct = setupProductFromQuery(setupSearchParams.get('product'))
   const selectedProduct = productContracts[setup.product]
   const selectedTemplate = templateFor(setup.product, setup.templateId)
+  const launchPackRows: Array<readonly [string, string, string]> = setup.product === 'commerce'
+    ? [
+      ['Bring', 'Product CSV, stock count, payment proof', 'Start from products, on-hand units, prices, and recent payment exceptions.'],
+      ['AI prepares', 'Catalog, reorder, order, accounting packets', 'The workspace maps SKU data, ranks stock risk, drafts Shop work, and keeps receipts reviewable.'],
+      ['First proof', 'One clean sale or stock review', 'Show the owner a reviewed queue before any stock, supplier, refund, or ledger write.'],
+      ['Gate', 'Owner approves writes', 'No sale, payment, supplier message, stock move, or accounting export runs from setup.'],
+    ]
+    : setup.product === 'production'
+      ? [
+        ['Bring', 'Job CSV, material list, quality holds', 'Start from planned work, BOM/material needs, WCM/maintenance issues, and ISO evidence.'],
+        ['AI prepares', 'MES queue, MRP check, ISO handoff', 'The workspace ranks jobs, blockers, material proof, quality release, and cost-readiness.'],
+        ['First proof', 'One shift handoff packet', 'Show production, quality, maintenance, trace, and cost evidence before any plant write.'],
+        ['Gate', 'Owner approves production', 'No equipment command, material issue, quality release, costing, or production write runs from setup.'],
+      ]
+      : setup.product === 'website'
+        ? [
+          ['Bring', 'Facts, offers, proof, photos, links', 'Start from the buyer proof needed to generate a useful website package.'],
+          ['AI prepares', 'Pages, copy, CTAs, SEO, release checklist', 'The workspace creates a reviewable static package and rollout plan without touching DNS.'],
+          ['First proof', 'One reviewed site package', 'Show the owner a package with contact route, claims, proof, and publish blockers.'],
+          ['Gate', 'Owner approves launch', 'No domain, form send, analytics install, CRM write, or publish action runs from setup.'],
+        ]
+        : [
+          ['Bring', 'Catalog rows, order CSV, channel samples', 'Start from products plus Viber, LINE, WeChat, email, form, or CSV order examples.'],
+          ['AI prepares', 'Storefront, quote, order review, Shop handoff', 'The workspace normalizes customer, SKU, quantity, fulfilment, payment, and source proof.'],
+          ['First proof', 'One Shop-ready order packet', 'Show ready/blocked order rows and the owner handoff before customer contact or fulfilment.'],
+          ['Gate', 'Owner approves fulfilment', 'No customer message, payment capture, delivery booking, stock move, refund, or Shop write runs from setup.'],
+        ]
   const evidenceDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date())
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
   const managedTrialRequestFilename = `supermega-managed-trial-request-${evidenceDate}.json`
@@ -1090,6 +1117,10 @@ export function SettingsPage() {
           <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${displayedCompletion}%` }} /></div><small>{settingsStep === 'workflow' ? 'Template - owner' : 'Record - target - evidence'}</small></div>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'workflow'} hidden={settingsStep !== 'workflow'}>
           {requestedProduct ? <div className="setup-selected-product"><span><small>Selected product</small><strong>{selectedProduct.name}</strong></span><Link className="text-link" to="/">Change product</Link></div> : <div aria-label="Choose solution" className="setup-product-grid" role="group">{Object.values(productContracts).map((product) => <button aria-pressed={setup.product === product.id} key={product.id} onClick={() => changeProduct(product.id)} type="button"><span><strong>{product.name}</strong><small>{product.headline}</small></span><b>{product.templates.length} templates</b></button>)}</div>}
+          <section aria-label="Selected launch pack checklist" className="setup-launch-pack">
+            <div><span className="core-eyebrow">Launch pack checklist</span><strong>{selectedProduct.name} setup</strong><small>Bring the starting data. AI prepares the packet. Owner keeps the gate.</small></div>
+            <div className="setup-launch-pack-rows">{launchPackRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+          </section>
           <div className="form-row"><label>Starting template<select value={setup.templateId} onChange={(event) => changeTemplate(event.target.value)}>{templatesFor(setup.product).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label><label>Starting point<select value={setup.entryPoint} onChange={(event) => updateSetup({ entryPoint: event.target.value })}>{selectedTemplate.entryPoints.map((entryPoint) => <option key={entryPoint}>{entryPoint}</option>)}</select></label></div>
           <div className="setup-template-summary"><div><span>Outcome</span><strong>{selectedTemplate.outcome}</strong></div><ol aria-label={`${selectedTemplate.name} workflow`}>{selectedTemplate.workflow.map((step) => <li key={step}>{step}</li>)}</ol><small>Measure success with {selectedTemplate.metric.toLowerCase()}.</small></div>
           <div className="form-row"><label>Workspace name<input maxLength={80} required value={setup.workspace} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder={setup.product === 'commerce' ? 'Example: Social sales team' : setup.product === 'production' ? 'Example: Main plant' : setup.product === 'website' ? 'Example: Company website' : 'Example: Online order desk'} /></label><label>Responsible owner<input maxLength={80} required value={setup.owner} onChange={(event) => updateSetup({ owner: event.target.value })} placeholder="Name or role" /></label></div>
