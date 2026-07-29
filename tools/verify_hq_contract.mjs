@@ -903,7 +903,9 @@ requireContract('research uses official sources',
 requireContract('Ally runtime audit is read-only and bounded',
   allyAuditText.includes("supermega.ally-runtime-audit.v1")
   && allyAuditText.includes("$HostAdmissionContract = 'supermega.ally-host-admission.v1'")
-  && allyAuditText.includes('$port -ge 5173 -and $port -le 5199')
+  && allyAuditText.includes('$Port -ge 5173 -and $Port -le 5199')
+  && allyAuditText.includes('$BackendPorts = @(8000, 8001, 8788)')
+  && allyAuditText.includes('$role = Get-ListenerRole $port')
   && allyAuditText.includes('maxConcurrentLocalRuns')
   && allyAuditText.includes("$CodexSubagentPolicyContract = 'supermega.codex-subagent-policy.v1'")
   && allyAuditText.includes("subagentObservation = 'runtime_count_not_os_observable'")

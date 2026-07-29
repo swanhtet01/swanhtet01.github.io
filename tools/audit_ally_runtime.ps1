@@ -21,6 +21,15 @@ $CodexSubagentPolicyContract = 'supermega.codex-subagent-policy.v1'
 $MaxLocalCompanyHealthBytes = 65536
 $MaxCodexConfigBytes = 262144
 $RepoMarker = 'supermega-platform'
+$BackendPorts = @(8000, 8001, 8788)
+
+function Get-ListenerRole {
+    param([int]$Port)
+    if (($Port -ge 4173 -and $Port -le 4199) -or ($Port -ge 5173 -and $Port -le 5199)) { return 'frontend' }
+    if ($BackendPorts -contains $Port) { return 'backend' }
+    if ($Port -eq 8765) { return 'worker' }
+    return ''
+}
 
 function ConvertTo-CodexSubagentPolicy {
     param([string]$Text)
@@ -268,7 +277,10 @@ function Invoke-SelfTest {
     $unverifiedPolicy = [pscustomobject]@{ contract = $CodexSubagentPolicyContract; verified = $false; multiAgentEnabled = $null; configuredMaxLocalSubagents = $null }
     $unverifiedFindings = @(Get-AuditFindings 50 500 0 $empty $true $null $false $false $unverifiedPolicy)
     if ($unverifiedFindings.code -notcontains 'codex_subagent_policy_unverified' -or (Get-HostAdmission $unverifiedFindings).eligible) { throw 'codex_subagent_unverified_fixture_failed' }
-    [pscustomobject]@{ ok = $true; contract = $Contract; hostAdmissionContract = $HostAdmissionContract; localCompanyHealthContract = $LocalCompanyHealthContract; codexSubagentPolicyContract = $CodexSubagentPolicyContract; checks = 18; processMutation = $false }
+    if ((Get-ListenerRole 5173) -ne 'frontend' -or (Get-ListenerRole 4187) -ne 'frontend') { throw 'frontend_port_fixture_failed' }
+    if ((Get-ListenerRole 8788) -ne 'backend' -or (Get-ListenerRole 8000) -ne 'backend') { throw 'backend_port_fixture_failed' }
+    if ((Get-ListenerRole 8765) -ne 'worker' -or (Get-ListenerRole 11434) -ne '') { throw 'worker_port_fixture_failed' }
+    [pscustomobject]@{ ok = $true; contract = $Contract; hostAdmissionContract = $HostAdmissionContract; localCompanyHealthContract = $LocalCompanyHealthContract; codexSubagentPolicyContract = $CodexSubagentPolicyContract; checks = 21; processMutation = $false }
 }
 
 if ($SelfTest) {
@@ -343,10 +355,7 @@ try {
     $listeners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop)
     foreach ($listener in $listeners) {
         $port = [int]$listener.LocalPort
-        $role = if (($port -ge 4173 -and $port -le 4199) -or ($port -ge 5173 -and $port -le 5199)) { 'frontend' }
-            elseif ($port -in @(8000, 8001)) { 'backend' }
-            elseif ($port -eq 8765) { 'worker' }
-            else { '' }
+        $role = Get-ListenerRole $port
         if (-not $role) { continue }
         $owner = $processMap[[int]$listener.OwningProcess]
         $owned = if ($role -eq 'worker') {
