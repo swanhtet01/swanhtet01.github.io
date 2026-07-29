@@ -175,10 +175,19 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.fullPlatformStatusTeams?.join(',') === 'engineering,finance-risk'
   && portfolio.agentOperatingModel?.connectorFleetDeferredForDailyProductGrowth === true
   && portfolio.agentOperatingModel?.maxOutcomesPerCeoCycle === 1
-  && portfolio.agentOperatingModel?.productControlFocusContract === 'supermega.ally-ceo-product-focus.v1'
-  && portfolio.agentOperatingModel?.productControlStrategy === 'utc_day_round_robin'
+  && portfolio.agentOperatingModel?.productControlFocusContract === 'supermega.ally-ceo-product-focus.v2'
+  && portfolio.agentOperatingModel?.productControlStrategy === 'portfolio_priority_ready'
   && portfolio.agentOperatingModel?.productControlSpecialist === 'delivery-planner'
   && portfolio.agentOperatingModel?.productControlAcceptanceDimensions?.join(',') === 'user_job,state_transition,data_contract,failure_recovery,mobile_acceptance,import_reconciliation,security_boundary,automated_test'
+  && portfolio.products?.every((product) =>
+    Object.keys(product.localAutomation || {}).sort().join(',') === 'priority,reason,status,workOrder'
+    && Number.isInteger(product.localAutomation.priority)
+    && product.localAutomation.priority >= 1
+    && product.localAutomation.priority <= 100
+    && ['ready-local', 'owner-gated', 'external-blocked'].includes(product.localAutomation.status)
+    && product.localAutomation.workOrder?.trim()
+    && product.localAutomation.reason?.trim())
+  && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').map((product) => product.id).join(',') === 'ecommerce'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -992,8 +1001,8 @@ requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
   && allyCeoPlannerText.includes("'daily-company-control': Object.freeze(['operations-analyst'])")
   && allyCeoPlannerText.includes("'product-portfolio-control': Object.freeze(['delivery-planner'])")
-  && allyCeoPlannerText.includes("ALLY_CEO_PRODUCT_FOCUS_CONTRACT = 'supermega.ally-ceo-product-focus.v1'")
-  && allyCeoPlannerText.includes("selection: 'utc_day_round_robin'")
+  && allyCeoPlannerText.includes("ALLY_CEO_PRODUCT_FOCUS_CONTRACT = 'supermega.ally-ceo-product-focus.v2'")
+  && allyCeoPlannerText.includes("selection: 'portfolio_priority_ready'")
   && allyCeoPlannerText.includes("'failure_recovery'")
   && allyCeoPlannerText.includes("registeredRoleLimit !== 12")
   && allyCeoPlannerText.includes("activeAssignmentLimit !== 2")

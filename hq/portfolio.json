@@ -39,8 +39,8 @@
     "fullPlatformStatusTeams": ["engineering", "finance-risk"],
     "connectorFleetDeferredForDailyProductGrowth": true,
     "maxOutcomesPerCeoCycle": 1,
-    "productControlFocusContract": "supermega.ally-ceo-product-focus.v1",
-    "productControlStrategy": "utc_day_round_robin",
+    "productControlFocusContract": "supermega.ally-ceo-product-focus.v2",
+    "productControlStrategy": "portfolio_priority_ready",
     "productControlSpecialist": "delivery-planner",
     "productControlAcceptanceDimensions": ["user_job", "state_transition", "data_contract", "failure_recovery", "mobile_acceptance", "import_reconciliation", "security_boundary", "automated_test"],
     "fixedReadOnlyEvidencePlan": true,
@@ -95,6 +95,12 @@
       "job": "Run orders, available-stock counts, purchasing and receipt, fulfilment, payment status, bounded returns, exceptions, versioned per-order tax calculation, daily close, and a balanced review-only accounting handoff with correction settlement and source-document traceability from one accountable shop record.",
       "surfaces": ["Sell", "Orders", "Stock"],
       "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
+      "localAutomation": {
+        "priority": 80,
+        "status": "owner-gated",
+        "workOrder": "Rehearse one authenticated order-to-close and return exception with a named operator on an isolated managed tenant.",
+        "reason": "The next Shop proof requires a founder-selected operator and approved isolated tenant, so local automation must not spend a model call pretending it can complete it."
+      },
       "nextGate": "Repeat one authenticated order-to-close and return-exception pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
     },
     {
@@ -108,6 +114,12 @@
       "job": "Run jobs, accountable short closes, output, job-linked material use, quality, equipment observations, maintenance, and shift exceptions from one plant record.",
       "surfaces": ["Jobs", "Problems"],
       "templateContract": { "file": "../site-manifest.json", "productId": "production" },
+      "localAutomation": {
+        "priority": 70,
+        "status": "owner-gated",
+        "workOrder": "Validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant.",
+        "reason": "The Plant evidence gate needs named human timing evidence and an approved managed tenant; automation cannot manufacture either input."
+      },
       "nextGate": "Validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant, reconcile the exact work-centre downtime source, and measure correction effort before adding costing or calibration adapters."
     },
     {
@@ -119,6 +131,12 @@
       "job": "Turn an approved business brief into a finite, reviewable website and one deterministic downloadable site file.",
       "surfaces": ["Preview", "Edit", "Download"],
       "templateContract": { "file": "../site-manifest.json", "productId": "website" },
+      "localAutomation": {
+        "priority": 60,
+        "status": "owner-gated",
+        "workOrder": "Run one named business brief through responsive review and retain the accepted managed artifact.",
+        "reason": "A real named business brief and accepted owner review are missing, so a generated sample cannot truthfully close the Website gate."
+      },
       "nextGate": "Complete one named-business brief through accepted responsive preview and retained managed artifact before connecting domain or publish authority."
     },
     {
@@ -130,6 +148,12 @@
       "job": "Create a simple customer storefront from a read-only Shop catalogue, quote a recoverable cart, and send structured order intent into Shop without duplicating back-office records.",
       "surfaces": ["Store", "Edit store", "Cart", "Quote", "Shop review"],
       "templateContract": { "file": "../site-manifest.json", "productId": "ecommerce" },
+      "localAutomation": {
+        "priority": 100,
+        "status": "ready-local",
+        "workOrder": "Add one order-bound customer support case lifecycle inside the existing Ecommerce buying surface and carry its exact request and Shop-order evidence into accountable Shop review without sending a message or creating a refund.",
+        "reason": "Customer and delivery identity now survive Shop handoff, making the roadmap's support-case gap the highest-value executable local continuation while hosted payment, shipping, and tenant work remain gated."
+      },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }
   ],

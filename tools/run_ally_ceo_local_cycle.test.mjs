@@ -31,25 +31,31 @@ test('HQ live command failures retain only recognized contract categories', () =
 
 function plan({ outcomeId = 'daily-company-control', hashCharacter = 'a' } = {}) {
   const generatedAt = '2026-07-29T00:00:00.000Z'
+  const productFocus = outcomeId === 'product-portfolio-control' ? {
+    contract: 'supermega.ally-ceo-product-focus.v2',
+    selection: 'portfolio_priority_ready',
+    productId: 'ecommerce',
+    status: 'release-candidate-local',
+    nextGate: 'Prove one duplicate-safe cart-to-Shop handoff.',
+    localPriority: 100,
+    workOrder: 'Add one order-bound customer support case.',
+    selectionReason: 'Identity handoff is ready and support remains an executable local gap.',
+    readyCandidateCount: 1,
+    lifecycle: ['discover', 'define', 'build', 'release', 'learn'],
+    acceptanceDimensions: ['user_job', 'state_transition', 'data_contract', 'failure_recovery', 'mobile_acceptance', 'import_reconciliation', 'security_boundary', 'automated_test'],
+  } : null
   return {
     ok: true,
     contract: 'supermega.ally-ceo-company-plan.v1',
     generatedAt,
     declined: false,
     outcomeId,
-    productFocus: outcomeId === 'product-portfolio-control' ? {
-      contract: 'supermega.ally-ceo-product-focus.v1',
-      selection: 'utc_day_round_robin',
-      productId: 'ecommerce',
-      status: 'release-candidate-local',
-      nextGate: 'Prove one duplicate-safe cart-to-Shop handoff.',
-      lifecycle: ['discover', 'define', 'build', 'release', 'learn'],
-      acceptanceDimensions: ['user_job', 'state_transition', 'data_contract', 'failure_recovery', 'mobile_acceptance', 'import_reconciliation', 'security_boundary', 'automated_test'],
-    } : null,
+    productFocus,
     manifest: {
       cycleId: `ally-ceo-20260729-${outcomeId}`,
       agents: outcomeAgents[outcomeId],
       roleBudget: 3,
+      evidence: outcomeId === 'product-portfolio-control' ? { 'delivery-planner': { productFocus: structuredClone(productFocus) } } : {},
     },
     preflight: { expectedPlanHash: hashCharacter.repeat(64), expectedWorkOrderId: 'company-order:' + 'b'.repeat(40) },
     plan: { budget: { plannedRoles: 3, remainingRoles: 0 } },
@@ -324,7 +330,7 @@ test('preflight binds the CEO plan to one local specialist without queue or mode
   assert.equal(state.calls.some((call) => call.args?.includes('add')), false)
 })
 
-test('product work-order focus is date-bound and rejects injected control text before useful work', async () => {
+test('product work-order focus is manifest-bound and rejects injected control text before useful work', async () => {
   const wrongProduct = plan({ outcomeId: 'product-portfolio-control' })
   wrongProduct.productFocus.productId = 'shop'
   const wrongState = harness()

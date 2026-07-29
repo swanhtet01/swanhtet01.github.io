@@ -120,23 +120,31 @@ function planSpec(plan) {
     fail('ally_ceo_local_cycle_team_invalid')
   }
   const productFocusRequired = outcomeId === 'product-portfolio-control'
-  const focusDayNumber = /^\d{4}-\d{2}-\d{2}/.test(generatedAt)
-    ? Math.floor(new Date(`${period}T00:00:00.000Z`).getTime() / 86_400_000)
-    : Number.NaN
-  const expectedFocusProduct = Number.isFinite(focusDayNumber)
-    ? PRODUCT_IDS[((focusDayNumber % PRODUCT_IDS.length) + PRODUCT_IDS.length) % PRODUCT_IDS.length]
-    : null
+  const manifestProductFocus = plan.manifest?.evidence?.['delivery-planner']?.productFocus
   const productFocusValid = productFocusRequired
-    && productFocus?.contract === 'supermega.ally-ceo-product-focus.v1'
-    && productFocus?.selection === 'utc_day_round_robin'
-    && productFocus?.productId === expectedFocusProduct
+    && productFocus?.contract === 'supermega.ally-ceo-product-focus.v2'
+    && productFocus?.selection === 'portfolio_priority_ready'
+    && PRODUCT_IDS.includes(productFocus?.productId)
     && /^[a-z0-9-]{1,80}$/.test(productFocus?.status || '')
     && typeof productFocus?.nextGate === 'string'
     && productFocus.nextGate.length > 0
     && productFocus.nextGate.length <= 1_200
-    && !PRODUCT_FOCUS_UNSAFE_RE.test(productFocus.nextGate)
+    && Number.isInteger(productFocus?.localPriority)
+    && productFocus.localPriority >= 1
+    && productFocus.localPriority <= 100
+    && typeof productFocus?.workOrder === 'string'
+    && productFocus.workOrder.length > 0
+    && productFocus.workOrder.length <= 1_200
+    && typeof productFocus?.selectionReason === 'string'
+    && productFocus.selectionReason.length > 0
+    && productFocus.selectionReason.length <= 600
+    && Number.isInteger(productFocus?.readyCandidateCount)
+    && productFocus.readyCandidateCount >= 1
+    && productFocus.readyCandidateCount <= PRODUCT_IDS.length
+    && !PRODUCT_FOCUS_UNSAFE_RE.test(`${productFocus.nextGate} | ${productFocus.workOrder} | ${productFocus.selectionReason}`)
     && productFocus?.lifecycle?.join(',') === 'discover,define,build,release,learn'
     && productFocus?.acceptanceDimensions?.join(',') === 'user_job,state_transition,data_contract,failure_recovery,mobile_acceptance,import_reconciliation,security_boundary,automated_test'
+    && JSON.stringify(productFocus) === JSON.stringify(manifestProductFocus)
   if ((productFocusRequired && !productFocusValid) || (!productFocusRequired && productFocus != null)) {
     fail('ally_ceo_local_cycle_product_focus_invalid')
   }
@@ -175,7 +183,8 @@ function planSpec(plan) {
   ]
   if (productFocusValid) {
     objectiveBody.splice(3, 0,
-      `Focus only on ${productFocus.productId}; its current status is ${productFocus.status} and its next gate is: ${productFocus.nextGate}`,
+      `Focus only on ${productFocus.productId}; execute this portfolio-prioritized local work order: ${productFocus.workOrder}`,
+      `Selection reason: ${productFocus.selectionReason} The external next gate remains: ${productFocus.nextGate}`,
       'The Task templates item must be one build-ready delivery work order covering exactly these acceptance dimensions: user job, state transition, data contract, failure recovery, mobile acceptance, import reconciliation, security boundary, and automated test.',
       'Do not propose another page, product, agent, dashboard, or integration unless that work order requires it to complete the named state transition.',
     )

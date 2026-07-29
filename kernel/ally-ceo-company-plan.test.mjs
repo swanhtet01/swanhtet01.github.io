@@ -28,7 +28,13 @@ const workboard = `# Workboard
 2. Prove managed isolation before writes.
 `
 
-function portfolio(overrides = {}) {
+function portfolio(overrides = {}, automationOverrides = {}) {
+  const automation = {
+    shop: { priority: 80, status: 'owner-gated', workOrder: 'Run the named Shop pilot.', reason: 'A named operator is required.' },
+    plant: { priority: 70, status: 'owner-gated', workOrder: 'Run the named Plant pilot.', reason: 'Operator timing evidence is required.' },
+    website: { priority: 60, status: 'owner-gated', workOrder: 'Run the named Website brief.', reason: 'An accepted business brief is required.' },
+    ecommerce: { priority: 100, status: 'ready-local', workOrder: 'Add one order-bound support case.', reason: 'Identity handoff is implemented and support remains local-ready.' },
+  }
   return JSON.stringify({
     schemaVersion: 'supermega.hq.portfolio.v3',
     northStar: 'One real workflow reaches a measurable outcome through an accountable operating record.',
@@ -49,6 +55,7 @@ function portfolio(overrides = {}) {
       id,
       status: 'release-candidate-local',
       nextGate: `Prove ${id} with one named operator.`,
+      localAutomation: { ...automation[id], ...automationOverrides[id] },
     })),
   })
 }
@@ -130,9 +137,8 @@ test('completed outcomes rotate through all five fixed teams and then stop', asy
   assert.equal(declined.manifest, null)
 })
 
-test('product control rotates one build-ready focus across four products without adding agents', async () => {
-  const expected = ['ecommerce', 'shop', 'plant', 'website']
-  for (let offset = 0; offset < expected.length; offset += 1) {
+test('product control selects the highest-priority ready local work order without adding agents', async () => {
+  for (let offset = 0; offset < 4; offset += 1) {
     const result = await buildAllyCeoCompanyPlan({
       now: new Date(Date.parse('2026-07-29T12:00:00.000Z') + offset * 86_400_000),
       hqNow: now,
@@ -142,14 +148,54 @@ test('product control rotates one build-ready focus across four products without
     })
     assert.equal(result.outcomeId, 'product-portfolio-control')
     assert.deepEqual(result.manifest.agents, ['delivery-planner'])
-    assert.equal(result.productFocus.contract, 'supermega.ally-ceo-product-focus.v1')
-    assert.equal(result.productFocus.selection, 'utc_day_round_robin')
-    assert.equal(result.productFocus.productId, expected[offset])
+    assert.equal(result.productFocus.contract, 'supermega.ally-ceo-product-focus.v2')
+    assert.equal(result.productFocus.selection, 'portfolio_priority_ready')
+    assert.equal(result.productFocus.productId, 'ecommerce')
+    assert.equal(result.productFocus.localPriority, 100)
+    assert.equal(result.productFocus.workOrder, 'Add one order-bound support case.')
+    assert.equal(result.productFocus.readyCandidateCount, 1)
     assert.equal(result.productFocus.acceptanceDimensions.length, 8)
     assert.deepEqual(result.manifest.evidence['delivery-planner'].productFocus, result.productFocus)
     assert.equal(result.controls.maxAgents, 1)
     assert.equal(result.controls.scaleToZero, true)
   }
+})
+
+test('product control skips gated priorities and rejects malformed or fully gated automation before work', async () => {
+  const selected = await buildAllyCeoCompanyPlan({
+    now: '2026-07-29T12:00:00.000Z',
+    hqNow: now,
+    workboard,
+    portfolioText: portfolio({}, {
+      shop: { priority: 100, status: 'owner-gated' },
+      plant: { priority: 90, status: 'ready-local' },
+      ecommerce: { priority: 80, status: 'ready-local' },
+    }),
+    completedOutcomeIds: ['daily-company-control', 'engineering-release-control'],
+  })
+  assert.equal(selected.productFocus.productId, 'plant')
+  assert.equal(selected.productFocus.readyCandidateCount, 2)
+
+  await assert.rejects(
+    buildAllyCeoCompanyPlan({
+      now: '2026-07-29T12:00:00.000Z',
+      hqNow: now,
+      workboard,
+      portfolioText: portfolio({}, { ecommerce: { priority: 101 } }),
+      completedOutcomeIds: ['daily-company-control', 'engineering-release-control'],
+    }),
+    /ally_ceo_company_plan_product_automation_invalid/,
+  )
+  await assert.rejects(
+    buildAllyCeoCompanyPlan({
+      now: '2026-07-29T12:00:00.000Z',
+      hqNow: now,
+      workboard,
+      portfolioText: portfolio({}, { ecommerce: { status: 'owner-gated' } }),
+      completedOutcomeIds: ['daily-company-control', 'engineering-release-control'],
+    }),
+    /ally_ceo_company_plan_no_executable_product_focus/,
+  )
 })
 
 test('capacity drift and non-authoritative social evidence fail before a work order exists', async () => {

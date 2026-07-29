@@ -6,7 +6,7 @@ import { selectCeoOutcome } from './supermega-hq-authority.mjs'
 
 export const ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'
 export const ALLY_CEO_CYCLE_EXPERIMENT_CONTRACT = 'supermega.ally-ceo-cycle-experiment.v1'
-export const ALLY_CEO_PRODUCT_FOCUS_CONTRACT = 'supermega.ally-ceo-product-focus.v1'
+export const ALLY_CEO_PRODUCT_FOCUS_CONTRACT = 'supermega.ally-ceo-product-focus.v2'
 
 const MAX_SOURCE_BYTES = 256 * 1024
 const REQUIRED_PRODUCTS = ['shop', 'plant', 'website', 'ecommerce']
@@ -31,6 +31,8 @@ const PRODUCT_ACCEPTANCE_DIMENSIONS = Object.freeze([
   'security_boundary',
   'automated_test',
 ])
+const PRODUCT_AUTOMATION_STATUSES = Object.freeze(new Set(['ready-local', 'owner-gated', 'external-blocked']))
+const PRODUCT_AUTOMATION_KEYS = Object.freeze(['priority', 'reason', 'status', 'workOrder'])
 
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value)
 
@@ -73,11 +75,37 @@ function portfolioView(value) {
     || !Array.isArray(value.products)
     || !isRecord(value.agentOperatingModel)) fail('ally_ceo_company_plan_portfolio_invalid')
 
-  const products = value.products.map((product) => ({
-    id: String(product?.id || ''),
-    status: String(product?.status || ''),
-    nextGate: String(product?.nextGate || ''),
-  }))
+  const products = value.products.map((product) => {
+    const localAutomation = product?.localAutomation
+    const automationKeys = isRecord(localAutomation) ? Object.keys(localAutomation).sort() : []
+    const priority = localAutomation?.priority
+    const automationStatus = String(localAutomation?.status || '')
+    const workOrder = String(localAutomation?.workOrder || '').trim()
+    const reason = String(localAutomation?.reason || '').trim()
+    if (automationKeys.join(',') !== PRODUCT_AUTOMATION_KEYS.join(',')
+      || !Number.isInteger(priority)
+      || priority < 1
+      || priority > 100
+      || !PRODUCT_AUTOMATION_STATUSES.has(automationStatus)
+      || !workOrder
+      || workOrder.length > 1_200
+      || !reason
+      || reason.length > 600
+      || /\u0000/.test(`${workOrder}${reason}`)) {
+      fail('ally_ceo_company_plan_product_automation_invalid')
+    }
+    return {
+      id: String(product?.id || ''),
+      status: String(product?.status || ''),
+      nextGate: String(product?.nextGate || ''),
+      localAutomation: {
+        priority,
+        status: automationStatus,
+        workOrder,
+        reason,
+      },
+    }
+  })
   if (products.map((product) => product.id).join(',') !== REQUIRED_PRODUCTS.join(',')
     || products.some((product) => !product.status || !product.nextGate)) {
     fail('ally_ceo_company_plan_products_invalid')
@@ -117,18 +145,24 @@ function canonicalInstant(value) {
   return instant.toISOString()
 }
 
-function productFocusFor(portfolio, generatedAt, outcomeId) {
+function productFocusFor(portfolio, outcomeId) {
   if (outcomeId !== 'product-portfolio-control') return null
-  const dayNumber = Math.floor(new Date(generatedAt).getTime() / 86_400_000)
-  const index = ((dayNumber % REQUIRED_PRODUCTS.length) + REQUIRED_PRODUCTS.length) % REQUIRED_PRODUCTS.length
-  const product = portfolio.products[index]
-  if (!product || product.id !== REQUIRED_PRODUCTS[index]) fail('ally_ceo_company_plan_product_focus_invalid')
+  const candidates = portfolio.products
+    .filter((product) => product.localAutomation.status === 'ready-local')
+    .sort((left, right) => right.localAutomation.priority - left.localAutomation.priority
+      || REQUIRED_PRODUCTS.indexOf(left.id) - REQUIRED_PRODUCTS.indexOf(right.id))
+  const product = candidates[0]
+  if (!product) fail('ally_ceo_company_plan_no_executable_product_focus')
   return {
     contract: ALLY_CEO_PRODUCT_FOCUS_CONTRACT,
-    selection: 'utc_day_round_robin',
+    selection: 'portfolio_priority_ready',
     productId: product.id,
     status: product.status,
     nextGate: product.nextGate,
+    localPriority: product.localAutomation.priority,
+    workOrder: product.localAutomation.workOrder,
+    selectionReason: product.localAutomation.reason,
+    readyCandidateCount: candidates.length,
     lifecycle: ['discover', 'define', 'build', 'release', 'learn'],
     acceptanceDimensions: [...PRODUCT_ACCEPTANCE_DIMENSIONS],
   }
@@ -221,7 +255,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
 
   const agents = OUTCOME_AGENTS[selection.selected.id]
   if (!agents || agents.length !== 1) fail('ally_ceo_company_plan_outcome_unmapped')
-  const productFocus = productFocusFor(portfolio, generatedAt, selection.selected.id)
+  const productFocus = productFocusFor(portfolio, selection.selected.id)
   const currentState = [
     markdownSection(hqNow, 'North-star outcome'),
     markdownSection(hqNow, 'Portfolio correction'),
@@ -249,13 +283,20 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
     humanApprovalForConsequentialActions: true,
     scaleToZero: true,
   }
+  const portfolioEvidence = {
+    northStar: portfolio.northStar,
+    products: portfolio.products.map(({ id, status, nextGate }) => ({ id, status, nextGate })),
+    limits: portfolio.limits,
+  }
   const evidence = {
     [agents[0]]: {
       objective: selection.selected.objective,
       deliverable: selection.selected.deliverable,
       successMeasure: selection.selected.successMeasure,
-      currentState,
-      portfolio,
+      currentState: productFocus
+        ? currentState.filter((section) => section.heading === 'North-star outcome' || section.heading === 'Verified baseline')
+        : currentState,
+      portfolio: portfolioEvidence,
       ...(productFocus ? { productFocus } : {}),
       sourceReceipts,
       controls: sharedControls,
