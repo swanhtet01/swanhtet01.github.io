@@ -3166,6 +3166,13 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     ['Learning', 'Records behavior only'],
     ['Boundary', 'No auto write'],
   ] as const
+  const shopCatalogUploadRows = [
+    ['Source', commerce.items.length ? `${commerce.items.length} current SKU` : 'Need catalog'],
+    ['Upload', 'Shared mapper'],
+    ['Checks', 'SKU, price, stock'],
+    ['Owner gate', 'Review package'],
+    ['Boundary', 'No Shop write'],
+  ] as const
   function runShopAutopilot() {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
@@ -4962,9 +4969,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
           </article>
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>
-      <section className="catalog-onboarding-bridge">
-        <div><span className="core-eyebrow">Import data</span><strong>Bring your catalog into the Shop trial.</strong><p>Preview and map a CSV before any reviewed records are applied.</p></div>
-        <Link className="core-button" to={clientSetupPath('commerce')}>Import Shop data</Link>
+      <section aria-label="Shop catalog upload autopilot" className="catalog-onboarding-bridge">
+        <div><span className="core-eyebrow">Catalog upload autopilot</span><strong>Bring your catalog into the Shop trial.</strong><p>AI routes product spreadsheets through the shared mapper, checks SKU, name, stock, reorder, and price fields, then prepares one reviewed import package. No supplier message, stock move, sale, accounting post, or Shop write runs from this panel.</p></div>
+        <div className="catalog-onboarding-status">{shopCatalogUploadRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+        <Link className="core-button" to={clientSetupPath('commerce')}>Upload product data</Link>
       </section>
       <details className="compact-disclosure catalog-disclosure">
         <summary>Add catalog item</summary>
