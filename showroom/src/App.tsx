@@ -56,8 +56,8 @@ export default function App() {
           <Route element={<Navigate replace to="/ecommerce/" />} path="products/ecommerce/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Settings" />}><SettingsPage /></Suspense>} path="settings/*" />
           <Route element={<LegacyEntryRedirect />} path="legacy-entry" />
-          <Route element={<Navigate replace to="/" />} path="agents/*" />
-          <Route element={<Navigate replace to="/" />} path="assist/*" />
+          <Route element={<Navigate replace to="/#command-center" />} path="agents/*" />
+          <Route element={<Navigate replace to="/#command-center" />} path="assist/*" />
           <Route element={<Navigate replace to="/settings/" />} path="setup/*" />
           <Route element={<Navigate replace to="/settings/#controls" />} path="trust/*" />
           <Route element={<Navigate replace to="/" />} path="app/*" />

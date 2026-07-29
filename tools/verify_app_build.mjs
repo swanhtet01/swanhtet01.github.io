@@ -31,6 +31,7 @@ let plantOrderRuntimeChecks = 0
 let websiteReleaseRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
+let businessCommandRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
 const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productHomeReadinessSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
@@ -102,6 +103,7 @@ const managedTrialRuntimeSource = await readFile(resolve(root, 'supermega_runtim
 const serviceRuntimeSource = await readFile(resolve(root, 'supermega_runtime', 'runtime.py'), 'utf8')
 const localDevSource = await readFile(resolve(root, 'tools', 'verify_local_app_dev.mjs'), 'utf8')
 const appLiveVerifierSource = await readFile(resolve(root, 'tools', 'verify_app_release_live.mjs'), 'utf8')
+const businessCommandSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'business-command.ts'), 'utf8')
 const websiteReleaseSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-release-foundation.ts'), 'utf8')
 const websiteReleaseUiSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteReleaseFoundation.tsx'), 'utf8')
 const managedWebsitePythonRuntime = await readFile(resolve(root, 'supermega_runtime', 'website_runtime.py'), 'utf8')
@@ -703,12 +705,20 @@ if (!productHomeReadinessSource.includes('const [behaviorTrail] = useState<Behav
   || !productHomeReadinessSource.includes("detail: `${label}: ${action}`")
   || !productHomeReadinessSource.includes("onClick={() => recordLaunchPackChoice(product, label, 'prepare data')}")
   || !productHomeReadinessSource.includes("onClick={() => recordLaunchPackChoice(product, label, 'open workspace')}")
-  || !productHomeReadinessSource.includes('aria-label="AI command queue"')
-  || !productHomeReadinessSource.includes('AI command queue')
-  || !productHomeReadinessSource.includes('One queue tells the owner what to do next.')
-  || !productHomeReadinessSource.includes('Current data and safety gates choose urgent work first.')
-  || !productHomeReadinessSource.includes('When no higher-priority blocker exists, repeated owner choices select the safe product to continue.')
-  || !productHomeReadinessSource.includes('it does not send, publish, charge, move stock, write production, or train models from this queue.')
+  || !productHomeReadinessSource.includes('aria-label="Ask SuperMega business command center"')
+  || !productHomeReadinessSource.includes('id="command-center"')
+  || !productHomeReadinessSource.includes('Ask SuperMega')
+  || !productHomeReadinessSource.includes('Ask what needs attention.')
+  || !productHomeReadinessSource.includes('Free mode answers from validated local Shop, Plant, Website, and Ecommerce records.')
+  || !productHomeReadinessSource.includes('Premium can add approved managed history and cross-workflow context.')
+  || !productHomeReadinessSource.includes('aria-label="Ask a business question"')
+  || !productHomeReadinessSource.includes('Raw questions stay in this field and are not written to behavior memory.')
+  || !productHomeReadinessSource.includes('BUSINESS_COMMAND_PROMPTS.map')
+  || !productHomeReadinessSource.includes('classifyBusinessQuestion(question)')
+  || !productHomeReadinessSource.includes('readLocalBusinessSnapshot(window.localStorage)')
+  || !productHomeReadinessSource.includes('detail: `Ask SuperMega: ${intent}`')
+  || !productHomeReadinessSource.includes('detail: `Follow SuperMega answer: ${answer.intent}`')
+  || !productHomeReadinessSource.includes('Why this answer')
   || !productHomeReadinessSource.includes("behaviorPreference.preferred ? 'Owner pattern' : 'Choose an agent job'")
   || !productHomeReadinessSource.includes('behaviorPreference.preferred.chosenCount')
   || !productHomeReadinessSource.includes('to={commandPath}>{commandLabel}</Link>')
@@ -736,17 +746,24 @@ if (!productHomeReadinessSource.includes('const [behaviorTrail] = useState<Behav
   || productHomeReadinessSource.includes('useOutletContext')
   || productHomeReadinessSource.includes('./CoreApp')) fail('product_home_readiness_lazy_contract_missing')
 if (!coreCssSource.includes('.product-home-command-queue')
+  || !coreCssSource.includes('.business-command-form')
+  || !coreCssSource.includes('.business-command-prompts')
+  || !coreCssSource.includes('.business-command-answer')
+  || !coreCssSource.includes('.business-command-facts')
+  || !coreCssSource.includes('.business-command-facts { grid-template-columns: repeat(2,minmax(0,1fr)); }')
+  || !coreCssSource.includes('.business-command-facts { grid-template-columns: 1fr; }')
+  || !coreCssSource.includes('grid-template-columns: repeat(6,minmax(0,1fr)); grid-template-rows: 64px; overflow-x: hidden;')
   || !coreCssSource.includes('.product-home-track-actions')
   || !coreCssSource.includes('.product-home-track-actions { grid-template-columns: repeat(2,minmax(0,1fr)); }')
   || !coreCssSource.includes('.product-home-track-actions { grid-template-columns: 1fr; }')
   || !coreCssSource.includes('.product-home-readiness')
   || !coreCssSource.includes('.product-home-readiness-grid')
   || !coreCssSource.includes('.product-home-readiness-grid { grid-template-columns: 1fr; }')) fail('first_run_operating_plan_responsive_ui_missing')
-if (!appLiveVerifierSource.includes('AI command queue')
-  || !appLiveVerifierSource.includes('One queue tells the owner what to do next.')
-  || !appLiveVerifierSource.includes('Current data and safety gates choose urgent work first.')
-  || !appLiveVerifierSource.includes('When no higher-priority blocker exists, repeated owner choices select the safe product to continue.')
-  || !appLiveVerifierSource.includes('it does not send, publish, charge, move stock, write production, or train models from this queue.')
+if (!appLiveVerifierSource.includes('Ask SuperMega')
+  || !appLiveVerifierSource.includes('Ask what needs attention.')
+  || !appLiveVerifierSource.includes('Free mode answers from validated local Shop, Plant, Website, and Ecommerce records.')
+  || !appLiveVerifierSource.includes('Raw questions stay in this field and are not written to behavior memory.')
+  || !appLiveVerifierSource.includes('This answer reads validated local records only.')
   || !appLiveVerifierSource.includes('Shop, Plant, Website, and Ecommerce stay separate apps but share one evidence and approval system.')
   || !appLiveVerifierSource.includes('Starter paths')
   || !appLiveVerifierSource.includes('Start one product in 2 clicks.')
@@ -761,7 +778,20 @@ if (!appLiveVerifierSource.includes('AI command queue')
   || !appLiveVerifierSource.includes('Open Plant')
   || !appLiveVerifierSource.includes('Open Website')
   || !appLiveVerifierSource.includes('Open Ecommerce')
-  || !appLiveVerifierSource.includes('agent_job_chosen')) fail('live_verifier_missing_ai_command_queue_contract')
+  || !appLiveVerifierSource.includes('agent_job_chosen')) fail('live_verifier_missing_business_command_contract')
+if (!businessCommandSource.includes("export type BusinessCommandIntent")
+  || !businessCommandSource.includes("contract: 'supermega.local_business_snapshot.v1'")
+  || !businessCommandSource.includes("contract: 'supermega.local_business_answer.v1'")
+  || !businessCommandSource.includes('export function readLocalBusinessSnapshot')
+  || !businessCommandSource.includes('export function classifyBusinessQuestion')
+  || !businessCommandSource.includes('export function buildBusinessCommandAnswer')
+  || !businessCommandSource.includes('validateCommerceState(JSON.parse(raw) as unknown)')
+  || !businessCommandSource.includes('validateProductionState(JSON.parse(raw) as unknown)')
+  || !businessCommandSource.includes('loadWebsiteWorkspace(storage)')
+  || !businessCommandSource.includes('readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE')
+  || !businessCommandSource.includes('This answer reads validated local records only.')
+  || !businessCommandSource.includes('It does not send messages, publish, charge, move stock, write production, or train models.')
+  || ['fetch(', '.setItem(', '.removeItem(', 'XMLHttpRequest'].some((marker) => businessCommandSource.includes(marker))) fail('business_command_read_only_contract_missing')
 if (!appLiveVerifierSource.includes('Ecommerce order review packet checked locally. No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.')
   || appLiveVerifierSource.includes('Ecommerce order review packet checked locally. No order import, customer message, payment, delivery, stock write, Shop write, or managed activation ran.')
   || !appLiveVerifierSource.includes("const ecommercePacketChunkPath = /assets\\/ecommerce-order-review-packet-")
@@ -1734,9 +1764,9 @@ if (!appSource.includes('<Navigate replace to="/website/" />')
   || !appSource.includes('<Navigate replace to="/ecommerce/" />')
   || !appSource.includes('path="products/website/*"')
   || !appSource.includes('path="products/ecommerce/*"')) fail('maker_product_compatibility_routes_missing')
-if (!appSource.includes('<Route element={<Navigate replace to="/" />} path="agents/*" />')
-  || !appSource.includes('<Route element={<Navigate replace to="/" />} path="assist/*" />')
-  || appSource.includes('/work/?view=agents')) fail('internal_agents_exposed_in_customer_router')
+if (!appSource.includes('<Route element={<Navigate replace to="/#command-center" />} path="agents/*" />')
+  || !appSource.includes('<Route element={<Navigate replace to="/#command-center" />} path="assist/*" />')
+  || appSource.includes('/work/?view=agents')) fail('business_command_entry_routes_missing')
 if (!storefrontSource.includes("supermega.ecommerce.storefront_preview.v1")
   || !storefrontSource.includes('readStorefrontCatalog')
   || !storefrontSource.includes('buildStorefrontPreview')
@@ -10178,6 +10208,83 @@ async function verifyProductionRuntime() {
   }
 }
 
+async function verifyBusinessCommandRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    businessCommandRuntimeChecks += 1
+  }
+  try {
+    const nonce = Date.now()
+    const command = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'business-command.ts')).href}?business-command=${nonce}`)
+    const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?business-command-commerce=${nonce}`)
+    const production = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts')).href}?business-command-production=${nonce}`)
+    const website = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?business-command-website=${nonce}`)
+    const storefront = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-draft.ts')).href}?business-command-storefront=${nonce}`)
+    const values = new Map()
+    const storage = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, String(value)),
+      removeItem: (key) => values.delete(key),
+    }
+
+    const empty = command.readLocalBusinessSnapshot(storage)
+    assert(empty.contract === 'supermega.local_business_snapshot.v1', 'business_command_snapshot_contract_wrong')
+    assert([empty.shop, empty.plant, empty.website, empty.ecommerce].every((source) => source.status === 'missing'), 'business_command_empty_sources_not_missing')
+    const emptyAnswer = command.buildBusinessCommandAnswer(empty, 'attention')
+    assert(emptyAnswer.contract === 'supermega.local_business_answer.v1' && emptyAnswer.sourceCount === 0 && emptyAnswer.nextAction.path === '/settings/?product=shop', 'business_command_empty_answer_not_actionable')
+
+    const commerceState = commerce.createSeedCommerce()
+    const productionState = production.createSeedProduction()
+    const websiteState = website.createInitialWorkspace()
+    values.set(commerce.COMMERCE_KEY, JSON.stringify(commerceState))
+    values.set(production.PRODUCTION_KEY, JSON.stringify(productionState))
+    values.set(website.WEBSITE_STORAGE_KEY, JSON.stringify(websiteState))
+    values.set(storefront.storefrontDraftStorageKey(storefront.LOCAL_STOREFRONT_DRAFT_SCOPE), JSON.stringify({
+      schema: storefront.STOREFRONT_DRAFT_SCHEMA,
+      scope: storefront.LOCAL_STOREFRONT_DRAFT_SCOPE,
+      revision: 1,
+      savedAt: '2026-07-30T00:00:00.000Z',
+      storeName: 'Sample Shop',
+      summary: 'A validated local storefront used only for command-center verification.',
+      selectedSkus: [commerceState.items[0].sku],
+      sourcePreviewDigest: `sha256:${'a'.repeat(64)}`,
+    }))
+    const beforeRead = JSON.stringify([...values.entries()])
+    const snapshot = command.readLocalBusinessSnapshot(storage)
+    assert(JSON.stringify([...values.entries()]) === beforeRead, 'business_command_reader_mutated_storage')
+    assert([snapshot.shop, snapshot.plant, snapshot.website, snapshot.ecommerce].every((source) => source.status === 'ready'), 'business_command_valid_sources_not_ready')
+    assert(snapshot.shop.itemCount === commerceState.items.length && snapshot.plant.jobCount === productionState.jobs.length, 'business_command_product_counts_wrong')
+    assert(snapshot.website.pageCount === websiteState.pages.length && snapshot.ecommerce.selectedSkus === 1 && snapshot.ecommerce.shopSourceReady, 'business_command_maker_counts_wrong')
+
+    const classifierCases = [
+      ['What needs attention?', 'attention'],
+      ['Which stock should I reorder?', 'shop_inventory'],
+      ['What blocks production?', 'plant_control'],
+      ['Is the website ready to publish?', 'website_readiness'],
+      ['Are online orders ready for delivery?', 'ecommerce_readiness'],
+    ]
+    for (const [question, expected] of classifierCases) {
+      assert(command.classifyBusinessQuestion(question) === expected, `business_command_classifier_wrong:${expected}`)
+    }
+    for (const intent of ['attention', 'shop_inventory', 'plant_control', 'website_readiness', 'ecommerce_readiness']) {
+      const answer = command.buildBusinessCommandAnswer(snapshot, intent)
+      assert(answer.contract === 'supermega.local_business_answer.v1' && answer.intent === intent && answer.facts.length === 4, `business_command_answer_contract_wrong:${intent}`)
+      assert(answer.nextAction.path.startsWith('/') && answer.boundary.includes('does not send messages') && answer.boundary.includes('train models'), `business_command_answer_boundary_wrong:${intent}`)
+    }
+    const rawQuestion = 'secret customer stock issue at branch 12'
+    const privacyAnswer = command.buildBusinessCommandAnswer(snapshot, command.classifyBusinessQuestion(rawQuestion))
+    assert(!JSON.stringify(privacyAnswer).includes(rawQuestion) && !JSON.stringify(privacyAnswer).includes('branch 12'), 'business_command_answer_retained_raw_question')
+
+    values.set(commerce.COMMERCE_KEY, '{broken')
+    const invalid = command.readLocalBusinessSnapshot(storage)
+    assert(invalid.shop.status === 'invalid' && invalid.plant.status === 'ready', 'business_command_source_failure_not_isolated')
+    const invalidAnswer = command.buildBusinessCommandAnswer(invalid, 'attention')
+    assert(invalidAnswer.title.includes('Shop data needs repair') && invalidAnswer.nextAction.path === '/settings/?product=shop', 'business_command_invalid_source_not_prioritized')
+  } catch (error) {
+    fail(`business_command_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 await verifyChannelOrderRuntime()
 await verifyShopInventoryRuntime()
 await verifyPlantOrderRuntime()
@@ -10195,6 +10302,7 @@ await verifyManagedStorefrontRuntime()
 await verifyEcommerceActivationRuntime()
 await verifyCommerceRuntime()
 await verifyProductionRuntime()
+await verifyBusinessCommandRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
 if (bytes > 2_500_000) fail(`artifact_budget:${bytes}`)
@@ -10209,4 +10317,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
