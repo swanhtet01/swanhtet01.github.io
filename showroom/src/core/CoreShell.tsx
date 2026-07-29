@@ -94,7 +94,40 @@ const navigation = [
 ] as const
 
 const THEME_KEY = 'supermega-interface-theme'
+const SETUP_KEY = 'supermega.setup.v3'
+const setupRequiredFields = ['workspace', 'owner', 'entryPoint', 'currentRecord', 'baseline', 'targetOutcome', 'authorityBoundary', 'acceptanceEvidence'] as const
 type InterfaceTheme = 'light' | 'dark'
+
+type LocalSetupReadiness = {
+  product: 'commerce' | 'production' | 'website' | 'ecommerce'
+  workspace: string
+  currentRecord: string
+  acceptanceEvidence: string
+  progress: number
+  ready: boolean
+}
+
+function readLocalSetupReadiness(): LocalSetupReadiness {
+  try {
+    const source = JSON.parse(window.localStorage.getItem(SETUP_KEY) ?? '{}') as Record<string, unknown>
+    const field = (name: string) => typeof source[name] === 'string' ? source[name].trim() : ''
+    const product = source.product === 'production' || source.product === 'website' || source.product === 'ecommerce'
+      ? source.product
+      : 'commerce'
+    const completed = setupRequiredFields.filter((name) => field(name)).length
+    const progress = Math.round((completed / setupRequiredFields.length) * 100)
+    return {
+      product,
+      workspace: field('workspace'),
+      currentRecord: field('currentRecord'),
+      acceptanceEvidence: field('acceptanceEvidence'),
+      progress,
+      ready: progress === 100 && Boolean(field('savedAt')),
+    }
+  } catch {
+    return { product: 'commerce', workspace: '', currentRecord: '', acceptanceEvidence: '', progress: 0, ready: false }
+  }
+}
 
 function initialInterfaceTheme(): InterfaceTheme {
   try {
@@ -319,14 +352,16 @@ const customerTracks = [
 
 export function ProductHomePage() {
   const runtime = useOutletContext<RuntimeHealth>()
+  const [setup] = useState(readLocalSetupReadiness)
   const activationCoverage = runtime.activationManifest?.ready_percent ?? runtime.coverageScore
   const hostedReady = runtime.operatingMode === 'managed_trial' && runtime.writesReady && runtime.requirements.length === 0
   const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Managed activation proof is still required.'
+  const setupProductName = productDisplayName(setup.product)
   const autopilotRows = [
-    ['Track', 'Pick one product', 'Shop, Plant, Website, or Ecommerce.'],
-    ['Data', 'Local first', 'Upload, paste, or describe one real record.'],
-    ['Proof', 'Evidence before premium', 'Define what proves the workflow works.'],
-    ['AI context', 'Locked until approval', 'Premium can learn from approved data, roles, and audit.'],
+    ['Track', setup.workspace ? setupProductName : 'Pick one product', setup.workspace || 'Shop, Plant, Website, or Ecommerce.'],
+    ['Data', setup.currentRecord ? 'First source named' : 'Local first', setup.currentRecord || 'Upload, paste, or describe one real record.'],
+    ['Proof', setup.acceptanceEvidence ? 'Acceptance proof named' : 'Evidence before premium', setup.acceptanceEvidence || 'Define what proves the workflow works.'],
+    ['AI context', setup.ready ? 'Ready for managed import' : 'Locked until approval', setup.ready ? 'Approved setup can now be exported for managed review.' : 'Premium can learn from approved data, roles, and audit.'],
   ] as const
 
   return (
@@ -350,14 +385,14 @@ export function ProductHomePage() {
             <h2>Recommended next move</h2>
             <p>Choose a product, bring in real records, then export evidence for managed activation. No external send, publish, payment, or production write runs from this screen.</p>
           </div>
-          <Link className="core-button primary" to="/settings/">Check readiness</Link>
+          <Link className="core-button primary" to={setup.ready ? '/settings/#controls' : '/settings/'}>{setup.ready ? 'Export evidence' : 'Check readiness'}</Link>
         </div>
         <div className="product-home-autopilot-grid">
           {autopilotRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}
         </div>
       </section>
       <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
-        <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={hostedReady ? 100 : activationCoverage} ready={hostedReady} />
+        <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={setup.progress} ready={setup.ready} />
       </Suspense>
       <nav aria-label="Business tracks" className="product-track-grid">
         {customerTracks.map(([name, fit, outcome, path, setupPath]) => (
