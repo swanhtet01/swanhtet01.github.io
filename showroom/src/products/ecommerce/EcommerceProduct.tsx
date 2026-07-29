@@ -1159,6 +1159,12 @@ export function EcommerceProduct() {
     ['Review', orderImportReview ? `${orderImportReview.readyRows}/${orderImportReview.totalRows} ready` : 'Paste CSV'],
     ['Boundary', 'No auto submit'],
   ] as const
+  const orderIntakeGuideRows = [
+    ['Channels', 'CSV, Viber, LINE, WeChat, email, form'],
+    ['AI prepares', 'Customer, SKU, quantity, fulfilment, payment, source proof'],
+    ['Owner sees', 'Ready rows, blocked rows, stock risk, missing fields'],
+    ['Handoff', 'One reviewed packet for Shop queue approval'],
+  ] as const
   const lifecycleRows = [
     ['Capture', pendingManagedRequests.length ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'}` : buyingCart.length ? `${buyingCart.length} cart lines` : 'Ready'],
     ['Price', buyingReady ? 'Quote controlled' : 'Save store first'],
@@ -1638,6 +1644,9 @@ export function EcommerceProduct() {
           <div className="ecommerce-inline-actions">
             <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
             <button className="text-link" onClick={downloadOrderImportTemplate} type="button">Download order template</button>
+          </div>
+          <div aria-label="Order intake guide" className="ecommerce-order-intake-guide">
+            {orderIntakeGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
           </div>
           <label className="ecommerce-order-import-upload">Upload order CSV<input accept=".csv,text/csv,text/plain" onChange={uploadOrderImportCsv} type="file" /></label>
           <label className="ecommerce-order-import-field">Order batch CSV<textarea onChange={(event) => {
