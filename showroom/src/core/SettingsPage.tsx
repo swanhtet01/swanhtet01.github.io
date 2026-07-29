@@ -71,6 +71,7 @@ import {
 } from '../products/ecommerce/ecommerce-order-review-packet'
 import { LEGACY_PRODUCTION_KEYS, PRODUCTION_KEY } from './production-workspace'
 import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } from './team-work'
+import { buildClientCapabilityPlan } from './client-capability-plan'
 import {
   buildClientDemoBlueprint,
   buildClientDemoRunbook,
@@ -363,6 +364,11 @@ export function SettingsPage() {
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
   const demoBlueprintFilename = `supermega-client-demo-${setup.workspace.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || evidenceDate}.json`
   const demoBlueprintHref = demoKitReadiness?.ready ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(demoKitReadiness.kit, null, 2))}` : ''
+  const capabilityPlan = demoBlueprint && demoKitReadiness?.kit
+    ? buildClientCapabilityPlan(demoBlueprint, demoKitReadiness.kit.exportedAt)
+    : null
+  const capabilityPlanFilename = `supermega-capability-plan-${setup.workspace.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || evidenceDate}.json`
+  const capabilityPlanHref = capabilityPlan ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(capabilityPlan, null, 2))}` : ''
   const privatePreparationCommand = `npm run client:prepare -- --kit "${demoBlueprintFilename}" --data-dir "client-data" --out "private-review.json"`
   const demoReadyCount = demoWorkspace?.products.filter((product) => ['data_ready', 'workspace_checked', 'applied'].includes(product.status)).length ?? 0
   const preparedApprovalReady = Boolean(preparedArtifact && clientDemoPreparationConfirmationMatches(preparedArtifact, preparedConfirmation))
@@ -1534,6 +1540,14 @@ export function SettingsPage() {
             {demoBlueprint ? <section aria-label="Client demo kit" className="demo-kit-result">
               <div className="panel-head"><div><span className="core-eyebrow">Client workspace</span><h3>{demoBlueprint.client.workspace}</h3><p>{demoRunbook?.provenCount ?? 0} proven · {demoReadyCount} data-ready · owner {demoBlueprint.client.owner}</p></div><a className="core-button" download={demoBlueprintFilename} href={demoBlueprintHref}>Download setup kit</a></div>
               <div aria-label="Shared operating foundation" className="readiness-list client-foundation-summary"><span><small>Operating unit</small><strong>{demoBlueprint.foundation.operatingUnit.name}</strong><em>{demoBlueprint.foundation.operatingUnit.code} · {demoBlueprint.foundation.operatingUnit.kind}</em></span><span><small>Market</small><strong>{demoBlueprint.foundation.localization.countryCode} · {demoBlueprint.foundation.localization.currency}</strong><em>{demoBlueprint.foundation.localization.locale}</em></span><span><small>Topology</small><strong>{demoBlueprint.topology.locations.length} location · {demoBlueprint.topology.channels.length} channels</strong><em>{demoBlueprint.topology.recordAuthorities.length} product authorities</em></span><span><small>Timezone</small><strong>{demoBlueprint.foundation.localization.timeZone}</strong><em>Shared by all selected products</em></span><span><small>Authority</small><strong>Client review required</strong><em>Managed identity required before activation</em></span></div>
+              {capabilityPlan ? <details className="compact-disclosure capability-rollout">
+                <summary><span>Capability rollout</span><small>{capabilityPlan.summary.demoReady} prove · {capabilityPlan.summary.configureNext} control · {capabilityPlan.summary.scaleLater} scale</small></summary>
+                <div className="capability-rollout-body">
+                  <div className="capability-rollout-head"><div><span className="core-eyebrow">Enterprise lifecycle</span><strong>Deep capability, introduced in three usable stages.</strong><p>The demo proves the first workflow. Control and scale capabilities remain an explicit implementation plan—not fake buttons.</p></div><a className="core-button compact" download={capabilityPlanFilename} href={capabilityPlanHref}>Download plan</a></div>
+                  <div className="capability-phase-grid">{capabilityPlan.phases.map((phase) => <section key={phase.id}><div><small>{phase.label}</small><strong>{phase.outcome}</strong></div><ul>{phase.capabilities.map((capability) => <li key={capability.id}><span>{productDisplayName(capability.product)}</span><strong>{capability.label}</strong><small>{capability.outcome}</small></li>)}</ul></section>)}</div>
+                  <p className="capability-control-note">Shared controls: {capabilityPlan.sharedControls.join(' · ')}. Every capability must be verified before it is presented as available.</p>
+                </div>
+              </details> : null}
               <details className="compact-disclosure client-preparation-handoff">
                 <summary><span>Prepare private client files</span><small>Internal founder workflow</small></summary>
                 <ol>

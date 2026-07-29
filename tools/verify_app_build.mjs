@@ -5710,6 +5710,7 @@ async function verifyClientOnboardingRuntime() {
   }
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?client-onboarding-verify=${Date.now()}`)
+    const capabilityModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-capability-plan.ts')).href}?client-capability-verify=${Date.now()}`)
     const plantPacks = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-industry-packs.ts')).href}?plant-packs-verify=${Date.now()}`)
     assert(plantPacks.plantIndustryPacks.map((pack) => pack.id).join(',') === manifestPlantPackIds.join(','), 'plant_industry_pack_manifest_drifted')
     const apparelSetup = plantPacks.plantIndustryPackSetup('apparel', { id: 'JOB-STYLE-01', line: 'Sewing A' })
@@ -5744,6 +5745,21 @@ async function verifyClientOnboardingRuntime() {
     assert(model.clientDemoPresets.length === 5 && new Set(model.clientDemoPresets.map((preset) => preset.id)).size === 5, 'client_demo_presets_missing_or_duplicated')
     for (const preset of model.clientDemoPresets) {
       const blueprint = model.buildClientDemoBlueprint({ workspace: 'Golden Valley Trading', owner: 'Operations lead', presetId: preset.id, selections: preset.selections })
+      const capabilityPlan = capabilityModel.buildClientCapabilityPlan(blueprint, '2026-07-29T00:00:00.000Z')
+      assert(capabilityPlan.schema === capabilityModel.CLIENT_CAPABILITY_PLAN_SCHEMA
+        && capabilityPlan.workspace === blueprint.client.workspace
+        && capabilityPlan.products.length === blueprint.products.length
+        && capabilityPlan.phases.length === 3, `client_demo_${preset.id}_capability_plan_identity_wrong`)
+      assert(capabilityPlan.summary.demoReady === blueprint.products.length * 3
+        && capabilityPlan.summary.configureNext === blueprint.products.length * 3
+        && capabilityPlan.summary.scaleLater === blueprint.products.length * 3
+        && capabilityPlan.summary.total === blueprint.products.length * 9
+        && new Set(capabilityPlan.phases.flatMap((phase) => phase.capabilities.map((capability) => capability.id))).size === capabilityPlan.summary.total, `client_demo_${preset.id}_capability_plan_scope_wrong`)
+      assert(capabilityPlan.sharedControls.length === 6
+        && capabilityPlan.controls.roadmapOnly === true
+        && capabilityPlan.controls.humanReviewRequired === true
+        && capabilityPlan.controls.externalWritesPerformed === false
+        && capabilityPlan.controls.capabilityPresenceMustBeVerified === true, `client_demo_${preset.id}_capability_plan_controls_wrong`)
       assert(blueprint.schema === model.CLIENT_DEMO_BLUEPRINT_SCHEMA && blueprint.client.presetId === preset.id && blueprint.client.shopIndustryPackId === preset.shopIndustryPackId && blueprint.client.plantIndustryPackId === preset.plantIndustryPackId, `client_demo_${preset.id}_identity_wrong`)
       assert(blueprint.foundation.schema === model.CLIENT_OPERATING_FOUNDATION_SCHEMA
         && blueprint.foundation.organization.displayName === 'Golden Valley Trading'
