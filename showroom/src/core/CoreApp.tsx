@@ -5108,6 +5108,7 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
 
 function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIdentity | null; tab: ProductionTab }) {
   const productionLocation = useLocation()
+  const navigate = useNavigate()
   const [production, mutateProduction, productionStorageError, workspaceMode, managedVersion, managedWorkspaceId, productionCanWrite] = useProductionWorkspace(managedIdentity)
   const [relatedCommerce] = useCommerceWorkspace(managedIdentity)
   const [, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
@@ -5330,6 +5331,43 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   ] as const
   const plantControlBoundary = 'Owner confirms production, quality, WCM, maintenance, material, and handoff writes.'
   const openWcmCount = openDowntimeIntervals.length + openMaintenanceRecords.length
+  const plantAutopilotStage = !productionCanWrite
+    ? 'Restore Plant readiness'
+    : pendingAction
+      ? 'Approve pending Plant action'
+      : urgentIssueCount
+        ? 'Contain urgent problem'
+        : heldJobs.length
+          ? 'Review quality hold'
+          : openWcmCount
+            ? 'Close WCM record'
+            : activeJobs.length
+              ? 'Record production evidence'
+              : !shiftHandoffIsCurrent
+                ? 'Build shift handoff'
+                : 'Plan next job'
+  const plantAutopilotNextAction = !productionCanWrite
+    ? 'Open managed activation controls'
+    : pendingAction
+      ? 'Finish owner approval'
+      : urgentIssueCount
+        ? 'Open quality or safety containment'
+        : heldJobs.length
+          ? 'Open quality review'
+          : openWcmCount
+            ? 'Open WCM controls'
+            : activeJobs.length
+              ? 'Open next job output'
+              : !shiftHandoffIsCurrent
+                ? 'Open handoff builder'
+                : 'Open job planning'
+  const plantAutopilotRows = [
+    ['Track', pendingAction ? 'Owner review' : urgentIssueCount || heldJobs.length ? 'Quality' : openWcmCount ? 'WCM' : activeJobs.length ? 'Execution' : !shiftHandoffIsCurrent ? 'Handoff' : 'Planning'],
+    ['Stage', plantAutopilotStage],
+    ['Next', plantAutopilotNextAction],
+    ['Learning', 'Records behavior only'],
+    ['Boundary', 'No equipment write'],
+  ] as const
   const mesDispatchStation = activeJobs[0]?.line ?? selectedDowntimeMachine?.name ?? selectedMaintenanceMachine?.name ?? 'Plant floor'
   const mesDispatchTarget = urgentIssueCount
     ? `${urgentIssueCount} urgent issue${urgentIssueCount === 1 ? '' : 's'}`
@@ -6122,7 +6160,33 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'production-idle'} action={pendingAction} onCancel={() => { setPendingAction(null); setNotice('Change cancelled. Plant data was not modified.') }} onConfirm={confirmAction} returnFocus={actionTrigger} />
     <ProductionEventHistory events={production.events} />
   </>
+  function runPlantAutopilot() {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'production',
+      route: productionLocation.pathname + productionLocation.search,
+      detail: `Plant autopilot: ${plantAutopilotStage}`,
+    })
+    if (pendingAction) {
+      setNotice('Finish or cancel the pending Plant review before starting another step.')
+      return
+    }
+    if (!productionCanWrite) {
+      navigate('/settings/#controls')
+      return
+    }
+    if (urgentIssueCount || heldJobs.length || openWcmCount || !shiftHandoffIsCurrent) {
+      navigate('/plant/?tab=control')
+      return
+    }
+    navigate('/plant/?tab=production')
+  }
   const plantStatus = <div aria-label="Plant MES status" className="readiness-list plant-mes-strip">{plantRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+  const plantCommandCenter = <section aria-label="Plant Autopilot" className="plant-command-center">
+    <div><span className="core-eyebrow">Plant Autopilot</span><h2>{plantAutopilotStage}</h2><p>One button chooses the next safe owner action from jobs, quality, WCM, material trace, handoff, and write-readiness state. AI may prepare records and packets; it does not command equipment, release quality, consume materials, close maintenance, or write Plant records here.</p></div>
+    <div className="plant-command-center-rows">{plantAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+    <button className="core-button primary compact" onClick={runPlantAutopilot} type="button">Run next step</button>
+  </section>
   const plantAgentQueue = <section aria-label="Recommended Plant agent job" className="plant-agent-queue">
     <div><span className="core-eyebrow">Plant agent queue</span><h2>{plantAgentJob}</h2><p>AI prepares the next Plant record from live jobs, quality, WCM, trace, and handoff state. Humans still approve every consequential action.</p></div>
     <div>{plantAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
@@ -6166,6 +6230,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   if (tab === 'production') return <div className="operation-module">
     {productionBoundary}
     {plantStatus}
+    {plantCommandCenter}
     {plantAgentQueue}
     {mesDispatch}
     {plantControl}
@@ -6258,6 +6323,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   if (tab === 'control') return <div className="operation-module">
     {productionBoundary}
     {plantStatus}
+    {plantCommandCenter}
     {plantAgentQueue}
     {mesDispatch}
     {plantControl}
