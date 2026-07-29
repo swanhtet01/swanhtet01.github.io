@@ -93,6 +93,7 @@ const settingsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core
 const channelOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ChannelOrderIntake.tsx'), 'utf8')
 const plantOrderSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts'), 'utf8')
 const plantOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantOrderFoundation.tsx'), 'utf8')
+const plantOrderPythonSource = await readFile(resolve(root, 'supermega_runtime', 'plant_order_foundation.py'), 'utf8')
 const plantIndustryPacksSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-industry-packs.ts'), 'utf8')
 const productionMaterialHandoffSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'production-material-handoff.ts'), 'utf8')
 const shopProductionHandoffUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopProductionHandoff.tsx'), 'utf8')
@@ -1699,13 +1700,16 @@ if (!commerceSource.includes('CommerceStockLocationCount')
 if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.order_foundation.v1'")
   || !plantOrderSource.includes("PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1'")
   || !plantOrderSource.includes("PLANT_ORDER_EXECUTION_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v2'")
+  || !plantOrderSource.includes("PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v3'")
   || !plantOrderSource.includes('PLANT_ORDER_ADDITIONAL_MATERIAL_MAX = 11')
   || !plantOrderSource.includes('PLANT_ORDER_ADDITIONAL_OPERATION_MAX = 11')
   || !plantOrderSource.includes('export function parsePlantOrderMaterialPaste')
   || !plantOrderSource.includes('export function parsePlantOrderRoutingPaste')
   || !plantOrderSource.includes('export function buildPlantOrderExecutionPlan')
+  || !plantOrderSource.includes('export function buildPlantOrderControlledPlan')
   || !plantOrderSource.includes('export function checkPlantOrderAvailability')
   || !plantOrderSource.includes('export function releasePlantOrder')
+  || !plantOrderSource.includes('export function recordPlantOrderCalibration')
   || !plantOrderSource.includes('export function issuePlantOrderMaterial')
   || !plantOrderSource.includes('export function parsePlantOrderDowntimePaste')
   || !plantOrderSource.includes('export function recordPlantOrderEffectiveness')
@@ -1734,13 +1738,16 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || !plantOrderUiSource.includes('review.details?.length')
   || !plantOrderUiSource.includes('additionalMaterials: event.target.value')
   || !plantOrderUiSource.includes('additionalOperations: event.target.value')
-  || !plantOrderUiSource.includes('buildPlantOrderExecutionPlan({')
+  || !plantOrderUiSource.includes('buildPlantOrderControlledPlan({')
   || !plantOrderUiSource.includes('projection.materials.map((material)')
   || !plantOrderUiSource.includes('projection.plan.workCentres.map((centre)')
   || !plantOrderUiSource.includes('parsePlantOrderQuantityMilli(draft.availableQuantity, true)')
   || !plantOrderUiSource.includes('availableQuantity: milliInputValue(')
   || !plantOrderUiSource.includes('Review operation progress')
   || !plantOrderUiSource.includes('Routing progress')
+  || !plantOrderUiSource.includes('Calibration control')
+  || !plantOrderUiSource.includes('Review calibration evidence')
+  || !plantOrderUiSource.includes('expired evidence blocks order release and routed operation recording')
   || !plantOrderUiSource.includes('Effectiveness')
   || !plantOrderUiSource.includes('Review effectiveness evidence')
   || !plantOrderUiSource.includes('Closed downtime intervals (optional)')
@@ -1757,6 +1764,10 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || !plantOrderUiSource.includes('Shop receipt, delivery, costing, and accounting are not posted automatically.')
   || !plantOrderUiSource.includes('navigator.locks')
   || plantOrderUiSource.includes('fetch(')) fail('plant_order_foundation_ui_boundary_missing')
+if (!plantOrderPythonSource.includes('PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v3"')
+  || !plantOrderPythonSource.includes('def build_plant_order_controlled_plan(')
+  || !plantOrderPythonSource.includes('def record_plant_order_calibration(')
+  || !plantOrderPythonSource.includes('requires current calibration for')) fail('managed_plant_calibration_parity_missing')
 if (!plantOrderUiSource.includes('managedState?: PlantOrderState | null')
   || !plantOrderUiSource.includes('onManagedCommand?:')
   || !plantOrderUiSource.includes('await onManagedCommand(')
@@ -3625,6 +3636,37 @@ async function verifyPlantOrderRuntime() {
     assert(executionPlan.contract === model.PLANT_ORDER_EXECUTION_PLAN_CONTRACT
       && executionPlan.packageDigest === 'sha256:a9fc5c9b53444139acc0b83de2ed42882d7359ef4ccd90d42b040ccce8ca6107',
     'plant_order_v2_python_browser_plan_digest_drifted')
+    const controlledAvailabilityMaterials = [
+      { materialId: 'MAT-FILTER-001', inputLotId: 'LOT-FILTER-2407', availableQuantityMilli: 15_000 },
+      { materialId: 'MAT-SHELL-001', inputLotId: 'LOT-SHELL-2407', availableQuantityMilli: 20_000 },
+    ]
+    const controlledAvailabilityCentres = [
+      { workCentreId: 'WC-ASSEMBLY-01', availableMinutes: 5 },
+      { workCentreId: 'WC-TEST-01', availableMinutes: 10 },
+    ]
+    const controlledPlan = model.buildPlantOrderControlledPlan({ ...planInput, planId: 'PLN-CONTROLLED-401' })
+    assert(controlledPlan.contract === model.PLANT_ORDER_CONTROLLED_PLAN_CONTRACT, 'plant_order_v3_contract_missing')
+    let controlledResult = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), controlledPlan, proof(1, 'approved controlled execution plan'), model.EMPTY_PLANT_ORDER_DIGEST)
+    controlledResult = model.checkPlantOrderAvailability(controlledResult.state, {
+      checkId: 'CHK-CONTROLLED-001', sourceDigest: model.plantOrderEvidenceDigest({ filter: 15_000, shell: 20_000, assembly: 5, test: 10 }),
+      materials: controlledAvailabilityMaterials, workCentres: controlledAvailabilityCentres, proof: proof(2, 'checked controlled availability'), expectedHeadDigest: controlledResult.state.headDigest,
+    })
+    assertThrows(() => model.releasePlantOrder(controlledResult.state, { releaseId: 'REL-CONTROLLED-MISSING', availabilityCheckId: 'CHK-CONTROLLED-001', proof: proof(3, 'release without calibration'), expectedHeadDigest: controlledResult.state.headDigest }), 'plant_order_v3_release_without_calibration_succeeded')
+    assertThrows(() => model.recordPlantOrderCalibration(controlledResult.state, {
+      calibrationId: 'CAL-CONTROLLED-FUTURE', workCentreId: 'WC-ASSEMBLY-01', certificateId: 'CERT-ASSEMBLY-000', calibratedAt: '2026-07-26T09:04:00+06:30', validUntil: '2026-07-26T10:00:00+06:30', standardReference: 'Approved reference standard', proof: proof(3, 'future calibration'), expectedHeadDigest: controlledResult.state.headDigest,
+    }), 'plant_order_v3_future_calibration_succeeded')
+    controlledResult = model.recordPlantOrderCalibration(controlledResult.state, {
+      calibrationId: 'CAL-CONTROLLED-ASSEMBLY-001', workCentreId: 'WC-ASSEMBLY-01', certificateId: 'CERT-ASSEMBLY-001', calibratedAt: '2026-07-26T08:00:00+06:30', validUntil: '2026-07-26T10:00:00+06:30', standardReference: 'Approved reference standard', proof: proof(3, 'reviewed assembly calibration'), expectedHeadDigest: controlledResult.state.headDigest,
+    })
+    const calibrationReplay = model.recordPlantOrderCalibration(controlledResult.state, {
+      calibrationId: 'CAL-CONTROLLED-ASSEMBLY-001', workCentreId: 'WC-ASSEMBLY-01', certificateId: 'CERT-ASSEMBLY-001', calibratedAt: '2026-07-26T08:00:00+06:30', validUntil: '2026-07-26T10:00:00+06:30', standardReference: 'Approved reference standard', proof: proof(3, 'reviewed assembly calibration'), expectedHeadDigest: model.EMPTY_PLANT_ORDER_DIGEST,
+    })
+    assert(calibrationReplay.replayed && calibrationReplay.state.headDigest === controlledResult.state.headDigest, 'plant_order_v3_calibration_replay_not_idempotent')
+    controlledResult = model.recordPlantOrderCalibration(controlledResult.state, {
+      calibrationId: 'CAL-CONTROLLED-TEST-001', workCentreId: 'WC-TEST-01', certificateId: 'CERT-TEST-001', calibratedAt: '2026-07-26T08:00:00+06:30', validUntil: '2026-07-26T10:00:00+06:30', standardReference: 'Approved reference standard', proof: proof(4, 'reviewed test calibration'), expectedHeadDigest: controlledResult.state.headDigest,
+    })
+    controlledResult = model.releasePlantOrder(controlledResult.state, { releaseId: 'REL-CONTROLLED-001', availabilityCheckId: 'CHK-CONTROLLED-001', proof: proof(5, 'released calibrated work package'), expectedHeadDigest: controlledResult.state.headDigest })
+    assert(model.projectPlantOrder(controlledResult.state).calibrations.map((row) => row.workCentreId).join(',') === 'WC-ASSEMBLY-01,WC-TEST-01', 'plant_order_v3_calibration_projection_wrong')
     let result = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), plan, proof(1, 'approved BOM and routing'), model.EMPTY_PLANT_ORDER_DIGEST)
     assert(!result.replayed && result.state.headDigest === 'sha256:c809f3f30d1df11b3bbed4df8ac7d12ea4afc6f245830059270c32bd14ca1ab1', 'plant_order_plan_head_drifted')
     const plannedState = result.state

@@ -1,6 +1,7 @@
 export const PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.order_foundation.v1' as const
 export const PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1' as const
 export const PLANT_ORDER_EXECUTION_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v2' as const
+export const PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v3' as const
 export const PLANT_ORDER_PROJECTION_CONTRACT = 'supermega.plant.order_projection.v1' as const
 export const PLANT_ORDER_EFFECTIVENESS_CONTRACT = 'supermega.plant.order_effectiveness.v2' as const
 export const PLANT_ORDER_COST_DRIVER_CONTRACT = 'supermega.plant.cost_driver_variance.v1' as const
@@ -39,7 +40,7 @@ export type PlantOrderRoutingStep = {
 export type PlantOrderRoutingDraft = Omit<PlantOrderRoutingStep, 'sequence'> & { workCentreName: string }
 
 export type PlantOrderPlan = {
-  contract: typeof PLANT_ORDER_PLAN_CONTRACT | typeof PLANT_ORDER_EXECUTION_PLAN_CONTRACT
+  contract: typeof PLANT_ORDER_PLAN_CONTRACT | typeof PLANT_ORDER_EXECUTION_PLAN_CONTRACT | typeof PLANT_ORDER_CONTROLLED_PLAN_CONTRACT
   planId: string
   sourceDigest: string
   job: { jobId: string; product: string; targetQuantity: number; outputBatchId: string }
@@ -70,6 +71,16 @@ type AvailabilityCommand = {
   proof: PlantOrderProof
 }
 type ReleaseOrderCommand = { kind: 'release_order'; id: string; availabilityCheckId: string; proof: PlantOrderProof }
+export type RecordCalibrationCommand = {
+  kind: 'record_calibration'
+  id: string
+  workCentreId: string
+  certificateId: string
+  calibratedAt: string
+  validUntil: string
+  standardReference: string
+  proof: PlantOrderProof
+}
 type IssueMaterialCommand = { kind: 'issue_material'; id: string; materialId: string; inputLotId: string; quantityMilli: number; proof: PlantOrderProof }
 export type PlantOrderEffectivenessWorkCentre = { workCentreId: string; plannedProductiveMinutesMilli: number }
 export type PlantOrderDowntimeInterval = { downtimeId: string; workCentreId: string; startedAt: string; endedAt: string }
@@ -98,7 +109,7 @@ export type InspectOutputCommand = {
   proof: PlantOrderProof
 }
 type ReleaseBatchCommand = { kind: 'release_batch'; id: string; outputBatchId: string; inspectionId: string; proof: PlantOrderProof }
-export type PlantOrderCommandPayload = ImportPlanCommand | AvailabilityCommand | ReleaseOrderCommand | IssueMaterialCommand | RecordEffectivenessCommand | RecordOperationCommand | RecordOutputCommand | InspectOutputCommand | ReleaseBatchCommand
+export type PlantOrderCommandPayload = ImportPlanCommand | AvailabilityCommand | ReleaseOrderCommand | RecordCalibrationCommand | IssueMaterialCommand | RecordEffectivenessCommand | RecordOperationCommand | RecordOutputCommand | InspectOutputCommand | ReleaseBatchCommand
 
 export type PlantOrderCommand = {
   sequence: number
@@ -135,6 +146,7 @@ export type PlantOrderProjection = {
   status: 'unplanned' | 'planned' | 'shortfall' | 'ready' | 'released' | 'in_process' | 'inspection_due' | 'quality_hold' | 'ready_to_release' | 'released_to_stock'
   latestAvailability: PlantOrderAvailabilityProjection | null
   orderRelease: ReleaseOrderCommand | null
+  calibrations: RecordCalibrationCommand[]
   effectivenessWindow: RecordEffectivenessCommand | null
   materials: Array<PlantOrderMaterial & { requiredQuantityMilli: number; issuedQuantityMilli: number; remainingToIssueMilli: number; inputLotId: string | null; availableQuantityMilli: number | null }>
   routing: PlantOrderRoutingStep[]
@@ -226,7 +238,7 @@ const digestPattern = /^sha256:[0-9a-f]{64}$/
 const businessIdPattern = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$/
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
 const materialUnits = new Set(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
-const commandKinds = new Set(['import_plan', 'availability_check', 'release_order', 'issue_material', 'record_effectiveness', 'record_operation', 'record_output', 'inspect_output', 'release_batch'])
+const commandKinds = new Set(['import_plan', 'availability_check', 'release_order', 'record_calibration', 'issue_material', 'record_effectiveness', 'record_operation', 'record_output', 'inspect_output', 'release_batch'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -493,7 +505,7 @@ function validateRouting(value: unknown, field: string, workCentreIds: Set<strin
 
 function validatePlanPackage(value: unknown): PlantOrderPlan {
   const source = exact(value, 'plan package', ['contract', 'planId', 'sourceDigest', 'job', 'materials', 'workCentres', 'routing', 'packageDigest'])
-  if (source.contract !== PLANT_ORDER_PLAN_CONTRACT && source.contract !== PLANT_ORDER_EXECUTION_PLAN_CONTRACT) throw new Error('plan package.contract is unsupported.')
+  if (source.contract !== PLANT_ORDER_PLAN_CONTRACT && source.contract !== PLANT_ORDER_EXECUTION_PLAN_CONTRACT && source.contract !== PLANT_ORDER_CONTROLLED_PLAN_CONTRACT) throw new Error('plan package.contract is unsupported.')
   const contract = source.contract
   const planId = identifier(source.planId, 'plan package.planId', 'PLN'); const sourceDigest = digest(source.sourceDigest, 'plan package.sourceDigest')
   const job = validateJob(source.job, 'plan package.job'); const materials = validateMaterials(source.materials, 'plan package.materials')
@@ -514,6 +526,11 @@ export function buildPlantOrderPlan(input: Omit<PlantOrderPlan, 'contract' | 'pa
 
 export function buildPlantOrderExecutionPlan(input: Omit<PlantOrderPlan, 'contract' | 'packageDigest'>) {
   const candidate = { contract: PLANT_ORDER_EXECUTION_PLAN_CONTRACT, ...input }
+  return validatePlanPackage({ ...candidate, packageDigest: canonicalDigest(candidate) })
+}
+
+export function buildPlantOrderControlledPlan(input: Omit<PlantOrderPlan, 'contract' | 'packageDigest'>) {
+  const candidate = { contract: PLANT_ORDER_CONTROLLED_PLAN_CONTRACT, ...input }
   return validatePlanPackage({ ...candidate, packageDigest: canonicalDigest(candidate) })
 }
 
@@ -645,6 +662,25 @@ function commandPayload(value: unknown, field: string): PlantOrderCommandPayload
     const row = exact(value, field, ['kind', 'id', 'availabilityCheckId', 'proof'])
     return { kind: 'release_order', id: identifier(row.id, `${field}.id`, 'REL'), availabilityCheckId: identifier(row.availabilityCheckId, `${field}.availabilityCheckId`, 'CHK'), proof: actionProof(row.proof, `${field}.proof`) }
   }
+  if (value.kind === 'record_calibration') {
+    const row = exact(value, field, ['kind', 'id', 'workCentreId', 'certificateId', 'calibratedAt', 'validUntil', 'standardReference', 'proof'])
+    const calibratedAt = timestampMicros(row.calibratedAt, `${field}.calibratedAt`)
+    const validUntil = timestampMicros(row.validUntil, `${field}.validUntil`)
+    const proof = actionProof(row.proof, `${field}.proof`)
+    const capturedAt = timestampMicros(proof.capturedAt, `${field}.proof.capturedAt`)
+    if (calibratedAt.micros > capturedAt.micros) throw new Error(`${field}.calibratedAt cannot follow its review.`)
+    if (validUntil.micros <= capturedAt.micros) throw new Error(`${field}.validUntil must follow its review.`)
+    return {
+      kind: 'record_calibration',
+      id: identifier(row.id, `${field}.id`, 'CAL'),
+      workCentreId: identifier(row.workCentreId, `${field}.workCentreId`, 'WC'),
+      certificateId: identifier(row.certificateId, `${field}.certificateId`, 'CERT'),
+      calibratedAt: calibratedAt.value,
+      validUntil: validUntil.value,
+      standardReference: text(row.standardReference, `${field}.standardReference`, 180),
+      proof,
+    }
+  }
   if (value.kind === 'issue_material') {
     const row = exact(value, field, ['kind', 'id', 'materialId', 'inputLotId', 'quantityMilli', 'proof'])
     return { kind: 'issue_material', id: identifier(row.id, `${field}.id`, 'ISSUE'), materialId: identifier(row.materialId, `${field}.materialId`, 'MAT'), inputLotId: identifier(row.inputLotId, `${field}.inputLotId`, 'LOT'), quantityMilli: integer(row.quantityMilli, `${field}.quantityMilli`, 1), proof: actionProof(row.proof, `${field}.proof`) }
@@ -700,14 +736,20 @@ function availabilityProjection(plan: PlantOrderPlan, command: AvailabilityComma
   return { checkId: command.id, sourceDigest: command.sourceDigest, proof: command.proof, passed: !shortfalls.length, materials, workCentres, shortfalls }
 }
 
+function calibrationCovers(command: RecordCalibrationCommand, capturedAt: string, field: string) {
+  const observed = timestampMicros(capturedAt, `${field}.capturedAt`).micros
+  return timestampMicros(command.calibratedAt, `${field}.calibratedAt`).micros <= observed
+    && observed < timestampMicros(command.validUntil, `${field}.validUntil`).micros
+}
+
 function emptyProjection(): Omit<PlantOrderProjection, 'contract' | 'revision' | 'headDigest'> {
-  return { plan: null, status: 'unplanned', latestAvailability: null, orderRelease: null, effectivenessWindow: null, materials: [], routing: [], operations: [], workCentres: [], outputEntries: [], totalOutput: 0, inspections: [], latestInspection: null, qualityHold: null, batchRelease: null, genealogy: [], metrics: { targetQuantity: 0, issuedMaterialCount: 0, completedOperationCount: 0, actualOperationMinutesMilli: 0, outputQuantity: 0, acceptedQuantity: 0 } }
+  return { plan: null, status: 'unplanned', latestAvailability: null, orderRelease: null, calibrations: [], effectivenessWindow: null, materials: [], routing: [], operations: [], workCentres: [], outputEntries: [], totalOutput: 0, inspections: [], latestInspection: null, qualityHold: null, batchRelease: null, genealogy: [], metrics: { targetQuantity: 0, issuedMaterialCount: 0, completedOperationCount: 0, actualOperationMinutesMilli: 0, outputQuantity: 0, acceptedQuantity: 0 } }
 }
 
 function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderProjection, 'contract' | 'revision' | 'headDigest'> {
   if (!commands.length) return emptyProjection()
   let plan: PlantOrderPlan | null = null; let latestAvailability: PlantOrderAvailabilityProjection | null = null; let orderRelease: ReleaseOrderCommand | null = null; let effectivenessWindow: RecordEffectivenessCommand | null = null
-  let issued = new Map<string, number>(); let operationQuantities = new Map<string, number>(); let operationMinutes = new Map<string, number>(); const materialIssueCommands: IssueMaterialCommand[] = []; const operationCommands: RecordOperationCommand[] = []; const outputEntries: RecordOutputCommand[] = []; const inspections: InspectOutputCommand[] = []
+  let issued = new Map<string, number>(); let operationQuantities = new Map<string, number>(); let operationMinutes = new Map<string, number>(); const calibrations = new Map<string, RecordCalibrationCommand>(); const materialIssueCommands: IssueMaterialCommand[] = []; const operationCommands: RecordOperationCommand[] = []; const outputEntries: RecordOutputCommand[] = []; const inspections: InspectOutputCommand[] = []
   let batchRelease: ReleaseBatchCommand | null = null; let totalOutput = 0
   commands.forEach((command, index) => {
     const field = `commands[${index}].payload`
@@ -722,11 +764,28 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
       if (orderRelease) throw new Error(`${field} cannot replace availability after order release.`)
       latestAvailability = availabilityProjection(currentPlan, command); return
     }
+    if (command.kind === 'record_calibration') {
+      if (currentPlan.contract !== PLANT_ORDER_CONTROLLED_PLAN_CONTRACT) throw new Error(`${field} requires a version 3 controlled plan.`)
+      if (batchRelease) throw new Error(`${field} follows final batch release.`)
+      if (!currentPlan.routing.some((operation) => operation.workCentreId === command.workCentreId)) throw new Error(`${field}.workCentreId is not in the reviewed routing.`)
+      const previous = calibrations.get(command.workCentreId)
+      if (previous && (timestampMicros(command.calibratedAt, `${field}.calibratedAt`).micros <= timestampMicros(previous.calibratedAt, `${field}.prior.calibratedAt`).micros
+        || timestampMicros(command.validUntil, `${field}.validUntil`).micros <= timestampMicros(previous.validUntil, `${field}.prior.validUntil`).micros)) throw new Error(`${field} does not advance the retained calibration.`)
+      calibrations.set(command.workCentreId, command); return
+    }
     if (command.kind === 'release_order') {
       if (orderRelease) throw new Error(`${field} attempts to release the order twice.`)
       if (!latestAvailability) throw new Error(`${field} requires a current availability check.`)
       if (command.availabilityCheckId !== latestAvailability.checkId) throw new Error(`${field} references a stale availability check.`)
       if (!latestAvailability.passed) throw new Error(`${field} cannot release an order with a shortfall.`)
+      if (currentPlan.contract === PLANT_ORDER_CONTROLLED_PLAN_CONTRACT) {
+        const routedCentreIds = [...new Set(currentPlan.routing.map((operation) => operation.workCentreId))]
+        const missing = routedCentreIds.filter((workCentreId) => {
+          const calibration = calibrations.get(workCentreId)
+          return !calibration || !calibrationCovers(calibration, command.proof.capturedAt, `${field}.calibration.${workCentreId}`)
+        })
+        if (missing.length) throw new Error(`${field} requires current calibration for ${missing.join(', ')}.`)
+      }
       orderRelease = command; return
     }
     if (!orderRelease) throw new Error(`${field} requires human order release.`)
@@ -753,9 +812,13 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
     }
     if (command.kind === 'record_operation') {
       if (currentHold) throw new Error(`${field} is blocked by the failed current inspection.`)
-      if (currentPlan.contract !== PLANT_ORDER_EXECUTION_PLAN_CONTRACT) throw new Error(`${field} requires a version 2 execution plan.`)
+      if (currentPlan.contract !== PLANT_ORDER_EXECUTION_PLAN_CONTRACT && currentPlan.contract !== PLANT_ORDER_CONTROLLED_PLAN_CONTRACT) throw new Error(`${field} requires a version 2 or 3 execution plan.`)
       const operationIndex = currentPlan.routing.findIndex((row) => row.operationId === command.operationId)
       if (operationIndex < 0) throw new Error(`${field}.operationId is not in the reviewed routing.`)
+      if (currentPlan.contract === PLANT_ORDER_CONTROLLED_PLAN_CONTRACT) {
+        const workCentreId = currentPlan.routing[operationIndex].workCentreId; const calibration = calibrations.get(workCentreId)
+        if (!calibration || !calibrationCovers(calibration, command.proof.capturedAt, `${field}.calibration.${workCentreId}`)) throw new Error(`${field} requires current calibration for ${workCentreId}.`)
+      }
       const completedQuantity = operationQuantities.get(command.operationId) ?? 0
       const nextCompletedQuantity = completedQuantity + command.quantity
       if (nextCompletedQuantity > currentPlan.job.targetQuantity) throw new Error(`${field} exceeds the reviewed operation target.`)
@@ -776,7 +839,7 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
       if (command.outputBatchId !== currentPlan.job.outputBatchId) throw new Error(`${field}.outputBatchId differs from the reviewed batch.`)
       const nextOutput = totalOutput + command.quantity
       if (nextOutput > currentPlan.job.targetQuantity) throw new Error(`${field} exceeds the reviewed order target.`)
-      if (currentPlan.contract === PLANT_ORDER_EXECUTION_PLAN_CONTRACT) {
+      if (currentPlan.contract === PLANT_ORDER_EXECUTION_PLAN_CONTRACT || currentPlan.contract === PLANT_ORDER_CONTROLLED_PLAN_CONTRACT) {
         const finalOperation = currentPlan.routing.at(-1)!
         if ((operationQuantities.get(finalOperation.operationId) ?? 0) < nextOutput) throw new Error(`${field} exceeds completed final-operation quantity.`)
       }
@@ -825,7 +888,7 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
   else if (totalOutput === finalPlan.job.targetQuantity) status = inspectionIsCurrent && latestInspection?.result === 'pass' ? 'ready_to_release' : 'inspection_due'
   else if (totalOutput || materialIssueCommands.length || operationCommands.length) status = 'in_process'
   else status = 'released'
-  return { plan: finalPlan, status, latestAvailability: finalAvailability, orderRelease: finalOrderRelease, effectivenessWindow, materials, routing: finalPlan.routing, operations, workCentres: finalAvailability?.workCentres ?? [], outputEntries, totalOutput, inspections, latestInspection, qualityHold, batchRelease: finalBatchRelease, genealogy, metrics: { targetQuantity: finalPlan.job.targetQuantity, issuedMaterialCount: [...issued.values()].filter(Boolean).length, completedOperationCount: operations.filter((row) => row.status === 'complete').length, actualOperationMinutesMilli: [...operationMinutes.values()].reduce((total, value) => total + value, 0), outputQuantity: totalOutput, acceptedQuantity: inspectionIsCurrent && latestInspection ? latestInspection.acceptedQuantity : 0 } }
+  return { plan: finalPlan, status, latestAvailability: finalAvailability, orderRelease: finalOrderRelease, calibrations: [...calibrations.values()].sort((left, right) => compareCanonicalText(left.workCentreId, right.workCentreId)), effectivenessWindow, materials, routing: finalPlan.routing, operations, workCentres: finalAvailability?.workCentres ?? [], outputEntries, totalOutput, inspections, latestInspection, qualityHold, batchRelease: finalBatchRelease, genealogy, metrics: { targetQuantity: finalPlan.job.targetQuantity, issuedMaterialCount: [...issued.values()].filter(Boolean).length, completedOperationCount: operations.filter((row) => row.status === 'complete').length, actualOperationMinutesMilli: [...operationMinutes.values()].reduce((total, value) => total + value, 0), outputQuantity: totalOutput, acceptedQuantity: inspectionIsCurrent && latestInspection ? latestInspection.acceptedQuantity : 0 } }
 }
 
 export function validatePlantOrderState(value: unknown): PlantOrderState {
@@ -1085,6 +1148,10 @@ export function checkPlantOrderAvailability(state: unknown, input: { checkId: un
 
 export function releasePlantOrder(state: unknown, input: { releaseId: unknown; availabilityCheckId: unknown; proof: unknown; expectedHeadDigest: unknown }) {
   return appendCommand(state, { kind: 'release_order', id: input.releaseId, availabilityCheckId: input.availabilityCheckId, proof: actionProof(input.proof, 'proof') }, input.expectedHeadDigest)
+}
+
+export function recordPlantOrderCalibration(state: unknown, input: { calibrationId: unknown; workCentreId: unknown; certificateId: unknown; calibratedAt: unknown; validUntil: unknown; standardReference: unknown; proof: unknown; expectedHeadDigest: unknown }) {
+  return appendCommand(state, { kind: 'record_calibration', id: input.calibrationId, workCentreId: input.workCentreId, certificateId: input.certificateId, calibratedAt: input.calibratedAt, validUntil: input.validUntil, standardReference: input.standardReference, proof: actionProof(input.proof, 'proof') }, input.expectedHeadDigest)
 }
 
 export function issuePlantOrderMaterial(state: unknown, input: { issueId: unknown; materialId: unknown; inputLotId: unknown; quantityMilli: unknown; proof: unknown; expectedHeadDigest: unknown }) {

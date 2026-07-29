@@ -5,11 +5,13 @@ import unittest
 
 from supermega_runtime.plant_order_foundation import (
     EMPTY_PLANT_ORDER_DIGEST,
+    PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
     PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
     PLANT_ORDER_PLAN_CONTRACT,
     PlantOrderValidationError,
     apply_plant_order_plan,
     build_plant_order_execution_plan,
+    build_plant_order_controlled_plan,
     build_plant_order_plan,
     check_plant_order_availability,
     create_empty_plant_order_state,
@@ -18,6 +20,7 @@ from supermega_runtime.plant_order_foundation import (
     plant_order_evidence_digest,
     project_plant_order,
     record_plant_order_effectiveness,
+    record_plant_order_calibration,
     record_plant_order_operation,
     record_plant_order_output,
     release_plant_order,
@@ -82,6 +85,18 @@ def reviewed_plan(*, target: int = 10) -> dict[str, object]:
                 "minutesPerUnitMilli": 1_000,
             },
         ],
+    )
+
+
+def controlled_plan(*, target: int = 10) -> dict[str, object]:
+    legacy = reviewed_plan(target=target)
+    return build_plant_order_controlled_plan(
+        plan_id="PLN-20260726-003",
+        source_digest=legacy["sourceDigest"],
+        job=legacy["job"],
+        materials=legacy["materials"],
+        work_centres=legacy["workCentres"],
+        routing=legacy["routing"],
     )
 
 
@@ -222,6 +237,110 @@ def fully_issued_execution_state() -> dict[str, object]:
 
 
 class PlantOrderFoundationTests(unittest.TestCase):
+    def test_v3_calibration_gates_release_and_operation_with_renewal(self) -> None:
+        state = create_empty_plant_order_state()
+        package = controlled_plan()
+        self.assertEqual(package["contract"], PLANT_ORDER_CONTROLLED_PLAN_CONTRACT)
+        state = apply_plant_order_plan(
+            state,
+            package,
+            proof(1, "approved controlled BOM and routing"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        state = check_state(state, sequence=2)
+        with self.assertRaisesRegex(PlantOrderValidationError, "current calibration"):
+            release_plant_order(
+                state,
+                release_id="REL-CAL-MISSING-001",
+                availability_check_id="CHK-20260726-001",
+                proof=proof(3, "release without calibration"),
+                expected_head_digest=state["headDigest"],
+            )
+
+        for sequence, centre in ((3, "WC-ASSEMBLY-01"), (4, "WC-TEST-01")):
+            state = record_plant_order_calibration(
+                state,
+                calibration_id=f"CAL-20260726-{sequence:03d}",
+                work_centre_id=centre,
+                certificate_id=f"CERT-{centre.removeprefix('WC-')}-001",
+                calibrated_at="2026-07-26T08:00:00+06:30",
+                valid_until="2026-07-26T10:00:00+06:30",
+                standard_reference="Approved reference standard",
+                proof=proof(sequence, f"reviewed {centre} calibration"),
+                expected_head_digest=state["headDigest"],
+            )["state"]
+        self.assertEqual(
+            [row["workCentreId"] for row in project_plant_order(state)["calibrations"]],
+            ["WC-ASSEMBLY-01", "WC-TEST-01"],
+        )
+        state = release_plant_order(
+            state,
+            release_id="REL-CAL-001",
+            availability_check_id="CHK-20260726-001",
+            proof=proof(5, "released calibrated work package"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        for sequence, material, lot, quantity in (
+            (6, "MAT-FILTER-001", "LOT-FILTER-2407", 15_000),
+            (7, "MAT-SHELL-001", "LOT-SHELL-2407", 20_000),
+        ):
+            state = issue_plant_order_material(
+                state,
+                issue_id=f"ISSUE-CAL-{sequence:03d}",
+                material_id=material,
+                input_lot_id=lot,
+                quantity_milli=quantity,
+                proof=proof(sequence, f"issued {material}"),
+                expected_head_digest=state["headDigest"],
+            )["state"]
+
+        expired_proof = {
+            **proof(8, "attempted operation with expired calibration"),
+            "capturedAt": "2026-07-26T10:01:00+06:30",
+        }
+        with self.assertRaisesRegex(PlantOrderValidationError, "current calibration for WC-ASSEMBLY-01"):
+            record_plant_order_operation(
+                state,
+                operation_run_id="OPRUN-CAL-EXPIRED-001",
+                operation_id="OP-ASSEMBLY-10",
+                quantity=1,
+                actual_minutes_milli=500,
+                proof=expired_proof,
+                expected_head_digest=state["headDigest"],
+            )
+
+        renewal_proof = {
+            **proof(9, "reviewed renewed assembly calibration"),
+            "capturedAt": "2026-07-26T10:02:00+06:30",
+        }
+        state = record_plant_order_calibration(
+            state,
+            calibration_id="CAL-ASSEMBLY-RENEW-001",
+            work_centre_id="WC-ASSEMBLY-01",
+            certificate_id="CERT-ASSEMBLY-002",
+            calibrated_at="2026-07-26T10:01:00+06:30",
+            valid_until="2027-07-26T10:00:00+06:30",
+            standard_reference="Approved annual reference standard",
+            proof=renewal_proof,
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        operation_proof = {
+            **proof(10, "recorded calibrated assembly operation"),
+            "capturedAt": "2026-07-26T10:03:00+06:30",
+        }
+        state = record_plant_order_operation(
+            state,
+            operation_run_id="OPRUN-CAL-001",
+            operation_id="OP-ASSEMBLY-10",
+            quantity=1,
+            actual_minutes_milli=500,
+            proof=operation_proof,
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        projection = project_plant_order(state)
+        self.assertEqual(projection["operations"][0]["completedQuantity"], 1)
+        self.assertEqual(projection["calibrations"][0]["certificateId"], "CERT-ASSEMBLY-002")
+
     def test_effectiveness_window_is_order_bound_and_fail_closed(self) -> None:
         state = released_state()
         evidence = {

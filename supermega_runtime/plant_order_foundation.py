@@ -20,6 +20,7 @@ from typing import Any
 PLANT_ORDER_STATE_SCHEMA = "supermega.plant.order_foundation.v1"
 PLANT_ORDER_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v1"
 PLANT_ORDER_EXECUTION_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v2"
+PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v3"
 PLANT_ORDER_PROJECTION_CONTRACT = "supermega.plant.order_projection.v1"
 EMPTY_PLANT_ORDER_DIGEST = f"sha256:{'0' * 64}"
 
@@ -37,6 +38,7 @@ _COMMAND_KINDS = frozenset(
         "import_plan",
         "availability_check",
         "release_order",
+        "record_calibration",
         "issue_material",
         "record_effectiveness",
         "record_operation",
@@ -335,6 +337,7 @@ def _validate_plan_package(value: object) -> dict[str, Any]:
     if source["contract"] not in {
         PLANT_ORDER_PLAN_CONTRACT,
         PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
+        PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
     }:
         raise _fail("plan package.contract is unsupported.")
     contract = source["contract"]
@@ -412,6 +415,30 @@ def build_plant_order_execution_plan(
 
     candidate = {
         "contract": PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
+        "planId": plan_id,
+        "sourceDigest": source_digest,
+        "job": job,
+        "materials": materials,
+        "workCentres": work_centres,
+        "routing": routing,
+    }
+    candidate["packageDigest"] = _canonical_digest(candidate)
+    return _validate_plan_package(candidate)
+
+
+def build_plant_order_controlled_plan(
+    *,
+    plan_id: object,
+    source_digest: object,
+    job: object,
+    materials: object,
+    work_centres: object,
+    routing: object,
+) -> dict[str, Any]:
+    """Build a v3 package with routed calibration controls."""
+
+    candidate = {
+        "contract": PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
         "planId": plan_id,
         "sourceDigest": source_digest,
         "job": job,
@@ -733,6 +760,42 @@ def _command_payload(value: object, field: str) -> dict[str, Any]:
             "proof": _proof(source["proof"], f"{field}.proof"),
         }
 
+    if kind == "record_calibration":
+        source = _object(
+            value,
+            field,
+            (
+                "kind",
+                "id",
+                "workCentreId",
+                "certificateId",
+                "calibratedAt",
+                "validUntil",
+                "standardReference",
+                "proof",
+            ),
+        )
+        calibrated_at = _timestamp(source["calibratedAt"], f"{field}.calibratedAt")
+        valid_until = _timestamp(source["validUntil"], f"{field}.validUntil")
+        calibration_proof = _proof(source["proof"], f"{field}.proof")
+        calibrated_time = datetime.fromisoformat(calibrated_at.replace("Z", "+00:00"))
+        valid_time = datetime.fromisoformat(valid_until.replace("Z", "+00:00"))
+        proof_time = datetime.fromisoformat(calibration_proof["capturedAt"].replace("Z", "+00:00"))
+        if calibrated_time > proof_time:
+            raise _fail(f"{field}.calibratedAt cannot follow its review.")
+        if valid_time <= proof_time:
+            raise _fail(f"{field}.validUntil must follow its review.")
+        return {
+            "kind": kind,
+            "id": _identifier(source["id"], f"{field}.id", "CAL"),
+            "workCentreId": _identifier(source["workCentreId"], f"{field}.workCentreId", "WC"),
+            "certificateId": _identifier(source["certificateId"], f"{field}.certificateId", "CERT"),
+            "calibratedAt": calibrated_at,
+            "validUntil": valid_until,
+            "standardReference": _text(source["standardReference"], f"{field}.standardReference"),
+            "proof": calibration_proof,
+        }
+
     if kind == "record_effectiveness":
         return _effectiveness_command(value, field)
 
@@ -920,12 +983,20 @@ def _availability_projection(
     }
 
 
+def _calibration_covers(command: Mapping[str, Any], captured_at: str) -> bool:
+    observed = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+    calibrated = datetime.fromisoformat(command["calibratedAt"].replace("Z", "+00:00"))
+    valid_until = datetime.fromisoformat(command["validUntil"].replace("Z", "+00:00"))
+    return calibrated <= observed < valid_until
+
+
 def _empty_projection() -> dict[str, Any]:
     return {
         "plan": None,
         "status": "unplanned",
         "latestAvailability": None,
         "orderRelease": None,
+        "calibrations": [],
         "effectivenessWindow": None,
         "materials": [],
         "routing": [],
@@ -957,6 +1028,7 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
     latest_availability: dict[str, Any] | None = None
     order_release: dict[str, Any] | None = None
     effectiveness_window: dict[str, Any] | None = None
+    calibrations: dict[str, dict[str, Any]] = {}
     issued: dict[str, int] = {}
     operation_quantities: dict[str, int] = {}
     operation_minutes: dict[str, int] = {}
@@ -994,6 +1066,25 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             latest_availability = _availability_projection(plan, command)
             continue
 
+        if kind == "record_calibration":
+            if plan["contract"] != PLANT_ORDER_CONTROLLED_PLAN_CONTRACT:
+                raise _fail(f"{field} requires a version 3 controlled plan.")
+            if batch_release is not None:
+                raise _fail(f"{field} follows final batch release.")
+            work_centre_id = command["workCentreId"]
+            if not any(row["workCentreId"] == work_centre_id for row in plan["routing"]):
+                raise _fail(f"{field}.workCentreId is not in the reviewed routing.")
+            previous = calibrations.get(work_centre_id)
+            if previous is not None:
+                calibrated = datetime.fromisoformat(command["calibratedAt"].replace("Z", "+00:00"))
+                valid_until = datetime.fromisoformat(command["validUntil"].replace("Z", "+00:00"))
+                previous_calibrated = datetime.fromisoformat(previous["calibratedAt"].replace("Z", "+00:00"))
+                previous_valid_until = datetime.fromisoformat(previous["validUntil"].replace("Z", "+00:00"))
+                if calibrated <= previous_calibrated or valid_until <= previous_valid_until:
+                    raise _fail(f"{field} does not advance the retained calibration.")
+            calibrations[work_centre_id] = command
+            continue
+
         if kind == "release_order":
             if order_release is not None:
                 raise _fail(f"{field} attempts to release the order twice.")
@@ -1003,6 +1094,16 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
                 raise _fail(f"{field} references a stale availability check.")
             if not latest_availability["passed"]:
                 raise _fail(f"{field} cannot release an order with a shortfall.")
+            if plan["contract"] == PLANT_ORDER_CONTROLLED_PLAN_CONTRACT:
+                routed_centres = sorted({row["workCentreId"] for row in plan["routing"]})
+                missing = [
+                    work_centre_id
+                    for work_centre_id in routed_centres
+                    if work_centre_id not in calibrations
+                    or not _calibration_covers(calibrations[work_centre_id], command["proof"]["capturedAt"])
+                ]
+                if missing:
+                    raise _fail(f"{field} requires current calibration for {', '.join(missing)}.")
             order_release = command
             continue
 
@@ -1055,8 +1156,11 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
         if kind == "record_operation":
             if current_hold:
                 raise _fail(f"{field} is blocked by the failed current inspection.")
-            if plan["contract"] != PLANT_ORDER_EXECUTION_PLAN_CONTRACT:
-                raise _fail(f"{field} requires a version 2 execution plan.")
+            if plan["contract"] not in {
+                PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
+                PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
+            }:
+                raise _fail(f"{field} requires a version 2 or 3 execution plan.")
             operation_index = next(
                 (
                     route_index
@@ -1067,6 +1171,11 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             )
             if operation_index < 0:
                 raise _fail(f"{field}.operationId is not in the reviewed routing.")
+            if plan["contract"] == PLANT_ORDER_CONTROLLED_PLAN_CONTRACT:
+                work_centre_id = plan["routing"][operation_index]["workCentreId"]
+                calibration = calibrations.get(work_centre_id)
+                if calibration is None or not _calibration_covers(calibration, command["proof"]["capturedAt"]):
+                    raise _fail(f"{field} requires current calibration for {work_centre_id}.")
             completed_quantity = operation_quantities[command["operationId"]]
             next_completed_quantity = completed_quantity + command["quantity"]
             if next_completed_quantity > job["targetQuantity"]:
@@ -1111,7 +1220,10 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             next_output = total_output + command["quantity"]
             if next_output > job["targetQuantity"]:
                 raise _fail(f"{field} exceeds the reviewed order target.")
-            if plan["contract"] == PLANT_ORDER_EXECUTION_PLAN_CONTRACT:
+            if plan["contract"] in {
+                PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
+                PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
+            }:
                 final_operation_id = plan["routing"][-1]["operationId"]
                 if operation_quantities[final_operation_id] < next_output:
                     raise _fail(
@@ -1269,6 +1381,7 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
         "status": status,
         "latestAvailability": latest_availability,
         "orderRelease": order_release,
+        "calibrations": [calibrations[key] for key in sorted(calibrations)],
         "effectivenessWindow": effectiveness_window,
         "materials": material_rows,
         "routing": plan["routing"],
@@ -1511,6 +1624,34 @@ def issue_plant_order_material(
     )
 
 
+def record_plant_order_calibration(
+    state: object,
+    *,
+    calibration_id: object,
+    work_centre_id: object,
+    certificate_id: object,
+    calibrated_at: object,
+    valid_until: object,
+    standard_reference: object,
+    proof: object,
+    expected_head_digest: object,
+) -> dict[str, Any]:
+    return _append_command(
+        state,
+        {
+            "kind": "record_calibration",
+            "id": calibration_id,
+            "workCentreId": work_centre_id,
+            "certificateId": certificate_id,
+            "calibratedAt": calibrated_at,
+            "validUntil": valid_until,
+            "standardReference": standard_reference,
+            "proof": _proof(proof, "proof"),
+        },
+        expected_head_digest=expected_head_digest,
+    )
+
+
 def record_plant_order_effectiveness(
     state: object,
     *,
@@ -1641,6 +1782,7 @@ def release_plant_order_batch(
 
 __all__ = (
     "EMPTY_PLANT_ORDER_DIGEST",
+    "PLANT_ORDER_CONTROLLED_PLAN_CONTRACT",
     "PLANT_ORDER_EXECUTION_PLAN_CONTRACT",
     "PLANT_ORDER_PLAN_CONTRACT",
     "PLANT_ORDER_PROJECTION_CONTRACT",
@@ -1648,6 +1790,7 @@ __all__ = (
     "PlantOrderValidationError",
     "apply_plant_order_plan",
     "build_plant_order_execution_plan",
+    "build_plant_order_controlled_plan",
     "build_plant_order_plan",
     "check_plant_order_availability",
     "create_empty_plant_order_state",
@@ -1656,6 +1799,7 @@ __all__ = (
     "plant_order_evidence_digest",
     "project_plant_order",
     "record_plant_order_effectiveness",
+    "record_plant_order_calibration",
     "record_plant_order_operation",
     "record_plant_order_output",
     "release_plant_order",
