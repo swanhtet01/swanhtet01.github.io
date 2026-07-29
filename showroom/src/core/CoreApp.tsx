@@ -4971,7 +4971,6 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
-    {shopGuidance}
     <ShopCounter disabled={commerceControlsDisabled} items={commerce.items} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} />
     {actionGate}
   </div>
