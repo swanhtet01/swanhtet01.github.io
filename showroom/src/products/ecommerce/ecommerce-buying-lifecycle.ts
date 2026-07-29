@@ -1,4 +1,4 @@
-import type { CommerceItem } from '../../core/commerce-workspace.ts'
+import type { CommerceItem, CommerceOrder } from '../../core/commerce-workspace.ts'
 import {
   storefrontPreviewDigest,
   validateStorefrontPreview,
@@ -730,6 +730,10 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
     || new Set(records.map((record) => record.id)).size !== records.length
     || new Set(records.map((record) => record.idempotencyKey)).size !== records.length
     || events.length !== records.length) throw new Error('Buying state records are not unique and scope-bound.')
+  const requestIds = new Set(requests.map((request) => request.id))
+  if (returnIntents.some((intent) => !requestIds.has(intent.sourceRequestId))) {
+    throw new Error('Return intent is not attributable to one recovered Ecommerce request.')
+  }
   const byId = new Map(records.map((record) => [record.id, record]))
   for (const event of events) {
     const record = byId.get(event.subjectId)
@@ -784,6 +788,63 @@ export async function recordEcommerceOrderRequestV2(
 ) {
   const request = await validateEcommerceOrderRequestV2(requestValue)
   return appendBuyingRecord(state, request, 'requests', 'request_recorded', expectedHeadDigest)
+}
+
+export function buildEcommerceReturnIntent(input: {
+  scope: string
+  orderSnapshot: CommerceOrder
+  sku: string
+  quantity: number
+  disposition: EcommerceReturnDisposition
+  reason: string
+  idempotencyKey: string
+  createdAt: string
+}): EcommerceReturnIntent {
+  const order = input.orderSnapshot
+  if (!isRecord(order)
+    || order.status !== 'completed'
+    || !isRecord(order.completion)
+    || !Array.isArray(order.lines)
+    || order.lines.length < 1
+    || order.lines.length > maxLines) {
+    throw new Error('Returns require a completed Shop order with completion proof and exact sold lines.')
+  }
+  const orderId = canonicalToken(order.id, 'orderSnapshot.id')
+  const sourceRequestId = canonicalText(order.sourceRecordId, 'orderSnapshot.sourceRecordId', 40)
+  if (!requestIdPattern.test(sourceRequestId)) throw new Error('Return order is not attributable to an Ecommerce request.')
+  const lines = order.lines.map((line, index) => ({
+    sku: canonicalToken(line?.sku, `orderSnapshot.lines[${index}].sku`),
+    quantity: safeInteger(line?.quantity, `orderSnapshot.lines[${index}].quantity`, 1, maxQuantity),
+  }))
+  const sku = canonicalToken(input.sku, 'sku')
+  const matching = lines.filter((line) => line.sku === sku)
+  if (matching.length !== 1) throw new Error('Return SKU is not one exact sold line.')
+  const returned = (order.returns ?? []).reduce((total, record, index) => {
+    const recordSku = canonicalToken(record?.sku, `orderSnapshot.returns[${index}].sku`)
+    const recordQuantity = safeInteger(record?.quantity, `orderSnapshot.returns[${index}].quantity`, 1, maxQuantity)
+    return recordSku === sku ? total + recordQuantity : total
+  }, 0)
+  const quantity = safeInteger(input.quantity, 'quantity', 1, maxQuantity)
+  if (quantity > matching[0].quantity - returned) throw new Error('Return quantity exceeds the remaining sold quantity.')
+  if (!returnDispositions.includes(input.disposition)) throw new Error('Return disposition is unsupported.')
+  const idempotencyKey = canonicalText(input.idempotencyKey, 'idempotencyKey', 40)
+  if (!returnKeyPattern.test(idempotencyKey)) throw new Error('Return idempotency key is invalid.')
+  return validateEcommerceReturnIntent({
+    schema: ECOMMERCE_RETURN_INTENT_SCHEMA,
+    state: 'pending_shop_review',
+    scope: canonicalToken(input.scope, 'scope'),
+    id: `ERR-${idempotencyKey.slice(4)}`,
+    idempotencyKey,
+    createdAt: canonicalTimestamp(input.createdAt, 'createdAt'),
+    orderId,
+    sourceRequestId,
+    sku,
+    quantity,
+    disposition: input.disposition,
+    reason: canonicalText(input.reason, 'reason', 300),
+    refundStatus: 'not_started',
+    evidenceReference: `ECOMMERCE-RETURN:${idempotencyKey.slice(4)}:${orderId}:${sourceRequestId}`,
+  })
 }
 
 export function validateEcommerceReturnIntent(value: unknown): EcommerceReturnIntent {
@@ -887,6 +948,46 @@ export async function saveEcommerceOrderRequestV2(
       throw error instanceof Error
         ? error
         : new Error('Checkout recovery write failed. The previous value was restored.', { cause: error })
+    }
+  })
+}
+
+export async function saveEcommerceReturnIntent(
+  scope: string,
+  intent: EcommerceReturnIntent,
+  expectedHeadDigest: string,
+  options: { storage?: EcommerceBuyingStorage; locks?: EcommerceBuyingLocks } = {},
+) {
+  const canonicalScope = canonicalToken(scope, 'scope')
+  const storage = options.storage ?? browserStorage()
+  const locks = options.locks ?? browserLocks()
+  if (!storage) throw new Error('Browser recovery is unavailable. The return request was not saved.')
+  if (!locks) throw new Error('Safe browser locking is unavailable. The return request was not saved.')
+  const storageKey = ecommerceBuyingStateStorageKey(canonicalScope)
+  return locks.request(`supermega:ecommerce:buying-lifecycle:${encodeURIComponent(canonicalScope)}`, { mode: 'exclusive' }, async () => {
+    const currentRead = await readEcommerceBuyingState(canonicalScope, storage)
+    if (!currentRead.state || currentRead.status === 'invalid' || currentRead.status === 'unavailable') {
+      throw new Error(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
+    }
+    const next = await recordEcommerceReturnIntent(currentRead.state, intent, expectedHeadDigest)
+    if (next === currentRead.state || canonicalJson(next) === canonicalJson(currentRead.state)) return next
+    const previousRaw = storage.getItem(storageKey)
+    const nextRaw = canonicalJson(next)
+    try {
+      storage.setItem(storageKey, nextRaw)
+      if (storage.getItem(storageKey) !== nextRaw) throw new Error('Return request recovery write could not be confirmed.')
+      return next
+    } catch (error) {
+      try {
+        if (previousRaw === null) storage.removeItem(storageKey)
+        else storage.setItem(storageKey, previousRaw)
+        if (storage.getItem(storageKey) !== previousRaw) throw new Error('rollback confirmation failed', { cause: error })
+      } catch (rollbackError) {
+        throw new Error('Return request recovery write failed and rollback could not be confirmed. Stop and export local evidence.', { cause: rollbackError })
+      }
+      throw error instanceof Error
+        ? error
+        : new Error('Return request recovery write failed. The previous value was restored.', { cause: error })
     }
   })
 }

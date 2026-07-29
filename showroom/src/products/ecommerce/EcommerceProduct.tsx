@@ -31,6 +31,7 @@ import { EcommerceBuyingWorkspace } from './EcommerceBuyingWorkspace'
 import {
   type EcommerceCartLine,
   type EcommerceOrderRequestV2,
+  type EcommerceReturnIntent,
   type EcommerceShopDraftV2,
 } from './ecommerce-buying-lifecycle'
 import {
@@ -2117,7 +2118,7 @@ export function EcommerceProduct() {
               onCartChange={setBuyingCart}
               onDraft={openShopDraft}
               onOpenManagedRequest={managedIdentity ? (requestId) => navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestId)}`) : undefined}
-              onOpenReturns={() => navigate('/shop/?tab=orders&source=ecommerce-return')}
+              onOpenReturns={(intent: EcommerceReturnIntent) => navigate('/shop/?tab=orders', { state: { ecommerceReturnIntent: intent } })}
               onRecordManagedRequest={managedIdentity ? recordManagedBuyingRequest : undefined}
               preview={previewResult.preview}
               scope={buyingScope}

@@ -4,16 +4,20 @@ import {
   buildEcommerceCheckoutQuote,
   buildEcommerceOrderRequestV2,
   buildEcommercePimProjection,
+  buildEcommerceReturnIntent,
   createEmptyEcommerceBuyingState,
   ecommerceBuyingStateStorageKey,
   ecommercePaymentMatchesFulfilment,
   prepareEcommerceShopDraftV2,
   readEcommerceBuyingState,
   saveEcommerceOrderRequestV2,
+  saveEcommerceReturnIntent,
   type EcommerceBuyingState,
   type EcommerceCartLine,
   type EcommerceFulfilment,
   type EcommercePaymentAdapter,
+  type EcommerceReturnDisposition,
+  type EcommerceReturnIntent,
   type EcommerceShopDraftV2,
 } from './ecommerce-buying-lifecycle'
 import {
@@ -33,7 +37,7 @@ type EcommerceBuyingWorkspaceProps = {
   onCartChange: (cart: EcommerceCartLine[]) => void
   onDraft: (draft: EcommerceShopDraftV2) => void
   onOpenManagedRequest?: (requestId: string) => void
-  onOpenReturns: () => void
+  onOpenReturns: (intent: EcommerceReturnIntent) => void
   onRecordManagedRequest?: (request: EcommerceBuyingState['requests'][number]) => Promise<void>
   preview: StorefrontPreview
   scope: string
@@ -96,6 +100,14 @@ export function EcommerceBuyingWorkspace({
   const [freshQuoteId, setFreshQuoteId] = useState('')
   const [quoteClock, setQuoteClock] = useState(() => Date.now())
   const [notice, setNotice] = useState('')
+  const [returnDraft, setReturnDraft] = useState<{
+    orderId: string
+    sku: string
+    quantity: string
+    disposition: EcommerceReturnDisposition
+    reason: string
+  } | null>(null)
+  const [returnBusy, setReturnBusy] = useState(false)
   const confirmationRef = useRef<HTMLInputElement>(null)
 
   const emptyBuyingState = useMemo(() => createEmptyEcommerceBuyingState(scope), [scope])
@@ -118,6 +130,7 @@ export function EcommerceBuyingWorkspace({
       setOpen(false)
       setHandoffConfirmed(false)
       setFreshQuoteId('')
+      setReturnDraft(null)
       setNotice('')
       const latest = recoveredState.requests[0]
       if (!latest || latest.sourcePreviewDigest !== sourcePreviewDigest) return
@@ -191,6 +204,24 @@ export function EcommerceBuyingWorkspace({
   const customerOrderTimeline = combinedOrderTimeline.filter((entry) => (
     trackedCustomerReference && entry.request.customerReference === trackedCustomerReference
   ))
+  const completedCustomerOrders = customerOrderTimeline.filter((entry) => entry.stage === 'completed' && entry.order?.completion)
+  const returnDraftEntry = returnDraft
+    ? completedCustomerOrders.find((entry) => entry.order?.id === returnDraft.orderId) ?? null
+    : null
+  const returnDraftLines = returnDraftEntry?.order?.lines?.map((line) => {
+    const returned = (returnDraftEntry.order?.returns ?? [])
+      .filter((record) => record.sku === line.sku)
+      .reduce((total, record) => total + record.quantity, 0)
+    return { ...line, remaining: line.quantity - returned }
+  }).filter((line) => line.remaining > 0) ?? []
+  const pendingReturnIntents = activeBuyingState.returnIntents.filter((intent) => {
+    const order = completedCustomerOrders.find((entry) => entry.order?.id === intent.orderId)?.order
+    return Boolean(order && !(order.returns ?? []).some((record) => (
+      record.evidenceReference === intent.evidenceReference
+        && record.sku === intent.sku
+        && record.quantity === intent.quantity
+    )))
+  })
   const quoteCurrent = Boolean(latestRequest
     && latestRequest.id === freshQuoteId
     && latestRequest.scope === scope
@@ -282,6 +313,65 @@ export function EcommerceBuyingWorkspace({
     if (entry.stage === 'ready') return entry.request.fulfilment === 'pickup' ? 'Ready for pickup' : 'Ready for delivery'
     if (entry.stage === 'completed') return 'Completed'
     return 'Cancelled'
+  }
+
+  function openReturnRequest(entry: CommerceStorefrontOrderTimelineEntry) {
+    const order = entry.order
+    const lines = order?.lines?.map((line) => {
+      const returned = (order.returns ?? [])
+        .filter((record) => record.sku === line.sku)
+        .reduce((total, record) => total + record.quantity, 0)
+      return { ...line, remaining: line.quantity - returned }
+    }).filter((line) => line.remaining > 0) ?? []
+    if (!order?.completion || order.status !== 'completed' || !lines.length) {
+      setNotice('This order has no attributable sold quantity left to request a return for.')
+      return
+    }
+    if (pendingReturnIntents.some((intent) => intent.orderId === order.id)) {
+      setNotice('This order already has a return request waiting for Shop review.')
+      return
+    }
+    setReturnDraft({ orderId: order.id, sku: lines[0].sku, quantity: '1', disposition: 'restock', reason: '' })
+    setNotice('Describe the return, then send the exact request to Shop review. No refund or stock change starts here.')
+  }
+
+  async function submitReturnRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!returnDraft || !returnDraftEntry?.order || returnBusy || disabled || recoveryBlocked) return
+    const line = returnDraftLines.find((candidate) => candidate.sku === returnDraft.sku)
+    const quantity = /^(?:[1-9]\d*)$/.test(returnDraft.quantity) ? Number(returnDraft.quantity) : Number.NaN
+    if (!line || !Number.isSafeInteger(quantity) || quantity > line.remaining) {
+      setNotice('Choose one sold item and a whole quantity within the amount left to return.')
+      return
+    }
+    if (!globalThis.crypto?.randomUUID) {
+      setNotice('Secure return identity is unavailable. Nothing was recorded.')
+      return
+    }
+    setReturnBusy(true)
+    setNotice('')
+    try {
+      const intent = buildEcommerceReturnIntent({
+        scope,
+        orderSnapshot: returnDraftEntry.order,
+        sku: line.sku,
+        quantity,
+        disposition: returnDraft.disposition,
+        reason: returnDraft.reason,
+        idempotencyKey: `ERI-${globalThis.crypto.randomUUID().toUpperCase()}`,
+        createdAt: new Date().toISOString(),
+      })
+      const saved = await saveEcommerceReturnIntent(scope, intent, activeBuyingState.headDigest)
+      setBuyingState(saved)
+      setRecoveryRead({ scope, status: 'ready', issue: '' })
+      setReturnDraft(null)
+      setNotice(`${intent.id} is saved for Shop review. No refund, payment, stock, message, or order changed.`)
+      onOpenReturns(intent)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Return request failed closed.')
+    } finally {
+      setReturnBusy(false)
+    }
   }
 
   async function reviewOrder(event: FormEvent<HTMLFormElement>) {
@@ -495,7 +585,8 @@ export function EcommerceBuyingWorkspace({
                     <div>
                       <small>{entry.request.fulfilment === 'pickup' ? 'Pickup' : 'Delivery'}</small>
                       <small>{entry.paymentStatus === 'reconciled' ? 'Payment confirmed' : entry.paymentStatus === 'pending' ? 'Payment pending' : 'Payment not charged'}</small>
-                      {entry.order?.promisedAt ? <small>Promise {new Date(entry.order.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small> : <small>Shop confirms the promise</small>}
+                       {entry.order?.promisedAt ? <small>Promise {new Date(entry.order.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small> : <small>Shop confirms the promise</small>}
+                       {entry.returnedQuantity ? <small>{entry.returnedQuantity} returned in Shop</small> : null}
                     </div>
                     <button className="core-button secondary" disabled={disabled} onClick={() => reorder(entry)} type="button">Reorder</button>
                   </article>
@@ -512,11 +603,29 @@ export function EcommerceBuyingWorkspace({
         </div>
       </details>
 
-      <details className="ecommerce-after-purchase">
-        <summary><span><strong>After purchase</strong><small>Returns and refunds stay accountable</small></span><b>Shop</b></summary>
-        <div>
+      <details className="ecommerce-after-purchase" open={Boolean(returnDraft) || undefined}>
+        <summary><span><strong>After purchase</strong><small>Request a return from a completed order</small></span><b>{pendingReturnIntents.length ? `${pendingReturnIntents.length} waiting` : 'Shop review'}</b></summary>
+        <div className="ecommerce-return-workspace">
           <p>Completed Ecommerce orders use Shop’s proven return quantity, stock disposition, and refund record. No refund starts here.</p>
-          <button className="core-button secondary" onClick={onOpenReturns} type="button">Open Shop returns</button>
+          {pendingReturnIntents.map((intent) => <article className="ecommerce-return-status" key={intent.id}>
+            <span><strong>Waiting for Shop review</strong><small>{intent.quantity} {intent.sku} / {intent.orderId}</small></span>
+            <button className="core-button secondary" disabled={disabled} onClick={() => onOpenReturns(intent)} type="button">Continue in Shop</button>
+          </article>)}
+          {!returnDraft ? completedCustomerOrders.filter((entry) => (
+            !pendingReturnIntents.some((intent) => intent.orderId === entry.order?.id)
+          )).map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
+            <span><strong>{entry.order?.id}</strong><small>{entry.order?.lines?.map((line) => `${line.name} x ${line.quantity}`).join(' / ') ?? entry.order?.item}</small></span>
+            <button className="core-button secondary" disabled={disabled} onClick={() => openReturnRequest(entry)} type="button">Start return</button>
+          </article>) : null}
+          {returnDraft && returnDraftEntry?.order ? <form className="ecommerce-return-form" onSubmit={(event) => void submitReturnRequest(event)}>
+            <span><strong>Return {returnDraft.orderId}</strong><small>Nothing changes until Shop reviews the physical return.</small></span>
+            <label>Item<select disabled={disabled || returnBusy || returnDraftLines.length === 1} onChange={(event) => setReturnDraft((current) => current ? { ...current, sku: event.target.value, quantity: '1' } : current)} value={returnDraft.sku}>{returnDraftLines.map((line) => <option key={line.sku} value={line.sku}>{line.name} / {line.remaining} left</option>)}</select></label>
+            <label>Quantity<input disabled={disabled || returnBusy} inputMode="numeric" max={returnDraftLines.find((line) => line.sku === returnDraft.sku)?.remaining ?? 1} min="1" onChange={(event) => setReturnDraft((current) => current ? { ...current, quantity: event.target.value } : current)} required step="1" type="number" value={returnDraft.quantity} /></label>
+            <label>Item condition<select disabled={disabled || returnBusy} onChange={(event) => setReturnDraft((current) => current ? { ...current, disposition: event.target.value as EcommerceReturnDisposition } : current)} value={returnDraft.disposition}><option value="restock">Unopened / looks sellable</option><option value="not_restocked">Opened / damaged / check it</option></select></label>
+            <label className="ecommerce-return-reason">What happened<textarea disabled={disabled || returnBusy} maxLength={300} onChange={(event) => setReturnDraft((current) => current ? { ...current, reason: event.target.value } : current)} placeholder="Describe the issue for Shop review" required rows={2} value={returnDraft.reason} /></label>
+            <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || returnBusy} type="submit">{returnBusy ? 'Saving...' : 'Send to Shop review'}</button><button className="core-button secondary" disabled={disabled || returnBusy} onClick={() => { setReturnDraft(null); setNotice('Return request closed. Nothing changed.') }} type="button">Cancel</button></div>
+          </form> : null}
+          {!completedCustomerOrders.length && !pendingReturnIntents.length ? <p>Completed orders for this exact contact will appear here when they become returnable.</p> : null}
         </div>
       </details>
     </>

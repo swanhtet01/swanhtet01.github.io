@@ -368,6 +368,13 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
             idempotency_key=RETURN_KEY,
             created_at="2026-07-26T11:05:00+06:30",
         )
+        orphan = create_empty_ecommerce_lifecycle_state(SCOPE)
+        with self.assertRaisesRegex(EcommerceLifecycleValidationError, "not attributable"):
+            record_ecommerce_return_intent(
+                orphan,
+                intent,
+                expected_head_digest=orphan["headDigest"],
+            )
         returned = record_ecommerce_return_intent(
             state,
             intent,

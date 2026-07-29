@@ -2045,7 +2045,7 @@ if (addToCartStart < 0
   || !ecommerceSource.includes('onDraft={openShopDraft}')
   || !ecommerceSource.includes('onOpenManagedRequest={managedIdentity ?')
   || !ecommerceSource.includes('onRecordManagedRequest={managedIdentity ? recordManagedBuyingRequest : undefined}')
-  || !ecommerceSource.includes("onOpenReturns={() => navigate('/shop/?tab=orders&source=ecommerce-return')}")
+  || !ecommerceSource.includes("onOpenReturns={(intent: EcommerceReturnIntent) => navigate('/shop/?tab=orders', { state: { ecommerceReturnIntent: intent } })}")
   || storefrontSavePreviewAdvanceCount !== 2
   || managedStorefrontSave < 0
   || localStorefrontSave < 0
@@ -2107,7 +2107,11 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('Review order')
   || !ecommerceBuyingUiSource.includes('Open in Shop')
   || !ecommerceBuyingUiSource.includes('After purchase')
-  || !ecommerceBuyingUiSource.includes('Open Shop returns')
+  || !ecommerceBuyingUiSource.includes('Send to Shop review')
+  || !ecommerceBuyingUiSource.includes('Continue in Shop')
+  || !ecommerceBuyingUiSource.includes('buildEcommerceReturnIntent')
+  || !ecommerceBuyingUiSource.includes('saveEcommerceReturnIntent')
+  || !ecommerceBuyingUiSource.includes('{entry.returnedQuantity ? <small>{entry.returnedQuantity} returned in Shop</small> : null}')
   || !ecommerceBuyingUiSource.includes('buildEcommercePimProjection')
   || !ecommerceBuyingUiSource.includes('buildEcommerceCheckoutQuote')
   || !ecommerceBuyingUiSource.includes('buildEcommerceOrderRequestV2')
@@ -2144,6 +2148,13 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('No refund starts here.')
   || !ecommerceBuyingLifecycleSource.includes('export function ecommercePaymentMatchesFulfilment(')
   || !ecommerceBuyingLifecycleSource.includes('Checkout payment does not match how the customer receives the order.')
+  || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceReturnIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceReturnIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('Return intent is not attributable to one recovered Ecommerce request.')
+  || !coreSource.includes('ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent}')
+  || !coreSource.includes('validateEcommerceReturnIntent(ecommerceReturnNavigationIntent)')
+  || !coreSource.includes('sourceIntent: intent')
+  || !coreSource.includes('Customer requested return review: ${returnDraft.sourceIntent.reason}')
   || !commerceSource.includes("quote.payment.adapter !== 'kbzpay_manual'")
   || ['fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'chargePayment', 'authorizePayment'].some((marker) => ecommerceBuyingUiSource.includes(marker))
   || !ecommerceCssSource.includes('.ecommerce-preview-gate')
@@ -10579,6 +10590,48 @@ async function verifyStorefrontRuntime() {
     buyingAssert(paidReadyTimeline[0]?.paymentStatus === 'reconciled'
       && paidReadyTimeline[0].nextAction === 'complete_fulfilment',
     'ecommerce_paid_order_did_not_surface_completion_gate')
+    const completedOrderState = paidReadyState && commerce.advanceCommerceOrder(paidReadyState, 'ORD-ECOMMERCE-1', 'ready', {
+      actionId: 'ACT-ECOMMERCE-COMPLETE-1',
+      capturedAt: '2026-07-24T09:40:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Confirm the customer received the reviewed Ecommerce order.',
+      evidenceReference: 'ECOMMERCE-ORDER-COMPLETE-1',
+    })
+    const completedOrder = completedOrderState?.orders.find((order) => order.id === 'ORD-ECOMMERCE-1')
+    buyingAssert(completedOrder?.status === 'completed' && Boolean(completedOrder.completion),
+      'ecommerce_completed_return_fixture_invalid')
+    const returnIntent = buyingModel.buildEcommerceReturnIntent({
+      scope: buyingScope,
+      orderSnapshot: completedOrder,
+      sku: 'SM-CARE-01',
+      quantity: 1,
+      disposition: 'not_restocked',
+      reason: 'Opened item needs Shop condition review.',
+      idempotencyKey: 'ERI-42345678-1234-4ABC-8ABC-1234567890AB',
+      createdAt: '2026-07-24T09:45:00.000Z',
+    })
+    buyingAssert(returnIntent.id === 'ERR-42345678-1234-4ABC-8ABC-1234567890AB'
+      && returnIntent.sourceRequestId === buyingRequest.id
+      && returnIntent.refundStatus === 'not_started'
+      && returnIntent.evidenceReference === `ECOMMERCE-RETURN:42345678-1234-4ABC-8ABC-1234567890AB:${completedOrder.id}:${buyingRequest.id}`,
+    'ecommerce_return_intent_not_bound_to_completed_shop_order')
+    const returnExpectation = commerce.commerceOrderReturnExpectation(completedOrderState, completedOrder.id, returnIntent.sku, returnIntent.disposition, returnIntent.quantity)
+    const returnedShopState = returnExpectation && commerce.recordCommerceOrderReturn(completedOrderState, {
+      orderId: completedOrder.id,
+      sku: returnIntent.sku,
+      quantity: returnIntent.quantity,
+      disposition: returnIntent.disposition,
+    }, {
+      actionId: 'ACT-ECOMMERCE-RETURN-1',
+      capturedAt: '2026-07-24T09:46:00.000Z',
+      actor: 'OP-OWNER',
+      reason: `Customer requested return review: ${returnIntent.reason}`,
+      evidenceReference: returnIntent.evidenceReference,
+    }, returnExpectation)
+    const returnedTimeline = returnedShopState ? commerce.commerceStorefrontOrderTimeline(returnedShopState) : []
+    buyingAssert(returnedTimeline[0]?.returnedQuantity === 1
+      && returnedTimeline[0].order?.returns?.[0]?.evidenceReference === returnIntent.evidenceReference,
+    'ecommerce_return_intent_did_not_reconcile_to_shop_return')
     const paidConfirmedState = linkedOrderState && commerce.reconcileCommercePayment(linkedOrderState, 'ORD-ECOMMERCE-1', {
       actionId: 'ACT-ECOMMERCE-PAID-CANCEL-1',
       capturedAt: '2026-07-24T09:20:00.000Z',
@@ -10616,6 +10669,9 @@ async function verifyStorefrontRuntime() {
       && buyingModel.ecommerceShopDraftV2MatchesCatalog(managedBuyingDraft, catalog),
       'ecommerce_buying_managed_inbox_draft_not_catalog_bound')
     const emptyBuying = buyingModel.createEmptyEcommerceBuyingState(buyingScope)
+    let orphanReturnRejected = false
+    try { await buyingModel.recordEcommerceReturnIntent(emptyBuying, returnIntent, emptyBuying.headDigest) } catch { orphanReturnRejected = true }
+    buyingAssert(orphanReturnRejected, 'ecommerce_orphan_return_intent_entered_recovery')
     const recordedBuying = await buyingModel.recordEcommerceOrderRequestV2(emptyBuying, buyingRequest, emptyBuying.headDigest)
     const replayedBuying = await buyingModel.recordEcommerceOrderRequestV2(recordedBuying, structuredClone(buyingRequest), recordedBuying.headDigest)
     buyingAssert(JSON.stringify(recordedBuying) === JSON.stringify(replayedBuying)
@@ -10630,6 +10686,12 @@ async function verifyStorefrontRuntime() {
       }, recordedBuying.headDigest)
     } catch { conflictingBuyingRejected = true }
     buyingAssert(conflictingBuyingRejected, 'ecommerce_buying_conflicting_idempotency_replay_accepted')
+    const recordedReturnBuying = await buyingModel.recordEcommerceReturnIntent(recordedBuying, returnIntent, recordedBuying.headDigest)
+    const replayedReturnBuying = await buyingModel.recordEcommerceReturnIntent(recordedReturnBuying, structuredClone(returnIntent), recordedReturnBuying.headDigest)
+    buyingAssert(JSON.stringify(recordedReturnBuying) === JSON.stringify(replayedReturnBuying)
+      && recordedReturnBuying.revision === 2
+      && recordedReturnBuying.returnIntents[0].id === returnIntent.id,
+    'ecommerce_return_intent_replay_advanced_or_lost_history')
     const buyingDraft = await buyingModel.prepareEcommerceShopDraftV2({
       request: buyingRequest,
       state: recordedBuying,
@@ -10706,6 +10768,17 @@ async function verifyStorefrontRuntime() {
       && recoveredBuying.state?.headDigest === savedBuying.headDigest
       && buyingModel.ecommerceBuyingStateContains(recoveredBuying.state, buyingRequest),
     'ecommerce_buying_request_not_locked_or_recoverable')
+    const savedReturnBuying = await buyingModel.saveEcommerceReturnIntent(
+      buyingScope,
+      returnIntent,
+      savedBuying.headDigest,
+      { storage: buyingStorage, locks: buyingLocks },
+    )
+    const recoveredReturnBuying = await buyingModel.readEcommerceBuyingState(buyingScope, buyingStorage)
+    buyingAssert(buyingLockRequests === 2
+      && savedReturnBuying.revision === 2
+      && recoveredReturnBuying.state?.returnIntents[0]?.id === returnIntent.id,
+    'ecommerce_return_intent_not_locked_or_recoverable')
     const buyingKey = buyingModel.ecommerceBuyingStateStorageKey(buyingScope)
     const recoveredRaw = buyingValues.get(buyingKey)
     buyingValues.set(buyingKey, '{broken')
@@ -10740,7 +10813,7 @@ async function verifyStorefrontRuntime() {
       await buyingModel.saveEcommerceOrderRequestV2(
         buyingScope,
         secondRequest,
-        savedBuying.headDigest,
+        savedReturnBuying.headDigest,
         { storage: mismatchBuyingStorage, locks: buyingLocks },
       )
     } catch { failedConfirmationRejected = true }

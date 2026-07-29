@@ -4,6 +4,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useS
 import './core-app.css'
 import { WebsiteCommerceIntake } from '../products/WebsiteCommerceIntake'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
+import type { EcommerceReturnIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
 import { readWebsiteEcommerceHandoff, type WebsiteOrderRecord } from '../products/product-handoff'
 import {
   createManagedApproval,
@@ -240,6 +241,7 @@ type CommerceReturnDraft = {
   sku: string
   quantity: string
   disposition: CommerceReturnDisposition
+  sourceIntent?: EcommerceReturnIntent
 }
 
 type ProductId = 'commerce' | 'production'
@@ -1259,6 +1261,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   const [searchParams] = useSearchParams()
   const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const ecommerceNavigationDraft = (location.state as { ecommerceShopDraft?: EcommerceShopDraft } | null)?.ecommerceShopDraft ?? null
+  const ecommerceReturnNavigationIntent = (location.state as { ecommerceReturnIntent?: EcommerceReturnIntent } | null)?.ecommerceReturnIntent ?? null
   const routeModule = location.pathname.split('/').filter(Boolean)[1]
   const requestedView = searchParams.get('view')
   const requestedSource = searchParams.get('source')
@@ -1309,7 +1312,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceNavigationDraft={ecommerceNavigationDraft} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1494,8 +1497,9 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequestId, requestedSource, tab }: {
+function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationIntent, managedIdentity, requestedRequestId, requestedSource, tab }: {
   ecommerceNavigationDraft: EcommerceShopDraft | null
+  ecommerceReturnNavigationIntent: EcommerceReturnIntent | null
   managedIdentity: ManagedIdentity | null
   requestedRequestId: string | null
   requestedSource: string | null
@@ -1554,6 +1558,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const ecommerceInboxTargetRef = useRef<HTMLButtonElement>(null)
   const preparedChannelRef = useRef<HTMLDivElement>(null)
   const consumedEcommerceDraftId = useRef('')
+  const consumedEcommerceReturnIntentId = useRef('')
   const consumedEcommerceInboxSource = useRef('')
   const orderDraftRevisionRef = useRef(orderDraftRead.draft?.revision ?? 0)
   const orderDraftSaveQueueRef = useRef(Promise.resolve())
@@ -2160,6 +2165,50 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       })
     return () => { current = false }
   }, [commerce.inventoryFoundation, commerce.items, ecommerceNavigationDraft, managedIdentity, managedInventoryProjection, navigate, preparedEcommerceDraft, workspaceMode])
+
+  useEffect(() => {
+    if (!ecommerceReturnNavigationIntent
+      || tab !== 'orders'
+      || managedIdentity && workspaceMode !== 'managed-ready'
+      || consumedEcommerceReturnIntentId.current === ecommerceReturnNavigationIntent.id) return
+    let current = true
+    void import('../products/ecommerce/ecommerce-buying-lifecycle')
+      .then(({ validateEcommerceReturnIntent }) => {
+        if (!current) return
+        const intent = validateEcommerceReturnIntent(ecommerceReturnNavigationIntent)
+        const order = commerce.orders.find((candidate) => candidate.id === intent.orderId)
+        const expected = commerceOrderReturnExpectation(commerce, intent.orderId, intent.sku, intent.disposition, intent.quantity)
+        if (!order
+          || order.status !== 'completed'
+          || !order.completion
+          || order.sourceRecordId !== intent.sourceRequestId
+          || !expected
+          || intent.quantity > expected.soldQuantity - expected.returnedQuantity) {
+          consumedEcommerceReturnIntentId.current = intent.id
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+          setNotice('The Ecommerce return request no longer matches a completed Shop order. Nothing was prepared.')
+          return
+        }
+        consumedEcommerceReturnIntentId.current = intent.id
+        setReturnDraft({
+          orderId: intent.orderId,
+          sku: intent.sku,
+          quantity: String(intent.quantity),
+          disposition: intent.disposition,
+          sourceIntent: intent,
+        })
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        setNotice(`${intent.id} is ready for Shop review. Confirm the received item and stock condition; no refund has started.`)
+        requestAnimationFrame(() => returnEditorRef.current?.querySelector<HTMLElement>('#order-return-quantity')?.focus())
+      })
+      .catch(() => {
+        if (!current) return
+        consumedEcommerceReturnIntentId.current = ecommerceReturnNavigationIntent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        setNotice('The Ecommerce return request could not be verified. Nothing was prepared.')
+      })
+    return () => { current = false }
+  }, [commerce, ecommerceReturnNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
 
   useEffect(() => {
     const sourceKey = requestedRequestId || 'ecommerce-inbox'
@@ -3579,6 +3628,11 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       summary: `Record ${input.quantity} ${input.sku} returned from ${input.orderId}`,
       before: `${expected.returnedQuantity} of ${expected.soldQuantity} returned · ${item.onHand} sellable units`,
       after: `${nextReturned} of ${expected.soldQuantity} returned · ${dispositionAfter} · payment and order total unchanged`,
+      reasonSuggestion: returnDraft.sourceIntent
+        ? `Customer requested return review: ${returnDraft.sourceIntent.reason}`
+        : 'Reviewed the received return and its stock condition.',
+      evidenceReferenceSuggestion: returnDraft.sourceIntent?.evidenceReference,
+      evidenceReferenceLocked: Boolean(returnDraft.sourceIntent),
       apply: async (action) => {
         const proof = commerceActionProof(action)
         await mutateCommerce(
@@ -4449,7 +4503,15 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     onCancelCorrection={cancelCorrectionEditor}
     onCancelReturn={cancelReturnEditor}
     onChangeCorrection={(patch) => setCorrectionDraft((current) => current ? { ...current, ...patch } : current)}
-    onChangeReturn={(patch) => setReturnDraft((current) => current ? { ...current, ...patch } : current)}
+    onChangeReturn={(patch) => setReturnDraft((current) => {
+      if (!current) return current
+      const next = { ...current, ...patch }
+      if (!current.sourceIntent) return next
+      const remainsExact = next.sku === current.sourceIntent.sku
+        && next.quantity === String(current.sourceIntent.quantity)
+      if (remainsExact) return next
+      return { orderId: next.orderId, sku: next.sku, quantity: next.quantity, disposition: next.disposition }
+    })}
     onOpenCorrection={openCorrectionEditor}
     onOpenReturn={openReturnEditor}
     onReviewCorrection={reviewOrderCorrection}
@@ -4853,12 +4915,13 @@ function ClosedOrderHistory({
   returnLocationPreview: string
 }) {
   const [page, setPage] = useState(0)
-  if (!orders.length) return null
   const pageSize = 8
+  if (!orders.length) return null
   const pageCount = Math.ceil(orders.length / pageSize)
-  const currentPage = Math.min(page, pageCount - 1)
+  const returnOrderIndex = returnDraft ? orders.findIndex((order) => order.id === returnDraft.orderId) : -1
+  const currentPage = returnOrderIndex >= 0 ? Math.floor(returnOrderIndex / pageSize) : Math.min(page, pageCount - 1)
   const visibleOrders = orders.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
-  return <details className="order-archive" id="shop-order-history">
+  return <details className="order-archive" id="shop-order-history" open={Boolean(returnDraft) || undefined}>
     <summary><span>Completed and cancelled orders</span><small>{orders.length} {orders.length === 1 ? 'record' : 'records'} · returns and corrections</small></summary>
     <div className="order-archive-list">{visibleOrders.map((order) => {
       const lines = commerceOrderReturnLines(order).map((line) => {
@@ -4928,7 +4991,7 @@ function ClosedOrderHistory({
         </div>)}
       </div> : null}
       {activeReturnDraft && selectedLine ? <form aria-label={`Return items from ${order.id}`} className="order-return-editor" onSubmit={onReviewReturn} ref={onReturnEditor}>
-        <div className="order-return-copy"><span className="core-eyebrow">Return</span><strong>{order.id}</strong><small>Record received goods only. Payment and order totals do not change.</small></div>
+        <div className="order-return-copy"><span className="core-eyebrow">Return</span><strong>{order.id}</strong><small>{activeReturnDraft.sourceIntent ? `Prepared from customer request ${activeReturnDraft.sourceIntent.id}. Confirm what Shop actually received.` : 'Record received goods only.'} Payment and order totals do not change.</small></div>
         <label>Item<select disabled={disabled || availableLines.length === 1} onChange={(event) => onChangeReturn({ sku: event.target.value, quantity: '1' })} value={selectedLine.sku}>{availableLines.map((line) => <option key={line.sku} value={line.sku}>{line.name} · {line.remaining} left</option>)}</select></label>
         <label>Quantity<input disabled={disabled} id="order-return-quantity" max={selectedLine.remaining} min="1" onChange={(event) => onChangeReturn({ quantity: event.target.value })} required step="1" type="number" value={activeReturnDraft.quantity} /></label>
         <label>Stock result<select disabled={disabled} onChange={(event) => onChangeReturn({ disposition: event.target.value as CommerceReturnDisposition })} value={activeReturnDraft.disposition}><option value="restock">Sellable · add to stock</option><option value="not_restocked">Not sellable · stock unchanged</option></select></label>

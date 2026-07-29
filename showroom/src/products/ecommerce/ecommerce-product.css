@@ -1367,6 +1367,96 @@
   min-height: 44px;
 }
 
+.ecommerce-after-purchase > .ecommerce-return-workspace {
+  display: grid;
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 8px;
+}
+
+.ecommerce-return-workspace > p {
+  max-width: none;
+}
+
+.ecommerce-return-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(31, 68, 51, .12);
+  border-radius: 12px;
+  padding: 9px;
+  background: rgba(255, 255, 255, .68);
+}
+
+.ecommerce-return-status > span,
+.ecommerce-return-form > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ecommerce-return-status strong,
+.ecommerce-return-form strong {
+  color: #17231d;
+  font-size: 11px;
+}
+
+.ecommerce-return-status small,
+.ecommerce-return-form small {
+  color: #66746b;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.ecommerce-return-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(110px, .7fr) minmax(0, 1fr);
+  gap: 9px;
+  border: 1px solid rgba(11, 116, 94, .22);
+  border-radius: 12px;
+  padding: 11px;
+  background: rgba(225, 245, 238, .56);
+}
+
+.ecommerce-return-form > span,
+.ecommerce-return-reason,
+.ecommerce-return-actions {
+  grid-column: 1 / -1;
+}
+
+.ecommerce-return-form label {
+  display: grid;
+  gap: 5px;
+  color: #34443b;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.ecommerce-return-form input,
+.ecommerce-return-form select,
+.ecommerce-return-form textarea {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(31, 68, 51, .18);
+  border-radius: 9px;
+  padding: 9px 10px;
+  background: #fff;
+  color: #17231d;
+  font: inherit;
+}
+
+.ecommerce-return-form textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.ecommerce-return-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 @media (max-width: 560px) {
   .ecommerce-business-controls > summary b { display: none; }
   .ecommerce-business-controls > summary span { width: 100%; }
@@ -1513,6 +1603,21 @@
   .ecommerce-after-purchase > div {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .ecommerce-return-status {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ecommerce-return-form {
+    grid-template-columns: 1fr;
+  }
+
+  .ecommerce-return-form > span,
+  .ecommerce-return-reason,
+  .ecommerce-return-actions {
+    grid-column: auto;
   }
 
   .ecommerce-order-tracking-head,

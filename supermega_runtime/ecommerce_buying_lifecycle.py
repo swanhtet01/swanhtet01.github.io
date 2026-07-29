@@ -1040,6 +1040,9 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
         raise _fail("Lifecycle idempotency keys must be unique.")
     if any(record["scope"] != scope for record in records):
         raise _fail("Lifecycle record scope does not match the state.")
+    request_ids = {request["id"] for request in requests}
+    if any(intent["sourceRequestId"] not in request_ids for intent in return_intents):
+        raise _fail("Return intent is not attributable to one recovered Ecommerce request.")
     by_id = {record["id"]: record for record in records}
     if len(events) != len(records):
         raise _fail("Lifecycle history must contain one event per record.")
