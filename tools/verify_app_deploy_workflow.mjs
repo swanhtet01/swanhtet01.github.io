@@ -26,6 +26,7 @@ const retiredAliasVerifier = await readFile(resolve(root, 'tools/verify_retired_
 const previewServer = await readFile(resolve(root, 'tools/serve_solution.py'), 'utf8')
 const previewLauncher = await readFile(resolve(root, 'tools/deploy_preview.sh'), 'utf8')
 const retiredClaimableLauncher = await readFile(resolve(root, 'tools/deploy_claimable_preview.sh'), 'utf8')
+const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 const config = JSON.parse(await readFile(resolve(root, 'vercel.json'), 'utf8'))
 const schedulerAuthority = JSON.parse(await readFile(resolve(root, 'tools/supermega_scheduler_authority.json'), 'utf8'))
 const kernelConfig = JSON.parse(await readFile(resolve(root, 'kernel/vercel.json'), 'utf8'))
@@ -130,7 +131,12 @@ requireContract('canonical app project id', workflow.includes('APP_VERCEL_PROJEC
 requireContract('canonical public project id', workflow.includes('VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR'))
 requireContract('canonical project identities', workflow.includes('project inspect megaos') && workflow.includes('APP_VERCEL_PROJECT_ID: prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG') && workflow.includes('PUBLIC_VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR'))
 requireContract('pinned Vercel CLI', workflow.includes('vercel@56.1.0'))
-requireContract('app build contract', config.buildCommand === 'npm run app:build' && generator.includes("buildCommand: 'npm run app:build'"))
+requireContract('app build contract',
+  config.buildCommand === 'npm run app:build'
+  && generator.includes("buildCommand: 'npm run app:build'")
+  && packageJson.scripts?.['app:build'] === 'npm run app:release:write && npm --prefix showroom run build'
+  && packageJson.scripts?.['app:build:checked'] === 'npm run app:build && npm run app:verify'
+  && ciWorkflow.includes('run: npm run app:build:checked'))
 requireContract('remote dependency install contract', config.installCommand === 'npm --prefix showroom ci' && generator.includes("installCommand: 'npm --prefix showroom ci'"))
 requireContract('remote security inputs are included', generator.includes("'!.env.app.example'"))
 requireContract('canonical output directory', config.outputDirectory === 'showroom/dist')
