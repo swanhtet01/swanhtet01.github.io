@@ -36,9 +36,34 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
     ['Product coverage', behaviorProducts ? `${behaviorProducts}/4 products` : 'Start anywhere', behaviorProducts ? 'Behavior memory is split by Shop, Plant, Website, and Ecommerce.' : 'Use any product track to begin the learning trail.'],
     ['Learning boundary', 'No model training', 'Free keeps behavior local. Premium uses exported, approved context only after managed activation.'],
   ] as const
+  const agentCommandQueueRows = [
+    [ready ? 'Export evidence' : 'Finish setup', ready ? 'Ready for support review' : `${progress}% ready`, ready ? 'Package setup, imports, behavior, decisions, and activation proof before premium starts.' : 'Finish baseline, owner, source, and acceptance evidence first.'],
+    [behaviorChoices ? 'Repeat owner choice' : 'Choose an agent job', behaviorChoices ? `${behaviorChoices} chosen` : 'Needs signal', behaviorChoices ? 'Rank the next safe workflow from what the owner already selected.' : 'Open a product and choose one recommended job to teach the local queue.'],
+    [hostedReady ? 'Activate managed lane' : 'Clear managed gate', hostedReady ? 'Controls ready' : `${activationCoverage}% gated`, hostedReady ? 'Use tenant roles, audit, and approval before any real write.' : nextHostedAction],
+    ['Operate products', behaviorProducts ? `${behaviorProducts}/4 touched` : 'Pick one product', 'Shop, Plant, Website, and Ecommerce stay separate apps but share one evidence and approval system.'],
+  ] as const
 
   return (
     <>
+      <section className="product-home-readiness product-home-command-queue" aria-label="AI command queue">
+        <div className="product-home-readiness-head">
+          <div>
+            <span className="core-eyebrow">AI command queue</span>
+            <h2>One queue tells the owner what to do next.</h2>
+            <p>SuperMega ranks setup, import, product work, managed activation, and learning handoff into safe next actions. It prepares the work; it does not send, publish, charge, move stock, write production, or train models from this queue.</p>
+          </div>
+          <Link className="core-button primary" to={ready ? '/settings/#controls' : '/settings/'}>{ready ? 'Export evidence' : 'Finish setup'}</Link>
+        </div>
+        <div className="product-home-readiness-grid">
+          {agentCommandQueueRows.map(([label, value, detail]) => (
+            <span key={label}>
+              <small>{label}</small>
+              <strong>{value}</strong>
+              <em>{detail}</em>
+            </span>
+          ))}
+        </div>
+      </section>
       <section className="product-home-agent-contract" aria-label="Enterprise autopilot contract">
         <div className="product-home-readiness-head">
           <div>
