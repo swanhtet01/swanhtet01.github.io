@@ -256,6 +256,7 @@ export function SettingsPage() {
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
   const demoBlueprintFilename = `supermega-client-demo-${setup.workspace.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || evidenceDate}.json`
   const demoBlueprintHref = demoBlueprint ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(buildClientDemoKit(demoBlueprint, new Date().toISOString()), null, 2))}` : ''
+  const privatePreparationCommand = `npm run client:prepare -- --kit "${demoBlueprintFilename}" --data-dir "client-data" --out "private-review.json"`
   const demoReadyCount = demoWorkspace?.products.filter((product) => ['data_ready', 'workspace_checked', 'applied'].includes(product.status)).length ?? 0
   const preparedApprovalReady = Boolean(preparedArtifact && clientDemoPreparationConfirmationMatches(preparedArtifact, preparedConfirmation))
   const preparedAppliedProducts = new Set(demoWorkspace?.products.filter((product) => product.status === 'applied').map((product) => product.product) ?? [])
@@ -682,6 +683,15 @@ export function SettingsPage() {
     }
   }
 
+  async function copyPrivatePreparationCommand() {
+    try {
+      await navigator.clipboard.writeText(privatePreparationCommand)
+      setNotice('Private preparation command copied. Run it from the SuperMega project folder after adding the client CSV files.')
+    } catch {
+      setNotice('Copy was unavailable. Select the command below and run it from the SuperMega project folder.')
+    }
+  }
+
   async function installPreparedProducts() {
     const artifact = preparedArtifact
     if (!artifact || preparedBusyProduct || managedIdentity || !preparedApprovalReady) return
@@ -904,6 +914,17 @@ export function SettingsPage() {
             {demoBlueprint ? <section aria-label="Client demo kit" className="demo-kit-result">
               <div className="panel-head"><div><span className="core-eyebrow">Client workspace</span><h3>{demoBlueprint.client.workspace}</h3><p>{demoRunbook?.provenCount ?? 0} proven · {demoReadyCount} data-ready · owner {demoBlueprint.client.owner}</p></div><a className="core-button" download={demoBlueprintFilename} href={demoBlueprintHref}>Download setup kit</a></div>
               <div aria-label="Shared operating foundation" className="readiness-list client-foundation-summary"><span><small>Operating unit</small><strong>{demoBlueprint.foundation.operatingUnit.name}</strong><em>{demoBlueprint.foundation.operatingUnit.code} · {demoBlueprint.foundation.operatingUnit.kind}</em></span><span><small>Market</small><strong>{demoBlueprint.foundation.localization.countryCode} · {demoBlueprint.foundation.localization.currency}</strong><em>{demoBlueprint.foundation.localization.locale}</em></span><span><small>Topology</small><strong>{demoBlueprint.topology.locations.length} location · {demoBlueprint.topology.channels.length} channels</strong><em>{demoBlueprint.topology.recordAuthorities.length} product authorities</em></span><span><small>Timezone</small><strong>{demoBlueprint.foundation.localization.timeZone}</strong><em>Shared by all selected products</em></span><span><small>Authority</small><strong>Client review required</strong><em>Managed identity required before activation</em></span></div>
+              <details className="compact-disclosure client-preparation-handoff">
+                <summary><span>Prepare private client files</span><small>Internal founder workflow</small></summary>
+                <ol>
+                  <li>Download the setup kit above.</li>
+                  <li>Create a <code>client-data</code> folder beside it and add {demoBlueprint.products.map((product) => `${product.product}.csv`).join(', ')}.</li>
+                  <li>Run the command below from the SuperMega project folder.</li>
+                  <li>Load <code>private-review.json</code> with <strong>Load private package</strong>, review the digest, then install.</li>
+                </ol>
+                <div className="client-preparation-command"><code>{privatePreparationCommand}</code><button className="core-button compact" onClick={() => void copyPrivatePreparationCommand()} type="button">Copy command</button></div>
+                <p>Preparation is local, serial, and fail-closed. It performs no model call, network send, managed write, or activation.</p>
+              </details>
               {preparedArtifact ? <section aria-label="Private client package installer" className="setup-template-summary">
                 <div><span className="core-eyebrow">Verified private package</span><strong>Install one connected local demo.</strong><small>Private client rows stay in this browser. Nothing is uploaded, shared, or installed automatically.</small></div>
                 <div className="template-contract"><span>Founder approval</span><strong>{preparedArtifact.products.length} products · {preparedArtifact.products.reduce((total, product) => total + product.rowCount, 0)} reviewed rows</strong><small>{preparedArtifact.controls.containsNormalizedClientData ? 'Includes normalized client CSV data.' : 'Uses prepared sample fixtures.'}</small></div>
