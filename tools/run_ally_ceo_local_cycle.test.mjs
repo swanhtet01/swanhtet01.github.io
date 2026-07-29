@@ -462,6 +462,32 @@ test('quality-passed reports with withheld specialist work cannot advance CEO co
   )
 })
 
+test('quality-passed reports ending in a dangling specialist clause cannot advance', async () => {
+  for (const ending of ['or', 'does']) {
+    const state = harness({ modelEventCount: 2 })
+    const danglingReport = acceptedStructuredReport.replace(
+      'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
+      `Not verified or performed: Proposed next action: review one bounded local gap. Assumption: its priority is unconfirmed. Missing proof: validate Shop Plant ${ending}.`,
+    )
+    await assert.rejects(
+      runAllyCeoLocalCycle(
+        { execute: true },
+        {
+          plan: plan(),
+          runCommand: state.runCommand,
+          inspectReport: async () => ({
+            path: 'C:\\state\\outputs\\dangling.md',
+            bytes: Buffer.byteLength(danglingReport),
+            digest: 'sha256:' + '4'.repeat(64),
+            text: danglingReport,
+          }),
+        },
+      ),
+      /ally_ceo_local_cycle_specialist_section_rejected/,
+    )
+  }
+})
+
 test('one rejected legacy outcome can be repaired once under the current quality contract', async () => {
   const oldQueueId = 'f'.repeat(12)
   const oldJobId = 'e'.repeat(12)
@@ -496,8 +522,84 @@ test('one rejected legacy outcome can be repaired once under the current quality
   })
   assert.equal(result.queueWrites, 1)
   const addedObjective = state.calls.find((call) => call.args?.[1] === 'add').args[2]
-  assert.match(addedObjective, /\[ALLY_CEO_REPAIR:2026-07-29:daily-company-control\]/)
+  assert.match(addedObjective, /\[ALLY_CEO_REPAIR:2026-07-29:daily-company-control:[a-f0-9]{12}\]/)
   assert.doesNotMatch(addedObjective, /\[ALLY_CEO_OUTCOME:/)
+})
+
+test('a rejected preceding-version repair migrates to one versioned repair marker', async () => {
+  const oldQueueId = '9'.repeat(12)
+  const oldJobId = '8'.repeat(12)
+  const oldReportPath = 'C:\\state\\outputs\\old-repair.md'
+  const cycleMarker = `[ALLY_CEO_CYCLE:${legacyDailyHash('2026-07-29.12')}]`
+  const repairMarker = '[ALLY_CEO_REPAIR:2026-07-29:daily-company-control]'
+  const state = harness({
+    queueList: `${oldQueueId}  complete        p=100  2026-07-29T00:00:00Z  project=SuperMega  playbook=-  job=${oldJobId}  ${repairMarker} prior repair\n`,
+    jobObjectives: { [oldJobId]: `${repairMarker} ${cycleMarker} prior repair` },
+    reportPaths: { [oldJobId]: oldReportPath },
+    modelEventCount: 2,
+  })
+  const danglingReport = acceptedStructuredReport.replace(
+    'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
+    'Not verified or performed: Proposed next action: review one bounded local gap. Assumption: its priority is unconfirmed. Missing proof: validate Shop Plant or.',
+  )
+  const result = await runAllyCeoLocalCycle(
+    { execute: true, repairRejected: true },
+    {
+      plan: plan(),
+      runCommand: state.runCommand,
+      inspectReport: async (path) => {
+        const text = path === oldReportPath ? danglingReport : acceptedStructuredReport
+        return { path, bytes: Buffer.byteLength(text), digest: 'sha256:' + '5'.repeat(64), text }
+      },
+    },
+  )
+  assert.equal(result.status, 'accepted')
+  assert.equal(result.repair.queueId, oldQueueId)
+  const addedObjective = state.calls.find((call) => call.args?.[1] === 'add').args[2]
+  assert.match(addedObjective, /\[ALLY_CEO_REPAIR:2026-07-29:daily-company-control:[a-f0-9]{12}\]/)
+  assert.doesNotMatch(addedObjective, /\[ALLY_CEO_REPAIR:2026-07-29:daily-company-control\]/)
+})
+
+test('newest versioned repair takes precedence over an older unversioned repair', async () => {
+  const oldQueueId = '9'.repeat(12)
+  const oldJobId = '8'.repeat(12)
+  const recentQueueId = '7'.repeat(12)
+  const recentJobId = '6'.repeat(12)
+  const oldPath = 'C:\\state\\outputs\\old.md'
+  const recentPath = 'C:\\state\\outputs\\recent.md'
+  const oldMarker = '[ALLY_CEO_REPAIR:2026-07-29:daily-company-control]'
+  const recentHash = legacyDailyHash('2026-07-29.13')
+  const recentMarker = `[ALLY_CEO_REPAIR:2026-07-29:daily-company-control:${recentHash}]`
+  const state = harness({
+    queueList: [
+      `${oldQueueId}  complete        p=100  2026-07-29T00:00:00Z  project=SuperMega  playbook=-  job=${oldJobId}  ${oldMarker} old repair`,
+      `${recentQueueId}  complete        p=100  2026-07-29T00:01:00Z  project=SuperMega  playbook=-  job=${recentJobId}  ${recentMarker} recent repair`,
+      '',
+    ].join('\n'),
+    jobObjectives: {
+      [oldJobId]: `${oldMarker} [ALLY_CEO_CYCLE:${legacyDailyHash('2026-07-29.12')}] old`,
+      [recentJobId]: `${recentMarker} [ALLY_CEO_CYCLE:${recentHash}] recent`,
+    },
+    reportPaths: { [oldJobId]: oldPath, [recentJobId]: recentPath },
+  })
+  const danglingReport = acceptedStructuredReport.replace(
+    'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
+    'Not verified or performed: Proposed next action: review one bounded local gap. Assumption: its priority is unconfirmed. Missing proof: validate Shop Plant does.',
+  )
+  const result = await runAllyCeoLocalCycle(
+    { execute: false },
+    {
+      plan: plan(),
+      runCommand: state.runCommand,
+      inspectReport: async (path) => {
+        const text = path === recentPath ? danglingReport : acceptedStructuredReport
+        return { path, bytes: Buffer.byteLength(text), digest: 'sha256:' + '6'.repeat(64), text }
+      },
+    },
+  )
+  assert.equal(result.status, 'existing_rejected')
+  assert.equal(result.queueId, recentQueueId)
+  assert.equal(state.calls.filter((call) => call.args?.[0] === 'show').length, 1)
 })
 
 test('legacy repair is execution-only and never retries a rejected current-version outcome', async () => {

@@ -19,8 +19,8 @@ const defaultLocalCompanyHome = resolve(root, '..', 'supermega-local-company-sta
 const powershell = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const MAX_COMMAND_BYTES = 512 * 1024
 const MAX_REPORT_BYTES = 256 * 1024
-const EXECUTION_SPEC_VERSION = '2026-07-29.12'
-const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.11', '2026-07-29.10'])
+const EXECUTION_SPEC_VERSION = '2026-07-29.14'
+const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
 
 const AGENT_ROLE_MAP = Object.freeze({
   'operations-analyst': 'operations',
@@ -122,7 +122,11 @@ function planSpec(plan) {
   ].join('|')).slice(0, 12))
   const shortHash = cycleHash.slice(0, 12)
   const outcomeMarker = `[ALLY_CEO_OUTCOME:${period}:${outcomeId}]`
-  const repairMarker = `[ALLY_CEO_REPAIR:${period}:${outcomeId}]`
+  const repairMarker = `[ALLY_CEO_REPAIR:${period}:${outcomeId}:${shortHash}]`
+  const legacyRepairMarkers = [
+    ...legacyShortHashes.map((hash) => `[ALLY_CEO_REPAIR:${period}:${outcomeId}:${hash}]`),
+    `[ALLY_CEO_REPAIR:${period}:${outcomeId}]`,
+  ]
   const objectiveBody = [
     `Using imported SuperMega project evidence, produce one concise internal ${OUTCOME_BRIEFS[outcomeId]} brief and separate verified facts from assumptions.`,
     'Use CURRENT.md, hq/NOW.md, hq/portfolio.json, and site-manifest.json as current authority; treat older handoff files as historical context that cannot prove current completion.',
@@ -144,6 +148,7 @@ function planSpec(plan) {
     period,
     outcomeMarker,
     repairMarker,
+    legacyRepairMarkers,
     planHash: hash,
     cycleHash,
     shortHash,
@@ -303,6 +308,7 @@ function existingForSpec(queueText, spec) {
   const markers = [
     `[ALLY_CEO_CYCLE:${spec.shortHash}]`,
     spec.repairMarker,
+    ...spec.legacyRepairMarkers,
     spec.outcomeMarker,
     ...spec.legacyShortHashes.map((hash) => `[ALLY_CEO_CYCLE:${hash}]`),
   ]
@@ -443,6 +449,7 @@ function validateSpecialistSections(text, requiredRoles) {
       || !/Assumption\s*:/i.test(section)
       || !/Missing proof\s*:/i.test(section)
       || /specialist draft withheld|incomplete model output|no substantive specialist draft/i.test(section)
+      || /\b(?:and|or|to|for|with|using|before|after|the|a|an|of|in|on|at|from|does|is|are|has|have|can|will|must|should|could|would|may|might|verify|confirm)\.?$/i.test(section)
       || /\[EVIDENCE:/i.test(section)) {
       fail('ally_ceo_local_cycle_specialist_section_rejected')
     }
