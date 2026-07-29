@@ -23,6 +23,26 @@ requireContract('full-stack verification is part of app verification',
 requireContract('runner starts the canonical runtime',
   runnerSource.includes("'supermega_runtime.runtime:app'")
   && runnerSource.includes("body?.service === 'supermega-service'"))
+requireContract('runner proves ecommerce order queue validation through the app proxy',
+  runnerSource.includes('/api/trial/v1/ecommerce/order-queue/validate')
+  && runnerSource.includes("contract === 'supermega.ecommerce.order_queue_readiness_validation.v1'")
+  && runnerSource.includes("payload.identity_authority === 'isolated_demo_untrusted_workspace'")
+  && runnerSource.includes('payload.validation.external_writes_performed === false')
+  && runnerSource.includes("forbiddenUntilReady: ['order_import']")
+  && runnerSource.includes('response.status === 422'))
+requireContract('runner proves ecommerce Shop queue import plan through the app proxy',
+  runnerSource.includes('/api/trial/v1/ecommerce/order-queue/import-plan')
+  && runnerSource.includes("contract === 'supermega.ecommerce.shop_queue_import_plan.v1'")
+  && runnerSource.includes("payload.plan.status === 'ready_for_managed_apply'")
+  && runnerSource.includes("payload.plan.target_adapter === 'shop_order_queue'")
+  && runnerSource.includes("payload.identity_authority === 'isolated_demo_untrusted_workspace'")
+  && runnerSource.includes('payload.plan.external_writes_performed === false')
+  && runnerSource.includes('tamperedOrderQueueImportPlan.response.status === 422'))
+requireContract('runner proves ecommerce Shop queue apply preflight is managed-auth only',
+  runnerSource.includes('/api/trial/v1/ecommerce/order-queue/apply-preflight')
+  && runnerSource.includes('orderQueueApplyPreflightUnauthorized.response.status === 401')
+  && runnerSource.includes("String(payload?.detail ?? '').includes('trial_auth_required')")
+  && runnerSource.includes('applyPreflightAuthRequired: orderQueueApplyPreflightUnauthorized.response.status === 401'))
 requireContract('runner is loopback-only and connects Vite explicitly',
   runnerSource.includes("const loopbackHost = '127.0.0.1'")
   && runnerSource.includes('SUPERMEGA_LOCAL_API: apiUrl')
@@ -158,6 +178,23 @@ requireContract('full stack keeps security headers and local safety',
   && report.safety?.databaseUrlCleared === true
   && report.safety?.hostedAuthCleared === true
   && report.safety?.externalWorkerCleared === true)
+requireContract('full stack proves zero-write ecommerce queue validation',
+  report.ecommerceOrderQueueValidation?.contract === 'supermega.ecommerce.order_queue_readiness_validation.v1'
+  && report.ecommerceOrderQueueValidation?.status === 'ready_for_owner_review'
+  && report.ecommerceOrderQueueValidation?.identityAuthority === 'isolated_demo_untrusted_workspace'
+  && report.ecommerceOrderQueueValidation?.writesPerformed === false
+  && report.ecommerceOrderQueueValidation?.tamperRejected === true)
+requireContract('full stack proves zero-write ecommerce Shop queue import plan',
+  report.ecommerceOrderQueueImportPlan?.contract === 'supermega.ecommerce.shop_queue_import_plan.v1'
+  && report.ecommerceOrderQueueImportPlan?.status === 'ready_for_managed_apply'
+  && report.ecommerceOrderQueueImportPlan?.targetAdapter === 'shop_order_queue'
+  && report.ecommerceOrderQueueImportPlan?.identityAuthority === 'isolated_demo_untrusted_workspace'
+  && report.ecommerceOrderQueueImportPlan?.writesPerformed === false
+  && report.ecommerceOrderQueueImportPlan?.tamperRejected === true)
+requireContract('full stack proves ecommerce Shop queue apply preflight is auth-gated',
+  report.ecommerceOrderQueueApplyPreflight?.authRequired === true
+  && report.ecommerceOrderQueueApplyPreflight?.applyPreflightAuthRequired === true
+  && report.ecommerceOrderQueueApplyPreflight?.writesPerformed === false)
 
 if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_local_full_stack', failures, report }, null, 2))
@@ -167,7 +204,7 @@ if (failures.length) {
 console.log(JSON.stringify({
   ok: true,
   contract: 'supermega_local_full_stack',
-  checks: 10,
+  checks: 14,
   operatingMode: report.runtime.operatingMode,
   writesEnabled: report.runtime.writesEnabled,
   loopbackOnly: report.safety.loopbackOnly,

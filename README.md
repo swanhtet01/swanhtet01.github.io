@@ -38,7 +38,7 @@ Requirements: Node.js 24 and Python 3.12.
 npm.cmd --prefix showroom ci
 python -m pip install -r requirements-test.txt
 python -m unittest discover -s tests -p 'test_*.py' -v
-npm.cmd run app:build
+npm.cmd run app:build:checked
 npm.cmd run public:prebuilt
 npm.cmd audit --omit=dev
 npm.cmd --prefix showroom audit --omit=dev

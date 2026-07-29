@@ -9,7 +9,8 @@
   "scripts": {
     "build": "npm run public:build",
     "app:release:write": "node tools/write_app_release_metadata.mjs",
-    "app:build": "npm run app:release:write && npm --prefix showroom run build && npm run app:verify",
+    "app:build": "npm run app:release:write && npm --prefix showroom run build",
+    "app:build:checked": "npm run app:build && npm run app:verify",
     "app:verify": "node tools/verify_app_build.mjs && npm run app:dev:verify && node tools/verify_app_deploy_workflow.mjs && node tools/verify_app_security_contract.mjs && npm run client:prepare:self-test && npm run workspace:recovery:self-test && npm run storage:privacy:self-test && npm run database:validator:self-test && npm run database:supabase:compatibility && npm run database:migrations:verify && npm run vercel:contracts:test && npm run hq:verify",
     "app:dev:verify": "node tools/verify_local_app_dev.mjs",
     "app:verify:live": "node tools/verify_app_release_live.mjs",

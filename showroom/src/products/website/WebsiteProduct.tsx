@@ -585,6 +585,12 @@ export function WebsiteProduct() {
     setSelectedPageId(staged.workspace.selectedPageId)
     setStarterDismissed(true)
     openContentSurface('preview')
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'website',
+      route: location.pathname + location.search,
+      detail: `Website starter brief generated: ${brief.businessName}`,
+    })
     setNotice('Your one-page site is ready as an unsaved preview. Review it, then Save or Discard.')
   }
 
@@ -803,6 +809,30 @@ export function WebsiteProduct() {
     ['Reason', websiteAgentReason],
     ['Owner gate', websiteOwnerGate],
   ]
+  const websiteAutopilotTrack = storageIssue || canRepairLocalStorage
+    ? 'Recovery'
+    : starterSetupActive || starterAvailable
+      ? 'Brief'
+      : hasUnsavedChanges || failingContentChecks.length
+        ? 'Content'
+        : !approvalIsCurrent || !publishIsCurrent
+          ? 'Release'
+          : storageMode === 'managed'
+            ? 'Rollout'
+            : 'Handoff'
+  const websiteAutopilotRows = [
+    ['Track', websiteAutopilotTrack],
+    ['Stage', websiteAgentJob],
+    ['Next', websiteAgentActionLabel],
+    ['Learning', 'Records behavior only'],
+    ['Boundary', 'No auto deploy'],
+  ]
+  const websiteGeneratorGuideRows = [
+    ['Inputs', 'Business facts, offers, proof, photos, links'],
+    ['AI creates', 'Pages, copy, CTAs, SEO basics, release checklist'],
+    ['Owner reviews', 'Brand, claims, contact route, pricing, proof'],
+    ['Handoff', 'Static package plus managed rollout plan'],
+  ]
   const websiteLaunchPriority = storageIssue || canRepairLocalStorage
     ? 'Recover workspace'
     : hasUnsavedChanges
@@ -867,6 +897,25 @@ export function WebsiteProduct() {
     ['Package', publishIsCurrent ? 'Static snapshot' : 'Needed'],
     ['Gate', storageMode === 'managed' ? 'Owner rollout' : 'Free local only'],
   ]
+  const websiteHandoffNext = storageIssue || canRepairLocalStorage
+    ? 'Recover Website workspace'
+    : failingContentChecks.length
+      ? 'Finish page readiness'
+      : !approvalIsCurrent
+        ? 'Record owner approval'
+        : !publishIsCurrent
+          ? 'Download static package'
+          : storageMode === 'managed'
+            ? 'Prepare managed handoff'
+            : 'Hand off website package'
+  const websiteHandoffRows = [
+    ['Pages', `${workspace.pages.filter((page) => page.stage === 'ready').length}/${workspace.pages.length} ready`],
+    ['Approval', approvalIsCurrent ? 'Recorded' : 'Needed'],
+    ['Package', publishIsCurrent ? 'Retained' : canReview ? 'Ready to build' : 'Needs review'],
+    ['Lead capture', websiteLeadCaptureNext],
+    ['Managed gate', storageMode === 'managed' ? 'Tenant review' : 'Free export'],
+    ['Boundary', 'No auto launch'],
+  ] as const
   useEffect(() => {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_seen',
@@ -875,6 +924,32 @@ export function WebsiteProduct() {
       detail: websiteAgentJob,
     })
   }, [location.pathname, location.search, websiteAgentJob])
+
+  function runWebsiteAutopilot() {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'website',
+      route: location.pathname + location.search,
+      detail: `Website autopilot: ${websiteAgentJob}`,
+    })
+    if (storageIssue || canRepairLocalStorage) {
+      requestRecoveryFocus()
+      return
+    }
+    if (starterAvailable || starterSetupActive) {
+      openStarterSetup()
+      return
+    }
+    if (hasUnsavedChanges || failingContentChecks.length) {
+      openContentSurface('work')
+      return
+    }
+    if (!approvalIsCurrent || !publishIsCurrent || storageMode === 'managed') {
+      openWorkspaceView('publish')
+      return
+    }
+    downloadTrialSite()
+  }
 
   function runWebsiteAgentJob() {
     recordBehaviorSignal(window.localStorage, {
@@ -1095,6 +1170,29 @@ export function WebsiteProduct() {
           <details className="website-business-controls">
             <summary><span><strong>Launch controls</strong><small>Next: {websiteAgentJob}</small></span><b>Readiness, leads, domain, release, and rollout</b></summary>
             <div className="website-business-controls-content">
+          <section aria-label="Website Autopilot" className="website-autopilot">
+            <div>
+              <span className="website-kicker">Website Autopilot</span>
+              <h2>{websiteAgentJob}</h2>
+              <p>One button chooses the next safe owner action from recovery, business brief, content proof, lead capture, owner approval, release package, and rollout-readiness state. AI may prepare pages and packets; it does not publish, change DNS, send forms, install analytics, write CRM, write Shop, or deploy from here.</p>
+            </div>
+            <div className="website-autopilot-rows">
+              {websiteAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            </div>
+            <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">Run next step</button>
+          </section>
+
+          <section aria-label="Website generator guide" className="website-generator-guide">
+            <div>
+              <span className="website-kicker">Website generator guide</span>
+              <h2>Bring any business. Get a reviewed site package.</h2>
+              <p>AI turns a simple business brief into a complete website draft and launch packet. The owner still approves claims, proof, contact paths, release package, and rollout before anything goes public.</p>
+            </div>
+            <div className="website-generator-guide-rows">
+              {websiteGeneratorGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            </div>
+          </section>
+
           <section aria-label="Recommended Website agent job" className="website-agent-queue">
             <div>
               <span>Website agent queue</span>
@@ -1135,6 +1233,17 @@ export function WebsiteProduct() {
             </div>
             <div className="website-rollout-packet-rows">
               {managedRolloutRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            </div>
+          </section>
+
+          <section aria-label="Website handoff packet" className="website-handoff-packet">
+            <div>
+              <span className="website-kicker">Website handoff packet</span>
+              <h2>{websiteHandoffNext}</h2>
+              <p>AI turns ready pages, owner approval, static package state, lead capture route, and managed gate into one handoff checklist. No DNS change, form send, analytics install, CRM write, Shop write, publish, or deployment action runs from this packet.</p>
+            </div>
+            <div className="website-handoff-packet-rows">
+              {websiteHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
             </div>
           </section>
             </div>

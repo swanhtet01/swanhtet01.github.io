@@ -1,4 +1,4 @@
-import { lazy, Suspense, type Dispatch, type FormEvent, type MouseEvent, type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, type ChangeEvent, type Dispatch, type FormEvent, type MouseEvent, type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
 import siteManifest from '../../../site-manifest.json'
@@ -712,6 +712,70 @@ function defaultPurchaseOrderExpectedInput() {
 
 function defaultJobDueInput() {
   return localDateTimeInputValue(new Date(Date.now() + 8 * 60 * 60 * 1000))
+}
+
+type PlantJobImportReview = {
+  status: 'ready' | 'blocked'
+  totalRows: number
+  readyRows: number
+  blockedRows: number
+  firstReady?: { id: string; line: string; product: string; target: string; owner: string; priority: ProductionJobPriority; dueAt: string }
+  summary: string
+}
+
+const PLANT_JOB_IMPORT_MAX_BYTES = 180 * 1024
+const PLANT_JOB_IMPORT_MAX_ROWS = 50
+
+function plantJobImportCsvCell(value: string | number) {
+  const text = String(value)
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+}
+
+function parsePlantJobImportCsv(source: string) {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ''
+  let quoted = false
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index]
+    if (quoted) {
+      if (character === '"' && source[index + 1] === '"') {
+        field += '"'
+        index += 1
+      } else if (character === '"') quoted = false
+      else field += character
+      continue
+    }
+    if (character === '"') quoted = true
+    else if (character === ',') {
+      row.push(field.trim())
+      field = ''
+    } else if (character === '\n') {
+      row.push(field.trim())
+      rows.push(row)
+      row = []
+      field = ''
+    } else if (character !== '\r') field += character
+  }
+  if (quoted) throw new Error('Plant job CSV has an unclosed quoted cell.')
+  row.push(field.trim())
+  if (row.some(Boolean)) rows.push(row)
+  return rows
+}
+
+function plantJobImportColumn(headers: string[], aliases: string[]) {
+  const normalized = headers.map((header) => header.toLowerCase().replace(/[^a-z0-9]+/g, ''))
+  return aliases.reduce<number>((found, alias) => {
+    if (found >= 0) return found
+    return normalized.indexOf(alias)
+  }, -1)
+}
+
+function plantJobImportDate(value: string) {
+  const raw = value.trim()
+  if (!raw) return ''
+  const parsed = new Date(raw)
+  return Number.isNaN(parsed.getTime()) ? '' : localDateTimeInputValue(parsed)
 }
 
 function useMinuteClock() {
@@ -2452,6 +2516,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const purchaseOrderTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const purchaseOrderEditorRef = useRef<HTMLFormElement>(null)
   const purchaseOrderHistoryRef = useRef<HTMLDetailsElement>(null)
+  const catalogCreateFormRef = useRef<HTMLFormElement>(null)
   const stockCountTriggerRef = useRef<HTMLButtonElement>(null)
   const stockCountEditorRef = useRef<HTMLFormElement>(null)
   const returnTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
@@ -2472,6 +2537,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [notice, setNotice] = useState('')
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
   const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
+  const [catalogCreateOpen, setCatalogCreateOpen] = useState(false)
   const [catalogEditDraft, setCatalogEditDraft] = useState<CatalogItemEditDraft | null>(null)
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
@@ -3267,6 +3333,118 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     ['Reason', shopAgentReason],
     ['Owner gate', shopOwnerGate],
   ]
+  const shopAutopilotStage = !commerceCanWrite
+    ? 'Restore Shop readiness'
+    : pendingAction
+      ? 'Approve pending Shop change'
+      : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
+        ? 'Review online requests'
+        : actionOrders.length
+          ? 'Finish order queue'
+          : activePurchaseOrders.length
+            ? 'Receive purchase orders'
+            : lowStock.length
+              ? 'Reorder low stock'
+              : !commerce.inventoryFoundation || !managedInventoryProjection
+                ? 'Set up stock foundation'
+                : 'Open counter sales'
+  const shopAutopilotNextAction = !commerceCanWrite
+    ? 'Open managed activation controls'
+    : pendingAction
+      ? 'Finish owner approval'
+      : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
+        ? 'Open online request review'
+        : actionOrders.length
+          ? 'Open fulfilment queue'
+          : activePurchaseOrders.length
+            ? 'Open receiving queue'
+            : lowStock.length
+              ? 'Open reorder queue'
+              : !commerce.inventoryFoundation || !managedInventoryProjection
+                ? 'Open inventory setup'
+                : 'Open counter'
+  const shopAutopilotRows = [
+    ['Track', pendingAction ? 'Owner review' : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting || actionOrders.length ? 'Orders' : activePurchaseOrders.length || lowStock.length || !commerce.inventoryFoundation || !managedInventoryProjection ? 'Inventory' : 'Counter'],
+    ['Stage', shopAutopilotStage],
+    ['Next', shopAutopilotNextAction],
+    ['Learning', 'Records behavior only'],
+    ['Boundary', 'No auto write'],
+  ] as const
+  const shopCatalogUploadRows = [
+    ['Source', commerce.items.length ? `${commerce.items.length} current SKU` : 'Need catalog'],
+    ['Upload', 'Shared mapper'],
+    ['Checks', 'SKU, price, stock'],
+    ['Owner gate', 'Review package'],
+    ['Boundary', 'No Shop write'],
+  ] as const
+  const shopSetupGuideRows = [
+    ['Products', commerce.items.length ? `${commerce.items.length} current SKU` : 'Import catalog'],
+    ['Stock', commerce.inventoryFoundation && managedInventoryProjection ? 'Location + ATP' : 'Simple count first'],
+    ['Orders', pendingStorefrontRequests.length || legacyWebsiteWorkWaiting ? 'Online review' : actionOrders.length ? 'Queue active' : 'Counter ready'],
+    ['Payments', paymentReview.length ? `${paymentReview.length} exception` : 'Review only'],
+    ['Accounting', latestCloseDownload ? 'Export ready' : 'Close later'],
+    ['Boundary', 'Owner approves writes'],
+  ] as const
+  function runShopAutopilot() {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'commerce',
+      route: commerceLocation.pathname + commerceLocation.search,
+      detail: `Shop autopilot: ${shopAutopilotStage}`,
+    })
+    if (pendingAction) {
+      setNotice('Finish or cancel the pending Shop review before starting another step.')
+      return
+    }
+    navigate(shopAgentPath)
+  }
+
+  function loadSampleCatalogItem() {
+    const sampleItem = {
+      sku: 'SM-FRESH-006',
+      name: 'Fresh market delivery pack',
+      onHand: '24',
+      reorderAt: '8',
+      price: '16500',
+    }
+    if (pendingAction) {
+      setNotice('Finish or cancel the pending Shop review before loading a sample catalog item.')
+      return
+    }
+    if (commerce.items.some((item) => item.sku === sampleItem.sku)) {
+      setSku(sampleItem.sku)
+      setNotice(`${sampleItem.sku} is already in the catalog. Open its row to edit price, reorder level, stock, or receiving.`)
+      return
+    }
+    setItemDraft(sampleItem)
+    setCatalogCreateOpen(true)
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'commerce',
+      route: commerceLocation.pathname + commerceLocation.search,
+      detail: 'Load sample Shop catalog item',
+    })
+    setNotice('Sample Shop catalog item loaded for owner review. Click Review catalog item to queue it; no Shop write, stock move, supplier message, sale, payment, or accounting post ran.')
+    requestAnimationFrame(() => catalogCreateFormRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
+  }
+
+  const shopCommandCenter = <section aria-label="Shop Autopilot" className="shop-command-center">
+    <div>
+      <span className="core-eyebrow">Shop Autopilot</span>
+      <h2>{shopAutopilotStage}</h2>
+      <p>One button chooses the next safe owner action from online requests, orders, payment exceptions, purchase orders, low stock, inventory foundation, and write-readiness state. AI may prepare records and packets; it does not send customers, charge payments, book delivery, move stock, reconcile cash, or write Shop records here.</p>
+    </div>
+    <div className="shop-command-center-rows">{shopAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+    <button className="core-button primary compact" onClick={runShopAutopilot} type="button">Run next step</button>
+  </section>
+  const shopSetupGuide = <section aria-label="Shop setup guide" className="shop-order-control shop-setup-guide">
+    <div>
+      <span className="core-eyebrow">Shop setup guide</span>
+      <strong>Import products once. Let AI run the daily queue.</strong>
+      <small>AI prepares catalog import, stock foundation, online order review, payment exceptions, supplier receiving, and accounting packets. The owner confirms every sale, payment, stock, supplier, refund, and accounting handoff.</small>
+    </div>
+    <div className="shop-order-control-rows">{shopSetupGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
   const shopAgentQueue = <section aria-label="Recommended Shop agent job" className="shop-agent-queue">
     <div>
       <span className="core-eyebrow">Shop agent queue</span>
@@ -4997,6 +5175,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       <details className="shop-business-controls">
         <summary><span>Business controls</span><small>Lifecycle, accounting, and audit</small></summary>
         <div className="shop-business-controls-content">
+          {shopCommandCenter}
+          {shopSetupGuide}
+          {shopAgentQueue}
           <section className="shop-order-control" aria-label="Shop order control">
             <div><span className="core-eyebrow">Order control</span><strong>{shopOrderControlNext}</strong><small>{shopOrderControlBoundary}</small></div>
             <div className="shop-order-control-rows">{shopOrderControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
@@ -5359,13 +5540,15 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
           </article>
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>
-      <section className="catalog-onboarding-bridge">
-        <div><span className="core-eyebrow">Import data</span><strong>Bring your catalog into the Shop trial.</strong><p>Preview and map a CSV before any reviewed records are applied.</p></div>
-        <Link className="core-button" to={clientSetupPath('commerce')}>Import Shop data</Link>
+      <section aria-label="Shop catalog upload autopilot" className="catalog-onboarding-bridge">
+        <div><span className="core-eyebrow">Catalog upload autopilot</span><strong>Bring your catalog into the Shop trial.</strong><p>AI routes product spreadsheets through the shared mapper, checks SKU, name, stock, reorder, and price fields, then prepares one reviewed import package. No supplier message, stock move, sale, accounting post, or Shop write runs from this panel.</p></div>
+        <div className="catalog-onboarding-status">{shopCatalogUploadRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+        <button className="core-button" disabled={commerceControlsDisabled} onClick={loadSampleCatalogItem} type="button">Load sample catalog item</button>
+        <Link className="core-button" to={clientSetupPath('commerce')}>Upload product data</Link>
       </section>
-      <details className="compact-disclosure catalog-disclosure">
+      <details className="compact-disclosure catalog-disclosure" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
         <summary>Add catalog item</summary>
-        <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem}>
+        <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem} ref={catalogCreateFormRef}>
           <div className="form-row"><label>SKU<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="SKU-002" required value={itemDraft.sku} /></label><label>Item name<input disabled={commerceControlsDisabled} maxLength={180} onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Real item name" required value={itemDraft.name} /></label></div>
           <div className="form-row"><label>Opening stock<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Reorder at<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} required step="1" type="number" value={itemDraft.reorderAt} /></label></div>
           <label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label>
@@ -5706,6 +5889,7 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
 
 function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIdentity | null; tab: ProductionTab }) {
   const productionLocation = useLocation()
+  const navigate = useNavigate()
   const [production, mutateProduction, productionStorageError, workspaceMode, managedVersion, managedWorkspaceId, productionCanWrite] = useProductionWorkspace(managedIdentity)
   const [relatedCommerce] = useCommerceWorkspace(managedIdentity)
   const relatedCommerceRef = useRef(relatedCommerce)
@@ -5762,6 +5946,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [shopDemandIssue, setShopDemandIssue] = useState('')
   const [selectedShopDemandDigest, setSelectedShopDemandDigest] = useState('')
   const jobDisclosureRef = useRef<HTMLDetailsElement>(null)
+  const [plantJobImportReview, setPlantJobImportReview] = useState<PlantJobImportReview | null>(null)
+  const [plantJobImportSourceName, setPlantJobImportSourceName] = useState('')
   const [scheduleDraft, setScheduleDraft] = useState<{ jobId: string; owner: string; priority: ProductionJobPriority; dueAt: string } | null>(null)
   const [notice, setNotice] = useState('')
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
@@ -5942,6 +6128,84 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Handoff', shiftHandoffIsCurrent ? 'Ready' : 'Build'],
   ] as const
   const plantControlBoundary = 'Owner confirms production, quality, WCM, maintenance, material, and handoff writes.'
+  const openWcmCount = openDowntimeIntervals.length + openMaintenanceRecords.length
+  const plantAutopilotStage = !productionCanWrite
+    ? 'Restore Plant readiness'
+    : pendingAction
+      ? 'Approve pending Plant action'
+      : urgentIssueCount
+        ? 'Contain urgent problem'
+        : heldJobs.length
+          ? 'Review quality hold'
+          : openWcmCount
+            ? 'Close WCM record'
+            : activeJobs.length
+              ? 'Record production evidence'
+              : !shiftHandoffIsCurrent
+                ? 'Build shift handoff'
+                : 'Plan next job'
+  const plantAutopilotNextAction = !productionCanWrite
+    ? 'Open managed activation controls'
+    : pendingAction
+      ? 'Finish owner approval'
+      : urgentIssueCount
+        ? 'Open quality or safety containment'
+        : heldJobs.length
+          ? 'Open quality review'
+          : openWcmCount
+            ? 'Open WCM controls'
+            : activeJobs.length
+              ? 'Open next job output'
+              : !shiftHandoffIsCurrent
+                ? 'Open handoff builder'
+                : 'Open job planning'
+  const plantAutopilotRows = [
+    ['Track', pendingAction ? 'Owner review' : urgentIssueCount || heldJobs.length ? 'Quality' : openWcmCount ? 'WCM' : activeJobs.length ? 'Execution' : !shiftHandoffIsCurrent ? 'Handoff' : 'Planning'],
+    ['Stage', plantAutopilotStage],
+    ['Next', plantAutopilotNextAction],
+    ['Learning', 'Records behavior only'],
+    ['Boundary', 'No equipment write'],
+  ] as const
+  const mesDispatchStation = activeJobs[0]?.line ?? selectedDowntimeMachine?.name ?? selectedMaintenanceMachine?.name ?? 'Plant floor'
+  const mesDispatchTarget = urgentIssueCount
+    ? `${urgentIssueCount} urgent issue${urgentIssueCount === 1 ? '' : 's'}`
+    : heldJobs[0]
+      ? heldJobs[0].id
+      : activeJobs[0]
+        ? `${activeJobs[0].id} / ${(activeJobs[0].target - activeJobs[0].output - (activeJobs[0].scrap ?? 0)).toLocaleString()} left`
+        : shiftHandoffIsCurrent
+          ? 'Next plan'
+          : 'Shift handoff'
+  const mesDispatchBlocker = !productionCanWrite
+    ? 'Write readiness'
+    : pendingAction
+      ? 'Owner approval'
+      : urgentIssueCount
+        ? 'Containment'
+        : heldJobs.length
+          ? 'Quality hold'
+          : openWcmCount
+            ? 'WCM close'
+            : activeJobs.length && !materialEntries.length
+              ? 'Trace start'
+              : !shiftHandoffIsCurrent
+                ? 'Handoff'
+                : 'None'
+  const mesDispatchEvidence = materialEntries.length
+    ? `${materialEntries.length} material trace`
+    : shiftHandoffIsCurrent
+      ? 'Handoff current'
+      : activeJobs.length
+        ? 'Need trace'
+        : 'Plan evidence'
+  const mesDispatchRows = [
+    ['Station', mesDispatchStation],
+    ['Target', mesDispatchTarget],
+    ['Blocker', mesDispatchBlocker],
+    ['Evidence', mesDispatchEvidence],
+    ['Handoff', shiftHandoffIsCurrent ? 'Current' : 'Build'],
+    ['Boundary', 'No equipment write'],
+  ] as const
   const openMaterialIssues = openIssues.filter((issue) => issue.kind === 'materials')
   const shopLowStock = relatedCommerce.items.filter((item) => item.onHand <= item.reorderAt)
   const orderExecutionProjection = production.orderExecution ? projectPlantOrder(production.orderExecution) : null
@@ -5965,7 +6229,6 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Trace', materialEntries.length ? `${materialEntries.length} consumed` : 'Not started'],
   ] as const
   const openQualityIssues = openIssues.filter((issue) => issue.kind === 'quality')
-  const openWcmCount = openDowntimeIntervals.length + openMaintenanceRecords.length
   const productionGoodUnits = production.jobs.reduce((total, job) => total + job.output, 0)
   const productionScrapUnits = production.jobs.reduce((total, job) => total + (job.scrap ?? 0), 0)
   const plantCostReadinessNext = !productionCanWrite
@@ -6042,6 +6305,29 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['CAPA', resolvedIssues.filter((issue) => issue.kind === 'quality').length ? `${resolvedIssues.filter((issue) => issue.kind === 'quality').length} closed` : 'None yet'],
     ['Evidence', heldJobs.length || openQualityIssues.length || materialEntries.length ? 'Required' : 'Ready'],
     ['Release', productionCanWrite && !pendingAction && !heldJobs.length && !openQualityIssues.length ? 'Owner review' : 'Blocked'],
+  ] as const
+  const plantComplianceDossierNext = !productionCanWrite
+    ? 'Restore audit readiness'
+    : pendingAction
+      ? 'Approve pending Plant action'
+      : openQualityIssues.length || heldJobs.length
+        ? 'Resolve ISO evidence'
+        : openWcmCount
+          ? 'Close WCM evidence'
+          : !materialEntries.length
+            ? 'Record traceability'
+            : !shiftHandoffIsCurrent
+              ? 'Build shift dossier'
+              : plantCostPacketReady
+                ? 'Audit dossier ready'
+                : 'Prepare cost dossier'
+  const plantComplianceDossierRows = [
+    ['ISO', openQualityIssues.length || heldJobs.length ? `${openQualityIssues.length + heldJobs.length} blocked` : 'Clear'],
+    ['WCM', openWcmCount ? `${openWcmCount} open` : 'Closed'],
+    ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'Missing'],
+    ['Output', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} good` : 'No output'],
+    ['Handoff', shiftHandoffIsCurrent ? 'Current' : 'Build'],
+    ['Boundary', 'No auto release'],
   ] as const
 
   useEffect(() => {
@@ -6423,6 +6709,137 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     setNotice('Shop demand is bound to this draft. Review the owner, line, due time, and accountable action before creating the job.')
   }
 
+  function buildPlantJobImportReview(csvText: string): PlantJobImportReview {
+    const parsed = parsePlantJobImportCsv(csvText)
+    if (parsed.length < 2) throw new Error('Upload the Plant job CSV header and at least one job row.')
+    if (parsed.length - 1 > PLANT_JOB_IMPORT_MAX_ROWS) throw new Error(`Review at most ${PLANT_JOB_IMPORT_MAX_ROWS} Plant job rows at a time.`)
+    const headers = parsed[0].map((header) => header.trim())
+    const jobIdIndex = plantJobImportColumn(headers, ['jobid', 'job', 'id', 'workorder', 'order'])
+    const lineIndex = plantJobImportColumn(headers, ['line', 'team', 'station', 'workcenter', 'workcentre'])
+    const productIndex = plantJobImportColumn(headers, ['product', 'batch', 'sku', 'item'])
+    const targetIndex = plantJobImportColumn(headers, ['target', 'units', 'quantity', 'qty'])
+    const ownerIndex = plantJobImportColumn(headers, ['owner', 'responsible', 'supervisor', 'operator'])
+    const priorityIndex = plantJobImportColumn(headers, ['priority', 'urgency'])
+    const dueAtIndex = plantJobImportColumn(headers, ['dueat', 'duetime', 'due', 'deadline'])
+    const missingColumns = ([
+      ['job_id', jobIdIndex],
+      ['line', lineIndex],
+      ['product', productIndex],
+      ['target', targetIndex],
+      ['owner', ownerIndex],
+      ['due_at', dueAtIndex],
+    ] as Array<[string, number]>).filter(([, index]) => index < 0).map(([label]) => label)
+    if (missingColumns.length) throw new Error(`Plant job CSV is missing ${missingColumns.join(', ')}.`)
+
+    const existingIds = new Set(production.jobs.map((job) => job.id.toUpperCase()))
+    const seenIds = new Set<string>()
+    let readyRows = 0
+    let blockedRows = 0
+    let firstReady: PlantJobImportReview['firstReady']
+    for (const cells of parsed.slice(1)) {
+      const id = (cells[jobIdIndex] ?? '').trim().toUpperCase()
+      const line = (cells[lineIndex] ?? '').trim()
+      const product = (cells[productIndex] ?? '').trim()
+      const target = (cells[targetIndex] ?? '').trim()
+      const owner = (cells[ownerIndex] ?? '').trim()
+      const dueAt = plantJobImportDate(cells[dueAtIndex] ?? '')
+      const priorityRaw = (priorityIndex >= 0 ? cells[priorityIndex] ?? '' : '').toLowerCase()
+      const priority: ProductionJobPriority = priorityRaw.includes('urgent') || priorityRaw.includes('high') || priorityRaw.includes('rush')
+        ? 'urgent'
+        : priorityRaw.includes('low')
+          ? 'low'
+          : 'normal'
+      const targetNumber = Number(target)
+      const dueDate = dueAt ? new Date(dueAt) : null
+      const blocked = !id || !line || !product || !owner || owner.length > 120
+        || !Number.isSafeInteger(targetNumber) || targetNumber < 1
+        || !dueDate || Number.isNaN(dueDate.getTime()) || dueDate.getTime() <= Date.now()
+        || existingIds.has(id) || seenIds.has(id)
+      if (blocked) {
+        blockedRows += 1
+      } else {
+        readyRows += 1
+        seenIds.add(id)
+        firstReady ??= { id, line, product, target: String(targetNumber), owner, priority, dueAt }
+      }
+    }
+    const totalRows = readyRows + blockedRows
+    return {
+      status: readyRows > 0 && blockedRows === 0 ? 'ready' : 'blocked',
+      totalRows,
+      readyRows,
+      blockedRows,
+      firstReady,
+      summary: firstReady
+        ? `${readyRows} ready of ${totalRows}. First ready job ${firstReady.id} was copied into the review form.`
+        : `${blockedRows} blocked of ${totalRows}. Fix IDs, line, product, target, owner, future due time, and duplicates.`,
+    }
+  }
+
+  function buildSamplePlantJobImportCsv() {
+    const rows = [
+      ['job_id', 'line', 'product', 'target', 'owner', 'priority', 'due_at'],
+      ['JOB-AI-101', 'Line A', 'First production run', 120, 'Plant supervisor', 'urgent', localDateTimeInputValue(new Date(Date.now() + 10 * 60 * 60 * 1000))],
+      ['JOB-AI-102', 'Quality Lab', 'ISO release sample', 1, 'Quality owner', 'normal', localDateTimeInputValue(new Date(Date.now() + 12 * 60 * 60 * 1000))],
+    ]
+    return rows.map((row) => row.map(plantJobImportCsvCell).join(',')).join('\r\n')
+  }
+
+  function loadSamplePlantJobImportBatch() {
+    if (pendingAction) {
+      setNotice('Finish or cancel the pending Plant review before loading a sample job batch.')
+      return
+    }
+    const review = buildPlantJobImportReview(buildSamplePlantJobImportCsv())
+    setPlantJobImportReview(review)
+    setPlantJobImportSourceName('sample-plant-job-batch.csv')
+    if (review.firstReady) setJobDraft(review.firstReady)
+    setNotice(review.firstReady
+      ? 'Sample Plant job batch loaded and the first reviewed job was copied into the form. No production job, equipment command, material movement, accounting post, or managed write ran.'
+      : 'Sample Plant job batch was reviewed locally but no row is ready. No production job, equipment command, material movement, accounting post, or managed write ran.')
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'production',
+      route: productionLocation.pathname + productionLocation.search,
+      detail: 'Load sample Plant job batch',
+    })
+  }
+
+  async function uploadPlantJobCsv(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0] ?? null
+    event.currentTarget.value = ''
+    if (!file) return
+    setPlantJobImportSourceName(file.name)
+    if (!file.name.toLowerCase().endsWith('.csv') && file.type !== 'text/csv') {
+      setPlantJobImportReview(null)
+      setNotice('Plant job upload rejected locally. Choose a CSV file. No production job, equipment command, material movement, accounting post, or managed write ran.')
+      return
+    }
+    if (file.size > PLANT_JOB_IMPORT_MAX_BYTES) {
+      setPlantJobImportReview(null)
+      setNotice('Plant job CSV is too large. Upload at most 180 KB or split the file into 50-row batches. No production job, equipment command, material movement, accounting post, or managed write ran.')
+      return
+    }
+    try {
+      const text = await file.text()
+      const review = buildPlantJobImportReview(text)
+      setPlantJobImportReview(review)
+      if (review.firstReady) setJobDraft(review.firstReady)
+      setNotice(review.firstReady
+        ? 'Uploaded Plant job CSV and prepared the first reviewed job locally. No production job, equipment command, material movement, accounting post, or managed write ran.'
+        : 'Uploaded Plant job CSV was reviewed locally but no row is ready. No production job, equipment command, material movement, accounting post, or managed write ran.')
+      recordBehaviorSignal(window.localStorage, {
+        event: 'agent_job_chosen',
+        product: 'production',
+        route: productionLocation.pathname + productionLocation.search,
+        detail: 'Upload Plant job CSV for local MES review',
+      })
+    } catch (error) {
+      setPlantJobImportReview(null)
+      setNotice(error instanceof Error ? error.message : 'Uploaded Plant job CSV could not be reviewed locally.')
+    }
+  }
+
   function openJobSchedule(job: ProductionJob, trigger: HTMLButtonElement) {
     if (job.closure || job.output + (job.scrap ?? 0) >= job.target) return
     scheduleTriggerRef.current = trigger
@@ -6758,7 +7175,33 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'production-idle'} action={pendingAction} onCancel={() => { setPendingAction(null); setNotice('Change cancelled. Plant data was not modified.') }} onConfirm={confirmAction} returnFocus={actionTrigger} />
     <ProductionEventHistory events={production.events} />
   </>
+  function runPlantAutopilot() {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'production',
+      route: productionLocation.pathname + productionLocation.search,
+      detail: `Plant autopilot: ${plantAutopilotStage}`,
+    })
+    if (pendingAction) {
+      setNotice('Finish or cancel the pending Plant review before starting another step.')
+      return
+    }
+    if (!productionCanWrite) {
+      navigate('/settings/#controls')
+      return
+    }
+    if (urgentIssueCount || heldJobs.length || openWcmCount || !shiftHandoffIsCurrent) {
+      navigate('/plant/?tab=control')
+      return
+    }
+    navigate('/plant/?tab=production')
+  }
   const plantStatus = <div aria-label="Plant MES status" className="readiness-list plant-mes-strip">{plantRows.map(([label, value]) => <span data-metric={label.toLowerCase()} key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+  const plantCommandCenter = <section aria-label="Plant Autopilot" className="plant-command-center">
+    <div><span className="core-eyebrow">Plant Autopilot</span><h2>{plantAutopilotStage}</h2><p>One button chooses the next safe owner action from jobs, quality, WCM, material trace, handoff, and write-readiness state. AI may prepare records and packets; it does not command equipment, release quality, consume materials, close maintenance, or write Plant records here.</p></div>
+    <div className="plant-command-center-rows">{plantAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+    <button className="core-button primary compact" onClick={runPlantAutopilot} type="button">Run next step</button>
+  </section>
   const plantAgentQueue = <section aria-label="Recommended Plant agent job" className="plant-agent-queue">
     <div><span className="core-eyebrow">Plant agent queue</span><h2>{plantAgentJob}</h2><p>AI prepares the next Plant record from live jobs, quality, WCM, trace, and handoff state. Humans still approve every consequential action.</p></div>
     <div>{plantAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
@@ -6769,6 +7212,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const plantControl = <section aria-label="Plant control" className="plant-control">
     <div><span className="core-eyebrow">Plant control</span><strong>{plantControlNext}</strong><small>{plantControlBoundary}</small></div>
     <div className="plant-control-rows">{plantControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
+  const mesDispatch = <section aria-label="MES dispatch autopilot" className="plant-control mes-dispatch-control">
+    <div><span className="core-eyebrow">MES dispatch</span><strong>{plantAgentJob}</strong><small>AI chooses the next station, blocker, evidence need, and handoff route from live Plant state. No equipment command or production write runs from this panel.</small></div>
+    <div className="plant-control-rows">{mesDispatchRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantLifecycle = <section aria-label="Plant lifecycle control" className="plant-control">
     <div><span className="core-eyebrow">MES lifecycle</span><strong>Plan to handoff</strong><small>AI guides plan, execution, quality, WCM, trace, and handoff. No equipment or production write runs without owner approval.</small></div>
@@ -6794,10 +7241,27 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div><span className="core-eyebrow">Inspection + CAPA</span><strong>{plantInspectionNext}</strong><small>AI turns sampling, NCR containment, corrective action, evidence, and release review into one quality queue. No certificate, CAPA closure, customer claim, inventory block, costing, or production write runs from this panel.</small>{tab === 'control' ? <button className="text-link" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={startInspectionNcr} type="button">Start inspection NCR</button> : <Link className="text-link" to="/plant/?tab=control">Open inspection queue</Link>}</div>
     <div className="plant-control-rows">{plantInspectionRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
+  const plantComplianceDossier = <section aria-label="Plant compliance dossier" className="plant-control plant-compliance-dossier">
+    <div><span className="core-eyebrow">Compliance dossier</span><strong>{plantComplianceDossierNext}</strong><small>AI summarizes ISO quality release, WCM closure, material traceability, output evidence, shift handoff, and cost-readiness into one audit packet. No certificate, quality release, costing, inventory valuation, equipment command, customer claim, or production write runs from this dossier.</small></div>
+    <div className="plant-control-rows">{plantComplianceDossierRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
+  const plantJobRepairRows = plantJobImportReview
+    ? [
+        ['Ready rows', `${plantJobImportReview.readyRows}`],
+        ['Blocked rows', `${plantJobImportReview.blockedRows}`],
+        ['Next fix', plantJobImportReview.status === 'ready' ? 'Review copied job' : 'Fix ID, line, product, target, owner, due time, duplicates'],
+      ] as const
+    : [
+        ['Step 1', 'Load sample or upload CSV'],
+        ['Step 2', 'AI checks MES fields locally'],
+        ['Step 3', 'Review one copied job'],
+      ] as const
   const plantBusinessControls = <details className="product-guidance-disclosure plant-business-controls">
     <summary><span>System controls</span><small>{plantControlNext} · planning, MRP, quality, maintenance, and costing</small></summary>
     <div className="product-guidance-content">
+      {plantCommandCenter}
       {plantAgentQueue}
+      {mesDispatch}
       {plantControl}
       {plantLifecycle}
       {plantMrp}
@@ -6805,21 +7269,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       {plantCostPacket}
       {plantQualityRelease}
       {plantInspectionControl}
+      {plantComplianceDossier}
     </div>
   </details>
-  const plantControlBusinessControls = <details className="product-guidance-disclosure plant-business-controls">
-    <summary><span>System controls</span><small>{plantControlNext} · planning, MRP, quality, maintenance, and costing</small></summary>
-    <div className="product-guidance-content">
-      {plantAgentQueue}
-      {plantControl}
-      {plantLifecycle}
-      {plantMrp}
-      {plantCostReadiness}
-      {plantCostPacket}
-      {plantQualityRelease}
-      {plantInspectionControl}
-    </div>
-  </details>
+  const plantControlBusinessControls = plantBusinessControls
 
   if (tab === 'production') return <div className="operation-module production-operation-module">
     {productionBoundary}
@@ -6833,6 +7286,16 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <CompletedJobHistory jobs={completedJobs} now={issueClock} />
         <details className="compact-disclosure catalog-disclosure" ref={jobDisclosureRef}>
           <summary>{selectedShopDemand ? 'Add Shop-demand job' : 'Add job'}</summary>
+          <section aria-label="Plant job CSV autopilot" className="plant-job-import">
+            <div><span className="core-eyebrow">Job CSV autopilot</span><strong>Upload job list</strong><small>AI checks job ID, line, product, target, owner, priority, due time, and duplicates before copying one ready job into review. No production job, equipment command, material movement, accounting post, or managed write runs from this importer.</small></div>
+            <div className="plant-job-import-actions">
+              <button className="core-button" disabled={Boolean(pendingAction)} onClick={loadSamplePlantJobImportBatch} type="button">Load sample job batch</button>
+              <label className="plant-job-import-upload">Upload Plant job CSV<input accept=".csv,text/csv" disabled={Boolean(pendingAction)} onChange={uploadPlantJobCsv} type="file" /></label>
+              <div aria-label="AI Plant job repair checklist" className="plant-job-import-repair">{plantJobRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+              {plantJobImportReview ? <div className={`plant-job-import-review ${plantJobImportReview.status}`} role="status"><strong>{plantJobImportReview.status === 'ready' ? 'Ready for owner review' : 'Repair before Plant review'}</strong><span>{plantJobImportReview.summary}</span><small>{plantJobImportReview.readyRows} ready / {plantJobImportReview.blockedRows} blocked / no Plant write</small></div> : null}
+              {plantJobImportSourceName ? <p className="plant-job-import-source">Local file: {plantJobImportSourceName}</p> : null}
+            </div>
+          </section>
           <form className="core-form compact-form" onSubmit={createJob}>
             <div className="form-row"><label>Job ID<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={80} onChange={(event) => setJobDraft((current) => ({ ...current, id: event.target.value }))} placeholder="JOB-002" required value={jobDraft.id} /></label><label>Line or team<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setJobDraft((current) => ({ ...current, line: event.target.value }))} placeholder="Line 02" required value={jobDraft.line} /></label></div>
             <div className="form-row"><label>Product or batch<input disabled={!productionCanWrite || Boolean(pendingAction) || Boolean(selectedShopDemand)} maxLength={180} onChange={(event) => setJobDraft((current) => ({ ...current, product: event.target.value }))} placeholder="Product name" required value={jobDraft.product} /></label><label>Target units<input disabled={!productionCanWrite || Boolean(pendingAction) || Boolean(selectedShopDemand)} min="1" onChange={(event) => setJobDraft((current) => ({ ...current, target: event.target.value }))} required step="1" type="number" value={jobDraft.target} /></label></div>

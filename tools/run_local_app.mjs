@@ -166,6 +166,33 @@ async function waitForJson(url, state, accept, timeoutMs = 20_000) {
   throw new Error(`${state.label} did not become ready at ${url}. ${lastIssue}${details ? `\n${details}` : ''}`)
 }
 
+async function postJson(url, body, state, accept, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs
+  let lastIssue = ''
+  while (Date.now() < deadline) {
+    const failure = childFailure(state)
+    if (failure) throw new Error(failure)
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(1_500),
+      })
+      const type = response.headers.get('content-type') ?? ''
+      const payload = type.includes('application/json') ? await response.json() : null
+      if (accept(response, payload)) return { body: payload, response }
+      lastIssue = `${url} returned HTTP ${response.status}${payload ? `: ${JSON.stringify(payload).slice(0, 500)}` : ''}.`
+    } catch (error) {
+      lastIssue = error instanceof Error ? error.message : String(error)
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 150))
+  }
+  const details = state.stderr.trim() || state.stdout.trim()
+  throw new Error(`${state.label} did not return accepted POST response at ${url}. ${lastIssue}${details ? `\n${details}` : ''}`)
+}
+
 async function stopChild(state) {
   if (!state || state.finished) return
   state.child.kill('SIGTERM')
@@ -260,6 +287,136 @@ async function run() {
       uiState,
       (body) => body?.service === 'supermega-service',
     )
+    const ecommerceOrderQueuePacket = {
+      schema: 'supermega.ecommerce.order_queue_readiness.v1',
+      version: 1,
+      generatedAt: '2026-07-29T00:00:00.000Z',
+      product: 'ecommerce',
+      storeName: 'SuperMega Ecommerce Demo',
+      sourceReview: {
+        schema: 'supermega.ecommerce.order_import_review_packet.v1',
+        generatedAt: '2026-07-29T00:00:00.000Z',
+        operatingMode: 'browser_local_trial',
+        catalogSource: 'shop-local',
+        selectedSkus: ['SKU-001'],
+        totalRows: 1,
+        readyRows: 1,
+        blockedRows: 0,
+      },
+      readiness: {
+        status: 'ready_for_support',
+        nextAction: 'Support can compare this packet with the managed Shop catalog before queue import approval.',
+      },
+      requiredControls: [
+        'managed_postgres_rls',
+        'workspace_identity',
+        'shop_catalog_match',
+        'source_message_retention',
+        'owner_queue_approval',
+        'audit_log',
+        'scheduler_proof',
+      ],
+      forbiddenUntilReady: [
+        'order_import',
+        'production_queue_write',
+        'customer_message_send',
+        'payment_capture',
+        'wallet_debit',
+        'delivery_booking',
+        'stock_move',
+        'refund_write',
+        'shop_write',
+        'managed_activation',
+      ],
+    }
+    const orderQueueValidation = await postJson(
+      `${uiUrl}/api/trial/v1/ecommerce/order-queue/validate`,
+      { workspace_id: 'verify-workspace', packet: ecommerceOrderQueuePacket },
+      uiState,
+      (response, payload) => response.ok
+        && payload?.validation?.contract === 'supermega.ecommerce.order_queue_readiness_validation.v1'
+        && payload.validation.status === 'ready_for_owner_review'
+        && payload.validation.workspace_id === 'verify-workspace'
+        && payload.validation.required_capability === 'commerce.write'
+        && payload.identity_authority === 'isolated_demo_untrusted_workspace'
+        && payload.validation.external_writes_performed === false
+        && payload.external_writes_performed === false,
+    )
+    const tamperedOrderQueueValidation = await postJson(
+      `${uiUrl}/api/trial/v1/ecommerce/order-queue/validate`,
+      {
+        workspace_id: 'verify-workspace',
+        packet: { ...ecommerceOrderQueuePacket, forbiddenUntilReady: ['order_import'] },
+      },
+      uiState,
+      (response, payload) => response.status === 422
+        && String(payload?.detail ?? '').includes('failed validation'),
+    )
+    const ecommerceOrderQueueApprovalPacket = {
+      contract: 'supermega.ecommerce.order_queue_owner_approval.v1',
+      version: 1,
+      createdAt: '2026-07-29T00:00:00.000Z',
+      product: 'ecommerce',
+      workspaceId: 'verify-workspace',
+      storeName: ecommerceOrderQueuePacket.storeName,
+      queuePacketSchema: ecommerceOrderQueuePacket.schema,
+      validationContract: 'supermega.ecommerce.order_queue_readiness_validation.v1',
+      validationStatus: 'ready_for_owner_review',
+      targetSurface: 'commerce',
+      requiredCapability: 'commerce.write',
+      rowCount: 1,
+      readyRows: 1,
+      blockedRows: 0,
+      selectedSkus: ['SKU-001'],
+      sourceEvidence: {
+        sourceReviewGeneratedAt: ecommerceOrderQueuePacket.sourceReview.generatedAt,
+        sourceCatalog: ecommerceOrderQueuePacket.sourceReview.catalogSource,
+        sourceMessagesRetained: true,
+      },
+      ownerDecision: 'Approve one managed Shop queue import after reviewing source messages, catalog match, and zero-write receipt.',
+      ownerApprovalRequired: true,
+      forbiddenUntilApproved: ecommerceOrderQueuePacket.forbiddenUntilReady,
+      externalWritesPerformed: false,
+      nextAction: 'Owner reviews this packet, then support records a named approval before one idempotent Shop queue import.',
+    }
+    const orderQueueImportPlan = await postJson(
+      `${uiUrl}/api/trial/v1/ecommerce/order-queue/import-plan`,
+      {
+        workspace_id: 'verify-workspace',
+        packet: ecommerceOrderQueuePacket,
+        approval_packet: ecommerceOrderQueueApprovalPacket,
+      },
+      uiState,
+      (response, payload) => response.ok
+        && payload?.plan?.contract === 'supermega.ecommerce.shop_queue_import_plan.v1'
+        && payload.plan.status === 'ready_for_managed_apply'
+        && payload.plan.target_adapter === 'shop_order_queue'
+        && String(payload.plan.idempotency_key || '').startsWith('ecommerce-shop-queue:')
+        && payload.identity_authority === 'isolated_demo_untrusted_workspace'
+        && payload.plan.external_writes_performed === false
+        && payload.external_writes_performed === false,
+    )
+    const tamperedOrderQueueImportPlan = await postJson(
+      `${uiUrl}/api/trial/v1/ecommerce/order-queue/import-plan`,
+      {
+        workspace_id: 'verify-workspace',
+        packet: ecommerceOrderQueuePacket,
+        approval_packet: { ...ecommerceOrderQueueApprovalPacket, selectedSkus: ['SKU-OTHER'] },
+      },
+      uiState,
+      (response, payload) => response.status === 422
+        && String(payload?.detail ?? '').includes('does not match'),
+    )
+    const orderQueueApplyPreflightUnauthorized = await postJson(
+      `${uiUrl}/api/trial/v1/ecommerce/order-queue/apply-preflight`,
+      {
+        approval_id: 'approval-queue-001',
+        plan: orderQueueImportPlan.body.plan,
+      },
+      uiState,
+      (response, payload) => response.status === 401
+        && String(payload?.detail ?? '').includes('trial_auth_required'),
+    )
 
     const body = proxiedHealth.body
     const report = {
@@ -290,6 +447,26 @@ async function run() {
         databaseUrlCleared: true,
         hostedAuthCleared: true,
         externalWorkerCleared: true,
+      },
+      ecommerceOrderQueueValidation: {
+        contract: orderQueueValidation.body.validation.contract,
+        status: orderQueueValidation.body.validation.status,
+        writesPerformed: orderQueueValidation.body.validation.external_writes_performed,
+        identityAuthority: orderQueueValidation.body.identity_authority,
+        tamperRejected: tamperedOrderQueueValidation.response.status === 422,
+      },
+      ecommerceOrderQueueImportPlan: {
+        contract: orderQueueImportPlan.body.plan.contract,
+        status: orderQueueImportPlan.body.plan.status,
+        targetAdapter: orderQueueImportPlan.body.plan.target_adapter,
+        writesPerformed: orderQueueImportPlan.body.plan.external_writes_performed,
+        identityAuthority: orderQueueImportPlan.body.identity_authority,
+        tamperRejected: tamperedOrderQueueImportPlan.response.status === 422,
+      },
+      ecommerceOrderQueueApplyPreflight: {
+        authRequired: orderQueueApplyPreflightUnauthorized.response.status === 401,
+        writesPerformed: false,
+        applyPreflightAuthRequired: orderQueueApplyPreflightUnauthorized.response.status === 401,
       },
     }
 

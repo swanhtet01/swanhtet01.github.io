@@ -10,6 +10,7 @@ import {
   readShopServiceSchedule,
   type ShopServiceSchedule,
 } from './shop-service-scheduling.ts'
+import type { EcommerceOrderQueueReadinessPacket } from '../products/ecommerce/ecommerce-order-review-packet'
 
 
 const WORKSPACE_STORAGE_KEY = 'supermega.managed.workspace.v1'
@@ -236,6 +237,63 @@ export type ManagedClientImportProvisioningPlan = {
   next_step: string
 }
 
+export type ManagedEcommerceOrderQueueValidation = {
+  contract: 'supermega.ecommerce.order_queue_readiness_validation.v1'
+  status: 'ready_for_owner_review' | 'blocked'
+  workspace_id: string
+  product: 'ecommerce'
+  target_surface: 'commerce'
+  required_capability: 'commerce.write'
+  packet_schema: 'supermega.ecommerce.order_queue_readiness.v1'
+  row_count: number
+  ready_rows: number
+  blocked_rows: number
+  required_controls: string[]
+  forbidden_until_applied: string[]
+  human_approval_required: true
+  external_writes_performed: false
+  next_step: string
+}
+
+export type ManagedEcommerceOrderQueueImportPlan = {
+  contract: 'supermega.ecommerce.shop_queue_import_plan.v1'
+  status: 'ready_for_managed_apply' | 'blocked'
+  workspace_id: string
+  product: 'ecommerce'
+  target_surface: 'commerce'
+  target_adapter: 'shop_order_queue'
+  required_capability: 'commerce.write'
+  idempotency_key: string
+  plan_digest: string
+  store_name: string
+  row_count: number
+  ready_rows: number
+  blocked_rows: number
+  selected_skus: string[]
+  required_controls: string[]
+  required_approval_contract: 'supermega.ecommerce.order_queue_owner_approval.v1'
+  external_writes_performed: false
+  forbidden_until_applied: string[]
+  apply_boundary: string
+  next_step: string
+}
+
+export type ManagedEcommerceOrderQueueApplyPreflight = {
+  contract: 'supermega.ecommerce.shop_queue_apply_preflight.v1'
+  status: 'ready_for_idempotent_apply'
+  workspace_id: string
+  approval_id: string
+  approved_by: string
+  approved_at: string
+  plan_digest: string
+  idempotency_key: string
+  required_capability: 'commerce.write'
+  target_adapter: 'shop_order_queue'
+  external_writes_performed: false
+  apply_boundary: string
+  next_step: string
+}
+
 type ManagedApprovalRequest = {
   command_id: string
   title: string
@@ -335,6 +393,33 @@ function expectedEcommerceMerchandising(stagingPackage: ManagedClientImportPacka
     .sort((left, right) => compareManagedImportText(left.sku, right.sku))
 }
 
+const ECOMMERCE_ORDER_QUEUE_REQUIRED_CONTROLS = [
+  'managed_postgres_rls',
+  'workspace_identity',
+  'shop_catalog_match',
+  'source_message_retention',
+  'owner_queue_approval',
+  'audit_log',
+  'scheduler_proof',
+] as const
+
+const ECOMMERCE_ORDER_QUEUE_FORBIDDEN_UNTIL_APPLIED = [
+  'order_import',
+  'production_queue_write',
+  'customer_message_send',
+  'payment_capture',
+  'wallet_debit',
+  'delivery_booking',
+  'stock_move',
+  'refund_write',
+  'shop_write',
+  'managed_activation',
+] as const
+
+function sameManagedStringArray(left: readonly string[], right: readonly string[]) {
+  return left.length === right.length && left.every((item, index) => item === right[index])
+}
+
 export function managedClientImportActivationContext(
   stagingPackage: ManagedClientImportPackage,
   bootstrap?: ManagedBootstrap,
@@ -419,6 +504,170 @@ export function buildManagedClientImportProvisioningPlan(
       ? 'Owner reviews the checked package, confirms approval, then SuperMega applies one idempotent managed revision.'
       : 'Resolve identity, digest, adapter, or version blockers before asking the owner to approve.',
   }
+}
+
+export function buildManagedEcommerceOrderQueueValidation(
+  packet: EcommerceOrderQueueReadinessPacket,
+  expectedIdentity: ManagedIdentity,
+): ManagedEcommerceOrderQueueValidation {
+  const rowCount = packet.sourceReview.totalRows
+  const readyRows = packet.sourceReview.readyRows
+  const blockedRows = packet.sourceReview.blockedRows
+  const rowsReconcile = readyRows + blockedRows === rowCount
+  const controlsMatch = sameManagedStringArray(packet.requiredControls, ECOMMERCE_ORDER_QUEUE_REQUIRED_CONTROLS)
+  const forbiddenMatch = sameManagedStringArray(packet.forbiddenUntilReady, ECOMMERCE_ORDER_QUEUE_FORBIDDEN_UNTIL_APPLIED)
+  const sourceReady = packet.readiness.status === 'ready_for_support'
+    && blockedRows === 0
+    && rowCount > 0
+    && packet.sourceReview.selectedSkus.length > 0
+    && packet.sourceReview.catalogSource !== 'unavailable'
+  const ready = rowsReconcile && controlsMatch && forbiddenMatch && sourceReady
+  return {
+    contract: 'supermega.ecommerce.order_queue_readiness_validation.v1',
+    status: ready ? 'ready_for_owner_review' : 'blocked',
+    workspace_id: expectedIdentity.workspaceId,
+    product: 'ecommerce',
+    target_surface: 'commerce',
+    required_capability: 'commerce.write',
+    packet_schema: packet.schema,
+    row_count: rowCount,
+    ready_rows: readyRows,
+    blocked_rows: blockedRows,
+    required_controls: [...ECOMMERCE_ORDER_QUEUE_REQUIRED_CONTROLS],
+    forbidden_until_applied: [...ECOMMERCE_ORDER_QUEUE_FORBIDDEN_UNTIL_APPLIED],
+    human_approval_required: true,
+    external_writes_performed: false,
+    next_step: ready
+      ? 'Owner reviews this zero-write receipt, then support may prepare one managed Shop queue import approval.'
+      : 'Repair packet rows, controls, catalog source, or evidence before managed queue approval.',
+  }
+}
+
+export function assertManagedEcommerceOrderQueueValidation(
+  response: unknown,
+  packet: EcommerceOrderQueueReadinessPacket,
+  expectedIdentity: ManagedIdentity,
+): ManagedEcommerceOrderQueueValidation {
+  if (!isRecord(response) || !isRecord(response.validation)) {
+    throw new ManagedTrialError('The managed workspace returned an invalid Ecommerce order queue validation.', {
+      code: 'managed_ecommerce_order_queue_validation_invalid',
+    })
+  }
+  if (response.identity_authority !== 'trusted_managed_identity') {
+    throw new ManagedTrialError('The managed Ecommerce queue check was not bound to trusted workspace identity.', {
+      code: 'managed_ecommerce_order_queue_identity_untrusted',
+    })
+  }
+  const validation = response.validation as Record<string, unknown>
+  const expected = buildManagedEcommerceOrderQueueValidation(packet, expectedIdentity)
+  if (validation.contract !== expected.contract
+    || validation.status !== expected.status
+    || validation.workspace_id !== expected.workspace_id
+    || validation.product !== expected.product
+    || validation.target_surface !== expected.target_surface
+    || validation.required_capability !== expected.required_capability
+    || validation.packet_schema !== expected.packet_schema
+    || validation.row_count !== expected.row_count
+    || validation.ready_rows !== expected.ready_rows
+    || validation.blocked_rows !== expected.blocked_rows
+    || JSON.stringify(validation.required_controls) !== JSON.stringify(expected.required_controls)
+    || JSON.stringify(validation.forbidden_until_applied) !== JSON.stringify(expected.forbidden_until_applied)
+    || validation.human_approval_required !== true
+    || validation.external_writes_performed !== false
+    || validation.next_step !== expected.next_step) {
+    throw new ManagedTrialError('The managed Ecommerce order queue validation does not match the packet.', {
+      code: 'managed_ecommerce_order_queue_validation_invalid',
+    })
+  }
+  return validation as unknown as ManagedEcommerceOrderQueueValidation
+}
+
+export function assertManagedEcommerceOrderQueueImportPlan(
+  response: unknown,
+  packet: EcommerceOrderQueueReadinessPacket,
+  approvalPacket: Record<string, unknown>,
+  expectedIdentity: ManagedIdentity,
+): ManagedEcommerceOrderQueueImportPlan {
+  if (!isRecord(response) || !isRecord(response.plan)) {
+    throw new ManagedTrialError('The managed workspace returned an invalid Ecommerce import plan.', {
+      code: 'managed_ecommerce_order_queue_import_plan_invalid',
+    })
+  }
+  if (response.identity_authority !== 'trusted_managed_identity') {
+    throw new ManagedTrialError('The managed Ecommerce import plan was not bound to trusted workspace identity.', {
+      code: 'managed_ecommerce_order_queue_identity_untrusted',
+    })
+  }
+  const plan = response.plan as Record<string, unknown>
+  const validation = buildManagedEcommerceOrderQueueValidation(packet, expectedIdentity)
+  const selectedSkus = Array.isArray(approvalPacket.selectedSkus) ? approvalPacket.selectedSkus : []
+  const ready = validation.status === 'ready_for_owner_review' && validation.blocked_rows === 0
+  if (plan.contract !== 'supermega.ecommerce.shop_queue_import_plan.v1'
+    || plan.status !== (ready ? 'ready_for_managed_apply' : 'blocked')
+    || plan.workspace_id !== expectedIdentity.workspaceId
+    || plan.product !== 'ecommerce'
+    || plan.target_surface !== 'commerce'
+    || plan.target_adapter !== 'shop_order_queue'
+    || plan.required_capability !== 'commerce.write'
+    || typeof plan.idempotency_key !== 'string'
+    || !plan.idempotency_key.startsWith('ecommerce-shop-queue:')
+    || typeof plan.plan_digest !== 'string'
+    || !plan.plan_digest.startsWith('sha256:')
+    || plan.store_name !== packet.storeName
+    || plan.row_count !== validation.row_count
+    || plan.ready_rows !== validation.ready_rows
+    || plan.blocked_rows !== validation.blocked_rows
+    || JSON.stringify(plan.selected_skus) !== JSON.stringify(selectedSkus)
+    || JSON.stringify(plan.required_controls) !== JSON.stringify([...ECOMMERCE_ORDER_QUEUE_REQUIRED_CONTROLS])
+    || plan.required_approval_contract !== 'supermega.ecommerce.order_queue_owner_approval.v1'
+    || plan.external_writes_performed !== false
+    || JSON.stringify(plan.forbidden_until_applied) !== JSON.stringify([...ECOMMERCE_ORDER_QUEUE_FORBIDDEN_UNTIL_APPLIED])
+    || typeof plan.apply_boundary !== 'string'
+    || !plan.apply_boundary.includes('Apply requires a decided human approval record')
+    || typeof plan.next_step !== 'string') {
+    throw new ManagedTrialError('The managed Ecommerce import plan does not match the approved queue packet.', {
+      code: 'managed_ecommerce_order_queue_import_plan_invalid',
+    })
+  }
+  return plan as unknown as ManagedEcommerceOrderQueueImportPlan
+}
+
+export function assertManagedEcommerceOrderQueueApplyPreflight(
+  response: unknown,
+  plan: ManagedEcommerceOrderQueueImportPlan,
+  approval: { approval_id: string; decided_by: string; decided_at: string },
+  expectedIdentity: ManagedIdentity,
+): ManagedEcommerceOrderQueueApplyPreflight {
+  if (!isRecord(response) || !isRecord(response.preflight)) {
+    throw new ManagedTrialError('The managed workspace returned an invalid Ecommerce apply preflight.', {
+      code: 'managed_ecommerce_order_queue_apply_preflight_invalid',
+    })
+  }
+  if (response.identity_authority !== 'trusted_managed_identity') {
+    throw new ManagedTrialError('The managed Ecommerce apply preflight was not bound to trusted workspace identity.', {
+      code: 'managed_ecommerce_order_queue_identity_untrusted',
+    })
+  }
+  const preflight = response.preflight as Record<string, unknown>
+  if (preflight.contract !== 'supermega.ecommerce.shop_queue_apply_preflight.v1'
+    || preflight.status !== 'ready_for_idempotent_apply'
+    || preflight.workspace_id !== expectedIdentity.workspaceId
+    || preflight.approval_id !== approval.approval_id
+    || preflight.approved_by !== approval.decided_by
+    || preflight.approved_at !== approval.decided_at
+    || preflight.plan_digest !== plan.plan_digest
+    || preflight.idempotency_key !== plan.idempotency_key
+    || preflight.required_capability !== 'commerce.write'
+    || preflight.target_adapter !== 'shop_order_queue'
+    || preflight.external_writes_performed !== false
+    || typeof preflight.apply_boundary !== 'string'
+    || !preflight.apply_boundary.includes('Preflight only')
+    || typeof preflight.next_step !== 'string') {
+    throw new ManagedTrialError('The managed Ecommerce apply preflight does not match the approved import plan.', {
+      code: 'managed_ecommerce_order_queue_apply_preflight_invalid',
+    })
+  }
+  return preflight as unknown as ManagedEcommerceOrderQueueApplyPreflight
 }
 
 async function sha256Text(value: string) {
@@ -1177,6 +1426,66 @@ export async function validateManagedClientImport(
     expectedIdentity,
     expectedPackageDigest,
   )
+}
+
+export async function validateManagedEcommerceOrderQueue(
+  packet: EcommerceOrderQueueReadinessPacket,
+  expectedIdentity: ManagedIdentity,
+) {
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/ecommerce/order-queue/validate',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        workspace_id: expectedIdentity.workspaceId,
+        packet,
+      }),
+    },
+    true,
+    expectedIdentity,
+  )
+  return assertManagedEcommerceOrderQueueValidation(response, packet, expectedIdentity)
+}
+
+export async function planManagedEcommerceOrderQueueImport(request: {
+  approvalPacket: Record<string, unknown>
+  identity: ManagedIdentity
+  packet: EcommerceOrderQueueReadinessPacket
+}) {
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/ecommerce/order-queue/import-plan',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        workspace_id: request.identity.workspaceId,
+        packet: request.packet,
+        approval_packet: request.approvalPacket,
+      }),
+    },
+    true,
+    request.identity,
+  )
+  return assertManagedEcommerceOrderQueueImportPlan(response, request.packet, request.approvalPacket, request.identity)
+}
+
+export async function preflightManagedEcommerceOrderQueueApply(request: {
+  approval: { approval_id: string; decided_by: string; decided_at: string }
+  identity: ManagedIdentity
+  plan: ManagedEcommerceOrderQueueImportPlan
+}) {
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/ecommerce/order-queue/apply-preflight',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        approval_id: request.approval.approval_id,
+        plan: request.plan,
+      }),
+    },
+    true,
+    request.identity,
+  )
+  return assertManagedEcommerceOrderQueueApplyPreflight(response, request.plan, request.approval, request.identity)
 }
 
 export async function applyManagedClientImport(request: {

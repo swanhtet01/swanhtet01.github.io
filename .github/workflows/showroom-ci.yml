@@ -106,4 +106,4 @@ jobs:
       - name: Build and verify canonical app
         env:
           SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
-        run: npm run app:build
+        run: npm run app:build:checked

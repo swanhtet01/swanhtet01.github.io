@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
@@ -36,6 +36,10 @@ import {
   buildEcommerceManagedStoreActivationPacket,
   type EcommerceManagedStoreActivationReadiness,
 } from './ecommerce-activation-packet'
+import {
+  buildEcommerceOrderImportReviewPacket,
+  type EcommerceOrderImportReview,
+} from './ecommerce-order-review-packet'
 import {
   acceptManagedStorefrontCommand,
   prepareManagedStorefrontSave,
@@ -88,7 +92,6 @@ type ManagedStorefrontView = {
   }
   availableSku: string
 }
-
 const DEFAULT_STORE_NAME = 'Mingalar Market'
 const DEFAULT_STORE_SUMMARY = 'Everyday essentials for pickup or delivery, with clear local pricing.'
 
@@ -117,6 +120,43 @@ function storefrontDisplayName(item: StorefrontPreviewItem) {
 
 function safeEcommerceFilename(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'store'
+}
+
+function csvCell(value: string | number) {
+  const text = String(value)
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+}
+
+function parseOrderImportCsv(source: string) {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ''
+  let quoted = false
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index]
+    if (quoted) {
+      if (character === '"' && source[index + 1] === '"') {
+        field += '"'
+        index += 1
+      } else if (character === '"') quoted = false
+      else field += character
+      continue
+    }
+    if (character === '"') quoted = true
+    else if (character === ',') {
+      row.push(field.trim())
+      field = ''
+    } else if (character === '\n') {
+      row.push(field.trim())
+      rows.push(row)
+      row = []
+      field = ''
+    } else if (character !== '\r') field += character
+  }
+  if (quoted) throw new Error('Order CSV has an unclosed quoted cell.')
+  row.push(field.trim())
+  if (row.some(Boolean)) rows.push(row)
+  return rows
 }
 
 function deliveryAreaFromCustomerReference(value: string) {
@@ -237,6 +277,10 @@ export function EcommerceProduct() {
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
   const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
+  const [orderImportText, setOrderImportText] = useState('')
+  const [orderImportReview, setOrderImportReview] = useState<EcommerceOrderImportReview | null>(null)
+  const [orderImportNotice, setOrderImportNotice] = useState('')
+  const [orderImportSourceName, setOrderImportSourceName] = useState('')
   const [customerFollowUpDraft, setCustomerFollowUpDraft] = useState('')
   const [deliveryReviewDraft, setDeliveryReviewDraft] = useState('')
   const [deliveryAreaTemplateDraft, setDeliveryAreaTemplateDraft] = useState('')
@@ -480,6 +524,199 @@ export function EcommerceProduct() {
         ? current.filter((candidate) => candidate !== sku)
         : current.length < 8 ? [...current, sku] : current
     ))
+  }
+
+  function recommendedSellableSkus() {
+    return [...catalog.items]
+      .filter((item) => item.onHand > 0)
+      .sort((left, right) => right.onHand - left.onHand || right.price - left.price || left.sku.localeCompare(right.sku))
+      .slice(0, 4)
+      .map((item) => item.sku)
+  }
+
+  function applyProductAutopilot() {
+    const nextSkus = recommendedSellableSkus()
+    if (!nextSkus.length) {
+      setDraftNotice('Product autopilot needs at least one in-stock Shop item before it can prepare the storefront.')
+      return
+    }
+    setSelectedSkus(nextSkus)
+    setMerchandising(null)
+    setBuyingCart([])
+    if (missingSavedSkus.length) setMissingSelectionReviewed(true)
+    setDraftNotice(`Product autopilot selected ${nextSkus.length} in-stock products. Save to confirm the storefront; no catalog, order, payment, delivery, stock, or Shop write ran.`)
+  }
+
+  function downloadOrderImportTemplate() {
+    const csv = buildSampleOrderImportCsv()
+    const url = URL.createObjectURL(new Blob([`${csv}\r\n`], { type: 'text/csv' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `supermega-ecommerce-order-import-${safeEcommerceFilename(storeName)}.csv`
+    link.hidden = true
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'ecommerce',
+      route: location.pathname + location.search,
+      detail: 'Download Ecommerce order import template',
+    })
+    const notice = 'Order import template downloaded. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.'
+    setOrderImportNotice(notice)
+    setDraftNotice(notice)
+  }
+
+  function buildSampleOrderImportCsv() {
+    const suggestedSku = selectedSkus.find((sku) => catalog.items.some((item) => item.sku === sku && item.onHand > 0))
+      ?? catalog.items.find((item) => item.onHand > 0)?.sku
+      ?? 'SKU-001'
+    const rows = [
+      ['customer_reference', 'channel', 'sku', 'quantity', 'fulfilment', 'payment', 'source_message'],
+      ['Daw Mya / 09 xxx xxx xxx / Bahan', 'Viber', suggestedSku, 1, 'delivery', 'manual_review', 'Paste original customer message here'],
+      ['Walk-in customer', 'Shop form', suggestedSku, 1, 'pickup', 'cash_on_pickup', 'Owner-entered sample row'],
+    ]
+    return rows.map((row) => row.map(csvCell).join(',')).join('\r\n')
+  }
+
+  function loadSampleOrderImportBatch() {
+    const csv = buildSampleOrderImportCsv()
+    const review = buildOrderImportReview(csv)
+    setOrderImportText(csv)
+    setOrderImportReview(review)
+    setOrderImportSourceName('sample-order-batch.csv')
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'ecommerce',
+      route: location.pathname + location.search,
+      detail: 'Load sample Ecommerce order batch',
+    })
+    const notice = 'Sample Ecommerce order batch loaded and reviewed locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.'
+    setOrderImportNotice(notice)
+    setDraftNotice(notice)
+  }
+
+  function buildOrderImportReview(csvText: string): EcommerceOrderImportReview {
+    const parsed = parseOrderImportCsv(csvText)
+    if (parsed.length < 2) throw new Error('Paste or upload the order CSV header and at least one order row.')
+    if (parsed.length > 52) throw new Error('Review at most 50 order rows at a time.')
+    const [header, ...rows] = parsed
+    const normalizedHeaders = header.map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''))
+    const required = ['customer_reference', 'channel', 'sku', 'quantity', 'fulfilment', 'payment', 'source_message']
+    const missing = required.filter((field) => !normalizedHeaders.includes(field))
+    if (missing.length) throw new Error(`Missing columns: ${missing.join(', ')}.`)
+    const indexes = Object.fromEntries(required.map((field) => [field, normalizedHeaders.indexOf(field)]))
+    const allowedSkus = new Set(catalog.items.map((item) => item.sku))
+    const selected = new Set(selectedSkus)
+    let readyRows = 0
+    let blockedRows = 0
+    for (const row of rows) {
+      const sku = row[indexes.sku]?.trim() ?? ''
+      const quantity = Number(row[indexes.quantity])
+      const fulfilment = (row[indexes.fulfilment] ?? '').toLowerCase()
+      const payment = (row[indexes.payment] ?? '').toLowerCase()
+      const customer = row[indexes.customer_reference]?.trim() ?? ''
+      const sourceMessage = row[indexes.source_message]?.trim() ?? ''
+      const ready = Boolean(customer && sourceMessage && allowedSkus.has(sku) && selected.has(sku) && Number.isInteger(quantity) && quantity > 0 && quantity <= 50 && ['pickup', 'delivery'].includes(fulfilment) && ['manual_review', 'cash_on_pickup', 'cash_on_delivery'].includes(payment))
+      if (ready) readyRows += 1
+      else blockedRows += 1
+    }
+    return {
+      status: blockedRows ? 'blocked' : 'ready',
+      totalRows: rows.length,
+      readyRows,
+      blockedRows,
+      summary: blockedRows
+        ? `${blockedRows} row${blockedRows === 1 ? '' : 's'} need SKU, quantity, fulfilment, payment, customer, or source-message repair.`
+        : `${readyRows} order row${readyRows === 1 ? '' : 's'} ready for owner review.`,
+    }
+  }
+
+  function reviewOrderImportBatch() {
+    try {
+      setOrderImportReview(buildOrderImportReview(orderImportText))
+      setOrderImportNotice('Order import batch reviewed locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.')
+    } catch (error) {
+      setOrderImportReview({
+        status: 'blocked',
+        totalRows: 0,
+        readyRows: 0,
+        blockedRows: 0,
+        summary: error instanceof Error ? error.message : 'Order CSV could not be reviewed locally.',
+      })
+      setOrderImportNotice('Order import batch rejected locally. No Shop or customer action ran.')
+    }
+  }
+
+  async function uploadOrderImportCsv(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setOrderImportSourceName(file.name)
+    setOrderImportReview(null)
+    if (file.size > 180_000) {
+      setOrderImportNotice('Order CSV is too large. Upload at most 180 KB or split the file into 50-row batches. No Shop or customer action ran.')
+      return
+    }
+    try {
+      const text = await file.text()
+      if (!text.trim()) throw new Error('Uploaded file is empty.')
+      const review = buildOrderImportReview(text)
+      setOrderImportText(text)
+      setOrderImportReview(review)
+      recordBehaviorSignal(window.localStorage, {
+        event: 'agent_job_chosen',
+        product: 'ecommerce',
+        route: location.pathname + location.search,
+        detail: 'Upload Ecommerce order CSV for local review',
+      })
+      setOrderImportNotice(`Uploaded ${file.name} and reviewed it locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.`)
+    } catch (error) {
+      setOrderImportText('')
+      setOrderImportReview({
+        status: 'blocked',
+        totalRows: 0,
+        readyRows: 0,
+        blockedRows: 0,
+        summary: error instanceof Error ? error.message : 'Uploaded order CSV could not be reviewed locally.',
+      })
+      setOrderImportNotice('Uploaded order CSV was rejected locally. No Shop or customer action ran.')
+    }
+  }
+
+  function downloadOrderImportReviewPacket() {
+    if (!orderImportReview) return
+    const packet = buildEcommerceOrderImportReviewPacket({
+      generatedAt: new Date().toISOString(),
+      product: 'ecommerce',
+      storeName,
+      operatingMode: managedIdentity ? 'managed_trial' : 'browser_local_trial',
+      catalog: {
+        source: catalog.source,
+        items: catalog.items.length,
+        selectedSkus: [...selectedSkus],
+      },
+      review: orderImportReview,
+      sourceCsv: orderImportText,
+    })
+    const url = URL.createObjectURL(new Blob([`${JSON.stringify(packet, null, 2)}\n`], { type: 'application/json' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `supermega-ecommerce-order-review-${safeEcommerceFilename(storeName)}.json`
+    link.hidden = true
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'ecommerce',
+      route: location.pathname + location.search,
+      detail: 'Download Ecommerce order import review packet',
+    })
+    setOrderImportNotice('Order import review packet downloaded. No order import, customer message, payment, delivery booking, stock move, refund, Shop write, or managed activation ran.')
   }
 
   function showMobileWorkspace(view: 'setup' | 'preview') {
@@ -880,6 +1117,15 @@ export function EcommerceProduct() {
     : []
   const buyingReady = Boolean(previewResult.preview && digest && (savedDraftIsCurrent || !managedIdentity))
   const activeCommerceState = managedIdentity ? managedInbox?.state ?? null : localCommerceState
+  const autopilotSkus = recommendedSellableSkus()
+  const autopilotMatchesSelection = selectedSkus.length === autopilotSkus.length
+    && autopilotSkus.every((sku) => selectedSkus.includes(sku))
+  const productAutopilotRows = [
+    ['Source', catalog.source === 'sample' ? 'Sample Shop' : catalog.source === 'managed-shop' ? 'Managed Shop' : catalog.source === 'shop-local' ? 'Local Shop' : 'No catalog'],
+    ['Pick', autopilotSkus.length ? `${autopilotSkus.length} in stock` : 'Needs stock'],
+    ['Mode', autopilotMatchesSelection ? 'Applied' : 'Ready'],
+    ['Boundary', 'Local selection'],
+  ] as const
   const pendingManagedRequests = managedInbox
     ? commerceStorefrontRequests(managedInbox.state).filter((request) => request.state === 'pending_shop_review')
     : []
@@ -926,6 +1172,39 @@ export function EcommerceProduct() {
     ['Stock risk', orderOpsStockRiskCount ? `${orderOpsStockRiskCount} blocked` : 'Clear'],
     ['Payment', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} review` : 'Not charged'],
     ['Handoff', pendingManagedRequests.length ? 'Shop owns writes' : buyingReady ? 'Ready for quote' : 'Setup first'],
+  ] as const
+  const orderImportStage = importNeeded
+    ? 'Upload catalog first'
+    : pendingManagedRequests.length
+      ? 'Review imported orders'
+      : buyingReady
+        ? 'Ready for order upload'
+        : 'Save storefront first'
+  const orderImportRows = [
+    ['Input', catalog.source === 'managed-shop' ? 'Managed catalog' : catalog.source === 'shop-local' ? 'Local catalog' : 'Sample/import'],
+    ['Bulk', importNeeded ? 'Need products' : 'CSV or messages'],
+    ['Mapping', selectedSkus.length ? `${selectedSkus.length} SKUs` : 'No SKUs'],
+    ['Queue', pendingManagedRequests.length ? `${pendingManagedRequests.length} review` : 'No pending'],
+    ['Template', 'Download CSV'],
+    ['Review', orderImportReview ? `${orderImportReview.readyRows}/${orderImportReview.totalRows} ready` : 'Paste CSV'],
+    ['Boundary', 'No auto submit'],
+  ] as const
+  const orderRepairRows = orderImportReview
+    ? [
+        ['Ready rows', `${orderImportReview.readyRows}`],
+        ['Blocked rows', `${orderImportReview.blockedRows}`],
+        ['Next fix', orderImportReview.status === 'ready' ? 'Download packet' : 'Repair SKU, quantity, fulfilment, payment, customer, source proof'],
+      ] as const
+    : [
+        ['Step 1', 'Load sample or upload CSV'],
+        ['Step 2', 'AI checks fields locally'],
+        ['Step 3', 'Download reviewed packet'],
+      ] as const
+  const orderIntakeGuideRows = [
+    ['Channels', 'CSV, Viber, LINE, WeChat, email, form'],
+    ['AI prepares', 'Customer, SKU, quantity, fulfilment, payment, source proof'],
+    ['Owner sees', 'Ready rows, blocked rows, stock risk, missing fields'],
+    ['Handoff', 'One reviewed packet for Shop queue approval'],
   ] as const
   const lifecycleRows = [
     ['Capture', pendingManagedRequests.length ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'}` : buyingCart.length ? `${buyingCart.length} cart lines` : 'Ready'],
@@ -1064,6 +1343,34 @@ export function EcommerceProduct() {
     ['Evidence', customerFollowUpRequest ? customerFollowUpRequest.id : 'No request yet'],
     ['Review', customerFollowUpRequest ? 'Owner approves' : 'Locked'],
     ['Boundary', 'No send'],
+  ] as const
+  const fulfillmentHandoffStage = importNeeded
+    ? 'Import catalog before fulfillment'
+    : !savedDraftIsCurrent
+      ? 'Save storefront before fulfillment'
+      : orderImportReview?.status === 'blocked'
+        ? 'Repair imported orders'
+        : orderImportReview?.status === 'ready'
+          ? 'Package orders for Shop'
+          : orderOpsStockRiskCount
+            ? 'Resolve stock before handoff'
+            : orderOpsPaymentRiskCount
+              ? 'Review payment before handoff'
+              : deliveryReviewCount
+                ? 'Review delivery before handoff'
+                : pendingManagedRequests.length
+                  ? 'Open Shop fulfillment queue'
+                  : buyingReady
+                    ? 'Fulfillment handoff ready'
+                    : 'Fulfillment handoff locked'
+  const fulfillmentHandoffRows = [
+    ['Source', orderImportReview ? `${orderImportReview.readyRows}/${orderImportReview.totalRows} import` : pendingManagedRequests.length ? 'Managed queue' : buyingCart.length ? 'Cart quote' : 'No request yet'],
+    ['Stock', orderOpsStockRiskCount ? `${orderOpsStockRiskCount} risk` : catalog.items.length ? 'ATP check' : 'Need catalog'],
+    ['Payment', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} manual` : pendingManagedRequests.length || buyingReady ? 'Not charged' : 'Locked'],
+    ['Fulfilment', deliveryReviewCount ? `${deliveryReviewCount} delivery` : pickupReviewCount ? `${pickupReviewCount} pickup` : savedDraftIsCurrent ? 'Pickup/delivery' : 'Locked'],
+    ['Reply', customerFollowUpRequest ? 'Draftable' : buyingReady ? 'Template ready' : 'Locked'],
+    ['Shop handoff', pendingManagedRequests.length ? 'Owner queue' : orderImportReview?.status === 'ready' ? 'Packet ready' : buyingReady ? 'Quote only' : 'Setup first'],
+    ['Boundary', 'No auto fulfill'],
   ] as const
   const deliveryReviewRequest = pendingManagedRequests.find((request) => request.fulfilment === 'delivery')
     ?? null
@@ -1238,6 +1545,65 @@ export function EcommerceProduct() {
       : !savedDraftIsCurrent
         ? null
       : { label: 'Open storefront', to: '#ecommerce-preview-panel' }
+  const orderAutopilotStage = importNeeded
+    ? 'Connect products'
+    : !savedDraftIsCurrent
+      ? 'Save storefront'
+      : orderImportReview?.status === 'ready'
+        ? 'Package order batch'
+        : orderImportReview?.status === 'blocked'
+          ? 'Repair order batch'
+          : pendingManagedRequests.length
+            ? 'Open Shop review'
+            : buyingReady
+              ? 'Ready for customer orders'
+              : 'Check setup'
+  const orderAutopilotNextAction = importNeeded
+    ? 'Open import setup'
+    : !savedDraftIsCurrent
+      ? 'Save the customer-facing storefront'
+      : orderImportReview?.status === 'ready'
+        ? 'Download the owner-reviewed order packet'
+        : orderImportReview?.status === 'blocked'
+          ? 'Fix CSV rows before handoff'
+          : pendingManagedRequests.length
+            ? 'Open the accountable Shop queue'
+            : buyingReady
+              ? 'Prepare a quote or wait for channel orders'
+              : 'Review catalog, storefront, and checkout'
+  const orderAutopilotRows = [
+    ['Track', pendingManagedRequests.length ? 'Shop queue' : orderImportReview ? 'Order import' : 'Store setup'],
+    ['Stage', orderAutopilotStage],
+    ['Next', orderAutopilotNextAction],
+    ['Learning', 'Records behavior only'],
+    ['Boundary', 'No auto write'],
+  ] as const
+
+  function runOrderAutopilot() {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'ecommerce',
+      route: location.pathname + location.search,
+      detail: `Order autopilot: ${orderAutopilotStage}`,
+    })
+    if (importNeeded) {
+      navigate('/settings/?product=ecommerce')
+      return
+    }
+    if (!savedDraftIsCurrent) {
+      finishStorefrontSetup()
+      return
+    }
+    if (orderImportReview?.status === 'ready') {
+      downloadOrderImportReviewPacket()
+      return
+    }
+    if (pendingManagedRequests.length) {
+      navigate('/shop/?tab=orders&source=ecommerce')
+      return
+    }
+    prepareQuoteRecovery()
+  }
 
   useEffect(() => {
     recordBehaviorSignal(window.localStorage, {
@@ -1302,6 +1668,50 @@ export function EcommerceProduct() {
             }} type="button">Finish setup</button>}
       </section>
 
+      <section aria-label="Order Autopilot" className="ecommerce-order-command-center">
+        <div>
+          <span className="core-eyebrow">Order Autopilot</span>
+          <h2>{orderAutopilotStage}</h2>
+          <p>One button chooses the next safe owner action from catalog, storefront, order import, checkout, and Shop queue state. AI may prepare packets and drafts; it does not send customer messages, charge payments, book delivery, move stock, or write Shop orders here.</p>
+        </div>
+        <div className="ecommerce-order-command-center-rows">
+          {orderAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+        <button className="core-button primary compact" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">Run next step</button>
+      </section>
+
+      <section aria-label="Order import autopilot" className="ecommerce-ops-cockpit ecommerce-order-import-cockpit">
+        <div>
+          <span className="core-eyebrow">Order import autopilot</span>
+          <h2>{orderImportStage}</h2>
+          <p>AI prepares CSV, Viber, LINE, WeChat, email, and form order batches against the saved Shop catalog so owners review one clean Shop queue. No customer message, payment, delivery booking, stock move, refund, or Shop write runs from this importer.</p>
+          <div className="ecommerce-inline-actions">
+            <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
+            <button className="text-link" onClick={downloadOrderImportTemplate} type="button">Download order template</button>
+            <button className="text-link" onClick={loadSampleOrderImportBatch} type="button">Load sample order batch</button>
+          </div>
+          <div aria-label="Order intake guide" className="ecommerce-order-intake-guide">
+            {orderIntakeGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          </div>
+          <div aria-label="AI order repair checklist" className="ecommerce-order-repair-checklist">
+            {orderRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          </div>
+          <label className="ecommerce-order-import-upload">Upload order CSV<input accept=".csv,text/csv,text/plain" onChange={uploadOrderImportCsv} type="file" /></label>
+          <label className="ecommerce-order-import-field">Order batch CSV<textarea onChange={(event) => {
+            setOrderImportText(event.target.value)
+            setOrderImportReview(null)
+            setOrderImportSourceName('')
+          }} placeholder="Paste customer_reference, channel, sku, quantity, fulfilment, payment, source_message rows" value={orderImportText} /></label>
+          <button className="text-link" disabled={!orderImportText.trim()} onClick={reviewOrderImportBatch} type="button">Review order batch</button>
+          {orderImportReview ? <div className={`ecommerce-order-import-review ${orderImportReview.status}`} role="status"><strong>{orderImportReview.status === 'ready' ? 'Ready for owner review' : 'Repair before handoff'}</strong><span>{orderImportReview.summary}</span><small>{orderImportReview.readyRows} ready · {orderImportReview.blockedRows} blocked · no Shop write</small><button className="text-link" onClick={downloadOrderImportReviewPacket} type="button">Download review packet</button></div> : null}
+          {orderImportSourceName ? <p className="ecommerce-order-import-source">Local file: {orderImportSourceName}</p> : null}
+          {orderImportNotice ? <p className="ecommerce-order-import-notice" role="status">{orderImportNotice}</p> : null}
+        </div>
+        <div className="ecommerce-ops-cockpit-rows">
+          {orderImportRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+      </section>
+
       <section aria-label="Ecommerce request inbox" className="ecommerce-ops-cockpit ecommerce-request-inbox-cockpit">
         <div>
           <span className="core-eyebrow">Request inbox</span>
@@ -1349,6 +1759,17 @@ export function EcommerceProduct() {
         </div>
         <div className="ecommerce-ops-cockpit-rows ecommerce-managed-activation-rows">
           {managedStoreActivationRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+      </section>
+
+      <section aria-label="Ecommerce fulfillment handoff" className="ecommerce-ops-cockpit ecommerce-fulfillment-handoff-cockpit">
+        <div>
+          <span className="core-eyebrow">Fulfillment handoff</span>
+          <h2>{fulfillmentHandoffStage}</h2>
+          <p>AI summarizes the exact customer/order handoff across source evidence, ATP, payment review, pickup or delivery, reply draft, and Shop queue ownership. No customer message, payment capture, wallet debit, rider booking, stock move, refund, Shop write, or fulfillment confirmation runs from this panel.</p>
+        </div>
+        <div className="ecommerce-ops-cockpit-rows ecommerce-fulfillment-handoff-rows">
+          {fulfillmentHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
       </section>
 
@@ -1484,6 +1905,16 @@ export function EcommerceProduct() {
           <div className="ecommerce-catalog-head">
             <strong>Shop products</strong>
             <small>Select 1–8. Price and availability stay locked.</small>
+          </div>
+          <div aria-label="Product autopilot" className="ecommerce-product-autopilot">
+            <div>
+              <strong>Product autopilot</strong>
+              <small>AI prepares the simplest sellable set from in-stock Shop items. You only save after review.</small>
+            </div>
+            <div className="ecommerce-product-autopilot-rows">
+              {productAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
+            </div>
+            <button className="core-button secondary" disabled={catalogHydrating || draftBusy || !autopilotSkus.length || autopilotMatchesSelection} onClick={applyProductAutopilot} type="button">Use recommended products</button>
           </div>
           {catalog.error ? <p className="form-notice warning-text">{catalog.error}</p> : null}
           <div className="ecommerce-catalog-list">

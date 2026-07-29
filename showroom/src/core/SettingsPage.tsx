@@ -45,12 +45,30 @@ import {
   type SetupProductId,
 } from './CoreApp'
 import {
+  type ManagedEcommerceOrderQueueApplyPreflight,
+  type ManagedEcommerceOrderQueueImportPlan,
+  type ManagedEcommerceOrderQueueValidation,
+  buildManagedEcommerceOrderQueueValidation,
+  createManagedApproval,
   currentManagedWorkspace,
   loadManagedBootstrap,
   managedTrialAuthConfigured,
+  planManagedEcommerceOrderQueueImport,
+  preflightManagedEcommerceOrderQueueApply,
   signInManagedTrial,
   signOutManagedTrial,
+  validateManagedEcommerceOrderQueue,
 } from './managed-trial'
+import {
+  buildEcommerceManagedStoreActivationPacket,
+  validateEcommerceManagedStoreActivationPacket,
+} from '../products/ecommerce/ecommerce-activation-packet'
+import {
+  buildEcommerceOrderImportReviewPacket,
+  buildEcommerceOrderQueueReadinessPacket,
+  validateEcommerceOrderImportReviewPacket,
+  type EcommerceOrderQueueReadinessPacket,
+} from '../products/ecommerce/ecommerce-order-review-packet'
 import { LEGACY_PRODUCTION_KEYS, PRODUCTION_KEY } from './production-workspace'
 import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } from './team-work'
 import {
@@ -179,6 +197,29 @@ function normalizeSchedulerActivation(body: unknown): SchedulerActivation | null
   }
 }
 
+function safePacketFilename(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'store'
+}
+
+function settingsCommandUuid() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16))
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const value = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`
+}
+
+function settingsFingerprint(value: unknown) {
+  const input = JSON.stringify(value)
+  let hash = 2166136261
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return `fnv1a:${(hash >>> 0).toString(16).padStart(8, '0')}`
+}
+
 function useSchedulerActivation() {
   const [schedulerActivation, setSchedulerActivation] = useState<SchedulerActivation | null>(null)
 
@@ -232,6 +273,24 @@ export function SettingsPage() {
   const [preparedBusyProduct, setPreparedBusyProduct] = useState<SetupProductId | null>(null)
   const [preparedInstallStep, setPreparedInstallStep] = useState('')
   const [preparedNotice, setPreparedNotice] = useState('')
+  const [ecommerceActivationPacketText, setEcommerceActivationPacketText] = useState('')
+  const [ecommerceActivationPacketReview, setEcommerceActivationPacketReview] = useState<Array<readonly [string, string]>>([
+    ['Status', 'Waiting for packet'],
+    ['Boundary', 'Review only'],
+  ])
+  const [ecommerceOrderReviewPacketText, setEcommerceOrderReviewPacketText] = useState('')
+  const [ecommerceOrderReviewPacketReview, setEcommerceOrderReviewPacketReview] = useState<Array<readonly [string, string]>>([
+    ['Status', 'Waiting for packet'],
+    ['Boundary', 'Review only'],
+  ])
+  const [ecommerceOrderQueueReadinessPacket, setEcommerceOrderQueueReadinessPacket] = useState<EcommerceOrderQueueReadinessPacket | null>(null)
+  const [ecommerceOrderQueueServerValidation, setEcommerceOrderQueueServerValidation] = useState<ManagedEcommerceOrderQueueValidation | null>(null)
+  const [ecommerceOrderQueueImportPlan, setEcommerceOrderQueueImportPlan] = useState<ManagedEcommerceOrderQueueImportPlan | null>(null)
+  const [ecommerceOrderQueueApplyPreflight, setEcommerceOrderQueueApplyPreflight] = useState<ManagedEcommerceOrderQueueApplyPreflight | null>(null)
+  const [ecommerceOrderQueueServerBusy, setEcommerceOrderQueueServerBusy] = useState(false)
+  const [ecommerceOrderQueueApprovalBusy, setEcommerceOrderQueueApprovalBusy] = useState(false)
+  const [ecommerceOrderQueueImportPlanBusy, setEcommerceOrderQueueImportPlanBusy] = useState(false)
+  const [ecommerceOrderQueueApplyPreflightBusy, setEcommerceOrderQueueApplyPreflightBusy] = useState(false)
   const completion = pilotProgress(setup)
   const isPilotReady = pilotReady(setup)
   const requestedProduct = setupProductFromQuery(setupSearchParams.get('product'))
@@ -252,6 +311,49 @@ export function SettingsPage() {
   const displayedReady = settingsStep === 'workflow' ? workflowReady : isPilotReady
   const selectedProduct = productContracts[setup.product]
   const selectedTemplate = templateFor(setup.product, setup.templateId)
+  const launchPackRows: Array<readonly [string, string, string]> = setup.product === 'commerce'
+    ? [
+      ['Bring', 'Product CSV, stock count, payment proof', 'Start from products, on-hand units, prices, and recent payment exceptions.'],
+      ['AI prepares', 'Catalog, reorder, order, accounting packets', 'The workspace maps SKU data, ranks stock risk, drafts Shop work, and keeps receipts reviewable.'],
+      ['First proof', 'One clean sale or stock review', 'Show the owner a reviewed queue before any stock, supplier, refund, or ledger write.'],
+      ['Gate', 'Owner approves writes', 'No sale, payment, supplier message, stock move, or accounting export runs from setup.'],
+    ]
+    : setup.product === 'production'
+      ? [
+        ['Bring', 'Job CSV, material list, quality holds', 'Start from planned work, BOM/material needs, WCM/maintenance issues, and ISO evidence.'],
+        ['AI prepares', 'MES queue, MRP check, ISO handoff', 'The workspace ranks jobs, blockers, material proof, quality release, and cost-readiness.'],
+        ['First proof', 'One shift handoff packet', 'Show production, quality, maintenance, trace, and cost evidence before any plant write.'],
+        ['Gate', 'Owner approves production', 'No equipment command, material issue, quality release, costing, or production write runs from setup.'],
+      ]
+      : setup.product === 'website'
+        ? [
+          ['Bring', 'Facts, offers, proof, photos, links', 'Start from the buyer proof needed to generate a useful website package.'],
+          ['AI prepares', 'Pages, copy, CTAs, SEO, release checklist', 'The workspace creates a reviewable static package and rollout plan without touching DNS.'],
+          ['First proof', 'One reviewed site package', 'Show the owner a package with contact route, claims, proof, and publish blockers.'],
+          ['Gate', 'Owner approves launch', 'No domain, form send, analytics install, CRM write, or publish action runs from setup.'],
+        ]
+        : [
+          ['Bring', 'Catalog rows, order CSV, channel samples', 'Start from products plus Viber, LINE, WeChat, email, form, or CSV order examples.'],
+          ['AI prepares', 'Storefront, quote, order review, Shop handoff', 'The workspace normalizes customer, SKU, quantity, fulfilment, payment, and source proof.'],
+          ['First proof', 'One Shop-ready order packet', 'Show ready/blocked order rows and the owner handoff before customer contact or fulfilment.'],
+          ['Gate', 'Owner approves fulfilment', 'No customer message, payment capture, delivery booking, stock move, refund, or Shop write runs from setup.'],
+        ]
+  const launchPackManifest = {
+    contract: 'supermega.launch_pack_manifest.v1',
+    version: 1,
+    createdAt: new Date().toISOString(),
+    product: selectedProduct.name,
+    productSlug: selectedProduct.slug,
+    templateId: selectedTemplate.id,
+    templateName: selectedTemplate.name,
+    workspace: setup.workspace || 'Workspace not named',
+    owner: setup.owner || 'Owner not assigned',
+    rows: launchPackRows.map(([label, value, detail]) => ({ label, value, detail })),
+    allowedAiUses: ['map_starting_data', 'rank_first_workflow', 'draft_review_packet', 'summarize_missing_proof'],
+    ownerGate: launchPackRows.find(([label]) => label === 'Gate')?.[1] ?? 'Owner approval required',
+    forbiddenActions: ['customer_message_send', 'payment_capture', 'wallet_debit', 'delivery_booking', 'stock_move', 'supplier_message', 'quality_release', 'production_write', 'domain_publish', 'crm_write', 'accounting_post', 'model_training_without_owner_approval'],
+    activationRequired: true,
+  }
   const evidenceDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date())
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
   const demoBlueprintFilename = `supermega-client-demo-${setup.workspace.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || evidenceDate}.json`
@@ -285,6 +387,9 @@ export function SettingsPage() {
   const managedApprovalRequests = approvals.map(toManagedApprovalRequest).filter((request): request is NonNullable<typeof request> => Boolean(request))
   const localProductRecords = collectLocalProductRecords(window.localStorage)
   const localRecordCount = Object.keys(localProductRecords).length
+  const localProductRecordKeys = Object.keys(localProductRecords)
+  const websiteLocalRecordCount = localProductRecordKeys.filter((key) => key === WEBSITE_STORAGE_KEY || key === LEGACY_WEBSITE_STORAGE_KEY || key.startsWith('supermega.website.workspace.recovery.v1.')).length
+  const ecommerceLocalRecordCount = localProductRecordKeys.filter((key) => key === WEBSITE_ECOMMERCE_HANDOFF_KEY || key.startsWith(STOREFRONT_DRAFT_RESET_PREFIX) || key.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)).length
   const behaviorTrail = readBehaviorTrail(window.localStorage)
   const behaviorSignalCount = behaviorTrail.length
   const agentBehaviorSignals = behaviorTrail.filter((entry) => entry.event === 'agent_job_seen' || entry.event === 'agent_job_chosen')
@@ -344,6 +449,54 @@ export function SettingsPage() {
     ['Controls', runtime.writesReady && evidencePlanReady ? 'Ready' : 'Locked', runtime.writesReady && evidencePlanReady ? 'Managed writes and evidence gates are ready.' : 'Managed activation gates must pass before AI can learn from customer data.'],
     ['Next handoff', localRecordCount && agentBehaviorSignals.length && (managedApprovalRequests.length || approvals.length) ? 'Export context' : 'Collect proof', 'Export stays browser-local until the owner requests managed activation.'],
   ] as const
+  const aiProductSourceRows = [
+    ['Shop', commerce.items.length || commerce.orders.length ? `${commerce.items.length} SKU / ${commerce.orders.length} orders` : 'Need Shop use', 'Premium can learn stock, order, payment, purchase, and counter patterns after managed import.'],
+    ['Plant', production.jobs.length || production.events.length ? `${production.jobs.length} jobs / ${production.events.length} events` : 'Need Plant use', 'Premium can learn MES, quality, WCM, trace, and handoff patterns after managed import.'],
+    ['Website', websiteLocalRecordCount ? `${websiteLocalRecordCount} local records` : 'Need website save', 'Premium can learn content, lead capture, approval, package, and rollout readiness after managed import.'],
+    ['Ecommerce', ecommerceLocalRecordCount ? `${ecommerceLocalRecordCount} handoff records` : 'Need store handoff', 'Premium can learn catalog, storefront, order review, and Shop queue handoff after managed import.'],
+    ['Behavior', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} agent signals` : 'Need usage', 'Premium ranks next actions only from exported local choices and approved decisions.'],
+  ] as const
+  const aiProductSourceMap = {
+    contract: 'supermega.ai_product_source_map.v1',
+    version: 1,
+    createdAt: new Date().toISOString(),
+    evidenceVersion: 23,
+    products: [
+      {
+        product: 'Shop',
+        source: 'commerce_workspace',
+        prepared: commerce.items.length > 0 || commerce.orders.length > 0,
+        records: { skus: commerce.items.length, orders: commerce.orders.length, purchaseOrders: commerce.purchaseOrders?.length ?? 0 },
+        allowedLearning: ['stock_patterns', 'order_queue_priority', 'payment_exception_summary', 'purchase_reorder_recommendations'],
+      },
+      {
+        product: 'Plant',
+        source: 'production_workspace',
+        prepared: production.jobs.length > 0 || production.events.length > 0,
+        records: { jobs: production.jobs.length, machines: production.machines.length, issues: production.issues.length, events: production.events.length },
+        allowedLearning: ['mes_next_action_rank', 'quality_hold_summary', 'wcm_exception_triage', 'material_trace_handoff'],
+      },
+      {
+        product: 'Website',
+        source: 'website_local_records',
+        prepared: websiteLocalRecordCount > 0,
+        records: { localRecords: websiteLocalRecordCount },
+        allowedLearning: ['content_gap_summary', 'lead_capture_readiness', 'release_package_review', 'rollout_blocker_summary'],
+      },
+      {
+        product: 'Ecommerce',
+        source: 'ecommerce_handoff_records',
+        prepared: ecommerceLocalRecordCount > 0,
+        records: { localRecords: ecommerceLocalRecordCount },
+        allowedLearning: ['storefront_readiness', 'catalog_match_summary', 'order_queue_review', 'shop_handoff_rank'],
+      },
+    ],
+    behaviorSignals: agentBehaviorSignals.length,
+    decisionPackets: managedApprovalRequests.length || approvals.length,
+    allowedUses: ['summarize_product_sources', 'rank_product_next_actions', 'prepare_import_mapping', 'draft_operator_recommendations'],
+    forbiddenActions: ['customer_message_send', 'payment_capture', 'stock_move', 'production_write', 'domain_publish', 'crm_write', 'model_training_without_owner_approval'],
+    activationRequired: true,
+  }
   const contextHandoffReady = localRecordCount > 0 && agentBehaviorSignals.length > 0 && (managedApprovalRequests.length > 0 || approvals.length > 0)
   const contextHandoffManifest = {
     contract: 'supermega.ai_context_handoff.v1',
@@ -362,6 +515,7 @@ export function SettingsPage() {
       approvalPackets: managedApprovalRequests.length || approvals.length,
       accountableActions: actions.length,
     },
+    productSourceMap: aiProductSourceMap,
     allowedUses: ['rank_next_actions', 'draft_internal_recommendations', 'prepare_import_mapping', 'summarize_workspace_evidence'],
     forbiddenActions: ['customer_message_send', 'payment_capture', 'domain_deploy', 'production_write', 'training_without_owner_approval'],
     activationRequired: !runtime.writesReady || !evidencePlanReady,
@@ -373,6 +527,34 @@ export function SettingsPage() {
     ['Forbidden', 'No send/write/train', 'Customer messages, payments, publishing, production writes, and model training stay blocked.'],
     ['Activation', contextHandoffManifest.activationRequired ? 'Required' : 'Ready', contextHandoffManifest.activationRequired ? 'Managed controls must pass before premium learns from customer data.' : 'Managed evidence gates are ready for import review.'],
     ['Owner action', contextHandoffReady ? 'Export context' : 'Collect proof', contextHandoffManifest.nextAction],
+  ] as const
+  const aiContextReadinessGates = [
+    ['Records', localRecordCount > 0, localRecordCount ? `${localRecordCount} local records prepared.` : 'Use or import one product workspace first.'],
+    ['Behavior', agentBehaviorSignals.length > 0, agentBehaviorSignals.length ? `${agentBehaviorSignals.length} agent queue signals captured.` : 'Open product queues and choose a recommended action.'],
+    ['Decisions', managedApprovalRequests.length + approvals.length > 0, managedApprovalRequests.length || approvals.length ? `${managedApprovalRequests.length || approvals.length} human review packets ready.` : 'Record one approval or decline before premium learns from decisions.'],
+    ['Controls', runtime.writesReady && evidencePlanReady, runtime.writesReady && evidencePlanReady ? 'Managed evidence gates are ready.' : 'Managed Postgres, identity, audit, and write gates remain locked.'],
+    ['Products', aiProductSourceMap.products.some((product) => product.prepared), aiProductSourceMap.products.some((product) => product.prepared) ? 'At least one product has a usable source package.' : 'Create Shop, Plant, Website, or Ecommerce evidence.'],
+    ['Owner setup', Boolean(setup.savedAt), setup.savedAt ? 'Trial plan is saved for handoff.' : 'Save the trial plan before requesting managed activation.'],
+  ] as const
+  const aiContextReadyGateCount = aiContextReadinessGates.filter(([, ready]) => ready).length
+  const aiContextReadinessScore = Math.round((aiContextReadyGateCount / aiContextReadinessGates.length) * 100)
+  const aiContextNextMove = !localRecordCount
+    ? 'Create or import product records'
+    : !agentBehaviorSignals.length
+      ? 'Use agent queues'
+      : !(managedApprovalRequests.length || approvals.length)
+        ? 'Record owner decision'
+        : !setup.savedAt
+          ? 'Save trial plan'
+          : !runtime.writesReady || !evidencePlanReady
+            ? 'Request managed activation'
+            : 'Export context for review'
+  const aiContextReadinessScoreRows = [
+    ['Score', `${aiContextReadinessScore}%`, `${aiContextReadyGateCount}/${aiContextReadinessGates.length} gates ready for premium context review.`],
+    ['Next move', aiContextNextMove, 'Follow this before asking premium AI to learn from customer data.'],
+    ['Records', localRecordCount ? `${localRecordCount} prepared` : 'Need records', aiContextReadinessGates[0][2]],
+    ['Behavior', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} signals` : 'Need usage', aiContextReadinessGates[1][2]],
+    ['Controls', runtime.writesReady && evidencePlanReady ? 'Ready' : 'Locked', aiContextReadinessGates[3][2]],
   ] as const
   const provisioningReady = isPilotReady && localRecordCount > 0 && managedApprovalRequests.length + approvals.length > 0
   const managedWorkspaceProvisioningPacket = {
@@ -456,6 +638,8 @@ export function SettingsPage() {
     localRecords: localRecordCount,
     approvalPackets: managedApprovalRequests.length || approvals.length,
     behaviorSignals: behaviorSignalCount,
+    launchPackManifest,
+    productSourceMap: aiProductSourceMap,
     contextHandoffManifest,
     managedWorkspaceProvisioningPacket,
     importProvisioningPacket,
@@ -491,8 +675,103 @@ export function SettingsPage() {
       ]),
     ['Coverage', `${runtime.coverageScore}%`],
   ]
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 23, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, contextHandoffManifest, contextHandoffRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 23, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
+  const ecommerceOrderQueueReadinessFilename = ecommerceOrderQueueReadinessPacket
+    ? `supermega-ecommerce-order-queue-${safePacketFilename(ecommerceOrderQueueReadinessPacket.storeName)}.json`
+    : 'supermega-ecommerce-order-queue.json'
+  const ecommerceOrderQueueManagedValidation = ecommerceOrderQueueReadinessPacket && managedIdentity
+    ? ecommerceOrderQueueServerValidation ?? buildManagedEcommerceOrderQueueValidation(ecommerceOrderQueueReadinessPacket, managedIdentity)
+    : null
+  const ecommerceOrderQueueManagedRows: Array<readonly [string, string, string]> = ecommerceOrderQueueReadinessPacket
+    ? [
+        ['Workspace', managedIdentity?.workspaceId ?? 'Connect workspace', managedIdentity ? 'Identity selected for zero-write check.' : 'Premium check waits for managed sign-in.'],
+        ['Rows', `${ecommerceOrderQueueReadinessPacket.sourceReview.readyRows}/${ecommerceOrderQueueReadinessPacket.sourceReview.totalRows} ready`, `${ecommerceOrderQueueReadinessPacket.sourceReview.blockedRows} blocked rows.`],
+        ['Managed check', ecommerceOrderQueueServerBusy ? 'Checking' : ecommerceOrderQueueManagedValidation?.status ?? 'Waiting', ecommerceOrderQueueServerValidation ? 'Server validation passed with zero records written.' : ecommerceOrderQueueManagedValidation ? 'Local receipt ready; run managed check before owner approval.' : 'No managed request or write has run.'],
+        ['Boundary', ecommerceOrderQueueManagedValidation?.external_writes_performed === false ? 'Zero write' : 'Locked', 'Order import, customer send, payment, delivery, stock, and Shop writes remain blocked.'],
+      ]
+    : [
+        ['Workspace', managedIdentity?.workspaceId ?? 'Connect workspace', 'Validate an order packet first.'],
+        ['Managed check', 'Waiting', 'No managed request or write has run.'],
+      ]
+  const ecommerceOrderQueueApprovalPacket = ecommerceOrderQueueReadinessPacket && ecommerceOrderQueueServerValidation
+    ? {
+        contract: 'supermega.ecommerce.order_queue_owner_approval.v1',
+        version: 1,
+        createdAt: new Date().toISOString(),
+        product: 'ecommerce',
+        workspaceId: ecommerceOrderQueueServerValidation.workspace_id,
+        storeName: ecommerceOrderQueueReadinessPacket.storeName,
+        queuePacketSchema: ecommerceOrderQueueReadinessPacket.schema,
+        validationContract: ecommerceOrderQueueServerValidation.contract,
+        validationStatus: ecommerceOrderQueueServerValidation.status,
+        targetSurface: ecommerceOrderQueueServerValidation.target_surface,
+        requiredCapability: ecommerceOrderQueueServerValidation.required_capability,
+        rowCount: ecommerceOrderQueueServerValidation.row_count,
+        readyRows: ecommerceOrderQueueServerValidation.ready_rows,
+        blockedRows: ecommerceOrderQueueServerValidation.blocked_rows,
+        selectedSkus: ecommerceOrderQueueReadinessPacket.sourceReview.selectedSkus,
+        sourceEvidence: {
+          sourceReviewGeneratedAt: ecommerceOrderQueueReadinessPacket.sourceReview.generatedAt,
+          sourceCatalog: ecommerceOrderQueueReadinessPacket.sourceReview.catalogSource,
+          sourceMessagesRetained: true,
+        },
+        ownerDecision: 'Approve one managed Shop queue import after reviewing source messages, catalog match, and zero-write receipt.',
+        ownerApprovalRequired: true,
+        forbiddenUntilApproved: ecommerceOrderQueueServerValidation.forbidden_until_applied,
+        externalWritesPerformed: false,
+        nextAction: ecommerceOrderQueueServerValidation.status === 'ready_for_owner_review'
+          ? 'Owner reviews this packet, then support records a named approval before one idempotent Shop queue import.'
+          : 'Repair the order queue packet before requesting owner approval.',
+      }
+    : null
+  const ecommerceOrderQueueApprovalFilename = ecommerceOrderQueueApprovalPacket
+    ? `supermega-ecommerce-order-approval-${safePacketFilename(ecommerceOrderQueueApprovalPacket.storeName)}.json`
+    : 'supermega-ecommerce-order-approval.json'
+  const ecommerceOrderQueueApprovalHref = ecommerceOrderQueueApprovalPacket
+    ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(ecommerceOrderQueueApprovalPacket, null, 2))}`
+    : ''
+  const ecommerceOrderQueueApprovalRows: Array<readonly [string, string, string]> = ecommerceOrderQueueApprovalPacket
+    ? [
+        ['Approval packet', ecommerceOrderQueueApprovalPacket.validationStatus, 'Backend receipt is packaged for named owner review.'],
+        ['Rows', `${ecommerceOrderQueueApprovalPacket.readyRows}/${ecommerceOrderQueueApprovalPacket.rowCount} ready`, `${ecommerceOrderQueueApprovalPacket.blockedRows} blocked rows before approval.`],
+        ['Capability', ecommerceOrderQueueApprovalPacket.requiredCapability, 'Approval may unlock only one managed Shop queue import.'],
+        ['Boundary', ecommerceOrderQueueApprovalPacket.externalWritesPerformed ? 'Unsafe' : 'Zero write', 'The packet itself sends nothing and writes nothing.'],
+      ]
+    : [
+        ['Approval packet', 'Waiting', 'Run managed queue check before preparing owner approval.'],
+        ['Boundary', 'Locked', 'No import or approval record has been created.'],
+      ]
+  const ecommerceOrderQueueImportPlanRows: Array<readonly [string, string, string]> = ecommerceOrderQueueImportPlan
+    ? [
+        ['Import plan', ecommerceOrderQueueImportPlan.status, 'Backend returned an idempotent Shop queue plan.'],
+        ['Rows', `${ecommerceOrderQueueImportPlan.ready_rows}/${ecommerceOrderQueueImportPlan.row_count} ready`, `${ecommerceOrderQueueImportPlan.blocked_rows} blocked rows before apply.`],
+        ['Adapter', ecommerceOrderQueueImportPlan.target_adapter, ecommerceOrderQueueImportPlan.required_capability],
+        ['Idempotency', ecommerceOrderQueueImportPlan.idempotency_key, 'Retry-safe key for the future managed apply command.'],
+        ['Boundary', ecommerceOrderQueueImportPlan.external_writes_performed ? 'Unsafe' : 'Zero write', 'Plan only; no Shop queue import or customer action ran.'],
+      ]
+    : [
+        ['Import plan', 'Waiting', 'Prepare after managed queue check and owner approval packet.'],
+        ['Boundary', 'Locked', 'No Shop queue import command has been created.'],
+      ]
+  const approvedEcommerceQueueApproval = ecommerceOrderQueueImportPlan
+    ? approvals.find((approval) => approval.managed
+      && approval.status === 'approved'
+      && approval.decidedActorKind === 'human'
+      && approval.packet.subject.kind === 'ecommerce_order_queue'
+      && approval.packet.subject.id === ecommerceOrderQueueImportPlan.store_name)
+    : undefined
+  const ecommerceOrderQueueApplyPreflightRows: Array<readonly [string, string, string]> = ecommerceOrderQueueApplyPreflight
+    ? [
+        ['Apply preflight', ecommerceOrderQueueApplyPreflight.status, 'Approved owner decision is bound to this plan.'],
+        ['Approval', ecommerceOrderQueueApplyPreflight.approval_id, `${ecommerceOrderQueueApplyPreflight.approved_by} at ${formatTime(ecommerceOrderQueueApplyPreflight.approved_at)}`],
+        ['Idempotency', ecommerceOrderQueueApplyPreflight.idempotency_key, 'Future apply must use this retry-safe key.'],
+        ['Boundary', ecommerceOrderQueueApplyPreflight.external_writes_performed ? 'Unsafe' : 'Zero write', 'Preflight only; no Shop queue import ran.'],
+      ]
+    : [
+        ['Apply preflight', approvedEcommerceQueueApproval ? 'Ready to check' : 'Waiting', approvedEcommerceQueueApproval ? 'Run preflight before any managed apply command.' : 'Approve the managed owner decision before apply preflight.'],
+        ['Boundary', 'Locked', 'No Shop queue import apply command has been created.'],
+      ]
 
   useEffect(() => {
     if (!requestedProduct || requestedProduct === setup.product) return
@@ -808,6 +1087,326 @@ export function SettingsPage() {
     setNotice('Trial plan saved locally. No external action was connected.')
   }
 
+  function reviewEcommerceActivationPacket() {
+    try {
+      const packet = validateEcommerceManagedStoreActivationPacket(JSON.parse(ecommerceActivationPacketText))
+      setEcommerceActivationPacketReview([
+        ['Status', 'Valid packet'],
+        ['Schema', packet.schema],
+        ['Store', packet.storeName],
+        ['Source', `${packet.source.catalogSource} / ${packet.source.selectedSkus.length} SKUs`],
+        ['Queue', `${packet.orderQueue.pendingShopReviews} Shop review`],
+        ['Boundary', packet.forbiddenActions.includes('managed_activation') ? 'Managed activation blocked' : 'Unsafe'],
+      ])
+      setNotice('Ecommerce activation packet reviewed locally. No import, managed activation, Shop write, payment, delivery, stock, or customer action ran.')
+    } catch (error) {
+      setEcommerceActivationPacketReview([
+        ['Status', 'Rejected'],
+        ['Reason', error instanceof Error ? error.message : 'Invalid packet'],
+        ['Boundary', 'No import'],
+      ])
+      setNotice('Ecommerce activation packet rejected locally. No managed action ran.')
+    }
+  }
+
+  function loadSampleEcommerceActivationPacket() {
+    const packet = buildEcommerceManagedStoreActivationPacket({
+      generatedAt: new Date().toISOString(),
+      product: 'ecommerce',
+      storeName: 'Sample Ecommerce Store',
+      stage: 'Support review sample',
+      operatingMode: 'browser_local_trial',
+      source: {
+        catalogSource: 'sample',
+        catalogItems: 2,
+        selectedSkus: ['DEMO-SKU-01', 'DEMO-SKU-02'],
+        previewDigest: null,
+        managedCatalogDigest: null,
+        savedRevision: null,
+        savedAt: null,
+      },
+      readiness: {
+        Catalog: 'Sample catalog ready',
+        Storefront: 'Sample fingerprint',
+        Checkout: 'Quote review only',
+        Payments: 'Manual review only',
+        Delivery: 'Template review only',
+        'Shop gate': 'No live queue',
+        Activation: 'Free local only',
+      },
+      orderQueue: {
+        pendingShopReviews: 0,
+        stockRisk: 0,
+        expiringQuotes: 0,
+        manualPaymentReview: 0,
+        deliveryReview: 0,
+        pickupReview: 0,
+      },
+    })
+    setEcommerceActivationPacketText(`${JSON.stringify(packet, null, 2)}\n`)
+    setEcommerceActivationPacketReview([
+      ['Status', 'Sample loaded'],
+      ['Store', packet.storeName],
+      ['Boundary', 'Review only'],
+    ])
+    setNotice('Sample Ecommerce activation packet loaded locally. Review it to test the handoff gate.')
+  }
+
+  function clearEcommerceActivationPacketReview() {
+    setEcommerceActivationPacketText('')
+    setEcommerceActivationPacketReview([
+      ['Status', 'Waiting for packet'],
+      ['Boundary', 'Review only'],
+    ])
+    setNotice('Ecommerce activation packet review cleared locally.')
+  }
+
+  function downloadJsonPacket(packet: unknown, filename: string) {
+    const url = URL.createObjectURL(new Blob([`${JSON.stringify(packet, null, 2)}\n`], { type: 'application/json' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.hidden = true
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+
+  function reviewEcommerceOrderReviewPacket() {
+    try {
+      const packet = validateEcommerceOrderImportReviewPacket(JSON.parse(ecommerceOrderReviewPacketText))
+      const queueReadinessPacket = buildEcommerceOrderQueueReadinessPacket({
+        generatedAt: new Date().toISOString(),
+        reviewPacket: packet,
+      })
+      setEcommerceOrderQueueReadinessPacket(queueReadinessPacket)
+      setEcommerceOrderQueueServerValidation(null)
+      setEcommerceOrderQueueImportPlan(null)
+      setEcommerceOrderQueueApplyPreflight(null)
+      setEcommerceOrderReviewPacketReview([
+        ['Status', packet.review.status === 'ready' ? 'Ready packet' : 'Blocked packet'],
+        ['Schema', packet.schema],
+        ['Store', packet.storeName],
+        ['Rows', `${packet.review.readyRows} ready / ${packet.review.blockedRows} blocked`],
+        ['Catalog', `${packet.catalog.source} / ${packet.catalog.selectedSkus.length} SKUs`],
+        ['Queue handoff', queueReadinessPacket.readiness.status === 'ready_for_support' ? 'Ready to package' : 'Repair first'],
+        ['Boundary', packet.forbiddenActions.includes('order_import') && packet.forbiddenActions.includes('managed_activation') ? 'Import and activation blocked' : 'Unsafe'],
+      ])
+      setNotice('Ecommerce order review packet checked locally. No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.')
+    } catch (error) {
+      setEcommerceOrderQueueReadinessPacket(null)
+      setEcommerceOrderQueueServerValidation(null)
+      setEcommerceOrderQueueImportPlan(null)
+      setEcommerceOrderQueueApplyPreflight(null)
+      setEcommerceOrderReviewPacketReview([
+        ['Status', 'Rejected'],
+        ['Reason', error instanceof Error ? error.message : 'Invalid order review packet'],
+        ['Boundary', 'No import'],
+      ])
+      setNotice('Ecommerce order review packet rejected locally. No order or managed action ran.')
+    }
+  }
+
+  function loadSampleEcommerceOrderReviewPacket() {
+    const packet = buildEcommerceOrderImportReviewPacket({
+      generatedAt: new Date().toISOString(),
+      product: 'ecommerce',
+      storeName: 'Sample Ecommerce Store',
+      operatingMode: 'browser_local_trial',
+      catalog: {
+        source: 'sample',
+        items: 2,
+        selectedSkus: ['DEMO-SKU-01', 'DEMO-SKU-02'],
+      },
+      review: {
+        status: 'ready',
+        totalRows: 2,
+        readyRows: 2,
+        blockedRows: 0,
+        summary: '2 rows ready for owner review.',
+      },
+      sourceCsv: 'customer_reference,channel,sku,quantity,fulfilment,payment,source_message\nDaw Mya - Yangon,viber,DEMO-SKU-01,1,delivery,manual_review,Viber screenshot retained\nKo Min - pickup,line,DEMO-SKU-02,2,pickup,cash_on_pickup,LINE order retained\n',
+    })
+    setEcommerceOrderReviewPacketText(`${JSON.stringify(packet, null, 2)}\n`)
+    setEcommerceOrderReviewPacketReview([
+      ['Status', 'Sample loaded'],
+      ['Store', packet.storeName],
+      ['Rows', `${packet.review.readyRows} ready / ${packet.review.blockedRows} blocked`],
+      ['Boundary', 'Review only'],
+    ])
+    setEcommerceOrderQueueReadinessPacket(null)
+    setEcommerceOrderQueueServerValidation(null)
+    setEcommerceOrderQueueImportPlan(null)
+    setEcommerceOrderQueueApplyPreflight(null)
+    setNotice('Sample Ecommerce order review packet loaded locally. Review it to test the order handoff gate.')
+  }
+
+  function clearEcommerceOrderReviewPacketReview() {
+    setEcommerceOrderReviewPacketText('')
+    setEcommerceOrderQueueReadinessPacket(null)
+    setEcommerceOrderQueueServerValidation(null)
+    setEcommerceOrderQueueImportPlan(null)
+    setEcommerceOrderQueueApplyPreflight(null)
+    setEcommerceOrderReviewPacketReview([
+      ['Status', 'Waiting for packet'],
+      ['Boundary', 'Review only'],
+    ])
+    setNotice('Ecommerce order review packet cleared locally.')
+  }
+
+  function downloadEcommerceOrderQueueReadinessPacket() {
+    if (!ecommerceOrderQueueReadinessPacket) return
+    downloadJsonPacket(ecommerceOrderQueueReadinessPacket, ecommerceOrderQueueReadinessFilename)
+    setNotice('Ecommerce order queue readiness packet downloaded. No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.')
+  }
+
+  async function runManagedEcommerceOrderQueueCheck() {
+    if (!managedIdentity || !ecommerceOrderQueueReadinessPacket) {
+      setNotice('Connect a managed workspace and validate an order packet first.')
+      return
+    }
+    setEcommerceOrderQueueServerBusy(true)
+    try {
+      const validation = await validateManagedEcommerceOrderQueue(ecommerceOrderQueueReadinessPacket, managedIdentity)
+      setEcommerceOrderQueueServerValidation(validation)
+      setEcommerceOrderQueueImportPlan(null)
+      setEcommerceOrderQueueApplyPreflight(null)
+      setNotice('Managed Ecommerce order queue check passed with zero records written. Owner approval is still required before any Shop queue import.')
+    } catch (error) {
+      setEcommerceOrderQueueServerValidation(null)
+      setEcommerceOrderQueueImportPlan(null)
+      setEcommerceOrderQueueApplyPreflight(null)
+      setNotice(error instanceof Error ? error.message : 'Managed Ecommerce order queue check failed. No write ran.')
+    } finally {
+      setEcommerceOrderQueueServerBusy(false)
+    }
+  }
+
+  async function requestManagedEcommerceOrderQueueApproval() {
+    if (!managedIdentity || !ecommerceOrderQueueApprovalPacket || !ecommerceOrderQueueServerValidation) {
+      setNotice('Run the managed queue check before requesting owner approval.')
+      return
+    }
+    setEcommerceOrderQueueApprovalBusy(true)
+    try {
+      const createdAt = new Date().toISOString()
+      const packet = {
+        contract: 'decision_packet.v1' as const,
+        subject: { kind: 'ecommerce_order_queue', id: ecommerceOrderQueueApprovalPacket.storeName, version: 1 as const },
+        decision: ecommerceOrderQueueApprovalPacket.ownerDecision,
+        claims: [
+          {
+            id: 'queue-validation-zero-write',
+            claimType: 'fact' as const,
+            statement: `Backend validation ${ecommerceOrderQueueApprovalPacket.validationContract} returned ${ecommerceOrderQueueApprovalPacket.validationStatus} with zero external writes.`,
+            sourceReference: ecommerceOrderQueueApprovalFilename,
+            capturedAt: createdAt,
+            status: 'verified' as const,
+            uncertainty: 'low' as const,
+            visibility: 'private' as const,
+            digest: settingsFingerprint(ecommerceOrderQueueServerValidation),
+          },
+          {
+            id: 'queue-row-counts',
+            claimType: 'fact' as const,
+            statement: `${ecommerceOrderQueueApprovalPacket.readyRows} of ${ecommerceOrderQueueApprovalPacket.rowCount} Ecommerce order rows are ready; ${ecommerceOrderQueueApprovalPacket.blockedRows} remain blocked.`,
+            sourceReference: ecommerceOrderQueueApprovalFilename,
+            capturedAt: createdAt,
+            status: 'verified' as const,
+            uncertainty: 'low' as const,
+            visibility: 'private' as const,
+          },
+          {
+            id: 'queue-write-boundary',
+            claimType: 'analysis' as const,
+            statement: `Approval may unlock only ${ecommerceOrderQueueApprovalPacket.requiredCapability}; ${ecommerceOrderQueueApprovalPacket.forbiddenUntilApproved.join(', ')} remain forbidden until a named owner decision exists.`,
+            sourceReference: ecommerceOrderQueueApprovalFilename,
+            capturedAt: createdAt,
+            status: 'observed' as const,
+            uncertainty: 'low' as const,
+            visibility: 'private' as const,
+          },
+        ],
+        baseline: 'Order queue import is blocked after zero-write validation.',
+        target: 'Named owner approves exactly one managed Shop queue import.',
+        result: `${ecommerceOrderQueueApprovalPacket.readyRows}/${ecommerceOrderQueueApprovalPacket.rowCount} rows ready for owner review.`,
+        acceptance: 'Support records owner approval before any idempotent managed Shop queue import runs.',
+        artifactReference: ecommerceOrderQueueApprovalFilename,
+      }
+      const approval = {
+        id: `APR-${settingsCommandUuid()}`.toUpperCase(),
+        commandId: settingsCommandUuid(),
+        createdAt,
+        title: `Approve Ecommerce queue import for ${ecommerceOrderQueueApprovalPacket.storeName}`,
+        requestedBy: managedIdentity.email,
+        requestedActorKind: 'human' as const,
+        packet,
+        packetFingerprint: settingsFingerprint(packet),
+        status: 'pending' as const,
+      }
+      const request = toManagedApprovalRequest(approval)
+      if (!request) throw new Error('The owner approval request packet is incomplete.')
+      const managedRecord = await createManagedApproval(request)
+      setApprovals((current) => mergeManagedApprovals(current, [managedRecord]))
+      setNotice('Managed owner approval request recorded. No Shop queue import, customer message, payment, delivery, stock move, or activation ran.')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Managed owner approval request failed. No Shop import ran.')
+    } finally {
+      setEcommerceOrderQueueApprovalBusy(false)
+    }
+  }
+
+  async function prepareManagedEcommerceOrderQueueImportPlan() {
+    if (!managedIdentity || !ecommerceOrderQueueReadinessPacket || !ecommerceOrderQueueApprovalPacket) {
+      setNotice('Run the managed queue check and prepare owner approval before building an import plan.')
+      return
+    }
+    setEcommerceOrderQueueImportPlanBusy(true)
+    try {
+      const plan = await planManagedEcommerceOrderQueueImport({
+        identity: managedIdentity,
+        packet: ecommerceOrderQueueReadinessPacket,
+        approvalPacket: ecommerceOrderQueueApprovalPacket,
+      })
+      setEcommerceOrderQueueImportPlan(plan)
+      setEcommerceOrderQueueApplyPreflight(null)
+      setNotice('Managed Shop queue import plan prepared with zero external writes. Apply still requires a decided human approval record and managed write gates.')
+    } catch (error) {
+      setEcommerceOrderQueueImportPlan(null)
+      setEcommerceOrderQueueApplyPreflight(null)
+      setNotice(error instanceof Error ? error.message : 'Managed Shop queue import plan failed. No Shop import ran.')
+    } finally {
+      setEcommerceOrderQueueImportPlanBusy(false)
+    }
+  }
+
+  async function runManagedEcommerceOrderQueueApplyPreflight() {
+    if (!managedIdentity || !ecommerceOrderQueueImportPlan || !approvedEcommerceQueueApproval?.decidedBy || !approvedEcommerceQueueApproval.decidedAt) {
+      setNotice('Approve the managed owner decision and prepare the import plan before apply preflight.')
+      return
+    }
+    setEcommerceOrderQueueApplyPreflightBusy(true)
+    try {
+      const preflight = await preflightManagedEcommerceOrderQueueApply({
+        identity: managedIdentity,
+        plan: ecommerceOrderQueueImportPlan,
+        approval: {
+          approval_id: approvedEcommerceQueueApproval.id,
+          decided_by: approvedEcommerceQueueApproval.decidedBy,
+          decided_at: approvedEcommerceQueueApproval.decidedAt,
+        },
+      })
+      setEcommerceOrderQueueApplyPreflight(preflight)
+      setNotice('Managed Ecommerce apply preflight passed with zero external writes. The future Shop queue apply must use the approved digest and idempotency key.')
+    } catch (error) {
+      setEcommerceOrderQueueApplyPreflight(null)
+      setNotice(error instanceof Error ? error.message : 'Managed Ecommerce apply preflight failed. No Shop import ran.')
+    } finally {
+      setEcommerceOrderQueueApplyPreflightBusy(false)
+    }
+  }
+
   async function resetDemoWorkspace() {
     setResetBusy(true)
     try {
@@ -852,6 +1451,9 @@ export function SettingsPage() {
     try {
       const identity = await signInManagedTrial(managedEmail, managedPassword, managedWorkspace)
       setManagedIdentity(identity)
+      setEcommerceOrderQueueServerValidation(null)
+      setEcommerceOrderQueueImportPlan(null)
+      setEcommerceOrderQueueApplyPreflight(null)
       setManagedPassword('')
       try {
         const bootstrap = await loadManagedBootstrap(identity)
@@ -871,6 +1473,12 @@ export function SettingsPage() {
     setManagedBusy(true)
     await signOutManagedTrial()
     setManagedIdentity(null)
+    setEcommerceOrderQueueServerValidation(null)
+    setEcommerceOrderQueueImportPlan(null)
+    setEcommerceOrderQueueApplyPreflight(null)
+    setEcommerceOrderQueueApprovalBusy(false)
+    setEcommerceOrderQueueImportPlanBusy(false)
+    setEcommerceOrderQueueApplyPreflightBusy(false)
     setApprovals((current) => current.filter((approval) => !approval.managed))
     setManagedNotice('Managed account disconnected.')
     setManagedBusy(false)
@@ -890,6 +1498,10 @@ export function SettingsPage() {
           <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${displayedCompletion}%` }} /></div><small>{settingsStep === 'workflow' ? requestedProduct ? 'Template - owner' : 'Client - business - ready' : 'Record - target - evidence'}</small></div>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'workflow'} hidden={settingsStep !== 'workflow'}>
           {requestedProduct ? <div className="setup-selected-product"><span><small>Selected product</small><strong>{selectedProduct.name}</strong></span><Link className="text-link" to="/settings/">Build full demo kit</Link></div> : null}
+          {requestedProduct ? <section aria-label="Selected launch pack checklist" className="setup-launch-pack">
+            <div><span className="core-eyebrow">Launch pack checklist</span><strong>{selectedProduct.name} setup</strong><small>Bring the starting data. AI prepares the packet. Owner keeps the gate.</small></div>
+            <div className="setup-launch-pack-rows">{launchPackRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+          </section> : null}
           <div className="form-row"><label>Client or workspace name<input maxLength={60} required value={setup.workspace} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" /></label><label>Responsible owner<input maxLength={80} required value={setup.owner} onChange={(event) => updateSetup({ owner: event.target.value })} placeholder="Name or role" /></label></div>
           {requestedProduct === 'commerce' || (!requestedProduct && Boolean(demoSelections.commerce)) ? <div className="form-row"><label>Shop business pack<select onChange={(event) => changeShopIndustryPack(event.target.value as ShopIndustryPackId)} value={shopIndustryPackId}>{shopIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select></label><div className="template-contract"><span>{selectedShopIndustryPack.description}</span><strong>{selectedShopIndustryPack.firstWorkflow}</strong><small>{selectedShopIndustryPack.capabilities.join(' · ')}</small></div></div> : null}
           {requestedProduct === 'production' || (!requestedProduct && Boolean(demoSelections.production)) ? <div className="form-row"><label>Plant industry pack<select onChange={(event) => changePlantIndustryPack(event.target.value as PlantIndustryPackId)} value={plantIndustryPackId}>{plantIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select></label><div className="template-contract"><span>{selectedPlantIndustryPack.description}</span><strong>{selectedPlantIndustryPack.firstWorkflow}</strong><small>{selectedPlantIndustryPack.capabilities.join(' · ')}</small></div></div> : null}
@@ -984,9 +1596,17 @@ export function SettingsPage() {
                 <div><span className="core-eyebrow">AI context quality</span><h3>What premium can safely use</h3><p>Premium learning starts only when source records, behavior, decisions, and managed controls are present in the exported evidence.</p></div>
                 <div className="context-quality-rows">{aiContextQualityRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
               </div>
+              <div aria-label="AI product source map" className="learning-plan-agent context-quality-panel">
+                <div><span className="core-eyebrow">AI product source map</span><h3>What each product can teach</h3><p>Premium receives an explicit map of Shop, Plant, Website, Ecommerce, behavior, and decision sources. It may summarize and rank only after managed activation; no customer send, payment, stock move, production write, domain publish, CRM write, or model training runs from this map.</p></div>
+                <div className="context-quality-rows">{aiProductSourceRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+              </div>
               <div aria-label="AI context handoff manifest" className="learning-plan-agent context-quality-panel">
                 <div><span className="core-eyebrow">AI context handoff</span><h3>What premium receives</h3><p>This manifest tells support and the managed agent what it may use, what it must ignore, and which actions remain forbidden.</p></div>
                 <div className="context-quality-rows">{contextHandoffRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+              </div>
+              <div aria-label="AI context readiness score" className="learning-plan-agent context-quality-panel">
+                <div><span className="core-eyebrow">AI context score</span><h3>{aiContextNextMove}</h3><p>This score explains whether premium can safely review the exported context package. It does not activate learning, train models, send messages, move stock, write production records, publish domains, or call managed APIs.</p></div>
+                <div className="context-quality-rows">{aiContextReadinessScoreRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
               </div>
               <div aria-label="Managed workspace provisioning packet" className="learning-plan-agent context-quality-panel">
                 <div><span className="core-eyebrow">Provisioning packet</span><h3>How this becomes a real workspace</h3><p>Premium activation creates a managed tenant from exported evidence only after roles, data, controls, and write gates are verified.</p></div>
@@ -996,6 +1616,24 @@ export function SettingsPage() {
                 <div><span className="core-eyebrow">Import provisioning</span><h3>What must pass before real imports</h3><p>Backend health owns this checklist. Uploaded files stay local or export-only until identity, schema, validation, approval, adapter, and revision proof are ready.</p></div>
                 <div className="context-quality-rows">{importProvisioningRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
               </div>
+              {setup.product === 'ecommerce' ? <>
+                <div aria-label="Ecommerce order review packet check" className="learning-plan-agent context-quality-panel">
+                  <div><span className="core-eyebrow">Order review packet</span><h3>Check before Shop queue</h3><p>Paste the Ecommerce order review JSON. The browser checks schema, row counts, catalog source, source CSV, and forbidden actions locally; no order import, customer message, payment, delivery, stock, Shop write, or managed activation runs.</p></div>
+                  <label className="packet-review-field">Order review packet JSON<textarea maxLength={24000} onChange={(event) => setEcommerceOrderReviewPacketText(event.target.value)} placeholder="Paste supermega.ecommerce.order_import_review_packet.v1 JSON" rows={5} value={ecommerceOrderReviewPacketText} /></label>
+                  <div className="context-quality-rows">{ecommerceOrderReviewPacketReview.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{label === 'Boundary' ? 'Review only; Shop queue still requires managed proof.' : 'Local order packet check'}</em></span>)}</div>
+                  <div aria-label="Managed order queue check" className="context-quality-rows">{ecommerceOrderQueueManagedRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+                  <div aria-label="Order queue owner approval packet" className="context-quality-rows">{ecommerceOrderQueueApprovalRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+                  <div aria-label="Shop queue import plan" className="context-quality-rows">{ecommerceOrderQueueImportPlanRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+                  <div aria-label="Shop queue apply preflight" className="context-quality-rows">{ecommerceOrderQueueApplyPreflightRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+                  <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceOrderReviewPacket} type="button">Load sample order packet</button><button className="core-button" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={reviewEcommerceOrderReviewPacket} type="button">Check order packet locally</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueReadinessPacket || ecommerceOrderQueueServerBusy} onClick={() => void runManagedEcommerceOrderQueueCheck()} type="button">{ecommerceOrderQueueServerBusy ? 'Checking managed queue...' : 'Run managed queue check'}</button><button className="core-button" disabled={!ecommerceOrderQueueReadinessPacket} onClick={downloadEcommerceOrderQueueReadinessPacket} type="button">Download queue packet</button>{ecommerceOrderQueueApprovalPacket ? <a className="core-button" download={ecommerceOrderQueueApprovalFilename} href={ecommerceOrderQueueApprovalHref}>Download approval packet</a> : <button className="core-button" disabled type="button">Download approval packet</button>}<button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueApprovalPacket || ecommerceOrderQueueApprovalBusy} onClick={() => void requestManagedEcommerceOrderQueueApproval()} type="button">{ecommerceOrderQueueApprovalBusy ? 'Recording approval...' : 'Record owner approval request'}</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueApprovalPacket || ecommerceOrderQueueImportPlanBusy} onClick={() => void prepareManagedEcommerceOrderQueueImportPlan()} type="button">{ecommerceOrderQueueImportPlanBusy ? 'Preparing plan...' : 'Prepare import plan'}</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueImportPlan || !approvedEcommerceQueueApproval || ecommerceOrderQueueApplyPreflightBusy} onClick={() => void runManagedEcommerceOrderQueueApplyPreflight()} type="button">{ecommerceOrderQueueApplyPreflightBusy ? 'Checking apply...' : 'Run apply preflight'}</button><button className="text-link" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={clearEcommerceOrderReviewPacketReview} type="button">Clear order packet</button></div>
+                </div>
+                <div aria-label="Ecommerce activation packet review" className="learning-plan-agent context-quality-panel">
+                  <div><span className="core-eyebrow">Ecommerce activation packet</span><h3>Review before managed setup</h3><p>Paste the downloaded Ecommerce activation JSON. The browser validates schema, source, queue, and forbidden actions locally; no import, managed activation, Shop write, payment, delivery, stock, or customer action runs.</p></div>
+                  <label className="packet-review-field">Activation packet JSON<textarea maxLength={12000} onChange={(event) => setEcommerceActivationPacketText(event.target.value)} placeholder="Paste supermega.ecommerce.managed_store_activation_packet.v1 JSON" rows={5} value={ecommerceActivationPacketText} /></label>
+                  <div className="context-quality-rows">{ecommerceActivationPacketReview.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{label === 'Boundary' ? 'Review only; production setup still requires managed proof.' : 'Local packet check'}</em></span>)}</div>
+                  <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceActivationPacket} type="button">Load sample packet</button><button className="core-button" disabled={!ecommerceActivationPacketText.trim()} onClick={reviewEcommerceActivationPacket} type="button">Review packet locally</button><button className="text-link" disabled={!ecommerceActivationPacketText.trim()} onClick={clearEcommerceActivationPacketReview} type="button">Clear packet</button></div>
+                </div>
+              </> : null}
               <div aria-label="Agent behavior memory" className="learning-plan-agent">
                 <div><span className="core-eyebrow">Behavior memory</span><h3>What owners keep choosing</h3><p>Free mode keeps this local. Premium can use approved queue behavior after managed import.</p></div>
                 <div className="learning-plan-rows">{agentBehaviorRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
