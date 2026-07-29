@@ -80,6 +80,12 @@ export function validateWorkflowAuthority(source) {
   }
 }
 
+export function validateReleaseCandidateAncestry(relations) {
+  if (relations?.mainIsAncestor !== true) fail('release_handoff_candidate_diverged_from_main')
+  if (relations?.liveIsAncestor !== true) fail('release_handoff_candidate_diverged_from_live')
+  return true
+}
+
 function releaseWorkflowAuthority(value) {
   const workflowDigest = String(value?.workflowDigest || '')
   if (value?.workflow !== '.github/workflows/supermega-public-release.yml'
@@ -114,7 +120,7 @@ export function buildReleaseHandoff(input) {
   if (!BRANCH_PATTERN.test(branch) || branch === LEGACY_RELEASE_BRANCH) fail('release_handoff_branch_invalid')
   if (input.candidate?.clean !== true) fail('release_handoff_worktree_dirty')
   if (input.repository !== REPOSITORY || input.remote?.origin !== ORIGIN) fail('release_handoff_repository_invalid')
-  if (input.relations?.mainIsAncestor !== true || input.relations?.liveIsAncestor !== true) fail('release_handoff_ancestry_invalid')
+  validateReleaseCandidateAncestry(input.relations)
   if (input.verification?.passed !== true || input.verification?.verifiedCommit !== candidateCommit) fail('release_handoff_verification_invalid')
   if (JSON.stringify(liveApp) !== JSON.stringify(livePublic)) fail('release_handoff_live_pair_mismatch')
 
@@ -331,6 +337,15 @@ async function prepareReleaseHandoff(output) {
   const workflowAuthority = validateWorkflowAuthority(workflowSource.replace(/\r\n?/g, '\n'))
   const [app, publicRelease] = await Promise.all([boundedJson(APP_RELEASE_URL), boundedJson(PUBLIC_RELEASE_URL)])
 
+  const relations = {
+    mainIsAncestor: isAncestor(remoteMainCommit, candidateCommit),
+    liveIsAncestor: isAncestor(app.commit, candidateCommit),
+    remoteCandidateIsAncestor: remoteCandidateCommit ? isAncestor(remoteCandidateCommit, candidateCommit) : null,
+    candidateAheadOfMain: Number(git('rev-list', '--count', `${remoteMainCommit}..${candidateCommit}`)),
+    candidateAheadOfLive: Number(git('rev-list', '--count', `${app.commit}..${candidateCommit}`)),
+  }
+  validateReleaseCandidateAncestry(relations)
+
   const verificationCommand = appVerifyCommand()
   const verified = run(verificationCommand.file, verificationCommand.args, { inherit: true, allowFailure: true })
   if (verified.status !== 0) fail('release_handoff_app_verify_failed')
@@ -343,13 +358,7 @@ async function prepareReleaseHandoff(output) {
     candidate: { branch, commit: candidateCommit, clean: true },
     remote: { origin, mainCommit: remoteMainCommit, candidateCommit: remoteCandidateCommit },
     live: { app, public: publicRelease },
-    relations: {
-      mainIsAncestor: isAncestor(remoteMainCommit, candidateCommit),
-      liveIsAncestor: isAncestor(app.commit, candidateCommit),
-      remoteCandidateIsAncestor: remoteCandidateCommit ? isAncestor(remoteCandidateCommit, candidateCommit) : null,
-      candidateAheadOfMain: Number(git('rev-list', '--count', `${remoteMainCommit}..${candidateCommit}`)),
-      candidateAheadOfLive: Number(git('rev-list', '--count', `${app.commit}..${candidateCommit}`)),
-    },
+    relations,
     legacyReleaseBranch: {
       commit: legacyCommit,
       isAncestorOfCandidate: legacyCommit ? isAncestor(legacyCommit, candidateCommit) : null,

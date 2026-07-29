@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { buildReleaseHandoff, validateReleaseHandoffPacket, validateWorkflowAuthority, writeExclusiveJson } from './prepare_release_handoff.mjs'
+import { buildReleaseHandoff, validateReleaseCandidateAncestry, validateReleaseHandoffPacket, validateWorkflowAuthority, writeExclusiveJson } from './prepare_release_handoff.mjs'
 
 const candidate = 'a'.repeat(40)
 const main = 'b'.repeat(40)
@@ -71,7 +71,8 @@ test('release handoff is immutable, review-only, and exact-commit bound', () => 
 test('release handoff fails closed on drift, dirty state, weak ancestry, or invented verification', () => {
   assert.throws(() => buildReleaseHandoff(valid({ candidate: { branch: 'main', commit: candidate, clean: true } })), /release_handoff_branch_invalid/)
   assert.throws(() => buildReleaseHandoff(valid({ candidate: { branch: 'agent/test', commit: candidate, clean: false } })), /release_handoff_worktree_dirty/)
-  assert.throws(() => buildReleaseHandoff(valid({ relations: { ...valid().relations, mainIsAncestor: false } })), /release_handoff_ancestry_invalid/)
+  assert.throws(() => buildReleaseHandoff(valid({ relations: { ...valid().relations, mainIsAncestor: false } })), /release_handoff_candidate_diverged_from_main/)
+  assert.throws(() => buildReleaseHandoff(valid({ relations: { ...valid().relations, liveIsAncestor: false } })), /release_handoff_candidate_diverged_from_live/)
   assert.throws(() => buildReleaseHandoff(valid({ verification: { ...valid().verification, verifiedCommit: main } })), /release_handoff_verification_invalid/)
   assert.throws(() => buildReleaseHandoff(valid({ live: { app: identity, public: { ...identity, commit: main } } })), /release_handoff_live_pair_mismatch/)
   assert.throws(() => buildReleaseHandoff(valid({ remote: { ...valid().remote, candidateCommit: legacy }, relations: { ...valid().relations, remoteCandidateIsAncestor: false } })), /release_handoff_candidate_push_not_fast_forward/)
@@ -81,6 +82,12 @@ test('release handoff fails closed on drift, dirty state, weak ancestry, or inve
   assert.throws(() => validateReleaseHandoffPacket(tampered), /release_handoff_packet_invalid/)
   const extra = { ...buildReleaseHandoff(valid()), inventedAuthority: true }
   assert.throws(() => validateReleaseHandoffPacket(extra), /release_handoff_packet_invalid/)
+})
+
+test('release ancestry gate reports the exact divergence before expensive verification', () => {
+  assert.equal(validateReleaseCandidateAncestry(valid().relations), true)
+  assert.throws(() => validateReleaseCandidateAncestry({ mainIsAncestor: false, liveIsAncestor: true }), /release_handoff_candidate_diverged_from_main/)
+  assert.throws(() => validateReleaseCandidateAncestry({ mainIsAncestor: true, liveIsAncestor: false }), /release_handoff_candidate_diverged_from_live/)
 })
 
 test('workflow authority rejects missing production and rollback controls', () => {
