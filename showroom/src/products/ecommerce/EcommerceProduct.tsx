@@ -36,6 +36,10 @@ import {
   type EcommerceManagedStoreActivationReadiness,
 } from './ecommerce-activation-packet'
 import {
+  buildEcommerceOrderImportReviewPacket,
+  type EcommerceOrderImportReview,
+} from './ecommerce-order-review-packet'
+import {
   acceptManagedStorefrontCommand,
   prepareManagedStorefrontSave,
   readManagedStorefront,
@@ -87,27 +91,6 @@ type ManagedStorefrontView = {
   }
   availableSku: string
 }
-type OrderImportReview = {
-  status: 'ready' | 'blocked'
-  totalRows: number
-  readyRows: number
-  blockedRows: number
-  summary: string
-}
-
-const ORDER_IMPORT_REVIEW_PACKET_SCHEMA = 'supermega.ecommerce.order_import_review_packet.v1' as const
-const orderImportForbiddenActions = [
-  'order_import',
-  'customer_message_send',
-  'payment_capture',
-  'wallet_debit',
-  'delivery_booking',
-  'stock_move',
-  'refund_write',
-  'shop_write',
-  'managed_activation',
-] as const
-
 const DEFAULT_STORE_NAME = 'Mingalar Market'
 const DEFAULT_STORE_SUMMARY = 'Everyday essentials for pickup or delivery, with clear local pricing.'
 
@@ -290,7 +273,7 @@ export function EcommerceProduct() {
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
   const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
   const [orderImportText, setOrderImportText] = useState('')
-  const [orderImportReview, setOrderImportReview] = useState<OrderImportReview | null>(null)
+  const [orderImportReview, setOrderImportReview] = useState<EcommerceOrderImportReview | null>(null)
   const [orderImportNotice, setOrderImportNotice] = useState('')
   const [customerFollowUpDraft, setCustomerFollowUpDraft] = useState('')
   const [deliveryReviewDraft, setDeliveryReviewDraft] = useState('')
@@ -612,7 +595,7 @@ export function EcommerceProduct() {
         if (ready) readyRows += 1
         else blockedRows += 1
       }
-      const review: OrderImportReview = {
+      const review: EcommerceOrderImportReview = {
         status: blockedRows ? 'blocked' : 'ready',
         totalRows: rows.length,
         readyRows,
@@ -637,8 +620,7 @@ export function EcommerceProduct() {
 
   function downloadOrderImportReviewPacket() {
     if (!orderImportReview) return
-    const packet = {
-      schema: ORDER_IMPORT_REVIEW_PACKET_SCHEMA,
+    const packet = buildEcommerceOrderImportReviewPacket({
       generatedAt: new Date().toISOString(),
       product: 'ecommerce',
       storeName,
@@ -650,12 +632,7 @@ export function EcommerceProduct() {
       },
       review: orderImportReview,
       sourceCsv: orderImportText,
-      supportHandoff: [
-        'Review this packet against the saved Shop catalog before any managed queue import.',
-        'Enable Shop writes only after Postgres, RLS, auth, audit, and scheduler proof passes.',
-      ],
-      forbiddenActions: [...orderImportForbiddenActions],
-    }
+    })
     const url = URL.createObjectURL(new Blob([`${JSON.stringify(packet, null, 2)}\n`], { type: 'application/json' }))
     const link = document.createElement('a')
     link.href = url

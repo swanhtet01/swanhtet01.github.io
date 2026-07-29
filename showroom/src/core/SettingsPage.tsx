@@ -55,6 +55,10 @@ import {
   buildEcommerceManagedStoreActivationPacket,
   validateEcommerceManagedStoreActivationPacket,
 } from '../products/ecommerce/ecommerce-activation-packet'
+import {
+  buildEcommerceOrderImportReviewPacket,
+  validateEcommerceOrderImportReviewPacket,
+} from '../products/ecommerce/ecommerce-order-review-packet'
 import { LEGACY_PRODUCTION_KEYS, PRODUCTION_KEY } from './production-workspace'
 import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } from './team-work'
 
@@ -159,6 +163,11 @@ export function SettingsPage() {
   const [managedBusy, setManagedBusy] = useState(false)
   const [ecommerceActivationPacketText, setEcommerceActivationPacketText] = useState('')
   const [ecommerceActivationPacketReview, setEcommerceActivationPacketReview] = useState<Array<readonly [string, string]>>([
+    ['Status', 'Waiting for packet'],
+    ['Boundary', 'Review only'],
+  ])
+  const [ecommerceOrderReviewPacketText, setEcommerceOrderReviewPacketText] = useState('')
+  const [ecommerceOrderReviewPacketReview, setEcommerceOrderReviewPacketReview] = useState<Array<readonly [string, string]>>([
     ['Status', 'Waiting for packet'],
     ['Boundary', 'Review only'],
   ])
@@ -529,6 +538,67 @@ export function SettingsPage() {
     setNotice('Ecommerce activation packet review cleared locally.')
   }
 
+  function reviewEcommerceOrderReviewPacket() {
+    try {
+      const packet = validateEcommerceOrderImportReviewPacket(JSON.parse(ecommerceOrderReviewPacketText))
+      setEcommerceOrderReviewPacketReview([
+        ['Status', packet.review.status === 'ready' ? 'Ready packet' : 'Blocked packet'],
+        ['Schema', packet.schema],
+        ['Store', packet.storeName],
+        ['Rows', `${packet.review.readyRows} ready / ${packet.review.blockedRows} blocked`],
+        ['Catalog', `${packet.catalog.source} / ${packet.catalog.selectedSkus.length} SKUs`],
+        ['Boundary', packet.forbiddenActions.includes('order_import') && packet.forbiddenActions.includes('managed_activation') ? 'Import and activation blocked' : 'Unsafe'],
+      ])
+      setNotice('Ecommerce order review packet checked locally. No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.')
+    } catch (error) {
+      setEcommerceOrderReviewPacketReview([
+        ['Status', 'Rejected'],
+        ['Reason', error instanceof Error ? error.message : 'Invalid order review packet'],
+        ['Boundary', 'No import'],
+      ])
+      setNotice('Ecommerce order review packet rejected locally. No order or managed action ran.')
+    }
+  }
+
+  function loadSampleEcommerceOrderReviewPacket() {
+    const packet = buildEcommerceOrderImportReviewPacket({
+      generatedAt: new Date().toISOString(),
+      product: 'ecommerce',
+      storeName: 'Sample Ecommerce Store',
+      operatingMode: 'browser_local_trial',
+      catalog: {
+        source: 'sample',
+        items: 2,
+        selectedSkus: ['DEMO-SKU-01', 'DEMO-SKU-02'],
+      },
+      review: {
+        status: 'ready',
+        totalRows: 2,
+        readyRows: 2,
+        blockedRows: 0,
+        summary: '2 rows ready for owner review.',
+      },
+      sourceCsv: 'customer_reference,channel,sku,quantity,fulfilment,payment,source_message\nDaw Mya - Yangon,viber,DEMO-SKU-01,1,delivery,manual_review,Viber screenshot retained\nKo Min - pickup,line,DEMO-SKU-02,2,pickup,cash_on_pickup,LINE order retained\n',
+    })
+    setEcommerceOrderReviewPacketText(`${JSON.stringify(packet, null, 2)}\n`)
+    setEcommerceOrderReviewPacketReview([
+      ['Status', 'Sample loaded'],
+      ['Store', packet.storeName],
+      ['Rows', `${packet.review.readyRows} ready / ${packet.review.blockedRows} blocked`],
+      ['Boundary', 'Review only'],
+    ])
+    setNotice('Sample Ecommerce order review packet loaded locally. Review it to test the order handoff gate.')
+  }
+
+  function clearEcommerceOrderReviewPacketReview() {
+    setEcommerceOrderReviewPacketText('')
+    setEcommerceOrderReviewPacketReview([
+      ['Status', 'Waiting for packet'],
+      ['Boundary', 'Review only'],
+    ])
+    setNotice('Ecommerce order review packet cleared locally.')
+  }
+
   async function resetDemoWorkspace() {
     setResetBusy(true)
     try {
@@ -658,12 +728,20 @@ export function SettingsPage() {
                 <div><span className="core-eyebrow">Import provisioning</span><h3>What must pass before real imports</h3><p>Backend health owns this checklist. Uploaded files stay local or export-only until identity, schema, validation, approval, adapter, and revision proof are ready.</p></div>
                 <div className="context-quality-rows">{importProvisioningRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
               </div>
-              {setup.product === 'ecommerce' ? <div aria-label="Ecommerce activation packet review" className="learning-plan-agent context-quality-panel">
-                <div><span className="core-eyebrow">Ecommerce activation packet</span><h3>Review before managed setup</h3><p>Paste the downloaded Ecommerce activation JSON. The browser validates schema, source, queue, and forbidden actions locally; no import, managed activation, Shop write, payment, delivery, stock, or customer action runs.</p></div>
-                <label className="packet-review-field">Activation packet JSON<textarea maxLength={12000} onChange={(event) => setEcommerceActivationPacketText(event.target.value)} placeholder="Paste supermega.ecommerce.managed_store_activation_packet.v1 JSON" rows={5} value={ecommerceActivationPacketText} /></label>
-                <div className="context-quality-rows">{ecommerceActivationPacketReview.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{label === 'Boundary' ? 'Review only; production setup still requires managed proof.' : 'Local packet check'}</em></span>)}</div>
-                <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceActivationPacket} type="button">Load sample packet</button><button className="core-button" disabled={!ecommerceActivationPacketText.trim()} onClick={reviewEcommerceActivationPacket} type="button">Review packet locally</button><button className="text-link" disabled={!ecommerceActivationPacketText.trim()} onClick={clearEcommerceActivationPacketReview} type="button">Clear packet</button></div>
-              </div> : null}
+              {setup.product === 'ecommerce' ? <>
+                <div aria-label="Ecommerce order review packet check" className="learning-plan-agent context-quality-panel">
+                  <div><span className="core-eyebrow">Order review packet</span><h3>Check before Shop queue</h3><p>Paste the Ecommerce order review JSON. The browser checks schema, row counts, catalog source, source CSV, and forbidden actions locally; no order import, customer message, payment, delivery, stock, Shop write, or managed activation runs.</p></div>
+                  <label className="packet-review-field">Order review packet JSON<textarea maxLength={24000} onChange={(event) => setEcommerceOrderReviewPacketText(event.target.value)} placeholder="Paste supermega.ecommerce.order_import_review_packet.v1 JSON" rows={5} value={ecommerceOrderReviewPacketText} /></label>
+                  <div className="context-quality-rows">{ecommerceOrderReviewPacketReview.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{label === 'Boundary' ? 'Review only; Shop queue still requires managed proof.' : 'Local order packet check'}</em></span>)}</div>
+                  <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceOrderReviewPacket} type="button">Load sample order packet</button><button className="core-button" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={reviewEcommerceOrderReviewPacket} type="button">Check order packet locally</button><button className="text-link" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={clearEcommerceOrderReviewPacketReview} type="button">Clear order packet</button></div>
+                </div>
+                <div aria-label="Ecommerce activation packet review" className="learning-plan-agent context-quality-panel">
+                  <div><span className="core-eyebrow">Ecommerce activation packet</span><h3>Review before managed setup</h3><p>Paste the downloaded Ecommerce activation JSON. The browser validates schema, source, queue, and forbidden actions locally; no import, managed activation, Shop write, payment, delivery, stock, or customer action runs.</p></div>
+                  <label className="packet-review-field">Activation packet JSON<textarea maxLength={12000} onChange={(event) => setEcommerceActivationPacketText(event.target.value)} placeholder="Paste supermega.ecommerce.managed_store_activation_packet.v1 JSON" rows={5} value={ecommerceActivationPacketText} /></label>
+                  <div className="context-quality-rows">{ecommerceActivationPacketReview.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{label === 'Boundary' ? 'Review only; production setup still requires managed proof.' : 'Local packet check'}</em></span>)}</div>
+                  <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceActivationPacket} type="button">Load sample packet</button><button className="core-button" disabled={!ecommerceActivationPacketText.trim()} onClick={reviewEcommerceActivationPacket} type="button">Review packet locally</button><button className="text-link" disabled={!ecommerceActivationPacketText.trim()} onClick={clearEcommerceActivationPacketReview} type="button">Clear packet</button></div>
+                </div>
+              </> : null}
               <div aria-label="Agent behavior memory" className="learning-plan-agent">
                 <div><span className="core-eyebrow">Behavior memory</span><h3>What owners keep choosing</h3><p>Free mode keeps this local. Premium can use approved queue behavior after managed import.</p></div>
                 <div className="learning-plan-rows">{agentBehaviorRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
