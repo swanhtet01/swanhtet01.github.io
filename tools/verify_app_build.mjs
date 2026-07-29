@@ -1170,6 +1170,8 @@ if (!managedTrialProofSource.includes("MANAGED_TRIAL_PROOF_CONTRACT = 'supermega
   || !managedTrialProofSource.includes('sha256Hex(JSON.stringify(projection))')
   || !managedTrialProofSource.includes("['proof_digest', proof.summaryDigest]")
   || !managedTrialProofSource.includes("['proof_raw_records', 'false']")) fail('managed_trial_proof_contract_missing')
+if (!appLiveVerifierSource.includes('if (!operationsChunk.includes(required)) throw new Error(`missing_live_managed_trial_proof_contract:${required}`)')
+  || appLiveVerifierSource.includes('if (!assetCorpus.includes(required)) throw new Error(`missing_live_managed_trial_proof_contract:${required}`)')) fail('managed_trial_proof_live_chunk_contract_missing')
 try {
   const proofModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'managed-trial-proof.ts')).href}?verify=${Date.now()}`)
   const input = { product: 'plant', templateId: 'production-control', readinessScore: 67, sourceRecordCount: 12, behaviorSignalCount: 4, reviewedDecisionCount: 2 }
