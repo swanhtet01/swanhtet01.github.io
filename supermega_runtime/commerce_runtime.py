@@ -119,6 +119,10 @@ _PRODUCTION_MATERIAL_UNITS = frozenset(
     {"kg", "g", "l", "ml", "pcs", "pack", "bag", "roll", "sheet", "m", "cm"}
 )
 _RETURN_DISPOSITIONS = ("restock", "not_restocked")
+_PURCHASE_DISCREPANCY_CODES = frozenset({"damaged", "wrong_item", "quality_failed"})
+_PURCHASE_DISCREPANCY_FIELDS = frozenset(
+    {"rejectedQuantity", "discrepancyCode", "discrepancyDisposition"}
+)
 _CORRECTION_KINDS = ("credit", "debit")
 _CORRECTION_REASON_CODES = ("pricing_error", "service_recovery", "fee_adjustment", "other")
 _WEBSITE_INTAKE_STATUSES = ("pending_confirmation", "converted")
@@ -338,6 +342,9 @@ _MOVEMENT_FIELDS = frozenset(
         "quantityDelta",
         "orderId",
         "purchaseOrderId",
+        "rejectedQuantity",
+        "discrepancyCode",
+        "discrepancyDisposition",
         "expectedQuantity",
         "countedQuantity",
         "productionRequestId",
@@ -1913,6 +1920,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     reserve_movement_by_order: dict[str, dict[str, Any]] = {}
     movements_by_action: dict[str, list[dict[str, Any]]] = {}
     receipt_quantity_by_purchase_order: dict[str, int] = {}
+    rejected_quantity_by_purchase_order: dict[str, int] = {}
     latest_receipt_at_by_purchase_order: dict[str, datetime] = {}
     production_request_ids: list[str] = []
     production_release_ids: list[str] = []
@@ -1930,6 +1938,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     "expectedQuantity",
                     "countedQuantity",
                 }
+                | _PURCHASE_DISCREPANCY_FIELDS
                 | _PRODUCTION_ISSUE_FIELDS
                 | _PRODUCTION_RECEIPT_EXCLUSIVE_FIELDS
             ),
@@ -1941,6 +1950,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     "countedQuantity",
                 }
             )
+            | _PURCHASE_DISCREPANCY_FIELDS
             | _PRODUCTION_ISSUE_FIELDS
             | _PRODUCTION_RECEIPT_EXCLUSIVE_FIELDS,
         )
@@ -1961,6 +1971,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             raise TrialValidationError(f"movements[{index}].kind is invalid.")
         retained_production_fields = _PRODUCTION_ISSUE_FIELDS.intersection(movement)
         retained_production_receipt_fields = _PRODUCTION_RECEIPT_FIELDS.intersection(movement)
+        retained_purchase_discrepancy_fields = _PURCHASE_DISCREPANCY_FIELDS.intersection(movement)
         if kind == "production_issue":
             if (
                 retained_production_fields != _PRODUCTION_ISSUE_FIELDS
@@ -2078,6 +2089,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             raise TrialValidationError(
                 f"movements[{index}] production fields are unsupported for {kind}."
             )
+        if kind != "receipt" and retained_purchase_discrepancy_fields:
+            raise TrialValidationError(
+                f"movements[{index}] purchase discrepancy fields are unsupported for {kind}."
+            )
         movements_by_action.setdefault(action_id, []).append(movement)
         if kind == "count":
             if "orderId" in movement or "purchaseOrderId" in movement:
@@ -2127,6 +2142,28 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         if kind in {"opening", "receipt", "count"}:
             if "orderId" in movement:
                 raise TrialValidationError(f"movements[{index}] {kind} cannot reference an order.")
+            rejected_quantity = 0
+            if kind == "receipt" and retained_purchase_discrepancy_fields:
+                if retained_purchase_discrepancy_fields != _PURCHASE_DISCREPANCY_FIELDS:
+                    raise TrialValidationError(
+                        f"movements[{index}] purchase discrepancy fields are incomplete."
+                    )
+                rejected_quantity = _integer(
+                    movement["rejectedQuantity"],
+                    f"movements[{index}].rejectedQuantity",
+                    minimum=1,
+                )
+                if (
+                    movement["discrepancyCode"] not in _PURCHASE_DISCREPANCY_CODES
+                    or movement["discrepancyDisposition"] != "return_to_vendor"
+                ):
+                    raise TrialValidationError(
+                        f"movements[{index}] purchase discrepancy is invalid."
+                    )
+                if "purchaseOrderId" not in movement:
+                    raise TrialValidationError(
+                        f"movements[{index}] purchase discrepancy requires a purchase order."
+                    )
             if kind == "opening" and "purchaseOrderId" in movement:
                 raise TrialValidationError(
                     f"movements[{index}] opening cannot reference a purchase order."
@@ -2165,14 +2202,22 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     receipt_quantity_by_purchase_order.get(purchase_order_id, 0)
                     + quantity_delta
                 )
+                rejected = (
+                    rejected_quantity_by_purchase_order.get(purchase_order_id, 0)
+                    + rejected_quantity
+                )
+                delivered = received + rejected
                 if (
-                    received > purchase_order["quantityOrdered"]
+                    delivered > purchase_order["quantityOrdered"]
                     or received > _MAX_SAFE_INTEGER
+                    or rejected > _MAX_SAFE_INTEGER
+                    or delivered > _MAX_SAFE_INTEGER
                 ):
                     raise TrialValidationError(
                         f"movements[{index}] exceeds its purchase order quantity."
                     )
                 receipt_quantity_by_purchase_order[purchase_order_id] = received
+                rejected_quantity_by_purchase_order[purchase_order_id] = rejected
                 latest_receipt_at_by_purchase_order[purchase_order_id] = max(
                     latest_receipt_at_by_purchase_order.get(
                         purchase_order_id,
@@ -2419,6 +2464,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     active_purchase_order_skus: list[str] = []
     for purchase_order_id, purchase_order in purchase_order_by_id.items():
         received = receipt_quantity_by_purchase_order.get(purchase_order_id, 0)
+        rejected = rejected_quantity_by_purchase_order.get(purchase_order_id, 0)
+        delivered = received + rejected
         if "cancellation" in purchase_order:
             cancellation_at = datetime.fromisoformat(
                 str(purchase_order["cancellation"]["capturedAt"]).replace(
@@ -2427,7 +2474,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 )
             )
             if (
-                received >= purchase_order["quantityOrdered"]
+                delivered >= purchase_order["quantityOrdered"]
                 or cancellation_at
                 < latest_receipt_at_by_purchase_order.get(
                     purchase_order_id,
@@ -2439,7 +2486,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 raise TrialValidationError(
                     f"{purchase_order_id} has an invalid cancellation boundary."
                 )
-        elif received < purchase_order["quantityOrdered"]:
+        elif delivered < purchase_order["quantityOrdered"]:
             active_purchase_order_skus.append(purchase_order["sku"])
     _unique(active_purchase_order_skus, "Active purchase order SKU")
 
@@ -5776,13 +5823,15 @@ def _validate_purchase_order_received(
         raise TrialValidationError(
             "purchase receipt requires one open matching purchase order."
         )
-    previously_received = sum(
-        prior["quantityDelta"]
+    previously_delivered = sum(
+        prior["quantityDelta"] + prior.get("rejectedQuantity", 0)
         for prior in current["movements"]
         if prior.get("purchaseOrderId") == purchase_order_id
     )
+    rejected_quantity = movement.get("rejectedQuantity", 0)
     if (
-        movement["quantityDelta"] > purchase_order["quantityOrdered"] - previously_received
+        movement["quantityDelta"] + rejected_quantity
+        > purchase_order["quantityOrdered"] - previously_delivered
         or after_item
         != {
             **before_item,

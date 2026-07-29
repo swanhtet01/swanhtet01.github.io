@@ -2185,6 +2185,15 @@ if (!commercePageContract.includes('purchaseOrderDraft')
   || !commercePageContract.includes('Your draft was preserved.')
   || !commercePageContract.includes('purchaseOrderEditorRef')
   || !commercePageContract.includes('Review receipt')
+  || !commercePageContract.includes('Rejected units')
+  || !commercePageContract.includes('Accepted units')
+  || !commercePageContract.includes('Discrepancy reason')
+  || !commercePageContract.includes('return to vendor')
+  || !commercePageContract.includes('purchaseReceiptDiscrepancyReady')
+  || !commercePageContract.includes('defect {formatTaxRate(supplier.defectRateBasisPoints)}')
+  || !commerceSource.includes("discrepancyDisposition?: 'return_to_vendor'")
+  || !commerceSource.includes("status: 'open' | 'partially_received' | 'received' | 'received_with_discrepancy' | 'cancelled'")
+  || !managedCommerceRuntime.includes('_PURCHASE_DISCREPANCY_FIELDS')
   || !commercePageContract.includes('Cancel remainder')
   || !commercePageContract.includes('id="purchase-orders"')
   || !commercePageContract.includes("commerceLocation.hash !== '#purchase-orders'")
@@ -7312,6 +7321,39 @@ async function verifyCommerceRuntime() {
     'stock_count_changed_open_purchase_order_progress')
     assert(model.receiveCommercePurchaseOrder(purchasePartial, purchaseOrderId, 4, purchasePartialProof) === purchasePartial, 'purchase_order_receipt_retry_not_idempotent')
     assert(model.receiveCommercePurchaseOrder(purchasePartial, purchaseOrderId, 7, proof('ACT-PURCHASE-OVERRECEIPT', 120_000)) === null, 'purchase_order_overreceipt_succeeded')
+    const purchaseDiscrepancyProof = proof('ACT-PURCHASE-DISCREPANCY', 120_000)
+    const purchaseDiscrepant = model.receiveCommercePurchaseOrder(
+      purchaseCreated,
+      purchaseOrderId,
+      6,
+      purchaseDiscrepancyProof,
+      undefined,
+      { quantityRejected: 4, reasonCode: 'quality_failed', disposition: 'return_to_vendor' },
+    )
+    const purchaseDiscrepantProgress = purchaseDiscrepant && model.commercePurchaseOrderProgress(purchaseDiscrepant, purchaseDiscrepant.purchaseOrders[0])
+    assert(purchaseDiscrepant
+      && purchaseDiscrepant.items[0].onHand === 16
+      && purchaseDiscrepant.movements[0].quantityDelta === 6
+      && purchaseDiscrepant.movements[0].rejectedQuantity === 4
+      && purchaseDiscrepant.movements[0].discrepancyCode === 'quality_failed'
+      && purchaseDiscrepant.movements[0].discrepancyDisposition === 'return_to_vendor'
+      && purchaseDiscrepantProgress?.received === 6
+      && purchaseDiscrepantProgress.rejected === 4
+      && purchaseDiscrepantProgress.delivered === 10
+      && purchaseDiscrepantProgress.remaining === 0
+      && purchaseDiscrepantProgress.status === 'received_with_discrepancy', 'purchase_receipt_discrepancy_not_exact')
+    assert(model.receiveCommercePurchaseOrder(
+      purchaseCreated,
+      purchaseOrderId,
+      7,
+      proof('ACT-PURCHASE-DISCREPANCY-OVER'),
+      undefined,
+      { quantityRejected: 4, reasonCode: 'damaged', disposition: 'return_to_vendor' },
+    ) === null, 'purchase_receipt_discrepancy_overdelivery_succeeded')
+    assertThrows(() => model.validateCommerceState({
+      ...purchaseDiscrepant,
+      movements: [{ ...purchaseDiscrepant.movements[0], discrepancyCode: undefined }, ...purchaseDiscrepant.movements.slice(1)],
+    }), 'incomplete_purchase_receipt_discrepancy_succeeded')
     assert(model.cancelCommercePurchaseOrder(
       purchasePartial,
       purchaseOrderId,
@@ -7343,10 +7385,12 @@ async function verifyCommerceRuntime() {
       && openSupplierPerformance[0].activeOrders === 1
       && openSupplierPerformance[0].orderedUnits === 10
       && openSupplierPerformance[0].receivedUnits === 0
+      && openSupplierPerformance[0].rejectedUnits === 0
       && openSupplierPerformance[0].openUnits === 10
       && openSupplierPerformance[0].lateOpenOrders === 1
       && openSupplierPerformance[0].completedDeliveries === 0
       && openSupplierPerformance[0].receiptRateBasisPoints === 0
+      && openSupplierPerformance[0].defectRateBasisPoints === 0
       && openSupplierPerformance[0].onTimeRateBasisPoints === null
       && openSupplierPerformance[0].status === 'attention', 'open_supplier_performance_not_exact')
     const onTimeSupplierPerformance = model.commerceSupplierPerformance(
@@ -7356,13 +7400,25 @@ async function verifyCommerceRuntime() {
     assert(onTimeSupplierPerformance.length === 1
       && onTimeSupplierPerformance[0].activeOrders === 0
       && onTimeSupplierPerformance[0].receivedUnits === 10
+      && onTimeSupplierPerformance[0].rejectedUnits === 0
       && onTimeSupplierPerformance[0].openUnits === 0
       && onTimeSupplierPerformance[0].completedDeliveries === 1
       && onTimeSupplierPerformance[0].onTimeDeliveries === 1
       && onTimeSupplierPerformance[0].lateDeliveries === 0
       && onTimeSupplierPerformance[0].receiptRateBasisPoints === 10_000
+      && onTimeSupplierPerformance[0].defectRateBasisPoints === 0
       && onTimeSupplierPerformance[0].onTimeRateBasisPoints === 10_000
       && onTimeSupplierPerformance[0].status === 'on_track', 'on_time_supplier_performance_not_exact')
+    const discrepantSupplierPerformance = model.commerceSupplierPerformance(
+      purchaseDiscrepant,
+      Date.parse('2026-07-26T09:00:00.000Z'),
+    )
+    assert(discrepantSupplierPerformance.length === 1
+      && discrepantSupplierPerformance[0].receivedUnits === 6
+      && discrepantSupplierPerformance[0].rejectedUnits === 4
+      && discrepantSupplierPerformance[0].receiptRateBasisPoints === 6_000
+      && discrepantSupplierPerformance[0].defectRateBasisPoints === 4_000
+      && discrepantSupplierPerformance[0].status === 'attention', 'supplier_discrepancy_not_measured')
     const latePurchaseFilled = model.receiveCommercePurchaseOrder(
       purchaseCreated,
       purchaseOrderId,

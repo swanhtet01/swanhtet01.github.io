@@ -242,6 +242,9 @@ export type CommerceStockMovement = {
   quantityDelta: number
   orderId?: string
   purchaseOrderId?: string
+  rejectedQuantity?: number
+  discrepancyCode?: CommercePurchaseOrderDiscrepancyCode
+  discrepancyDisposition?: 'return_to_vendor'
   expectedQuantity?: number
   countedQuantity?: number
   productionRequestId?: string
@@ -541,10 +544,20 @@ export type CommercePurchaseOrder = {
   cancellation?: CommerceActionProof
 }
 
+export type CommercePurchaseOrderDiscrepancyCode = 'damaged' | 'wrong_item' | 'quality_failed'
+
+export type CommercePurchaseOrderReceiptDiscrepancy = {
+  quantityRejected: number
+  reasonCode: CommercePurchaseOrderDiscrepancyCode
+  disposition: 'return_to_vendor'
+}
+
 export type CommercePurchaseOrderProgress = {
   received: number
+  rejected: number
+  delivered: number
   remaining: number
-  status: 'open' | 'partially_received' | 'received' | 'cancelled'
+  status: 'open' | 'partially_received' | 'received' | 'received_with_discrepancy' | 'cancelled'
 }
 
 export type CommercePurchaseOrderArrivalUrgency = 'late' | 'due_soon' | 'scheduled' | 'unrecorded' | 'closed'
@@ -557,12 +570,14 @@ export type CommerceSupplierPerformance = {
   activeOrders: number
   orderedUnits: number
   receivedUnits: number
+  rejectedUnits: number
   openUnits: number
   lateOpenOrders: number
   completedDeliveries: number
   onTimeDeliveries: number
   lateDeliveries: number
   receiptRateBasisPoints: number
+  defectRateBasisPoints: number
   onTimeRateBasisPoints: number | null
   status: CommerceSupplierPerformanceStatus
 }
@@ -732,6 +747,8 @@ const productionIssueFields = [
   'productionUnit',
   'conversionNote',
 ] as const
+const purchaseReceiptDiscrepancyFields = ['rejectedQuantity', 'discrepancyCode', 'discrepancyDisposition'] as const
+const purchaseOrderDiscrepancyCodes = new Set<CommercePurchaseOrderDiscrepancyCode>(['damaged', 'wrong_item', 'quality_failed'])
 const productionReceiptFields = [
   'productionReleaseId',
   'productionCommandDigest',
@@ -1969,6 +1986,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const reserveMovementByOrder = new Map<string, CommerceStockMovement>()
   const movementsByAction = new Map<string, CommerceStockMovement[]>()
   const receiptQuantityByPurchaseOrder = new Map<string, number>()
+  const rejectedQuantityByPurchaseOrder = new Map<string, number>()
   const latestReceiptAtByPurchaseOrder = new Map<string, bigint>()
   const productionRequestIds: string[] = []
   const productionReleaseIds: string[] = []
@@ -1977,7 +1995,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!isRecord(candidate) || !hasExactKeys(
       candidate,
       ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'sku', 'quantityDelta'],
-      ['orderId', 'purchaseOrderId', 'expectedQuantity', 'countedQuantity', ...productionIssueFields, ...productionReceiptExclusiveFields],
+      ['orderId', 'purchaseOrderId', 'expectedQuantity', 'countedQuantity', ...purchaseReceiptDiscrepancyFields, ...productionIssueFields, ...productionReceiptExclusiveFields],
     )) throw new Error(`movements[${index}] is invalid.`)
     movementIds.push(requiredText(candidate.id, `movements[${index}].id`))
     movementActionIds.push(requiredText(candidate.actionId, `movements[${index}].actionId`))
@@ -1987,6 +2005,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!movementKinds.includes(candidate.kind as CommerceStockMovementKind)) throw new Error(`movements[${index}].kind is invalid.`)
     const retainedProductionFields = productionIssueFields.filter((field) => candidate[field] !== undefined)
     const retainedProductionReceiptFields = productionReceiptFields.filter((field) => candidate[field] !== undefined)
+    const retainedDiscrepancyFields = purchaseReceiptDiscrepancyFields.filter((field) => candidate[field] !== undefined)
     if (candidate.kind === 'production_issue') {
       if (retainedProductionFields.length !== productionIssueFields.length
         || productionReceiptExclusiveFields.some((field) => candidate[field] !== undefined)
@@ -2024,6 +2043,9 @@ export function validateCommerceState(value: unknown): CommerceState {
     } else if (retainedProductionFields.length || retainedProductionReceiptFields.length) {
       throw new Error(`movements[${index}] production fields are unsupported for ${String(candidate.kind)}.`)
     }
+    if (candidate.kind !== 'receipt' && retainedDiscrepancyFields.length) {
+      throw new Error(`movements[${index}] purchase discrepancy fields are unsupported for ${String(candidate.kind)}.`)
+    }
     const actionMovements = movementsByAction.get(candidate.actionId as string) ?? []
     actionMovements.push(candidate as unknown as CommerceStockMovement)
     movementsByAction.set(candidate.actionId as string, actionMovements)
@@ -2049,6 +2071,18 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (candidate.kind === 'production_receipt') continue
     if (candidate.kind === 'receipt') {
       if (candidate.orderId !== undefined) throw new Error(`movements[${index}] receipt cannot reference an order.`)
+      if (retainedDiscrepancyFields.length !== 0 && retainedDiscrepancyFields.length !== purchaseReceiptDiscrepancyFields.length) {
+        throw new Error(`movements[${index}] purchase discrepancy fields are incomplete.`)
+      }
+      if (retainedDiscrepancyFields.length) assertSafeInteger(candidate.rejectedQuantity, `movements[${index}].rejectedQuantity`, 1)
+      const rejectedQuantity = retainedDiscrepancyFields.length ? Number(candidate.rejectedQuantity) : 0
+      if (rejectedQuantity && (!purchaseOrderDiscrepancyCodes.has(candidate.discrepancyCode as CommercePurchaseOrderDiscrepancyCode)
+        || candidate.discrepancyDisposition !== 'return_to_vendor')) {
+        throw new Error(`movements[${index}] purchase discrepancy is invalid.`)
+      }
+      if (rejectedQuantity && candidate.purchaseOrderId === undefined) {
+        throw new Error(`movements[${index}] purchase discrepancy requires a purchase order.`)
+      }
       if (candidate.purchaseOrderId !== undefined) {
         const purchaseOrderId = canonicalText(candidate.purchaseOrderId, `movements[${index}].purchaseOrderId`, 80)
         const purchaseOrder = purchaseOrderById.get(purchaseOrderId)
@@ -2060,10 +2094,13 @@ export function validateCommerceState(value: unknown): CommerceState {
           throw new Error(`movements[${index}] does not match its purchase order.`)
         }
         const received = (receiptQuantityByPurchaseOrder.get(purchaseOrderId) ?? 0) + Number(candidate.quantityDelta)
-        if (!Number.isSafeInteger(received) || received > purchaseOrder.quantityOrdered) {
+        const rejected = (rejectedQuantityByPurchaseOrder.get(purchaseOrderId) ?? 0) + rejectedQuantity
+        const delivered = received + rejected
+        if (!Number.isSafeInteger(received) || !Number.isSafeInteger(rejected) || !Number.isSafeInteger(delivered) || delivered > purchaseOrder.quantityOrdered) {
           throw new Error(`movements[${index}] exceeds its purchase order quantity.`)
         }
         receiptQuantityByPurchaseOrder.set(purchaseOrderId, received)
+        rejectedQuantityByPurchaseOrder.set(purchaseOrderId, rejected)
         const latestReceiptAt = latestReceiptAtByPurchaseOrder.get(purchaseOrderId) ?? 0n
         latestReceiptAtByPurchaseOrder.set(purchaseOrderId, createdAt > latestReceiptAt ? createdAt : latestReceiptAt)
       }
@@ -2176,12 +2213,14 @@ export function validateCommerceState(value: unknown): CommerceState {
   }
   for (const purchaseOrder of purchaseOrderById.values()) {
     const received = receiptQuantityByPurchaseOrder.get(purchaseOrder.id) ?? 0
+    const rejected = rejectedQuantityByPurchaseOrder.get(purchaseOrder.id) ?? 0
+    const delivered = received + rejected
     if (purchaseOrder.cancellation) {
-      if (received >= purchaseOrder.quantityOrdered
+      if (delivered >= purchaseOrder.quantityOrdered
         || (timestampMicros(purchaseOrder.cancellation.capturedAt) as bigint) < (latestReceiptAtByPurchaseOrder.get(purchaseOrder.id) ?? 0n)) {
         throw new Error(`${purchaseOrder.id} has an invalid cancellation boundary.`)
       }
-    } else if (received < purchaseOrder.quantityOrdered) {
+    } else if (delivered < purchaseOrder.quantityOrdered) {
       activePurchaseOrderSkus.push(purchaseOrder.sku)
     }
   }
@@ -2962,18 +3001,21 @@ export function commercePurchaseOrders(state: CommerceState) {
 }
 
 export function commercePurchaseOrderProgress(state: CommerceState, purchaseOrder: CommercePurchaseOrder): CommercePurchaseOrderProgress {
-  const received = state.movements
-    .filter((movement) => movement.kind === 'receipt' && movement.purchaseOrderId === purchaseOrder.id)
-    .reduce((total, movement) => total + movement.quantityDelta, 0)
-  const remaining = purchaseOrder.quantityOrdered - received
+  const receipts = state.movements.filter((movement) => movement.kind === 'receipt' && movement.purchaseOrderId === purchaseOrder.id)
+  const received = receipts.reduce((total, movement) => total + movement.quantityDelta, 0)
+  const rejected = receipts.reduce((total, movement) => total + (movement.rejectedQuantity ?? 0), 0)
+  const delivered = received + rejected
+  const remaining = purchaseOrder.quantityOrdered - delivered
   return {
     received,
+    rejected,
+    delivered,
     remaining,
     status: purchaseOrder.cancellation
       ? 'cancelled'
       : remaining === 0
-        ? 'received'
-        : received > 0
+        ? rejected > 0 ? 'received_with_discrepancy' : 'received'
+        : delivered > 0
           ? 'partially_received'
           : 'open',
   }
@@ -2984,7 +3026,7 @@ export function commercePurchaseOrderArrivalUrgency(
   progress: CommercePurchaseOrderProgress,
   now: number,
 ): CommercePurchaseOrderArrivalUrgency {
-  if (progress.status === 'received' || progress.status === 'cancelled') return 'closed'
+  if (progress.status === 'received' || progress.status === 'received_with_discrepancy' || progress.status === 'cancelled') return 'closed'
   const expectedAt = purchaseOrder.expectedAt ? Date.parse(purchaseOrder.expectedAt) : Number.NaN
   if (!Number.isFinite(expectedAt) || !Number.isFinite(now)) return 'unrecorded'
   if (expectedAt <= now) return 'late'
@@ -3010,8 +3052,8 @@ export function commerceSupplierPerformance(state: CommerceState, now: number): 
       return latest === null || capturedAt > latest ? capturedAt : latest
     }, null)
     const promisedAt = purchaseOrder.expectedAt ? timestampMicros(purchaseOrder.expectedAt) : null
-    const deliveryMeasured = progress.status === 'received' && completedAt !== null && promisedAt !== null
-    const onTime = progress.status === 'received'
+    const deliveryMeasured = (progress.status === 'received' || progress.status === 'received_with_discrepancy') && completedAt !== null && promisedAt !== null
+    const onTime = (progress.status === 'received' || progress.status === 'received_with_discrepancy')
       && completedAt !== null
       && promisedAt !== null
       && completedAt <= promisedAt
@@ -3023,12 +3065,14 @@ export function commerceSupplierPerformance(state: CommerceState, now: number): 
       activeOrders: 0,
       orderedUnits: 0,
       receivedUnits: 0,
+      rejectedUnits: 0,
       openUnits: 0,
       lateOpenOrders: 0,
       completedDeliveries: 0,
       onTimeDeliveries: 0,
       lateDeliveries: 0,
       receiptRateBasisPoints: 0,
+      defectRateBasisPoints: 0,
       onTimeRateBasisPoints: null,
       status: 'collecting' as CommerceSupplierPerformanceStatus,
     }
@@ -3036,6 +3080,7 @@ export function commerceSupplierPerformance(state: CommerceState, now: number): 
     existing.activeOrders += active ? 1 : 0
     existing.orderedUnits = addSafeUnits(existing.orderedUnits, purchaseOrder.quantityOrdered)
     existing.receivedUnits = addSafeUnits(existing.receivedUnits, progress.received)
+    existing.rejectedUnits = addSafeUnits(existing.rejectedUnits, progress.rejected)
     existing.openUnits = addSafeUnits(existing.openUnits, active ? progress.remaining : 0)
     existing.lateOpenOrders += lateOpen ? 1 : 0
     existing.completedDeliveries += deliveryMeasured ? 1 : 0
@@ -3048,10 +3093,13 @@ export function commerceSupplierPerformance(state: CommerceState, now: number): 
     receiptRateBasisPoints: supplier.orderedUnits
       ? Math.round((supplier.receivedUnits / supplier.orderedUnits) * 10_000)
       : 0,
+    defectRateBasisPoints: supplier.orderedUnits
+      ? Math.round((supplier.rejectedUnits / supplier.orderedUnits) * 10_000)
+      : 0,
     onTimeRateBasisPoints: supplier.completedDeliveries
       ? Math.round((supplier.onTimeDeliveries / supplier.completedDeliveries) * 10_000)
       : null,
-    status: supplier.lateOpenOrders || supplier.lateDeliveries
+    status: supplier.rejectedUnits || supplier.lateOpenOrders || supplier.lateDeliveries
       ? 'attention'
       : supplier.completedDeliveries
         ? 'on_track'
@@ -3984,14 +4032,26 @@ export function receiveCommercePurchaseOrder(
   quantity: number,
   proof: CommerceActionProof,
   locationReceipt?: CommercePurchaseOrderLocationReceipt,
+  discrepancy?: CommercePurchaseOrderReceiptDiscrepancy,
 ) {
-  if (!validProof(proof) || !Number.isSafeInteger(quantity) || quantity < 1) return null
+  const rejectedQuantity = discrepancy?.quantityRejected ?? 0
+  if (!validProof(proof)
+    || !Number.isSafeInteger(quantity)
+    || quantity < 1
+    || !Number.isSafeInteger(rejectedQuantity)
+    || rejectedQuantity < 0
+    || (discrepancy !== undefined && (rejectedQuantity < 1
+      || !purchaseOrderDiscrepancyCodes.has(discrepancy.reasonCode)
+      || discrepancy.disposition !== 'return_to_vendor'))) return null
   const current = validateCommerceState(state)
   const replayMovement = current.movements.find((movement) => movement.actionId === proof.actionId)
   if (replayMovement) {
     const aggregateReplayMatches = replayMovement.kind === 'receipt'
       && replayMovement.purchaseOrderId === purchaseOrderId
       && replayMovement.quantityDelta === quantity
+      && (replayMovement.rejectedQuantity ?? 0) === rejectedQuantity
+      && (replayMovement.discrepancyCode ?? null) === (discrepancy?.reasonCode ?? null)
+      && (replayMovement.discrepancyDisposition ?? null) === (discrepancy?.disposition ?? null)
       && sameProof(replayMovement, proof)
     if (!aggregateReplayMatches) return null
     if (!current.inventoryFoundation) return locationReceipt ? null : current
@@ -4018,7 +4078,7 @@ export function receiveCommercePurchaseOrder(
     || purchaseOrder.cancellation
     || (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(purchaseOrder.createdAt) as bigint)) return null
   const progress = commercePurchaseOrderProgress(current, purchaseOrder)
-  if (quantity > progress.remaining) return null
+  if (!Number.isSafeInteger(quantity + rejectedQuantity) || quantity + rejectedQuantity > progress.remaining) return null
   const item = current.items.find((candidate) => candidate.sku === purchaseOrder.sku)
   if (!item) return null
   const nextBalance = safeBalance(item.onHand, quantity)
@@ -4028,6 +4088,11 @@ export function receiveCommercePurchaseOrder(
     sku: purchaseOrder.sku,
     quantityDelta: quantity,
     purchaseOrderId,
+    ...(discrepancy ? {
+      rejectedQuantity,
+      discrepancyCode: discrepancy.reasonCode,
+      discrepancyDisposition: discrepancy.disposition,
+    } : {}),
   })
   const nextItems = current.items.map((candidate) => candidate.sku === purchaseOrder.sku ? { ...candidate, onHand: nextBalance } : candidate)
   let inventoryFoundation = current.inventoryFoundation

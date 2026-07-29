@@ -89,6 +89,7 @@ import {
   type CommerceOrder,
   type CommerceOrderLine,
   type CommerceOrderStatus,
+  type CommercePurchaseOrderDiscrepancyCode,
   type CommerceReturnDisposition,
   type CommerceState,
   type CommerceStockMovement,
@@ -265,7 +266,7 @@ type ActionKind =
 
 type PurchaseOrderDraft =
   | { mode: 'create'; sku: string; supplier: string; expectedAt: string; quantity: string }
-  | { mode: 'receive'; purchaseOrderId: string; quantity: string; locationId: string; trackingCode: string }
+  | { mode: 'receive'; purchaseOrderId: string; quantity: string; rejectedQuantity: string; discrepancyCode: CommercePurchaseOrderDiscrepancyCode; locationId: string; trackingCode: string }
 
 type StockCountDraft = {
   sku: string
@@ -2542,9 +2543,16 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const purchaseOrderQuantity = /^\d+$/.test(purchaseOrderQuantityText)
     ? Number(purchaseOrderQuantityText)
     : Number.NaN
+  const purchaseOrderRejectedText = purchaseOrderDraft?.mode === 'receive' ? purchaseOrderDraft.rejectedQuantity.trim() : '0'
+  const purchaseOrderRejectedQuantity = /^\d+$/.test(purchaseOrderRejectedText)
+    ? Number(purchaseOrderRejectedText)
+    : Number.NaN
+  const purchaseOrderRejectedResult = Number.isSafeInteger(purchaseOrderRejectedQuantity) && purchaseOrderRejectedQuantity >= 0
+    ? purchaseOrderRejectedQuantity
+    : null
   const purchaseOrderQuantityLimit = purchaseOrderDraft?.mode === 'receive'
     ? Math.min(
-        purchaseOrderDraftOrder?.progress.remaining ?? 0,
+        Math.max(0, (purchaseOrderDraftOrder?.progress.remaining ?? 0) - (purchaseOrderRejectedResult ?? 0)),
         purchaseOrderDraftItem ? Number.MAX_SAFE_INTEGER - purchaseOrderDraftItem.onHand : 0,
       )
     : Number.MAX_SAFE_INTEGER
@@ -2573,6 +2581,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     && purchaseReceiptTrackingCode
     && purchaseReceiptTrackingCode.length <= 80,
   )
+  const purchaseReceiptDiscrepancyReady = purchaseOrderDraft?.mode !== 'receive'
+    || (purchaseOrderRejectedResult !== null
+      && purchaseOrderQuantityResult !== null
+      && purchaseOrderQuantityResult + purchaseOrderRejectedResult <= (purchaseOrderDraftOrder?.progress.remaining ?? 0))
   const catalogEditItem = catalogEditDraft
     ? commerce.items.find((item) => item.sku === catalogEditDraft.sku)
     : undefined
@@ -4166,7 +4178,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     }
     const receiptDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date()).replaceAll('-', '')
     setPurchaseOrderDraft(active
-      ? { mode: 'receive', purchaseOrderId: active.purchaseOrder.id, quantity: '', locationId: defaultReceiptLocationId, trackingCode: `IN-${receiptDate}-${commandUuid().slice(0, 8).toUpperCase()}` }
+      ? { mode: 'receive', purchaseOrderId: active.purchaseOrder.id, quantity: '', rejectedQuantity: '0', discrepancyCode: 'damaged', locationId: defaultReceiptLocationId, trackingCode: `IN-${receiptDate}-${commandUuid().slice(0, 8).toUpperCase()}` }
       : { mode: 'create', sku: itemSku, supplier: '', expectedAt: defaultPurchaseOrderExpectedInput(), quantity: '' })
     setNotice(active
       ? `Record only units counted against ${active.purchaseOrder.id}. Nothing changes until confirmation.`
@@ -4186,7 +4198,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
 
   function reviewPurchaseOrder(event: FormEvent) {
     event.preventDefault()
-    if (!purchaseOrderDraft || !purchaseOrderDraftItem || purchaseOrderQuantityResult === null) {
+    if (!purchaseOrderDraft || !purchaseOrderDraftItem || purchaseOrderQuantityResult === null || !purchaseReceiptDiscrepancyReady) {
       setNotice('Enter a positive whole-unit quantity within the available order balance.')
       return
     }
@@ -4232,6 +4244,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     }
     const { purchaseOrder, progress, item } = purchaseOrderRow
     const receiptQuantity = purchaseOrderQuantityResult
+    const rejectedQuantity = purchaseOrderRejectedResult ?? 0
+    const discrepancy = rejectedQuantity > 0
+      ? { quantityRejected: rejectedQuantity, reasonCode: purchaseOrderDraft.discrepancyCode, disposition: 'return_to_vendor' as const }
+      : undefined
     const expectedOnHand = item.onHand
     const expectedRemaining = progress.remaining
     if (!purchaseReceiptAllocationReady) {
@@ -4250,9 +4266,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     queueAction({
       kind: 'purchase_order_receive',
       subjectId: purchaseOrder.id,
-      summary: `Receive ${receiptQuantity.toLocaleString()} units against ${purchaseOrder.id}`,
-      before: `${progress.received.toLocaleString()} of ${purchaseOrder.quantityOrdered.toLocaleString()} received · ${expectedOnHand.toLocaleString()} on hand`,
-      after: `${(progress.received + receiptQuantity).toLocaleString()} of ${purchaseOrder.quantityOrdered.toLocaleString()} received · ${(expectedOnHand + receiptQuantity).toLocaleString()} on hand${locationReceipt ? ` · ${purchaseReceiptLocation?.name ?? locationReceipt.locationId} · lot ${locationReceipt.trackingCode}` : ''}`,
+      summary: `Receive ${receiptQuantity.toLocaleString()} accepted${rejectedQuantity ? ` and reject ${rejectedQuantity.toLocaleString()}` : ''} against ${purchaseOrder.id}`,
+      before: `${progress.received.toLocaleString()} accepted · ${progress.rejected.toLocaleString()} rejected · ${progress.remaining.toLocaleString()} due · ${expectedOnHand.toLocaleString()} on hand`,
+      after: `${(progress.received + receiptQuantity).toLocaleString()} accepted · ${(progress.rejected + rejectedQuantity).toLocaleString()} rejected${rejectedQuantity ? ` for ${purchaseOrderDraft.discrepancyCode.replace('_', ' ')} / return to vendor` : ''} · ${(expectedOnHand + receiptQuantity).toLocaleString()} on hand${locationReceipt ? ` · ${purchaseReceiptLocation?.name ?? locationReceipt.locationId} · lot ${locationReceipt.trackingCode}` : ''}`,
       apply: async (action) => {
         const proof = commerceActionProof(action)
         await mutateCommerce('commerce.purchase_order.received', action.commandId, proof, (current) => {
@@ -4262,7 +4278,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
             || !currentItem
             || currentItem.onHand !== expectedOnHand
             || commercePurchaseOrderProgress(current, currentPurchaseOrder).remaining !== expectedRemaining) return null
-          return receiveCommercePurchaseOrder(current, purchaseOrder.id, receiptQuantity, proof, locationReceipt)
+          return receiveCommercePurchaseOrder(current, purchaseOrder.id, receiptQuantity, proof, locationReceipt, discrepancy)
         })
         setPurchaseOrderDraft((current) => current?.mode === 'receive' && current.purchaseOrderId === purchaseOrder.id ? null : current)
       },
@@ -4915,15 +4931,16 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         </div>
         {purchaseOrderDraft.mode === 'create' ? <label>Supplier reference{managedInventoryProjection ? <select autoFocus disabled={commerceControlsDisabled} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} required value={purchaseOrderDraft.supplier}><option value="">Choose supplier</option>{managedInventoryProjection.vendors.map((vendor) => <option key={vendor.id} value={vendor.name}>{vendor.name}</option>)}</select> : <input autoFocus disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} placeholder="Supplier name" required value={purchaseOrderDraft.supplier} />}</label> : null}
         {purchaseOrderDraft.mode === 'create' ? <label>Expected arrival<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, expectedAt: event.target.value } : current)} required type="datetime-local" value={purchaseOrderDraft.expectedAt} /></label> : null}
-        <label>{purchaseOrderDraft.mode === 'create' ? 'Quantity to order' : 'Quantity received'}<input aria-describedby="stock-receipt-preview" autoFocus={purchaseOrderDraft.mode === 'receive'} disabled={commerceControlsDisabled} inputMode="numeric" max={purchaseOrderQuantityLimit} min="1" onChange={(event) => setPurchaseOrderDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="10" required step="1" type="number" value={purchaseOrderDraft.quantity} /></label>
+        <label>{purchaseOrderDraft.mode === 'create' ? 'Quantity to order' : 'Accepted units'}<input aria-describedby="stock-receipt-preview" autoFocus={purchaseOrderDraft.mode === 'receive'} disabled={commerceControlsDisabled} inputMode="numeric" max={purchaseOrderQuantityLimit} min="1" onChange={(event) => setPurchaseOrderDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="10" required step="1" type="number" value={purchaseOrderDraft.quantity} /></label>
+        {purchaseOrderDraft.mode === 'receive' ? <div className="form-row"><label>Rejected units<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" max={Math.max(0, (purchaseOrderDraftOrder?.progress.remaining ?? 0) - (purchaseOrderQuantityResult ?? 0))} min="0" onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, rejectedQuantity: event.target.value } : current)} required step="1" type="number" value={purchaseOrderDraft.rejectedQuantity} /></label><label>Discrepancy reason<select disabled={commerceControlsDisabled || purchaseOrderRejectedResult === 0} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, discrepancyCode: event.target.value as CommercePurchaseOrderDiscrepancyCode } : current)} required={Boolean(purchaseOrderRejectedResult)} value={purchaseOrderDraft.discrepancyCode}><option value="damaged">Damaged</option><option value="wrong_item">Wrong item</option><option value="quality_failed">Quality failed</option></select></label></div> : null}
         {purchaseOrderDraft.mode === 'receive' && commerce.inventoryFoundation ? <label>Receive into<select disabled={commerceControlsDisabled || !managedInventoryProjection} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, locationId: event.target.value } : current)} required value={purchaseOrderDraft.locationId}><option value="">Choose location</option>{managedInventoryProjection?.locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label> : null}
         {purchaseOrderDraft.mode === 'receive' && commerce.inventoryFoundation ? <label>Lot or batch<input autoComplete="off" disabled={commerceControlsDisabled || !managedInventoryProjection} maxLength={80} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, trackingCode: event.target.value } : current)} placeholder="Scan or enter lot" required value={purchaseOrderDraft.trackingCode} /></label> : null}
         <div aria-live="polite" className="stock-receipt-preview" id="stock-receipt-preview"><small>{purchaseOrderDraft.mode === 'create' ? 'Internal order' : 'New on hand'}</small><strong>{purchaseOrderQuantityResult === null
           ? 'Enter whole units'
           : purchaseOrderDraft.mode === 'create'
             ? `${purchaseOrderQuantityResult.toLocaleString()} units`
-            : `${purchaseOrderDraftItem.onHand.toLocaleString()} → ${(purchaseOrderDraftItem.onHand + purchaseOrderQuantityResult).toLocaleString()}${purchaseReceiptLocation ? ` · ${purchaseReceiptLocation.name}` : ''}`}</strong></div>
-        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelPurchaseOrderEditor} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || purchaseOrderQuantityResult === null || !purchaseReceiptAllocationReady || (purchaseOrderDraft.mode === 'create' && (!purchaseOrderDraft.supplier.trim() || purchaseOrderExpectedAtResult === null))} type="submit">{purchaseOrderDraft.mode === 'create' ? 'Review order' : 'Review receipt'}</button></div>
+            : `${purchaseOrderDraftItem.onHand.toLocaleString()} → ${(purchaseOrderDraftItem.onHand + purchaseOrderQuantityResult).toLocaleString()} accepted into stock${purchaseOrderRejectedResult ? ` · ${purchaseOrderRejectedResult.toLocaleString()} rejected / return to vendor` : ''}${purchaseReceiptLocation ? ` · ${purchaseReceiptLocation.name}` : ''}`}</strong></div>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelPurchaseOrderEditor} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || purchaseOrderQuantityResult === null || !purchaseReceiptAllocationReady || !purchaseReceiptDiscrepancyReady || (purchaseOrderDraft.mode === 'create' && (!purchaseOrderDraft.supplier.trim() || purchaseOrderExpectedAtResult === null))} type="submit">{purchaseOrderDraft.mode === 'create' ? 'Review order' : 'Review receipt'}</button></div>
       </form> : null}
       <details className="compact-disclosure purchase-order-history" id="purchase-orders" ref={purchaseOrderHistoryRef}>
         <summary><span>Purchase orders</span><strong>{purchaseOrderRows.filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received').length} active · {purchaseOrderRows.length} total</strong></summary>
@@ -4931,8 +4948,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
           <div className="supplier-performance-heading"><span className="core-eyebrow">Supplier performance</span><small>Measured from Shop orders and receipts</small></div>
           <div className="supplier-performance-grid">{supplierPerformance.map((supplier) => <article data-supplier-status={supplier.status} key={supplier.supplier}>
             <div><strong>{supplier.supplier}</strong><small>{supplier.totalOrders} order{supplier.totalOrders === 1 ? '' : 's'} · {supplier.activeOrders} active</small></div>
-            <span><strong>{supplier.receivedUnits}/{supplier.orderedUnits}</strong><small>units received · {supplier.openUnits} open</small></span>
-            <span><strong>{supplier.onTimeRateBasisPoints === null ? 'Collecting' : formatTaxRate(supplier.onTimeRateBasisPoints)}</strong><small>{supplier.completedDeliveries ? `${supplier.onTimeDeliveries}/${supplier.completedDeliveries} on time` : 'No completed arrival yet'}{supplier.lateOpenOrders ? ` · ${supplier.lateOpenOrders} late open` : ''}</small></span>
+            <span><strong>{supplier.receivedUnits}/{supplier.orderedUnits}</strong><small>units accepted · {supplier.rejectedUnits} rejected · {supplier.openUnits} open</small></span>
+            <span><strong>{supplier.onTimeRateBasisPoints === null ? 'Collecting' : formatTaxRate(supplier.onTimeRateBasisPoints)}</strong><small>{supplier.completedDeliveries ? `${supplier.onTimeDeliveries}/${supplier.completedDeliveries} on time` : 'No completed arrival yet'} · defect {formatTaxRate(supplier.defectRateBasisPoints)}{supplier.lateOpenOrders ? ` · ${supplier.lateOpenOrders} late open` : ''}</small></span>
           </article>)}</div>
         </section> : null}
         {purchaseOrderRows.length ? <div className="purchase-order-list">{purchaseOrderRows.map(({ purchaseOrder, progress, item }) => {
@@ -4941,8 +4958,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
             <div><strong>{item?.name ?? purchaseOrder.sku}</strong><small>{purchaseOrder.supplier} · {purchaseOrder.id}</small><small data-arrival-risk={arrivalUrgency}>{purchaseOrder.expectedAt
               ? `Expected ${formatIssueDue(purchaseOrder.expectedAt)}${arrivalUrgency === 'late' ? ' · Late' : arrivalUrgency === 'due_soon' ? ' · Due soon' : ''}`
               : 'Arrival not recorded · legacy order'}</small></div>
-            <span><strong>{progress.received}/{purchaseOrder.quantityOrdered}</strong><small>{progress.status.replace('_', ' ')}</small></span>
-            {progress.remaining > 0 && progress.status !== 'cancelled' ? <button aria-label={`Cancel remainder for ${purchaseOrder.id}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => reviewPurchaseOrderCancellation(purchaseOrder.id)} type="button">Cancel remainder</button> : <small className="purchase-order-closed">{progress.status === 'received' ? 'Complete' : 'Closed'}</small>}
+            <span><strong>{progress.received} accepted{progress.rejected ? ` · ${progress.rejected} rejected` : ''}/{purchaseOrder.quantityOrdered}</strong><small>{progress.status.replaceAll('_', ' ')}</small></span>
+            {progress.remaining > 0 && progress.status !== 'cancelled' ? <button aria-label={`Cancel remainder for ${purchaseOrder.id}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => reviewPurchaseOrderCancellation(purchaseOrder.id)} type="button">Cancel remainder</button> : <small className="purchase-order-closed">{progress.status === 'received' ? 'Complete' : progress.status === 'received_with_discrepancy' ? 'Return due' : 'Closed'}</small>}
           </article>
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>

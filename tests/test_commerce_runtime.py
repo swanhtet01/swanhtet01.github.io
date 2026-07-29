@@ -131,6 +131,8 @@ def movement(
     purchase_order_id: str | None = None,
     expected_quantity: int | None = None,
     counted_quantity: int | None = None,
+    rejected_quantity: int | None = None,
+    discrepancy_code: str | None = None,
 ) -> dict[str, object]:
     encoded_action_id = quote(action_id, safe="-_.!~*'()")
     record: dict[str, object] = {
@@ -152,6 +154,10 @@ def movement(
         record["expectedQuantity"] = expected_quantity
     if counted_quantity is not None:
         record["countedQuantity"] = counted_quantity
+    if rejected_quantity is not None:
+        record["rejectedQuantity"] = rejected_quantity
+        record["discrepancyCode"] = discrepancy_code or "damaged"
+        record["discrepancyDisposition"] = "return_to_vendor"
     return record
 
 
@@ -3472,6 +3478,44 @@ class CommerceRuntimeTests(unittest.TestCase):
                 TrialValidationError
             ):
                 validate_commerce_state(invalid)
+
+    def test_purchase_receipt_retains_rejected_units_without_adding_them_to_stock(self) -> None:
+        current = catalog_state()
+        current["purchaseOrders"] = [purchase_order_record()]
+        accepted_state = deepcopy(current)
+        accepted_state["items"][0]["onHand"] = 16  # type: ignore[index]
+        accepted_state["movements"] = [
+            movement(
+                "receipt",
+                "ACT-PURCHASE-DISCREPANCY",
+                6,
+                created_at="2026-07-23T09:10:00.000Z",
+                purchase_order_id=PURCHASE_ORDER_ID,
+                rejected_quantity=4,
+                discrepancy_code="quality_failed",
+            )
+        ]
+        accepted = apply_event(
+            current,
+            "commerce.purchase_order.received",
+            accepted_state,
+        )
+        receipt = accepted["movements"][0]  # type: ignore[index]
+        self.assertEqual(accepted["items"][0]["onHand"], 16)  # type: ignore[index]
+        self.assertEqual(receipt["quantityDelta"], 6)  # type: ignore[index]
+        self.assertEqual(receipt["rejectedQuantity"], 4)  # type: ignore[index]
+        self.assertEqual(receipt["discrepancyDisposition"], "return_to_vendor")  # type: ignore[index]
+
+        incomplete = deepcopy(accepted_state)
+        del incomplete["movements"][0]["discrepancyCode"]  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "discrepancy fields are incomplete"):
+            apply_event(current, "commerce.purchase_order.received", incomplete)
+
+        over_delivery = deepcopy(accepted_state)
+        over_delivery["items"][0]["onHand"] = 17  # type: ignore[index]
+        over_delivery["movements"][0]["quantityDelta"] = 7  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "outstanding quantity|exceeds its purchase order"):
+            apply_event(current, "commerce.purchase_order.received", over_delivery)
 
     def test_store_stamps_purchase_order_creation_and_rejects_expired_arrival(self) -> None:
         store = InMemoryTrialStore(reducer=reduce_trial_state)
