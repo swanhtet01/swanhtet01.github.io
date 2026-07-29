@@ -19,7 +19,8 @@ const defaultLocalCompanyHome = resolve(root, '..', 'supermega-local-company-sta
 const powershell = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const MAX_COMMAND_BYTES = 512 * 1024
 const MAX_REPORT_BYTES = 256 * 1024
-const EXECUTION_SPEC_VERSION = '2026-07-29.10'
+const EXECUTION_SPEC_VERSION = '2026-07-29.11'
+const LEGACY_EXECUTION_SPEC_VERSION = '2026-07-29.10'
 
 const AGENT_ROLE_MAP = Object.freeze({
   'operations-analyst': 'operations',
@@ -37,6 +38,13 @@ const OUTCOME_BRIEFS = Object.freeze({
   'growth-pipeline-control': 'internal growth-pipeline control',
   'finance-risk-control': 'internal finance and risk control',
 })
+const OUTCOME_SEQUENCE = Object.freeze([
+  'daily-company-control',
+  'engineering-release-control',
+  'product-portfolio-control',
+  'growth-pipeline-control',
+  'finance-risk-control',
+])
 
 function fail(reason) {
   throw new Error(reason)
@@ -66,6 +74,8 @@ function planSpec(plan) {
   const hash = String(plan?.preflight?.expectedPlanHash || '')
   const agents = plan?.manifest?.agents
   const outcomeId = String(plan?.outcomeId || '')
+  const generatedAt = String(plan?.generatedAt || '')
+  const period = generatedAt.slice(0, 10)
   if (!plan?.ok
     || plan.contract !== 'supermega.ally-ceo-company-plan.v1'
     || plan.declined !== false
@@ -80,7 +90,10 @@ function planSpec(plan) {
     || plan.controls?.planningExternalWrites !== false
     || plan.controls?.maxAgents !== 2
     || plan.controls?.maxConcurrentAllyRuns !== 1
-    || plan.controls?.scaleToZero !== true) {
+    || plan.controls?.scaleToZero !== true
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(generatedAt)
+    || new Date(generatedAt).toISOString() !== generatedAt
+    || plan.manifest?.cycleId !== `ally-ceo-${period.replaceAll('-', '')}-${outcomeId}`) {
     fail('ally_ceo_local_cycle_plan_invalid')
   }
   const roles = agents.map((agent) => AGENT_ROLE_MAP[agent])
@@ -95,8 +108,17 @@ function planSpec(plan) {
     outcomeId,
     roles.join(','),
   ].join('|'))
+  const legacyCycleHash = sha256([
+    ALLY_CEO_LOCAL_CYCLE_CONTRACT,
+    LEGACY_EXECUTION_SPEC_VERSION,
+    hash,
+    outcomeId,
+    roles.join(','),
+  ].join('|'))
   const shortHash = cycleHash.slice(0, 12)
+  const outcomeMarker = `[ALLY_CEO_OUTCOME:${period}:${outcomeId}]`
   const objective = [
+    outcomeMarker,
     `[ALLY_CEO_CYCLE:${shortHash}]`,
     `[ALLY_CEO_PLAN:${planShortHash}]`,
     `Using imported SuperMega project evidence, produce one concise internal ${OUTCOME_BRIEFS[outcomeId]} brief and separate verified facts from assumptions.`,
@@ -108,9 +130,12 @@ function planSpec(plan) {
   ].join(' ')
   return {
     outcomeId,
+    period,
+    outcomeMarker,
     planHash: hash,
     cycleHash,
     shortHash,
+    legacyShortHash: legacyCycleHash.slice(0, 12),
     workOrderId: String(plan.preflight?.expectedWorkOrderId || ''),
     agents: [...agents],
     roles,
@@ -235,21 +260,35 @@ function validateKnowledgeRefresh(receipt, before) {
   return receipt.refreshed_count
 }
 
-function findExistingCycle(queueText, shortHash) {
+function findExistingCycle(queueText, marker) {
   if (typeof queueText !== 'string' || Buffer.byteLength(queueText, 'utf8') > MAX_COMMAND_BYTES) {
     fail('ally_ceo_local_cycle_queue_inventory_invalid')
   }
+  if (typeof marker !== 'string' || !/^\[ALLY_CEO_(?:OUTCOME|CYCLE):[A-Za-z0-9:-]+\]$/.test(marker)) {
+    fail('ally_ceo_local_cycle_queue_marker_invalid')
+  }
   const parsed = queueText.split(/\r?\n/)
-    .filter((line) => line.includes(`[ALLY_CEO_CYCLE:${shortHash}]`))
+    .filter((line) => line.includes(marker))
     .map((line) => {
       const match = /^([a-f0-9]{12})\s+([a-z_]+)/.exec(line)
       const job = /\sjob=([a-f0-9]{12}|-)\s/.exec(line)
-      if (!match || !job) fail('ally_ceo_local_cycle_queue_inventory_invalid')
+      if (!match
+        || !job
+        || !/\sp=100\s/.test(line)
+        || !/\sproject=SuperMega\s/.test(line)) {
+        fail('ally_ceo_local_cycle_queue_inventory_invalid')
+      }
       return { queueId: match[1], status: match[2], jobId: job[1] === '-' ? null : job[1] }
     })
     .filter((item) => item.status !== 'cancelled')
   if (parsed.length > 1) fail('ally_ceo_local_cycle_duplicate_plan')
   return parsed[0] || null
+}
+
+function existingForSpec(queueText, spec) {
+  return findExistingCycle(queueText, spec.outcomeMarker)
+    || findExistingCycle(queueText, `[ALLY_CEO_CYCLE:${spec.shortHash}]`)
+    || findExistingCycle(queueText, `[ALLY_CEO_CYCLE:${spec.legacyShortHash}]`)
 }
 
 function validateQueuePreflight(preflight, queueId, roles) {
@@ -289,13 +328,13 @@ function parseQueueResult(text, queueId) {
   return { queueId: match[1], jobId: match[2], qualityPassed: match[3] === 'passed', reportPath: match[4].trim() }
 }
 
-async function currentPlan(now) {
+async function currentPlan(now, completedOutcomeIds = []) {
   const [hqNow, workboard, portfolioText] = await Promise.all([
     readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
     readFile(resolve(root, 'hq', 'WORKBOARD.md'), 'utf8'),
     readFile(resolve(root, 'hq', 'portfolio.json'), 'utf8'),
   ])
-  return buildAllyCeoCompanyPlan({ now, hqNow, workboard, portfolioText })
+  return buildAllyCeoCompanyPlan({ now, hqNow, workboard, portfolioText, completedOutcomeIds })
 }
 
 function limitedEnvironment(localCompanyRoot) {
@@ -402,6 +441,63 @@ function validateAcceptedReport(value) {
   return { path: value.path, bytes: value.bytes, digest }
 }
 
+async function inspectExistingCycle(existing, runCommand, inspectReport) {
+  let report = null
+  let reason = null
+  if (existing.status === 'complete' && existing.jobId) {
+    try {
+      const detail = parseJson(
+        await runCommand({ kind: 'local', args: ['show', existing.jobId], timeoutMs: 30_000 }),
+        'ally_ceo_local_cycle_existing_job_invalid',
+      )
+      if (!Array.isArray(detail.job)
+        || detail.job[0] !== existing.jobId
+        || detail.job[2] !== 'complete'
+        || detail.evaluation?.passed !== true
+        || typeof detail.job[4] !== 'string') {
+        fail('ally_ceo_local_cycle_existing_job_rejected')
+      }
+      report = validateAcceptedReport(await inspectReport(detail.job[4]))
+    } catch (error) {
+      reason = String(error?.message || 'ally_ceo_local_cycle_existing_job_rejected').slice(0, 160)
+    }
+  }
+  return {
+    accepted: existing.status === 'complete' && Boolean(report) && !reason,
+    report,
+    reason,
+  }
+}
+
+async function selectRotatingPlan({ buildPlan, queueText, runCommand, inspectReport }) {
+  const completedOutcomeIds = []
+  let period = null
+  for (const expectedOutcomeId of OUTCOME_SEQUENCE) {
+    const plan = await buildPlan([...completedOutcomeIds])
+    const spec = planSpec(plan)
+    if (spec.outcomeId !== expectedOutcomeId || period && spec.period !== period) {
+      fail('ally_ceo_local_cycle_rotation_sequence_invalid')
+    }
+    period ??= spec.period
+    const existing = existingForSpec(queueText, spec)
+    if (!existing) return { allDone: false, plan, spec, existing: null, inspection: null, completedOutcomeIds }
+    const inspection = await inspectExistingCycle(existing, runCommand, inspectReport)
+    if (!inspection.accepted) return { allDone: false, plan, spec, existing, inspection, completedOutcomeIds }
+    completedOutcomeIds.push(spec.outcomeId)
+  }
+
+  const declined = await buildPlan([...completedOutcomeIds])
+  if (!declined?.ok
+    || declined.contract !== 'supermega.ally-ceo-company-plan.v1'
+    || declined.declined !== true
+    || declined.reason !== 'no_authorized_ceo_outcome'
+    || declined.manifest !== null
+    || declined.plan !== null) {
+    fail('ally_ceo_local_cycle_rotation_completion_invalid')
+  }
+  return { allDone: true, period, completedOutcomeIds }
+}
+
 export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   const execute = input.execute === true
   const refreshKnowledge = input.refreshKnowledge === true
@@ -415,8 +511,8 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   const localCompanyHome = resolve(input.localCompanyHome || defaultLocalCompanyHome)
   const runCommand = dependencies.runCommand || ((request) => defaultCommandRunner({ ...request, localCompanyRoot, localCompanyHome }))
   const inspectReport = dependencies.inspectReport || ((path) => defaultReportInspector(path, localCompanyHome))
-  const plan = dependencies.plan || await currentPlan(input.now ?? new Date())
-  const spec = planSpec(plan)
+  const cycleNow = input.now ?? new Date()
+  const buildPlan = dependencies.buildPlan || ((completedOutcomeIds) => currentPlan(cycleNow, completedOutcomeIds))
 
   const audit = parseJson(await runCommand({ kind: 'audit', args: [], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_audit_json_invalid')
   const host = validateAudit(audit)
@@ -451,35 +547,47 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     refreshedSources,
   }
   const queueText = await runCommand({ kind: 'local', args: ['queue', 'list'], timeoutMs: 30_000 })
-  const existing = findExistingCycle(queueText, spec.shortHash)
-  if (existing) {
-    let acceptedReport = null
-    let existingRejectedReason = null
-    if (existing.status === 'complete' && existing.jobId) {
-      try {
-        const detail = parseJson(
-          await runCommand({ kind: 'local', args: ['show', existing.jobId], timeoutMs: 30_000 }),
-          'ally_ceo_local_cycle_existing_job_invalid',
-        )
-        if (!Array.isArray(detail.job)
-          || detail.job[0] !== existing.jobId
-          || detail.job[2] !== 'complete'
-          || detail.evaluation?.passed !== true
-          || typeof detail.job[4] !== 'string') {
-          fail('ally_ceo_local_cycle_existing_job_rejected')
+  const rotation = dependencies.plan
+    ? (() => {
+        const spec = planSpec(dependencies.plan)
+        return {
+          allDone: false,
+          plan: dependencies.plan,
+          spec,
+          existing: existingForSpec(queueText, spec),
+          inspection: null,
+          completedOutcomeIds: [],
         }
-        acceptedReport = validateAcceptedReport(await inspectReport(detail.job[4]))
-      } catch (error) {
-        existingRejectedReason = String(error?.message || 'ally_ceo_local_cycle_existing_job_rejected').slice(0, 160)
-      }
-    }
-    const accepted = existing.status === 'complete' && Boolean(acceptedReport) && !existingRejectedReason
+      })()
+    : await selectRotatingPlan({ buildPlan, queueText, runCommand, inspectReport })
+  if (rotation.allDone) {
     return {
-      ok: accepted,
+      ok: true,
       contract: ALLY_CEO_LOCAL_CYCLE_CONTRACT,
-      status: existingRejectedReason ? 'existing_rejected' : 'existing',
+      status: 'period_complete',
       replayed: true,
+      period: rotation.period,
+      outcomeId: null,
+      completedOutcomeIds: rotation.completedOutcomeIds,
+      host,
+      sourceCount,
+      knowledgeRefresh,
+      modelCalls: 0,
+      queueWrites: 0,
+      controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
+    }
+  }
+  const { spec, existing, completedOutcomeIds } = rotation
+  if (existing) {
+    const inspected = rotation.inspection || await inspectExistingCycle(existing, runCommand, inspectReport)
+    return {
+      ok: inspected.accepted,
+      contract: ALLY_CEO_LOCAL_CYCLE_CONTRACT,
+      status: inspected.reason ? 'existing_rejected' : 'existing',
+      replayed: true,
+      period: spec.period,
       outcomeId: spec.outcomeId,
+      completedOutcomeIds,
       planHash: spec.planHash,
       cycleHash: spec.cycleHash,
       workOrderId: spec.workOrderId,
@@ -489,9 +597,9 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
       queueId: existing.queueId,
       jobId: existing.jobId,
       queueStatus: existing.status,
-      qualityPassed: accepted,
-      report: acceptedReport,
-      reason: existingRejectedReason,
+      qualityPassed: inspected.accepted,
+      report: inspected.report,
+      reason: inspected.reason,
       host,
       sourceCount,
       knowledgeRefresh,
@@ -506,7 +614,9 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     contract: ALLY_CEO_LOCAL_CYCLE_CONTRACT,
     status: execute ? 'executing' : 'ready',
     replayed: false,
+    period: spec.period,
     outcomeId: spec.outcomeId,
+    completedOutcomeIds,
     planHash: spec.planHash,
     cycleHash: spec.cycleHash,
     workOrderId: spec.workOrderId,

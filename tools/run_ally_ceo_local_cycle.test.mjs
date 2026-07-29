@@ -3,14 +3,29 @@ import test from 'node:test'
 
 import { runAllyCeoLocalCycle } from './run_ally_ceo_local_cycle.mjs'
 
-function plan() {
+const outcomeAgents = {
+  'daily-company-control': ['operations-analyst', 'project-controller'],
+  'engineering-release-control': ['proof-builder', 'quality-reviewer'],
+  'product-portfolio-control': ['operations-analyst', 'quality-reviewer'],
+  'growth-pipeline-control': ['sales-qualifier', 'project-controller'],
+  'finance-risk-control': ['operations-analyst', 'cash-reconciler'],
+}
+const outcomeSequence = Object.keys(outcomeAgents)
+
+function plan({ outcomeId = 'daily-company-control', hashCharacter = 'a' } = {}) {
+  const generatedAt = '2026-07-29T00:00:00.000Z'
   return {
     ok: true,
     contract: 'supermega.ally-ceo-company-plan.v1',
+    generatedAt,
     declined: false,
-    outcomeId: 'daily-company-control',
-    manifest: { agents: ['operations-analyst', 'project-controller'], roleBudget: 6 },
-    preflight: { expectedPlanHash: 'a'.repeat(64), expectedWorkOrderId: 'company-order:' + 'b'.repeat(40) },
+    outcomeId,
+    manifest: {
+      cycleId: `ally-ceo-20260729-${outcomeId}`,
+      agents: outcomeAgents[outcomeId],
+      roleBudget: 6,
+    },
+    preflight: { expectedPlanHash: hashCharacter.repeat(64), expectedWorkOrderId: 'company-order:' + 'b'.repeat(40) },
     plan: { budget: { plannedRoles: 6, remainingRoles: 0 } },
     controls: {
       planningModelCalls: 0,
@@ -21,6 +36,28 @@ function plan() {
       scaleToZero: true,
     },
   }
+}
+
+function rotatingPlan(completedOutcomeIds) {
+  if (completedOutcomeIds.length === outcomeSequence.length) {
+    return {
+      ok: true,
+      contract: 'supermega.ally-ceo-company-plan.v1',
+      generatedAt: '2026-07-29T00:00:00.000Z',
+      declined: true,
+      reason: 'no_authorized_ceo_outcome',
+      manifest: null,
+      plan: null,
+    }
+  }
+  const outcomeId = outcomeSequence[completedOutcomeIds.length]
+  return plan({ outcomeId, hashCharacter: String.fromCharCode(97 + completedOutcomeIds.length) })
+}
+
+function completedOutcomeLine(outcomeId, index = 0, status = 'complete') {
+  const queueId = (index + 1).toString(16).padStart(12, '0')
+  const jobId = (index + 101).toString(16).padStart(12, '0')
+  return `${queueId}  ${status.padEnd(14)}  p=100  2026-07-29T00:00:00Z  project=SuperMega  playbook=-  job=${jobId}  [ALLY_CEO_OUTCOME:2026-07-29:${outcomeId}] prior accepted outcome\n`
 }
 
 const audit = (eligible = true) => JSON.stringify({
@@ -183,6 +220,92 @@ test('preflight binds the CEO plan to two local roles without queue or model wor
   assert.equal(result.modelCalls, 0)
   assert.equal(result.queueWrites, 0)
   assert.equal(state.calls.some((call) => call.args?.includes('add')), false)
+})
+
+test('accepted daily evidence rotates the next serial run to Engineering despite plan-hash drift', async () => {
+  const state = harness({ queueList: completedOutcomeLine('daily-company-control') })
+  const result = await runAllyCeoLocalCycle(
+    { execute: false },
+    {
+      buildPlan: async (completedOutcomeIds) => rotatingPlan(completedOutcomeIds),
+      runCommand: state.runCommand,
+      inspectReport: async () => ({
+        path: 'C:\\state\\outputs\\daily.md',
+        bytes: Buffer.byteLength(acceptedStructuredReport),
+        digest: 'sha256:' + '7'.repeat(64),
+        text: acceptedStructuredReport,
+      }),
+    },
+  )
+  assert.equal(result.status, 'ready')
+  assert.equal(result.outcomeId, 'engineering-release-control')
+  assert.deepEqual(result.completedOutcomeIds, ['daily-company-control'])
+  assert.deepEqual(result.roles, ['engineering', 'quality'])
+  assert.equal(result.modelCalls, 0)
+  assert.equal(state.calls.filter((call) => call.args?.[0] === 'show').length, 1)
+})
+
+test('five accepted outcomes close the UTC period with zero queue or model work', async () => {
+  const queueList = outcomeSequence.map((outcomeId, index) => completedOutcomeLine(outcomeId, index)).join('')
+  const state = harness({ queueList })
+  const result = await runAllyCeoLocalCycle(
+    { execute: true, refreshKnowledge: true },
+    {
+      buildPlan: async (completedOutcomeIds) => rotatingPlan(completedOutcomeIds),
+      runCommand: state.runCommand,
+      inspectReport: async () => ({
+        path: 'C:\\state\\outputs\\accepted.md',
+        bytes: Buffer.byteLength(acceptedStructuredReport),
+        digest: 'sha256:' + '8'.repeat(64),
+        text: acceptedStructuredReport,
+      }),
+    },
+  )
+  assert.equal(result.ok, true)
+  assert.equal(result.status, 'period_complete')
+  assert.equal(result.period, '2026-07-29')
+  assert.deepEqual(result.completedOutcomeIds, outcomeSequence)
+  assert.equal(result.modelCalls, 0)
+  assert.equal(result.queueWrites, 0)
+  assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)
+})
+
+test('failed and duplicate period outcomes never advance or create replacement work', async () => {
+  const failed = harness({ queueList: completedOutcomeLine('daily-company-control', 0, 'quality_failed') })
+  const failedResult = await runAllyCeoLocalCycle(
+    { execute: true },
+    { buildPlan: async (completedOutcomeIds) => rotatingPlan(completedOutcomeIds), runCommand: failed.runCommand },
+  )
+  assert.equal(failedResult.ok, false)
+  assert.equal(failedResult.status, 'existing')
+  assert.equal(failedResult.outcomeId, 'daily-company-control')
+  assert.equal(failed.calls.some((call) => call.args?.[1] === 'add'), false)
+
+  const duplicate = harness({
+    queueList: completedOutcomeLine('daily-company-control', 0) + completedOutcomeLine('daily-company-control', 1),
+  })
+  await assert.rejects(
+    runAllyCeoLocalCycle(
+      { execute: true },
+      { buildPlan: async (completedOutcomeIds) => rotatingPlan(completedOutcomeIds), runCommand: duplicate.runCommand },
+    ),
+    /ally_ceo_local_cycle_duplicate_plan/,
+  )
+  assert.equal(duplicate.calls.some((call) => call.args?.[1] === 'add'), false)
+})
+
+test('a period marker from another project cannot satisfy SuperMega rotation', async () => {
+  const foreign = harness({
+    queueList: completedOutcomeLine('daily-company-control').replace('project=SuperMega', 'project=Other'),
+  })
+  await assert.rejects(
+    runAllyCeoLocalCycle(
+      { execute: true },
+      { buildPlan: async (completedOutcomeIds) => rotatingPlan(completedOutcomeIds), runCommand: foreign.runCommand },
+    ),
+    /ally_ceo_local_cycle_queue_inventory_invalid/,
+  )
+  assert.equal(foreign.calls.some((call) => call.args?.[1] === 'add'), false)
 })
 
 test('execution claims the exact reviewed mission once and accepts only a quality-passed report', async () => {
