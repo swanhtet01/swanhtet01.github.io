@@ -35,9 +35,9 @@ function portfolio(overrides = {}) {
     agentOperatingModel: {
       mode: 'bounded-demand-driven',
       registeredRoleLimit: 12,
-      activeAssignmentLimit: 4,
+      activeAssignmentLimit: 2,
       maxAgentsPerCycle: 2,
-      maxConcurrentCompanyCycles: 2,
+      maxConcurrentCompanyCycles: 1,
       scaleToZero: true,
       idleCapabilitiesConsumeCompute: false,
       dynamicDelegation: false,
@@ -67,8 +67,8 @@ test('CEO planning selects one scale-to-zero specialist with deterministic contr
   assert.equal(result.manifest.cycleId, 'ally-ceo-20260729-daily-company-control')
   assert.equal(result.manifest.roleBudget, result.plan.budget.plannedRoles)
   assert.equal(result.plan.budget.remainingRoles, 0)
-  assert.equal(result.plan.controls.maxActiveAssignments, 4)
-  assert.equal(result.plan.controls.maxConcurrentCycles, 2)
+  assert.equal(result.plan.controls.maxActiveAssignments, 2)
+  assert.equal(result.plan.controls.maxConcurrentCycles, 1)
   assert.equal(result.plan.controls.execution, 'sequential')
   assert.equal(result.plan.controls.externalWrites, false)
   assert.equal(result.controls.planningModelCalls, 0)
@@ -132,6 +132,14 @@ test('completed outcomes rotate through all five fixed teams and then stop', asy
 test('capacity drift and non-authoritative social evidence fail before a work order exists', async () => {
   await assert.rejects(
     buildAllyCeoCompanyPlan({ now: '2026-07-29T00:00:00.000Z', hqNow: now, workboard, portfolioText: portfolio({ registeredRoleLimit: 175 }) }),
+    /ally_ceo_company_plan_capacity_invalid/,
+  )
+  await assert.rejects(
+    buildAllyCeoCompanyPlan({ now: '2026-07-29T00:00:00.000Z', hqNow: now, workboard, portfolioText: portfolio({ activeAssignmentLimit: 4 }) }),
+    /ally_ceo_company_plan_capacity_invalid/,
+  )
+  await assert.rejects(
+    buildAllyCeoCompanyPlan({ now: '2026-07-29T00:00:00.000Z', hqNow: now, workboard, portfolioText: portfolio({ maxConcurrentCompanyCycles: 2 }) }),
     /ally_ceo_company_plan_capacity_invalid/,
   )
   await assert.rejects(

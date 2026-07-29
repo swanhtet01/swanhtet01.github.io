@@ -58,8 +58,8 @@ test('agent roster is fixed, bounded, and backed by validated crews', async () =
   const roster = listCompanyAgents()
   assert.equal(roster.length, 12)
   assert.equal(MAX_REGISTERED_COMPANY_AGENTS, 12)
-  assert.equal(MAX_ACTIVE_COMPANY_ASSIGNMENTS, 4)
-  assert.equal(MAX_RUNNING_COMPANY_CYCLES, 2)
+  assert.equal(MAX_ACTIVE_COMPANY_ASSIGNMENTS, 2)
+  assert.equal(MAX_RUNNING_COMPANY_CYCLES, 1)
   assert.equal(MAX_RUNNING_COMPANY_CYCLES * MAX_CYCLE_AGENTS, MAX_ACTIVE_COMPANY_ASSIGNMENTS)
   assert.equal(COMPANY_CAPACITY_CLAIM_CONTRACT, 'supermega.agent-company-capacity-claims.v1')
   assert.equal(COMPANY_CAPACITY_CLAIM_TTL_SECONDS, 120)
@@ -99,8 +99,8 @@ test('agent roster is fixed, bounded, and backed by validated crews', async () =
   assert.equal(plan.budget.roleLimit, 6)
   assert.equal(plan.budget.remainingRoles, 0)
   assert.equal(plan.controls.execution, 'sequential')
-  assert.equal(plan.controls.maxConcurrentCycles, 2)
-  assert.equal(plan.controls.maxActiveAssignments, 4)
+  assert.equal(plan.controls.maxConcurrentCycles, 1)
+  assert.equal(plan.controls.maxActiveAssignments, 2)
   assert.equal(plan.controls.capacityClaimContract, COMPANY_CAPACITY_CLAIM_CONTRACT)
   assert.equal(plan.controls.capacityClaimTtlSeconds, COMPANY_CAPACITY_CLAIM_TTL_SECONDS)
   assert.equal(plan.controls.dynamicDelegation, false)
@@ -241,7 +241,7 @@ test('runner uses a durable claim, executes serially, and isolates each agent ev
   assert.deepEqual(result.trace[0].guardrails, result.results[0].guardrails)
 })
 
-test('runner admits two durable cycles, blocks the third, and releases capacity on every result', async () => {
+test('runner admits one durable cycle, blocks the second, and releases capacity after failure', async () => {
   const state = durableClaimHarness()
   let started = 0
   let releaseCrews
@@ -285,7 +285,7 @@ test('runner admits two durable cycles, blocks the third, and releases capacity 
 
   releaseCrews()
   const completed = await Promise.all(admitted)
-  assert.deepEqual(completed.map((result) => result.status), ['completed', 'failed'])
+  assert.deepEqual(completed.map((result) => result.status), ['failed'])
   assert.equal([...state.claims.keys()].filter((id) => id.startsWith('agent-company-capacity:')).length, 0)
 
   const retried = await runCompanyCycle(overflowInput, {

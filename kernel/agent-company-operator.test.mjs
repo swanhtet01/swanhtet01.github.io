@@ -55,8 +55,8 @@ const PLAN = {
   budget: { agentLimit: 2, selectedAgents: 2, roleLimit: 6, plannedRoles: 6, remainingRoles: 0 },
   controls: {
     execution: 'sequential',
-    maxConcurrentCycles: 2,
-    maxActiveAssignments: 4,
+    maxConcurrentCycles: 1,
+    maxActiveAssignments: 2,
     dynamicDelegation: false,
     crossAgentContext: false,
     externalWrites: false,
@@ -276,6 +276,7 @@ test('operator rejects identity, hash, and boundary drift across server response
     { action: 'plan', mutate: (body) => { body.plan.runId = 'agent-company:another-run' } },
     { action: 'plan', mutate: (body) => { body.plan.budget.roleLimit = 8 } },
     { action: 'plan', mutate: (body) => { body.plan.controls.maxConcurrentCycles = 4 } },
+    { action: 'plan', mutate: (body) => { body.plan.controls.maxActiveAssignments = 4 } },
     { action: 'work-order-create', mutate: (body) => { body.workOrder.cycleId = 'another-cycle' } },
     { action: 'work-order-create', mutate: (body) => { body.workOrder.workOrderId = 'company-order:another-order' } },
     { action: 'work-order-create', mutate: (body) => { body.workOrder.planHash = 'f'.repeat(64) } },

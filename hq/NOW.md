@@ -31,7 +31,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 ## Implemented reality
 
-- HQ caps 12 roles, four jobs, and zero idle compute; overrides fail closed and duplicate ceilings are removed. Ally stays zero-subagent: its audit requires exactly one `[features] multi_agent = false` declaration and reports a zero ceiling; no duplicate dev server or loaded local model. Idle Ollama hosts were stopped; one lease blocks duplicate cycles (`21afe44`).
+- HQ keeps 12 roles; one cycle activates two specialists; two jobs wait without compute; overrides fail closed and duplicate ceilings are removed. Ally stays zero-subagent: its audit requires exactly one `[features] multi_agent = false` declaration; no duplicate dev server or loaded local model. Idle Ollama hosts were stopped; one lease blocks duplicate cycles (`21afe44`).
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation (`07dd959`).
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked (`be78a02`).
 - Each CEO cycle selects one outcome. Invalid identity/evidence stops before spend; owner-send uncertainty is explicit, retains claims, and is never auto-retried (`f1328a0`, `cafdafe`, `f626ee7`).
@@ -43,7 +43,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 - CEO status is output-free across weekly briefs. Company Week separates recorded from delivered and fails incomplete delivery to attention; Company Health shows receipt counts (`8d97d4d`, `ece46ce`).
-- CEO brief startup is 13 files/245,202 bytes; operations and eight connectors are deferred (`006070f`, `c508983`). Fixed HQ synthesis keeps report time in evidence but outside cache keys, so unchanged evidence uses zero model work (`1c62d45`).
+- CEO brief startup is 13 files/250,926 bytes; operations and eight connectors are deferred (`006070f`, `c508983`). Fixed HQ synthesis keeps report time in evidence but outside cache keys, so unchanged evidence uses zero model work (`1c62d45`).
 - Company Health separates registered roles from running compute and rejects malformed counts (`adde4a09`). CEO errors preserve only recognized redacted live-contract categories (`cd53a31`).
 
 ## Verified baseline
@@ -75,7 +75,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 - Delivery stays on Shop, Plant, Website, and Ecommerce; Ecommerce feeds Shop, and AI remains gated R&D.
 - Use one app, identity foundation, evidence/approval model, and release path.
-- Keep four teams, twelve roster roles, four active assignments, and zero idle compute.
+- Keep four teams, twelve dormant roles, one cycle, two active assignments, and zero idle compute.
 - New modules require a real user job, an implemented state transition, a failure/recovery path, and an acceptance test.
 
 ## Build rule

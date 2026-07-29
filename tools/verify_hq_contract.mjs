@@ -137,10 +137,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.manager === 'CEO / Codex integrator'
   && portfolio.agentOperatingModel?.buildTeams?.join(',') === 'product,engineering,growth,finance-risk'
   && portfolio.agentOperatingModel?.registeredRoleLimit === 12
-  && portfolio.agentOperatingModel?.activeAssignmentLimit === 4
-  && portfolio.agentOperatingModel?.batchJobLimit === 4
+  && portfolio.agentOperatingModel?.activeAssignmentLimit === 2
+  && portfolio.agentOperatingModel?.batchJobLimit === 2
   && portfolio.agentOperatingModel?.maxAgentsPerCycle === 2
-  && portfolio.agentOperatingModel?.maxConcurrentCompanyCycles === 2
+  && portfolio.agentOperatingModel?.maxConcurrentCompanyCycles === 1
   && portfolio.agentOperatingModel?.validatedCrewCapabilities === 15
   && portfolio.agentOperatingModel?.ceoOutcomeAuthority === 'supermega.ceo-outcome-authority.v2'
   && portfolio.agentOperatingModel?.ceoOutcomeOperationsContract === CEO_OUTCOME_OPERATION_CONTRACT
@@ -162,7 +162,7 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerFiles === 30
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerBytes === 409600
   && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerFiles === 13
-  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 245202
+  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 250926
   && portfolio.agentOperatingModel?.companyOperationsDeferredForStartup === true
   && portfolio.agentOperatingModel?.optionalToolConnectorsDeferredForStartup === true
   && portfolio.agentOperatingModel?.fullPlatformStatusTeams?.join(',') === 'engineering,finance-risk'
@@ -231,7 +231,9 @@ requireContract('local inference is explicit, loopback-only, budgeted, and scale
   && !kernelGatewayText.includes('SUPERMEGA_OLLAMA_URL')
   && !/\b(?:child_process|spawn|execFile|cluster)\b/.test(kernelGatewayText))
 requireContract('agent capacity agrees across HQ, coordinator, and Kernel',
-  workforce.runtime_policy?.max_registered_specialists === portfolio.agentOperatingModel?.registeredRoleLimit
+  workboard.includes('| OPS-093 | CEO + Agent Capacity / Runtime Integrity Codex | done-local |')
+  && workboard.includes('one company cycle, at most two active assignments, and at most two waiting batch jobs')
+  && workforce.runtime_policy?.max_registered_specialists === portfolio.agentOperatingModel?.registeredRoleLimit
   && workforce.runtime_policy?.max_running === portfolio.agentOperatingModel?.activeAssignmentLimit
   && workforce.runtime_policy?.max_company_cycles === portfolio.agentOperatingModel?.maxConcurrentCompanyCycles
   && workforce.runtime_policy?.max_specialists_per_company_cycle === portfolio.agentOperatingModel?.maxAgentsPerCycle
@@ -505,7 +507,7 @@ requireContract('agent security brief is reconciled to current controls',
   && agentSecurity.includes('Human review is bound to one clean commit')
   && agentSecurity.includes('builds once, rechecks the canonical project')
   && agentSecurity.includes('pinned `--prebuilt`')
-  && agentSecurity.includes('two atomic durable capacity claims')
+  && agentSecurity.includes('sole atomic durable capacity claim')
   && agentSecurity.includes('old Google Cloud Scheduler entry point is now a read-only compatibility shim')
   && agentSecurity.includes('no production or preview project activity over 90 days')
   && agentSecurity.includes('prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG')
@@ -956,9 +958,9 @@ requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
   && allyCeoPlannerText.includes("'daily-company-control': Object.freeze(['operations-analyst'])")
   && allyCeoPlannerText.includes("registeredRoleLimit !== 12")
-  && allyCeoPlannerText.includes("activeAssignmentLimit !== 4")
+  && allyCeoPlannerText.includes("activeAssignmentLimit !== 2")
   && allyCeoPlannerText.includes("maxAgentsPerCycle !== 2")
-  && allyCeoPlannerText.includes("maxConcurrentCompanyCycles !== 2")
+  && allyCeoPlannerText.includes("maxConcurrentCompanyCycles !== 1")
   && allyCeoPlannerText.includes("maxConcurrentAllyRuns: 1")
   && allyCeoPlannerText.includes("maxAgents: 1")
   && allyCeoPlannerText.includes("ALLY_CEO_CYCLE_EXPERIMENT_CONTRACT = 'supermega.ally-ceo-cycle-experiment.v1'")
@@ -1063,10 +1065,10 @@ requireContract('Ally CEO execution uses one exact local-company run and no exte
   && !/\b(?:fetch|XMLHttpRequest|WebSocket|https?:\/\/|vercel|supabase|stripe|resend)\b/i.test(allyCeoLocalCycleText))
 
 requireContract('agent job cycles are canonical, bounded, and scale to zero',
-  workforce.runtime_policy.max_batch_jobs === 4
+  workforce.runtime_policy.max_batch_jobs === 2
   && workforce.runtime_policy.scale_to_zero === true
   && agentJobRunnerText.includes('AGENT_RUNNER_CYCLE_CONTRACT = "supermega.agent-runner-cycle-budget.v1"')
-  && agentJobRunnerText.includes('MAX_PROCESSED_PER_CYCLE = 4')
+  && agentJobRunnerText.includes('MAX_PROCESSED_PER_CYCLE = 2')
   && agentJobRunnerText.includes('MAX_JOB_TYPE_ARGUMENTS = 24')
   && agentJobRunnerText.includes('def build_job_cycle_plan(')
   && agentJobRunnerText.includes('raise RuntimeError("job_type_not_canonical")')
@@ -1150,7 +1152,7 @@ requireContract('scheduled CEO function keeps the full connector fleet deferred 
   && kernelFootprintVerifier.includes('connectorInventoryComplete: connectorImports === EXPECTED_CONNECTORS')
   && workboard.includes('| OPS-041 | CEO + Agent Operations / Vercel Efficiency Codex | done-local |')
   && workboard.includes('Checkpoint `6bad4e7` defers full status from the operator tool import')
-  && now.includes('CEO brief startup is 13 files/245,202 bytes')
+  && now.includes('CEO brief startup is 13 files/250,926 bytes')
   && now.includes('unchanged evidence uses zero model work'))
 
 for (const forbidden of ['Yangon Tyre', 'ytf.supermega.dev', 'pos.supermega.dev', 'twelve product']) {

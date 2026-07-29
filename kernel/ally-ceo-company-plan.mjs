@@ -74,9 +74,9 @@ function portfolioView(value) {
   const model = value.agentOperatingModel
   if (model.mode !== 'bounded-demand-driven'
     || model.registeredRoleLimit !== 12
-    || model.activeAssignmentLimit !== 4
+    || model.activeAssignmentLimit !== 2
     || model.maxAgentsPerCycle !== 2
-    || model.maxConcurrentCompanyCycles !== 2
+    || model.maxConcurrentCompanyCycles !== 1
     || model.scaleToZero !== true
     || model.idleCapabilitiesConsumeCompute !== false
     || model.dynamicDelegation !== false
@@ -90,9 +90,9 @@ function portfolioView(value) {
     products,
     limits: {
       registeredRoles: 12,
-      activeAssignments: 4,
+      activeAssignments: 2,
       agentsPerCycle: 2,
-      concurrentKernelCycles: 2,
+      concurrentKernelCycles: 1,
       concurrentAllyRuns: 1,
       scaleToZero: true,
     },
@@ -113,8 +113,8 @@ function assertSafePlan(plan, expectedAgents) {
     || plan.controls?.crossAgentContext !== false
     || plan.controls?.externalWrites !== false
     || plan.controls?.durableClaimRequired !== true
-    || plan.controls?.maxConcurrentCycles !== 2
-    || plan.controls?.maxActiveAssignments !== 4) {
+    || plan.controls?.maxConcurrentCycles !== 1
+    || plan.controls?.maxActiveAssignments !== 2) {
     fail('ally_ceo_company_plan_unsafe')
   }
 }

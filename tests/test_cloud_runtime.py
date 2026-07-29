@@ -787,15 +787,13 @@ class AgentGovernanceTests(unittest.TestCase):
         self.assertEqual(busy["target_active_executions"], load_agent_workforce_policy().max_running)
         self.assertEqual(
             busy["recommended_claim_job_types"],
-            ["ops_watch", "github_release_watch", "task_triage", "founder_brief"],
+            ["ops_watch", "github_release_watch"],
         )
         self.assertEqual(
             busy["recommended_claims"],
             [
                 {"job_type": "ops_watch", "priority": 100, "work_units": 1},
                 {"job_type": "github_release_watch", "priority": 90, "work_units": 2},
-                {"job_type": "task_triage", "priority": 80, "work_units": 1},
-                {"job_type": "founder_brief", "priority": 70, "work_units": 3},
             ],
         )
         self.assertEqual(busy["idle_registered_specialists"], AGENT_ROSTER_LIMIT - AGENT_ACTIVE_ASSIGNMENT_LIMIT)
@@ -945,17 +943,17 @@ class AgentGovernanceTests(unittest.TestCase):
             running_job_types=[],
             daily_job_types=[],
             registered_specialists=AGENT_ROSTER_LIMIT,
-            max_claim_runs=4,
+            max_claim_runs=2,
             max_claim_work_units=4,
         )
         self.assertEqual(plan["selection_policy"], "fixed_priority_then_work_unit_efficiency_then_fifo")
         self.assertEqual(
             plan["recommended_claim_job_types"],
-            ["ops_watch", "github_release_watch", "task_triage"],
+            ["ops_watch", "github_release_watch"],
         )
-        self.assertEqual(plan["recommended_claim_work_units"], 4)
-        self.assertEqual(plan["target_active_executions"], 3)
-        self.assertEqual(plan["deferred_reasons"]["work_unit_budget"], 4)
+        self.assertEqual(plan["recommended_claim_work_units"], 3)
+        self.assertEqual(plan["target_active_executions"], 2)
+        self.assertEqual(plan["deferred_reasons"]["run_or_concurrency_limit"], 5)
 
         with self._database() as (database_url, workspace_id, _):
             for job_type in self.job_types:
@@ -963,7 +961,7 @@ class AgentGovernanceTests(unittest.TestCase):
             claimed = claim_agent_runs(database_url, workspace_id=workspace_id, limit=4)
             self.assertEqual(
                 [row["job_type"] for row in claimed],
-                ["ops_watch", "github_release_watch", "task_triage", "founder_brief"],
+                ["ops_watch", "github_release_watch"],
             )
 
     def test_capacity_plan_skips_expensive_work_that_cannot_fit_remaining_budget(self) -> None:

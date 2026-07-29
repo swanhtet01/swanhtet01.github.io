@@ -18,7 +18,7 @@ AGENT_RETRY_POLICY_CONTRACT = "supermega.agent-retry-policy.v1"
 AGENT_BUDGET_GRANT_CONTRACT = "supermega.agent-budget-grant.v1"
 AGENT_BUDGET_ACCOUNTING_CONTRACT = "supermega.agent-budget-accounting.v1"
 AGENT_BUDGET_AUDIENCE = "supermega-agent-runtime"
-AGENT_ACTIVE_ASSIGNMENT_LIMIT = 4
+AGENT_ACTIVE_ASSIGNMENT_LIMIT = 2
 AGENT_ROSTER_LIMIT = 12
 
 # Registered jobs are reusable capabilities; only these reviewed lanes are

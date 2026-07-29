@@ -5,15 +5,15 @@
   "dialectic": {
     "thesis": "Reusable specialists let a small company cover product, engineering, growth, and risk.",
     "antithesis": "Always-on swarms duplicate work, increase cost, and blur accountability.",
-    "synthesis": "Keep a dormant registry, activate at most four unique jobs from demand, and require evidence plus human gates."
+    "synthesis": "Keep a dormant registry, run one cycle with at most two specialists, and require evidence plus human gates."
   },
   "runtime_policy": {
     "execution_model": "ephemeral_demand_driven",
     "scale_to_zero": true,
     "registered_specialists_consume_compute": false,
     "max_registered_specialists": 12,
-    "max_running": 4,
-    "max_company_cycles": 2,
+    "max_running": 2,
+    "max_company_cycles": 1,
     "max_specialists_per_company_cycle": 2,
     "local_host_admission_contract": "supermega.ally-host-admission.v1",
     "max_local_running": 1,
@@ -21,7 +21,7 @@
     "local_duplicate_listener_blocks_dispatch": true,
     "local_loaded_model_blocks_dispatch": true,
     "max_queued": 24,
-    "max_batch_jobs": 4,
+    "max_batch_jobs": 2,
     "max_daily_runs": 64,
     "max_daily_work_units": 96,
     "in_flight_per_job": 1,

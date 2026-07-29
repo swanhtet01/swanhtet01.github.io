@@ -16,7 +16,7 @@ Registry size and execution capacity are separate:
 - every worker claim receives a short-lived signed budget grant and one consumable reservation;
 - idempotency, lease expiry, audit records, and human approval boundaries fail closed.
 
-`agent_os/workforce/supermega_build_workforce.json` is the sole machine-readable company capacity contract. The default workspace links to it instead of repeating limits. The active ceiling is twelve registered roles, four active or batch jobs, and two Kernel agents per cycle; historical 175- or 256-role manifests are rejected rather than treated as a dormant company.
+`agent_os/workforce/supermega_build_workforce.json` is the sole machine-readable company capacity contract. The default workspace links to it instead of repeating limits. The ceiling is twelve dormant roles, one cycle with at most two active specialists, and two waiting batch jobs; historical 175- or 256-role manifests are rejected rather than treated as a dormant company.
 
 ## Small company model
 
