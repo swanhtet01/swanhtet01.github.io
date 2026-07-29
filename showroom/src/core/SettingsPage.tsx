@@ -7,7 +7,7 @@ import {
   WEBSITE_STORAGE_KEY,
 } from '../products/product-handoff'
 import { COMMERCE_KEY, LEGACY_COMMERCE_KEYS } from './commerce-workspace'
-import { BEHAVIOR_TRAIL_KEY, readBehaviorTrail, summarizeBehaviorPreferences } from './behavior-trail'
+import { BEHAVIOR_TRAIL_KEY, readBehaviorTrail, recordBehaviorSignal, summarizeBehaviorPreferences } from './behavior-trail'
 import {
   ACTION_KEY,
   APPROVAL_KEY,
@@ -74,6 +74,47 @@ import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } fr
 
 const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding').then((module) => ({ default: module.ClientDataOnboarding })))
 const ManagedActivationRunbook = lazy(() => import('./ManagedActivationRunbook').then((module) => ({ default: module.ManagedActivationRunbook })))
+
+type RecommendedSetupDraft = Pick<SetupState, 'workspace' | 'owner' | 'currentRecord' | 'baseline' | 'targetOutcome' | 'authorityBoundary' | 'acceptanceEvidence'>
+
+const recommendedSetupDrafts: Record<SetupProductId, RecommendedSetupDraft> = {
+  commerce: {
+    workspace: 'Shop starter workspace',
+    owner: 'Business owner',
+    currentRecord: 'One sample catalog item and order',
+    baseline: 'Products, orders, and stock are reviewed manually.',
+    targetOutcome: 'Prepare one reviewed sale or stock packet.',
+    authorityBoundary: 'Owner approves catalog, order, payment, and stock changes.',
+    acceptanceEvidence: 'A reviewed Shop packet with no external write.',
+  },
+  production: {
+    workspace: 'Plant starter workspace',
+    owner: 'Production owner',
+    currentRecord: 'One sample production job and shift handoff',
+    baseline: 'Jobs, output, quality, and downtime are reviewed manually.',
+    targetOutcome: 'Prepare one reviewed shift handoff packet.',
+    authorityBoundary: 'Owner approves production, material, quality, and maintenance changes.',
+    acceptanceEvidence: 'A reviewed Plant packet with no production write.',
+  },
+  website: {
+    workspace: 'Website starter workspace',
+    owner: 'Brand owner',
+    currentRecord: 'One-page website brief',
+    baseline: 'Business facts, offers, proof, and calls to action are scattered.',
+    targetOutcome: 'Prepare one reviewed website preview.',
+    authorityBoundary: 'Owner approves business claims, contact details, and publishing.',
+    acceptanceEvidence: 'A reviewed website preview with no domain publish.',
+  },
+  ecommerce: {
+    workspace: 'Ecommerce starter workspace',
+    owner: 'Order owner',
+    currentRecord: 'One sample online order batch',
+    baseline: 'Catalog rows and channel orders are reviewed manually.',
+    targetOutcome: 'Prepare one reviewed Shop-ready order packet.',
+    authorityBoundary: 'Owner approves customer, payment, delivery, stock, and Shop actions.',
+    acceptanceEvidence: 'A reviewed Ecommerce packet with no external send or write.',
+  },
+}
 
 type SchedulerActivation = {
   status: string
@@ -221,6 +262,17 @@ export function SettingsPage() {
   const requestedProduct = setupProductFromQuery(setupSearchParams.get('product'))
   const selectedProduct = productContracts[setup.product]
   const selectedTemplate = templateFor(setup.product, setup.templateId)
+  const recommendedSetupDraft = recommendedSetupDrafts[setup.product]
+  const setupGuideTitle = setup.savedAt
+    ? `${selectedProduct.name} is ready to continue`
+    : workflowReady
+      ? `Your ${selectedProduct.name} sample is ready`
+      : `Let AI prepare the first ${selectedProduct.name} trial`
+  const setupGuideCopy = setup.savedAt
+    ? 'Continue the saved workflow or review the editable setup below.'
+    : workflowReady
+      ? 'The starter is prepared locally. Open the sample now or adjust any field first.'
+      : 'SuperMega fills only missing starter fields. Nothing is sent, published, paid, or written outside this browser.'
   const launchPackRows: Array<readonly [string, string, string]> = setup.product === 'commerce'
     ? [
       ['Bring', 'Product CSV, stock count, payment proof', 'Start from products, on-hand units, prices, and recent payment exceptions.'],
@@ -789,6 +841,32 @@ export function SettingsPage() {
     updateSetup({ templateId: template.id, entryPoint: template.entryPoints.includes(setup.entryPoint) ? setup.entryPoint : template.entryPoints[0] ?? '', startedAt: undefined })
   }
 
+  function prepareRecommendedTrial() {
+    setSetup((current) => ({
+      ...current,
+      templateId: selectedTemplate.id,
+      entryPoint: current.entryPoint.trim() || selectedTemplate.entryPoints[0] || '',
+      workspace: current.workspace.trim() || recommendedSetupDraft.workspace,
+      owner: current.owner.trim() || recommendedSetupDraft.owner,
+      currentRecord: current.currentRecord.trim() || recommendedSetupDraft.currentRecord,
+      baseline: current.baseline.trim() || recommendedSetupDraft.baseline,
+      targetOutcome: current.targetOutcome.trim() || recommendedSetupDraft.targetOutcome,
+      authorityBoundary: current.authorityBoundary.trim() || recommendedSetupDraft.authorityBoundary,
+      acceptanceEvidence: current.acceptanceEvidence.trim() || recommendedSetupDraft.acceptanceEvidence,
+      startedAt: undefined,
+      savedAt: undefined,
+    }))
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: setup.product,
+      route: clientSetupPath(setup.product),
+      detail: `Prepare recommended ${selectedProduct.name} trial`,
+    })
+    setSettingsStep('workflow')
+    navigate(clientSetupPath(setup.product), { replace: true })
+    setNotice(`${selectedProduct.name} starter prepared locally. Review it or open the guided sample.`)
+  }
+
   function startGuidedTrial() {
     if (!workflowReady) {
       setNotice('Name the trial workspace and responsible owner first.')
@@ -1210,7 +1288,18 @@ export function SettingsPage() {
 
   return (
     <div className="workspace-screen settings-screen">
-      <PageHeading eyebrow="Guided trial" title="Start with one workflow" copy="Pick template, owner, sample." />
+      <PageHeading eyebrow="Guided trial" title="Start with one workflow" copy="AI prepares a safe starter. You keep approval." />
+      <section aria-label="AI setup guide" className="ai-setup-guide">
+        <div className="ai-setup-guide-copy"><span className="core-eyebrow">AI setup guide</span><h2>{setupGuideTitle}</h2><p>{setupGuideCopy}</p></div>
+        <div aria-label="AI setup recommendation" className="ai-setup-guide-rows">
+          <span><small>Product</small><strong>{selectedProduct.name}</strong></span>
+          <span><small>Starter</small><strong>{selectedTemplate.name}</strong></span>
+          <span><small>Control</small><strong>Owner approval</strong></span>
+        </div>
+        {setup.savedAt
+          ? <Link className="core-button primary" to={setupProductPreviewPath(setup.product)}>Continue {selectedProduct.name}</Link>
+          : <button className="core-button primary" onClick={workflowReady ? startGuidedTrial : prepareRecommendedTrial} type="button">{workflowReady ? 'Start guided sample' : 'Prepare recommended trial'}</button>}
+      </section>
       <nav aria-label="Setup steps" className="settings-step-nav">
         <button aria-current={settingsStep === 'workflow' ? 'step' : undefined} onClick={() => chooseSettingsStep('workflow')} type="button"><span>1</span>Template</button>
         <button aria-current={settingsStep === 'success' ? 'step' : undefined} onClick={() => chooseSettingsStep('success')} type="button"><span>2</span>Trial plan</button>
