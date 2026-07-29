@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 
@@ -72,6 +73,30 @@ const validSubmission = {
   source_url: 'https://supermega.dev/contact/?product=production',
 }
 
+function trialProofFields({
+  product = 'plant',
+  template = 'production-control',
+  readiness = 67,
+  sources = 12,
+  behavior = 4,
+  decisions = 2,
+} = {}) {
+  const contract = 'supermega.managed_trial_proof.v1'
+  const projection = [contract, 1, product, template, readiness, sources, behavior, decisions, false]
+  return {
+    proof_contract: contract,
+    proof_version: '1',
+    proof_digest: `sha256:${createHash('sha256').update(JSON.stringify(projection)).digest('hex')}`,
+    proof_product: product,
+    proof_template: template,
+    proof_readiness: String(readiness),
+    proof_sources: String(sources),
+    proof_behavior: String(behavior),
+    proof_decisions: String(decisions),
+    proof_raw_records: 'false',
+  }
+}
+
 try {
   clearChannels()
   globalThis.fetch = async () => { throw new Error('unexpected_external_request') }
@@ -82,7 +107,7 @@ try {
     status: 'attention',
     service: 'supermega-contact',
     accepting: false,
-    controls: { idempotency: 'required', edge_rate_limit: 'required' },
+    controls: { idempotency: 'required', edge_rate_limit: 'required', trial_proof: 'optional_client_provided' },
   })
 
   process.env.SUPERMEGA_LEAD_WEBHOOK_URL = 'https://lead-router.example.test/events'
@@ -139,6 +164,7 @@ try {
   assert.equal(event.record.workflow, 'guide')
   assert.equal(event.record.email, 'operator@example.com')
   assert.equal(event.record.source, 'supermega.dev')
+  assert.equal(accepted.body.proof_bound, false)
 
   const replay = await invoke({ body: { ...validSubmission, product: 'UNRECOGNIZED' }, headers: withKey(3) })
   assert.equal(replay.status, 202)
@@ -177,6 +203,68 @@ try {
   const ecommerceEvent = JSON.parse(delivered.options.body)
   assert.equal(ecommerceEvent.record.workflow, 'ecommerce')
   assert.equal(ecommerceEvent.record.requested_package, 'social-storefront')
+
+  const attachedProof = trialProofFields()
+  const proofAccepted = await invoke({
+    body: {
+      ...validSubmission,
+      ...attachedProof,
+      source_url: `https://supermega.dev/contact/?product=plant&template=production-control#${new URLSearchParams(attachedProof)}`,
+      referrer: 'https://app.supermega.dev/settings/?product=plant#private-fragment',
+    },
+    headers: withKey(6, { 'x-forwarded-for': '203.0.113.13' }),
+  })
+  assert.equal(proofAccepted.status, 202)
+  assert.equal(proofAccepted.body.proof_bound, true)
+  const proofEvent = JSON.parse(delivered.options.body)
+  assert.equal(proofEvent.record.workflow, 'production')
+  assert.equal(proofEvent.record.source_url, 'https://supermega.dev/contact/?product=plant&template=production-control')
+  assert.equal(proofEvent.record.referrer, 'https://app.supermega.dev/settings/?product=plant')
+  assert.deepEqual(proofEvent.record.raw.trial_proof, {
+    contract: 'supermega.managed_trial_proof.v1',
+    version: 1,
+    summary_digest: attachedProof.proof_digest,
+    product: 'plant',
+    template: 'production-control',
+    readiness_score: 67,
+    source_record_count: 12,
+    behavior_signal_count: 4,
+    reviewed_decision_count: 2,
+    raw_records_included: false,
+    verification: 'client_provided_summary',
+  })
+  assert.equal(proofEvent.record.raw.contact_idempotency.version, 2)
+  assert.equal(JSON.stringify(proofEvent.record.raw).includes('private-fragment'), false)
+
+  const tamperedProof = await invoke({
+    body: { ...validSubmission, ...attachedProof, proof_sources: '13' },
+    headers: withKey(7, { 'x-forwarded-for': '203.0.113.14' }),
+  })
+  assert.equal(tamperedProof.status, 400)
+  assert.equal(tamperedProof.body.reason, 'trial_proof_invalid')
+
+  const partialProof = await invoke({
+    body: { ...validSubmission, proof_contract: attachedProof.proof_contract },
+    headers: withKey(8, { 'x-forwarded-for': '203.0.113.15' }),
+  })
+  assert.equal(partialProof.status, 400)
+  assert.equal(partialProof.body.reason, 'trial_proof_invalid')
+
+  const wrongProductProof = trialProofFields({ product: 'shop' })
+  const mismatchedProof = await invoke({
+    body: { ...validSubmission, ...wrongProductProof },
+    headers: withKey(9, { 'x-forwarded-for': '203.0.113.16' }),
+  })
+  assert.equal(mismatchedProof.status, 400)
+  assert.equal(mismatchedProof.body.reason, 'trial_proof_invalid')
+
+  const changedProofFields = trialProofFields({ sources: 13 })
+  const proofConflict = await invoke({
+    body: { ...validSubmission, ...changedProofFields },
+    headers: withKey(6, { 'x-forwarded-for': '203.0.113.17' }),
+  })
+  assert.equal(proofConflict.status, 409)
+  assert.equal(proofConflict.body.reason, 'idempotency_conflict')
 
   const rateHeaders = { 'x-forwarded-for': '203.0.113.77' }
   for (let index = 0; index < 5; index += 1) {
@@ -266,6 +354,35 @@ try {
     durableRecord.raw.contact_idempotency.payload_fingerprint,
   )
 
+  const durableProofSubmission = {
+    ...validSubmission,
+    ...trialProofFields(),
+    source_url: 'https://supermega.dev/contact/?product=plant&template=production-control#proof_digest=must-not-persist',
+  }
+  const durableProofAccepted = await invoke({
+    activeHandler: loadHandler({ fresh: true }),
+    body: durableProofSubmission,
+    headers: withKey(203, { 'x-forwarded-for': '203.0.113.96' }),
+  })
+  assert.equal(durableProofAccepted.status, 202)
+  assert.equal(durableProofAccepted.body.proof_bound, true)
+  const durableProofRecord = persistedLeads.get(durableProofAccepted.body.request_id)
+  assert.equal(durableProofRecord.raw.contact_idempotency.version, 2)
+  assert.equal(durableProofRecord.raw.trial_proof.verification, 'client_provided_summary')
+  assert.equal(durableProofRecord.raw.trial_proof.summary_digest, durableProofSubmission.proof_digest)
+  assert.equal(durableProofRecord.raw.trial_proof.raw_records_included, false)
+  assert.equal(durableProofRecord.source_url.includes('#'), false)
+
+  const durableProofReplay = await invoke({
+    activeHandler: loadHandler({ fresh: true }),
+    body: durableProofSubmission,
+    headers: withKey(203, { 'x-forwarded-for': '203.0.113.97' }),
+  })
+  assert.equal(durableProofReplay.status, 202)
+  assert.equal(durableProofReplay.body.request_id, durableProofAccepted.body.request_id)
+  assert.equal(durableProofReplay.body.proof_bound, true)
+  assert.equal(durableProofReplay.headers['x-idempotent-replay'], 'true')
+
   const legacyAccepted = await invoke({ activeHandler: loadHandler({ fresh: true }), body: validSubmission, headers: withKey(201, { 'x-forwarded-for': '203.0.113.91' }) })
   assert.equal(legacyAccepted.status, 202)
   const legacyRecord = persistedLeads.get(legacyAccepted.body.request_id)
@@ -292,7 +409,7 @@ try {
   assert.equal(ambiguousReplay.body.reason, 'contact_persistence_unavailable')
   assert.equal(unexpectedDeliveryCalls, 0)
 
-  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 87 }, null, 2))
+  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 120 }, null, 2))
 } finally {
   globalThis.fetch = originalFetch
   for (const name of environmentNames) {

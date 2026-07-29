@@ -74,6 +74,7 @@ import {
 } from '../products/ecommerce/ecommerce-order-review-packet'
 import { LEGACY_PRODUCTION_KEYS, PRODUCTION_KEY } from './production-workspace'
 import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } from './team-work'
+import { buildManagedTrialProof } from './managed-trial-proof'
 
 const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding').then((module) => ({ default: module.ClientDataOnboarding })))
 const ManagedActivationRunbook = lazy(() => import('./ManagedActivationRunbook').then((module) => ({ default: module.ManagedActivationRunbook })))
@@ -742,6 +743,14 @@ export function SettingsPage() {
       setup.currentRecord ? `Current: ${setup.currentRecord}` : '',
       setup.targetOutcome ? `Target: ${setup.targetOutcome}` : '',
     ].filter(Boolean).join('\n'),
+    proof: buildManagedTrialProof({
+      product: selectedProduct.slug,
+      templateId: selectedTemplate.id,
+      readinessScore: aiMemoryReadinessScore,
+      sourceRecordCount: aiMemorySourceRecordCount,
+      behaviorSignalCount: agentBehaviorSignals.length,
+      reviewedDecisionCount: managedApprovalRequests.length || approvals.length,
+    }),
   }
   const premiumPilotProofKept = managedPilotRetained || managedPilotBrief?.retention === 'persisted_managed_audit'
   const premiumPilotRows = [

@@ -36,6 +36,18 @@ async function request(path, options = {}) {
 async function readPage(route) {
   const response = await request(route)
   assert(response.status === 200, 'page_http_error', { route, status: response.status })
+  const csp = response.headers.get('content-security-policy') || ''
+  assert(csp.includes("default-src 'self'")
+    && csp.includes("frame-ancestors 'none'")
+    && csp.includes("script-src-attr 'none'")
+    && csp.includes("style-src-attr 'none'")
+    && /script-src 'self' 'sha256-[A-Za-z0-9+/=]+'/.test(csp)
+    && /style-src 'self' 'sha256-[A-Za-z0-9+/=]+'/.test(csp)
+    && !csp.includes("'unsafe-inline'")
+    && !csp.includes("'unsafe-eval'"), 'page_csp_wrong', { route, csp })
+  for (const [name, value] of Object.entries({ 'cross-origin-opener-policy': 'same-origin', 'cross-origin-resource-policy': 'same-origin', 'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()', 'referrer-policy': 'strict-origin-when-cross-origin', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY' })) {
+    assert(response.headers.get(name) === value, 'page_security_header_wrong', { route, name, expected: value, actual: response.headers.get(name) })
+  }
   const html = await response.text()
   for (const token of [
     `meta name="supermega-brand-version" content="${manifest.brand.version}"`,
@@ -79,6 +91,12 @@ async function verifyOnce() {
   }
   for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Gated R&amp;D']) assert(!pages.get('/')?.includes(internalLabel), 'internal_system_exposed', { internalLabel })
   assert(pages.get('/')?.includes('id="trust"'), 'control_boundary_missing')
+  const contactPage = pages.get('/contact/') || ''
+  for (const token of ['supermega.managed_trial_proof.v1', 'data-trial-proof', 'Client-provided trial proof', 'name="proof_digest"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'trial_proof_invalid', 'Trial summary detached.', 'Request received:']) {
+    assert(contactPage.includes(token), 'contact_trial_proof_contract_missing', { token })
+  }
+  const privacyPage = pages.get('/privacy/') || ''
+  assert(privacyPage.includes('optional trial proof summary and digest') && privacyPage.includes('no raw product records, questions, approval contents, or account details'), 'trial_proof_privacy_copy_missing')
 
   const [{ body: release, headers: releaseHeaders }, { body: health }, { body: contact }] = await Promise.all([
     readJson(manifest.release.releaseEndpoint),
@@ -95,7 +113,7 @@ async function verifyOnce() {
   assert(health.ok === true && health.status === 'ready' && health.service === 'supermega-public-site', 'health_contract_wrong', health)
   assert(health.brand_version === manifest.brand.version && health.context_version === manifest.contextVersion && health.catalog_version === manifest.catalogVersion, 'health_version_wrong', health)
   assert(contact.status === 'ready' && contact.accepting === true, 'contact_not_accepting', contact)
-  assert(contact.controls?.idempotency === 'required' && contact.controls?.edge_rate_limit === 'required', 'contact_controls_wrong', contact)
+  assert(contact.controls?.idempotency === 'required' && contact.controls?.edge_rate_limit === 'required' && contact.controls?.trial_proof === 'optional_client_provided', 'contact_controls_wrong', contact)
 
   await Promise.all([
     verifyRedirect('/products/shop/', '/#shop'),
