@@ -3268,7 +3268,11 @@ if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_i
   || !clientOnboardingSource.includes('export function clientImportChecklist')
   || !clientOnboardingSource.includes('function checklistNote')
   || !clientOnboardingSource.includes('acceptedHeaders:')
-  || !clientOnboardingSource.includes('exampleRows(product, workflowTemplateId)')
+  || !clientOnboardingSource.includes('exampleRows(product, workflowTemplateId, context)')
+  || !clientOnboardingSource.includes('const shopIndustrySampleCsv:')
+  || !clientOnboardingSource.includes('const ecommerceIndustrySampleCsv:')
+  || !clientOnboardingSource.includes('const websiteIndustrySampleCsv:')
+  || !clientOnboardingSource.includes('const plantIndustrySampleCsv:')
   || !clientOnboardingSource.includes("'social-commerce':")
   || !clientOnboardingSource.includes("'production-control':")
   || !clientOnboardingSource.includes("'business-presence':")
@@ -3344,12 +3348,12 @@ if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !clientOnboardingUiSource.includes('Try sample')
   || !clientOnboardingUiSource.includes('Data checklist')
   || !clientOnboardingUiSource.includes('downloadChecklist')
-  || !clientOnboardingUiSource.includes('clientImportChecklist(product, workflowTemplateId)')
+  || !clientOnboardingUiSource.includes('clientImportChecklist(product, workflowTemplateId, templateContext)')
   || !clientOnboardingUiSource.includes('aria-label={`${productName} data checklist`')
   || !clientOnboardingUiSource.includes('What to prepare')
   || !clientOnboardingUiSource.includes('acceptedHeaders.join')
   || !clientOnboardingUiSource.includes('previewSample()')
-  || !clientOnboardingUiSource.includes('clientImportTemplate(expectedProduct, expectedWorkflowTemplateId)')
+  || !clientOnboardingUiSource.includes('clientImportTemplate(expectedProduct, expectedWorkflowTemplateId, templateContext)')
   || !clientOnboardingUiSource.includes('SuperMega matches clear columns')
   || !clientOnboardingUiSource.includes('Import autopilot')
   || !clientOnboardingUiSource.includes('const importStageRows = [')
@@ -3414,7 +3418,7 @@ if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !clientOnboardingUiSource.includes('[product, workflowTemplateId]')
   || !clientOnboardingUiSource.includes('initiallyOpen?: boolean')
   || !clientOnboardingUiSource.includes('open={initiallyOpen || undefined}')
-  || !clientOnboardingUiSource.includes('clientImportTemplate(product, workflowTemplateId)')
+  || !clientOnboardingUiSource.includes('clientImportTemplate(product, workflowTemplateId, templateContext)')
   || ['fetch(', 'localStorage', 'sessionStorage', 'supabase'].some((marker) => clientOnboardingUiSource.includes(marker))) fail('four_product_client_onboarding_ui_missing_or_unsafe')
 const settingsStepNavContract = sourceBlock(settingsPageSource, '      {requestedProduct ? <nav aria-label="Setup steps"', '\n      </nav> : null}')
 if (!coreSource.includes('templateId: string')
@@ -5746,6 +5750,34 @@ async function verifyClientOnboardingRuntime() {
     assert(customPlantPackage.plantIndustryPackId === 'batch-process', 'client_demo_custom_plant_pack_not_bound')
     const schoolBlueprint = model.buildClientDemoBlueprint({ workspace: 'Learning Centre', owner: 'School administrator', presetId: 'service-business', shopIndustryPackId: 'school', selections: model.clientDemoPresets.find((preset) => preset.id === 'service-business').selections })
     assert(schoolBlueprint.client.shopIndustryPackId === 'school', 'client_demo_custom_shop_pack_not_bound')
+    const schoolIntegratedBlueprint = model.buildClientDemoBlueprint({
+      workspace: 'Learning Centre',
+      owner: 'School administrator',
+      presetId: 'service-business',
+      shopIndustryPackId: 'school',
+      selections: [
+        ...model.clientDemoPresets.find((preset) => preset.id === 'service-business').selections,
+        { product: 'ecommerce', templateId: 'social-storefront' },
+      ],
+    })
+    const schoolShopProduct = schoolIntegratedBlueprint.products.find((product) => product.product === 'commerce')
+    const schoolWebsiteProduct = schoolIntegratedBlueprint.products.find((product) => product.product === 'website')
+    const schoolEcommerceProduct = schoolIntegratedBlueprint.products.find((product) => product.product === 'ecommerce')
+    const schoolShopPreview = await model.createClientImportPreview(schoolShopProduct.sampleCsv, 'commerce', undefined, 'school-shop.csv', schoolShopProduct.templateId)
+    const schoolEcommercePreview = await model.createClientImportPreview(schoolEcommerceProduct.sampleCsv, 'ecommerce', undefined, 'school-storefront.csv', schoolEcommerceProduct.templateId)
+    assert(schoolShopPreview.readyForStaging
+      && schoolEcommercePreview.readyForStaging
+      && schoolShopPreview.rows.map((row) => row.key).join(',') === schoolEcommercePreview.rows.map((row) => row.key).join(',')
+      && schoolWebsiteProduct.sampleCsv.includes('courses,Courses')
+      && schoolShopProduct.checklist.find((row) => row.field === 'SKU')?.example === 'SCHOOL-ENGLISH',
+    'client_demo_school_pack_did_not_align_shop_website_and_ecommerce_samples')
+    const apparelTemplate = model.clientImportTemplate('production', 'production-control', { plantIndustryPackId: 'apparel' })
+    const apparelPreview = await model.createClientImportPreview(apparelTemplate, 'production', undefined, 'apparel.csv', 'production-control')
+    assert(apparelPreview.readyForStaging
+      && apparelPreview.rows[0].key === 'STYLE-001'
+      && apparelPreview.rows[0].values.line === 'Sewing Line 1',
+    'client_demo_apparel_pack_did_not_prepare_industry_jobs')
+    rejectsSync(() => model.clientImportTemplate('commerce', 'unknown', { shopIndustryPackId: 'school' }), 'client_demo_industry_template_bypassed_workflow_validation')
     const workspaceCreatedAt = '2026-07-28T08:00:00.000Z'
     const demoWorkspace = model.createClientDemoWorkspace(manufacturingBlueprint, workspaceCreatedAt)
     assert(demoWorkspace.schema === model.CLIENT_DEMO_WORKSPACE_SCHEMA && demoWorkspace.products.length === 4 && demoWorkspace.products.every((product) => product.status === 'not_started'), 'client_demo_workspace_not_initialized')

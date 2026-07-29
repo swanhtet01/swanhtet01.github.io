@@ -33,6 +33,11 @@ export type ClientDemoSelection = {
   templateId: string
 }
 
+export type ClientImportTemplateContext = {
+  shopIndustryPackId?: ShopIndustryPackId
+  plantIndustryPackId?: PlantIndustryPackId
+}
+
 export type ClientDemoPreset = {
   id: ClientDemoPresetId
   name: string
@@ -801,12 +806,57 @@ function resolveWorkflowTemplateId(product: ClientSolutionId, workflowTemplateId
   return requested
 }
 
-export function clientImportTemplate(product: ClientSolutionId, workflowTemplateId?: string) {
-  return objects[product].workflowTemplates[resolveWorkflowTemplateId(product, workflowTemplateId)]
+const shopIndustrySampleCsv: Readonly<Record<ShopIndustryPackId, string>> = {
+  retail: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nRICE-25KG,Premium rice 25kg,18,6,72000\r\nOIL-1L,Cooking oil 1L,48,16,9500\r\n',
+  cafe: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nMENU-MOHINGA,Mohinga,80,20,3500\r\nMENU-TEA,Myanmar milk tea,120,30,1800\r\n',
+  restaurant: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nMENU-CURRY,Chicken curry set,60,15,8500\r\nMENU-RICE,Steamed rice,120,30,1200\r\n',
+  spa: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nSPA-MASSAGE,Traditional massage 60 min,20,4,45000\r\nSPA-FACIAL,Facial treatment 45 min,16,4,38000\r\n',
+  gym: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nGYM-PT,Personal training session,24,6,30000\r\nGYM-DAY,Gym day pass,40,10,10000\r\n',
+  school: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nSCHOOL-ENGLISH,English class session,30,8,18000\r\nSCHOOL-MATH,Math class session,30,8,18000\r\n',
 }
 
-function exampleRows(product: ClientSolutionId, workflowTemplateId?: string) {
-  const template = clientImportTemplate(product, workflowTemplateId)
+const ecommerceIndustrySampleCsv: Readonly<Record<ShopIndustryPackId, string>> = {
+  retail: 'sku,featured,collection,display_name,merchandising_note\r\nRICE-25KG,true,Trade essentials,Premium rice 25kg,Ask for quantity and delivery area.\r\nOIL-1L,false,Trade essentials,Cooking oil 1L,Keep trade pricing under review.\r\n',
+  cafe: 'sku,featured,collection,display_name,merchandising_note\r\nMENU-MOHINGA,true,Pickup this week,Mohinga,Show the pickup promise before request.\r\nMENU-TEA,false,Drinks,Myanmar milk tea,Confirm availability before collection.\r\n',
+  restaurant: 'sku,featured,collection,display_name,merchandising_note\r\nMENU-CURRY,true,Popular meals,Chicken curry set,Show preparation and pickup timing.\r\nMENU-RICE,false,Sides,Steamed rice,Confirm quantity with the meal request.\r\n',
+  spa: 'sku,featured,collection,display_name,merchandising_note\r\nSPA-MASSAGE,true,Treatments,Traditional massage 60 min,Request a preferred appointment time.\r\nSPA-FACIAL,false,Treatments,Facial treatment 45 min,Confirm therapist availability in Shop.\r\n',
+  gym: 'sku,featured,collection,display_name,merchandising_note\r\nGYM-PT,true,Coaching,Personal training session,Request a coach and preferred time.\r\nGYM-DAY,false,Access,Gym day pass,Confirm facility availability before arrival.\r\n',
+  school: 'sku,featured,collection,display_name,merchandising_note\r\nSCHOOL-ENGLISH,true,Classes,English class session,Request the preferred class schedule.\r\nSCHOOL-MATH,false,Classes,Math class session,Confirm teacher and seat availability.\r\n',
+}
+
+const websiteIndustrySampleCsv: Readonly<Record<ShopIndustryPackId, string>> = {
+  retail: 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Shop trusted everyday essentials,Show current products and one clear enquiry path.,https://example.com/contact\r\nproducts,Products,Find the right product,Group products with useful buying details.,https://example.com/contact\r\n',
+  cafe: 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Fresh local favourites ready for pickup,Show today’s menu location and opening hours.,https://example.com/contact\r\nmenu,Menu,Choose food and drinks,Explain pickup timing and how to request an order.,https://example.com/contact\r\n',
+  restaurant: 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,A clear place to eat well,Show signature meals location and reservation details.,https://example.com/contact\r\nmenu,Menu,Explore the approved menu,Explain table and pickup options before enquiry.,https://example.com/contact\r\n',
+  spa: 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Make time for trusted care,Show treatments proof and one appointment path.,https://example.com/contact\r\nservices,Services,Choose the right treatment,Explain duration price and preparation clearly.,https://example.com/contact\r\n',
+  gym: 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Train with a clear plan,Show coaching facilities and one trial path.,https://example.com/contact\r\nclasses,Classes,Find the right session,Explain schedules levels and what to bring.,https://example.com/contact\r\n',
+  school: 'page_slug,page_title,headline,body,contact_url\r\nhome,Home,Learn with a clear next step,Show courses teachers proof and one enquiry path.,https://example.com/contact\r\ncourses,Courses,Choose the right class,Explain level schedule fees and enrollment clearly.,https://example.com/contact\r\n',
+}
+
+const plantIndustrySampleCsv: Readonly<Record<PlantIndustryPackId, string>> = {
+  'general-manufacturing': 'job_code,product_name,target_quantity,due_date,production_line\r\nJOB-001,Finished product A,500,2026-08-15,Line A\r\nJOB-002,Finished product B,300,2026-08-16,Line B\r\n',
+  'batch-process': 'job_code,product_name,target_quantity,due_date,production_line\r\nBATCH-001,Process batch A,100,2026-08-15,Process Line 1\r\nBATCH-002,Process batch B,120,2026-08-16,Process Line 2\r\n',
+  'food-beverage': 'job_code,product_name,target_quantity,due_date,production_line\r\nFOOD-001,Chili sauce batch,200,2026-08-15,Batch Kitchen\r\nFOOD-002,Juice batch,300,2026-08-16,Filling Line\r\n',
+  apparel: 'job_code,product_name,target_quantity,due_date,production_line\r\nSTYLE-001,Cotton shirt style,400,2026-08-15,Sewing Line 1\r\nSTYLE-002,Work trouser style,250,2026-08-16,Sewing Line 2\r\n',
+  assembly: 'job_code,product_name,target_quantity,due_date,production_line\r\nBUILD-001,Assembly model A,120,2026-08-15,Assembly Cell 1\r\nBUILD-002,Assembly model B,80,2026-08-16,Assembly Cell 2\r\n',
+}
+
+export function clientImportTemplate(product: ClientSolutionId, workflowTemplateId?: string, context: ClientImportTemplateContext = {}) {
+  const resolvedWorkflowTemplateId = resolveWorkflowTemplateId(product, workflowTemplateId)
+  if (product === 'production' && context.plantIndustryPackId) {
+    return plantIndustrySampleCsv[plantIndustryPack(context.plantIndustryPackId).id]
+  }
+  if (context.shopIndustryPackId) {
+    const industryPackId = shopIndustryPack(context.shopIndustryPackId).id
+    if (product === 'commerce') return shopIndustrySampleCsv[industryPackId]
+    if (product === 'website') return websiteIndustrySampleCsv[industryPackId]
+    if (product === 'ecommerce') return ecommerceIndustrySampleCsv[industryPackId]
+  }
+  return objects[product].workflowTemplates[resolvedWorkflowTemplateId]
+}
+
+function exampleRows(product: ClientSolutionId, workflowTemplateId?: string, context: ClientImportTemplateContext = {}) {
+  const template = clientImportTemplate(product, workflowTemplateId, context)
   const parsed = parseCsv(template)
   const headers = parsed.rows[0]?.cells ?? []
   const sample = parsed.rows[1]?.cells ?? []
@@ -823,9 +873,9 @@ function checklistNote(field: ClientImportField) {
   return `Text${field.maximum ? ` up to ${field.maximum} characters` : ''}. No spreadsheet formulas.`
 }
 
-export function clientImportChecklist(product: ClientSolutionId, workflowTemplateId?: string) {
+export function clientImportChecklist(product: ClientSolutionId, workflowTemplateId?: string, context: ClientImportTemplateContext = {}) {
   const object = objects[product]
-  const { headers, sample } = exampleRows(product, workflowTemplateId)
+  const { headers, sample } = exampleRows(product, workflowTemplateId, context)
   return object.fields.map((field): ClientImportChecklistRow => {
     const normalizedAliases = new Set([...field.aliases, field.id].map(normalizeHeader))
     const templateHeader = headers.find((header) => normalizedAliases.has(normalizeHeader(header)))
@@ -1036,8 +1086,14 @@ export function buildClientDemoBlueprint(input: {
       setupPath: details.setupPath,
       importObject: object.id,
       importLabel: object.label,
-      sampleCsv: clientImportTemplate(product, templateId),
-      checklist: clientImportChecklist(product, templateId),
+      sampleCsv: clientImportTemplate(product, templateId, {
+        shopIndustryPackId: industryPack.id,
+        plantIndustryPackId: plantPack.id,
+      }),
+      checklist: clientImportChecklist(product, templateId, {
+        shopIndustryPackId: industryPack.id,
+        plantIndustryPackId: plantPack.id,
+      }),
       activationBoundary: object.activationBoundary,
     }]
   })

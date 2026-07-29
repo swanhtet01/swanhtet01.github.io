@@ -176,7 +176,8 @@ function downloadFile(filename: string, content: string, type: string) {
 
 export function ClientDataOnboarding({ product, productName, productSlug, workflowTemplateId, workspace, owner, shopIndustryPackId, plantIndustryPackId, managedIdentity, onProgress, initiallyOpen = false }: ClientDataOnboardingProps) {
   const object = clientImportObject(product)
-  const checklist = clientImportChecklist(product, workflowTemplateId)
+  const templateContext = { shopIndustryPackId, plantIndustryPackId }
+  const checklist = clientImportChecklist(product, workflowTemplateId, templateContext)
   const requestRef = useRef(0)
   const validationRequestRef = useRef(0)
   const productRef = useRef(product)
@@ -521,7 +522,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   function downloadTemplate() {
     downloadFile(
       `supermega-${productSlug}-${workflowTemplateId}-${object.id}-sample-v1.csv`,
-      `\uFEFF${clientImportTemplate(product, workflowTemplateId)}`,
+      `\uFEFF${clientImportTemplate(product, workflowTemplateId, templateContext)}`,
       'text/csv;charset=utf-8',
     )
   }
@@ -550,7 +551,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     const expectedWorkflowTemplateId = workflowTemplateId
     void runPreview(
       `supermega-${productSlug}-${expectedWorkflowTemplateId}-${object.id}-sample-v1.csv`,
-      clientImportTemplate(expectedProduct, expectedWorkflowTemplateId),
+      clientImportTemplate(expectedProduct, expectedWorkflowTemplateId, templateContext),
       undefined,
       expectedProduct,
       expectedWorkflowTemplateId,
