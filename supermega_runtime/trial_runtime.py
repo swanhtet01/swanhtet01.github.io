@@ -10,7 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from supermega_runtime.commerce_runtime import COMMERCE_HUMAN_EVENTS
+from supermega_runtime.commerce_runtime import COMMERCE_HUMAN_EVENTS, validate_commerce_state
 from supermega_runtime.client_import_runtime import (
     CLIENT_IMPORT_MAX_PACKAGE_BYTES,
     ClientImportValidationError,
@@ -109,11 +109,21 @@ class TrialCommandRequest(_StrictRequest):
 class TrialClientImportApplyRequest(_StrictRequest):
     command_id: UUID
     expected_version: int = Field(ge=0)
+    preflight_digest: str = Field(
+        min_length=71,
+        max_length=71,
+        pattern=r"^sha256:[0-9a-f]{64}$",
+    )
     confirmation: str = Field(
         min_length=77,
         max_length=77,
         pattern=r"^APPLY sha256:[0-9a-f]{64}$",
     )
+    package: dict[str, Any]
+
+
+class TrialClientImportApplyPreflightRequest(_StrictRequest):
+    expected_version: int = Field(ge=0)
     package: dict[str, Any]
 
 
@@ -629,6 +639,125 @@ def _ecommerce_merchandising_import_payload(
     }
 
 
+_CLIENT_IMPORT_APPLY_PREFLIGHT_CONTRACT = "supermega.client_import_apply_preflight.v1"
+_CLIENT_IMPORT_APPLY_PREFLIGHT_CHECKS = (
+    "trusted_managed_identity",
+    "human_actor",
+    "setup_write_capability",
+    "product_write_capability",
+    "package_digest_bound",
+    "current_revision_bound",
+    "atomic_adapter_ready",
+)
+
+
+def _client_import_apply_preflight_digest(
+    *,
+    principal: TrialPrincipal,
+    validation: Any,
+    expected_version: int,
+) -> str:
+    projection = [
+        _CLIENT_IMPORT_APPLY_PREFLIGHT_CONTRACT,
+        1,
+        principal.workspace_id,
+        principal.actor_id,
+        validation.product,
+        validation.object_id,
+        validation.workflow_template_id,
+        validation.target_surface,
+        validation.required_capability,
+        validation.package_digest,
+        validation.row_count,
+        expected_version,
+    ]
+    canonical = json.dumps(
+        projection,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return f"sha256:{sha256(canonical).hexdigest()}"
+
+
+def _client_import_apply_preflight(
+    *,
+    principal: TrialPrincipal,
+    validation: Any,
+    package: Mapping[str, Any],
+    expected_version: int,
+    current_state: Any,
+) -> dict[str, Any]:
+    if validation.product not in {"commerce", "production", "website", "ecommerce"}:
+        raise _error(
+            409,
+            "client_import_activation_not_ready",
+            product=validation.product,
+        )
+    if current_state.surface != validation.target_surface:
+        raise _error(409, "client_import_preflight_surface_mismatch")
+    if current_state.version != expected_version:
+        raise _error(
+            409,
+            "trial_version_conflict",
+            expected_version=expected_version,
+            current_version=current_state.version,
+        )
+    if validation.product == "ecommerce":
+        if expected_version < 1:
+            raise _error(409, "client_import_activation_not_ready", product="ecommerce")
+        try:
+            commerce_state = validate_commerce_state(current_state.state)
+            configuration = commerce_state.get("storefrontConfiguration")
+            current_skus = {item["sku"] for item in commerce_state["items"]}
+            rows = package.get("rows")
+            if (
+                not isinstance(configuration, Mapping)
+                or not isinstance(rows, list)
+                or not rows
+                or any(
+                    not isinstance(row, Mapping)
+                    or not isinstance(row.get("values"), Mapping)
+                    or row["values"].get("sku") not in current_skus
+                    for row in rows
+                )
+            ):
+                raise ValueError("missing Ecommerce prerequisite")
+        except (KeyError, TypeError, TrialValidationError, ValueError) as exc:
+            raise _error(409, "client_import_activation_not_ready", product="ecommerce") from exc
+    elif expected_version != 0:
+        raise _error(
+            409,
+            "client_import_activation_not_ready",
+            product=validation.product,
+        )
+    return {
+        "contract": _CLIENT_IMPORT_APPLY_PREFLIGHT_CONTRACT,
+        "status": "ready_for_owner_confirmation",
+        "workspace_id": principal.workspace_id,
+        "actor_id": principal.actor_id,
+        "product": validation.product,
+        "object": validation.object_id,
+        "workflow_template_id": validation.workflow_template_id,
+        "target_surface": validation.target_surface,
+        "required_capability": validation.required_capability,
+        "package_digest": validation.package_digest,
+        "row_count": validation.row_count,
+        "expected_version": expected_version,
+        "current_version": current_state.version,
+        "preflight_digest": _client_import_apply_preflight_digest(
+            principal=principal,
+            validation=validation,
+            expected_version=expected_version,
+        ),
+        "confirmation": f"APPLY {validation.package_digest}",
+        "checks": list(_CLIENT_IMPORT_APPLY_PREFLIGHT_CHECKS),
+        "external_writes_performed": False,
+        "next_step": (
+            "The named human may submit one idempotent managed import using this exact package, revision, identity, and preflight receipt."
+        ),
+    }
+
+
 def _website_source_identity(value: object) -> tuple[str, str, str, str] | None:
     if not isinstance(value, Mapping):
         return None
@@ -904,6 +1033,47 @@ def create_trial_router(
             }
         }
 
+    @router.post("/imports/apply-preflight")
+    async def trial_import_apply_preflight(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_write_ready(readiness, "setup.write")
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        raw_body = await _bounded_json_body(
+            request,
+            maximum_bytes=CLIENT_IMPORT_MAX_PACKAGE_BYTES + 1024,
+        )
+        try:
+            body = TrialClientImportApplyPreflightRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "client_import_apply_preflight_invalid") from exc
+        try:
+            validation = validate_client_import_staging_package(body.package)
+        except ClientImportValidationError as exc:
+            raise _error(
+                422,
+                "client_import_validation_error",
+                message=str(exc),
+            ) from exc
+        _require_write_ready(readiness, validation.required_capability)
+        current_state = _invoke(
+            lambda: store.get_state(principal, validation.target_surface)
+        )
+        preflight = _client_import_apply_preflight(
+            principal=principal,
+            validation=validation,
+            package=body.package,
+            expected_version=body.expected_version,
+            current_state=current_state,
+        )
+        return {
+            "preflight": preflight,
+            "identity_authority": "trusted_managed_identity",
+            "external_writes_performed": False,
+            "secret_values_exposed": False,
+        }
+
     @router.post("/imports/apply")
     async def trial_import_apply(request: Request) -> dict[str, Any]:
         principal = _resolve_principal(request, resolve_principal)
@@ -934,6 +1104,13 @@ def create_trial_router(
                 product=validation.product,
             )
         _require_write_ready(readiness, validation.required_capability)
+        expected_preflight_digest = _client_import_apply_preflight_digest(
+            principal=principal,
+            validation=validation,
+            expected_version=body.expected_version,
+        )
+        if body.preflight_digest != expected_preflight_digest:
+            raise _error(409, "client_import_apply_preflight_mismatch")
         if body.confirmation != f"APPLY {validation.package_digest}":
             raise _error(409, "client_import_confirmation_mismatch")
         if validation.product == "commerce":

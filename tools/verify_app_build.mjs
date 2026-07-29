@@ -3234,6 +3234,19 @@ if (!coreSource.includes('templateId: string')
 const managedClientImportUiContract = sourceBlock(clientOnboardingUiSource, '  async function validateOrDownloadStagingPackage()', '\n\n  return (')
 if (!managedTrialSource.includes('export async function validateManagedClientImport')
   || !managedTrialSource.includes("'/api/trial/v1/imports/validate'")
+  || !managedTrialSource.includes('export type ManagedClientImportApplyPreflight = {')
+  || !managedTrialSource.includes("contract: 'supermega.client_import_apply_preflight.v1'")
+  || !managedTrialSource.includes('export async function managedClientImportApplyPreflightDigest')
+  || !managedTrialSource.includes('export async function assertManagedClientImportApplyPreflight')
+  || !managedTrialSource.includes('export async function preflightManagedClientImport')
+  || !managedTrialSource.includes("'/api/trial/v1/imports/apply-preflight'")
+  || !managedTrialSource.includes('preflight_digest: request.preflight.preflight_digest')
+  || !managedTrialRuntimeSource.includes('class TrialClientImportApplyPreflightRequest')
+  || !managedTrialRuntimeSource.includes('@router.post("/imports/apply-preflight")')
+  || !managedTrialRuntimeSource.includes('_CLIENT_IMPORT_APPLY_PREFLIGHT_CONTRACT = "supermega.client_import_apply_preflight.v1"')
+  || !managedTrialRuntimeSource.includes('def _client_import_apply_preflight_digest(')
+  || !managedTrialRuntimeSource.includes('def _client_import_apply_preflight(')
+  || !managedTrialRuntimeSource.includes('"client_import_apply_preflight_mismatch"')
   || !managedTrialSource.includes('export type ManagedClientImportProvisioningPlan = {')
   || !managedTrialSource.includes("contract: 'supermega.client_import_provisioning_plan.v1'")
   || !managedTrialSource.includes('export function buildManagedClientImportProvisioningPlan')
@@ -3290,10 +3303,15 @@ if (!managedTrialSource.includes('export async function validateManagedClientImp
   || !clientOnboardingUiSource.includes("reviewLabel: 'Ecommerce display rows'")
   || !clientOnboardingUiSource.includes('`Import ${state.validation.stagingPackage.rows.length} ${managedActivation.reviewLabel}`')
   || !clientOnboardingUiSource.includes('applyManagedClientImport({')
+  || !clientOnboardingUiSource.includes('preflightManagedClientImport({')
+  || !clientOnboardingUiSource.includes('preflight,')
+  || !clientOnboardingUiSource.includes('Verifying the named human, product capability, package digest, and current workspace revision...')
+  || !clientOnboardingUiSource.includes('Running final preflight...')
+  || !clientOnboardingUiSource.includes('authority + revision preflight retained')
   || !clientOnboardingUiSource.includes('activationContext,')
   || !clientOnboardingUiSource.includes('priorState: validated.activationContext.priorState')
   || !clientOnboardingUiSource.includes("error.code === 'trial_version_conflict'")
-  || !clientOnboardingUiSource.includes('validation: ecommerceNeedsRefresh ? null : current.validation')
+  || !clientOnboardingUiSource.includes('validation: activationNeedsRefresh ? null : current.validation')
   || !clientOnboardingUiSource.includes('const bootstrap = await loadManagedBootstrap(expectedIdentity)')
   || !clientOnboardingUiSource.includes('buildManagedClientImportProvisioningPlan(')
   || !clientOnboardingUiSource.includes('provisioningPlan')
@@ -5101,6 +5119,67 @@ async function verifyManagedClientImportRuntime() {
       packageDigest,
     )
     assert(accepted === receipt && /^sha256:[0-9a-f]{64}$/.test(packageDigest), 'managed_client_import_valid_receipt_rejected')
+    const applyPreflightDigest = await managedTrial.managedClientImportApplyPreflightDigest({
+      expectedVersion: 0,
+      identity,
+      validation: accepted,
+    })
+    const otherActorPreflightDigest = await managedTrial.managedClientImportApplyPreflightDigest({
+      expectedVersion: 0,
+      identity: { ...identity, userId: 'USER-MANAGED-IMPORT-002' },
+      validation: accepted,
+    })
+    assert(
+      otherActorPreflightDigest !== applyPreflightDigest,
+      'managed_client_import_apply_preflight_not_actor_bound',
+    )
+    const applyPreflight = {
+      contract: 'supermega.client_import_apply_preflight.v1',
+      status: 'ready_for_owner_confirmation',
+      workspace_id: identity.workspaceId,
+      actor_id: identity.userId,
+      product: staged.product,
+      object: staged.object,
+      workflow_template_id: staged.workflowTemplateId,
+      target_surface: accepted.activation.target_surface,
+      required_capability: accepted.activation.required_capability,
+      package_digest: packageDigest,
+      row_count: staged.rows.length,
+      expected_version: 0,
+      current_version: 0,
+      preflight_digest: applyPreflightDigest,
+      confirmation: `APPLY ${packageDigest}`,
+      checks: [...managedTrial.MANAGED_CLIENT_IMPORT_PREFLIGHT_CHECKS],
+      external_writes_performed: false,
+      next_step: 'The named human may submit one idempotent managed import using this exact package, revision, identity, and preflight receipt.',
+    }
+    assert(await managedTrial.assertManagedClientImportApplyPreflight(
+      {
+        preflight: applyPreflight,
+        identity_authority: 'trusted_managed_identity',
+        external_writes_performed: false,
+        secret_values_exposed: false,
+      },
+      staged,
+      accepted,
+      identity,
+      0,
+    ) === applyPreflight, 'managed_client_import_apply_preflight_rejected')
+    await rejectsAsync(
+      () => managedTrial.assertManagedClientImportApplyPreflight(
+        {
+          preflight: { ...applyPreflight, current_version: 1 },
+          identity_authority: 'trusted_managed_identity',
+          external_writes_performed: false,
+          secret_values_exposed: false,
+        },
+        staged,
+        accepted,
+        identity,
+        0,
+      ),
+      'managed_client_import_stale_apply_preflight_accepted',
+    )
     const provisioningPlan = managedTrial.buildManagedClientImportProvisioningPlan(
       staged,
       accepted,

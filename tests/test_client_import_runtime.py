@@ -537,6 +537,45 @@ class ClientImportRouteTests(unittest.TestCase):
     def _headers(session: str = "reader") -> dict[str, str]:
         return {"x-test-session": session}
 
+    def _apply_preflight(
+        self,
+        package: dict[str, object],
+        *,
+        expected_version: int = 0,
+        session: str = "writer",
+    ) -> dict[str, object]:
+        response = self.client.post(
+            "/api/trial/v1/imports/apply-preflight",
+            headers=self._headers(session),
+            json={"expected_version": expected_version, "package": package},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["identity_authority"], "trusted_managed_identity")
+        self.assertFalse(body["external_writes_performed"])
+        self.assertFalse(body["secret_values_exposed"])
+        return body["preflight"]
+
+    def _apply_body(
+        self,
+        package: dict[str, object],
+        *,
+        command_id: str,
+        expected_version: int = 0,
+    ) -> dict[str, object]:
+        validation = validate_client_import_staging_package(package)
+        preflight = self._apply_preflight(
+            package,
+            expected_version=expected_version,
+        )
+        return {
+            "command_id": command_id,
+            "expected_version": expected_version,
+            "preflight_digest": preflight["preflight_digest"],
+            "confirmation": f"APPLY {validation.package_digest}",
+            "package": package,
+        }
+
     def test_authenticated_validation_is_tenant_bound_and_has_no_writes(self) -> None:
         before = (deepcopy(self.store._states), deepcopy(self.store._events))
         response = self.client.post(
@@ -673,6 +712,112 @@ class ClientImportRouteTests(unittest.TestCase):
         self.assertEqual(response.json()["validation"]["activation"]["status"], "not_applied")
         self.assertEqual(self.reducer.calls, 0)
 
+    def test_apply_preflight_binds_human_authority_package_and_revision_without_writes(self) -> None:
+        package = _package("commerce", "retail-wholesale")
+        before = (deepcopy(self.store._states), deepcopy(self.store._events))
+        preflight = self._apply_preflight(package)
+        validation = validate_client_import_staging_package(package)
+        self.assertEqual(
+            preflight,
+            {
+                "contract": "supermega.client_import_apply_preflight.v1",
+                "status": "ready_for_owner_confirmation",
+                "workspace_id": "workspace-b",
+                "actor_id": "setup-writer",
+                "product": "commerce",
+                "object": "shop_catalog",
+                "workflow_template_id": "retail-wholesale",
+                "target_surface": "commerce",
+                "required_capability": "commerce.write",
+                "package_digest": validation.package_digest,
+                "row_count": 1,
+                "expected_version": 0,
+                "current_version": 0,
+                "preflight_digest": preflight["preflight_digest"],
+                "confirmation": f"APPLY {validation.package_digest}",
+                "checks": [
+                    "trusted_managed_identity",
+                    "human_actor",
+                    "setup_write_capability",
+                    "product_write_capability",
+                    "package_digest_bound",
+                    "current_revision_bound",
+                    "atomic_adapter_ready",
+                ],
+                "external_writes_performed": False,
+                "next_step": "The named human may submit one idempotent managed import using this exact package, revision, identity, and preflight receipt.",
+            },
+        )
+        self.assertRegex(preflight["preflight_digest"], r"^sha256:[0-9a-f]{64}$")
+        self.assertEqual((self.store._states, self.store._events), before)
+        self.assertEqual(self.reducer.calls, 0)
+
+        setup_only = self.client.post(
+            "/api/trial/v1/imports/apply-preflight",
+            headers=self._headers("setup-only"),
+            json={"expected_version": 0, "package": package},
+        )
+        self.assertEqual(setup_only.status_code, 403)
+        self.assertEqual(
+            setup_only.json()["detail"]["required_capability"],
+            "commerce.write",
+        )
+        nonhuman = self.client.post(
+            "/api/trial/v1/imports/apply-preflight",
+            headers=self._headers("agent"),
+            json={"expected_version": 0, "package": package},
+        )
+        self.assertEqual(nonhuman.status_code, 403)
+        self.assertEqual(
+            nonhuman.json()["detail"]["code"],
+            "trial_human_approval_required",
+        )
+        stale = self.client.post(
+            "/api/trial/v1/imports/apply-preflight",
+            headers=self._headers("writer"),
+            json={"expected_version": 1, "package": package},
+        )
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.json()["detail"]["code"], "trial_version_conflict")
+        self.assertEqual((self.store._states, self.store._events), before)
+
+    def test_apply_rejects_missing_or_mismatched_preflight_receipt(self) -> None:
+        package = _package("commerce")
+        validation = validate_client_import_staging_package(package)
+        baseline = (deepcopy(self.store._states), deepcopy(self.store._events))
+        missing = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json={
+                "command_id": "00000000-0000-4000-8000-000000000109",
+                "expected_version": 0,
+                "confirmation": f"APPLY {validation.package_digest}",
+                "package": package,
+            },
+        )
+        self.assertEqual(missing.status_code, 422)
+        self.assertEqual(missing.json()["detail"]["code"], "client_import_apply_invalid")
+
+        preflight = self._apply_preflight(package)
+        mismatched = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json={
+                "command_id": "00000000-0000-4000-8000-000000000110",
+                "expected_version": 0,
+                "preflight_digest": "sha256:" + "0" * 64,
+                "confirmation": f"APPLY {validation.package_digest}",
+                "package": package,
+            },
+        )
+        self.assertNotEqual(preflight["preflight_digest"], "sha256:" + "0" * 64)
+        self.assertEqual(mismatched.status_code, 409)
+        self.assertEqual(
+            mismatched.json()["detail"]["code"],
+            "client_import_apply_preflight_mismatch",
+        )
+        self.assertEqual((self.store._states, self.store._events), baseline)
+
     def test_reviewed_shop_import_applies_once_as_one_revisioned_catalog(self) -> None:
         package = _package("commerce", "retail-wholesale")
         second_row = deepcopy(package["rows"][0])
@@ -689,12 +834,10 @@ class ClientImportRouteTests(unittest.TestCase):
         package["controls"]["rowCount"] = 2
         package = _resign(package)
         validation = validate_client_import_staging_package(package)
-        body = {
-            "command_id": "00000000-0000-4000-8000-000000000101",
-            "expected_version": 0,
-            "confirmation": f"APPLY {validation.package_digest}",
-            "package": package,
-        }
+        body = self._apply_body(
+            package,
+            command_id="00000000-0000-4000-8000-000000000101",
+        )
 
         applied = self.client.post(
             "/api/trial/v1/imports/apply",
@@ -773,12 +916,10 @@ class ClientImportRouteTests(unittest.TestCase):
         package["controls"]["rowCount"] = 2
         package = _resign(package)
         validation = validate_client_import_staging_package(package)
-        body = {
-            "command_id": "00000000-0000-4000-8000-000000000103",
-            "expected_version": 0,
-            "confirmation": f"APPLY {validation.package_digest}",
-            "package": package,
-        }
+        body = self._apply_body(
+            package,
+            command_id="00000000-0000-4000-8000-000000000103",
+        )
 
         applied = self.client.post(
             "/api/trial/v1/imports/apply",
@@ -887,12 +1028,10 @@ class ClientImportRouteTests(unittest.TestCase):
         package["controls"]["rowCount"] = 3
         package = _resign(package)
         validation = validate_client_import_staging_package(package)
-        body = {
-            "command_id": "00000000-0000-4000-8000-000000000104",
-            "expected_version": 0,
-            "confirmation": f"APPLY {validation.package_digest}",
-            "package": package,
-        }
+        body = self._apply_body(
+            package,
+            command_id="00000000-0000-4000-8000-000000000104",
+        )
 
         applied = self.client.post(
             "/api/trial/v1/imports/apply",
@@ -1004,16 +1143,13 @@ class ClientImportRouteTests(unittest.TestCase):
 
     def test_reviewed_ecommerce_import_updates_existing_storefront_once(self) -> None:
         shop_package = _package("commerce", "social-commerce")
-        shop_validation = validate_client_import_staging_package(shop_package)
         shop_applied = self.client.post(
             "/api/trial/v1/imports/apply",
             headers=self._headers("writer"),
-            json={
-                "command_id": "00000000-0000-4000-8000-000000000105",
-                "expected_version": 0,
-                "confirmation": f"APPLY {shop_validation.package_digest}",
-                "package": shop_package,
-            },
+            json=self._apply_body(
+                shop_package,
+                command_id="00000000-0000-4000-8000-000000000105",
+            ),
         )
         self.assertEqual(shop_applied.status_code, 200, shop_applied.text)
         shop_state = shop_applied.json()["result"]["state"]
@@ -1051,12 +1187,11 @@ class ClientImportRouteTests(unittest.TestCase):
 
         ecommerce_package = _package("ecommerce", "social-storefront")
         ecommerce_validation = validate_client_import_staging_package(ecommerce_package)
-        body = {
-            "command_id": "00000000-0000-4000-8000-000000000107",
-            "expected_version": 2,
-            "confirmation": f"APPLY {ecommerce_validation.package_digest}",
-            "package": ecommerce_package,
-        }
+        body = self._apply_body(
+            ecommerce_package,
+            command_id="00000000-0000-4000-8000-000000000107",
+            expected_version=2,
+        )
         applied = self.client.post(
             "/api/trial/v1/imports/apply",
             headers=self._headers("writer"),
@@ -1146,12 +1281,10 @@ class ClientImportRouteTests(unittest.TestCase):
     def test_import_activation_fails_closed_before_every_product_write(self) -> None:
         package = _package("commerce")
         validation = validate_client_import_staging_package(package)
-        body = {
-            "command_id": "00000000-0000-4000-8000-000000000102",
-            "expected_version": 0,
-            "confirmation": f"APPLY {validation.package_digest}",
-            "package": package,
-        }
+        body = self._apply_body(
+            package,
+            command_id="00000000-0000-4000-8000-000000000102",
+        )
         baseline = (deepcopy(self.store._states), deepcopy(self.store._events))
 
         wrong_confirmation = self.client.post(
@@ -1185,23 +1318,21 @@ class ClientImportRouteTests(unittest.TestCase):
         self.assertEqual(nonhuman.json()["detail"]["code"], "trial_human_approval_required")
 
         ecommerce_package = _package("ecommerce")
-        ecommerce_validation = validate_client_import_staging_package(ecommerce_package)
         missing_prerequisites = self.client.post(
-            "/api/trial/v1/imports/apply",
+            "/api/trial/v1/imports/apply-preflight",
             headers=self._headers("writer"),
             json={
-                **body,
-                "confirmation": f"APPLY {ecommerce_validation.package_digest}",
+                "expected_version": 0,
                 "package": ecommerce_package,
             },
         )
-        self.assertEqual(missing_prerequisites.status_code, 422)
+        self.assertEqual(missing_prerequisites.status_code, 409)
         self.assertEqual(
             missing_prerequisites.json()["detail"]["code"],
-            "trial_validation_error",
+            "client_import_activation_not_ready",
         )
         self.assertEqual((self.store._states, self.store._events), baseline)
-        self.assertEqual(self.reducer.calls, 1)
+        self.assertEqual(self.reducer.calls, 0)
 
 
 if __name__ == "__main__":

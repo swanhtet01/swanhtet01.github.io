@@ -18,11 +18,13 @@ import {
   buildManagedClientImportProvisioningPlan,
   loadManagedBootstrap,
   managedClientImportActivationContext,
+  preflightManagedClientImport,
   sameManagedClientImportState,
   sameManagedIdentity,
   validateManagedClientImport,
   type ManagedClientImportActivationContext,
   type ManagedClientImportActivationResult,
+  type ManagedClientImportApplyPreflight,
   type ManagedClientImportPackage,
   type ManagedClientImportProvisioningPlan,
   type ManagedClientImportValidation,
@@ -44,6 +46,7 @@ type ValidatedImport = {
   commandId: string
   contextKey: string
   provisioningPlan: ManagedClientImportProvisioningPlan
+  preflight: ManagedClientImportApplyPreflight | null
   receipt: ManagedClientImportValidation
   stagingPackage: ManagedClientImportPackage
 }
@@ -59,6 +62,7 @@ type ImportState = {
   preview: ClientImportPreview | null
   busy: boolean
   validating: boolean
+  preflighting: boolean
   applying: boolean
   applyConfirmed: boolean
   applied: AppliedImport | null
@@ -96,6 +100,7 @@ function emptyImportState(): ImportState {
     preview: null,
     busy: false,
     validating: false,
+    preflighting: false,
     applying: false,
     applyConfirmed: false,
     applied: null,
@@ -236,13 +241,14 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             failure: 'The Ecommerce display details were not applied. The checked import is still available.',
           }
         : null
-  const canPrepareImport = Boolean(state.preview?.readyForStaging && importContextReady && !state.busy && !state.validating && !state.applying)
+  const canPrepareImport = Boolean(state.preview?.readyForStaging && importContextReady && !state.busy && !state.validating && !state.preflighting && !state.applying)
   const canApplyManagedImport = Boolean(
     managedActivation
     && managedIdentity
     && validationIsCurrent
     && state.validation?.receipt.activation.atomic_adapter_ready
     && state.applyConfirmed
+    && !state.preflighting
     && !state.applying
     && !appliedIsCurrent,
   )
@@ -250,7 +256,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     ['Read file', state.preview ? `${state.preview.totals.rows} rows` : state.busy ? 'Reading' : 'Waiting'],
     ['Match columns', state.preview ? mappingNeedsReview ? 'Review' : `${matchedFieldCount}/${state.preview.fields.length}` : 'Auto'],
     ['Check workspace', appliedIsCurrent ? 'Applied' : validationIsCurrent ? 'Checked' : state.validating ? 'Checking' : managedIdentity ? 'Ready' : 'Local file'],
-    ['Confirm import', appliedIsCurrent ? 'Done' : state.applying ? 'Writing' : canApplyManagedImport ? 'Ready' : state.preview?.readyForStaging ? 'Prepare' : 'Locked'],
+    ['Confirm import', appliedIsCurrent ? 'Done' : state.preflighting ? 'Preflight' : state.applying ? 'Writing' : canApplyManagedImport ? 'Ready' : state.preview?.readyForStaging ? 'Prepare' : 'Locked'],
   ] as const
   const importStageMessage = appliedIsCurrent
     ? `${productName} import is confirmed in ${managedIdentity?.workspaceId}.`
@@ -285,38 +291,42 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     : ''
   const importCoachAction = appliedIsCurrent
     ? 'Handoff ready'
-    : state.applying
-      ? 'Confirming import'
-      : canApplyManagedImport
-        ? `Import ${state.validation?.stagingPackage.rows.length ?? 0} reviewed rows`
-        : validationIsCurrent
-          ? 'Approve checked import'
-          : state.validating
-            ? 'Checking workspace'
-            : state.preview
-              ? mappingNeedsReview
-                ? 'Match required columns'
-                : state.preview.totals.duplicates
-                  ? 'Fix duplicate keys'
-                  : state.preview.totals.issueRows
-                    ? 'Fix row issues'
-                    : !importContextReady
-                      ? 'Add workspace and owner'
-                      : managedIdentity
-                        ? 'Check with workspace'
-                        : 'Prepare import file'
-              : 'Upload or try sample'
+    : state.preflighting
+      ? 'Checking authority and revision'
+      : state.applying
+        ? 'Confirming import'
+        : canApplyManagedImport
+          ? `Import ${state.validation?.stagingPackage.rows.length ?? 0} reviewed rows`
+          : validationIsCurrent
+            ? 'Approve checked import'
+            : state.validating
+              ? 'Checking workspace'
+              : state.preview
+                ? mappingNeedsReview
+                  ? 'Match required columns'
+                  : state.preview.totals.duplicates
+                    ? 'Fix duplicate keys'
+                    : state.preview.totals.issueRows
+                      ? 'Fix row issues'
+                      : !importContextReady
+                        ? 'Add workspace and owner'
+                        : managedIdentity
+                          ? 'Check with workspace'
+                          : 'Prepare import file'
+                : 'Upload or try sample'
   const importCoachReason = appliedIsCurrent
     ? 'The managed result is confirmed and ready for handoff.'
-    : canApplyManagedImport
-      ? 'The workspace check passed and the owner approval box is ticked.'
-      : validationIsCurrent
-        ? 'The server checked the file. Owner approval is still required before writing records.'
-        : state.preview
-          ? state.preview.readyForStaging
-            ? 'The file is clean; the next step is accountable preparation or managed validation.'
-            : importRepairMessage
-          : 'Start with a CSV or sample so SuperMega can map columns and inspect rows locally.'
+    : state.preflighting
+      ? 'SuperMega is binding this package to the named human, managed workspace, product capability, and current revision before any write.'
+      : canApplyManagedImport
+        ? 'The workspace check passed and the owner approval box is ticked.'
+        : validationIsCurrent
+          ? 'The server checked the file. Owner approval is still required before writing records.'
+          : state.preview
+            ? state.preview.readyForStaging
+              ? 'The file is clean; the next step is accountable preparation or managed validation.'
+              : importRepairMessage
+            : 'Start with a CSV or sample so SuperMega can map columns and inspect rows locally.'
   const importCoachRows = [
     ['Next action', importCoachAction],
     ['Reason', importCoachReason],
@@ -361,6 +371,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         ['Target', provisioningPlan.target_surface],
         ['Rows', `${provisioningPlan.row_count}`],
         ['Version', `${provisioningPlan.expected_version}`],
+        ['Final preflight', state.validation?.preflight ? 'Authority + revision checked' : 'Runs before apply'],
         ['Controls', `${provisioningPlan.required_controls.length}`],
       ] as const
     : []
@@ -373,7 +384,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
 
   useEffect(() => {
     validationRequestRef.current += 1
-    setState((current) => ({ ...current, validating: false, applying: false, applyConfirmed: false, applied: null, validation: null, error: '' }))
+    setState((current) => ({ ...current, validating: false, preflighting: false, applying: false, applyConfirmed: false, applied: null, validation: null, error: '' }))
   }, [managedIdentity?.userId, managedIdentity?.workspaceId, owner, workspace])
 
   async function runPreview(
@@ -387,7 +398,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     const requestId = requestRef.current + 1
     requestRef.current = requestId
     validationRequestRef.current += 1
-    setState((current) => ({ ...current, sourceName, sourceText, busy: true, validating: false, validation: null, error: '' }))
+    setState((current) => ({ ...current, sourceName, sourceText, busy: true, validating: false, preflighting: false, applying: false, validation: null, error: '' }))
     try {
       const preview = await createClientImportPreview(sourceText, expectedProduct, mapping, sourceName, expectedWorkflowTemplateId)
       if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
@@ -526,7 +537,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
 
       validationRequestId = validationRequestRef.current + 1
       validationRequestRef.current = validationRequestId
-      setState((current) => ({ ...current, validating: true, validation: null, error: '' }))
+      setState((current) => ({ ...current, validating: true, preflighting: false, validation: null, error: '' }))
       const receipt = await validateManagedClientImport(stagingPackage, expectedIdentity)
       if (validationRequestRef.current !== validationRequestId || validationContextChanged()) return
       const activationBootstrap = stagingPackage.product === 'ecommerce'
@@ -545,6 +556,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         ? {
             ...current,
             validating: false,
+            preflighting: false,
             applying: false,
             applyConfirmed: false,
             applied: null,
@@ -552,6 +564,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
               activationContext,
               commandId,
               contextKey: expectedContextKey,
+              preflight: null,
               provisioningPlan,
               receipt,
               stagingPackage,
@@ -565,6 +578,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       setState((current) => ({
         ...current,
         validating: false,
+        preflighting: false,
         validation: null,
         error: error instanceof Error ? error.message : 'The staging package could not be validated.',
       }))
@@ -580,6 +594,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       || !validated
       || !validated.receipt.activation.atomic_adapter_ready
       || !state.applyConfirmed
+      || state.preflighting
       || state.applying
       || appliedIsCurrent) return
     const expectedContextKey = currentValidationContext
@@ -591,12 +606,34 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       || !managedIdentityRef.current
       || !sameManagedIdentity(managedIdentityRef.current, expectedIdentity)
     )
-    setState((current) => ({ ...current, applying: true, applied: null, error: '' }))
+    setState((current) => ({
+      ...current,
+      preflighting: !validated.preflight,
+      applying: Boolean(validated.preflight),
+      applied: null,
+      error: '',
+    }))
     try {
+      const preflight = validated.preflight ?? await preflightManagedClientImport({
+        expectedVersion: validated.activationContext.expectedVersion,
+        identity: expectedIdentity,
+        stagingPackage: validated.stagingPackage,
+        validation: validated.receipt,
+      })
+      if (contextChanged()) return
+      setState((current) => current.validation?.commandId === validated.commandId
+        ? {
+            ...current,
+            preflighting: false,
+            applying: true,
+            validation: { ...current.validation, preflight },
+          }
+        : current)
       const receipt = await applyManagedClientImport({
         commandId: validated.commandId,
         expectedVersion: validated.activationContext.expectedVersion,
         identity: expectedIdentity,
+        preflight,
         priorState: validated.activationContext.priorState,
         stagingPackage: validated.stagingPackage,
         validation: validated.receipt,
@@ -624,6 +661,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         && current.validation?.commandId === validated.commandId
         ? {
             ...current,
+            preflighting: false,
             applying: false,
             applyConfirmed: false,
             applied: { contextKey: expectedContextKey, receipt },
@@ -632,17 +670,17 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         : current)
     } catch (error) {
       if (contextChanged()) return
-      const ecommerceNeedsRefresh = validated.stagingPackage.product === 'ecommerce'
-        && error instanceof ManagedTrialError
+      const activationNeedsRefresh = error instanceof ManagedTrialError
         && (error.code === 'trial_version_conflict' || error.code === 'trial_invalid_transition')
       setState((current) => ({
         ...current,
+        preflighting: false,
         applying: false,
-        applyConfirmed: ecommerceNeedsRefresh ? false : current.applyConfirmed,
+        applyConfirmed: activationNeedsRefresh ? false : current.applyConfirmed,
         applied: null,
-        validation: ecommerceNeedsRefresh ? null : current.validation,
-        error: ecommerceNeedsRefresh
-          ? 'Shop or Ecommerce changed after this validation, or these display details are already current. Review the preview and validate again.'
+        validation: activationNeedsRefresh ? null : current.validation,
+        error: activationNeedsRefresh
+          ? 'The managed workspace changed after validation, or this import is already current. Review the preview and validate again.'
           : error instanceof Error ? error.message : managedActivation.failure,
       }))
     }
@@ -700,6 +738,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         </div> : null}
         {state.busy ? <p className="form-notice" role="status">Matching columns and checking every row...</p> : null}
         {state.validating ? <p className="form-notice" role="status">Checking the prepared import with your workspace...</p> : null}
+        {state.preflighting ? <p className="form-notice" role="status">Verifying the named human, product capability, package digest, and current workspace revision...</p> : null}
         {state.applying ? <p className="form-notice" role="status">{managedActivation?.progressLabel ?? 'Confirming the import...'}</p> : null}
         {state.error ? <p className="form-error" role="alert">{state.error}</p> : null}
         {state.preview ? <div className="catalog-import-preview" ref={previewRef} tabIndex={-1}>
@@ -741,22 +780,22 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             {state.preview.rows.length > visibleRows.length ? <p className="panel-copy">Showing {visibleRows.length} of {state.preview.rows.length} checked rows.</p> : null}
           </details>
           {validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation && !appliedIsCurrent ? <>
-            <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.validation.stagingPackage.rows.length} {managedActivation.reviewLabel} and approve this import.</span></label>
-            <div className="form-actions"><button className="core-button primary" disabled={!canApplyManagedImport} onClick={() => void activateManagedImport()} type="button">{state.applying ? managedActivation.busyLabel : `Import ${state.validation.stagingPackage.rows.length} ${managedActivation.reviewLabel}`}</button></div>
+            <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.preflighting || state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.validation.stagingPackage.rows.length} {managedActivation.reviewLabel} and approve this import.</span></label>
+            <div className="form-actions"><button className="core-button primary" disabled={!canApplyManagedImport} onClick={() => void activateManagedImport()} type="button">{state.preflighting ? 'Running final preflight...' : state.applying ? managedActivation.busyLabel : `Import ${state.validation.stagingPackage.rows.length} ${managedActivation.reviewLabel}`}</button></div>
           </> : null}
           <div className="catalog-import-footer">
             <div><strong>{appliedIsCurrent && state.applied ? `${state.applied.receipt.activation.row_count} ${managedActivation?.completedLabel ?? 'records'} ${managedActivation?.resultVerb ?? 'created'} in revision ${state.applied.receipt.result.version}.` : validationIsCurrent ? `Validated by ${managedIdentity?.workspaceId}.` : state.preview.readyForStaging && !importContextReady ? 'Add workspace and owner above.' : state.preview.readyForStaging ? 'Data check passed.' : 'Fix the highlighted rows first.'}</strong><small>{appliedIsCurrent && state.applied
               ? `The ${managedActivation?.productLabel ?? 'product'} import is confirmed.`
               : validationIsCurrent
-              ? 'Checked successfully. Review and confirm above before records are written.'
+              ? state.validation?.preflight ? 'Authority and revision preflight passed. The reviewed import remains bound to this exact receipt.' : 'Checked successfully. Review and confirm above; SuperMega runs a final authority and revision preflight before writing.'
               : state.preview.readyForStaging && !importContextReady
                 ? 'These details connect the prepared rows to one accountable client workspace.'
               : managedIdentity
                 ? 'Ready to check with your workspace.'
                 : 'Ready to prepare an accountable import file.'}</small>
-              {appliedIsCurrent && state.applied ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.applied.receipt.activation.package_digest.slice(7, 19).toUpperCase()} / revision {state.applied.receipt.result.version} / idempotent command confirmed</p></details> : validationIsCurrent && state.validation ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.validation.receipt.package_digest.slice(7, 19).toUpperCase()} / zero records written / {object.activationBoundary}</p></details> : null}
+              {appliedIsCurrent && state.applied ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.applied.receipt.activation.package_digest.slice(7, 19).toUpperCase()} / revision {state.applied.receipt.result.version} / idempotent command confirmed</p></details> : validationIsCurrent && state.validation ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.validation.receipt.package_digest.slice(7, 19).toUpperCase()} / {state.validation.preflight ? 'authority + revision preflight retained' : 'zero records written'} / {object.activationBoundary}</p></details> : null}
             </div>
-            <div className="form-actions"><button className="core-button" disabled={state.applying} onClick={clearPreview} type="button">Clear</button>{!appliedIsCurrent && !(validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation) ? <button className="core-button primary" disabled={!canPrepareImport} onClick={() => void validateOrDownloadStagingPackage()} type="button">{state.validating ? 'Checking...' : !importContextReady ? 'Add workspace and owner' : validationIsCurrent ? 'Download checked file' : managedIdentity ? 'Check with workspace' : 'Prepare import file'}</button> : null}</div>
+            <div className="form-actions"><button className="core-button" disabled={state.preflighting || state.applying} onClick={clearPreview} type="button">Clear</button>{!appliedIsCurrent && !(validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation) ? <button className="core-button primary" disabled={!canPrepareImport} onClick={() => void validateOrDownloadStagingPackage()} type="button">{state.validating ? 'Checking...' : !importContextReady ? 'Add workspace and owner' : validationIsCurrent ? 'Download checked file' : managedIdentity ? 'Check with workspace' : 'Prepare import file'}</button> : null}</div>
           </div>
         </div> : null}
       </div>
