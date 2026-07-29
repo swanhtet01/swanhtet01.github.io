@@ -1529,13 +1529,6 @@ export function EcommerceProduct() {
     ['Reason', aiAgentReason],
     ['Owner gate', aiOwnerGate],
   ] as const
-  const aiDeskAction = pendingManagedRequests.length
-    ? { label: 'Review requests', to: '/shop/?tab=orders&source=ecommerce' }
-    : importNeeded
-      ? { label: 'Import catalog', to: '/settings/?product=ecommerce' }
-      : !savedDraftIsCurrent
-        ? null
-      : { label: 'Open storefront', to: '#ecommerce-preview-panel' }
   const orderAutopilotStage = importNeeded
     ? 'Connect products'
     : !savedDraftIsCurrent
@@ -1549,27 +1542,6 @@ export function EcommerceProduct() {
             : buyingReady
               ? 'Ready for customer orders'
               : 'Check setup'
-  const orderAutopilotNextAction = importNeeded
-    ? 'Open import setup'
-    : !savedDraftIsCurrent
-      ? 'Save the customer-facing storefront'
-      : orderImportReview?.status === 'ready'
-        ? 'Download the owner-reviewed order packet'
-        : orderImportReview?.status === 'blocked'
-          ? 'Fix CSV rows before handoff'
-          : pendingManagedRequests.length
-            ? 'Open the accountable Shop queue'
-            : buyingReady
-              ? 'Prepare a quote or wait for channel orders'
-              : 'Review catalog, storefront, and checkout'
-  const orderAutopilotRows = [
-    ['Track', pendingManagedRequests.length ? 'Shop queue' : orderImportReview ? 'Order import' : 'Store setup'],
-    ['Stage', orderAutopilotStage],
-    ['Next', orderAutopilotNextAction],
-    ['Learning', 'Records behavior only'],
-    ['Boundary', 'No auto write'],
-  ] as const
-
   function runOrderAutopilot() {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
@@ -1646,25 +1618,6 @@ export function EcommerceProduct() {
         <div className="ecommerce-ai-agent-queue" aria-label="Recommended Ecommerce agent job">
           {aiAgentQueueRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
-        {aiDeskAction
-          ? <Link className="core-button primary compact" onClick={() => {
-              recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'ecommerce', route: location.pathname + location.search, detail: aiAgentJob })
-            }} to={aiDeskAction.to}>{aiDeskAction.label}</Link>
-          : <button className="core-button primary compact" onClick={() => {
-              recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'ecommerce', route: location.pathname + location.search, detail: aiAgentJob })
-              finishStorefrontSetup()
-            }} type="button">Finish setup</button>}
-      </section>
-
-      <section aria-label="Order Autopilot" className="ecommerce-order-command-center">
-        <div>
-          <span className="core-eyebrow">Order Autopilot</span>
-          <h2>{orderAutopilotStage}</h2>
-          <p>One button chooses the next safe owner action from catalog, storefront, order import, checkout, and Shop queue state. AI may prepare packets and drafts; it does not send customer messages, charge payments, book delivery, move stock, or write Shop orders here.</p>
-        </div>
-        <div className="ecommerce-order-command-center-rows">
-          {orderAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-        </div>
         <button className="core-button primary compact" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">Run next step</button>
       </section>
 
@@ -1678,28 +1631,36 @@ export function EcommerceProduct() {
             <button className="text-link" onClick={downloadOrderImportTemplate} type="button">Download order template</button>
             <button className="text-link" onClick={loadSampleOrderImportBatch} type="button">Load sample order batch</button>
           </div>
-          <div aria-label="Order intake guide" className="ecommerce-order-intake-guide">
-            {orderIntakeGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-          </div>
-          <div aria-label="AI order repair checklist" className="ecommerce-order-repair-checklist">
-            {orderRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-          </div>
-          <label className="ecommerce-order-import-upload">Upload order CSV<input accept=".csv,text/csv,text/plain" onChange={uploadOrderImportCsv} type="file" /></label>
-          <label className="ecommerce-order-import-field">Order batch CSV<textarea onChange={(event) => {
-            setOrderImportText(event.target.value)
-            setOrderImportReview(null)
-            setOrderImportSourceName('')
-          }} placeholder="Paste customer_reference, channel, sku, quantity, fulfilment, payment, source_message rows" value={orderImportText} /></label>
-          <button className="text-link" disabled={!orderImportText.trim()} onClick={reviewOrderImportBatch} type="button">Review order batch</button>
-          {orderImportReview ? <div className={`ecommerce-order-import-review ${orderImportReview.status}`} role="status"><strong>{orderImportReview.status === 'ready' ? 'Ready for owner review' : 'Repair before handoff'}</strong><span>{orderImportReview.summary}</span><small>{orderImportReview.readyRows} ready · {orderImportReview.blockedRows} blocked · no Shop write</small><button className="text-link" onClick={downloadOrderImportReviewPacket} type="button">Download review packet</button></div> : null}
-          {orderImportSourceName ? <p className="ecommerce-order-import-source">Local file: {orderImportSourceName}</p> : null}
-          {orderImportNotice ? <p className="ecommerce-order-import-notice" role="status">{orderImportNotice}</p> : null}
+          <details className="ecommerce-order-import-workspace" open={orderImportText || orderImportReview ? true : undefined}>
+            <summary><span>Review an order batch</span><small>Upload CSV or paste channel orders only when needed.</small></summary>
+            <div aria-label="Order batch review workspace" className="ecommerce-order-import-workspace-body">
+              <div aria-label="Order intake guide" className="ecommerce-order-intake-guide">
+                {orderIntakeGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+              </div>
+              <div aria-label="AI order repair checklist" className="ecommerce-order-repair-checklist">
+                {orderRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+              </div>
+              <label className="ecommerce-order-import-upload">Upload order CSV<input accept=".csv,text/csv,text/plain" onChange={uploadOrderImportCsv} type="file" /></label>
+              <label className="ecommerce-order-import-field">Order batch CSV<textarea onChange={(event) => {
+                setOrderImportText(event.target.value)
+                setOrderImportReview(null)
+                setOrderImportSourceName('')
+              }} placeholder="Paste customer_reference, channel, sku, quantity, fulfilment, payment, source_message rows" value={orderImportText} /></label>
+              <button className="text-link" disabled={!orderImportText.trim()} onClick={reviewOrderImportBatch} type="button">Review order batch</button>
+              {orderImportReview ? <div className={`ecommerce-order-import-review ${orderImportReview.status}`} role="status"><strong>{orderImportReview.status === 'ready' ? 'Ready for owner review' : 'Repair before handoff'}</strong><span>{orderImportReview.summary}</span><small>{orderImportReview.readyRows} ready · {orderImportReview.blockedRows} blocked · no Shop write</small><button className="text-link" onClick={downloadOrderImportReviewPacket} type="button">Download review packet</button></div> : null}
+              {orderImportSourceName ? <p className="ecommerce-order-import-source">Local file: {orderImportSourceName}</p> : null}
+              {orderImportNotice ? <p className="ecommerce-order-import-notice" role="status">{orderImportNotice}</p> : null}
+            </div>
+          </details>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
           {orderImportRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
       </section>
 
+      <details aria-label="Enterprise order controls" className="ecommerce-enterprise-controls">
+        <summary><span>Enterprise order controls</span><small>Inbox, payment, delivery, recovery, replies, and activation evidence.</small></summary>
+        <div className="ecommerce-enterprise-controls-body">
       <section aria-label="Ecommerce request inbox" className="ecommerce-ops-cockpit ecommerce-request-inbox-cockpit">
         <div>
           <span className="core-eyebrow">Request inbox</span>
@@ -1849,6 +1810,8 @@ export function EcommerceProduct() {
         </div>
         {channelReplyDraft ? <p className="ecommerce-channel-reply-draft" role="status">{channelReplyDraft}</p> : null}
       </section>
+        </div>
+      </details>
 
       <div aria-label="Ecommerce workspace" className="ecommerce-mobile-switch" role="group">
         <button aria-controls="ecommerce-preview-panel" aria-pressed={mobileWorkspace === 'preview'} onClick={() => showMobileWorkspace('preview')} type="button">Store</button>

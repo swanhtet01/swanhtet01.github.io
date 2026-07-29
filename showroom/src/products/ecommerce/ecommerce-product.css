@@ -161,75 +161,6 @@
   overflow-wrap: anywhere;
 }
 
-.ecommerce-order-command-center {
-  display: grid;
-  grid-template-columns: minmax(0, .95fr) minmax(320px, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  margin: 0 0 12px;
-  border: 1px solid rgba(13, 95, 76, .2);
-  border-radius: 10px;
-  padding: 12px;
-  background: #f3fbf7;
-}
-
-.ecommerce-order-command-center h2 {
-  margin: 0;
-  color: #17231d;
-  font-size: 17px;
-  line-height: 1.2;
-}
-
-.ecommerce-order-command-center p {
-  margin: 3px 0 0;
-  color: #607268;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.ecommerce-order-command-center-rows {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  overflow: hidden;
-  border: 1px solid rgba(13, 95, 76, .12);
-  border-radius: 8px;
-  background: #fff;
-}
-
-.ecommerce-order-command-center-rows span {
-  min-width: 0;
-  min-height: 48px;
-  display: grid;
-  align-content: center;
-  gap: 2px;
-  border-right: 1px solid rgba(13, 95, 76, .1);
-  padding: 7px 8px;
-}
-
-.ecommerce-order-command-center-rows span:last-child {
-  border-right: 0;
-}
-
-.ecommerce-order-command-center-rows small {
-  overflow: hidden;
-  color: #607268;
-  font-size: 8px;
-  font-weight: 780;
-  letter-spacing: .04em;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.ecommerce-order-command-center-rows strong {
-  overflow: hidden;
-  color: #17231d;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .ecommerce-ops-cockpit {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, .95fr);
@@ -254,6 +185,70 @@
 .ecommerce-order-import-cockpit {
   border-color: rgba(70, 85, 165, .18);
   background: #f7f8ff;
+}
+
+.ecommerce-order-import-workspace {
+  margin-top: 10px;
+  border-top: 1px solid rgba(70, 85, 165, .16);
+}
+
+.ecommerce-order-import-workspace > summary,
+.ecommerce-enterprise-controls > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 24px;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 2px;
+  color: #293044;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ecommerce-order-import-workspace > summary::-webkit-details-marker,
+.ecommerce-enterprise-controls > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ecommerce-order-import-workspace > summary span,
+.ecommerce-enterprise-controls > summary span {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.ecommerce-order-import-workspace > summary small,
+.ecommerce-enterprise-controls > summary small {
+  color: #66746b;
+  font-size: 11px;
+  text-align: right;
+}
+
+.ecommerce-order-import-workspace > summary::after,
+.ecommerce-enterprise-controls > summary::after {
+  content: '+';
+  color: #0b745e;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.ecommerce-order-import-workspace[open] > summary::after,
+.ecommerce-enterprise-controls[open] > summary::after {
+  content: '−';
+}
+
+.ecommerce-order-import-workspace-body {
+  padding-bottom: 2px;
+}
+
+.ecommerce-enterprise-controls {
+  margin: 0;
+  border-top: 1px solid rgba(31, 68, 51, .14);
+  border-bottom: 1px solid rgba(31, 68, 51, .14);
+}
+
+.ecommerce-enterprise-controls-body {
+  display: grid;
+  gap: 10px;
+  padding: 0 0 12px;
 }
 
 .ecommerce-fulfillment-handoff-cockpit {
@@ -578,10 +573,6 @@
     grid-template-columns: 1fr;
   }
 
-  .ecommerce-order-command-center {
-    grid-template-columns: 1fr;
-  }
-
   .ecommerce-ops-cockpit-rows {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -602,23 +593,15 @@
     grid-template-columns: 1fr;
   }
 
-  .ecommerce-order-command-center-rows {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .ecommerce-order-import-workspace > summary,
+  .ecommerce-enterprise-controls > summary {
+    grid-template-columns: minmax(0, 1fr) 24px;
   }
 
-  .ecommerce-order-command-center-rows span {
-    border-right: 1px solid rgba(13, 95, 76, .1);
-    border-bottom: 1px solid rgba(13, 95, 76, .1);
-  }
-
-  .ecommerce-order-command-center-rows span:nth-child(2n) {
-    border-right: 0;
-  }
-
-  .ecommerce-order-command-center-rows span:last-child {
-    grid-column: 1 / -1;
-    border-right: 0;
-    border-bottom: 0;
+  .ecommerce-order-import-workspace > summary small,
+  .ecommerce-enterprise-controls > summary small {
+    grid-column: 1;
+    text-align: left;
   }
 }
 
