@@ -2399,6 +2399,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const purchaseOrderTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const purchaseOrderEditorRef = useRef<HTMLFormElement>(null)
   const purchaseOrderHistoryRef = useRef<HTMLDetailsElement>(null)
+  const catalogCreateFormRef = useRef<HTMLFormElement>(null)
   const stockCountTriggerRef = useRef<HTMLButtonElement>(null)
   const stockCountEditorRef = useRef<HTMLFormElement>(null)
   const returnTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
@@ -2417,6 +2418,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [notice, setNotice] = useState('')
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
   const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
+  const [catalogCreateOpen, setCatalogCreateOpen] = useState(false)
   const [catalogEditDraft, setCatalogEditDraft] = useState<CatalogItemEditDraft | null>(null)
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
@@ -3199,6 +3201,36 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     }
     navigate(shopAgentPath)
   }
+
+  function loadSampleCatalogItem() {
+    const sampleItem = {
+      sku: 'SM-FRESH-006',
+      name: 'Fresh market delivery pack',
+      onHand: '24',
+      reorderAt: '8',
+      price: '16500',
+    }
+    if (pendingAction) {
+      setNotice('Finish or cancel the pending Shop review before loading a sample catalog item.')
+      return
+    }
+    if (commerce.items.some((item) => item.sku === sampleItem.sku)) {
+      setSku(sampleItem.sku)
+      setNotice(`${sampleItem.sku} is already in the catalog. Open its row to edit price, reorder level, stock, or receiving.`)
+      return
+    }
+    setItemDraft(sampleItem)
+    setCatalogCreateOpen(true)
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'commerce',
+      route: commerceLocation.pathname + commerceLocation.search,
+      detail: 'Load sample Shop catalog item',
+    })
+    setNotice('Sample Shop catalog item loaded for owner review. Click Review catalog item to queue it; no Shop write, stock move, supplier message, sale, payment, or accounting post ran.')
+    requestAnimationFrame(() => catalogCreateFormRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
+  }
+
   const shopCommandCenter = <section aria-label="Shop Autopilot" className="shop-command-center">
     <div>
       <span className="core-eyebrow">Shop Autopilot</span>
@@ -4996,11 +5028,12 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       <section aria-label="Shop catalog upload autopilot" className="catalog-onboarding-bridge">
         <div><span className="core-eyebrow">Catalog upload autopilot</span><strong>Bring your catalog into the Shop trial.</strong><p>AI routes product spreadsheets through the shared mapper, checks SKU, name, stock, reorder, and price fields, then prepares one reviewed import package. No supplier message, stock move, sale, accounting post, or Shop write runs from this panel.</p></div>
         <div className="catalog-onboarding-status">{shopCatalogUploadRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+        <button className="core-button" disabled={commerceControlsDisabled} onClick={loadSampleCatalogItem} type="button">Load sample catalog item</button>
         <Link className="core-button" to={clientSetupPath('commerce')}>Upload product data</Link>
       </section>
-      <details className="compact-disclosure catalog-disclosure">
+      <details className="compact-disclosure catalog-disclosure" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
         <summary>Add catalog item</summary>
-        <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem}>
+        <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem} ref={catalogCreateFormRef}>
           <div className="form-row"><label>SKU<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="SKU-002" required value={itemDraft.sku} /></label><label>Item name<input disabled={commerceControlsDisabled} maxLength={180} onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Real item name" required value={itemDraft.name} /></label></div>
           <div className="form-row"><label>Opening stock<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Reorder at<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} required step="1" type="number" value={itemDraft.reorderAt} /></label></div>
           <label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label>
