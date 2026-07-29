@@ -1100,15 +1100,18 @@ requireContract('current CEO platform evidence is recorded without expanding aut
   && workboard.includes('Checkpoint `e8a3adb` adds `supermega.platform-status.v1`')
   && workboard.includes('All 289 Kernel tests, 69 connectors across 993 adversarial calls, 15 crews across 214 checks, plus the complete app gate with 69 release and 70 security checks pass')
   && now.includes('CEO status is output-free across weekly briefs')
-  && now.includes('without process stops; admission opened at 83.7% RAM')
-  && now.includes('Post-gate RAM is 86.5%, so dispatch is paused'))
+  && now.includes('released 2,270.7 MB without process stops; admission opened at 81.3% RAM')
+  && now.includes('admission open at 84.6% RAM with zero loaded models and one idle worker'))
 
 requireContract('rejected CEO outcomes are quarantined without repair loops or hidden completion',
   workboard.includes('| OPS-079 | CEO + Agent Efficiency Codex | done-local |')
   && workboard.includes('Checkpoint `6e567181` separates accepted outcomes from terminal rejected attempts')
   && workboard.includes('closes the UTC day as `period_incomplete`')
   && workboard.includes('produced zero model calls, queue writes, connectors, or loaded models')
-  && now.includes('Replay accepted 2 outcomes, quarantined 3'))
+  && now.includes('CEO period retains four accepted outcomes and one quarantined Finance/Risk artifact')
+  && workboard.includes('| OPS-090 | CEO + Release Operations / Truthful Automation Codex | done-local |')
+  && workboard.includes('Checkpoint `cd53a31` preserves only recognized redacted live-contract categories')
+  && workboard.includes('stopped before knowledge refresh, queue write, or model work'))
 
 requireContract('current company-operations evidence is recorded without adding runtime capacity',
   workboard.includes('| OPS-040 | CEO + Agent Operations / Evidence Quality Codex | done-local |')
