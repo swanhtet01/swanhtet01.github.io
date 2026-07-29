@@ -821,6 +821,12 @@ export function WebsiteProduct() {
     ['Learning', 'Records behavior only'],
     ['Boundary', 'No auto deploy'],
   ]
+  const websiteGeneratorGuideRows = [
+    ['Inputs', 'Business facts, offers, proof, photos, links'],
+    ['AI creates', 'Pages, copy, CTAs, SEO basics, release checklist'],
+    ['Owner reviews', 'Brand, claims, contact route, pricing, proof'],
+    ['Handoff', 'Static package plus managed rollout plan'],
+  ]
   const websiteLaunchPriority = storageIssue || canRepairLocalStorage
     ? 'Recover workspace'
     : hasUnsavedChanges
@@ -1166,6 +1172,17 @@ export function WebsiteProduct() {
               {websiteAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
             </div>
             <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">Run next step</button>
+          </section>
+
+          <section aria-label="Website generator guide" className="website-generator-guide">
+            <div>
+              <span className="website-kicker">Website generator guide</span>
+              <h2>Bring any business. Get a reviewed site package.</h2>
+              <p>AI turns a simple business brief into a complete website draft and launch packet. The owner still approves claims, proof, contact paths, release package, and rollout before anything goes public.</p>
+            </div>
+            <div className="website-generator-guide-rows">
+              {websiteGeneratorGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            </div>
           </section>
 
           <section aria-label="Recommended Website agent job" className="website-agent-queue">

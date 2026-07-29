@@ -2387,6 +2387,7 @@
 }
 
 .website-autopilot,
+.website-generator-guide,
 .website-launch-cockpit,
 .website-lead-capture-cockpit,
 .website-rollout-packet,
@@ -2407,6 +2408,11 @@
   background: linear-gradient(135deg, rgba(14, 55, 87, .2), rgba(11, 116, 94, .1));
 }
 
+.website-generator-guide {
+  border-color: rgba(45, 212, 191, .22);
+  background: rgba(11, 116, 94, .12);
+}
+
 .website-lead-capture-cockpit {
   border-color: rgba(96, 165, 250, .24);
   background: rgba(14, 55, 87, .18);
@@ -2423,6 +2429,7 @@
 }
 
 .website-autopilot > div:first-child,
+.website-generator-guide > div:first-child,
 .website-launch-cockpit > div:first-child,
 .website-lead-capture-cockpit > div:first-child,
 .website-rollout-packet > div:first-child,
@@ -2433,6 +2440,7 @@
 }
 
 .website-autopilot h2,
+.website-generator-guide h2,
 .website-launch-cockpit h2,
 .website-lead-capture-cockpit h2,
 .website-rollout-packet h2,
@@ -2444,6 +2452,7 @@
 }
 
 .website-autopilot p,
+.website-generator-guide p,
 .website-launch-cockpit p,
 .website-lead-capture-cockpit p,
 .website-rollout-packet p,
@@ -2455,6 +2464,7 @@
 }
 
 .website-autopilot-rows,
+.website-generator-guide-rows,
 .website-launch-cockpit-rows,
 .website-lead-capture-cockpit-rows,
 .website-rollout-packet-rows,
@@ -2474,6 +2484,7 @@
 }
 
 .website-autopilot-rows span,
+.website-generator-guide-rows span,
 .website-launch-cockpit-rows span,
 .website-lead-capture-cockpit-rows span,
 .website-rollout-packet-rows span,
@@ -2488,6 +2499,7 @@
 }
 
 .website-autopilot-rows span:last-child,
+.website-generator-guide-rows span:last-child,
 .website-launch-cockpit-rows span:last-child,
 .website-lead-capture-cockpit-rows span:last-child,
 .website-rollout-packet-rows span:last-child,
@@ -2496,6 +2508,7 @@
 }
 
 .website-autopilot-rows small,
+.website-generator-guide-rows small,
 .website-launch-cockpit-rows small,
 .website-lead-capture-cockpit-rows small,
 .website-rollout-packet-rows small,
@@ -2512,6 +2525,7 @@
 }
 
 .website-autopilot-rows strong,
+.website-generator-guide-rows strong,
 .website-launch-cockpit-rows strong,
 .website-lead-capture-cockpit-rows strong,
 .website-rollout-packet-rows strong,
@@ -2980,6 +2994,7 @@
   }
 
   .website-autopilot,
+  .website-generator-guide,
   .website-launch-cockpit,
   .website-lead-capture-cockpit,
   .website-rollout-packet,
@@ -2988,6 +3003,7 @@
   }
 
   .website-autopilot-rows,
+  .website-generator-guide-rows,
   .website-launch-cockpit-rows,
   .website-lead-capture-cockpit-rows,
   .website-rollout-packet-rows,
@@ -2996,6 +3012,7 @@
   }
 
   .website-autopilot-rows span,
+  .website-generator-guide-rows span,
   .website-launch-cockpit-rows span,
   .website-lead-capture-cockpit-rows span,
   .website-rollout-packet-rows span,
@@ -3005,6 +3022,7 @@
   }
 
   .website-autopilot-rows span:nth-child(2n),
+  .website-generator-guide-rows span:nth-child(2n),
   .website-launch-cockpit-rows span:nth-child(2n),
   .website-lead-capture-cockpit-rows span:nth-child(2n),
   .website-rollout-packet-rows span:nth-child(2n),
@@ -3013,6 +3031,7 @@
   }
 
   .website-autopilot-rows span:last-child,
+  .website-generator-guide-rows span:last-child,
   .website-launch-cockpit-rows span:last-child,
   .website-lead-capture-cockpit-rows span:last-child,
   .website-rollout-packet-rows span:last-child,
