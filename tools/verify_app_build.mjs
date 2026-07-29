@@ -3301,6 +3301,13 @@ if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_i
   || !clientOnboardingSource.includes('const ecommerceIndustrySampleCsv:')
   || !clientOnboardingSource.includes('const websiteIndustrySampleCsv:')
   || !clientOnboardingSource.includes('const plantIndustrySampleCsv:')
+  || !clientOnboardingSource.includes('export function clientImportPlanningDate')
+  || !clientOnboardingSource.includes("timeZone: 'Asia/Yangon'")
+  || !clientOnboardingSource.includes("code: 'date_not_future'")
+  || !clientOnboardingSource.includes(".replaceAll('{{dueDate14}}'")
+  || clientOnboardingSource.includes('2026-08-15')
+  || !managedTrialRuntimeSource.includes('current_date: DateResolver = _current_yangon_date')
+  || (managedTrialRuntimeSource.match(/minimum_production_due_date=current_date\(\)/g) ?? []).length !== 2
   || !clientOnboardingSource.includes("'social-commerce':")
   || !clientOnboardingSource.includes("'production-control':")
   || !clientOnboardingSource.includes("'business-presence':")
@@ -5765,6 +5772,11 @@ async function verifyClientOnboardingRuntime() {
       assert(previewDigests.size === productProfile.templates.length, `client_import_${product}_workflow_digest_not_bound`)
     }
     assert(objectIds.size === 4, 'client_import_objects_not_unique')
+    const datedPlantTemplate = model.clientImportTemplate('production', 'production-control', { planningDate: '2026-07-30' })
+    assert(datedPlantTemplate.includes('2026-08-13')
+      && datedPlantTemplate.includes('2026-08-20')
+      && !datedPlantTemplate.includes('{{dueDate'), 'client_import_plant_template_dates_not_materialized')
+    rejectsSync(() => model.clientImportTemplate('production', 'production-control', { planningDate: '2026-02-30' }), 'client_import_invalid_planning_date_accepted')
 
     const leadStorageValues = new Map()
     const leadStorage = {
@@ -6093,7 +6105,7 @@ async function verifyClientOnboardingRuntime() {
     assert(burmeseShop.readyForStaging && burmeseShop.rows[0].values.name === 'မြန်မာ ကော်ဖီ', 'client_import_burmese_headers_or_values_lost')
     assert(burmeseShop.suggestions.filter((suggestion) => suggestion.basis === 'alias').length >= 4, 'client_import_alias_mapping_not_explained')
 
-    const manualCsv = 'Code,Thing,Count,Needed,Work cell\nJOB-X,Item X,4,2026-08-20,Line X\n'
+    const manualCsv = 'Code,Thing,Count,Needed,Work cell\nJOB-X,Item X,4,2099-08-20,Line X\n'
     const unmapped = await model.createClientImportPreview(manualCsv, 'production')
     assert(!unmapped.readyForStaging && unmapped.fileIssues.length >= 4, 'client_import_unmapped_columns_did_not_fail_closed')
     const manualMapping = { jobCode: 'Code', productName: 'Thing', targetQuantity: 'Count', dueDate: 'Needed', line: 'Work cell' }
@@ -6108,6 +6120,10 @@ async function verifyClientOnboardingRuntime() {
     assert(invalidCodes.has('spreadsheet_formula') && invalidCodes.has('identifier_not_canonical') && invalidCodes.has('column_count'), 'client_import_canonical_validation_missing')
     const badDate = await model.createClientImportPreview('job_code,product_name,target_quantity,due_date,production_line\nJOB-1,Item,1,2026-02-30,Line A\n', 'production')
     assert(badDate.rows[0].issues.some((issue) => issue.code === 'date_not_canonical'), 'client_import_impossible_date_accepted')
+    const stalePlantDate = await model.createClientImportPreview('job_code,product_name,target_quantity,due_date,production_line\nJOB-1,Item,1,2026-07-30,Line A\n', 'production', undefined, 'stale.csv', 'production-control', '2026-07-30')
+    assert(!stalePlantDate.readyForStaging && stalePlantDate.rows[0].issues.some((issue) => issue.code === 'date_not_future'), 'client_import_stale_plant_date_accepted')
+    const futurePlantDate = await model.createClientImportPreview('job_code,product_name,target_quantity,due_date,production_line\nJOB-1,Item,1,2026-07-31,Line A\n', 'production', undefined, 'future.csv', 'production-control', '2026-07-30')
+    assert(futurePlantDate.readyForStaging, 'client_import_future_plant_date_rejected')
     const badUrl = await model.createClientImportPreview('page_slug,page_title,headline,body,contact_url\nhome,Home,Hello,Body,javascript:alert(1)\n', 'website')
     assert(badUrl.rows[0].issues.some((issue) => issue.code === 'url_not_allowed'), 'client_import_unsafe_url_accepted')
     const websiteObject = model.clientImportObject('website')

@@ -328,8 +328,18 @@ def _package_digest(value: Mapping[str, Any]) -> str:
     return f"sha256:{sha256(canonical).hexdigest()}"
 
 
-def validate_client_import_staging_package(value: object) -> ClientImportValidationResult:
+def validate_client_import_staging_package(
+    value: object,
+    *,
+    minimum_production_due_date: date | None = None,
+) -> ClientImportValidationResult:
     """Validate a complete import package without retaining or applying it."""
+
+    if (
+        minimum_production_due_date is not None
+        and type(minimum_production_due_date) is not date
+    ):
+        raise TypeError("minimum_production_due_date must be a date.")
 
     raw_product = value.get("product") if isinstance(value, Mapping) else None
     package_fields = (
@@ -446,6 +456,16 @@ def validate_client_import_staging_package(value: object) -> ClientImportValidat
                 field,
                 f"{row_path}.values.{field.identifier}",
             )
+            if (
+                product == "production"
+                and field.identifier == "dueDate"
+                and minimum_production_due_date is not None
+                and date.fromisoformat(field_value) <= minimum_production_due_date
+            ):
+                raise _fail(
+                    f"{row_path}.values.dueDate must be after "
+                    f"{minimum_production_due_date.isoformat()} in Asia/Yangon."
+                )
             if not mapping[field.identifier] and field_value:
                 raise _fail(f"{row_path}.values.{field.identifier} has no source mapping.")
             values[field.identifier] = field_value

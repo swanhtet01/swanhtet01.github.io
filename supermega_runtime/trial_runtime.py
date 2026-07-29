@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 import json
 from typing import Any, Literal, TypeVar
@@ -60,7 +60,14 @@ TRIAL_API_PREFIX = "/api/trial/v1"
 TRIAL_SURFACE_ORDER = ("company", "commerce", "production", "website", "setup")
 
 PrincipalResolver = Callable[[Request], TrialPrincipal | None]
+DateResolver = Callable[[], date]
 ResultT = TypeVar("ResultT")
+
+_YANGON_TIME_ZONE = timezone(timedelta(hours=6, minutes=30))
+
+
+def _current_yangon_date() -> date:
+    return datetime.now(_YANGON_TIME_ZONE).date()
 
 _CLIENT_IDENTITY_FIELDS = frozenset(
     {
@@ -659,6 +666,7 @@ def create_trial_router(
     store: TrialStore,
     resolve_principal: PrincipalResolver,
     order_intake_provider: OrderIntakeDraftProvider | None = None,
+    current_date: DateResolver = _current_yangon_date,
 ) -> APIRouter:
     """Create an unwired private-trial router with injected storage and auth.
 
@@ -854,7 +862,10 @@ def create_trial_router(
             )
         package = await _bounded_json_body(request)
         try:
-            validation = validate_client_import_staging_package(package)
+            validation = validate_client_import_staging_package(
+                package,
+                minimum_production_due_date=current_date(),
+            )
         except ClientImportValidationError as exc:
             raise _error(
                 422,
@@ -884,7 +895,10 @@ def create_trial_router(
         except ValidationError as exc:
             raise _error(422, "client_import_apply_invalid") from exc
         try:
-            validation = validate_client_import_staging_package(body.package)
+            validation = validate_client_import_staging_package(
+                body.package,
+                minimum_production_due_date=current_date(),
+            )
         except ClientImportValidationError as exc:
             raise _error(
                 422,

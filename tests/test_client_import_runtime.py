@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -545,7 +545,13 @@ class ClientImportRouteTests(unittest.TestCase):
             return self.sessions.get(request.headers.get("x-test-session", ""))
 
         app = FastAPI()
-        app.include_router(create_trial_router(store=store, resolve_principal=resolve_principal))
+        app.include_router(
+            create_trial_router(
+                store=store,
+                resolve_principal=resolve_principal,
+                current_date=lambda: date(2026, 7, 30),
+            )
+        )
         return TestClient(app)
 
     @staticmethod
@@ -575,6 +581,49 @@ class ClientImportRouteTests(unittest.TestCase):
         )
         self.assertEqual(writer_response.status_code, 200)
         self.assertEqual(writer_response.json()["validation"]["workspace_id"], "workspace-b")
+        self.assertEqual(self.reducer.calls, 0)
+
+    def test_plant_due_dates_fail_during_review_and_apply_before_any_write(self) -> None:
+        stale_package = _package("production")
+        stale_package["rows"][0]["values"]["dueDate"] = "2026-07-30"
+        stale_package = _resign(stale_package)
+        before = (deepcopy(self.store._states), deepcopy(self.store._events))
+
+        stale_review = self.client.post(
+            "/api/trial/v1/imports/validate",
+            headers=self._headers(),
+            json=stale_package,
+        )
+        self.assertEqual(stale_review.status_code, 422)
+        self.assertEqual(stale_review.json()["detail"]["code"], "client_import_validation_error")
+        self.assertIn("after 2026-07-30 in Asia/Yangon", stale_review.json()["detail"]["message"])
+
+        pure_validation = validate_client_import_staging_package(stale_package)
+        stale_apply = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json={
+                "command_id": "00000000-0000-4000-8000-000000000099",
+                "expected_version": 0,
+                "confirmation": f"APPLY {pure_validation.package_digest}",
+                "package": stale_package,
+            },
+        )
+        self.assertEqual(stale_apply.status_code, 422)
+        self.assertEqual(stale_apply.json()["detail"]["code"], "client_import_validation_error")
+        self.assertEqual((self.store._states, self.store._events), before)
+        self.assertEqual(self.reducer.calls, 0)
+
+        future_package = deepcopy(stale_package)
+        future_package["rows"][0]["values"]["dueDate"] = "2026-07-31"
+        future_review = self.client.post(
+            "/api/trial/v1/imports/validate",
+            headers=self._headers(),
+            json=_resign(future_package),
+        )
+        self.assertEqual(future_review.status_code, 200)
+        self.assertEqual(future_review.json()["validation"]["status"], "valid")
+        self.assertEqual((self.store._states, self.store._events), before)
         self.assertEqual(self.reducer.calls, 0)
 
     def test_auth_membership_and_capability_are_checked_before_body(self) -> None:

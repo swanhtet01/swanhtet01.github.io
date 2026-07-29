@@ -36,6 +36,7 @@ export type ClientDemoSelection = {
 export type ClientImportTemplateContext = {
   shopIndustryPackId?: ShopIndustryPackId
   plantIndustryPackId?: PlantIndustryPackId
+  planningDate?: string
 }
 
 export type ClientDemoPreset = {
@@ -315,9 +316,9 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     maximumRows: 100,
     activationBoundary: 'A Plant owner must verify capacity, material, and safety before jobs enter the live schedule.',
     workflowTemplates: {
-      'production-control': 'job_code,product_name,target_quantity,due_date,production_line\r\nJOB-001,20 inch tyre,500,2026-08-15,Line A\r\nJOB-002,16 inch tyre,300,2026-08-16,Line B\r\n',
-      'maintenance-downtime': 'job_code,product_name,target_quantity,due_date,production_line\r\nMAINT-001,Compressor preventive service,1,2026-08-15,Utilities\r\nMAINT-002,Mixer bearing inspection,1,2026-08-16,Compounding\r\n',
-      'quality-traceability': 'job_code,product_name,target_quantity,due_date,production_line\r\nQC-001,Incoming rubber inspection,1,2026-08-15,Quality Lab\r\nQC-002,Finished tyre release check,1,2026-08-16,Final Inspection\r\n',
+      'production-control': 'job_code,product_name,target_quantity,due_date,production_line\r\nJOB-001,20 inch tyre,500,{{dueDate14}},Line A\r\nJOB-002,16 inch tyre,300,{{dueDate21}},Line B\r\n',
+      'maintenance-downtime': 'job_code,product_name,target_quantity,due_date,production_line\r\nMAINT-001,Compressor preventive service,1,{{dueDate14}},Utilities\r\nMAINT-002,Mixer bearing inspection,1,{{dueDate21}},Compounding\r\n',
+      'quality-traceability': 'job_code,product_name,target_quantity,due_date,production_line\r\nQC-001,Incoming rubber inspection,1,{{dueDate14}},Quality Lab\r\nQC-002,Finished tyre release check,1,{{dueDate21}},Final Inspection\r\n',
     },
     fields: [
       { id: 'jobCode', label: 'Job code', required: true, kind: 'sku', aliases: ['job_code', 'job_id', 'work_order', 'work_order_id', 'order_number', 'အလုပ်ကုဒ်'], maximum: 80 },
@@ -701,7 +702,7 @@ function mappingIssues(object: ClientImportObject, headers: string[], mapping: C
   return issues
 }
 
-function fieldIssue(field: ClientImportField, value: string): ClientImportIssue | null {
+function fieldIssue(field: ClientImportField, value: string, minimumProductionDueDate?: string): ClientImportIssue | null {
   if (!value) return field.required ? { code: 'value_required', field: field.id, message: `${field.label} is required.` } : null
   if (value !== value.trim()) return { code: 'value_not_canonical', field: field.id, message: `${field.label} has leading or trailing spaces.` }
   if (value !== value.normalize('NFC')) return { code: 'unicode_normalization', field: field.id, message: `${field.label} must use normalized Unicode text.` }
@@ -720,6 +721,7 @@ function fieldIssue(field: ClientImportField, value: string): ClientImportIssue 
   } else if (field.kind === 'date') {
     const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00.000Z`) : null
     if (!parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) return { code: 'date_not_canonical', field: field.id, message: `${field.label} must use a real YYYY-MM-DD date.` }
+    if (minimumProductionDueDate && value <= minimumProductionDueDate) return { code: 'date_not_future', field: field.id, message: `${field.label} must be after ${minimumProductionDueDate} in Asia/Yangon.` }
   } else if (field.kind === 'boolean') {
     if (value !== 'true' && value !== 'false') return { code: 'boolean_not_canonical', field: field.id, message: `${field.label} must be true or false.` }
   } else if (field.kind === 'url') {
@@ -733,7 +735,7 @@ function fieldIssue(field: ClientImportField, value: string): ClientImportIssue 
   return null
 }
 
-function rowFromMapping(parsed: ParsedCsvRow, object: ClientImportObject, headers: string[], mapping: ClientImportMapping, fileIssues: ClientImportIssue[]) {
+function rowFromMapping(parsed: ParsedCsvRow, object: ClientImportObject, headers: string[], mapping: ClientImportMapping, fileIssues: ClientImportIssue[], minimumProductionDueDate?: string) {
   const source = Object.fromEntries(headers.map((header, index) => [header, parsed.cells[index] ?? '']))
   const issues: ClientImportIssue[] = []
   if (parsed.cells.length !== headers.length) issues.push({ code: 'column_count', field: 'row', message: `Expected ${headers.length} columns but found ${parsed.cells.length}.` })
@@ -742,7 +744,7 @@ function rowFromMapping(parsed: ParsedCsvRow, object: ClientImportObject, header
   const values = Object.fromEntries(object.fields.map((field) => [field.id, mapping[field.id] ? source[mapping[field.id]] ?? '' : '']))
   if (!issues.length) {
     for (const field of object.fields) {
-      const issue = fieldIssue(field, values[field.id] ?? '')
+      const issue = fieldIssue(field, values[field.id] ?? '', minimumProductionDueDate)
       if (issue) issues.push(issue)
     }
   }
@@ -834,17 +836,50 @@ const websiteIndustrySampleCsv: Readonly<Record<ShopIndustryPackId, string>> = {
 }
 
 const plantIndustrySampleCsv: Readonly<Record<PlantIndustryPackId, string>> = {
-  'general-manufacturing': 'job_code,product_name,target_quantity,due_date,production_line\r\nJOB-001,Finished product A,500,2026-08-15,Line A\r\nJOB-002,Finished product B,300,2026-08-16,Line B\r\n',
-  'batch-process': 'job_code,product_name,target_quantity,due_date,production_line\r\nBATCH-001,Process batch A,100,2026-08-15,Process Line 1\r\nBATCH-002,Process batch B,120,2026-08-16,Process Line 2\r\n',
-  'food-beverage': 'job_code,product_name,target_quantity,due_date,production_line\r\nFOOD-001,Chili sauce batch,200,2026-08-15,Batch Kitchen\r\nFOOD-002,Juice batch,300,2026-08-16,Filling Line\r\n',
-  apparel: 'job_code,product_name,target_quantity,due_date,production_line\r\nSTYLE-001,Cotton shirt style,400,2026-08-15,Sewing Line 1\r\nSTYLE-002,Work trouser style,250,2026-08-16,Sewing Line 2\r\n',
-  assembly: 'job_code,product_name,target_quantity,due_date,production_line\r\nBUILD-001,Assembly model A,120,2026-08-15,Assembly Cell 1\r\nBUILD-002,Assembly model B,80,2026-08-16,Assembly Cell 2\r\n',
+  'general-manufacturing': 'job_code,product_name,target_quantity,due_date,production_line\r\nJOB-001,Finished product A,500,{{dueDate14}},Line A\r\nJOB-002,Finished product B,300,{{dueDate21}},Line B\r\n',
+  'batch-process': 'job_code,product_name,target_quantity,due_date,production_line\r\nBATCH-001,Process batch A,100,{{dueDate14}},Process Line 1\r\nBATCH-002,Process batch B,120,{{dueDate21}},Process Line 2\r\n',
+  'food-beverage': 'job_code,product_name,target_quantity,due_date,production_line\r\nFOOD-001,Chili sauce batch,200,{{dueDate14}},Batch Kitchen\r\nFOOD-002,Juice batch,300,{{dueDate21}},Filling Line\r\n',
+  apparel: 'job_code,product_name,target_quantity,due_date,production_line\r\nSTYLE-001,Cotton shirt style,400,{{dueDate14}},Sewing Line 1\r\nSTYLE-002,Work trouser style,250,{{dueDate21}},Sewing Line 2\r\n',
+  assembly: 'job_code,product_name,target_quantity,due_date,production_line\r\nBUILD-001,Assembly model A,120,{{dueDate14}},Assembly Cell 1\r\nBUILD-002,Assembly model B,80,{{dueDate21}},Assembly Cell 2\r\n',
+}
+
+function currentYangonDate() {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Yangon',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date()).map((part) => [part.type, part.value]))
+  return `${parts.year}-${parts.month}-${parts.day}`
+}
+
+export function clientImportPlanningDate(value = currentYangonDate()) {
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00.000Z`) : null
+  if (!parsed || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    throw new Error('Planning date must use a real YYYY-MM-DD date.')
+  }
+  return value
+}
+
+function planningDateAfter(value: string, days: number) {
+  const parsed = new Date(`${clientImportPlanningDate(value)}T00:00:00.000Z`)
+  parsed.setUTCDate(parsed.getUTCDate() + days)
+  const result = parsed.toISOString().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(result)) throw new Error('Planning date is outside the supported range.')
+  return result
+}
+
+function materializePlantTemplate(source: string, planningDate?: string) {
+  const resolvedPlanningDate = clientImportPlanningDate(planningDate)
+  return source
+    .replaceAll('{{dueDate14}}', planningDateAfter(resolvedPlanningDate, 14))
+    .replaceAll('{{dueDate21}}', planningDateAfter(resolvedPlanningDate, 21))
 }
 
 export function clientImportTemplate(product: ClientSolutionId, workflowTemplateId?: string, context: ClientImportTemplateContext = {}) {
   const resolvedWorkflowTemplateId = resolveWorkflowTemplateId(product, workflowTemplateId)
   if (product === 'production' && context.plantIndustryPackId) {
-    return plantIndustrySampleCsv[plantIndustryPack(context.plantIndustryPackId).id]
+    return materializePlantTemplate(plantIndustrySampleCsv[plantIndustryPack(context.plantIndustryPackId).id], context.planningDate)
   }
   if (context.shopIndustryPackId) {
     const industryPackId = shopIndustryPack(context.shopIndustryPackId).id
@@ -852,7 +887,8 @@ export function clientImportTemplate(product: ClientSolutionId, workflowTemplate
     if (product === 'website') return websiteIndustrySampleCsv[industryPackId]
     if (product === 'ecommerce') return ecommerceIndustrySampleCsv[industryPackId]
   }
-  return objects[product].workflowTemplates[resolvedWorkflowTemplateId]
+  const source = objects[product].workflowTemplates[resolvedWorkflowTemplateId]
+  return product === 'production' ? materializePlantTemplate(source, context.planningDate) : source
 }
 
 function exampleRows(product: ClientSolutionId, workflowTemplateId?: string, context: ClientImportTemplateContext = {}) {
@@ -866,7 +902,7 @@ function exampleRows(product: ClientSolutionId, workflowTemplateId?: string, con
 function checklistNote(field: ClientImportField) {
   if (field.kind === 'sku') return 'Use stable uppercase codes. Do not reuse one code for two records.'
   if (field.kind === 'integer') return `Whole number${field.minimum !== undefined ? `, minimum ${field.minimum}` : ''}. No decimals or formulas.`
-  if (field.kind === 'date') return 'Use YYYY-MM-DD so schedules and approvals stay deterministic.'
+  if (field.kind === 'date') return 'Use YYYY-MM-DD and a date after today in Asia/Yangon.'
   if (field.kind === 'boolean') return 'Use true/false, yes/no, 1/0, or on/off.'
   if (field.kind === 'slug') return 'Use lowercase URL-safe slugs, for example home or products.'
   if (field.kind === 'url') return 'Use https:// links, /relative paths, or leave blank when optional.'
@@ -897,6 +933,7 @@ export async function createClientImportPreview(
   selectedMapping?: ClientImportMapping,
   sourceName = 'client-data.csv',
   workflowTemplateId?: string,
+  planningDate?: string,
 ): Promise<ClientImportPreview> {
   const object = objects[product]
   const resolvedWorkflowTemplateId = resolveWorkflowTemplateId(product, workflowTemplateId)
@@ -908,7 +945,8 @@ export async function createClientImportPreview(
   const suggested = suggestMapping(object, headers, normalizedHeaders)
   const mapping = selectedMapping ? { ...selectedMapping } : suggested.mapping
   const fileIssues = mappingIssues(object, headers, mapping)
-  const rows = parsed.rows.slice(1).map((row) => rowFromMapping(row, object, headers, mapping, fileIssues))
+  const minimumProductionDueDate = product === 'production' ? clientImportPlanningDate(planningDate) : undefined
+  const rows = parsed.rows.slice(1).map((row) => rowFromMapping(row, object, headers, mapping, fileIssues, minimumProductionDueDate))
   if (!rows.length) fileIssues.push({ code: 'data_rows_required', field: 'file', message: 'Add at least one data row below the header.' })
   if (rows.length > object.maximumRows) fileIssues.push({ code: 'object_row_limit', field: 'file', message: `${object.label} accepts at most ${object.maximumRows} rows in one accountable import.` })
   classifyDuplicates(rows)
