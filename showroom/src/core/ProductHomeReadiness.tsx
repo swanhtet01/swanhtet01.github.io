@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 
-import { readBehaviorTrail, recordBehaviorSignal, type BehaviorTrailEntry } from './behavior-trail'
+import { readBehaviorTrail, recordBehaviorSignal } from './behavior-trail'
 
 type ProductHomeReadinessProps = {
   activationCoverage: number
@@ -12,10 +12,7 @@ type ProductHomeReadinessProps = {
 }
 
 export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHostedAction, progress, ready }: ProductHomeReadinessProps) {
-  const [behaviorTrail, setBehaviorTrail] = useState<BehaviorTrailEntry[]>([])
-  useEffect(() => {
-    setBehaviorTrail(readBehaviorTrail(window.localStorage))
-  }, [])
+  const [behaviorTrail] = useState(() => readBehaviorTrail(window.localStorage))
   const behaviorProducts = useMemo(() => new Set(behaviorTrail.map((entry) => entry.product).filter((product) => product !== 'unknown')).size, [behaviorTrail])
   const behaviorChoices = useMemo(() => behaviorTrail.filter((entry) => entry.event === 'agent_job_chosen').length, [behaviorTrail])
   const launchReadinessRows = [

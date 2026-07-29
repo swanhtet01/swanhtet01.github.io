@@ -65,6 +65,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
   const [resourceDraft, setResourceDraft] = useState({ name: '', kind: 'staff' as 'staff' | 'room' | 'equipment' })
   const [managedLoading, setManagedLoading] = useState(true)
   const [managedSaving, setManagedSaving] = useState(false)
+  const [managedConnected, setManagedConnected] = useState(false)
   const managedIdentityRef = useRef<ManagedIdentity | null>(null)
   const managedVersionRef = useRef<number | null>(null)
   const managedSaveBusyRef = useRef(false)
@@ -76,6 +77,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
     void currentManagedIdentity().then(async (identity) => {
       if (!active || !identity) return
       managedIdentityRef.current = identity
+      setManagedConnected(true)
       const managed = await loadManagedServiceSchedule(identity)
       if (!active) return
       managedVersionRef.current = managed.version
@@ -258,7 +260,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
           <form onSubmit={createResource}><strong>Add staff or resource</strong><label>Name<input disabled={disabled} maxLength={160} onChange={(event) => setResourceDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Staff name or Room 2" required value={resourceDraft.name} /></label><label>Type<select disabled={disabled} onChange={(event) => setResourceDraft((current) => ({ ...current, kind: event.target.value as typeof resourceDraft.kind }))} value={resourceDraft.kind}><option value="staff">Staff</option><option value="room">Room</option><option value="equipment">Equipment</option></select></label><button className="core-button" disabled={disabled} type="submit">Add resource</button></form>
         </div>
       </details>
-      <p className="form-notice" aria-live="polite">{notice || (managedIdentityRef.current ? 'Appointments persist in this managed workspace. Customer messages, calendar sync, and payment remain separate human-approved actions.' : 'Appointments persist on this device. Sign in to share them across the managed workspace.')}</p>
+      <p className="form-notice" aria-live="polite">{notice || (managedConnected ? 'Appointments persist in this managed workspace. Customer messages, calendar sync, and payment remain separate human-approved actions.' : 'Appointments persist on this device. Sign in to share them across the managed workspace.')}</p>
     </div>
   </details>
 }

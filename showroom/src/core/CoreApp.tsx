@@ -3216,7 +3216,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   }
 
   const effectiveMode = managedIdentity && (workspaceMode === 'local' || managedWorkspaceId !== managedIdentity.workspaceId) ? 'managed-loading' : workspaceMode
-  if (managedIdentity && effectiveMode !== 'managed-ready') {
+  const managedCommerceBoundary: ReactNode = managedIdentity && effectiveMode !== 'managed-ready' ? (() => {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
     if (unprovisioned) return <section className="core-panel managed-commerce-boundary">
       <div className="panel-head"><div><span className="core-eyebrow">Managed Shop setup</span><h2>Create the real catalog</h2></div><span className="status-pill pending">Not provisioned</span></div>
@@ -3236,7 +3236,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       <p className="panel-copy">{commerceStorageError || 'Shop remains read-only until the authenticated tenant state is confirmed.'}</p>
       <div className="form-actions"><Link className="core-button" to="/settings/">Open workspace settings</Link></div>
     </section>
-  }
+  })() : null
 
   const commerceBoundary = <div className="production-mode-banner commerce-mode-banner" data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
     <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : 'Sample data'}</span>
@@ -3508,6 +3508,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       detail: shopAgentJob,
     })
   }, [commerceLocation.pathname, commerceLocation.search, shopAgentJob])
+
+  if (managedCommerceBoundary) return managedCommerceBoundary
 
   function showOrderComposer() {
     const dialog = orderComposerRef.current
@@ -6018,8 +6020,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [relatedCommerce] = useCommerceWorkspace(managedIdentity)
   const relatedCommerceRef = useRef(relatedCommerce)
   const productionRef = useRef(production)
-  relatedCommerceRef.current = relatedCommerce
-  productionRef.current = production
+  useEffect(() => { relatedCommerceRef.current = relatedCommerce }, [relatedCommerce])
+  useEffect(() => { productionRef.current = production }, [production])
   const [localPlantIndustryPackId] = useState(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
   const plantIndustryPackId = production.openingPlan?.industryPackId ?? localPlantIndustryPackId
   const plantOrderScopeWorkspaceId = managedIdentity
@@ -6778,7 +6780,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       setNotice('The Shop-bound product, quantity, or existing Plant coverage changed. Reopen the current demand signal.')
       return
     }
-    if (!id || !line || !product || !owner || owner.length > 120 || !Number.isSafeInteger(jobTarget) || jobTarget < 1 || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= Date.now()) {
+    if (!id || !line || !product || !owner || owner.length > 120 || !Number.isSafeInteger(jobTarget) || jobTarget < 1 || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= issueClock) {
       setNotice('Enter a unique job ID, line or team, product or batch, responsible owner, whole-number target, and future due time.')
       return
     }

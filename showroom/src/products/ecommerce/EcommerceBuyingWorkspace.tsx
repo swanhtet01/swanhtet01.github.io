@@ -94,6 +94,7 @@ export function EcommerceBuyingWorkspace({
   const [handoffBusy, setHandoffBusy] = useState(false)
   const [handoffConfirmed, setHandoffConfirmed] = useState(false)
   const [freshQuoteId, setFreshQuoteId] = useState('')
+  const [quoteClock, setQuoteClock] = useState(() => Date.now())
   const [notice, setNotice] = useState('')
   const confirmationRef = useRef<HTMLInputElement>(null)
 
@@ -128,6 +129,7 @@ export function EcommerceBuyingWorkspace({
       setOpen(true)
       const stillFresh = Date.parse(latest.quote.expiresAt) > Date.now()
       setFreshQuoteId(stillFresh ? latest.id : '')
+      setQuoteClock(Date.now())
       setNotice(stillFresh
         ? `${latest.id} recovered on this device. Review current Shop values before handoff.`
         : `${latest.id} was recovered, but its quote expired. Review a new total.`)
@@ -148,6 +150,7 @@ export function EcommerceBuyingWorkspace({
         setHandoffConfirmed(false)
         const latest = recoveredState.requests[0]
         setFreshQuoteId(latest && Date.parse(latest.quote.expiresAt) > Date.now() ? latest.id : '')
+        setQuoteClock(Date.now())
         setNotice(latest
           ? 'Checkout recovery changed in another tab. Review the current receipt.'
           : result.error || 'The saved checkout was cleared in another tab.')
@@ -170,6 +173,12 @@ export function EcommerceBuyingWorkspace({
     }, Math.max(0, remainingMs))
     return () => window.clearTimeout(timeoutId)
   }, [activeBuyingState.requests, freshQuoteId])
+
+  useEffect(() => {
+    if (!freshQuoteId) return
+    const intervalId = window.setInterval(() => setQuoteClock(Date.now()), 60_000)
+    return () => window.clearInterval(intervalId)
+  }, [freshQuoteId])
 
   const latestRequest = activeBuyingState.requests[0] ?? null
   const combinedOrderTimeline = useMemo(() => {
@@ -200,7 +209,7 @@ export function EcommerceBuyingWorkspace({
   ), 0)
   const recoveryBlocked = recoveryStatus !== 'empty' && recoveryStatus !== 'ready'
   const quoteMinutesRemaining = latestRequest
-    ? Math.max(0, Math.ceil((Date.parse(latestRequest.quote.expiresAt) - Date.now()) / 60000))
+    ? Math.max(0, Math.ceil((Date.parse(latestRequest.quote.expiresAt) - quoteClock) / 60000))
     : 0
   const orderAutopilotNext = recoveryBlocked
     ? 'Repair checkout recovery'
@@ -305,6 +314,7 @@ export function EcommerceBuyingWorkspace({
         await onRecordManagedRequest(retained)
         setHandoffConfirmed(false)
         setFreshQuoteId(retained.id)
+        setQuoteClock(quotedAt.getTime())
         setNotice('This quote is confirmed in the managed Shop inbox. No order, stock, message, or charge changed.')
         requestAnimationFrame(() => {
           confirmationRef.current?.scrollIntoView({ block: 'center' })
@@ -331,6 +341,7 @@ export function EcommerceBuyingWorkspace({
       setFreshQuoteId('')
       if (onRecordManagedRequest) await onRecordManagedRequest(request)
       setFreshQuoteId(request.id)
+      setQuoteClock(quotedAt.getTime())
       setNotice(onRecordManagedRequest
         ? 'This quote is saved to the managed Shop inbox and local recovery. No order, stock, message, or charge changed.'
         : 'This quote is saved on this device for 15 minutes. No order, stock, message, or charge changed.')
