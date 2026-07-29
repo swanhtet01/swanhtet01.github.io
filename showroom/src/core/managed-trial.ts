@@ -840,7 +840,6 @@ export function assertManagedPlantImportState(
 ) {
   const stateKeys = ['events', 'issues', 'jobs', 'machines', 'openingPlan', 'revision', 'schema'] as const
   const jobKeys = ['dueAt', 'id', 'line', 'output', 'owner', 'priority', 'product', 'target'] as const
-  const machineKeys = ['id', 'name', 'state'] as const
   const openingPlanKeys = ['confirmedAt', 'contract', 'industryPackId', 'jobIds', 'machineIds', 'packageDigest'] as const
   if (stagingPackage.product !== 'production'
     || !/^sha256:[0-9a-f]{64}$/.test(expectedPackageDigest)
@@ -853,6 +852,7 @@ export function assertManagedPlantImportState(
     || !Array.isArray(state.issues)
     || state.issues.length !== 0
     || !Array.isArray(state.machines)
+    || state.machines.length !== 0
     || !Array.isArray(state.events)
     || state.events.length !== 0
     || !isRecord(state.openingPlan)
@@ -897,26 +897,10 @@ export function assertManagedPlantImportState(
       code: 'managed_client_import_activation_invalid',
     })
   }
-  const expectedLines = [...new Set(stagingPackage.rows.map((row) => row.values.line))]
-  if (state.machines.length !== expectedLines.length
-    || state.openingPlan.machineIds.length !== expectedLines.length) {
-    throw new ManagedTrialError('The managed Plant opening plan has mismatched machine evidence.', {
+  if (state.openingPlan.machineIds.length !== 0) {
+    throw new ManagedTrialError('The managed Plant opening plan invented equipment records.', {
       code: 'managed_client_import_activation_invalid',
     })
-  }
-  for (const [index, line] of expectedLines.entries()) {
-    const machine = state.machines[index]
-    const machineId = `machine-import-${index + 1}`
-    if (!isRecord(machine)
-      || !hasExactKeys(machine, machineKeys)
-      || machine.id !== machineId
-      || machine.name !== line
-      || machine.state !== 'running'
-      || state.openingPlan.machineIds[index] !== machineId) {
-      throw new ManagedTrialError('The managed Plant import does not match its production lines.', {
-        code: 'managed_client_import_activation_invalid',
-      })
-    }
   }
   return state
 }

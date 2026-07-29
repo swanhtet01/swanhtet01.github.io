@@ -742,7 +742,6 @@ export function validateProductionState(value: unknown): ProductionState {
       || !openingPlan.jobIds.length
       || openingPlan.jobIds.length > 100
       || !Array.isArray(openingPlan.machineIds)
-      || !openingPlan.machineIds.length
       || openingPlan.machineIds.length > 100) throw new Error('Production opening plan record IDs are invalid.')
     const planJobIds = openingPlan.jobIds.map((id, index) => canonicalText(id, `openingPlan.jobIds[${index}]`, 80))
     const planMachineIds = openingPlan.machineIds.map((id, index) => canonicalText(id, `openingPlan.machineIds[${index}]`, 80))

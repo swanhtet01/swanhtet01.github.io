@@ -593,9 +593,9 @@ def _validate_opening_plan(
         "production state.openingPlan.machineIds",
         maximum=_MAX_MACHINES,
     )
-    if not job_ids_raw or not machine_ids_raw:
+    if not job_ids_raw:
         raise TrialValidationError(
-            "production state.openingPlan must retain its jobs and machines."
+            "production state.openingPlan must retain its jobs."
         )
     job_ids = [
         _text(value, f"production state.openingPlan.jobIds[{index}]", maximum=80)
@@ -2464,7 +2464,6 @@ def reduce_production_state(
         managed_plan_shape_is_valid = (
             opening_plan is not None
             and bool(next_state["jobs"])
-            and bool(next_state["machines"])
         )
         jobs_are_pristine = all(
             job["output"] == 0
@@ -2493,8 +2492,8 @@ def reduce_production_state(
         ):
             raise TrialValidationError(
                 "Production initialization requires owned, scheduled zero-output "
-                "jobs, running machines, and no copied operating history. Multiple "
-                "opening records require one immutable opening plan."
+                "jobs, any declared machines to be running, and no copied operating "
+                "history. Multiple opening records require one immutable opening plan."
             )
         if opening_plan is not None and (
             opening_plan["confirmedAt"] != evidence["capturedAt"]

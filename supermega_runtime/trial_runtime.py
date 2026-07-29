@@ -440,8 +440,6 @@ def _plant_jobs_import_payload(
     ):
         raise _error(422, "client_import_activation_invalid")
     jobs: list[dict[str, Any]] = []
-    machines: list[dict[str, str]] = []
-    machine_ids_by_line: dict[str, str] = {}
     try:
         for row in rows:
             if not isinstance(row, Mapping) or not isinstance(row.get("values"), Mapping):
@@ -470,16 +468,6 @@ def _plant_jobs_import_payload(
                     "dueAt": f"{canonical_due_date}T17:29:59.999Z",
                 }
             )
-            if line not in machine_ids_by_line:
-                machine_id = f"machine-import-{len(machines) + 1}"
-                machine_ids_by_line[line] = machine_id
-                machines.append(
-                    {
-                        "id": machine_id,
-                        "name": line,
-                        "state": "running",
-                    }
-                )
     except (KeyError, TypeError, ValueError) as exc:
         raise _error(422, "client_import_activation_invalid") from exc
     return {
@@ -488,7 +476,7 @@ def _plant_jobs_import_payload(
             "revision": 0,
             "jobs": jobs,
             "issues": [],
-            "machines": machines,
+            "machines": [],
             "events": [],
             "openingPlan": {
                 "contract": "supermega.production.opening-plan.v1",
@@ -496,7 +484,7 @@ def _plant_jobs_import_payload(
                 "confirmedAt": "server-assigned",
                 "industryPackId": industry_pack_id,
                 "jobIds": [job["id"] for job in jobs],
-                "machineIds": [machine["id"] for machine in machines],
+                "machineIds": [],
             },
         },
         "evidence": {

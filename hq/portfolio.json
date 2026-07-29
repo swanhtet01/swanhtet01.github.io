@@ -151,8 +151,8 @@
       "localAutomation": {
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Add one atomic managed Plant adapter for the existing checked client-import package so an approved Plant job file can initialize one isolated tenant with exact replay and rollback evidence, without applying BOM, inventory, equipment, costing, or certificate actions.",
-        "reason": "Plant batch genealogy is now portable and integrity-bound from retained Shop demand through material lots, output, scrap, quality history, and controlled execution. The highest-value next founder workflow is converting the already checked Plant setup package into real isolated-tenant jobs through the same governed onboarding surface instead of adding product pages or demo-only controls."
+        "workOrder": "Make checked Plant imports time-safe: generate future-valid sample job dates and reject stale production due dates during managed validation before any tenant write, while retaining exact replay and the no-invented-equipment rule.",
+        "reason": "The atomic Plant setup adapter now initializes only reviewed jobs and one digest-bound opening plan; it never turns a line label into equipment. The next local-ready risk is fixed or stale due-date data passing initial review and then failing at activation, which would make founder-led client setup unreliable."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }

@@ -3574,6 +3574,10 @@ if (!managedTrialSource.includes('export async function validateManagedClientImp
   || !managedTrialSource.includes('confirmation: `APPLY ${request.validation.package_digest}`')
   || !managedTrialSource.includes('assertManagedClientImportActivation(')
   || !managedTrialSource.includes('export function assertManagedPlantImportState')
+  || !managedTrialSource.includes('state.machines.length !== 0')
+  || !managedTrialSource.includes('managed Plant opening plan invented equipment records')
+  || managedTrialRuntimeSource.includes('machine_ids_by_line')
+  || managedTrialRuntimeSource.includes('machine-import-')
   || !managedTrialSource.includes('export function assertManagedWebsiteImportState')
   || !managedTrialSource.includes('export async function assertManagedEcommerceImportState')
   || !managedTrialSource.includes("eventType: 'commerce.storefront.merchandising.imported'")
@@ -6538,7 +6542,6 @@ async function verifyManagedClientImportRuntime() {
     )
     assert(acceptedPlant === plantReceipt, 'managed_client_import_plant_receipt_rejected')
     const plantTimestamp = '2026-07-26T04:30:00.000Z'
-    const plantLines = [...new Set(plantStaged.rows.map((row) => row.values.line))]
     const plantState = {
       schema: 'supermega.production.workspace.v2',
       revision: 0,
@@ -6553,7 +6556,7 @@ async function verifyManagedClientImportRuntime() {
         dueAt: `${row.values.dueDate}T17:29:59.999Z`,
       })),
       issues: [],
-      machines: plantLines.map((line, index) => ({ id: `machine-import-${index + 1}`, name: line, state: 'running' })),
+      machines: [],
       events: [],
       openingPlan: {
         contract: 'supermega.production.opening-plan.v1',
@@ -6561,7 +6564,7 @@ async function verifyManagedClientImportRuntime() {
         confirmedAt: plantTimestamp,
         industryPackId: plantStaged.plantIndustryPackId,
         jobIds: plantStaged.rows.map((row) => row.values.jobCode),
-        machineIds: plantLines.map((_, index) => `machine-import-${index + 1}`),
+        machineIds: [],
       },
     }
     const plantCommandId = '00000000-0000-4000-8000-000000000203'
@@ -6600,7 +6603,7 @@ async function verifyManagedClientImportRuntime() {
       ['surface', { ...plantActivationResponse, result: { ...plantActivationResponse.result, surface: 'commerce' } }],
       ['history', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, events: [{}] } } }],
       ['job', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, jobs: [{ ...plantState.jobs[0], target: plantState.jobs[0].target + 1 }, ...plantState.jobs.slice(1)] } } }],
-      ['machine', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, machines: [{ ...plantState.machines[0], state: 'stopped' }, ...plantState.machines.slice(1)] } } }],
+      ['machine', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, machines: [{ id: 'machine-invented-1', name: 'Invented equipment', state: 'running' }], openingPlan: { ...plantState.openingPlan, machineIds: ['machine-invented-1'] } } } }],
       ['digest', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, openingPlan: { ...plantState.openingPlan, packageDigest: `sha256:${'0'.repeat(64)}` } } } }],
       ['timestamp', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, openingPlan: { ...plantState.openingPlan, confirmedAt: 'server-assigned' } } } }],
       ['pack', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, openingPlan: { ...plantState.openingPlan, industryPackId: 'unsupported-pack' } } } }],
@@ -11868,6 +11871,12 @@ async function verifyProductionRuntime() {
       },
     }
     assert(model.validateProductionState(openingPlanState) === openingPlanState, 'production_opening_plan_rejected')
+    const jobsOnlyOpeningPlanState = {
+      ...openingPlanState,
+      machines: [],
+      openingPlan: { ...openingPlanState.openingPlan, machineIds: [] },
+    }
+    assert(model.validateProductionState(jobsOnlyOpeningPlanState) === jobsOnlyOpeningPlanState, 'production_jobs_only_opening_plan_rejected')
     assertThrows(() => model.validateProductionState({ ...openingPlanState, openingPlan: { ...openingPlanState.openingPlan, packageDigest: 'sha256:bad' } }), 'production_opening_plan_bad_digest_accepted')
     assertThrows(() => model.validateProductionState({ ...openingPlanState, openingPlan: { ...openingPlanState.openingPlan, jobIds: [...openingPlanState.openingPlan.jobIds].reverse() } }), 'production_opening_plan_job_tamper_accepted')
     assertThrows(() => model.validateProductionState({ ...openingPlanState, openingPlan: { ...openingPlanState.openingPlan, machineIds: [...openingPlanState.openingPlan.machineIds].reverse() } }), 'production_opening_plan_machine_tamper_accepted')

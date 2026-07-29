@@ -994,10 +994,7 @@ class ClientImportRouteTests(unittest.TestCase):
         )
         self.assertEqual(
             state["machines"],
-            [
-                {"id": "machine-import-1", "name": "Line A", "state": "running"},
-                {"id": "machine-import-2", "name": "Line B", "state": "running"},
-            ],
+            [],
         )
         stored = self.store._states[("workspace-b", "production")]
         canonical_confirmed_at = (
@@ -1014,7 +1011,7 @@ class ClientImportRouteTests(unittest.TestCase):
                 "confirmedAt": canonical_confirmed_at,
                 "industryPackId": "general-manufacturing",
                 "jobIds": ["JOB-001", "JOB-002", "JOB-003"],
-                "machineIds": ["machine-import-1", "machine-import-2"],
+                "machineIds": [],
             },
         )
         self.assertNotEqual(canonical_confirmed_at, "server-assigned")
