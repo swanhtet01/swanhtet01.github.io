@@ -3,6 +3,7 @@ import { type FormEvent, useMemo, useState } from 'react'
 import {
   applyShopInventoryImport,
   buildShopInventoryImportPackage,
+  createShopInventoryMaster,
   createEmptyShopInventoryState,
   projectShopInventory,
   shopInventoryEvidenceDigest,
@@ -35,7 +36,7 @@ type ShopInventoryFoundationProps = {
     transition: (state: CommerceState) => CommerceState | null,
   ) => Promise<void>
   onInventory: (
-    eventType: 'commerce.inventory.initialized' | 'commerce.inventory.transferred' | 'commerce.production_batch.received',
+    eventType: 'commerce.inventory.initialized' | 'commerce.inventory.master_created' | 'commerce.inventory.transferred' | 'commerce.production_batch.received',
     commandId: string,
     proof: CommerceActionProof,
     transition: (state: CommerceState) => CommerceState | null,
@@ -55,6 +56,14 @@ type TransferReview = {
   fromLocationId: string
   toLocationId: string
   quantity: number
+  proof: ShopInventoryProof
+  expectedHeadDigest: string
+}
+
+type MasterReview = {
+  commandId: string
+  masterType: 'client' | 'vendor'
+  master: { id: string; name: string }
   proof: ShopInventoryProof
   expectedHeadDigest: string
 }
@@ -116,6 +125,8 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
   const [transferOpen, setTransferOpen] = useState(false)
   const [transferDraft, setTransferDraft] = useState({ balanceKey: '', quantity: '1' })
   const [transferReview, setTransferReview] = useState<TransferReview | null>(null)
+  const [masterDraft, setMasterDraft] = useState<{ masterType: 'client' | 'vendor'; name: string }>({ masterType: 'client', name: '' })
+  const [masterReview, setMasterReview] = useState<MasterReview | null>(null)
   const [productionReceiptReview, setProductionReceiptReview] = useState<ProductionReceiptReview | null>(null)
   const [productionItemMapping, setProductionItemMapping] = useState<{ releaseId: string; sku: string } | null>(null)
 
@@ -123,6 +134,9 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     () => projectShopInventory(state, catalogSkus),
     [catalogSkus, state],
   )
+  const selectedMasters = masterDraft.masterType === 'client' ? projection.clients : projection.vendors
+  const masterAtLimit = selectedMasters.length >= 200
+  const masterListPreview = `${selectedMasters.slice(0, 4).map((master) => master.name).join(' · ')}${selectedMasters.length > 4 ? ` · +${selectedMasters.length - 4} more` : ''}`
   const catalogBySku = useMemo(() => new Map(catalog.map((item) => [item.sku, item])), [catalog])
   const balanceOptions = projection.balances.filter((row) => row.availableToPromise > 0)
   const activeAggregateOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
@@ -401,6 +415,59 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     }
   }
 
+  function reviewMaster(event: FormEvent) {
+    event.preventDefault()
+    const name = masterDraft.name.trim()
+    const existing = selectedMasters
+    if (!name || name.length > 120) {
+      setError('Enter a client or supplier name of 120 characters or fewer.')
+      return
+    }
+    if (existing.some((master) => master.name.toLocaleLowerCase('en-US') === name.toLocaleLowerCase('en-US'))) {
+      setError(`${name} is already in the ${masterDraft.masterType === 'client' ? 'client' : 'supplier'} master.`)
+      return
+    }
+    setError('')
+    const masterLabel = masterDraft.masterType === 'client' ? 'client' : 'supplier'
+    setMasterReview({
+      commandId: commandId('MST'),
+      masterType: masterDraft.masterType,
+      master: { id: commandId(masterDraft.masterType === 'client' ? 'CLI' : 'VEN'), name },
+      proof: actionProof(actor, `the new ${masterLabel} master “${name}”`),
+      expectedHeadDigest: state.headDigest,
+    })
+    setNotice(`Review the new ${masterLabel}. Nothing has been recorded yet.`)
+  }
+
+  async function confirmMaster() {
+    if (!masterReview) return
+    setBusy(true)
+    setError('')
+    try {
+      await onInventory(
+        'commerce.inventory.master_created',
+        masterReview.proof.actionId.slice(4),
+        masterReview.proof,
+        (current) => {
+          if (!current.inventoryFoundation) return null
+          const result = createShopInventoryMaster(current.inventoryFoundation, {
+            ...masterReview,
+            catalogSkus: current.items.map((item) => item.sku).sort(),
+          })
+          return { ...current, inventoryFoundation: result.state }
+        },
+      )
+      const masterLabel = masterReview.masterType === 'client' ? 'client' : 'supplier'
+      setMasterReview(null)
+      setMasterDraft((current) => ({ ...current, name: '' }))
+      setNotice(`${masterReview.master.name} is now an accountable ${masterLabel} record.`)
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'The business partner was not confirmed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return <>{releasedPlantBatch ? <section aria-labelledby="plant-receipt-title" className="catalog-onboarding-bridge">
     <div><span className="core-eyebrow">Released from Plant</span><h3 id="plant-receipt-title">{receivedPlantMovement ? 'Batch received' : releasedPlantBatch.product}</h3><p>{releasedPlantBatch.quantity.toLocaleString()} accepted units · batch {releasedPlantBatch.outputBatchId}{plantCatalogItem ? ` · ${plantCatalogItem.name}` : ''}</p></div>
     {!receivedPlantMovement && productionMappingRequired ? <label>Receive as Shop item<select aria-label="Map released Plant product to Shop item" disabled={disabled || busy || Boolean(productionReceiptReview)} onChange={(event) => { setProductionItemMapping({ releaseId: releasedPlantBatch.releaseId, sku: event.target.value }); setProductionReceiptReview(null) }} value={selectedProductionSku}><option value="">Choose one item</option>{catalog.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.sku}</option>)}</select><small>This reviewed choice is retained in the stock receipt evidence.</small></label> : null}
@@ -430,6 +497,14 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
       <div className="form-actions">{setupReview ? <button className="core-button" disabled={busy} onClick={() => setSetupReview(null)} type="button">Edit</button> : null}<button className="core-button primary" disabled={disabled || busy} onClick={setupReview ? () => void confirmSetup() : undefined} type={setupReview ? 'button' : 'submit'}>{setupReview ? busy ? 'Recording…' : 'Confirm setup' : 'Review setup'}</button></div>
     </form> : null}
     {state.revision ? <div className="exception-summary" aria-label="Stock by location">{locationTotals.map((location) => <span key={location.id}><strong>{location.availableToPromise.toLocaleString()}</strong><small>{location.name} ATP · {location.onHand.toLocaleString()} on hand</small></span>)}</div> : null}
+    {state.revision ? <details className="compact-disclosure">
+      <summary><span>Clients and suppliers</span><small>{projection.clients.length} clients · {projection.vendors.length} suppliers</small></summary>
+      <form className="core-form compact-form" onSubmit={reviewMaster}>
+        <div className="form-row"><label>Record type<select disabled={disabled || busy || Boolean(masterReview)} onChange={(event) => { setMasterDraft({ masterType: event.target.value as 'client' | 'vendor', name: '' }); setMasterReview(null); setError('') }} value={masterDraft.masterType}><option value="client">Client</option><option value="vendor">Supplier</option></select></label><label>Name<input disabled={disabled || busy || masterAtLimit || Boolean(masterReview)} maxLength={120} onChange={(event) => { setMasterDraft((current) => ({ ...current, name: event.target.value })); setMasterReview(null) }} placeholder={masterDraft.masterType === 'client' ? 'Customer or account name' : 'Supplier name'} required value={masterDraft.name} /></label></div>
+        <div className="stock-receipt-preview" role="status"><small>{masterDraft.masterType === 'client' ? 'Client master' : 'Supplier master'}</small><strong>{masterReview ? `${masterReview.master.name} · ${masterReview.master.id}` : masterAtLimit ? '200-record pilot limit reached' : masterListPreview}</strong></div>
+        <div className="form-actions">{masterReview ? <button className="core-button" disabled={busy} onClick={() => setMasterReview(null)} type="button">Edit</button> : null}<button className="core-button primary" disabled={disabled || busy || masterAtLimit || !masterDraft.name.trim()} onClick={masterReview ? () => void confirmMaster() : undefined} type={masterReview ? 'button' : 'submit'}>{masterReview ? busy ? 'Recording…' : 'Confirm record' : 'Review record'}</button></div>
+      </form>
+    </details> : null}
     {transferOpen && state.revision ? <form className="core-form compact-form" id="location-stock-transfer" onSubmit={reviewTransfer}>
       <label>Stock to move<select disabled={disabled || Boolean(transferReview)} onChange={(event) => setTransferDraft({ balanceKey: event.target.value, quantity: '1' })} required value={transferDraft.balanceKey}><option value="">Choose stock</option>{balanceOptions.map((row) => <option key={`${row.stockUnitId}|${row.locationId}`} value={`${row.stockUnitId}|${row.locationId}`}>{catalogBySku.get(row.sku)?.name ?? row.sku} · {projection.locations.find((location) => location.id === row.locationId)?.name} · {row.availableToPromise} ATP</option>)}</select></label>
       <label>Quantity<input disabled={disabled || Boolean(transferReview) || !selectedBalance} inputMode="numeric" max={selectedBalance?.availableToPromise ?? 0} min="1" onChange={(event) => setTransferDraft((current) => ({ ...current, quantity: event.target.value }))} required step="1" type="number" value={transferDraft.quantity} /></label>

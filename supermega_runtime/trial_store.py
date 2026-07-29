@@ -42,6 +42,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.production_material.issued",
         "commerce.production_batch.received",
         "commerce.inventory.initialized",
+        "commerce.inventory.master_created",
         "commerce.inventory.transferred",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
@@ -642,6 +643,7 @@ def _authoritative_command_payload(
         return authoritative
     if event_type in {
         "commerce.inventory.initialized",
+        "commerce.inventory.master_created",
         "commerce.inventory.transferred",
     }:
         evidence = authoritative.get("evidence")

@@ -484,6 +484,25 @@ def _payload(value: object, field: str, catalog_skus: list[str]) -> dict[str, An
             "package": package,
             "proof": _proof(row["proof"], f"{field}.proof"),
         }
+    if kind == "master_create":
+        row = _exact(row, field, {"kind", "id", "masterType", "master", "proof"})
+        master_type = _text(row["masterType"], f"{field}.masterType", 12)
+        if master_type not in {"client", "vendor"}:
+            raise ShopInventoryValidationError(f"{field}.masterType is unsupported.")
+        master_row = _exact(row["master"], f"{field}.master", {"id", "name"})
+        master_prefix = "CLI" if master_type == "client" else "VEN"
+        return {
+            "kind": "master_create",
+            "id": _identifier(row["id"], f"{field}.id", "MST"),
+            "masterType": master_type,
+            "master": {
+                "id": _identifier(
+                    master_row["id"], f"{field}.master.id", master_prefix
+                ),
+                "name": _text(master_row["name"], f"{field}.master.name", 120),
+            },
+            "proof": _proof(row["proof"], f"{field}.proof"),
+        }
     if kind == "transfer":
         row = _exact(
             row,
@@ -940,6 +959,8 @@ def _plan_order_return_allocations(
 
 
 def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
+    clients: dict[str, dict[str, str]] = {}
+    vendors: dict[str, dict[str, str]] = {}
     locations: set[str] = set()
     units: dict[str, dict[str, str]] = {}
     balances: dict[tuple[str, str], dict[str, int]] = {}
@@ -986,6 +1007,8 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
             if import_count != 1:
                 raise ShopInventoryValidationError("managed v1 accepts one opening import.")
             package = command["package"]
+            clients.update({client["id"]: client for client in package["clients"]})
+            vendors.update({vendor["id"]: vendor for vendor in package["vendors"]})
             locations.update(location["id"] for location in package["locations"])
             units.update({unit["id"]: unit for unit in package["stockUnits"]})
             for opening in package["openings"]:
@@ -996,6 +1019,25 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
                     reserved_delta=0,
                     field=field,
                 )
+            continue
+        if command["kind"] == "master_create":
+            masters = clients if command["masterType"] == "client" else vendors
+            label = "client" if command["masterType"] == "client" else "vendor"
+            master = command["master"]
+            if len(masters) >= 200:
+                raise ShopInventoryValidationError(
+                    f"{field} exceeds the supported {label} master limit."
+                )
+            if master["id"] in masters:
+                raise ShopInventoryValidationError(
+                    f"{field}.master.id is already recorded."
+                )
+            folded_name = str(master["name"]).lower()
+            if any(str(existing["name"]).lower() == folded_name for existing in masters.values()):
+                raise ShopInventoryValidationError(
+                    f"{field}.master.name is already recorded."
+                )
+            masters[str(master["id"])] = master
             continue
         if command["kind"] in {"receipt", "production_receipt"}:
             if command["locationId"] not in locations:

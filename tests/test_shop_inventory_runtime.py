@@ -32,6 +32,7 @@ from supermega_runtime.trial_store import (
 
 OPEN_AT = "2026-07-27T01:00:00.000Z"
 TRANSFER_AT = "2026-07-27T02:00:00.000Z"
+MASTER_AT = "2026-07-27T02:30:00.000Z"
 SERVER_OPEN_AT = "2026-07-27T03:00:00+00:00"
 SERVER_TRANSFER_AT = "2026-07-27T04:00:00+00:00"
 RECEIPT_AT = "2026-07-27T05:00:00.000Z"
@@ -147,6 +148,27 @@ def transferred_inventory(
     current["headDigest"] = command["digest"]
     current["commands"] = [*current["commands"], command]  # type: ignore[misc]
     return current
+
+
+def master_created_inventory(
+    state: dict[str, object],
+    proof: dict[str, str],
+    *,
+    command_id: str = "MST-CLIENT-001",
+    master_type: str = "client",
+    master_id: str = "CLI-ACCOUNT-001",
+    name: str = "Golden Lotus",
+) -> dict[str, object]:
+    return append_inventory_command(
+        state,
+        {
+            "kind": "master_create",
+            "id": command_id,
+            "masterType": master_type,
+            "master": {"id": master_id, "name": name},
+            "proof": proof,
+        },
+    )
 
 
 def received_inventory(
@@ -1079,6 +1101,7 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
                 accepted,
                 {"state": conflicting_mapping, "evidence": conflicting_proof},
             )
+
         self.assertEqual(
             shop_inventory_sku_available_to_promise(
                 accepted["inventoryFoundation"], ["SKU-1"]
@@ -1117,6 +1140,65 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
                 accepted,
                 {"state": duplicate, "evidence": duplicate_proof},
             )
+
+    def test_client_and_supplier_masters_are_append_only_and_stock_neutral(self) -> None:
+        current = commerce_state()
+        opening = opening_inventory()
+        initialized = reduce_commerce_state(
+            "commerce.inventory.initialized",
+            current,
+            {
+                "state": {**current, "inventoryFoundation": opening},
+                "evidence": opening["commands"][-1]["payload"]["proof"],  # type: ignore[index]
+            },
+        )
+        proof = action_proof("ACT-MASTER-001", MASTER_AT)
+        created_foundation = master_created_inventory(
+            initialized["inventoryFoundation"], proof
+        )
+        accepted = reduce_commerce_state(
+            "commerce.inventory.master_created",
+            initialized,
+            {
+                "state": {**initialized, "inventoryFoundation": created_foundation},
+                "evidence": proof,
+            },
+        )
+        self.assertEqual(
+            shop_inventory_sku_totals(accepted["inventoryFoundation"], ["SKU-1"]),
+            {"SKU-1": 10},
+        )
+        self.assertEqual(
+            shop_inventory_sku_available_to_promise(
+                accepted["inventoryFoundation"], ["SKU-1"]
+            ),
+            {"SKU-1": 10},
+        )
+
+        duplicate_name = master_created_inventory(
+            accepted["inventoryFoundation"],
+            action_proof("ACT-MASTER-002", "2026-07-27T02:40:00.000Z"),
+            command_id="MST-CLIENT-002",
+            master_id="CLI-ACCOUNT-002",
+            name="golden lotus",
+        )
+        with self.assertRaises(ShopInventoryValidationError):
+            validate_shop_inventory_state(duplicate_name, ["SKU-1"])
+
+        duplicate_id = master_created_inventory(
+            accepted["inventoryFoundation"],
+            action_proof("ACT-MASTER-003", "2026-07-27T02:50:00.000Z"),
+            command_id="MST-CLIENT-003",
+            master_id="CLI-ACCOUNT-001",
+            name="Another account",
+        )
+        with self.assertRaises(ShopInventoryValidationError):
+            validate_shop_inventory_state(duplicate_id, ["SKU-1"])
+
+        tampered = deepcopy(created_foundation)
+        tampered["commands"][-1]["payload"]["master"]["name"] = "Changed"  # type: ignore[index]
+        with self.assertRaises(ShopInventoryValidationError):
+            validate_shop_inventory_state(tampered, ["SKU-1"])
 
     def test_order_allocation_reserve_release_and_fulfil_are_atomic(self) -> None:
         current = commerce_state()

@@ -1475,7 +1475,7 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${shopInventoryUiSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.storefront_request.received')
@@ -1613,6 +1613,7 @@ if (coreSource.includes("await import('./shop-catalog-import')")
 if (!shopInventorySource.includes("SHOP_INVENTORY_STATE_SCHEMA = 'supermega.shop.inventory_foundation.v1'")
   || !shopInventorySource.includes("SHOP_INVENTORY_IMPORT_CONTRACT = 'supermega.shop.inventory_import.v1'")
   || !shopInventorySource.includes('export function applyShopInventoryImport')
+  || !shopInventorySource.includes('export function createShopInventoryMaster')
   || !shopInventorySource.includes('export function transferShopInventory')
   || !shopInventorySource.includes('export function receiveShopInventory')
   || !shopInventorySource.includes('export function countShopInventory')
@@ -1632,7 +1633,10 @@ if (!coreSource.includes('<ShopInventoryFoundation')
   || !shopInventoryUiSource.includes('commerce.inventoryFoundation ?? createEmptyShopInventoryState()')
   || !shopInventoryUiSource.includes('Boolean(state.revision && catalog.some')
   || !shopInventoryUiSource.includes("await onInventory(\n        'commerce.inventory.initialized'")
+  || !shopInventoryUiSource.includes("await onInventory(\n        'commerce.inventory.master_created'")
   || !shopInventoryUiSource.includes("await onInventory(\n        'commerce.inventory.transferred'")
+  || !shopInventoryUiSource.includes('Clients and suppliers')
+  || !shopInventoryUiSource.includes('Nothing has been recorded yet.')
   || shopInventoryUiSource.includes('loadShopInventoryWorkspace')
   || shopInventoryUiSource.includes('mutateShopInventoryWorkspace')
   || shopInventoryUiSource.includes('fetch(')) fail('shop_inventory_foundation_ui_boundary_missing')
@@ -1646,11 +1650,14 @@ if (!shopInventoryUiSource.includes('const inventoryAutopilotRows = [')
 if (!commerceSource.includes('inventoryFoundation?: ShopInventoryState')
   || !commerceSource.includes('Commerce location inventory envelope is invalid.')
   || !shopInventoryUiSource.includes("'commerce.inventory.initialized'")
+  || !shopInventoryUiSource.includes("'commerce.inventory.master_created'")
   || !shopInventoryUiSource.includes("'commerce.inventory.transferred'")
   || !shopInventoryUiSource.includes('current.inventoryFoundation')
   || !coreSource.includes('onInventory={mutateCommerce}')
   || !managedCommerceRuntime.includes('_validate_inventory_initialized')
+  || !managedCommerceRuntime.includes('_validate_inventory_master_created')
   || !managedCommerceRuntime.includes('_validate_inventory_transferred')
+  || !managedTrialStoreRuntime.includes('"commerce.inventory.master_created"')
   || !managedTrialStoreRuntime.includes('restamp_latest_shop_inventory_command')
   || !shopInventoryPythonSource.includes('validate_shop_inventory_state')
   || !shopInventoryPythonSource.includes('inventory command digest is invalid')) fail('managed_shop_inventory_foundation_missing')
@@ -2856,6 +2863,32 @@ async function verifyShopInventoryRuntime() {
     'shop_inventory_opening_projection_wrong')
     const openingReplay = model.applyShopInventoryImport(opening.state, importPackage, proof(1, 'opening'), catalogSkus, model.EMPTY_SHOP_INVENTORY_DIGEST)
     assert(openingReplay.replayed && JSON.stringify(openingReplay.state) === JSON.stringify(opening.state), 'shop_inventory_opening_retry_not_idempotent')
+
+    const masterCreated = model.createShopInventoryMaster(opening.state, {
+      commandId: 'MST-CLIENT-001', masterType: 'client', master: { id: 'CLI-WHOLESALE-001', name: 'Golden Lotus' },
+      proof: proof(2, 'client-master'), catalogSkus, expectedHeadDigest: opening.state.headDigest,
+    })
+    const masterProjection = model.projectShopInventory(masterCreated.state, catalogSkus)
+    assert(!masterCreated.replayed
+      && masterCreated.state.revision === 2
+      && masterProjection.clients.length === 2
+      && masterProjection.clients.at(-1)?.name === 'Golden Lotus'
+      && masterProjection.metrics.totalOnHand === openingProjection.metrics.totalOnHand
+      && masterProjection.metrics.totalAvailableToPromise === openingProjection.metrics.totalAvailableToPromise,
+    'shop_inventory_master_create_not_stock_neutral')
+    const masterReplay = model.createShopInventoryMaster(masterCreated.state, {
+      commandId: 'MST-CLIENT-001', masterType: 'client', master: { id: 'CLI-WHOLESALE-001', name: 'Golden Lotus' },
+      proof: proof(2, 'client-master'), catalogSkus, expectedHeadDigest: model.EMPTY_SHOP_INVENTORY_DIGEST,
+    })
+    assert(masterReplay.replayed && JSON.stringify(masterReplay.state) === JSON.stringify(masterCreated.state), 'shop_inventory_master_create_retry_not_idempotent')
+    assertThrows(() => model.createShopInventoryMaster(masterCreated.state, {
+      commandId: 'MST-CLIENT-002', masterType: 'client', master: { id: 'CLI-WHOLESALE-002', name: 'golden lotus' },
+      proof: proof(3, 'duplicate-master'), catalogSkus, expectedHeadDigest: masterCreated.state.headDigest,
+    }), 'shop_inventory_duplicate_master_name_succeeded')
+    assertThrows(() => model.createShopInventoryMaster(masterCreated.state, {
+      commandId: 'MST-CLIENT-001', masterType: 'client', master: { id: 'CLI-WHOLESALE-001', name: 'Changed account' },
+      proof: proof(2, 'client-master'), catalogSkus, expectedHeadDigest: masterCreated.state.headDigest,
+    }), 'shop_inventory_changed_master_retry_succeeded')
 
     const transferred = model.transferShopInventory(opening.state, {
       transferId: 'TRF-MAIN-BRANCH-001',

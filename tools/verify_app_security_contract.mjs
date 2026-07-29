@@ -268,6 +268,7 @@ const expectedHumanCommerceEvents = [
   'commerce.account_mapping.saved',
   'commerce.close.saved',
   'commerce.inventory.initialized',
+  'commerce.inventory.master_created',
   'commerce.inventory.transferred',
   'commerce.item.created',
   'commerce.item.updated',
@@ -451,9 +452,12 @@ requireContract('client demo setup kits are bounded, canonical, and explicitly d
   && /Client records, product packs, and progress were not changed/.test(settingsPage))
 requireContract('managed Shop location inventory and order allocation are human-only, server-stamped, and digest-chained',
   /commerce\.inventory\.initialized/.test(managedTrialClient)
+  && /commerce\.inventory\.master_created/.test(managedTrialClient)
   && /commerce\.inventory\.transferred/.test(managedTrialClient)
   && /_validate_inventory_initialized/.test(commerceRuntime)
+  && /_validate_inventory_master_created/.test(commerceRuntime)
   && /_validate_inventory_transferred/.test(commerceRuntime)
+  && /master_create/.test(shopInventoryRuntime)
   && /_order_inventory_transition/.test(commerceRuntime)
   && /order_reserve/.test(shopInventoryRuntime)
   && /order_release/.test(shopInventoryRuntime)

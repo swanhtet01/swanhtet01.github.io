@@ -77,6 +77,7 @@ export type ShopInventoryImportPackage = {
 
 export type ShopInventoryCommandPayload =
   | { kind: 'import'; id: string; package: ShopInventoryImportPackage; proof: ShopInventoryProof }
+  | { kind: 'master_create'; id: string; masterType: 'client' | 'vendor'; master: ShopInventoryMaster; proof: ShopInventoryProof }
   | { kind: 'transfer'; id: string; stockUnitId: string; fromLocationId: string; toLocationId: string; quantity: number; proof: ShopInventoryProof }
   | { kind: 'receipt'; id: string; purchaseOrderId: string; stockUnitId: string; sku: string; trackingCode: string; locationId: string; quantity: number; proof: ShopInventoryProof }
   | { kind: 'production_receipt'; id: string; productionReleaseId: string; productionCommandDigest: string; productionJobId: string; productionOutputBatchId: string; productionReleasedAt: string; stockUnitId: string; sku: string; trackingCode: string; locationId: string; quantity: number; proof: ShopInventoryProof }
@@ -142,7 +143,7 @@ export type ShopInventoryProjection = {
 const digestPattern = /^sha256:[0-9a-f]{64}$/
 const businessIdPattern = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$/
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
-const commandKinds = new Set(['import', 'transfer', 'receipt', 'production_receipt', 'count', 'production_issue', 'reserve', 'release', 'fulfil', 'order_reserve', 'order_release', 'order_fulfil', 'order_return'])
+const commandKinds = new Set(['import', 'master_create', 'transfer', 'receipt', 'production_receipt', 'count', 'production_issue', 'reserve', 'release', 'fulfil', 'order_reserve', 'order_release', 'order_fulfil', 'order_return'])
 const productionUnits = new Set<ShopInventoryProductionUnit>(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -458,6 +459,23 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
     const id = identifier(source.id, `${field}.id`, 'IMP')
     if (id !== importPackage.importId) throw new Error(`${field}.id must equal its import package identity.`)
     return { kind: 'import', id, package: importPackage, proof: proof(source.proof, `${field}.proof`) }
+  }
+  if (value.kind === 'master_create') {
+    const source = exact(value, field, ['kind', 'id', 'masterType', 'master', 'proof'])
+    const masterType = text(source.masterType, `${field}.masterType`, 12)
+    if (masterType !== 'client' && masterType !== 'vendor') throw new Error(`${field}.masterType is unsupported.`)
+    const masterSource = exact(source.master, `${field}.master`, ['id', 'name'])
+    const master = {
+      id: identifier(masterSource.id, `${field}.master.id`, masterType === 'client' ? 'CLI' : 'VEN'),
+      name: text(masterSource.name, `${field}.master.name`, 120),
+    }
+    return {
+      kind: 'master_create',
+      id: identifier(source.id, `${field}.id`, 'MST'),
+      masterType,
+      master,
+      proof: proof(source.proof, `${field}.proof`),
+    }
   }
   if (value.kind === 'transfer') {
     const source = exact(value, field, ['kind', 'id', 'stockUnitId', 'fromLocationId', 'toLocationId', 'quantity', 'proof'])
@@ -803,6 +821,18 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
           onHandDelta: opening.quantity, reservedDelta: 0, referenceId: command.package.importId, vendorId: opening.vendorId,
         }))
       })
+      return
+    }
+    if (command.kind === 'master_create') {
+      const masters = command.masterType === 'client' ? clients : vendors
+      const label = command.masterType === 'client' ? 'client' : 'vendor'
+      if (masters.size >= 200) throw new Error(`${field} exceeds the supported ${label} master limit.`)
+      if (masters.has(command.master.id)) throw new Error(`${field}.master.id is already recorded.`)
+      const foldedName = command.master.name.toLocaleLowerCase('en-US')
+      if ([...masters.values()].some((master) => master.name.toLocaleLowerCase('en-US') === foldedName)) {
+        throw new Error(`${field}.master.name is already recorded.`)
+      }
+      masters.set(command.master.id, command.master)
       return
     }
     if (command.kind === 'receipt' || command.kind === 'production_receipt') {
@@ -1188,6 +1218,23 @@ export function receiveShopInventory(state: unknown, input: {
     kind: 'receipt', id: input.receiptId, purchaseOrderId: input.purchaseOrderId,
     stockUnitId: input.stockUnitId, sku: input.sku, trackingCode: input.trackingCode,
     locationId: input.locationId, quantity: input.quantity, proof: proof(input.proof, 'proof'),
+  }, input.catalogSkus, input.expectedHeadDigest)
+}
+
+export function createShopInventoryMaster(state: unknown, input: {
+  commandId: unknown
+  masterType: unknown
+  master: unknown
+  proof: unknown
+  catalogSkus: unknown
+  expectedHeadDigest: unknown
+}) {
+  return appendCommand(state, {
+    kind: 'master_create',
+    id: input.commandId,
+    masterType: input.masterType,
+    master: input.master,
+    proof: proof(input.proof, 'proof'),
   }, input.catalogSkus, input.expectedHeadDigest)
 }
 
