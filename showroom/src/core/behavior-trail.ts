@@ -19,6 +19,26 @@ export type BehaviorTrailEntry = {
   createdAt: string
 }
 
+type BehaviorPreferenceProduct = Exclude<BehaviorProductId, 'unknown'>
+
+export type BehaviorPreferenceSnapshot = {
+  contract: 'supermega.behavior_preference.v1'
+  version: 1
+  chosenSignals: number
+  productCount: number
+  preferred: {
+    product: BehaviorPreferenceProduct
+    detail: string
+    chosenCount: number
+    lastChosenAt: string
+  } | null
+  latest: {
+    product: BehaviorPreferenceProduct
+    detail: string
+    createdAt: string
+  } | null
+}
+
 const behaviorTrailLimit = 80
 
 function behaviorId() {
@@ -71,6 +91,45 @@ export function readBehaviorTrail(storage: Storage): BehaviorTrailEntry[] {
     return raw ? normalizeBehaviorTrail(JSON.parse(raw)) : []
   } catch {
     return []
+  }
+}
+
+export function summarizeBehaviorPreferences(entries: BehaviorTrailEntry[]): BehaviorPreferenceSnapshot {
+  const chosen = entries.filter((entry): entry is BehaviorTrailEntry & { product: BehaviorPreferenceProduct } => (
+    entry.event === 'agent_job_chosen' && entry.product !== 'unknown'
+  ))
+  const grouped = new Map<string, BehaviorPreferenceSnapshot['preferred']>()
+  chosen.forEach((entry) => {
+    const key = `${entry.product}:${entry.detail}`
+    const current = grouped.get(key)
+    grouped.set(key, {
+      product: entry.product,
+      detail: entry.detail,
+      chosenCount: (current?.chosenCount ?? 0) + 1,
+      lastChosenAt: !current || entry.createdAt > current.lastChosenAt ? entry.createdAt : current.lastChosenAt,
+    })
+  })
+  const preferred = [...grouped.values()]
+    .filter((entry): entry is NonNullable<BehaviorPreferenceSnapshot['preferred']> => Boolean(entry))
+    .sort((left, right) => (
+      right.chosenCount - left.chosenCount
+      || right.lastChosenAt.localeCompare(left.lastChosenAt)
+      || left.product.localeCompare(right.product)
+      || left.detail.localeCompare(right.detail)
+    ))[0] ?? null
+  const latestEntry = [...chosen].sort((left, right) => (
+    right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id)
+  ))[0]
+
+  return {
+    contract: 'supermega.behavior_preference.v1',
+    version: 1,
+    chosenSignals: chosen.length,
+    productCount: new Set(chosen.map((entry) => entry.product)).size,
+    preferred,
+    latest: latestEntry
+      ? { product: latestEntry.product, detail: latestEntry.detail, createdAt: latestEntry.createdAt }
+      : null,
   }
 }
 

@@ -7,7 +7,7 @@ import {
   WEBSITE_STORAGE_KEY,
 } from '../products/product-handoff'
 import { COMMERCE_KEY, LEGACY_COMMERCE_KEYS } from './commerce-workspace'
-import { BEHAVIOR_TRAIL_KEY, readBehaviorTrail } from './behavior-trail'
+import { BEHAVIOR_TRAIL_KEY, readBehaviorTrail, summarizeBehaviorPreferences } from './behavior-trail'
 import {
   ACTION_KEY,
   APPROVAL_KEY,
@@ -276,21 +276,7 @@ export function SettingsPage() {
   const behaviorTrail = readBehaviorTrail(window.localStorage)
   const behaviorSignalCount = behaviorTrail.length
   const agentBehaviorSignals = behaviorTrail.filter((entry) => entry.event === 'agent_job_seen' || entry.event === 'agent_job_chosen')
-  const chosenAgentSignals = agentBehaviorSignals.filter((entry) => entry.event === 'agent_job_chosen')
-  const agentJobCounts = new Map<string, { product: string; job: string; seen: number; chosen: number; lastAt: string }>()
-  agentBehaviorSignals.forEach((entry) => {
-    const key = `${entry.product}:${entry.detail}`
-    const current = agentJobCounts.get(key) ?? { product: entry.product, job: entry.detail, seen: 0, chosen: 0, lastAt: entry.createdAt }
-    if (entry.event === 'agent_job_seen') current.seen += 1
-    if (entry.event === 'agent_job_chosen') current.chosen += 1
-    if (entry.createdAt > current.lastAt) current.lastAt = entry.createdAt
-    agentJobCounts.set(key, current)
-  })
-  const rankedAgentJobs = [...agentJobCounts.values()].sort((left, right) => (
-    right.chosen - left.chosen
-    || right.seen - left.seen
-    || right.lastAt.localeCompare(left.lastAt)
-  ))
+  const behaviorPreference = summarizeBehaviorPreferences(behaviorTrail)
   const agentProductName = (product: string) => (
     product === 'commerce'
     || product === 'production'
@@ -299,11 +285,11 @@ export function SettingsPage() {
       ? productDisplayName(product)
       : productDisplayName(setup.product)
   )
-  const topAgentJob = rankedAgentJobs[0]
-  const lastChosenAgentJob = chosenAgentSignals.at(-1)
+  const topAgentJob = behaviorPreference.preferred
+  const lastChosenAgentJob = behaviorPreference.latest
   const agentBehaviorRows = [
     ['Signals', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} queue signals` : 'No queue signals', agentBehaviorSignals.length ? 'Seen and chosen recommendations are saved locally for export.' : 'Open a product queue to start behavior memory.'],
-    ['Top job', topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.job}` : 'No pattern yet', topAgentJob ? `${topAgentJob.seen} seen - ${topAgentJob.chosen} chosen.` : 'The system waits for repeated owner behavior before ranking work.'],
+    ['Preferred job', topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.detail}` : 'No pattern yet', topAgentJob ? `${topAgentJob.chosenCount} chosen; last ${formatTime(topAgentJob.lastChosenAt)}.` : 'The system waits for owner choices before selecting a safe continuation.'],
     ['Last chosen', lastChosenAgentJob ? `${agentProductName(lastChosenAgentJob.product)}: ${lastChosenAgentJob.detail}` : 'Nothing chosen yet', lastChosenAgentJob ? `Captured ${formatTime(lastChosenAgentJob.createdAt)}.` : 'Click a recommended agent job to teach the next handoff.'],
   ] as const
   const learningRows = [
@@ -399,6 +385,7 @@ export function SettingsPage() {
       accountableActions: actions.length,
     },
     productSourceMap: aiProductSourceMap,
+    behaviorPreference,
     allowedUses: ['rank_next_actions', 'draft_internal_recommendations', 'prepare_import_mapping', 'summarize_workspace_evidence'],
     forbiddenActions: ['customer_message_send', 'payment_capture', 'domain_deploy', 'production_write', 'training_without_owner_approval'],
     activationRequired: !runtime.writesReady || !evidencePlanReady,
@@ -521,6 +508,7 @@ export function SettingsPage() {
     localRecords: localRecordCount,
     approvalPackets: managedApprovalRequests.length || approvals.length,
     behaviorSignals: behaviorSignalCount,
+    behaviorPreference,
     launchPackManifest,
     productSourceMap: aiProductSourceMap,
     contextHandoffManifest,
@@ -606,7 +594,10 @@ export function SettingsPage() {
       decisionPackets: managedApprovalRequests.length || approvals.length,
     },
     ownerBehavior: {
-      topRecommendedJob: topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.job}` : null,
+      contract: behaviorPreference.contract,
+      preferred: behaviorPreference.preferred,
+      latest: behaviorPreference.latest,
+      topRecommendedJob: topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.detail}` : null,
       lastChosenJob: lastChosenAgentJob ? `${agentProductName(lastChosenAgentJob.product)}: ${lastChosenAgentJob.detail}` : null,
     },
     readiness: {
@@ -628,7 +619,7 @@ export function SettingsPage() {
   }
   const aiMemoryRows = [
     ['Sources', aiMemorySourceRecordCount ? `${aiMemorySourceRecordCount} prepared` : 'Start using a product', aiMemorySourceRecordCount ? `${selectedProduct.name} and shared local evidence are summarized without raw records.` : 'Create or import product evidence to teach the operator.'],
-    ['Behavior', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} signals` : 'No pattern yet', topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.job}` : 'Choose a recommended product action to start owner preference memory.'],
+    ['Behavior', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} signals` : 'No pattern yet', topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.detail}` : 'Choose a recommended product action to start owner preference memory.'],
     ['Decisions', managedApprovalRequests.length || approvals.length ? `${managedApprovalRequests.length || approvals.length} reviewed` : 'Needs one review', 'Only accountable owner decisions can become reusable premium context.'],
     ['Readiness', `${aiMemoryReadinessScore}%`, aiMemoryNextMove],
   ] as const
@@ -640,7 +631,7 @@ export function SettingsPage() {
       setup.targetOutcome ? `Target: ${setup.targetOutcome}` : '',
     ].filter(Boolean).join('\n'),
   }
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 23, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 23, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, behaviorPreference, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
   const ecommerceOrderQueueReadinessFilename = ecommerceOrderQueueReadinessPacket
     ? `supermega-ecommerce-order-queue-${safePacketFilename(ecommerceOrderQueueReadinessPacket.storeName)}.json`
