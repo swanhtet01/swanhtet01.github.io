@@ -968,6 +968,9 @@ requireContract('Ally CEO execution uses one exact local-company run and no exte
   && allyCeoLocalCycleText.includes('`[ALLY_CEO_OUTCOME:${period}:${outcomeId}]`')
   && allyCeoLocalCycleText.includes('`[ALLY_CEO_REPAIR:${period}:${outcomeId}:${shortHash}]`')
   && allyCeoLocalCycleText.includes("status: 'period_complete'")
+  && allyCeoLocalCycleText.includes("status: 'period_incomplete'")
+  && allyCeoLocalCycleText.includes('const rejectedOutcomes = []')
+  && allyCeoLocalCycleText.includes('reason: inspection.reason || `queue_${existing.status}`')
   && allyCeoLocalCycleText.includes('ally_ceo_local_cycle_rotation_sequence_invalid')
   && allyCeoLocalCycleText.includes('ally_ceo_local_cycle_rotation_completion_invalid')
   && allyCeoLocalCycleText.includes("!/\\sp=100\\s/.test(line)")
@@ -1058,7 +1061,14 @@ requireContract('current CEO platform evidence is recorded without expanding aut
   && workboard.includes('Checkpoint `e8a3adb` adds `supermega.platform-status.v1`')
   && workboard.includes('All 289 Kernel tests, 69 connectors across 993 adversarial calls, 15 crews across 214 checks, plus the complete app gate with 69 release and 70 security checks pass')
   && now.includes('CEO status is output-free across weekly briefs')
-  && now.includes('with no process stops; zero models remain and dispatch stays blocked on memory pressure'))
+  && now.includes('without process stops, restoring one-run admission at 83.7% RAM'))
+
+requireContract('rejected CEO outcomes are quarantined without repair loops or hidden completion',
+  workboard.includes('| OPS-079 | CEO + Agent Efficiency Codex | done-local |')
+  && workboard.includes('Checkpoint `6e567181` separates accepted outcomes from terminal rejected attempts')
+  && workboard.includes('closes the UTC day as `period_incomplete`')
+  && workboard.includes('produced zero model calls, queue writes, connectors, or loaded models')
+  && now.includes('CEO replay accepted two outcomes, quarantined three'))
 
 requireContract('current company-operations evidence is recorded without adding runtime capacity',
   workboard.includes('| OPS-040 | CEO + Agent Operations / Evidence Quality Codex | done-local |')
