@@ -3,7 +3,7 @@
 // draft→approve→act gate stays on those. Each tool: { description, input_schema, available, run }.
 import store from './store.mjs'
 import { ownerEvidenceConfigured, readOwnerEvidence } from './owner-evidence.mjs'
-import { MAX_CYCLE_AGENTS, MAX_CYCLE_ROLE_BUDGET, MAX_REGISTERED_COMPANY_AGENTS } from './agent-company.mjs'
+import { MAX_ACTIVE_COMPANY_ASSIGNMENTS, MAX_CYCLE_AGENTS, MAX_CYCLE_ROLE_BUDGET, MAX_REGISTERED_COMPANY_AGENTS } from './agent-company.mjs'
 
 const PLATFORM_STATUS_CONTRACT = 'supermega.platform-status.v1'
 const COMPANY_OPERATIONS_STATUS_CONTRACT = 'supermega.company-operations-status.v1'
@@ -141,7 +141,7 @@ function operationsUnavailable(windowDays) {
     attention: { overduePlanned: 0, overdueRunning: 0, failedOrBlocked: 0, revisionRequired: 0, missingEvaluation: 0, deliveryFailed: 0, deliveryUncertain: 0, deliveryMissing: 0 },
     attentionQueue: { state: 'unavailable', requiredActions: 0, signals: 0 },
     targets: { met: 0, atRisk: 0, collecting: 0 },
-    workforce: { availableAgents: MAX_REGISTERED_COMPANY_AGENTS, utilizedAgents: 0, dormantAgents: MAX_REGISTERED_COMPANY_AGENTS, totalAssignments: 0, activeAssignments: 0, queuedAssignments: 0, runningAssignments: 0, usedRoleCalls: 0, modelCalls: 0, cacheHits: 0, weightedTotalUnits: 0 },
+    workforce: { registeredAgents: MAX_REGISTERED_COMPANY_AGENTS, availableAgents: MAX_REGISTERED_COMPANY_AGENTS, historicalAgents: 0, utilizedAgents: 0, activeAgents: 0, queuedAgents: 0, runningAgents: 0, computeConsumingAgents: 0, registeredAgentsConsumeCompute: false, activationMode: 'demand_driven', dormantAgents: MAX_REGISTERED_COMPANY_AGENTS, totalAssignments: 0, activeAssignments: 0, queuedAssignments: 0, runningAssignments: 0, usedRoleCalls: 0, modelCalls: 0, cacheHits: 0, weightedTotalUnits: 0 },
     outcomes: { available: false, durable: false, state: 'unavailable', completed: 0, evaluated: 0, accepted: 0, revisionRequired: 0, efficiencyAvailable: false, acceptedPer1000WorkUnits: null },
     delivery: { available: false, durable: false, state: 'unavailable', completed: 0, recorded: 0, sent: 0, failed: 0, uncertain: 0, missing: 0 },
     actions: { available: false, durable: false, state: 'unavailable', accepted: 0, proposed: 0, missing: 0 },
@@ -177,7 +177,13 @@ export function companyOperationsStatusView(report, requestedWindowDays = 30) {
       collecting: targets.filter((target) => target.state === 'collecting').length,
     } : { met: 0, atRisk: 0, collecting: 0 }
   const availableAgents = report.workforce?.availableAgents === MAX_REGISTERED_COMPANY_AGENTS ? MAX_REGISTERED_COMPANY_AGENTS : 0
+  const registeredAgents = report.workforce?.registeredAgents === MAX_REGISTERED_COMPANY_AGENTS ? MAX_REGISTERED_COMPANY_AGENTS : 0
+  const historicalAgents = exactCount(report.workforce?.historicalAgents, MAX_REGISTERED_COMPANY_AGENTS)
   const utilizedAgents = exactCount(report.workforce?.utilizedAgents, MAX_REGISTERED_COMPANY_AGENTS)
+  const activeAgents = exactCount(report.workforce?.activeAgents, MAX_ACTIVE_COMPANY_ASSIGNMENTS)
+  const queuedAgents = exactCount(report.workforce?.queuedAgents, MAX_ACTIVE_COMPANY_ASSIGNMENTS)
+  const runningAgents = exactCount(report.workforce?.runningAgents, MAX_ACTIVE_COMPANY_ASSIGNMENTS)
+  const computeConsumingAgents = exactCount(report.workforce?.computeConsumingAgents, MAX_ACTIVE_COMPANY_ASSIGNMENTS)
   const totalAssignments = exactCount(report.workforce?.totalAssignments)
   const activeAssignments = exactCount(report.workforce?.activeAssignments)
   const dormantAgents = exactCount(report.workforce?.dormantAgents, MAX_REGISTERED_COMPANY_AGENTS)
@@ -187,13 +193,27 @@ export function companyOperationsStatusView(report, requestedWindowDays = 30) {
   const modelCalls = exactCount(report.workforce?.modelCalls)
   const cacheHits = exactCount(report.workforce?.cacheHits)
   const weightedTotalUnits = exactCount(report.workforce?.weightedTotalUnits, 1_000_000_000)
-  const workforceValid = availableAgents === MAX_REGISTERED_COMPANY_AGENTS
+  const workforceValid = registeredAgents === MAX_REGISTERED_COMPANY_AGENTS
+    && availableAgents === registeredAgents
+    && historicalAgents === report.workforce?.historicalAgents
+    && historicalAgents === utilizedAgents
     && utilizedAgents <= availableAgents
+    && activeAgents === report.workforce?.activeAgents
+    && activeAgents <= historicalAgents
+    && queuedAgents === report.workforce?.queuedAgents
+    && runningAgents === report.workforce?.runningAgents
+    && queuedAgents <= activeAgents
+    && runningAgents <= activeAgents
+    && computeConsumingAgents === report.workforce?.computeConsumingAgents
+    && computeConsumingAgents === runningAgents
+    && report.workforce?.registeredAgentsConsumeCompute === false
+    && report.workforce?.activationMode === 'demand_driven'
     && totalAssignments === report.workforce?.totalAssignments
     && activeAssignments === report.workforce?.activeAssignments
     && activeAssignments <= totalAssignments
+    && activeAssignments <= MAX_ACTIVE_COMPANY_ASSIGNMENTS
     && dormantAgents === report.workforce?.dormantAgents
-    && dormantAgents <= availableAgents
+    && dormantAgents === availableAgents - activeAgents
     && queuedAssignments === report.workforce?.queuedAssignments
     && runningAssignments === report.workforce?.runningAssignments
     && queuedAssignments + runningAssignments === activeAssignments
@@ -290,8 +310,16 @@ export function companyOperationsStatusView(report, requestedWindowDays = 30) {
     },
     targets: targetSummary,
     workforce: {
+      registeredAgents: workforceValid ? registeredAgents : 0,
       availableAgents,
+      historicalAgents: workforceValid ? historicalAgents : 0,
       utilizedAgents: workforceValid ? utilizedAgents : 0,
+      activeAgents: workforceValid ? activeAgents : 0,
+      queuedAgents: workforceValid ? queuedAgents : 0,
+      runningAgents: workforceValid ? runningAgents : 0,
+      computeConsumingAgents: workforceValid ? computeConsumingAgents : 0,
+      registeredAgentsConsumeCompute: false,
+      activationMode: 'demand_driven',
       dormantAgents: workforceValid ? dormantAgents : 0,
       totalAssignments: workforceValid ? totalAssignments : 0,
       activeAssignments: workforceValid ? activeAssignments : 0,

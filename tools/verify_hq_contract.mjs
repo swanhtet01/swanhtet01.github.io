@@ -97,7 +97,7 @@ const ceoOperationsEvidence = companyOperationsStatusView({
   counts: { total: 5, planned: 0, running: 0, cancelled: 0, terminal: 5, completed: 5, partial: 0, blocked: 0, failed: 0, evaluated: 5, accepted: 5, revisionRequired: 0, missingEvaluation: 0 },
   attention: { overduePlanned: 0, overdueRunning: 0, failedOrBlocked: 0, revisionRequired: 0, missingEvaluation: 0, deliveryFailed: 0, deliveryUncertain: 0, deliveryMissing: 0 },
   targets: Array.from({ length: 8 }, () => ({ state: 'met' })),
-  workforce: { availableAgents: 12, utilizedAgents: 2, dormantAgents: 12, totalAssignments: 5, activeAssignments: 0, queuedAssignments: 0, runningAssignments: 0, usedRoleCalls: 15, modelCalls: 3, cacheHits: 2, weightedTotalUnits: 1200, agents: [{ agentId: 'must-not-escape' }] },
+  workforce: { registeredAgents: 12, availableAgents: 12, historicalAgents: 2, utilizedAgents: 2, activeAgents: 0, queuedAgents: 0, runningAgents: 0, computeConsumingAgents: 0, registeredAgentsConsumeCompute: false, activationMode: 'demand_driven', dormantAgents: 12, totalAssignments: 5, activeAssignments: 0, queuedAssignments: 0, runningAssignments: 0, usedRoleCalls: 15, modelCalls: 3, cacheHits: 2, weightedTotalUnits: 1200, agents: [{ agentId: 'must-not-escape' }] },
   outcomes: { available: true, durable: true, state: 'measured', counts: { completed: 5, evaluated: 5, accepted: 5, revisionRequired: 0 }, efficiency: { available: true, acceptedOutcomesPer1000WorkUnits: 4.166667 }, delivery: { available: true, durable: true, state: 'ready', counts: { completed: 5, recorded: 5, sent: 5, failed: 0, uncertain: 0, missing: 0 }, records: [{ deliveryId: 'must-not-escape-delivery' }] }, actions: { available: true, durable: true, state: 'ready', counts: { accepted: 5, proposed: 5, missing: 0 }, items: [{ actionId: 'must-not-escape-action', title: 'must-not-escape-action-content' }] }, records: [{ output: 'must-not-escape' }] },
   coverage: { directCyclesExcluded: true },
   exposure: { rawEvidenceReturned: false, modelOutputReturned: false, specialistOutputReturned: false, providerRowsReturned: false, ceoDeliveryContentReturned: false },
@@ -320,7 +320,12 @@ requireContract('CEO company-operations evidence is measured, bounded, and outpu
   && ceoOperationsEvidence.status === 'ready'
   && ceoOperationsEvidence.counts?.accepted === 5
   && ceoOperationsEvidence.workforce?.availableAgents === 12
+  && ceoOperationsEvidence.workforce?.registeredAgents === 12
+  && ceoOperationsEvidence.workforce?.historicalAgents === 2
   && ceoOperationsEvidence.workforce?.utilizedAgents === 2
+  && ceoOperationsEvidence.workforce?.computeConsumingAgents === 0
+  && ceoOperationsEvidence.workforce?.registeredAgentsConsumeCompute === false
+  && ceoOperationsEvidence.workforce?.activationMode === 'demand_driven'
   && ceoOperationsEvidence.outcomes?.durable === true
   && ceoOperationsEvidence.outcomes?.efficiencyAvailable === true
   && ceoOperationsEvidence.delivery?.durable === true

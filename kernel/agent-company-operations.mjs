@@ -1369,10 +1369,21 @@ function buildWorkforce(orders) {
       completionRate: rate(agent.completedAssignments, agent.terminalAssignments),
     }))
     .sort((left, right) => right.assignedOrders - left.assignedOrders || left.name.localeCompare(right.name))
+  const activeAgents = utilized.filter((agent) => agent.activeAssignments > 0).length
+  const queuedAgents = utilized.filter((agent) => agent.queuedAssignments > 0).length
+  const runningAgents = utilized.filter((agent) => agent.runningAssignments > 0).length
   return {
+    registeredAgents: catalog.length,
     availableAgents: catalog.length,
+    historicalAgents: utilized.length,
     utilizedAgents: utilized.length,
-    dormantAgents: catalog.length - utilized.filter((agent) => agent.activeAssignments > 0).length,
+    activeAgents,
+    queuedAgents,
+    runningAgents,
+    computeConsumingAgents: runningAgents,
+    registeredAgentsConsumeCompute: false,
+    activationMode: 'demand_driven',
+    dormantAgents: catalog.length - activeAgents,
     totalAssignments: utilized.reduce((total, agent) => total + agent.assignedOrders, 0),
     activeAssignments: utilized.reduce((total, agent) => total + agent.activeAssignments, 0),
     queuedAssignments: utilized.reduce((total, agent) => total + agent.queuedAssignments, 0),

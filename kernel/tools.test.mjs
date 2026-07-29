@@ -128,7 +128,7 @@ test('company operations status exposes measured control metadata and strips wor
     counts: { total: 5, planned: 0, running: 0, cancelled: 0, terminal: 5, completed: 5, partial: 0, blocked: 0, failed: 0, evaluated: 5, accepted: 5, revisionRequired: 0, missingEvaluation: 0 },
     attention: { overduePlanned: 0, overdueRunning: 0, failedOrBlocked: 0, revisionRequired: 0, missingEvaluation: 0, deliveryFailed: 0, deliveryUncertain: 0, deliveryMissing: 0 },
     targets: Array.from({ length: 8 }, (_, index) => ({ id: `private-target-${index}`, state: 'met' })),
-    workforce: { availableAgents: 12, utilizedAgents: 2, dormantAgents: 12, totalAssignments: 5, activeAssignments: 0, queuedAssignments: 0, runningAssignments: 0, usedRoleCalls: 15, modelCalls: 3, cacheHits: 2, weightedTotalUnits: 1200, agents: [{ agentId: 'must-not-escape-agent' }] },
+    workforce: { registeredAgents: 12, availableAgents: 12, historicalAgents: 2, utilizedAgents: 2, activeAgents: 0, queuedAgents: 0, runningAgents: 0, computeConsumingAgents: 0, registeredAgentsConsumeCompute: false, activationMode: 'demand_driven', dormantAgents: 12, totalAssignments: 5, activeAssignments: 0, queuedAssignments: 0, runningAssignments: 0, usedRoleCalls: 15, modelCalls: 3, cacheHits: 2, weightedTotalUnits: 1200, agents: [{ agentId: 'must-not-escape-agent' }] },
     outcomes: {
       available: true,
       durable: true,
@@ -160,7 +160,12 @@ test('company operations status exposes measured control metadata and strips wor
   assert.equal(ready.status, 'ready')
   assert.deepEqual(ready.targets, { met: 8, atRisk: 0, collecting: 0 })
   assert.equal(ready.workforce.availableAgents, 12)
+  assert.equal(ready.workforce.registeredAgents, 12)
+  assert.equal(ready.workforce.historicalAgents, 2)
   assert.equal(ready.workforce.utilizedAgents, 2)
+  assert.equal(ready.workforce.computeConsumingAgents, 0)
+  assert.equal(ready.workforce.registeredAgentsConsumeCompute, false)
+  assert.equal(ready.workforce.activationMode, 'demand_driven')
   assert.equal(ready.outcomes.efficiencyAvailable, true)
   assert.equal(ready.delivery.state, 'ready')
   assert.equal(ready.delivery.sent, 5)
@@ -214,8 +219,16 @@ test('company operations status exposes measured control metadata and strips wor
   assert.equal(malformed.status, 'attention')
   assert.equal(malformed.generatedAt, null)
   assert.equal(malformed.workforce.availableAgents, 0)
+  assert.equal(malformed.workforce.registeredAgents, 0)
   assert.equal(malformed.workforce.utilizedAgents, 0)
   assert.equal(malformed.controls.metadataOnly, false)
+
+  const inventedCompute = companyOperationsStatusView({
+    ...report,
+    workforce: { ...report.workforce, computeConsumingAgents: 1 },
+  }, 30)
+  assert.equal(inventedCompute.status, 'attention')
+  assert.equal(inventedCompute.workforce.computeConsumingAgents, 0)
 
   const inconsistent = companyOperationsStatusView({
     ...report,
@@ -229,6 +242,7 @@ test('company operations status exposes measured control metadata and strips wor
   assert.equal(unavailable.status, 'unavailable')
   assert.equal(unavailable.windowDays, 90)
   assert.equal(unavailable.workforce.availableAgents, 12)
+  assert.equal(unavailable.workforce.registeredAgents, 12)
   assert.doesNotMatch(JSON.stringify(unavailable), /must-not-escape|"clientId"|"agentId"|"briefText"/i)
 })
 
