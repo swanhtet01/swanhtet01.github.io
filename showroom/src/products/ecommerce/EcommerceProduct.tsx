@@ -1430,6 +1430,65 @@ export function EcommerceProduct() {
       : !savedDraftIsCurrent
         ? null
       : { label: 'Open storefront', to: '#ecommerce-preview-panel' }
+  const orderAutopilotStage = importNeeded
+    ? 'Connect products'
+    : !savedDraftIsCurrent
+      ? 'Save storefront'
+      : orderImportReview?.status === 'ready'
+        ? 'Package order batch'
+        : orderImportReview?.status === 'blocked'
+          ? 'Repair order batch'
+          : pendingManagedRequests.length
+            ? 'Open Shop review'
+            : buyingReady
+              ? 'Ready for customer orders'
+              : 'Check setup'
+  const orderAutopilotNextAction = importNeeded
+    ? 'Open import setup'
+    : !savedDraftIsCurrent
+      ? 'Save the customer-facing storefront'
+      : orderImportReview?.status === 'ready'
+        ? 'Download the owner-reviewed order packet'
+        : orderImportReview?.status === 'blocked'
+          ? 'Fix CSV rows before handoff'
+          : pendingManagedRequests.length
+            ? 'Open the accountable Shop queue'
+            : buyingReady
+              ? 'Prepare a quote or wait for channel orders'
+              : 'Review catalog, storefront, and checkout'
+  const orderAutopilotRows = [
+    ['Track', pendingManagedRequests.length ? 'Shop queue' : orderImportReview ? 'Order import' : 'Store setup'],
+    ['Stage', orderAutopilotStage],
+    ['Next', orderAutopilotNextAction],
+    ['Learning', 'Records behavior only'],
+    ['Boundary', 'No auto write'],
+  ] as const
+
+  function runOrderAutopilot() {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'ecommerce',
+      route: location.pathname + location.search,
+      detail: `Order autopilot: ${orderAutopilotStage}`,
+    })
+    if (importNeeded) {
+      navigate('/settings/?product=ecommerce')
+      return
+    }
+    if (!savedDraftIsCurrent) {
+      finishStorefrontSetup()
+      return
+    }
+    if (orderImportReview?.status === 'ready') {
+      downloadOrderImportReviewPacket()
+      return
+    }
+    if (pendingManagedRequests.length) {
+      navigate('/shop/?tab=orders&source=ecommerce')
+      return
+    }
+    prepareQuoteRecovery()
+  }
 
   useEffect(() => {
     recordBehaviorSignal(window.localStorage, {
@@ -1489,6 +1548,18 @@ export function EcommerceProduct() {
               recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'ecommerce', route: location.pathname + location.search, detail: aiAgentJob })
               finishStorefrontSetup()
             }} type="button">Finish setup</button>}
+      </section>
+
+      <section aria-label="Order Autopilot" className="ecommerce-order-command-center">
+        <div>
+          <span className="core-eyebrow">Order Autopilot</span>
+          <h2>{orderAutopilotStage}</h2>
+          <p>One button chooses the next safe owner action from catalog, storefront, order import, checkout, and Shop queue state. AI may prepare packets and drafts; it does not send customer messages, charge payments, book delivery, move stock, or write Shop orders here.</p>
+        </div>
+        <div className="ecommerce-order-command-center-rows">
+          {orderAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+        <button className="core-button primary compact" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">Run next step</button>
       </section>
 
       <section aria-label="Order import autopilot" className="ecommerce-ops-cockpit ecommerce-order-import-cockpit">

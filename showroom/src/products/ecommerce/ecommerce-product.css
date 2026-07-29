@@ -161,6 +161,75 @@
   overflow-wrap: anywhere;
 }
 
+.ecommerce-order-command-center {
+  display: grid;
+  grid-template-columns: minmax(0, .95fr) minmax(320px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+  border: 1px solid rgba(13, 95, 76, .2);
+  border-radius: 10px;
+  padding: 12px;
+  background: #f3fbf7;
+}
+
+.ecommerce-order-command-center h2 {
+  margin: 0;
+  color: #17231d;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.ecommerce-order-command-center p {
+  margin: 3px 0 0;
+  color: #607268;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ecommerce-order-command-center-rows {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid rgba(13, 95, 76, .12);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.ecommerce-order-command-center-rows span {
+  min-width: 0;
+  min-height: 48px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  border-right: 1px solid rgba(13, 95, 76, .1);
+  padding: 7px 8px;
+}
+
+.ecommerce-order-command-center-rows span:last-child {
+  border-right: 0;
+}
+
+.ecommerce-order-command-center-rows small {
+  overflow: hidden;
+  color: #607268;
+  font-size: 8px;
+  font-weight: 780;
+  letter-spacing: .04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ecommerce-order-command-center-rows strong {
+  overflow: hidden;
+  color: #17231d;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ecommerce-ops-cockpit {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, .95fr);
@@ -403,6 +472,10 @@
     grid-template-columns: 1fr;
   }
 
+  .ecommerce-order-command-center {
+    grid-template-columns: 1fr;
+  }
+
   .ecommerce-ops-cockpit-rows {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -416,6 +489,25 @@
 
   .ecommerce-ops-cockpit-rows {
     grid-template-columns: 1fr;
+  }
+
+  .ecommerce-order-command-center-rows {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ecommerce-order-command-center-rows span {
+    border-right: 1px solid rgba(13, 95, 76, .1);
+    border-bottom: 1px solid rgba(13, 95, 76, .1);
+  }
+
+  .ecommerce-order-command-center-rows span:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .ecommerce-order-command-center-rows span:last-child {
+    grid-column: 1 / -1;
+    border-right: 0;
+    border-bottom: 0;
   }
 }
 
