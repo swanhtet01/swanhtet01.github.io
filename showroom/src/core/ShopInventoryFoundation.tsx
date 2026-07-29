@@ -62,6 +62,7 @@ type TransferReview = {
 type ProductionReceiptReview = {
   receipt: CommerceProductionBatchReceipt
   proof: ShopInventoryProof
+  sourceProduct: string
   locationId: string
   expectedItemOnHand: number
   expectedInventoryHeadDigest: string | null
@@ -86,13 +87,15 @@ function actionProof(actor: string, label: string): ShopInventoryProof {
   }
 }
 
-function productionReceiptProof(actor: string, receipt: CommerceProductionBatchReceipt, locationId: string): ShopInventoryProof {
+function productionReceiptProof(actor: string, receipt: CommerceProductionBatchReceipt, sourceProduct: string, locationId: string): ShopInventoryProof {
   const actionId = commandId('ACT')
+  const productLabel = sourceProduct.trim().slice(0, 48)
+  const skuLabel = receipt.sku.trim().slice(0, 48)
   return {
     actionId,
     capturedAt: new Date().toISOString(),
     actor: actor.trim() || 'Local Shop operator',
-    reason: `Confirm released Plant batch ${receipt.outputBatchId} into Shop.`,
+    reason: `Map Plant “${productLabel}” to Shop “${skuLabel}” and receive the released batch.`,
     evidenceReference: `PLANT-BATCH:${receipt.releaseId}:${receipt.sourceCommandDigest}:${locationId}`,
   }
 }
@@ -114,6 +117,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
   const [transferDraft, setTransferDraft] = useState({ balanceKey: '', quantity: '1' })
   const [transferReview, setTransferReview] = useState<TransferReview | null>(null)
   const [productionReceiptReview, setProductionReceiptReview] = useState<ProductionReceiptReview | null>(null)
+  const [productionItemMapping, setProductionItemMapping] = useState<{ releaseId: string; sku: string } | null>(null)
 
   const projection = useMemo(
     () => projectShopInventory(state, catalogSkus),
@@ -179,21 +183,23 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     ? commerce.movements.find((movement) => movement.kind === 'production_receipt' && movement.productionReleaseId === releasedPlantBatch.releaseId)
     : undefined
   const normalizedPlantProduct = releasedPlantBatch?.product.trim().toLocaleLowerCase() ?? ''
-  const plantCatalogMatches = releasedPlantBatch
+  const exactPlantCatalogMatches = releasedPlantBatch
     ? catalog.filter((item) => [item.sku, item.name].some((value) => value.trim().toLocaleLowerCase() === normalizedPlantProduct))
     : []
-  const plantCatalogItem = plantCatalogMatches.length === 1 ? plantCatalogMatches[0] : undefined
+  const selectedProductionSku = productionItemMapping && productionItemMapping.releaseId === releasedPlantBatch?.releaseId ? productionItemMapping.sku : ''
+  const plantCatalogItem = exactPlantCatalogMatches.length === 1
+    ? exactPlantCatalogMatches[0]
+    : catalog.find((item) => item.sku === selectedProductionSku)
+  const productionMappingRequired = Boolean(releasedPlantBatch && exactPlantCatalogMatches.length !== 1)
   const plantReceiptLocationId = state.revision
     ? projection.locations.find((location) => location.id === 'LOC-MAIN')?.id ?? projection.locations[0]?.id ?? ''
     : 'LOC-MAIN'
   const plantReceiptIssue = releasedPlantBatch && !receivedPlantMovement
-    ? plantCatalogMatches.length === 0
-      ? `Released Plant product “${releasedPlantBatch.product}” is not mapped to one Shop catalog item.`
-      : plantCatalogMatches.length > 1
-        ? `Released Plant product “${releasedPlantBatch.product}” matches more than one Shop item.`
-        : !plantReceiptLocationId
-          ? 'Released Plant stock needs one active Shop location.'
-          : ''
+    ? !catalog.length
+      ? 'Add at least one Shop catalog item before receiving Plant output.'
+      : !plantReceiptLocationId
+        ? 'Released Plant stock needs one active Shop location.'
+        : ''
     : ''
 
   function reviewProductionReceipt() {
@@ -210,7 +216,8 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     setError('')
     setProductionReceiptReview({
       receipt,
-      proof: productionReceiptProof(actor, receipt, plantReceiptLocationId),
+      proof: productionReceiptProof(actor, receipt, releasedPlantBatch.product, plantReceiptLocationId),
+      sourceProduct: releasedPlantBatch.product,
       locationId: plantReceiptLocationId,
       expectedItemOnHand: plantCatalogItem.onHand,
       expectedInventoryHeadDigest: commerce.inventoryFoundation?.headDigest ?? null,
@@ -224,7 +231,8 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     if (!plantProjection
       || plantProjection.status !== 'released_to_stock'
       || plantProjection.headDigest !== productionReceiptReview.expectedProductionHeadDigest
-      || plantProjection.batchRelease?.id !== productionReceiptReview.receipt.releaseId) {
+      || plantProjection.batchRelease?.id !== productionReceiptReview.receipt.releaseId
+      || plantProjection.plan?.job.product !== productionReceiptReview.sourceProduct) {
       setProductionReceiptReview(null)
       setError('The Plant release changed. Review the current released batch again.')
       return
@@ -386,9 +394,10 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
 
   return <>{releasedPlantBatch ? <section aria-labelledby="plant-receipt-title" className="catalog-onboarding-bridge">
     <div><span className="core-eyebrow">Released from Plant</span><h3 id="plant-receipt-title">{receivedPlantMovement ? 'Batch received' : releasedPlantBatch.product}</h3><p>{releasedPlantBatch.quantity.toLocaleString()} accepted units · batch {releasedPlantBatch.outputBatchId}{plantCatalogItem ? ` · ${plantCatalogItem.name}` : ''}</p></div>
-    {receivedPlantMovement ? <span className="status-badge success">In Shop stock</span> : plantReceiptIssue ? null : <button className="core-button primary" disabled={disabled || busy} onClick={productionReceiptReview ? () => void confirmProductionReceipt() : reviewProductionReceipt} type="button">{productionReceiptReview ? busy ? 'Receiving…' : 'Confirm into Shop' : 'Review Plant receipt'}</button>}
+    {!receivedPlantMovement && productionMappingRequired ? <label>Receive as Shop item<select aria-label="Map released Plant product to Shop item" disabled={disabled || busy || Boolean(productionReceiptReview)} onChange={(event) => { setProductionItemMapping({ releaseId: releasedPlantBatch.releaseId, sku: event.target.value }); setProductionReceiptReview(null) }} value={selectedProductionSku}><option value="">Choose one item</option>{catalog.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.sku}</option>)}</select><small>This reviewed choice is retained in the stock receipt evidence.</small></label> : null}
+    {receivedPlantMovement ? <span className="status-badge success">In Shop stock</span> : plantReceiptIssue || !plantCatalogItem ? null : <button className="core-button primary" disabled={disabled || busy} onClick={productionReceiptReview ? () => void confirmProductionReceipt() : reviewProductionReceipt} type="button">{productionReceiptReview ? busy ? 'Receiving…' : 'Confirm into Shop' : 'Review Plant receipt'}</button>}
     {productionReceiptReview && !receivedPlantMovement ? <div className="stock-receipt-preview" role="status"><small>{productionReceiptReview.receipt.sku} · {productionReceiptReview.locationId}</small><strong>{productionReceiptReview.receipt.quantity.toLocaleString()} units · lot {productionReceiptReview.receipt.outputBatchId}</strong></div> : null}
-    {plantReceiptIssue ? <p className="form-notice warning-text" role="alert">{plantReceiptIssue}</p> : null}
+    {plantReceiptIssue ? <p className="form-notice warning-text" role="alert">{plantReceiptIssue}</p> : productionMappingRequired && !plantCatalogItem ? <p className="form-notice" role="status">Choose the Shop item that represents this Plant product. SuperMega will not guess the mapping.</p> : null}
   </section> : null}<ShopProductionHandoff commerce={commerce} disabled={disabled} identity={identity} onIssue={onIssue} /><section aria-labelledby="location-stock-title" className="catalog-onboarding-bridge">
     <div aria-label="Inventory autopilot" className="inventory-autopilot">
       <div><span className="core-eyebrow">Inventory autopilot</span><strong>{state.revision ? inventoryDrift ? 'Reconcile stock truth' : 'Location stock is active' : 'Start location stock'}</strong><small>{inventoryAutopilotMessage}</small></div>
