@@ -25,7 +25,7 @@ import {
 } from '../kernel/gateway.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText, agentArchitectureText, agentGovernanceText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -61,6 +61,8 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'kernel', 'gateway.test.mjs'), 'utf8'),
   readFile(resolve(root, 'kernel', 'console', 'api.mjs'), 'utf8'),
   readFile(resolve(root, 'kernel', 'README.md'), 'utf8'),
+  readFile(resolve(root, 'agent_os', 'agent_os_architecture.md'), 'utf8'),
+  readFile(resolve(root, 'supermega_runtime', 'agent_governance.py'), 'utf8'),
 ])
 const enterpriseRoadmap = await readFile(resolve(root, 'hq', 'research', 'enterprise-product-roadmap-2026-07-28.md'), 'utf8')
 
@@ -76,6 +78,11 @@ const workboardExecutionOrder = workboard.includes(executionOrderMarker)
   : ''
 const kernelRoster = listCompanyAgents()
 const kernelCrewCapabilities = kernelRoster.flatMap((agent) => [agent.crew, ...agent.capabilityCrews])
+const workforceDailyRuns = Object.values(workforce.runtime_policy?.job_daily_limits || {})
+  .reduce((total, value) => total + Number(value || 0), 0)
+const workforceDailyWorkUnits = Object.entries(workforce.runtime_policy?.job_daily_limits || {})
+  .reduce((total, [jobType, limit]) => total + Number(limit || 0) * Number(workforce.runtime_policy?.job_units?.[jobType] || 0), 0)
+const workforceInstructionText = JSON.stringify(workforce.instruction_packs || [])
 const ceoOutcomeSelection = selectCeoOutcome()
 const ceoPlatformEvidence = platformStatusView({
   ok: true,
@@ -243,6 +250,13 @@ requireContract('agent capacity agrees across HQ, coordinator, and Kernel',
   && workforce.runtime_policy?.local_duplicate_listener_blocks_dispatch === true
   && workforce.runtime_policy?.local_loaded_model_blocks_dispatch === true
   && workforce.runtime_policy?.max_batch_jobs === portfolio.agentOperatingModel?.batchJobLimit
+  && workforce.runtime_policy?.max_queued === 24
+  && workforce.runtime_policy?.max_daily_runs === workforceDailyRuns
+  && workforce.runtime_policy?.max_daily_work_units === workforceDailyWorkUnits
+  && workforceDailyRuns === 57
+  && workforceDailyWorkUnits === 83
+  && workforce.runtime_policy?.specialist_job_types?.join(',') === Object.keys(workforce.runtime_policy?.job_units || {}).join(',')
+  && workforce.runtime_policy?.specialist_job_types?.join(',') === Object.keys(workforce.runtime_policy?.job_daily_limits || {}).join(',')
   && workforce.runtime_policy?.scale_to_zero === portfolio.agentOperatingModel?.scaleToZero
   && workforce.runtime_policy?.registered_specialists_consume_compute === portfolio.agentOperatingModel?.idleCapabilitiesConsumeCompute
   && workforce.build_teams?.map((entry) => entry.id).join(',') === portfolio.agentOperatingModel?.buildTeams?.join(',')
@@ -255,7 +269,15 @@ requireContract('agent capacity agrees across HQ, coordinator, and Kernel',
   && workforce.runtime_policy?.capacity_claim_ttl_seconds === COMPANY_CAPACITY_CLAIM_TTL_SECONDS
   && MAX_CYCLE_AGENTS === portfolio.agentOperatingModel?.maxAgentsPerCycle
   && kernelCrewCapabilities.length === portfolio.agentOperatingModel?.validatedCrewCapabilities
-  && new Set(kernelCrewCapabilities).size === kernelCrewCapabilities.length)
+  && new Set(kernelCrewCapabilities).size === kernelCrewCapabilities.length
+  && agentArchitectureText.includes('at most two assignments may run inside the single admitted company cycle')
+  && !/four unique (?:job families|active assignments)/i.test(agentArchitectureText)
+  && !/four unique active assignments/i.test(workforceInstructionText)
+  && agentGovernanceText.includes('AGENT_DAILY_RUN_LIMIT = sum(AGENT_JOB_DAILY_LIMITS.values())')
+  && agentGovernanceText.includes('AGENT_DAILY_WORK_UNIT_LIMIT = sum(')
+  && agentGovernanceText.includes('max_daily_runs=_bounded_environment_int(')
+  && agentGovernanceText.includes('AGENT_DAILY_RUN_LIMIT,\n            1,\n            AGENT_DAILY_RUN_LIMIT,')
+  && agentGovernanceText.includes('AGENT_DAILY_WORK_UNIT_LIMIT,\n            1,\n            AGENT_DAILY_WORK_UNIT_LIMIT,'))
 requireContract('CEO outcome authority is bounded and reconciled to HQ',
   SUPERMEGA_HQ_AUTHORITY.contract === portfolio.agentOperatingModel?.ceoOutcomeAuthority
   && SUPERMEGA_HQ_AUTHORITY.maxSelectedOutcomes === portfolio.agentOperatingModel?.maxOutcomesPerCeoCycle

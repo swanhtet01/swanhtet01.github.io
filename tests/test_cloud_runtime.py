@@ -39,9 +39,15 @@ from mark1_pilot.agent_governance import (
     AGENT_BUDGET_GRANT_CONTRACT,
     AGENT_CADENCE_ADMISSION_CONTRACT,
     AGENT_CAPACITY_PLAN_CONTRACT,
+    AGENT_DAILY_RUN_LIMIT,
+    AGENT_DAILY_WORK_UNIT_LIMIT,
     AGENT_JOB_CADENCE_SECONDS,
+    AGENT_JOB_DAILY_LIMITS,
     AGENT_JOB_MAX_ATTEMPTS,
     AGENT_JOB_PRIORITIES,
+    AGENT_JOB_UNITS,
+    AGENT_LEASE_LIMIT_SECONDS,
+    AGENT_QUEUE_LIMIT,
     AGENT_RETRY_POLICY_CONTRACT,
     AGENT_ROSTER_LIMIT,
     AgentGovernanceError,
@@ -716,6 +722,31 @@ class AgentGovernanceTests(unittest.TestCase):
                 load_agent_workforce_policy()
         self.assertEqual(roster_policy_error.exception.code, "agent_policy_invalid")
 
+        expanding_overrides = {
+            "SUPERMEGA_AGENT_MAX_QUEUED": AGENT_QUEUE_LIMIT + 1,
+            "SUPERMEGA_AGENT_MAX_DAILY_RUNS": AGENT_DAILY_RUN_LIMIT + 1,
+            "SUPERMEGA_AGENT_MAX_DAILY_UNITS": AGENT_DAILY_WORK_UNIT_LIMIT + 1,
+            "SUPERMEGA_AGENT_LEASE_SECONDS": AGENT_LEASE_LIMIT_SECONDS + 1,
+        }
+        for variable, value in expanding_overrides.items():
+            with self.subTest(variable=variable):
+                with patch.dict(os.environ, {variable: str(value)}):
+                    with self.assertRaises(AgentGovernanceError) as expansion_error:
+                        load_agent_workforce_policy()
+                self.assertEqual(expansion_error.exception.code, "agent_policy_invalid")
+
+        with patch.dict(os.environ, {
+            "SUPERMEGA_AGENT_MAX_QUEUED": "2",
+            "SUPERMEGA_AGENT_MAX_DAILY_RUNS": "8",
+            "SUPERMEGA_AGENT_MAX_DAILY_UNITS": "12",
+            "SUPERMEGA_AGENT_LEASE_SECONDS": "120",
+        }):
+            narrowed = load_agent_workforce_policy()
+        self.assertEqual(
+            (narrowed.max_queued, narrowed.max_daily_runs, narrowed.max_daily_units, narrowed.lease_seconds),
+            (2, 8, 12, 120),
+        )
+
     def test_roster_cap_rejects_agent_sprawl_and_valid_roster_scales_to_zero(self) -> None:
         workforce_path = Path(__file__).resolve().parents[1] / "agent_os" / "workforce" / "supermega_build_workforce.json"
         workforce = json.loads(workforce_path.read_text(encoding="utf-8"))
@@ -724,7 +755,12 @@ class AgentGovernanceTests(unittest.TestCase):
         self.assertEqual(runtime_policy["max_running"], policy.max_running)
         self.assertEqual(runtime_policy["max_batch_jobs"], policy.max_batch_jobs)
         self.assertEqual(runtime_policy["max_registered_specialists"], policy.max_registered_specialists)
+        self.assertEqual(runtime_policy["max_queued"], AGENT_QUEUE_LIMIT)
+        self.assertEqual(runtime_policy["max_daily_runs"], AGENT_DAILY_RUN_LIMIT)
+        self.assertEqual(runtime_policy["max_daily_work_units"], AGENT_DAILY_WORK_UNIT_LIMIT)
         self.assertEqual(runtime_policy["specialist_job_types"], list(policy.allowed_job_types))
+        self.assertEqual(runtime_policy["job_units"], AGENT_JOB_UNITS)
+        self.assertEqual(runtime_policy["job_daily_limits"], AGENT_JOB_DAILY_LIMITS)
         self.assertEqual(runtime_policy["job_priorities"], AGENT_JOB_PRIORITIES)
         self.assertEqual(runtime_policy["job_cadence_seconds"], AGENT_JOB_CADENCE_SECONDS)
         self.assertEqual(runtime_policy["cadence_admission_contract"], AGENT_CADENCE_ADMISSION_CONTRACT)
@@ -739,6 +775,10 @@ class AgentGovernanceTests(unittest.TestCase):
             AgentWorkforcePolicy(max_running=AGENT_ACTIVE_ASSIGNMENT_LIMIT + 1),
             AgentWorkforcePolicy(max_batch_jobs=AGENT_ACTIVE_ASSIGNMENT_LIMIT + 1),
             AgentWorkforcePolicy(max_registered_specialists=AGENT_ROSTER_LIMIT + 1),
+            AgentWorkforcePolicy(max_queued=AGENT_QUEUE_LIMIT + 1),
+            AgentWorkforcePolicy(max_daily_runs=AGENT_DAILY_RUN_LIMIT + 1),
+            AgentWorkforcePolicy(max_daily_units=AGENT_DAILY_WORK_UNIT_LIMIT + 1),
+            AgentWorkforcePolicy(lease_seconds=AGENT_LEASE_LIMIT_SECONDS + 1),
         ):
             with self.subTest(unsafe_policy=unsafe_policy):
                 with self.assertRaises(AgentGovernanceError) as custom_policy_error:

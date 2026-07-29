@@ -22,12 +22,30 @@
     "local_loaded_model_blocks_dispatch": true,
     "max_queued": 24,
     "max_batch_jobs": 2,
-    "max_daily_runs": 64,
-    "max_daily_work_units": 96,
+    "max_daily_runs": 57,
+    "max_daily_work_units": 83,
     "in_flight_per_job": 1,
     "capacity_claim_contract": "supermega.agent-company-capacity-claims.v1",
     "capacity_claim_ttl_seconds": 120,
     "specialist_job_types": ["revenue_scout", "list_clerk", "task_triage", "template_clerk", "ops_watch", "founder_brief", "github_release_watch"],
+    "job_units": {
+      "revenue_scout": 3,
+      "list_clerk": 1,
+      "task_triage": 1,
+      "template_clerk": 2,
+      "ops_watch": 1,
+      "founder_brief": 3,
+      "github_release_watch": 2
+    },
+    "job_daily_limits": {
+      "revenue_scout": 6,
+      "list_clerk": 2,
+      "task_triage": 12,
+      "template_clerk": 6,
+      "ops_watch": 24,
+      "founder_brief": 1,
+      "github_release_watch": 6
+    },
     "dispatch_policy": "fixed_priority_then_work_unit_efficiency_then_fifo",
     "cadence_admission_contract": "supermega.agent-cadence-admission.v1",
     "retry_policy_contract": "supermega.agent-retry-policy.v1",
@@ -164,7 +182,7 @@
       "name": "Agent Capacity Pack",
       "audience": "All teams",
       "workspace": "/work/?team=engineering&view=agents",
-      "instructions": ["Registry records are dormant until work is queued.", "Keep at most twelve registered roles, four unique active assignments, and one in-flight run per job family.", "Pause stale work and require evidence before review."],
+      "instructions": ["Registry records are dormant until work is queued.", "Keep at most twelve registered roles, two active assignments in one company cycle, and one in-flight run per job family.", "Pause stale work and require evidence before review."],
       "done_when": "No idle execution is running and each active job has one owner, budget, lease, and acceptance target."
     },
     {
