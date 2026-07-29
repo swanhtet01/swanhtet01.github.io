@@ -169,12 +169,16 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerFiles === 30
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerBytes === 409600
   && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerFiles === 13
-  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 250926
+  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 251096
   && portfolio.agentOperatingModel?.companyOperationsDeferredForStartup === true
   && portfolio.agentOperatingModel?.optionalToolConnectorsDeferredForStartup === true
   && portfolio.agentOperatingModel?.fullPlatformStatusTeams?.join(',') === 'engineering,finance-risk'
   && portfolio.agentOperatingModel?.connectorFleetDeferredForDailyProductGrowth === true
   && portfolio.agentOperatingModel?.maxOutcomesPerCeoCycle === 1
+  && portfolio.agentOperatingModel?.productControlFocusContract === 'supermega.ally-ceo-product-focus.v1'
+  && portfolio.agentOperatingModel?.productControlStrategy === 'utc_day_round_robin'
+  && portfolio.agentOperatingModel?.productControlSpecialist === 'delivery-planner'
+  && portfolio.agentOperatingModel?.productControlAcceptanceDimensions?.join(',') === 'user_job,state_transition,data_contract,failure_recovery,mobile_acceptance,import_reconciliation,security_boundary,automated_test'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -983,6 +987,10 @@ requireContract('Ally company cycles are host-admitted and serial',
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
   && allyCeoPlannerText.includes("'daily-company-control': Object.freeze(['operations-analyst'])")
+  && allyCeoPlannerText.includes("'product-portfolio-control': Object.freeze(['delivery-planner'])")
+  && allyCeoPlannerText.includes("ALLY_CEO_PRODUCT_FOCUS_CONTRACT = 'supermega.ally-ceo-product-focus.v1'")
+  && allyCeoPlannerText.includes("selection: 'utc_day_round_robin'")
+  && allyCeoPlannerText.includes("'failure_recovery'")
   && allyCeoPlannerText.includes("registeredRoleLimit !== 12")
   && allyCeoPlannerText.includes("activeAssignmentLimit !== 2")
   && allyCeoPlannerText.includes("maxAgentsPerCycle !== 2")
@@ -1017,6 +1025,7 @@ requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect
 requireContract('Ally CEO execution uses one exact local-company run and no external action surface',
   allyCeoLocalCycleText.includes("ALLY_CEO_LOCAL_CYCLE_CONTRACT = 'supermega.ally-ceo-local-cycle.v1'")
   && allyCeoLocalCycleText.includes("'operations-analyst': 'operations'")
+  && allyCeoLocalCycleText.includes("'delivery-planner': 'product'")
   && allyCeoLocalCycleText.includes("'project-controller': 'chief-of-staff'")
   && allyCeoLocalCycleText.includes("ally_ceo_local_cycle_host_blocked")
   && allyCeoLocalCycleText.includes("ally_ceo_local_cycle_host_not_idle")
@@ -1033,8 +1042,8 @@ requireContract('Ally CEO execution uses one exact local-company run and no exte
   && allyCeoLocalCycleText.includes("ally_ceo_local_cycle_legacy_repair_requires_execution")
   && allyCeoLocalCycleText.includes("ally_ceo_local_cycle_legacy_repair_not_allowed")
   && allyCeoLocalCycleText.includes("ally_ceo_local_cycle_legacy_repair_not_available")
-  && allyCeoLocalCycleText.includes("EXECUTION_SPEC_VERSION = '2026-07-29.21'")
-  && allyCeoLocalCycleText.includes("LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])")
+  && allyCeoLocalCycleText.includes("EXECUTION_SPEC_VERSION = '2026-07-29.22'")
+  && allyCeoLocalCycleText.includes("LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])")
   && allyCeoLocalCycleText.includes("MEMORY_RECOVERY_BLOCKERS = Object.freeze(new Set(['memory_pressure_critical', 'codex_working_set_high']))")
   && allyCeoLocalCycleText.includes('ally_ceo_local_cycle_memory_recovery_invalid')
   && allyCeoLocalCycleText.includes("kind === 'trim'")

@@ -6,6 +6,7 @@ import { selectCeoOutcome } from './supermega-hq-authority.mjs'
 
 export const ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'
 export const ALLY_CEO_CYCLE_EXPERIMENT_CONTRACT = 'supermega.ally-ceo-cycle-experiment.v1'
+export const ALLY_CEO_PRODUCT_FOCUS_CONTRACT = 'supermega.ally-ceo-product-focus.v1'
 
 const MAX_SOURCE_BYTES = 256 * 1024
 const REQUIRED_PRODUCTS = ['shop', 'plant', 'website', 'ecommerce']
@@ -15,10 +16,21 @@ const SENSITIVE_VALUE_RE = /(?:-----BEGIN [A-Z ]+PRIVATE KEY-----|\b(?:sk-proj|g
 const OUTCOME_AGENTS = Object.freeze({
   'daily-company-control': Object.freeze(['operations-analyst']),
   'engineering-release-control': Object.freeze(['proof-builder']),
-  'product-portfolio-control': Object.freeze(['operations-analyst']),
+  'product-portfolio-control': Object.freeze(['delivery-planner']),
   'growth-pipeline-control': Object.freeze(['sales-qualifier']),
   'finance-risk-control': Object.freeze(['cash-reconciler']),
 })
+
+const PRODUCT_ACCEPTANCE_DIMENSIONS = Object.freeze([
+  'user_job',
+  'state_transition',
+  'data_contract',
+  'failure_recovery',
+  'mobile_acceptance',
+  'import_reconciliation',
+  'security_boundary',
+  'automated_test',
+])
 
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value)
 
@@ -103,6 +115,23 @@ function canonicalInstant(value) {
   const instant = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(instant.getTime())) fail('ally_ceo_company_plan_clock_invalid')
   return instant.toISOString()
+}
+
+function productFocusFor(portfolio, generatedAt, outcomeId) {
+  if (outcomeId !== 'product-portfolio-control') return null
+  const dayNumber = Math.floor(new Date(generatedAt).getTime() / 86_400_000)
+  const index = ((dayNumber % REQUIRED_PRODUCTS.length) + REQUIRED_PRODUCTS.length) % REQUIRED_PRODUCTS.length
+  const product = portfolio.products[index]
+  if (!product || product.id !== REQUIRED_PRODUCTS[index]) fail('ally_ceo_company_plan_product_focus_invalid')
+  return {
+    contract: ALLY_CEO_PRODUCT_FOCUS_CONTRACT,
+    selection: 'utc_day_round_robin',
+    productId: product.id,
+    status: product.status,
+    nextGate: product.nextGate,
+    lifecycle: ['discover', 'define', 'build', 'release', 'learn'],
+    acceptanceDimensions: [...PRODUCT_ACCEPTANCE_DIMENSIONS],
+  }
 }
 
 function assertSafePlan(plan, expectedAgents) {
@@ -192,6 +221,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
 
   const agents = OUTCOME_AGENTS[selection.selected.id]
   if (!agents || agents.length !== 1) fail('ally_ceo_company_plan_outcome_unmapped')
+  const productFocus = productFocusFor(portfolio, generatedAt, selection.selected.id)
   const currentState = [
     markdownSection(hqNow, 'North-star outcome'),
     markdownSection(hqNow, 'Portfolio correction'),
@@ -226,6 +256,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
       successMeasure: selection.selected.successMeasure,
       currentState,
       portfolio,
+      ...(productFocus ? { productFocus } : {}),
       sourceReceipts,
       controls: sharedControls,
     },
@@ -264,6 +295,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
     authorityId: selection.authorityId,
     authorityDigest: selection.authorityDigest,
     outcomeId: selection.selected.id,
+    productFocus,
     successMeasureDigest: selection.selected.successMeasureDigest,
     manifest,
     preflight,
@@ -284,5 +316,6 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
 export default {
   ALLY_CEO_COMPANY_PLAN_CONTRACT,
   ALLY_CEO_CYCLE_EXPERIMENT_CONTRACT,
+  ALLY_CEO_PRODUCT_FOCUS_CONTRACT,
   buildAllyCeoCompanyPlan,
 }

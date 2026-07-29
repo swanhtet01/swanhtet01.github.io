@@ -63,6 +63,7 @@ test('CEO planning selects one scale-to-zero specialist with deterministic contr
 
   assert.equal(result.ok, true)
   assert.equal(result.outcomeId, 'daily-company-control')
+  assert.equal(result.productFocus, null)
   assert.deepEqual(result.manifest.agents, ['operations-analyst'])
   assert.equal(result.manifest.cycleId, 'ally-ceo-20260729-daily-company-control')
   assert.equal(result.manifest.roleBudget, result.plan.budget.plannedRoles)
@@ -97,7 +98,7 @@ test('completed outcomes rotate through all five fixed teams and then stop', asy
   const sequence = [
     ['daily-company-control', ['operations-analyst']],
     ['engineering-release-control', ['proof-builder']],
-    ['product-portfolio-control', ['operations-analyst']],
+    ['product-portfolio-control', ['delivery-planner']],
     ['growth-pipeline-control', ['sales-qualifier']],
     ['finance-risk-control', ['cash-reconciler']],
   ]
@@ -127,6 +128,28 @@ test('completed outcomes rotate through all five fixed teams and then stop', asy
   })
   assert.equal(declined.declined, true)
   assert.equal(declined.manifest, null)
+})
+
+test('product control rotates one build-ready focus across four products without adding agents', async () => {
+  const expected = ['ecommerce', 'shop', 'plant', 'website']
+  for (let offset = 0; offset < expected.length; offset += 1) {
+    const result = await buildAllyCeoCompanyPlan({
+      now: new Date(Date.parse('2026-07-29T12:00:00.000Z') + offset * 86_400_000),
+      hqNow: now,
+      workboard,
+      portfolioText: portfolio(),
+      completedOutcomeIds: ['daily-company-control', 'engineering-release-control'],
+    })
+    assert.equal(result.outcomeId, 'product-portfolio-control')
+    assert.deepEqual(result.manifest.agents, ['delivery-planner'])
+    assert.equal(result.productFocus.contract, 'supermega.ally-ceo-product-focus.v1')
+    assert.equal(result.productFocus.selection, 'utc_day_round_robin')
+    assert.equal(result.productFocus.productId, expected[offset])
+    assert.equal(result.productFocus.acceptanceDimensions.length, 8)
+    assert.deepEqual(result.manifest.evidence['delivery-planner'].productFocus, result.productFocus)
+    assert.equal(result.controls.maxAgents, 1)
+    assert.equal(result.controls.scaleToZero, true)
+  }
 })
 
 test('capacity drift and non-authoritative social evidence fail before a work order exists', async () => {

@@ -19,12 +19,15 @@ const defaultLocalCompanyHome = resolve(root, '..', 'supermega-local-company-sta
 const powershell = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const MAX_COMMAND_BYTES = 512 * 1024
 const MAX_REPORT_BYTES = 256 * 1024
-const EXECUTION_SPEC_VERSION = '2026-07-29.21'
-const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
+const EXECUTION_SPEC_VERSION = '2026-07-29.22'
+const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
 const MEMORY_RECOVERY_BLOCKERS = Object.freeze(new Set(['memory_pressure_critical', 'codex_working_set_high']))
+const PRODUCT_IDS = Object.freeze(['shop', 'plant', 'website', 'ecommerce'])
+const PRODUCT_FOCUS_UNSAFE_RE = /[\u0000-\u001f]|\[(?:ALLY_CEO_[A-Z_]+|EVIDENCE):|(?:instagram\.com|linkedin\.com|lnkd\.in)|-----BEGIN [A-Z ]+PRIVATE KEY-----|\b(?:sk-proj|ghp|gho|glpat|xoxb|xoxp|xoxa|xoxr)-[A-Za-z0-9_-]{16,}/i
 
 const AGENT_ROLE_MAP = Object.freeze({
   'operations-analyst': 'operations',
+  'delivery-planner': 'product',
   'project-controller': 'chief-of-staff',
   'proof-builder': 'engineering',
   'quality-reviewer': 'quality',
@@ -35,7 +38,7 @@ const AGENT_ROLE_MAP = Object.freeze({
 const OUTCOME_BRIEFS = Object.freeze({
   'daily-company-control': 'daily SuperMega operating control',
   'engineering-release-control': 'engineering quality and release-readiness control',
-  'product-portfolio-control': 'four-product portfolio control',
+  'product-portfolio-control': 'one product delivery work order',
   'growth-pipeline-control': 'internal growth-pipeline control',
   'finance-risk-control': 'internal finance and risk control',
 })
@@ -89,6 +92,7 @@ function planSpec(plan) {
   const hash = String(plan?.preflight?.expectedPlanHash || '')
   const agents = plan?.manifest?.agents
   const outcomeId = String(plan?.outcomeId || '')
+  const productFocus = plan?.productFocus
   const generatedAt = String(plan?.generatedAt || '')
   const period = generatedAt.slice(0, 10)
   if (!plan?.ok
@@ -114,6 +118,27 @@ function planSpec(plan) {
   const roles = agents.map((agent) => AGENT_ROLE_MAP[agent])
   if (roles.some((role) => !role) || new Set(roles).size !== 1 || !OUTCOME_BRIEFS[outcomeId]) {
     fail('ally_ceo_local_cycle_team_invalid')
+  }
+  const productFocusRequired = outcomeId === 'product-portfolio-control'
+  const focusDayNumber = /^\d{4}-\d{2}-\d{2}/.test(generatedAt)
+    ? Math.floor(new Date(`${period}T00:00:00.000Z`).getTime() / 86_400_000)
+    : Number.NaN
+  const expectedFocusProduct = Number.isFinite(focusDayNumber)
+    ? PRODUCT_IDS[((focusDayNumber % PRODUCT_IDS.length) + PRODUCT_IDS.length) % PRODUCT_IDS.length]
+    : null
+  const productFocusValid = productFocusRequired
+    && productFocus?.contract === 'supermega.ally-ceo-product-focus.v1'
+    && productFocus?.selection === 'utc_day_round_robin'
+    && productFocus?.productId === expectedFocusProduct
+    && /^[a-z0-9-]{1,80}$/.test(productFocus?.status || '')
+    && typeof productFocus?.nextGate === 'string'
+    && productFocus.nextGate.length > 0
+    && productFocus.nextGate.length <= 1_200
+    && !PRODUCT_FOCUS_UNSAFE_RE.test(productFocus.nextGate)
+    && productFocus?.lifecycle?.join(',') === 'discover,define,build,release,learn'
+    && productFocus?.acceptanceDimensions?.join(',') === 'user_job,state_transition,data_contract,failure_recovery,mobile_acceptance,import_reconciliation,security_boundary,automated_test'
+  if ((productFocusRequired && !productFocusValid) || (!productFocusRequired && productFocus != null)) {
+    fail('ally_ceo_local_cycle_product_focus_invalid')
   }
   const planShortHash = hash.slice(0, 12)
   const cycleHash = sha256([
@@ -148,6 +173,13 @@ function planSpec(plan) {
     SPECIALIST_SECTION_CONTRACT,
     SPECIALIST_OUTPUT_GRAMMAR,
   ]
+  if (productFocusValid) {
+    objectiveBody.splice(3, 0,
+      `Focus only on ${productFocus.productId}; its current status is ${productFocus.status} and its next gate is: ${productFocus.nextGate}`,
+      'The Task templates item must be one build-ready delivery work order covering exactly these acceptance dimensions: user job, state transition, data contract, failure recovery, mobile acceptance, import reconciliation, security boundary, and automated test.',
+      'Do not propose another page, product, agent, dashboard, or integration unless that work order requires it to complete the named state transition.',
+    )
+  }
   const objective = [outcomeMarker, `[ALLY_CEO_CYCLE:${shortHash}]`, `[ALLY_CEO_PLAN:${planShortHash}]`, ...objectiveBody].join(' ')
   const repairObjective = [
     repairMarker,
@@ -158,6 +190,7 @@ function planSpec(plan) {
   ].join(' ')
   return {
     outcomeId,
+    productFocus: productFocusValid ? structuredClone(productFocus) : null,
     period,
     outcomeMarker,
     repairMarker,
@@ -911,6 +944,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
         replayed: true,
         period: spec.period,
         outcomeId: spec.outcomeId,
+        productFocus: spec.productFocus,
         completedOutcomeIds,
         planHash: spec.planHash,
         cycleHash: spec.cycleHash,
@@ -945,6 +979,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     replayed: false,
     period: spec.period,
     outcomeId: spec.outcomeId,
+    productFocus: spec.productFocus,
     completedOutcomeIds,
     rejectedOutcomes,
     planHash: spec.planHash,

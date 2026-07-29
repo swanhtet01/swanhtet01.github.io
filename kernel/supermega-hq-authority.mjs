@@ -252,14 +252,14 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
     }),
     Object.freeze({
       id: 'product-portfolio-control',
-      title: 'Review product and customer evidence',
+      title: 'Prepare one product delivery work order',
       team: 'product',
       priority: 73,
       state: 'ready',
       actionMode: 'read_only_brief',
-      deliverable: 'One evidence-backed product brief naming the strongest customer signal, the largest evidence gap, and one measurable product decision.',
-      objective: 'Compare the fixed lead, pipeline, and company-operation evidence across Shop, Plant, Website, and Ecommerce. Prefer a real workflow outcome over feature volume, state missing evidence plainly, and propose one measurable product decision. Do not change the roadmap or customer records.',
-      successMeasure: 'The brief identifies one source-backed customer signal, one explicit evidence gap, and one product decision with an observable workflow metric and no record mutation.',
+      deliverable: 'One build-ready work order for the deterministic daily focus product with one user job, state transition, data contract, recovery path, mobile and import acceptance, security boundary, and automated test.',
+      objective: 'Use the fixed product focus and evidence to define the highest-value complete workflow slice for exactly one of Shop, Plant, Website, or Ecommerce. Prefer operating depth over more pages, identify missing customer proof, and keep every managed or consequential action gated. Do not change the roadmap or customer records.',
+      successMeasure: 'The work order names exactly one focus product and one observable workflow outcome, covers all eight acceptance dimensions, identifies missing proof, and remains executable by one bounded delivery team without record mutation.',
       blockers: Object.freeze([]),
       evidencePlan: Object.freeze([
         Object.freeze({ tool: 'leads_overview', args: Object.freeze({ limit: 5 }) }),

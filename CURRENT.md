@@ -98,6 +98,7 @@ AI and delegated agents may not independently send customer messages, charge or 
 - `hq/` is the active machine-readable company authority.
 - `hq/NOW.md` is the short daily operating brief; `hq/WORKBOARD.md` is assignment authority.
 - SuperMega HQ coordinates Product, Engineering, Growth, Finance, evidence, exceptions, and bounded agents. It is internal machinery, not another customer product.
+- Product control rotates one UTC-day focus across Shop, Plant, Website, and Ecommerce. One dormant Delivery Planner becomes the only active specialist and must return one build-ready work order covering the user job, state transition, data contract, recovery, mobile, import reconciliation, security, and automated acceptance; the rotation adds no agent or idle compute.
 - The supplied Codex operating-system and free-resource packs govern R&D discipline: discover, verify, test, compare, package, review, and monitor.
 - Resource intelligence stays inside HQ until it produces verified implementation guidance for a real product. It must not become a public AI-tools directory.
 - Social posts can provide discovery signals but cannot verify product, pricing, security, or market claims.
