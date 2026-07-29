@@ -488,6 +488,32 @@ test('quality-passed reports ending in a dangling specialist clause cannot advan
   }
 })
 
+test('quality-passed reports with unbalanced specialist markdown cannot advance', async () => {
+  for (const fragment of ['`Shop', '(Shop', '[Shop', '{Shop']) {
+    const state = harness({ modelEventCount: 2 })
+    const malformedReport = acceptedStructuredReport.replace(
+      'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
+      `Not verified or performed: Proposed next action: review one bounded local gap. Assumption: its priority is unconfirmed. Missing proof: validate ${fragment} and Plant evidence.`,
+    )
+    await assert.rejects(
+      runAllyCeoLocalCycle(
+        { execute: true },
+        {
+          plan: plan(),
+          runCommand: state.runCommand,
+          inspectReport: async () => ({
+            path: 'C:\\state\\outputs\\malformed.md',
+            bytes: Buffer.byteLength(malformedReport),
+            digest: 'sha256:' + '7'.repeat(64),
+            text: malformedReport,
+          }),
+        },
+      ),
+      /ally_ceo_local_cycle_specialist_section_rejected/,
+    )
+  }
+})
+
 test('one rejected legacy outcome can be repaired once under the current quality contract', async () => {
   const oldQueueId = 'f'.repeat(12)
   const oldJobId = 'e'.repeat(12)

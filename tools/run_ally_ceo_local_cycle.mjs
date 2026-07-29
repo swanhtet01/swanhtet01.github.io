@@ -19,8 +19,8 @@ const defaultLocalCompanyHome = resolve(root, '..', 'supermega-local-company-sta
 const powershell = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const MAX_COMMAND_BYTES = 512 * 1024
 const MAX_REPORT_BYTES = 256 * 1024
-const EXECUTION_SPEC_VERSION = '2026-07-29.14'
-const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
+const EXECUTION_SPEC_VERSION = '2026-07-29.16'
+const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
 
 const AGENT_ROLE_MAP = Object.freeze({
   'operations-analyst': 'operations',
@@ -435,6 +435,16 @@ function specialistSection(text, role) {
   return lines.slice(start + 1, end).join('\n').trim()
 }
 
+function balancedSpecialistDelimiters(text) {
+  const stack = []
+  const closing = { ')': '(', ']': '[', '}': '{' }
+  for (const character of text) {
+    if ('([{'.includes(character)) stack.push(character)
+    else if (closing[character] && stack.pop() !== closing[character]) return false
+  }
+  return stack.length === 0 && (text.match(/`/g) || []).length % 2 === 0
+}
+
 function validateSpecialistSections(text, requiredRoles) {
   if (!Array.isArray(requiredRoles) || requiredRoles.length !== 2 || new Set(requiredRoles).size !== 2) {
     fail('ally_ceo_local_cycle_specialist_roles_invalid')
@@ -450,6 +460,7 @@ function validateSpecialistSections(text, requiredRoles) {
       || !/Missing proof\s*:/i.test(section)
       || /specialist draft withheld|incomplete model output|no substantive specialist draft/i.test(section)
       || /\b(?:and|or|to|for|with|using|before|after|the|a|an|of|in|on|at|from|does|is|are|has|have|can|will|must|should|could|would|may|might|verify|confirm)\.?$/i.test(section)
+      || !balancedSpecialistDelimiters(section)
       || /\[EVIDENCE:/i.test(section)) {
       fail('ally_ceo_local_cycle_specialist_section_rejected')
     }
