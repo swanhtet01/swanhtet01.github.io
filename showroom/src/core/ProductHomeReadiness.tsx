@@ -37,10 +37,16 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
     ['Ecommerce', 'AI order desk', 'Builds a catalog, reviews incoming orders, matches Shop stock, and prepares delivery/payment handoff for approval.'],
   ] as const
   const businessTrackRows = [
-    ['Retail or distributor', 'Shop + Ecommerce', 'Free imports products and reviews orders locally. Premium activates managed stock, approvals, branches, and audit.'],
-    ['Factory or workshop', 'Plant + Shop', 'Free prepares jobs, quality, maintenance, WCM, and material evidence. Premium adds MES, MRP, ISO, roles, and cost handoff.'],
-    ['Service or local brand', 'Website + Ecommerce', 'Free creates a reviewed website/store package. Premium connects lead capture, order intake, data history, and agent follow-up.'],
-    ['Multi-branch operator', 'All products', 'Free proves one branch. Premium scales shared roles, import checks, approvals, evidence export, and AI context across branches.'],
+    ['Retail or distributor', 'Shop + Ecommerce', 'Start with product CSV, stock counts, online order CSV, and payment review proof.'],
+    ['Factory or workshop', 'Plant + Shop', 'Start with job CSV, material list, quality holds, maintenance evidence, and stock issue proof.'],
+    ['Service or local brand', 'Website + Ecommerce', 'Start with business facts, offer proof, photos, catalog rows, and channel order samples.'],
+    ['Multi-branch operator', 'All products', 'Start with one branch pack, role list, import samples, approval receipts, and shared evidence export.'],
+  ] as const
+  const trackRunbookRows = [
+    ['Free proof', 'Local enterprise max', 'Upload or paste sample data, run the AI queue, export evidence, and prove value without managed writes.'],
+    ['Premium unlock', 'Managed AI context', 'Activate tenant roles, audit, branch data, approved learning, hosted scheduler, and write gates after review.'],
+    ['First sale motion', 'Prepared template demo', 'Create a client-specific starter workspace before outreach so the buyer sees their own products, jobs, site, or orders.'],
+    ['Operator promise', 'Minimal controls', 'The owner chooses a track and approves packets; AI handles cleanup, ranking, drafts, checks, and handoff preparation.'],
   ] as const
   const learningCockpitRows = [
     ['Behavior memory', behaviorTrail.length ? `${behaviorTrail.length} local signals` : 'No signals yet', behaviorTrail.length ? 'Owner navigation and agent queue choices are ready for evidence export.' : 'Open products and choose agent jobs to create local memory.'],
@@ -106,6 +112,15 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
         </div>
         <div className="product-home-readiness-grid">
           {businessTrackRows.map(([label, value, detail]) => (
+            <span key={label}>
+              <small>{label}</small>
+              <strong>{value}</strong>
+              <em>{detail}</em>
+            </span>
+          ))}
+        </div>
+        <div className="product-home-readiness-grid product-home-track-runbook">
+          {trackRunbookRows.map(([label, value, detail]) => (
             <span key={label}>
               <small>{label}</small>
               <strong>{value}</strong>

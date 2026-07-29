@@ -131,6 +131,7 @@ a { color: inherit; }
 .product-home-readiness-head h2 { margin: 4px 0; font-size: 18px; line-height: 1.15; letter-spacing: -.01em; }
 .product-home-readiness-head p { max-width: 780px; margin: 0; color: var(--core-muted); font-size: 12px; line-height: 1.45; }
 .product-home-readiness-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 10px; background: var(--core-panel); }
+.product-home-track-runbook { margin-top: 10px; }
 .product-home-readiness-grid span { min-width: 0; min-height: 82px; display: grid; align-content: center; gap: 4px; border-right: 1px solid var(--core-line); padding: 10px 12px; }
 .product-home-readiness-grid span:last-child { border-right: 0; }
 .product-home-readiness-grid small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
