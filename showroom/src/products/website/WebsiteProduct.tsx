@@ -585,6 +585,12 @@ export function WebsiteProduct() {
     setSelectedPageId(staged.workspace.selectedPageId)
     setStarterDismissed(true)
     openContentSurface('preview')
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'website',
+      route: location.pathname + location.search,
+      detail: `Website starter brief generated: ${brief.businessName}`,
+    })
     setNotice('Your one-page site is ready as an unsaved preview. Review it, then Save or Discard.')
   }
 

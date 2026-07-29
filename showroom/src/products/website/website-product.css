@@ -16,7 +16,8 @@
   width: 100%;
   height: 100svh;
   min-width: 320px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background:
     radial-gradient(circle at 82% -18%, rgba(11, 116, 94, .1), transparent 31%),
     linear-gradient(180deg, #fbfaf6, var(--website-bg) 62%);
@@ -2538,6 +2539,8 @@
 
 .website-workspace-grid,
 .website-workspace-grid.view-publish {
+  position: relative;
+  z-index: 5;
   min-height: 0;
   display: grid;
   flex: 1;
@@ -2547,6 +2550,8 @@
 
 .website-work-surface,
 .website-preview-surface {
+  position: relative;
+  z-index: 1;
   min-width: 0;
   min-height: 0;
 }
@@ -3285,19 +3290,21 @@
 
 /* Website runs inside the shared SuperMega shell. */
 .website-product {
-  height: 100%;
+  height: auto;
   min-width: 0;
-  min-height: 0;
-  overflow: hidden;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: visible;
   background: transparent;
 }
 
 .website-shell {
-  height: 100%;
+  height: auto;
 }
 
 .website-main {
   width: 100%;
+  height: auto;
   padding: 0;
 }
 
@@ -3961,13 +3968,12 @@
 }
 
 .website-starter-actions {
-  position: sticky;
-  z-index: 2;
-  bottom: -14px;
+  position: relative;
+  z-index: 3;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin: 0 -14px -14px;
+  margin: 0;
   border-top: 1px solid var(--website-line);
   padding: 10px 14px 14px;
   background: linear-gradient(to bottom, color-mix(in srgb, var(--website-panel) 88%, transparent), var(--website-panel) 28%);

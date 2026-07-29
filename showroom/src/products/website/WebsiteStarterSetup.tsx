@@ -18,6 +18,14 @@ const EMPTY_BRIEF: WebsiteStarterBrief = {
   contactHref: '',
 }
 
+const SAMPLE_BRIEF: WebsiteStarterBrief = {
+  businessName: 'Mingalar Fresh Mart',
+  audience: 'families and office buyers in Yangon',
+  offer: 'Daily groceries, pantry packs, and local delivery with clear pickup windows.',
+  proof: 'Owner-approved public proof: same-day neighborhood delivery, visible prices, and a reviewed phone or chat contact route.',
+  contactHref: 'https://m.me/mingalarfreshmart',
+}
+
 export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSetupProps) {
   const [brief, setBrief] = useState(EMPTY_BRIEF)
   const [attempted, setAttempted] = useState(false)
@@ -34,6 +42,12 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
 
   function updateBrief(field: keyof WebsiteStarterBrief, value: string) {
     setBrief((current) => ({ ...current, [field]: value }))
+  }
+
+  function loadSampleBrief() {
+    setBrief(SAMPLE_BRIEF)
+    setAttempted(false)
+    requestAnimationFrame(() => starterFormRef.current?.querySelector<HTMLInputElement>('input')?.focus())
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -141,6 +155,7 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
         </div>
 
         <footer className="website-starter-actions">
+          <button className="website-button is-secondary" onClick={loadSampleBrief} type="button">Load sample brief</button>
           <button className="website-button is-secondary" onClick={onViewSample} type="button">View sample</button>
           <button className="website-button is-primary" type="submit">Preview my site</button>
         </footer>
