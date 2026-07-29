@@ -5639,6 +5639,29 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Evidence', heldJobs.length || openQualityIssues.length || materialEntries.length ? 'Required' : 'Ready'],
     ['Release', productionCanWrite && !pendingAction && !heldJobs.length && !openQualityIssues.length ? 'Owner review' : 'Blocked'],
   ] as const
+  const plantComplianceDossierNext = !productionCanWrite
+    ? 'Restore audit readiness'
+    : pendingAction
+      ? 'Approve pending Plant action'
+      : openQualityIssues.length || heldJobs.length
+        ? 'Resolve ISO evidence'
+        : openWcmCount
+          ? 'Close WCM evidence'
+          : !materialEntries.length
+            ? 'Record traceability'
+            : !shiftHandoffIsCurrent
+              ? 'Build shift dossier'
+              : plantCostPacketReady
+                ? 'Audit dossier ready'
+                : 'Prepare cost dossier'
+  const plantComplianceDossierRows = [
+    ['ISO', openQualityIssues.length || heldJobs.length ? `${openQualityIssues.length + heldJobs.length} blocked` : 'Clear'],
+    ['WCM', openWcmCount ? `${openWcmCount} open` : 'Closed'],
+    ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'Missing'],
+    ['Output', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} good` : 'No output'],
+    ['Handoff', shiftHandoffIsCurrent ? 'Current' : 'Build'],
+    ['Boundary', 'No auto release'],
+  ] as const
 
   useEffect(() => {
     const timer = window.setInterval(() => setIssueClock(Date.now()), 60_000)
@@ -6459,6 +6482,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div><span className="core-eyebrow">Inspection + CAPA</span><strong>{plantInspectionNext}</strong><small>AI turns sampling, NCR containment, corrective action, evidence, and release review into one quality queue. No certificate, CAPA closure, customer claim, inventory block, costing, or production write runs from this panel.</small>{tab === 'control' ? <button className="text-link" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={startInspectionNcr} type="button">Start inspection NCR</button> : <Link className="text-link" to="/plant/?tab=control">Open inspection queue</Link>}</div>
     <div className="plant-control-rows">{plantInspectionRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
+  const plantComplianceDossier = <section aria-label="Plant compliance dossier" className="plant-control plant-compliance-dossier">
+    <div><span className="core-eyebrow">Compliance dossier</span><strong>{plantComplianceDossierNext}</strong><small>AI summarizes ISO quality release, WCM closure, material traceability, output evidence, shift handoff, and cost-readiness into one audit packet. No certificate, quality release, costing, inventory valuation, equipment command, customer claim, or production write runs from this dossier.</small></div>
+    <div className="plant-control-rows">{plantComplianceDossierRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+  </section>
 
   if (tab === 'production') return <div className="operation-module">
     {productionBoundary}
@@ -6473,6 +6500,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {plantCostPacket}
     {plantQualityRelease}
     {plantInspectionControl}
+    {plantComplianceDossier}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
@@ -6574,6 +6602,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {plantCostPacket}
     {plantQualityRelease}
     {plantInspectionControl}
+    {plantComplianceDossier}
     <div className="control-workspace">
       <div className="split-workspace">
         <section className="core-panel production-issue-launcher">
