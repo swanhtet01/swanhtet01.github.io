@@ -183,20 +183,28 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     ? commerce.movements.find((movement) => movement.kind === 'production_receipt' && movement.productionReleaseId === releasedPlantBatch.releaseId)
     : undefined
   const normalizedPlantProduct = releasedPlantBatch?.product.trim().toLocaleLowerCase() ?? ''
+  const retainedProductionSku = releasedPlantBatch
+    ? commerce.movements.find((movement) => movement.kind === 'production_receipt'
+      && movement.productionSourceProduct?.trim().toLocaleLowerCase() === normalizedPlantProduct)?.sku ?? ''
+    : ''
   const exactPlantCatalogMatches = releasedPlantBatch
     ? catalog.filter((item) => [item.sku, item.name].some((value) => value.trim().toLocaleLowerCase() === normalizedPlantProduct))
     : []
   const selectedProductionSku = productionItemMapping && productionItemMapping.releaseId === releasedPlantBatch?.releaseId ? productionItemMapping.sku : ''
-  const plantCatalogItem = exactPlantCatalogMatches.length === 1
+  const plantCatalogItem = retainedProductionSku
+    ? catalog.find((item) => item.sku === retainedProductionSku)
+    : exactPlantCatalogMatches.length === 1
     ? exactPlantCatalogMatches[0]
     : catalog.find((item) => item.sku === selectedProductionSku)
-  const productionMappingRequired = Boolean(releasedPlantBatch && exactPlantCatalogMatches.length !== 1)
+  const productionMappingRequired = Boolean(releasedPlantBatch && !retainedProductionSku && exactPlantCatalogMatches.length !== 1)
   const plantReceiptLocationId = state.revision
     ? projection.locations.find((location) => location.id === 'LOC-MAIN')?.id ?? projection.locations[0]?.id ?? ''
     : 'LOC-MAIN'
   const plantReceiptIssue = releasedPlantBatch && !receivedPlantMovement
     ? !catalog.length
       ? 'Add at least one Shop catalog item before receiving Plant output.'
+      : retainedProductionSku && !plantCatalogItem
+        ? `The retained Plant mapping points to missing Shop SKU ${retainedProductionSku}. Restore that catalog item before receiving more output.`
       : !plantReceiptLocationId
         ? 'Released Plant stock needs one active Shop location.'
         : ''
@@ -210,6 +218,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
       jobId: releasedPlantBatch.jobId,
       outputBatchId: releasedPlantBatch.outputBatchId,
       releasedAt: releasedPlantBatch.releasedAt,
+      sourceProduct: releasedPlantBatch.product,
       sku: plantCatalogItem.sku,
       quantity: releasedPlantBatch.quantity,
     }

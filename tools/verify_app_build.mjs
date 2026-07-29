@@ -1661,6 +1661,8 @@ if (!commerceSource.includes('CommercePurchaseOrderLocationReceipt')
   || !managedTrialStoreRuntime.includes('location_receipt_matches')) fail('managed_purchase_receipt_location_contract_missing')
 if (!shopInventorySource.includes('export function receiveShopInventoryFromProduction')
   || !commerceSource.includes('export function receiveCommerceProductionBatch')
+  || !commerceSource.includes('productionSourceProduct')
+  || !commerceSource.includes('conflicts with the retained Plant product mapping')
   || !commerceSource.includes('PLANT-BATCH:${checkedReceipt.releaseId}:${checkedReceipt.sourceCommandDigest}:${locationId}')
   || !managedTrialSource.includes("'commerce.production_batch.received'")
   || !managedCommerceRuntime.includes('def _validate_production_batch_received')
@@ -3120,6 +3122,7 @@ async function verifyShopInventoryRuntime() {
       jobId: 'JOB-LOCATION-RECEIPT-001',
       outputBatchId: 'BATCH-LOCATION-001',
       releasedAt: '2026-07-26T03:00:00+06:30',
+      sourceProduct: 'Finished location product',
       sku: 'SKU-1',
       quantity: 6,
     }
@@ -3141,6 +3144,7 @@ async function verifyShopInventoryRuntime() {
       && productionReceiptCommand.id.startsWith('PRC-')
       && productionReceiptCommand.stockUnitId.startsWith('LOT-PLANT-')
       && productionReceiptCommand.trackingCode === productionReceipt.outputBatchId
+      && productionReceived.movements[0].productionSourceProduct === productionReceipt.sourceProduct
       && productionReceivedProjection?.metrics.totalOnHand === 16
       && productionReceivedProjection.metrics.totalAvailableToPromise === 16
       && productionReceivedProjection.ledger.at(-1)?.referenceId === productionReceipt.releaseId,
@@ -3157,6 +3161,25 @@ async function verifyShopInventoryRuntime() {
       productionReceiptProof,
       { locationId: 'LOC-MAIN', expectedHeadDigest: managedBase.inventoryFoundation.headDigest },
     ) === null, 'managed_production_receipt_changed_retry_succeeded')
+    assert(commerce.receiveCommerceProductionBatch(
+      productionReceived,
+      { ...productionReceipt, sourceProduct: 'Changed product identity' },
+      productionReceiptProof,
+      { locationId: 'LOC-MAIN', expectedHeadDigest: managedBase.inventoryFoundation.headDigest },
+    ) === null, 'managed_production_receipt_source_identity_tamper_succeeded')
+    const mappedCatalogState = commerce.validateCommerceState({
+      ...productionReceived,
+      items: [...productionReceived.items, { sku: 'SKU-2', name: 'Alternate item', onHand: 0, reorderAt: 0, price: 500 }],
+    })
+    assert(commerce.receiveCommerceProductionBatch(
+      mappedCatalogState,
+      { ...productionReceipt, releaseId: 'QREL-LOCATION-002', outputBatchId: 'BATCH-LOCATION-002', sku: 'SKU-2' },
+      {
+        ...proof(5, 'production-receipt-remap'),
+        evidenceReference: `PLANT-BATCH:QREL-LOCATION-002:${productionReceipt.sourceCommandDigest}:LOC-MAIN`,
+      },
+      { locationId: 'LOC-MAIN', expectedHeadDigest: mappedCatalogState.inventoryFoundation.headDigest },
+    ) === null, 'managed_production_receipt_conflicting_product_mapping_succeeded')
     assert(commerce.receiveCommerceProductionBatch(
       productionReceived,
       productionReceipt,

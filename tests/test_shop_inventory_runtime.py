@@ -367,6 +367,7 @@ def production_receipt_movement(
         "productionJobId": release["jobId"],
         "productionOutputBatchId": release["outputBatchId"],
         "productionReleasedAt": release["releasedAt"],
+        "productionSourceProduct": release["sourceProduct"],
     }
 
 
@@ -1004,6 +1005,7 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
             "jobId": "JOB-PLANT-001",
             "outputBatchId": "BATCH-PLANT-001",
             "releasedAt": "2026-07-27T09:00:00.000Z",
+            "sourceProduct": "Finished Product A",
         }
         proof = {
             **action_proof(
@@ -1032,6 +1034,51 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
             ),
             {"SKU-1": 16},
         )
+        self.assertEqual(
+            accepted["movements"][0]["productionSourceProduct"],  # type: ignore[index]
+            "Finished Product A",
+        )
+
+        conflicting_mapping = deepcopy(accepted)
+        conflicting_mapping["items"].append(  # type: ignore[union-attr]
+            {
+                "sku": "SKU-2",
+                "name": "Alternate finished product",
+                "onHand": 0,
+                "reorderAt": 0,
+                "price": 500,
+            }
+        )
+        conflicting_release = {
+            **release,
+            "releaseId": "QREL-PLANT-002",
+            "outputBatchId": "BATCH-PLANT-002",
+        }
+        conflicting_proof = {
+            **action_proof(
+                "ACT-PLANT-RECEIPT-002", "2026-07-27T09:30:00.000Z"
+            ),
+            "evidenceReference": (
+                "PLANT-BATCH:QREL-PLANT-002:"
+                f"{release['sourceCommandDigest']}:LOC-MAIN"
+            ),
+        }
+        conflicting_movement = production_receipt_movement(
+            conflicting_proof, conflicting_release
+        )
+        conflicting_movement["sku"] = "SKU-2"
+        conflicting_mapping["movements"] = [
+            conflicting_movement,
+            *accepted["movements"],  # type: ignore[misc]
+        ]
+        with self.assertRaisesRegex(
+            TrialValidationError, "conflicts with the retained Plant product mapping"
+        ):
+            reduce_commerce_state(
+                "commerce.production_batch.received",
+                accepted,
+                {"state": conflicting_mapping, "evidence": conflicting_proof},
+            )
         self.assertEqual(
             shop_inventory_sku_available_to_promise(
                 accepted["inventoryFoundation"], ["SKU-1"]

@@ -347,6 +347,7 @@ _MOVEMENT_FIELDS = frozenset(
         "productionReleaseId",
         "productionOutputBatchId",
         "productionReleasedAt",
+        "productionSourceProduct",
     }
 )
 _PRODUCTION_ISSUE_FIELDS = frozenset(
@@ -461,7 +462,12 @@ _PRODUCTION_ISSUE_EXCLUSIVE_FIELDS = frozenset(
     }
 )
 _PRODUCTION_RECEIPT_EXCLUSIVE_FIELDS = frozenset(
-    {"productionReleaseId", "productionOutputBatchId", "productionReleasedAt"}
+    {
+        "productionReleaseId",
+        "productionOutputBatchId",
+        "productionReleasedAt",
+        "productionSourceProduct",
+    }
 )
 _STOREFRONT_ACTIVATION_FIELDS = frozenset(
     {"contract", "packageDigest", "workflowTemplateId", "confirmedAt", "skus"}
@@ -1899,6 +1905,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     latest_receipt_at_by_purchase_order: dict[str, datetime] = {}
     production_request_ids: list[str] = []
     production_release_ids: list[str] = []
+    production_sku_by_source_product: dict[str, str] = {}
     for index, candidate in enumerate(movements):
         movement = _object(candidate, f"movements[{index}]")
         _exact_fields(
@@ -2029,6 +2036,18 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 f"movements[{index}].productionOutputBatchId",
                 maximum=80,
             )
+            production_source_product = _text(
+                movement["productionSourceProduct"],
+                f"movements[{index}].productionSourceProduct",
+                maximum=180,
+            )
+            source_product_key = production_source_product.casefold()
+            mapped_sku = production_sku_by_source_product.get(source_product_key)
+            if mapped_sku is not None and mapped_sku != sku:
+                raise TrialValidationError(
+                    f"movements[{index}] conflicts with the retained Plant product mapping."
+                )
+            production_sku_by_source_product[source_product_key] = sku
             released_at = datetime.fromisoformat(
                 _timestamp(
                     movement["productionReleasedAt"],

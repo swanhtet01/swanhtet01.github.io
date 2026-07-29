@@ -222,6 +222,7 @@ export type CommerceProductionBatchReceipt = {
   jobId: string
   outputBatchId: string
   releasedAt: string
+  sourceProduct: string
   sku: string
   quantity: number
 }
@@ -253,6 +254,7 @@ export type CommerceStockMovement = {
   productionReleaseId?: string
   productionOutputBatchId?: string
   productionReleasedAt?: string
+  productionSourceProduct?: string
 }
 
 export type CommerceClose = {
@@ -708,9 +710,10 @@ const productionReceiptFields = [
   'productionJobId',
   'productionOutputBatchId',
   'productionReleasedAt',
+  'productionSourceProduct',
 ] as const
 const productionIssueExclusiveFields = ['productionRequestId', 'productionMaterialId', 'productionInputLotId', 'productionQuantityMilli', 'productionUnit', 'conversionNote'] as const
-const productionReceiptExclusiveFields = ['productionReleaseId', 'productionOutputBatchId', 'productionReleasedAt'] as const
+const productionReceiptExclusiveFields = ['productionReleaseId', 'productionOutputBatchId', 'productionReleasedAt', 'productionSourceProduct'] as const
 const returnDispositions: CommerceReturnDisposition[] = ['restock', 'not_restocked']
 const correctionKinds: CommerceCorrectionKind[] = ['credit', 'debit']
 const correctionReasonCodes: CommerceCorrectionReasonCode[] = ['pricing_error', 'service_recovery', 'fee_adjustment', 'other']
@@ -1941,6 +1944,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const latestReceiptAtByPurchaseOrder = new Map<string, bigint>()
   const productionRequestIds: string[] = []
   const productionReleaseIds: string[] = []
+  const productionSkuBySourceProduct = new Map<string, string>()
   for (const [index, candidate] of movements.entries()) {
     if (!isRecord(candidate) || !hasExactKeys(
       candidate,
@@ -1982,6 +1986,11 @@ export function validateCommerceState(value: unknown): CommerceState {
       if (typeof candidate.productionCommandDigest !== 'string' || !sha256DigestPattern.test(candidate.productionCommandDigest)) throw new Error(`movements[${index}].productionCommandDigest is invalid.`)
       canonicalText(candidate.productionJobId, `movements[${index}].productionJobId`, 80)
       canonicalText(candidate.productionOutputBatchId, `movements[${index}].productionOutputBatchId`, 80)
+      const productionSourceProduct = canonicalText(candidate.productionSourceProduct, `movements[${index}].productionSourceProduct`, 180)
+      const sourceProductKey = productionSourceProduct.toLocaleLowerCase()
+      const mappedSku = productionSkuBySourceProduct.get(sourceProductKey)
+      if (mappedSku && mappedSku !== candidate.sku) throw new Error(`movements[${index}] conflicts with the retained Plant product mapping.`)
+      productionSkuBySourceProduct.set(sourceProductKey, candidate.sku as string)
       if (!validTimestamp(candidate.productionReleasedAt)) throw new Error(`movements[${index}].productionReleasedAt is invalid.`)
       if ((timestampMicros(candidate.createdAt) as bigint) < (timestampMicros(candidate.productionReleasedAt) as bigint)) throw new Error(`movements[${index}] predates its Plant release.`)
     } else if (retainedProductionFields.length || retainedProductionReceiptFields.length) {
@@ -4129,6 +4138,7 @@ export function receiveCommerceProductionBatch(
       jobId: canonicalText(receipt.jobId, 'production job ID', 80),
       outputBatchId: canonicalText(receipt.outputBatchId, 'production output batch ID', 80),
       releasedAt: canonicalText(receipt.releasedAt, 'production release time', 40),
+      sourceProduct: canonicalText(receipt.sourceProduct, 'production source product', 180),
       sku: canonicalText(receipt.sku, 'production receipt SKU', 80),
       quantity: receipt.quantity,
     }
@@ -4154,6 +4164,7 @@ export function receiveCommerceProductionBatch(
     && movement.productionJobId === checkedReceipt.jobId
     && movement.productionOutputBatchId === checkedReceipt.outputBatchId
     && movement.productionReleasedAt === checkedReceipt.releasedAt
+    && movement.productionSourceProduct === checkedReceipt.sourceProduct
   const replayMovement = current.movements.find((movement) => movement.actionId === proof.actionId)
   if (replayMovement) {
     if (!movementMatches(replayMovement) || !sameProof(replayMovement, proof)) return null
@@ -4177,6 +4188,10 @@ export function receiveCommerceProductionBatch(
   const matchingItems = current.items.filter((candidate) => candidate.sku === checkedReceipt.sku)
   const item = matchingItems.length === 1 ? matchingItems[0] : undefined
   if (!item) return null
+  const sourceProductKey = checkedReceipt.sourceProduct.toLocaleLowerCase()
+  const retainedMapping = current.movements.find((movement) => movement.kind === 'production_receipt'
+    && movement.productionSourceProduct?.toLocaleLowerCase() === sourceProductKey)
+  if (retainedMapping && retainedMapping.sku !== checkedReceipt.sku) return null
   const nextBalance = safeBalance(item.onHand, checkedReceipt.quantity)
   if (nextBalance === null) return null
   const nextItems = current.items.map((candidate) => candidate.sku === checkedReceipt.sku ? { ...candidate, onHand: nextBalance } : candidate)
@@ -4206,6 +4221,7 @@ export function receiveCommerceProductionBatch(
     productionJobId: checkedReceipt.jobId,
     productionOutputBatchId: checkedReceipt.outputBatchId,
     productionReleasedAt: checkedReceipt.releasedAt,
+    productionSourceProduct: checkedReceipt.sourceProduct,
   })
   return validateCommerceState({
     ...current,
