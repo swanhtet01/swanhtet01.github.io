@@ -464,7 +464,7 @@ requireContract('agent roster consolidation is recorded',
   && workboard.includes('Checkpoints `cafdafe` and `f626ee7` add `supermega.ceo-outcome-delivery.v1`')
   && workboard.includes('Current accepted agent-operations checkpoint: `a2e1b89`')
   && now.includes('Current local checkpoints: workspace recovery `81c1db0`, database contracts `dd0d84a`, and Shop receivables `8402162`')
-  && now.includes('Ally stays zero-subagent; multi-agent is disabled')
+  && now.includes('Ally stays zero-subagent: its audit requires exactly one `[features] multi_agent = false` declaration')
   && now.includes('no duplicate dev server or loaded local model')
   && now.includes('Idle Ollama hosts were stopped')
   && now.includes('YTF identities cannot render in core operations')
@@ -881,7 +881,13 @@ requireContract('Ally runtime audit is read-only and bounded',
   && allyAuditText.includes("$HostAdmissionContract = 'supermega.ally-host-admission.v1'")
   && allyAuditText.includes('$port -ge 5173 -and $port -le 5199')
   && allyAuditText.includes('maxConcurrentLocalRuns')
-  && allyAuditText.includes("subagentObservation = 'not_os_observable'")
+  && allyAuditText.includes("$CodexSubagentPolicyContract = 'supermega.codex-subagent-policy.v1'")
+  && allyAuditText.includes("subagentObservation = 'runtime_count_not_os_observable'")
+  && allyAuditText.includes('configuredMaxLocalSubagents = if ($enabled) { $null } else { 0 }')
+  && allyAuditText.includes("code = 'codex_subagent_policy_unverified'")
+  && allyAuditText.includes("code = 'codex_multi_agent_enabled'")
+  && allyAuditText.includes('codexConfigPathReturned = $false')
+  && allyAuditText.includes('codexConfigMaxBytes = $MaxCodexConfigBytes')
   && allyAuditText.includes("$LocalCompanyHealthContract = 'local-company.health.v1'")
   && allyAuditText.includes('$MaxLocalCompanyHealthBytes = 65536')
   && allyAuditText.includes("http://127.0.0.1:8765/health.json")
@@ -901,6 +907,14 @@ requireContract('Ally runtime audit is read-only and bounded',
   && packageText.includes('"audit:ally"')
   && packageText.includes('"audit:ally:self-test"')
   && !/\b(?:Stop-Process|Start-Process|taskkill|kill|Remove-Item|EmptyWorkingSet|SetProcessWorkingSetSize)\b/i.test(allyAuditText))
+
+requireContract('Ally zero-subagent policy is config-bound and fail-closed',
+  workboard.includes('| OPS-091 | CEO + Ally Agent Capacity Codex | done-local |')
+  && workboard.includes('configured ceiling is now reported as zero')
+  && workboard.includes('enabled, missing, duplicate, malformed, oversized, or unreadable policy blocks company admission')
+  && now.includes('requires exactly one `[features] multi_agent = false` declaration')
+  && now.includes('must pass `release:handoff:verify`')
+  && !now.includes('this integration candidate is `cd53a31'))
 
 requireContract('Ally working-set recovery is preview-first and non-terminating',
   allyTrimText.includes("$Contract = 'supermega.ally-working-set-trim.v1'")

@@ -17,8 +17,54 @@ Set-StrictMode -Version Latest
 $Contract = 'supermega.ally-runtime-audit.v1'
 $HostAdmissionContract = 'supermega.ally-host-admission.v1'
 $LocalCompanyHealthContract = 'local-company.health.v1'
+$CodexSubagentPolicyContract = 'supermega.codex-subagent-policy.v1'
 $MaxLocalCompanyHealthBytes = 65536
+$MaxCodexConfigBytes = 262144
 $RepoMarker = 'supermega-platform'
+
+function ConvertTo-CodexSubagentPolicy {
+    param([string]$Text)
+    if ([string]::IsNullOrWhiteSpace($Text) -or [System.Text.Encoding]::UTF8.GetByteCount($Text) -gt $MaxCodexConfigBytes) {
+        throw 'codex_subagent_policy_config_invalid'
+    }
+    $featureSections = 0
+    $multiAgentDeclarations = [System.Collections.Generic.List[bool]]::new()
+    $insideFeatures = $false
+    foreach ($line in ($Text -split "`r?`n")) {
+        if ($line -match '^\s*\[([^\]]+)\]\s*(?:#.*)?$') {
+            $insideFeatures = $Matches[1].Trim() -ceq 'features'
+            if ($insideFeatures) { $featureSections += 1 }
+            continue
+        }
+        if (-not $insideFeatures -or $line -match '^\s*(?:#|$)') { continue }
+        if ($line -match '^\s*multi_agent\s*=\s*(true|false)\s*(?:#.*)?$') {
+            $multiAgentDeclarations.Add($Matches[1] -ceq 'true')
+            continue
+        }
+        if ($line -match '^\s*multi_agent\s*=') { throw 'codex_subagent_policy_value_invalid' }
+    }
+    if ($featureSections -ne 1 -or $multiAgentDeclarations.Count -ne 1) { throw 'codex_subagent_policy_declaration_invalid' }
+    $enabled = [bool]$multiAgentDeclarations[0]
+    [pscustomobject]@{
+        contract = $CodexSubagentPolicyContract
+        verified = $true
+        source = 'local_codex_config'
+        multiAgentEnabled = $enabled
+        configuredMaxLocalSubagents = if ($enabled) { $null } else { 0 }
+    }
+}
+
+function Get-CodexSubagentPolicy {
+    $profileRoot = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+    if ([string]::IsNullOrWhiteSpace($profileRoot)) { throw 'codex_subagent_policy_profile_unavailable' }
+    $configPath = [System.IO.Path]::GetFullPath((Join-Path $profileRoot '.codex\config.toml'))
+    $item = Get-Item -LiteralPath $configPath -ErrorAction Stop
+    if (-not $item.PSIsContainer -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0 -and $item.Length -gt 0 -and $item.Length -le $MaxCodexConfigBytes) {
+        $encoding = [System.Text.UTF8Encoding]::new($false, $true)
+        return ConvertTo-CodexSubagentPolicy ($encoding.GetString([System.IO.File]::ReadAllBytes($configPath)))
+    }
+    throw 'codex_subagent_policy_file_invalid'
+}
 
 function Get-BoundedHealthCount {
     param(
@@ -97,7 +143,8 @@ function Get-AuditFindings {
         [bool]$ListenerInventoryAvailable,
         [pscustomobject]$LocalCompanySummary = $null,
         [bool]$LocalCompanyHealthRequired = $false,
-        [bool]$LocalCompanyHealthAvailable = $false
+        [bool]$LocalCompanyHealthAvailable = $false,
+        [pscustomobject]$CodexSubagentPolicy = $null
     )
     $findings = [System.Collections.Generic.List[object]]::new()
     if ($UsedMemoryPercent -ge $MemoryWarningPercent) {
@@ -136,6 +183,14 @@ function Get-AuditFindings {
             $findings.Add([pscustomobject]@{ code = 'local_company_work_active'; severity = 'blocker'; detail = 'The local company already has active or transitional work; another company cycle is paused.' })
         }
     }
+    if ($null -ne $CodexSubagentPolicy) {
+        if ($CodexSubagentPolicy.contract -ne $CodexSubagentPolicyContract -or $CodexSubagentPolicy.verified -ne $true) {
+            $findings.Add([pscustomobject]@{ code = 'codex_subagent_policy_unverified'; severity = 'blocker'; detail = 'The local Codex zero-subagent policy could not be verified.' })
+        }
+        elseif ($CodexSubagentPolicy.multiAgentEnabled -ne $false -or $CodexSubagentPolicy.configuredMaxLocalSubagents -ne 0) {
+            $findings.Add([pscustomobject]@{ code = 'codex_multi_agent_enabled'; severity = 'blocker'; detail = 'Codex multi-agent execution is enabled; local company dispatch is paused.' })
+        }
+    }
     return @($findings)
 }
 
@@ -151,7 +206,9 @@ function Get-HostAdmission {
         'duplicate_local_workers',
         'ambiguous_listener_ownership',
         'local_company_health_unavailable',
-        'local_company_work_active'
+        'local_company_work_active',
+        'codex_subagent_policy_unverified',
+        'codex_multi_agent_enabled'
     )
     $blockers = @($Findings | Where-Object { $blockingCodes -contains [string]$_.code } | ForEach-Object { [string]$_.code })
     [pscustomobject]@{
@@ -195,7 +252,23 @@ function Invoke-SelfTest {
     if ($missingFindings.code -notcontains 'local_company_health_unavailable' -or (Get-HostAdmission $missingFindings).eligible) { throw 'local_company_missing_fixture_failed' }
     try { ConvertTo-LocalCompanyHealthSummary $healthFixture 124 | Out-Null; throw 'fixture_should_reject' }
     catch { if ($_.Exception.Message -ne 'local_company_health_pid_mismatch') { throw } }
-    [pscustomobject]@{ ok = $true; contract = $Contract; hostAdmissionContract = $HostAdmissionContract; localCompanyHealthContract = $LocalCompanyHealthContract; checks = 12; processMutation = $false }
+    $disabledPolicy = ConvertTo-CodexSubagentPolicy "[features]`nmulti_agent = false # local-only`n"
+    if (-not $disabledPolicy.verified -or $disabledPolicy.multiAgentEnabled -or $disabledPolicy.configuredMaxLocalSubagents -ne 0) { throw 'codex_subagent_disabled_fixture_failed' }
+    $enabledPolicy = ConvertTo-CodexSubagentPolicy "[features]`nmulti_agent = true`n"
+    $enabledFindings = @(Get-AuditFindings 50 500 0 $empty $true $null $false $false $enabledPolicy)
+    if ($enabledFindings.code -notcontains 'codex_multi_agent_enabled' -or (Get-HostAdmission $enabledFindings).eligible) { throw 'codex_subagent_enabled_fixture_failed' }
+    foreach ($invalid in @(
+        "# multi_agent = false`n[features]`nother = true`n",
+        "[features]`nmulti_agent = false`n[features]`nmulti_agent = false`n",
+        "[features]`nmulti_agent = 0`n"
+    )) {
+        try { ConvertTo-CodexSubagentPolicy $invalid | Out-Null; throw 'fixture_should_reject' }
+        catch { if ($_.Exception.Message -eq 'fixture_should_reject') { throw } }
+    }
+    $unverifiedPolicy = [pscustomobject]@{ contract = $CodexSubagentPolicyContract; verified = $false; multiAgentEnabled = $null; configuredMaxLocalSubagents = $null }
+    $unverifiedFindings = @(Get-AuditFindings 50 500 0 $empty $true $null $false $false $unverifiedPolicy)
+    if ($unverifiedFindings.code -notcontains 'codex_subagent_policy_unverified' -or (Get-HostAdmission $unverifiedFindings).eligible) { throw 'codex_subagent_unverified_fixture_failed' }
+    [pscustomobject]@{ ok = $true; contract = $Contract; hostAdmissionContract = $HostAdmissionContract; localCompanyHealthContract = $LocalCompanyHealthContract; codexSubagentPolicyContract = $CodexSubagentPolicyContract; checks = 18; processMutation = $false }
 }
 
 if ($SelfTest) {
@@ -237,6 +310,17 @@ $rendererWorkingSetMb = [math]::Round((($renderers | Measure-Object WorkingSetSi
 $helpers = @($codexRows | Where-Object { $_.Name -in @('codex.exe', 'node.exe', 'node_repl.exe', 'powershell.exe', 'conhost.exe') })
 $activeHelpers = @($helpers | Where-Object { [double]$_.WorkingSetSize -ge 5MB })
 $helperWorkingSetMb = [math]::Round((($helpers | Measure-Object WorkingSetSize -Sum).Sum / 1MB), 1)
+$codexSubagentPolicy = $null
+try { $codexSubagentPolicy = Get-CodexSubagentPolicy }
+catch {
+    $codexSubagentPolicy = [pscustomobject]@{
+        contract = $CodexSubagentPolicyContract
+        verified = $false
+        source = 'local_codex_config'
+        multiAgentEnabled = $null
+        configuredMaxLocalSubagents = $null
+    }
+}
 
 $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
 $totalMemoryGb = [math]::Round($os.TotalVisibleMemorySize / 1MB, 2)
@@ -302,7 +386,7 @@ if ($localCompanyHealthRequired) {
         $localCompanySummary = $null
     }
 }
-$findings = @(Get-AuditFindings $usedMemoryPercent $codexWorkingSetMb $loadedModelCount $listenerSummary $listenerInventoryAvailable $localCompanySummary $localCompanyHealthRequired $localCompanyHealthAvailable)
+$findings = @(Get-AuditFindings $usedMemoryPercent $codexWorkingSetMb $loadedModelCount $listenerSummary $listenerInventoryAvailable $localCompanySummary $localCompanyHealthRequired $localCompanyHealthAvailable $codexSubagentPolicy)
 $hostAdmission = Get-HostAdmission $findings
 $report = [ordered]@{
     ok = $findings.Count -eq 0
@@ -323,7 +407,14 @@ $report = [ordered]@{
         activeHelperCount = $activeHelpers.Count
         helperWorkingSetMb = $helperWorkingSetMb
         subagentCount = $null
-        subagentObservation = 'not_os_observable'
+        subagentObservation = 'runtime_count_not_os_observable'
+        subagentPolicy = [ordered]@{
+            contract = $codexSubagentPolicy.contract
+            verified = $codexSubagentPolicy.verified
+            source = $codexSubagentPolicy.source
+            multiAgentEnabled = $codexSubagentPolicy.multiAgentEnabled
+            configuredMaxLocalSubagents = $codexSubagentPolicy.configuredMaxLocalSubagents
+        }
     }
     localModels = [ordered]@{
         serviceAvailable = $ollamaAvailable
@@ -357,6 +448,9 @@ $report = [ordered]@{
         commandLinesReturned = $false
         secretValuesReturned = $false
         environmentRead = $false
+        codexConfigRead = $true
+        codexConfigPathReturned = $false
+        codexConfigMaxBytes = $MaxCodexConfigBytes
         loopbackHealthRead = $true
         loopbackHealthMaxBytes = $MaxLocalCompanyHealthBytes
         automaticCleanup = $false

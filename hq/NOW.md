@@ -31,7 +31,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 ## Implemented reality
 
-- HQ caps 12 roles, four jobs, and zero idle compute; overrides fail closed and duplicate ceilings are removed. Ally stays zero-subagent; multi-agent is disabled, with no duplicate dev server or loaded local model. Idle Ollama hosts were stopped; one named lease blocks duplicate company cycles (`21afe44`).
+- HQ caps 12 roles, four jobs, and zero idle compute; overrides fail closed and duplicate ceilings are removed. Ally stays zero-subagent: its audit requires exactly one `[features] multi_agent = false` declaration and reports a zero ceiling; no duplicate dev server or loaded local model. Idle Ollama hosts were stopped; one lease blocks duplicate cycles (`21afe44`).
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation (`07dd959`).
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked (`be78a02`).
 - Each CEO cycle selects one outcome. Invalid identity/evidence stops before spend; owner-send uncertainty is explicit, retains claims, and is never auto-retried (`f1328a0`, `cafdafe`, `f626ee7`).
@@ -67,7 +67,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - `supermegabase` is not a trial target: it has existing records, one recorded migration, and 27 public RLS tables without policies. No isolated branch is verified, so managed writes remain off.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
 - Local integration now combines deployed `d38cdbb` Settings v23 and richer product controls with recovery, Shop operating flow, receivables, service scheduling, production demand, and settlement work; it is verified locally but not released.
-- Paired production remains at `d38cdbb8031395c851470edb3b10bf97dbdcf681`, while this integration candidate is `cd53a31f38a0f92e377d80897144a17a1aba83c9`. At this audit it is 224 commits ahead of live and 172 ahead of current remote `main`; production lacks the candidate launch-readiness context, so live HQ and legacy CEO repair fail closed until owner-gated integration and release.
+- Production `d38cdbb8031395c851470edb3b10bf97dbdcf681` lacks launch-readiness, so live HQ and CEO repair fail closed. The external handoff packet binds current candidate, remote/live identity, workflow authority, ancestry, and no-deploy controls and must pass `release:handoff:verify`; mutable counts stay out.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 
