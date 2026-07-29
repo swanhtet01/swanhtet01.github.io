@@ -43,8 +43,8 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal 
 - Client setup uses one manifest-backed smart import with exception review (`ab9a89e`).
 - Founder operations can compile one private four-product artifact (`39ceec5`); Settings revalidates rows and three digest layers, requires exact founder approval, and installs each real local product separately (`bdd843e`).
 - Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancel releases, complete consumes, and sellable returns restore the exact fulfilled location/lot (`3cd4825`).
-- Shop close keeps a balanced accounting-review CSV grouped by payment method and freezes a human-approved versioned tax code, rate, and inclusive/exclusive treatment into future orders. Owner-reviewed account mappings apply only to later closes; history stays unchanged and no filing or posting occurs (`d47f5d9`, `39b7fc2`, `369cb2b`).
-- Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, release, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches bind reviewed productive time and closed downtime to one exact order window and routed work centre before Availability and OEE (`3c885d8`, `607565a`, `5cb85db`).
+- Shop close keeps a balanced accounting-review CSV grouped by payment method and freezes a human-approved versioned tax code, rate, and inclusive/exclusive treatment into future orders. Owner-reviewed account mappings apply only to later closes; history stays unchanged and no filing or posting occurs. Purchasing, returns, refunds, and settlement exist (`d47f5d9`, `39b7fc2`, `369cb2b`, `a37c933c`).
+- Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, release, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches bind reviewed productive time and closed downtime to one exact order window and routed work centre before Availability and OEE. Cost and calibration controls now fail closed (`3c885d8`, `607565a`, `5cb85db`, `b78a3248`).
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 - CEO status is output-free across weekly briefs. Company Week separates recorded from delivered and fails incomplete delivery to attention; Company Health shows receipt counts (`8d97d4d`, `ece46ce`).
@@ -72,7 +72,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
-- Remaining enterprise gaps include Shop tax/settlement/posting, Plant validated OEE/costing/calibration, Website hosted release, and Ecommerce payment/shipping/tax/returns.
+- Remaining gaps: managed security/recovery; Shop conditional accounting; Plant engineering/rework/compliance; Website hosting/analytics; Ecommerce provider/shipping/returns.
 
 ## Decisions in force
 

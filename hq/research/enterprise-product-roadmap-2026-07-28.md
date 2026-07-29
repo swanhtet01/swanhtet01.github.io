@@ -14,6 +14,25 @@ The integrated operating loops are:
 4. Product exception -> responsible owner -> evidence -> approval -> recovery -> audit trail.
 5. Client profile -> industry blueprint -> product templates -> data preview -> accountable activation -> measurable pilot.
 
+## Verified implementation baseline - 2026-07-29
+
+This roadmap is now split between controls that exist in the product and capabilities that remain sequenced. Do not create a second module for an implemented lifecycle.
+
+- **Client preparation:** five business presets, one-to-four product selection, shared client/owner/topology, product-specific CSV preview and correction, a digest-bound private package, local installation, and one evidence mission per selected product are implemented. The CLI and Settings installer fail before writes on invalid, oversized, stale, duplicate-authority, or tampered packages.
+- **Shop:** order intake, allocation, location/lot stock, fulfilment, reconciled payments, effective-dated tax, correction notes, multi-part returns with disposition, refund evidence, supplier purchase orders with partial receipt/cancellation, daily close, balanced accounting-review export, account mappings, and counted settlement variance are implemented as reviewed local/managed state transitions. External posting, filing, payment, and refund execution remain absent by design.
+- **Plant:** reviewed BOM/routing, material and capacity checks, exact Shop issue handoff, routed WIP/time, output/scrap, inspection/hold/release, genealogy, effectiveness/OEE, standard-versus-actual MMK cost, and versioned work-centre calibration evidence are implemented. New v3 controlled plans block release and operation recording when calibration evidence is missing or expired; legacy v1/v2 plans remain readable.
+- **Website:** structured local editing, responsive preview, evidence review, approval, artifact binding, and local release history exist. A hosted domain/TLS promotion and measured live lead-analytics loop are not proven.
+- **Ecommerce:** Shop-backed catalog projection, merchandising, cart/quote, customer and delivery intent, request receipt, and Shop confirmation exist. Provider payment, carrier shipping, tax adapter, customer account, and return-status loops are not proven.
+
+The next enterprise slices must close the following true gaps inside existing task surfaces:
+
+1. **Shared managed foundation:** isolated tenant, RLS, durable commands, backup/restore, observability, and role/capability proof. This gates every hosted integration claim.
+2. **Shop control depth:** company/location account determination, correction settlement accounts, supplier discrepancy/return-to-vendor, receivables aging, warranty/service case, and an owner-approved duplicate-safe posting adapter.
+3. **Plant control depth:** item/BOM/routing effective dates, material return/substitution, rework and CAPA, maintenance-to-order linkage, WIP valuation projection, training/document control, and recall search/export.
+4. **Website hosted lifecycle:** exact-domain preview promotion, TLS/domain proof, rollback execution, consented lead attribution, and privacy-safe conversion reporting.
+5. **Ecommerce post-request lifecycle:** Shop-reviewed shipping/tax/payment adapters, request status, customer history/reorder, return/support request, and abuse/rate-limit recovery.
+6. **Cross-product reporting:** shared master-data dimensions, exception inbox, saved views, and source-backed operational reports without adding top-level navigation.
+
 ## Shared enterprise foundation
 
 Every product should reuse these foundations instead of rebuilding them:
@@ -156,9 +175,10 @@ No module moves up a level until its data authority, lifecycle, failure path, re
 
 ## Sequencing
 
-1. Build one internal client demo blueprint spanning selected products, templates, import objects, and integration handoffs.
-2. Make quote-to-cash complete across Website/Ecommerce/Shop, then make plan-to-produce complete across Shop/Plant.
-3. Add shared master data and reporting before adding more navigation.
-4. Add Shop purchasing/returns/finance controls and Plant planning/quality/maintenance depth inside existing task surfaces.
-5. Add Website release/lead analytics and Ecommerce customer/shipping/returns after managed tenant security is proven.
-6. Validate each template pack with one real operator and promote only measured, recoverable workflows.
+1. Use the implemented internal client-demo blueprint and private-package path with founder-selected CSVs; do not build another setup surface.
+2. Complete one measured quote-to-close pilot across Website/Ecommerce/Shop and one plan-to-stock pilot across Shop/Plant.
+3. Prove isolated managed tenant security, recovery, and durable commands before provider, hosted publish, or external posting work.
+4. Add the true Shop and Plant control gaps listed above inside current Counter/Orders/Stock/Jobs/Problems surfaces.
+5. Add shared master data and reporting before adding navigation or products.
+6. Add Website hosted release/lead analytics and Ecommerce customer/shipping/returns only after managed tenant security is proven.
+7. Validate each template pack with one real operator and promote only measured, recoverable workflows.
