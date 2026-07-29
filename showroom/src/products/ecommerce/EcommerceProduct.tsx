@@ -7,6 +7,7 @@ import {
   commerceCatalogDigest,
   commerceCatalogDigestSource,
   commerceStorefrontConfiguration,
+  commerceStorefrontOrderTimeline,
   commerceStorefrontRequestEquals,
   commerceStorefrontRequestLines,
   commerceStorefrontRequests,
@@ -1126,9 +1127,20 @@ export function EcommerceProduct() {
     ['Mode', autopilotMatchesSelection ? 'Applied' : 'Ready'],
     ['Boundary', 'Local selection'],
   ] as const
-  const pendingManagedRequests = managedInbox
-    ? commerceStorefrontRequests(managedInbox.state).filter((request) => request.state === 'pending_shop_review')
+  const managedOrderTimeline = managedInbox
+    ? commerceStorefrontOrderTimeline(managedInbox.state)
     : []
+  const pendingManagedRequests = managedOrderTimeline
+    .filter((entry) => entry.nextAction === 'review_in_shop')
+    .map((entry) => entry.request)
+  const activeManagedOrders = managedOrderTimeline.filter((entry) => entry.order
+    && entry.stage !== 'completed'
+    && entry.stage !== 'cancelled')
+  const completedManagedOrders = managedOrderTimeline.filter((entry) => entry.stage === 'completed')
+  const cancelledManagedOrders = managedOrderTimeline.filter((entry) => entry.stage === 'cancelled')
+  const lifecyclePaymentAttention = managedOrderTimeline.filter((entry) => entry.nextAction === 'confirm_payment')
+  const lifecycleRefundAttention = managedOrderTimeline.filter((entry) => entry.nextAction === 'settle_refund')
+  const managedReturnedUnits = managedOrderTimeline.reduce((total, entry) => total + entry.returnedQuantity, 0)
   const importNeeded = catalog.source === 'sample' || catalog.source === 'unavailable' || catalog.items.length === 0
   const orderOpsNow = Date.now()
   const orderOpsAgingCount = pendingManagedRequests.filter((request) => Date.parse(request.createdAt) <= orderOpsNow - 30 * 60 * 1000).length
@@ -1153,25 +1165,32 @@ export function EcommerceProduct() {
         : buyingCart.length
           ? 'Quote payment and delivery'
           : 'Checkout controls ready'
-  const orderOpsPriority = orderOpsStockRiskCount
-    ? 'Resolve stock risk'
-    : orderOpsExpiringCount
-      ? 'Refresh expiring quotes'
-      : orderOpsAgingCount
-        ? 'Clear aged requests'
-        : pendingManagedRequests.length
-          ? 'Review next request'
-          : importNeeded
-            ? 'Import sellable catalog'
-            : savedDraftIsCurrent
-              ? 'Keep storefront open'
-              : 'Save storefront'
+  const orderOpsPriority = lifecycleRefundAttention.length
+    ? 'Settle refund evidence'
+    : lifecyclePaymentAttention.length
+      ? 'Confirm payment before completion'
+      : orderOpsStockRiskCount
+        ? 'Resolve stock risk'
+        : orderOpsExpiringCount
+          ? 'Refresh expiring quotes'
+          : orderOpsAgingCount
+            ? 'Clear aged requests'
+            : pendingManagedRequests.length
+              ? 'Review next request'
+              : activeManagedOrders.length
+                ? 'Continue fulfilment'
+                : importNeeded
+                  ? 'Import sellable catalog'
+                  : savedDraftIsCurrent
+                    ? 'Ready for customer orders'
+                    : 'Save storefront'
   const orderOpsRows = [
-    ['Priority', orderOpsPriority],
-    ['SLA', pendingManagedRequests.length ? orderOpsAgingCount ? `${orderOpsAgingCount} aging` : 'Inside window' : 'No queue'],
-    ['Stock risk', orderOpsStockRiskCount ? `${orderOpsStockRiskCount} blocked` : 'Clear'],
-    ['Payment', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} review` : 'Not charged'],
-    ['Handoff', pendingManagedRequests.length ? 'Shop owns writes' : buyingReady ? 'Ready for quote' : 'Setup first'],
+    ['Review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : 'Clear'],
+    ['Fulfil', activeManagedOrders.length ? `${activeManagedOrders.length} active` : 'Clear'],
+    ['Payment', lifecyclePaymentAttention.length ? `${lifecyclePaymentAttention.length} blocking` : 'Clear'],
+    ['Refund', lifecycleRefundAttention.length ? `${lifecycleRefundAttention.length} due` : 'Clear'],
+    ['Done', `${completedManagedOrders.length} completed · ${cancelledManagedOrders.length} cancelled`],
+    ['Returns', managedReturnedUnits ? `${managedReturnedUnits} units recorded` : 'None'],
   ] as const
   const orderImportStage = importNeeded
     ? 'Upload catalog first'
@@ -1728,11 +1747,12 @@ export function EcommerceProduct() {
         <p className="ecommerce-request-inbox-summary" role="status">{requestInboxNextSummary}</p>
       </section>
 
-      <section aria-label="Order ops cockpit" className="ecommerce-ops-cockpit">
+      <section aria-label="Order lifecycle queue" className="ecommerce-ops-cockpit">
         <div>
-          <span className="core-eyebrow">Order ops cockpit</span>
+          <span className="core-eyebrow">Order lifecycle</span>
           <h2>{orderOpsPriority}</h2>
-          <p>AI ranks order exceptions from the live queue, quote expiry, stock risk, and payment state. Shop still confirms every write.</p>
+          <p>One Shop-owned record now follows each Ecommerce request through review, fulfilment, payment, cancellation, refund, and return. This view reads the lifecycle; Shop confirms every change.</p>
+          <button className="text-link" disabled={!managedOrderTimeline.some((entry) => entry.order)} onClick={() => navigate('/shop/?tab=orders')} type="button">Open Shop order queue</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
           {orderOpsRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}

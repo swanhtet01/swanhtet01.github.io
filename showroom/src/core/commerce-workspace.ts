@@ -625,11 +625,23 @@ export type CommerceStorefrontRequest = CommerceStorefrontRequestV1 | CommerceSt
 
 export type CommerceStorefrontOrderStage = 'waiting_shop_review' | CommerceOrderStatus
 
+export type CommerceStorefrontOrderNextAction =
+  | 'review_in_shop'
+  | 'start_preparing'
+  | 'mark_ready'
+  | 'confirm_payment'
+  | 'complete_fulfilment'
+  | 'settle_refund'
+  | 'none'
+
 export type CommerceStorefrontOrderTimelineEntry = {
   request: CommerceStorefrontRequest
   order: CommerceOrder | null
   stage: CommerceStorefrontOrderStage
   paymentStatus: 'not_authorized' | CommercePaymentStatus
+  refundStatus: 'none' | CommerceRefundStatus
+  returnedQuantity: number
+  nextAction: CommerceStorefrontOrderNextAction
 }
 
 export type CommerceStorefrontMerchandising = {
@@ -3321,11 +3333,27 @@ export function commerceStorefrontOrderTimeline(
     const matchingOrders = current.orders.filter((order) => order.sourceRecordId === request.id)
     if (matchingOrders.length > 1) throw new Error(`Ecommerce request ${request.id} has multiple Shop orders.`)
     const order = matchingOrders[0] ? structuredClone(matchingOrders[0]) : null
+    const nextAction: CommerceStorefrontOrderNextAction = !order
+      ? 'review_in_shop'
+      : order.refundStatus === 'due'
+        ? 'settle_refund'
+        : order.status === 'confirmed'
+          ? 'start_preparing'
+          : order.status === 'preparing'
+            ? 'mark_ready'
+            : order.status === 'ready' && order.paymentStatus !== 'reconciled'
+              ? 'confirm_payment'
+              : order.status === 'ready'
+                ? 'complete_fulfilment'
+                : 'none'
     return {
       request: structuredClone(request),
       order,
       stage: order?.status ?? 'waiting_shop_review',
       paymentStatus: order?.paymentStatus ?? 'not_authorized',
+      refundStatus: order?.refundStatus ?? 'none',
+      returnedQuantity: order?.returns?.reduce((total, record) => total + record.quantity, 0) ?? 0,
+      nextAction,
     }
   }).sort((left, right) => Date.parse(right.request.createdAt) - Date.parse(left.request.createdAt))
 }

@@ -328,6 +328,10 @@ if (!ecommerceSource.includes('const orderAutopilotStage =')
   || !ecommerceCssSource.includes('.ecommerce-order-command-center-rows')
   || !ecommerceCssSource.includes('grid-template-columns: repeat(5, minmax(0, 1fr))')) fail('ecommerce_order_command_center_missing')
 if (!ecommerceSource.includes('const orderOpsRows = [')
+  || !ecommerceSource.includes('commerceStorefrontOrderTimeline')
+  || !ecommerceSource.includes("entry.nextAction === 'review_in_shop'")
+  || !ecommerceSource.includes("entry.nextAction === 'confirm_payment'")
+  || !ecommerceSource.includes("entry.nextAction === 'settle_refund'")
   || !ecommerceSource.includes("useState<RequestInboxFilter>('all')")
   || !ecommerceSource.includes('const lifecycleRows = [')
   || !ecommerceSource.includes('const orderingReadinessRows = [')
@@ -337,14 +341,13 @@ if (!ecommerceSource.includes('const orderOpsRows = [')
   || !ecommerceSource.includes('const requestInboxFilterButtons = [')
   || !ecommerceSource.includes('const orderingReadinessStage =')
   || !ecommerceSource.includes('const paymentDeliveryStage =')
-  || !ecommerceSource.includes('aria-label="Order ops cockpit"')
-  || !ecommerceSource.includes('Order ops cockpit')
-  || !ecommerceSource.includes('AI ranks order exceptions from the live queue, quote expiry, stock risk, and payment state. Shop still confirms every write.')
-  || !ecommerceSource.includes("['Priority', orderOpsPriority]")
-  || !ecommerceSource.includes("['SLA', pendingManagedRequests.length ? orderOpsAgingCount ? `${orderOpsAgingCount} aging` : 'Inside window' : 'No queue']")
-  || !ecommerceSource.includes("['Stock risk', orderOpsStockRiskCount ? `${orderOpsStockRiskCount} blocked` : 'Clear']")
-  || !ecommerceSource.includes("['Payment', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} review` : 'Not charged']")
-  || !ecommerceSource.includes("['Handoff', pendingManagedRequests.length ? 'Shop owns writes' : buyingReady ? 'Ready for quote' : 'Setup first']")
+  || !ecommerceSource.includes('aria-label="Order lifecycle queue"')
+  || !ecommerceSource.includes('One Shop-owned record now follows each Ecommerce request through review, fulfilment, payment, cancellation, refund, and return.')
+  || !ecommerceSource.includes("['Review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : 'Clear']")
+  || !ecommerceSource.includes("['Fulfil', activeManagedOrders.length ? `${activeManagedOrders.length} active` : 'Clear']")
+  || !ecommerceSource.includes("['Payment', lifecyclePaymentAttention.length ? `${lifecyclePaymentAttention.length} blocking` : 'Clear']")
+  || !ecommerceSource.includes("['Refund', lifecycleRefundAttention.length ? `${lifecycleRefundAttention.length} due` : 'Clear']")
+  || !ecommerceSource.includes('Open Shop order queue')
   || !ecommerceSource.includes('const orderImportStage =')
   || !ecommerceSource.includes('const orderImportRows = [')
   || !ecommerceSource.includes('type EcommerceOrderImportReview')
@@ -10382,7 +10385,10 @@ async function verifyStorefrontRuntime() {
       && waitingTimeline[0].request.id === buyingRequest.id
       && waitingTimeline[0].order === null
       && waitingTimeline[0].stage === 'waiting_shop_review'
-      && waitingTimeline[0].paymentStatus === 'not_authorized',
+      && waitingTimeline[0].paymentStatus === 'not_authorized'
+      && waitingTimeline[0].refundStatus === 'none'
+      && waitingTimeline[0].returnedQuantity === 0
+      && waitingTimeline[0].nextAction === 'review_in_shop',
     'ecommerce_request_timeline_did_not_show_shop_review_boundary')
     const linkedOrderProof = {
       actionId: 'ACT-ECOMMERCE-ORDER-1',
@@ -10423,8 +10429,57 @@ async function verifyStorefrontRuntime() {
     buyingAssert(confirmedTimeline.length === 1
       && confirmedTimeline[0].order?.id === 'ORD-ECOMMERCE-1'
       && confirmedTimeline[0].stage === 'confirmed'
-      && confirmedTimeline[0].paymentStatus === 'pending',
+      && confirmedTimeline[0].paymentStatus === 'pending'
+      && confirmedTimeline[0].nextAction === 'start_preparing',
     'ecommerce_request_timeline_did_not_follow_linked_shop_order')
+    const preparingOrderState = linkedOrderState && commerce.advanceCommerceOrder(linkedOrderState, 'ORD-ECOMMERCE-1', 'confirmed', {
+      actionId: 'ACT-ECOMMERCE-PREPARING-1',
+      capturedAt: '2026-07-24T09:20:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Start preparing the reviewed Ecommerce order.',
+      evidenceReference: 'ECOMMERCE-ORDER-PREPARING-1',
+    })
+    const readyOrderState = preparingOrderState && commerce.advanceCommerceOrder(preparingOrderState, 'ORD-ECOMMERCE-1', 'preparing', {
+      actionId: 'ACT-ECOMMERCE-READY-1',
+      capturedAt: '2026-07-24T09:30:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Mark the Ecommerce order ready for its reviewed handoff.',
+      evidenceReference: 'ECOMMERCE-ORDER-READY-1',
+    })
+    const readyTimeline = readyOrderState ? commerce.commerceStorefrontOrderTimeline(readyOrderState) : []
+    buyingAssert(readyTimeline[0]?.stage === 'ready'
+      && readyTimeline[0].nextAction === 'confirm_payment',
+    'ecommerce_ready_order_did_not_surface_payment_gate')
+    const paidReadyState = readyOrderState && commerce.reconcileCommercePayment(readyOrderState, 'ORD-ECOMMERCE-1', {
+      actionId: 'ACT-ECOMMERCE-PAID-1',
+      capturedAt: '2026-07-24T09:35:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Confirm reviewed Ecommerce payment evidence.',
+      evidenceReference: 'ECOMMERCE-ORDER-PAID-1',
+    })
+    const paidReadyTimeline = paidReadyState ? commerce.commerceStorefrontOrderTimeline(paidReadyState) : []
+    buyingAssert(paidReadyTimeline[0]?.paymentStatus === 'reconciled'
+      && paidReadyTimeline[0].nextAction === 'complete_fulfilment',
+    'ecommerce_paid_order_did_not_surface_completion_gate')
+    const paidConfirmedState = linkedOrderState && commerce.reconcileCommercePayment(linkedOrderState, 'ORD-ECOMMERCE-1', {
+      actionId: 'ACT-ECOMMERCE-PAID-CANCEL-1',
+      capturedAt: '2026-07-24T09:20:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Confirm payment before the reviewed Ecommerce cancellation.',
+      evidenceReference: 'ECOMMERCE-ORDER-PAID-CANCEL-1',
+    })
+    const refundDueState = paidConfirmedState && commerce.cancelCommerceOrder(paidConfirmedState, 'ORD-ECOMMERCE-1', {
+      actionId: 'ACT-ECOMMERCE-CANCEL-1',
+      capturedAt: '2026-07-24T09:25:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Cancel the reviewed Ecommerce order and release its stock.',
+      evidenceReference: 'ECOMMERCE-ORDER-CANCEL-1',
+    })
+    const refundDueTimeline = refundDueState ? commerce.commerceStorefrontOrderTimeline(refundDueState) : []
+    buyingAssert(refundDueTimeline[0]?.stage === 'cancelled'
+      && refundDueTimeline[0].refundStatus === 'due'
+      && refundDueTimeline[0].nextAction === 'settle_refund',
+    'ecommerce_cancelled_paid_order_did_not_surface_refund_gate')
     buyingAssert(await commerce.recordCommerceStorefrontRequest(managedBuyingState, structuredClone(buyingRequest), managedRequestProof) === managedBuyingState,
       'ecommerce_buying_managed_request_retry_not_idempotent')
     buyingAssert(await commerce.recordCommerceStorefrontRequest(managedPreviewState, {
