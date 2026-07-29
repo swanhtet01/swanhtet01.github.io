@@ -142,6 +142,13 @@ test('company operations status exposes measured control metadata and strips wor
         counts: { completed: 5, recorded: 5, sent: 5, failed: 0, uncertain: 0, missing: 0 },
         records: [{ deliveryId: 'must-not-escape-delivery', briefText: 'must-not-escape-delivery-output' }],
       },
+      actions: {
+        available: true,
+        durable: true,
+        state: 'ready',
+        counts: { accepted: 5, proposed: 5, missing: 0 },
+        items: [{ actionId: 'must-not-escape-action', title: 'must-not-escape-action-content' }],
+      },
       records: [{ briefText: 'must-not-escape-output' }],
     },
     coverage: { directCyclesExcluded: true },
@@ -157,11 +164,13 @@ test('company operations status exposes measured control metadata and strips wor
   assert.equal(ready.outcomes.efficiencyAvailable, true)
   assert.equal(ready.delivery.state, 'ready')
   assert.equal(ready.delivery.sent, 5)
+  assert.deepEqual(ready.actions, { available: true, durable: true, state: 'ready', accepted: 5, proposed: 5, missing: 0 })
   assert.equal(ready.attention.deliveryFailed, 0)
   assert.deepEqual(ready.attentionQueue, { state: 'clear', requiredActions: 0, signals: 0 })
   assert.equal(ready.workforce.dormantAgents, 12)
   assert.equal(ready.controls.metadataOnly, true)
-  assert.doesNotMatch(JSON.stringify(ready), /must-not-escape|"clientId"|"agentId"|"briefText"|"deliveryId"/i)
+  assert.equal(ready.controls.ceoActionContentReturned, false)
+  assert.doesNotMatch(JSON.stringify(ready), /must-not-escape|"clientId"|"agentId"|"briefText"|"deliveryId"|"actionId"/i)
 
   for (const [state, counts] of [
     ['attention', { completed: 5, recorded: 5, sent: 4, failed: 1, uncertain: 0, missing: 0 }],
@@ -188,6 +197,13 @@ test('company operations status exposes measured control metadata and strips wor
   }, 30)
   assert.equal(nonDurableDelivery.status, 'attention')
   assert.equal(nonDurableDelivery.delivery.durable, false)
+
+  const missingAction = companyOperationsStatusView({
+    ...report,
+    outcomes: { ...report.outcomes, actions: { ...report.outcomes.actions, state: 'missing', counts: { accepted: 5, proposed: 4, missing: 1 } } },
+  }, 30)
+  assert.equal(missingAction.status, 'attention')
+  assert.equal(missingAction.actions.missing, 1)
 
   const malformed = companyOperationsStatusView({
     ...report,

@@ -98,7 +98,7 @@ const ceoOperationsEvidence = companyOperationsStatusView({
   attention: { overduePlanned: 0, overdueRunning: 0, failedOrBlocked: 0, revisionRequired: 0, missingEvaluation: 0, deliveryFailed: 0, deliveryUncertain: 0, deliveryMissing: 0 },
   targets: Array.from({ length: 8 }, () => ({ state: 'met' })),
   workforce: { availableAgents: 12, utilizedAgents: 2, dormantAgents: 12, totalAssignments: 5, activeAssignments: 0, queuedAssignments: 0, runningAssignments: 0, usedRoleCalls: 15, modelCalls: 3, cacheHits: 2, weightedTotalUnits: 1200, agents: [{ agentId: 'must-not-escape' }] },
-  outcomes: { available: true, durable: true, state: 'measured', counts: { completed: 5, evaluated: 5, accepted: 5, revisionRequired: 0 }, efficiency: { available: true, acceptedOutcomesPer1000WorkUnits: 4.166667 }, delivery: { available: true, durable: true, state: 'ready', counts: { completed: 5, recorded: 5, sent: 5, failed: 0, uncertain: 0, missing: 0 }, records: [{ deliveryId: 'must-not-escape-delivery' }] }, records: [{ output: 'must-not-escape' }] },
+  outcomes: { available: true, durable: true, state: 'measured', counts: { completed: 5, evaluated: 5, accepted: 5, revisionRequired: 0 }, efficiency: { available: true, acceptedOutcomesPer1000WorkUnits: 4.166667 }, delivery: { available: true, durable: true, state: 'ready', counts: { completed: 5, recorded: 5, sent: 5, failed: 0, uncertain: 0, missing: 0 }, records: [{ deliveryId: 'must-not-escape-delivery' }] }, actions: { available: true, durable: true, state: 'ready', counts: { accepted: 5, proposed: 5, missing: 0 }, items: [{ actionId: 'must-not-escape-action', title: 'must-not-escape-action-content' }] }, records: [{ output: 'must-not-escape' }] },
   coverage: { directCyclesExcluded: true },
   exposure: { rawEvidenceReturned: false, modelOutputReturned: false, specialistOutputReturned: false, providerRowsReturned: false, ceoDeliveryContentReturned: false },
 })
@@ -326,6 +326,10 @@ requireContract('CEO company-operations evidence is measured, bounded, and outpu
   && ceoOperationsEvidence.delivery?.durable === true
   && ceoOperationsEvidence.delivery?.state === 'ready'
   && ceoOperationsEvidence.delivery?.sent === 5
+  && ceoOperationsEvidence.actions?.durable === true
+  && ceoOperationsEvidence.actions?.state === 'ready'
+  && ceoOperationsEvidence.actions?.proposed === 5
+  && ceoOperationsEvidence.actions?.missing === 0
   && ceoOperationsEvidence.attention?.deliveryFailed === 0
   && ceoOperationsEvidence.attention?.deliveryUncertain === 0
   && ceoOperationsEvidence.attention?.deliveryMissing === 0
@@ -339,13 +343,17 @@ requireContract('CEO company-operations evidence is measured, bounded, and outpu
   && ceoOperationsEvidence.controls?.specialistOutputReturned === false
   && ceoOperationsEvidence.controls?.providerRowsReturned === false
   && ceoOperationsEvidence.controls?.ceoDeliveryContentReturned === false
-  && !/must-not-escape|"clientId"|"agentId"|"briefText"|"deliveryId"/i.test(JSON.stringify(ceoOperationsEvidence)))
+  && ceoOperationsEvidence.controls?.ceoActionContentReturned === false
+  && !/must-not-escape|"clientId"|"agentId"|"briefText"|"deliveryId"|"actionId"/i.test(JSON.stringify(ceoOperationsEvidence)))
 requireContract('owner console presents delivery coverage without exposing receipt content',
   kernelConsoleText.includes('function companyDeliverySection(delivery={})')
   && kernelConsoleText.includes('Receipt coverage only; message content stays private')
   && kernelConsoleText.includes('function companyAttentionSection(queue={})')
   && kernelConsoleText.includes('Only exceptions that need a decision')
   && kernelConsoleText.includes('No owner action needed in this window')
+  && kernelConsoleText.includes('function companyDepartmentQueueSection(queue={})')
+  && kernelConsoleText.includes('Accepted decisions become one accountable internal draft; nothing runs automatically')
+  && kernelConsoleText.includes('departmentQueue=report.outcomes&&report.outcomes.actions||{}')
   && !/delivery\.records|deliveryId|deliveryClaimId/.test(kernelConsoleText))
 requireContract('weekly CEO completion remains distinct from durable owner delivery',
   kernelOperationsText.includes("CEO_OUTCOME_CYCLE_STATE_FIELDS = new Set(['clientId', 'authorityDigest', 'asOf', 'includeDelivery'])")

@@ -22,6 +22,7 @@ const OUTCOME_STATES = new Set([
   'store_unavailable',
 ])
 const DELIVERY_STATES = new Set(['ready', 'no_outcomes', 'missing', 'attention', 'invalid_coverage', 'non_durable', 'store_unavailable'])
+const ACTION_STATES = new Set(['ready', 'no_accepted_outcomes', 'missing', 'invalid_coverage', 'non_durable', 'store_unavailable'])
 
 function envValue(name, env = process.env) {
   return String(env?.[name] || '').trim()
@@ -143,7 +144,8 @@ function operationsUnavailable(windowDays) {
     workforce: { availableAgents: MAX_REGISTERED_COMPANY_AGENTS, utilizedAgents: 0, dormantAgents: MAX_REGISTERED_COMPANY_AGENTS, totalAssignments: 0, activeAssignments: 0, queuedAssignments: 0, runningAssignments: 0, usedRoleCalls: 0, modelCalls: 0, cacheHits: 0, weightedTotalUnits: 0 },
     outcomes: { available: false, durable: false, state: 'unavailable', completed: 0, evaluated: 0, accepted: 0, revisionRequired: 0, efficiencyAvailable: false, acceptedPer1000WorkUnits: null },
     delivery: { available: false, durable: false, state: 'unavailable', completed: 0, recorded: 0, sent: 0, failed: 0, uncertain: 0, missing: 0 },
-    controls: { metadataOnly: true, directCyclesExcluded: true, rawEvidenceReturned: false, modelOutputReturned: false, specialistOutputReturned: false, providerRowsReturned: false, ceoDeliveryContentReturned: false },
+    actions: { available: false, durable: false, state: 'unavailable', accepted: 0, proposed: 0, missing: 0 },
+    controls: { metadataOnly: true, directCyclesExcluded: true, rawEvidenceReturned: false, modelOutputReturned: false, specialistOutputReturned: false, providerRowsReturned: false, ceoDeliveryContentReturned: false, ceoActionContentReturned: false },
   }
 }
 
@@ -219,6 +221,16 @@ export function companyOperationsStatusView(report, requestedWindowDays = 30) {
     && report.attention.deliveryFailed === report.outcomes.delivery.counts.failed
     && report.attention.deliveryUncertain === report.outcomes.delivery.counts.uncertain
     && report.attention.deliveryMissing === report.outcomes.delivery.counts.missing
+  const actionState = ACTION_STATES.has(report.outcomes?.actions?.state) ? report.outcomes.actions.state : 'invalid_coverage'
+  const actionsDurable = report.outcomes?.actions?.durable === true
+  const actionCountKeys = ['accepted', 'proposed', 'missing']
+  const actionCountsValid = actionCountKeys.every((key) => exactCount(report.outcomes?.actions?.counts?.[key]) === report.outcomes?.actions?.counts?.[key])
+    && report.outcomes.actions.counts.accepted === report.outcomes.counts.accepted
+    && report.outcomes.actions.counts.proposed + report.outcomes.actions.counts.missing === report.outcomes.actions.counts.accepted
+    && (actionState !== 'ready' || (actionsDurable && report.outcomes.actions.counts.missing === 0))
+    && (actionState !== 'no_accepted_outcomes' || (actionsDurable && report.outcomes.actions.counts.accepted === 0))
+    && (actionState !== 'missing' || report.outcomes.actions.counts.missing > 0)
+    && (actionState !== 'non_durable' || !actionsDurable)
   const boundarySafe = report.coverage?.directCyclesExcluded === true
     && report.exposure?.rawEvidenceReturned === false
     && report.exposure?.modelOutputReturned === false
@@ -231,10 +243,11 @@ export function companyOperationsStatusView(report, requestedWindowDays = 30) {
   const outcomeReady = outcomeState === 'measured' && outcomesDurable
   const deliveryReady = deliveryState === 'ready' && deliveryDurable
   const deliveryEmpty = outcomeState === 'no_outcomes' && deliveryState === 'no_outcomes' && deliveryDurable
-  const status = !generatedAt || !countsValid || !attentionValid || !targetsValid || !workforceValid || !outcomesValid || !deliveryCountsValid
+  const status = !generatedAt || !countsValid || !attentionValid || !targetsValid || !workforceValid || !outcomesValid || !deliveryCountsValid || !actionCountsValid
     || !boundarySafe || readiness === 'at_risk' || attentionTotal > 0
     || ['invalid_coverage', 'non_durable', 'store_unavailable'].includes(outcomeState)
     || ['invalid_coverage', 'non_durable', 'store_unavailable', 'missing', 'attention'].includes(deliveryState)
+    || ['invalid_coverage', 'non_durable', 'store_unavailable', 'missing'].includes(actionState)
     ? 'attention'
     : readiness === 'meeting_targets' && outcomeReady && deliveryReady ? 'ready'
       : deliveryEmpty || deliveryReady ? 'collecting' : 'attention'
@@ -313,6 +326,14 @@ export function companyOperationsStatusView(report, requestedWindowDays = 30) {
       uncertain: exactCount(report.outcomes?.delivery?.counts?.uncertain),
       missing: exactCount(report.outcomes?.delivery?.counts?.missing),
     },
+    actions: {
+      available: report.outcomes?.actions?.available === true,
+      durable: actionsDurable,
+      state: actionState,
+      accepted: exactCount(report.outcomes?.actions?.counts?.accepted),
+      proposed: exactCount(report.outcomes?.actions?.counts?.proposed),
+      missing: exactCount(report.outcomes?.actions?.counts?.missing),
+    },
     controls: {
       metadataOnly: boundarySafe,
       directCyclesExcluded: report.coverage?.directCyclesExcluded === true,
@@ -321,6 +342,7 @@ export function companyOperationsStatusView(report, requestedWindowDays = 30) {
       specialistOutputReturned: report.exposure?.specialistOutputReturned === true,
       providerRowsReturned: report.exposure?.providerRowsReturned === true,
       ceoDeliveryContentReturned: report.exposure?.ceoDeliveryContentReturned === true,
+      ceoActionContentReturned: false,
     },
   }
 }
@@ -337,7 +359,7 @@ export const TOOLS = {
     },
   },
   company_operations_status: {
-    description: 'Get a metadata-only 7, 30, or 90 day Agent Company operating readout: accountable work states, overdue/blocked and owner-delivery attention, target coverage, bounded workforce utilization, cache/model work units, and accepted CEO outcomes. Read-only; no model or connector calls and no raw evidence or output. Defaults to 30 days.',
+    description: 'Get a metadata-only 7, 30, or 90 day Agent Company operating readout: accountable work states, overdue/blocked and owner-delivery attention, accepted-action queue counts, target coverage, bounded workforce utilization, cache/model work units, and accepted CEO outcomes. Read-only; no model or connector calls and no raw evidence or output. Defaults to 30 days.',
     input_schema: { type: 'object', properties: { window_days: { type: 'integer', enum: COMPANY_OPERATIONS_WINDOWS } }, additionalProperties: false },
     available: () => true,
     run: async ({ window_days = 30 } = {}) => {
