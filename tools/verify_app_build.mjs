@@ -2181,7 +2181,15 @@ if (!commercePageContract.includes('purchaseOrderDraft')
   || !coreCssSource.includes('.purchase-order-editor[data-mode="receive"] { grid-template-columns: 1fr; }')
   || !coreCssSource.includes('.purchase-order-editor[data-mode="create"] { grid-template-columns: repeat(2,minmax(0,1fr)); }')) fail('commerce_purchase_order_ui_missing')
 const commerceOrdersContract = commercePageContract.slice(commercePageContract.indexOf("if (tab === 'orders')"), commercePageContract.indexOf("if (tab === 'inventory')"))
-if (!commerceOrdersContract.includes('order-daily-controls') || !commerceOrdersContract.includes('Save daily close') || !commerceOrdersContract.includes('Close and exceptions')) fail('commerce_daily_controls_not_inside_orders')
+if (!commerceOrdersContract.includes('order-daily-controls') || !commerceOrdersContract.includes('Review and save close') || !commerceOrdersContract.includes('Close and exceptions')) fail('commerce_daily_controls_not_inside_orders')
+if (!coreSource.includes('data-close-settlement=')
+  || !coreSource.includes('Settlement count')
+  || !coreSource.includes('variance needs a responsible owner')
+  || !commerceSource.includes('supermega.commerce.close-settlement.v1')
+  || !commerceSource.includes('export function commerceCloseSettlementReview')
+  || !managedCommerceRuntime.includes('COMMERCE_CLOSE_SETTLEMENT_SCHEMA')
+  || !managedCommerceRuntime.includes('varianceOwner')
+  || !managedCommerceRuntime.includes('varianceReason')) fail('commerce_close_settlement_contract_missing')
 const commerceInventoryContract = commercePageContract.slice(commercePageContract.indexOf("if (tab === 'inventory')"))
 const commerceStockTableHeadContract = commerceInventoryContract.slice(commerceInventoryContract.indexOf('data-row table-head'), commerceInventoryContract.indexOf('{stockRows.map', commerceInventoryContract.indexOf('data-row table-head')))
 const openPurchaseOrderContract = commercePageContract.slice(commercePageContract.indexOf('function openPurchaseOrder'), commercePageContract.indexOf('function cancelPurchaseOrderEditor'))
@@ -6797,7 +6805,40 @@ async function verifyCommerceRuntime() {
       evidenceReference: 'EV-ACCOUNTING-CLOSE-001',
     })
     const accountingCloseExpectation = model.commerceCloseExpectation(completed, accountingCloseAt)
-    const accountingClosed = model.saveCommerceClose(completed, accountingCloseId, accountingCloseProof, accountingCloseExpectation)
+    const matchedSettlementInput = [{
+      paymentMethod: completed.orders[0].payment,
+      countedMmk: 200,
+      varianceOwner: '',
+      varianceReason: '',
+    }]
+    const matchedSettlement = model.commerceCloseSettlementReview(completed, accountingCloseExpectation, matchedSettlementInput)
+    const accountingClosed = model.saveCommerceClose(completed, accountingCloseId, accountingCloseProof, accountingCloseExpectation, matchedSettlementInput)
+    assert(matchedSettlement?.schema === 'supermega.commerce.close-settlement.v1'
+      && matchedSettlement.status === 'matched'
+      && matchedSettlement.totalExpectedMmk === 200
+      && matchedSettlement.totalCountedMmk === 200
+      && matchedSettlement.totalVarianceMmk === 0
+      && matchedSettlement.lines[0].varianceOwner === null
+      && accountingClosed?.closes[0].settlement?.status === 'matched',
+    'daily_close_matched_settlement_not_persisted')
+    assert(model.saveCommerceClose(accountingClosed, accountingCloseId, accountingCloseProof, accountingCloseExpectation, matchedSettlementInput) === accountingClosed,
+      'daily_close_matched_settlement_retry_not_idempotent')
+    assert(model.saveCommerceClose(accountingClosed, accountingCloseId, accountingCloseProof, accountingCloseExpectation, [{ ...matchedSettlementInput[0], countedMmk: 199, varianceOwner: 'Cashier', varianceReason: 'Count under review.' }]) === null,
+      'daily_close_changed_settlement_retry_succeeded')
+    assert(model.commerceCloseSettlementReview(completed, accountingCloseExpectation, [{ ...matchedSettlementInput[0], paymentMethod: 'Unknown' }]) === null,
+      'daily_close_unknown_payment_settlement_succeeded')
+    assert(model.commerceCloseSettlementReview(completed, accountingCloseExpectation, [{ ...matchedSettlementInput[0], countedMmk: 190 }]) === null,
+      'daily_close_unowned_variance_succeeded')
+    const varianceInput = [{ ...matchedSettlementInput[0], countedMmk: 190, varianceOwner: 'Shift lead', varianceReason: 'Cash drawer recount required.' }]
+    const varianceSettlement = model.commerceCloseSettlementReview(completed, accountingCloseExpectation, varianceInput)
+    assert(varianceSettlement?.status === 'variance_review'
+      && varianceSettlement.totalVarianceMmk === -10
+      && varianceSettlement.lines[0].varianceOwner === 'Shift lead'
+      && varianceSettlement.lines[0].varianceReason === 'Cash drawer recount required.',
+    'daily_close_variance_evidence_not_retained')
+    const forgedSettlementState = structuredClone(accountingClosed)
+    forgedSettlementState.closes[0].settlement.totalCountedMmk = 201
+    assertThrows(() => model.validateCommerceState(forgedSettlementState), 'daily_close_forged_settlement_total_validated')
     const accountingExport = model.commerceDailyCloseExport(accountingClosed, accountingCloseId)
     assert(accountingExport?.schema === 'supermega.commerce.daily-close-export.v3'
       && accountingExport.orderCount === 1
@@ -6933,6 +6974,13 @@ async function verifyCommerceRuntime() {
     const formulaPaymentState = model.validateCommerceState({
       ...accountingClosed,
       orders: accountingClosed.orders.map((candidate) => ({ ...candidate, payment: '=2+2' })),
+      closes: accountingClosed.closes.map((candidate) => ({
+        ...candidate,
+        settlement: candidate.settlement ? {
+          ...candidate.settlement,
+          lines: candidate.settlement.lines.map((line) => ({ ...line, paymentMethod: '=2+2' })),
+        } : undefined,
+      })),
     })
     const formulaAccountingHandoff = model.commerceAccountingHandoff(formulaPaymentState, accountingCloseId)
     assert(model.commerceAccountingHandoffCsv(formulaAccountingHandoff).includes('"\'=2+2"'), 'accounting_handoff_csv_formula_injection_not_neutralized')

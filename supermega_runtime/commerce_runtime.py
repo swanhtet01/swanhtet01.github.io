@@ -34,6 +34,7 @@ from supermega_runtime.trial_store import TrialValidationError
 COMMERCE_SCHEMA = "supermega.commerce.workspace.v2"
 COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v3"
 COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v2"
+COMMERCE_CLOSE_SETTLEMENT_SCHEMA = "supermega.commerce.close-settlement.v1"
 COMMERCE_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
@@ -444,6 +445,13 @@ _STOREFRONT_CONFIGURATION_FIELDS = frozenset(
 _STOREFRONT_CONFIGURATION_OPTIONAL_FIELDS = frozenset({"activation", "merchandising"})
 _STOREFRONT_MERCHANDISING_FIELDS = frozenset(
     {"sku", "featured", "collection", "displayName", "note"}
+)
+_CLOSE_OPTIONAL_FIELDS = _CLOSE_SNAPSHOT_FIELDS | {"settlement"}
+_CLOSE_SETTLEMENT_FIELDS = frozenset(
+    {"schema", "status", "totalExpectedMmk", "totalCountedMmk", "totalVarianceMmk", "lines"}
+)
+_CLOSE_SETTLEMENT_LINE_FIELDS = frozenset(
+    {"paymentMethod", "expectedMmk", "countedMmk", "varianceMmk", "status", "varianceOwner", "varianceReason"}
 )
 _PRODUCTION_RECEIPT_FIELDS = frozenset(
     {
@@ -2445,7 +2453,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             close,
             f"closes[{index}]",
             required=_CLOSE_REQUIRED_FIELDS,
-            optional=_CLOSE_SNAPSHOT_FIELDS,
+            optional=_CLOSE_OPTIONAL_FIELDS,
         )
         close_ids.append(_text(close["id"], f"closes[{index}].id", maximum=160))
         _timestamp(close["createdAt"], f"closes[{index}].createdAt")
@@ -2538,6 +2546,57 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             _text(close["operator"], f"closes[{index}].operator")
             _text(close["reason"], f"closes[{index}].reason")
             _text(close["evidenceReference"], f"closes[{index}].evidenceReference")
+            if "settlement" in close:
+                settlement = _object(close["settlement"], f"closes[{index}].settlement")
+                _exact_fields(
+                    settlement,
+                    f"closes[{index}].settlement",
+                    required=_CLOSE_SETTLEMENT_FIELDS,
+                )
+                if settlement["schema"] != COMMERCE_CLOSE_SETTLEMENT_SCHEMA or settlement["status"] not in {"matched", "variance_review"}:
+                    raise TrialValidationError(f"closes[{index}].settlement contract is invalid.")
+                expected_by_payment: dict[str, int] = {}
+                for order, adjusted_total in zip(member_orders, member_adjusted_totals, strict=True):
+                    assert adjusted_total is not None
+                    payment_method = str(order["payment"])
+                    expected_by_payment[payment_method] = expected_by_payment.get(payment_method, 0) + adjusted_total
+                settlement_lines: list[dict[str, Any]] = []
+                for line_index, candidate_line in enumerate(_list(settlement["lines"], f"closes[{index}].settlement.lines")):
+                    field = f"closes[{index}].settlement.lines[{line_index}]"
+                    line = _object(candidate_line, field)
+                    _exact_fields(line, field, required=_CLOSE_SETTLEMENT_LINE_FIELDS)
+                    payment_method = _text(line["paymentMethod"], f"{field}.paymentMethod", maximum=80)
+                    expected_mmk = _integer(line["expectedMmk"], f"{field}.expectedMmk")
+                    counted_mmk = _integer(line["countedMmk"], f"{field}.countedMmk")
+                    variance_mmk = line["varianceMmk"]
+                    if isinstance(variance_mmk, bool) or not isinstance(variance_mmk, int) or abs(variance_mmk) > _MAX_SAFE_INTEGER:
+                        raise TrialValidationError(f"{field}.varianceMmk must be a safe integer.")
+                    if expected_by_payment.get(payment_method) != expected_mmk or counted_mmk - expected_mmk != variance_mmk:
+                        raise TrialValidationError(f"{field} does not match the closed orders.")
+                    if variance_mmk == 0:
+                        if line["status"] != "matched" or line["varianceOwner"] is not None or line["varianceReason"] is not None:
+                            raise TrialValidationError(f"{field} matched evidence is invalid.")
+                    else:
+                        if line["status"] != "variance_review":
+                            raise TrialValidationError(f"{field} variance status is invalid.")
+                        _text(line["varianceOwner"], f"{field}.varianceOwner", maximum=80)
+                        _text(line["varianceReason"], f"{field}.varianceReason", maximum=240)
+                    settlement_lines.append(line)
+                methods = [line["paymentMethod"] for line in settlement_lines]
+                if methods != sorted(expected_by_payment):
+                    raise TrialValidationError(f"closes[{index}].settlement payment methods are invalid.")
+                total_expected = sum(line["expectedMmk"] for line in settlement_lines)
+                total_counted = sum(line["countedMmk"] for line in settlement_lines)
+                total_variance = sum(line["varianceMmk"] for line in settlement_lines)
+                if (
+                    any(abs(value) > _MAX_SAFE_INTEGER for value in (total_expected, total_counted, total_variance))
+                    or settlement["totalExpectedMmk"] != total_expected
+                    or settlement["totalCountedMmk"] != total_counted
+                    or settlement["totalVarianceMmk"] != total_variance
+                    or total_expected != close["total"]
+                    or settlement["status"] != ("variance_review" if any(line["status"] == "variance_review" for line in settlement_lines) else "matched")
+                ):
+                    raise TrialValidationError(f"closes[{index}].settlement totals are invalid.")
     _unique(close_ids, "Daily close ID")
     _unique(close_business_dates, "Daily close business date")
     _unique(closed_order_ids, "Closed order ID")
@@ -6441,6 +6500,7 @@ __all__ = [
     "COMMERCE_EVENTS",
     "COMMERCE_HUMAN_EVENTS",
     "COMMERCE_SCHEMA",
+    "COMMERCE_CLOSE_SETTLEMENT_SCHEMA",
     "commerce_catalog_baseline_digest",
     "commerce_catalog_digest",
     "commerce_order_calculation_digest",

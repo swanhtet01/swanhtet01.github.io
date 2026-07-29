@@ -20,6 +20,7 @@ export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calcu
 export const COMMERCE_ORDER_CALCULATION_V2_SCHEMA = 'supermega.commerce.order-calculation.v2' as const
 export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v3' as const
 export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v2' as const
+export const COMMERCE_CLOSE_SETTLEMENT_SCHEMA = 'supermega.commerce.close-settlement.v1' as const
 const COMMERCE_STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
 export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
 export const LEGACY_COMMERCE_KEYS = ['supermega.commerce.workspace.v1', 'supermega.shop.workspace.v2']
@@ -270,6 +271,33 @@ export type CommerceClose = {
   operator?: string
   reason?: string
   evidenceReference?: string
+  settlement?: CommerceCloseSettlement
+}
+
+export type CommerceCloseSettlementLine = {
+  paymentMethod: string
+  expectedMmk: number
+  countedMmk: number
+  varianceMmk: number
+  status: 'matched' | 'variance_review'
+  varianceOwner: string | null
+  varianceReason: string | null
+}
+
+export type CommerceCloseSettlement = {
+  schema: typeof COMMERCE_CLOSE_SETTLEMENT_SCHEMA
+  status: 'matched' | 'variance_review'
+  totalExpectedMmk: number
+  totalCountedMmk: number
+  totalVarianceMmk: number
+  lines: CommerceCloseSettlementLine[]
+}
+
+export type CommerceCloseSettlementInputLine = {
+  paymentMethod: string
+  countedMmk: number
+  varianceOwner: string
+  varianceReason: string
 }
 
 export type CommerceCloseExpectation = {
@@ -2164,7 +2192,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!isRecord(candidate) || !hasExactKeys(
       candidate,
       ['id', 'createdAt', 'total', 'orders'],
-      [...closeSnapshotFields],
+      [...closeSnapshotFields, 'settlement'],
     )) throw new Error(`closes[${index}] is invalid.`)
     closeIds.push(requiredText(candidate.id, `closes[${index}].id`))
     if (!validTimestamp(candidate.createdAt)) throw new Error(`closes[${index}].createdAt is invalid.`)
@@ -2211,6 +2239,53 @@ export function validateCommerceState(value: unknown): CommerceState {
       canonicalText(candidate.operator, `closes[${index}].operator`)
       canonicalText(candidate.reason, `closes[${index}].reason`)
       canonicalText(candidate.evidenceReference, `closes[${index}].evidenceReference`)
+      if (candidate.settlement !== undefined) {
+        const settlement = candidate.settlement
+        if (!isRecord(settlement) || !hasExactKeys(settlement, ['schema', 'status', 'totalExpectedMmk', 'totalCountedMmk', 'totalVarianceMmk', 'lines'])
+          || settlement.schema !== COMMERCE_CLOSE_SETTLEMENT_SCHEMA
+          || !['matched', 'variance_review'].includes(String(settlement.status))
+          || !Array.isArray(settlement.lines)) throw new Error(`closes[${index}].settlement is invalid.`)
+        const expectedByPayment = new Map<string, number>()
+        for (const order of memberOrders) {
+          const adjustedTotal = commerceOrderAdjustedTotal(order)
+          if (adjustedTotal === null) throw new Error(`closes[${index}].settlement order total is invalid.`)
+          expectedByPayment.set(order.payment, (expectedByPayment.get(order.payment) ?? 0) + adjustedTotal)
+        }
+        const expectedMethods = [...expectedByPayment.keys()].sort()
+        const settlementLines = settlement.lines.map((lineCandidate, lineIndex): CommerceCloseSettlementLine => {
+          const field = `closes[${index}].settlement.lines[${lineIndex}]`
+          if (!isRecord(lineCandidate) || !hasExactKeys(lineCandidate, ['paymentMethod', 'expectedMmk', 'countedMmk', 'varianceMmk', 'status', 'varianceOwner', 'varianceReason'])) throw new Error(`${field} is invalid.`)
+          const paymentMethod = canonicalText(lineCandidate.paymentMethod, `${field}.paymentMethod`, 80)
+          if (!Number.isSafeInteger(lineCandidate.expectedMmk) || Number(lineCandidate.expectedMmk) < 0
+            || !Number.isSafeInteger(lineCandidate.countedMmk) || Number(lineCandidate.countedMmk) < 0
+            || !Number.isSafeInteger(lineCandidate.varianceMmk)) throw new Error(`${field} amounts are invalid.`)
+          const expectedMmk = Number(lineCandidate.expectedMmk)
+          const countedMmk = Number(lineCandidate.countedMmk)
+          const varianceMmk = Number(lineCandidate.varianceMmk)
+          if (expectedByPayment.get(paymentMethod) !== expectedMmk || countedMmk - expectedMmk !== varianceMmk) throw new Error(`${field} does not match the closed orders.`)
+          if (varianceMmk === 0) {
+            if (lineCandidate.status !== 'matched' || lineCandidate.varianceOwner !== null || lineCandidate.varianceReason !== null) throw new Error(`${field} matched evidence is invalid.`)
+          } else {
+            if (lineCandidate.status !== 'variance_review') throw new Error(`${field} variance status is invalid.`)
+            canonicalText(lineCandidate.varianceOwner, `${field}.varianceOwner`, 80)
+            canonicalText(lineCandidate.varianceReason, `${field}.varianceReason`, 240)
+          }
+          return lineCandidate as unknown as CommerceCloseSettlementLine
+        })
+        const methods = settlementLines.map((line) => line.paymentMethod)
+        if (!sameStringArray(methods, expectedMethods)) throw new Error(`closes[${index}].settlement payment methods are invalid.`)
+        const totalExpectedMmk = settlementLines.reduce((total, line) => total + line.expectedMmk, 0)
+        const totalCountedMmk = settlementLines.reduce((total, line) => total + line.countedMmk, 0)
+        const totalVarianceMmk = settlementLines.reduce((total, line) => total + line.varianceMmk, 0)
+        if (![totalExpectedMmk, totalCountedMmk, totalVarianceMmk].every(Number.isSafeInteger)
+          || settlement.totalExpectedMmk !== totalExpectedMmk
+          || settlement.totalCountedMmk !== totalCountedMmk
+          || settlement.totalVarianceMmk !== totalVarianceMmk
+          || totalExpectedMmk !== candidate.total
+          || settlement.status !== (settlementLines.some((line) => line.status === 'variance_review') ? 'variance_review' : 'matched')) {
+          throw new Error(`closes[${index}].settlement totals are invalid.`)
+        }
+      }
     }
   }
   assertUnique(closeIds, 'Daily close ID')
@@ -4842,11 +4917,85 @@ export function commerceCloseExpectation(state: CommerceState, capturedAt: strin
   }
 }
 
+function buildCommerceCloseSettlement(
+  state: CommerceState,
+  expected: CommerceCloseExpectation,
+  input: CommerceCloseSettlementInputLine[],
+): CommerceCloseSettlement | null {
+  if (!expected || !Array.isArray(input)) return null
+  let sourceState = state
+  if (expected.stateSnapshot !== JSON.stringify(state)) {
+    try {
+      sourceState = validateCommerceState(JSON.parse(expected.stateSnapshot))
+    } catch {
+      return null
+    }
+  }
+  const orderById = new Map(sourceState.orders.map((order) => [order.id, order]))
+  const expectedByPayment = new Map<string, number>()
+  for (const orderId of expected.orderIds) {
+    const order = orderById.get(orderId)
+    const adjustedTotal = order ? commerceOrderAdjustedTotal(order) : null
+    if (!order || adjustedTotal === null) return null
+    expectedByPayment.set(order.payment, (expectedByPayment.get(order.payment) ?? 0) + adjustedTotal)
+  }
+  const expectedMethods = [...expectedByPayment.keys()].sort()
+  if (input.length !== expectedMethods.length) return null
+  try {
+    const lines = input.map((candidate): CommerceCloseSettlementLine => {
+      const paymentMethod = canonicalText(candidate?.paymentMethod, 'settlement.paymentMethod', 80)
+      if (!Number.isSafeInteger(candidate?.countedMmk) || candidate.countedMmk < 0) throw new Error('settlement.countedMmk is invalid')
+      const expectedMmk = expectedByPayment.get(paymentMethod)
+      if (expectedMmk === undefined) throw new Error('settlement.paymentMethod is unknown')
+      const varianceMmk = candidate.countedMmk - expectedMmk
+      if (!Number.isSafeInteger(varianceMmk)) throw new Error('settlement.varianceMmk is invalid')
+      if (varianceMmk === 0) {
+        if (candidate.varianceOwner.trim() || candidate.varianceReason.trim()) throw new Error('matched settlement cannot retain variance evidence')
+        return { paymentMethod, expectedMmk, countedMmk: candidate.countedMmk, varianceMmk, status: 'matched', varianceOwner: null, varianceReason: null }
+      }
+      return {
+        paymentMethod,
+        expectedMmk,
+        countedMmk: candidate.countedMmk,
+        varianceMmk,
+        status: 'variance_review',
+        varianceOwner: canonicalText(candidate.varianceOwner, 'settlement.varianceOwner', 80),
+        varianceReason: canonicalText(candidate.varianceReason, 'settlement.varianceReason', 240),
+      }
+    }).sort((left, right) => left.paymentMethod < right.paymentMethod ? -1 : left.paymentMethod > right.paymentMethod ? 1 : 0)
+    if (!sameStringArray(lines.map((line) => line.paymentMethod), expectedMethods)) return null
+    const totalExpectedMmk = lines.reduce((total, line) => total + line.expectedMmk, 0)
+    const totalCountedMmk = lines.reduce((total, line) => total + line.countedMmk, 0)
+    const totalVarianceMmk = lines.reduce((total, line) => total + line.varianceMmk, 0)
+    if (![totalExpectedMmk, totalCountedMmk, totalVarianceMmk].every(Number.isSafeInteger) || totalExpectedMmk !== expected.total) return null
+    return {
+      schema: COMMERCE_CLOSE_SETTLEMENT_SCHEMA,
+      status: lines.some((line) => line.status === 'variance_review') ? 'variance_review' : 'matched',
+      totalExpectedMmk,
+      totalCountedMmk,
+      totalVarianceMmk,
+      lines,
+    }
+  } catch {
+    return null
+  }
+}
+
+export function commerceCloseSettlementReview(
+  state: CommerceState,
+  expected: CommerceCloseExpectation,
+  input: CommerceCloseSettlementInputLine[],
+) {
+  const current = validateCommerceState(state)
+  return buildCommerceCloseSettlement(current, expected, input)
+}
+
 export function saveCommerceClose(
   state: CommerceState,
   closeId: string,
   proof: CommerceActionProof,
   expected: CommerceCloseExpectation,
+  settlementInput?: CommerceCloseSettlementInputLine[],
 ) {
   if (!validProof(proof)
     || !validTimestamp(proof.capturedAt)
@@ -4854,8 +5003,10 @@ export function saveCommerceClose(
     || !closeActionIdPattern.test(proof.actionId)
     || !closeIdPattern.test(closeId)) return null
   const current = validateCommerceState(state)
+  const settlement = settlementInput === undefined ? undefined : buildCommerceCloseSettlement(current, expected, settlementInput)
+  if (settlementInput !== undefined && !settlement) return null
   const existing = current.closes.find((close) => close.id === closeId)
-  if (existing) return sameCloseProof(existing, proof) ? current : null
+  if (existing) return sameCloseProof(existing, proof) && JSON.stringify(existing.settlement) === JSON.stringify(settlement) ? current : null
   if (actionIdIsUsed(current, proof.actionId)) return null
   const actual = commerceCloseExpectation(current, proof.capturedAt)
   if (!actual || !expected || !sameCloseExpectation(actual, expected)) return null
@@ -4872,6 +5023,7 @@ export function saveCommerceClose(
     operator: proof.actor,
     reason: proof.reason,
     evidenceReference: proof.evidenceReference,
+    ...(settlement ? { settlement } : {}),
   }
   return validateCommerceState({ ...current, closes: [close, ...current.closes] })
 }

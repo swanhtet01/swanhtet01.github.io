@@ -2342,6 +2342,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.production_material.issued",
                     "commerce.production_batch.received",
                     "commerce.inventory.initialized",
+                    "commerce.inventory.master_created",
                     "commerce.inventory.transferred",
                     "commerce.purchase_order.created",
                     "commerce.purchase_order.received",
@@ -4504,6 +4505,67 @@ class CommerceRuntimeTests(unittest.TestCase):
                 "commerce.order.correction_recorded",
                 after_close,
             )
+
+    def test_daily_close_settlement_matches_payment_totals_and_retains_owned_variance(self) -> None:
+        current = completed_state("ORD-SETTLEMENT")
+        close = close_record(current, CLOSE_ACTION_ID_2, close_id=CLOSE_ID_2, captured_at="2026-07-23T10:00:00.000Z")
+        payment_method = current["orders"][0]["payment"]  # type: ignore[index]
+        close["settlement"] = {
+            "schema": "supermega.commerce.close-settlement.v1",
+            "status": "matched",
+            "totalExpectedMmk": 200,
+            "totalCountedMmk": 200,
+            "totalVarianceMmk": 0,
+            "lines": [{
+                "paymentMethod": payment_method,
+                "expectedMmk": 200,
+                "countedMmk": 200,
+                "varianceMmk": 0,
+                "status": "matched",
+                "varianceOwner": None,
+                "varianceReason": None,
+            }],
+        }
+        matched_state = deepcopy(current)
+        matched_state["closes"] = [close]
+        accepted = apply_event(current, "commerce.close.saved", matched_state)
+        self.assertEqual(accepted["closes"][0]["settlement"]["status"], "matched")  # type: ignore[index]
+
+        variance_state = deepcopy(current)
+        variance_close = close_record(current, CLOSE_ACTION_ID_3, close_id=CLOSE_ID_3, captured_at="2026-07-23T10:00:00.000Z")
+        variance_close["settlement"] = {
+            **deepcopy(close["settlement"]),
+            "status": "variance_review",
+            "totalCountedMmk": 190,
+            "totalVarianceMmk": -10,
+            "lines": [{
+                "paymentMethod": payment_method,
+                "expectedMmk": 200,
+                "countedMmk": 190,
+                "varianceMmk": -10,
+                "status": "variance_review",
+                "varianceOwner": "Shift lead",
+                "varianceReason": "Cash drawer recount required.",
+            }],
+        }
+        variance_state["closes"] = [variance_close]
+        variance_accepted = apply_event(current, "commerce.close.saved", variance_state)
+        self.assertEqual(variance_accepted["closes"][0]["settlement"]["totalVarianceMmk"], -10)  # type: ignore[index]
+
+        forged_total = deepcopy(matched_state)
+        forged_total["closes"][0]["settlement"]["totalCountedMmk"] = 201  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(forged_total)
+
+        unowned_variance = deepcopy(variance_state)
+        unowned_variance["closes"][0]["settlement"]["lines"][0]["varianceOwner"] = None  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(unowned_variance)
+
+        wrong_payment = deepcopy(matched_state)
+        wrong_payment["closes"][0]["settlement"]["lines"][0]["paymentMethod"] = "Unknown"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(wrong_payment)
 
     def test_daily_close_snapshots_exact_exceptions_and_legacy_records_still_load(self) -> None:
         current = created_state("ORD-EXCEPTION")
