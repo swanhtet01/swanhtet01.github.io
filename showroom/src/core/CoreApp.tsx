@@ -29,6 +29,7 @@ import {
   type ManagedStateRecord,
 } from './managed-trial'
 import { recordBehaviorSignal, type BehaviorProductId } from './behavior-trail'
+import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
 import { formatTime, teamDefinitions, useTeamWorkspace } from './team-work'
 import {
   advanceCommerceOrder,
@@ -550,6 +551,7 @@ export function clientSetupPath(product: SetupProductId) {
 export type ManagedTrialRequestPrefill = {
   company?: string
   goal?: string
+  proof?: ManagedTrialProof
 }
 
 export function managedTrialRequestUrl(product: SetupProductId, templateId: string, prefill?: ManagedTrialRequestPrefill) {
@@ -564,6 +566,11 @@ export function managedTrialRequestUrl(product: SetupProductId, templateId: stri
   const goal = prefill?.goal?.trim().slice(0, 4_000)
   if (company) fragment.set('company', company)
   if (goal) fragment.set('goal', goal)
+  if (prefill?.proof) {
+    for (const [name, value] of managedTrialProofFragmentFields(prefill.proof, productContracts[product].slug, templateId)) {
+      fragment.set(name, value)
+    }
+  }
   const handoff = fragment.toString()
   return `https://supermega.dev/contact/?${query.toString()}${handoff ? `#${handoff}` : ''}`
 }

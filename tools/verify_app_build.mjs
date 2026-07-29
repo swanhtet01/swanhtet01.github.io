@@ -1,4 +1,5 @@
 import { readdir, readFile as readRawFile, stat } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -93,6 +94,7 @@ const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'c
 const shopInventoryPythonSource = await readFile(resolve(root, 'supermega_runtime', 'shop_inventory_runtime.py'), 'utf8')
 const managedActivationRunbookSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedActivationRunbook.tsx'), 'utf8')
 const settingsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'SettingsPage.tsx'), 'utf8')
+const managedTrialProofSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'managed-trial-proof.ts'), 'utf8')
 const channelOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ChannelOrderIntake.tsx'), 'utf8')
 const plantOrderSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts'), 'utf8')
 const plantOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantOrderFoundation.tsx'), 'utf8')
@@ -1148,13 +1150,44 @@ if (!settingsPageSource.includes("contract: 'supermega.ai_memory_preview.v1'")
   || !coreSource.includes('export type ManagedTrialRequestPrefill = {')
   || !coreSource.includes("fragment.set('company', company)")
   || !coreSource.includes("fragment.set('goal', goal)")
+  || !coreSource.includes('managedTrialProofFragmentFields(prefill.proof, productContracts[product].slug, templateId)')
   || !settingsPageSource.includes('const managedTrialPrefill = {')
+  || !settingsPageSource.includes('proof: buildManagedTrialProof({')
+  || !settingsPageSource.includes('readinessScore: aiMemoryReadinessScore')
+  || !settingsPageSource.includes('sourceRecordCount: aiMemorySourceRecordCount')
+  || !settingsPageSource.includes('behaviorSignalCount: agentBehaviorSignals.length')
+  || !settingsPageSource.includes('reviewedDecisionCount: managedApprovalRequests.length || approvals.length')
   || !settingsPageSource.includes('managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)')
   || !settingsPageSource.includes('Raw product records stay out of this preview.')
   || !settingsPageSource.includes('No customer message, payment, stock move, production write, domain publish, managed write, or model training runs from this preview.')
   || !coreCssSource.includes('.ai-memory-preview')
   || !coreCssSource.includes('.ai-memory-preview-rows')
   || !coreCssSource.includes('.ai-memory-next')) fail('ai_memory_preview_missing')
+if (!managedTrialProofSource.includes("MANAGED_TRIAL_PROOF_CONTRACT = 'supermega.managed_trial_proof.v1'")
+  || !managedTrialProofSource.includes("const PRODUCT_PATTERN = /^(shop|plant|website|ecommerce)$/")
+  || !managedTrialProofSource.includes('rawRecordsIncluded: false')
+  || !managedTrialProofSource.includes('managedTrialProofProjection')
+  || !managedTrialProofSource.includes('sha256Hex(JSON.stringify(projection))')
+  || !managedTrialProofSource.includes("['proof_digest', proof.summaryDigest]")
+  || !managedTrialProofSource.includes("['proof_raw_records', 'false']")) fail('managed_trial_proof_contract_missing')
+try {
+  const proofModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'managed-trial-proof.ts')).href}?verify=${Date.now()}`)
+  const input = { product: 'plant', templateId: 'production-control', readinessScore: 67, sourceRecordCount: 12, behaviorSignalCount: 4, reviewedDecisionCount: 2 }
+  const projection = ['supermega.managed_trial_proof.v1', 1, 'plant', 'production-control', 67, 12, 4, 2, false]
+  const expectedDigest = `sha256:${createHash('sha256').update(JSON.stringify(projection)).digest('hex')}`
+  const proof = proofModel.buildManagedTrialProof(input)
+  const fields = proofModel.managedTrialProofFragmentFields(proof, 'plant', 'production-control')
+  if (proof.summaryDigest !== expectedDigest
+    || proof.rawRecordsIncluded !== false
+    || fields.length !== 10
+    || !fields.some(([name, value]) => name === 'proof_digest' && value === expectedDigest)
+    || proofModel.managedTrialProofFragmentFields({ ...proof, sourceRecordCount: 13 }, 'plant', 'production-control').length !== 0) fail('managed_trial_proof_runtime_invalid')
+  let invalidCountRejected = false
+  try { proofModel.buildManagedTrialProof({ ...input, sourceRecordCount: 1_000_001 }) } catch { invalidCountRejected = true }
+  if (!invalidCountRejected) fail('managed_trial_proof_count_boundary_missing')
+} catch (error) {
+  fail(`managed_trial_proof_runtime_failed:${error instanceof Error ? error.message : String(error)}`)
+}
 if (!settingsPageSource.includes('aria-label="Premium pilot"')
   || !settingsPageSource.includes('Your business context, remembered.')
   || !settingsPageSource.includes('SuperMega combines approved product data and owner patterns, then prepares one next move for review.')

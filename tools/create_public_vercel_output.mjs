@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -193,6 +194,14 @@ const sharedStyle = `
   .contact-layout { display: grid; grid-template-columns: minmax(0,.78fr) minmax(430px,1.22fr); gap: 76px; align-items: start; padding-bottom: 110px; }
   .contact-copy { padding-top: 24px; }
   .contact-copy p { color: var(--muted); font-size: 18px; }
+  .trial-proof-summary { margin-top: 34px; padding: 24px 0; border-block: 1px solid var(--line); }
+  .trial-proof-summary[hidden] { display: none; }
+  .trial-proof-summary h3 { margin-top: 8px; }
+  .trial-proof-summary > p { font-size: 14px; }
+  .trial-proof-metrics { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1px; margin: 22px 0 0; background: var(--line); }
+  .trial-proof-metrics div { min-width: 0; padding: 14px; background: var(--background); }
+  .trial-proof-metrics dt { color: var(--quiet); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+  .trial-proof-metrics dd { margin: 4px 0 0; color: var(--ink); font-size: 18px; font-weight: 800; }
   .direct-links { display: grid; margin-top: 34px; border-top: 1px solid var(--line); }
   .direct-links a { min-height: 55px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); color: var(--muted); text-decoration: none; }
   .direct-links a:hover { color: var(--ink); }
@@ -205,6 +214,7 @@ const sharedStyle = `
   textarea { min-height: 150px; resize: vertical; }
   .form-note, .form-status { margin: 0; color: var(--quiet); font-size: 12px; }
   .form-status { min-height: 1.5em; color: var(--green); }
+  .contact-honeypot { position: absolute; left: -9999px; }
   .prose { max-width: 820px; padding-bottom: 100px; }
   .prose section { display: grid; grid-template-columns: 220px 1fr; gap: 42px; border-top: 1px solid var(--line); padding: 30px 0; }
   .prose p { color: var(--muted); }
@@ -343,20 +353,79 @@ const homeHtml = documentHtml({
   </main>`,
 })
 
-const contactScript = `<script>(function(){var form=document.querySelector('[data-contact-form]');if(!form)return;var query=new URLSearchParams(location.search),handoff=new URLSearchParams(location.hash.slice(1)),status=form.querySelector('[data-form-status]'),submit=form.querySelector('button[type="submit"]'),product=form.querySelector('[name="product"]'),template=form.querySelector('[name="template"]'),company=form.querySelector('[name="company"]'),goal=form.querySelector('[name="goal"]'),heading=document.querySelector('[data-contact-heading]'),lede=document.querySelector('[data-contact-lede]'),copyHeading=document.querySelector('[data-contact-copy-heading]'),copy=document.querySelector('[data-contact-copy]'),requestKey=form.querySelector('[name="idempotency_key"]'),source=form.querySelector('[name="source_url"]'),referrer=form.querySelector('[name="referrer"]');function newKey(){if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();var bytes=new Uint8Array(24);crypto.getRandomValues(bytes);return Array.from(bytes,function(value){return value.toString(16).padStart(2,'0')}).join('')}if(query.get('product')&&product)product.value=query.get('product');if(query.get('template')&&template)template.value=query.get('template');if(handoff.get('company')&&company)company.value=handoff.get('company').slice(0,180);if(handoff.get('goal')&&goal)goal.value=handoff.get('goal').slice(0,4000);if(handoff.toString()){var productName=product&&product.selectedOptions.length?product.selectedOptions[0].textContent:'managed AI';if(heading)heading.textContent='Finish your '+productName+' request.';if(lede)lede.textContent='Your company and goal are already filled. Add your name and reply email, review the request, then send it.';if(copyHeading)copyHeading.textContent='Your setup is ready.';if(copy)copy.textContent='Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.';status.textContent='Company and goal are ready for review from your AI memory.';history.replaceState(null,'',location.pathname+location.search)}form.addEventListener('submit',async function(event){event.preventDefault();status.textContent='Sending...';submit.disabled=true;if(!requestKey.value)requestKey.value=newKey();source.value=location.href;referrer.value=document.referrer||'';var payload=Object.fromEntries(new FormData(form).entries());try{var response=await fetch('/api/contact-submissions',{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-idempotency-key':requestKey.value},body:JSON.stringify(payload)});var body=await response.json().catch(function(){return {};});if(!response.ok)throw new Error(body.reason||'send_failed');form.reset();requestKey.value='';status.textContent='Request received. We will reply with the clearest next step.';}catch(error){status.textContent=error&&error.message==='rate_limited'?'Too many requests from this connection. Please wait ten minutes and try again.':'Could not route the request here. Please wait and try again.';}finally{submit.disabled=false;}});})();</script>`
+const contactScript = `<script>(function(){
+  var form=document.querySelector('[data-contact-form]');if(!form)return;
+  var query=new URLSearchParams(location.search),handoff=new URLSearchParams(location.hash.slice(1)),status=form.querySelector('[data-form-status]'),submit=form.querySelector('button[type="submit"]'),product=form.querySelector('[name="product"]'),template=form.querySelector('[name="template"]'),company=form.querySelector('[name="company"]'),goal=form.querySelector('[name="goal"]'),heading=document.querySelector('[data-contact-heading]'),lede=document.querySelector('[data-contact-lede]'),copyHeading=document.querySelector('[data-contact-copy-heading]'),copy=document.querySelector('[data-contact-copy]'),requestKey=form.querySelector('[name="idempotency_key"]'),source=form.querySelector('[name="source_url"]'),referrer=form.querySelector('[name="referrer"]'),proofSummary=document.querySelector('[data-trial-proof]');
+  var proofNames=['proof_contract','proof_version','proof_digest','proof_product','proof_template','proof_readiness','proof_sources','proof_behavior','proof_decisions','proof_raw_records'];
+  function newKey(){if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();var bytes=new Uint8Array(24);crypto.getRandomValues(bytes);return Array.from(bytes,function(value){return value.toString(16).padStart(2,'0')}).join('')}
+  function boundedInteger(value,max){return /^(?:0|[1-9][0-9]{0,6})$/.test(value)&&Number(value)<=max}
+  function readProof(){
+    var values=Object.fromEntries(proofNames.map(function(name){return [name,handoff.get(name)||'']}));
+    var attempted=proofNames.some(function(name){return values[name]});
+    if(!attempted)return {attempted:false,proof:null};
+    var valid=values.proof_contract==='supermega.managed_trial_proof.v1'&&values.proof_version==='1'&&/^sha256:[0-9a-f]{64}$/.test(values.proof_digest)&&/^(shop|plant|website|ecommerce)$/.test(values.proof_product)&&/^[a-z0-9][a-z0-9._-]{0,119}$/.test(values.proof_template)&&boundedInteger(values.proof_readiness,100)&&boundedInteger(values.proof_sources,1000000)&&boundedInteger(values.proof_behavior,1000000)&&boundedInteger(values.proof_decisions,1000000)&&values.proof_raw_records==='false'&&values.proof_product===(query.get('product')||'')&&values.proof_template===(query.get('template')||'');
+    return {attempted:true,proof:valid?values:null};
+  }
+  if(query.get('product')&&product)product.value=query.get('product');
+  if(query.get('template')&&template)template.value=query.get('template');
+  if(handoff.get('company')&&company)company.value=handoff.get('company').slice(0,180);
+  if(handoff.get('goal')&&goal)goal.value=handoff.get('goal').slice(0,4000);
+  var proofResult=readProof(),proof=proofResult.proof;
+  if(proof){
+    proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=proof[name]});
+    if(proofSummary){proofSummary.hidden=false;proofSummary.querySelector('[data-proof-readiness]').textContent=proof.proof_readiness+'%';proofSummary.querySelector('[data-proof-sources]').textContent=proof.proof_sources;proofSummary.querySelector('[data-proof-behavior]').textContent=proof.proof_behavior;proofSummary.querySelector('[data-proof-decisions]').textContent=proof.proof_decisions;}
+  }
+  function detachProofIfChanged(){
+    if(!proof)return;
+    if(proof.proof_product===(product&&product.value||'')&&proof.proof_template===(template&&template.value.trim().toLowerCase()||''))return;
+    proof=null;proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=''});if(proofSummary)proofSummary.hidden=true;
+    if(copyHeading)copyHeading.textContent='Your setup is ready.';if(copy)copy.textContent='Only the company and goal remain attached. The trial summary was removed because the product or template changed.';status.textContent='Trial summary detached. Review the updated request before sending.';
+  }
+  if(product)product.addEventListener('change',detachProofIfChanged);
+  if(template)template.addEventListener('input',detachProofIfChanged);
+  if(handoff.toString()){
+    var productName=product&&product.selectedOptions.length?product.selectedOptions[0].textContent:'managed AI';
+    if(heading)heading.textContent='Finish your '+productName+' request.';
+    if(lede)lede.textContent='Your company and goal are already filled. Add your name and reply email, review the request, then send it.';
+    if(copyHeading)copyHeading.textContent=proof?'Your trial proof is attached.':'Your setup is ready.';
+    if(copy)copy.textContent=proof?'Readiness, source count, behavior count, and reviewed decisions move forward. Raw records, questions, approval contents, and account details stay out.':'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.';
+    status.textContent=proof?'Trial summary attached for review. Nothing has been sent.':proofResult.attempted?'Company and goal are ready. Trial proof was not attached because it did not match this request.':'Company and goal are ready for review from your AI memory.';
+    history.replaceState(null,'',location.pathname+location.search);
+  }
+  form.addEventListener('submit',async function(event){
+    event.preventDefault();status.textContent='Sending...';submit.disabled=true;if(!requestKey.value)requestKey.value=newKey();source.value=location.href;referrer.value=document.referrer||'';
+    var payload=Object.fromEntries(new FormData(form).entries());
+    try{
+      var response=await fetch('/api/contact-submissions',{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-idempotency-key':requestKey.value},body:JSON.stringify(payload)});
+      var body=await response.json().catch(function(){return {}});if(!response.ok)throw new Error(body.reason||'send_failed');form.reset();requestKey.value='';status.textContent='Request received: '+(body.request_id||'confirmed')+'. Keep this ID for follow-up.';
+    }catch(error){status.textContent=error&&error.message==='rate_limited'?'Too many requests from this connection. Please wait ten minutes and try again.':error&&error.message==='trial_proof_invalid'?'The attached trial summary changed or does not match this request. Open the request again from SuperMega.':'Could not route the request here. Please wait and try again.';}finally{submit.disabled=false;}
+  });
+})();</script>`
+
+const inlineDigest = (value) => createHash('sha256').update(value).digest('base64')
+const contactScriptBody = contactScript.slice('<script>'.length, -'</script>'.length)
+const publicSecurityHeaders = {
+  'content-security-policy': `default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'sha256-${inlineDigest(contactScriptBody)}'; script-src-attr 'none'; style-src 'self' 'sha256-${inlineDigest(sharedStyle)}'; style-src-attr 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; media-src 'none'; worker-src 'none'; manifest-src 'self'`,
+  'cross-origin-opener-policy': 'same-origin',
+  'cross-origin-resource-policy': 'same-origin',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+}
 
 const contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
   description: 'Tell SuperMega which company workflow should run better.',
-  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Start a system</span><h1 data-contact-heading>What should run better?</h1><p class="lede" data-contact-lede>Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share. We will reply with the smallest useful system step.</p></section><section class="contact-layout"><div class="contact-copy"><h2 data-contact-copy-heading>Start with the work.</h2><p data-contact-copy>No account, data connection, automation, or external action begins from this form. We first identify the operating records, owner, acceptance test, and authority boundary.</p></div><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Send the workflow</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Reply email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label>Starting point<select name="product"><option value="guide">Help me choose</option><option value="shop">Shop</option><option value="plant">Plant</option><option value="website">Website</option><option value="ecommerce">Ecommerce</option></select></label><label>Template, if known<input name="template" maxlength="120" /></label><label class="wide">What happens now, and what should be better?<textarea name="goal" required maxlength="4000"></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert style="position:absolute;left:-9999px" /><button class="button primary" type="submit">Send workflow</button><p class="form-note">Your note is used only to respond and prepare the agreed next step.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
+  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Start a system</span><h1 data-contact-heading>What should run better?</h1><p class="lede" data-contact-lede>Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share. We will reply with the smallest useful system step.</p></section><section class="contact-layout"><div class="contact-copy"><h2 data-contact-copy-heading>Start with the work.</h2><p data-contact-copy>No account, data connection, automation, or external action begins from this form. We first identify the operating records, owner, acceptance test, and authority boundary.</p><section class="trial-proof-summary" data-trial-proof hidden><span class="eyebrow">Client-provided trial proof</span><h3>Reviewed setup summary</h3><p>Attached from this browser. SuperMega checks that the summary belongs to this request after you send; it does not verify a managed account.</p><dl class="trial-proof-metrics"><div><dt>Readiness</dt><dd data-proof-readiness>0%</dd></div><div><dt>Sources</dt><dd data-proof-sources>0</dd></div><div><dt>Behavior</dt><dd data-proof-behavior>0</dd></div><div><dt>Decisions</dt><dd data-proof-decisions>0</dd></div></dl></section></div><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Send the workflow</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Reply email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label>Starting point<select name="product"><option value="guide">Help me choose</option><option value="shop">Shop</option><option value="plant">Plant</option><option value="website">Website</option><option value="ecommerce">Ecommerce</option></select></label><label>Template, if known<input name="template" maxlength="120" /></label><label class="wide">What happens now, and what should be better?<textarea name="goal" required maxlength="4000"></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send workflow</button><p class="form-note">Your note is used only to respond and prepare the agreed next step.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
 
 const privacyHtml = documentHtml({
   route: '/privacy/',
   title: 'Privacy | SuperMega',
   description: 'How SuperMega handles public contact requests and product implementation data.',
-  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, and referrer. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>Sending a request does not create an account or connect a source. Product access, imports, retention, roles, and integrations are agreed separately before implementation.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
+  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional trial proof summary and digest. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>Trial proof includes bounded readiness, source, behavior, and reviewed-decision counts, but no raw product records, questions, approval contents, or account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
 })
 
 const notFoundHtml = documentHtml({
@@ -393,8 +462,12 @@ const RATE_LIMIT = 5
 const RATE_WINDOW_MS = 10 * 60 * 1000
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
 const CACHE_LIMIT = 2000
-const CONTACT_FINGERPRINT_VERSION = 1
+const CONTACT_FINGERPRINT_CURRENT_VERSION = 2
+const CONTACT_FINGERPRINT_LEGACY_VERSION = 1
 const CONTACT_FINGERPRINT_ALGORITHM = 'sha256'
+const TRIAL_PROOF_CONTRACT = 'supermega.managed_trial_proof.v1'
+const TRIAL_PROOF_VERSION = 1
+const TRIAL_PROOF_FIELDS = ['proof_contract', 'proof_version', 'proof_digest', 'proof_product', 'proof_template', 'proof_readiness', 'proof_sources', 'proof_behavior', 'proof_decisions', 'proof_raw_records']
 const replayCache = new Map()
 const rateBuckets = new Map()
 
@@ -434,27 +507,96 @@ async function parseBody(req) {
   return Object.fromEntries(new URLSearchParams(raw))
 }
 
+function privacyUrl(value, max = 700) {
+  const source = text(value, max)
+  if (!source) return ''
+  try {
+    const parsed = new URL(source)
+    parsed.hash = ''
+    return text(parsed.toString(), max)
+  } catch {
+    return text(source.split('#')[0], max)
+  }
+}
+
+function canonicalInteger(value, max) {
+  const source = text(value, 24)
+  if (!/^(?:0|[1-9][0-9]{0,6})$/.test(source)) return null
+  const parsed = Number(source)
+  return Number.isSafeInteger(parsed) && parsed <= max ? parsed : null
+}
+
+function publicProduct(product) {
+  return product === 'commerce' ? 'shop' : product === 'production' ? 'plant' : product
+}
+
+function trialProofProjection(proof) {
+  return [proof.contract, proof.version, proof.product, proof.template, proof.readiness_score, proof.source_record_count, proof.behavior_signal_count, proof.reviewed_decision_count, false]
+}
+
+function normalizeTrialProof(payload, product, template) {
+  const attempted = TRIAL_PROOF_FIELDS.some((field) => text(payload[field], 160))
+  if (!attempted) return null
+  if (!TRIAL_PROOF_FIELDS.every((field) => text(payload[field], 160))) throw new Error('trial_proof_invalid')
+  const proof = {
+    contract: text(payload.proof_contract, 80),
+    version: canonicalInteger(payload.proof_version, 1),
+    summary_digest: text(payload.proof_digest, 80),
+    product: text(payload.proof_product, 40).toLowerCase(),
+    template: text(payload.proof_template, 120).toLowerCase(),
+    readiness_score: canonicalInteger(payload.proof_readiness, 100),
+    source_record_count: canonicalInteger(payload.proof_sources, 1000000),
+    behavior_signal_count: canonicalInteger(payload.proof_behavior, 1000000),
+    reviewed_decision_count: canonicalInteger(payload.proof_decisions, 1000000),
+    raw_records_included: false,
+    verification: 'client_provided_summary',
+  }
+  if (proof.contract !== TRIAL_PROOF_CONTRACT
+    || proof.version !== TRIAL_PROOF_VERSION
+    || !/^sha256:[0-9a-f]{64}$/.test(proof.summary_digest)
+    || !/^(shop|plant|website|ecommerce)$/.test(proof.product)
+    || !/^[a-z0-9][a-z0-9._-]{0,119}$/.test(proof.template)
+    || proof.readiness_score === null
+    || proof.source_record_count === null
+    || proof.behavior_signal_count === null
+    || proof.reviewed_decision_count === null
+    || text(payload.proof_raw_records, 20) !== 'false'
+    || proof.product !== publicProduct(product)
+    || proof.template !== template.toLowerCase()) throw new Error('trial_proof_invalid')
+  const expectedDigest = 'sha256:' + createHash('sha256').update(JSON.stringify(trialProofProjection(proof))).digest('hex')
+  if (proof.summary_digest !== expectedDigest) throw new Error('trial_proof_invalid')
+  return proof
+}
+
 function normalizePayload(payload) {
   const requestedProduct = text(payload.product, 40).toLowerCase()
   const product = requestedProduct === 'shop' ? 'commerce' : requestedProduct === 'plant' ? 'production' : requestedProduct
-  return {
+  const template = text(payload.template, 120)
+  const safe = {
     name: text(payload.name, 120),
     email: text(payload.email, 180).toLowerCase(),
     company: text(payload.company, 180),
     product: ['commerce', 'production', 'website', 'ecommerce', 'guide'].includes(product) ? product : 'guide',
-    template: text(payload.template, 120),
+    template,
     goal: text(payload.goal, 4000),
-    source_url: text(payload.source_url, 700),
-    referrer: text(payload.referrer, 700),
+    source_url: privacyUrl(payload.source_url, 700),
+    referrer: privacyUrl(payload.referrer, 700),
   }
+  return { ...safe, trial_proof: normalizeTrialProof(payload, safe.product, template) }
 }
 
 function keyedDigest(value) {
   return createHmac('sha256', idempotencySecret()).update(value).digest('hex')
 }
 
-function payloadFingerprint(safe) {
-  return createHash(CONTACT_FINGERPRINT_ALGORITHM).update('supermega.contact.payload.v1\\n' + JSON.stringify(safe)).digest('hex')
+function fingerprintVersion(safe) {
+  return safe.trial_proof ? CONTACT_FINGERPRINT_CURRENT_VERSION : CONTACT_FINGERPRINT_LEGACY_VERSION
+}
+
+function payloadFingerprint(safe, version = fingerprintVersion(safe)) {
+  const { trial_proof: _trialProof, ...legacySafe } = safe
+  const projection = version === CONTACT_FINGERPRINT_LEGACY_VERSION ? legacySafe : safe
+  return createHash(CONTACT_FINGERPRINT_ALGORITHM).update('supermega.contact.payload.v' + version + '\\n' + JSON.stringify(projection)).digest('hex')
 }
 
 function pruneCaches(now) {
@@ -517,6 +659,7 @@ function recordFrom(safe, req, idempotencyKey, fingerprint) {
   const leadId = 'LEAD-' + keyedDigest('lead:' + idempotencyKey).slice(0, 16).toUpperCase()
   const taskId = 'TASK-' + keyedDigest('task:' + idempotencyKey).slice(0, 16).toUpperCase()
   const attribution = sourceAttribution(safe.source_url)
+  const { trial_proof: trialProof, ...contactSafe } = safe
   return {
     lead_id: leadId,
     task_id: taskId,
@@ -544,10 +687,11 @@ function recordFrom(safe, req, idempotencyKey, fingerprint) {
     next_step: 'Review the workflow and reply with the smallest useful next step.',
     submitted_at: submittedAt,
     raw: {
-      ...safe,
+      ...contactSafe,
+      ...(trialProof ? { trial_proof: trialProof } : {}),
       user_agent: text(req.headers?.['user-agent'], 240),
       contact_idempotency: {
-        version: CONTACT_FINGERPRINT_VERSION,
+        version: fingerprintVersion(safe),
         algorithm: CONTACT_FINGERPRINT_ALGORITHM,
         payload_fingerprint: fingerprint,
       },
@@ -586,7 +730,7 @@ function storedFingerprint(row) {
     !marker ||
     typeof marker !== 'object' ||
     Array.isArray(marker) ||
-    marker.version !== CONTACT_FINGERPRINT_VERSION ||
+    ![CONTACT_FINGERPRINT_LEGACY_VERSION, CONTACT_FINGERPRINT_CURRENT_VERSION].includes(marker.version) ||
     marker.algorithm !== CONTACT_FINGERPRINT_ALGORITHM ||
     typeof marker.payload_fingerprint !== 'string' ||
     !/^[a-f0-9]{64}$/.test(marker.payload_fingerprint)
@@ -674,7 +818,7 @@ module.exports = async function handler(req, res) {
   const method = String(req.method || 'GET').toUpperCase()
   if (method === 'GET') {
     const accepting = configured()
-    send(res, 200, { status: accepting ? 'ready' : 'attention', service: 'supermega-contact', accepting, controls: { idempotency: 'required', edge_rate_limit: 'required' } })
+    send(res, 200, { status: accepting ? 'ready' : 'attention', service: 'supermega-contact', accepting, controls: { idempotency: 'required', edge_rate_limit: 'required', trial_proof: 'optional_client_provided' } })
     return
   }
   if (method !== 'POST') { send(res, 405, { status: 'error', reason: 'method_not_allowed' }); return }
@@ -682,7 +826,11 @@ module.exports = async function handler(req, res) {
   try { payload = await parseBody(req) } catch { send(res, 400, { status: 'error', reason: 'invalid_request' }); return }
   if (text(payload.website, 120)) { send(res, 202, { status: 'ready' }); return }
   if (!sameOrigin(req)) { send(res, 403, { status: 'error', reason: 'origin_not_allowed' }); return }
-  const safe = normalizePayload(payload)
+  let safe
+  try { safe = normalizePayload(payload) } catch (error) {
+    send(res, 400, { status: 'error', reason: error?.message === 'trial_proof_invalid' ? 'trial_proof_invalid' : 'invalid_request' })
+    return
+  }
   if (!safe.name || !safe.company || !safe.goal || !emailOk(safe.email)) { send(res, 400, { status: 'error', reason: 'required_fields_missing' }); return }
   if (!idempotencySecret()) { send(res, 503, { status: 'error', reason: 'contact_controls_unavailable', fallback_email: 'swanhtet@supermega.dev' }); return }
   const idempotencyKey = idempotencyKeyFrom(payload, req)
@@ -705,7 +853,7 @@ module.exports = async function handler(req, res) {
     send(res, 503, { status: 'error', reason: 'contact_persistence_unavailable', fallback_email: 'swanhtet@supermega.dev' })
     return
   }
-  const acceptedBody = { status: 'ready', request_id: record.lead_id }
+  const acceptedBody = { status: 'ready', request_id: record.lead_id, proof_bound: Boolean(safe.trial_proof) }
   if (storeResult.status === 'conflict') {
     send(res, 409, { status: 'error', reason: 'idempotency_conflict' })
     return
@@ -734,6 +882,7 @@ const pageFiles = new Map([
 const vercelConfig = {
   version: 3,
   routes: [
+    { src: '^/(.*)$', headers: publicSecurityHeaders, continue: true },
     { src: '^/api/contact-submissions/status/?$', dest: '/api/contact-submissions.js' },
     { src: '^/api/contact-submissions/?$', dest: '/api/contact-submissions.js' },
     { src: '^/api/health/?$', dest: '/api/health.js' },
