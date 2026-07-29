@@ -7,6 +7,7 @@ import {
   WEBSITE_STORAGE_KEY,
 } from '../products/product-handoff'
 import { getCurrentPublish, loadWebsiteWorkspace } from '../products/website/website-model'
+import { WEBSITE_LEAD_LEDGER_KEY } from '../products/website/website-leads'
 import { COMMERCE_KEY, LEGACY_COMMERCE_KEYS } from './commerce-workspace'
 import { BEHAVIOR_TRAIL_KEY, readBehaviorTrail } from './behavior-trail'
 import {
@@ -1444,6 +1445,7 @@ export function SettingsPage() {
         TEAM_WORK_KEY,
         WEBSITE_STORAGE_KEY,
         LEGACY_WEBSITE_STORAGE_KEY,
+        WEBSITE_LEAD_LEDGER_KEY,
         WEBSITE_ECOMMERCE_HANDOFF_KEY,
         CLIENT_DEMO_WORKSPACE_STORAGE_KEY,
         LEGACY_STOREFRONT_DRAFT_RESET_KEY,
