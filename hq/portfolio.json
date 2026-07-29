@@ -151,8 +151,8 @@
       "localAutomation": {
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Add one versioned Plant batch-genealogy report that links Shop demand, production job, material lots, output, scrap, and quality-hold evidence without adding a page or issuing inventory, equipment, costing, or certificate actions.",
-        "reason": "Shop support workload is now portable, privacy-minimal, and integrity-bound. Plant already retains job-linked material lots, output, scrap, quality holds, and Shop demand evidence; the next enterprise control is one deterministic trace record that makes those retained facts reviewable together instead of adding another operational shell."
+        "workOrder": "Add one atomic managed Plant adapter for the existing checked client-import package so an approved Plant job file can initialize one isolated tenant with exact replay and rollback evidence, without applying BOM, inventory, equipment, costing, or certificate actions.",
+        "reason": "Plant batch genealogy is now portable and integrity-bound from retained Shop demand through material lots, output, scrap, quality history, and controlled execution. The highest-value next founder workflow is converting the already checked Plant setup package into real isolated-tenant jobs through the same governed onboarding surface instead of adding product pages or demo-only controls."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }

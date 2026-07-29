@@ -47,13 +47,14 @@ def action_evidence(
     *,
     actor: str = ACTOR,
     captured_at: str = NOW,
+    evidence_reference: str | None = None,
 ) -> dict[str, str]:
     return {
         "actionId": action_id,
         "capturedAt": captured_at,
         "actor": actor,
         "reason": "Verified against the accountable operating record.",
-        "evidenceReference": f"evidence://production/{action_id}",
+        "evidenceReference": evidence_reference or f"evidence://production/{action_id}",
     }
 
 
@@ -655,6 +656,80 @@ class ProductionRuntimeTests(unittest.TestCase):
         }
         self.assertEqual(PRODUCTION_EVENTS, expected_events)
         self.assertEqual(PRODUCTION_HUMAN_EVENTS, expected_events)
+
+    def test_shop_demand_job_retains_digest_bound_customer_free_source(self) -> None:
+        current = starting_workspace()
+        snapshot = {
+            "schema": "supermega.shop_production_demand.v1",
+            "operatingUnitLocationId": "LOC-MAIN",
+            "sku": "SKU-SHOP-001",
+            "productName": "Shop replenishment batch",
+            "sourceOrderIds": ["ORD-001", "ORD-002"],
+            "activeDemandUnits": 18,
+            "uncoveredDemandUnits": 8,
+            "availableToPromiseUnits": 10,
+            "reorderAtUnits": 15,
+            "replenishmentGapUnits": 5,
+            "recommendedBatchUnits": 8,
+        }
+        source_digest = plant_order_evidence_digest(snapshot)
+        evidence_reference = f"SHOP-DEMAND:{source_digest}:LOC-MAIN"
+        evidence = action_evidence(
+            "ACT-SHOP-DEMAND-JOB",
+            captured_at=LATER,
+            evidence_reference=evidence_reference,
+        )
+        job = {
+            "id": "JOB-SHOP-001",
+            "line": "Packing team",
+            "product": snapshot["productName"],
+            "target": snapshot["recommendedBatchUnits"],
+            "output": 0,
+            "owner": "Packing lead",
+            "priority": "urgent",
+            "dueAt": "2026-07-25T09:00:00.000Z",
+            "shopDemandSource": {
+                "contract": "supermega.production.shop-demand-source.v1",
+                "sourceDigest": source_digest,
+                "evidenceReference": evidence_reference,
+                "snapshot": snapshot,
+            },
+        }
+        next_state = deepcopy(current)
+        next_state["revision"] = 1
+        next_state["jobs"] = [job, *next_state["jobs"]]
+        next_state["events"] = [
+            production_event(
+                evidence,
+                kind="job_created",
+                subject_id=job["id"],
+                summary="Created Shop replenishment batch job for Packing team",
+                jobPriority=job["priority"],
+                jobDueAt=job["dueAt"],
+                jobOwner=job["owner"],
+            )
+        ]
+
+        accepted = apply_event(
+            current,
+            "production.job.created",
+            next_state,
+            evidence,
+        )
+        retained = accepted["jobs"][0]["shopDemandSource"]
+        self.assertEqual(retained["snapshot"]["sourceOrderIds"], ["ORD-001", "ORD-002"])
+        self.assertNotIn("customer", str(retained).lower())
+
+        for mutate in (
+            lambda state: state["jobs"][0]["shopDemandSource"]["snapshot"]["sourceOrderIds"].append("ORD-003"),
+            lambda state: state["jobs"][0]["shopDemandSource"].__setitem__("sourceDigest", f"sha256:{'0' * 64}"),
+            lambda state: state["events"][0].__setitem__("evidenceReference", "evidence://forged"),
+            lambda state: state["jobs"][0].__setitem__("target", 9),
+        ):
+            forged = deepcopy(next_state)
+            mutate(forged)
+            with self.assertRaises(TrialValidationError):
+                validate_production_state(forged)
 
     def test_managed_order_execution_appends_one_bound_command(self) -> None:
         current = starting_workspace(target=10)

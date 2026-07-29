@@ -1,10 +1,13 @@
-import type { PlantOrderState } from './plant-order-foundation'
+import { plantOrderEvidenceDigest, projectPlantOrder, type PlantOrderState } from './plant-order-foundation.ts'
 import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs.ts'
+import type { ShopProductionDemandSourceSnapshot } from './shop-production-demand.ts'
 
 export const PRODUCTION_WORKSPACE_SCHEMA = 'supermega.production.workspace.v2' as const
 export const PRODUCTION_KEY = 'supermega.production.workspace.v2'
 export const LEGACY_PRODUCTION_KEYS = ['supermega.production.workspace.v1', 'supermega.plant.workspace.v2']
 export const PRODUCTION_LOCK = 'supermega-production-workspace-v2'
+export const PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT = 'supermega.production.shop-demand-source.v1' as const
+export const PRODUCTION_BATCH_GENEALOGY_SCHEMA = 'supermega.production.batch-genealogy.v1' as const
 
 export type ProductionIssueKind = 'quality' | 'maintenance' | 'materials' | 'operations'
 export type ProductionIssueSeverity = 'critical' | 'high' | 'medium' | 'low'
@@ -30,6 +33,13 @@ export type ProductionJobClosure = {
   remainingUnits: number
 }
 
+export type ProductionShopDemandSource = {
+  contract: typeof PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT
+  sourceDigest: string
+  evidenceReference: string
+  snapshot: ShopProductionDemandSourceSnapshot
+}
+
 export type ProductionJob = {
   id: string
   line: string
@@ -42,6 +52,7 @@ export type ProductionJob = {
   scrap?: number
   qualityHold?: ProductionQualityHold
   closure?: ProductionJobClosure
+  shopDemandSource?: ProductionShopDemandSource
 }
 
 export type ProductionIssueResolution = {
@@ -316,7 +327,9 @@ const maintenanceStartEventFields = [...baseEventFields, 'maintenanceOwner']
 const maintenanceCompleteEventFields = [...baseEventFields, 'maintenanceStartActionId']
 const productionStateFields = ['schema', 'revision', 'jobs', 'issues', 'machines', 'events', 'openingPlan', 'orderExecution']
 const productionOpeningPlanFields = ['contract', 'packageDigest', 'confirmedAt', 'industryPackId', 'jobIds', 'machineIds']
-const productionJobFields = ['id', 'line', 'product', 'target', 'output', 'owner', 'priority', 'dueAt', 'scrap', 'qualityHold', 'closure']
+const productionJobFields = ['id', 'line', 'product', 'target', 'output', 'owner', 'priority', 'dueAt', 'scrap', 'qualityHold', 'closure', 'shopDemandSource']
+const productionShopDemandSourceFields = ['contract', 'sourceDigest', 'evidenceReference', 'snapshot']
+const productionShopDemandSnapshotFields = ['schema', 'operatingUnitLocationId', 'sku', 'productName', 'sourceOrderIds', 'activeDemandUnits', 'uncoveredDemandUnits', 'availableToPromiseUnits', 'reorderAtUnits', 'replenishmentGapUnits', 'recommendedBatchUnits']
 const productionIssueFields = ['id', 'createdAt', 'area', 'kind', 'summary', 'status', 'severity', 'owner', 'dueAt', 'containment', 'resolution']
 const productionIssueResolutionFields = ['actionId', 'resolvedAt', 'resolvedBy', 'reason', 'evidenceReference']
 const productionMachineFields = ['id', 'name', 'state']
@@ -472,6 +485,65 @@ function assertUnique(values: string[], field: string) {
   if (new Set(values).size !== values.length) throw new Error(`${field} values must be unique.`)
 }
 
+function validateProductionShopDemandSource(value: unknown, field: string): ProductionShopDemandSource {
+  if (!isRecord(value)) throw new Error(`${field} is invalid.`)
+  assertOnlyFields(value, productionShopDemandSourceFields, field)
+  if (value.contract !== PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT) throw new Error(`${field}.contract is invalid.`)
+  if (!isRecord(value.snapshot)) throw new Error(`${field}.snapshot is invalid.`)
+  const snapshot = value.snapshot
+  assertOnlyFields(snapshot, productionShopDemandSnapshotFields, `${field}.snapshot`)
+  if (snapshot.schema !== 'supermega.shop_production_demand.v1') throw new Error(`${field}.snapshot.schema is invalid.`)
+  if (snapshot.operatingUnitLocationId !== 'LOC-MAIN') throw new Error(`${field}.snapshot operating unit is invalid.`)
+  const sku = canonicalText(snapshot.sku, `${field}.snapshot.sku`, 80)
+  const productName = canonicalText(snapshot.productName, `${field}.snapshot.productName`)
+  if (!Array.isArray(snapshot.sourceOrderIds) || snapshot.sourceOrderIds.length > 100) throw new Error(`${field}.snapshot.sourceOrderIds is invalid.`)
+  const sourceOrderIds = snapshot.sourceOrderIds.map((id, index) => canonicalText(id, `${field}.snapshot.sourceOrderIds[${index}]`, 80))
+  assertUnique(sourceOrderIds, `${field}.snapshot.sourceOrderIds`)
+  if (JSON.stringify(sourceOrderIds) !== JSON.stringify([...sourceOrderIds].sort((left, right) => left.localeCompare(right)))) throw new Error(`${field}.snapshot.sourceOrderIds must be sorted.`)
+  const metricFields = ['activeDemandUnits', 'uncoveredDemandUnits', 'availableToPromiseUnits', 'reorderAtUnits', 'replenishmentGapUnits', 'recommendedBatchUnits'] as const
+  for (const metric of metricFields) assertSafeInteger(snapshot[metric], `${field}.snapshot.${metric}`, metric === 'recommendedBatchUnits' ? 1 : 0)
+  const activeDemandUnits = Number(snapshot.activeDemandUnits)
+  const uncoveredDemandUnits = Number(snapshot.uncoveredDemandUnits)
+  const availableToPromiseUnits = Number(snapshot.availableToPromiseUnits)
+  const reorderAtUnits = Number(snapshot.reorderAtUnits)
+  const replenishmentGapUnits = Number(snapshot.replenishmentGapUnits)
+  const recommendedBatchUnits = Number(snapshot.recommendedBatchUnits)
+  if (uncoveredDemandUnits !== Math.max(0, activeDemandUnits - availableToPromiseUnits)
+    || replenishmentGapUnits !== Math.max(0, reorderAtUnits - availableToPromiseUnits)
+    || recommendedBatchUnits !== Math.max(1, uncoveredDemandUnits, replenishmentGapUnits)) throw new Error(`${field}.snapshot demand metrics are inconsistent.`)
+  const canonicalSnapshot: ShopProductionDemandSourceSnapshot = {
+    schema: 'supermega.shop_production_demand.v1',
+    operatingUnitLocationId: 'LOC-MAIN',
+    sku,
+    productName,
+    sourceOrderIds,
+    activeDemandUnits,
+    uncoveredDemandUnits,
+    availableToPromiseUnits,
+    reorderAtUnits,
+    replenishmentGapUnits,
+    recommendedBatchUnits,
+  }
+  const sourceDigest = canonicalText(value.sourceDigest, `${field}.sourceDigest`, 71)
+  if (!/^sha256:[0-9a-f]{64}$/.test(sourceDigest) || sourceDigest !== plantOrderEvidenceDigest(canonicalSnapshot)) throw new Error(`${field}.sourceDigest does not match its canonical snapshot.`)
+  const evidenceReference = canonicalText(value.evidenceReference, `${field}.evidenceReference`)
+  if (evidenceReference !== `SHOP-DEMAND:${sourceDigest}:LOC-MAIN`) throw new Error(`${field}.evidenceReference is invalid.`)
+  return { contract: PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT, sourceDigest, evidenceReference, snapshot: canonicalSnapshot }
+}
+
+export function productionShopDemandSource(input: {
+  sourceSnapshot: ShopProductionDemandSourceSnapshot
+  sourceDigest: string
+  evidenceReference: string
+}) {
+  return validateProductionShopDemandSource({
+    contract: PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT,
+    sourceDigest: input.sourceDigest,
+    evidenceReference: input.evidenceReference,
+    snapshot: input.sourceSnapshot,
+  }, 'Shop demand source')
+}
+
 function validProof(proof: unknown): proof is ProductionActionProof {
   if (!isRecord(proof)) return false
   return Boolean(
@@ -581,6 +653,13 @@ export function validateProductionState(value: unknown): ProductionState {
     if (candidate.scrap !== undefined) assertSafeInteger(candidate.scrap, `jobs[${index}].scrap`)
     const accounted = Number(candidate.output) + Number(candidate.scrap ?? 0)
     if (!Number.isSafeInteger(accounted) || accounted > Number(candidate.target)) throw new Error(`jobs[${index}] good plus scrap exceeds target.`)
+    if (candidate.shopDemandSource !== undefined) {
+      const source = validateProductionShopDemandSource(candidate.shopDemandSource, `jobs[${index}].shopDemandSource`)
+      const product = String(candidate.product).toLocaleLowerCase('en-US')
+      if (source.snapshot.productName.toLocaleLowerCase('en-US') !== product
+        && source.snapshot.sku.toLocaleLowerCase('en-US') !== product) throw new Error(`jobs[${index}] product does not match its Shop demand source.`)
+      if (source.snapshot.recommendedBatchUnits !== Number(candidate.target)) throw new Error(`jobs[${index}] target does not match its Shop demand source.`)
+    }
     if (candidate.qualityHold !== undefined) {
       if (!isRecord(candidate.qualityHold)) throw new Error(`jobs[${index}].qualityHold is invalid.`)
       const qualityHold = candidate.qualityHold
@@ -826,6 +905,11 @@ export function validateProductionState(value: unknown): ProductionState {
     const creationEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'job_created' && event.subjectId === candidate.id)
     if (creationEvents.length > 1) throw new Error(`jobs[${index}] has duplicate creation events.`)
     const creationEvent = creationEvents[0]
+    if (candidate.shopDemandSource !== undefined) {
+      const source = validateProductionShopDemandSource(candidate.shopDemandSource, `jobs[${index}].shopDemandSource`)
+      if (!creationEvent) throw new Error(`jobs[${index}] Shop demand source requires immutable creation evidence.`)
+      if (creationEvent.evidenceReference !== source.evidenceReference) throw new Error(`jobs[${index}] Shop demand source does not match its creation evidence.`)
+    }
     const scheduleEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'job_schedule_updated' && event.subjectId === candidate.id)
     if (!creationEvent && !scheduleEvents.length) continue
     const scheduleFieldCount = ['priority', 'dueAt'].filter((field) => candidate[field] !== undefined).length
@@ -1637,11 +1721,148 @@ export function formatProductionShiftHandoff(handoff: ProductionShiftHandoff) {
   return lines.join('\n')
 }
 
+function compareProductionEvidence(left: { createdAt: string; actionId: string }, right: { createdAt: string; actionId: string }) {
+  return compareTimestamps(left.createdAt, right.createdAt)
+    || (left.actionId < right.actionId ? -1 : left.actionId > right.actionId ? 1 : 0)
+}
+
+export function buildProductionBatchGenealogy(state: ProductionState, jobId: string) {
+  if (!validCanonicalText(jobId, 80)) return null
+  const current = validateProductionState(state)
+  const job = current.jobs.find((candidate) => candidate.id === jobId)
+  if (!job) return null
+  const creationEvent = current.events.find((event) => event.kind === 'job_created' && event.subjectId === job.id)
+  const materialEntries = current.events
+    .filter((event) => event.kind === 'material_consumed' && event.subjectId === job.id)
+    .map((event) => ({
+      actionId: event.actionId,
+      createdAt: event.createdAt,
+      actor: event.actor,
+      reason: event.reason,
+      evidenceReference: event.evidenceReference,
+      shiftRef: event.shiftRef ?? '',
+      materialRef: event.materialRef ?? '',
+      materialLot: event.materialLot ?? null,
+      materialUnit: event.materialUnit as ProductionMaterialUnit,
+      quantity: event.quantity ?? 0,
+    }))
+    .sort(compareProductionEvidence)
+  const outputEntries = current.events
+    .filter((event) => event.kind === 'output_recorded' && event.subjectId === job.id)
+    .map((event) => ({
+      actionId: event.actionId,
+      createdAt: event.createdAt,
+      actor: event.actor,
+      reason: event.reason,
+      evidenceReference: event.evidenceReference,
+      shiftRef: event.shiftRef ?? '',
+      outputKind: event.outputKind ?? 'good',
+      quantity: event.quantity ?? 0,
+    }))
+    .sort(compareProductionEvidence)
+  const qualityEvents = current.events
+    .filter((event) => (event.kind === 'quality_hold_placed' || event.kind === 'quality_hold_released') && event.subjectId === job.id)
+    .map((event) => ({
+      actionId: event.actionId,
+      createdAt: event.createdAt,
+      actor: event.actor,
+      reason: event.reason,
+      evidenceReference: event.evidenceReference,
+      action: event.kind === 'quality_hold_placed' ? 'hold_placed' as const : 'hold_released' as const,
+    }))
+    .sort(compareProductionEvidence)
+  const controlled = current.orderExecution ? projectPlantOrder(current.orderExecution) : null
+  const controlledExecution = controlled?.plan?.job.jobId === job.id ? {
+    planId: controlled.plan.planId,
+    planDigest: controlled.plan.packageDigest,
+    status: controlled.status,
+    outputBatchId: controlled.plan.job.outputBatchId,
+    genealogy: controlled.genealogy.map((entry) => ({ ...entry })),
+    outputEntries: controlled.outputEntries.map((entry) => ({ id: entry.id, quantity: entry.quantity, proof: { ...entry.proof } })),
+    inspections: controlled.inspections.map((entry) => ({
+      id: entry.id,
+      inspectedQuantity: entry.inspectedQuantity,
+      acceptedQuantity: entry.acceptedQuantity,
+      rejectedQuantity: entry.rejectedQuantity,
+      result: entry.result,
+      proof: { ...entry.proof },
+    })),
+    qualityHold: controlled.qualityHold ? { ...controlled.qualityHold, proof: { ...controlled.qualityHold.proof } } : null,
+    batchRelease: controlled.batchRelease ? { id: controlled.batchRelease.id, inspectionId: controlled.batchRelease.inspectionId, proof: { ...controlled.batchRelease.proof } } : null,
+  } : null
+  const payload = {
+    schema: PRODUCTION_BATCH_GENEALOGY_SCHEMA,
+    sourceRevision: current.revision,
+    sourceStateDigest: plantOrderEvidenceDigest(current),
+    job: {
+      id: job.id,
+      line: job.line,
+      product: job.product,
+      targetUnits: job.target,
+      goodUnits: job.output,
+      scrapUnits: job.scrap ?? 0,
+      remainingUnits: Math.max(0, job.target - job.output - (job.scrap ?? 0)),
+      owner: job.owner ?? null,
+      priority: job.priority ?? null,
+      dueAt: job.dueAt ?? null,
+      status: job.closure ? 'closed_short' as const : job.qualityHold ? 'quality_hold' as const : job.output + (job.scrap ?? 0) >= job.target ? 'complete' as const : 'active' as const,
+    },
+    shopDemandSource: job.shopDemandSource ? validateProductionShopDemandSource(job.shopDemandSource, `job ${job.id}.shopDemandSource`) : null,
+    creationEvidence: creationEvent ? {
+      source: 'job_created_event' as const,
+      actionId: creationEvent.actionId,
+      createdAt: creationEvent.createdAt,
+      actor: creationEvent.actor,
+      reason: creationEvent.reason,
+      evidenceReference: creationEvent.evidenceReference,
+    } : current.openingPlan?.jobIds.includes(job.id) ? {
+      source: 'opening_plan' as const,
+      packageDigest: current.openingPlan.packageDigest,
+      confirmedAt: current.openingPlan.confirmedAt,
+    } : { source: 'legacy_record' as const },
+    materialEntries,
+    outputEntries,
+    qualityEvents,
+    closure: job.closure ? { ...job.closure } : null,
+    controlledExecution,
+    evidenceCoverage: {
+      shopDemandLinked: Boolean(job.shopDemandSource),
+      materialEntryCount: materialEntries.length,
+      materialLotEntryCount: materialEntries.filter((entry) => entry.materialLot).length,
+      outputEntryCount: outputEntries.length,
+      qualityEventCount: qualityEvents.length,
+      controlledExecutionLinked: Boolean(controlledExecution),
+    },
+    controls: {
+      issuesInventory: false,
+      changesEquipment: false,
+      postsCosting: false,
+      issuesCertificate: false,
+      performsExternalAction: false,
+    },
+  }
+  return { ...payload, digest: plantOrderEvidenceDigest(payload) }
+}
+
+export type ProductionBatchGenealogy = NonNullable<ReturnType<typeof buildProductionBatchGenealogy>>
+
+export function formatProductionBatchGenealogy(report: ProductionBatchGenealogy) {
+  const { digest, ...payload } = report
+  if (digest !== plantOrderEvidenceDigest(payload)) throw new Error('Production batch genealogy digest does not match its evidence.')
+  return `${JSON.stringify(report, null, 2)}\n`
+}
+
 export function registerProductionJob(state: ProductionState, job: ProductionJob, proof: ProductionActionProof) {
   if (!isRecord(job)) return null
   const jobPriority = job.priority
   const jobDueAt = job.dueAt
   const jobOwner = job.owner
+  let shopDemandSource: ProductionShopDemandSource | undefined
+  try {
+    if (job.shopDemandSource !== undefined) shopDemandSource = validateProductionShopDemandSource(job.shopDemandSource, 'job.shopDemandSource')
+  } catch {
+    return null
+  }
   if (!validProof(proof)
     || !validCanonicalText(job.id, 80)
     || !validCanonicalText(job.line, 120)
@@ -1658,7 +1879,13 @@ export function registerProductionJob(state: ProductionState, job: ProductionJob
     || !validCanonicalText(jobOwner, 120)
     || job.scrap !== undefined
     || job.qualityHold !== undefined
-    || job.closure !== undefined) return null
+    || job.closure !== undefined
+    || (shopDemandSource !== undefined && (
+      proof.evidenceReference !== shopDemandSource.evidenceReference
+      || shopDemandSource.snapshot.recommendedBatchUnits !== job.target
+      || (shopDemandSource.snapshot.productName.toLocaleLowerCase('en-US') !== job.product.toLocaleLowerCase('en-US')
+        && shopDemandSource.snapshot.sku.toLocaleLowerCase('en-US') !== job.product.toLocaleLowerCase('en-US'))
+    ))) return null
   const existing = state.events.find((event) => event.actionId === proof.actionId)
   if (existing) {
     const storedJob = state.jobs.find((candidate) => candidate.id === job.id)
@@ -1719,7 +1946,8 @@ export function importProductionJobs(stateValue: ProductionState, input: {
         || existing.dueAt !== job.dueAt
         || existing.scrap !== job.scrap
         || existing.qualityHold !== job.qualityHold
-        || existing.closure !== job.closure) return null
+        || existing.closure !== job.closure
+        || JSON.stringify(existing.shopDemandSource) !== JSON.stringify(job.shopDemandSource)) return null
       alreadyPresent += 1
       continue
     }

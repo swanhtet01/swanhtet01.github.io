@@ -1,7 +1,22 @@
 import { validateCommerceState, type CommerceOrder, type CommerceState } from './commerce-workspace.ts'
+import { plantOrderEvidenceDigest } from './plant-order-foundation.ts'
 import type { ProductionJob } from './production-workspace.ts'
 
 export const SHOP_PRODUCTION_DEMAND_SCHEMA = 'supermega.shop_production_demand.v1' as const
+
+export type ShopProductionDemandSourceSnapshot = {
+  schema: typeof SHOP_PRODUCTION_DEMAND_SCHEMA
+  operatingUnitLocationId: 'LOC-MAIN'
+  sku: string
+  productName: string
+  sourceOrderIds: string[]
+  activeDemandUnits: number
+  uncoveredDemandUnits: number
+  availableToPromiseUnits: number
+  reorderAtUnits: number
+  replenishmentGapUnits: number
+  recommendedBatchUnits: number
+}
 
 export type ShopProductionDemandSignal = {
   schema: typeof SHOP_PRODUCTION_DEMAND_SCHEMA
@@ -23,6 +38,7 @@ export type ShopProductionDemandSignal = {
   recommendedBatchUnits: number
   existingJobIds: string[]
   existingActiveJobIds: string[]
+  sourceSnapshot: ShopProductionDemandSourceSnapshot
   sourceDigest: string
   evidenceReference: string
   suggestedJobId: string
@@ -35,13 +51,6 @@ function orderLines(order: CommerceOrder) {
 
 function canonicalSnapshot(value: unknown) {
   return JSON.stringify(value)
-}
-
-async function sha256(value: string) {
-  const subtle = globalThis.crypto?.subtle
-  if (!subtle) throw new Error('SHA-256 is unavailable for the Shop demand projection.')
-  const bytes = await subtle.digest('SHA-256', new TextEncoder().encode(value))
-  return `sha256:${Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
 }
 
 function activeJob(job: ProductionJob) {
@@ -87,14 +96,12 @@ export async function projectShopProductionDemand(
         .filter((job) => jobMatchesProduct(job, item.sku, item.name))
         .map((job) => job.id)
         .sort((left, right) => left.localeCompare(right))
-      const snapshot = {
+      const sourceSnapshot: ShopProductionDemandSourceSnapshot = {
         schema: SHOP_PRODUCTION_DEMAND_SCHEMA,
         operatingUnitLocationId: 'LOC-MAIN',
         sku: item.sku,
         productName: item.name,
-        sourceOrders: activeOrders
-          .filter((order) => demand.orderIds.includes(order.id))
-          .map((order) => ({ id: order.id, status: order.status, promisedAt: order.promisedAt ?? null, lines: orderLines(order) })),
+        sourceOrderIds: [...demand.orderIds].sort((left, right) => left.localeCompare(right)),
         activeDemandUnits: demand.quantity,
         uncoveredDemandUnits,
         availableToPromiseUnits: item.onHand,
@@ -102,7 +109,7 @@ export async function projectShopProductionDemand(
         replenishmentGapUnits,
         recommendedBatchUnits,
       }
-      const sourceDigest = await sha256(canonicalSnapshot(snapshot))
+      const sourceDigest = plantOrderEvidenceDigest(sourceSnapshot)
       const canonicalSku = item.sku.toLocaleUpperCase('en-US').replace(/[^A-Z0-9_-]/g, '-').slice(0, 40)
       const jobIdBase = `JOB-SHOP-${canonicalSku}-${sourceDigest.slice(7, 15).toLocaleUpperCase('en-US')}`
       let suggestedJobId = jobIdBase
@@ -131,6 +138,7 @@ export async function projectShopProductionDemand(
         recommendedBatchUnits,
         existingJobIds,
         existingActiveJobIds,
+        sourceSnapshot,
         sourceDigest,
         evidenceReference: `SHOP-DEMAND:${sourceDigest}:LOC-MAIN`,
         suggestedJobId,

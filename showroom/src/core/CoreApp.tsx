@@ -148,11 +148,13 @@ import type {
 } from './commerce-order-draft'
 import {
   buildProductionShiftHandoff,
+  buildProductionBatchGenealogy,
   closeProductionJob,
   compareProductionJobSchedule,
   completeProductionMaintenance,
   endProductionDowntime,
   formatProductionShiftHandoff,
+  formatProductionBatchGenealogy,
   openProductionIssue,
   parseProductionMaterialQuantity,
   placeProductionQualityHold,
@@ -162,6 +164,7 @@ import {
   productionMaintenanceRecords,
   productionMaterialUnits,
   productionMachineStates,
+  productionShopDemandSource,
   productionShiftOutput,
   productionStateCanonical,
   recordProductionOutput,
@@ -5718,6 +5721,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [holdJobId, setHoldJobId] = useState(production.jobs.find((job) => !job.qualityHold && !job.closure)?.id ?? '')
   const [handoffShiftRef, setHandoffShiftRef] = useState('')
   const [shiftHandoff, setShiftHandoff] = useState<ProductionShiftHandoff | null>(null)
+  const [genealogyJobId, setGenealogyJobId] = useState(production.jobs[0]?.id ?? '')
   const [quantity, setQuantity] = useState(1)
   const [outputKind, setOutputKind] = useState<ProductionOutputKind>('good')
   const [shiftRef, setShiftRef] = useState('')
@@ -5826,6 +5830,19 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     && shiftHandoff.sourceRevision === production.revision
     && shiftHandoff.sourceCanonical === currentProductionCanonical
     && shiftHandoff.shiftRef === handoffShiftRef.trim())
+  const selectedGenealogyJobId = production.jobs.some((job) => job.id === genealogyJobId)
+    ? genealogyJobId
+    : production.jobs[0]?.id ?? ''
+  const batchGenealogyDownload = useMemo(() => {
+    if (!selectedGenealogyJobId) return null
+    const report = buildProductionBatchGenealogy(production, selectedGenealogyJobId)
+    if (!report) return null
+    return {
+      report,
+      filename: `supermega-plant-genealogy-${report.job.id}-${report.digest.slice(7, 15)}.json`,
+      href: `data:application/json;charset=utf-8,${encodeURIComponent(formatProductionBatchGenealogy(report))}`,
+    }
+  }, [production, selectedGenealogyJobId])
   const observedMachine = machineObservation
     ? production.machines.find((machine) => machine.id === machineObservation.machineId)
     : undefined
@@ -6471,7 +6488,17 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
     const canonicalDueAt = dueAt.toISOString()
     const demandSignal = selectedShopDemand
-    const job: ProductionJob = { id, line, product, target: jobTarget, output: 0, owner, priority: jobDraft.priority, dueAt: canonicalDueAt }
+    const job: ProductionJob = {
+      id,
+      line,
+      product,
+      target: jobTarget,
+      output: 0,
+      owner,
+      priority: jobDraft.priority,
+      dueAt: canonicalDueAt,
+      ...(demandSignal ? { shopDemandSource: productionShopDemandSource(demandSignal) } : {}),
+    }
     queueAction({
       kind: 'production_job',
       subjectId: id,
@@ -7197,6 +7224,18 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
               <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedHoldJob} type="submit">Review hold</button>
               <p className="panel-copy">The next review records who placed the hold, why, and the source evidence. It does not change output or control equipment.</p>
             </form> : <p className="panel-copy">Every recorded job is currently held. Release one with evidence before placing another hold.</p>}
+          </details>
+          <details className="compact-disclosure production-history" data-plant-genealogy="versioned">
+            <summary>Batch trace <span>{batchGenealogyDownload ? 'Ready' : 'None'}</span></summary>
+            {production.jobs.length ? <div className="core-form compact-form">
+              <label>Job or batch<select onChange={(event) => setGenealogyJobId(event.target.value)} value={selectedGenealogyJobId}>{production.jobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product}</option>)}</select></label>
+              {batchGenealogyDownload ? <>
+                <p className="panel-copy"><strong>{batchGenealogyDownload.report.job.product}</strong> · {batchGenealogyDownload.report.job.goodUnits.toLocaleString()} good · {batchGenealogyDownload.report.job.scrapUnits.toLocaleString()} scrap · {batchGenealogyDownload.report.materialEntries.length} material records · {batchGenealogyDownload.report.qualityEvents.length} quality events.</p>
+                <p className="panel-copy">{batchGenealogyDownload.report.shopDemandSource ? `${batchGenealogyDownload.report.shopDemandSource.snapshot.sourceOrderIds.length || 'Reorder'} Shop source ${batchGenealogyDownload.report.shopDemandSource.snapshot.sourceOrderIds.length === 1 ? 'order' : 'orders'} retained without customer details.` : 'No retained Shop-demand source exists for this legacy or manual job.'}</p>
+                <a className="core-button" download={batchGenealogyDownload.filename} href={batchGenealogyDownload.href}>Download batch genealogy</a>
+                <p className="panel-copy">Read-only evidence. It does not issue inventory, control equipment, post costs, issue a certificate, or contact another system.</p>
+              </> : null}
+            </div> : <p className="panel-copy">Create a production job before building a batch trace.</p>}
           </details>
           <details className="compact-disclosure production-history" open={shiftHandoff ? true : undefined}>
             <summary>Shift handoff <span>{shiftHandoffIsCurrent ? 'Ready' : 'Build'}</span></summary>

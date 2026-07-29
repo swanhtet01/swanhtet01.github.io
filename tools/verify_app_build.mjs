@@ -3238,7 +3238,8 @@ if (!shopInventoryUiSource.includes("import { ShopProductionHandoff } from './Sh
   || !plantOrderUiSource.includes("loadPlantOrderWorkspace(localStorage, 'plant:')")
   || shopProductionHandoffUiSource.includes('fetch(')) fail('plant_shop_material_handoff_ui_boundary_missing')
 if (!shopProductionDemandSource.includes("SHOP_PRODUCTION_DEMAND_SCHEMA = 'supermega.shop_production_demand.v1'")
-  || !shopProductionDemandSource.includes('globalThis.crypto?.subtle')
+  || !shopProductionDemandSource.includes('plantOrderEvidenceDigest(sourceSnapshot)')
+  || !shopProductionDemandSource.includes('sourceSnapshot: ShopProductionDemandSourceSnapshot')
   || !shopProductionDemandSource.includes('validateCommerceState')
   || !shopProductionDemandSource.includes("operatingUnitLocationId: 'LOC-MAIN'")
   || !shopProductionDemandSource.includes("sourceAuthority: 'commerce'")
@@ -3263,10 +3264,23 @@ if (!coreSource.includes('projectShopProductionDemand')
   || !coreSource.includes('evidenceReference: demandSignal.evidenceReference')
   || !coreSource.includes("mutateProduction('production.job.created'")
   || !coreSource.includes('registerProductionJob')
+  || !coreSource.includes('data-plant-genealogy="versioned"')
+  || !coreSource.includes('Download batch genealogy')
   || !coreCssSource.includes('.production-operation-module > .production-view { min-height: clamp(420px,62vh,620px); flex: 0 0 auto; }')
   || !coreCssSource.includes('.production-operation-module > .production-view > .output-panel { position: sticky; top: 0; height: min(620px,calc(100svh - 240px)); max-height: 620px; align-self: start; }')
   || !coreCssSource.includes('.job-panel > .stock-receipt-preview > button { grid-column: 2; grid-row: 1 / 4; align-self: center; }')
   || !coreCssSource.includes('.job-panel > .stock-receipt-preview > button { width: 100%; grid-column: 1; grid-row: auto; margin-top: 6px; }')) fail('shop_production_demand_ui_boundary_missing')
+if (!productionSource.includes("PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT = 'supermega.production.shop-demand-source.v1'")
+  || !productionSource.includes("PRODUCTION_BATCH_GENEALOGY_SCHEMA = 'supermega.production.batch-genealogy.v1'")
+  || !productionSource.includes('validateProductionShopDemandSource')
+  || !productionSource.includes('buildProductionBatchGenealogy')
+  || !productionSource.includes('formatProductionBatchGenealogy')
+  || !productionSource.includes('issuesInventory: false')
+  || !productionSource.includes('changesEquipment: false')
+  || !productionSource.includes('postsCosting: false')
+  || !productionSource.includes('issuesCertificate: false')
+  || !managedProductionRuntime.includes('_SHOP_DEMAND_SOURCE_CONTRACT = "supermega.production.shop-demand-source.v1"')
+  || !managedProductionRuntime.includes('plant_order_evidence_digest(snapshot)')) fail('production_batch_genealogy_contract_missing')
 if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1'")
   || !clientOnboardingSource.includes("CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1'")
   || !clientOnboardingSource.includes("CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v3'")
@@ -5049,6 +5063,7 @@ async function verifyShopProductionDemandRuntime() {
     const nonce = Date.now()
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-production-demand.ts')).href}?shop-production-demand-verify=${nonce}`)
     const commerceModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-production-demand-commerce-verify=${nonce}`)
+    const plantModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts')).href}?shop-production-demand-digest-verify=${nonce}`)
     const commerce = commerceModel.createSeedCommerce(Date.parse('2026-07-29T08:00:00.000Z'))
     const signals = await model.projectShopProductionDemand(commerce, [])
     assert(signals.length >= 1, 'shop_production_demand_seed_projection_missing')
@@ -5061,6 +5076,10 @@ async function verifyShopProductionDemandRuntime() {
     assert(/^sha256:[0-9a-f]{64}$/.test(signal.sourceDigest)
       && signal.evidenceReference === `SHOP-DEMAND:${signal.sourceDigest}:LOC-MAIN`
       && signal.suggestedJobId.startsWith('JOB-SHOP-'), 'shop_production_demand_evidence_wrong')
+    assert(signal.sourceDigest === plantModel.plantOrderEvidenceDigest(signal.sourceSnapshot)
+      && signal.sourceSnapshot.recommendedBatchUnits === signal.recommendedBatchUnits
+      && JSON.stringify(signal.sourceSnapshot.sourceOrderIds) === JSON.stringify([...signal.sourceOrderIds].sort())
+      && !/customer|contact|phone|email|payment|note/i.test(JSON.stringify(signal.sourceSnapshot)), 'shop_production_demand_source_snapshot_not_minimal_or_bound')
     assert(signal.recommendedBatchUnits >= Math.max(1, signal.uncoveredDemandUnits, signal.replenishmentGapUnits), 'shop_production_demand_quantity_understated')
     assert(!signals.some((candidate) => candidate.sku === 'SM-1001'), 'shop_production_demand_covered_order_created_overproduction')
     assert(await model.shopProductionDemandIsCurrent(signal, commerce, []), 'shop_production_demand_fresh_signal_rejected')
@@ -11752,6 +11771,17 @@ async function verifyProductionRuntime() {
     const orderExecution = plantModel.applyPlantOrderPlan(emptyExecution, executionPlan, executionProof, emptyExecution.headDigest).state
     const embeddedExecution = { ...model.createEmptyProduction(), jobs: [{ id: 'JOB-1', line: 'Line 01', product: 'Test batch', target: 100, output: 0 }], orderExecution }
     assert(model.validateProductionState(embeddedExecution) === embeddedExecution, 'production_managed_order_execution_rejected')
+    const embeddedGenealogy = model.buildProductionBatchGenealogy(embeddedExecution, 'JOB-1')
+    assert(embeddedGenealogy?.schema === 'supermega.production.batch-genealogy.v1'
+      && embeddedGenealogy.controlledExecution?.planId === executionPlan.planId
+      && embeddedGenealogy.controlledExecution.outputBatchId === executionPlan.job.outputBatchId
+      && embeddedGenealogy.controls.issuesInventory === false
+      && embeddedGenealogy.controls.changesEquipment === false
+      && embeddedGenealogy.controls.postsCosting === false
+      && embeddedGenealogy.controls.issuesCertificate === false
+      && embeddedGenealogy.controls.performsExternalAction === false,
+    'production_batch_genealogy_controlled_execution_or_boundary_missing')
+    assertThrows(() => model.formatProductionBatchGenealogy({ ...embeddedGenealogy, sourceRevision: embeddedGenealogy.sourceRevision + 1 }), 'production_batch_genealogy_digest_tamper_accepted')
     assertThrows(() => model.validateProductionState({ ...embeddedExecution, orderExecution: { ...orderExecution, headDigest: `sha256:${'0'.repeat(64)}` } }), 'production_managed_order_execution_head_tamper_accepted')
     const legacy = {
       jobs: [{ id: 'JOB-1', line: 'Line 01', product: 'Test batch', target: 100, output: 90 }],
@@ -11861,6 +11891,49 @@ async function verifyProductionRuntime() {
     assert(model.registerProductionJob(base, { ...newJob, owner: undefined }, proof('ACT-JOB-UNOWNED')) === null, 'production_unowned_job_succeeded')
     assert(model.registerProductionJob(base, { ...newJob, priority: 'invalid' }, proof('ACT-JOB-PRIORITY')) === null, 'production_invalid_job_priority_succeeded')
     assert(model.registerProductionJob(base, { ...newJob, dueAt: jobProof.capturedAt }, proof('ACT-JOB-OVERDUE')) === null, 'production_nonfuture_job_due_succeeded')
+    const demandSnapshot = {
+      schema: 'supermega.shop_production_demand.v1',
+      operatingUnitLocationId: 'LOC-MAIN',
+      sku: 'SKU-SHOP-001',
+      productName: 'Shop batch',
+      sourceOrderIds: ['ORD-001', 'ORD-002'],
+      activeDemandUnits: 18,
+      uncoveredDemandUnits: 8,
+      availableToPromiseUnits: 10,
+      reorderAtUnits: 15,
+      replenishmentGapUnits: 5,
+      recommendedBatchUnits: 8,
+    }
+    const demandDigest = plantModel.plantOrderEvidenceDigest(demandSnapshot)
+    const demandEvidenceReference = `SHOP-DEMAND:${demandDigest}:LOC-MAIN`
+    const demandSource = model.productionShopDemandSource({ sourceSnapshot: demandSnapshot, sourceDigest: demandDigest, evidenceReference: demandEvidenceReference })
+    const demandJob = { ...newJob, id: 'JOB-SHOP-001', product: demandSnapshot.productName, target: demandSnapshot.recommendedBatchUnits, shopDemandSource: demandSource }
+    const demandProof = proof('ACT-JOB-SHOP-DEMAND', 0, { evidenceReference: demandEvidenceReference })
+    const demandJobState = model.registerProductionJob(base, demandJob, demandProof)
+    assert(demandJobState?.jobs[0].shopDemandSource.sourceDigest === demandDigest
+      && demandJobState.events[0].evidenceReference === demandEvidenceReference,
+    'production_shop_demand_source_not_retained_or_bound')
+    assert(model.registerProductionJob(base, demandJob, proof('ACT-JOB-SHOP-WRONG-EVIDENCE')) === null, 'production_shop_demand_wrong_creation_evidence_accepted')
+    assertThrows(() => model.validateProductionState({
+      ...demandJobState,
+      jobs: [{ ...demandJobState.jobs[0], shopDemandSource: { ...demandSource, snapshot: { ...demandSnapshot, sourceOrderIds: [...demandSnapshot.sourceOrderIds, 'ORD-003'] } } }, ...demandJobState.jobs.slice(1)],
+    }), 'production_shop_demand_order_tamper_accepted')
+    assertThrows(() => model.validateProductionState({
+      ...demandJobState,
+      jobs: [{ ...demandJobState.jobs[0], shopDemandSource: { ...demandSource, sourceDigest: `sha256:${'0'.repeat(64)}` } }, ...demandJobState.jobs.slice(1)],
+    }), 'production_shop_demand_digest_tamper_accepted')
+    const demandWithMaterial = model.recordProductionMaterialConsumption(demandJobState, demandJob.id, 'MAT-SHOP-001', 'LOT-SHOP-001', 2.5, 'kg', '2026-07-23 Day', proof('ACT-JOB-SHOP-MATERIAL', 1_000))
+    const demandWithOutput = model.recordProductionOutput(demandWithMaterial, demandJob.id, 3, '2026-07-23 Day', proof('ACT-JOB-SHOP-OUTPUT', 2_000))
+    const demandWithHold = model.placeProductionQualityHold(demandWithOutput, demandJob.id, proof('ACT-JOB-SHOP-HOLD', 3_000))
+    const demandWithRelease = model.releaseProductionQualityHold(demandWithHold, demandJob.id, proof('ACT-JOB-SHOP-RELEASE', 4_000))
+    const demandGenealogy = model.buildProductionBatchGenealogy(demandWithRelease, demandJob.id)
+    assert(demandGenealogy?.shopDemandSource.snapshot.sourceOrderIds.join(',') === 'ORD-001,ORD-002'
+      && demandGenealogy.materialEntries[0].materialLot === 'LOT-SHOP-001'
+      && demandGenealogy.outputEntries[0].quantity === 3
+      && demandGenealogy.qualityEvents.map((event) => event.action).join(',') === 'hold_placed,hold_released'
+      && demandGenealogy.evidenceCoverage.materialLotEntryCount === 1
+      && model.formatProductionBatchGenealogy(demandGenealogy).endsWith('\n'),
+    'production_shop_demand_batch_genealogy_incomplete')
     const clientPlanDigest = `sha256:${'d'.repeat(64)}`
     const clientPlanJobs = [
       { id: 'JOB-CLIENT-1', line: 'Line A', product: 'Client batch one', target: 50, output: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2026-08-15T00:00:00.000Z' },

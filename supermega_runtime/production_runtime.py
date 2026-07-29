@@ -12,6 +12,7 @@ from typing import Any, Callable
 from supermega_runtime.plant_order_foundation import (
     PlantOrderValidationError,
     create_empty_plant_order_state,
+    plant_order_evidence_digest,
     project_plant_order,
     validate_plant_order_state,
 )
@@ -80,6 +81,8 @@ _PLANT_INDUSTRY_PACK_IDS = frozenset(
     {"general-manufacturing", "batch-process", "food-beverage", "apparel", "assembly"}
 )
 _OPENING_PLAN_CONTRACT = "supermega.production.opening-plan.v1"
+_SHOP_DEMAND_SOURCE_CONTRACT = "supermega.production.shop-demand-source.v1"
+_SHOP_DEMAND_SCHEMA = "supermega.shop_production_demand.v1"
 _DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 _JOB_REQUIRED_FIELDS = frozenset({"id", "line", "product", "target", "output"})
 _JOB_SCHEDULE_FIELDS = frozenset({"priority", "dueAt"})
@@ -88,7 +91,26 @@ _JOB_OPTIONAL_FIELDS = _JOB_SCHEDULE_FIELDS | {
     "scrap",
     "qualityHold",
     "closure",
+    "shopDemandSource",
 }
+_SHOP_DEMAND_SOURCE_FIELDS = frozenset(
+    {"contract", "sourceDigest", "evidenceReference", "snapshot"}
+)
+_SHOP_DEMAND_SNAPSHOT_FIELDS = frozenset(
+    {
+        "schema",
+        "operatingUnitLocationId",
+        "sku",
+        "productName",
+        "sourceOrderIds",
+        "activeDemandUnits",
+        "uncoveredDemandUnits",
+        "availableToPromiseUnits",
+        "reorderAtUnits",
+        "replenishmentGapUnits",
+        "recommendedBatchUnits",
+    }
+)
 _QUALITY_HOLD_FIELDS = frozenset(
     {"actionId", "heldAt", "heldBy", "reason", "evidenceReference"}
 )
@@ -346,6 +368,74 @@ def _job_closure(value: object, field: str) -> dict[str, Any]:
     return closure
 
 
+def _shop_demand_source(value: object, field: str) -> dict[str, Any]:
+    source = _object(value, field)
+    _exact_fields(source, field, required=_SHOP_DEMAND_SOURCE_FIELDS)
+    if source["contract"] != _SHOP_DEMAND_SOURCE_CONTRACT:
+        raise TrialValidationError(f"{field}.contract is unsupported.")
+    snapshot_field = f"{field}.snapshot"
+    snapshot = _object(source["snapshot"], snapshot_field)
+    _exact_fields(snapshot, snapshot_field, required=_SHOP_DEMAND_SNAPSHOT_FIELDS)
+    if snapshot["schema"] != _SHOP_DEMAND_SCHEMA:
+        raise TrialValidationError(f"{snapshot_field}.schema is unsupported.")
+    if snapshot["operatingUnitLocationId"] != "LOC-MAIN":
+        raise TrialValidationError(f"{snapshot_field} operating unit is unsupported.")
+    _text(snapshot["sku"], f"{snapshot_field}.sku", maximum=80)
+    _text(snapshot["productName"], f"{snapshot_field}.productName")
+    source_order_ids = snapshot["sourceOrderIds"]
+    if not isinstance(source_order_ids, list) or len(source_order_ids) > 100:
+        raise TrialValidationError(f"{snapshot_field}.sourceOrderIds must be a bounded list.")
+    canonical_order_ids = [
+        _text(order_id, f"{snapshot_field}.sourceOrderIds[{index}]", maximum=80)
+        for index, order_id in enumerate(source_order_ids)
+    ]
+    if len(set(canonical_order_ids)) != len(canonical_order_ids):
+        raise TrialValidationError(f"{snapshot_field}.sourceOrderIds must be unique.")
+    if canonical_order_ids != sorted(canonical_order_ids):
+        raise TrialValidationError(f"{snapshot_field}.sourceOrderIds must be sorted.")
+    metric_fields = (
+        "activeDemandUnits",
+        "uncoveredDemandUnits",
+        "availableToPromiseUnits",
+        "reorderAtUnits",
+        "replenishmentGapUnits",
+        "recommendedBatchUnits",
+    )
+    for metric in metric_fields:
+        _integer(
+            snapshot[metric],
+            f"{snapshot_field}.{metric}",
+            minimum=1 if metric == "recommendedBatchUnits" else 0,
+        )
+    if (
+        snapshot["uncoveredDemandUnits"]
+        != max(0, snapshot["activeDemandUnits"] - snapshot["availableToPromiseUnits"])
+        or snapshot["replenishmentGapUnits"]
+        != max(0, snapshot["reorderAtUnits"] - snapshot["availableToPromiseUnits"])
+        or snapshot["recommendedBatchUnits"]
+        != max(
+            1,
+            snapshot["uncoveredDemandUnits"],
+            snapshot["replenishmentGapUnits"],
+        )
+    ):
+        raise TrialValidationError(f"{snapshot_field} demand metrics are inconsistent.")
+    source_digest = _text(source["sourceDigest"], f"{field}.sourceDigest", maximum=71)
+    if (
+        _DIGEST_PATTERN.fullmatch(source_digest) is None
+        or source_digest != plant_order_evidence_digest(snapshot)
+    ):
+        raise TrialValidationError(
+            f"{field}.sourceDigest does not match its canonical snapshot."
+        )
+    evidence_reference = _text(
+        source["evidenceReference"], f"{field}.evidenceReference"
+    )
+    if evidence_reference != f"SHOP-DEMAND:{source_digest}:LOC-MAIN":
+        raise TrialValidationError(f"{field}.evidenceReference is invalid.")
+    return source
+
+
 def _validate_job(candidate: object, index: int) -> dict[str, Any]:
     field = f"jobs[{index}]"
     job = _object(candidate, field)
@@ -383,6 +473,16 @@ def _validate_job(candidate: object, index: int) -> dict[str, Any]:
             raise TrialValidationError(
                 f"{field}.closure remaining units must match its output."
             )
+    if "shopDemandSource" in job:
+        source = _shop_demand_source(job["shopDemandSource"], f"{field}.shopDemandSource")
+        snapshot = source["snapshot"]
+        if job["product"].lower() not in {
+            snapshot["sku"].lower(),
+            snapshot["productName"].lower(),
+        }:
+            raise TrialValidationError(f"{field} product does not match its Shop demand source.")
+        if target != snapshot["recommendedBatchUnits"]:
+            raise TrialValidationError(f"{field} target does not match its Shop demand source.")
     return job
 
 
@@ -980,6 +1080,19 @@ def _validate_job_history(
             )
         else:
             creation_event = matches[0]
+
+        if "shopDemandSource" in job:
+            source = _shop_demand_source(
+                job["shopDemandSource"], f"jobs[{index}].shopDemandSource"
+            )
+            if creation_event is None:
+                raise TrialValidationError(
+                    f"jobs[{index}] Shop demand source requires immutable creation evidence."
+                )
+            if creation_event["evidenceReference"] != source["evidenceReference"]:
+                raise TrialValidationError(
+                    f"jobs[{index}] Shop demand source does not match its creation evidence."
+                )
 
         schedule_events = [
             event
@@ -1929,6 +2042,14 @@ def _validate_job_created(
         )
     if event["subjectId"] != job["id"]:
         raise TrialValidationError("job creation event must reference the new job.")
+    if (
+        "shopDemandSource" in job
+        and event["evidenceReference"]
+        != job["shopDemandSource"]["evidenceReference"]
+    ):
+        raise TrialValidationError(
+            "Shop demand source must match the immutable job creation evidence."
+        )
     expected_summary = f"Created {job['product']} job for {job['line']}"
     if event["summary"] != expected_summary:
         raise TrialValidationError("job creation summary is not canonical.")
