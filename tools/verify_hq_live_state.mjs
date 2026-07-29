@@ -6,6 +6,8 @@ const CONTRACT = 'supermega.hq-live-state.v1'
 const APP_ORIGIN = 'https://app.supermega.dev'
 const PUBLIC_ORIGIN = 'https://supermega.dev'
 const MAX_RESPONSE_BYTES = 65_536
+const LIVE_PROBE_TIMEOUT_MS = 15_000
+const LIVE_PROBE_MAX_ATTEMPTS = 2
 const MAX_HQ_NOW_BYTES = 128 * 1_024
 const MAX_SNAPSHOT_AGE_MS = 72 * 60 * 60 * 1_000
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1_000
@@ -163,7 +165,7 @@ async function fetchJson(url) {
   const response = await fetch(url, {
     headers: { Accept: 'application/json' },
     redirect: 'error',
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(LIVE_PROBE_TIMEOUT_MS),
   })
   if (!response.ok) throw new Error(`http_${response.status}`)
   if (!response.headers.get('content-type')?.toLowerCase().includes('application/json')) throw new Error('response_content_type_invalid')
@@ -192,7 +194,39 @@ async function fetchJson(url) {
   }
 }
 
-function runSelfTest() {
+function liveProbeFailureReason(error) {
+  if (error?.name === 'AbortError' || error?.name === 'TimeoutError') return 'timeout'
+  const message = error instanceof Error ? error.message : ''
+  if (/^http_[45]\d\d$/.test(message)
+    || /^(?:response_content_type_invalid|response_too_large|response_body_missing|response_json_invalid)$/.test(message)) {
+    return message
+  }
+  return 'network_error'
+}
+
+export async function fetchLiveJson(label, url, options = {}) {
+  if (!/^[a-z][a-z_]{0,31}$/.test(label)) throw new Error('live_probe_label_invalid')
+  const fetchJsonImpl = options.fetchJsonImpl || fetchJson
+  const maxAttempts = options.maxAttempts ?? LIVE_PROBE_MAX_ATTEMPTS
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > LIVE_PROBE_MAX_ATTEMPTS) {
+    throw new Error('live_probe_attempt_limit_invalid')
+  }
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return { value: await fetchJsonImpl(url), attempts: attempt }
+    } catch (error) {
+      const reason = liveProbeFailureReason(error)
+      const retryable = reason === 'timeout' || reason === 'network_error' || /^http_5\d\d$/.test(reason)
+      if (!retryable || attempt === maxAttempts) {
+        throw new Error(`live_${label}_fetch_failed:${reason}:attempts=${attempt}`)
+      }
+    }
+  }
+  throw new Error(`live_${label}_fetch_failed:network_error:attempts=${maxAttempts}`)
+}
+
+async function runSelfTest() {
   const commit = 'a'.repeat(40)
   const now = new Date('2026-07-27T12:00:00Z')
   const hq = parseHqLiveState(`Live state contract: \`${CONTRACT}\`
@@ -235,6 +269,51 @@ Live security ready: \`false\``)
     if (!passed) throw new Error(`self_test_${name}_failed`)
   }
 
+  let transientAttempts = 0
+  const transient = await fetchLiveJson('app_release', `${APP_ORIGIN}/__release.json`, {
+    fetchJsonImpl: async () => {
+      transientAttempts += 1
+      if (transientAttempts === 1) {
+        const error = new Error('must-not-escape')
+        error.name = 'TimeoutError'
+        throw error
+      }
+      return appRelease
+    },
+  })
+  let invalidAttempts = 0
+  let invalidFailure = ''
+  try {
+    await fetchLiveJson('public_release', `${PUBLIC_ORIGIN}/__release.json`, {
+      fetchJsonImpl: async () => {
+        invalidAttempts += 1
+        throw new Error('response_content_type_invalid')
+      },
+    })
+  } catch (error) {
+    invalidFailure = error instanceof Error ? error.message : ''
+  }
+  let exhaustedFailure = ''
+  try {
+    await fetchLiveJson('health', `${APP_ORIGIN}/api/health`, {
+      fetchJsonImpl: async () => {
+        const error = new Error('must-not-escape')
+        error.name = 'TimeoutError'
+        throw error
+      },
+    })
+  } catch (error) {
+    exhaustedFailure = error instanceof Error ? error.message : ''
+  }
+  const probeCases = [
+    ['retry_one_transient_failure', transient.attempts === 2 && transient.value === appRelease],
+    ['do_not_retry_invalid_content', invalidAttempts === 1 && invalidFailure === 'live_public_release_fetch_failed:response_content_type_invalid:attempts=1'],
+    ['redact_exhausted_transient_failure', exhaustedFailure === 'live_health_fetch_failed:timeout:attempts=2'],
+  ]
+  for (const [name, passed] of probeCases) {
+    if (!passed) throw new Error(`self_test_${name}_failed`)
+  }
+
   const failureCases = [
     ['app_release_contract_invalid', { ...baseline, appRelease: { ...appRelease, brandVersion: '' } }],
     ['public_release_contract_invalid', { ...baseline, publicRelease: { ...publicRelease, service: 'wrong' } }],
@@ -274,7 +353,7 @@ Live security ready: \`false\``)
     if (!(error instanceof Error) || error.message !== 'hq_now_contract_duplicate') throw error
   }
 
-  return { ok: true, contract: CONTRACT, checks: failureCases.length + appVerifierCases.length + 2, networkRequests: 0 }
+  return { ok: true, contract: CONTRACT, checks: failureCases.length + appVerifierCases.length + probeCases.length + 2, networkRequests: 0 }
 }
 
 async function main() {
@@ -285,18 +364,30 @@ async function main() {
   const root = resolve(import.meta.dirname, '..')
   const appProductContract = verifyLiveAppProductContract(root)
   const hq = parseHqLiveState(await readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'))
-  const [appRelease, publicRelease, health, cloud] = await Promise.all([
-    fetchJson(`${APP_ORIGIN}/__release.json`),
-    fetchJson(`${PUBLIC_ORIGIN}/__release.json`),
-    fetchJson(`${APP_ORIGIN}/api/health`),
-    fetchJson(`${APP_ORIGIN}/api/cloud-autonomy/status`),
+  const [appReleaseProbe, publicReleaseProbe, healthProbe, cloudProbe] = await Promise.all([
+    fetchLiveJson('app_release', `${APP_ORIGIN}/__release.json`),
+    fetchLiveJson('public_release', `${PUBLIC_ORIGIN}/__release.json`),
+    fetchLiveJson('health', `${APP_ORIGIN}/api/health`),
+    fetchLiveJson('cloud_autonomy', `${APP_ORIGIN}/api/cloud-autonomy/status`),
   ])
+  const appRelease = appReleaseProbe.value
+  const publicRelease = publicReleaseProbe.value
+  const health = healthProbe.value
+  const cloud = cloudProbe.value
   const result = assessHqLiveState({ hq, appRelease, publicRelease, health, cloud })
   return {
     ...result,
     observedAt: new Date().toISOString(),
     hqObservedAt: hq.observedAt,
     appProductContract,
+    probes: {
+      timeoutMs: LIVE_PROBE_TIMEOUT_MS,
+      maxAttempts: LIVE_PROBE_MAX_ATTEMPTS,
+      appReleaseAttempts: appReleaseProbe.attempts,
+      publicReleaseAttempts: publicReleaseProbe.attempts,
+      healthAttempts: healthProbe.attempts,
+      cloudAutonomyAttempts: cloudProbe.attempts,
+    },
     release: {
       commit: appRelease.commit,
       brandVersion: appRelease.brandVersion,
