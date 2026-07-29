@@ -994,6 +994,7 @@ requireContract('Ally CEO execution uses one exact local-company run and no exte
   && workboard.includes('| OPS-068 | CEO + Portfolio Rotation Codex | done-local |')
   && workboard.includes('| OPS-069 | CEO + Specialist Output Quality Codex | done-local |')
   && workboard.includes('| OPS-070 | CEO + Legacy Quality Recovery Codex | done-local |')
+  && workboard.includes('| OPS-071 | CEO + Engineering Quality Recovery Codex | done-local |')
   && workboard.includes('job `b7fe6524a638`')
   && workboard.includes('two specialist model calls, and zero synthesis model calls')
   && workboard.includes('Exact replay returned the same report with zero model calls and zero queue writes')
