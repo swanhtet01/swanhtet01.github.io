@@ -159,6 +159,11 @@ export type CommerceOrderCorrection = {
   externalPostingPerformed: false
 }
 
+export type CommerceCollectionAction = {
+  kind: 'customer_contact'
+  proof: CommerceActionProof
+}
+
 export type CommerceOrder = {
   id: string
   createdAt: string
@@ -184,6 +189,8 @@ export type CommerceOrder = {
   fulfilment?: string
   fulfilmentReference?: string
   promisedAt?: string
+  paymentDueAt?: string
+  collectionActions?: CommerceCollectionAction[]
   sourceRecordId?: string
   evidenceReference?: string
   lines?: CommerceOrderLine[]
@@ -215,6 +222,8 @@ export type CommerceReceivableAgingRow = {
   balanceMmk: number
   daysPastDue: number
   bucket: CommerceReceivableAgingBucket
+  collectionActionCount: number
+  lastCollectionAction?: CommerceActionProof
 }
 
 export type CommerceReceivablesAging = {
@@ -242,7 +251,7 @@ export function commerceReceivablesAging(state: CommerceState, now: number): Com
   const rows = state.orders
     .filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending')
     .flatMap((order): CommerceReceivableAgingRow[] => {
-      const dueAt = order.promisedAt ?? order.createdAt
+      const dueAt = order.paymentDueAt ?? order.promisedAt ?? order.createdAt
       const dueTime = Date.parse(dueAt)
       if (!Number.isFinite(dueTime) || !Number.isSafeInteger(order.total) || order.total < 0) return []
       const daysPastDue = safeNow > dueTime ? Math.ceil((safeNow - dueTime) / dayMilliseconds) : 0
@@ -254,6 +263,8 @@ export function commerceReceivablesAging(state: CommerceState, now: number): Com
         balanceMmk: order.total,
         daysPastDue,
         bucket: receivableBucket(daysPastDue),
+        collectionActionCount: order.collectionActions?.length ?? 0,
+        ...(order.collectionActions?.[0] ? { lastCollectionAction: order.collectionActions[0].proof } : {}),
       }]
     })
     .sort((left, right) => right.daysPastDue - left.daysPastDue || left.dueAt.localeCompare(right.dueAt) || left.orderId.localeCompare(right.orderId))
@@ -846,6 +857,7 @@ const maxAccountMappingConfigurations = 100
 const maxOrderLines = 20
 const maxReturnsPerOrder = 100
 const maxCorrectionsPerOrder = 100
+const maxCollectionActionsPerOrder = 100
 const closeIdPattern = /^CLOSE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const closeActionIdPattern = /^ACT-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const businessDatePattern = /^\d{4}-\d{2}-\d{2}$/
@@ -1429,6 +1441,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const completionActionIds: string[] = []
   const returnActionIds: string[] = []
   const correctionActionIds: string[] = []
+  const collectionActionIds: string[] = []
   const orderReturns: Array<{ orderId: string; record: CommerceOrderReturn }> = []
   const closeActionIds: string[] = []
   const closeBusinessDates: string[] = []
@@ -1991,6 +2004,43 @@ export function validateCommerceState(value: unknown): CommerceState {
         correctionActionIds.push(actionId)
       }
     }
+    if (candidate.paymentDueAt !== undefined) {
+      const paymentDueAt = timestampMicros(candidate.paymentDueAt)
+      const createdAt = timestampMicros(candidate.createdAt)
+      if (paymentDueAt === null || createdAt === null || paymentDueAt < createdAt) {
+        throw new Error(`orders[${index}].paymentDueAt cannot be before its creation time.`)
+      }
+    }
+    if (candidate.collectionActions !== undefined) {
+      if (!Array.isArray(candidate.collectionActions)
+        || candidate.collectionActions.length < 1
+        || candidate.collectionActions.length > maxCollectionActionsPerOrder) {
+        throw new Error(`orders[${index}].collectionActions requires 1 to ${maxCollectionActionsPerOrder} records.`)
+      }
+      let newerActionAt: bigint | null = null
+      for (const [actionIndex, actionCandidate] of candidate.collectionActions.entries()) {
+        if (!isRecord(actionCandidate)
+          || !hasExactKeys(actionCandidate, ['kind', 'proof'])
+          || actionCandidate.kind !== 'customer_contact'
+          || !isRecord(actionCandidate.proof)
+          || !hasExactKeys(actionCandidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+          || !validProof(actionCandidate.proof as CommerceActionProof)) {
+          throw new Error(`orders[${index}].collectionActions[${actionIndex}] is invalid.`)
+        }
+        const proof = actionCandidate.proof as CommerceActionProof
+        const capturedAt = timestampMicros(proof.capturedAt)
+        if (capturedAt === null
+          || capturedAt < (timestampMicros(candidate.createdAt) as bigint)
+          || (newerActionAt !== null && capturedAt > newerActionAt)) {
+          throw new Error(`orders[${index}].collectionActions[${actionIndex}] is outside the order chronology.`)
+        }
+        newerActionAt = capturedAt
+        for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+          canonicalText(proof[field], `orders[${index}].collectionActions[${actionIndex}].proof.${field}`, field === 'actionId' ? 160 : 180)
+        }
+        collectionActionIds.push(proof.actionId)
+      }
+    }
     if (candidate.returns !== undefined) {
       if (!Array.isArray(candidate.returns)
         || candidate.returns.length < 1
@@ -2044,6 +2094,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   assertUnique(completionActionIds, 'Order completion action ID')
   assertUnique(returnActionIds, 'Order return action ID')
   assertUnique(correctionActionIds, 'Order correction action ID')
+  assertUnique(collectionActionIds, 'Collection action ID')
 
   const reserveByOrder = new Map<string, number>()
   const releaseByOrder = new Map<string, number>()
@@ -2602,6 +2653,8 @@ export function validateCommerceState(value: unknown): CommerceState {
     ...advancementActionIds,
     ...completionActionIds,
     ...returnActionIds,
+    ...correctionActionIds,
+    ...collectionActionIds,
     ...catalogChangeActionIds.filter((actionId) => !catalogBaselineActionSet.has(actionId)),
     ...catalogBaselineActionSet,
     ...taxConfigurationActionIds,
@@ -2818,6 +2871,7 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || state.orders.some((order) => order.completion?.actionId === actionId)
     || state.orders.some((order) => order.returns?.some((record) => record.actionId === actionId))
     || state.orders.some((order) => order.corrections?.some((record) => record.actionId === actionId))
+    || state.orders.some((order) => order.collectionActions?.some((record) => record.proof.actionId === actionId))
     || state.closes.some((close) => close.actionId === actionId)
     || commerceCatalogBaselines(state).some((baseline) => baseline.proof.actionId === actionId)
     || commerceCatalogChanges(state).some((change) => change.proof.actionId === actionId)
@@ -3595,6 +3649,7 @@ export function convertCommerceWebsiteIntake(
     fulfilment,
     fulfilmentReference: intake.id,
     promisedAt: input.promisedAt,
+    paymentDueAt: input.promisedAt,
     sourceRecordId: intake.id,
     evidenceReference: proof.evidenceReference,
     calculation,
@@ -4635,6 +4690,30 @@ export function reconcileCommercePayment(state: CommerceState, orderId: string, 
       paymentReconciledBy: proof.actor,
       paymentReconciliationReason: proof.reason,
       paymentEvidenceReference: proof.evidenceReference,
+    } : candidate),
+  })
+}
+
+export function recordCommerceCollectionAction(state: CommerceState, orderId: string, proof: CommerceActionProof) {
+  if (!validProof(proof)) return null
+  const order = state.orders.find((candidate) => candidate.id === orderId)
+  const replay = order?.collectionActions?.find((record) => record.proof.actionId === proof.actionId)
+  if (replay) return sameActionProof(replay.proof, proof) ? state : null
+  const capturedAt = timestampMicros(proof.capturedAt)
+  const createdAt = order ? timestampMicros(order.createdAt) : null
+  if (!order
+    || order.status === 'cancelled'
+    || order.paymentStatus !== 'pending'
+    || actionIdIsUsed(state, proof.actionId)
+    || (order.collectionActions?.length ?? 0) >= maxCollectionActionsPerOrder
+    || capturedAt === null
+    || createdAt === null
+    || capturedAt < createdAt) return null
+  return validateCommerceState({
+    ...state,
+    orders: state.orders.map((candidate) => candidate.id === orderId ? {
+      ...candidate,
+      collectionActions: [{ kind: 'customer_contact' as const, proof: { ...proof } }, ...(candidate.collectionActions ?? [])],
     } : candidate),
   })
 }

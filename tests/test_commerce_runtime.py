@@ -896,6 +896,13 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
             "reason": record["reason"],
             "evidenceReference": record["evidenceReference"],
         }
+    if event_type == "commerce.collection_action.recorded":
+        contacted_orders = [
+            order
+            for order in next_state["orders"]  # type: ignore[union-attr]
+            if order.get("collectionActions")
+        ]
+        return dict(contacted_orders[0]["collectionActions"][0]["proof"])
     if event_type in {
         "commerce.item.created",
         "commerce.order.created",
@@ -2342,6 +2349,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.order.return_recorded",
                     "commerce.order.correction_recorded",
                     "commerce.payment.reconciled",
+                    "commerce.collection_action.recorded",
                     "commerce.refund.settled",
                     "commerce.stock.received",
                     "commerce.stock.counted",
@@ -4206,6 +4214,44 @@ class CommerceRuntimeTests(unittest.TestCase):
 
     def test_order_progress_payment_and_close_are_server_checked(self) -> None:
         current = created_state()
+        current["orders"][0]["paymentDueAt"] = "2026-08-22T09:00:00.000Z"  # type: ignore[index]
+        current = validate_commerce_state(current)
+        contact_proof = action_evidence(
+            "ACT-COLLECTION-1",
+            captured_at="2026-07-23T09:05:00.000Z",
+            reason="Recorded a customer payment follow-up.",
+        )
+        contacted = deepcopy(current)
+        contacted["orders"][0]["collectionActions"] = [  # type: ignore[index]
+            {"kind": "customer_contact", "proof": contact_proof}
+        ]
+        current = apply_event(
+            current,
+            "commerce.collection_action.recorded",
+            contacted,
+        )
+        self.assertEqual(
+            current["orders"][0]["collectionActions"][0]["proof"],  # type: ignore[index]
+            contact_proof,
+        )
+        rewritten_due = deepcopy(current)
+        rewritten_due["orders"][0]["paymentDueAt"] = "2026-08-23T09:00:00.000Z"  # type: ignore[index]
+        rewritten_due["orders"][0]["collectionActions"] = [  # type: ignore[index]
+            {
+                "kind": "customer_contact",
+                "proof": action_evidence(
+                    "ACT-COLLECTION-2",
+                    captured_at="2026-07-23T09:06:00.000Z",
+                ),
+            },
+            *current["orders"][0]["collectionActions"],  # type: ignore[index]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.collection_action.recorded",
+                rewritten_due,
+            )
         preparing = deepcopy(current)
         preparing["orders"][0].update(  # type: ignore[index]
             {
@@ -5718,7 +5764,34 @@ class CommerceRuntimeTests(unittest.TestCase):
                 "evidence": action_evidence("ACT-STORE-PREPARING"),
             },
         )
-        reconciled_state = deepcopy(preparing.state)
+        collection_state = deepcopy(preparing.state)
+        forged_collection_proof = action_evidence(
+            "ACT-STORE-COLLECTION",
+            captured_at="2099-01-01T00:00:00.000Z",
+            actor="Fabricated Collection Bot",
+            reason="Recorded a customer payment follow-up.",
+        )
+        collection_state["orders"][0]["collectionActions"] = [  # type: ignore[index]
+            {"kind": "customer_contact", "proof": forged_collection_proof}
+        ]
+        contacted = store.apply_command(
+            principal,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.collection_action.recorded",
+            expected_version=preparing.version,
+            payload={
+                "state": collection_state,
+                "evidence": forged_collection_proof,
+            },
+        )
+        authoritative_contact = contacted.state["orders"][0]["collectionActions"][0]["proof"]  # type: ignore[index]
+        self.assertEqual(authoritative_contact["actor"], principal.actor_id)
+        self.assertNotEqual(
+            authoritative_contact["capturedAt"],
+            forged_collection_proof["capturedAt"],
+        )
+        reconciled_state = deepcopy(contacted.state)
         reconciled_state["orders"][0].update(  # type: ignore[index]
             {
                 "paymentStatus": "reconciled",
@@ -5734,7 +5807,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             command_id=str(uuid4()),
             surface="commerce",
             event_type="commerce.payment.reconciled",
-            expected_version=preparing.version,
+            expected_version=contacted.version,
             payload={
                 "state": reconciled_state,
                 "evidence": evidence_for(

@@ -267,6 +267,7 @@ requireContract('source line endings normalize across platforms',
 const expectedHumanCommerceEvents = [
   'commerce.account_mapping.saved',
   'commerce.close.saved',
+  'commerce.collection_action.recorded',
   'commerce.inventory.initialized',
   'commerce.inventory.master_created',
   'commerce.inventory.transferred',

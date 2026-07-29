@@ -11,6 +11,7 @@ export const commerceOrderDraftPayments = ['KBZPay', 'WavePay', 'Cash on deliver
 export type CommerceOrderDraftChannel = typeof commerceOrderDraftChannels[number]
 export type CommerceOrderDraftPayment = '' | typeof commerceOrderDraftPayments[number]
 export type CommerceOrderDraftFulfilment = '' | 'pickup' | 'delivery'
+export type CommerceOrderDraftPaymentTermsDays = 0 | 7 | 30
 
 export type CommerceOrderDraftLine = {
   sku: string
@@ -26,6 +27,7 @@ export type CommerceOrderDraftInput = {
   fulfilment: CommerceOrderDraftFulfilment
   fulfilmentReference: string
   promisedAt: string
+  paymentTermsDays: CommerceOrderDraftPaymentTermsDays
   lines: CommerceOrderDraftLine[]
 }
 
@@ -165,11 +167,13 @@ function canonicalInput(value: CommerceOrderDraftInput): CommerceOrderDraftInput
   const customer = canonicalText(value.customer, 'Order draft customer', 80)
   const fulfilmentReference = canonicalText(value.fulfilmentReference, 'Order draft handoff reference', 160)
   const promisedAt = value.promisedAt === '' ? '' : canonicalTimestamp(value.promisedAt)
+  const paymentTermsDays = Number(value.paymentTermsDays)
   if (!commerceOrderDraftChannels.includes(value.channel)) throw new Error('Order draft channel is invalid.')
   if (value.payment !== '' && !commerceOrderDraftPayments.includes(value.payment)) {
     throw new Error('Order draft payment is invalid.')
   }
   if (!['', 'pickup', 'delivery'].includes(value.fulfilment)) throw new Error('Order draft fulfilment is invalid.')
+  if (![0, 7, 30].includes(paymentTermsDays)) throw new Error('Order draft payment terms are invalid.')
   if (!Array.isArray(value.lines) || value.lines.length < 1 || value.lines.length > 20) {
     throw new Error('Order draft must contain between 1 and 20 item lines.')
   }
@@ -184,6 +188,7 @@ function canonicalInput(value: CommerceOrderDraftInput): CommerceOrderDraftInput
     fulfilment: value.fulfilment,
     fulfilmentReference,
     promisedAt,
+    paymentTermsDays: paymentTermsDays as CommerceOrderDraftPaymentTermsDays,
     lines,
   }
 }
@@ -214,6 +219,7 @@ export function commerceOrderDraftMatchesInput(left: CommerceOrderDraft, right: 
     && left.fulfilment === right.fulfilment
     && left.fulfilmentReference === right.fulfilmentReference
     && left.promisedAt === right.promisedAt
+    && left.paymentTermsDays === right.paymentTermsDays
     && left.lines.length === right.lines.length
     && left.lines.every((line, index) => {
       const candidate = right.lines[index]
@@ -262,7 +268,8 @@ export function validateCommerceOrderDraft(value: unknown, expectedScope?: strin
   ]
   if (!isRecord(value)
     || (!hasExactKeys(value, legacyFields)
-      && !hasExactKeys(value, [...legacyFields, 'promisedAt']))
+      && !hasExactKeys(value, [...legacyFields, 'promisedAt'])
+      && !hasExactKeys(value, [...legacyFields, 'promisedAt', 'paymentTermsDays']))
     || value.schema !== COMMERCE_ORDER_DRAFT_SCHEMA
     || !Number.isSafeInteger(value.revision)
     || Number(value.revision) < 1) {
@@ -284,6 +291,7 @@ export function validateCommerceOrderDraft(value: unknown, expectedScope?: strin
       fulfilment: value.fulfilment as CommerceOrderDraftFulfilment,
       fulfilmentReference: value.fulfilmentReference as string,
       promisedAt: typeof value.promisedAt === 'string' ? value.promisedAt : '',
+      paymentTermsDays: typeof value.paymentTermsDays === 'number' ? value.paymentTermsDays as CommerceOrderDraftPaymentTermsDays : 0,
       lines: value.lines as CommerceOrderDraftLine[],
     }),
   }
@@ -590,6 +598,7 @@ export function rebindCommerceOrderDraft(
     fulfilment: draft.fulfilment,
     fulfilmentReference: draft.fulfilmentReference,
     promisedAt: draft.promisedAt,
+    paymentTermsDays: draft.paymentTermsDays,
     lines: draft.lines.map((line) => {
       const item = bySku.get(line.sku)
       if (!item) throw new Error('Recovered Shop item is missing.')

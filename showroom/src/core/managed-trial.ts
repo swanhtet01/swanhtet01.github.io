@@ -72,6 +72,7 @@ export type ManagedCommerceEvent =
   | 'commerce.order.return_recorded'
   | 'commerce.order.correction_recorded'
   | 'commerce.payment.reconciled'
+  | 'commerce.collection_action.recorded'
   | 'commerce.refund.settled'
   | 'commerce.stock.received'
   | 'commerce.stock.counted'

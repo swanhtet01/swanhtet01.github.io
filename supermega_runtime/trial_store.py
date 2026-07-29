@@ -36,6 +36,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.order.return_recorded",
         "commerce.order.correction_recorded",
         "commerce.payment.reconciled",
+        "commerce.collection_action.recorded",
         "commerce.refund.settled",
         "commerce.stock.received",
         "commerce.stock.counted",
@@ -1232,6 +1233,72 @@ def _authoritative_command_payload(
         )
         authoritative_state = dict(state)
         authoritative_state["purchaseOrders"] = authoritative_purchase_orders
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.collection_action.recorded":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        orders = state.get("orders") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(orders, list)
+        ):
+            return authoritative
+        contacted_order = next(
+            (
+                order
+                for order in orders
+                if isinstance(order, Mapping)
+                and isinstance(order.get("collectionActions"), list)
+                and order["collectionActions"]
+                and isinstance(order["collectionActions"][0], Mapping)
+                and isinstance(order["collectionActions"][0].get("proof"), Mapping)
+                and order["collectionActions"][0]["proof"].get("actionId")
+                == evidence.get("actionId")
+            ),
+            None,
+        )
+        effective_captured_at = captured_at
+        if contacted_order is not None:
+            prior_actions = contacted_order.get("collectionActions", [])[1:]
+            effective_captured_at = _not_before(
+                captured_at,
+                contacted_order.get("createdAt"),
+                *(
+                    action.get("proof", {}).get("capturedAt")
+                    for action in prior_actions
+                    if isinstance(action, Mapping)
+                    and isinstance(action.get("proof"), Mapping)
+                ),
+            )
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": effective_captured_at,
+        }
+        authoritative_orders = deepcopy(orders)
+        for order_index, order in enumerate(authoritative_orders):
+            actions = order.get("collectionActions") if isinstance(order, Mapping) else None
+            if (
+                not isinstance(actions, list)
+                or not actions
+                or not isinstance(actions[0], Mapping)
+                or not isinstance(actions[0].get("proof"), Mapping)
+                or actions[0]["proof"].get("actionId") != evidence.get("actionId")
+            ):
+                continue
+            authoritative_action = dict(actions[0])
+            authoritative_action["proof"] = deepcopy(authoritative_evidence)
+            authoritative_order = dict(order)
+            authoritative_order["collectionActions"] = [
+                authoritative_action,
+                *deepcopy(actions[1:]),
+            ]
+            authoritative_orders[order_index] = authoritative_order
+        authoritative_state = dict(state)
+        authoritative_state["orders"] = authoritative_orders
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative

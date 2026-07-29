@@ -74,6 +74,7 @@ import {
   mutateCommerceWorkspace,
   receiveCommercePurchaseOrder,
   reconcileCommercePayment,
+  recordCommerceCollectionAction,
   recordCommerceOrderReturn,
   recordCommerceOrderCorrection,
   registerCommerceItem,
@@ -241,6 +242,7 @@ type ActionKind =
   | 'order_return'
   | 'order_correction'
   | 'payment_reconcile'
+  | 'collection_contact'
   | 'refund_settle'
   | 'catalog_item_create'
   | 'catalog_item_update'
@@ -2189,8 +2191,15 @@ export function OperationsPage({ product }: { product?: ProductId }) {
 
   const tabs = view === 'commerce' ? commerceTabs : productionTabs
   const productCopy = view === 'commerce'
-    ? 'Tap an item, choose payment, and confirm the sale.'
-    : 'Jobs, output, equipment, and problems in one place.'
+    ? {
+        counter: 'Tap an item, choose payment, and confirm the sale.',
+        orders: 'Finish fulfilment, follow up payment, and handle exceptions.',
+        inventory: 'Count stock, replenish items, and review location availability.',
+      }[commerceTab]
+    : {
+        production: 'Run jobs, record output, and keep material trace current.',
+        control: 'Contain quality, equipment, downtime, and maintenance problems.',
+      }[productionTab]
 
   if (!isProductRoute && !requestedView) {
     return <div className="workspace-screen product-catalog-screen">
@@ -2360,6 +2369,7 @@ function buildCommerceOrderRecoveryInput(
     fulfilment: '' | 'pickup' | 'delivery'
     fulfilmentReference: string
     promisedAt: string
+    paymentTermsDays: 0 | 7 | 30
     lines: Array<{ sku: string; quantity: number }>
   },
   catalog: CommerceItem[],
@@ -2387,6 +2397,7 @@ function buildCommerceOrderRecoveryInput(
     fulfilment: fields.fulfilment,
     fulfilmentReference: fields.fulfilmentReference.trim(),
     promisedAt: promisedAt && !Number.isNaN(promisedAt.getTime()) ? promisedAt.toISOString() : '',
+    paymentTermsDays: fields.paymentTermsDays,
     lines: lines as CommerceOrderDraftInput['lines'],
   }
 }
@@ -2417,6 +2428,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [fulfilment, setFulfilment] = useState<'' | 'pickup' | 'delivery'>('')
   const [fulfilmentReference, setFulfilmentReference] = useState('')
   const [promisedAt, setPromisedAt] = useState('')
+  const [paymentTermsDays, setPaymentTermsDays] = useState<0 | 7 | 30>(0)
   const [preparedChannelDraft, setPreparedChannelDraft] = useState<ChannelOrderDraft | null>(null)
   const [preparedEcommerceDraft, setPreparedEcommerceDraft] = useState<EcommerceShopDraft | null>(null)
   const [orderEntryMode, setOrderEntryMode] = useState<'manual' | 'message' | 'online'>('manual')
@@ -2489,6 +2501,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     || fulfilment
     || fulfilmentReference.trim()
     || promisedAt
+    || paymentTermsDays !== 0
     || extraOrderLines.length
     || quantity !== 1
     || selectedSku !== (commerce.items[0]?.sku ?? ''))
@@ -2499,10 +2512,11 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     fulfilment,
     fulfilmentReference,
     promisedAt,
+    paymentTermsDays,
     lines: manualOrderLineDrafts,
   })
   const currentOrderRecoveryInput = buildCommerceOrderRecoveryInput(
-    { customer, channel, payment, fulfilment, fulfilmentReference, promisedAt, lines: manualOrderLineDrafts },
+    { customer, channel, payment, fulfilment, fulfilmentReference, promisedAt, paymentTermsDays, lines: manualOrderLineDrafts },
     commerce.items,
     null,
   )
@@ -2895,6 +2909,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       fulfilment: '' | 'pickup' | 'delivery'
       fulfilmentReference: string
       promisedAt: string
+      paymentTermsDays: 0 | 7 | 30
       lines: Array<{ sku: string; quantity: number }>
     }
     const timer = window.setTimeout(() => {
@@ -3293,6 +3308,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     setFulfilment('')
     setFulfilmentReference('')
     setPromisedAt('')
+    setPaymentTermsDays(0)
     setPreparedChannelDraft(null)
     setPreparedEcommerceDraft(null)
     setOrderEntryMode('manual')
@@ -3375,6 +3391,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     setFulfilment(draft.fulfilment)
     setFulfilmentReference(draft.fulfilmentReference)
     setPromisedAt(draft.promisedAt ? localDateTimeInputValue(new Date(draft.promisedAt)) : '')
+    setPaymentTermsDays(draft.paymentTermsDays)
     setSku(firstLine.sku)
     setQuantity(firstLine.quantity)
     setExtraOrderLines(remainingLines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
@@ -3810,6 +3827,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       fulfilment: 'pickup',
       fulfilmentReference: `Counter ${orderId}`,
       promisedAt,
+      paymentDueAt: promisedAt,
       lines: orderLines,
       total: orderTotal,
       status: 'confirmed',
@@ -3869,6 +3887,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       return
     }
     const canonicalPromisedAt = promisedTime.toISOString()
+    const paymentDueAt = paymentTermsDays === 0
+      ? canonicalPromisedAt
+      : new Date(reviewedAt.getTime() + paymentTermsDays * 24 * 60 * 60 * 1000).toISOString()
     const sourceDraft = preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? preparedChannelDraft : null
     const ecommerceDraft = preparedEcommerceDraft
     if (sourceDraft && ecommerceDraft) {
@@ -3991,6 +4012,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       fulfilment,
       fulfilmentReference: handoffReference,
       promisedAt: canonicalPromisedAt,
+      paymentDueAt,
       sourceRecordId,
       evidenceReference: sourceEvidence,
       ...(!sourceBacked || orderLines.length > 1 ? { lines: orderLines } : {}),
@@ -4025,7 +4047,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       subjectId: order.id,
       summary: ecommerceDraft ? 'Review Ecommerce order' : `Confirm order for ${order.customer}`,
       before: `${sourceRecordId ? `Request ${sourceRecordId} · ` : ''}Customer ${order.customer} · ${lineReview}`,
-      after: `Order ${order.id} · ${formatCommerceCalculation(calculationReview)} · Payment ${payment} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
+      after: `Order ${order.id} · ${formatCommerceCalculation(calculationReview)} · Payment ${payment} · due ${formatIssueDue(paymentDueAt)} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
       evidenceReferenceSuggestion: confirmationEvidence,
       evidenceReferenceLocked: Boolean(sourceRecordId),
       reasonSuggestion: ecommerceDraft
@@ -4131,6 +4153,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       fulfilment: orderFulfilment,
       fulfilmentReference: record.id,
       promisedAt: canonicalPromisedAt,
+      paymentDueAt: canonicalPromisedAt,
       sourceRecordId: record.id,
       evidenceReference: record.completion.evidenceReference,
       total: record.totalMmk,
@@ -4195,6 +4218,29 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       return
     }
     queueAction({ kind: 'payment_reconcile', subjectId: orderId, summary: `Reconcile ${order.id} payment`, before: `${order.payment} · ${order.paymentStatus}`, after: `${order.payment} · reconciled`, apply: (action) => mutateCommerce('commerce.payment.reconciled', action.commandId, commerceActionProof(action), (current) => reconcileCommercePayment(current, orderId, commerceActionProof(action))) })
+  }
+
+  function recordCollectionContact(orderId: string) {
+    const order = commerce.orders.find((candidate) => candidate.id === orderId)
+    if (!order || order.status === 'cancelled' || order.paymentStatus !== 'pending') {
+      setNotice('Only a pending, active customer balance can receive a collection note.')
+      return
+    }
+    const dueAt = order.paymentDueAt ?? order.promisedAt ?? order.createdAt
+    queueAction({
+      kind: 'collection_contact',
+      subjectId: orderId,
+      summary: `Record customer follow-up for ${order.id}`,
+      before: `${order.customer} · ${formatMoney(order.total)} pending · due ${formatTime(dueAt)} · ${order.collectionActions?.length ?? 0} prior notes`,
+      after: 'Append an attributable contact note · no message sent · no payment changed',
+      reasonSuggestion: 'Customer payment follow-up recorded.',
+      apply: (action) => mutateCommerce(
+        'commerce.collection_action.recorded',
+        action.commandId,
+        commerceActionProof(action),
+        (current) => recordCommerceCollectionAction(current, orderId, commerceActionProof(action)),
+      ),
+    })
   }
 
   function settleRefund(orderId: string) {
@@ -4946,7 +4992,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       ready={commerce.orders.filter((order) => order.status === 'ready').length}
       refundDue={commerce.orders.filter((order) => order.refundStatus === 'due').length}
     /></Suspense>
-    <ReceivablesAging aging={receivablesAging} />
+    <ReceivablesAging aging={receivablesAging} disabled={commerceControlsDisabled} onRecordContact={recordCollectionContact} />
     <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
       <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span>{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
       <details className="shop-business-controls">
@@ -5055,6 +5101,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
               }
             }}><option value="">Choose pickup or delivery</option><option value="pickup">Pickup</option><option value="delivery">Delivery</option></select></label>
             <label>Promised for<input autoComplete="off" disabled={commerceControlsDisabled} id="commerce-order-promise" min={localDateTimeInputValue(new Date())} onChange={(event) => setPromisedAt(event.target.value)} ref={orderPromiseRef} required type="datetime-local" value={promisedAt} /></label>
+            <label>Payment due<select disabled={commerceControlsDisabled} onChange={(event) => setPaymentTermsDays(Number(event.target.value) as 0 | 7 | 30)} value={paymentTermsDays}><option value="0">At handoff</option><option value="7">7 days after order</option><option value="30">30 days after order</option></select></label>
             <label>Handoff reference<input disabled={commerceControlsDisabled} maxLength={160} onChange={(event) => setFulfilmentReference(event.target.value)} placeholder="Pickup ticket or delivery route" required value={fulfilmentReference} /></label>
             <label>{extraOrderLines.length ? 'Item 1' : 'Item'}<select disabled={commerceControlsDisabled} value={selectedSku} onChange={(event) => { setSku(event.target.value); detachPreparedOrderSources() }}>{!commerce.items.some((item) => item.sku === selectedSku) && selectedSku ? <option disabled value={selectedSku}>{selectedSku} · no longer in Shop</option> : null}{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
             <label>{extraOrderLines.length ? 'Quantity 1' : 'Quantity'}<input disabled={commerceControlsDisabled} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); detachPreparedOrderSources() }} /></label>
@@ -5337,7 +5384,11 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   return null
 }
 
-function ReceivablesAging({ aging }: { aging: ReturnType<typeof commerceReceivablesAging> }) {
+function ReceivablesAging({ aging, disabled, onRecordContact }: {
+  aging: ReturnType<typeof commerceReceivablesAging>
+  disabled: boolean
+  onRecordContact: (orderId: string) => void
+}) {
   if (!aging.rows.length) return null
   const bucketLabels = [
     ['current', 'Not overdue'],
@@ -5359,11 +5410,11 @@ function ReceivablesAging({ aging }: { aging: ReturnType<typeof commerceReceivab
     </div>
     <div className="receivables-aging-list">
       {aging.rows.slice(0, 5).map((row) => <div key={row.orderId}>
-        <span><strong>{row.customer}</strong><small>{row.orderId} · {row.paymentMethod} · due {formatTime(row.dueAt)}</small></span>
-        <span><strong>{formatMoney(row.balanceMmk)}</strong><small>{row.daysPastDue ? `${row.daysPastDue} days overdue` : 'not overdue'}</small></span>
+        <span><strong>{row.customer}</strong><small>{row.orderId} · {row.paymentMethod} · due {formatTime(row.dueAt)}</small>{row.lastCollectionAction ? <small>Last contact {formatTime(row.lastCollectionAction.capturedAt)} by {row.lastCollectionAction.actor} · {row.collectionActionCount} total</small> : <small>No customer contact recorded</small>}</span>
+        <span><strong>{formatMoney(row.balanceMmk)}</strong><small>{row.daysPastDue ? `${row.daysPastDue} days overdue` : 'not overdue'}</small><button className="text-link" disabled={disabled} onClick={() => onRecordContact(row.orderId)} type="button">Record contact</button></span>
       </div>)}
     </div>
-    <p className="form-notice">Until customer credit terms are configured, the promised fulfilment time is the payment due time. Reconcile payment on the order only after evidence is available.</p>
+    <p className="form-notice">New orders retain an immutable payment-due snapshot. Older orders fall back to their fulfilment promise. Contact notes are append-only evidence; recording one does not send a message or change payment.</p>
   </details>
 }
 
@@ -5415,7 +5466,7 @@ function OrderList({
           : `${order.item} × ${order.quantity}`}</strong>
         {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
         <OrderCalculationNote order={order} />
-        <small>{order.id} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.channel} · {order.payment}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
+        <small>{order.id} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.channel} · {order.payment}{order.paymentDueAt ? ` · payment due ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
         {order.refundStatus === 'due' ? <small role="note">Record a refund already completed with the external payment provider. This does not send money.</small> : null}
       </div>
       <div className="order-row-actions">

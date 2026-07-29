@@ -48,6 +48,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.order.return_recorded",
         "commerce.order.correction_recorded",
         "commerce.payment.reconciled",
+        "commerce.collection_action.recorded",
         "commerce.refund.settled",
         "commerce.stock.received",
         "commerce.stock.counted",
@@ -82,6 +83,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.order.return_recorded",
         "commerce.order.correction_recorded",
         "commerce.payment.reconciled",
+        "commerce.collection_action.recorded",
         "commerce.refund.settled",
         "commerce.stock.received",
         "commerce.stock.counted",
@@ -149,6 +151,7 @@ _MAX_ACCOUNT_MAPPING_CONFIGURATIONS = 100
 _MAX_ORDER_LINES = 20
 _MAX_RETURNS_PER_ORDER = 100
 _MAX_CORRECTIONS_PER_ORDER = 100
+_MAX_COLLECTION_ACTIONS_PER_ORDER = 100
 _MAX_MOVEMENT_ID_LENGTH = 2_000
 _SERVICE_SCHEDULE_SCHEMA = "supermega.shop.service_schedule.v2"
 _SERVICE_SCHEDULE_PACKS = frozenset({"retail", "cafe", "restaurant", "spa", "gym", "school"})
@@ -230,6 +233,8 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "fulfilment",
         "fulfilmentReference",
         "promisedAt",
+        "paymentDueAt",
+        "collectionActions",
         "owner",
         "sourceRecordId",
         "evidenceReference",
@@ -243,6 +248,7 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
 )
 _ORDER_LINE_REQUIRED_FIELDS = frozenset({"sku", "name", "quantity", "unitPriceMmk"})
 _ORDER_LINE_OPTIONAL_FIELDS = frozenset({"variant"})
+_COLLECTION_ACTION_FIELDS = frozenset({"kind", "proof"})
 _ORDER_CALCULATION_SCHEMA = "supermega.commerce.order-calculation.v1"
 _ORDER_CALCULATION_V2_SCHEMA = "supermega.commerce.order-calculation.v2"
 _ORDER_CALCULATION_FIELDS = frozenset(
@@ -1419,13 +1425,16 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     completion_action_ids: list[str] = []
     return_action_ids: list[str] = []
     correction_action_ids: list[str] = []
+    collection_action_ids: list[str] = []
     order_returns: list[tuple[str, dict[str, Any]]] = []
     order_by_id: dict[str, dict[str, Any]] = {}
     for index, candidate in enumerate(orders):
         order = _object(candidate, f"orders[{index}]")
         _exact_fields(order, f"orders[{index}]", required=_ORDER_REQUIRED_FIELDS, optional=_ORDER_OPTIONAL_FIELDS)
         order_id = _text(order["id"], f"orders[{index}].id", maximum=160)
-        _timestamp(order["createdAt"], f"orders[{index}].createdAt")
+        order_created_at = datetime.fromisoformat(
+            _timestamp(order["createdAt"], f"orders[{index}].createdAt").replace("Z", "+00:00")
+        )
         for field in ("customer", "channel", "item", "payment"):
             _text(order[field], f"orders[{index}].{field}")
         if "owner" in order:
@@ -1681,6 +1690,53 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 raise TrialValidationError(
                     f"orders[{index}].promisedAt must be after its creation time."
                 )
+        if "paymentDueAt" in order:
+            payment_due_at = datetime.fromisoformat(
+                _timestamp(
+                    order["paymentDueAt"],
+                    f"orders[{index}].paymentDueAt",
+                ).replace("Z", "+00:00")
+            )
+            if payment_due_at < order_created_at:
+                raise TrialValidationError(
+                    f"orders[{index}].paymentDueAt cannot be before its creation time."
+                )
+        if "collectionActions" in order:
+            collection_actions = _list(
+                order["collectionActions"],
+                f"orders[{index}].collectionActions",
+            )
+            if not 1 <= len(collection_actions) <= _MAX_COLLECTION_ACTIONS_PER_ORDER:
+                raise TrialValidationError(
+                    f"orders[{index}].collectionActions requires 1 to "
+                    f"{_MAX_COLLECTION_ACTIONS_PER_ORDER} records."
+                )
+            newer_collection_at: datetime | None = None
+            for action_index, action_candidate in enumerate(collection_actions):
+                field = f"orders[{index}].collectionActions[{action_index}]"
+                collection_action = _object(action_candidate, field)
+                _exact_fields(collection_action, field, required=_COLLECTION_ACTION_FIELDS)
+                if collection_action["kind"] != "customer_contact":
+                    raise TrialValidationError(f"{field}.kind is invalid.")
+                action_proof = _action_proof(
+                    collection_action["proof"],
+                    f"{field}.proof",
+                )
+                captured_at = datetime.fromisoformat(
+                    action_proof["capturedAt"].replace("Z", "+00:00")
+                )
+                if (
+                    captured_at < order_created_at
+                    or (
+                        newer_collection_at is not None
+                        and captured_at > newer_collection_at
+                    )
+                ):
+                    raise TrialValidationError(
+                        f"{field} is outside the order chronology."
+                    )
+                newer_collection_at = captured_at
+                collection_action_ids.append(action_proof["actionId"])
 
         present_reconciliation_fields = _RECONCILIATION_FIELDS & set(order)
         if order["paymentStatus"] == "reconciled":
@@ -1910,6 +1966,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     _unique(completion_action_ids, "Order completion action ID")
     _unique(return_action_ids, "Order return action ID")
     _unique(correction_action_ids, "Order correction action ID")
+    _unique(collection_action_ids, "Collection action ID")
 
     movement_ids: list[str] = []
     movement_action_ids: list[str] = []
@@ -2842,6 +2899,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *completion_action_ids,
             *return_action_ids,
             *correction_action_ids,
+            *collection_action_ids,
             *intake_action_ids,
             *close_action_ids,
             *purchase_order_action_ids,
@@ -3185,6 +3243,22 @@ def _validate_event_evidence(
         ):
             raise TrialValidationError(
                 "command evidence must match the order correction proof."
+            )
+    elif event_type == "commerce.collection_action.recorded":
+        _, contacted_order = _one_changed(
+            current["orders"],
+            next_state["orders"],
+            "orders",
+        )
+        actions = contacted_order.get("collectionActions")
+        record = actions[0] if isinstance(actions, list) and actions else {}
+        proof = record.get("proof", {}) if isinstance(record, Mapping) else {}
+        if not isinstance(proof, Mapping) or not _proof_matches_evidence(
+            proof,
+            evidence,
+        ):
+            raise TrialValidationError(
+                "command evidence must match the collection contact proof."
             )
     elif event_type in {
         "commerce.inventory.initialized",
@@ -5288,6 +5362,34 @@ def _validate_reconciled(current: Mapping[str, Any], next_state: Mapping[str, An
         raise TrialValidationError("payment reconciliation requires complete evidence.")
 
 
+def _validate_collection_action_recorded(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    before, after = _one_changed(current["orders"], next_state["orders"], "orders")
+    before_actions = before.get("collectionActions", [])
+    after_actions = after.get("collectionActions")
+    if before["status"] == "cancelled" or before["paymentStatus"] != "pending":
+        raise TrialValidationError(
+            "collection contact requires a pending payment on an active order."
+        )
+    if (
+        not isinstance(after_actions, list)
+        or len(after_actions) != len(before_actions) + 1
+        or after_actions[1:] != before_actions
+        or _without(before, frozenset({"collectionActions"}))
+        != _without(after, frozenset({"collectionActions"}))
+    ):
+        raise TrialValidationError(
+            "commerce.collection_action.recorded must prepend exactly one immutable contact proof."
+        )
+
+
 def _validate_refund_settled(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     _require_unchanged(current, next_state, "items", "movements", "closes")
     _require_website_intakes_unchanged(current, next_state)
@@ -6446,6 +6548,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.order.return_recorded": _validate_return_recorded,
     "commerce.order.correction_recorded": _validate_correction_recorded,
     "commerce.payment.reconciled": _validate_reconciled,
+    "commerce.collection_action.recorded": _validate_collection_action_recorded,
     "commerce.refund.settled": _validate_refund_settled,
     "commerce.stock.received": _validate_received,
     "commerce.stock.counted": _validate_counted,

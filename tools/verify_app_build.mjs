@@ -1648,7 +1648,7 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !coreSource.includes('Review cancelled. The prepared Ecommerce request and Payment are unchanged; Shop data was not modified.')
   || !coreSource.includes("summary: ecommerceDraft ? 'Review Ecommerce order'")
   || !coreSource.includes('Customer ${order.customer} · ${lineReview}')
-  || !coreSource.includes('Payment ${payment} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)}')
+  || !coreSource.includes('Payment ${payment} · due ${formatIssueDue(paymentDueAt)} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)}')
   || !coreSource.includes('Stock ${reservationReview}')
   || !coreCssSource.includes('.order-ecommerce-payment')
   || !ecommerceBuyingLifecycleSource.includes("ECOMMERCE_SHOP_DRAFT_SCHEMA_V3 = 'supermega.ecommerce.shop_draft.v3'")
@@ -2217,7 +2217,7 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${shopInventoryUiSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.collection_action.recorded', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.storefront_request.received')
@@ -2243,8 +2243,11 @@ if (!coreSource.includes("'commerce.refund.settled'")
   || !coreSource.includes('settleCommerceRefund(current, orderId, commerceActionProof(action))')
   || !coreSource.includes("kind: 'refund_settle'")) fail('commerce_refund_settlement_gate_missing')
 if (!coreSource.includes('Payment follow-up')
-  || !coreSource.includes('Until customer credit terms are configured, the promised fulfilment time is the payment due time.')
-  || !commerceSource.includes('export function commerceReceivablesAging')) fail('commerce_receivables_aging_ui_contract_missing')
+  || !coreSource.includes('New orders retain an immutable payment-due snapshot.')
+  || !coreSource.includes('Record contact')
+  || !coreSource.includes("'commerce.collection_action.recorded'")
+  || !commerceSource.includes('export function commerceReceivablesAging')
+  || !commerceSource.includes('export function recordCommerceCollectionAction')) fail('commerce_receivables_aging_ui_contract_missing')
 if (!coreSource.includes('data-order-calculation-note="true"')
   || !coreSource.includes('Recorded total {formatMoney(order.total)} · Tax status not recorded')
   || !coreSource.includes('formatCommerceCalculation(calculationReview)')
@@ -7371,6 +7374,7 @@ async function verifyCommerceRuntime() {
       fulfilment: 'pickup',
       fulfilmentReference: 'PICKUP-001',
       promisedAt: '2026-07-23T11:00:00.000Z',
+      paymentDueAt: '2026-08-22T09:00:00.000Z',
       sourceRecordId: 'WEB-1',
       evidenceReference: reserveProof.evidenceReference,
       total: 200,
@@ -7530,6 +7534,10 @@ async function verifyCommerceRuntime() {
     }), 'backdated_order_promise_loaded')
     assertThrows(() => model.validateCommerceState({
       ...reserved,
+      orders: [{ ...reserved.orders[0], paymentDueAt: '2026-07-23T08:59:59.999Z' }],
+    }), 'backdated_payment_due_snapshot_loaded')
+    assertThrows(() => model.validateCommerceState({
+      ...reserved,
       orders: [{ ...reserved.orders[0], owner: 'Different operator' }],
     }), 'order_owner_history_rewrite_loaded')
     assert(model.reserveCommerceOrder(base, { ...order, owner: undefined }, reserveProof) === null, 'new_order_without_owner_succeeded')
@@ -7683,23 +7691,34 @@ async function verifyCommerceRuntime() {
       && ready?.orders[0].status === 'ready'
       && JSON.stringify(ready.orders[0].advancementActionIds) === JSON.stringify([preparingProof.actionId, readyProof.actionId]),
     'fulfilment_progression_failed')
-    const currentReceivables = model.commerceReceivablesAging(ready, Date.parse('2026-07-23T10:00:00.000Z'))
+    const currentReceivables = model.commerceReceivablesAging(ready, Date.parse('2026-08-22T08:59:59.999Z'))
     assert(currentReceivables.rows.length === 1
       && currentReceivables.rows[0].bucket === 'current'
+      && currentReceivables.rows[0].dueAt === order.paymentDueAt
       && currentReceivables.totalsMmk.current === 200
       && currentReceivables.overdueMmk === 0,
     'current_receivable_aging_projection_invalid')
-    const overdueReceivables = model.commerceReceivablesAging(ready, Date.parse('2026-07-23T11:00:01.000Z'))
+    const overdueReceivables = model.commerceReceivablesAging(ready, Date.parse('2026-08-22T09:00:00.001Z'))
     assert(overdueReceivables.rows[0].bucket === '1_7'
       && overdueReceivables.rows[0].daysPastDue === 1
       && overdueReceivables.overdueOrders === 1
       && overdueReceivables.overdueMmk === 200,
     'overdue_receivable_aging_projection_invalid')
+    const collectionProof = proof('ACT-COLLECTION', 800)
+    const contactedReady = model.recordCommerceCollectionAction(ready, order.id, collectionProof)
+    const contactedAging = model.commerceReceivablesAging(contactedReady, Date.parse('2026-08-22T09:00:00.001Z'))
+    assert(contactedReady?.orders[0].collectionActions?.[0].proof.actionId === collectionProof.actionId
+      && contactedAging.rows[0].collectionActionCount === 1
+      && contactedAging.rows[0].lastCollectionAction.evidenceReference === collectionProof.evidenceReference,
+    'collection_contact_history_not_attributable_or_visible')
+    assert(model.recordCommerceCollectionAction(contactedReady, order.id, collectionProof) === contactedReady, 'collection_contact_retry_not_idempotent')
+    assert(model.recordCommerceCollectionAction(contactedReady, order.id, { ...collectionProof, reason: 'Changed.' }) === null, 'collection_contact_conflicting_retry_succeeded')
     assert(model.advanceCommerceOrder(ready, order.id, 'ready') === null, 'pending_payment_completed_order')
     const paymentProof = proof('ACT-PAYMENT', 1_000)
-    const reconciled = model.reconcileCommercePayment(ready, order.id, paymentProof)
+    const reconciled = model.reconcileCommercePayment(contactedReady, order.id, paymentProof)
     assert(reconciled?.orders[0].paymentStatus === 'reconciled' && reconciled.orders[0].paymentReconciledBy === paymentProof.actor && reconciled.orders[0].paymentEvidenceReference === paymentProof.evidenceReference, 'payment_reconciliation_lost_human_evidence')
     assert(model.commerceReceivablesAging(reconciled, Date.parse('2026-07-24T11:00:00.000Z')).rows.length === 0, 'reconciled_payment_remained_receivable')
+    assert(model.recordCommerceCollectionAction(reconciled, order.id, proof('ACT-COLLECTION-AFTER-PAYMENT', 1_500)) === null, 'paid_order_accepted_collection_contact')
     assert(model.reconcileCommercePayment(reconciled, order.id, paymentProof) === reconciled, 'exact_payment_retry_not_idempotent')
     assert(model.reconcileCommercePayment(reconciled, order.id, { ...paymentProof, evidenceReference: 'EV-CONFLICT' }) === null, 'conflicting_payment_retry_succeeded')
     const completionProof = proof('ACT-COMPLETE', 2_000)
@@ -8477,6 +8496,7 @@ async function verifyCommerceOrderDraftRuntime() {
       fulfilment: 'pickup',
       fulfilmentReference: 'PICKUP-17',
       promisedAt: '2026-07-25T07:00:00.000Z',
+      paymentTermsDays: 7,
       lines: [
         { sku: 'SM-1001', quantity: 2, unitPriceMmk: 18_500, availableAtSave: 34 },
         { sku: 'SM-1003', quantity: 1, unitPriceMmk: 12_000, availableAtSave: 21 },
@@ -8498,12 +8518,16 @@ async function verifyCommerceOrderDraftRuntime() {
       && first.scope === 'local'
       && first.lines.length === 2
       && first.promisedAt === input.promisedAt
+      && first.paymentTermsDays === input.paymentTermsDays
       && first.savedAt === '2026-07-25T05:00:00.000Z',
     'commerce_order_draft_first_save_invalid')
-    assert(Object.keys(JSON.parse(firstRaw)).sort().join(',') === 'channel,customer,fulfilment,fulfilmentReference,lines,payment,promisedAt,revision,savedAt,schema,scope', 'commerce_order_draft_extra_fields_persisted')
+    assert(Object.keys(JSON.parse(firstRaw)).sort().join(',') === 'channel,customer,fulfilment,fulfilmentReference,lines,payment,paymentTermsDays,promisedAt,revision,savedAt,schema,scope', 'commerce_order_draft_extra_fields_persisted')
     const legacyDraft = { ...first }
     delete legacyDraft.promisedAt
-    assert(model.validateCommerceOrderDraft(legacyDraft, localScope).promisedAt === '', 'commerce_order_draft_legacy_promise_not_migrated_additively')
+    delete legacyDraft.paymentTermsDays
+    assert(model.validateCommerceOrderDraft(legacyDraft, localScope).promisedAt === ''
+      && model.validateCommerceOrderDraft(legacyDraft, localScope).paymentTermsDays === 0,
+    'commerce_order_draft_legacy_terms_not_migrated_additively')
     assert(lockCalls[0]?.name === 'supermega:shop:order-draft:reset'
       && lockCalls[1]?.name === 'supermega:shop:order-draft:local'
       && lockCalls.slice(0, 2).every((call) => call.options?.mode === 'exclusive'),
@@ -8546,6 +8570,7 @@ async function verifyCommerceOrderDraftRuntime() {
     const rebound = model.rebindCommerceOrderDraft(first, catalog.map((item) => item.sku === 'SM-1001' ? { ...item, price: 19_000, onHand: 30 } : item))
     assert(rebound.customer === input.customer
       && rebound.promisedAt === input.promisedAt
+      && rebound.paymentTermsDays === input.paymentTermsDays
       && rebound.lines[0].unitPriceMmk === 19_000
       && rebound.lines[0].availableAtSave === 30,
     'commerce_order_draft_rebind_changed_operator_fields_or_kept_stale_catalog')
@@ -8564,6 +8589,7 @@ async function verifyCommerceOrderDraftRuntime() {
       { ...input, lines: [] },
       { ...input, lines: [input.lines[0], input.lines[0]] },
       { ...input, payment: 'Crypto' },
+      { ...input, paymentTermsDays: 14 },
       { ...input, promisedAt: '2026-07-25T07:00:00' },
       { ...input, lines: [{ ...input.lines[0], quantity: 0 }] },
     ]) {
