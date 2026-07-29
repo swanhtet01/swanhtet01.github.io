@@ -1,9 +1,34 @@
+import { execFileSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 
+const verifyCurrentHead = process.argv.includes('--current-head')
+const configuredExpectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim().toLowerCase()
+
+function readCurrentHead() {
+  try {
+    const commit = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: resolve(import.meta.dirname, '..'),
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    }).trim().toLowerCase()
+    if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error('invalid_commit')
+    return commit
+  } catch {
+    throw new Error('current_head_commit_unavailable')
+  }
+}
+
+const currentHeadCommit = verifyCurrentHead ? readCurrentHead() : ''
+if (configuredExpectedCommit && currentHeadCommit && configuredExpectedCommit !== currentHeadCommit) {
+  throw new Error('configured_expected_commit_differs_from_current_head')
+}
+const expectedCommit = configuredExpectedCommit || currentHeadCommit
+const verificationScope = expectedCommit ? 'exact_release' : 'availability_and_contract'
 const manifest = JSON.parse(await readFile(new URL('../site-manifest.json', import.meta.url), 'utf8'))
 const baseUrl = String(process.env.PUBLIC_BASE_URL || manifest.release.productionDomain).replace(/\/$/, '')
-const expectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').toLowerCase()
-const attempts = Number(process.env.PUBLIC_VERIFY_ATTEMPTS || 6)
+const attempts = Number(process.env.PUBLIC_VERIFY_ATTEMPTS || (verifyCurrentHead ? 1 : 6))
 const retryDelayMs = Number(process.env.PUBLIC_VERIFY_RETRY_MS || 5000)
 const timeoutMs = Number(process.env.PUBLIC_VERIFY_TIMEOUT_MS || 15000)
 
@@ -121,7 +146,7 @@ let verified = false
 for (let attempt = 1; attempt <= attempts; attempt += 1) {
   try {
     const result = await verifyOnce()
-    console.log(JSON.stringify({ ok: true, contract: 'supermega_public_live_release', baseUrl, attempt, expectedCommit: expectedCommit || null, ...result }, null, 2))
+    console.log(JSON.stringify({ ok: true, contract: 'supermega_public_live_release', baseUrl, verificationScope, attempt, expectedCommit: expectedCommit || null, ...result }, null, 2))
     verified = true
     break
   } catch (error) {
@@ -134,6 +159,6 @@ for (let attempt = 1; attempt <= attempts; attempt += 1) {
 }
 
 if (!verified) {
-  console.error(JSON.stringify({ ok: false, contract: 'supermega_public_live_release', baseUrl, expectedCommit: expectedCommit || null, reason: lastError?.message || 'unknown_failure' }, null, 2))
+  console.error(JSON.stringify({ ok: false, contract: 'supermega_public_live_release', baseUrl, verificationScope, expectedCommit: expectedCommit || null, reason: lastError?.message || 'unknown_failure' }, null, 2))
   process.exitCode = 1
 }

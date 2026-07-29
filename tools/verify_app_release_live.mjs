@@ -2,12 +2,35 @@ import { execFileSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
+const verifyCurrentHead = process.argv.includes('--current-head')
+const configuredExpectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim().toLowerCase()
+
+function readCurrentHead() {
+  try {
+    const commit = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: resolve(import.meta.dirname, '..'),
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    }).trim().toLowerCase()
+    if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error('invalid_commit')
+    return commit
+  } catch {
+    throw new Error('current_head_commit_unavailable')
+  }
+}
+
+const currentHeadCommit = verifyCurrentHead ? readCurrentHead() : ''
+if (configuredExpectedCommit && currentHeadCommit && configuredExpectedCommit !== currentHeadCommit) {
+  throw new Error('configured_expected_commit_differs_from_current_head')
+}
+const expectedCommit = configuredExpectedCommit || currentHeadCommit
+const verificationScope = expectedCommit ? 'exact_release' : 'availability_and_contract'
 const manifest = JSON.parse(await readFile(new URL('../site-manifest.json', import.meta.url), 'utf8'))
 const settingsSource = await readFile(new URL('../showroom/src/core/SettingsPage.tsx', import.meta.url), 'utf8')
 const localEvidenceVersion = Number(/contract:\s*['"]supermega_trial_evidence['"][\s\S]{0,200}?version:\s*(\d+)/.exec(settingsSource)?.[1])
 if (!Number.isInteger(localEvidenceVersion)) throw new Error('local_settings_evidence_version_missing')
 const baseUrl = String(process.env.APP_BASE_URL || 'https://app.supermega.dev').replace(/\/$/, '')
-const expectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim().toLowerCase()
 const protectedPreview = process.env.VERCEL_PROTECTED_PREVIEW === '1'
 const vercelToken = String(process.env.VERCEL_TOKEN || '').trim()
 const cliEnv = vercelToken ? { ...process.env, VERCEL_TOKEN: vercelToken } : process.env
@@ -77,7 +100,18 @@ if (release.canonicalDomain !== 'https://app.supermega.dev') throw new Error('wr
 if (release.brandVersion !== manifest.brand.version) throw new Error(`release_brand_version_mismatch:${release.brandVersion}`)
 if (release.contextVersion !== manifest.contextVersion) throw new Error(`release_context_version_mismatch:${release.contextVersion}`)
 if (release.catalogVersion !== manifest.catalogVersion) throw new Error(`release_catalog_version_mismatch:${release.catalogVersion}`)
-if (expectedCommit && String(release.commit || '').toLowerCase() !== expectedCommit) throw new Error(`release_commit_mismatch:${release.commit}`)
+if (expectedCommit && String(release.commit || '').toLowerCase() !== expectedCommit) {
+  console.error(JSON.stringify({
+    ok: false,
+    contract: 'supermega_app_live',
+    baseUrl,
+    verificationScope,
+    expectedCommit,
+    actualCommit: String(release.commit || '').toLowerCase() || null,
+    reason: 'release_commit_mismatch',
+  }, null, 2))
+  process.exit(1)
+}
 
 const health = JSON.parse((await get('/api/health')).body)
 if (health.status !== 'ready' || health.service !== 'supermega-service') throw new Error('canonical_api_unavailable')
@@ -243,4 +277,4 @@ if (protectedPreview) {
   if (JSON.stringify(deploymentFunctions) !== JSON.stringify(['api/app'])) throw new Error(`deployment_function_surface_wrong:${deploymentFunctions.join(',')}`)
 }
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_live', baseUrl, routes, release, operatingMode: health.operating_mode, agentScheduler: cloud.status, deploymentFunctions }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_live', baseUrl, verificationScope, expectedCommit: expectedCommit || null, routes, release, operatingMode: health.operating_mode, agentScheduler: cloud.status, deploymentFunctions }, null, 2))
