@@ -58,7 +58,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal 
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
 - Both domains serve deployed `d38cdbb8031395c851470edb3b10bf97dbdcf681`; four direct samples open and paired brand/catalog identities match.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-- `supermega.ally-working-set-trim.v1` released 1,754.5 MB without process stops, restoring one-run admission at 83.7% RAM. CEO replay accepted two outcomes, quarantined three, and used zero model calls, queue writes, connectors, or loaded models.
+- `supermega.ally-working-set-trim.v1` released 1,754.5 MB without process stops; admission opened at 83.7% RAM. Post-gate RAM is 86.5%, so dispatch is paused. Replay accepted 2 outcomes, quarantined 3, and used no models, queue writes, or connectors.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
 ## Owner-gated actions
