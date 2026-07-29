@@ -48,6 +48,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.order.cancelled",
         "commerce.order.return_recorded",
         "commerce.order.support_case_opened",
+        "commerce.order.support_case_service_recorded",
         "commerce.order.support_case_resolved",
         "commerce.order.correction_recorded",
         "commerce.payment.reconciled",
@@ -86,6 +87,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.order.cancelled",
         "commerce.order.return_recorded",
         "commerce.order.support_case_opened",
+        "commerce.order.support_case_service_recorded",
         "commerce.order.support_case_resolved",
         "commerce.order.correction_recorded",
         "commerce.payment.reconciled",
@@ -134,6 +136,8 @@ _SUPPORT_RESOLUTION_OUTCOMES = frozenset(
     {"information_provided", "replacement_review_required", "refund_review_required", "no_action"}
 )
 _SUPPORT_PRIORITIES = frozenset({"urgent", "high", "normal", "low"})
+_SUPPORT_PRIORITY_ORDER = ("urgent", "high", "normal", "low")
+_SUPPORT_SERVICE_EVENT_KINDS = frozenset({"reassigned", "escalated"})
 _PURCHASE_DISCREPANCY_CODES = frozenset({"damaged", "wrong_item", "quality_failed"})
 _PURCHASE_DISCREPANCY_FIELDS = frozenset(
     {"rejectedQuantity", "discrepancyCode", "discrepancyDisposition"}
@@ -165,6 +169,7 @@ _MAX_CUSTOMER_CREDIT_POLICIES = 500
 _MAX_ORDER_LINES = 20
 _MAX_RETURNS_PER_ORDER = 100
 _MAX_SUPPORT_CASES_PER_ORDER = 100
+_MAX_SUPPORT_SERVICE_EVENTS_PER_CASE = 100
 _MAX_CORRECTIONS_PER_ORDER = 100
 _MAX_COLLECTION_ACTIONS_PER_ORDER = 100
 _MAX_MOVEMENT_ID_LENGTH = 2_000
@@ -346,7 +351,10 @@ _ORDER_SUPPORT_CASE_REQUIRED_FIELDS = frozenset(
     }
 )
 _ORDER_SUPPORT_CASE_OPTIONAL_FIELDS = frozenset(
-    {"resolution", "priority", "owner", "dueAt"}
+    {"resolution", "serviceEvents", "priority", "owner", "dueAt"}
+)
+_ORDER_SUPPORT_SERVICE_EVENT_FIELDS = frozenset(
+    {"kind", "owner", "priority", "dueAt", "note", "proof"}
 )
 _ORDER_SUPPORT_RESOLUTION_FIELDS = frozenset({"outcome", "note", "proof"})
 _ORDER_CORRECTION_FIELDS = frozenset(
@@ -2121,6 +2129,97 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     maximum=300,
                 )
                 newer_opening_at = opening_at
+                effective_service = (
+                    {
+                        "priority": support_case["priority"],
+                        "owner": support_case["owner"],
+                        "dueAt": support_case["dueAt"],
+                    }
+                    if all(triage_fields)
+                    else None
+                )
+                latest_service_at = opening_at
+                if "serviceEvents" in support_case:
+                    service_events = _list(
+                        support_case["serviceEvents"], f"{field}.serviceEvents"
+                    )
+                    if (
+                        effective_service is None
+                        or not 1 <= len(service_events) <= _MAX_SUPPORT_SERVICE_EVENTS_PER_CASE
+                    ):
+                        raise TrialValidationError(
+                            f"{field}.serviceEvents requires attributable opening triage and 1 to "
+                            f"{_MAX_SUPPORT_SERVICE_EVENTS_PER_CASE} records."
+                        )
+                    for reverse_index, service_candidate in enumerate(reversed(service_events)):
+                        service_index = len(service_events) - reverse_index - 1
+                        service_field = f"{field}.serviceEvents[{service_index}]"
+                        service_event = _object(service_candidate, service_field)
+                        _exact_fields(
+                            service_event,
+                            service_field,
+                            required=_ORDER_SUPPORT_SERVICE_EVENT_FIELDS,
+                        )
+                        if (
+                            service_event["kind"] not in _SUPPORT_SERVICE_EVENT_KINDS
+                            or service_event["priority"] not in _SUPPORT_PRIORITIES
+                        ):
+                            raise TrialValidationError(f"{service_field} is invalid.")
+                        owner = _text(service_event["owner"], f"{service_field}.owner", maximum=120)
+                        _text(service_event["note"], f"{service_field}.note", maximum=300)
+                        service_proof = _action_proof(
+                            service_event["proof"], f"{service_field}.proof"
+                        )
+                        service_at = datetime.fromisoformat(
+                            service_proof["capturedAt"].replace("Z", "+00:00")
+                        )
+                        service_due_at = datetime.fromisoformat(
+                            _timestamp(service_event["dueAt"], f"{service_field}.dueAt").replace("Z", "+00:00")
+                        )
+                        previous_due_at = datetime.fromisoformat(
+                            str(effective_service["dueAt"]).replace("Z", "+00:00")
+                        )
+                        previous_priority = _SUPPORT_PRIORITY_ORDER.index(
+                            str(effective_service["priority"])
+                        )
+                        next_priority = _SUPPORT_PRIORITY_ORDER.index(
+                            str(service_event["priority"])
+                        )
+                        if (
+                            service_proof["evidenceReference"] != f"SUPPORT-SERVICE:{case_id}"
+                            or service_at < latest_service_at
+                            or service_due_at <= service_at
+                        ):
+                            raise TrialValidationError(f"{service_field} chronology is invalid.")
+                        if service_event["kind"] == "reassigned":
+                            if (
+                                owner == effective_service["owner"]
+                                or service_event["priority"] != effective_service["priority"]
+                                or service_event["dueAt"] != effective_service["dueAt"]
+                            ):
+                                raise TrialValidationError(
+                                    f"{service_field} must change only the accountable owner."
+                                )
+                        elif (
+                            owner != effective_service["owner"]
+                            or next_priority > previous_priority
+                            or service_due_at > previous_due_at
+                            or (
+                                next_priority == previous_priority
+                                and service_due_at == previous_due_at
+                            )
+                        ):
+                            raise TrialValidationError(
+                                f"{service_field} must increase priority or bring the due time "
+                                "forward without changing owner."
+                            )
+                        effective_service = {
+                            "priority": service_event["priority"],
+                            "owner": owner,
+                            "dueAt": service_event["dueAt"],
+                        }
+                        latest_service_at = service_at
+                        support_action_ids.append(service_proof["actionId"])
                 if support_case["status"] == "open":
                     if "resolution" in support_case:
                         raise TrialValidationError(f"{field} open case cannot have resolution evidence.")
@@ -2139,8 +2238,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     )
                     if datetime.fromisoformat(
                         resolution_proof["capturedAt"].replace("Z", "+00:00")
-                    ) < opening_at:
-                        raise TrialValidationError(f"{field}.resolution predates opening.")
+                    ) < latest_service_at:
+                        raise TrialValidationError(
+                            f"{field}.resolution predates its latest service event."
+                        )
                     support_action_ids.append(resolution_proof["actionId"])
                 else:
                     raise TrialValidationError(f"{field}.status is invalid.")
@@ -3510,6 +3611,30 @@ def _validate_event_evidence(
         if not isinstance(opening, Mapping) or not _proof_matches_evidence(opening, evidence):
             raise TrialValidationError(
                 "command evidence must match the support case opening proof."
+            )
+    elif event_type == "commerce.order.support_case_service_recorded":
+        before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
+        before_by_id = {
+            case.get("caseId"): case
+            for case in before_order.get("supportCases", [])
+            if isinstance(case, Mapping)
+        }
+        changed = [
+            case
+            for case in after_order.get("supportCases", [])
+            if isinstance(case, Mapping) and case != before_by_id.get(case.get("caseId"))
+        ]
+        service_events = changed[0].get("serviceEvents") if len(changed) == 1 else None
+        proof = (
+            service_events[0].get("proof")
+            if isinstance(service_events, list)
+            and service_events
+            and isinstance(service_events[0], Mapping)
+            else None
+        )
+        if not isinstance(proof, Mapping) or not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the support service event proof."
             )
     elif event_type == "commerce.order.support_case_resolved":
         before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
@@ -5826,6 +5951,55 @@ def _validate_support_case_resolved(
         )
 
 
+def _validate_support_case_service_recorded(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
+    before_cases = before_order.get("supportCases")
+    after_cases = after_order.get("supportCases")
+    if (
+        not isinstance(before_cases, list)
+        or not isinstance(after_cases, list)
+        or len(after_cases) != len(before_cases)
+        or _without(before_order, frozenset({"supportCases"}))
+        != _without(after_order, frozenset({"supportCases"}))
+    ):
+        raise TrialValidationError(
+            "commerce.order.support_case_service_recorded may change only one support case."
+        )
+    changed = [
+        (before, after)
+        for before, after in zip(before_cases, after_cases, strict=True)
+        if before != after
+    ]
+    if len(changed) != 1:
+        raise TrialValidationError(
+            "commerce.order.support_case_service_recorded must append exactly one event."
+        )
+    before_case, after_case = changed[0]
+    before_events = before_case.get("serviceEvents", [])
+    after_events = after_case.get("serviceEvents")
+    if (
+        before_case.get("status") != "open"
+        or "resolution" in before_case
+        or not isinstance(before_events, list)
+        or not isinstance(after_events, list)
+        or len(after_events) != len(before_events) + 1
+        or after_events[1:] != before_events
+        or _without(before_case, frozenset({"serviceEvents"}))
+        != _without(after_case, frozenset({"serviceEvents"}))
+    ):
+        raise TrialValidationError(
+            "commerce.order.support_case_service_recorded must prepend one immutable service event."
+        )
+
+
 def _validate_correction_recorded(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -7112,6 +7286,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.order.cancelled": _validate_cancelled,
     "commerce.order.return_recorded": _validate_return_recorded,
     "commerce.order.support_case_opened": _validate_support_case_opened,
+    "commerce.order.support_case_service_recorded": _validate_support_case_service_recorded,
     "commerce.order.support_case_resolved": _validate_support_case_resolved,
     "commerce.order.correction_recorded": _validate_correction_recorded,
     "commerce.payment.reconciled": _validate_reconciled,

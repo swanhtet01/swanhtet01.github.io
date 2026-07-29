@@ -151,8 +151,8 @@
       "localAutomation": {
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Turn open support records into one existing-archive queue ordered by overdue state, priority, and due time, with immutable reassignment and escalation history but no new route or customer message.",
-        "reason": "Every newly opened support case now has accountable service controls and derived overdue state; ordered work and retained responsibility changes are the next useful local capability while hosted messaging, refund, payment, shipping, and tenant work remain gated."
+        "workOrder": "Add immutable acknowledgement and first-response checkpoints plus a bounded service-level summary in the existing support archive, without sending a customer message or adding a page.",
+        "reason": "Open support work is now ordered by overdue state, priority, and due time with retained reassignment and escalation evidence; response checkpoints are the next useful local control while hosted messaging, refund, payment, shipping, and tenant work remain gated."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }

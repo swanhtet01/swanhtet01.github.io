@@ -2803,6 +2803,9 @@ if (!commerceSource.includes('export type CommerceOrderReturn')
 if (!commerceSource.includes('export type CommerceOrderSupportCase')
   || !commerceSource.includes('export function commerceOrderSupportOpenExpectation')
   || !commerceSource.includes('export function commerceSupportCaseUrgency')
+  || !commerceSource.includes('export function commerceSupportQueue')
+  || !commerceSource.includes('export function commerceOrderSupportServiceExpectation')
+  || !commerceSource.includes('export function recordCommerceOrderSupportServiceEvent')
   || !commerceSource.includes('export function recordCommerceOrderSupportCase')
   || !commerceSource.includes('export function resolveCommerceOrderSupportCase')
   || !commerceSource.includes('externalMessageSent: false')
@@ -2810,8 +2813,11 @@ if (!commerceSource.includes('export type CommerceOrderSupportCase')
   || !commerceSource.includes("export type CommerceSupportPriority = 'urgent' | 'high' | 'normal' | 'low'")
   || !coreSource.includes('Assign service responsibility before opening.')
   || !coreSource.includes('data-support-urgency={urgency}')
+  || !coreSource.includes('Support queue · next work first')
+  || !coreSource.includes('Review service change')
   || !coreSource.includes('Choose one accountable owner and a future due time for this support case.')
   || !managedCommerceRuntime.includes('def _validate_support_case_opened')
+  || !managedCommerceRuntime.includes('def _validate_support_case_service_recorded')
   || !managedCommerceRuntime.includes('def _validate_support_case_resolved')) fail('commerce_order_support_contract_missing')
 if (!commerceSource.includes('export type CommerceOrderCorrection')
   || !commerceSource.includes("financialStatus: 'review_required'")
@@ -2832,7 +2838,7 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${shopInventoryUiSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.support_case_opened', 'commerce.order.support_case_resolved', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.collection_action.recorded', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved', 'commerce.customer_credit_policy.saved']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.support_case_opened', 'commerce.order.support_case_service_recorded', 'commerce.order.support_case_resolved', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.collection_action.recorded', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved', 'commerce.customer_credit_policy.saved']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.storefront_request.received')
@@ -10735,25 +10741,114 @@ async function verifyStorefrontRuntime() {
       supportOpenExpectation,
     )
     buyingAssert(missingSupportOwner === null, 'ecommerce_support_case_missing_owner_accepted')
-    const supportResolveExpectation = supportCase && commerce.commerceOrderSupportResolveExpectation(
+    const openedSupportQueue = commerce.commerceSupportQueue(openedSupportState?.orders ?? [], Date.parse('2026-07-24T13:47:00.000Z'))
+    buyingAssert(openedSupportQueue[0]?.supportCase.caseId === supportCase.caseId
+      && openedSupportQueue[0]?.urgency === 'overdue'
+      && openedSupportQueue[0]?.service?.owner === 'Support owner',
+    'ecommerce_support_queue_not_ordered_by_operational_state')
+    const supportQueueOrderingFixture = commerce.commerceSupportQueue([
+      {
+        ...completedOrder,
+        id: 'ORD-SUPPORT-SCHEDULED',
+        customer: 'Scheduled customer',
+        supportCases: [{ ...supportCase, caseId: 'CASE-SCHEDULED', priority: 'urgent', dueAt: '2026-07-24T14:30:00.000Z' }],
+      },
+      {
+        ...completedOrder,
+        id: 'ORD-SUPPORT-HIGH',
+        customer: 'High customer',
+        supportCases: [{ ...supportCase, caseId: 'CASE-HIGH', priority: 'high', dueAt: '2026-07-24T13:45:00.000Z' }],
+      },
+      {
+        ...completedOrder,
+        id: 'ORD-SUPPORT-URGENT',
+        customer: 'Urgent customer',
+        supportCases: [{ ...supportCase, caseId: 'CASE-URGENT', priority: 'urgent', dueAt: '2026-07-24T13:46:00.000Z' }],
+      },
+    ], Date.parse('2026-07-24T13:47:00.000Z'))
+    buyingAssert(supportQueueOrderingFixture.map((row) => row.orderId).join(',') === 'ORD-SUPPORT-URGENT,ORD-SUPPORT-HIGH,ORD-SUPPORT-SCHEDULED',
+      'ecommerce_support_queue_priority_order_drifted')
+    const supportServiceExpectation = supportCase && commerce.commerceOrderSupportServiceExpectation(
       openedSupportState,
       completedOrder.id,
       supportCase.caseId,
     )
-    const resolvedSupportState = supportResolveExpectation && commerce.resolveCommerceOrderSupportCase(
+    const reassignedSupportState = supportServiceExpectation && commerce.recordCommerceOrderSupportServiceEvent(
       openedSupportState,
       {
         orderId: completedOrder.id,
         caseId: supportCase.caseId,
+        kind: 'reassigned',
+        owner: 'Tier 2 owner',
+        priority: 'high',
+        dueAt: '2026-07-24T13:46:00.000Z',
+        note: 'Assigned to the delivery specialist.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-REASSIGN-1',
+        capturedAt: '2026-07-24T09:47:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Assign the case to the delivery specialist.',
+        evidenceReference: `SUPPORT-SERVICE:${supportCase.caseId}`,
+      },
+      supportServiceExpectation,
+    )
+    const reassignedCase = reassignedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    buyingAssert(reassignedCase?.serviceEvents?.[0]?.owner === 'Tier 2 owner'
+      && JSON.stringify(reassignedSupportState?.items) === JSON.stringify(completedOrderState.items)
+      && JSON.stringify(reassignedSupportState?.movements) === JSON.stringify(completedOrderState.movements),
+    'ecommerce_support_reassignment_mutated_operational_truth')
+    const escalationExpectation = reassignedCase && commerce.commerceOrderSupportServiceExpectation(
+      reassignedSupportState,
+      completedOrder.id,
+      reassignedCase.caseId,
+    )
+    const escalatedSupportState = escalationExpectation && commerce.recordCommerceOrderSupportServiceEvent(
+      reassignedSupportState,
+      {
+        orderId: completedOrder.id,
+        caseId: reassignedCase.caseId,
+        kind: 'escalated',
+        owner: 'Tier 2 owner',
+        priority: 'urgent',
+        dueAt: '2026-07-24T12:46:00.000Z',
+        note: 'Customer impact now requires urgent review.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-ESCALATE-1',
+        capturedAt: '2026-07-24T09:48:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Escalate priority while preserving accountable ownership.',
+        evidenceReference: `SUPPORT-SERVICE:${reassignedCase.caseId}`,
+      },
+      escalationExpectation,
+    )
+    const escalatedCase = escalatedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    const escalatedService = escalatedCase && commerce.commerceSupportServiceState(escalatedCase)
+    buyingAssert(escalatedCase?.serviceEvents?.length === 2
+      && escalatedService?.owner === 'Tier 2 owner'
+      && escalatedService?.priority === 'urgent'
+      && escalatedService?.dueAt === '2026-07-24T12:46:00.000Z',
+    'ecommerce_support_escalation_history_not_effective')
+    const supportResolveExpectation = escalatedCase && commerce.commerceOrderSupportResolveExpectation(
+      escalatedSupportState,
+      completedOrder.id,
+      escalatedCase.caseId,
+    )
+    const resolvedSupportState = supportResolveExpectation && commerce.resolveCommerceOrderSupportCase(
+      escalatedSupportState,
+      {
+        orderId: completedOrder.id,
+        caseId: escalatedCase.caseId,
         outcome: 'information_provided',
         note: 'Reviewed the delivery timeline with the retained order evidence.',
       },
       {
         actionId: 'ACT-ECOMMERCE-SUPPORT-RESOLVE-1',
-        capturedAt: '2026-07-24T09:47:00.000Z',
+        capturedAt: '2026-07-24T09:49:00.000Z',
         actor: 'OP-OWNER',
         reason: 'Reviewed and closed the support case.',
-        evidenceReference: `SUPPORT-RESOLUTION:${supportCase.caseId}`,
+        evidenceReference: `SUPPORT-RESOLUTION:${escalatedCase.caseId}`,
       },
       supportResolveExpectation,
     )

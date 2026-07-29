@@ -909,6 +909,12 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
             order for order in next_state["orders"] if order.get("supportCases")  # type: ignore[union-attr]
         )
         return dict(support_order["supportCases"][0]["opening"])
+    if event_type == "commerce.order.support_case_service_recorded":
+        support_order = next(
+            order for order in next_state["orders"] if order.get("supportCases")  # type: ignore[union-attr]
+        )
+        support_case = next(case for case in support_order["supportCases"] if case.get("serviceEvents"))
+        return dict(support_case["serviceEvents"][0]["proof"])
     if event_type == "commerce.order.support_case_resolved":
         support_order = next(
             order for order in next_state["orders"] if order.get("supportCases")  # type: ignore[union-attr]
@@ -2393,6 +2399,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.order.cancelled",
                     "commerce.order.return_recorded",
                     "commerce.order.support_case_opened",
+                    "commerce.order.support_case_service_recorded",
                     "commerce.order.support_case_resolved",
                     "commerce.order.correction_recorded",
                     "commerce.payment.reconciled",
@@ -4492,6 +4499,57 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertEqual(opened["items"], current["items"])
         self.assertEqual(opened["movements"], current["movements"])
 
+        reassigned_candidate = deepcopy(opened)
+        reassigned_candidate["orders"][0]["supportCases"][0]["serviceEvents"] = [{  # type: ignore[index]
+            "kind": "reassigned",
+            "owner": "Tier 2 owner",
+            "priority": "high",
+            "dueAt": "2026-07-23T13:30:00.000Z",
+            "note": "Assigned to the delivery specialist.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-REASSIGN",
+                captured_at="2026-07-23T09:35:00.000Z",
+                reason="Assign the case to the delivery specialist.",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }]
+        reassigned = apply_event(
+            opened,
+            "commerce.order.support_case_service_recorded",
+            reassigned_candidate,
+        )
+        self.assertEqual(
+            reassigned["orders"][0]["supportCases"][0]["serviceEvents"][0]["owner"],  # type: ignore[index]
+            "Tier 2 owner",
+        )
+
+        escalated_candidate = deepcopy(reassigned)
+        escalated_case = escalated_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        escalated_case["serviceEvents"] = [{
+            "kind": "escalated",
+            "owner": "Tier 2 owner",
+            "priority": "urgent",
+            "dueAt": "2026-07-23T12:30:00.000Z",
+            "note": "Customer delivery impact now requires urgent review.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-ESCALATE",
+                captured_at="2026-07-23T09:36:00.000Z",
+                reason="Escalate the delivery case without changing its owner.",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }, *escalated_case["serviceEvents"]]
+        escalated = apply_event(
+            reassigned,
+            "commerce.order.support_case_service_recorded",
+            escalated_candidate,
+        )
+        self.assertEqual(
+            escalated["orders"][0]["supportCases"][0]["serviceEvents"][0]["priority"],  # type: ignore[index]
+            "urgent",
+        )
+        self.assertEqual(escalated["items"], current["items"])
+        self.assertEqual(escalated["movements"], current["movements"])
+
         resolution = {
             "outcome": "information_provided",
             "note": "Reviewed the delivery timeline with the customer record.",
@@ -4502,12 +4560,12 @@ class CommerceRuntimeTests(unittest.TestCase):
                 evidence_reference=f"SUPPORT-RESOLUTION:{case_id}",
             ),
         }
-        resolved_candidate = deepcopy(opened)
+        resolved_candidate = deepcopy(escalated)
         resolved_case = resolved_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
         resolved_case["status"] = "resolved"
         resolved_case["resolution"] = resolution
         resolved = apply_event(
-            opened,
+            escalated,
             "commerce.order.support_case_resolved",
             resolved_candidate,
         )
@@ -4527,6 +4585,27 @@ class CommerceRuntimeTests(unittest.TestCase):
         del missing_triage["orders"][0]["supportCases"][0]["owner"]  # type: ignore[index]
         with self.assertRaises(TrialValidationError):
             apply_event(current, "commerce.order.support_case_opened", missing_triage)
+
+        invalid_escalation = deepcopy(reassigned)
+        invalid_case = invalid_escalation["orders"][0]["supportCases"][0]  # type: ignore[index]
+        invalid_case["serviceEvents"] = [{
+            "kind": "escalated",
+            "owner": "Different owner",
+            "priority": "urgent",
+            "dueAt": "2026-07-23T12:30:00.000Z",
+            "note": "Invalid combined escalation and reassignment.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-INVALID-ESCALATE",
+                captured_at="2026-07-23T09:36:00.000Z",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }, *invalid_case["serviceEvents"]]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                reassigned,
+                "commerce.order.support_case_service_recorded",
+                invalid_escalation,
+            )
 
     def test_completed_order_accepts_multiple_partial_returns_with_explicit_stock_disposition(self) -> None:
         current = validate_commerce_state(completed_state())

@@ -35,6 +35,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.order.cancelled",
         "commerce.order.return_recorded",
         "commerce.order.support_case_opened",
+        "commerce.order.support_case_service_recorded",
         "commerce.order.support_case_resolved",
         "commerce.order.correction_recorded",
         "commerce.payment.reconciled",
@@ -1397,6 +1398,7 @@ def _authoritative_command_payload(
         return authoritative
     if event_type in {
         "commerce.order.support_case_opened",
+        "commerce.order.support_case_service_recorded",
         "commerce.order.support_case_resolved",
     }:
         evidence = authoritative.get("evidence")
@@ -1412,13 +1414,22 @@ def _authoritative_command_payload(
             for support_case in order.get("supportCases", []):
                 if not isinstance(support_case, Mapping):
                     continue
-                proof = (
-                    support_case.get("opening")
-                    if event_type == "commerce.order.support_case_opened"
-                    else support_case.get("resolution", {}).get("proof")
-                    if isinstance(support_case.get("resolution"), Mapping)
-                    else None
-                )
+                if event_type == "commerce.order.support_case_opened":
+                    proof = support_case.get("opening")
+                elif event_type == "commerce.order.support_case_service_recorded":
+                    proof = next(
+                        (
+                            service_event.get("proof")
+                            for service_event in support_case.get("serviceEvents", [])
+                            if isinstance(service_event, Mapping)
+                            and isinstance(service_event.get("proof"), Mapping)
+                            and service_event["proof"].get("actionId") == evidence.get("actionId")
+                        ),
+                        None,
+                    )
+                else:
+                    resolution = support_case.get("resolution")
+                    proof = resolution.get("proof") if isinstance(resolution, Mapping) else None
                 if isinstance(proof, Mapping) and proof.get("actionId") == evidence.get("actionId"):
                     target_order = order
                     target_case = support_case
@@ -1429,12 +1440,19 @@ def _authoritative_command_payload(
         if isinstance(target_order, Mapping) and isinstance(target_case, Mapping):
             completion = target_order.get("completion")
             opening = target_case.get("opening")
+            service_events = target_case.get("serviceEvents", [])
             effective_captured_at = _not_before(
                 captured_at,
                 target_order.get("createdAt"),
                 completion.get("capturedAt") if isinstance(completion, Mapping) else None,
                 target_case.get("customerRequestedAt"),
                 opening.get("capturedAt") if isinstance(opening, Mapping) else None,
+                *(
+                    service_event.get("proof", {}).get("capturedAt")
+                    for service_event in service_events
+                    if isinstance(service_event, Mapping)
+                    and isinstance(service_event.get("proof"), Mapping)
+                ),
             )
         authoritative_evidence = dict(evidence)
         authoritative_evidence["actor"] = principal.actor_id
@@ -1460,6 +1478,29 @@ def _authoritative_command_payload(
                     changed_proof["actor"] = principal.actor_id
                     changed_proof["capturedAt"] = effective_captured_at
                     changed_case["opening"] = changed_proof
+                elif event_type == "commerce.order.support_case_service_recorded":
+                    service_events = support_case.get("serviceEvents")
+                    if not isinstance(service_events, list):
+                        continue
+                    changed_events = deepcopy(service_events)
+                    event_changed = False
+                    for service_index, service_event in enumerate(changed_events):
+                        if not isinstance(service_event, Mapping):
+                            continue
+                        proof = service_event.get("proof")
+                        if not isinstance(proof, Mapping) or proof.get("actionId") != evidence.get("actionId"):
+                            continue
+                        changed_proof = dict(proof)
+                        changed_proof["actor"] = principal.actor_id
+                        changed_proof["capturedAt"] = effective_captured_at
+                        changed_event = dict(service_event)
+                        changed_event["proof"] = changed_proof
+                        changed_events[service_index] = changed_event
+                        event_changed = True
+                        break
+                    if not event_changed:
+                        continue
+                    changed_case["serviceEvents"] = changed_events
                 else:
                     resolution = support_case.get("resolution")
                     proof = resolution.get("proof") if isinstance(resolution, Mapping) else None
