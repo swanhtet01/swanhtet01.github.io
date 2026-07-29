@@ -3,6 +3,9 @@ import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
 const manifest = JSON.parse(await readFile(new URL('../site-manifest.json', import.meta.url), 'utf8'))
+const settingsSource = await readFile(new URL('../showroom/src/core/SettingsPage.tsx', import.meta.url), 'utf8')
+const localEvidenceVersion = Number(/contract:\s*['"]supermega_trial_evidence['"][\s\S]{0,200}?version:\s*(\d+)/.exec(settingsSource)?.[1])
+if (!Number.isInteger(localEvidenceVersion)) throw new Error('local_settings_evidence_version_missing')
 const baseUrl = String(process.env.APP_BASE_URL || 'https://app.supermega.dev').replace(/\/$/, '')
 const expectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim().toLowerCase()
 const protectedPreview = process.env.VERCEL_PROTECTED_PREVIEW === '1'
@@ -115,13 +118,20 @@ const assetCorpus = (await Promise.all([...scriptPaths, ...cssPaths].map(async (
 const settingsChunkPath = /assets\/SettingsPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!settingsChunkPath) throw new Error('settings_chunk_missing')
 const settingsChunk = (await get(`/${settingsChunkPath}`)).body
+const evidenceMarkerOffset = settingsChunk.indexOf('supermega_trial_evidence')
+const liveEvidenceWindow = evidenceMarkerOffset >= 0 ? settingsChunk.slice(evidenceMarkerOffset, evidenceMarkerOffset + 512) : ''
+const liveEvidenceVersion = Number(/version:(\d+)/.exec(liveEvidenceWindow)?.[1])
+if (!Number.isInteger(liveEvidenceVersion)) throw new Error('live_settings_evidence_version_missing')
+if (liveEvidenceVersion !== localEvidenceVersion) {
+  throw new Error(`live_settings_evidence_version_mismatch:local=${localEvidenceVersion}:live=${liveEvidenceVersion}`)
+}
 const activationRunbookChunkPath = /assets\/ManagedActivationRunbook-[A-Za-z0-9_-]+\.js/.exec(settingsChunk)?.[0]
 if (!activationRunbookChunkPath) throw new Error('managed_activation_runbook_chunk_missing')
 const activationRunbookChunk = (await get(`/${activationRunbookChunkPath}`)).body
 for (const required of ['SUPERMEGA', 'Choose a product. Run work.', 'Free workspace', 'Premium activation', 'Managed data, AI context', 'Check readiness', 'Open product', 'Set up product', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sample workspace', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_context:${required}`)
 }
-for (const required of ['Start guided sample', 'Request managed trial', 'Export evidence before managed import.', 'supermega_trial_evidence', 'activationRows', 'activationEvidencePlan', 'version:13', 'learningRows', 'learningPlanRows', 'Premium AI context', 'What the system can learn', 'Export AI context package']) {
+for (const required of ['Start guided sample', 'Request managed trial', 'Export evidence before managed import.', 'supermega_trial_evidence', 'activationRows', 'activationEvidencePlan', `version:${localEvidenceVersion}`, 'learningRows', 'learningPlanRows', 'Premium AI context', 'What the system can learn', 'Export AI context package']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_settings_context:${required}`)
 }
 for (const required of ['Managed activation evidence plan', 'Evidence to go live', 'proof gates ready']) {

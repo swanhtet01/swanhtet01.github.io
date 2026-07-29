@@ -18,7 +18,7 @@ export function assessLiveAppVerifier({ status, signal = null, stdout = '', stde
   if (signal) return { ok: false, reason: 'verifier_process_interrupted' }
   if (status !== 0) {
     const detail = /Error:\s+([^\r\n]{1,240})/.exec(String(stderr))?.[1]?.trim() ?? ''
-    const safeDetail = /^[A-Za-z0-9_.:/-]+$/.test(detail) ? detail : `exit_${status}`
+    const safeDetail = /^[A-Za-z0-9_.:/=-]+$/.test(detail) ? detail : `exit_${status}`
     return { ok: false, reason: safeDetail }
   }
 
@@ -225,7 +225,7 @@ Live security ready: \`false\``)
   })
   const appVerifierCases = [
     ['accept_live_app_receipt', assessLiveAppVerifier({ status: 0, stdout: liveReceipt }).ok],
-    ['reject_live_app_failure', assessLiveAppVerifier({ status: 1, stderr: 'Error: missing_live_settings_context:version:13' }).reason === 'missing_live_settings_context:version:13'],
+    ['reject_live_app_failure', assessLiveAppVerifier({ status: 1, stderr: 'Error: live_settings_evidence_version_mismatch:local=13:live=23' }).reason === 'live_settings_evidence_version_mismatch:local=13:live=23'],
     ['reject_live_app_signal', assessLiveAppVerifier({ status: null, signal: 'SIGTERM' }).reason === 'verifier_process_interrupted'],
     ['reject_live_app_malformed_receipt', assessLiveAppVerifier({ status: 0, stdout: 'not-json' }).reason === 'verifier_receipt_invalid'],
     ['reject_live_app_wrong_contract', assessLiveAppVerifier({ status: 0, stdout: JSON.stringify({ ...JSON.parse(liveReceipt), contract: 'wrong' }) }).reason === 'verifier_receipt_contract_invalid'],

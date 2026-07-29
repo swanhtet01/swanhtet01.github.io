@@ -52,13 +52,13 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal 
 
 ## Verified baseline
 
-- Current checkpoints: product `7ae8c80`, CEO preflight `f1328a0`, delivery `cafdafe`/`f626ee7`, CEO operations `909807d`, performance `6bad4e7`, release `39642eb`; Shop `479802b`, Plant `5cb85db`, agent operations `a2e1b89`, operations `63a245f`.
-- Private client preparation `39ceec5` and activation `bdd843e` pass production build, 168 onboarding, 74 security, five preparation tests, release/privacy/database/Vercel/HQ, and approval/tamper-before-write checks.
+- Current local checkpoints: workspace recovery `81c1db0`, database contracts `dd0d84a`, and Shop receivables `8402162`; the full app gate and all 351 Python tests pass.
+- Client preparation passes 186 onboarding, 74 security, six preparation, recovery, release, privacy, database, Vercel, HQ, approval, and tamper-before-write checks.
 - Browser proof: one Manufacturing kit installed all four products, persisted prepared records, completed a Shop sale (OIL-1L 48 to 47; orders four to five), reset cleanly, and reprovisioned. Desktop/mobile had no overflow or browser warnings.
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
-- Both `supermega.dev` and `app.supermega.dev` serve exact remote `main` commit `d38cdbb8031395c851470edb3b10bf97dbdcf681`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Paired release identity is current at brand `jade-v2-2026-07` and catalog `2026-07-28.1`.
+- Both domains serve deployed `d38cdbb8031395c851470edb3b10bf97dbdcf681`; four direct samples open and paired brand/catalog identities match.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-- Ally: `supermega.ally-working-set-trim.v1` released 2,565.1 MB; RAM moved from 88.9% to 83.7% with zero models, eligible dispatch, and no process stops.
+- Ally audit: `supermega.ally-working-set-trim.v1` moved RAM 93.8% to 92.0% after releasing 1,958.1 MB with no process stops; zero models remain and dispatch stays blocked on memory pressure.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
 ## Owner-gated actions
@@ -70,6 +70,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
 - `supermegabase` is not a trial target: it has existing records, one recorded migration, and 27 public RLS tables without policies. No isolated branch is verified, so managed writes remain off.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
+- Release integration is blocked: this checkout has Settings evidence v13 while deployed `d38cdbb` has v23 on a 59-commit production-only line; reconcile source and behavior before claiming readiness.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 - Gaps: hosted restore/custody/recovery-time proof; Shop finance/returns/service; Plant engineering/CAPA/maintenance/WIP/compliance; Website hosting/analytics; Ecommerce providers/shipping/returns. Local workspace recovery is preflight only.
