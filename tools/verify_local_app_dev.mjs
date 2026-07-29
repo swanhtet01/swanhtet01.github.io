@@ -23,6 +23,12 @@ requireContract('full-stack verification is part of app verification',
 requireContract('runner starts the canonical runtime',
   runnerSource.includes("'supermega_runtime.runtime:app'")
   && runnerSource.includes("body?.service === 'supermega-service'"))
+requireContract('runner proves ecommerce order queue validation through the app proxy',
+  runnerSource.includes('/api/trial/v1/ecommerce/order-queue/validate')
+  && runnerSource.includes("contract === 'supermega.ecommerce.order_queue_readiness_validation.v1'")
+  && runnerSource.includes('payload.validation.external_writes_performed === false')
+  && runnerSource.includes("forbiddenUntilReady: ['order_import']")
+  && runnerSource.includes('response.status === 422'))
 requireContract('runner is loopback-only and connects Vite explicitly',
   runnerSource.includes("const loopbackHost = '127.0.0.1'")
   && runnerSource.includes('SUPERMEGA_LOCAL_API: apiUrl')
@@ -158,6 +164,11 @@ requireContract('full stack keeps security headers and local safety',
   && report.safety?.databaseUrlCleared === true
   && report.safety?.hostedAuthCleared === true
   && report.safety?.externalWorkerCleared === true)
+requireContract('full stack proves zero-write ecommerce queue validation',
+  report.ecommerceOrderQueueValidation?.contract === 'supermega.ecommerce.order_queue_readiness_validation.v1'
+  && report.ecommerceOrderQueueValidation?.status === 'ready_for_owner_review'
+  && report.ecommerceOrderQueueValidation?.writesPerformed === false
+  && report.ecommerceOrderQueueValidation?.tamperRejected === true)
 
 if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_local_full_stack', failures, report }, null, 2))
@@ -167,7 +178,7 @@ if (failures.length) {
 console.log(JSON.stringify({
   ok: true,
   contract: 'supermega_local_full_stack',
-  checks: 10,
+  checks: 12,
   operatingMode: report.runtime.operatingMode,
   writesEnabled: report.runtime.writesEnabled,
   loopbackOnly: report.safety.loopbackOnly,

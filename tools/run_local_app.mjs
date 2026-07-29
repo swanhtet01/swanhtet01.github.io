@@ -166,6 +166,33 @@ async function waitForJson(url, state, accept, timeoutMs = 20_000) {
   throw new Error(`${state.label} did not become ready at ${url}. ${lastIssue}${details ? `\n${details}` : ''}`)
 }
 
+async function postJson(url, body, state, accept, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs
+  let lastIssue = ''
+  while (Date.now() < deadline) {
+    const failure = childFailure(state)
+    if (failure) throw new Error(failure)
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(1_500),
+      })
+      const type = response.headers.get('content-type') ?? ''
+      const payload = type.includes('application/json') ? await response.json() : null
+      if (accept(response, payload)) return { body: payload, response }
+      lastIssue = `${url} returned HTTP ${response.status}.`
+    } catch (error) {
+      lastIssue = error instanceof Error ? error.message : String(error)
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 150))
+  }
+  const details = state.stderr.trim() || state.stdout.trim()
+  throw new Error(`${state.label} did not return accepted POST response at ${url}. ${lastIssue}${details ? `\n${details}` : ''}`)
+}
+
 async function stopChild(state) {
   if (!state || state.finished) return
   state.child.kill('SIGTERM')
@@ -260,6 +287,70 @@ async function run() {
       uiState,
       (body) => body?.service === 'supermega-service',
     )
+    const ecommerceOrderQueuePacket = {
+      schema: 'supermega.ecommerce.order_queue_readiness.v1',
+      version: 1,
+      generatedAt: '2026-07-29T00:00:00.000Z',
+      product: 'ecommerce',
+      storeName: 'SuperMega Ecommerce Demo',
+      sourceReview: {
+        schema: 'supermega.ecommerce.order_import_review_packet.v1',
+        generatedAt: '2026-07-29T00:00:00.000Z',
+        operatingMode: 'browser_local_trial',
+        catalogSource: 'shop-local',
+        selectedSkus: ['SKU-001'],
+        totalRows: 1,
+        readyRows: 1,
+        blockedRows: 0,
+      },
+      readiness: {
+        status: 'ready_for_support',
+        nextAction: 'Support can compare this packet with the managed Shop catalog before queue import approval.',
+      },
+      requiredControls: [
+        'managed_postgres_rls',
+        'workspace_identity',
+        'shop_catalog_match',
+        'source_message_retention',
+        'owner_queue_approval',
+        'audit_log',
+        'scheduler_proof',
+      ],
+      forbiddenUntilReady: [
+        'order_import',
+        'production_queue_write',
+        'customer_message_send',
+        'payment_capture',
+        'wallet_debit',
+        'delivery_booking',
+        'stock_move',
+        'refund_write',
+        'shop_write',
+        'managed_activation',
+      ],
+    }
+    const orderQueueValidation = await postJson(
+      `${uiUrl}/api/trial/v1/ecommerce/order-queue/validate`,
+      { workspace_id: 'verify-workspace', packet: ecommerceOrderQueuePacket },
+      uiState,
+      (response, payload) => response.ok
+        && payload?.validation?.contract === 'supermega.ecommerce.order_queue_readiness_validation.v1'
+        && payload.validation.status === 'ready_for_owner_review'
+        && payload.validation.workspace_id === 'verify-workspace'
+        && payload.validation.required_capability === 'commerce.write'
+        && payload.validation.external_writes_performed === false
+        && payload.external_writes_performed === false,
+    )
+    const tamperedOrderQueueValidation = await postJson(
+      `${uiUrl}/api/trial/v1/ecommerce/order-queue/validate`,
+      {
+        workspace_id: 'verify-workspace',
+        packet: { ...ecommerceOrderQueuePacket, forbiddenUntilReady: ['order_import'] },
+      },
+      uiState,
+      (response, payload) => response.status === 422
+        && String(payload?.detail ?? '').includes('failed validation'),
+    )
 
     const body = proxiedHealth.body
     const report = {
@@ -290,6 +381,12 @@ async function run() {
         databaseUrlCleared: true,
         hostedAuthCleared: true,
         externalWorkerCleared: true,
+      },
+      ecommerceOrderQueueValidation: {
+        contract: orderQueueValidation.body.validation.contract,
+        status: orderQueueValidation.body.validation.status,
+        writesPerformed: orderQueueValidation.body.validation.external_writes_performed,
+        tamperRejected: tamperedOrderQueueValidation.response.status === 422,
       },
     }
 
