@@ -1,11 +1,11 @@
 # HQ now
 
-Updated: 2026-07-28
+Updated: 2026-07-29
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `af3f45c22b13e5edccdf87214608817fc3499e4d`
-Live state observed: `2026-07-28T09:43:03Z`
+Live release commit: `d38cdbb8031395c851470edb3b10bf97dbdcf681`
+Live state observed: `2026-07-29T02:23:10Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -56,7 +56,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal 
 - Private client preparation `39ceec5` and activation `bdd843e` pass production build, 168 onboarding, 74 security, five preparation tests, release/privacy/database/Vercel/HQ, and approval/tamper-before-write checks.
 - Browser proof: one Manufacturing kit installed all four products, persisted prepared records, completed a Shop sale (OIL-1L 48 to 47; orders four to five), reset cleanly, and reprovisioned. Desktop/mobile had no overflow or browser warnings.
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
-- Both `supermega.dev` and `app.supermega.dev` serve exact remote `main` commit `af3f45c22b13e5edccdf87214608817fc3499e4d`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Paired release identity is current at catalog `2026-07-28.1`.
+- Both `supermega.dev` and `app.supermega.dev` serve exact remote `main` commit `d38cdbb8031395c851470edb3b10bf97dbdcf681`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Paired release identity is current at brand `jade-v2-2026-07` and catalog `2026-07-28.1`.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
 - Ally: `supermega.ally-working-set-trim.v1` released 2,565.1 MB; RAM moved from 88.9% to 83.7% with zero models, eligible dispatch, and no process stops.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.

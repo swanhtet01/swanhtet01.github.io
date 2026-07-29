@@ -118,9 +118,9 @@ const internalSystem = (id) => portfolio.internalSystems?.find((entry) => entry.
 
 requireContract('portfolio schema', portfolio.schemaVersion === 'supermega.hq.portfolio.v3')
 requireContract('portfolio is current',
-  portfolio.updatedAt === '2026-07-28'
-  && now.includes('Updated: 2026-07-28')
-  && current.includes('Last confirmed: 2026-07-28'))
+  portfolio.updatedAt === '2026-07-29'
+  && now.includes('Updated: 2026-07-29')
+  && current.includes('Last confirmed: 2026-07-29'))
 requireContract('customer portfolio is explicit',
   portfolio.products?.map((entry) => entry.id).join(',') === 'shop,plant,website,ecommerce')
 requireContract('customer paths are canonical',
