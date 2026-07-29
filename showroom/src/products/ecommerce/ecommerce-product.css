@@ -1048,14 +1048,22 @@
 @media (max-width: 560px) {
   .ecommerce-business-controls > summary b { display: none; }
   .ecommerce-business-controls > summary span { width: 100%; }
-  .ecommerce-heading-actions,
   .ecommerce-save-bar {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .ecommerce-heading-actions .text-link {
+  .ecommerce-heading-actions {
     width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .ecommerce-heading-actions .text-link {
+    width: auto;
+    justify-content: center;
+    text-align: center;
   }
 
   .ecommerce-command-strip {
