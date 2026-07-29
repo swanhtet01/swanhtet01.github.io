@@ -59,7 +59,7 @@ const LEGACY_REPAIRABLE_REASONS = Object.freeze(new Set([
   'ally_ceo_local_cycle_specialist_section_rejected',
 ]))
 const SPECIALIST_SECTION_CONTRACT = 'Each specialist section must be at most 90 words and contain exactly these advisory labels: Proposed next action, Assumption, and Missing proof. Specialists must not claim execution or verified facts; the evidence-grounded executive synthesis remains code-owned. The executive synthesis must be at most 120 words and end with: Owner review required.'
-const SPECIALIST_OUTPUT_GRAMMAR = 'Write each specialist section as complete sentences on one line. The Proposed next action must begin with review, inspect, compare, or draft; never begin it with execute, deploy, publish, send, pay, purchase, migrate, or enable. Do not end a clause with a conjunction, helper verb, or unfinished phrase, and do not append canned scope warnings after a semicolon.'
+const SPECIALIST_OUTPUT_GRAMMAR = 'Write each specialist section as complete sentences on one line. The Proposed next action must begin with exactly one of these advisory verbs: review, inspect, compare, or draft. Do not end a clause with a conjunction, helper verb, or unfinished phrase, and do not append canned scope warnings after a semicolon.'
 
 function fail(reason) {
   throw new Error(reason)
@@ -214,12 +214,20 @@ function validateHqLiveReceipt(receipt) {
     probes?.healthAttempts,
     probes?.cloudAutonomyAttempts,
   ]
+  const productContract = receipt?.appProductContract
+  const productContractCurrent = productContract?.contract === 'supermega_app_live'
+    && productContract.ok === true
+    && productContract.status === 'current'
+    && productContract.reason === null
+  const productContractDrifted = productContract?.contract === 'supermega_app_live'
+    && productContract.ok === false
+    && productContract.status === 'drifted'
+    && /^(?:missing_live_[a-z0-9_]+|live_[a-z0-9_]+|[a-z0-9_]+_(?:missing|wrong|invalid|mismatch|rejected))(?::[A-Za-z0-9_.=/-]+){0,3}$/.test(String(productContract.reason || ''))
   if (receipt?.contract !== 'supermega.hq-live-state.v1'
     || receipt.ok !== true
     || !Array.isArray(receipt.failures)
     || receipt.failures.length !== 0
-    || receipt.appProductContract?.contract !== 'supermega_app_live'
-    || receipt.appProductContract?.ok !== true
+    || (!productContractCurrent && !productContractDrifted)
     || !/^[a-f0-9]{40}$/.test(commit)
     || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(observedAt)
     || !Number.isFinite(snapshotAgeHours)
@@ -245,6 +253,9 @@ function validateHqLiveReceipt(receipt) {
     probeAttempts: attempts,
     managedPersistenceReady: false,
     securityReady: false,
+    launchReadinessCurrent: productContractCurrent,
+    productContractStatus: productContract.status,
+    productContractReason: productContract.reason,
   }
 }
 
@@ -605,6 +616,7 @@ function validateSpecialistSections(text, requiredRoles) {
       || words.length < 12
       || words.length > 90
       || !/Proposed next action\s*:/i.test(section)
+      || !/Proposed next action\s*:\s*(?:review|inspect|compare|draft)\b/i.test(section)
       || !/Assumption\s*:/i.test(section)
       || !/Missing proof\s*:/i.test(section)
       || /specialist draft withheld|incomplete model output|no substantive specialist draft/i.test(section)

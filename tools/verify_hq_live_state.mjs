@@ -15,6 +15,7 @@ const RELEASE_VALUE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/
 const UTC_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/
 const APP_LIVE_CONTRACT = 'supermega_app_live'
 const SAFE_LIVE_FAILURE_CATEGORY = /^(?:missing_live_[a-z0-9_]+|live_[a-z0-9_]+|[a-z0-9_]+_(?:missing|wrong|invalid|mismatch|rejected))$/
+const LIVE_PRODUCT_DRIFT_REASON = /^(?:missing_live_[a-z0-9_]+|live_[a-z0-9_]+|[a-z0-9_]+_(?:missing|wrong|invalid|mismatch|rejected))(?::[A-Za-z0-9_.=/-]+){0,3}$/
 
 function safeLiveVerifierFailure(stderr, status) {
   const detail = /Error:\s+([^\r\n]{1,240})/.exec(String(stderr))?.[1]?.trim() ?? ''
@@ -42,9 +43,22 @@ export function assessLiveAppVerifier({ status, signal = null, stdout = '', stde
   return {
     ok: true,
     contract: receipt.contract,
+    status: 'current',
+    reason: null,
     operatingMode: receipt.operatingMode,
     agentScheduler: receipt.agentScheduler,
   }
+}
+
+export function classifyLiveAppProductContract(result) {
+  if (result?.ok === true && result.contract === APP_LIVE_CONTRACT && result.status === 'current' && result.reason === null) {
+    return result
+  }
+  const reason = String(result?.reason || '')
+  if (result?.ok === false && LIVE_PRODUCT_DRIFT_REASON.test(reason)) {
+    return { ok: false, contract: APP_LIVE_CONTRACT, status: 'drifted', reason }
+  }
+  throw new Error(`live_app_product_contract_failed:${reason || 'verifier_receipt_invalid'}`)
 }
 
 function verifyLiveAppProductContract(root) {
@@ -57,8 +71,7 @@ function verifyLiveAppProductContract(root) {
     windowsHide: true,
   })
   const result = assessLiveAppVerifier(execution)
-  if (!result.ok) throw new Error(`live_app_product_contract_failed:${result.reason}`)
-  return result
+  return classifyLiveAppProductContract(result)
 }
 
 function requireLine(text, label, pattern) {
@@ -264,7 +277,7 @@ Live security ready: \`false\``)
     agentScheduler: 'degraded',
   })
   const appVerifierCases = [
-    ['accept_live_app_receipt', assessLiveAppVerifier({ status: 0, stdout: liveReceipt }).ok],
+    ['accept_live_app_receipt', assessLiveAppVerifier({ status: 0, stdout: liveReceipt }).status === 'current'],
     ['reject_live_app_failure', assessLiveAppVerifier({ status: 1, stderr: 'Error: live_settings_evidence_version_mismatch:local=13:live=23' }).reason === 'live_settings_evidence_version_mismatch:local=13:live=23'],
     ['retain_safe_live_failure_category', assessLiveAppVerifier({ status: 1, stderr: 'Error: missing_live_launch_readiness_context:AI command queue' }).reason === 'missing_live_launch_readiness_context'],
     ['reject_live_app_signal', assessLiveAppVerifier({ status: null, signal: 'SIGTERM' }).reason === 'verifier_process_interrupted'],
@@ -274,6 +287,21 @@ Live security ready: \`false\``)
   ]
   for (const [name, passed] of appVerifierCases) {
     if (!passed) throw new Error(`self_test_${name}_failed`)
+  }
+  const currentProductContract = classifyLiveAppProductContract(assessLiveAppVerifier({ status: 0, stdout: liveReceipt }))
+  const driftedProductContract = classifyLiveAppProductContract({ ok: false, reason: 'missing_live_launch_readiness_context' })
+  const missingChunkProductContract = classifyLiveAppProductContract({ ok: false, reason: 'product_home_readiness_chunk_missing' })
+  if (currentProductContract.status !== 'current'
+    || driftedProductContract.status !== 'drifted'
+    || driftedProductContract.reason !== 'missing_live_launch_readiness_context'
+    || missingChunkProductContract.status !== 'drifted') {
+    throw new Error('self_test_product_contract_classification_failed')
+  }
+  try {
+    classifyLiveAppProductContract({ ok: false, reason: 'verifier_process_error' })
+    throw new Error('self_test_unsafe_product_contract_failure_accepted')
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== 'live_app_product_contract_failed:verifier_process_error') throw error
   }
 
   let transientAttempts = 0
@@ -360,7 +388,7 @@ Live security ready: \`false\``)
     if (!(error instanceof Error) || error.message !== 'hq_now_contract_duplicate') throw error
   }
 
-  return { ok: true, contract: CONTRACT, checks: failureCases.length + appVerifierCases.length + probeCases.length + 2, networkRequests: 0 }
+  return { ok: true, contract: CONTRACT, checks: failureCases.length + appVerifierCases.length + probeCases.length + 5, networkRequests: 0 }
 }
 
 async function main() {

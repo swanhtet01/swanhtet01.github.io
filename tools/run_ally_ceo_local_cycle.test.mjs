@@ -185,7 +185,7 @@ const hqLive = JSON.stringify({
   failures: [],
   snapshotAgeHours: 1.5,
   observedAt: '2026-07-29T00:30:00.000Z',
-  appProductContract: { ok: true, contract: 'supermega_app_live' },
+  appProductContract: { ok: true, contract: 'supermega_app_live', status: 'current', reason: null },
   probes: {
     timeoutMs: 15000,
     maxAttempts: 2,
@@ -308,9 +308,41 @@ test('preflight binds the CEO plan to one local specialist without queue or mode
   assert.equal(result.queueWrites, 0)
   assert.equal(result.liveHq.releaseCommit, 'a'.repeat(40))
   assert.equal(result.liveHq.performed, true)
+  assert.equal(result.liveHq.launchReadinessCurrent, true)
+  assert.equal(result.liveHq.productContractStatus, 'current')
   assert.deepEqual(result.liveHq.probeAttempts, [1, 2, 1, 1])
   assert.equal(state.calls.findIndex((call) => call.kind === 'hq_live') < state.calls.findIndex((call) => call.args?.[0] === 'knowledge'), true)
   assert.equal(state.calls.some((call) => call.args?.includes('add')), false)
+})
+
+test('read-only CEO work can report bounded live product drift without weakening release acceptance', async () => {
+  const drifted = JSON.parse(hqLive)
+  drifted.appProductContract = {
+    ok: false,
+    contract: 'supermega_app_live',
+    status: 'drifted',
+    reason: 'missing_live_launch_readiness_context',
+  }
+  const state = harness({ hqLive: JSON.stringify(drifted) })
+  const result = await runAllyCeoLocalCycle({ execute: false }, { plan: plan(), runCommand: state.runCommand })
+  assert.equal(result.status, 'ready')
+  assert.equal(result.liveHq.launchReadinessCurrent, false)
+  assert.equal(result.liveHq.productContractStatus, 'drifted')
+  assert.equal(result.liveHq.productContractReason, 'missing_live_launch_readiness_context')
+  assert.equal(result.modelCalls, 0)
+  assert.equal(result.queueWrites, 0)
+
+  drifted.appProductContract.reason = 'product_home_readiness_chunk_missing'
+  const missingChunk = harness({ hqLive: JSON.stringify(drifted) })
+  const missingChunkResult = await runAllyCeoLocalCycle({ execute: false }, { plan: plan(), runCommand: missingChunk.runCommand })
+  assert.equal(missingChunkResult.liveHq.productContractStatus, 'drifted')
+
+  drifted.appProductContract.reason = 'verifier_process_error'
+  const invalid = harness({ hqLive: JSON.stringify(drifted) })
+  await assert.rejects(
+    runAllyCeoLocalCycle({ execute: false }, { plan: plan(), runCommand: invalid.runCommand }),
+    /ally_ceo_local_cycle_hq_live_rejected/,
+  )
 })
 
 test('fresh outcomes fail before knowledge, queue, or model work when live HQ truth is rejected', async () => {
@@ -511,7 +543,7 @@ test('a closed period never repairs a rejected current-version outcome', async (
   const state = harness({
     queueList,
     jobObjectives: {
-      [firstJobId]: '[ALLY_CEO_OUTCOME:2026-07-29:daily-company-control] [ALLY_CEO_CYCLE:0123456789ab] [ALLY_CEO_PLAN:fedcba987654] Each specialist section must be at most 90 words and contain exactly these advisory labels: Proposed next action, Assumption, and Missing proof. Specialists must not claim execution or verified facts; the evidence-grounded executive synthesis remains code-owned. The executive synthesis must be at most 120 words and end with: Owner review required. Write each specialist section as complete sentences on one line. The Proposed next action must begin with review, inspect, compare, or draft; never begin it with execute, deploy, publish, send, pay, purchase, migrate, or enable. Do not end a clause with a conjunction, helper verb, or unfinished phrase, and do not append canned scope warnings after a semicolon.',
+      [firstJobId]: '[ALLY_CEO_OUTCOME:2026-07-29:daily-company-control] [ALLY_CEO_CYCLE:0123456789ab] [ALLY_CEO_PLAN:fedcba987654] Each specialist section must be at most 90 words and contain exactly these advisory labels: Proposed next action, Assumption, and Missing proof. Specialists must not claim execution or verified facts; the evidence-grounded executive synthesis remains code-owned. The executive synthesis must be at most 120 words and end with: Owner review required. Write each specialist section as complete sentences on one line. The Proposed next action must begin with exactly one of these advisory verbs: review, inspect, compare, or draft. Do not end a clause with a conjunction, helper verb, or unfinished phrase, and do not append canned scope warnings after a semicolon.',
     },
     reportPaths: { [firstJobId]: firstReportPath },
   })
@@ -572,8 +604,8 @@ test('execution claims the exact reviewed mission once and accepts only a qualit
   assert.equal(add.args.includes('--roles'), true)
   assert.equal(add.args.includes('operations'), true)
   assert.match(add.args[2], /Proposed next action, Assumption, and Missing proof/)
-  assert.match(add.args[2], /must begin with review, inspect, compare, or draft/)
-  assert.match(add.args[2], /never begin it with execute, deploy, publish, send, pay, purchase, migrate, or enable/)
+  assert.match(add.args[2], /must begin with exactly one of these advisory verbs: review, inspect, compare, or draft/)
+  assert.doesNotMatch(add.args[2], /\b(?:deploy|publish|send|pay|purchase|migrate|enable)\b/i)
   assert.match(add.args[2], /Do not end a clause with a conjunction, helper verb, or unfinished phrase/)
   const run = state.calls.find((call) => call.args?.[1] === 'run-next')
   assert.deepEqual(run.args.slice(0, 4), ['queue', 'run-next', '--queue-id', state.queueId])
