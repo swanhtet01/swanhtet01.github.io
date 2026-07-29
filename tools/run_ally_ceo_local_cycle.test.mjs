@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import test from 'node:test'
 
-import { runAllyCeoLocalCycle } from './run_ally_ceo_local_cycle.mjs'
+import { commandFailureReason, runAllyCeoLocalCycle } from './run_ally_ceo_local_cycle.mjs'
 
 const outcomeAgents = {
   'daily-company-control': ['operations-analyst'],
@@ -12,6 +12,22 @@ const outcomeAgents = {
   'finance-risk-control': ['cash-reconciler'],
 }
 const outcomeSequence = Object.keys(outcomeAgents)
+
+test('HQ live command failures retain only recognized contract categories', () => {
+  assert.equal(commandFailureReason('hq_live', {
+    code: 1,
+    stderr: JSON.stringify({
+      ok: false,
+      contract: 'supermega.hq-live-state.v1',
+      error: 'live_app_product_contract_failed:missing_live_launch_readiness_context',
+    }),
+  }), 'ally_ceo_local_cycle_hq_live_failed:live_app_product_contract_failed:missing_live_launch_readiness_context')
+  assert.equal(commandFailureReason('hq_live', {
+    code: 1,
+    stderr: JSON.stringify({ contract: 'supermega.hq-live-state.v1', error: 'token=must-not-escape' }),
+  }), 'ally_ceo_local_cycle_command_failed:hq_live:1')
+  assert.equal(commandFailureReason('local', { code: 2, stderr: 'private output' }), 'ally_ceo_local_cycle_command_failed:local:2')
+})
 
 function plan({ outcomeId = 'daily-company-control', hashCharacter = 'a' } = {}) {
   const generatedAt = '2026-07-29T00:00:00.000Z'

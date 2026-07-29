@@ -14,14 +14,20 @@ const MAX_FUTURE_SKEW_MS = 5 * 60 * 1_000
 const RELEASE_VALUE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/
 const UTC_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/
 const APP_LIVE_CONTRACT = 'supermega_app_live'
+const SAFE_LIVE_FAILURE_CATEGORY = /^(?:missing_live_[a-z0-9_]+|live_[a-z0-9_]+|[a-z0-9_]+_(?:missing|wrong|invalid|mismatch|rejected))$/
+
+function safeLiveVerifierFailure(stderr, status) {
+  const detail = /Error:\s+([^\r\n]{1,240})/.exec(String(stderr))?.[1]?.trim() ?? ''
+  const category = /^([a-z][a-z0-9_]{2,100})(?::|$)/.exec(detail)?.[1] ?? ''
+  if (!SAFE_LIVE_FAILURE_CATEGORY.test(category)) return `exit_${status}`
+  return /^[A-Za-z0-9_.:/=-]+$/.test(detail) ? detail : category
+}
 
 export function assessLiveAppVerifier({ status, signal = null, stdout = '', stderr = '', error = null }) {
   if (error) return { ok: false, reason: 'verifier_process_error' }
   if (signal) return { ok: false, reason: 'verifier_process_interrupted' }
   if (status !== 0) {
-    const detail = /Error:\s+([^\r\n]{1,240})/.exec(String(stderr))?.[1]?.trim() ?? ''
-    const safeDetail = /^[A-Za-z0-9_.:/=-]+$/.test(detail) ? detail : `exit_${status}`
-    return { ok: false, reason: safeDetail }
+    return { ok: false, reason: safeLiveVerifierFailure(stderr, status) }
   }
 
   let receipt
@@ -260,6 +266,7 @@ Live security ready: \`false\``)
   const appVerifierCases = [
     ['accept_live_app_receipt', assessLiveAppVerifier({ status: 0, stdout: liveReceipt }).ok],
     ['reject_live_app_failure', assessLiveAppVerifier({ status: 1, stderr: 'Error: live_settings_evidence_version_mismatch:local=13:live=23' }).reason === 'live_settings_evidence_version_mismatch:local=13:live=23'],
+    ['retain_safe_live_failure_category', assessLiveAppVerifier({ status: 1, stderr: 'Error: missing_live_launch_readiness_context:AI command queue' }).reason === 'missing_live_launch_readiness_context'],
     ['reject_live_app_signal', assessLiveAppVerifier({ status: null, signal: 'SIGTERM' }).reason === 'verifier_process_interrupted'],
     ['reject_live_app_malformed_receipt', assessLiveAppVerifier({ status: 0, stdout: 'not-json' }).reason === 'verifier_receipt_invalid'],
     ['reject_live_app_wrong_contract', assessLiveAppVerifier({ status: 0, stdout: JSON.stringify({ ...JSON.parse(liveReceipt), contract: 'wrong' }) }).reason === 'verifier_receipt_contract_invalid'],

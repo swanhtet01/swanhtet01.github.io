@@ -495,6 +495,23 @@ function limitedEnvironment(localCompanyRoot) {
   return environment
 }
 
+export function commandFailureReason(kind, error) {
+  const code = typeof error?.code === 'number' ? error.code : 'error'
+  const fallback = `ally_ceo_local_cycle_command_failed:${kind}:${code}`
+  if (kind !== 'hq_live') return fallback
+  try {
+    const receipt = JSON.parse(String(error?.stderr || '').trim())
+    const detail = String(receipt?.error || '')
+    if (receipt?.contract !== 'supermega.hq-live-state.v1'
+      || !/^live_app_product_contract_failed:(?:missing_live_[a-z0-9_]+|live_[a-z0-9_]+|[a-z0-9_]+_(?:missing|wrong|invalid|mismatch|rejected))(?::[A-Za-z0-9_.=/-]+){0,3}$/.test(detail)) {
+      return fallback
+    }
+    return `ally_ceo_local_cycle_hq_live_failed:${detail}`
+  } catch {
+    return fallback
+  }
+}
+
 async function defaultCommandRunner({ kind, args, timeoutMs, localCompanyRoot, localCompanyHome }) {
   let file
   let commandArgs
@@ -543,8 +560,7 @@ async function defaultCommandRunner({ kind, args, timeoutMs, localCompanyRoot, l
     })
     return String(result.stdout || '')
   } catch (error) {
-    const code = typeof error?.code === 'number' ? error.code : 'error'
-    fail(`ally_ceo_local_cycle_command_failed:${kind}:${code}`)
+    fail(commandFailureReason(kind, error))
   }
 }
 
