@@ -151,8 +151,8 @@
       "localAutomation": {
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Add immutable acknowledgement and first-response checkpoints plus a bounded service-level summary in the existing support archive, without sending a customer message or adding a page.",
-        "reason": "Open support work is now ordered by overdue state, priority, and due time with retained reassignment and escalation evidence; response checkpoints are the next useful local control while hosted messaging, refund, payment, shipping, and tenant work remain gated."
+        "workOrder": "Add a retained reopen and follow-up lifecycle for resolved support cases with one linked reason, accountable owner, priority, and due time, without sending a customer message or adding a page.",
+        "reason": "Support acknowledgement, first-response readiness, overdue recovery, and service-level counts are now immutable and measurable; recurrent customer issues currently dead-end at resolution, so a linked reopen is the next useful local lifecycle control while hosted messaging, refund, payment, shipping, and tenant work remain gated."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }

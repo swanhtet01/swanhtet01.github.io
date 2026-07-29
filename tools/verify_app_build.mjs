@@ -2803,7 +2803,9 @@ if (!commerceSource.includes('export type CommerceOrderReturn')
 if (!commerceSource.includes('export type CommerceOrderSupportCase')
   || !commerceSource.includes('export function commerceOrderSupportOpenExpectation')
   || !commerceSource.includes('export function commerceSupportCaseUrgency')
+  || !commerceSource.includes('export function commerceSupportCheckpointState')
   || !commerceSource.includes('export function commerceSupportQueue')
+  || !commerceSource.includes('export function commerceSupportSlaSummary')
   || !commerceSource.includes('export function commerceOrderSupportServiceExpectation')
   || !commerceSource.includes('export function recordCommerceOrderSupportServiceEvent')
   || !commerceSource.includes('export function recordCommerceOrderSupportCase')
@@ -2813,8 +2815,11 @@ if (!commerceSource.includes('export type CommerceOrderSupportCase')
   || !commerceSource.includes("export type CommerceSupportPriority = 'urgent' | 'high' | 'normal' | 'low'")
   || !coreSource.includes('Assign service responsibility before opening.')
   || !coreSource.includes('data-support-urgency={urgency}')
+  || !coreSource.includes('data-support-sla="bounded"')
   || !coreSource.includes('Support queue · next work first')
-  || !coreSource.includes('Review service change')
+  || !coreSource.includes('First response ready for independent delivery')
+  || !coreSource.includes("onOpenSupportService(order.id, supportCase.caseId, 'acknowledged')")
+  || !coreSource.includes("onOpenSupportService(order.id, supportCase.caseId, 'first_response_ready')")
   || !coreSource.includes('Choose one accountable owner and a future due time for this support case.')
   || !managedCommerceRuntime.includes('def _validate_support_case_opened')
   || !managedCommerceRuntime.includes('def _validate_support_case_service_recorded')
@@ -10744,8 +10749,15 @@ async function verifyStorefrontRuntime() {
     const openedSupportQueue = commerce.commerceSupportQueue(openedSupportState?.orders ?? [], Date.parse('2026-07-24T13:47:00.000Z'))
     buyingAssert(openedSupportQueue[0]?.supportCase.caseId === supportCase.caseId
       && openedSupportQueue[0]?.urgency === 'overdue'
-      && openedSupportQueue[0]?.service?.owner === 'Support owner',
+      && openedSupportQueue[0]?.service?.owner === 'Support owner'
+      && openedSupportQueue[0]?.checkpoints.acknowledged === null,
     'ecommerce_support_queue_not_ordered_by_operational_state')
+    const openedSupportSla = commerce.commerceSupportSlaSummary(openedSupportState?.orders ?? [], Date.parse('2026-07-24T13:47:00.000Z'))
+    buyingAssert(openedSupportSla.openCases === 1
+      && openedSupportSla.overdueCases === 1
+      && openedSupportSla.awaitingAcknowledgement === 1
+      && openedSupportSla.responseTargetMisses === 1,
+    'ecommerce_support_sla_summary_not_truthful')
     const supportQueueOrderingFixture = commerce.commerceSupportQueue([
       {
         ...completedOrder,
@@ -10798,6 +10810,33 @@ async function verifyStorefrontRuntime() {
       && JSON.stringify(reassignedSupportState?.items) === JSON.stringify(completedOrderState.items)
       && JSON.stringify(reassignedSupportState?.movements) === JSON.stringify(completedOrderState.movements),
     'ecommerce_support_reassignment_mutated_operational_truth')
+    const overdueReassignmentExpectation = commerce.commerceOrderSupportServiceExpectation(
+      openedSupportState,
+      completedOrder.id,
+      supportCase.caseId,
+    )
+    const overdueReassignedState = commerce.recordCommerceOrderSupportServiceEvent(
+      openedSupportState,
+      {
+        orderId: completedOrder.id,
+        caseId: supportCase.caseId,
+        kind: 'reassigned',
+        owner: 'Overdue recovery owner',
+        priority: 'high',
+        dueAt: '2026-07-24T13:46:00.000Z',
+        note: 'Take accountable ownership without rewriting the missed target.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-OVERDUE-REASSIGN-1',
+        capturedAt: '2026-07-24T14:00:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Reassign overdue work without changing its target.',
+        evidenceReference: `SUPPORT-SERVICE:${supportCase.caseId}`,
+      },
+      overdueReassignmentExpectation,
+    )
+    buyingAssert(overdueReassignedState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]?.serviceEvents?.[0]?.owner === 'Overdue recovery owner',
+      'ecommerce_overdue_support_reassignment_rejected')
     const escalationExpectation = reassignedCase && commerce.commerceOrderSupportServiceExpectation(
       reassignedSupportState,
       completedOrder.id,
@@ -10830,25 +10869,111 @@ async function verifyStorefrontRuntime() {
       && escalatedService?.priority === 'urgent'
       && escalatedService?.dueAt === '2026-07-24T12:46:00.000Z',
     'ecommerce_support_escalation_history_not_effective')
-    const supportResolveExpectation = escalatedCase && commerce.commerceOrderSupportResolveExpectation(
+    buyingAssert(commerce.commerceOrderSupportResolveExpectation(
+      escalatedSupportState,
+      completedOrder.id,
+      escalatedCase.caseId,
+    ) === null, 'ecommerce_support_resolved_before_first_response')
+    const acknowledgeExpectation = commerce.commerceOrderSupportServiceExpectation(
       escalatedSupportState,
       completedOrder.id,
       escalatedCase.caseId,
     )
-    const resolvedSupportState = supportResolveExpectation && commerce.resolveCommerceOrderSupportCase(
+    const acknowledgedSupportState = commerce.recordCommerceOrderSupportServiceEvent(
       escalatedSupportState,
       {
         orderId: completedOrder.id,
         caseId: escalatedCase.caseId,
+        kind: 'acknowledged',
+        owner: 'Tier 2 owner',
+        priority: 'urgent',
+        dueAt: '2026-07-24T12:46:00.000Z',
+        note: 'Delivery specialist accepted the case internally.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-ACKNOWLEDGE-1',
+        capturedAt: '2026-07-24T09:49:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Acknowledge the case without sending a customer message.',
+        evidenceReference: `SUPPORT-SERVICE:${escalatedCase.caseId}`,
+      },
+      acknowledgeExpectation,
+    )
+    const acknowledgedCase = acknowledgedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    const acknowledgedCheckpoints = acknowledgedCase && commerce.commerceSupportCheckpointState(acknowledgedCase)
+    buyingAssert(acknowledgedCheckpoints?.acknowledged?.kind === 'acknowledged'
+      && acknowledgedCheckpoints.firstResponseReady === null,
+    'ecommerce_support_acknowledgement_not_retained')
+    const invalidFirstResponse = commerce.recordCommerceOrderSupportServiceEvent(
+      escalatedSupportState,
+      {
+        orderId: completedOrder.id,
+        caseId: escalatedCase.caseId,
+        kind: 'first_response_ready',
+        owner: 'Tier 2 owner',
+        priority: 'urgent',
+        dueAt: '2026-07-24T12:46:00.000Z',
+        note: 'Invalid response before acknowledgement.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-INVALID-RESPONSE-1',
+        capturedAt: '2026-07-24T09:49:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Attempt a response checkpoint before acknowledgement.',
+        evidenceReference: `SUPPORT-SERVICE:${escalatedCase.caseId}`,
+      },
+      acknowledgeExpectation,
+    )
+    buyingAssert(invalidFirstResponse === null, 'ecommerce_support_first_response_before_acknowledgement_accepted')
+    const firstResponseExpectation = commerce.commerceOrderSupportServiceExpectation(
+      acknowledgedSupportState,
+      completedOrder.id,
+      escalatedCase.caseId,
+    )
+    const firstResponseReadyState = commerce.recordCommerceOrderSupportServiceEvent(
+      acknowledgedSupportState,
+      {
+        orderId: completedOrder.id,
+        caseId: escalatedCase.caseId,
+        kind: 'first_response_ready',
+        owner: 'Tier 2 owner',
+        priority: 'urgent',
+        dueAt: '2026-07-24T12:46:00.000Z',
+        note: 'Reviewed first response is ready for independent delivery.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-RESPONSE-READY-1',
+        capturedAt: '2026-07-24T09:50:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Record response readiness without sending a customer message.',
+        evidenceReference: `SUPPORT-SERVICE:${escalatedCase.caseId}`,
+      },
+      firstResponseExpectation,
+    )
+    const firstResponseCase = firstResponseReadyState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    const firstResponseCheckpoints = firstResponseCase && commerce.commerceSupportCheckpointState(firstResponseCase)
+    buyingAssert(firstResponseCheckpoints?.firstResponseReady?.kind === 'first_response_ready'
+      && firstResponseCase?.externalMessageSent === false,
+    'ecommerce_support_first_response_readiness_claimed_message_send')
+    const supportResolveExpectation = firstResponseCase && commerce.commerceOrderSupportResolveExpectation(
+      firstResponseReadyState,
+      completedOrder.id,
+      firstResponseCase.caseId,
+    )
+    const resolvedSupportState = supportResolveExpectation && commerce.resolveCommerceOrderSupportCase(
+      firstResponseReadyState,
+      {
+        orderId: completedOrder.id,
+        caseId: firstResponseCase.caseId,
         outcome: 'information_provided',
         note: 'Reviewed the delivery timeline with the retained order evidence.',
       },
       {
         actionId: 'ACT-ECOMMERCE-SUPPORT-RESOLVE-1',
-        capturedAt: '2026-07-24T09:49:00.000Z',
+        capturedAt: '2026-07-24T09:51:00.000Z',
         actor: 'OP-OWNER',
         reason: 'Reviewed and closed the support case.',
-        evidenceReference: `SUPPORT-RESOLUTION:${escalatedCase.caseId}`,
+        evidenceReference: `SUPPORT-RESOLUTION:${firstResponseCase.caseId}`,
       },
       supportResolveExpectation,
     )

@@ -209,7 +209,9 @@ export type CommerceSupportCategory = 'order_status' | 'delivery_issue' | 'payme
 export type CommerceSupportResolutionOutcome = 'information_provided' | 'replacement_review_required' | 'refund_review_required' | 'no_action'
 export type CommerceSupportPriority = 'urgent' | 'high' | 'normal' | 'low'
 export type CommerceSupportUrgency = 'overdue' | 'due_soon' | 'scheduled' | 'untriaged' | 'resolved'
-export type CommerceSupportServiceEventKind = 'reassigned' | 'escalated'
+export type CommerceSupportResponsibilityEventKind = 'reassigned' | 'escalated'
+export type CommerceSupportCheckpointKind = 'acknowledged' | 'first_response_ready'
+export type CommerceSupportServiceEventKind = CommerceSupportResponsibilityEventKind | CommerceSupportCheckpointKind
 
 export type CommerceOrderSupportServiceEvent = {
   kind: CommerceSupportServiceEventKind
@@ -1030,7 +1032,9 @@ const returnDispositions: CommerceReturnDisposition[] = ['restock', 'not_restock
 const supportCategories: CommerceSupportCategory[] = ['delivery_issue', 'item_issue', 'order_status', 'other', 'payment_question']
 const supportResolutionOutcomes: CommerceSupportResolutionOutcome[] = ['information_provided', 'replacement_review_required', 'refund_review_required', 'no_action']
 const supportPriorities: CommerceSupportPriority[] = ['urgent', 'high', 'normal', 'low']
-const supportServiceEventKinds: CommerceSupportServiceEventKind[] = ['reassigned', 'escalated']
+const supportResponsibilityEventKinds: CommerceSupportResponsibilityEventKind[] = ['reassigned', 'escalated']
+const supportCheckpointKinds: CommerceSupportCheckpointKind[] = ['acknowledged', 'first_response_ready']
+const supportServiceEventKinds: CommerceSupportServiceEventKind[] = [...supportResponsibilityEventKinds, ...supportCheckpointKinds]
 const correctionKinds: CommerceCorrectionKind[] = ['credit', 'debit']
 const correctionReasonCodes: CommerceCorrectionReasonCode[] = ['pricing_error', 'service_recovery', 'fee_adjustment', 'other']
 const websiteIntakeStatuses: CommerceWebsiteIntakeStatus[] = ['pending_confirmation', 'converted']
@@ -2506,6 +2510,8 @@ export function validateCommerceState(value: unknown): CommerceState {
           ? { priority: caseCandidate.priority as CommerceSupportPriority, owner: caseCandidate.owner as string, dueAt: caseCandidate.dueAt as string }
           : null
         let latestServiceAt = openingAt
+        let acknowledged = false
+        let firstResponseReady = false
         if (caseCandidate.serviceEvents !== undefined) {
           if (!effectiveService
             || !Array.isArray(caseCandidate.serviceEvents)
@@ -2534,16 +2540,37 @@ export function validateCommerceState(value: unknown): CommerceState {
             const nextPriority = supportPriorities.indexOf(serviceCandidate.priority as CommerceSupportPriority)
             canonicalText(serviceCandidate.owner, `${serviceField}.owner`, 120)
             canonicalText(serviceCandidate.note, `${serviceField}.note`, 300)
-            if (serviceAt < latestServiceAt || dueAt <= serviceAt) throw new Error(`${serviceField} chronology is invalid.`)
+            if (serviceAt < latestServiceAt) throw new Error(`${serviceField} chronology is invalid.`)
             if (serviceCandidate.kind === 'reassigned') {
               if (serviceCandidate.owner === effectiveService.owner
                 || serviceCandidate.priority !== effectiveService.priority
                 || serviceCandidate.dueAt !== effectiveService.dueAt) throw new Error(`${serviceField} must change only the accountable owner.`)
-            } else if (serviceCandidate.owner !== effectiveService.owner
-              || nextPriority > previousPriority
-              || dueAt > previousDueAt
-              || (nextPriority === previousPriority && dueAt === previousDueAt)) {
-              throw new Error(`${serviceField} must increase priority or bring the due time forward without changing owner.`)
+            } else if (serviceCandidate.kind === 'escalated') {
+              if (serviceCandidate.owner !== effectiveService.owner
+                || nextPriority > previousPriority
+                || dueAt > previousDueAt
+                || (nextPriority === previousPriority && dueAt === previousDueAt)
+                || (serviceCandidate.dueAt !== effectiveService.dueAt && dueAt <= serviceAt)) {
+                throw new Error(`${serviceField} must increase priority or bring a future due time forward without changing owner.`)
+              }
+            } else if (serviceCandidate.kind === 'acknowledged') {
+              if (acknowledged
+                || firstResponseReady
+                || serviceCandidate.owner !== effectiveService.owner
+                || serviceCandidate.priority !== effectiveService.priority
+                || serviceCandidate.dueAt !== effectiveService.dueAt) {
+                throw new Error(`${serviceField} must acknowledge the current service state exactly once.`)
+              }
+              acknowledged = true
+            } else {
+              if (!acknowledged
+                || firstResponseReady
+                || serviceCandidate.owner !== effectiveService.owner
+                || serviceCandidate.priority !== effectiveService.priority
+                || serviceCandidate.dueAt !== effectiveService.dueAt) {
+                throw new Error(`${serviceField} must record one first response after acknowledgement without changing service state.`)
+              }
+              firstResponseReady = true
             }
             effectiveService = {
               priority: serviceCandidate.priority as CommerceSupportPriority,
@@ -5691,7 +5718,22 @@ export type CommerceSupportQueueRow = {
   customer: string
   supportCase: CommerceOrderSupportCase
   service: CommerceSupportServiceState | null
+  checkpoints: CommerceSupportCheckpointState
   urgency: CommerceSupportUrgency
+}
+
+export type CommerceSupportCheckpointState = {
+  acknowledged: CommerceOrderSupportServiceEvent | null
+  firstResponseReady: CommerceOrderSupportServiceEvent | null
+}
+
+export type CommerceSupportSlaSummary = {
+  openCases: number
+  overdueCases: number
+  awaitingAcknowledgement: number
+  awaitingFirstResponse: number
+  firstResponseReady: number
+  responseTargetMisses: number
 }
 
 export function commerceSupportServiceState(
@@ -5702,6 +5744,16 @@ export function commerceSupportServiceState(
   return supportCase.owner && supportCase.priority && supportCase.dueAt
     ? { owner: supportCase.owner, priority: supportCase.priority, dueAt: supportCase.dueAt }
     : null
+}
+
+export function commerceSupportCheckpointState(
+  supportCase: CommerceOrderSupportCase,
+): CommerceSupportCheckpointState {
+  const chronological = [...(supportCase.serviceEvents ?? [])].reverse()
+  return {
+    acknowledged: chronological.find((event) => event.kind === 'acknowledged') ?? null,
+    firstResponseReady: chronological.find((event) => event.kind === 'first_response_ready') ?? null,
+  }
 }
 
 export function commerceSupportQueue(
@@ -5722,6 +5774,7 @@ export function commerceSupportQueue(
       customer: order.customer,
       supportCase,
       service: commerceSupportServiceState(supportCase),
+      checkpoints: commerceSupportCheckpointState(supportCase),
       urgency: commerceSupportCaseUrgency(supportCase, now),
     })))
     .sort((left, right) => urgencyRank[left.urgency] - urgencyRank[right.urgency]
@@ -5729,6 +5782,35 @@ export function commerceSupportQueue(
       || (left.service?.dueAt ?? '9999').localeCompare(right.service?.dueAt ?? '9999')
       || left.supportCase.customerRequestedAt.localeCompare(right.supportCase.customerRequestedAt)
       || left.supportCase.caseId.localeCompare(right.supportCase.caseId))
+}
+
+export function commerceSupportSlaSummary(
+  orders: CommerceOrder[],
+  now: number,
+): CommerceSupportSlaSummary {
+  const queue = commerceSupportQueue(orders, now)
+  return queue.reduce<CommerceSupportSlaSummary>((summary, row) => {
+    const acknowledged = row.checkpoints.acknowledged
+    const firstResponseReady = row.checkpoints.firstResponseReady
+    const targetMissed = firstResponseReady
+      ? Date.parse(firstResponseReady.proof.capturedAt) > Date.parse(firstResponseReady.dueAt)
+      : row.service !== null && Date.parse(row.service.dueAt) <= now
+    return {
+      openCases: summary.openCases + 1,
+      overdueCases: summary.overdueCases + (row.urgency === 'overdue' ? 1 : 0),
+      awaitingAcknowledgement: summary.awaitingAcknowledgement + (acknowledged ? 0 : 1),
+      awaitingFirstResponse: summary.awaitingFirstResponse + (acknowledged && !firstResponseReady ? 1 : 0),
+      firstResponseReady: summary.firstResponseReady + (firstResponseReady ? 1 : 0),
+      responseTargetMisses: summary.responseTargetMisses + (targetMissed ? 1 : 0),
+    }
+  }, {
+    openCases: 0,
+    overdueCases: 0,
+    awaitingAcknowledgement: 0,
+    awaitingFirstResponse: 0,
+    firstResponseReady: 0,
+    responseTargetMisses: 0,
+  })
 }
 
 export function recordCommerceOrderSupportCase(
@@ -5888,16 +5970,30 @@ export function recordCommerceOrderSupportServiceEvent(
   const previousDueAt = timestampMicros(service.dueAt) as bigint
   const previousPriority = supportPriorities.indexOf(service.priority)
   const nextPriority = supportPriorities.indexOf(input.priority)
+  const checkpoints = commerceSupportCheckpointState(supportCase)
   const latestAt = [supportCase.opening.capturedAt, ...(supportCase.serviceEvents ?? []).map((entry) => entry.proof.capturedAt)]
     .map((value) => timestampMicros(value) as bigint)
     .reduce((maximum, value) => value > maximum ? value : maximum, 0n)
-  if (proofAt < latestAt || dueAt <= proofAt) return null
+  if (proofAt < latestAt) return null
   if (input.kind === 'reassigned') {
     if (input.owner === service.owner || input.priority !== service.priority || input.dueAt !== service.dueAt) return null
-  } else if (input.owner !== service.owner
-    || nextPriority > previousPriority
-    || dueAt > previousDueAt
-    || (nextPriority === previousPriority && dueAt === previousDueAt)) return null
+  } else if (input.kind === 'escalated') {
+    if (input.owner !== service.owner
+      || nextPriority > previousPriority
+      || dueAt > previousDueAt
+      || (nextPriority === previousPriority && dueAt === previousDueAt)
+      || (input.dueAt !== service.dueAt && dueAt <= proofAt)) return null
+  } else if (input.kind === 'acknowledged') {
+    if (checkpoints.acknowledged
+      || checkpoints.firstResponseReady
+      || input.owner !== service.owner
+      || input.priority !== service.priority
+      || input.dueAt !== service.dueAt) return null
+  } else if (!checkpoints.acknowledged
+    || checkpoints.firstResponseReady
+    || input.owner !== service.owner
+    || input.priority !== service.priority
+    || input.dueAt !== service.dueAt) return null
   const serviceEvent: CommerceOrderSupportServiceEvent = {
     kind: input.kind,
     owner: input.owner,
@@ -5928,6 +6024,7 @@ export function commerceOrderSupportResolveExpectation(
   const order = current.orders.find((candidate) => candidate.id === orderId)
   const supportCase = order?.supportCases?.find((candidate) => candidate.caseId === caseId)
   if (!order || !supportCase || supportCase.status !== 'open' || supportCase.resolution) return null
+  if (commerceSupportServiceState(supportCase) && !commerceSupportCheckpointState(supportCase).firstResponseReady) return null
   return { orderId, caseId, orderSnapshot: JSON.stringify(order), caseSnapshot: JSON.stringify(supportCase) }
 }
 

@@ -77,7 +77,9 @@ import {
   commerceOrderSupportResolveExpectation,
   commerceOrderSupportServiceExpectation,
   commerceSupportCaseUrgency,
+  commerceSupportCheckpointState,
   commerceSupportQueue,
+  commerceSupportSlaSummary,
   commerceSupportServiceState,
   commerceOrderItemSummary,
   commerceOrderLocationAllocationPreview,
@@ -281,6 +283,12 @@ type CommerceSupportServiceDraft = {
 }
 
 const commerceSupportPriorityOrder: CommerceSupportPriority[] = ['urgent', 'high', 'normal', 'low']
+const commerceSupportServiceActionLabels: Record<CommerceSupportServiceEventKind, string> = {
+  reassigned: 'Reassign case',
+  escalated: 'Escalate case',
+  acknowledged: 'Acknowledge case',
+  first_response_ready: 'First response ready',
+}
 
 type ProductId = 'commerce' | 'production'
 
@@ -3822,8 +3830,17 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
     const supportCase = order?.supportCases?.find((candidate) => candidate.caseId === caseId)
     const service = supportCase ? commerceSupportServiceState(supportCase) : null
+    const checkpoints = supportCase ? commerceSupportCheckpointState(supportCase) : null
     if (!supportCase || !service || !commerceOrderSupportServiceExpectation(commerce, orderId, caseId)) {
       setNotice('This support case is resolved, untriaged, or changed before review.')
+      return
+    }
+    if (kind === 'acknowledged' && (checkpoints?.acknowledged || checkpoints?.firstResponseReady)) {
+      setNotice('This support case already has immutable acknowledgement evidence.')
+      return
+    }
+    if (kind === 'first_response_ready' && (!checkpoints?.acknowledged || checkpoints.firstResponseReady)) {
+      setNotice(checkpoints?.firstResponseReady ? 'This support case already has first-response evidence.' : 'Acknowledge this support case before preparing its first response.')
       return
     }
     const currentPriorityIndex = commerceSupportPriorityOrder.indexOf(service.priority)
@@ -3863,19 +3880,21 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
     const order = commerce.orders.find((candidate) => candidate.id === supportServiceDraft.orderId)
     const supportCase = order?.supportCases?.find((candidate) => candidate.caseId === supportServiceDraft.caseId)
     const service = supportCase ? commerceSupportServiceState(supportCase) : null
+    const checkpoints = supportCase ? commerceSupportCheckpointState(supportCase) : null
     const dueAt = new Date(supportServiceDraft.dueAt)
     const owner = supportServiceDraft.owner.trim()
     const note = supportServiceDraft.note.trim()
-    if (!expected || !service) {
+    if (!expected || !service || !checkpoints) {
       setSupportServiceDraft(null)
       setNotice('This support case changed before review. Nothing was queued.')
       return
     }
-    if (!owner || !note || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= purchaseOrderClock) {
-      setNotice('Record one accountable owner, a future due time, and the reason for this service change.')
+    if (!owner || !note || Number.isNaN(dueAt.getTime())) {
+      setNotice('Record one accountable owner and the reason for this support action.')
       return
     }
-    const canonicalDueAt = supportServiceDraft.kind === 'reassigned' ? service.dueAt : dueAt.toISOString()
+    const dueChanged = supportServiceDraft.dueAt !== localDateTimeInputValue(new Date(service.dueAt))
+    const canonicalDueAt = supportServiceDraft.kind === 'escalated' && dueChanged ? dueAt.toISOString() : service.dueAt
     const previousPriority = commerceSupportPriorityOrder.indexOf(service.priority)
     const nextPriority = commerceSupportPriorityOrder.indexOf(supportServiceDraft.priority)
     if (supportServiceDraft.kind === 'reassigned') {
@@ -3883,11 +3902,28 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
         setNotice('Reassignment changes only the owner. Use escalation to tighten priority or due time.')
         return
       }
-    } else if (owner !== service.owner
-      || nextPriority > previousPriority
-      || Date.parse(canonicalDueAt) > Date.parse(service.dueAt)
-      || (nextPriority === previousPriority && canonicalDueAt === service.dueAt)) {
-      setNotice('Escalation keeps the owner and must raise priority or bring the due time forward.')
+    } else if (supportServiceDraft.kind === 'escalated') {
+      if (owner !== service.owner
+        || nextPriority > previousPriority
+        || Date.parse(canonicalDueAt) > Date.parse(service.dueAt)
+        || (nextPriority === previousPriority && canonicalDueAt === service.dueAt)
+        || (canonicalDueAt !== service.dueAt && Date.parse(canonicalDueAt) <= purchaseOrderClock)) {
+        setNotice('Escalation keeps the owner and must raise priority or bring a future due time forward.')
+        return
+      }
+    } else if (supportServiceDraft.kind === 'acknowledged') {
+      if (checkpoints.acknowledged || checkpoints.firstResponseReady
+        || owner !== service.owner
+        || supportServiceDraft.priority !== service.priority
+        || canonicalDueAt !== service.dueAt) {
+        setNotice('Acknowledgement records the current owner, priority, and due time exactly once.')
+        return
+      }
+    } else if (!checkpoints.acknowledged || checkpoints.firstResponseReady
+      || owner !== service.owner
+      || supportServiceDraft.priority !== service.priority
+      || canonicalDueAt !== service.dueAt) {
+      setNotice('First response must follow acknowledgement and preserve the current service responsibility.')
       return
     }
     const input = {
@@ -3899,12 +3935,23 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
       dueAt: canonicalDueAt,
       note,
     }
+    const actionLabel = input.kind === 'reassigned'
+      ? 'Reassign'
+      : input.kind === 'escalated'
+        ? 'Escalate'
+        : input.kind === 'acknowledged'
+          ? 'Acknowledge'
+          : 'Record first response ready'
     queueAction({
       kind: 'order_support_service',
       subjectId: `${input.orderId}:${input.caseId}`,
-      summary: `${input.kind === 'reassigned' ? 'Reassign' : 'Escalate'} ${input.caseId}`,
+      summary: `${actionLabel} ${input.caseId}`,
       before: `${service.priority} · ${service.owner} · due ${formatTime(service.dueAt)}`,
-      after: `${input.priority} · ${input.owner} · due ${formatTime(input.dueAt)} · no external action`,
+      after: input.kind === 'acknowledged'
+        ? `${input.owner} acknowledged internally · no customer message sent`
+        : input.kind === 'first_response_ready'
+          ? 'First response ready for independent delivery · no customer message sent'
+          : `${input.priority} · ${input.owner} · due ${formatTime(input.dueAt)} · no external action`,
       reasonSuggestion: input.note,
       evidenceReferenceSuggestion: `SUPPORT-SERVICE:${input.caseId}`,
       evidenceReferenceLocked: true,
@@ -5283,15 +5330,20 @@ function ClosedOrderHistory({
   const currentPage = focusedOrderIndex >= 0 ? Math.floor(focusedOrderIndex / pageSize) : Math.min(page, pageCount - 1)
   const visibleOrders = orders.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
   const supportWorkQueue = commerceSupportQueue(orders, supportClock)
-  const overdueSupportCases = supportWorkQueue.filter((row) => row.urgency === 'overdue')
+  const supportSla = commerceSupportSlaSummary(orders, supportClock)
   return <details className="order-archive" id="shop-order-history" open={Boolean(returnDraft || supportDraft || supportServiceDraft || supportResolutionDraft) || undefined}>
-    <summary><span>Completed and cancelled orders</span><small>{supportWorkQueue.length ? `${supportWorkQueue.length} help open · ${overdueSupportCases.length} overdue · ` : ''}{orders.length} {orders.length === 1 ? 'record' : 'records'}</small></summary>
+    <summary><span>Completed and cancelled orders</span><small>{supportWorkQueue.length ? `${supportSla.openCases} help open · ${supportSla.overdueCases} overdue · ` : ''}{orders.length} {orders.length === 1 ? 'record' : 'records'}</small></summary>
     {supportWorkQueue.length ? <section aria-label="Open support queue" className="order-return-records" data-support-queue="ordered">
       <div><strong>Support queue · next work first</strong><small>Overdue, priority, due time, request time</small></div>
+      <div data-support-sla="bounded"><strong>Service level</strong><small>{supportSla.awaitingAcknowledgement} awaiting acknowledgement · {supportSla.awaitingFirstResponse} awaiting first response · {supportSla.firstResponseReady} response ready · {supportSla.responseTargetMisses} target missed</small></div>
       {supportWorkQueue.slice(0, 6).map((row) => <div data-support-urgency={row.urgency} key={`queue-${row.supportCase.caseId}`}>
         <strong>{row.urgency === 'overdue' ? 'OVERDUE · ' : ''}{row.customer} · {row.supportCase.category.replaceAll('_', ' ')}</strong>
         <small>{row.service ? `${row.service.priority} · ${row.service.owner} · due ${formatTime(row.service.dueAt)}` : 'Legacy untriaged case'} · {row.supportCase.caseId}</small>
-        {row.service ? <button className="text-link" disabled={disabled || Boolean(supportDraft || supportServiceDraft || supportResolutionDraft || returnDraft || correctionDraft)} onClick={() => onOpenSupportService(row.orderId, row.supportCase.caseId, 'escalated')} type="button">Escalate</button> : null}
+        {row.service ? <button className="text-link" disabled={disabled || Boolean(supportDraft || supportServiceDraft || supportResolutionDraft || returnDraft || correctionDraft)} onClick={() => row.checkpoints.acknowledged
+          ? row.checkpoints.firstResponseReady
+            ? onOpenSupportResolution(row.orderId, row.supportCase.caseId)
+            : onOpenSupportService(row.orderId, row.supportCase.caseId, 'first_response_ready')
+          : onOpenSupportService(row.orderId, row.supportCase.caseId, 'acknowledged')} type="button">{row.checkpoints.acknowledged ? row.checkpoints.firstResponseReady ? 'Resolve case' : 'Response ready' : 'Acknowledge'}</button> : null}
       </div>)}
       {supportWorkQueue.length > 6 ? <small>{supportWorkQueue.length - 6} more open cases remain in the order archive.</small> : null}
     </section> : null}
@@ -5362,6 +5414,7 @@ function ClosedOrderHistory({
         {order.supportCases.map((supportCase) => {
           const urgency = commerceSupportCaseUrgency(supportCase, supportClock)
           const service = commerceSupportServiceState(supportCase)
+          const checkpoints = commerceSupportCheckpointState(supportCase)
           return <div data-support-urgency={urgency} key={supportCase.caseId} role="listitem">
             <strong>{urgency === 'overdue' ? 'OVERDUE · ' : ''}{supportCase.status === 'resolved' ? 'Resolved help case' : 'Open help case'} · {supportCase.category.replaceAll('_', ' ')}</strong>
             <small>{supportCase.caseId} · requested {formatTime(supportCase.customerRequestedAt)} · opened by {supportCase.opening.actor}</small>
@@ -5369,8 +5422,9 @@ function ClosedOrderHistory({
               ? <small>{service.priority} priority · owner {service.owner} · {urgency === 'overdue' ? 'overdue since' : 'due'} {formatTime(service.dueAt)}</small>
               : <small>Legacy case · priority, owner, and due time were not recorded</small>}
             <small>{supportCase.customerDescription}</small>
-            {supportCase.serviceEvents?.length ? <details className="compact-disclosure"><summary><span>Service history</span><small>{supportCase.serviceEvents.length} {supportCase.serviceEvents.length === 1 ? 'change' : 'changes'}</small></summary><div className="boundary-list">{supportCase.serviceEvents.map((serviceEvent) => <div key={serviceEvent.proof.actionId}><strong>{serviceEvent.kind} · {serviceEvent.priority} · {serviceEvent.owner}</strong><small>{formatTime(serviceEvent.proof.capturedAt)} · due {formatTime(serviceEvent.dueAt)} · {serviceEvent.note}</small></div>)}</div></details> : null}
-            {supportCase.resolution ? <small>{supportCase.resolution.outcome.replaceAll('_', ' ')} · {supportCase.resolution.note} · {supportCase.resolution.proof.actor}</small> : service ? <div className="form-actions"><button className="text-link" disabled={disabled || Boolean(activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'reassigned')} type="button">Reassign</button><button className="text-link" disabled={disabled || Boolean(activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'escalated')} type="button">Escalate</button><button className="text-link" disabled={disabled || Boolean(activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve case</button></div> : <button className="text-link" disabled={disabled || Boolean(activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve legacy case</button>}
+            {checkpoints.acknowledged ? <small>Acknowledged by {checkpoints.acknowledged.proof.actor} · {formatTime(checkpoints.acknowledged.proof.capturedAt)}{checkpoints.firstResponseReady ? ` · first response ready ${formatTime(checkpoints.firstResponseReady.proof.capturedAt)}` : ' · first response pending'}</small> : service ? <small>Acknowledgement pending</small> : null}
+            {supportCase.serviceEvents?.length ? <details className="compact-disclosure"><summary><span>Service history</span><small>{supportCase.serviceEvents.length} {supportCase.serviceEvents.length === 1 ? 'event' : 'events'}</small></summary><div className="boundary-list">{supportCase.serviceEvents.map((serviceEvent) => <div key={serviceEvent.proof.actionId}><strong>{serviceEvent.kind.replaceAll('_', ' ')} · {serviceEvent.priority} · {serviceEvent.owner}</strong><small>{formatTime(serviceEvent.proof.capturedAt)} · due {formatTime(serviceEvent.dueAt)} · {serviceEvent.note}</small></div>)}</div></details> : null}
+            {supportCase.resolution ? <small>{supportCase.resolution.outcome.replaceAll('_', ' ')} · {supportCase.resolution.note} · {supportCase.resolution.proof.actor}</small> : service ? <div className="form-actions">{!checkpoints.acknowledged ? <button className="text-link" disabled={disabled || Boolean(activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'acknowledged')} type="button">Acknowledge</button> : !checkpoints.firstResponseReady ? <button className="text-link" disabled={disabled || Boolean(activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'first_response_ready')} type="button">Response ready</button> : <button className="text-link" disabled={disabled || Boolean(activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve case</button>}<button className="text-link" disabled={disabled || Boolean(activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'reassigned')} type="button">Reassign</button><button className="text-link" disabled={disabled || Boolean(activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'escalated')} type="button">Escalate</button></div> : <button className="text-link" disabled={disabled || Boolean(activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve legacy case</button>}
             <small>No external message or refund performed</small>
           </div>
         })}
@@ -5396,11 +5450,11 @@ function ClosedOrderHistory({
         <label>Due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportOpen({ dueAt: event.target.value })} required type="datetime-local" value={activeSupportDraft.dueAt} /></label>
         <div className="form-actions"><button className="core-button primary compact" disabled={disabled} id="shop-support-open-review" type="submit">Review case opening</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportOpen} type="button">Cancel</button></div>
       </form> : null}
-      {activeSupportService ? <form aria-label={`${activeSupportService.kind === 'reassigned' ? 'Reassign' : 'Escalate'} support case ${activeSupportService.caseId}`} className="order-return-editor" onSubmit={onReviewSupportService}>
-        <div className="order-return-copy"><span className="core-eyebrow">{activeSupportService.kind === 'reassigned' ? 'Reassign case' : 'Escalate case'}</span><strong>{activeSupportService.caseId}</strong><small>{activeSupportService.kind === 'reassigned' ? 'Change only the accountable owner. Priority and due time stay immutable.' : 'Keep the owner and raise priority or bring the due time forward.'} No message, refund, or payment action runs.</small></div>
-        {activeSupportService.kind === 'reassigned' ? <label>New owner<input disabled={disabled} id={`support-service-${activeSupportService.caseId}`} maxLength={120} onChange={(event) => onChangeSupportService({ owner: event.target.value })} required value={activeSupportService.owner} /></label> : <><div className="form-row"><label>Owner<input disabled value={activeSupportService.owner} /></label><label>Priority<select disabled={disabled} id={`support-service-${activeSupportService.caseId}`} onChange={(event) => onChangeSupportService({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportService.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label></div><label>Earlier due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportService({ dueAt: event.target.value })} required type="datetime-local" value={activeSupportService.dueAt} /></label></>}
-        <label>Reason<textarea disabled={disabled} maxLength={300} onChange={(event) => onChangeSupportService({ note: event.target.value })} required rows={2} value={activeSupportService.note} /></label>
-        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review service change</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportService} type="button">Cancel</button></div>
+      {activeSupportService ? <form aria-label={`${commerceSupportServiceActionLabels[activeSupportService.kind]} ${activeSupportService.caseId}`} className="order-return-editor" onSubmit={onReviewSupportService}>
+        <div className="order-return-copy"><span className="core-eyebrow">{commerceSupportServiceActionLabels[activeSupportService.kind]}</span><strong>{activeSupportService.caseId}</strong><small>{activeSupportService.kind === 'reassigned' ? 'Change only the accountable owner. Priority and due time stay immutable.' : activeSupportService.kind === 'escalated' ? 'Keep the owner and raise priority or bring a future due time forward.' : activeSupportService.kind === 'acknowledged' ? 'Record that the accountable owner accepted this case internally.' : 'Record that a first response is ready for independent delivery.'} No message, refund, or payment action runs.</small></div>
+        {activeSupportService.kind === 'reassigned' ? <label>New owner<input disabled={disabled} id={`support-service-${activeSupportService.caseId}`} maxLength={120} onChange={(event) => onChangeSupportService({ owner: event.target.value })} required value={activeSupportService.owner} /></label> : activeSupportService.kind === 'escalated' ? <><div className="form-row"><label>Owner<input disabled value={activeSupportService.owner} /></label><label>Priority<select disabled={disabled} id={`support-service-${activeSupportService.caseId}`} onChange={(event) => onChangeSupportService({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportService.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label></div><label>Earlier due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportService({ dueAt: event.target.value })} required type="datetime-local" value={activeSupportService.dueAt} /></label></> : <small role="note">{activeSupportService.priority} priority · owner {activeSupportService.owner} · target {formatTime(new Date(activeSupportService.dueAt).toISOString())}</small>}
+        <label>{activeSupportService.kind === 'first_response_ready' ? 'Response preparation note' : activeSupportService.kind === 'acknowledged' ? 'Acknowledgement note' : 'Reason'}<textarea disabled={disabled} id={activeSupportService.kind === 'acknowledged' || activeSupportService.kind === 'first_response_ready' ? `support-service-${activeSupportService.caseId}` : undefined} maxLength={300} onChange={(event) => onChangeSupportService({ note: event.target.value })} required rows={2} value={activeSupportService.note} /></label>
+        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review {activeSupportService.kind === 'acknowledged' ? 'acknowledgement' : activeSupportService.kind === 'first_response_ready' ? 'response readiness' : 'service change'}</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportService} type="button">Cancel</button></div>
       </form> : null}
       {activeSupportResolution ? <form aria-label={`Resolve support case ${activeSupportResolution.caseId}`} className="order-return-editor" onSubmit={onReviewSupportResolution}>
         <div className="order-return-copy"><span className="core-eyebrow">Resolve help case</span><strong>{activeSupportResolution.caseId}</strong><small>Record the reviewed outcome only. External communication and financial action remain separate.</small></div>

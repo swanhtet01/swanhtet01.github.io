@@ -137,7 +137,9 @@ _SUPPORT_RESOLUTION_OUTCOMES = frozenset(
 )
 _SUPPORT_PRIORITIES = frozenset({"urgent", "high", "normal", "low"})
 _SUPPORT_PRIORITY_ORDER = ("urgent", "high", "normal", "low")
-_SUPPORT_SERVICE_EVENT_KINDS = frozenset({"reassigned", "escalated"})
+_SUPPORT_SERVICE_EVENT_KINDS = frozenset(
+    {"reassigned", "escalated", "acknowledged", "first_response_ready"}
+)
 _PURCHASE_DISCREPANCY_CODES = frozenset({"damaged", "wrong_item", "quality_failed"})
 _PURCHASE_DISCREPANCY_FIELDS = frozenset(
     {"rejectedQuantity", "discrepancyCode", "discrepancyDisposition"}
@@ -2139,6 +2141,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     else None
                 )
                 latest_service_at = opening_at
+                acknowledged = False
+                first_response_ready = False
                 if "serviceEvents" in support_case:
                     service_events = _list(
                         support_case["serviceEvents"], f"{field}.serviceEvents"
@@ -2188,7 +2192,6 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                         if (
                             service_proof["evidenceReference"] != f"SUPPORT-SERVICE:{case_id}"
                             or service_at < latest_service_at
-                            or service_due_at <= service_at
                         ):
                             raise TrialValidationError(f"{service_field} chronology is invalid.")
                         if service_event["kind"] == "reassigned":
@@ -2200,19 +2203,49 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                                 raise TrialValidationError(
                                     f"{service_field} must change only the accountable owner."
                                 )
-                        elif (
-                            owner != effective_service["owner"]
-                            or next_priority > previous_priority
-                            or service_due_at > previous_due_at
-                            or (
-                                next_priority == previous_priority
-                                and service_due_at == previous_due_at
-                            )
-                        ):
-                            raise TrialValidationError(
-                                f"{service_field} must increase priority or bring the due time "
-                                "forward without changing owner."
-                            )
+                        elif service_event["kind"] == "escalated":
+                            if (
+                                owner != effective_service["owner"]
+                                or next_priority > previous_priority
+                                or service_due_at > previous_due_at
+                                or (
+                                    next_priority == previous_priority
+                                    and service_due_at == previous_due_at
+                                )
+                                or (
+                                    service_event["dueAt"] != effective_service["dueAt"]
+                                    and service_due_at <= service_at
+                                )
+                            ):
+                                raise TrialValidationError(
+                                    f"{service_field} must increase priority or bring a future due "
+                                    "time forward without changing owner."
+                                )
+                        elif service_event["kind"] == "acknowledged":
+                            if (
+                                acknowledged
+                                or first_response_ready
+                                or owner != effective_service["owner"]
+                                or service_event["priority"] != effective_service["priority"]
+                                or service_event["dueAt"] != effective_service["dueAt"]
+                            ):
+                                raise TrialValidationError(
+                                    f"{service_field} must acknowledge the current service state exactly once."
+                                )
+                            acknowledged = True
+                        else:
+                            if (
+                                not acknowledged
+                                or first_response_ready
+                                or owner != effective_service["owner"]
+                                or service_event["priority"] != effective_service["priority"]
+                                or service_event["dueAt"] != effective_service["dueAt"]
+                            ):
+                                raise TrialValidationError(
+                                    f"{service_field} must record one first response after acknowledgement "
+                                    "without changing service state."
+                                )
+                            first_response_ready = True
                         effective_service = {
                             "priority": service_event["priority"],
                             "owner": owner,
@@ -5938,9 +5971,15 @@ def _validate_support_case_resolved(
             "commerce.order.support_case_resolved must resolve exactly one case."
         )
     before_case, after_case = changed[0]
+    triaged = all(field in before_case for field in ("priority", "owner", "dueAt"))
+    response_ready = any(
+        isinstance(event, Mapping) and event.get("kind") == "first_response_ready"
+        for event in before_case.get("serviceEvents", [])
+    )
     if (
         before_case.get("status") != "open"
         or "resolution" in before_case
+        or (triaged and not response_ready)
         or after_case.get("status") != "resolved"
         or not isinstance(after_case.get("resolution"), Mapping)
         or _without(before_case, frozenset({"status", "resolution"}))

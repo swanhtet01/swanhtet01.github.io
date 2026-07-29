@@ -4550,6 +4550,113 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertEqual(escalated["items"], current["items"])
         self.assertEqual(escalated["movements"], current["movements"])
 
+        overdue_reassignment_candidate = deepcopy(opened)
+        overdue_case = overdue_reassignment_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        overdue_case["serviceEvents"] = [{
+            "kind": "reassigned",
+            "owner": "Overdue recovery owner",
+            "priority": "high",
+            "dueAt": "2026-07-23T13:30:00.000Z",
+            "note": "Take accountable ownership of the overdue case.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-OVERDUE-REASSIGN",
+                captured_at="2026-07-23T14:00:00.000Z",
+                reason="Reassign overdue work without rewriting its target.",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }]
+        overdue_reassignment = apply_event(
+            opened,
+            "commerce.order.support_case_service_recorded",
+            overdue_reassignment_candidate,
+        )
+        self.assertEqual(
+            overdue_reassignment["orders"][0]["supportCases"][0]["serviceEvents"][0]["owner"],  # type: ignore[index]
+            "Overdue recovery owner",
+        )
+
+        unresolved_candidate = deepcopy(escalated)
+        unresolved_case = unresolved_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        unresolved_case["status"] = "resolved"
+        unresolved_case["resolution"] = {
+            "outcome": "no_action",
+            "note": "Invalid close before response readiness.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-EARLY-RESOLVE",
+                captured_at="2026-07-23T09:37:00.000Z",
+                evidence_reference=f"SUPPORT-RESOLUTION:{case_id}",
+            ),
+        }
+        with self.assertRaises(TrialValidationError):
+            apply_event(escalated, "commerce.order.support_case_resolved", unresolved_candidate)
+
+        response_before_ack_candidate = deepcopy(escalated)
+        response_before_ack_case = response_before_ack_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        response_before_ack_case["serviceEvents"] = [{
+            "kind": "first_response_ready",
+            "owner": "Tier 2 owner",
+            "priority": "urgent",
+            "dueAt": "2026-07-23T12:30:00.000Z",
+            "note": "Invalid response readiness before acknowledgement.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-EARLY-RESPONSE",
+                captured_at="2026-07-23T09:37:00.000Z",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }, *response_before_ack_case["serviceEvents"]]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                escalated,
+                "commerce.order.support_case_service_recorded",
+                response_before_ack_candidate,
+            )
+
+        acknowledged_candidate = deepcopy(escalated)
+        acknowledged_case = acknowledged_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        acknowledged_case["serviceEvents"] = [{
+            "kind": "acknowledged",
+            "owner": "Tier 2 owner",
+            "priority": "urgent",
+            "dueAt": "2026-07-23T12:30:00.000Z",
+            "note": "Delivery specialist accepted the case internally.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-ACKNOWLEDGE",
+                captured_at="2026-07-23T09:37:00.000Z",
+                reason="Acknowledge accountable ownership without sending a message.",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }, *acknowledged_case["serviceEvents"]]
+        acknowledged = apply_event(
+            escalated,
+            "commerce.order.support_case_service_recorded",
+            acknowledged_candidate,
+        )
+
+        response_candidate = deepcopy(acknowledged)
+        response_case = response_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        response_case["serviceEvents"] = [{
+            "kind": "first_response_ready",
+            "owner": "Tier 2 owner",
+            "priority": "urgent",
+            "dueAt": "2026-07-23T12:30:00.000Z",
+            "note": "Reviewed first response is ready for independent delivery.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-RESPONSE-READY",
+                captured_at="2026-07-23T09:38:00.000Z",
+                reason="Record response readiness without sending a customer message.",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }, *response_case["serviceEvents"]]
+        response_ready = apply_event(
+            acknowledged,
+            "commerce.order.support_case_service_recorded",
+            response_candidate,
+        )
+        self.assertEqual(
+            response_ready["orders"][0]["supportCases"][0]["serviceEvents"][0]["kind"],  # type: ignore[index]
+            "first_response_ready",
+        )
+
         resolution = {
             "outcome": "information_provided",
             "note": "Reviewed the delivery timeline with the customer record.",
@@ -4560,12 +4667,12 @@ class CommerceRuntimeTests(unittest.TestCase):
                 evidence_reference=f"SUPPORT-RESOLUTION:{case_id}",
             ),
         }
-        resolved_candidate = deepcopy(escalated)
+        resolved_candidate = deepcopy(response_ready)
         resolved_case = resolved_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
         resolved_case["status"] = "resolved"
         resolved_case["resolution"] = resolution
         resolved = apply_event(
-            escalated,
+            response_ready,
             "commerce.order.support_case_resolved",
             resolved_candidate,
         )
