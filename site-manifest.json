@@ -40,7 +40,7 @@
       "status": "available-in-app",
       "eyebrow": "Shop operations",
       "headline": "Keep every order and stock movement accountable.",
-      "description": "Run browser-local orders, stock, fulfilment, payment status, exceptions, and daily close across common channels. No live channel, checkout, payment, delivery, customer send, or external write is connected.",
+      "description": "Run browser-local selling, purchasing, stock by location and lot, Plant receipts, fulfilment, returns, payment status, exceptions, and daily close. No live channel, payment, delivery, customer send, or external write is connected.",
       "primaryCta": {
         "label": "Open Shop"
       },
@@ -51,7 +51,7 @@
       "modules": [
         "Sell: visual counter, cart, payment choice and accountable confirmation",
         "Orders: intake, fulfilment, payments, follow-up and close",
-        "Stock: catalogue, balances, receipts and reorder exceptions",
+        "Stock: locations, lots, purchase receipts, Plant receipts, transfers, counts and reorder exceptions",
         "Accountability: evidence, owner review and recovery"
       ],
       "internalTemplatePacks": [
@@ -316,8 +316,8 @@
       "status": "release-candidate-local",
       "eyebrow": "Ecommerce maker",
       "headline": "Create a Shop-backed storefront and hand customer intent to human review.",
-      "views": ["Storefront", "Preview", "Request receipt", "Shop inbox", "Shop review"],
-      "workflow": ["Choose products", "Write storefront copy", "Review phone and desktop", "Retain deterministic preview digest", "Create pending request receipt", "Optionally retain exact receipt in authenticated Shop inbox", "Recover or review exact request", "Choose payment review", "Open accountable Shop action gate"],
+      "views": ["Storefront", "Cart and quote", "Request receipt", "Shop review", "Returns"],
+      "workflow": ["Choose Shop-backed products", "Build cart", "Select pickup or delivery intent", "Review a 15-minute whole-MMK quote", "Save a recoverable request receipt", "Confirm exact Shop handoff", "Complete payment, fulfilment, returns, and refunds in Shop"],
       "templates": [
         {
           "id": "social-storefront",
@@ -344,8 +344,8 @@
           "metric": "Qualified wholesale requests and review cycle time"
         }
       ],
-      "proof": ["Read-only Shop catalogue snapshot", "Locked price and availability projection", "Deterministic SHA-256 preview digest", "Exact retained-ledger membership", "Idempotent receipt and exact managed replay", "Revision, action-identity, and cross-tenant conflict rejection", "Bootstrap recovery", "Unchanged Shop orders and stock movements", "Human-confirmed source-locked Shop draft", "83 Shop runtime checks", "Stale, duplicate, unknown, sold-out, repriced, insufficient-stock, oversized-inbox, and tampered request rejection"],
-      "boundaries": ["No duplicate stock ledger", "No isolated hosted tenant proof", "Managed inbox uses a 100-entry revisioned Shop workspace pilot envelope; a normalized indexed queue is gated on measured scale", "No Shop order or stock reservation before separate accountable confirmation", "No cart or payment initiation", "No delivery execution", "No customer send", "No publishing", "No external write"]
+      "proof": ["Read-only Shop catalogue snapshot", "Locked price and availability projection", "Deterministic SHA-256 preview digest", "Deterministic 15-minute checkout quote", "Recoverable cart and request state", "Exact retained-ledger membership", "Idempotent receipt and exact managed replay", "Revision, action-identity, and cross-tenant conflict rejection", "Bootstrap recovery", "Unchanged Shop orders and stock movements", "Human-confirmed source-locked Shop draft", "Payment remains unauthorized before Shop", "23 Ecommerce buying runtime checks", "Stale, duplicate, unknown, sold-out, repriced, insufficient-stock, oversized-inbox, and tampered request rejection"],
+      "boundaries": ["No duplicate stock ledger", "No isolated hosted tenant proof", "Managed inbox uses a 100-entry revisioned Shop workspace pilot envelope; a normalized indexed queue is gated on measured scale", "No Shop order or stock reservation before separate accountable confirmation", "No payment authorization or charge", "Delivery stays an intent until Shop confirms fee and fulfilment", "Returns and refunds are completed in Shop", "No customer send", "No publishing", "No external write"]
     }
   ],
   "sharedCapabilities": [
