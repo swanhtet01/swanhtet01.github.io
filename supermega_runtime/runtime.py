@@ -734,6 +734,26 @@ def _ecommerce_order_queue_import_plan(
     }
 
 
+def _ecommerce_order_queue_identity(request: Request, body: Mapping[str, Any]) -> tuple[str, str]:
+    try:
+        principal = resolve_trial_principal(request)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="trial_auth_unavailable") from exc
+    if principal is not None:
+        workspace_id = principal.workspace_id
+        body_workspace_id = _text(body.get("workspace_id"))
+        if body_workspace_id and body_workspace_id != workspace_id:
+            raise HTTPException(status_code=403, detail="workspace_id does not match trusted identity.")
+        return workspace_id, "trusted_managed_identity"
+    identity_secret = _text(os.getenv("SUPERMEGA_TRIAL_IDENTITY_SECRET"))
+    if identity_secret or SupabaseAuthConfig.from_environment().ready:
+        raise HTTPException(status_code=401, detail="trial_auth_required")
+    workspace_id = _text(body.get("workspace_id") or request.headers.get("x-supermega-workspace-id"))
+    if not _canonical_text(workspace_id, 128):
+        raise HTTPException(status_code=400, detail="workspace_id is required.")
+    return workspace_id, "isolated_demo_untrusted_workspace"
+
+
 def create_app() -> FastAPI:
     database_url = _text(os.getenv("SUPERMEGA_DATABASE_URL"))
     store = PostgresTrialStore(
@@ -876,9 +896,7 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="Request body must be JSON.") from exc
         if not isinstance(body, dict):
             raise HTTPException(status_code=400, detail="Request body must be an object.")
-        workspace_id = _text(body.get("workspace_id") or request.headers.get("x-supermega-workspace-id"))
-        if not _canonical_text(workspace_id, 128):
-            raise HTTPException(status_code=400, detail="workspace_id is required.")
+        workspace_id, identity_authority = _ecommerce_order_queue_identity(request, body)
         if not _is_record(body.get("packet")):
             raise HTTPException(status_code=400, detail="packet is required.")
         try:
@@ -889,6 +907,7 @@ def create_app() -> FastAPI:
         return {
             "status": "ready",
             "validation": validation,
+            "identity_authority": identity_authority,
             "external_writes_performed": False,
             "secret_values_exposed": False,
         }
@@ -901,9 +920,7 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="Request body must be JSON.") from exc
         if not isinstance(body, dict):
             raise HTTPException(status_code=400, detail="Request body must be an object.")
-        workspace_id = _text(body.get("workspace_id") or request.headers.get("x-supermega-workspace-id"))
-        if not _canonical_text(workspace_id, 128):
-            raise HTTPException(status_code=400, detail="workspace_id is required.")
+        workspace_id, identity_authority = _ecommerce_order_queue_identity(request, body)
         if not _is_record(body.get("packet")):
             raise HTTPException(status_code=400, detail="packet is required.")
         if not _is_record(body.get("approval_packet")):
@@ -917,6 +934,7 @@ def create_app() -> FastAPI:
         return {
             "status": "ready",
             "plan": plan,
+            "identity_authority": identity_authority,
             "external_writes_performed": False,
             "secret_values_exposed": False,
         }

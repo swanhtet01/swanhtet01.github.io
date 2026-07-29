@@ -338,6 +338,7 @@ async function run() {
         && payload.validation.status === 'ready_for_owner_review'
         && payload.validation.workspace_id === 'verify-workspace'
         && payload.validation.required_capability === 'commerce.write'
+        && payload.identity_authority === 'isolated_demo_untrusted_workspace'
         && payload.validation.external_writes_performed === false
         && payload.external_writes_performed === false,
     )
@@ -391,6 +392,7 @@ async function run() {
         && payload.plan.status === 'ready_for_managed_apply'
         && payload.plan.target_adapter === 'shop_order_queue'
         && String(payload.plan.idempotency_key || '').startsWith('ecommerce-shop-queue:')
+        && payload.identity_authority === 'isolated_demo_untrusted_workspace'
         && payload.plan.external_writes_performed === false
         && payload.external_writes_performed === false,
     )
@@ -440,6 +442,7 @@ async function run() {
         contract: orderQueueValidation.body.validation.contract,
         status: orderQueueValidation.body.validation.status,
         writesPerformed: orderQueueValidation.body.validation.external_writes_performed,
+        identityAuthority: orderQueueValidation.body.identity_authority,
         tamperRejected: tamperedOrderQueueValidation.response.status === 422,
       },
       ecommerceOrderQueueImportPlan: {
@@ -447,6 +450,7 @@ async function run() {
         status: orderQueueImportPlan.body.plan.status,
         targetAdapter: orderQueueImportPlan.body.plan.target_adapter,
         writesPerformed: orderQueueImportPlan.body.plan.external_writes_performed,
+        identityAuthority: orderQueueImportPlan.body.identity_authority,
         tamperRejected: tamperedOrderQueueImportPlan.response.status === 422,
       },
     }

@@ -520,6 +520,11 @@ export function assertManagedEcommerceOrderQueueValidation(
       code: 'managed_ecommerce_order_queue_validation_invalid',
     })
   }
+  if (response.identity_authority !== 'trusted_managed_identity') {
+    throw new ManagedTrialError('The managed Ecommerce queue check was not bound to trusted workspace identity.', {
+      code: 'managed_ecommerce_order_queue_identity_untrusted',
+    })
+  }
   const validation = response.validation as Record<string, unknown>
   const expected = buildManagedEcommerceOrderQueueValidation(packet, expectedIdentity)
   if (validation.contract !== expected.contract
@@ -553,6 +558,11 @@ export function assertManagedEcommerceOrderQueueImportPlan(
   if (!isRecord(response) || !isRecord(response.plan)) {
     throw new ManagedTrialError('The managed workspace returned an invalid Ecommerce import plan.', {
       code: 'managed_ecommerce_order_queue_import_plan_invalid',
+    })
+  }
+  if (response.identity_authority !== 'trusted_managed_identity') {
+    throw new ManagedTrialError('The managed Ecommerce import plan was not bound to trusted workspace identity.', {
+      code: 'managed_ecommerce_order_queue_identity_untrusted',
     })
   }
   const plan = response.plan as Record<string, unknown>

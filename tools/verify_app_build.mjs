@@ -958,6 +958,11 @@ if (!serviceRuntimeSource.includes('@app.post("/api/trial/v1/ecommerce/order-que
   || !serviceRuntimeSource.includes('"target_adapter": "shop_order_queue"')
   || !serviceRuntimeSource.includes('"idempotency_key": f"ecommerce-shop-queue:{digest[:24]}"')
   || !serviceRuntimeSource.includes('"external_writes_performed": False')
+  || !serviceRuntimeSource.includes('def _ecommerce_order_queue_identity(')
+  || !serviceRuntimeSource.includes('return workspace_id, "trusted_managed_identity"')
+  || !serviceRuntimeSource.includes('return workspace_id, "isolated_demo_untrusted_workspace"')
+  || !serviceRuntimeSource.includes('raise HTTPException(status_code=401, detail="trial_auth_required")')
+  || !serviceRuntimeSource.includes('"identity_authority": identity_authority')
   || !serviceRuntimeSource.includes('"required_capability": "commerce.write"')
   || !serviceRuntimeSource.includes('"external_writes_performed": False')
   || !serviceRuntimeSource.includes('"secret_values_exposed": False')
@@ -966,6 +971,7 @@ if (!serviceRuntimeSource.includes('@app.post("/api/trial/v1/ecommerce/order-que
   || !serviceRuntimeSource.includes('raise HTTPException(status_code=422')
   || !localDevSource.includes('/api/trial/v1/ecommerce/order-queue/validate')
   || !localDevSource.includes('/api/trial/v1/ecommerce/order-queue/import-plan')
+  || !localDevSource.includes("payload.identity_authority === 'isolated_demo_untrusted_workspace'")
   || !localDevSource.includes('tamperedOrderQueueImportPlan.response.status === 422')
   || !localDevSource.includes('tamperRejected === true')) fail('ecommerce_order_queue_api_contract_missing')
 if (!coreSource.includes('const plantRows = [')
@@ -2697,6 +2703,8 @@ if (!managedTrialSource.includes('export async function validateManagedClientImp
   || !managedTrialSource.includes('export async function planManagedEcommerceOrderQueueImport')
   || !managedTrialSource.includes("'/api/trial/v1/ecommerce/order-queue/import-plan'")
   || !managedTrialSource.includes("target_adapter: 'shop_order_queue'")
+  || !managedTrialSource.includes("response.identity_authority !== 'trusted_managed_identity'")
+  || !managedTrialSource.includes("code: 'managed_ecommerce_order_queue_identity_untrusted'")
   || !managedTrialSource.includes('export function buildManagedEcommerceOrderQueueValidation')
   || !managedTrialSource.includes('export function assertManagedEcommerceOrderQueueValidation')
   || !managedTrialSource.includes("'production_queue_write'")
@@ -4603,7 +4611,7 @@ async function verifyManagedClientImportRuntime() {
       && orderQueueValidation.forbidden_until_applied.includes('managed_activation')
       && orderQueueValidation.external_writes_performed === false, 'managed_ecommerce_order_queue_validation_invalid')
     assert(managedTrial.assertManagedEcommerceOrderQueueValidation(
-      { validation: orderQueueValidation },
+      { validation: orderQueueValidation, identity_authority: 'trusted_managed_identity' },
       orderQueuePacket,
       identity,
     ) === orderQueueValidation, 'managed_ecommerce_order_queue_validation_rejected')
@@ -4657,14 +4665,14 @@ async function verifyManagedClientImportRuntime() {
       next_step: 'Support may prepare one idempotent managed Shop queue import command from this plan after owner approval is decided.',
     }
     assert(managedTrial.assertManagedEcommerceOrderQueueImportPlan(
-      { plan: orderQueueImportPlan },
+      { plan: orderQueueImportPlan, identity_authority: 'trusted_managed_identity' },
       orderQueuePacket,
       orderQueueApprovalPacket,
       identity,
     ) === orderQueueImportPlan, 'managed_ecommerce_order_queue_import_plan_rejected')
     rejects(
       () => managedTrial.assertManagedEcommerceOrderQueueImportPlan(
-        { plan: { ...orderQueueImportPlan, external_writes_performed: true } },
+        { plan: { ...orderQueueImportPlan, external_writes_performed: true }, identity_authority: 'trusted_managed_identity' },
         orderQueuePacket,
         orderQueueApprovalPacket,
         identity,
@@ -4694,10 +4702,27 @@ async function verifyManagedClientImportRuntime() {
       ['forbidden', { ...orderQueueValidation, forbidden_until_applied: orderQueueValidation.forbidden_until_applied.filter((action) => action !== 'managed_activation') }],
     ]) {
       rejects(
-        () => managedTrial.assertManagedEcommerceOrderQueueValidation({ validation: changed }, orderQueuePacket, identity),
+        () => managedTrial.assertManagedEcommerceOrderQueueValidation({ validation: changed, identity_authority: 'trusted_managed_identity' }, orderQueuePacket, identity),
         `managed_ecommerce_order_queue_${label}_tamper_accepted`,
       )
     }
+    rejects(
+      () => managedTrial.assertManagedEcommerceOrderQueueValidation(
+        { validation: orderQueueValidation, identity_authority: 'isolated_demo_untrusted_workspace' },
+        orderQueuePacket,
+        identity,
+      ),
+      'managed_ecommerce_order_queue_untrusted_identity_accepted',
+    )
+    rejects(
+      () => managedTrial.assertManagedEcommerceOrderQueueImportPlan(
+        { plan: orderQueueImportPlan, identity_authority: 'isolated_demo_untrusted_workspace' },
+        orderQueuePacket,
+        orderQueueApprovalPacket,
+        identity,
+      ),
+      'managed_ecommerce_order_queue_import_plan_untrusted_identity_accepted',
+    )
     managedClientImportRuntimeChecks += 3
     assert(await managedTrial.managedClientImportPackageDigest(staged) === packageDigest, 'managed_client_import_package_digest_not_deterministic')
     assert(await managedTrial.managedClientImportPackageDigest({ ...staged, owner: 'Different owner' }) !== packageDigest, 'managed_client_import_context_not_digest_bound')
