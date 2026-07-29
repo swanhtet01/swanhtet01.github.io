@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import test from 'node:test'
 
 import { runAllyCeoLocalCycle } from './run_ally_ceo_local_cycle.mjs'
@@ -58,6 +59,16 @@ function completedOutcomeLine(outcomeId, index = 0, status = 'complete') {
   const queueId = (index + 1).toString(16).padStart(12, '0')
   const jobId = (index + 101).toString(16).padStart(12, '0')
   return `${queueId}  ${status.padEnd(14)}  p=100  2026-07-29T00:00:00Z  project=SuperMega  playbook=-  job=${jobId}  [ALLY_CEO_OUTCOME:2026-07-29:${outcomeId}] prior accepted outcome\n`
+}
+
+function legacyDailyHash(version = '2026-07-29.10') {
+  return createHash('sha256').update([
+    'supermega.ally-ceo-local-cycle.v1',
+    version,
+    'a'.repeat(64),
+    'daily-company-control',
+    'operations,chief-of-staff',
+  ].join('|')).digest('hex').slice(0, 12)
 }
 
 const audit = (eligible = true) => JSON.stringify({
@@ -171,7 +182,13 @@ function harness(overrides = {}) {
       return `Queue item ${queueId} completed as job ${jobId}; quality=passed\nReport: C:\\state\\outputs\\report.md\n`
     }
     if (args[0] === 'show') return JSON.stringify({
-      job: [args[1], 'objective', 'complete', '2026-07-29T00:00:00Z', 'C:\\state\\outputs\\report.md'],
+      job: [
+        args[1],
+        overrides.jobObjectives?.[args[1]] || 'objective',
+        'complete',
+        '2026-07-29T00:00:00Z',
+        overrides.reportPaths?.[args[1]] || 'C:\\state\\outputs\\report.md',
+      ],
       evaluation: { passed: true },
       events: Array.from({ length: overrides.modelEventCount ?? 3 }, () => ['model_metrics', '{}']),
     })
@@ -443,6 +460,89 @@ test('quality-passed reports with withheld specialist work cannot advance CEO co
     ),
     /ally_ceo_local_cycle_specialist_section_rejected/,
   )
+})
+
+test('one rejected legacy outcome can be repaired once under the current quality contract', async () => {
+  const oldQueueId = 'f'.repeat(12)
+  const oldJobId = 'e'.repeat(12)
+  const oldReportPath = 'C:\\state\\outputs\\legacy.md'
+  const marker = `[ALLY_CEO_CYCLE:${legacyDailyHash()}]`
+  const state = harness({
+    queueList: `${oldQueueId}  complete        p=100  2026-07-29T00:00:00Z  project=SuperMega  playbook=-  job=${oldJobId}  ${marker} legacy cycle\n`,
+    jobObjectives: { [oldJobId]: `${marker} legacy objective` },
+    reportPaths: { [oldJobId]: oldReportPath },
+    modelEventCount: 2,
+  })
+  const withheldReport = acceptedStructuredReport.replace(
+    'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
+    'Not verified or performed: specialist draft withheld after incomplete model output.',
+  )
+  const result = await runAllyCeoLocalCycle(
+    { execute: true, repairRejected: true },
+    {
+      plan: plan(),
+      runCommand: state.runCommand,
+      inspectReport: async (path) => {
+        const text = path === oldReportPath ? withheldReport : acceptedStructuredReport
+        return { path, bytes: Buffer.byteLength(text), digest: 'sha256:' + '2'.repeat(64), text }
+      },
+    },
+  )
+  assert.equal(result.status, 'accepted')
+  assert.deepEqual(result.repair, {
+    queueId: oldQueueId,
+    jobId: oldJobId,
+    reason: 'ally_ceo_local_cycle_specialist_section_rejected',
+  })
+  assert.equal(result.queueWrites, 1)
+  const addedObjective = state.calls.find((call) => call.args?.[1] === 'add').args[2]
+  assert.match(addedObjective, /\[ALLY_CEO_REPAIR:2026-07-29:daily-company-control\]/)
+  assert.doesNotMatch(addedObjective, /\[ALLY_CEO_OUTCOME:/)
+})
+
+test('legacy repair is execution-only and never retries a rejected current-version outcome', async () => {
+  const beforeExecution = harness()
+  await assert.rejects(
+    runAllyCeoLocalCycle(
+      { execute: false, repairRejected: true },
+      { plan: plan(), runCommand: beforeExecution.runCommand },
+    ),
+    /ally_ceo_local_cycle_legacy_repair_requires_execution/,
+  )
+  assert.equal(beforeExecution.calls.length, 0)
+
+  const preview = await runAllyCeoLocalCycle(
+    { execute: false },
+    { plan: plan(), runCommand: harness().runCommand },
+  )
+  const oldQueueId = 'f'.repeat(12)
+  const oldJobId = 'e'.repeat(12)
+  const currentMarker = `[ALLY_CEO_CYCLE:${preview.cycleHash.slice(0, 12)}]`
+  const state = harness({
+    queueList: `${oldQueueId}  complete        p=100  2026-07-29T00:00:00Z  project=SuperMega  playbook=-  job=${oldJobId}  ${currentMarker} current cycle\n`,
+    jobObjectives: { [oldJobId]: `${currentMarker} current objective` },
+  })
+  const withheldReport = acceptedStructuredReport.replace(
+    'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
+    'Not verified or performed: specialist draft withheld after incomplete model output.',
+  )
+  await assert.rejects(
+    runAllyCeoLocalCycle(
+      { execute: true, repairRejected: true },
+      {
+        plan: plan(),
+        runCommand: state.runCommand,
+        inspectReport: async () => ({
+          path: 'C:\\state\\outputs\\current.md',
+          bytes: Buffer.byteLength(withheldReport),
+          digest: 'sha256:' + '3'.repeat(64),
+          text: withheldReport,
+        }),
+      },
+    ),
+    /ally_ceo_local_cycle_legacy_repair_not_allowed/,
+  )
+  assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)
 })
 
 test('a locally passed report is still rejected when it denies known missing proof', async () => {

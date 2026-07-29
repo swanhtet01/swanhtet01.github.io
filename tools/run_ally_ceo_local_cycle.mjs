@@ -45,6 +45,11 @@ const OUTCOME_SEQUENCE = Object.freeze([
   'growth-pipeline-control',
   'finance-risk-control',
 ])
+const LEGACY_REPAIRABLE_REASONS = Object.freeze(new Set([
+  'ally_ceo_local_cycle_report_semantics_rejected',
+  'ally_ceo_local_cycle_report_citations_rejected',
+  'ally_ceo_local_cycle_specialist_section_rejected',
+]))
 
 function fail(reason) {
   throw new Error(reason)
@@ -117,21 +122,28 @@ function planSpec(plan) {
   ].join('|')).slice(0, 12))
   const shortHash = cycleHash.slice(0, 12)
   const outcomeMarker = `[ALLY_CEO_OUTCOME:${period}:${outcomeId}]`
-  const objective = [
-    outcomeMarker,
-    `[ALLY_CEO_CYCLE:${shortHash}]`,
-    `[ALLY_CEO_PLAN:${planShortHash}]`,
+  const repairMarker = `[ALLY_CEO_REPAIR:${period}:${outcomeId}]`
+  const objectiveBody = [
     `Using imported SuperMega project evidence, produce one concise internal ${OUTCOME_BRIEFS[outcomeId]} brief and separate verified facts from assumptions.`,
     'Use CURRENT.md, hq/NOW.md, hq/portfolio.json, and site-manifest.json as current authority; treat older handoff files as historical context that cannot prove current completion.',
     'Lead with current limitations: the live app is not a managed system of record, and managed persistence and security remain not ready.',
     'Define 1 reusable task template under Task templates for the highest-value internal next action, plus success checks, failure modes that expose missing proof, and owner gates.',
     'Every verified claim must name its exact source filename and matching supplied evidence ID.',
     'Each specialist section must be at most 90 words and contain exactly these advisory labels: Proposed next action, Assumption, and Missing proof. Specialists must not claim execution or verified facts; the evidence-grounded executive synthesis remains code-owned. The executive synthesis must be at most 120 words and end with: Owner review required.',
+  ]
+  const objective = [outcomeMarker, `[ALLY_CEO_CYCLE:${shortHash}]`, `[ALLY_CEO_PLAN:${planShortHash}]`, ...objectiveBody].join(' ')
+  const repairObjective = [
+    repairMarker,
+    `[ALLY_CEO_CYCLE:${shortHash}]`,
+    `[ALLY_CEO_PLAN:${planShortHash}]`,
+    'Replace one rejected legacy control artifact under the current quality contract; do not retry a current-version failure.',
+    ...objectiveBody,
   ].join(' ')
   return {
     outcomeId,
     period,
     outcomeMarker,
+    repairMarker,
     planHash: hash,
     cycleHash,
     shortHash,
@@ -141,6 +153,8 @@ function planSpec(plan) {
     roles,
     objective,
     objectiveDigest: `sha256:${sha256(objective)}`,
+    repairObjective,
+    repairObjectiveDigest: `sha256:${sha256(repairObjective)}`,
   }
 }
 
@@ -264,7 +278,7 @@ function findExistingCycle(queueText, marker) {
   if (typeof queueText !== 'string' || Buffer.byteLength(queueText, 'utf8') > MAX_COMMAND_BYTES) {
     fail('ally_ceo_local_cycle_queue_inventory_invalid')
   }
-  if (typeof marker !== 'string' || !/^\[ALLY_CEO_(?:OUTCOME|CYCLE):[A-Za-z0-9:-]+\]$/.test(marker)) {
+  if (typeof marker !== 'string' || !/^\[ALLY_CEO_(?:OUTCOME|CYCLE|REPAIR):[A-Za-z0-9:-]+\]$/.test(marker)) {
     fail('ally_ceo_local_cycle_queue_marker_invalid')
   }
   const parsed = queueText.split(/\r?\n/)
@@ -287,8 +301,9 @@ function findExistingCycle(queueText, marker) {
 
 function existingForSpec(queueText, spec) {
   const markers = [
-    spec.outcomeMarker,
     `[ALLY_CEO_CYCLE:${spec.shortHash}]`,
+    spec.repairMarker,
+    spec.outcomeMarker,
     ...spec.legacyShortHashes.map((hash) => `[ALLY_CEO_CYCLE:${hash}]`),
   ]
   for (const marker of markers) {
@@ -478,9 +493,10 @@ function validateAcceptedReport(value, requiredRoles) {
   return { path: value.path, bytes: value.bytes, digest }
 }
 
-async function inspectExistingCycle(existing, requiredRoles, runCommand, inspectReport) {
+async function inspectExistingCycle(existing, spec, runCommand, inspectReport) {
   let report = null
   let reason = null
+  let legacyExecution = false
   if (existing.status === 'complete' && existing.jobId) {
     try {
       const detail = parseJson(
@@ -491,10 +507,12 @@ async function inspectExistingCycle(existing, requiredRoles, runCommand, inspect
         || detail.job[0] !== existing.jobId
         || detail.job[2] !== 'complete'
         || detail.evaluation?.passed !== true
+        || typeof detail.job[1] !== 'string'
         || typeof detail.job[4] !== 'string') {
         fail('ally_ceo_local_cycle_existing_job_rejected')
       }
-      report = validateAcceptedReport(await inspectReport(detail.job[4]), requiredRoles)
+      legacyExecution = spec.legacyShortHashes.some((hash) => detail.job[1].includes(`[ALLY_CEO_CYCLE:${hash}]`))
+      report = validateAcceptedReport(await inspectReport(detail.job[4]), spec.roles)
     } catch (error) {
       reason = String(error?.message || 'ally_ceo_local_cycle_existing_job_rejected').slice(0, 160)
     }
@@ -503,6 +521,7 @@ async function inspectExistingCycle(existing, requiredRoles, runCommand, inspect
     accepted: existing.status === 'complete' && Boolean(report) && !reason,
     report,
     reason,
+    legacyExecution,
   }
 }
 
@@ -518,7 +537,7 @@ async function selectRotatingPlan({ buildPlan, queueText, runCommand, inspectRep
     period ??= spec.period
     const existing = existingForSpec(queueText, spec)
     if (!existing) return { allDone: false, plan, spec, existing: null, inspection: null, completedOutcomeIds }
-    const inspection = await inspectExistingCycle(existing, spec.roles, runCommand, inspectReport)
+    const inspection = await inspectExistingCycle(existing, spec, runCommand, inspectReport)
     if (!inspection.accepted) return { allDone: false, plan, spec, existing, inspection, completedOutcomeIds }
     completedOutcomeIds.push(spec.outcomeId)
   }
@@ -538,9 +557,11 @@ async function selectRotatingPlan({ buildPlan, queueText, runCommand, inspectRep
 export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   const execute = input.execute === true
   const refreshKnowledge = input.refreshKnowledge === true
+  const repairRejected = input.repairRejected === true
   const provider = input.provider || 'ollama'
   const model = input.model || 'qwen3.5:0.8b'
   if (refreshKnowledge && !execute) fail('ally_ceo_local_cycle_knowledge_refresh_requires_execution')
+  if (repairRejected && !execute) fail('ally_ceo_local_cycle_legacy_repair_requires_execution')
   if (!['ollama', 'mock'].includes(provider) || !/^[a-zA-Z0-9._:-]{1,80}$/.test(model)) {
     fail('ally_ceo_local_cycle_provider_invalid')
   }
@@ -615,37 +636,51 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     }
   }
   const { spec, existing, completedOutcomeIds } = rotation
+  let repair = null
   if (existing) {
-    const inspected = rotation.inspection || await inspectExistingCycle(existing, spec.roles, runCommand, inspectReport)
-    return {
-      ok: inspected.accepted,
-      contract: ALLY_CEO_LOCAL_CYCLE_CONTRACT,
-      status: inspected.reason ? 'existing_rejected' : 'existing',
-      replayed: true,
-      period: spec.period,
-      outcomeId: spec.outcomeId,
-      completedOutcomeIds,
-      planHash: spec.planHash,
-      cycleHash: spec.cycleHash,
-      workOrderId: spec.workOrderId,
-      agents: spec.agents,
-      roles: spec.roles,
-      objectiveDigest: spec.objectiveDigest,
-      queueId: existing.queueId,
-      jobId: existing.jobId,
-      queueStatus: existing.status,
-      qualityPassed: inspected.accepted,
-      report: inspected.report,
-      reason: inspected.reason,
-      host,
-      sourceCount,
-      knowledgeRefresh,
-      modelCalls: 0,
-      queueWrites: 0,
-      controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
+    const inspected = rotation.inspection || await inspectExistingCycle(existing, spec, runCommand, inspectReport)
+    if (repairRejected && !inspected.accepted) {
+      if (existing.status !== 'complete'
+        || !existing.jobId
+        || !inspected.legacyExecution
+        || !LEGACY_REPAIRABLE_REASONS.has(inspected.reason)) {
+        fail('ally_ceo_local_cycle_legacy_repair_not_allowed')
+      }
+      repair = { queueId: existing.queueId, jobId: existing.jobId, reason: inspected.reason }
+    } else {
+      return {
+        ok: inspected.accepted,
+        contract: ALLY_CEO_LOCAL_CYCLE_CONTRACT,
+        status: inspected.reason ? 'existing_rejected' : 'existing',
+        replayed: true,
+        period: spec.period,
+        outcomeId: spec.outcomeId,
+        completedOutcomeIds,
+        planHash: spec.planHash,
+        cycleHash: spec.cycleHash,
+        workOrderId: spec.workOrderId,
+        agents: spec.agents,
+        roles: spec.roles,
+        objectiveDigest: spec.objectiveDigest,
+        queueId: existing.queueId,
+        jobId: existing.jobId,
+        queueStatus: existing.status,
+        qualityPassed: inspected.accepted,
+        report: inspected.report,
+        reason: inspected.reason,
+        host,
+        sourceCount,
+        knowledgeRefresh,
+        modelCalls: 0,
+        queueWrites: 0,
+        controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
+      }
     }
+  } else if (repairRejected) {
+    fail('ally_ceo_local_cycle_legacy_repair_not_available')
   }
 
+  const executionObjective = repair ? spec.repairObjective : spec.objective
   const base = {
     ok: true,
     contract: ALLY_CEO_LOCAL_CYCLE_CONTRACT,
@@ -659,7 +694,8 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     workOrderId: spec.workOrderId,
     agents: spec.agents,
     roles: spec.roles,
-    objectiveDigest: spec.objectiveDigest,
+    objectiveDigest: repair ? spec.repairObjectiveDigest : spec.objectiveDigest,
+    repair,
     host,
     sourceCount,
     knowledgeRefresh,
@@ -669,7 +705,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
 
   const added = await runCommand({
     kind: 'local',
-    args: ['queue', 'add', spec.objective, '--project', 'SuperMega', '--roles', spec.roles.join(','), '--priority', '100'],
+    args: ['queue', 'add', executionObjective, '--project', 'SuperMega', '--roles', spec.roles.join(','), '--priority', '100'],
     timeoutMs: 30_000,
   })
   const queueId = parseQueueAdd(added)
@@ -735,11 +771,12 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
 }
 
 function parseArgs(argv) {
-  const result = { execute: false, refreshKnowledge: false, provider: 'ollama' }
+  const result = { execute: false, refreshKnowledge: false, repairRejected: false, provider: 'ollama' }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--execute') result.execute = true
     else if (arg === '--refresh-knowledge') result.refreshKnowledge = true
+    else if (arg === '--repair-rejected') result.repairRejected = true
     else if (arg === '--provider') result.provider = argv[++index]
     else if (arg === '--help' || arg === '-h') result.help = true
     else fail(`ally_ceo_local_cycle_unknown_argument:${arg}`)
@@ -755,8 +792,10 @@ async function main() {
       '',
       '  npm run company:ally:preflight',
       '  npm run company:ally:run',
+      '  npm run company:ally:repair',
       '',
       'Preflight is read-only. Run refreshes changed registered sources, then queues and executes one exact local mission.',
+      'Repair replaces at most one rejected prior-version artifact; a current-version failure is never retried.',
       'Missing, unavailable, unstable, or malformed source evidence fails before queue or model work.',
       'No connector, deployment, payment, message, or customer action is available.',
     ].join('\n') + '\n')
