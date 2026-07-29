@@ -670,6 +670,11 @@ type PlantJobImportReview = {
 const PLANT_JOB_IMPORT_MAX_BYTES = 180 * 1024
 const PLANT_JOB_IMPORT_MAX_ROWS = 50
 
+function plantJobImportCsvCell(value: string | number) {
+  const text = String(value)
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+}
+
 function parsePlantJobImportCsv(source: string) {
   const rows: string[][] = []
   let row: string[] = []
@@ -6065,6 +6070,35 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
   }
 
+  function buildSamplePlantJobImportCsv() {
+    const rows = [
+      ['job_id', 'line', 'product', 'target', 'owner', 'priority', 'due_at'],
+      ['JOB-AI-101', 'Line A', 'First production run', 120, 'Plant supervisor', 'urgent', localDateTimeInputValue(new Date(Date.now() + 10 * 60 * 60 * 1000))],
+      ['JOB-AI-102', 'Quality Lab', 'ISO release sample', 1, 'Quality owner', 'normal', localDateTimeInputValue(new Date(Date.now() + 12 * 60 * 60 * 1000))],
+    ]
+    return rows.map((row) => row.map(plantJobImportCsvCell).join(',')).join('\r\n')
+  }
+
+  function loadSamplePlantJobImportBatch() {
+    if (pendingAction) {
+      setNotice('Finish or cancel the pending Plant review before loading a sample job batch.')
+      return
+    }
+    const review = buildPlantJobImportReview(buildSamplePlantJobImportCsv())
+    setPlantJobImportReview(review)
+    setPlantJobImportSourceName('sample-plant-job-batch.csv')
+    if (review.firstReady) setJobDraft(review.firstReady)
+    setNotice(review.firstReady
+      ? 'Sample Plant job batch loaded and the first reviewed job was copied into the form. No production job, equipment command, material movement, accounting post, or managed write ran.'
+      : 'Sample Plant job batch was reviewed locally but no row is ready. No production job, equipment command, material movement, accounting post, or managed write ran.')
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'production',
+      route: productionLocation.pathname + productionLocation.search,
+      detail: 'Load sample Plant job batch',
+    })
+  }
+
   async function uploadPlantJobCsv(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0] ?? null
     event.currentTarget.value = ''
@@ -6505,6 +6539,17 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div><span className="core-eyebrow">Compliance dossier</span><strong>{plantComplianceDossierNext}</strong><small>AI summarizes ISO quality release, WCM closure, material traceability, output evidence, shift handoff, and cost-readiness into one audit packet. No certificate, quality release, costing, inventory valuation, equipment command, customer claim, or production write runs from this dossier.</small></div>
     <div className="plant-control-rows">{plantComplianceDossierRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
+  const plantJobRepairRows = plantJobImportReview
+    ? [
+        ['Ready rows', `${plantJobImportReview.readyRows}`],
+        ['Blocked rows', `${plantJobImportReview.blockedRows}`],
+        ['Next fix', plantJobImportReview.status === 'ready' ? 'Review copied job' : 'Fix ID, line, product, target, owner, due time, duplicates'],
+      ] as const
+    : [
+        ['Step 1', 'Load sample or upload CSV'],
+        ['Step 2', 'AI checks MES fields locally'],
+        ['Step 3', 'Review one copied job'],
+      ] as const
 
   if (tab === 'production') return <div className="operation-module">
     {productionBoundary}
@@ -6530,7 +6575,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           <section aria-label="Plant job CSV autopilot" className="plant-job-import">
             <div><span className="core-eyebrow">Job CSV autopilot</span><strong>Upload job list</strong><small>AI checks job ID, line, product, target, owner, priority, due time, and duplicates before copying one ready job into review. No production job, equipment command, material movement, accounting post, or managed write runs from this importer.</small></div>
             <div className="plant-job-import-actions">
+              <button className="core-button" disabled={Boolean(pendingAction)} onClick={loadSamplePlantJobImportBatch} type="button">Load sample job batch</button>
               <label className="plant-job-import-upload">Upload Plant job CSV<input accept=".csv,text/csv" disabled={Boolean(pendingAction)} onChange={uploadPlantJobCsv} type="file" /></label>
+              <div aria-label="AI Plant job repair checklist" className="plant-job-import-repair">{plantJobRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
               {plantJobImportReview ? <div className={`plant-job-import-review ${plantJobImportReview.status}`} role="status"><strong>{plantJobImportReview.status === 'ready' ? 'Ready for owner review' : 'Repair before Plant review'}</strong><span>{plantJobImportReview.summary}</span><small>{plantJobImportReview.readyRows} ready / {plantJobImportReview.blockedRows} blocked / no Plant write</small></div> : null}
               {plantJobImportSourceName ? <p className="plant-job-import-source">Local file: {plantJobImportSourceName}</p> : null}
             </div>
