@@ -1,17 +1,10 @@
 import { lazy, Suspense, type ChangeEvent, type Dispatch, type FormEvent, type MouseEvent, type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
-import siteManifest from '../../../site-manifest.json'
 import './core-app.css'
 import { WebsiteCommerceIntake } from '../products/WebsiteCommerceIntake'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
-import {
-  LEGACY_WEBSITE_STORAGE_KEY,
-  WEBSITE_ECOMMERCE_HANDOFF_KEY,
-  WEBSITE_STORAGE_KEY,
-  readWebsiteEcommerceHandoff,
-  type WebsiteOrderRecord,
-} from '../products/product-handoff'
+import { readWebsiteEcommerceHandoff, type WebsiteOrderRecord } from '../products/product-handoff'
 import {
   createManagedApproval,
   currentManagedIdentity,
@@ -29,6 +22,27 @@ import {
   type ManagedStateRecord,
 } from './managed-trial'
 import { recordBehaviorSignal } from './behavior-trail'
+import {
+  ACTION_KEY,
+  APPROVAL_KEY,
+  LEGACY_APPROVAL_KEYS,
+  LEGACY_SETUP_KEYS,
+  normalizeSetup,
+  pilotProgress,
+  pilotReady,
+  productContracts,
+  productDisplayName,
+  productFromPathname,
+  seedSetup,
+  SETUP_KEY,
+  SETUP_SYNC_EVENT,
+  setupProductFromQuery,
+  SHOP_ORDER_DRAFT_RESET_EPOCH_KEY,
+  SHOP_ORDER_DRAFT_RESET_PREFIX,
+  templateFor,
+  clientSetupPath,
+  type SetupState,
+} from './product-setup'
 import { formatTime, teamDefinitions, useTeamWorkspace } from './team-work'
 import { readPlantIndustryPackId } from './plant-industry-packs'
 import {
@@ -106,7 +120,6 @@ import {
 } from './commerce-workspace'
 import { projectShopInventory } from './shop-inventory-foundation'
 import { channelOrderDraftIsReady, type ChannelOrderDraft } from './channel-order-intake'
-import type { ClientSolutionId } from './client-onboarding'
 import type {
   CommerceOrderDraft,
   CommerceOrderDraftInput,
@@ -362,54 +375,9 @@ class ShopReviewRequiredError extends Error {}
 class PlantReviewRequiredError extends Error {}
 
 type ProductId = 'commerce' | 'production'
-export type SetupProductId = ClientSolutionId
-
-export function productDisplayName(product: SetupProductId) {
-  return productContracts[product].name
-}
-
-export function setupProductPreviewPath(product: SetupProductId) {
-  if (product === 'commerce') return '/shop/?tab=counter'
-  if (product === 'production') return '/plant/?tab=production'
-  if (product === 'website') return '/website/'
-  return '/ecommerce/'
-}
 
 function productCanonicalPath(product: ProductId) {
   return product === 'commerce' ? '/shop/' : '/plant/'
-}
-
-type WorkflowTemplate = {
-  id: string
-  name: string
-  outcome: string
-  workflow: string[]
-  entryPoints: string[]
-  metric: string
-}
-
-type ProductContract = {
-  id: SetupProductId
-  slug: string
-  name: string
-  status: string
-  headline: string
-  templates: WorkflowTemplate[]
-}
-
-export type SetupState = {
-  product: SetupProductId
-  templateId: string
-  workspace: string
-  owner: string
-  entryPoint: string
-  currentRecord: string
-  baseline: string
-  targetOutcome: string
-  authorityBoundary: string
-  acceptanceEvidence: string
-  startedAt?: string
-  savedAt?: string
 }
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
@@ -477,19 +445,7 @@ export type RuntimeHealth = {
 type CommerceTab = 'counter' | 'orders' | 'inventory'
 type ProductionTab = 'production' | 'control'
 
-export const APPROVAL_KEY = 'supermega.approvals.v3'
-export const SETUP_KEY = 'supermega.setup.v3'
-const SETUP_SYNC_EVENT = 'supermega:setup-updated'
-export const ACTION_KEY = 'supermega.accountable.actions.v1'
 const THEME_KEY = 'supermega.interface.theme.v1'
-export const STOREFRONT_DRAFT_RESET_PREFIX = 'supermega.ecommerce.storefront_draft.v2.'
-export const LEGACY_STOREFRONT_DRAFT_RESET_PREFIX = 'supermega.ecommerce.storefront_draft.v1.'
-export const LEGACY_STOREFRONT_DRAFT_RESET_KEY = 'supermega.ecommerce.storefront_draft.v1'
-export const SHOP_ORDER_DRAFT_RESET_PREFIX = 'supermega.shop.order_draft.v1.'
-export const SHOP_ORDER_DRAFT_RESET_EPOCH_KEY = 'supermega.shop.order_draft_reset.v1'
-const WEBSITE_RECOVERY_EXPORT_PREFIX = 'supermega.website.workspace.recovery.v1.'
-export const LEGACY_APPROVAL_KEYS = ['supermega.approvals.v2']
-export const LEGACY_SETUP_KEYS = ['supermega.setup.v2']
 
 type InterfaceTheme = 'light' | 'dark'
 
@@ -502,144 +458,6 @@ function initialInterfaceTheme(): InterfaceTheme {
     // Use the device preference when local theme storage is unavailable.
   }
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-}
-
-export function collectLocalProductRecords(storage: Pick<Storage, 'getItem' | 'key' | 'length'>) {
-  const exactKeys = new Set([
-    WEBSITE_STORAGE_KEY,
-    LEGACY_WEBSITE_STORAGE_KEY,
-    WEBSITE_ECOMMERCE_HANDOFF_KEY,
-    LEGACY_STOREFRONT_DRAFT_RESET_KEY,
-  ])
-  const records: Record<string, string> = {}
-  try {
-    for (let index = 0; index < storage.length; index += 1) {
-      const key = storage.key(index)
-      if (!key
-        || (!exactKeys.has(key)
-          && !key.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)
-          && !key.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)
-          && !key.startsWith(SHOP_ORDER_DRAFT_RESET_PREFIX)
-          && !key.startsWith(WEBSITE_RECOVERY_EXPORT_PREFIX))) continue
-      const value = storage.getItem(key)
-      if (value !== null) records[key] = value
-    }
-  } catch {
-    return {}
-  }
-  return records
-}
-
-function requireProductContract(id: SetupProductId): ProductContract {
-  const product = siteManifest.customerProducts.find((candidate) => candidate.runtimeId === id)
-  if (!product) throw new Error(`Missing ${id} product contract.`)
-  return {
-    id,
-    slug: product.id,
-    name: product.name,
-    status: product.status,
-    headline: product.headline,
-    templates: product.templates,
-  }
-}
-
-export const productContracts: Record<SetupProductId, ProductContract> = {
-  commerce: requireProductContract('commerce'),
-  production: requireProductContract('production'),
-  website: requireProductContract('website'),
-  ecommerce: requireProductContract('ecommerce'),
-}
-
-export function templatesFor(product: SetupProductId) {
-  return productContracts[product].templates
-}
-
-export function templateFor(product: SetupProductId, name: string) {
-  const templates = templatesFor(product)
-  const fallback = templates[0]
-  if (!fallback) throw new Error(`Missing ${product} workflow templates.`)
-  return templates.find((template) => template.id === name || template.name === name) ?? fallback
-}
-
-const seedCommerceTemplate = templateFor('commerce', '')
-
-const seedSetup: SetupState = {
-  product: 'commerce',
-  templateId: seedCommerceTemplate.id,
-  workspace: '',
-  owner: '',
-  entryPoint: seedCommerceTemplate.entryPoints[0] ?? '',
-  currentRecord: '',
-  baseline: '',
-  targetOutcome: '',
-  authorityBoundary: '',
-  acceptanceEvidence: '',
-}
-
-const pilotRequiredFields = ['workspace', 'owner', 'entryPoint', 'currentRecord', 'baseline', 'targetOutcome', 'authorityBoundary', 'acceptanceEvidence'] as const
-
-function normalizeSetup(value: SetupState) {
-  const source = (value && typeof value === 'object' ? value : seedSetup) as Omit<Partial<SetupState>, 'product'> & { product?: string; template?: string }
-  const product: SetupProductId = source.product === 'production' || source.product === 'plant'
-    ? 'production'
-    : source.product === 'website'
-      ? 'website'
-      : source.product === 'ecommerce'
-        ? 'ecommerce'
-        : 'commerce'
-  const template = templateFor(product, String(source.templateId || source.template || ''))
-  const sourceEntryPoint = String(source.entryPoint || '')
-  const normalized: SetupState = {
-    product,
-    templateId: template.id,
-    workspace: typeof source.workspace === 'string' ? source.workspace : '',
-    owner: typeof source.owner === 'string' ? source.owner : '',
-    entryPoint: template.entryPoints.includes(sourceEntryPoint) ? sourceEntryPoint : template.entryPoints[0] ?? '',
-    currentRecord: typeof source.currentRecord === 'string' ? source.currentRecord : '',
-    baseline: typeof source.baseline === 'string' ? source.baseline : '',
-    targetOutcome: typeof source.targetOutcome === 'string' ? source.targetOutcome : '',
-    authorityBoundary: typeof source.authorityBoundary === 'string' ? source.authorityBoundary : '',
-    acceptanceEvidence: typeof source.acceptanceEvidence === 'string' ? source.acceptanceEvidence : '',
-    ...(typeof source.startedAt === 'string' && source.startedAt ? { startedAt: source.startedAt } : {}),
-    ...(typeof source.savedAt === 'string' && source.savedAt ? { savedAt: source.savedAt } : {}),
-  }
-  return JSON.stringify(normalized) === JSON.stringify(value) ? value : normalized
-}
-
-export function setupProductFromQuery(value: string | null): SetupProductId | null {
-  if (!value) return null
-  return Object.values(productContracts).find((product) => product.slug === value || product.id === value)?.id ?? null
-}
-
-export function clientSetupPath(product: SetupProductId) {
-  return `/settings/?product=${encodeURIComponent(productContracts[product].slug)}`
-}
-
-export function managedTrialRequestUrl(product: SetupProductId, templateId: string) {
-  const query = new URLSearchParams({
-    product: productContracts[product].slug,
-    template: templateId,
-    utm_source: 'app',
-    utm_medium: 'guided_trial',
-  })
-  return `https://supermega.dev/contact/?${query.toString()}`
-}
-
-function productFromPathname(pathname: string): SetupProductId | null {
-  if (pathname.startsWith('/shop/')) return 'commerce'
-  if (pathname.startsWith('/plant/')) return 'production'
-  if (pathname.startsWith('/website/')) return 'website'
-  if (pathname.startsWith('/ecommerce/')) return 'ecommerce'
-  return null
-}
-
-export function pilotProgress(setup: SetupState) {
-  const complete = pilotRequiredFields.filter((field) => setup[field].trim()).length
-  return Math.round((complete / pilotRequiredFields.length) * 100)
-}
-
-export function pilotReady(setup: SetupState) {
-  return pilotProgress(setup) === 100 && Boolean(setup.savedAt)
 }
 
 const checkingRuntime: RuntimeHealth = {
