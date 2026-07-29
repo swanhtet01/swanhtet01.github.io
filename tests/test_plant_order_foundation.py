@@ -21,6 +21,7 @@ from supermega_runtime.plant_order_foundation import (
     project_plant_order,
     record_plant_order_effectiveness,
     record_plant_order_calibration,
+    record_plant_order_quality_rework,
     record_plant_order_operation,
     record_plant_order_output,
     release_plant_order,
@@ -340,6 +341,135 @@ class PlantOrderFoundationTests(unittest.TestCase):
         projection = project_plant_order(state)
         self.assertEqual(projection["operations"][0]["completedQuantity"], 1)
         self.assertEqual(projection["calibrations"][0]["certificateId"], "CERT-ASSEMBLY-002")
+
+    def test_v3_quality_hold_requires_attributed_rework_before_reinspection(self) -> None:
+        state = create_empty_plant_order_state()
+        state = apply_plant_order_plan(
+            state,
+            controlled_plan(),
+            proof(1, "approved controlled quality plan"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        state = check_state(state, sequence=2)
+        for sequence, centre in ((3, "WC-ASSEMBLY-01"), (4, "WC-TEST-01")):
+            state = record_plant_order_calibration(
+                state,
+                calibration_id=f"CAL-QUALITY-{sequence:03d}",
+                work_centre_id=centre,
+                certificate_id=f"CERT-{centre.removeprefix('WC-')}-QUALITY",
+                calibrated_at="2026-07-26T08:00:00+06:30",
+                valid_until="2027-07-26T10:00:00+06:30",
+                standard_reference="Approved quality reference standard",
+                proof=proof(sequence, f"reviewed {centre} calibration"),
+                expected_head_digest=state["headDigest"],
+            )["state"]
+        state = release_plant_order(
+            state,
+            release_id="REL-QUALITY-001",
+            availability_check_id="CHK-20260726-001",
+            proof=proof(5, "released controlled quality package"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        for sequence, material, lot, quantity in (
+            (6, "MAT-FILTER-001", "LOT-FILTER-2407", 15_000),
+            (7, "MAT-SHELL-001", "LOT-SHELL-2407", 20_000),
+        ):
+            state = issue_plant_order_material(
+                state,
+                issue_id=f"ISSUE-QUALITY-{sequence:03d}",
+                material_id=material,
+                input_lot_id=lot,
+                quantity_milli=quantity,
+                proof=proof(sequence, f"issued {material}"),
+                expected_head_digest=state["headDigest"],
+            )["state"]
+        for sequence, operation, minutes in (
+            (8, "OP-ASSEMBLY-10", 5_000),
+            (9, "OP-TEST-20", 10_000),
+        ):
+            state = record_plant_order_operation(
+                state,
+                operation_run_id=f"OPRUN-QUALITY-{sequence:03d}",
+                operation_id=operation,
+                quantity=10,
+                actual_minutes_milli=minutes,
+                proof=proof(sequence, f"completed {operation}"),
+                expected_head_digest=state["headDigest"],
+            )["state"]
+        state = record_plant_order_output(
+            state,
+            output_id="OUT-QUALITY-001",
+            output_batch_id="BATCH-20260726-401",
+            quantity=10,
+            proof=proof(10, "recorded controlled output"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        state = inspect_plant_order_output(
+            state,
+            inspection_id="INSP-QUALITY-FAIL-001",
+            output_batch_id="BATCH-20260726-401",
+            inspected_quantity=10,
+            accepted_quantity=8,
+            rejected_quantity=2,
+            result="fail",
+            proof=proof(11, "failed controlled inspection"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        with self.assertRaisesRegex(PlantOrderValidationError, "requires attributable rework"):
+            inspect_plant_order_output(
+                state,
+                inspection_id="INSP-QUALITY-BYPASS-001",
+                output_batch_id="BATCH-20260726-401",
+                inspected_quantity=10,
+                accepted_quantity=10,
+                rejected_quantity=0,
+                result="pass",
+                proof=proof(12, "attempted reinspection without rework"),
+                expected_head_digest=state["headDigest"],
+            )
+        with self.assertRaisesRegex(PlantOrderValidationError, "must equal the current rejected quantity"):
+            record_plant_order_quality_rework(
+                state,
+                rework_id="RWK-QUALITY-WRONG-001",
+                inspection_id="INSP-QUALITY-FAIL-001",
+                operation_id="OP-TEST-20",
+                quantity=1,
+                actual_minutes_milli=2_000,
+                owner="Quality lead",
+                cause="Pressure seal was incomplete.",
+                corrective_action="Reset fixture and repeat pressure cycle.",
+                proof=proof(12, "wrong rework quantity"),
+                expected_head_digest=state["headDigest"],
+            )
+        state = record_plant_order_quality_rework(
+            state,
+            rework_id="RWK-QUALITY-001",
+            inspection_id="INSP-QUALITY-FAIL-001",
+            operation_id="OP-TEST-20",
+            quantity=2,
+            actual_minutes_milli=2_000,
+            owner="Quality lead",
+            cause="Pressure seal was incomplete.",
+            corrective_action="Reset fixture and repeat pressure cycle.",
+            proof=proof(12, "reviewed attributable rework"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        projection = project_plant_order(state)
+        self.assertEqual(projection["qualityReworks"][0]["owner"], "Quality lead")
+        self.assertEqual(projection["operations"][1]["actualMinutesMilli"], 12_000)
+        self.assertEqual(projection["metrics"]["actualOperationMinutesMilli"], 17_000)
+        state = inspect_plant_order_output(
+            state,
+            inspection_id="INSP-QUALITY-PASS-001",
+            output_batch_id="BATCH-20260726-401",
+            inspected_quantity=10,
+            accepted_quantity=10,
+            rejected_quantity=0,
+            result="pass",
+            proof=proof(13, "passed full reinspection after rework"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        self.assertEqual(project_plant_order(state)["status"], "ready_to_release")
 
     def test_effectiveness_window_is_order_bound_and_fail_closed(self) -> None:
         state = released_state()

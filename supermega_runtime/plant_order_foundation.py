@@ -39,6 +39,7 @@ _COMMAND_KINDS = frozenset(
         "availability_check",
         "release_order",
         "record_calibration",
+        "record_quality_rework",
         "issue_material",
         "record_effectiveness",
         "record_operation",
@@ -796,6 +797,36 @@ def _command_payload(value: object, field: str) -> dict[str, Any]:
             "proof": calibration_proof,
         }
 
+    if kind == "record_quality_rework":
+        source = _object(
+            value,
+            field,
+            (
+                "kind",
+                "id",
+                "inspectionId",
+                "operationId",
+                "quantity",
+                "actualMinutesMilli",
+                "owner",
+                "cause",
+                "correctiveAction",
+                "proof",
+            ),
+        )
+        return {
+            "kind": kind,
+            "id": _identifier(source["id"], f"{field}.id", "RWK"),
+            "inspectionId": _identifier(source["inspectionId"], f"{field}.inspectionId", "INSP"),
+            "operationId": _identifier(source["operationId"], f"{field}.operationId", "OP"),
+            "quantity": _integer(source["quantity"], f"{field}.quantity", minimum=1),
+            "actualMinutesMilli": _integer(source["actualMinutesMilli"], f"{field}.actualMinutesMilli", minimum=1),
+            "owner": _text(source["owner"], f"{field}.owner", maximum=120),
+            "cause": _text(source["cause"], f"{field}.cause", maximum=300),
+            "correctiveAction": _text(source["correctiveAction"], f"{field}.correctiveAction", maximum=300),
+            "proof": _proof(source["proof"], f"{field}.proof"),
+        }
+
     if kind == "record_effectiveness":
         return _effectiveness_command(value, field)
 
@@ -997,6 +1028,7 @@ def _empty_projection() -> dict[str, Any]:
         "latestAvailability": None,
         "orderRelease": None,
         "calibrations": [],
+        "qualityReworks": [],
         "effectivenessWindow": None,
         "materials": [],
         "routing": [],
@@ -1029,6 +1061,7 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
     order_release: dict[str, Any] | None = None
     effectiveness_window: dict[str, Any] | None = None
     calibrations: dict[str, dict[str, Any]] = {}
+    quality_reworks: list[dict[str, Any]] = []
     issued: dict[str, int] = {}
     operation_quantities: dict[str, int] = {}
     operation_minutes: dict[str, int] = {}
@@ -1127,6 +1160,37 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             and latest_inspection["inspectedQuantity"] == total_output
             and latest_inspection["result"] == "fail"
         )
+
+        if kind == "record_quality_rework":
+            if plan["contract"] != PLANT_ORDER_CONTROLLED_PLAN_CONTRACT:
+                raise _fail(f"{field} requires a version 3 controlled plan.")
+            if (
+                not current_hold
+                or latest_inspection is None
+                or command["inspectionId"] != latest_inspection["id"]
+            ):
+                raise _fail(f"{field} requires the current failed inspection.")
+            if any(row["inspectionId"] == command["inspectionId"] for row in quality_reworks):
+                raise _fail(f"{field} attempts to rework one failed inspection twice.")
+            if command["quantity"] != latest_inspection["rejectedQuantity"]:
+                raise _fail(f"{field}.quantity must equal the current rejected quantity.")
+            operation = next(
+                (row for row in plan["routing"] if row["operationId"] == command["operationId"]),
+                None,
+            )
+            if operation is None:
+                raise _fail(f"{field}.operationId is not in the reviewed routing.")
+            calibration = calibrations.get(operation["workCentreId"])
+            if calibration is None or not _calibration_covers(
+                calibration, command["proof"]["capturedAt"]
+            ):
+                raise _fail(f"{field} requires current calibration for {operation['workCentreId']}.")
+            next_minutes = operation_minutes[operation["operationId"]] + command["actualMinutesMilli"]
+            if next_minutes > _MAX_SAFE_INTEGER:
+                raise _fail(f"{field}.actualMinutesMilli exceeds the supported range.")
+            operation_minutes[operation["operationId"]] = next_minutes
+            quality_reworks.append(command)
+            continue
 
         if kind == "issue_material":
             if current_hold:
@@ -1248,6 +1312,13 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
                 raise _fail(f"{field}.outputBatchId differs from the reviewed batch.")
             if total_output < 1 or command["inspectedQuantity"] != total_output:
                 raise _fail(f"{field} must inspect all currently recorded output.")
+            if (
+                current_hold
+                and plan["contract"] == PLANT_ORDER_CONTROLLED_PLAN_CONTRACT
+                and latest_inspection is not None
+                and not any(row["inspectionId"] == latest_inspection["id"] for row in quality_reworks)
+            ):
+                raise _fail(f"{field} requires attributable rework for the current failed inspection.")
             inspections.append(command)
             continue
 
@@ -1382,6 +1453,7 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
         "latestAvailability": latest_availability,
         "orderRelease": order_release,
         "calibrations": [calibrations[key] for key in sorted(calibrations)],
+        "qualityReworks": quality_reworks,
         "effectivenessWindow": effectiveness_window,
         "materials": material_rows,
         "routing": plan["routing"],
@@ -1652,6 +1724,38 @@ def record_plant_order_calibration(
     )
 
 
+def record_plant_order_quality_rework(
+    state: object,
+    *,
+    rework_id: object,
+    inspection_id: object,
+    operation_id: object,
+    quantity: object,
+    actual_minutes_milli: object,
+    owner: object,
+    cause: object,
+    corrective_action: object,
+    proof: object,
+    expected_head_digest: object,
+) -> dict[str, Any]:
+    return _append_command(
+        state,
+        {
+            "kind": "record_quality_rework",
+            "id": rework_id,
+            "inspectionId": inspection_id,
+            "operationId": operation_id,
+            "quantity": quantity,
+            "actualMinutesMilli": actual_minutes_milli,
+            "owner": owner,
+            "cause": cause,
+            "correctiveAction": corrective_action,
+            "proof": _proof(proof, "proof"),
+        },
+        expected_head_digest=expected_head_digest,
+    )
+
+
 def record_plant_order_effectiveness(
     state: object,
     *,
@@ -1800,6 +1904,7 @@ __all__ = (
     "project_plant_order",
     "record_plant_order_effectiveness",
     "record_plant_order_calibration",
+    "record_plant_order_quality_rework",
     "record_plant_order_operation",
     "record_plant_order_output",
     "release_plant_order",

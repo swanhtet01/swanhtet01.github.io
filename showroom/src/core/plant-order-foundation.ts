@@ -81,6 +81,18 @@ export type RecordCalibrationCommand = {
   standardReference: string
   proof: PlantOrderProof
 }
+export type RecordQualityReworkCommand = {
+  kind: 'record_quality_rework'
+  id: string
+  inspectionId: string
+  operationId: string
+  quantity: number
+  actualMinutesMilli: number
+  owner: string
+  cause: string
+  correctiveAction: string
+  proof: PlantOrderProof
+}
 type IssueMaterialCommand = { kind: 'issue_material'; id: string; materialId: string; inputLotId: string; quantityMilli: number; proof: PlantOrderProof }
 export type PlantOrderEffectivenessWorkCentre = { workCentreId: string; plannedProductiveMinutesMilli: number }
 export type PlantOrderDowntimeInterval = { downtimeId: string; workCentreId: string; startedAt: string; endedAt: string }
@@ -109,7 +121,7 @@ export type InspectOutputCommand = {
   proof: PlantOrderProof
 }
 type ReleaseBatchCommand = { kind: 'release_batch'; id: string; outputBatchId: string; inspectionId: string; proof: PlantOrderProof }
-export type PlantOrderCommandPayload = ImportPlanCommand | AvailabilityCommand | ReleaseOrderCommand | RecordCalibrationCommand | IssueMaterialCommand | RecordEffectivenessCommand | RecordOperationCommand | RecordOutputCommand | InspectOutputCommand | ReleaseBatchCommand
+export type PlantOrderCommandPayload = ImportPlanCommand | AvailabilityCommand | ReleaseOrderCommand | RecordCalibrationCommand | RecordQualityReworkCommand | IssueMaterialCommand | RecordEffectivenessCommand | RecordOperationCommand | RecordOutputCommand | InspectOutputCommand | ReleaseBatchCommand
 
 export type PlantOrderCommand = {
   sequence: number
@@ -147,6 +159,7 @@ export type PlantOrderProjection = {
   latestAvailability: PlantOrderAvailabilityProjection | null
   orderRelease: ReleaseOrderCommand | null
   calibrations: RecordCalibrationCommand[]
+  qualityReworks: RecordQualityReworkCommand[]
   effectivenessWindow: RecordEffectivenessCommand | null
   materials: Array<PlantOrderMaterial & { requiredQuantityMilli: number; issuedQuantityMilli: number; remainingToIssueMilli: number; inputLotId: string | null; availableQuantityMilli: number | null }>
   routing: PlantOrderRoutingStep[]
@@ -238,7 +251,7 @@ const digestPattern = /^sha256:[0-9a-f]{64}$/
 const businessIdPattern = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$/
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
 const materialUnits = new Set(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
-const commandKinds = new Set(['import_plan', 'availability_check', 'release_order', 'record_calibration', 'issue_material', 'record_effectiveness', 'record_operation', 'record_output', 'inspect_output', 'release_batch'])
+const commandKinds = new Set(['import_plan', 'availability_check', 'release_order', 'record_calibration', 'record_quality_rework', 'issue_material', 'record_effectiveness', 'record_operation', 'record_output', 'inspect_output', 'release_batch'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -681,6 +694,21 @@ function commandPayload(value: unknown, field: string): PlantOrderCommandPayload
       proof,
     }
   }
+  if (value.kind === 'record_quality_rework') {
+    const row = exact(value, field, ['kind', 'id', 'inspectionId', 'operationId', 'quantity', 'actualMinutesMilli', 'owner', 'cause', 'correctiveAction', 'proof'])
+    return {
+      kind: 'record_quality_rework',
+      id: identifier(row.id, `${field}.id`, 'RWK'),
+      inspectionId: identifier(row.inspectionId, `${field}.inspectionId`, 'INSP'),
+      operationId: identifier(row.operationId, `${field}.operationId`, 'OP'),
+      quantity: integer(row.quantity, `${field}.quantity`, 1),
+      actualMinutesMilli: integer(row.actualMinutesMilli, `${field}.actualMinutesMilli`, 1),
+      owner: text(row.owner, `${field}.owner`, 120),
+      cause: text(row.cause, `${field}.cause`, 300),
+      correctiveAction: text(row.correctiveAction, `${field}.correctiveAction`, 300),
+      proof: actionProof(row.proof, `${field}.proof`),
+    }
+  }
   if (value.kind === 'issue_material') {
     const row = exact(value, field, ['kind', 'id', 'materialId', 'inputLotId', 'quantityMilli', 'proof'])
     return { kind: 'issue_material', id: identifier(row.id, `${field}.id`, 'ISSUE'), materialId: identifier(row.materialId, `${field}.materialId`, 'MAT'), inputLotId: identifier(row.inputLotId, `${field}.inputLotId`, 'LOT'), quantityMilli: integer(row.quantityMilli, `${field}.quantityMilli`, 1), proof: actionProof(row.proof, `${field}.proof`) }
@@ -743,13 +771,13 @@ function calibrationCovers(command: RecordCalibrationCommand, capturedAt: string
 }
 
 function emptyProjection(): Omit<PlantOrderProjection, 'contract' | 'revision' | 'headDigest'> {
-  return { plan: null, status: 'unplanned', latestAvailability: null, orderRelease: null, calibrations: [], effectivenessWindow: null, materials: [], routing: [], operations: [], workCentres: [], outputEntries: [], totalOutput: 0, inspections: [], latestInspection: null, qualityHold: null, batchRelease: null, genealogy: [], metrics: { targetQuantity: 0, issuedMaterialCount: 0, completedOperationCount: 0, actualOperationMinutesMilli: 0, outputQuantity: 0, acceptedQuantity: 0 } }
+  return { plan: null, status: 'unplanned', latestAvailability: null, orderRelease: null, calibrations: [], qualityReworks: [], effectivenessWindow: null, materials: [], routing: [], operations: [], workCentres: [], outputEntries: [], totalOutput: 0, inspections: [], latestInspection: null, qualityHold: null, batchRelease: null, genealogy: [], metrics: { targetQuantity: 0, issuedMaterialCount: 0, completedOperationCount: 0, actualOperationMinutesMilli: 0, outputQuantity: 0, acceptedQuantity: 0 } }
 }
 
 function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderProjection, 'contract' | 'revision' | 'headDigest'> {
   if (!commands.length) return emptyProjection()
   let plan: PlantOrderPlan | null = null; let latestAvailability: PlantOrderAvailabilityProjection | null = null; let orderRelease: ReleaseOrderCommand | null = null; let effectivenessWindow: RecordEffectivenessCommand | null = null
-  let issued = new Map<string, number>(); let operationQuantities = new Map<string, number>(); let operationMinutes = new Map<string, number>(); const calibrations = new Map<string, RecordCalibrationCommand>(); const materialIssueCommands: IssueMaterialCommand[] = []; const operationCommands: RecordOperationCommand[] = []; const outputEntries: RecordOutputCommand[] = []; const inspections: InspectOutputCommand[] = []
+  let issued = new Map<string, number>(); let operationQuantities = new Map<string, number>(); let operationMinutes = new Map<string, number>(); const calibrations = new Map<string, RecordCalibrationCommand>(); const qualityReworks: RecordQualityReworkCommand[] = []; const materialIssueCommands: IssueMaterialCommand[] = []; const operationCommands: RecordOperationCommand[] = []; const outputEntries: RecordOutputCommand[] = []; const inspections: InspectOutputCommand[] = []
   let batchRelease: ReleaseBatchCommand | null = null; let totalOutput = 0
   commands.forEach((command, index) => {
     const field = `commands[${index}].payload`
@@ -798,6 +826,19 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
     }
     if (batchRelease) throw new Error(`${field} follows final batch release.`)
     const latestInspection = inspections.at(-1); const currentHold = Boolean(latestInspection && latestInspection.inspectedQuantity === totalOutput && latestInspection.result === 'fail')
+    if (command.kind === 'record_quality_rework') {
+      if (currentPlan.contract !== PLANT_ORDER_CONTROLLED_PLAN_CONTRACT) throw new Error(`${field} requires a version 3 controlled plan.`)
+      if (!currentHold || !latestInspection || command.inspectionId !== latestInspection.id) throw new Error(`${field} requires the current failed inspection.`)
+      if (qualityReworks.some((rework) => rework.inspectionId === command.inspectionId)) throw new Error(`${field} attempts to rework one failed inspection twice.`)
+      if (command.quantity !== latestInspection.rejectedQuantity) throw new Error(`${field}.quantity must equal the current rejected quantity.`)
+      const operation = currentPlan.routing.find((candidate) => candidate.operationId === command.operationId)
+      if (!operation) throw new Error(`${field}.operationId is not in the reviewed routing.`)
+      const calibration = calibrations.get(operation.workCentreId)
+      if (!calibration || !calibrationCovers(calibration, command.proof.capturedAt, `${field}.calibration.${operation.workCentreId}`)) throw new Error(`${field} requires current calibration for ${operation.workCentreId}.`)
+      const nextMinutes = (operationMinutes.get(operation.operationId) ?? 0) + command.actualMinutesMilli
+      if (!Number.isSafeInteger(nextMinutes)) throw new Error(`${field}.actualMinutesMilli exceeds the supported range.`)
+      operationMinutes.set(operation.operationId, nextMinutes); qualityReworks.push(command); return
+    }
     if (command.kind === 'issue_material') {
       if (currentHold) throw new Error(`${field} is blocked by the failed current inspection.`)
       const material = currentPlan.materials.find((row) => row.materialId === command.materialId)
@@ -852,6 +893,7 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
     if (command.kind === 'inspect_output') {
       if (command.outputBatchId !== currentPlan.job.outputBatchId) throw new Error(`${field}.outputBatchId differs from the reviewed batch.`)
       if (totalOutput < 1 || command.inspectedQuantity !== totalOutput) throw new Error(`${field} must inspect all currently recorded output.`)
+      if (currentHold && currentPlan.contract === PLANT_ORDER_CONTROLLED_PLAN_CONTRACT && latestInspection && !qualityReworks.some((rework) => rework.inspectionId === latestInspection.id)) throw new Error(`${field} requires attributable rework for the current failed inspection.`)
       inspections.push(command); return
     }
     if (command.outputBatchId !== currentPlan.job.outputBatchId) throw new Error(`${field}.outputBatchId differs from the reviewed batch.`)
@@ -888,7 +930,7 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
   else if (totalOutput === finalPlan.job.targetQuantity) status = inspectionIsCurrent && latestInspection?.result === 'pass' ? 'ready_to_release' : 'inspection_due'
   else if (totalOutput || materialIssueCommands.length || operationCommands.length) status = 'in_process'
   else status = 'released'
-  return { plan: finalPlan, status, latestAvailability: finalAvailability, orderRelease: finalOrderRelease, calibrations: [...calibrations.values()].sort((left, right) => compareCanonicalText(left.workCentreId, right.workCentreId)), effectivenessWindow, materials, routing: finalPlan.routing, operations, workCentres: finalAvailability?.workCentres ?? [], outputEntries, totalOutput, inspections, latestInspection, qualityHold, batchRelease: finalBatchRelease, genealogy, metrics: { targetQuantity: finalPlan.job.targetQuantity, issuedMaterialCount: [...issued.values()].filter(Boolean).length, completedOperationCount: operations.filter((row) => row.status === 'complete').length, actualOperationMinutesMilli: [...operationMinutes.values()].reduce((total, value) => total + value, 0), outputQuantity: totalOutput, acceptedQuantity: inspectionIsCurrent && latestInspection ? latestInspection.acceptedQuantity : 0 } }
+  return { plan: finalPlan, status, latestAvailability: finalAvailability, orderRelease: finalOrderRelease, calibrations: [...calibrations.values()].sort((left, right) => compareCanonicalText(left.workCentreId, right.workCentreId)), qualityReworks, effectivenessWindow, materials, routing: finalPlan.routing, operations, workCentres: finalAvailability?.workCentres ?? [], outputEntries, totalOutput, inspections, latestInspection, qualityHold, batchRelease: finalBatchRelease, genealogy, metrics: { targetQuantity: finalPlan.job.targetQuantity, issuedMaterialCount: [...issued.values()].filter(Boolean).length, completedOperationCount: operations.filter((row) => row.status === 'complete').length, actualOperationMinutesMilli: [...operationMinutes.values()].reduce((total, value) => total + value, 0), outputQuantity: totalOutput, acceptedQuantity: inspectionIsCurrent && latestInspection ? latestInspection.acceptedQuantity : 0 } }
 }
 
 export function validatePlantOrderState(value: unknown): PlantOrderState {
@@ -1152,6 +1194,10 @@ export function releasePlantOrder(state: unknown, input: { releaseId: unknown; a
 
 export function recordPlantOrderCalibration(state: unknown, input: { calibrationId: unknown; workCentreId: unknown; certificateId: unknown; calibratedAt: unknown; validUntil: unknown; standardReference: unknown; proof: unknown; expectedHeadDigest: unknown }) {
   return appendCommand(state, { kind: 'record_calibration', id: input.calibrationId, workCentreId: input.workCentreId, certificateId: input.certificateId, calibratedAt: input.calibratedAt, validUntil: input.validUntil, standardReference: input.standardReference, proof: actionProof(input.proof, 'proof') }, input.expectedHeadDigest)
+}
+
+export function recordPlantOrderQualityRework(state: unknown, input: { reworkId: unknown; inspectionId: unknown; operationId: unknown; quantity: unknown; actualMinutesMilli: unknown; owner: unknown; cause: unknown; correctiveAction: unknown; proof: unknown; expectedHeadDigest: unknown }) {
+  return appendCommand(state, { kind: 'record_quality_rework', id: input.reworkId, inspectionId: input.inspectionId, operationId: input.operationId, quantity: input.quantity, actualMinutesMilli: input.actualMinutesMilli, owner: input.owner, cause: input.cause, correctiveAction: input.correctiveAction, proof: actionProof(input.proof, 'proof') }, input.expectedHeadDigest)
 }
 
 export function issuePlantOrderMaterial(state: unknown, input: { issueId: unknown; materialId: unknown; inputLotId: unknown; quantityMilli: unknown; proof: unknown; expectedHeadDigest: unknown }) {

@@ -27,6 +27,7 @@ import {
   recordPlantOrderEffectiveness,
   recordPlantOrderOperation,
   recordPlantOrderOutput,
+  recordPlantOrderQualityRework,
   releasePlantOrder,
   releasePlantOrderBatch,
   validatePlantOrderState,
@@ -98,6 +99,7 @@ type EffectivenessDraft = {
   downtimeIntervals: string
 }
 type CalibrationDraft = { workCentreId: string; certificateId: string; calibratedAt: string; validUntil: string; standardReference: string }
+type ReworkDraft = { operationId: string; actualMinutes: string; owner: string; cause: string; correctiveAction: string }
 
 const setupMaterialUnits: PlantOrderMaterial['unit'][] = ['pcs', 'kg', 'g', 'l', 'ml', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm']
 
@@ -262,6 +264,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   const [operationDraft, setOperationDraft] = useState<OperationDraft>({ operationId: '', quantity: '', actualMinutes: '' })
   const [effectivenessDraft, setEffectivenessDraft] = useState<EffectivenessDraft>({ windowStart: '', windowEnd: '', workCentres: {}, downtimeIntervals: '' })
   const [calibrationDraft, setCalibrationDraft] = useState<CalibrationDraft>(() => calibrationDefaults())
+  const [reworkDraft, setReworkDraft] = useState<ReworkDraft>({ operationId: '', actualMinutes: '', owner: '', cause: '', correctiveAction: '' })
   const [inspectionDraft, setInspectionDraft] = useState({ result: 'pass' as 'pass' | 'fail', rejected: '0' })
   const [review, setReview] = useState<ReviewedTransition | null>(null)
   const setupDialogRef = useRef<HTMLDialogElement>(null)
@@ -284,6 +287,11 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   const activeCalibrationDraft = calibrationDueCentre && calibrationDraft.workCentreId !== calibrationDueCentre.workCentreId
     ? calibrationDefaults(calibrationDueCentre.workCentreId, evaluationTime)
     : calibrationDraft
+  const currentQualityRework = projection.qualityHold ? projection.qualityReworks.find((rework) => rework.inspectionId === projection.qualityHold?.inspectionId) : undefined
+  const qualityReworkRequired = Boolean(controlledPlan && projection.qualityHold && !currentQualityRework)
+  const activeReworkDraft = reworkDraft.operationId
+    ? reworkDraft
+    : { ...reworkDraft, operationId: projection.routing.at(-1)?.operationId ?? '' }
   const selectedSetupJob = activeJobs.find((job) => job.id === setupDraft.jobId) ?? activeJobs[0]
   const boundJob = projection.plan ? jobs.find((job) => job.id === projection.plan?.job.jobId) : undefined
   const bindingCurrent = Boolean(!projection.plan || (boundJob && plantOrderEvidenceDigest(jobSnapshot(scope, boundJob)) === projection.plan.sourceDigest))
@@ -329,6 +337,8 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
     ? activeJobs.length ? { title: 'Set up this batch', detail: 'Choose one active job, then review its BOM and routing.' } : { title: 'Add a production job first', detail: 'A controlled batch must start from one scheduled, owned job.' }
     : calibrationDueCentre
       ? { title: `Review ${calibrationDueCentre.name} calibration`, detail: 'Bind one current certificate before release or routed work continues.' }
+    : qualityReworkRequired
+      ? { title: 'Record accountable rework', detail: `${projection.qualityHold?.rejectedQuantity ?? 0} rejected units need cause, owner, corrective action, and actual time.` }
     : projection.status === 'planned' || projection.status === 'shortfall'
       ? { title: projection.status === 'shortfall' ? 'Resolve the availability shortfall' : 'Check material and capacity', detail: 'Record exact lots and work-centre minutes before release.' }
       : projection.status === 'ready'
@@ -341,7 +351,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
           : projection.status === 'inspection_due'
             ? { title: 'Inspect the completed batch', detail: 'Record accepted and rejected units before release.' }
             : projection.status === 'quality_hold'
-              ? { title: 'Resolve the quality hold', detail: 'Reinspect the current output; release remains blocked.' }
+              ? { title: 'Reinspect the corrected batch', detail: 'Rework is recorded; the current output still needs a new passing inspection.' }
               : projection.status === 'ready_to_release'
                 ? { title: 'Release the accepted batch', detail: 'Record the final human quality release to stock.' }
                 : { title: 'Batch execution complete', detail: 'The released quantity is ready for a separate reviewed Shop receipt.' }
@@ -622,6 +632,24 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
     stage({ title: 'Batch output', summary: `${outputRemaining.toLocaleString()} units · ${projection.plan.job.outputBatchId}`, boundary: 'Records this execution package output. The existing Plant output ledger and Shop receipt remain separate reviewed steps.', proof: actionProof, apply: (current) => recordPlantOrderOutput(current, { outputId, outputBatchId: projection.plan!.job.outputBatchId, quantity: outputRemaining, proof: actionProof, expectedHeadDigest }) })
   }
 
+  function reviewQualityRework(event: FormEvent) {
+    event.preventDefault()
+    if (!projection.qualityHold || !projection.latestInspection || !qualityReworkRequired) return
+    const operation = projection.routing.find((candidate) => candidate.operationId === activeReworkDraft.operationId)
+    const actualMinutesMilli = parsePlantOrderQuantityMilli(activeReworkDraft.actualMinutes)
+    const owner = activeReworkDraft.owner.trim(); const cause = activeReworkDraft.cause.trim(); const correctiveAction = activeReworkDraft.correctiveAction.trim()
+    if (!operation || !actualMinutesMilli || !owner || !cause || !correctiveAction) return setError('Choose the rework operation and enter actual minutes, owner, cause, and corrective action.')
+    const reworkId = commandId('RWK'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, `quality rework for ${projection.latestInspection.id}`)
+    stage({
+      title: 'Quality rework',
+      summary: `${projection.qualityHold.rejectedQuantity.toLocaleString()} units · ${operation.name} · ${formatMilli(actualMinutesMilli)} minutes`,
+      details: [{ label: 'Responsible owner', value: owner }, { label: 'Cause', value: cause }, { label: 'Corrective action', value: correctiveAction }],
+      boundary: 'Records attributed rework evidence and actual routed time only. It does not clear the quality hold; a separate full reinspection is still required.',
+      proof: actionProof,
+      apply: (current) => recordPlantOrderQualityRework(current, { reworkId, inspectionId: projection.latestInspection!.id, operationId: operation.operationId, quantity: projection.qualityHold!.rejectedQuantity, actualMinutesMilli, owner, cause, correctiveAction, proof: actionProof, expectedHeadDigest }),
+    })
+  }
+
   function reviewInspection(event: FormEvent) {
     event.preventDefault()
     if (!projection.plan || !inspectionValid || inspectedQuantity < 1) return
@@ -698,11 +726,19 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         <button className="core-button primary" disabled={controlsDisabled} type="submit">Review operation progress</button>
       </form> : null}
       {!calibrationDueCentre && projection.status === 'in_process' && !nextMaterial && !awaitingWarehouse && !nextOperation && outputRemaining > 0 ? <button className="core-button primary" disabled={controlsDisabled} onClick={reviewOutput} type="button">Review batch output</button> : null}
-      {(projection.status === 'inspection_due' || projection.status === 'quality_hold') ? <form className="core-form compact-form" onSubmit={reviewInspection}>
+      {!calibrationDueCentre && qualityReworkRequired ? <form className="core-form compact-form" onSubmit={reviewQualityRework}>
+        <div><strong>Quality hold · {projection.qualityHold?.rejectedQuantity.toLocaleString()} rejected</strong><small>Record the correction before reinspection.</small></div>
+        <div className="form-row"><label>Rework operation<select disabled={controlsDisabled} onChange={(event) => setReworkDraft({ ...activeReworkDraft, operationId: event.target.value })} required value={activeReworkDraft.operationId}>{projection.routing.map((operation) => <option key={operation.operationId} value={operation.operationId}>{operation.name} · {operation.workCentreId}</option>)}</select></label><label>Actual rework minutes<input disabled={controlsDisabled} inputMode="decimal" min="0.001" onChange={(event) => setReworkDraft({ ...activeReworkDraft, actualMinutes: event.target.value })} required step="0.001" type="number" value={activeReworkDraft.actualMinutes} /></label></div>
+        <label>Responsible owner<input disabled={controlsDisabled} maxLength={120} onChange={(event) => setReworkDraft({ ...activeReworkDraft, owner: event.target.value })} placeholder="Name or role" required value={activeReworkDraft.owner} /></label>
+        <label>Observed cause<textarea disabled={controlsDisabled} maxLength={300} onChange={(event) => setReworkDraft({ ...activeReworkDraft, cause: event.target.value })} placeholder="What caused the rejected output?" required rows={2} value={activeReworkDraft.cause} /></label>
+        <label>Corrective action<textarea disabled={controlsDisabled} maxLength={300} onChange={(event) => setReworkDraft({ ...activeReworkDraft, correctiveAction: event.target.value })} placeholder="What was changed before reinspection?" required rows={2} value={activeReworkDraft.correctiveAction} /></label>
+        <button className="core-button primary" disabled={controlsDisabled} type="submit">Review quality rework</button>
+      </form> : null}
+      {!calibrationDueCentre && (projection.status === 'inspection_due' || projection.status === 'quality_hold' && !qualityReworkRequired) ? <form className="core-form compact-form" onSubmit={reviewInspection}>
         <div className="form-row"><label>Inspection result<select disabled={controlsDisabled} onChange={(event) => { const result = event.target.value as 'pass' | 'fail'; setInspectionDraft({ result, rejected: result === 'pass' ? '0' : '1' }) }} value={inspectionDraft.result}><option value="pass">Pass</option><option value="fail">Fail and hold</option></select></label><label>Rejected units<input disabled={controlsDisabled} max={inspectedQuantity} min="0" onChange={(event) => setInspectionDraft((current) => ({ ...current, rejected: event.target.value }))} required step="1" type="number" value={inspectionDraft.rejected} /></label></div>
         <button className="core-button primary" disabled={controlsDisabled || !inspectionValid} type="submit">Review inspection</button>
       </form> : null}
-      {projection.status === 'ready_to_release' ? <button className="core-button primary" disabled={controlsDisabled} onClick={reviewBatchRelease} type="button">Review batch release</button> : null}
+      {!calibrationDueCentre && projection.status === 'ready_to_release' ? <button className="core-button primary" disabled={controlsDisabled} onClick={reviewBatchRelease} type="button">Review batch release</button> : null}
       {projection.status === 'released_to_stock' ? <div className="stock-receipt-preview" role="status"><small>Human-released batch</small><strong>{projection.plan?.job.outputBatchId} · {projection.metrics.acceptedQuantity.toLocaleString()} accepted</strong></div> : null}
 
       {!bindingCurrent && projection.status !== 'released_to_stock' ? <p className="form-notice warning-text" role="alert">The bound Plant job changed after this execution plan was reviewed. This chain is paused; reconcile the job snapshot before continuing.</p> : null}
@@ -710,6 +746,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         const calibration = calibrationByCentre.get(centre.workCentreId); const current = Boolean(calibration && Date.parse(calibration.validUntil) > evaluationTime)
         return <article key={centre.workCentreId}><span aria-hidden="true" className={`issue-mark ${current ? 'resolved' : ''}`}>CAL</span><div><strong>{centre.name}</strong><small>{calibration ? `${calibration.certificateId} · ${calibration.standardReference} · valid until ${calibration.validUntil}` : `${centre.workCentreId} · certificate evidence required`}</small></div></article>
       })}</div><p className="panel-copy">Certificate evidence is immutable and attributable. It gates release and each routed operation but never claims SuperMega calibrated the equipment.</p></details> : null}
+      {projection.qualityReworks.length ? <details className="compact-disclosure production-history"><summary>Quality rework <span>{projection.qualityReworks.length}</span></summary><div className="issue-list">{projection.qualityReworks.map((rework) => <article key={rework.id}><span aria-hidden="true" className="issue-mark resolved">RWK</span><div><strong>{rework.quantity} units · {rework.operationId}</strong><small>{formatMilli(rework.actualMinutesMilli)} minutes · owner {rework.owner} · {rework.cause} → {rework.correctiveAction}</small></div></article>)}</div><p className="panel-copy">Rework time is included in actual conversion cost and variance. Only a later full passing inspection clears the hold.</p></details> : null}
       {requiresOperationEvidence ? <details className="compact-disclosure production-history"><summary>Routing progress <span>{projection.metrics.completedOperationCount}/{projection.operations.length}</span></summary><div className="issue-list">{projection.operations.map((operation) => <article key={operation.operationId}><span aria-hidden="true" className={`issue-mark ${operation.status === 'complete' ? 'resolved' : ''}`}>{operation.sequence}</span><div><strong>{operation.name}</strong><small>{operation.completedQuantity.toLocaleString()} / {projection.metrics.targetQuantity.toLocaleString()} units · {formatMilli(operation.actualMinutesMilli)} actual / {formatMilli(operation.plannedMinutesMilli)} planned minutes · {operation.status.replace('_', ' ')}</small></div></article>)}</div></details> : null}
       {projection.plan ? <details className="compact-disclosure production-history"><summary>Standard vs actual <span>{financialCost.status === 'setup_required' ? 'Rates required' : formatMmk(financialCost.varianceMmk ?? 0)}</span></summary>{financialCost.status !== 'setup_required' ? <div className="form-row"><span className="status-pill">Planned {formatMmk(financialCost.planned.totalMmk)}</span><span className="status-pill">Earned {formatMmk(financialCost.earned.totalMmk)}</span><span className="status-pill">Actual {formatMmk(financialCost.actual.totalMmk)}</span><span className={`status-pill ${(financialCost.varianceMmk ?? 0) <= 0 ? 'bounded' : 'pending'}`}>Variance {formatMmk(financialCost.varianceMmk ?? 0)}</span><span className={`status-pill ${(financialCost.qualityLossMmk ?? 0) === 0 ? 'bounded' : 'pending'}`}>Quality loss {formatMmk(financialCost.qualityLossMmk ?? 0)}</span></div> : null}<div className="issue-list">
         {costDrivers.materials.map((material) => <article key={material.materialId}><span aria-hidden="true" className={`issue-mark ${material.varianceQuantityMilli <= 0 ? 'resolved' : ''}`}>MAT</span><div><strong>{material.name}</strong><small>{formatMilli(material.actualQuantityMilli)} actual / {formatMilli(material.standardQuantityMilli)} standard {material.unit} · {formatMilli(material.varianceQuantityMilli)} variance</small></div></article>)}
