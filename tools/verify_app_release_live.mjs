@@ -207,6 +207,9 @@ for (const required of ['Start guided sample', 'Request managed trial', 'Your AI
 for (const required of ['supermega.ai_memory_preview.v1', 'AI memory preview', 'Download AI memory', 'Request managed AI', 'Raw product records stay out of this preview.', 'No customer message, payment, stock move, production write, domain publish, managed write, or model training runs from this preview.']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_ai_memory_preview_context:${required}`)
 }
+for (const required of ['Premium pilot', 'Your business context, remembered.', 'SuperMega combines approved product data and owner patterns, then prepares one next move for review.', 'Owner pattern', 'Managed account', 'Approved sources', 'Pilot proof', 'Counts only; raw source records are not shown here.', 'Managed company brief', 'Reviewed next move', 'Verify this company, not a generic demo.', 'Connect and verify', 'Verify context', 'Keep pilot proof', 'Pilot proof kept in the managed audit. No external action ran.', 'Review only. No customer send, payment, stock move, production write, domain publish, or model training runs from this pilot.', 'Managed access recovery', 'Connect an existing workspace before rebuilding a local trial.', 'Recover managed access', 'Connect through Premium pilot after saving a trial.']) {
+  if (!settingsChunk.includes(required)) throw new Error(`missing_live_premium_pilot_context:${required}`)
+}
 for (const required of ['storagePackages', 'selectedProductRecords']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_prepared_record_context:${required}`)
 }
