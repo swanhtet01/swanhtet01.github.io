@@ -297,6 +297,79 @@ def production_issue_movement(
     }
 
 
+def production_receipt_command_id(release_id: str) -> str:
+    identity = canonical_digest(
+        {
+            "contract": "supermega.shop.production-receipt-inventory-command.v1",
+            "releaseId": release_id,
+        }
+    )
+    return f"PRC-{identity[7:39].upper()}"
+
+
+def production_receipt_stock_unit_id(release_id: str) -> str:
+    identity = canonical_digest(
+        {
+            "contract": "supermega.shop.production-receipt-stock-unit.v1",
+            "releaseId": release_id,
+        }
+    )
+    return f"LOT-PLANT-{identity[7:31].upper()}"
+
+
+def production_received_inventory(
+    state: dict[str, object],
+    proof: dict[str, str],
+    release: dict[str, object],
+    *,
+    quantity: int = 6,
+) -> dict[str, object]:
+    release_id = str(release["releaseId"])
+    output_batch_id = str(release["outputBatchId"])
+    return append_inventory_command(
+        state,
+        {
+            "kind": "production_receipt",
+            "id": production_receipt_command_id(release_id),
+            "productionReleaseId": release_id,
+            "productionCommandDigest": release["sourceCommandDigest"],
+            "productionJobId": release["jobId"],
+            "productionOutputBatchId": output_batch_id,
+            "productionReleasedAt": release["releasedAt"],
+            "stockUnitId": production_receipt_stock_unit_id(release_id),
+            "sku": "SKU-1",
+            "trackingCode": output_batch_id,
+            "locationId": "LOC-MAIN",
+            "quantity": quantity,
+            "proof": proof,
+        },
+    )
+
+
+def production_receipt_movement(
+    proof: dict[str, str],
+    release: dict[str, object],
+    *,
+    quantity: int = 6,
+) -> dict[str, object]:
+    return {
+        "id": f"MOV2:{proof['actionId']}",
+        "actionId": proof["actionId"],
+        "createdAt": proof["capturedAt"],
+        "actor": proof["actor"],
+        "reason": proof["reason"],
+        "evidenceReference": proof["evidenceReference"],
+        "kind": "production_receipt",
+        "sku": "SKU-1",
+        "quantityDelta": quantity,
+        "productionReleaseId": release["releaseId"],
+        "productionCommandDigest": release["sourceCommandDigest"],
+        "productionJobId": release["jobId"],
+        "productionOutputBatchId": release["outputBatchId"],
+        "productionReleasedAt": release["releasedAt"],
+    }
+
+
 def order_inventory_command_id(prefix: str, order_id: str) -> str:
     identity = canonical_digest(
         {
@@ -913,6 +986,90 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
             ShopInventoryValidationError, "cannot allocate|available"
         ):
             validate_shop_inventory_state(over_issued, ["SKU-1"])
+
+    def test_managed_plant_batch_receipt_updates_aggregate_and_location_truth(self) -> None:
+        current = commerce_state()
+        opening = opening_inventory()
+        initialized = reduce_commerce_state(
+            "commerce.inventory.initialized",
+            current,
+            {
+                "state": {**current, "inventoryFoundation": opening},
+                "evidence": opening["commands"][-1]["payload"]["proof"],  # type: ignore[index]
+            },
+        )
+        release: dict[str, object] = {
+            "releaseId": "QREL-PLANT-001",
+            "sourceCommandDigest": canonical_digest({"plant": "released-batch-001"}),
+            "jobId": "JOB-PLANT-001",
+            "outputBatchId": "BATCH-PLANT-001",
+            "releasedAt": "2026-07-27T09:00:00.000Z",
+        }
+        proof = {
+            **action_proof(
+                "ACT-PLANT-RECEIPT-001", "2026-07-27T09:15:00.000Z"
+            ),
+            "evidenceReference": (
+                "PLANT-BATCH:QREL-PLANT-001:"
+                f"{release['sourceCommandDigest']}:LOC-MAIN"
+            ),
+        }
+        candidate = deepcopy(initialized)
+        candidate["items"][0]["onHand"] = 16  # type: ignore[index]
+        candidate["movements"] = [production_receipt_movement(proof, release)]
+        candidate["inventoryFoundation"] = production_received_inventory(
+            initialized["inventoryFoundation"], proof, release
+        )
+        accepted = reduce_commerce_state(
+            "commerce.production_batch.received",
+            initialized,
+            {"state": candidate, "evidence": proof},
+        )
+        self.assertEqual(accepted["items"][0]["onHand"], 16)
+        self.assertEqual(
+            shop_inventory_sku_totals(
+                accepted["inventoryFoundation"], ["SKU-1"]
+            ),
+            {"SKU-1": 16},
+        )
+        self.assertEqual(
+            shop_inventory_sku_available_to_promise(
+                accepted["inventoryFoundation"], ["SKU-1"]
+            ),
+            {"SKU-1": 16},
+        )
+
+        tampered = deepcopy(candidate)
+        tampered["inventoryFoundation"]["commands"][-1]["payload"][  # type: ignore[index]
+            "productionOutputBatchId"
+        ] = "BATCH-TAMPERED-001"
+        with self.assertRaises(TrialValidationError):
+            reduce_commerce_state(
+                "commerce.production_batch.received",
+                initialized,
+                {"state": tampered, "evidence": proof},
+            )
+
+        duplicate_proof = {
+            **proof,
+            "actionId": "ACT-PLANT-RECEIPT-DUPLICATE",
+            "capturedAt": "2026-07-27T09:30:00.000Z",
+        }
+        duplicate = deepcopy(accepted)
+        duplicate["items"][0]["onHand"] = 22  # type: ignore[index]
+        duplicate["movements"] = [
+            production_receipt_movement(duplicate_proof, release),
+            *accepted["movements"],
+        ]
+        duplicate["inventoryFoundation"] = production_received_inventory(
+            accepted["inventoryFoundation"], duplicate_proof, release
+        )
+        with self.assertRaises(TrialValidationError):
+            reduce_commerce_state(
+                "commerce.production_batch.received",
+                accepted,
+                {"state": duplicate, "evidence": duplicate_proof},
+            )
 
     def test_order_allocation_reserve_release_and_fulfil_are_atomic(self) -> None:
         current = commerce_state()

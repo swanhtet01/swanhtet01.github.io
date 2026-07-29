@@ -76,6 +76,7 @@ export type ManagedCommerceEvent =
   | 'commerce.stock.received'
   | 'commerce.stock.counted'
   | 'commerce.production_material.issued'
+  | 'commerce.production_batch.received'
   | 'commerce.inventory.initialized'
   | 'commerce.inventory.transferred'
   | 'commerce.purchase_order.created'

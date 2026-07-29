@@ -50,6 +50,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.stock.received",
         "commerce.stock.counted",
         "commerce.production_material.issued",
+        "commerce.production_batch.received",
         "commerce.inventory.initialized",
         "commerce.inventory.transferred",
         "commerce.purchase_order.created",
@@ -82,6 +83,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.stock.received",
         "commerce.stock.counted",
         "commerce.production_material.issued",
+        "commerce.production_batch.received",
         "commerce.inventory.initialized",
         "commerce.inventory.transferred",
         "commerce.purchase_order.created",
@@ -3132,6 +3134,7 @@ def _validate_event_evidence(
         "commerce.stock.received": "receipt",
         "commerce.stock.counted": "count",
         "commerce.production_material.issued": "production_issue",
+        "commerce.production_batch.received": "production_receipt",
         "commerce.purchase_order.received": "receipt",
         "commerce.website_intake.converted": "reserve",
     }.get(event_type)
@@ -4178,6 +4181,16 @@ def _production_inventory_command_id(request_id: str) -> str:
         }
     )
     return f"PIS-{identity[7:39].upper()}"
+
+
+def _production_receipt_command_id(release_id: str) -> str:
+    identity = _order_inventory_digest(
+        {
+            "contract": "supermega.shop.production-receipt-inventory-command.v1",
+            "releaseId": release_id,
+        }
+    )
+    return f"PRC-{identity[7:39].upper()}"
 
 
 def _order_return_inventory_command_id(
@@ -5426,6 +5439,133 @@ def _validate_production_material_issued(
         )
 
 
+def _validate_production_receipt_inventory_transition(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    movement: Mapping[str, Any],
+) -> None:
+    current_foundation = _inventory_foundation(current)
+    next_foundation = _inventory_foundation(next_state)
+    if current_foundation is None:
+        if next_foundation is not None:
+            raise TrialValidationError(
+                "a Plant batch receipt cannot create location inventory implicitly."
+            )
+        return
+    if next_foundation is None:
+        raise TrialValidationError(
+            "a Plant batch receipt cannot remove the location inventory record."
+        )
+    catalog_skus = [str(item["sku"]) for item in current["items"]]
+    try:
+        before = validate_shop_inventory_state(current_foundation, catalog_skus)
+        after = validate_shop_inventory_state(next_foundation, catalog_skus)
+        before_physical = shop_inventory_sku_totals(before, catalog_skus)
+        after_physical = shop_inventory_sku_totals(after, catalog_skus)
+        before_available = shop_inventory_sku_available_to_promise(
+            before, catalog_skus
+        )
+        after_available = shop_inventory_sku_available_to_promise(
+            after, catalog_skus
+        )
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+    if (
+        len(after["commands"]) != len(before["commands"]) + 1
+        or after["commands"][:-1] != before["commands"]
+        or after["commands"][-1]["payload"].get("kind")
+        != "production_receipt"
+    ):
+        raise TrialValidationError(
+            "the Plant batch receipt must append exactly one location receipt command."
+        )
+    command = after["commands"][-1]["payload"]
+    release_id = str(movement["productionReleaseId"])
+    if (
+        command.get("id") != _production_receipt_command_id(release_id)
+        or command.get("productionReleaseId") != release_id
+        or command.get("productionCommandDigest")
+        != movement["productionCommandDigest"]
+        or command.get("productionJobId") != movement["productionJobId"]
+        or command.get("productionOutputBatchId")
+        != movement["productionOutputBatchId"]
+        or command.get("productionReleasedAt")
+        != movement["productionReleasedAt"]
+        or command.get("sku") != movement["sku"]
+        or command.get("quantity") != movement["quantityDelta"]
+        or any(
+            command["proof"].get(proof_field) != movement[movement_field]
+            for proof_field, movement_field in (
+                ("actionId", "actionId"),
+                ("capturedAt", "createdAt"),
+                ("actor", "actor"),
+                ("reason", "reason"),
+                ("evidenceReference", "evidenceReference"),
+            )
+        )
+    ):
+        raise TrialValidationError(
+            "the Plant receipt location command must match the exact release evidence."
+        )
+
+    def increased(source: Mapping[str, int]) -> dict[str, int]:
+        retained = dict(source)
+        sku = str(movement["sku"])
+        retained[sku] = retained.get(sku, 0) + int(movement["quantityDelta"])
+        return retained
+
+    if after_physical != increased(before_physical):
+        raise TrialValidationError(
+            "the Plant batch receipt must increase exact physical location stock."
+        )
+    if after_available != increased(before_available):
+        raise TrialValidationError(
+            "the Plant batch receipt must increase exact location available-to-promise."
+        )
+
+
+def _validate_production_batch_received(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "orders", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    if (
+        len(next_state["movements"]) != len(current["movements"]) + 1
+        or next_state["movements"][1:] != current["movements"]
+    ):
+        raise TrialValidationError(
+            "commerce.production_batch.received must prepend exactly one stock receipt."
+        )
+    movement = next_state["movements"][0]
+    if (
+        movement.get("kind") != "production_receipt"
+        or movement.get("quantityDelta", 0) <= 0
+        or movement.get("id") != _movement_id(str(movement.get("actionId")))
+    ):
+        raise TrialValidationError(
+            "Plant batch receipt requires one attributable positive stock movement."
+        )
+    _validate_production_receipt_inventory_transition(current, next_state, movement)
+    before_item, after_item = _one_changed(
+        current["items"], next_state["items"], "items"
+    )
+    if (
+        before_item["sku"] != movement["sku"]
+        or after_item
+        != {
+            **before_item,
+            "onHand": before_item["onHand"] + movement["quantityDelta"],
+        }
+    ):
+        raise TrialValidationError(
+            "Plant batch receipt must increase only its matching Shop item."
+        )
+
+
 def _validate_purchase_order_created(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -6116,6 +6256,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.stock.received": _validate_received,
     "commerce.stock.counted": _validate_counted,
     "commerce.production_material.issued": _validate_production_material_issued,
+    "commerce.production_batch.received": _validate_production_batch_received,
     "commerce.inventory.initialized": _validate_inventory_initialized,
     "commerce.inventory.transferred": _validate_inventory_transferred,
     "commerce.purchase_order.created": _validate_purchase_order_created,
@@ -6192,6 +6333,7 @@ def reduce_commerce_state(
         "commerce.inventory.transferred",
         "commerce.stock.counted",
         "commerce.production_material.issued",
+        "commerce.production_batch.received",
         "commerce.purchase_order.received",
         "commerce.order.created",
         "commerce.order.cancelled",
