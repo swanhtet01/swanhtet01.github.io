@@ -885,6 +885,25 @@ export function WebsiteProduct() {
     ['Package', publishIsCurrent ? 'Static snapshot' : 'Needed'],
     ['Gate', storageMode === 'managed' ? 'Owner rollout' : 'Free local only'],
   ]
+  const websiteHandoffNext = storageIssue || canRepairLocalStorage
+    ? 'Recover Website workspace'
+    : failingContentChecks.length
+      ? 'Finish page readiness'
+      : !approvalIsCurrent
+        ? 'Record owner approval'
+        : !publishIsCurrent
+          ? 'Download static package'
+          : storageMode === 'managed'
+            ? 'Prepare managed handoff'
+            : 'Hand off website package'
+  const websiteHandoffRows = [
+    ['Pages', `${workspace.pages.filter((page) => page.stage === 'ready').length}/${workspace.pages.length} ready`],
+    ['Approval', approvalIsCurrent ? 'Recorded' : 'Needed'],
+    ['Package', publishIsCurrent ? 'Retained' : canReview ? 'Ready to build' : 'Needs review'],
+    ['Lead capture', websiteLeadCaptureNext],
+    ['Managed gate', storageMode === 'managed' ? 'Tenant review' : 'Free export'],
+    ['Boundary', 'No auto launch'],
+  ] as const
   useEffect(() => {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_seen',
@@ -1189,6 +1208,17 @@ export function WebsiteProduct() {
             </div>
             <div className="website-rollout-packet-rows">
               {managedRolloutRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            </div>
+          </section>
+
+          <section aria-label="Website handoff packet" className="website-handoff-packet">
+            <div>
+              <span className="website-kicker">Website handoff packet</span>
+              <h2>{websiteHandoffNext}</h2>
+              <p>AI turns ready pages, owner approval, static package state, lead capture route, and managed gate into one handoff checklist. No DNS change, form send, analytics install, CRM write, Shop write, publish, or deployment action runs from this packet.</p>
+            </div>
+            <div className="website-handoff-packet-rows">
+              {websiteHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
             </div>
           </section>
 
