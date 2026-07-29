@@ -10,6 +10,13 @@ import {
   type BusinessCommandAnswer,
   type BusinessCommandIntent,
 } from './business-command'
+import {
+  currentManagedIdentity,
+  loadManagedCompanyBrief,
+  retainManagedCompanyBrief,
+  type ManagedCompanyBrief,
+  type ManagedIdentity,
+} from './managed-trial'
 
 type ProductHomeReadinessProps = {
   activationCoverage: number
@@ -28,12 +35,17 @@ const productContinuations = {
 
 export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHostedAction, progress, ready }: ProductHomeReadinessProps) {
   const commandInputRef = useRef<HTMLInputElement>(null)
+  const managedRequestRef = useRef(0)
   const [behaviorTrail] = useState<BehaviorTrailEntry[]>(() => readBehaviorTrail(window.localStorage))
   const [question, setQuestion] = useState('')
-  const [answer, setAnswer] = useState<BusinessCommandAnswer>(() => buildBusinessCommandAnswer(readLocalBusinessSnapshot(window.localStorage), 'attention'))
+  const [answer, setAnswer] = useState<BusinessCommandAnswer | ManagedCompanyBrief>(() => buildBusinessCommandAnswer(readLocalBusinessSnapshot(window.localStorage), 'attention'))
+  const [managedContext, setManagedContext] = useState<{ brief: ManagedCompanyBrief; identity: ManagedIdentity } | null>(null)
+  const [managedNotice, setManagedNotice] = useState('')
+  const [managedPending, setManagedPending] = useState(false)
   const behaviorProducts = useMemo(() => new Set(behaviorTrail.map((entry) => entry.product).filter((product) => product !== 'unknown')).size, [behaviorTrail])
   const behaviorPreference = useMemo(() => summarizeBehaviorPreferences(behaviorTrail), [behaviorTrail])
   const preferredContinuation = behaviorPreference.preferred ? productContinuations[behaviorPreference.preferred.product] : null
+  const managedBriefRetained = managedContext?.brief.retention === 'persisted_managed_audit'
   const commandPath = ready && preferredContinuation ? preferredContinuation.path : ready ? '/settings/#controls' : '/settings/'
   const commandLabel = ready && preferredContinuation ? `Continue ${preferredContinuation.label}` : ready ? 'Export evidence' : 'Finish setup'
   const trackActionRows = [
@@ -69,8 +81,33 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
     })
   }, [])
 
+  async function refreshManagedBrief(intent: BusinessCommandIntent) {
+    const requestId = managedRequestRef.current + 1
+    managedRequestRef.current = requestId
+    const identity = await currentManagedIdentity()
+    if (!identity || requestId !== managedRequestRef.current) return
+    setManagedPending(true)
+    setManagedNotice('Reading approved managed context...')
+    try {
+      const brief = await loadManagedCompanyBrief(intent, identity)
+      if (requestId !== managedRequestRef.current) return
+      setAnswer(brief)
+      setManagedContext({ brief, identity })
+      setManagedNotice(`Managed workspace ${identity.workspaceId} / ${brief.sourceCount} validated product sources.`)
+    } catch {
+      if (requestId !== managedRequestRef.current) return
+      setManagedContext(null)
+      setManagedNotice('Managed context is unavailable. The validated local answer remains on screen.')
+    } finally {
+      if (requestId === managedRequestRef.current) setManagedPending(false)
+    }
+  }
+
   function runBusinessCommand(intent: BusinessCommandIntent) {
     setAnswer(buildBusinessCommandAnswer(readLocalBusinessSnapshot(window.localStorage), intent))
+    setManagedContext(null)
+    setManagedNotice('')
+    void refreshManagedBrief(intent)
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
       product: intent === 'shop_inventory'
@@ -110,6 +147,29 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
       route: window.location.pathname + window.location.search + window.location.hash,
       detail: `Follow SuperMega answer: ${answer.intent}`,
     })
+  }
+
+  async function retainBrief() {
+    if (!managedContext || managedPending) return
+    const requestId = managedRequestRef.current
+    setManagedPending(true)
+    setManagedNotice('Keeping this managed brief as evidence...')
+    try {
+      const retained = await retainManagedCompanyBrief({
+        brief: managedContext.brief,
+        commandId: crypto.randomUUID(),
+        identity: managedContext.identity,
+      })
+      if (requestId !== managedRequestRef.current) return
+      setAnswer(retained.brief)
+      setManagedContext({ ...managedContext, brief: retained.brief })
+      setManagedNotice(retained.retention.idempotentReplay ? 'This exact brief was already retained.' : 'Brief retained in the managed audit history.')
+    } catch {
+      if (requestId !== managedRequestRef.current) return
+      setManagedNotice('The brief was not retained. Managed write readiness or company permission is required.')
+    } finally {
+      if (requestId === managedRequestRef.current) setManagedPending(false)
+    }
   }
 
   return (
@@ -166,11 +226,14 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
         <div className="business-command-answer" aria-live="polite">
           <div className="business-command-answer-head">
             <div>
-              <span>{answer.sourceCount}/4 validated product sources</span>
+              <span>{answer.sourceCount}/4 validated {managedContext ? 'managed' : 'local'} product sources</span>
               <h3>{answer.title}</h3>
               <p>{answer.summary}</p>
             </div>
-            <Link className="core-button primary" onClick={recordAnswerFollow} to={answer.nextAction.path}>{answer.nextAction.label}</Link>
+            <div className="form-actions">
+              {managedContext ? <button className="core-button" disabled={managedPending || managedBriefRetained} onClick={() => void retainBrief()} type="button">{managedBriefRetained ? 'Evidence retained' : 'Keep as evidence'}</button> : null}
+              <Link className="core-button primary" onClick={recordAnswerFollow} to={answer.nextAction.path}>{answer.nextAction.label}</Link>
+            </div>
           </div>
           <div className="business-command-facts">
             {answer.facts.map((fact) => (
@@ -182,6 +245,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
             ))}
           </div>
           <p className="business-command-boundary">{answer.boundary}</p>
+          {managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}
         </div>
         <details className="business-command-evidence">
           <summary><span>Why this answer</span><small>Setup, owner behavior, managed gates, and product coverage</small></summary>
