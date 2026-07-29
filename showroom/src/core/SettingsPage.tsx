@@ -558,6 +558,81 @@ export function SettingsPage() {
       ]),
     ['Coverage', `${runtime.coverageScore}%`],
   ]
+  const selectedProductSource = aiProductSourceMap.products.find((product) => product.product === selectedProduct.name)
+  const selectedProductRecordCount = Object.values(selectedProductSource?.records ?? {}).reduce((total, count) => total + count, 0)
+  const aiMemorySourceRecordCount = Math.max(localRecordCount, selectedProductRecordCount)
+  const aiMemoryReadinessGates = aiContextReadinessGates.map(([label, ready, detail]) => (
+    label === 'Records'
+      ? [label, aiMemorySourceRecordCount > 0, aiMemorySourceRecordCount ? `${aiMemorySourceRecordCount} ${selectedProduct.name} records prepared.` : detail] as const
+      : [label, ready, detail] as const
+  ))
+  const aiMemoryReadyGateCount = aiMemoryReadinessGates.filter(([, ready]) => ready).length
+  const aiMemoryReadinessScore = Math.round((aiMemoryReadyGateCount / aiMemoryReadinessGates.length) * 100)
+  const aiMemoryNextMove = !aiMemorySourceRecordCount
+    ? 'Create or import product records'
+    : !agentBehaviorSignals.length
+      ? 'Use agent queues'
+      : !(managedApprovalRequests.length || approvals.length)
+        ? 'Record owner decision'
+        : !setup.savedAt
+          ? 'Save trial plan'
+          : !runtime.writesReady || !evidencePlanReady
+            ? 'Request managed activation'
+            : 'Export context for review'
+  const aiMemoryFilename = `supermega-ai-memory-${selectedProduct.slug}-${evidenceDate}.json`
+  const aiMemoryPreview = {
+    contract: 'supermega.ai_memory_preview.v1',
+    version: 1,
+    createdAt: new Date().toISOString(),
+    workspace: setup.workspace || 'Workspace not named',
+    owner: setup.owner || 'Owner not assigned',
+    product: selectedProduct.name,
+    template: selectedTemplate.name,
+    objective: {
+      startingPoint: setup.entryPoint || selectedTemplate.entryPoints[0] || '',
+      currentRecord: setup.currentRecord,
+      baseline: setup.baseline,
+      targetOutcome: setup.targetOutcome,
+      acceptanceEvidence: setup.acceptanceEvidence,
+      ownerGate: setup.authorityBoundary || launchPackManifest.ownerGate,
+    },
+    sourceSummary: {
+      localProductRecords: localRecordCount,
+      summarizedRecords: aiMemorySourceRecordCount,
+      selectedProductPrepared: selectedProductSource?.prepared === true,
+      selectedProductRecordCounts: selectedProductSource?.records ?? {},
+      accountableActions: actions.length,
+      behaviorSignals: agentBehaviorSignals.length,
+      decisionPackets: managedApprovalRequests.length || approvals.length,
+    },
+    ownerBehavior: {
+      topRecommendedJob: topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.job}` : null,
+      lastChosenJob: lastChosenAgentJob ? `${agentProductName(lastChosenAgentJob.product)}: ${lastChosenAgentJob.detail}` : null,
+    },
+    readiness: {
+      score: aiMemoryReadinessScore,
+      readyGates: aiMemoryReadyGateCount,
+      totalGates: aiMemoryReadinessGates.length,
+      nextMove: aiMemoryNextMove,
+    },
+    allowedUses: contextHandoffManifest.allowedUses,
+    forbiddenActions: contextHandoffManifest.forbiddenActions,
+    privacyBoundary: {
+      summaryOnly: true,
+      rawProductRecordsIncluded: false,
+      externalSendPerformed: false,
+      managedWritePerformed: false,
+      modelTrainingAllowed: false,
+    },
+    managedNextAction: contextHandoffManifest.nextAction,
+  }
+  const aiMemoryRows = [
+    ['Sources', aiMemorySourceRecordCount ? `${aiMemorySourceRecordCount} prepared` : 'Start using a product', aiMemorySourceRecordCount ? `${selectedProduct.name} and shared local evidence are summarized without raw records.` : 'Create or import product evidence to teach the operator.'],
+    ['Behavior', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} signals` : 'No pattern yet', topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.job}` : 'Choose a recommended product action to start owner preference memory.'],
+    ['Decisions', managedApprovalRequests.length || approvals.length ? `${managedApprovalRequests.length || approvals.length} reviewed` : 'Needs one review', 'Only accountable owner decisions can become reusable premium context.'],
+    ['Readiness', `${aiMemoryReadinessScore}%`, aiMemoryNextMove],
+  ] as const
+  const aiMemoryHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(aiMemoryPreview, null, 2))}`
   const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 23, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
   const ecommerceOrderQueueReadinessFilename = ecommerceOrderQueueReadinessPacket
@@ -1150,7 +1225,14 @@ export function SettingsPage() {
           <div className="form-row pilot-text-row"><label>Baseline<textarea maxLength={240} required value={setup.baseline} onChange={(event) => updateSetup({ baseline: event.target.value })} placeholder="Current time, error rate, backlog, output." /></label><label>Target outcome<textarea maxLength={240} required value={setup.targetOutcome} onChange={(event) => updateSetup({ targetOutcome: event.target.value })} placeholder={`Target for ${selectedTemplate.metric.toLowerCase()}.`} /></label></div>
           <div className="form-row pilot-text-row"><label>Human authority boundary<textarea maxLength={240} required value={setup.authorityBoundary} onChange={(event) => updateSetup({ authorityBoundary: event.target.value })} placeholder="Which actions need owner approval?" /></label><label>Acceptance evidence<textarea maxLength={240} required value={setup.acceptanceEvidence} onChange={(event) => updateSetup({ acceptanceEvidence: event.target.value })} placeholder="What proves the pilot works?" /></label></div>
           <div className="settings-step-actions"><button className="text-link" onClick={() => chooseSettingsStep('workflow')} type="button">Back</button><button className="core-button primary" type="submit">Save client setup</button></div>
-          {setup.savedAt ? <div className="setup-complete"><div><strong>Trial plan saved.</strong><small>Export evidence before managed import.</small></div><div className="setup-complete-actions"><Link className="core-button" to={setupProductPreviewPath(setup.product)}>Open {productDisplayName(setup.product)}</Link><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a><a className="core-button" download={managedTrialRequestFilename} href={managedTrialRequestHref}>Download request packet</a><a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id)}>Request managed trial</a></div></div> : null}
+          {setup.savedAt ? <>
+            <div className="setup-complete"><div><strong>Trial plan saved.</strong><small>Your AI memory preview is ready.</small></div><div className="setup-complete-actions"><Link className="core-button" to={setupProductPreviewPath(setup.product)}>Open {productDisplayName(setup.product)}</Link><a className="core-button" download={aiMemoryFilename} href={aiMemoryHref}>Download AI memory</a><a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id)}>Request managed AI</a></div></div>
+            <section aria-label="AI memory preview" className="ai-memory-preview">
+              <div className="ai-memory-preview-heading"><div><span className="core-eyebrow">AI memory preview</span><h3>{selectedProduct.name} context is {aiMemoryReadinessScore}% ready</h3><p>SuperMega summarizes business goals, source counts, owner choices, and reviewed decisions. Raw product records stay out of this preview.</p></div><strong>{aiMemoryReadyGateCount}/{aiMemoryReadinessGates.length} gates</strong></div>
+              <div className="ai-memory-preview-rows">{aiMemoryRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+              <p className="ai-memory-next"><strong>Next:</strong> {aiMemoryNextMove}. No customer message, payment, stock move, production write, domain publish, managed write, or model training runs from this preview.</p>
+            </section>
+          </> : null}
           </fieldset>
           <p className="form-notice" aria-live="polite">{notice || (setup.savedAt ? `Last saved ${formatTime(setup.savedAt)}` : setup.startedAt ? `Guided ${selectedTemplate.name} sample started.` : 'Draft stays local.')}</p>
         </form>
