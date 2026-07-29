@@ -213,6 +213,12 @@ function remoteHead(ref) {
   return exactSha(commit, 'release_handoff_remote_ref_invalid')
 }
 
+function appVerifyCommand() {
+  if (process.platform !== 'win32') return { file: 'npm', args: ['run', 'app:verify'] }
+  const command = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'cmd.exe')
+  return { file: command, args: ['/d', '/s', '/c', 'npm.cmd run app:verify'] }
+}
+
 async function boundedJson(url) {
   const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(15_000) })
   if (!response.ok || !response.body) fail('release_handoff_live_fetch_failed')
@@ -268,8 +274,8 @@ async function main() {
   const workflowAuthority = validateWorkflowAuthority(workflowSource.replace(/\r\n?/g, '\n'))
   const [app, publicRelease] = await Promise.all([boundedJson(APP_RELEASE_URL), boundedJson(PUBLIC_RELEASE_URL)])
 
-  const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-  const verified = run(npm, ['run', 'app:verify'], { inherit: true, allowFailure: true })
+  const verificationCommand = appVerifyCommand()
+  const verified = run(verificationCommand.file, verificationCommand.args, { inherit: true, allowFailure: true })
   if (verified.status !== 0) fail('release_handoff_app_verify_failed')
   if (git('rev-parse', 'HEAD') !== candidateCommit || git('status', '--porcelain=v1')) fail('release_handoff_candidate_changed_during_verify')
 
@@ -306,4 +312,3 @@ if (invokedDirectly) {
     process.exitCode = 1
   })
 }
-

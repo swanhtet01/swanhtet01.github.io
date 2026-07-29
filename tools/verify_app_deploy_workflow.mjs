@@ -57,7 +57,8 @@ requireContract('release handoff is exact, review-only, and cannot deploy',
   && releaseHandoff.includes('deploymentApproved: false')
   && releaseHandoff.includes('remoteWritesPerformed: false')
   && releaseHandoff.includes("git('ls-remote', '--heads', 'origin', ref)")
-  && releaseHandoff.includes("run(npm, ['run', 'app:verify']")
+  && releaseHandoff.includes("args: ['/d', '/s', '/c', 'npm.cmd run app:verify']")
+  && releaseHandoff.includes("return { file: 'npm', args: ['run', 'app:verify'] }")
   && !/\b(?:vercel|gh)\s+(?:deploy|promote|rollback|workflow|api)\b/i.test(releaseHandoff))
 
 function runRollbackResolver(args, payload) {
