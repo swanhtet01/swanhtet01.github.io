@@ -542,10 +542,17 @@ test('accepted CEO outcomes per work unit require complete evaluation, valid usa
       .filter(([key]) => key.startsWith('ceo-outcome-delivery:'))
       .map(([key, payload]) => ({ key, payload: structuredClone(payload) })),
   })
+  const listCeoOutcomeActionRecords = async () => ({
+    durable: true,
+    records: [...state.cache.entries()]
+      .filter(([key]) => key.startsWith('ceo-outcome-action:'))
+      .map(([key, payload]) => ({ key, payload: structuredClone(payload) })),
+  })
   const reportOptions = {
     listCompanyWorkOrders: async () => ({ ok: true, workOrders: [] }),
     listCeoOutcomeRecords,
     listCeoOutcomeDeliveryRecords,
+    listCeoOutcomeActionRecords,
     getCeoOutcomeEvaluation: state.options.getCeoOutcomeEvaluation,
     now: () => '2026-07-16T02:00:00.000Z',
   }
@@ -579,6 +586,18 @@ test('accepted CEO outcomes per work unit require complete evaluation, valid usa
   assert.equal(measured.outcomes.efficiency.workUnitsPerAcceptedOutcome, 75)
   assert.deepEqual(measured.outcomes.delivery.counts, { completed: 2, recorded: 2, sent: 2, failed: 0, uncertain: 0, missing: 0 })
   assert.equal(measured.outcomes.delivery.state, 'ready')
+  assert.equal(measured.outcomes.actions.state, 'ready')
+  assert.deepEqual(measured.outcomes.actions.counts, { accepted: 1, proposed: 1, missing: 0 })
+  assert.deepEqual(measured.outcomes.actions.items, [{
+    outcomeId: 'daily-company-control',
+    team: 'product',
+    ownerRole: 'milestone-builder',
+    title: 'Convert the accepted CEO brief into one bounded implementation task',
+    acceptanceCheck: 'Record one accountable owner, one exact artifact, and one verifiable acceptance check before execution.',
+    actionMode: 'internal_draft_only',
+    status: 'proposed',
+  }])
+  assert.doesNotMatch(JSON.stringify(measured.outcomes.actions), /operationId|evaluationId|actionId|Hash|provider|model output/i)
   assert.equal(measured.attention.deliveryFailed, 0)
   assert.equal(measured.attention.deliveryUncertain, 0)
   assert.equal(measured.attention.deliveryMissing, 0)
@@ -593,6 +612,14 @@ test('accepted CEO outcomes per work unit require complete evaluation, valid usa
   assert.equal(measured.exposure.ceoDeliveryContentReturned, false)
   assert.equal(measured.exposure.providerRowsReturned, false)
   assert.equal(JSON.stringify(measured.outcomes).includes('private-provider'), false)
+
+  const missingAction = await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 30 }, {
+    ...reportOptions,
+    listCeoOutcomeActionRecords: async () => ({ durable: true, records: [] }),
+  })
+  assert.equal(missingAction.outcomes.actions.state, 'missing')
+  assert.deepEqual(missingAction.outcomes.actions.counts, { accepted: 1, proposed: 0, missing: 1 })
+  assert.deepEqual(missingAction.outcomes.actions.items, [])
 
   const nonDurable = await buildCompanyOperationsReport({ clientId: 'client-acme', windowDays: 30 }, {
     ...reportOptions,
