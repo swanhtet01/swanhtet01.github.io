@@ -706,6 +706,43 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   const host = { ...validateAudit(audit), memoryRecovery }
   const health = parseJson(await runCommand({ kind: 'local', args: ['health'], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_health_invalid')
   validateHealth(health, provider, model)
+  const queueText = await runCommand({ kind: 'local', args: ['queue', 'list'], timeoutMs: 30_000 })
+  const rotation = dependencies.plan
+    ? (() => {
+        const spec = planSpec(dependencies.plan)
+        return {
+          allDone: false,
+          plan: dependencies.plan,
+          spec,
+          existing: existingForSpec(queueText, spec),
+          inspection: null,
+          completedOutcomeIds: [],
+        }
+      })()
+    : await selectRotatingPlan({ buildPlan, queueText, runCommand, inspectReport })
+  if (rotation.periodIncomplete || rotation.allDone) {
+    return {
+      ok: rotation.allDone,
+      contract: ALLY_CEO_LOCAL_CYCLE_CONTRACT,
+      status: rotation.allDone ? 'period_complete' : 'period_incomplete',
+      replayed: true,
+      period: rotation.period,
+      outcomeId: rotation.allDone ? null : undefined,
+      completedOutcomeIds: rotation.completedOutcomeIds,
+      ...(rotation.periodIncomplete ? { rejectedOutcomes: rotation.rejectedOutcomes } : {}),
+      host,
+      sourceCount: null,
+      knowledgeRefresh: {
+        requested: refreshKnowledge,
+        performed: false,
+        refreshedSources: 0,
+        skipped: 'period_closed',
+      },
+      modelCalls: 0,
+      queueWrites: 0,
+      controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
+    }
+  }
   const knowledge = parseJson(await runCommand({ kind: 'local', args: ['knowledge', 'audit', '--project', 'SuperMega'], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_knowledge_invalid')
   const initialKnowledge = knowledgeStatus(knowledge)
   if (initialKnowledge.missing > 0 || initialKnowledge.unavailable > 0) {
@@ -733,54 +770,6 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     requested: refreshKnowledge,
     performed: refreshedSources > 0,
     refreshedSources,
-  }
-  const queueText = await runCommand({ kind: 'local', args: ['queue', 'list'], timeoutMs: 30_000 })
-  const rotation = dependencies.plan
-    ? (() => {
-        const spec = planSpec(dependencies.plan)
-        return {
-          allDone: false,
-          plan: dependencies.plan,
-          spec,
-          existing: existingForSpec(queueText, spec),
-          inspection: null,
-          completedOutcomeIds: [],
-        }
-      })()
-    : await selectRotatingPlan({ buildPlan, queueText, runCommand, inspectReport })
-  if (rotation.periodIncomplete) {
-    return {
-      ok: false,
-      contract: ALLY_CEO_LOCAL_CYCLE_CONTRACT,
-      status: 'period_incomplete',
-      replayed: true,
-      period: rotation.period,
-      completedOutcomeIds: rotation.completedOutcomeIds,
-      rejectedOutcomes: rotation.rejectedOutcomes,
-      host,
-      sourceCount,
-      knowledgeRefresh,
-      modelCalls: 0,
-      queueWrites: 0,
-      controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
-    }
-  }
-  if (rotation.allDone) {
-    return {
-      ok: true,
-      contract: ALLY_CEO_LOCAL_CYCLE_CONTRACT,
-      status: 'period_complete',
-      replayed: true,
-      period: rotation.period,
-      outcomeId: null,
-      completedOutcomeIds: rotation.completedOutcomeIds,
-      host,
-      sourceCount,
-      knowledgeRefresh,
-      modelCalls: 0,
-      queueWrites: 0,
-      controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
-    }
   }
   const { spec, existing, completedOutcomeIds, rejectedOutcomes = [] } = rotation
   let repair = null

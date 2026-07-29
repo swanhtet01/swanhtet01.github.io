@@ -317,6 +317,14 @@ test('five accepted outcomes close the UTC period with zero queue or model work'
   assert.deepEqual(result.completedOutcomeIds, outcomeSequence)
   assert.equal(result.modelCalls, 0)
   assert.equal(result.queueWrites, 0)
+  assert.equal(result.sourceCount, null)
+  assert.deepEqual(result.knowledgeRefresh, {
+    requested: true,
+    performed: false,
+    refreshedSources: 0,
+    skipped: 'period_closed',
+  })
+  assert.equal(state.calls.some((call) => call.args?.[0] === 'knowledge'), false)
   assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)
 })
 
@@ -378,6 +386,9 @@ test('a fully attempted period with rejected outcomes closes incomplete without 
   assert.deepEqual(result.rejectedOutcomes.map((item) => item.outcomeId), ['daily-company-control'])
   assert.equal(result.modelCalls, 0)
   assert.equal(result.queueWrites, 0)
+  assert.equal(result.sourceCount, null)
+  assert.equal(result.knowledgeRefresh.skipped, 'period_closed')
+  assert.equal(state.calls.some((call) => call.args?.[0] === 'knowledge'), false)
   assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)
 })
 
@@ -443,7 +454,7 @@ test('execution can atomically refresh changed registered evidence before queue 
   assert.equal(result.ok, true)
   assert.deepEqual(result.knowledgeRefresh, { requested: true, performed: true, refreshedSources: 1 })
   const localCalls = state.calls.filter((call) => call.kind === 'local').map((call) => call.args.slice(0, 2).join(' '))
-  assert.deepEqual(localCalls.slice(1, 5), ['knowledge audit', 'knowledge refresh', 'knowledge audit', 'queue list'])
+  assert.deepEqual(localCalls.slice(1, 5), ['queue list', 'knowledge audit', 'knowledge refresh', 'knowledge audit'])
 })
 
 test('knowledge refresh is execution-only and stale evidence still fails without the explicit control', async () => {
