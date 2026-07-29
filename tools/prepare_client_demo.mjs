@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { constants as fsConstants, existsSync } from 'node:fs'
-import { access, chmod, link, lstat, open, readFile, realpath, unlink } from 'node:fs/promises'
+import { access, chmod, link, lstat, open, readFile, readdir, realpath, unlink } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -10,6 +10,7 @@ export const CLIENT_DEMO_PREPARATION_CONTRACT = 'supermega.client_demo_preparati
 export const CLIENT_DEMO_PREPARATION_VALIDATION_CONTRACT = 'supermega.client_demo_preparation_validation.v1'
 export const CLIENT_DEMO_PREPARATION_MAX_BYTES = 5 * 1024 * 1024
 const CLIENT_DEMO_KIT_MAX_BYTES = 128 * 1024
+const CLIENT_PROFILE_MAX_BYTES = 16 * 1024
 const CLIENT_DATA_MAX_BYTES = 512 * 1024
 const PRODUCT_ORDER = Object.freeze(['commerce', 'production', 'website', 'ecommerce'])
 const PRODUCT_FILE = Object.freeze(Object.fromEntries(PRODUCT_ORDER.map((product) => [product, `${product}.csv`])))
@@ -21,6 +22,7 @@ const PRODUCT_PATHS = Object.freeze({
   ecommerce: { demoPath: '/ecommerce/', setupPath: '/settings/?product=ecommerce' },
 })
 const CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v3'
+const CLIENT_PROFILE_SCHEMA = 'supermega.client_profile.v1'
 const CLIENT_OPERATING_FOUNDATION_SCHEMA = 'supermega.client_operating_foundation.v1'
 const CLIENT_OPERATIONAL_TOPOLOGY_SCHEMA = 'supermega.client_operational_topology.v1'
 const OPERATING_UNIT_KIND = Object.freeze({
@@ -156,12 +158,65 @@ async function readableFile(path, maximum, code) {
   try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes) } catch { fail(`${code}_utf8_invalid`) }
 }
 
-async function optionalClientSource(dataDirectory, product) {
-  if (!dataDirectory) return null
+async function clientDataDirectory(path) {
   let directoryMetadata
-  try { directoryMetadata = await lstat(dataDirectory) } catch { fail('client_data_directory_missing') }
+  try { directoryMetadata = await lstat(path) } catch { fail('client_data_directory_missing') }
   if (!directoryMetadata.isDirectory() || directoryMetadata.isSymbolicLink()) fail('client_data_directory_invalid')
-  const directoryRealPath = await realpath(dataDirectory).catch(() => fail('client_data_directory_invalid'))
+  return realpath(path).catch(() => fail('client_data_directory_invalid'))
+}
+
+async function clientProfileKit(directoryRealPath, timestamp, model) {
+  const profileText = await readableFile(resolve(directoryRealPath, 'client.json'), CLIENT_PROFILE_MAX_BYTES, 'client_profile')
+  let profile
+  try { profile = JSON.parse(profileText) } catch { fail('client_profile_json_invalid') }
+  if (!hasExactKeys(profile, ['schema', 'workspace', 'owner', 'presetId', 'products'])
+    || profile.schema !== CLIENT_PROFILE_SCHEMA
+    || !Array.isArray(profile.products) || profile.products.length < 1 || profile.products.length > PRODUCT_ORDER.length
+    || profile.products.some((product) => !PRODUCT_ORDER.includes(product))
+    || new Set(profile.products).size !== profile.products.length
+    || JSON.stringify(profile.products) !== JSON.stringify(PRODUCT_ORDER.filter((product) => profile.products.includes(product)))) {
+    fail('client_profile_contract_invalid')
+  }
+  try {
+    const preset = model.clientDemoPreset(profile.presetId)
+    const recommended = new Map(preset.selections.map((selection) => [selection.product, selection.templateId]))
+    const selections = profile.products.map((product) => ({
+      product,
+      templateId: recommended.get(product) ?? model.clientImportWorkflowTemplateIds(product)[0],
+    }))
+    if (selections.some((selection) => !selection.templateId)) fail('client_profile_contract_invalid')
+    const blueprint = model.buildClientDemoBlueprint({
+      workspace: profile.workspace,
+      owner: profile.owner,
+      presetId: preset.id,
+      shopIndustryPackId: preset.shopIndustryPackId,
+      plantIndustryPackId: preset.plantIndustryPackId,
+      selections,
+    })
+    const kit = model.buildClientDemoKit(blueprint, timestamp)
+    return { kit, kitText: JSON.stringify(kit) }
+  } catch (error) {
+    if (error instanceof PreparationError) throw error
+    fail('client_profile_contract_invalid')
+  }
+}
+
+async function validateClientDataDirectory(directoryRealPath, selectedProducts, profileMode) {
+  const entries = await readdir(directoryRealPath, { withFileTypes: true }).catch(() => fail('client_data_directory_unreadable'))
+  const allowedCsv = new Set(selectedProducts.map((product) => PRODUCT_FILE[product]))
+  for (const entry of entries) {
+    if (entry.name === 'client.json') {
+      if (!profileMode) fail('client_data_profile_conflict')
+      continue
+    }
+    if (!entry.name.toLowerCase().endsWith('.csv')) continue
+    if (!allowedCsv.has(entry.name)) fail('client_data_file_unrecognized')
+    if (!entry.isFile() || entry.isSymbolicLink()) fail('client_data_file_invalid')
+  }
+}
+
+async function optionalClientSource(directoryRealPath, product) {
+  if (!directoryRealPath) return null
   const candidate = resolve(directoryRealPath, PRODUCT_FILE[product])
   try { await access(candidate, fsConstants.F_OK) } catch { return null }
   let candidateMetadata
@@ -215,20 +270,31 @@ function preparationChecks(packages) {
 export async function prepareClientDemo({ kitPath, dataDirectory, preparedAt = new Date().toISOString() }) {
   const timestamp = canonicalTimestamp(preparedAt)
   if (!timestamp) fail('client_demo_prepared_at_invalid')
-  const kitText = await readableFile(resolve(kitPath || ''), CLIENT_DEMO_KIT_MAX_BYTES, 'client_demo_kit')
-  let kitValue
-  try { kitValue = JSON.parse(kitText) } catch { fail('client_demo_kit_json_invalid') }
   const model = await import(`${pathToFileURL(resolve(ROOT, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?client-preparation=${Date.now()}`)
+  if (!kitPath && !dataDirectory) fail('client_demo_setup_source_invalid')
+  const directoryRealPath = dataDirectory ? await clientDataDirectory(resolve(dataDirectory)) : null
+  let kitText
+  let kitValue
+  const profileMode = !kitPath
+  if (profileMode) {
+    const generated = await clientProfileKit(directoryRealPath, timestamp, model)
+    kitText = generated.kitText
+    kitValue = generated.kit
+  } else {
+    kitText = await readableFile(resolve(kitPath), CLIENT_DEMO_KIT_MAX_BYTES, 'client_demo_kit')
+    try { kitValue = JSON.parse(kitText) } catch { fail('client_demo_kit_json_invalid') }
+  }
   const kit = model.restoreClientDemoKit(kitValue)
   if (!kit) fail('client_demo_kit_contract_invalid')
   const selectedProducts = kit.blueprint.products.map((product) => product.product)
   const canonicalProducts = PRODUCT_ORDER.filter((product) => selectedProducts.includes(product))
   if (JSON.stringify(selectedProducts) !== JSON.stringify(canonicalProducts)) fail('client_demo_product_order_invalid')
+  if (directoryRealPath) await validateClientDataDirectory(directoryRealPath, selectedProducts, profileMode)
 
   const packages = []
   const sourceModes = new Map()
   for (const product of kit.blueprint.products) {
-    const clientSource = await optionalClientSource(dataDirectory ? resolve(dataDirectory) : null, product.product)
+    const clientSource = await optionalClientSource(directoryRealPath, product.product)
     const sourceMode = clientSource ? 'client_csv' : 'kit_sample_fixture'
     const sourceText = clientSource?.text ?? product.sampleCsv
     const sourceName = clientSource?.name ?? `sample-${PRODUCT_FILE[product.product]}`
@@ -452,7 +518,7 @@ function parseArguments(argv) {
     else if (argument === '--out' && !parsed.outputPath) parsed.outputPath = value
     else fail('client_demo_arguments_invalid')
   }
-  if (!parsed.kitPath || !parsed.outputPath) fail('client_demo_arguments_invalid')
+  if ((!parsed.kitPath && !parsed.dataDirectory) || !parsed.outputPath) fail('client_demo_arguments_invalid')
   return parsed
 }
 
@@ -460,7 +526,7 @@ async function main() {
   try {
     const options = parseArguments(process.argv.slice(2))
     if (options.mode === 'help') {
-      console.log('Prepare: npm run client:prepare -- --kit <setup-kit.json> [--data-dir <private-csv-directory>] --out <private-review.json>\nVerify: npm run client:prepare:verify -- <private-review.json>')
+      console.log('One-folder prepare: put client.json and selected product CSVs in a private directory, then run npm run client:prepare -- --data-dir <private-client-directory> --out <private-review.json>\nExisting-kit prepare: npm run client:prepare -- --kit <setup-kit.json> [--data-dir <private-csv-directory>] --out <private-review.json>\nVerify: npm run client:prepare:verify -- <private-review.json>')
       return
     }
     if (options.mode === 'verify') {

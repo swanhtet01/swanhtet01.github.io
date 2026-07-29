@@ -190,6 +190,82 @@ test('exact client CSVs are normalized locally while missing products remain exp
   }
 })
 
+test('one private client folder builds the setup kit and four-product review artifact without using the app', async () => {
+  const source = await fixture()
+  try {
+    const dataDirectory = resolve(source.directory, 'one-folder-client')
+    await mkdir(dataDirectory)
+    await writeFile(resolve(dataDirectory, 'client.json'), JSON.stringify({
+      schema: 'supermega.client_profile.v1',
+      workspace: 'One-folder client',
+      owner: 'Implementation owner',
+      presetId: 'manufacturing',
+      products: ['commerce', 'production', 'website', 'ecommerce'],
+    }), 'utf8')
+    const commerce = source.blueprint.products.find((product) => product.product === 'commerce')
+    assert.ok(commerce)
+    await writeFile(resolve(dataDirectory, 'commerce.csv'), commerce.sampleCsv, 'utf8')
+
+    const artifact = await prepareClientDemo({ dataDirectory, preparedAt: PREPARED_AT })
+    assert.equal(artifact.client.workspace, 'One-folder client')
+    assert.equal(artifact.client.owner, 'Implementation owner')
+    assert.deepEqual(artifact.products.map((product) => product.product), ['commerce', 'production', 'website', 'ecommerce'])
+    assert.equal(artifact.products[0].sourceMode, 'client_csv')
+    assert.equal(artifact.products.slice(1).every((product) => product.sourceMode === 'kit_sample_fixture'), true)
+    assert.equal(artifact.kit.schema, 'supermega.client_demo_kit.v3')
+    assert.deepEqual(verifyClientDemoPreparation(artifact).status, 'verified_not_applied')
+
+    const cliOutput = resolve(source.directory, 'one-folder-review.json')
+    const cli = spawnSync(process.execPath, [TOOL, '--data-dir', dataDirectory, '--out', cliOutput], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+    })
+    assert.equal(cli.status, 0, cli.stderr)
+    assert.equal(JSON.parse(cli.stdout).clientDataFiles, 1)
+    assert.doesNotMatch(cli.stdout, /One-folder client|Implementation owner/)
+    assert.equal(JSON.parse(await readFile(cliOutput, 'utf8')).review.status, 'awaiting_founder_review')
+  } finally {
+    await rm(source.directory, { recursive: true, force: true })
+  }
+})
+
+test('one-folder setup rejects ambiguous profiles and CSVs that are not selected', async () => {
+  const source = await fixture()
+  try {
+    const dataDirectory = resolve(source.directory, 'ambiguous-client')
+    await mkdir(dataDirectory)
+    const profile = {
+      schema: 'supermega.client_profile.v1',
+      workspace: 'Ambiguous client',
+      owner: 'Implementation owner',
+      presetId: 'service-business',
+      products: ['commerce', 'website'],
+    }
+    await writeFile(resolve(dataDirectory, 'client.json'), JSON.stringify(profile), 'utf8')
+    await writeFile(resolve(dataDirectory, 'production.csv'), 'sku,name,quantity,line\nX,Unexpected,1,Line 1\n', 'utf8')
+    await assert.rejects(
+      prepareClientDemo({ dataDirectory, preparedAt: PREPARED_AT }),
+      /client_data_file_unrecognized/,
+    )
+
+    await rm(resolve(dataDirectory, 'production.csv'))
+    await assert.rejects(
+      prepareClientDemo({ kitPath: source.kitPath, dataDirectory, preparedAt: PREPARED_AT }),
+      /client_data_profile_conflict/,
+    )
+
+    await writeFile(resolve(dataDirectory, 'client.json'), JSON.stringify({ ...profile, products: ['website', 'commerce'] }), 'utf8')
+    await assert.rejects(
+      prepareClientDemo({ dataDirectory, preparedAt: PREPARED_AT }),
+      /client_profile_contract_invalid/,
+    )
+  } finally {
+    await rm(source.directory, { recursive: true, force: true })
+  }
+})
+
 test('invalid or oversized client data and tampered data-bearing kits fail before an artifact is written', async () => {
   const source = await fixture()
   try {
