@@ -1985,6 +1985,9 @@ if (!coreSource.includes('templateId: string')
   || !settingsPageSource.includes('className="demo-kit-result"')
   || !settingsPageSource.includes('Shop business pack')
   || !settingsPageSource.includes('shopIndustryPacks.map((pack)')
+  || !settingsPageSource.includes('Selected automatically from the business pack.')
+  || !settingsPageSource.includes("product === 'commerce' ? selectedShopIndustryPack.workflowTemplateId")
+  || settingsPageSource.includes('Current starting point')
   || !settingsPageSource.includes('provisionLocalShopIndustryPack')
   || !settingsPageSource.includes('provisionEmptyShopServiceSchedule')
   || !settingsPageSource.includes('Existing local evidence stays authoritative.')
@@ -2521,6 +2524,7 @@ const shopProductContract = solutionProducts.find((product) => product.id === 's
 const shopPackIds = shopProductContract?.internalTemplatePacks?.map((pack) => pack.id) ?? []
 if (shopPackIds.join(',') !== 'retail,cafe,restaurant,spa,gym,school'
   || shopProductContract?.internalTemplatePacks?.some((pack) => pack.status !== 'core-compatible' || !pack.availableNow?.some((capability) => /schedule|reservation|appointment/i.test(capability)))
+  || shopProductContract?.internalTemplatePacks?.some((pack) => !shopProductContract.templates?.some((template) => template.id === pack.workflowTemplateId && template.entryPoints?.includes(pack.entryPoint)))
   || shopProductContract?.internalTemplatePacks?.some((pack) => pack.plannedNext?.includes('Appointments') || pack.plannedNext?.includes('Classes'))) fail('shop_industry_pack_manifest_not_operationally_aligned')
 if (websiteProductContract?.status !== 'available-in-app'
   || websiteProductContract?.views?.join(',') !== 'Start,Edit,Preview,Download'
@@ -3418,6 +3422,7 @@ async function verifyShopServiceScheduleRuntime() {
     assert(model.validateShopServiceSchedule(state) === state && state.revision === 0 && state.industryPackId === 'spa', 'shop_service_schedule_seed_invalid')
     assert(state.services.length === 2 && state.resources.length === 2 && state.bookings.length === 0, 'shop_service_schedule_seed_not_useful')
     assert(model.shopIndustryPacks.map((pack) => pack.id).join(',') === 'retail,cafe,restaurant,spa,gym,school' && new Set(model.shopIndustryPacks.map((pack) => pack.id)).size === 6, 'shop_industry_pack_catalog_wrong')
+    assert(model.shopIndustryPacks.map((pack) => `${pack.id}:${pack.workflowTemplateId}:${pack.entryPoint}`).join(',') === 'retail:retail-wholesale:Walk-in,cafe:restaurant-ordering:Walk-in,restaurant:restaurant-ordering:Walk-in,spa:social-commerce:Phone,gym:social-commerce:Phone,school:social-commerce:Phone', 'shop_industry_pack_workflow_binding_wrong')
     for (const pack of model.shopIndustryPacks) {
       const packed = model.createShopServiceSchedule(pack.id)
       assert(model.validateShopServiceSchedule(packed) === packed && packed.industryPackId === pack.id && packed.services.length === 2 && packed.resources.length === 2 && pack.capabilities.length >= 5, `shop_industry_pack_${pack.id}_not_operational`)

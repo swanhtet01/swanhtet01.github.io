@@ -55,12 +55,12 @@
         "Accountability: evidence, owner review and recovery"
       ],
       "internalTemplatePacks": [
-        {"id": "retail", "name": "Retail", "status": "core-compatible", "firstWorkflow": "counter sale and reviewed pickup", "availableNow": ["Sell", "Orders", "Stock", "Purchasing", "Returns", "Pickup schedule"], "plannedNext": ["Promotions", "Loyalty"]},
-        {"id": "cafe", "name": "Cafe", "status": "core-compatible", "firstWorkflow": "counter order and collection slot", "availableNow": ["Sell", "Orders", "Stock", "Daily close", "Collection schedule"], "plannedNext": ["Menu modifiers", "Kitchen tickets"]},
-        {"id": "restaurant", "name": "Restaurant", "status": "core-compatible", "firstWorkflow": "order and table reservation", "availableNow": ["Sell", "Orders", "Stock", "Payments", "Reservations"], "plannedNext": ["Table map", "Kitchen display"]},
-        {"id": "spa", "name": "Spa", "status": "core-compatible", "firstWorkflow": "treatment appointment", "availableNow": ["Sell", "Orders", "Stock", "Payments", "Appointments", "Service resources"], "plannedNext": ["Staff commission", "Customer messaging"]},
-        {"id": "gym", "name": "Gym", "status": "core-compatible", "firstWorkflow": "personal training session", "availableNow": ["Sell", "Orders", "Stock", "Payments", "Training schedule", "Staff resources"], "plannedNext": ["Memberships", "Facility check-in"]},
-        {"id": "school", "name": "School", "status": "core-compatible", "firstWorkflow": "enrollment consultation or class session", "availableNow": ["Sell", "Orders", "Stock", "Payments", "Class schedule", "Teacher resources"], "plannedNext": ["Students", "Fees ledger", "Attendance"]}
+        {"id": "retail", "name": "Retail", "status": "core-compatible", "workflowTemplateId": "retail-wholesale", "entryPoint": "Walk-in", "firstWorkflow": "counter sale and reviewed pickup", "availableNow": ["Sell", "Orders", "Stock", "Purchasing", "Returns", "Pickup schedule"], "plannedNext": ["Promotions", "Loyalty"]},
+        {"id": "cafe", "name": "Cafe", "status": "core-compatible", "workflowTemplateId": "restaurant-ordering", "entryPoint": "Walk-in", "firstWorkflow": "counter order and collection slot", "availableNow": ["Sell", "Orders", "Stock", "Daily close", "Collection schedule"], "plannedNext": ["Menu modifiers", "Kitchen tickets"]},
+        {"id": "restaurant", "name": "Restaurant", "status": "core-compatible", "workflowTemplateId": "restaurant-ordering", "entryPoint": "Walk-in", "firstWorkflow": "order and table reservation", "availableNow": ["Sell", "Orders", "Stock", "Payments", "Reservations"], "plannedNext": ["Table map", "Kitchen display"]},
+        {"id": "spa", "name": "Spa", "status": "core-compatible", "workflowTemplateId": "social-commerce", "entryPoint": "Phone", "firstWorkflow": "treatment appointment", "availableNow": ["Sell", "Orders", "Stock", "Payments", "Appointments", "Service resources"], "plannedNext": ["Staff commission", "Customer messaging"]},
+        {"id": "gym", "name": "Gym", "status": "core-compatible", "workflowTemplateId": "social-commerce", "entryPoint": "Phone", "firstWorkflow": "personal training session", "availableNow": ["Sell", "Orders", "Stock", "Payments", "Training schedule", "Staff resources"], "plannedNext": ["Memberships", "Facility check-in"]},
+        {"id": "school", "name": "School", "status": "core-compatible", "workflowTemplateId": "social-commerce", "entryPoint": "Phone", "firstWorkflow": "enrollment consultation or class session", "availableNow": ["Sell", "Orders", "Stock", "Payments", "Class schedule", "Teacher resources"], "plannedNext": ["Students", "Fees ledger", "Attendance"]}
       ],
       "templates": [
         {

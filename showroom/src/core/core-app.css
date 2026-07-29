@@ -55,10 +55,10 @@ a { color: inherit; }
 .sidebar-foot { display: grid; gap: 8px; margin-top: auto; border-top: 1px solid var(--core-line); padding: 14px 4px 0; }
 .sidebar-foot p { margin: 0; color: var(--core-quiet); font-size: 8px; line-height: 1.55; }
 .sidebar-foot a { min-height: 36px; display: inline-flex; align-items: center; color: var(--core-muted); font-size: 12px; text-decoration: none; }
-.theme-toggle { min-height: 36px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--core-line); border-radius: 8px; padding: 0 10px; background: transparent; color: var(--core-muted); font-size: 11px; font-weight: 720; cursor: pointer; }
+.theme-toggle { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--core-line); border-radius: 8px; padding: 0 10px; background: transparent; color: var(--core-muted); font-size: 11px; font-weight: 720; cursor: pointer; }
 .theme-toggle:hover { border-color: var(--core-green); color: var(--core-ink); }
 .theme-toggle span { color: var(--core-green); font-family: var(--core-mono); font-size: 14px; }
-.mobile-theme-toggle { width: 40px; min-height: 38px; justify-content: center; padding: 0; }
+.mobile-theme-toggle { width: 44px; min-height: 44px; justify-content: center; padding: 0; }
 
 .core-topbar { position: relative; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--core-line); padding: 0 20px; background: rgba(255,255,255,.92); backdrop-filter: blur(18px); }
 .core-topbar > div { display: flex; align-items: center; gap: 9px; }

@@ -9,6 +9,8 @@ export type ShopIndustryPack = {
   name: string
   description: string
   firstWorkflow: string
+  workflowTemplateId: 'social-commerce' | 'retail-wholesale' | 'restaurant-ordering'
+  entryPoint: 'Walk-in' | 'Phone'
   capabilities: readonly string[]
   services: readonly Omit<ShopService, 'active'>[]
   resources: readonly Omit<ShopServiceResource, 'active'>[]
@@ -93,6 +95,8 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     name: 'Retail',
     description: 'Counter sales, pickup windows, stock, purchasing, and returns.',
     firstWorkflow: 'Complete a counter sale and schedule a reviewed pickup.',
+    workflowTemplateId: 'retail-wholesale',
+    entryPoint: 'Walk-in',
     capabilities: ['Sell', 'Orders', 'Stock', 'Purchasing', 'Returns', 'Pickup schedule'],
     services: [
       { id: 'service-personal-shopping', name: 'Personal shopping', durationMinutes: 30, priceMmk: 15_000 },
@@ -108,6 +112,8 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     name: 'Cafe',
     description: 'Counter orders, collection slots, stock, and daily close.',
     firstWorkflow: 'Take a counter order and schedule a large-order collection.',
+    workflowTemplateId: 'restaurant-ordering',
+    entryPoint: 'Walk-in',
     capabilities: ['Sell', 'Orders', 'Stock', 'Daily close', 'Collection schedule'],
     services: [
       { id: 'service-catering-consultation', name: 'Catering consultation', durationMinutes: 30, priceMmk: 20_000 },
@@ -123,6 +129,8 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     name: 'Restaurant',
     description: 'Orders, table reservations, deposits, stock, and payment review.',
     firstWorkflow: 'Record an order and hold one accountable table reservation.',
+    workflowTemplateId: 'restaurant-ordering',
+    entryPoint: 'Walk-in',
     capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Reservations'],
     services: [
       { id: 'service-table-reservation', name: 'Table reservation deposit', durationMinutes: 90, priceMmk: 10_000 },
@@ -138,6 +146,8 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     name: 'Spa',
     description: 'Service sales, appointments, staff, rooms, stock, and payments.',
     firstWorkflow: 'Hold, confirm, check in, and complete one treatment appointment.',
+    workflowTemplateId: 'social-commerce',
+    entryPoint: 'Phone',
     capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Appointments', 'Service resources'],
     services: [
       { id: 'service-consultation', name: 'Consultation', durationMinutes: 30, priceMmk: 20_000 },
@@ -153,6 +163,8 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     name: 'Gym',
     description: 'Service sales, consultations, training sessions, staff, and studios.',
     firstWorkflow: 'Schedule and complete one personal-training session.',
+    workflowTemplateId: 'social-commerce',
+    entryPoint: 'Phone',
     capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Training schedule', 'Staff resources'],
     services: [
       { id: 'service-fitness-consultation', name: 'Fitness consultation', durationMinutes: 30, priceMmk: 15_000 },
@@ -168,6 +180,8 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     name: 'School',
     description: 'Enrollment consultations, class sessions, teachers, rooms, and fee sales.',
     firstWorkflow: 'Schedule one enrollment consultation or class session.',
+    workflowTemplateId: 'social-commerce',
+    entryPoint: 'Phone',
     capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Class schedule', 'Teacher resources'],
     services: [
       { id: 'service-enrollment-consultation', name: 'Enrollment consultation', durationMinutes: 30, priceMmk: 10_000 },

@@ -167,10 +167,10 @@ export function SettingsPage() {
   const selectedDemoProductSummary = selectedDemoProductNames.length ? selectedDemoProductNames.join(' · ') : 'Choose at least one'
   const demoInputReady = Boolean(setup.workspace.trim() && setup.owner.trim() && selectedDemoEntries.length)
   const workflowReady = requestedProduct
-    ? Boolean(setup.workspace.trim() && setup.owner.trim() && setup.entryPoint.trim())
+    ? Boolean(setup.workspace.trim() && setup.owner.trim())
     : Boolean(demoWorkspace)
   const workflowCompletion = requestedProduct
-    ? Math.round(([setup.templateId, setup.entryPoint, setup.workspace.trim(), setup.owner.trim()].filter(Boolean).length / 4) * 100)
+    ? Math.round(([setup.templateId, setup.workspace.trim(), setup.owner.trim()].filter(Boolean).length / 3) * 100)
     : Math.round(([setup.workspace.trim(), setup.owner.trim(), selectedDemoEntries.length ? 'products' : '', demoWorkspace ? 'created' : ''].filter(Boolean).length / 4) * 100)
   const displayedCompletion = settingsStep === 'workflow' ? workflowCompletion : completion
   const displayedReady = settingsStep === 'workflow' ? workflowReady : isPilotReady
@@ -254,6 +254,19 @@ export function SettingsPage() {
   }, [requestedProduct, setSetup, setup.product])
 
   useEffect(() => {
+    if (requestedProduct !== 'commerce' || setup.product !== 'commerce') return
+    const template = templateFor('commerce', selectedShopIndustryPack.workflowTemplateId)
+    if (setup.templateId === template.id && setup.entryPoint === selectedShopIndustryPack.entryPoint) return
+    const packTimer = window.setTimeout(() => {
+      setSetup((current) => current.product !== 'commerce'
+        || (current.templateId === template.id && current.entryPoint === selectedShopIndustryPack.entryPoint)
+        ? current
+        : { ...current, templateId: template.id, entryPoint: selectedShopIndustryPack.entryPoint, startedAt: undefined, savedAt: undefined })
+    }, 0)
+    return () => window.clearTimeout(packTimer)
+  }, [requestedProduct, selectedShopIndustryPack.entryPoint, selectedShopIndustryPack.workflowTemplateId, setSetup, setup.entryPoint, setup.product, setup.templateId])
+
+  useEffect(() => {
     let failureNoticeTimer: number | undefined
     try {
       if (demoWorkspace) window.localStorage.setItem(CLIENT_DEMO_WORKSPACE_STORAGE_KEY, JSON.stringify(demoWorkspace))
@@ -285,7 +298,7 @@ export function SettingsPage() {
     setDemoSelections((current) => {
       const next = { ...current }
       if (next[product]) delete next[product]
-      else next[product] = clientImportWorkflowTemplateIds(product)[0]
+      else next[product] = product === 'commerce' ? selectedShopIndustryPack.workflowTemplateId : clientImportWorkflowTemplateIds(product)[0]
       return next
     })
     setDemoBlueprint(null)
@@ -293,16 +306,27 @@ export function SettingsPage() {
   }
 
   function changeDemoTemplate(product: SetupProductId, templateId: string) {
+    if (product === 'commerce') {
+      setDemoSelections((current) => ({ ...current, commerce: selectedShopIndustryPack.workflowTemplateId }))
+      setNotice('Shop workflow is selected by its business pack.')
+      return
+    }
     setDemoSelections((current) => ({ ...current, [product]: templateId }))
     setDemoBlueprint(null)
     setDemoWorkspace(null)
   }
 
   function changeShopIndustryPack(industryPackId: ShopIndustryPackId) {
-    setShopIndustryPackId(shopIndustryPack(industryPackId).id)
+    const pack = shopIndustryPack(industryPackId)
+    const template = templateFor('commerce', pack.workflowTemplateId)
+    setShopIndustryPackId(pack.id)
+    setDemoSelections((current) => current.commerce ? { ...current, commerce: template.id } : current)
+    if (requestedProduct === 'commerce') {
+      updateSetup({ templateId: template.id, entryPoint: pack.entryPoint, startedAt: undefined })
+    }
     setDemoBlueprint(null)
     setDemoWorkspace(null)
-    setNotice('Shop pack changed. Create the client demo again to bind this configuration.')
+    setNotice(`${pack.name} pack selected with the ${template.name} workflow.`)
   }
 
   function changePlantIndustryPack(industryPackId: PlantIndustryPackId) {
@@ -486,7 +510,7 @@ export function SettingsPage() {
 
   function changeTemplate(templateId: string) {
     const template = templateFor(setup.product, templateId)
-    updateSetup({ templateId: template.id, entryPoint: template.entryPoints.includes(setup.entryPoint) ? setup.entryPoint : template.entryPoints[0] ?? '', startedAt: undefined })
+    updateSetup({ templateId: template.id, entryPoint: template.entryPoints[0] ?? '', startedAt: undefined })
   }
 
   function startGuidedTrial() {
@@ -585,7 +609,7 @@ export function SettingsPage() {
 
   return (
     <div className="workspace-screen settings-screen">
-      <PageHeading eyebrow={requestedProduct ? 'Guided trial' : 'Client setup'} title={requestedProduct ? `Set up ${selectedProduct.name}` : 'Create a working client demo.'} copy={requestedProduct ? 'Name the client, choose one workflow, and prepare their data.' : 'Pick the business, name the owner, and open a connected demo. Customize only when needed.'} actions={requestedProduct ? undefined : <div className="setup-action-group"><label className="core-button">Load setup kit<input accept=".json,application/json" className="sr-only" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void loadDemoKit(file) }} type="file" /></label><label className="core-button primary">Load private package<input accept=".json,application/json" className="sr-only" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void loadPreparedClientDemo(file) }} type="file" /></label></div>} />
+      <PageHeading eyebrow={requestedProduct ? 'Guided trial' : 'Client setup'} title={requestedProduct ? `Set up ${selectedProduct.name}` : 'Create a working client demo.'} copy={requestedProduct ? requestedProduct === 'commerce' ? 'Name the client, choose the business pack, and prepare their data.' : 'Name the client, choose one workflow, and prepare their data.' : 'Pick the business, name the owner, and open a connected demo. Customize only when needed.'} actions={requestedProduct ? undefined : <div className="setup-action-group"><label className="core-button">Load setup kit<input accept=".json,application/json" className="sr-only" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void loadDemoKit(file) }} type="file" /></label><label className="core-button primary">Load private package<input accept=".json,application/json" className="sr-only" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void loadPreparedClientDemo(file) }} type="file" /></label></div>} />
       {!preparedArtifact && preparedNotice ? <p className="form-notice" role="status">{preparedNotice}</p> : null}
       {requestedProduct ? <nav aria-label="Setup steps" className="settings-step-nav">
         <button aria-current={settingsStep === 'workflow' ? 'step' : undefined} onClick={() => chooseSettingsStep('workflow')} type="button"><span>1</span>{requestedProduct ? 'Template' : 'Demo kit'}</button>
@@ -601,7 +625,7 @@ export function SettingsPage() {
           {requestedProduct === 'commerce' || (!requestedProduct && Boolean(demoSelections.commerce)) ? <div className="form-row"><label>Shop business pack<select onChange={(event) => changeShopIndustryPack(event.target.value as ShopIndustryPackId)} value={shopIndustryPackId}>{shopIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select></label><div className="template-contract"><span>{selectedShopIndustryPack.description}</span><strong>{selectedShopIndustryPack.firstWorkflow}</strong><small>{selectedShopIndustryPack.capabilities.join(' · ')}</small></div></div> : null}
           {requestedProduct === 'production' || (!requestedProduct && Boolean(demoSelections.production)) ? <div className="form-row"><label>Plant industry pack<select onChange={(event) => changePlantIndustryPack(event.target.value as PlantIndustryPackId)} value={plantIndustryPackId}>{plantIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select></label><div className="template-contract"><span>{selectedPlantIndustryPack.description}</span><strong>{selectedPlantIndustryPack.firstWorkflow}</strong><small>{selectedPlantIndustryPack.capabilities.join(' · ')}</small></div></div> : null}
           {requestedProduct ? <>
-            <div className="form-row"><label>Workflow<select value={setup.templateId} onChange={(event) => changeTemplate(event.target.value)}>{templatesFor(setup.product).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label><label>Current starting point<select value={setup.entryPoint} onChange={(event) => updateSetup({ entryPoint: event.target.value })}>{selectedTemplate.entryPoints.map((entryPoint) => <option key={entryPoint}>{entryPoint}</option>)}</select></label></div>
+            <div className="form-row">{setup.product === 'commerce' ? <div className="template-contract"><span>Configured workflow</span><strong>{selectedTemplate.name}</strong><small>Selected automatically from the business pack.</small></div> : <label>Workflow<select value={setup.templateId} onChange={(event) => changeTemplate(event.target.value)}>{templatesFor(setup.product).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label>}</div>
             <div className="setup-template-summary"><div><span>Outcome</span><strong>{selectedTemplate.outcome}</strong></div><ol aria-label={`${selectedTemplate.name} workflow`}>{selectedTemplate.workflow.map((step) => <li key={step}>{step}</li>)}</ol><small>Measure success with {selectedTemplate.metric.toLowerCase()}.</small></div>
           </> : <>
             <div aria-label="Choose client business type" className="demo-preset-grid" role="group">{clientDemoPresets.map((preset) => <button aria-pressed={demoPresetId === preset.id} key={preset.id} onClick={() => chooseDemoPreset(preset.id)} type="button"><strong>{preset.name}</strong><small>{preset.description}</small></button>)}</div>
@@ -613,7 +637,7 @@ export function SettingsPage() {
                 const templateId = demoSelections[product.id]
                 return <section className="demo-solution-card" data-selected={Boolean(templateId)} key={product.id}>
                   <label><input checked={Boolean(templateId)} onChange={() => toggleDemoProduct(product.id)} type="checkbox" /><span><strong>{product.name}</strong><small>{product.headline}</small></span></label>
-                  {templateId ? <select aria-label={`${product.name} workflow`} onChange={(event) => changeDemoTemplate(product.id, event.target.value)} value={templateId}>{templatesFor(product.id).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select> : <small>Not included in this demo.</small>}
+                  {templateId ? product.id === 'commerce' ? <small>{templateFor('commerce', selectedShopIndustryPack.workflowTemplateId).name} · selected by Shop pack</small> : <select aria-label={`${product.name} workflow`} onChange={(event) => changeDemoTemplate(product.id, event.target.value)} value={templateId}>{templatesFor(product.id).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select> : <small>Not included in this demo.</small>}
                 </section>
               })}</div>
             </details>
