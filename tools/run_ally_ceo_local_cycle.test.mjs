@@ -180,16 +180,21 @@ function harness(overrides = {}) {
   return { calls, jobId, queueId, runCommand }
 }
 
+const acceptedSpecialistSections = [
+  'operations', 'chief-of-staff', 'engineering', 'quality', 'sales', 'finance',
+].flatMap((role) => [
+  `## ${role}`,
+  'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
+])
+
 const acceptedReport = [
   '# Local Agent Company Report',
   '## Team plan',
   '1. operations',
-  '## operations',
-  'Managed persistence is not ready. CURRENT.md [EVIDENCE:1111111111111111]',
-  'Security is not ready. hq/NOW.md [EVIDENCE:2222222222222222]',
+  ...acceptedSpecialistSections,
   'Missing Proof: isolated managed tenant persistence and security evidence.',
   '## Executive synthesis',
-  'The live app is not a managed system of record.',
+  'CURRENT.md [EVIDENCE:1111111111111111] records that the live app is not a managed system of record. hq/NOW.md [EVIDENCE:2222222222222222] records managed persistence and security as not ready.',
   'Owner review required.',
   '## Evidence manifest',
 ].join('\n')
@@ -198,8 +203,7 @@ const acceptedStructuredReport = [
   '# Local Agent Company Report',
   '## Team plan',
   '1. operations',
-  '## operations',
-  'Not verified or performed: review current operating limitations.',
+  ...acceptedSpecialistSections,
   '## Executive synthesis',
   'Verified facts: CURRENT.md [EVIDENCE:1111111111111111] is verified as a frozen local source for this brief. hq/NOW.md [EVIDENCE:2222222222222222] records this frozen limitation: managed persistence is not ready.',
   'Assumptions: Current operational readiness and adoption remain unverified pending owner review.',
@@ -331,10 +335,11 @@ test('execution claims the exact reviewed mission once and accepts only a qualit
   const add = state.calls.find((call) => call.args?.[1] === 'add')
   assert.equal(add.args.includes('--roles'), true)
   assert.equal(add.args.includes('operations,chief-of-staff'), true)
+  assert.match(add.args[2], /Proposed next action, Assumption, and Missing proof/)
   const run = state.calls.find((call) => call.args?.[1] === 'run-next')
   assert.deepEqual(run.args.slice(0, 4), ['queue', 'run-next', '--queue-id', state.queueId])
   assert.equal(run.args.includes('0s'), true)
-  assert.equal(run.args.includes('512'), true)
+  assert.equal(run.args.includes('768'), true)
 })
 
 test('execution can atomically refresh changed registered evidence before queue or model work', async () => {
@@ -414,6 +419,30 @@ test('code-owned structured evidence and limitation sections satisfy CEO semanti
   )
   assert.equal(result.ok, true)
   assert.equal(result.modelCalls, 2)
+})
+
+test('quality-passed reports with withheld specialist work cannot advance CEO control', async () => {
+  const state = harness({ modelEventCount: 2 })
+  const withheldReport = acceptedStructuredReport.replace(
+    'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
+    'Not verified or performed: specialist draft withheld after incomplete model output.',
+  )
+  await assert.rejects(
+    runAllyCeoLocalCycle(
+      { execute: true },
+      {
+        plan: plan(),
+        runCommand: state.runCommand,
+        inspectReport: async () => ({
+          path: 'C:\\state\\outputs\\withheld.md',
+          bytes: Buffer.byteLength(withheldReport),
+          digest: 'sha256:' + '1'.repeat(64),
+          text: withheldReport,
+        }),
+      },
+    ),
+    /ally_ceo_local_cycle_specialist_section_rejected/,
+  )
 })
 
 test('a locally passed report is still rejected when it denies known missing proof', async () => {

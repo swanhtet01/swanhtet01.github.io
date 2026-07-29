@@ -19,8 +19,8 @@ const defaultLocalCompanyHome = resolve(root, '..', 'supermega-local-company-sta
 const powershell = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const MAX_COMMAND_BYTES = 512 * 1024
 const MAX_REPORT_BYTES = 256 * 1024
-const EXECUTION_SPEC_VERSION = '2026-07-29.11'
-const LEGACY_EXECUTION_SPEC_VERSION = '2026-07-29.10'
+const EXECUTION_SPEC_VERSION = '2026-07-29.12'
+const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.11', '2026-07-29.10'])
 
 const AGENT_ROLE_MAP = Object.freeze({
   'operations-analyst': 'operations',
@@ -108,13 +108,13 @@ function planSpec(plan) {
     outcomeId,
     roles.join(','),
   ].join('|'))
-  const legacyCycleHash = sha256([
+  const legacyShortHashes = LEGACY_EXECUTION_SPEC_VERSIONS.map((version) => sha256([
     ALLY_CEO_LOCAL_CYCLE_CONTRACT,
-    LEGACY_EXECUTION_SPEC_VERSION,
+    version,
     hash,
     outcomeId,
     roles.join(','),
-  ].join('|'))
+  ].join('|')).slice(0, 12))
   const shortHash = cycleHash.slice(0, 12)
   const outcomeMarker = `[ALLY_CEO_OUTCOME:${period}:${outcomeId}]`
   const objective = [
@@ -126,7 +126,7 @@ function planSpec(plan) {
     'Lead with current limitations: the live app is not a managed system of record, and managed persistence and security remain not ready.',
     'Define 1 reusable task template under Task templates for the highest-value internal next action, plus success checks, failure modes that expose missing proof, and owner gates.',
     'Every verified claim must name its exact source filename and matching supplied evidence ID.',
-    'Each specialist section must be at most 90 words. The executive synthesis must be at most 120 words and end with: Owner review required.',
+    'Each specialist section must be at most 90 words and contain exactly these advisory labels: Proposed next action, Assumption, and Missing proof. Specialists must not claim execution or verified facts; the evidence-grounded executive synthesis remains code-owned. The executive synthesis must be at most 120 words and end with: Owner review required.',
   ].join(' ')
   return {
     outcomeId,
@@ -135,7 +135,7 @@ function planSpec(plan) {
     planHash: hash,
     cycleHash,
     shortHash,
-    legacyShortHash: legacyCycleHash.slice(0, 12),
+    legacyShortHashes,
     workOrderId: String(plan.preflight?.expectedWorkOrderId || ''),
     agents: [...agents],
     roles,
@@ -286,9 +286,16 @@ function findExistingCycle(queueText, marker) {
 }
 
 function existingForSpec(queueText, spec) {
-  return findExistingCycle(queueText, spec.outcomeMarker)
-    || findExistingCycle(queueText, `[ALLY_CEO_CYCLE:${spec.shortHash}]`)
-    || findExistingCycle(queueText, `[ALLY_CEO_CYCLE:${spec.legacyShortHash}]`)
+  const markers = [
+    spec.outcomeMarker,
+    `[ALLY_CEO_CYCLE:${spec.shortHash}]`,
+    ...spec.legacyShortHashes.map((hash) => `[ALLY_CEO_CYCLE:${hash}]`),
+  ]
+  for (const marker of markers) {
+    const existing = findExistingCycle(queueText, marker)
+    if (existing) return existing
+  }
+  return null
 }
 
 function validateQueuePreflight(preflight, queueId, roles) {
@@ -398,7 +405,36 @@ async function defaultReportInspector(reportPath, localCompanyHome) {
   return { path: absolute, bytes: bytes.length, digest: `sha256:${sha256(bytes)}`, text: bytes.toString('utf8') }
 }
 
-function validateAcceptedReport(value) {
+function specialistSection(text, role) {
+  const lines = text.split(/\r?\n/)
+  const start = lines.findIndex((line) => line.trim() === `## ${role}`)
+  if (start < 0) return ''
+  const endOffset = lines.slice(start + 1).findIndex((line) => line.startsWith('## '))
+  const end = endOffset < 0 ? lines.length : start + 1 + endOffset
+  return lines.slice(start + 1, end).join('\n').trim()
+}
+
+function validateSpecialistSections(text, requiredRoles) {
+  if (!Array.isArray(requiredRoles) || requiredRoles.length !== 2 || new Set(requiredRoles).size !== 2) {
+    fail('ally_ceo_local_cycle_specialist_roles_invalid')
+  }
+  for (const role of requiredRoles) {
+    const section = specialistSection(text, role)
+    const words = section.match(/\b[\p{L}\p{N}][\p{L}\p{N}'-]*\b/gu) || []
+    if (!section.startsWith('Not verified or performed:')
+      || words.length < 12
+      || words.length > 90
+      || !/Proposed next action\s*:/i.test(section)
+      || !/Assumption\s*:/i.test(section)
+      || !/Missing proof\s*:/i.test(section)
+      || /specialist draft withheld|incomplete model output|no substantive specialist draft/i.test(section)
+      || /\[EVIDENCE:/i.test(section)) {
+      fail('ally_ceo_local_cycle_specialist_section_rejected')
+    }
+  }
+}
+
+function validateAcceptedReport(value, requiredRoles) {
   const text = typeof value?.text === 'string' ? value.text : ''
   const digest = String(value?.digest || '')
   if (!value
@@ -414,6 +450,7 @@ function validateAcceptedReport(value) {
     fail('ally_ceo_local_cycle_report_semantics_rejected')
   }
   const generatedOutput = (text.split('## Team plan')[1] || '').split('## Evidence manifest')[0]
+  validateSpecialistSections(generatedOutput, requiredRoles)
   const structuredLabels = [
     'Verified facts:', 'Assumptions:', 'Task templates:', 'Success checks:',
     'Failure modes:', 'Owner gates:',
@@ -441,7 +478,7 @@ function validateAcceptedReport(value) {
   return { path: value.path, bytes: value.bytes, digest }
 }
 
-async function inspectExistingCycle(existing, runCommand, inspectReport) {
+async function inspectExistingCycle(existing, requiredRoles, runCommand, inspectReport) {
   let report = null
   let reason = null
   if (existing.status === 'complete' && existing.jobId) {
@@ -457,7 +494,7 @@ async function inspectExistingCycle(existing, runCommand, inspectReport) {
         || typeof detail.job[4] !== 'string') {
         fail('ally_ceo_local_cycle_existing_job_rejected')
       }
-      report = validateAcceptedReport(await inspectReport(detail.job[4]))
+      report = validateAcceptedReport(await inspectReport(detail.job[4]), requiredRoles)
     } catch (error) {
       reason = String(error?.message || 'ally_ceo_local_cycle_existing_job_rejected').slice(0, 160)
     }
@@ -481,7 +518,7 @@ async function selectRotatingPlan({ buildPlan, queueText, runCommand, inspectRep
     period ??= spec.period
     const existing = existingForSpec(queueText, spec)
     if (!existing) return { allDone: false, plan, spec, existing: null, inspection: null, completedOutcomeIds }
-    const inspection = await inspectExistingCycle(existing, runCommand, inspectReport)
+    const inspection = await inspectExistingCycle(existing, spec.roles, runCommand, inspectReport)
     if (!inspection.accepted) return { allDone: false, plan, spec, existing, inspection, completedOutcomeIds }
     completedOutcomeIds.push(spec.outcomeId)
   }
@@ -579,7 +616,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   }
   const { spec, existing, completedOutcomeIds } = rotation
   if (existing) {
-    const inspected = rotation.inspection || await inspectExistingCycle(existing, runCommand, inspectReport)
+    const inspected = rotation.inspection || await inspectExistingCycle(existing, spec.roles, runCommand, inspectReport)
     return {
       ok: inspected.accepted,
       contract: ALLY_CEO_LOCAL_CYCLE_CONTRACT,
@@ -655,7 +692,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
       '--provider', provider,
       '--model', model,
       '--num-ctx', '4096',
-      '--num-predict', '512',
+      '--num-predict', '768',
       '--keep-alive', '0s',
     ],
     timeoutMs: 8 * 60_000,
@@ -677,7 +714,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   if (modelCalls < spec.roles.length || modelCalls > spec.roles.length + 2) {
     fail('ally_ceo_local_cycle_model_count_invalid')
   }
-  const report = validateAcceptedReport(await inspectReport(result.reportPath))
+  const report = validateAcceptedReport(await inspectReport(result.reportPath), spec.roles)
   const finalHealth = parseJson(await runCommand({ kind: 'local', args: ['health'], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_final_health_invalid')
   validateHealth(finalHealth, provider, model)
   const finalAudit = parseJson(await runCommand({ kind: 'audit', args: [], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_final_audit_invalid')
