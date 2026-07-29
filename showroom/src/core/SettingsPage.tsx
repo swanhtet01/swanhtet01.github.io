@@ -227,6 +227,9 @@ export function SettingsPage() {
   const managedApprovalRequests = approvals.map(toManagedApprovalRequest).filter((request): request is NonNullable<typeof request> => Boolean(request))
   const localProductRecords = collectLocalProductRecords(window.localStorage)
   const localRecordCount = Object.keys(localProductRecords).length
+  const localProductRecordKeys = Object.keys(localProductRecords)
+  const websiteLocalRecordCount = localProductRecordKeys.filter((key) => key === WEBSITE_STORAGE_KEY || key === LEGACY_WEBSITE_STORAGE_KEY || key.startsWith('supermega.website.workspace.recovery.v1.')).length
+  const ecommerceLocalRecordCount = localProductRecordKeys.filter((key) => key === WEBSITE_ECOMMERCE_HANDOFF_KEY || key.startsWith(STOREFRONT_DRAFT_RESET_PREFIX) || key.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)).length
   const behaviorTrail = readBehaviorTrail(window.localStorage)
   const behaviorSignalCount = behaviorTrail.length
   const agentBehaviorSignals = behaviorTrail.filter((entry) => entry.event === 'agent_job_seen' || entry.event === 'agent_job_chosen')
@@ -286,6 +289,54 @@ export function SettingsPage() {
     ['Controls', runtime.writesReady && evidencePlanReady ? 'Ready' : 'Locked', runtime.writesReady && evidencePlanReady ? 'Managed writes and evidence gates are ready.' : 'Managed activation gates must pass before AI can learn from customer data.'],
     ['Next handoff', localRecordCount && agentBehaviorSignals.length && (managedApprovalRequests.length || approvals.length) ? 'Export context' : 'Collect proof', 'Export stays browser-local until the owner requests managed activation.'],
   ] as const
+  const aiProductSourceRows = [
+    ['Shop', commerce.items.length || commerce.orders.length ? `${commerce.items.length} SKU / ${commerce.orders.length} orders` : 'Need Shop use', 'Premium can learn stock, order, payment, purchase, and counter patterns after managed import.'],
+    ['Plant', production.jobs.length || production.events.length ? `${production.jobs.length} jobs / ${production.events.length} events` : 'Need Plant use', 'Premium can learn MES, quality, WCM, trace, and handoff patterns after managed import.'],
+    ['Website', websiteLocalRecordCount ? `${websiteLocalRecordCount} local records` : 'Need website save', 'Premium can learn content, lead capture, approval, package, and rollout readiness after managed import.'],
+    ['Ecommerce', ecommerceLocalRecordCount ? `${ecommerceLocalRecordCount} handoff records` : 'Need store handoff', 'Premium can learn catalog, storefront, order review, and Shop queue handoff after managed import.'],
+    ['Behavior', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} agent signals` : 'Need usage', 'Premium ranks next actions only from exported local choices and approved decisions.'],
+  ] as const
+  const aiProductSourceMap = {
+    contract: 'supermega.ai_product_source_map.v1',
+    version: 1,
+    createdAt: new Date().toISOString(),
+    evidenceVersion: 23,
+    products: [
+      {
+        product: 'Shop',
+        source: 'commerce_workspace',
+        prepared: commerce.items.length > 0 || commerce.orders.length > 0,
+        records: { skus: commerce.items.length, orders: commerce.orders.length, purchaseOrders: commerce.purchaseOrders?.length ?? 0 },
+        allowedLearning: ['stock_patterns', 'order_queue_priority', 'payment_exception_summary', 'purchase_reorder_recommendations'],
+      },
+      {
+        product: 'Plant',
+        source: 'production_workspace',
+        prepared: production.jobs.length > 0 || production.events.length > 0,
+        records: { jobs: production.jobs.length, machines: production.machines.length, issues: production.issues.length, events: production.events.length },
+        allowedLearning: ['mes_next_action_rank', 'quality_hold_summary', 'wcm_exception_triage', 'material_trace_handoff'],
+      },
+      {
+        product: 'Website',
+        source: 'website_local_records',
+        prepared: websiteLocalRecordCount > 0,
+        records: { localRecords: websiteLocalRecordCount },
+        allowedLearning: ['content_gap_summary', 'lead_capture_readiness', 'release_package_review', 'rollout_blocker_summary'],
+      },
+      {
+        product: 'Ecommerce',
+        source: 'ecommerce_handoff_records',
+        prepared: ecommerceLocalRecordCount > 0,
+        records: { localRecords: ecommerceLocalRecordCount },
+        allowedLearning: ['storefront_readiness', 'catalog_match_summary', 'order_queue_review', 'shop_handoff_rank'],
+      },
+    ],
+    behaviorSignals: agentBehaviorSignals.length,
+    decisionPackets: managedApprovalRequests.length || approvals.length,
+    allowedUses: ['summarize_product_sources', 'rank_product_next_actions', 'prepare_import_mapping', 'draft_operator_recommendations'],
+    forbiddenActions: ['customer_message_send', 'payment_capture', 'stock_move', 'production_write', 'domain_publish', 'crm_write', 'model_training_without_owner_approval'],
+    activationRequired: true,
+  }
   const contextHandoffReady = localRecordCount > 0 && agentBehaviorSignals.length > 0 && (managedApprovalRequests.length > 0 || approvals.length > 0)
   const contextHandoffManifest = {
     contract: 'supermega.ai_context_handoff.v1',
@@ -304,6 +355,7 @@ export function SettingsPage() {
       approvalPackets: managedApprovalRequests.length || approvals.length,
       accountableActions: actions.length,
     },
+    productSourceMap: aiProductSourceMap,
     allowedUses: ['rank_next_actions', 'draft_internal_recommendations', 'prepare_import_mapping', 'summarize_workspace_evidence'],
     forbiddenActions: ['customer_message_send', 'payment_capture', 'domain_deploy', 'production_write', 'training_without_owner_approval'],
     activationRequired: !runtime.writesReady || !evidencePlanReady,
@@ -398,6 +450,7 @@ export function SettingsPage() {
     localRecords: localRecordCount,
     approvalPackets: managedApprovalRequests.length || approvals.length,
     behaviorSignals: behaviorSignalCount,
+    productSourceMap: aiProductSourceMap,
     contextHandoffManifest,
     managedWorkspaceProvisioningPacket,
     importProvisioningPacket,
@@ -433,7 +486,7 @@ export function SettingsPage() {
       ]),
     ['Coverage', `${runtime.coverageScore}%`],
   ]
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 23, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, contextHandoffManifest, contextHandoffRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 23, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
   const ecommerceOrderQueueReadinessFilename = ecommerceOrderQueueReadinessPacket
     ? `supermega-ecommerce-order-queue-${safePacketFilename(ecommerceOrderQueueReadinessPacket.storeName)}.json`
@@ -1045,6 +1098,10 @@ export function SettingsPage() {
               <div aria-label="AI context quality cockpit" className="learning-plan-agent context-quality-panel">
                 <div><span className="core-eyebrow">AI context quality</span><h3>What premium can safely use</h3><p>Premium learning starts only when source records, behavior, decisions, and managed controls are present in the exported evidence.</p></div>
                 <div className="context-quality-rows">{aiContextQualityRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+              </div>
+              <div aria-label="AI product source map" className="learning-plan-agent context-quality-panel">
+                <div><span className="core-eyebrow">AI product source map</span><h3>What each product can teach</h3><p>Premium receives an explicit map of Shop, Plant, Website, Ecommerce, behavior, and decision sources. It may summarize and rank only after managed activation; no customer send, payment, stock move, production write, domain publish, CRM write, or model training runs from this map.</p></div>
+                <div className="context-quality-rows">{aiProductSourceRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
               </div>
               <div aria-label="AI context handoff manifest" className="learning-plan-agent context-quality-panel">
                 <div><span className="core-eyebrow">AI context handoff</span><h3>What premium receives</h3><p>This manifest tells support and the managed agent what it may use, what it must ignore, and which actions remain forbidden.</p></div>
