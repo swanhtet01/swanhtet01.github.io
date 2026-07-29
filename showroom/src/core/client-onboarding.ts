@@ -74,7 +74,7 @@ export type ClientChannelKind = 'assisted-sales' | 'production-execution' | 'lea
 export type ClientOperationalTopology = {
   schema: typeof CLIENT_OPERATIONAL_TOPOLOGY_SCHEMA
   locations: Array<{
-    id: 'main'
+    id: 'LOC-MAIN'
     code: 'MAIN'
     name: 'Main operating unit'
     kind: ClientOperatingUnitKind
@@ -85,13 +85,13 @@ export type ClientOperationalTopology = {
     id: string
     label: string
     kind: ClientChannelKind
-    locationId: 'main'
+    locationId: 'LOC-MAIN'
     owningProduct: ClientSolutionId
   }>
   recordAuthorities: Array<{
     product: ClientSolutionId
     label: string
-    locationIds: ['main']
+    locationIds: ['LOC-MAIN']
     owns: string[]
     consumesFrom: ClientSolutionId[]
     writePolicy: 'human_review_required'
@@ -963,7 +963,7 @@ export function buildClientOperationalTopology(
   return {
     schema: CLIENT_OPERATIONAL_TOPOLOGY_SCHEMA,
     locations: [{
-      id: 'main',
+      id: 'LOC-MAIN',
       code: 'MAIN',
       name: 'Main operating unit',
       kind: operatingUnitKindByPreset[presetId],
@@ -972,13 +972,13 @@ export function buildClientOperationalTopology(
     }],
     channels: products.map((product) => ({
       ...clientChannelByProduct[product],
-      locationId: 'main' as const,
+      locationId: 'LOC-MAIN' as const,
       owningProduct: product,
     })),
     recordAuthorities: products.map((product) => ({
       product,
       label: clientDemoProductDetails[product].label,
-      locationIds: ['main'] as ['main'],
+      locationIds: ['LOC-MAIN'] as ['LOC-MAIN'],
       owns: [...clientRecordsOwnedByProduct[product]],
       consumesFrom: clientProductDependencies(product, selected),
       writePolicy: 'human_review_required' as const,

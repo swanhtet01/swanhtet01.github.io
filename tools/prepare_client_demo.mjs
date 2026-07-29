@@ -118,12 +118,12 @@ function canonicalOperationalTopology(client, products) {
   ))
   return {
     schema: CLIENT_OPERATIONAL_TOPOLOGY_SCHEMA,
-    locations: [{ id: 'main', code: 'MAIN', name: 'Main operating unit', kind: OPERATING_UNIT_KIND[client.presetId], timeZone: 'Asia/Yangon', active: true }],
-    channels: products.map((product) => ({ ...CHANNEL_BY_PRODUCT[product], locationId: 'main', owningProduct: product })),
+    locations: [{ id: 'LOC-MAIN', code: 'MAIN', name: 'Main operating unit', kind: OPERATING_UNIT_KIND[client.presetId], timeZone: 'Asia/Yangon', active: true }],
+    channels: products.map((product) => ({ ...CHANNEL_BY_PRODUCT[product], locationId: 'LOC-MAIN', owningProduct: product })),
     recordAuthorities: products.map((product) => ({
       product,
       label: PRODUCT_LABEL[product],
-      locationIds: ['main'],
+      locationIds: ['LOC-MAIN'],
       owns: [...RECORDS_BY_PRODUCT[product]],
       consumesFrom: dependencies(product),
       writePolicy: 'human_review_required',

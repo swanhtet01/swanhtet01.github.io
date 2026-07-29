@@ -74,18 +74,18 @@ test('client preparation compiles one validated four-product founder-review arti
     })
     assert.deepEqual(artifact.topology, {
       schema: 'supermega.client_operational_topology.v1',
-      locations: [{ id: 'main', code: 'MAIN', name: 'Main operating unit', kind: 'plant', timeZone: 'Asia/Yangon', active: true }],
+      locations: [{ id: 'LOC-MAIN', code: 'MAIN', name: 'Main operating unit', kind: 'plant', timeZone: 'Asia/Yangon', active: true }],
       channels: [
-        { id: 'shop-counter', label: 'Counter and assisted orders', kind: 'assisted-sales', locationId: 'main', owningProduct: 'commerce' },
-        { id: 'plant-execution', label: 'Production execution', kind: 'production-execution', locationId: 'main', owningProduct: 'production' },
-        { id: 'website-inquiry', label: 'Website inquiries', kind: 'lead-capture', locationId: 'main', owningProduct: 'website' },
-        { id: 'ecommerce-storefront', label: 'Digital storefront', kind: 'digital-sales', locationId: 'main', owningProduct: 'ecommerce' },
+        { id: 'shop-counter', label: 'Counter and assisted orders', kind: 'assisted-sales', locationId: 'LOC-MAIN', owningProduct: 'commerce' },
+        { id: 'plant-execution', label: 'Production execution', kind: 'production-execution', locationId: 'LOC-MAIN', owningProduct: 'production' },
+        { id: 'website-inquiry', label: 'Website inquiries', kind: 'lead-capture', locationId: 'LOC-MAIN', owningProduct: 'website' },
+        { id: 'ecommerce-storefront', label: 'Digital storefront', kind: 'digital-sales', locationId: 'LOC-MAIN', owningProduct: 'ecommerce' },
       ],
       recordAuthorities: [
-        { product: 'commerce', label: 'Shop', locationIds: ['main'], owns: ['catalog', 'inventory', 'orders', 'payments', 'customer_accounts'], consumesFrom: ['production'], writePolicy: 'human_review_required' },
-        { product: 'production', label: 'Plant', locationIds: ['main'], owns: ['materials', 'work_orders', 'quality', 'maintenance', 'released_stock'], consumesFrom: ['commerce'], writePolicy: 'human_review_required' },
-        { product: 'website', label: 'Website', locationIds: ['main'], owns: ['pages', 'content', 'releases', 'lead_intake'], consumesFrom: [], writePolicy: 'human_review_required' },
-        { product: 'ecommerce', label: 'Ecommerce', locationIds: ['main'], owns: ['storefront', 'collections', 'carts', 'quotes', 'order_requests'], consumesFrom: ['commerce', 'website'], writePolicy: 'human_review_required' },
+        { product: 'commerce', label: 'Shop', locationIds: ['LOC-MAIN'], owns: ['catalog', 'inventory', 'orders', 'payments', 'customer_accounts'], consumesFrom: ['production'], writePolicy: 'human_review_required' },
+        { product: 'production', label: 'Plant', locationIds: ['LOC-MAIN'], owns: ['materials', 'work_orders', 'quality', 'maintenance', 'released_stock'], consumesFrom: ['commerce'], writePolicy: 'human_review_required' },
+        { product: 'website', label: 'Website', locationIds: ['LOC-MAIN'], owns: ['pages', 'content', 'releases', 'lead_intake'], consumesFrom: [], writePolicy: 'human_review_required' },
+        { product: 'ecommerce', label: 'Ecommerce', locationIds: ['LOC-MAIN'], owns: ['storefront', 'collections', 'carts', 'quotes', 'order_requests'], consumesFrom: ['commerce', 'website'], writePolicy: 'human_review_required' },
       ],
       controls: { canonicalLocationRequired: true, crossProductReferencesRequired: true, unmanagedWritesAllowed: false },
     })

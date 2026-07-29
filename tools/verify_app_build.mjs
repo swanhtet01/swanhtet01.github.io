@@ -3886,11 +3886,12 @@ async function verifyClientOnboardingRuntime() {
         && blueprint.foundation.controls.managedIdentityRequiredBeforeActivation === true, `client_demo_${preset.id}_foundation_wrong`)
       assert(blueprint.topology.schema === model.CLIENT_OPERATIONAL_TOPOLOGY_SCHEMA
         && blueprint.topology.locations.length === 1
+        && blueprint.topology.locations[0].id === 'LOC-MAIN'
         && blueprint.topology.locations[0].code === 'MAIN'
         && blueprint.topology.locations[0].kind === blueprint.foundation.operatingUnit.kind
         && blueprint.topology.channels.length === blueprint.products.length
         && blueprint.topology.recordAuthorities.length === blueprint.products.length
-        && blueprint.topology.recordAuthorities.every((authority) => authority.locationIds.join(',') === 'main' && authority.owns.length >= 4 && authority.writePolicy === 'human_review_required')
+        && blueprint.topology.recordAuthorities.every((authority) => authority.locationIds.join(',') === 'LOC-MAIN' && authority.owns.length >= 4 && authority.writePolicy === 'human_review_required')
         && blueprint.topology.controls.unmanagedWritesAllowed === false, `client_demo_${preset.id}_topology_wrong`)
       assert(blueprint.products.length === preset.selections.length && blueprint.products.every((product) => product.sampleCsv && product.checklist.length === 5), `client_demo_${preset.id}_data_plan_incomplete`)
       assert(blueprint.controls.localDemoOnly === true && blueprint.controls.humanReviewRequired === true && blueprint.controls.externalWritesPerformed === false, `client_demo_${preset.id}_controls_weakened`)
