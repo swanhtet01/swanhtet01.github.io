@@ -277,6 +277,7 @@ const expectedHumanCommerceEvents = [
   'commerce.order.created',
   'commerce.order.return_recorded',
   'commerce.payment.reconciled',
+  'commerce.production_batch.received',
   'commerce.production_material.issued',
   'commerce.purchase_order.cancelled',
   'commerce.purchase_order.created',

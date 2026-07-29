@@ -1659,6 +1659,17 @@ if (!commerceSource.includes('CommercePurchaseOrderLocationReceipt')
   || !commerceSource.includes('locationResult.replayed')
   || !managedCommerceRuntime.includes('managed purchase receipt must append exactly one location receipt')
   || !managedTrialStoreRuntime.includes('location_receipt_matches')) fail('managed_purchase_receipt_location_contract_missing')
+if (!shopInventorySource.includes('export function receiveShopInventoryFromProduction')
+  || !commerceSource.includes('export function receiveCommerceProductionBatch')
+  || !commerceSource.includes('PLANT-BATCH:${checkedReceipt.releaseId}:${checkedReceipt.sourceCommandDigest}:${locationId}')
+  || !managedTrialSource.includes("'commerce.production_batch.received'")
+  || !managedCommerceRuntime.includes('def _validate_production_batch_received')
+  || !managedCommerceRuntime.includes('the Plant receipt location command must match the exact release evidence')
+  || !managedTrialStoreRuntime.includes('"commerce.production_batch.received": "production_receipt"')
+  || !coreSource.includes('production={relatedProduction}')
+  || !shopInventoryUiSource.includes('Released from Plant')
+  || !shopInventoryUiSource.includes('Review Plant receipt')
+  || !shopInventoryUiSource.includes("'commerce.production_batch.received'")) fail('plant_batch_shop_receipt_boundary_missing')
 if (!commerceSource.includes('CommerceStockLocationCount')
   || !commerceSource.includes('countShopInventory(current.inventoryFoundation')
   || !coreSource.includes("'Count one location'")
@@ -3097,6 +3108,71 @@ async function verifyShopInventoryRuntime() {
       catalogSkus: ['SKU-1'],
       expectedHeadDigest: model.EMPTY_SHOP_INVENTORY_DIGEST,
     }), 'managed_production_issue_stale_head_succeeded')
+    const productionReceipt = {
+      releaseId: 'QREL-LOCATION-001',
+      sourceCommandDigest: `sha256:${'c'.repeat(64)}`,
+      jobId: 'JOB-LOCATION-RECEIPT-001',
+      outputBatchId: 'BATCH-LOCATION-001',
+      releasedAt: '2026-07-26T03:00:00+06:30',
+      sku: 'SKU-1',
+      quantity: 6,
+    }
+    const productionReceiptProof = {
+      ...proof(4, 'production-receipt'),
+      evidenceReference: `PLANT-BATCH:${productionReceipt.releaseId}:${productionReceipt.sourceCommandDigest}:LOC-MAIN`,
+    }
+    const productionReceived = commerce.receiveCommerceProductionBatch(
+      managedBase,
+      productionReceipt,
+      productionReceiptProof,
+      { locationId: 'LOC-MAIN', expectedHeadDigest: managedBase.inventoryFoundation.headDigest },
+    )
+    const productionReceivedProjection = productionReceived
+      && model.projectShopInventory(productionReceived.inventoryFoundation, ['SKU-1'])
+    const productionReceiptCommand = productionReceived?.inventoryFoundation?.commands.at(-1)?.payload
+    assert(productionReceived?.items[0].onHand === 16
+      && productionReceiptCommand?.kind === 'production_receipt'
+      && productionReceiptCommand.id.startsWith('PRC-')
+      && productionReceiptCommand.stockUnitId.startsWith('LOT-PLANT-')
+      && productionReceiptCommand.trackingCode === productionReceipt.outputBatchId
+      && productionReceivedProjection?.metrics.totalOnHand === 16
+      && productionReceivedProjection.metrics.totalAvailableToPromise === 16
+      && productionReceivedProjection.ledger.at(-1)?.referenceId === productionReceipt.releaseId,
+    'managed_production_receipt_did_not_add_exact_location_lot_stock')
+    assert(commerce.receiveCommerceProductionBatch(
+      productionReceived,
+      productionReceipt,
+      productionReceiptProof,
+      { locationId: 'LOC-MAIN', expectedHeadDigest: managedBase.inventoryFoundation.headDigest },
+    ) === productionReceived, 'managed_production_receipt_retry_not_idempotent')
+    assert(commerce.receiveCommerceProductionBatch(
+      productionReceived,
+      { ...productionReceipt, quantity: 7 },
+      productionReceiptProof,
+      { locationId: 'LOC-MAIN', expectedHeadDigest: managedBase.inventoryFoundation.headDigest },
+    ) === null, 'managed_production_receipt_changed_retry_succeeded')
+    assert(commerce.receiveCommerceProductionBatch(
+      productionReceived,
+      productionReceipt,
+      {
+        ...proof(5, 'production-receipt-duplicate'),
+        evidenceReference: productionReceiptProof.evidenceReference,
+      },
+      { locationId: 'LOC-MAIN', expectedHeadDigest: productionReceived.inventoryFoundation.headDigest },
+    ) === null, 'managed_production_release_was_received_twice')
+    assert(commerce.receiveCommerceProductionBatch(
+      managedBase,
+      { ...productionReceipt, releaseId: 'QREL-LOCATION-STALE', outputBatchId: 'BATCH-LOCATION-STALE' },
+      {
+        ...proof(5, 'production-receipt-stale'),
+        evidenceReference: `PLANT-BATCH:QREL-LOCATION-STALE:${productionReceipt.sourceCommandDigest}:LOC-MAIN`,
+      },
+      { locationId: 'LOC-MAIN', expectedHeadDigest: model.EMPTY_SHOP_INVENTORY_DIGEST },
+    ) === null, 'managed_production_receipt_stale_head_succeeded')
+    const forgedProductionReceipt = structuredClone(productionReceived.inventoryFoundation)
+    forgedProductionReceipt.commands.at(-1).payload.productionOutputBatchId = 'BATCH-TAMPERED-001'
+    assertThrows(() => model.validateShopInventoryState(forgedProductionReceipt, ['SKU-1']),
+      'managed_production_receipt_tamper_validated')
     const locationReleaseProof = proof(3, 'order-release')
     const locationCancelled = commerce.cancelCommerceOrder(locationReserved, locationOrder.id, locationReleaseProof)
     const locationCancelledProjection = locationCancelled && model.projectShopInventory(locationCancelled.inventoryFoundation, ['SKU-1'])

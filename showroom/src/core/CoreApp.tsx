@@ -2301,6 +2301,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const commerceLocation = useLocation()
   const purchaseOrderClock = useMinuteClock()
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite] = useCommerceWorkspace(managedIdentity)
+  const [relatedProduction] = useProductionWorkspace(managedIdentity)
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
   const currentAccountMappingConfiguration = commerceCurrentAccountMappingConfiguration(commerce)
   const orderDraftScope = localCommerceOrderDraftScope(managedIdentity?.workspaceId)
@@ -4799,7 +4800,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         <label>{commerce.inventoryFoundation ? 'Counted physical units' : 'Counted available units'}<input aria-describedby="stock-count-help stock-count-preview" aria-invalid={Boolean(stockCountQuantityText) && stockCountQuantityResult === null} disabled={commerceControlsDisabled || !stockCountItem || Boolean(commerce.inventoryFoundation && !stockCountBalance)} id="stock-count-quantity" inputMode="numeric" max={stockCountBalance?.tracking === 'serial' ? 1 : Number.MAX_SAFE_INTEGER} min={stockCountBalance?.reserved ?? 0} onChange={(event) => setStockCountDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="0" required step="1" type="number" value={stockCountDraft.quantity} /></label>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockCount} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || stockCountQuantityResult === null || Boolean(commerce.inventoryFoundation && !stockCountBalance)} type="submit">Review count</button></div>
       </form> : null}
-      <Suspense fallback={null}><ShopInventoryFoundation actor={managedIdentity?.userId ?? 'Local Shop operator'} commerce={commerce} disabled={commerceControlsDisabled} identity={managedIdentity} key={`${orderDraftScope}:${commerce.items.map((item) => item.sku).sort().join('|')}`} onInventory={mutateCommerce} onIssue={mutateCommerce} scope={orderDraftScope} /></Suspense>
+      <Suspense fallback={null}><ShopInventoryFoundation actor={managedIdentity?.userId ?? 'Local Shop operator'} commerce={commerce} disabled={commerceControlsDisabled} identity={managedIdentity} key={`${orderDraftScope}:${commerce.items.map((item) => item.sku).sort().join('|')}`} onInventory={mutateCommerce} onIssue={mutateCommerce} production={relatedProduction} scope={orderDraftScope} /></Suspense>
       <div className="data-table" role="table" aria-label="Shop stock">
         <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
         {stockRows.map(({ item }) => {

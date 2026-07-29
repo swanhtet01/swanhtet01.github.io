@@ -11,8 +11,15 @@ import {
   type ShopInventoryProof,
 } from './shop-inventory-foundation'
 import { ShopProductionHandoff } from './ShopProductionHandoff'
-import type { CommerceActionProof, CommerceState } from './commerce-workspace'
+import { projectPlantOrder } from './plant-order-foundation'
+import {
+  receiveCommerceProductionBatch,
+  type CommerceActionProof,
+  type CommerceProductionBatchReceipt,
+  type CommerceState,
+} from './commerce-workspace'
 import type { ManagedIdentity } from './managed-trial'
+import type { ProductionState } from './production-workspace'
 
 
 type ShopInventoryFoundationProps = {
@@ -20,6 +27,7 @@ type ShopInventoryFoundationProps = {
   commerce: CommerceState
   disabled: boolean
   identity: ManagedIdentity | null
+  production: ProductionState
   onIssue: (
     eventType: 'commerce.production_material.issued',
     commandId: string,
@@ -27,7 +35,7 @@ type ShopInventoryFoundationProps = {
     transition: (state: CommerceState) => CommerceState | null,
   ) => Promise<void>
   onInventory: (
-    eventType: 'commerce.inventory.initialized' | 'commerce.inventory.transferred',
+    eventType: 'commerce.inventory.initialized' | 'commerce.inventory.transferred' | 'commerce.production_batch.received',
     commandId: string,
     proof: CommerceActionProof,
     transition: (state: CommerceState) => CommerceState | null,
@@ -51,6 +59,15 @@ type TransferReview = {
   expectedHeadDigest: string
 }
 
+type ProductionReceiptReview = {
+  receipt: CommerceProductionBatchReceipt
+  proof: ShopInventoryProof
+  locationId: string
+  expectedItemOnHand: number
+  expectedInventoryHeadDigest: string | null
+  expectedProductionHeadDigest: string
+}
+
 function commandId(prefix: string) {
   const random = typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID().toUpperCase()
@@ -69,7 +86,18 @@ function actionProof(actor: string, label: string): ShopInventoryProof {
   }
 }
 
-export function ShopInventoryFoundation({ actor, commerce, disabled, identity, onInventory, onIssue, scope }: ShopInventoryFoundationProps) {
+function productionReceiptProof(actor: string, receipt: CommerceProductionBatchReceipt, locationId: string): ShopInventoryProof {
+  const actionId = commandId('ACT')
+  return {
+    actionId,
+    capturedAt: new Date().toISOString(),
+    actor: actor.trim() || 'Local Shop operator',
+    reason: `Confirm released Plant batch ${receipt.outputBatchId} into Shop.`,
+    evidenceReference: `PLANT-BATCH:${receipt.releaseId}:${receipt.sourceCommandDigest}:${locationId}`,
+  }
+}
+
+export function ShopInventoryFoundation({ actor, commerce, disabled, identity, onInventory, onIssue, production, scope }: ShopInventoryFoundationProps) {
   const catalog = commerce.items
   const catalogSkus = useMemo(
     () => [...new Set(catalog.map((item) => item.sku))].sort(),
@@ -85,6 +113,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
   const [transferOpen, setTransferOpen] = useState(false)
   const [transferDraft, setTransferDraft] = useState({ balanceKey: '', quantity: '1' })
   const [transferReview, setTransferReview] = useState<TransferReview | null>(null)
+  const [productionReceiptReview, setProductionReceiptReview] = useState<ProductionReceiptReview | null>(null)
 
   const projection = useMemo(
     () => projectShopInventory(state, catalogSkus),
@@ -127,6 +156,110 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
       : setupBlockedByOrders
         ? 'Finish or cancel open aggregate-stock orders before creating location history.'
         : 'Set up locations once so orders, returns, production issues, counts, and transfers share the same stock truth.'
+  const plantProjection = useMemo(
+    () => production.orderExecution ? projectPlantOrder(production.orderExecution) : null,
+    [production.orderExecution],
+  )
+  const releasedPlantBatch = plantProjection?.status === 'released_to_stock'
+    && plantProjection.plan
+    && plantProjection.batchRelease
+    && plantProjection.latestInspection
+    && plantProjection.metrics.acceptedQuantity > 0
+    ? {
+        releaseId: plantProjection.batchRelease.id,
+        sourceCommandDigest: plantProjection.headDigest,
+        jobId: plantProjection.plan.job.jobId,
+        outputBatchId: plantProjection.batchRelease.outputBatchId,
+        releasedAt: plantProjection.batchRelease.proof.capturedAt,
+        product: plantProjection.plan.job.product,
+        quantity: plantProjection.metrics.acceptedQuantity,
+      }
+    : null
+  const receivedPlantMovement = releasedPlantBatch
+    ? commerce.movements.find((movement) => movement.kind === 'production_receipt' && movement.productionReleaseId === releasedPlantBatch.releaseId)
+    : undefined
+  const normalizedPlantProduct = releasedPlantBatch?.product.trim().toLocaleLowerCase() ?? ''
+  const plantCatalogMatches = releasedPlantBatch
+    ? catalog.filter((item) => [item.sku, item.name].some((value) => value.trim().toLocaleLowerCase() === normalizedPlantProduct))
+    : []
+  const plantCatalogItem = plantCatalogMatches.length === 1 ? plantCatalogMatches[0] : undefined
+  const plantReceiptLocationId = state.revision
+    ? projection.locations.find((location) => location.id === 'LOC-MAIN')?.id ?? projection.locations[0]?.id ?? ''
+    : 'LOC-MAIN'
+  const plantReceiptIssue = releasedPlantBatch && !receivedPlantMovement
+    ? plantCatalogMatches.length === 0
+      ? `Released Plant product “${releasedPlantBatch.product}” is not mapped to one Shop catalog item.`
+      : plantCatalogMatches.length > 1
+        ? `Released Plant product “${releasedPlantBatch.product}” matches more than one Shop item.`
+        : !plantReceiptLocationId
+          ? 'Released Plant stock needs one active Shop location.'
+          : ''
+    : ''
+
+  function reviewProductionReceipt() {
+    if (!releasedPlantBatch || !plantCatalogItem || !plantReceiptLocationId || receivedPlantMovement) return
+    const receipt: CommerceProductionBatchReceipt = {
+      releaseId: releasedPlantBatch.releaseId,
+      sourceCommandDigest: releasedPlantBatch.sourceCommandDigest,
+      jobId: releasedPlantBatch.jobId,
+      outputBatchId: releasedPlantBatch.outputBatchId,
+      releasedAt: releasedPlantBatch.releasedAt,
+      sku: plantCatalogItem.sku,
+      quantity: releasedPlantBatch.quantity,
+    }
+    setError('')
+    setProductionReceiptReview({
+      receipt,
+      proof: productionReceiptProof(actor, receipt, plantReceiptLocationId),
+      locationId: plantReceiptLocationId,
+      expectedItemOnHand: plantCatalogItem.onHand,
+      expectedInventoryHeadDigest: commerce.inventoryFoundation?.headDigest ?? null,
+      expectedProductionHeadDigest: releasedPlantBatch.sourceCommandDigest,
+    })
+    setNotice('Review the released quantity, output batch, Shop item, and receiving location. Nothing has been written yet.')
+  }
+
+  async function confirmProductionReceipt() {
+    if (!productionReceiptReview) return
+    if (!plantProjection
+      || plantProjection.status !== 'released_to_stock'
+      || plantProjection.headDigest !== productionReceiptReview.expectedProductionHeadDigest
+      || plantProjection.batchRelease?.id !== productionReceiptReview.receipt.releaseId) {
+      setProductionReceiptReview(null)
+      setError('The Plant release changed. Review the current released batch again.')
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      await onInventory(
+        'commerce.production_batch.received',
+        productionReceiptReview.proof.actionId.slice(4),
+        productionReceiptReview.proof,
+        (current) => {
+          const item = current.items.find((candidate) => candidate.sku === productionReceiptReview.receipt.sku)
+          if (!item || item.onHand !== productionReceiptReview.expectedItemOnHand) return null
+          if ((current.inventoryFoundation?.headDigest ?? null) !== productionReceiptReview.expectedInventoryHeadDigest) return null
+          return receiveCommerceProductionBatch(
+            current,
+            productionReceiptReview.receipt,
+            productionReceiptReview.proof,
+            current.inventoryFoundation
+              ? { locationId: productionReceiptReview.locationId, expectedHeadDigest: productionReceiptReview.expectedInventoryHeadDigest as string }
+              : undefined,
+          )
+        },
+      )
+      setProductionReceiptReview(null)
+      setNotice(identity
+        ? 'The managed Shop workspace received the released Plant batch with linked lot evidence.'
+        : 'The released Plant batch is now in Shop stock with linked lot evidence.')
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'The Plant batch was not received into Shop.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   function reviewSetup(event: FormEvent) {
     event.preventDefault()
@@ -251,7 +384,12 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     }
   }
 
-  return <><ShopProductionHandoff commerce={commerce} disabled={disabled} identity={identity} onIssue={onIssue} /><section aria-labelledby="location-stock-title" className="catalog-onboarding-bridge">
+  return <>{releasedPlantBatch ? <section aria-labelledby="plant-receipt-title" className="catalog-onboarding-bridge">
+    <div><span className="core-eyebrow">Released from Plant</span><h3 id="plant-receipt-title">{receivedPlantMovement ? 'Batch received' : releasedPlantBatch.product}</h3><p>{releasedPlantBatch.quantity.toLocaleString()} accepted units · batch {releasedPlantBatch.outputBatchId}{plantCatalogItem ? ` · ${plantCatalogItem.name}` : ''}</p></div>
+    {receivedPlantMovement ? <span className="status-badge success">In Shop stock</span> : plantReceiptIssue ? null : <button className="core-button primary" disabled={disabled || busy} onClick={productionReceiptReview ? () => void confirmProductionReceipt() : reviewProductionReceipt} type="button">{productionReceiptReview ? busy ? 'Receiving…' : 'Confirm into Shop' : 'Review Plant receipt'}</button>}
+    {productionReceiptReview && !receivedPlantMovement ? <div className="stock-receipt-preview" role="status"><small>{productionReceiptReview.receipt.sku} · {productionReceiptReview.locationId}</small><strong>{productionReceiptReview.receipt.quantity.toLocaleString()} units · lot {productionReceiptReview.receipt.outputBatchId}</strong></div> : null}
+    {plantReceiptIssue ? <p className="form-notice warning-text" role="alert">{plantReceiptIssue}</p> : null}
+  </section> : null}<ShopProductionHandoff commerce={commerce} disabled={disabled} identity={identity} onIssue={onIssue} /><section aria-labelledby="location-stock-title" className="catalog-onboarding-bridge">
     <div aria-label="Inventory autopilot" className="inventory-autopilot">
       <div><span className="core-eyebrow">Inventory autopilot</span><strong>{state.revision ? inventoryDrift ? 'Reconcile stock truth' : 'Location stock is active' : 'Start location stock'}</strong><small>{inventoryAutopilotMessage}</small></div>
       <div className="inventory-autopilot-rows">
