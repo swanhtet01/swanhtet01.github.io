@@ -200,6 +200,51 @@ function validateAudit(audit) {
   }
 }
 
+function validateHqLiveReceipt(receipt) {
+  const commit = String(receipt?.release?.commit || '')
+  const observedAt = String(receipt?.observedAt || '')
+  const snapshotAgeHours = Number(receipt?.snapshotAgeHours)
+  const probes = receipt?.probes
+  const attempts = [
+    probes?.appReleaseAttempts,
+    probes?.publicReleaseAttempts,
+    probes?.healthAttempts,
+    probes?.cloudAutonomyAttempts,
+  ]
+  if (receipt?.contract !== 'supermega.hq-live-state.v1'
+    || receipt.ok !== true
+    || !Array.isArray(receipt.failures)
+    || receipt.failures.length !== 0
+    || receipt.appProductContract?.contract !== 'supermega_app_live'
+    || receipt.appProductContract?.ok !== true
+    || !/^[a-f0-9]{40}$/.test(commit)
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(observedAt)
+    || !Number.isFinite(snapshotAgeHours)
+    || snapshotAgeHours < 0
+    || snapshotAgeHours > 72
+    || probes?.timeoutMs !== 15_000
+    || probes?.maxAttempts !== 2
+    || attempts.some((value) => !Number.isInteger(value) || value < 1 || value > 2)
+    || receipt.runtime?.operatingMode !== 'isolated_demo'
+    || receipt.runtime?.managedPersistenceReady !== false
+    || receipt.runtime?.securityReady !== false
+    || receipt.capacity?.scaleToZero !== true
+    || receipt.capacity?.idleActiveExecutionTarget !== 0
+    || receipt.capacity?.registeredSpecialistsConsumeCompute !== false) {
+    fail('ally_ceo_local_cycle_hq_live_rejected')
+  }
+  return {
+    contract: receipt.contract,
+    performed: true,
+    observedAt,
+    releaseCommit: commit,
+    snapshotAgeHours,
+    probeAttempts: attempts,
+    managedPersistenceReady: false,
+    securityReady: false,
+  }
+}
+
 function hostIsIdle(audit) {
   return audit?.localModels?.loaded === 0
     && audit?.localCompany?.activeJobs === 0
@@ -462,16 +507,24 @@ async function defaultCommandRunner({ kind, args, timeoutMs, localCompanyRoot, l
     commandArgs = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', resolve(root, 'tools', 'trim_codex_working_sets.ps1'), '-Apply', '-Json']
     cwd = root
     env = limitedEnvironment(localCompanyRoot)
-  } else {
+  } else if (kind === 'hq_live') {
+    file = process.execPath
+    commandArgs = [resolve(root, 'tools', 'verify_hq_live_state.mjs')]
+    cwd = root
+    env = limitedEnvironment(localCompanyRoot)
+  } else if (kind === 'local') {
     file = resolve(localCompanyRoot, '.venv', 'Scripts', 'python.exe')
     commandArgs = ['-m', 'local_company.cli', '--home', localCompanyHome, ...args]
     cwd = localCompanyRoot
     env = limitedEnvironment(localCompanyRoot)
+  } else {
+    fail('ally_ceo_local_cycle_command_kind_invalid')
   }
   for (const candidate of [
     file,
     ...(kind === 'local' ? [resolve(localCompanyRoot, 'src', 'local_company', 'cli.py')] : []),
     ...(kind === 'trim' ? [resolve(root, 'tools', 'trim_codex_working_sets.ps1')] : []),
+    ...(kind === 'hq_live' ? [resolve(root, 'tools', 'verify_hq_live_state.mjs')] : []),
   ]) {
     const stat = await lstat(candidate).catch(() => null)
     if (!stat?.isFile() || stat.isSymbolicLink()) fail('ally_ceo_local_cycle_runtime_untrusted')
@@ -731,6 +784,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
       completedOutcomeIds: rotation.completedOutcomeIds,
       ...(rotation.periodIncomplete ? { rejectedOutcomes: rotation.rejectedOutcomes } : {}),
       host,
+      liveHq: { performed: false, skipped: 'period_closed' },
       sourceCount: null,
       knowledgeRefresh: {
         requested: refreshKnowledge,
@@ -743,6 +797,10 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
       controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
     }
   }
+  const liveHq = validateHqLiveReceipt(parseJson(
+    await runCommand({ kind: 'hq_live', args: [], timeoutMs: 90_000 }),
+    'ally_ceo_local_cycle_hq_live_invalid',
+  ))
   const knowledge = parseJson(await runCommand({ kind: 'local', args: ['knowledge', 'audit', '--project', 'SuperMega'], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_knowledge_invalid')
   const initialKnowledge = knowledgeStatus(knowledge)
   if (initialKnowledge.missing > 0 || initialKnowledge.unavailable > 0) {
@@ -805,6 +863,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
         report: inspected.report,
         reason: inspected.reason,
         host,
+        liveHq,
         sourceCount,
         knowledgeRefresh,
         modelCalls: 0,
@@ -834,6 +893,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     objectiveDigest: repair ? spec.repairObjectiveDigest : spec.objectiveDigest,
     repair,
     host,
+    liveHq,
     sourceCount,
     knowledgeRefresh,
     controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },

@@ -163,6 +163,26 @@ const knowledgeRefresh = JSON.stringify({
   effects: { knowledge_records_mutated: true, model_called: false, work_started: false },
 })
 
+const hqLive = JSON.stringify({
+  ok: true,
+  contract: 'supermega.hq-live-state.v1',
+  failures: [],
+  snapshotAgeHours: 1.5,
+  observedAt: '2026-07-29T00:30:00.000Z',
+  appProductContract: { ok: true, contract: 'supermega_app_live' },
+  probes: {
+    timeoutMs: 15000,
+    maxAttempts: 2,
+    appReleaseAttempts: 1,
+    publicReleaseAttempts: 2,
+    healthAttempts: 1,
+    cloudAutonomyAttempts: 1,
+  },
+  release: { commit: 'a'.repeat(40) },
+  runtime: { operatingMode: 'isolated_demo', managedPersistenceReady: false, securityReady: false },
+  capacity: { scaleToZero: true, idleActiveExecutionTarget: 0, registeredSpecialistsConsumeCompute: false },
+})
+
 function harness(overrides = {}) {
   const calls = []
   let auditIndex = 0
@@ -179,6 +199,7 @@ function harness(overrides = {}) {
       return response
     }
     if (request.kind === 'trim') return overrides.trimReceipt || trimReceipt
+    if (request.kind === 'hq_live') return overrides.hqLive || hqLive
     if (args[0] === 'health') return health
     if (args[0] === 'knowledge' && args[1] === 'audit') {
       const sequence = overrides.knowledgeSequence || [overrides.knowledge || knowledge]
@@ -269,7 +290,23 @@ test('preflight binds the CEO plan to one local specialist without queue or mode
   assert.deepEqual(result.roles, ['operations'])
   assert.equal(result.modelCalls, 0)
   assert.equal(result.queueWrites, 0)
+  assert.equal(result.liveHq.releaseCommit, 'a'.repeat(40))
+  assert.equal(result.liveHq.performed, true)
+  assert.deepEqual(result.liveHq.probeAttempts, [1, 2, 1, 1])
+  assert.equal(state.calls.findIndex((call) => call.kind === 'hq_live') < state.calls.findIndex((call) => call.args?.[0] === 'knowledge'), true)
   assert.equal(state.calls.some((call) => call.args?.includes('add')), false)
+})
+
+test('fresh outcomes fail before knowledge, queue, or model work when live HQ truth is rejected', async () => {
+  const state = harness({ hqLive: JSON.stringify({ ok: false, contract: 'supermega.hq-live-state.v1', failures: ['snapshot_stale'] }) })
+  await assert.rejects(
+    runAllyCeoLocalCycle({ execute: true, refreshKnowledge: true }, { plan: plan(), runCommand: state.runCommand }),
+    /ally_ceo_local_cycle_hq_live_rejected/,
+  )
+  assert.equal(state.calls.filter((call) => call.kind === 'hq_live').length, 1)
+  assert.equal(state.calls.some((call) => call.args?.[0] === 'knowledge'), false)
+  assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)
+  assert.equal(state.calls.some((call) => call.args?.[1] === 'run-next'), false)
 })
 
 test('accepted daily evidence rotates the next serial run to Engineering despite plan-hash drift', async () => {
@@ -318,6 +355,7 @@ test('five accepted outcomes close the UTC period with zero queue or model work'
   assert.equal(result.modelCalls, 0)
   assert.equal(result.queueWrites, 0)
   assert.equal(result.sourceCount, null)
+  assert.deepEqual(result.liveHq, { performed: false, skipped: 'period_closed' })
   assert.deepEqual(result.knowledgeRefresh, {
     requested: true,
     performed: false,
@@ -325,6 +363,7 @@ test('five accepted outcomes close the UTC period with zero queue or model work'
     skipped: 'period_closed',
   })
   assert.equal(state.calls.some((call) => call.args?.[0] === 'knowledge'), false)
+  assert.equal(state.calls.some((call) => call.kind === 'hq_live'), false)
   assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)
 })
 
@@ -387,8 +426,10 @@ test('a fully attempted period with rejected outcomes closes incomplete without 
   assert.equal(result.modelCalls, 0)
   assert.equal(result.queueWrites, 0)
   assert.equal(result.sourceCount, null)
+  assert.deepEqual(result.liveHq, { performed: false, skipped: 'period_closed' })
   assert.equal(result.knowledgeRefresh.skipped, 'period_closed')
   assert.equal(state.calls.some((call) => call.args?.[0] === 'knowledge'), false)
+  assert.equal(state.calls.some((call) => call.kind === 'hq_live'), false)
   assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)
 })
 
