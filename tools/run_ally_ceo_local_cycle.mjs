@@ -615,22 +615,31 @@ async function inspectExistingCycle(existing, spec, runCommand, inspectReport) {
 
 async function selectRotatingPlan({ buildPlan, queueText, runCommand, inspectReport }) {
   const completedOutcomeIds = []
+  const processedOutcomeIds = []
+  const rejectedOutcomes = []
   let period = null
   for (const expectedOutcomeId of OUTCOME_SEQUENCE) {
-    const plan = await buildPlan([...completedOutcomeIds])
+    const plan = await buildPlan([...processedOutcomeIds])
     const spec = planSpec(plan)
     if (spec.outcomeId !== expectedOutcomeId || period && spec.period !== period) {
       fail('ally_ceo_local_cycle_rotation_sequence_invalid')
     }
     period ??= spec.period
     const existing = existingForSpec(queueText, spec)
-    if (!existing) return { allDone: false, plan, spec, existing: null, inspection: null, completedOutcomeIds }
+    if (!existing) return { allDone: false, periodIncomplete: false, plan, spec, existing: null, inspection: null, completedOutcomeIds, rejectedOutcomes }
     const inspection = await inspectExistingCycle(existing, spec, runCommand, inspectReport)
-    if (!inspection.accepted) return { allDone: false, plan, spec, existing, inspection, completedOutcomeIds }
-    completedOutcomeIds.push(spec.outcomeId)
+    if (inspection.accepted) completedOutcomeIds.push(spec.outcomeId)
+    else rejectedOutcomes.push({
+      outcomeId: spec.outcomeId,
+      queueId: existing.queueId,
+      jobId: existing.jobId ?? null,
+      status: existing.status,
+      reason: inspection.reason || `queue_${existing.status}`,
+    })
+    processedOutcomeIds.push(spec.outcomeId)
   }
 
-  const declined = await buildPlan([...completedOutcomeIds])
+  const declined = await buildPlan([...processedOutcomeIds])
   if (!declined?.ok
     || declined.contract !== 'supermega.ally-ceo-company-plan.v1'
     || declined.declined !== true
@@ -639,7 +648,13 @@ async function selectRotatingPlan({ buildPlan, queueText, runCommand, inspectRep
     || declined.plan !== null) {
     fail('ally_ceo_local_cycle_rotation_completion_invalid')
   }
-  return { allDone: true, period, completedOutcomeIds }
+  return {
+    allDone: rejectedOutcomes.length === 0,
+    periodIncomplete: rejectedOutcomes.length > 0,
+    period,
+    completedOutcomeIds,
+    rejectedOutcomes,
+  }
 }
 
 export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
@@ -724,6 +739,23 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
         }
       })()
     : await selectRotatingPlan({ buildPlan, queueText, runCommand, inspectReport })
+  if (rotation.periodIncomplete) {
+    return {
+      ok: false,
+      contract: ALLY_CEO_LOCAL_CYCLE_CONTRACT,
+      status: 'period_incomplete',
+      replayed: true,
+      period: rotation.period,
+      completedOutcomeIds: rotation.completedOutcomeIds,
+      rejectedOutcomes: rotation.rejectedOutcomes,
+      host,
+      sourceCount,
+      knowledgeRefresh,
+      modelCalls: 0,
+      queueWrites: 0,
+      controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
+    }
+  }
   if (rotation.allDone) {
     return {
       ok: true,
@@ -741,7 +773,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
       controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
     }
   }
-  const { spec, existing, completedOutcomeIds } = rotation
+  const { spec, existing, completedOutcomeIds, rejectedOutcomes = [] } = rotation
   let repair = null
   if (existing) {
     const inspected = rotation.inspection || await inspectExistingCycle(existing, spec, runCommand, inspectReport)
@@ -795,6 +827,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     period: spec.period,
     outcomeId: spec.outcomeId,
     completedOutcomeIds,
+    rejectedOutcomes,
     planHash: spec.planHash,
     cycleHash: spec.cycleHash,
     workOrderId: spec.workOrderId,

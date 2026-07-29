@@ -320,15 +320,23 @@ test('five accepted outcomes close the UTC period with zero queue or model work'
   assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)
 })
 
-test('failed and duplicate period outcomes never advance or create replacement work', async () => {
+test('failed period outcomes are quarantined while rotation advances without replacement work', async () => {
   const failed = harness({ queueList: completedOutcomeLine('daily-company-control', 0, 'quality_failed') })
   const failedResult = await runAllyCeoLocalCycle(
-    { execute: true },
+    { execute: false },
     { buildPlan: async (completedOutcomeIds) => rotatingPlan(completedOutcomeIds), runCommand: failed.runCommand },
   )
-  assert.equal(failedResult.ok, false)
-  assert.equal(failedResult.status, 'existing')
-  assert.equal(failedResult.outcomeId, 'daily-company-control')
+  assert.equal(failedResult.ok, true)
+  assert.equal(failedResult.status, 'ready')
+  assert.equal(failedResult.outcomeId, 'engineering-release-control')
+  assert.deepEqual(failedResult.completedOutcomeIds, [])
+  assert.deepEqual(failedResult.rejectedOutcomes, [{
+    outcomeId: 'daily-company-control',
+    queueId: '000000000001',
+    jobId: '000000000065',
+    status: 'quality_failed',
+    reason: 'queue_quality_failed',
+  }])
   assert.equal(failed.calls.some((call) => call.args?.[1] === 'add'), false)
 
   const duplicate = harness({
@@ -342,6 +350,35 @@ test('failed and duplicate period outcomes never advance or create replacement w
     /ally_ceo_local_cycle_duplicate_plan/,
   )
   assert.equal(duplicate.calls.some((call) => call.args?.[1] === 'add'), false)
+})
+
+test('a fully attempted period with rejected outcomes closes incomplete without queue or model work', async () => {
+  const queueList = outcomeSequence.map((outcomeId, index) => completedOutcomeLine(
+    outcomeId,
+    index,
+    index === 0 ? 'quality_failed' : 'complete',
+  )).join('')
+  const state = harness({ queueList })
+  const result = await runAllyCeoLocalCycle(
+    { execute: true },
+    {
+      buildPlan: async (completedOutcomeIds) => rotatingPlan(completedOutcomeIds),
+      runCommand: state.runCommand,
+      inspectReport: async () => ({
+        path: 'C:\\state\\outputs\\accepted.md',
+        bytes: Buffer.byteLength(acceptedStructuredReport),
+        digest: 'sha256:' + '8'.repeat(64),
+        text: acceptedStructuredReport,
+      }),
+    },
+  )
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 'period_incomplete')
+  assert.deepEqual(result.completedOutcomeIds, outcomeSequence.slice(1))
+  assert.deepEqual(result.rejectedOutcomes.map((item) => item.outcomeId), ['daily-company-control'])
+  assert.equal(result.modelCalls, 0)
+  assert.equal(result.queueWrites, 0)
+  assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)
 })
 
 test('a period marker from another project cannot satisfy SuperMega rotation', async () => {
