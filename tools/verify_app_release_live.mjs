@@ -201,6 +201,9 @@ for (const required of ['Start guided sample', 'Request managed trial', 'Your AI
 for (const required of ['supermega.ai_memory_preview.v1', 'AI memory preview', 'Download AI memory', 'Request managed AI', 'Raw product records stay out of this preview.', 'No customer message, payment, stock move, production write, domain publish, managed write, or model training runs from this preview.']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_ai_memory_preview_context:${required}`)
 }
+for (const required of ['storagePackages', 'selectedProductRecords']) {
+  if (!settingsChunk.includes(required)) throw new Error(`missing_live_prepared_record_context:${required}`)
+}
 for (const required of ['Import autopilot', 'Import coach', 'Next action', 'Write boundary', 'Start with a CSV or sample so SuperMega can map columns and inspect rows locally.', 'Managed check before write', 'Local/export only', 'Activation handoff', 'Download activation package', 'Run managed check', 'Free mode can export the package for support review without sending data from the browser.', 'Server validation passed with zero records written', 'Provisioning plan', 'managed provisioning plan', 'No browser storage, customer message, payment, domain publish, or scheduler autopilot is allowed from this validation.']) {
   if (!clientDataOnboardingChunk.includes(required)) throw new Error(`missing_live_import_coach_context:${required}`)
 }
