@@ -265,6 +265,8 @@ class TrialStoreTests(unittest.TestCase):
             "commerce.order.advanced",
             "commerce.order.cancelled",
             "commerce.order.return_recorded",
+            "commerce.order.support_case_opened",
+            "commerce.order.support_case_resolved",
             "commerce.payment.reconciled",
             "commerce.refund.settled",
             "commerce.stock.received",

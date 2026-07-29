@@ -5,6 +5,7 @@ import {
   buildEcommerceOrderRequestV2,
   buildEcommercePimProjection,
   buildEcommerceReturnIntent,
+  buildEcommerceSupportIntent,
   createEmptyEcommerceBuyingState,
   ecommerceBuyingStateStorageKey,
   ecommercePaymentMatchesFulfilment,
@@ -12,12 +13,15 @@ import {
   readEcommerceBuyingState,
   saveEcommerceOrderRequestV2,
   saveEcommerceReturnIntent,
+  saveEcommerceSupportIntent,
   type EcommerceBuyingState,
   type EcommerceCartLine,
   type EcommerceFulfilment,
   type EcommercePaymentAdapter,
   type EcommerceReturnDisposition,
   type EcommerceReturnIntent,
+  type EcommerceSupportCategory,
+  type EcommerceSupportIntent,
   type EcommerceShopDraftV2,
 } from './ecommerce-buying-lifecycle'
 import {
@@ -38,6 +42,7 @@ type EcommerceBuyingWorkspaceProps = {
   onDraft: (draft: EcommerceShopDraftV2) => void
   onOpenManagedRequest?: (requestId: string) => void
   onOpenReturns: (intent: EcommerceReturnIntent) => void
+  onOpenSupport: (intent: EcommerceSupportIntent) => void
   onRecordManagedRequest?: (request: EcommerceBuyingState['requests'][number]) => Promise<void>
   preview: StorefrontPreview
   scope: string
@@ -77,6 +82,7 @@ export function EcommerceBuyingWorkspace({
   onDraft,
   onOpenManagedRequest,
   onOpenReturns,
+  onOpenSupport,
   onRecordManagedRequest,
   preview,
   scope,
@@ -113,6 +119,12 @@ export function EcommerceBuyingWorkspace({
     reason: string
   } | null>(null)
   const [returnBusy, setReturnBusy] = useState(false)
+  const [supportDraft, setSupportDraft] = useState<{
+    orderId: string
+    category: EcommerceSupportCategory
+    description: string
+  } | null>(null)
+  const [supportBusy, setSupportBusy] = useState(false)
   const confirmationRef = useRef<HTMLInputElement>(null)
 
   const emptyBuyingState = useMemo(() => createEmptyEcommerceBuyingState(scope), [scope])
@@ -141,6 +153,7 @@ export function EcommerceBuyingWorkspace({
       setHandoffConfirmed(false)
       setFreshQuoteId('')
       setReturnDraft(null)
+      setSupportDraft(null)
       setNotice('')
       const latest = recoveredState.requests[0]
       if (!latest || latest.sourcePreviewDigest !== sourcePreviewDigest) return
@@ -241,6 +254,13 @@ export function EcommerceBuyingWorkspace({
         && record.quantity === intent.quantity
     )))
   })
+  const pendingSupportIntents = activeBuyingState.supportIntents.filter((intent) => {
+    const order = completedCustomerOrders.find((entry) => entry.order?.id === intent.orderId)?.order
+    return Boolean(order && !(order.supportCases ?? []).some((supportCase) => supportCase.sourceIntentId === intent.id))
+  })
+  const visibleSupportCases = completedCustomerOrders.flatMap((entry) => (
+    (entry.order?.supportCases ?? []).map((supportCase) => ({ orderId: entry.order?.id ?? '', supportCase }))
+  ))
   const quoteCurrent = Boolean(latestRequest
     && latestRequest.id === freshQuoteId
     && latestRequest.scope === scope
@@ -362,6 +382,7 @@ export function EcommerceBuyingWorkspace({
       setNotice('This order already has a return request waiting for Shop review.')
       return
     }
+    setSupportDraft(null)
     setReturnDraft({ orderId: order.id, sku: lines[0].sku, quantity: '1', disposition: 'restock', reason: '' })
     setNotice('Describe the return, then send the exact request to Shop review. No refund or stock change starts here.')
   }
@@ -402,6 +423,53 @@ export function EcommerceBuyingWorkspace({
       setNotice(error instanceof Error ? error.message : 'Return request failed closed.')
     } finally {
       setReturnBusy(false)
+    }
+  }
+
+  function openSupportRequest(entry: CommerceStorefrontOrderTimelineEntry) {
+    const order = entry.order
+    if (!order?.completion || order.status !== 'completed') {
+      setNotice('Support requests require one completed Ecommerce order.')
+      return
+    }
+    if (pendingSupportIntents.some((intent) => intent.orderId === order.id)) {
+      setNotice('This order already has a help request waiting for Shop review.')
+      return
+    }
+    setReturnDraft(null)
+    setSupportDraft({ orderId: order.id, category: 'order_status', description: '' })
+    setNotice('Describe what you need. Shop will open an accountable case; no message or refund is sent here.')
+  }
+
+  async function submitSupportRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supportDraft || supportBusy || disabled || recoveryBlocked) return
+    const order = completedCustomerOrders.find((entry) => entry.order?.id === supportDraft.orderId)?.order
+    if (!order?.completion || !globalThis.crypto?.randomUUID) {
+      setNotice('Secure support identity or completed order evidence is unavailable. Nothing was recorded.')
+      return
+    }
+    setSupportBusy(true)
+    setNotice('')
+    try {
+      const intent = buildEcommerceSupportIntent({
+        scope,
+        orderSnapshot: order,
+        category: supportDraft.category,
+        description: supportDraft.description,
+        idempotencyKey: `ESI-${globalThis.crypto.randomUUID().toUpperCase()}`,
+        createdAt: new Date().toISOString(),
+      })
+      const saved = await saveEcommerceSupportIntent(scope, intent, activeBuyingState.headDigest)
+      setBuyingState(saved)
+      setRecoveryRead({ scope, status: 'ready', issue: '' })
+      setSupportDraft(null)
+      setNotice(`${intent.id} is saved for Shop review. No message, refund, payment, stock, or order changed.`)
+      onOpenSupport(intent)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Support request failed closed.')
+    } finally {
+      setSupportBusy(false)
     }
   }
 
@@ -676,19 +744,28 @@ export function EcommerceBuyingWorkspace({
         </div>
       </details>
 
-      <details className="ecommerce-after-purchase" open={Boolean(returnDraft) || undefined}>
-        <summary><span><strong>After purchase</strong><small>Request a return from a completed order</small></span><b>{pendingReturnIntents.length ? `${pendingReturnIntents.length} waiting` : 'Shop review'}</b></summary>
+      <details className="ecommerce-after-purchase" open={Boolean(returnDraft || supportDraft) || undefined}>
+        <summary><span><strong>Returns and help</strong><small>Use one completed order</small></span><b>{pendingReturnIntents.length + pendingSupportIntents.length ? `${pendingReturnIntents.length + pendingSupportIntents.length} waiting` : 'Shop review'}</b></summary>
         <div className="ecommerce-return-workspace">
-          <p>Completed Ecommerce orders use Shop’s proven return quantity, stock disposition, and refund record. No refund starts here.</p>
+          <p>Completed Ecommerce orders use Shop’s proven return and support records. No refund starts here. Support requests send no message and change no stock or payment.</p>
           {pendingReturnIntents.map((intent) => <article className="ecommerce-return-status" key={intent.id}>
             <span><strong>Waiting for Shop review</strong><small>{intent.quantity} {intent.sku} / {intent.orderId}</small></span>
             <button className="core-button secondary" disabled={disabled} onClick={() => onOpenReturns(intent)} type="button">Continue in Shop</button>
           </article>)}
-          {!returnDraft ? completedCustomerOrders.filter((entry) => (
-            !pendingReturnIntents.some((intent) => intent.orderId === entry.order?.id)
-          )).map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
+          {pendingSupportIntents.map((intent) => <article className="ecommerce-return-status" key={intent.id}>
+            <span><strong>Help waiting</strong><small>{intent.category.replaceAll('_', ' ')} / {intent.orderId}</small></span>
+            <button className="core-button secondary" disabled={disabled} onClick={() => onOpenSupport(intent)} type="button">Continue in Shop</button>
+          </article>)}
+          {visibleSupportCases.slice(0, 3).map(({ orderId, supportCase }) => <article className="ecommerce-return-status" key={supportCase.caseId}>
+            <span><strong>{supportCase.status === 'resolved' ? 'Help resolved' : 'Help open'}</strong><small>{orderId} / {supportCase.category.replaceAll('_', ' ')}</small></span>
+            <b>{supportCase.status}</b>
+          </article>)}
+          {!returnDraft && !supportDraft ? completedCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
             <span><strong>{entry.order?.id}</strong><small>{entry.order?.lines?.map((line) => `${line.name} x ${line.quantity}`).join(' / ') ?? entry.order?.item}</small></span>
-            <button className="core-button secondary" disabled={disabled} onClick={() => openReturnRequest(entry)} type="button">Start return</button>
+            <div className="ecommerce-return-actions">
+              {!pendingReturnIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openReturnRequest(entry)} type="button">Return</button> : null}
+              {!pendingSupportIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openSupportRequest(entry)} type="button">Get help</button> : null}
+            </div>
           </article>) : null}
           {returnDraft && returnDraftEntry?.order ? <form className="ecommerce-return-form" onSubmit={(event) => void submitReturnRequest(event)}>
             <span><strong>Return {returnDraft.orderId}</strong><small>Nothing changes until Shop reviews the physical return.</small></span>
@@ -698,7 +775,13 @@ export function EcommerceBuyingWorkspace({
             <label className="ecommerce-return-reason">What happened<textarea disabled={disabled || returnBusy} maxLength={300} onChange={(event) => setReturnDraft((current) => current ? { ...current, reason: event.target.value } : current)} placeholder="Describe the issue for Shop review" required rows={2} value={returnDraft.reason} /></label>
             <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || returnBusy} type="submit">{returnBusy ? 'Saving...' : 'Send to Shop review'}</button><button className="core-button secondary" disabled={disabled || returnBusy} onClick={() => { setReturnDraft(null); setNotice('Return request closed. Nothing changed.') }} type="button">Cancel</button></div>
           </form> : null}
-          {!completedCustomerOrders.length && !pendingReturnIntents.length ? <p>Completed orders for this exact contact will appear here when they become returnable.</p> : null}
+          {supportDraft ? <form className="ecommerce-return-form" onSubmit={(event) => void submitSupportRequest(event)}>
+            <span><strong>Help with {supportDraft.orderId}</strong><small>Shop will open a trackable case after review.</small></span>
+            <label>Topic<select disabled={disabled || supportBusy} onChange={(event) => setSupportDraft((current) => current ? { ...current, category: event.target.value as EcommerceSupportCategory } : current)} value={supportDraft.category}><option value="order_status">Order status</option><option value="delivery_issue">Delivery issue</option><option value="payment_question">Payment question</option><option value="item_issue">Item issue</option><option value="other">Other</option></select></label>
+            <label className="ecommerce-return-reason">What do you need?<textarea disabled={disabled || supportBusy} maxLength={300} onChange={(event) => setSupportDraft((current) => current ? { ...current, description: event.target.value } : current)} placeholder="One clear description for Shop" required rows={2} value={supportDraft.description} /></label>
+            <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || supportBusy} type="submit">{supportBusy ? 'Saving...' : 'Send to Shop review'}</button><button className="core-button secondary" disabled={disabled || supportBusy} onClick={() => { setSupportDraft(null); setNotice('Help request closed. Nothing changed.') }} type="button">Cancel</button></div>
+          </form> : null}
+          {!completedCustomerOrders.length && !pendingReturnIntents.length && !pendingSupportIntents.length ? <p>Completed orders for this exact contact will appear here.</p> : null}
         </div>
       </details>
     </>

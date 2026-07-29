@@ -34,6 +34,8 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.order.advanced",
         "commerce.order.cancelled",
         "commerce.order.return_recorded",
+        "commerce.order.support_case_opened",
+        "commerce.order.support_case_resolved",
         "commerce.order.correction_recorded",
         "commerce.payment.reconciled",
         "commerce.collection_action.recorded",
@@ -1390,6 +1392,95 @@ def _authoritative_command_payload(
             actor=principal.actor_id,
             captured_at=effective_captured_at,
         )
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type in {
+        "commerce.order.support_case_opened",
+        "commerce.order.support_case_resolved",
+    }:
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        orders = state.get("orders") if isinstance(state, Mapping) else None
+        if not isinstance(evidence, Mapping) or not isinstance(state, Mapping) or not isinstance(orders, list):
+            return authoritative
+        target_order = None
+        target_case = None
+        for order in orders:
+            if not isinstance(order, Mapping):
+                continue
+            for support_case in order.get("supportCases", []):
+                if not isinstance(support_case, Mapping):
+                    continue
+                proof = (
+                    support_case.get("opening")
+                    if event_type == "commerce.order.support_case_opened"
+                    else support_case.get("resolution", {}).get("proof")
+                    if isinstance(support_case.get("resolution"), Mapping)
+                    else None
+                )
+                if isinstance(proof, Mapping) and proof.get("actionId") == evidence.get("actionId"):
+                    target_order = order
+                    target_case = support_case
+                    break
+            if target_case is not None:
+                break
+        effective_captured_at = captured_at
+        if isinstance(target_order, Mapping) and isinstance(target_case, Mapping):
+            completion = target_order.get("completion")
+            opening = target_case.get("opening")
+            effective_captured_at = _not_before(
+                captured_at,
+                target_order.get("createdAt"),
+                completion.get("capturedAt") if isinstance(completion, Mapping) else None,
+                target_case.get("customerRequestedAt"),
+                opening.get("capturedAt") if isinstance(opening, Mapping) else None,
+            )
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = effective_captured_at
+        authoritative_orders = deepcopy(orders)
+        for order_index, order in enumerate(authoritative_orders):
+            if not isinstance(order, Mapping):
+                continue
+            cases = order.get("supportCases")
+            if not isinstance(cases, list):
+                continue
+            changed_cases = deepcopy(cases)
+            changed = False
+            for case_index, support_case in enumerate(changed_cases):
+                if not isinstance(support_case, Mapping):
+                    continue
+                changed_case = dict(support_case)
+                if event_type == "commerce.order.support_case_opened":
+                    proof = support_case.get("opening")
+                    if not isinstance(proof, Mapping) or proof.get("actionId") != evidence.get("actionId"):
+                        continue
+                    changed_proof = dict(proof)
+                    changed_proof["actor"] = principal.actor_id
+                    changed_proof["capturedAt"] = effective_captured_at
+                    changed_case["opening"] = changed_proof
+                else:
+                    resolution = support_case.get("resolution")
+                    proof = resolution.get("proof") if isinstance(resolution, Mapping) else None
+                    if not isinstance(proof, Mapping) or proof.get("actionId") != evidence.get("actionId"):
+                        continue
+                    changed_proof = dict(proof)
+                    changed_proof["actor"] = principal.actor_id
+                    changed_proof["capturedAt"] = effective_captured_at
+                    changed_resolution = dict(resolution)
+                    changed_resolution["proof"] = changed_proof
+                    changed_case["resolution"] = changed_resolution
+                changed_cases[case_index] = changed_case
+                changed = True
+                break
+            if changed:
+                changed_order = dict(order)
+                changed_order["supportCases"] = changed_cases
+                authoritative_orders[order_index] = changed_order
+                break
+        authoritative_state = dict(state)
+        authoritative_state["orders"] = authoritative_orders
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative

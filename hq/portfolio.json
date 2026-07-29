@@ -151,8 +151,8 @@
       "localAutomation": {
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Add one order-bound customer support case lifecycle inside the existing Ecommerce buying surface and carry its exact request and Shop-order evidence into accountable Shop review without sending a message or creating a refund.",
-        "reason": "Customer and delivery identity now survive Shop handoff, making the roadmap's support-case gap the highest-value executable local continuation while hosted payment, shipping, and tenant work remain gated."
+        "workOrder": "Add support-case priority, accountable ownership, due-time evidence, and overdue review inside the existing Shop order archive without adding a new page or sending any customer message.",
+        "reason": "Order-bound support cases now survive Ecommerce-to-Shop handoff; accountable triage and service-time visibility are the next useful local capability while hosted messaging, refund, payment, shipping, and tenant work remain gated."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }

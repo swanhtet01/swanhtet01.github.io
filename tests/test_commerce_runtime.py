@@ -904,6 +904,17 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
             "reason": record["reason"],
             "evidenceReference": record["evidenceReference"],
         }
+    if event_type == "commerce.order.support_case_opened":
+        support_order = next(
+            order for order in next_state["orders"] if order.get("supportCases")  # type: ignore[union-attr]
+        )
+        return dict(support_order["supportCases"][0]["opening"])
+    if event_type == "commerce.order.support_case_resolved":
+        support_order = next(
+            order for order in next_state["orders"] if order.get("supportCases")  # type: ignore[union-attr]
+        )
+        support_case = next(case for case in support_order["supportCases"] if case.get("resolution"))
+        return dict(support_case["resolution"]["proof"])
     if event_type == "commerce.order.correction_recorded":
         corrected_orders = [
             order
@@ -2381,6 +2392,8 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.order.advanced",
                     "commerce.order.cancelled",
                     "commerce.order.return_recorded",
+                    "commerce.order.support_case_opened",
+                    "commerce.order.support_case_resolved",
                     "commerce.order.correction_recorded",
                     "commerce.payment.reconciled",
                     "commerce.collection_action.recorded",
@@ -4429,6 +4442,81 @@ class CommerceRuntimeTests(unittest.TestCase):
         accepted_next_day = apply_event(result, "commerce.close.saved", next_day)
         self.assertEqual(accepted_next_day["closes"][0]["orders"], 0)  # type: ignore[index]
         self.assertEqual(accepted_next_day["closes"][1]["orderIds"], ["ORD-1"])  # type: ignore[index]
+
+    def test_order_support_case_opens_and_resolves_without_external_side_effects(self) -> None:
+        request_uuid = "12345678-1234-4123-8123-123456789ABC"
+        request_id = f"ECR-{request_uuid}"
+        intent_id = f"ESR-{request_uuid}"
+        case_id = f"CASE-{request_uuid}"
+        requested_at = "2026-07-23T09:25:00.000Z"
+        opening_at = "2026-07-23T09:30:00.000Z"
+        resolution_at = "2026-07-23T09:40:00.000Z"
+        evidence_reference = f"ECOMMERCE-SUPPORT:{request_uuid}:ORD-1:{request_id}"
+        current = completed_state()
+        current["orders"][0]["sourceRecordId"] = request_id  # type: ignore[index]
+        current = validate_commerce_state(current)
+
+        opening = action_evidence(
+            "ACT-SUPPORT-OPEN",
+            captured_at=opening_at,
+            reason="Reviewed the customer help request.",
+            evidence_reference=evidence_reference,
+        )
+        opened_candidate = deepcopy(current)
+        opened_candidate["orders"][0]["supportCases"] = [{  # type: ignore[index]
+            "caseId": case_id,
+            "sourceIntentId": intent_id,
+            "sourceRequestId": request_id,
+            "customerRequestedAt": requested_at,
+            "category": "delivery_issue",
+            "customerDescription": "Delivery arrived later than the promised time.",
+            "status": "open",
+            "opening": opening,
+            "externalMessageSent": False,
+            "refundStarted": False,
+        }]
+        opened = apply_event(
+            current,
+            "commerce.order.support_case_opened",
+            opened_candidate,
+        )
+        support_case = opened["orders"][0]["supportCases"][0]  # type: ignore[index]
+        self.assertEqual(support_case["status"], "open")
+        self.assertFalse(support_case["externalMessageSent"])
+        self.assertFalse(support_case["refundStarted"])
+        self.assertEqual(opened["items"], current["items"])
+        self.assertEqual(opened["movements"], current["movements"])
+
+        resolution = {
+            "outcome": "information_provided",
+            "note": "Reviewed the delivery timeline with the customer record.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-RESOLVE",
+                captured_at=resolution_at,
+                reason="Reviewed and closed the support case.",
+                evidence_reference=f"SUPPORT-RESOLUTION:{case_id}",
+            ),
+        }
+        resolved_candidate = deepcopy(opened)
+        resolved_case = resolved_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        resolved_case["status"] = "resolved"
+        resolved_case["resolution"] = resolution
+        resolved = apply_event(
+            opened,
+            "commerce.order.support_case_resolved",
+            resolved_candidate,
+        )
+        self.assertEqual(
+            resolved["orders"][0]["supportCases"][0]["resolution"]["outcome"],  # type: ignore[index]
+            "information_provided",
+        )
+        self.assertEqual(resolved["items"], current["items"])
+        self.assertEqual(resolved["movements"], current["movements"])
+
+        forged = deepcopy(opened_candidate)
+        forged["orders"][0]["supportCases"][0]["refundStarted"] = True  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(forged)
 
     def test_completed_order_accepts_multiple_partial_returns_with_explicit_stock_disposition(self) -> None:
         current = validate_commerce_state(completed_state())

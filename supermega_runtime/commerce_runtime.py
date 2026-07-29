@@ -47,6 +47,8 @@ COMMERCE_EVENTS = frozenset(
         "commerce.order.advanced",
         "commerce.order.cancelled",
         "commerce.order.return_recorded",
+        "commerce.order.support_case_opened",
+        "commerce.order.support_case_resolved",
         "commerce.order.correction_recorded",
         "commerce.payment.reconciled",
         "commerce.collection_action.recorded",
@@ -83,6 +85,8 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.order.advanced",
         "commerce.order.cancelled",
         "commerce.order.return_recorded",
+        "commerce.order.support_case_opened",
+        "commerce.order.support_case_resolved",
         "commerce.order.correction_recorded",
         "commerce.payment.reconciled",
         "commerce.collection_action.recorded",
@@ -123,6 +127,12 @@ _PRODUCTION_MATERIAL_UNITS = frozenset(
     {"kg", "g", "l", "ml", "pcs", "pack", "bag", "roll", "sheet", "m", "cm"}
 )
 _RETURN_DISPOSITIONS = ("restock", "not_restocked")
+_SUPPORT_CATEGORIES = frozenset(
+    {"order_status", "delivery_issue", "payment_question", "item_issue", "other"}
+)
+_SUPPORT_RESOLUTION_OUTCOMES = frozenset(
+    {"information_provided", "replacement_review_required", "refund_review_required", "no_action"}
+)
 _PURCHASE_DISCREPANCY_CODES = frozenset({"damaged", "wrong_item", "quality_failed"})
 _PURCHASE_DISCREPANCY_FIELDS = frozenset(
     {"rejectedQuantity", "discrepancyCode", "discrepancyDisposition"}
@@ -153,6 +163,7 @@ _MAX_ACCOUNT_MAPPING_CONFIGURATIONS = 100
 _MAX_CUSTOMER_CREDIT_POLICIES = 500
 _MAX_ORDER_LINES = 20
 _MAX_RETURNS_PER_ORDER = 100
+_MAX_SUPPORT_CASES_PER_ORDER = 100
 _MAX_CORRECTIONS_PER_ORDER = 100
 _MAX_COLLECTION_ACTIONS_PER_ORDER = 100
 _MAX_MOVEMENT_ID_LENGTH = 2_000
@@ -160,6 +171,12 @@ _SERVICE_SCHEDULE_SCHEMA = "supermega.shop.service_schedule.v2"
 _SERVICE_SCHEDULE_PACKS = frozenset({"retail", "cafe", "restaurant", "spa", "gym", "school"})
 _SERVICE_SCHEDULE_EVENT_TYPES = frozenset(
     {"service_registered", "resource_registered", "booking_scheduled", "booking_advanced", "booking_cancelled"}
+)
+_SUPPORT_INTENT_ID_PATTERN = re.compile(
+    r"ESR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_SUPPORT_CASE_ID_PATTERN = re.compile(
+    r"CASE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
 _SERVICE_SCHEDULE_BOOKING_STATUSES = frozenset(
     {"held", "confirmed", "checked_in", "completed", "cancelled"}
@@ -269,6 +286,7 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "advancementActionIds",
         "completion",
         "returns",
+        "supportCases",
         "corrections",
         "calculation",
     }
@@ -319,6 +337,15 @@ _ORDER_RETURN_FIELDS = frozenset(
         "disposition",
     }
 )
+_ORDER_SUPPORT_CASE_REQUIRED_FIELDS = frozenset(
+    {
+        "caseId", "sourceIntentId", "sourceRequestId", "customerRequestedAt",
+        "category", "customerDescription", "status", "opening",
+        "externalMessageSent", "refundStarted",
+    }
+)
+_ORDER_SUPPORT_CASE_OPTIONAL_FIELDS = frozenset({"resolution"})
+_ORDER_SUPPORT_RESOLUTION_FIELDS = frozenset({"outcome", "note", "proof"})
 _ORDER_CORRECTION_FIELDS = frozenset(
     {
         "documentId",
@@ -1496,6 +1523,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     advancement_action_ids: list[str] = []
     completion_action_ids: list[str] = []
     return_action_ids: list[str] = []
+    support_action_ids: list[str] = []
+    support_source_intent_ids: list[str] = []
     correction_action_ids: list[str] = []
     collection_action_ids: list[str] = []
     order_returns: list[tuple[str, dict[str, Any]]] = []
@@ -2013,6 +2042,92 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 returned_by_sku[sku] = returned
                 return_action_ids.append(action_id)
                 order_returns.append((order_id, return_record))
+        if "supportCases" in order:
+            cases = _list(order["supportCases"], f"orders[{index}].supportCases")
+            if (
+                not 1 <= len(cases) <= _MAX_SUPPORT_CASES_PER_ORDER
+                or order["status"] != "completed"
+                or completion is None
+            ):
+                raise TrialValidationError(
+                    f"orders[{index}].supportCases requires 1 to "
+                    f"{_MAX_SUPPORT_CASES_PER_ORDER} records and completion proof."
+                )
+            newer_opening_at: datetime | None = None
+            completion_at = datetime.fromisoformat(completion["capturedAt"].replace("Z", "+00:00"))
+            for case_index, case_candidate in enumerate(cases):
+                field = f"orders[{index}].supportCases[{case_index}]"
+                support_case = _object(case_candidate, field)
+                _exact_fields(
+                    support_case,
+                    field,
+                    required=_ORDER_SUPPORT_CASE_REQUIRED_FIELDS,
+                    optional=_ORDER_SUPPORT_CASE_OPTIONAL_FIELDS,
+                )
+                case_id = _text(support_case["caseId"], f"{field}.caseId", maximum=41)
+                source_intent_id = _text(
+                    support_case["sourceIntentId"], f"{field}.sourceIntentId", maximum=40
+                )
+                source_request_id = _text(
+                    support_case["sourceRequestId"], f"{field}.sourceRequestId", maximum=40
+                )
+                expected_case_id = f"CASE-{source_intent_id[4:]}"
+                expected_evidence = (
+                    f"ECOMMERCE-SUPPORT:{source_intent_id[4:]}:{order_id}:{source_request_id}"
+                )
+                opening = _action_proof(support_case["opening"], f"{field}.opening")
+                requested_at = datetime.fromisoformat(
+                    _timestamp(
+                        support_case["customerRequestedAt"],
+                        f"{field}.customerRequestedAt",
+                    ).replace("Z", "+00:00")
+                )
+                opening_at = datetime.fromisoformat(opening["capturedAt"].replace("Z", "+00:00"))
+                if (
+                    _SUPPORT_CASE_ID_PATTERN.fullmatch(case_id) is None
+                    or _SUPPORT_INTENT_ID_PATTERN.fullmatch(source_intent_id) is None
+                    or case_id != expected_case_id
+                    or _STOREFRONT_REQUEST_ID_PATTERN.fullmatch(source_request_id) is None
+                    or source_request_id != order.get("sourceRecordId")
+                    or support_case["category"] not in _SUPPORT_CATEGORIES
+                    or support_case["externalMessageSent"] is not False
+                    or support_case["refundStarted"] is not False
+                    or opening["evidenceReference"] != expected_evidence
+                    or opening_at < max(requested_at, completion_at)
+                    or (newer_opening_at is not None and opening_at > newer_opening_at)
+                ):
+                    raise TrialValidationError(f"{field} boundary or chronology is invalid.")
+                _text(
+                    support_case["customerDescription"],
+                    f"{field}.customerDescription",
+                    maximum=300,
+                )
+                newer_opening_at = opening_at
+                if support_case["status"] == "open":
+                    if "resolution" in support_case:
+                        raise TrialValidationError(f"{field} open case cannot have resolution evidence.")
+                elif support_case["status"] == "resolved":
+                    resolution = _object(support_case.get("resolution"), f"{field}.resolution")
+                    _exact_fields(
+                        resolution,
+                        f"{field}.resolution",
+                        required=_ORDER_SUPPORT_RESOLUTION_FIELDS,
+                    )
+                    if resolution["outcome"] not in _SUPPORT_RESOLUTION_OUTCOMES:
+                        raise TrialValidationError(f"{field}.resolution.outcome is invalid.")
+                    _text(resolution["note"], f"{field}.resolution.note", maximum=300)
+                    resolution_proof = _action_proof(
+                        resolution["proof"], f"{field}.resolution.proof"
+                    )
+                    if datetime.fromisoformat(
+                        resolution_proof["capturedAt"].replace("Z", "+00:00")
+                    ) < opening_at:
+                        raise TrialValidationError(f"{field}.resolution predates opening.")
+                    support_action_ids.append(resolution_proof["actionId"])
+                else:
+                    raise TrialValidationError(f"{field}.status is invalid.")
+                support_source_intent_ids.append(source_intent_id)
+                support_action_ids.append(opening["actionId"])
         if "corrections" in order:
             corrections = _list(order["corrections"], f"orders[{index}].corrections")
             if (
@@ -2102,6 +2217,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     _unique(advancement_action_ids, "Order advancement action ID")
     _unique(completion_action_ids, "Order completion action ID")
     _unique(return_action_ids, "Order return action ID")
+    _unique(support_action_ids, "Order support action ID")
+    _unique(support_source_intent_ids, "Order support source intent ID")
     _unique(correction_action_ids, "Order correction action ID")
     _unique(collection_action_ids, "Collection action ID")
 
@@ -3035,6 +3152,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *advancement_action_ids,
             *completion_action_ids,
             *return_action_ids,
+            *support_action_ids,
             *correction_action_ids,
             *collection_action_ids,
             *intake_action_ids,
@@ -3366,6 +3484,32 @@ def _validate_event_evidence(
         ):
             raise TrialValidationError(
                 "command evidence must match the order return proof."
+            )
+    elif event_type == "commerce.order.support_case_opened":
+        _, changed_order = _one_changed(current["orders"], next_state["orders"], "orders")
+        cases = changed_order.get("supportCases")
+        opening = cases[0].get("opening") if isinstance(cases, list) and cases else None
+        if not isinstance(opening, Mapping) or not _proof_matches_evidence(opening, evidence):
+            raise TrialValidationError(
+                "command evidence must match the support case opening proof."
+            )
+    elif event_type == "commerce.order.support_case_resolved":
+        before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
+        before_by_id = {
+            case.get("caseId"): case
+            for case in before_order.get("supportCases", [])
+            if isinstance(case, Mapping)
+        }
+        changed = [
+            case
+            for case in after_order.get("supportCases", [])
+            if isinstance(case, Mapping) and case != before_by_id.get(case.get("caseId"))
+        ]
+        resolution = changed[0].get("resolution") if len(changed) == 1 else None
+        proof = resolution.get("proof") if isinstance(resolution, Mapping) else None
+        if not isinstance(proof, Mapping) or not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the support case resolution proof."
             )
     elif event_type == "commerce.order.correction_recorded":
         _, corrected_order = _one_changed(
@@ -5590,6 +5734,79 @@ def _validate_return_recorded(
         raise TrialValidationError("return disposition is invalid.")
 
 
+def _validate_support_case_opened(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
+    before_cases = before_order.get("supportCases", [])
+    after_cases = after_order.get("supportCases")
+    if (
+        before_order.get("status") != "completed"
+        or "completion" not in before_order
+        or not isinstance(after_cases, list)
+        or len(after_cases) != len(before_cases) + 1
+        or after_cases[1:] != before_cases
+        or _without(before_order, frozenset({"supportCases"}))
+        != _without(after_order, frozenset({"supportCases"}))
+        or after_cases[0].get("status") != "open"
+        or "resolution" in after_cases[0]
+    ):
+        raise TrialValidationError(
+            "commerce.order.support_case_opened must prepend one immutable open case."
+        )
+
+
+def _validate_support_case_resolved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
+    before_cases = before_order.get("supportCases")
+    after_cases = after_order.get("supportCases")
+    if (
+        not isinstance(before_cases, list)
+        or not isinstance(after_cases, list)
+        or len(after_cases) != len(before_cases)
+        or _without(before_order, frozenset({"supportCases"}))
+        != _without(after_order, frozenset({"supportCases"}))
+    ):
+        raise TrialValidationError(
+            "commerce.order.support_case_resolved may change only one existing support case."
+        )
+    changed = [
+        (before, after)
+        for before, after in zip(before_cases, after_cases, strict=True)
+        if before != after
+    ]
+    if len(changed) != 1:
+        raise TrialValidationError(
+            "commerce.order.support_case_resolved must resolve exactly one case."
+        )
+    before_case, after_case = changed[0]
+    if (
+        before_case.get("status") != "open"
+        or "resolution" in before_case
+        or after_case.get("status") != "resolved"
+        or not isinstance(after_case.get("resolution"), Mapping)
+        or _without(before_case, frozenset({"status", "resolution"}))
+        != _without(after_case, frozenset({"status", "resolution"}))
+    ):
+        raise TrialValidationError(
+            "commerce.order.support_case_resolved must preserve the immutable opened case."
+        )
+
+
 def _validate_correction_recorded(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -6875,6 +7092,8 @@ _TRANSITION_VALIDATORS = {
     "commerce.order.advanced": _validate_advanced,
     "commerce.order.cancelled": _validate_cancelled,
     "commerce.order.return_recorded": _validate_return_recorded,
+    "commerce.order.support_case_opened": _validate_support_case_opened,
+    "commerce.order.support_case_resolved": _validate_support_case_resolved,
     "commerce.order.correction_recorded": _validate_correction_recorded,
     "commerce.payment.reconciled": _validate_reconciled,
     "commerce.collection_action.recorded": _validate_collection_action_recorded,

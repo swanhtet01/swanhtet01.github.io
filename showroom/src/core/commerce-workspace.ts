@@ -205,6 +205,29 @@ export type CommerceCollectionAction = {
   proof: CommerceActionProof
 }
 
+export type CommerceSupportCategory = 'order_status' | 'delivery_issue' | 'payment_question' | 'item_issue' | 'other'
+export type CommerceSupportResolutionOutcome = 'information_provided' | 'replacement_review_required' | 'refund_review_required' | 'no_action'
+
+export type CommerceOrderSupportResolution = {
+  outcome: CommerceSupportResolutionOutcome
+  note: string
+  proof: CommerceActionProof
+}
+
+export type CommerceOrderSupportCase = {
+  caseId: string
+  sourceIntentId: string
+  sourceRequestId: string
+  customerRequestedAt: string
+  category: CommerceSupportCategory
+  customerDescription: string
+  status: 'open' | 'resolved'
+  opening: CommerceActionProof
+  resolution?: CommerceOrderSupportResolution
+  externalMessageSent: false
+  refundStarted: false
+}
+
 export type CommerceOrder = {
   id: string
   createdAt: string
@@ -239,6 +262,7 @@ export type CommerceOrder = {
   advancementActionIds?: string[]
   completion?: CommerceActionProof
   returns?: CommerceOrderReturn[]
+  supportCases?: CommerceOrderSupportCase[]
   corrections?: CommerceOrderCorrection[]
   calculation?: CommerceOrderCalculation
   total: number
@@ -826,6 +850,37 @@ export type CommerceOrderReturnExpectation = {
   orderSnapshot: string
 }
 
+export type CommerceOrderSupportOpenInput = {
+  orderId: string
+  sourceIntentId: string
+  sourceRequestId: string
+  customerRequestedAt: string
+  category: CommerceSupportCategory
+  customerDescription: string
+  externalMessageSent: false
+  refundStarted: false
+}
+
+export type CommerceOrderSupportOpenExpectation = {
+  orderId: string
+  supportCaseCount: number
+  orderSnapshot: string
+}
+
+export type CommerceOrderSupportResolveInput = {
+  orderId: string
+  caseId: string
+  outcome: CommerceSupportResolutionOutcome
+  note: string
+}
+
+export type CommerceOrderSupportResolveExpectation = {
+  orderId: string
+  caseId: string
+  orderSnapshot: string
+  caseSnapshot: string
+}
+
 export type CommerceOrderCorrectionInput = {
   orderId: string
   kind: CommerceCorrectionKind
@@ -936,6 +991,8 @@ const productionReceiptFields = [
 const productionIssueExclusiveFields = ['productionRequestId', 'productionMaterialId', 'productionInputLotId', 'productionQuantityMilli', 'productionUnit', 'conversionNote'] as const
 const productionReceiptExclusiveFields = ['productionReleaseId', 'productionOutputBatchId', 'productionReleasedAt', 'productionSourceProduct'] as const
 const returnDispositions: CommerceReturnDisposition[] = ['restock', 'not_restocked']
+const supportCategories: CommerceSupportCategory[] = ['delivery_issue', 'item_issue', 'order_status', 'other', 'payment_question']
+const supportResolutionOutcomes: CommerceSupportResolutionOutcome[] = ['information_provided', 'replacement_review_required', 'refund_review_required', 'no_action']
 const correctionKinds: CommerceCorrectionKind[] = ['credit', 'debit']
 const correctionReasonCodes: CommerceCorrectionReasonCode[] = ['pricing_error', 'service_recovery', 'fee_adjustment', 'other']
 const websiteIntakeStatuses: CommerceWebsiteIntakeStatus[] = ['pending_confirmation', 'converted']
@@ -948,6 +1005,8 @@ const storefrontIdempotencyPattern = /^ECI-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-
 const storefrontQuoteIdPattern = /^ECQ-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const storefrontCustomerIdPattern = /^CUS-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const storefrontAddressIdPattern = /^ADR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
+const supportIntentIdPattern = /^ESR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
+const supportCaseIdPattern = /^CASE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const sha256DigestPattern = /^sha256:[a-f0-9]{64}$/
 const maxStorefrontRequests = 100
 const maxPurchaseOrders = 100
@@ -959,6 +1018,7 @@ const maxCustomerCreditPolicies = 500
 const customerCreditTerms = new Set([0, 7, 30])
 const maxOrderLines = 20
 const maxReturnsPerOrder = 100
+const maxSupportCasesPerOrder = 100
 const maxCorrectionsPerOrder = 100
 const maxCollectionActionsPerOrder = 100
 const closeIdPattern = /^CLOSE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
@@ -1626,6 +1686,8 @@ export function validateCommerceState(value: unknown): CommerceState {
   const advancementActionIds: string[] = []
   const completionActionIds: string[] = []
   const returnActionIds: string[] = []
+  const supportActionIds: string[] = []
+  const supportSourceIntentIds: string[] = []
   const correctionActionIds: string[] = []
   const collectionActionIds: string[] = []
   const orderReturns: Array<{ orderId: string; record: CommerceOrderReturn }> = []
@@ -2341,6 +2403,77 @@ export function validateCommerceState(value: unknown): CommerceState {
         orderReturns.push({ orderId: candidate.id as string, record: returnRecord })
       }
     }
+    if (candidate.supportCases !== undefined) {
+      if (!Array.isArray(candidate.supportCases)
+        || candidate.supportCases.length < 1
+        || candidate.supportCases.length > maxSupportCasesPerOrder
+        || candidate.status !== 'completed'
+        || !candidate.completion) {
+        throw new Error(`orders[${index}].supportCases requires 1 to ${maxSupportCasesPerOrder} records on a completed order.`)
+      }
+      let newerOpeningAt: bigint | null = null
+      for (const [caseIndex, caseCandidate] of candidate.supportCases.entries()) {
+        const field = `orders[${index}].supportCases[${caseIndex}]`
+        if (!isRecord(caseCandidate) || !hasExactKeys(
+          caseCandidate,
+          ['caseId', 'sourceIntentId', 'sourceRequestId', 'customerRequestedAt', 'category', 'customerDescription', 'status', 'opening', 'externalMessageSent', 'refundStarted'],
+          ['resolution'],
+        )) throw new Error(`${field} is invalid.`)
+        const caseId = canonicalText(caseCandidate.caseId, `${field}.caseId`, 41)
+        const sourceIntentId = canonicalText(caseCandidate.sourceIntentId, `${field}.sourceIntentId`, 40)
+        const sourceRequestId = canonicalText(caseCandidate.sourceRequestId, `${field}.sourceRequestId`, 40)
+        const expectedCaseId = `CASE-${sourceIntentId.slice(4)}`
+        const expectedEvidence = `ECOMMERCE-SUPPORT:${sourceIntentId.slice(4)}:${String(candidate.id)}:${sourceRequestId}`
+        if (!supportCaseIdPattern.test(caseId)
+          || !supportIntentIdPattern.test(sourceIntentId)
+          || caseId !== expectedCaseId
+          || !storefrontRequestIdPattern.test(sourceRequestId)
+          || sourceRequestId !== candidate.sourceRecordId
+          || !validTimestamp(caseCandidate.customerRequestedAt)
+          || !supportCategories.includes(caseCandidate.category as CommerceSupportCategory)
+          || caseCandidate.externalMessageSent !== false
+          || caseCandidate.refundStarted !== false
+          || !isRecord(caseCandidate.opening)
+          || !hasExactKeys(caseCandidate.opening, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+          || !validProof(caseCandidate.opening as CommerceActionProof)
+          || caseCandidate.opening.evidenceReference !== expectedEvidence) {
+          throw new Error(`${field} boundary is invalid.`)
+        }
+        canonicalText(caseCandidate.customerDescription, `${field}.customerDescription`, 300)
+        const requestedAt = timestampMicros(caseCandidate.customerRequestedAt) as bigint
+        const opening = caseCandidate.opening as CommerceActionProof
+        const openingAt = timestampMicros(opening.capturedAt) as bigint
+        if (openingAt < requestedAt
+          || openingAt < (timestampMicros((candidate.completion as CommerceActionProof).capturedAt) as bigint)
+          || (newerOpeningAt !== null && openingAt > newerOpeningAt)) {
+          throw new Error(`${field} is outside the order chronology.`)
+        }
+        newerOpeningAt = openingAt
+        for (const proofField of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+          canonicalText(opening[proofField], `${field}.opening.${proofField}`, proofField === 'actionId' ? 160 : 300)
+        }
+        if (caseCandidate.status === 'open') {
+          if (caseCandidate.resolution !== undefined) throw new Error(`${field} open case cannot have resolution evidence.`)
+        } else if (caseCandidate.status === 'resolved') {
+          if (!isRecord(caseCandidate.resolution)
+            || !hasExactKeys(caseCandidate.resolution, ['outcome', 'note', 'proof'])
+            || !supportResolutionOutcomes.includes(caseCandidate.resolution.outcome as CommerceSupportResolutionOutcome)
+            || !isRecord(caseCandidate.resolution.proof)
+            || !hasExactKeys(caseCandidate.resolution.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+            || !validProof(caseCandidate.resolution.proof as CommerceActionProof)) {
+            throw new Error(`${field}.resolution is invalid.`)
+          }
+          canonicalText(caseCandidate.resolution.note, `${field}.resolution.note`, 300)
+          const resolutionProof = caseCandidate.resolution.proof as CommerceActionProof
+          if ((timestampMicros(resolutionProof.capturedAt) as bigint) < openingAt) throw new Error(`${field}.resolution predates opening.`)
+          supportActionIds.push(resolutionProof.actionId)
+        } else {
+          throw new Error(`${field}.status is invalid.`)
+        }
+        supportSourceIntentIds.push(sourceIntentId)
+        supportActionIds.push(opening.actionId)
+      }
+    }
     orderById.set(candidate.id as string, candidate)
   }
   assertUnique(orderIds, 'Order ID')
@@ -2349,6 +2482,8 @@ export function validateCommerceState(value: unknown): CommerceState {
   assertUnique(refundSettlementActionIds, 'Refund settlement action ID')
   assertUnique(completionActionIds, 'Order completion action ID')
   assertUnique(returnActionIds, 'Order return action ID')
+  assertUnique(supportActionIds, 'Order support action ID')
+  assertUnique(supportSourceIntentIds, 'Order support source intent ID')
   assertUnique(correctionActionIds, 'Order correction action ID')
   assertUnique(collectionActionIds, 'Collection action ID')
 
@@ -2909,6 +3044,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     ...advancementActionIds,
     ...completionActionIds,
     ...returnActionIds,
+    ...supportActionIds,
     ...correctionActionIds,
     ...collectionActionIds,
     ...catalogChangeActionIds.filter((actionId) => !catalogBaselineActionSet.has(actionId)),
@@ -3127,6 +3263,7 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || state.orders.some((order) => order.advancementActionIds?.includes(actionId))
     || state.orders.some((order) => order.completion?.actionId === actionId)
     || state.orders.some((order) => order.returns?.some((record) => record.actionId === actionId))
+    || state.orders.some((order) => order.supportCases?.some((record) => record.opening.actionId === actionId || record.resolution?.proof.actionId === actionId))
     || state.orders.some((order) => order.corrections?.some((record) => record.actionId === actionId))
     || state.orders.some((order) => order.collectionActions?.some((record) => record.proof.actionId === actionId))
     || state.closes.some((close) => close.actionId === actionId)
@@ -5390,6 +5527,166 @@ export function recordCommerceOrderReturn(
       : candidate),
     movements: movement ? [movement, ...current.movements] : current.movements,
     ...(inventoryFoundation ? { inventoryFoundation } : {}),
+  })
+}
+
+function sameSupportOpenExpectation(
+  left: CommerceOrderSupportOpenExpectation,
+  right: CommerceOrderSupportOpenExpectation,
+) {
+  return left.orderId === right.orderId
+    && left.supportCaseCount === right.supportCaseCount
+    && left.orderSnapshot === right.orderSnapshot
+}
+
+export function commerceOrderSupportOpenExpectation(
+  state: CommerceState,
+  orderId: string,
+  sourceIntentId: string,
+): CommerceOrderSupportOpenExpectation | null {
+  const current = validateCommerceState(state)
+  const order = current.orders.find((candidate) => candidate.id === orderId)
+  if (!order
+    || order.status !== 'completed'
+    || !order.completion
+    || !order.sourceRecordId
+    || !storefrontRequestIdPattern.test(order.sourceRecordId)
+    || !supportIntentIdPattern.test(sourceIntentId)
+    || order.supportCases?.some((entry) => entry.sourceIntentId === sourceIntentId)) return null
+  return {
+    orderId,
+    supportCaseCount: order.supportCases?.length ?? 0,
+    orderSnapshot: JSON.stringify(order),
+  }
+}
+
+export function recordCommerceOrderSupportCase(
+  state: CommerceState,
+  input: CommerceOrderSupportOpenInput,
+  proof: CommerceActionProof,
+  expected: CommerceOrderSupportOpenExpectation,
+) {
+  if (!validProof(proof)
+    || typeof input.orderId !== 'string'
+    || !input.orderId
+    || input.orderId !== input.orderId.trim()
+    || input.orderId.length > 160
+    || !supportIntentIdPattern.test(input.sourceIntentId)
+    || !storefrontRequestIdPattern.test(input.sourceRequestId)
+    || !supportCategories.includes(input.category)
+    || input.externalMessageSent !== false
+    || input.refundStarted !== false
+    || !validTimestamp(input.customerRequestedAt)
+    || typeof input.customerDescription !== 'string'
+    || !input.customerDescription
+    || input.customerDescription !== input.customerDescription.trim()
+    || input.customerDescription.length > 300) return null
+  const current = validateCommerceState(state)
+  const caseId = `CASE-${input.sourceIntentId.slice(4)}`
+  const evidenceReference = `ECOMMERCE-SUPPORT:${input.sourceIntentId.slice(4)}:${input.orderId}:${input.sourceRequestId}`
+  const replay = current.orders.flatMap((order) => (order.supportCases ?? []).map((entry) => ({ order, entry })))
+    .find(({ entry }) => entry.sourceIntentId === input.sourceIntentId || entry.opening.actionId === proof.actionId)
+  if (replay) {
+    const expectedRecord: CommerceOrderSupportCase = {
+      caseId,
+      sourceIntentId: input.sourceIntentId,
+      sourceRequestId: input.sourceRequestId,
+      customerRequestedAt: input.customerRequestedAt,
+      category: input.category,
+      customerDescription: input.customerDescription,
+      status: 'open',
+      opening: proof,
+      externalMessageSent: false,
+      refundStarted: false,
+    }
+    return replay.order.id === input.orderId && JSON.stringify(replay.entry) === JSON.stringify(expectedRecord) ? current : null
+  }
+  if (actionIdIsUsed(current, proof.actionId)) return null
+  const actual = commerceOrderSupportOpenExpectation(current, input.orderId, input.sourceIntentId)
+  if (!actual || !expected || !sameSupportOpenExpectation(actual, expected)) return null
+  const order = current.orders.find((candidate) => candidate.id === input.orderId)
+  if (!order
+    || !order.completion
+    || order.sourceRecordId !== input.sourceRequestId
+    || proof.evidenceReference !== evidenceReference) return null
+  const latest = [
+    order.completion.capturedAt,
+    input.customerRequestedAt,
+    ...(order.supportCases ?? []).flatMap((entry) => [entry.opening.capturedAt, ...(entry.resolution ? [entry.resolution.proof.capturedAt] : [])]),
+  ].map((value) => timestampMicros(value) as bigint).reduce((maximum, value) => value > maximum ? value : maximum, 0n)
+  if ((timestampMicros(proof.capturedAt) as bigint) < latest) return null
+  const supportCase: CommerceOrderSupportCase = {
+    caseId,
+    sourceIntentId: input.sourceIntentId,
+    sourceRequestId: input.sourceRequestId,
+    customerRequestedAt: input.customerRequestedAt,
+    category: input.category,
+    customerDescription: input.customerDescription,
+    status: 'open',
+    opening: proof,
+    externalMessageSent: false,
+    refundStarted: false,
+  }
+  return validateCommerceState({
+    ...current,
+    orders: current.orders.map((candidate) => candidate.id === input.orderId
+      ? { ...candidate, supportCases: [supportCase, ...(candidate.supportCases ?? [])] }
+      : candidate),
+  })
+}
+
+export function commerceOrderSupportResolveExpectation(
+  state: CommerceState,
+  orderId: string,
+  caseId: string,
+): CommerceOrderSupportResolveExpectation | null {
+  const current = validateCommerceState(state)
+  const order = current.orders.find((candidate) => candidate.id === orderId)
+  const supportCase = order?.supportCases?.find((candidate) => candidate.caseId === caseId)
+  if (!order || !supportCase || supportCase.status !== 'open' || supportCase.resolution) return null
+  return { orderId, caseId, orderSnapshot: JSON.stringify(order), caseSnapshot: JSON.stringify(supportCase) }
+}
+
+export function resolveCommerceOrderSupportCase(
+  state: CommerceState,
+  input: CommerceOrderSupportResolveInput,
+  proof: CommerceActionProof,
+  expected: CommerceOrderSupportResolveExpectation,
+) {
+  if (!validProof(proof)
+    || typeof input.orderId !== 'string'
+    || !input.orderId
+    || input.orderId !== input.orderId.trim()
+    || input.orderId.length > 160
+    || !supportCaseIdPattern.test(input.caseId)
+    || !supportResolutionOutcomes.includes(input.outcome)
+    || typeof input.note !== 'string'
+    || !input.note
+    || input.note !== input.note.trim()
+    || input.note.length > 300) return null
+  const current = validateCommerceState(state)
+  const replay = current.orders.flatMap((order) => (order.supportCases ?? []).map((entry) => ({ order, entry })))
+    .find(({ entry }) => entry.resolution?.proof.actionId === proof.actionId)
+  if (replay) {
+    return replay.order.id === input.orderId
+      && replay.entry.caseId === input.caseId
+      && replay.entry.resolution?.outcome === input.outcome
+      && replay.entry.resolution.note === input.note
+      && sameActionProof(replay.entry.resolution.proof, proof)
+      ? current : null
+  }
+  if (actionIdIsUsed(current, proof.actionId)) return null
+  const actual = commerceOrderSupportResolveExpectation(current, input.orderId, input.caseId)
+  if (!actual || !expected || JSON.stringify(actual) !== JSON.stringify(expected)) return null
+  const order = current.orders.find((candidate) => candidate.id === input.orderId)
+  const supportCase = order?.supportCases?.find((candidate) => candidate.caseId === input.caseId)
+  if (!order || !supportCase || (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(supportCase.opening.capturedAt) as bigint)) return null
+  const resolution: CommerceOrderSupportResolution = { outcome: input.outcome, note: input.note, proof }
+  return validateCommerceState({
+    ...current,
+    orders: current.orders.map((candidate) => candidate.id === input.orderId
+      ? { ...candidate, supportCases: candidate.supportCases?.map((entry) => entry.caseId === input.caseId ? { ...entry, status: 'resolved' as const, resolution } : entry) }
+      : candidate),
   })
 }
 

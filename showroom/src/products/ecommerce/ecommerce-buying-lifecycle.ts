@@ -13,6 +13,7 @@ export const ECOMMERCE_REQUEST_SCHEMA_V2 = 'supermega.ecommerce.order_request.v2
 export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V3 = 'supermega.ecommerce.shop_draft.v3' as const
 export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V2 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V3
 export const ECOMMERCE_RETURN_INTENT_SCHEMA = 'supermega.ecommerce.return_intent.v1' as const
+export const ECOMMERCE_SUPPORT_INTENT_SCHEMA = 'supermega.ecommerce.support_intent.v1' as const
 export const ECOMMERCE_BUYING_STATE_SCHEMA = 'supermega.ecommerce.buying_lifecycle.v1' as const
 export const ECOMMERCE_BUYING_EVENT_SCHEMA = 'supermega.ecommerce.buying_event.v1' as const
 export const ECOMMERCE_BUYING_STATE_KEY_PREFIX = 'supermega.ecommerce.buying_lifecycle.v1.'
@@ -21,6 +22,7 @@ export const EMPTY_ECOMMERCE_BUYING_DIGEST = `sha256:${'0'.repeat(64)}`
 export type EcommercePaymentAdapter = 'pay_on_pickup' | 'cash_on_delivery' | 'kbzpay_manual'
 export type EcommerceFulfilment = 'pickup' | 'delivery'
 export type EcommerceReturnDisposition = 'restock' | 'not_restocked'
+export type EcommerceSupportCategory = 'order_status' | 'delivery_issue' | 'payment_question' | 'item_issue' | 'other'
 
 export type EcommercePimItem = {
   sku: string
@@ -192,10 +194,26 @@ export type EcommerceReturnIntent = {
   evidenceReference: string
 }
 
+export type EcommerceSupportIntent = {
+  schema: typeof ECOMMERCE_SUPPORT_INTENT_SCHEMA
+  state: 'pending_shop_review'
+  scope: string
+  id: string
+  idempotencyKey: string
+  createdAt: string
+  orderId: string
+  sourceRequestId: string
+  category: EcommerceSupportCategory
+  description: string
+  externalMessageSent: false
+  refundStarted: false
+  evidenceReference: string
+}
+
 export type EcommerceBuyingEvent = {
   schema: typeof ECOMMERCE_BUYING_EVENT_SCHEMA
   sequence: number
-  action: 'request_recorded' | 'return_intent_recorded'
+  action: 'request_recorded' | 'return_intent_recorded' | 'support_intent_recorded'
   subjectId: string
   idempotencyKey: string
   payloadDigest: string
@@ -210,6 +228,7 @@ export type EcommerceBuyingState = {
   headDigest: string
   requests: EcommerceOrderRequestV2[]
   returnIntents: EcommerceReturnIntent[]
+  supportIntents: EcommerceSupportIntent[]
   events: EcommerceBuyingEvent[]
 }
 
@@ -243,10 +262,13 @@ const customerIdPattern = new RegExp(`^CUS-${uuidPattern}$`)
 const addressIdPattern = new RegExp(`^ADR-${uuidPattern}$`)
 const returnIdPattern = new RegExp(`^ERR-${uuidPattern}$`)
 const returnKeyPattern = new RegExp(`^ERI-${uuidPattern}$`)
+const supportIdPattern = new RegExp(`^ESR-${uuidPattern}$`)
+const supportKeyPattern = new RegExp(`^ESI-${uuidPattern}$`)
 const timestampPattern = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$/
 const paymentAdapters: EcommercePaymentAdapter[] = ['cash_on_delivery', 'kbzpay_manual', 'pay_on_pickup']
 const fulfilmentMethods: EcommerceFulfilment[] = ['delivery', 'pickup']
 const returnDispositions: EcommerceReturnDisposition[] = ['not_restocked', 'restock']
+const supportCategories: EcommerceSupportCategory[] = ['delivery_issue', 'item_issue', 'order_status', 'other', 'payment_question']
 const maxSafeInteger = Number.MAX_SAFE_INTEGER
 const maxLines = 20
 const maxQuantity = 99
@@ -895,6 +917,7 @@ export function createEmptyEcommerceBuyingState(scope: string): EcommerceBuyingS
     headDigest: EMPTY_ECOMMERCE_BUYING_DIGEST,
     requests: [],
     returnIntents: [],
+    supportIntents: [],
     events: [],
   }
 }
@@ -905,7 +928,7 @@ async function validateBuyingEvent(value: unknown, field: string): Promise<Ecomm
     'previousDigest', 'eventDigest',
   ])
   if (source.schema !== ECOMMERCE_BUYING_EVENT_SCHEMA
-    || source.action !== 'request_recorded' && source.action !== 'return_intent_recorded') {
+    || !['request_recorded', 'return_intent_recorded', 'support_intent_recorded'].includes(String(source.action))) {
     throw new Error(`${field} boundary is invalid.`)
   }
   const core = {
@@ -923,20 +946,27 @@ async function validateBuyingEvent(value: unknown, field: string): Promise<Ecomm
 }
 
 export async function validateEcommerceBuyingState(value: unknown, expectedScope?: string): Promise<EcommerceBuyingState> {
-  const source = exactObject(value, 'buying state', [
-    'schema', 'scope', 'revision', 'headDigest', 'requests', 'returnIntents', 'events',
-  ])
+  if (!isRecord(value)) throw new Error('Buying state must be an object.')
+  const legacyKeys = ['schema', 'scope', 'revision', 'headDigest', 'requests', 'returnIntents', 'events']
+  const currentKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'events']
+  const actualKeys = Object.keys(value)
+  const hasExactShape = (keys: string[]) => actualKeys.length === keys.length && keys.every((key) => actualKeys.includes(key))
+  if (!hasExactShape(legacyKeys) && !hasExactShape(currentKeys)) throw new Error('Buying state fields do not match the contract.')
+  const source = value
   if (source.schema !== ECOMMERCE_BUYING_STATE_SCHEMA
     || !Array.isArray(source.requests)
     || !Array.isArray(source.returnIntents)
+    || source.supportIntents !== undefined && !Array.isArray(source.supportIntents)
     || !Array.isArray(source.events)
     || source.requests.length > maxRecords
     || source.returnIntents.length > maxRecords
-    || source.events.length > maxRecords * 2) throw new Error('Buying state contract is invalid.')
+    || (source.supportIntents?.length ?? 0) > maxRecords
+    || source.events.length > maxRecords * 3) throw new Error('Buying state contract is invalid.')
   const scope = canonicalToken(source.scope, 'buying state.scope')
   if (expectedScope && scope !== canonicalToken(expectedScope, 'expectedScope')) throw new Error('Buying state belongs to a different workspace.')
   const requests = await Promise.all(source.requests.map((request) => validateEcommerceOrderRequestV2(request)))
   const returnIntents = source.returnIntents.map((intent) => validateEcommerceReturnIntent(intent))
+  const supportIntents = (source.supportIntents ?? []).map((intent) => validateEcommerceSupportIntent(intent))
   const events = await Promise.all(source.events.map((event, index) => validateBuyingEvent(event, `buying state.events[${index}]`)))
   const revision = safeInteger(source.revision, 'buying state.revision')
   if (revision !== events.length) throw new Error('Buying state revision does not match its history.')
@@ -947,7 +977,7 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
   })
   const headDigest = canonicalDigest(source.headDigest, 'buying state.headDigest')
   if (headDigest !== previousDigest) throw new Error('Buying state head digest is invalid.')
-  const records: Array<EcommerceOrderRequestV2 | EcommerceReturnIntent> = [...requests, ...returnIntents]
+  const records: Array<EcommerceOrderRequestV2 | EcommerceReturnIntent | EcommerceSupportIntent> = [...requests, ...returnIntents, ...supportIntents]
   if (records.some((record) => record.scope !== scope)
     || new Set(records.map((record) => record.id)).size !== records.length
     || new Set(records.map((record) => record.idempotencyKey)).size !== records.length
@@ -956,6 +986,9 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
   if (returnIntents.some((intent) => !requestIds.has(intent.sourceRequestId))) {
     throw new Error('Return intent is not attributable to one recovered Ecommerce request.')
   }
+  if (supportIntents.some((intent) => !requestIds.has(intent.sourceRequestId))) {
+    throw new Error('Support intent is not attributable to one recovered Ecommerce request.')
+  }
   const byId = new Map(records.map((record) => [record.id, record]))
   for (const event of events) {
     const record = byId.get(event.subjectId)
@@ -963,20 +996,20 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
       || record.idempotencyKey !== event.idempotencyKey
       || await ecommerceLifecycleDigest(record) !== event.payloadDigest) throw new Error('Buying event does not match its record.')
   }
-  return { schema: ECOMMERCE_BUYING_STATE_SCHEMA, scope, revision, headDigest, requests, returnIntents, events }
+  return { schema: ECOMMERCE_BUYING_STATE_SCHEMA, scope, revision, headDigest, requests, returnIntents, supportIntents, events }
 }
 
 async function appendBuyingRecord(
   stateValue: EcommerceBuyingState,
-  record: EcommerceOrderRequestV2 | EcommerceReturnIntent,
-  collection: 'requests' | 'returnIntents',
+  record: EcommerceOrderRequestV2 | EcommerceReturnIntent | EcommerceSupportIntent,
+  collection: 'requests' | 'returnIntents' | 'supportIntents',
   action: EcommerceBuyingEvent['action'],
   expectedHeadDigest: string,
 ) {
   const state = await validateEcommerceBuyingState(stateValue)
   if (canonicalDigest(expectedHeadDigest, 'expectedHeadDigest') !== state.headDigest) throw new Error('Buying state changed before this record was applied.')
   if (record.scope !== state.scope) throw new Error('Buying record belongs to a different workspace.')
-  const allRecords: Array<EcommerceOrderRequestV2 | EcommerceReturnIntent> = [...state.requests, ...state.returnIntents]
+  const allRecords: Array<EcommerceOrderRequestV2 | EcommerceReturnIntent | EcommerceSupportIntent> = [...state.requests, ...state.returnIntents, ...state.supportIntents]
   const existing = allRecords.find((candidate) => candidate.id === record.id || candidate.idempotencyKey === record.idempotencyKey)
   if (existing) {
     if (canonicalJson(existing) !== canonicalJson(record)) throw new Error('Buying idempotency key conflicts with a different record.')
@@ -1106,6 +1139,78 @@ export function validateEcommerceReturnIntent(value: unknown): EcommerceReturnIn
   }
 }
 
+export function buildEcommerceSupportIntent(input: {
+  scope: string
+  orderSnapshot: CommerceOrder
+  category: EcommerceSupportCategory
+  description: string
+  idempotencyKey: string
+  createdAt: string
+}): EcommerceSupportIntent {
+  const order = input.orderSnapshot
+  if (!isRecord(order) || order.status !== 'completed' || !isRecord(order.completion)) {
+    throw new Error('Support requests require a completed Shop order with completion proof.')
+  }
+  const orderId = canonicalToken(order.id, 'orderSnapshot.id')
+  const sourceRequestId = canonicalText(order.sourceRecordId, 'orderSnapshot.sourceRecordId', 40)
+  if (!requestIdPattern.test(sourceRequestId)) throw new Error('Support order is not attributable to an Ecommerce request.')
+  if (!supportCategories.includes(input.category)) throw new Error('Support category is unsupported.')
+  const idempotencyKey = canonicalText(input.idempotencyKey, 'idempotencyKey', 40)
+  if (!supportKeyPattern.test(idempotencyKey)) throw new Error('Support idempotency key is invalid.')
+  return validateEcommerceSupportIntent({
+    schema: ECOMMERCE_SUPPORT_INTENT_SCHEMA,
+    state: 'pending_shop_review',
+    scope: canonicalToken(input.scope, 'scope'),
+    id: `ESR-${idempotencyKey.slice(4)}`,
+    idempotencyKey,
+    createdAt: canonicalTimestamp(input.createdAt, 'createdAt'),
+    orderId,
+    sourceRequestId,
+    category: input.category,
+    description: canonicalText(input.description, 'description', 300),
+    externalMessageSent: false,
+    refundStarted: false,
+    evidenceReference: `ECOMMERCE-SUPPORT:${idempotencyKey.slice(4)}:${orderId}:${sourceRequestId}`,
+  })
+}
+
+export function validateEcommerceSupportIntent(value: unknown): EcommerceSupportIntent {
+  const source = exactObject(value, 'support intent', [
+    'schema', 'state', 'scope', 'id', 'idempotencyKey', 'createdAt', 'orderId',
+    'sourceRequestId', 'category', 'description', 'externalMessageSent', 'refundStarted', 'evidenceReference',
+  ])
+  const id = canonicalText(source.id, 'support intent.id', 40)
+  const idempotencyKey = canonicalText(source.idempotencyKey, 'support intent.idempotencyKey', 40)
+  const sourceRequestId = canonicalText(source.sourceRequestId, 'support intent.sourceRequestId', 40)
+  const orderId = canonicalToken(source.orderId, 'support intent.orderId')
+  const evidenceReference = `ECOMMERCE-SUPPORT:${idempotencyKey.slice(4)}:${orderId}:${sourceRequestId}`
+  if (source.schema !== ECOMMERCE_SUPPORT_INTENT_SCHEMA
+    || source.state !== 'pending_shop_review'
+    || !supportIdPattern.test(id)
+    || !supportKeyPattern.test(idempotencyKey)
+    || id.slice(4) !== idempotencyKey.slice(4)
+    || !requestIdPattern.test(sourceRequestId)
+    || !supportCategories.includes(source.category as EcommerceSupportCategory)
+    || source.externalMessageSent !== false
+    || source.refundStarted !== false
+    || source.evidenceReference !== evidenceReference) throw new Error('Support intent boundary is invalid.')
+  return {
+    schema: ECOMMERCE_SUPPORT_INTENT_SCHEMA,
+    state: 'pending_shop_review',
+    scope: canonicalToken(source.scope, 'support intent.scope'),
+    id,
+    idempotencyKey,
+    createdAt: canonicalTimestamp(source.createdAt, 'support intent.createdAt'),
+    orderId,
+    sourceRequestId,
+    category: source.category as EcommerceSupportCategory,
+    description: canonicalText(source.description, 'support intent.description', 300),
+    externalMessageSent: false,
+    refundStarted: false,
+    evidenceReference,
+  }
+}
+
 export async function recordEcommerceReturnIntent(
   state: EcommerceBuyingState,
   intentValue: EcommerceReturnIntent,
@@ -1174,6 +1279,14 @@ export async function saveEcommerceOrderRequestV2(
   })
 }
 
+export async function recordEcommerceSupportIntent(
+  state: EcommerceBuyingState,
+  intentValue: EcommerceSupportIntent,
+  expectedHeadDigest: string,
+) {
+  return appendBuyingRecord(state, validateEcommerceSupportIntent(intentValue), 'supportIntents', 'support_intent_recorded', expectedHeadDigest)
+}
+
 export async function saveEcommerceReturnIntent(
   scope: string,
   intent: EcommerceReturnIntent,
@@ -1210,6 +1323,46 @@ export async function saveEcommerceReturnIntent(
       throw error instanceof Error
         ? error
         : new Error('Return request recovery write failed. The previous value was restored.', { cause: error })
+    }
+  })
+}
+
+export async function saveEcommerceSupportIntent(
+  scope: string,
+  intent: EcommerceSupportIntent,
+  expectedHeadDigest: string,
+  options: { storage?: EcommerceBuyingStorage; locks?: EcommerceBuyingLocks } = {},
+) {
+  const canonicalScope = canonicalToken(scope, 'scope')
+  const storage = options.storage ?? browserStorage()
+  const locks = options.locks ?? browserLocks()
+  if (!storage) throw new Error('Browser recovery is unavailable. The support request was not saved.')
+  if (!locks) throw new Error('Safe browser locking is unavailable. The support request was not saved.')
+  const storageKey = ecommerceBuyingStateStorageKey(canonicalScope)
+  return locks.request(`supermega:ecommerce:buying-lifecycle:${encodeURIComponent(canonicalScope)}`, { mode: 'exclusive' }, async () => {
+    const currentRead = await readEcommerceBuyingState(canonicalScope, storage)
+    if (!currentRead.state || currentRead.status === 'invalid' || currentRead.status === 'unavailable') {
+      throw new Error(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
+    }
+    const next = await recordEcommerceSupportIntent(currentRead.state, intent, expectedHeadDigest)
+    if (next === currentRead.state || canonicalJson(next) === canonicalJson(currentRead.state)) return next
+    const previousRaw = storage.getItem(storageKey)
+    const nextRaw = canonicalJson(next)
+    try {
+      storage.setItem(storageKey, nextRaw)
+      if (storage.getItem(storageKey) !== nextRaw) throw new Error('Support request recovery write could not be confirmed.')
+      return next
+    } catch (error) {
+      try {
+        if (previousRaw === null) storage.removeItem(storageKey)
+        else storage.setItem(storageKey, previousRaw)
+        if (storage.getItem(storageKey) !== previousRaw) throw new Error('rollback confirmation failed', { cause: error })
+      } catch (rollbackError) {
+        throw new Error('Support request recovery write failed and rollback could not be confirmed. Stop and export local evidence.', { cause: rollbackError })
+      }
+      throw error instanceof Error
+        ? error
+        : new Error('Support request recovery write failed. The previous value was restored.', { cause: error })
     }
   })
 }

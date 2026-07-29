@@ -8,17 +8,20 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     ECOMMERCE_QUOTE_SCHEMA,
     ECOMMERCE_REQUEST_SCHEMA,
     ECOMMERCE_RETURN_INTENT_SCHEMA,
+    ECOMMERCE_SUPPORT_INTENT_SCHEMA,
     ECOMMERCE_SHOP_DRAFT_SCHEMA,
     EcommerceLifecycleValidationError,
     build_ecommerce_checkout_quote,
     build_ecommerce_order_request,
     build_ecommerce_pim_projection,
     build_ecommerce_return_intent,
+    build_ecommerce_support_intent,
     create_empty_ecommerce_lifecycle_state,
     ecommerce_payment_matches_fulfilment,
     prepare_ecommerce_shop_handoff,
     record_ecommerce_order_request,
     record_ecommerce_return_intent,
+    record_ecommerce_support_intent,
     validate_ecommerce_checkout_quote,
     validate_ecommerce_lifecycle_state,
     validate_ecommerce_order_request,
@@ -28,6 +31,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
 SCOPE = "ecommerce:client-demo"
 CHECKOUT_KEY = "ECI-12345678-1234-4ABC-8ABC-1234567890AB"
 RETURN_KEY = "ERI-12345678-1234-4ABC-8ABC-1234567890AC"
+SUPPORT_KEY = "ESI-12345678-1234-4ABC-8ABC-1234567890AD"
 SOURCE_DIGEST = "sha256:" + "1" * 64
 
 
@@ -462,6 +466,51 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         self.assertEqual(intent["refundStatus"], "not_started")
         self.assertNotIn("refundAmount", str(intent))
         self.assertNotIn("provider", str(intent).lower())
+
+    def test_support_intent_is_recoverable_attributable_and_side_effect_free(self) -> None:
+        state = create_empty_ecommerce_lifecycle_state(SCOPE)
+        state = record_ecommerce_order_request(
+            state,
+            request(),
+            expected_head_digest=state["headDigest"],
+        )
+        intent = build_ecommerce_support_intent(
+            scope=SCOPE,
+            order_snapshot=completed_order(),
+            category="delivery_issue",
+            description="Delivery arrived later than the confirmed promise.",
+            idempotency_key=SUPPORT_KEY,
+            created_at="2026-07-26T11:10:00+06:30",
+        )
+        self.assertEqual(intent["schema"], ECOMMERCE_SUPPORT_INTENT_SCHEMA)
+        self.assertFalse(intent["externalMessageSent"])
+        self.assertFalse(intent["refundStarted"])
+        retained = record_ecommerce_support_intent(
+            state,
+            intent,
+            expected_head_digest=state["headDigest"],
+        )
+        replay = record_ecommerce_support_intent(
+            retained,
+            deepcopy(intent),
+            expected_head_digest=retained["headDigest"],
+        )
+        self.assertEqual(replay, retained)
+        self.assertEqual(retained["revision"], 2)
+        self.assertEqual(retained["events"][-1]["action"], "support_intent_recorded")
+
+        orphan = create_empty_ecommerce_lifecycle_state(SCOPE)
+        with self.assertRaisesRegex(EcommerceLifecycleValidationError, "not attributable"):
+            record_ecommerce_support_intent(
+                orphan,
+                intent,
+                expected_head_digest=orphan["headDigest"],
+            )
+
+        legacy = deepcopy(state)
+        legacy.pop("supportIntents")
+        migrated = validate_ecommerce_lifecycle_state(legacy)
+        self.assertEqual(migrated["supportIntents"], [])
 
     def test_strict_contract_rejects_extra_fields_and_forged_history(self) -> None:
         candidate_quote = quote()

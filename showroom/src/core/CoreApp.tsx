@@ -4,7 +4,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useS
 import './core-app.css'
 import { WebsiteCommerceIntake } from '../products/WebsiteCommerceIntake'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
-import type { EcommerceReturnIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
+import type { EcommerceReturnIntent, EcommerceSupportIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
 import { readWebsiteEcommerceHandoff, type WebsiteOrderRecord } from '../products/product-handoff'
 import {
   createManagedApproval,
@@ -73,6 +73,8 @@ import {
   commerceOrderCorrectionExpectation,
   commerceOrderAdjustedTotal,
   commerceOrderReturnExpectation,
+  commerceOrderSupportOpenExpectation,
+  commerceOrderSupportResolveExpectation,
   commerceOrderItemSummary,
   commerceOrderLocationAllocationPreview,
   commerceOrderNeedsAction,
@@ -97,6 +99,8 @@ import {
   reconcileCommercePayment,
   recordCommerceCollectionAction,
   recordCommerceOrderReturn,
+  recordCommerceOrderSupportCase,
+  resolveCommerceOrderSupportCase,
   recordCommerceOrderCorrection,
   registerCommerceItem,
   reserveCommerceOrder,
@@ -115,6 +119,7 @@ import {
   type CommerceOrderStatus,
   type CommercePurchaseOrderDiscrepancyCode,
   type CommerceReturnDisposition,
+  type CommerceSupportResolutionOutcome,
   type CommerceStockMovement,
   type CommerceTaxConfiguration,
   type CommerceTaxMode,
@@ -242,6 +247,13 @@ type CommerceReturnDraft = {
   quantity: string
   disposition: CommerceReturnDisposition
   sourceIntent?: EcommerceReturnIntent
+}
+
+type CommerceSupportResolutionDraft = {
+  orderId: string
+  caseId: string
+  outcome: CommerceSupportResolutionOutcome
+  note: string
 }
 
 type ProductId = 'commerce' | 'production'
@@ -1262,6 +1274,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const ecommerceNavigationDraft = (location.state as { ecommerceShopDraft?: EcommerceShopDraft } | null)?.ecommerceShopDraft ?? null
   const ecommerceReturnNavigationIntent = (location.state as { ecommerceReturnIntent?: EcommerceReturnIntent } | null)?.ecommerceReturnIntent ?? null
+  const ecommerceSupportNavigationIntent = (location.state as { ecommerceSupportIntent?: EcommerceSupportIntent } | null)?.ecommerceSupportIntent ?? null
   const routeModule = location.pathname.split('/').filter(Boolean)[1]
   const requestedView = searchParams.get('view')
   const requestedSource = searchParams.get('source')
@@ -1312,7 +1325,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1497,9 +1510,10 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationIntent, managedIdentity, requestedRequestId, requestedSource, tab }: {
+function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, managedIdentity, requestedRequestId, requestedSource, tab }: {
   ecommerceNavigationDraft: EcommerceShopDraft | null
   ecommerceReturnNavigationIntent: EcommerceReturnIntent | null
+  ecommerceSupportNavigationIntent: EcommerceSupportIntent | null
   managedIdentity: ManagedIdentity | null
   requestedRequestId: string | null
   requestedSource: string | null
@@ -1559,6 +1573,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
   const preparedChannelRef = useRef<HTMLDivElement>(null)
   const consumedEcommerceDraftId = useRef('')
   const consumedEcommerceReturnIntentId = useRef('')
+  const consumedEcommerceSupportIntentId = useRef('')
   const consumedEcommerceInboxSource = useRef('')
   const orderDraftRevisionRef = useRef(orderDraftRead.draft?.revision ?? 0)
   const orderDraftSaveQueueRef = useRef(Promise.resolve())
@@ -1575,6 +1590,8 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
+  const [supportDraft, setSupportDraft] = useState<EcommerceSupportIntent | null>(null)
+  const [supportResolutionDraft, setSupportResolutionDraft] = useState<CommerceSupportResolutionDraft | null>(null)
   const [correctionDraft, setCorrectionDraft] = useState<CommerceCorrectionDraft | null>(null)
   const [taxDraft, setTaxDraft] = useState<TaxConfigurationDraft | null>(null)
   const [accountMapping, setAccountMapping] = useState<AccountMappingDraft | null>(null)
@@ -2217,6 +2234,48 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
       })
     return () => { current = false }
   }, [commerce, ecommerceReturnNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
+
+  useEffect(() => {
+    if (!ecommerceSupportNavigationIntent
+      || tab !== 'orders'
+      || managedIdentity && workspaceMode !== 'managed-ready'
+      || consumedEcommerceSupportIntentId.current === ecommerceSupportNavigationIntent.id) return
+    let current = true
+    void import('../products/ecommerce/ecommerce-buying-lifecycle')
+      .then(({ validateEcommerceSupportIntent }) => {
+        if (!current) return
+        const intent = validateEcommerceSupportIntent(ecommerceSupportNavigationIntent)
+        const order = commerce.orders.find((candidate) => candidate.id === intent.orderId)
+        const existing = order?.supportCases?.find((supportCase) => supportCase.sourceIntentId === intent.id)
+        const expected = commerceOrderSupportOpenExpectation(commerce, intent.orderId, intent.id)
+        consumedEcommerceSupportIntentId.current = intent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        if (existing) {
+          setSupportDraft(null)
+          setNotice(`${intent.id} is already ${existing.status} as ${existing.caseId}.`)
+          return
+        }
+        if (!order
+          || order.status !== 'completed'
+          || !order.completion
+          || order.sourceRecordId !== intent.sourceRequestId
+          || !expected) {
+          setNotice('The Ecommerce help request no longer matches a completed Shop order. Nothing was prepared.')
+          return
+        }
+        setReturnDraft(null)
+        setSupportDraft(intent)
+        setNotice(`${intent.id} is ready for Shop review. Open one trackable case; no message or refund is sent.`)
+        requestAnimationFrame(() => document.getElementById('shop-support-open-review')?.focus())
+      })
+      .catch(() => {
+        if (!current) return
+        consumedEcommerceSupportIntentId.current = ecommerceSupportNavigationIntent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        setNotice('The Ecommerce help request could not be verified. Nothing was prepared.')
+      })
+    return () => { current = false }
+  }, [commerce, ecommerceSupportNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
 
   useEffect(() => {
     const sourceKey = requestedRequestId || 'ecommerce-inbox'
@@ -3580,8 +3639,8 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
   }
 
   function openReturnEditor(orderId: string) {
-    if (pendingAction) {
-      setNotice('Finish or cancel the current Shop action before recording a return.')
+    if (pendingAction || supportDraft || supportResolutionDraft) {
+      setNotice('Finish or cancel the current Shop help action before recording a return.')
       return
     }
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
@@ -3659,12 +3718,106 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
     }, returnTriggerRefs.current.get(input.orderId))
   }
 
+  function reviewSupportCaseOpen(event: FormEvent) {
+    event.preventDefault()
+    if (!supportDraft) return
+    const expected = commerceOrderSupportOpenExpectation(commerce, supportDraft.orderId, supportDraft.id)
+    if (!expected) {
+      setSupportDraft(null)
+      setNotice('This help request was already handled or its Shop order changed. Nothing was queued.')
+      return
+    }
+    const input = {
+      orderId: supportDraft.orderId,
+      sourceIntentId: supportDraft.id,
+      sourceRequestId: supportDraft.sourceRequestId,
+      customerRequestedAt: supportDraft.createdAt,
+      category: supportDraft.category,
+      customerDescription: supportDraft.description,
+      externalMessageSent: false,
+      refundStarted: false,
+    } as const
+    queueAction({
+      kind: 'order_support_open',
+      subjectId: `${input.orderId}:${input.sourceIntentId}`,
+      summary: `Open support case for ${input.orderId}`,
+      before: `${input.category.replaceAll('_', ' ')} request waiting for Shop review`,
+      after: 'Accountable Shop case open · no message or refund sent',
+      reasonSuggestion: `Customer requested help: ${input.customerDescription}`,
+      evidenceReferenceSuggestion: supportDraft.evidenceReference,
+      evidenceReferenceLocked: true,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce(
+          'commerce.order.support_case_opened',
+          action.commandId,
+          proof,
+          (current) => recordCommerceOrderSupportCase(current, input, proof, expected),
+        )
+        setSupportDraft(null)
+      },
+    })
+  }
+
+  function openSupportResolution(orderId: string, caseId: string) {
+    if (pendingAction || returnDraft || correctionDraft || supportDraft) {
+      setNotice('Finish or close the current Shop action before resolving a support case.')
+      return
+    }
+    if (!commerceOrderSupportResolveExpectation(commerce, orderId, caseId)) {
+      setNotice('This support case is not open or changed before review.')
+      return
+    }
+    setSupportResolutionDraft({ orderId, caseId, outcome: 'information_provided', note: '' })
+    requestAnimationFrame(() => document.getElementById(`support-resolution-${caseId}`)?.focus())
+  }
+
+  function reviewSupportCaseResolution(event: FormEvent) {
+    event.preventDefault()
+    if (!supportResolutionDraft) return
+    const expected = commerceOrderSupportResolveExpectation(
+      commerce,
+      supportResolutionDraft.orderId,
+      supportResolutionDraft.caseId,
+    )
+    if (!expected || !supportResolutionDraft.note.trim()) {
+      setNotice('Add the reviewed outcome note for one open support case.')
+      return
+    }
+    const input = {
+      orderId: supportResolutionDraft.orderId,
+      caseId: supportResolutionDraft.caseId,
+      outcome: supportResolutionDraft.outcome,
+      note: supportResolutionDraft.note.trim(),
+    }
+    queueAction({
+      kind: 'order_support_resolve',
+      subjectId: `${input.orderId}:${input.caseId}`,
+      summary: `Resolve ${input.caseId}`,
+      before: 'Support case open',
+      after: `${input.outcome.replaceAll('_', ' ')} · no external action performed`,
+      reasonSuggestion: input.note,
+      evidenceReferenceSuggestion: `SUPPORT-RESOLUTION:${input.caseId}`,
+      evidenceReferenceLocked: true,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce(
+          'commerce.order.support_case_resolved',
+          action.commandId,
+          proof,
+          (current) => resolveCommerceOrderSupportCase(current, input, proof, expected),
+        )
+        setSupportResolutionDraft(null)
+      },
+    })
+  }
+
   function canCorrectOrder(orderId: string) {
     return Boolean(commerceOrderCorrectionExpectation(commerce, orderId))
   }
 
   function openCorrectionEditor(orderId: string) {
-    if (pendingAction || returnDraft) {
+    if (pendingAction || returnDraft || supportDraft || supportResolutionDraft) {
       setNotice('Finish or close the current Shop action before recording a correction.')
       return
     }
@@ -4529,6 +4682,12 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
     onOpenReturn={openReturnEditor}
     onReviewCorrection={reviewOrderCorrection}
     onReviewReturn={reviewOrderReturn}
+    onReviewSupportOpen={reviewSupportCaseOpen}
+    onReviewSupportResolution={reviewSupportCaseResolution}
+    onOpenSupportResolution={openSupportResolution}
+    onCancelSupportOpen={() => { setSupportDraft(null); setNotice('Support review closed. Nothing changed.') }}
+    onCancelSupportResolution={() => { setSupportResolutionDraft(null); setNotice('Support resolution closed. Nothing changed.') }}
+    onChangeSupportResolution={(patch) => setSupportResolutionDraft((current) => current ? { ...current, ...patch } : current)}
     onCorrectionEditor={(node) => { correctionEditorRef.current = node }}
     onCorrectionTrigger={(orderId, node) => {
       if (node) correctionTriggerRefs.current.set(orderId, node)
@@ -4542,6 +4701,8 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
     orders={closedOrders}
     returnDraft={returnDraft}
     returnLocationPreview={returnLocationPreview}
+    supportDraft={supportDraft}
+    supportResolutionDraft={supportResolutionDraft}
   />
   <details className="core-panel today-more order-daily-controls" id="shop-close-controls">
     <summary><span>Close and exceptions</span><small>{paymentReview.length + lowStock.length} {paymentReview.length + lowStock.length === 1 ? 'item needs' : 'items need'} attention</small></summary>
@@ -4898,6 +5059,12 @@ function ClosedOrderHistory({
   onOpenReturn,
   onReviewCorrection,
   onReviewReturn,
+  onReviewSupportOpen,
+  onReviewSupportResolution,
+  onOpenSupportResolution,
+  onCancelSupportOpen,
+  onCancelSupportResolution,
+  onChangeSupportResolution,
   onCorrectionEditor,
   onCorrectionTrigger,
   onReturnEditor,
@@ -4905,6 +5072,8 @@ function ClosedOrderHistory({
   orders,
   returnDraft,
   returnLocationPreview,
+  supportDraft,
+  supportResolutionDraft,
 }: {
   canCorrect: (orderId: string) => boolean
   canReturn: (orderId: string) => boolean
@@ -4919,6 +5088,12 @@ function ClosedOrderHistory({
   onOpenReturn: (orderId: string) => void
   onReviewCorrection: (event: FormEvent) => void
   onReviewReturn: (event: FormEvent) => void
+  onReviewSupportOpen: (event: FormEvent) => void
+  onReviewSupportResolution: (event: FormEvent) => void
+  onOpenSupportResolution: (orderId: string, caseId: string) => void
+  onCancelSupportOpen: () => void
+  onCancelSupportResolution: () => void
+  onChangeSupportResolution: (patch: Partial<CommerceSupportResolutionDraft>) => void
   onCorrectionEditor: (node: HTMLFormElement | null) => void
   onCorrectionTrigger: (orderId: string, node: HTMLButtonElement | null) => void
   onReturnEditor: (node: HTMLFormElement | null) => void
@@ -4926,16 +5101,21 @@ function ClosedOrderHistory({
   orders: CommerceOrder[]
   returnDraft: CommerceReturnDraft | null
   returnLocationPreview: string
+  supportDraft: EcommerceSupportIntent | null
+  supportResolutionDraft: CommerceSupportResolutionDraft | null
 }) {
   const [page, setPage] = useState(0)
   const pageSize = 8
   if (!orders.length) return null
   const pageCount = Math.ceil(orders.length / pageSize)
   const returnOrderIndex = returnDraft ? orders.findIndex((order) => order.id === returnDraft.orderId) : -1
-  const currentPage = returnOrderIndex >= 0 ? Math.floor(returnOrderIndex / pageSize) : Math.min(page, pageCount - 1)
+  const supportOrderId = supportDraft?.orderId ?? supportResolutionDraft?.orderId
+  const supportOrderIndex = supportOrderId ? orders.findIndex((order) => order.id === supportOrderId) : -1
+  const focusedOrderIndex = returnOrderIndex >= 0 ? returnOrderIndex : supportOrderIndex
+  const currentPage = focusedOrderIndex >= 0 ? Math.floor(focusedOrderIndex / pageSize) : Math.min(page, pageCount - 1)
   const visibleOrders = orders.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
-  return <details className="order-archive" id="shop-order-history" open={Boolean(returnDraft) || undefined}>
-    <summary><span>Completed and cancelled orders</span><small>{orders.length} {orders.length === 1 ? 'record' : 'records'} · returns and corrections</small></summary>
+  return <details className="order-archive" id="shop-order-history" open={Boolean(returnDraft || supportDraft || supportResolutionDraft) || undefined}>
+    <summary><span>Completed and cancelled orders</span><small>{orders.length} {orders.length === 1 ? 'record' : 'records'} · returns, help, and corrections</small></summary>
     <div className="order-archive-list">{visibleOrders.map((order) => {
       const lines = commerceOrderReturnLines(order).map((line) => {
         const returned = (order.returns ?? [])
@@ -4951,6 +5131,8 @@ function ClosedOrderHistory({
       const editing = activeReturnDraft !== null
       const activeCorrectionDraft = correctionDraft?.orderId === order.id ? correctionDraft : null
       const correcting = activeCorrectionDraft !== null
+      const activeSupportDraft = supportDraft?.orderId === order.id ? supportDraft : null
+      const activeSupportResolution = supportResolutionDraft?.orderId === order.id ? supportResolutionDraft : null
       const selectedLine = draftedLine ?? availableLines[0]
       const returnable = canReturn(order.id)
       const correctable = canCorrect(order.id)
@@ -4996,6 +5178,15 @@ function ClosedOrderHistory({
           <small>{record.actor} · {formatTime(record.createdAt)} · evidence {record.evidenceReference}</small>
         </div>)}
       </div> : null}
+      {order.supportCases?.length ? <div className="order-return-records" role="list">
+        {order.supportCases.map((supportCase) => <div key={supportCase.caseId} role="listitem">
+          <strong>{supportCase.status === 'resolved' ? 'Resolved help case' : 'Open help case'} · {supportCase.category.replaceAll('_', ' ')}</strong>
+          <small>{supportCase.caseId} · requested {formatTime(supportCase.customerRequestedAt)} · opened by {supportCase.opening.actor}</small>
+          <small>{supportCase.customerDescription}</small>
+          {supportCase.resolution ? <small>{supportCase.resolution.outcome.replaceAll('_', ' ')} · {supportCase.resolution.note} · {supportCase.resolution.proof.actor}</small> : <button className="text-link" disabled={disabled || Boolean(activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve case</button>}
+          <small>No external message or refund performed</small>
+        </div>)}
+      </div> : null}
       {order.corrections?.length ? <div className="order-return-records" role="list">
         {order.corrections.map((record) => <div key={record.documentId} role="listitem">
           <strong>{record.kind} note · {formatMoney(record.calculation.totalMmk)} · balance {formatMoney(record.balanceAfterMmk)}</strong>
@@ -5010,6 +5201,16 @@ function ClosedOrderHistory({
         <label>Stock result<select disabled={disabled} onChange={(event) => onChangeReturn({ disposition: event.target.value as CommerceReturnDisposition })} value={activeReturnDraft.disposition}><option value="restock">Sellable · add to stock</option><option value="not_restocked">Not sellable · stock unchanged</option></select></label>
         {activeReturnDraft.disposition === 'restock' && returnLocationPreview ? <small role="note">Restock to {returnLocationPreview}</small> : null}
         <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review return</button><button className="core-button compact" disabled={disabled} onClick={onCancelReturn} type="button">Cancel</button></div>
+      </form> : null}
+      {activeSupportDraft ? <form aria-label={`Open support case for ${order.id}`} className="order-return-editor" onSubmit={onReviewSupportOpen}>
+        <div className="order-return-copy"><span className="core-eyebrow">Customer help</span><strong>{activeSupportDraft.category.replaceAll('_', ' ')}</strong><small>{activeSupportDraft.description}</small><small>Creates one accountable Shop case. It does not send a message or start a refund.</small></div>
+        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} id="shop-support-open-review" type="submit">Review case opening</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportOpen} type="button">Cancel</button></div>
+      </form> : null}
+      {activeSupportResolution ? <form aria-label={`Resolve support case ${activeSupportResolution.caseId}`} className="order-return-editor" onSubmit={onReviewSupportResolution}>
+        <div className="order-return-copy"><span className="core-eyebrow">Resolve help case</span><strong>{activeSupportResolution.caseId}</strong><small>Record the reviewed outcome only. External communication and financial action remain separate.</small></div>
+        <label>Outcome<select disabled={disabled} onChange={(event) => onChangeSupportResolution({ outcome: event.target.value as CommerceSupportResolutionOutcome })} value={activeSupportResolution.outcome}><option value="information_provided">Information provided</option><option value="replacement_review_required">Replacement review required</option><option value="refund_review_required">Refund review required</option><option value="no_action">No action</option></select></label>
+        <label>Resolution note<textarea disabled={disabled} id={`support-resolution-${activeSupportResolution.caseId}`} maxLength={300} onChange={(event) => onChangeSupportResolution({ note: event.target.value })} required rows={2} value={activeSupportResolution.note} /></label>
+        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review resolution</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportResolution} type="button">Cancel</button></div>
       </form> : null}
       {activeCorrectionDraft ? <form aria-label={`Correct invoice ${order.id}`} className="order-return-editor" onSubmit={onReviewCorrection} ref={onCorrectionEditor}>
         <div className="order-return-copy"><span className="core-eyebrow">Correction note</span><strong>{order.id}</strong><small>The original invoice stays unchanged. This records review evidence; it does not post externally.</small></div>

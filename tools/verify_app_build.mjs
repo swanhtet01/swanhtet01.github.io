@@ -2106,11 +2106,13 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('Cart and checkout')
   || !ecommerceBuyingUiSource.includes('Review order')
   || !ecommerceBuyingUiSource.includes('Open in Shop')
-  || !ecommerceBuyingUiSource.includes('After purchase')
+  || !ecommerceBuyingUiSource.includes('Returns and help')
   || !ecommerceBuyingUiSource.includes('Send to Shop review')
   || !ecommerceBuyingUiSource.includes('Continue in Shop')
   || !ecommerceBuyingUiSource.includes('buildEcommerceReturnIntent')
   || !ecommerceBuyingUiSource.includes('saveEcommerceReturnIntent')
+  || !ecommerceBuyingUiSource.includes('buildEcommerceSupportIntent')
+  || !ecommerceBuyingUiSource.includes('saveEcommerceSupportIntent')
   || !ecommerceBuyingUiSource.includes('{entry.returnedQuantity ? <small>{entry.returnedQuantity} returned in Shop</small> : null}')
   || !ecommerceBuyingUiSource.includes('buildEcommercePimProjection')
   || !ecommerceBuyingUiSource.includes('buildEcommerceCheckoutQuote')
@@ -2150,9 +2152,12 @@ if (addToCartStart < 0
   || !ecommerceBuyingLifecycleSource.includes('Checkout payment does not match how the customer receives the order.')
   || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceReturnIntent(')
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceReturnIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceSupportIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceSupportIntent(')
   || !ecommerceBuyingLifecycleSource.includes('Return intent is not attributable to one recovered Ecommerce request.')
   || !coreSource.includes('ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent}')
   || !coreSource.includes('validateEcommerceReturnIntent(ecommerceReturnNavigationIntent)')
+  || !coreSource.includes('validateEcommerceSupportIntent(ecommerceSupportNavigationIntent)')
   || !coreSource.includes('sourceIntent: intent')
   || !coreSource.includes('Customer requested return review: ${returnDraft.sourceIntent.reason}')
   || !commerceSource.includes("quote.payment.adapter !== 'kbzpay_manual'")
@@ -2795,6 +2800,14 @@ if (!commerceSource.includes('export type CommerceOrderReturn')
   || !commerceSource.includes("kind: 'return'")
   || !managedCommerceRuntime.includes('def _validate_return_recorded')
   || !managedCommerceRuntime.includes('"commerce.order.return_recorded"')) fail('commerce_order_return_contract_missing')
+if (!commerceSource.includes('export type CommerceOrderSupportCase')
+  || !commerceSource.includes('export function commerceOrderSupportOpenExpectation')
+  || !commerceSource.includes('export function recordCommerceOrderSupportCase')
+  || !commerceSource.includes('export function resolveCommerceOrderSupportCase')
+  || !commerceSource.includes('externalMessageSent: false')
+  || !commerceSource.includes('refundStarted: false')
+  || !managedCommerceRuntime.includes('def _validate_support_case_opened')
+  || !managedCommerceRuntime.includes('def _validate_support_case_resolved')) fail('commerce_order_support_contract_missing')
 if (!commerceSource.includes('export type CommerceOrderCorrection')
   || !commerceSource.includes("financialStatus: 'review_required'")
   || !commerceSource.includes("postingAuthority: 'none'")
@@ -2814,7 +2827,7 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${shopInventoryUiSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.collection_action.recorded', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved', 'commerce.customer_credit_policy.saved']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.support_case_opened', 'commerce.order.support_case_resolved', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.collection_action.recorded', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved', 'commerce.customer_credit_policy.saved']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.storefront_request.received')
@@ -10645,6 +10658,71 @@ async function verifyStorefrontRuntime() {
     buyingAssert(returnedTimeline[0]?.returnedQuantity === 1
       && returnedTimeline[0].order?.returns?.[0]?.evidenceReference === returnIntent.evidenceReference,
     'ecommerce_return_intent_did_not_reconcile_to_shop_return')
+    const supportIntent = buyingModel.buildEcommerceSupportIntent({
+      scope: buyingScope,
+      orderSnapshot: completedOrder,
+      category: 'delivery_issue',
+      description: 'Delivery arrived later than the confirmed promise.',
+      idempotencyKey: 'ESI-52345678-1234-4ABC-8ABC-1234567890AB',
+      createdAt: '2026-07-24T09:45:00.000Z',
+    })
+    const supportOpenExpectation = commerce.commerceOrderSupportOpenExpectation(
+      completedOrderState,
+      completedOrder.id,
+      supportIntent.id,
+    )
+    const openedSupportState = supportOpenExpectation && commerce.recordCommerceOrderSupportCase(
+      completedOrderState,
+      {
+        orderId: supportIntent.orderId,
+        sourceIntentId: supportIntent.id,
+        sourceRequestId: supportIntent.sourceRequestId,
+        customerRequestedAt: supportIntent.createdAt,
+        category: supportIntent.category,
+        customerDescription: supportIntent.description,
+        externalMessageSent: false,
+        refundStarted: false,
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-OPEN-1',
+        capturedAt: '2026-07-24T09:46:00.000Z',
+        actor: 'OP-OWNER',
+        reason: `Customer requested help: ${supportIntent.description}`,
+        evidenceReference: supportIntent.evidenceReference,
+      },
+      supportOpenExpectation,
+    )
+    const supportCase = openedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    buyingAssert(supportCase?.status === 'open'
+      && supportCase.externalMessageSent === false
+      && supportCase.refundStarted === false
+      && JSON.stringify(openedSupportState?.items) === JSON.stringify(completedOrderState.items)
+      && JSON.stringify(openedSupportState?.movements) === JSON.stringify(completedOrderState.movements),
+    'ecommerce_support_case_opening_claimed_side_effects')
+    const supportResolveExpectation = supportCase && commerce.commerceOrderSupportResolveExpectation(
+      openedSupportState,
+      completedOrder.id,
+      supportCase.caseId,
+    )
+    const resolvedSupportState = supportResolveExpectation && commerce.resolveCommerceOrderSupportCase(
+      openedSupportState,
+      {
+        orderId: completedOrder.id,
+        caseId: supportCase.caseId,
+        outcome: 'information_provided',
+        note: 'Reviewed the delivery timeline with the retained order evidence.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-RESOLVE-1',
+        capturedAt: '2026-07-24T09:47:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Reviewed and closed the support case.',
+        evidenceReference: `SUPPORT-RESOLUTION:${supportCase.caseId}`,
+      },
+      supportResolveExpectation,
+    )
+    buyingAssert(resolvedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]?.status === 'resolved',
+      'ecommerce_support_case_did_not_resolve')
     const paidConfirmedState = linkedOrderState && commerce.reconcileCommercePayment(linkedOrderState, 'ORD-ECOMMERCE-1', {
       actionId: 'ACT-ECOMMERCE-PAID-CANCEL-1',
       capturedAt: '2026-07-24T09:20:00.000Z',
@@ -10707,6 +10785,12 @@ async function verifyStorefrontRuntime() {
       && recordedReturnBuying.revision === 2
       && recordedReturnBuying.returnIntents[0].id === returnIntent.id,
     'ecommerce_return_intent_replay_advanced_or_lost_history')
+    const recordedSupportBuying = await buyingModel.recordEcommerceSupportIntent(recordedReturnBuying, supportIntent, recordedReturnBuying.headDigest)
+    const replayedSupportBuying = await buyingModel.recordEcommerceSupportIntent(recordedSupportBuying, structuredClone(supportIntent), recordedSupportBuying.headDigest)
+    buyingAssert(JSON.stringify(recordedSupportBuying) === JSON.stringify(replayedSupportBuying)
+      && recordedSupportBuying.revision === 3
+      && recordedSupportBuying.supportIntents[0].id === supportIntent.id,
+    'ecommerce_support_intent_replay_advanced_or_lost_history')
     const buyingDraft = await buyingModel.prepareEcommerceShopDraftV2({
       request: buyingRequest,
       state: recordedBuying,

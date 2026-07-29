@@ -72,6 +72,8 @@ export type ManagedCommerceEvent =
   | 'commerce.order.advanced'
   | 'commerce.order.cancelled'
   | 'commerce.order.return_recorded'
+  | 'commerce.order.support_case_opened'
+  | 'commerce.order.support_case_resolved'
   | 'commerce.order.correction_recorded'
   | 'commerce.payment.reconciled'
   | 'commerce.collection_action.recorded'

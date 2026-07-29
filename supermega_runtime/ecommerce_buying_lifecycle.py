@@ -24,6 +24,7 @@ ECOMMERCE_DELIVERY_ADDRESS_SCHEMA = "supermega.ecommerce.delivery_address_snapsh
 ECOMMERCE_REQUEST_SCHEMA = "supermega.ecommerce.order_request.v2"
 ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v3"
 ECOMMERCE_RETURN_INTENT_SCHEMA = "supermega.ecommerce.return_intent.v1"
+ECOMMERCE_SUPPORT_INTENT_SCHEMA = "supermega.ecommerce.support_intent.v1"
 ECOMMERCE_LIFECYCLE_STATE_SCHEMA = "supermega.ecommerce.buying_lifecycle.v1"
 ECOMMERCE_LIFECYCLE_EVENT_SCHEMA = "supermega.ecommerce.buying_event.v1"
 EMPTY_ECOMMERCE_LIFECYCLE_DIGEST = f"sha256:{'0' * 64}"
@@ -38,6 +39,8 @@ _CUSTOMER_ID = re.compile(rf"^CUS-{_UUID}$")
 _ADDRESS_ID = re.compile(rf"^ADR-{_UUID}$")
 _RETURN_ID = re.compile(rf"^ERR-{_UUID}$")
 _RETURN_KEY = re.compile(rf"^ERI-{_UUID}$")
+_SUPPORT_ID = re.compile(rf"^ESR-{_UUID}$")
+_SUPPORT_KEY = re.compile(rf"^ESI-{_UUID}$")
 _ISO_TIMESTAMP = re.compile(
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
     r"(?:\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$"
@@ -51,6 +54,9 @@ _PAYMENT_ADAPTERS = frozenset(
 )
 _FULFILMENT_METHODS = frozenset({"pickup", "delivery"})
 _RETURN_DISPOSITIONS = frozenset({"restock", "not_restocked"})
+_SUPPORT_CATEGORIES = frozenset(
+    {"order_status", "delivery_issue", "payment_question", "item_issue", "other"}
+)
 _PHONE = re.compile(r"^\+?[0-9][0-9 ()-]{5,31}$")
 
 
@@ -1103,6 +1109,99 @@ def validate_ecommerce_return_intent(value: object) -> dict[str, Any]:
     }
 
 
+def build_ecommerce_support_intent(
+    *,
+    scope: str,
+    order_snapshot: Mapping[str, object],
+    category: str,
+    description: str,
+    idempotency_key: str,
+    created_at: str,
+) -> dict[str, Any]:
+    """Prepare order-bound support evidence; no message or refund occurs."""
+
+    if not isinstance(order_snapshot, Mapping) or not {
+        "id", "status", "sourceRecordId", "completion"
+    }.issubset(order_snapshot):
+        raise _fail("orderSnapshot must retain completed Ecommerce order evidence.")
+    order = order_snapshot
+    if order["status"] != "completed" or not isinstance(order["completion"], Mapping):
+        raise _fail("Support requests require a completed Shop order with completion proof.")
+    order_id = _token(order["id"], "orderSnapshot.id")
+    request_id = _text(
+        order["sourceRecordId"], "orderSnapshot.sourceRecordId", maximum=40
+    )
+    if _REQUEST_ID.fullmatch(request_id) is None:
+        raise _fail("Support order is not attributable to an Ecommerce request.")
+    if category not in _SUPPORT_CATEGORIES:
+        raise _fail("Support category is unsupported.")
+    key = _text(idempotency_key, "idempotencyKey", maximum=40)
+    if _SUPPORT_KEY.fullmatch(key) is None:
+        raise _fail("Support idempotency key is invalid.")
+    return validate_ecommerce_support_intent(
+        {
+            "schema": ECOMMERCE_SUPPORT_INTENT_SCHEMA,
+            "state": "pending_shop_review",
+            "scope": _token(scope, "scope"),
+            "id": f"ESR-{key[4:]}",
+            "idempotencyKey": key,
+            "createdAt": _timestamp(created_at, "createdAt"),
+            "orderId": order_id,
+            "sourceRequestId": request_id,
+            "category": category,
+            "description": _text(description, "description", maximum=300),
+            "externalMessageSent": False,
+            "refundStarted": False,
+            "evidenceReference": f"ECOMMERCE-SUPPORT:{key[4:]}:{order_id}:{request_id}",
+        }
+    )
+
+
+def validate_ecommerce_support_intent(value: object) -> dict[str, Any]:
+    source = _object(
+        value,
+        "support intent",
+        (
+            "schema", "state", "scope", "id", "idempotencyKey", "createdAt",
+            "orderId", "sourceRequestId", "category", "description",
+            "externalMessageSent", "refundStarted", "evidenceReference",
+        ),
+    )
+    support_id = _text(source["id"], "support intent.id", maximum=40)
+    key = _text(source["idempotencyKey"], "support intent.idempotencyKey", maximum=40)
+    request_id = _text(source["sourceRequestId"], "support intent.sourceRequestId", maximum=40)
+    order_id = _token(source["orderId"], "support intent.orderId")
+    expected_reference = f"ECOMMERCE-SUPPORT:{key[4:]}:{order_id}:{request_id}"
+    if (
+        source["schema"] != ECOMMERCE_SUPPORT_INTENT_SCHEMA
+        or source["state"] != "pending_shop_review"
+        or _SUPPORT_ID.fullmatch(support_id) is None
+        or _SUPPORT_KEY.fullmatch(key) is None
+        or support_id[4:] != key[4:]
+        or _REQUEST_ID.fullmatch(request_id) is None
+        or source["category"] not in _SUPPORT_CATEGORIES
+        or source["externalMessageSent"] is not False
+        or source["refundStarted"] is not False
+        or source["evidenceReference"] != expected_reference
+    ):
+        raise _fail("Support intent boundary is invalid.")
+    return {
+        "schema": ECOMMERCE_SUPPORT_INTENT_SCHEMA,
+        "state": "pending_shop_review",
+        "scope": _token(source["scope"], "support intent.scope"),
+        "id": support_id,
+        "idempotencyKey": key,
+        "createdAt": _timestamp(source["createdAt"], "support intent.createdAt"),
+        "orderId": order_id,
+        "sourceRequestId": request_id,
+        "category": source["category"],
+        "description": _text(source["description"], "support intent.description", maximum=300),
+        "externalMessageSent": False,
+        "refundStarted": False,
+        "evidenceReference": expected_reference,
+    }
+
+
 def create_empty_ecommerce_lifecycle_state(scope: str) -> dict[str, Any]:
     return {
         "schema": ECOMMERCE_LIFECYCLE_STATE_SCHEMA,
@@ -1111,6 +1210,7 @@ def create_empty_ecommerce_lifecycle_state(scope: str) -> dict[str, Any]:
         "headDigest": EMPTY_ECOMMERCE_LIFECYCLE_DIGEST,
         "requests": [],
         "returnIntents": [],
+        "supportIntents": [],
         "events": [],
     }
 
@@ -1131,7 +1231,7 @@ def _event(value: object, field: str) -> dict[str, Any]:
         ),
     )
     action = source["action"]
-    if action not in {"request_recorded", "return_intent_recorded"}:
+    if action not in {"request_recorded", "return_intent_recorded", "support_intent_recorded"}:
         raise _fail(f"{field}.action is unsupported.")
     core = {
         "schema": ECOMMERCE_LIFECYCLE_EVENT_SCHEMA,
@@ -1152,19 +1252,15 @@ def _event(value: object, field: str) -> dict[str, Any]:
 
 
 def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
-    source = _object(
-        value,
-        "lifecycle state",
-        (
-            "schema",
-            "scope",
-            "revision",
-            "headDigest",
-            "requests",
-            "returnIntents",
-            "events",
-        ),
+    if not isinstance(value, Mapping):
+        raise _fail("lifecycle state must be an object.")
+    legacy_fields = frozenset(
+        {"schema", "scope", "revision", "headDigest", "requests", "returnIntents", "events"}
     )
+    current_fields = frozenset({*legacy_fields, "supportIntents"})
+    if frozenset(value) not in {legacy_fields, current_fields}:
+        raise _fail("lifecycle state fields do not match the contract.")
+    source = value
     if source["schema"] != ECOMMERCE_LIFECYCLE_STATE_SCHEMA:
         raise _fail("Lifecycle state schema is invalid.")
     scope = _token(source["scope"], "lifecycle state.scope")
@@ -1180,10 +1276,18 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
             source["returnIntents"], "lifecycle state.returnIntents", maximum=_MAX_RECORDS
         )
     ]
+    support_intents = [
+        validate_ecommerce_support_intent(candidate)
+        for candidate in _array(
+            source.get("supportIntents", []),
+            "lifecycle state.supportIntents",
+            maximum=_MAX_RECORDS,
+        )
+    ]
     events = [
         _event(candidate, f"lifecycle state.events[{index}]")
         for index, candidate in enumerate(
-            _array(source["events"], "lifecycle state.events", maximum=_MAX_RECORDS * 2)
+            _array(source["events"], "lifecycle state.events", maximum=_MAX_RECORDS * 3)
         )
     ]
     revision = _integer(source["revision"], "lifecycle state.revision")
@@ -1197,7 +1301,7 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
     head = _digest(source["headDigest"], "lifecycle state.headDigest")
     if head != previous:
         raise _fail("Lifecycle state head digest is invalid.")
-    records = [*requests, *return_intents]
+    records = [*requests, *return_intents, *support_intents]
     if len({record["id"] for record in records}) != len(records):
         raise _fail("Lifecycle record IDs must be unique.")
     if len({record["idempotencyKey"] for record in records}) != len(records):
@@ -1207,6 +1311,8 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
     request_ids = {request["id"] for request in requests}
     if any(intent["sourceRequestId"] not in request_ids for intent in return_intents):
         raise _fail("Return intent is not attributable to one recovered Ecommerce request.")
+    if any(intent["sourceRequestId"] not in request_ids for intent in support_intents):
+        raise _fail("Support intent is not attributable to one recovered Ecommerce request.")
     by_id = {record["id"]: record for record in records}
     if len(events) != len(records):
         raise _fail("Lifecycle history must contain one event per record.")
@@ -1225,6 +1331,7 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
         "headDigest": head,
         "requests": requests,
         "returnIntents": return_intents,
+        "supportIntents": support_intents,
         "events": events,
     }
 
@@ -1243,7 +1350,7 @@ def _record_lifecycle_value(
         raise _fail("Lifecycle state changed before this record was applied.")
     if record["scope"] != state["scope"]:
         raise _fail("Lifecycle record belongs to a different scope.")
-    all_records = [*state["requests"], *state["returnIntents"]]
+    all_records = [*state["requests"], *state["returnIntents"], *state["supportIntents"]]
     existing = next(
         (
             candidate
@@ -1305,5 +1412,20 @@ def record_ecommerce_return_intent(
         validate_ecommerce_return_intent(intent),
         collection="returnIntents",
         action="return_intent_recorded",
+        expected_head_digest=expected_head_digest,
+    )
+
+
+def record_ecommerce_support_intent(
+    state: Mapping[str, object],
+    intent: Mapping[str, object],
+    *,
+    expected_head_digest: str,
+) -> dict[str, Any]:
+    return _record_lifecycle_value(
+        state,
+        validate_ecommerce_support_intent(intent),
+        collection="supportIntents",
+        action="support_intent_recorded",
         expected_head_digest=expected_head_digest,
     )
