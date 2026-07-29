@@ -28,7 +28,7 @@ import {
   type ManagedProductionEvent,
   type ManagedStateRecord,
 } from './managed-trial'
-import { recordBehaviorSignal } from './behavior-trail'
+import { recordBehaviorSignal, type BehaviorProductId } from './behavior-trail'
 import { formatTime, teamDefinitions, useTeamWorkspace } from './team-work'
 import {
   advanceCommerceOrder,
@@ -1813,6 +1813,18 @@ export function ProductHomePage() {
   )
 }
 
+function BehaviorSignalOnRender({ detail, product, route }: { detail: string; product: BehaviorProductId; route: string }) {
+  useEffect(() => {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_seen',
+      product,
+      route,
+      detail,
+    })
+  }, [detail, product, route])
+  return null
+}
+
 function ApprovalReviewDialog({ approval, onClose, onDecision }: { approval: Approval; onClose: () => void; onDecision: (status: 'approved' | 'declined', reviewer: string, note: string) => Promise<void> | void }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const reviewerInputRef = useRef<HTMLInputElement>(null)
@@ -3249,6 +3261,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     <div className="shop-order-control-rows">{shopSetupGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const shopAgentQueue = <section aria-label="Recommended Shop agent job" className="shop-agent-queue">
+    <BehaviorSignalOnRender detail={shopAgentJob} product="commerce" route={commerceLocation.pathname + commerceLocation.search} />
     <div>
       <span className="core-eyebrow">Shop agent queue</span>
       <h2>{shopAgentJob}</h2>
@@ -3259,15 +3272,6 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'commerce', route: commerceLocation.pathname + commerceLocation.search, detail: shopAgentJob })
     }} to={shopAgentPath}>{shopAgentPath.includes('settings') ? 'Open Settings' : shopAgentPath.includes('inventory') ? 'Open Inventory' : shopAgentPath.includes('orders') ? 'Open Orders' : 'Open Counter'}</Link>
   </section>
-
-  useEffect(() => {
-    recordBehaviorSignal(window.localStorage, {
-      event: 'agent_job_seen',
-      product: 'commerce',
-      route: commerceLocation.pathname + commerceLocation.search,
-      detail: shopAgentJob,
-    })
-  }, [commerceLocation.pathname, commerceLocation.search, shopAgentJob])
 
   function showOrderComposer() {
     const dialog = orderComposerRef.current
