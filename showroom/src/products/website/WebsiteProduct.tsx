@@ -1093,6 +1093,9 @@ export function WebsiteProduct() {
             ) : null}
           </header>
 
+          <details className="website-business-controls">
+            <summary><span><strong>Launch controls</strong><small>Next: {websiteAgentJob}</small></span><b>Readiness, leads, domain, release, and rollout</b></summary>
+            <div className="website-business-controls-content">
           <section aria-label="Recommended Website agent job" className="website-agent-queue">
             <div>
               <span>Website agent queue</span>
@@ -1135,6 +1138,8 @@ export function WebsiteProduct() {
               {managedRolloutRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
             </div>
           </section>
+            </div>
+          </details>
 
           <div
             aria-label={view === 'content' ? 'Edit' : 'Publish'}

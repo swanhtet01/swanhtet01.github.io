@@ -1265,6 +1265,9 @@ export function EcommerceProduct() {
         {setupRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
       </div>
 
+      <details className="ecommerce-business-controls">
+        <summary><span><strong>Order operations</strong><small>Next: {aiAgentJob}</small></span><b>Inbox, payments, delivery, recovery, and activation</b></summary>
+        <div className="ecommerce-business-controls-content">
       <section aria-label="AI order desk" className="ecommerce-ai-desk">
         <div>
           <span className="core-eyebrow">AI order desk</span>
@@ -1431,6 +1434,8 @@ export function EcommerceProduct() {
         </div>
         {channelReplyDraft ? <p className="ecommerce-channel-reply-draft" role="status">{channelReplyDraft}</p> : null}
       </section>
+        </div>
+      </details>
 
       <div aria-label="Ecommerce workspace" className="ecommerce-mobile-switch" role="group">
         <button aria-controls="ecommerce-preview-panel" aria-pressed={mobileWorkspace === 'preview'} onClick={() => showMobileWorkspace('preview')} type="button">Store</button>

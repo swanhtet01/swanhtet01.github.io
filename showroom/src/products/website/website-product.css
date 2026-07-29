@@ -1891,6 +1891,8 @@
 }
 
 @media (max-width: 640px) {
+  .website-business-controls > summary b { display: none; }
+  .website-business-controls > summary span { width: 100%; }
   .website-topbar {
     padding-inline: 12px;
   }
@@ -2342,6 +2344,37 @@
   padding: 12px;
   background: rgba(4, 20, 18, .74);
 }
+
+.website-business-controls {
+  border: 1px solid var(--website-line);
+  border-radius: 12px;
+  background: var(--website-panel);
+}
+
+.website-business-controls > summary {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  padding: 9px 12px;
+  color: var(--website-ink);
+  list-style: none;
+}
+
+.website-business-controls > summary::-webkit-details-marker { display: none; }
+.website-business-controls > summary::after { content: '+'; flex: 0 0 auto; color: var(--website-green); font-family: var(--website-mono); font-size: 16px; }
+.website-business-controls[open] > summary { border-bottom: 1px solid var(--website-line); }
+.website-business-controls[open] > summary::after { content: '\2212'; }
+.website-business-controls > summary span { min-width: 0; display: grid; gap: 2px; }
+.website-business-controls > summary strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.website-business-controls > summary small { overflow: hidden; color: var(--website-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.website-business-controls > summary b { min-width: 0; margin-left: auto; overflow: hidden; color: var(--website-muted); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.website-business-controls-content { display: grid; gap: 10px; padding: 10px; }
+.website-business-controls-content > .website-agent-queue,
+.website-business-controls-content > .website-launch-cockpit,
+.website-business-controls-content > .website-lead-capture-cockpit,
+.website-business-controls-content > .website-rollout-packet { margin: 0; }
 
 .website-agent-queue > div:first-child,
 .website-agent-queue > div:nth-child(2),

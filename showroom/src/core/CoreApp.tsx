@@ -3263,6 +3263,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'commerce', route: commerceLocation.pathname + commerceLocation.search, detail: shopAgentJob })
     }} to={shopAgentPath}>{shopAgentPath.includes('settings') ? 'Open Settings' : shopAgentPath.includes('inventory') ? 'Open Inventory' : shopAgentPath.includes('orders') ? 'Open Orders' : 'Open Counter'}</Link>
   </section>
+  const shopGuidance = <details className="product-guidance-disclosure">
+    <summary><span>Next: {shopAgentJob}</span><small>Why this matters and who approves it</small></summary>
+    <div className="product-guidance-content">{shopAgentQueue}</div>
+  </details>
 
   useEffect(() => {
     recordBehaviorSignal(window.localStorage, {
@@ -4921,14 +4925,14 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
-    {shopAgentQueue}
+    {shopGuidance}
     <ShopCounter disabled={commerceControlsDisabled} items={commerce.items} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} />
     {actionGate}
   </div>
 
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
-    {shopAgentQueue}
+    {shopGuidance}
     <Suspense fallback={null}><ShopOperatingFlow
       closeReady={closableOrders.length}
       confirmed={commerce.orders.filter((order) => order.status === 'confirmed').length}
@@ -5196,7 +5200,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
 
   if (tab === 'inventory') return <div className="operation-module">
     {commerceBoundary}
-    {shopAgentQueue}
+    {shopGuidance}
     <section className="core-panel inventory-panel">
       <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : 'Count stock'}</button></div></div>
       {shopProcurement}
@@ -6740,18 +6744,37 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div><span className="core-eyebrow">Inspection + CAPA</span><strong>{plantInspectionNext}</strong><small>AI turns sampling, NCR containment, corrective action, evidence, and release review into one quality queue. No certificate, CAPA closure, customer claim, inventory block, costing, or production write runs from this panel.</small>{tab === 'control' ? <button className="text-link" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={startInspectionNcr} type="button">Start inspection NCR</button> : <Link className="text-link" to="/plant/?tab=control">Open inspection queue</Link>}</div>
     <div className="plant-control-rows">{plantInspectionRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
+  const plantBusinessControls = <details className="product-guidance-disclosure plant-business-controls">
+    <summary><span>System controls</span><small>{plantControlNext} · planning, MRP, quality, maintenance, and costing</small></summary>
+    <div className="product-guidance-content">
+      {plantAgentQueue}
+      {plantControl}
+      {plantLifecycle}
+      {plantMrp}
+      {plantCostReadiness}
+      {plantCostPacket}
+      {plantQualityRelease}
+      {plantInspectionControl}
+    </div>
+  </details>
+  const plantControlBusinessControls = <details className="product-guidance-disclosure plant-business-controls">
+    <summary><span>System controls</span><small>{plantControlNext} · planning, MRP, quality, maintenance, and costing</small></summary>
+    <div className="product-guidance-content">
+      {plantAgentQueue}
+      {plantControl}
+      {plantLifecycle}
+      {plantMrp}
+      {plantCostReadiness}
+      {plantCostPacket}
+      {plantQualityRelease}
+      {plantInspectionControl}
+    </div>
+  </details>
 
   if (tab === 'production') return <div className="operation-module production-operation-module">
     {productionBoundary}
     {plantStatus}
-    {plantAgentQueue}
-    {plantControl}
-    {plantLifecycle}
-    {plantMrp}
-    {plantCostReadiness}
-    {plantCostPacket}
-    {plantQualityRelease}
-    {plantInspectionControl}
+    {plantBusinessControls}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
@@ -6834,14 +6857,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   if (tab === 'control') return <div className="operation-module">
     {productionBoundary}
     {plantStatus}
-    {plantAgentQueue}
-    {plantControl}
-    {plantLifecycle}
-    {plantMrp}
-    {plantCostReadiness}
-    {plantCostPacket}
-    {plantQualityRelease}
-    {plantInspectionControl}
+    {plantControlBusinessControls}
     <div className="control-workspace">
       <div className="split-workspace">
         <section className="core-panel production-issue-launcher">

@@ -412,6 +412,17 @@ textarea { min-height: 72px; resize: vertical; }
 .shop-business-controls[open] > summary::after { content: '\2212'; }
 .shop-business-controls > summary small { margin-left: auto; color: var(--core-muted); font-size: 10px; font-weight: 600; }
 .shop-business-controls-content { display: grid; gap: 9px; padding: 10px; }
+.product-guidance-disclosure { flex: 0 0 auto; border: 1px solid var(--core-line); border-radius: 10px; background: var(--core-panel); }
+.product-guidance-disclosure > summary { min-height: 44px; display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 9px 12px; color: var(--core-ink); font-size: 12px; font-weight: 800; list-style: none; }
+.product-guidance-disclosure > summary::-webkit-details-marker { display: none; }
+.product-guidance-disclosure > summary::after { content: '+'; flex: 0 0 auto; color: var(--core-green); font-family: var(--core-mono); font-size: 16px; }
+.product-guidance-disclosure[open] > summary { border-bottom: 1px solid var(--core-line); }
+.product-guidance-disclosure[open] > summary::after { content: '\2212'; }
+.product-guidance-disclosure > summary span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.product-guidance-disclosure > summary small { min-width: 0; margin-left: auto; overflow: hidden; color: var(--core-muted); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.product-guidance-content { display: grid; gap: 9px; padding: 10px; }
+.product-guidance-content > .shop-agent-queue,
+.product-guidance-content > .plant-agent-queue { margin: 0; }
 .shop-order-control { display: grid; grid-template-columns: minmax(220px,.55fr) minmax(0,1fr); gap: 9px; border: 1px solid rgba(11,116,94,.18); border-radius: 10px; padding: 10px; background: rgba(11,116,94,.045); }
 .shop-order-control.supplier-control { border-color: rgba(21,94,117,.2); background: rgba(14,116,144,.055); }
 .shop-order-control > div:first-child { min-width: 0; display: grid; align-content: center; gap: 3px; }
@@ -1210,7 +1221,7 @@ textarea { min-height: 72px; resize: vertical; }
 .shop-catalog-head { flex: 0 0 auto; display: flex; align-items: end; justify-content: space-between; gap: 18px; padding: 1px 1px 14px; }
 .shop-catalog-head h2 { margin: 4px 0 6px; font-size: 22px; letter-spacing: -.035em; }
 .shop-counter-summary { display: flex; gap: 12px; color: var(--core-quiet); font-family: var(--core-mono); font-size: 9px; text-transform: uppercase; }
-.shop-counter-summary a { color: inherit; text-decoration: none; text-underline-offset: 3px; }
+.shop-counter-summary a { min-height: 44px; display: inline-flex; align-items: center; color: inherit; text-decoration: none; text-underline-offset: 3px; }
 .shop-counter-summary a:hover, .shop-counter-summary a:focus-visible { color: var(--core-green); text-decoration: underline; }
 .shop-counter-summary a + a { border-left: 1px solid var(--core-line-strong); padding-left: 12px; }
 .shop-item-search { width: min(260px,38%); }
@@ -1317,6 +1328,7 @@ textarea { min-height: 72px; resize: vertical; }
   .topbar-title, .topbar-meta > span { display: none !important; }
   .topbar-meta > a { min-width: 44px; min-height: 38px; display: inline-flex; align-items: center; justify-content: center; color: var(--core-muted); font-size: 10px; text-decoration: none; }
   .mobile-nav { position: fixed; inset: auto 0 0; z-index: 40; min-height: 64px; display: grid; grid-template-columns: repeat(5,minmax(64px,1fr)); overflow-x: auto; border-top: 1px solid var(--core-line); padding-bottom: env(safe-area-inset-bottom); background: rgba(255,255,255,.97); box-shadow: 0 -12px 34px rgba(25,54,42,.1); backdrop-filter: blur(18px); }
+  .mobile-nav a:first-child { display: none; }
   .mobile-nav a { display: grid; place-items: center; border-top: 2px solid transparent; color: var(--core-quiet); font-size: 9px; font-weight: 740; text-decoration: none; }
   .mobile-nav a.active { border-top-color: var(--core-green); color: var(--core-green); }
   .core-main { width: min(calc(100% - 24px),760px); height: auto; min-height: 0; padding: 18px 0 calc(88px + env(safe-area-inset-bottom)); overflow: visible; }
@@ -1476,6 +1488,8 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 @media (max-width: 560px) {
+  .product-guidance-disclosure > summary { align-items: flex-start; flex-wrap: wrap; }
+  .product-guidance-disclosure > summary small { width: 100%; margin-left: 0; white-space: normal; }
   .core-main { width: min(calc(100% - 18px),760px); }
   .receivables-aging > summary { align-items: flex-start; padding: 14px; }
   .receivables-aging > summary > small { max-width: 46%; }

@@ -57,6 +57,35 @@
   white-space: nowrap;
 }
 
+.ecommerce-business-controls {
+  border: 1px solid var(--core-line);
+  border-radius: 10px;
+  background: var(--core-panel);
+}
+
+.ecommerce-business-controls > summary {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  padding: 9px 12px;
+  color: var(--core-ink);
+  list-style: none;
+}
+
+.ecommerce-business-controls > summary::-webkit-details-marker { display: none; }
+.ecommerce-business-controls > summary::after { content: '+'; flex: 0 0 auto; color: var(--core-green); font-family: var(--core-mono); font-size: 16px; }
+.ecommerce-business-controls[open] > summary { border-bottom: 1px solid var(--core-line); }
+.ecommerce-business-controls[open] > summary::after { content: '\2212'; }
+.ecommerce-business-controls > summary span { min-width: 0; display: grid; gap: 2px; }
+.ecommerce-business-controls > summary strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.ecommerce-business-controls > summary small { overflow: hidden; color: var(--core-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.ecommerce-business-controls > summary b { min-width: 0; margin-left: auto; overflow: hidden; color: var(--core-muted); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.ecommerce-business-controls-content { display: grid; gap: 10px; padding: 10px; }
+.ecommerce-business-controls-content > .ecommerce-ai-desk,
+.ecommerce-business-controls-content > .ecommerce-ops-cockpit { margin: 0; }
+
 .ecommerce-ai-desk {
   display: grid;
   grid-template-columns: minmax(0, .9fr) minmax(300px, .75fr) minmax(280px, .8fr) auto;
@@ -710,6 +739,7 @@
 }
 
 .ecommerce-cart-line > button {
+  min-width: 44px;
   min-height: 44px;
   border: 0;
   padding: 0 4px;
@@ -923,6 +953,8 @@
 }
 
 @media (max-width: 560px) {
+  .ecommerce-business-controls > summary b { display: none; }
+  .ecommerce-business-controls > summary span { width: 100%; }
   .ecommerce-heading-actions,
   .ecommerce-save-bar {
     align-items: stretch;
