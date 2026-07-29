@@ -1260,6 +1260,25 @@ export async function validateManagedClientImport(
   )
 }
 
+export async function validateManagedEcommerceOrderQueue(
+  packet: EcommerceOrderQueueReadinessPacket,
+  expectedIdentity: ManagedIdentity,
+) {
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/ecommerce/order-queue/validate',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        workspace_id: expectedIdentity.workspaceId,
+        packet,
+      }),
+    },
+    true,
+    expectedIdentity,
+  )
+  return assertManagedEcommerceOrderQueueValidation(response, packet, expectedIdentity)
+}
+
 export async function applyManagedClientImport(request: {
   commandId: string
   expectedVersion: number

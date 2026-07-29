@@ -45,12 +45,14 @@ import {
   type SetupProductId,
 } from './CoreApp'
 import {
+  type ManagedEcommerceOrderQueueValidation,
   buildManagedEcommerceOrderQueueValidation,
   currentManagedWorkspace,
   loadManagedBootstrap,
   managedTrialAuthConfigured,
   signInManagedTrial,
   signOutManagedTrial,
+  validateManagedEcommerceOrderQueue,
 } from './managed-trial'
 import {
   buildEcommerceManagedStoreActivationPacket,
@@ -179,6 +181,8 @@ export function SettingsPage() {
     ['Boundary', 'Review only'],
   ])
   const [ecommerceOrderQueueReadinessPacket, setEcommerceOrderQueueReadinessPacket] = useState<EcommerceOrderQueueReadinessPacket | null>(null)
+  const [ecommerceOrderQueueServerValidation, setEcommerceOrderQueueServerValidation] = useState<ManagedEcommerceOrderQueueValidation | null>(null)
+  const [ecommerceOrderQueueServerBusy, setEcommerceOrderQueueServerBusy] = useState(false)
   const completion = pilotProgress(setup)
   const isPilotReady = pilotReady(setup)
   const workflowReady = Boolean(setup.workspace.trim() && setup.owner.trim() && setup.entryPoint.trim())
@@ -406,13 +410,13 @@ export function SettingsPage() {
     ? `supermega-ecommerce-order-queue-${safePacketFilename(ecommerceOrderQueueReadinessPacket.storeName)}.json`
     : 'supermega-ecommerce-order-queue.json'
   const ecommerceOrderQueueManagedValidation = ecommerceOrderQueueReadinessPacket && managedIdentity
-    ? buildManagedEcommerceOrderQueueValidation(ecommerceOrderQueueReadinessPacket, managedIdentity)
+    ? ecommerceOrderQueueServerValidation ?? buildManagedEcommerceOrderQueueValidation(ecommerceOrderQueueReadinessPacket, managedIdentity)
     : null
   const ecommerceOrderQueueManagedRows: Array<readonly [string, string, string]> = ecommerceOrderQueueReadinessPacket
     ? [
         ['Workspace', managedIdentity?.workspaceId ?? 'Connect workspace', managedIdentity ? 'Identity selected for zero-write check.' : 'Premium check waits for managed sign-in.'],
         ['Rows', `${ecommerceOrderQueueReadinessPacket.sourceReview.readyRows}/${ecommerceOrderQueueReadinessPacket.sourceReview.totalRows} ready`, `${ecommerceOrderQueueReadinessPacket.sourceReview.blockedRows} blocked rows.`],
-        ['Managed check', ecommerceOrderQueueManagedValidation?.status ?? 'Waiting', ecommerceOrderQueueManagedValidation ? 'Zero-write receipt can be reviewed before owner approval.' : 'No managed request or write has run.'],
+        ['Managed check', ecommerceOrderQueueServerBusy ? 'Checking' : ecommerceOrderQueueManagedValidation?.status ?? 'Waiting', ecommerceOrderQueueServerValidation ? 'Server validation passed with zero records written.' : ecommerceOrderQueueManagedValidation ? 'Local receipt ready; run managed check before owner approval.' : 'No managed request or write has run.'],
         ['Boundary', ecommerceOrderQueueManagedValidation?.external_writes_performed === false ? 'Zero write' : 'Locked', 'Order import, customer send, payment, delivery, stock, and Shop writes remain blocked.'],
       ]
     : [
@@ -583,6 +587,7 @@ export function SettingsPage() {
         reviewPacket: packet,
       })
       setEcommerceOrderQueueReadinessPacket(queueReadinessPacket)
+      setEcommerceOrderQueueServerValidation(null)
       setEcommerceOrderReviewPacketReview([
         ['Status', packet.review.status === 'ready' ? 'Ready packet' : 'Blocked packet'],
         ['Schema', packet.schema],
@@ -595,6 +600,7 @@ export function SettingsPage() {
       setNotice('Ecommerce order review packet checked locally. No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.')
     } catch (error) {
       setEcommerceOrderQueueReadinessPacket(null)
+      setEcommerceOrderQueueServerValidation(null)
       setEcommerceOrderReviewPacketReview([
         ['Status', 'Rejected'],
         ['Reason', error instanceof Error ? error.message : 'Invalid order review packet'],
@@ -632,12 +638,14 @@ export function SettingsPage() {
       ['Boundary', 'Review only'],
     ])
     setEcommerceOrderQueueReadinessPacket(null)
+    setEcommerceOrderQueueServerValidation(null)
     setNotice('Sample Ecommerce order review packet loaded locally. Review it to test the order handoff gate.')
   }
 
   function clearEcommerceOrderReviewPacketReview() {
     setEcommerceOrderReviewPacketText('')
     setEcommerceOrderQueueReadinessPacket(null)
+    setEcommerceOrderQueueServerValidation(null)
     setEcommerceOrderReviewPacketReview([
       ['Status', 'Waiting for packet'],
       ['Boundary', 'Review only'],
@@ -649,6 +657,24 @@ export function SettingsPage() {
     if (!ecommerceOrderQueueReadinessPacket) return
     downloadJsonPacket(ecommerceOrderQueueReadinessPacket, ecommerceOrderQueueReadinessFilename)
     setNotice('Ecommerce order queue readiness packet downloaded. No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.')
+  }
+
+  async function runManagedEcommerceOrderQueueCheck() {
+    if (!managedIdentity || !ecommerceOrderQueueReadinessPacket) {
+      setNotice('Connect a managed workspace and validate an order packet first.')
+      return
+    }
+    setEcommerceOrderQueueServerBusy(true)
+    try {
+      const validation = await validateManagedEcommerceOrderQueue(ecommerceOrderQueueReadinessPacket, managedIdentity)
+      setEcommerceOrderQueueServerValidation(validation)
+      setNotice('Managed Ecommerce order queue check passed with zero records written. Owner approval is still required before any Shop queue import.')
+    } catch (error) {
+      setEcommerceOrderQueueServerValidation(null)
+      setNotice(error instanceof Error ? error.message : 'Managed Ecommerce order queue check failed. No write ran.')
+    } finally {
+      setEcommerceOrderQueueServerBusy(false)
+    }
   }
 
   async function resetDemoWorkspace() {
@@ -694,6 +720,7 @@ export function SettingsPage() {
     try {
       const identity = await signInManagedTrial(managedEmail, managedPassword, managedWorkspace)
       setManagedIdentity(identity)
+      setEcommerceOrderQueueServerValidation(null)
       setManagedPassword('')
       try {
         const bootstrap = await loadManagedBootstrap(identity)
@@ -713,6 +740,7 @@ export function SettingsPage() {
     setManagedBusy(true)
     await signOutManagedTrial()
     setManagedIdentity(null)
+    setEcommerceOrderQueueServerValidation(null)
     setApprovals((current) => current.filter((approval) => !approval.managed))
     setManagedNotice('Managed account disconnected.')
     setManagedBusy(false)
@@ -786,7 +814,7 @@ export function SettingsPage() {
                   <label className="packet-review-field">Order review packet JSON<textarea maxLength={24000} onChange={(event) => setEcommerceOrderReviewPacketText(event.target.value)} placeholder="Paste supermega.ecommerce.order_import_review_packet.v1 JSON" rows={5} value={ecommerceOrderReviewPacketText} /></label>
                   <div className="context-quality-rows">{ecommerceOrderReviewPacketReview.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{label === 'Boundary' ? 'Review only; Shop queue still requires managed proof.' : 'Local order packet check'}</em></span>)}</div>
                   <div aria-label="Managed order queue check" className="context-quality-rows">{ecommerceOrderQueueManagedRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
-                  <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceOrderReviewPacket} type="button">Load sample order packet</button><button className="core-button" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={reviewEcommerceOrderReviewPacket} type="button">Check order packet locally</button><button className="core-button" disabled={!ecommerceOrderQueueReadinessPacket} onClick={downloadEcommerceOrderQueueReadinessPacket} type="button">Download queue packet</button><button className="text-link" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={clearEcommerceOrderReviewPacketReview} type="button">Clear order packet</button></div>
+                  <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceOrderReviewPacket} type="button">Load sample order packet</button><button className="core-button" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={reviewEcommerceOrderReviewPacket} type="button">Check order packet locally</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueReadinessPacket || ecommerceOrderQueueServerBusy} onClick={() => void runManagedEcommerceOrderQueueCheck()} type="button">{ecommerceOrderQueueServerBusy ? 'Checking managed queue...' : 'Run managed queue check'}</button><button className="core-button" disabled={!ecommerceOrderQueueReadinessPacket} onClick={downloadEcommerceOrderQueueReadinessPacket} type="button">Download queue packet</button><button className="text-link" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={clearEcommerceOrderReviewPacketReview} type="button">Clear order packet</button></div>
                 </div>
                 <div aria-label="Ecommerce activation packet review" className="learning-plan-agent context-quality-panel">
                   <div><span className="core-eyebrow">Ecommerce activation packet</span><h3>Review before managed setup</h3><p>Paste the downloaded Ecommerce activation JSON. The browser validates schema, source, queue, and forbidden actions locally; no import, managed activation, Shop write, payment, delivery, stock, or customer action runs.</p></div>
