@@ -200,6 +200,51 @@
   font-size: 12px !important;
 }
 
+.ecommerce-order-import-field {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+  color: #4655a5;
+  font-size: 11px;
+  font-weight: 780;
+}
+
+.ecommerce-order-import-field textarea {
+  min-height: 82px;
+  border: 1px solid rgba(70, 85, 165, .18);
+  border-radius: 8px;
+  padding: 8px;
+  background: #fff;
+  color: #17231d;
+  font-size: 12px;
+}
+
+.ecommerce-order-import-review {
+  display: grid;
+  gap: 3px;
+  margin-top: 8px;
+  border: 1px solid rgba(70, 85, 165, .16);
+  border-radius: 8px;
+  padding: 8px;
+  background: #fff;
+  color: #293044;
+  font-size: 12px;
+}
+
+.ecommerce-order-import-review.ready {
+  border-color: rgba(11, 116, 94, .2);
+}
+
+.ecommerce-order-import-review.blocked {
+  border-color: rgba(180, 83, 9, .22);
+}
+
+.ecommerce-order-import-review strong,
+.ecommerce-order-import-review span,
+.ecommerce-order-import-review small {
+  overflow-wrap: anywhere;
+}
+
 .ecommerce-request-filter {
   display: flex;
   flex-wrap: wrap;

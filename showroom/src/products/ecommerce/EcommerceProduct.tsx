@@ -87,6 +87,13 @@ type ManagedStorefrontView = {
   }
   availableSku: string
 }
+type OrderImportReview = {
+  status: 'ready' | 'blocked'
+  totalRows: number
+  readyRows: number
+  blockedRows: number
+  summary: string
+}
 
 const DEFAULT_STORE_NAME = 'Mingalar Market'
 const DEFAULT_STORE_SUMMARY = 'Everyday essentials for pickup or delivery, with clear local pricing.'
@@ -121,6 +128,38 @@ function safeEcommerceFilename(value: string) {
 function csvCell(value: string | number) {
   const text = String(value)
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+}
+
+function parseOrderImportCsv(source: string) {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ''
+  let quoted = false
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index]
+    if (quoted) {
+      if (character === '"' && source[index + 1] === '"') {
+        field += '"'
+        index += 1
+      } else if (character === '"') quoted = false
+      else field += character
+      continue
+    }
+    if (character === '"') quoted = true
+    else if (character === ',') {
+      row.push(field.trim())
+      field = ''
+    } else if (character === '\n') {
+      row.push(field.trim())
+      rows.push(row)
+      row = []
+      field = ''
+    } else if (character !== '\r') field += character
+  }
+  if (quoted) throw new Error('Order CSV has an unclosed quoted cell.')
+  row.push(field.trim())
+  if (row.some(Boolean)) rows.push(row)
+  return rows
 }
 
 function deliveryAreaFromCustomerReference(value: string) {
@@ -237,6 +276,8 @@ export function EcommerceProduct() {
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
   const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
+  const [orderImportText, setOrderImportText] = useState('')
+  const [orderImportReview, setOrderImportReview] = useState<OrderImportReview | null>(null)
   const [orderImportNotice, setOrderImportNotice] = useState('')
   const [customerFollowUpDraft, setCustomerFollowUpDraft] = useState('')
   const [deliveryReviewDraft, setDeliveryReviewDraft] = useState('')
@@ -530,6 +571,55 @@ export function EcommerceProduct() {
     const notice = 'Order import template downloaded. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.'
     setOrderImportNotice(notice)
     setDraftNotice(notice)
+  }
+
+  function reviewOrderImportBatch() {
+    try {
+      const parsed = parseOrderImportCsv(orderImportText)
+      if (parsed.length < 2) throw new Error('Paste the order CSV header and at least one order row.')
+      if (parsed.length > 52) throw new Error('Review at most 50 order rows at a time.')
+      const [header, ...rows] = parsed
+      const normalizedHeaders = header.map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''))
+      const required = ['customer_reference', 'channel', 'sku', 'quantity', 'fulfilment', 'payment', 'source_message']
+      const missing = required.filter((field) => !normalizedHeaders.includes(field))
+      if (missing.length) throw new Error(`Missing columns: ${missing.join(', ')}.`)
+      const indexes = Object.fromEntries(required.map((field) => [field, normalizedHeaders.indexOf(field)]))
+      const allowedSkus = new Set(catalog.items.map((item) => item.sku))
+      const selected = new Set(selectedSkus)
+      let readyRows = 0
+      let blockedRows = 0
+      for (const row of rows) {
+        const sku = row[indexes.sku]?.trim() ?? ''
+        const quantity = Number(row[indexes.quantity])
+        const fulfilment = (row[indexes.fulfilment] ?? '').toLowerCase()
+        const payment = (row[indexes.payment] ?? '').toLowerCase()
+        const customer = row[indexes.customer_reference]?.trim() ?? ''
+        const sourceMessage = row[indexes.source_message]?.trim() ?? ''
+        const ready = Boolean(customer && sourceMessage && allowedSkus.has(sku) && selected.has(sku) && Number.isInteger(quantity) && quantity > 0 && quantity <= 50 && ['pickup', 'delivery'].includes(fulfilment) && ['manual_review', 'cash_on_pickup', 'cash_on_delivery'].includes(payment))
+        if (ready) readyRows += 1
+        else blockedRows += 1
+      }
+      const review: OrderImportReview = {
+        status: blockedRows ? 'blocked' : 'ready',
+        totalRows: rows.length,
+        readyRows,
+        blockedRows,
+        summary: blockedRows
+          ? `${blockedRows} row${blockedRows === 1 ? '' : 's'} need SKU, quantity, fulfilment, payment, customer, or source-message repair.`
+          : `${readyRows} order row${readyRows === 1 ? '' : 's'} ready for owner review.`,
+      }
+      setOrderImportReview(review)
+      setOrderImportNotice('Order import batch reviewed locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.')
+    } catch (error) {
+      setOrderImportReview({
+        status: 'blocked',
+        totalRows: 0,
+        readyRows: 0,
+        blockedRows: 0,
+        summary: error instanceof Error ? error.message : 'Order CSV could not be reviewed locally.',
+      })
+      setOrderImportNotice('Order import batch rejected locally. No Shop or customer action ran.')
+    }
   }
 
   function showMobileWorkspace(view: 'setup' | 'preview') {
@@ -997,6 +1087,7 @@ export function EcommerceProduct() {
     ['Mapping', selectedSkus.length ? `${selectedSkus.length} SKUs` : 'No SKUs'],
     ['Queue', pendingManagedRequests.length ? `${pendingManagedRequests.length} review` : 'No pending'],
     ['Template', 'Download CSV'],
+    ['Review', orderImportReview ? `${orderImportReview.readyRows}/${orderImportReview.totalRows} ready` : 'Paste CSV'],
     ['Boundary', 'No auto submit'],
   ] as const
   const lifecycleRows = [
@@ -1380,6 +1471,12 @@ export function EcommerceProduct() {
             <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
             <button className="text-link" onClick={downloadOrderImportTemplate} type="button">Download order template</button>
           </div>
+          <label className="ecommerce-order-import-field">Order batch CSV<textarea onChange={(event) => {
+            setOrderImportText(event.target.value)
+            setOrderImportReview(null)
+          }} placeholder="Paste customer_reference, channel, sku, quantity, fulfilment, payment, source_message rows" value={orderImportText} /></label>
+          <button className="text-link" disabled={!orderImportText.trim()} onClick={reviewOrderImportBatch} type="button">Review order batch</button>
+          {orderImportReview ? <div className={`ecommerce-order-import-review ${orderImportReview.status}`} role="status"><strong>{orderImportReview.status === 'ready' ? 'Ready for owner review' : 'Repair before handoff'}</strong><span>{orderImportReview.summary}</span><small>{orderImportReview.readyRows} ready · {orderImportReview.blockedRows} blocked · no Shop write</small></div> : null}
           {orderImportNotice ? <p className="ecommerce-order-import-notice" role="status">{orderImportNotice}</p> : null}
         </div>
         <div className="ecommerce-ops-cockpit-rows">
