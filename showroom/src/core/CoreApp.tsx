@@ -3070,6 +3070,65 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     ['Reason', shopAgentReason],
     ['Owner gate', shopOwnerGate],
   ]
+  const shopAutopilotStage = !commerceCanWrite
+    ? 'Restore Shop readiness'
+    : pendingAction
+      ? 'Approve pending Shop change'
+      : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
+        ? 'Review online requests'
+        : actionOrders.length
+          ? 'Finish order queue'
+          : activePurchaseOrders.length
+            ? 'Receive purchase orders'
+            : lowStock.length
+              ? 'Reorder low stock'
+              : !commerce.inventoryFoundation || !managedInventoryProjection
+                ? 'Set up stock foundation'
+                : 'Open counter sales'
+  const shopAutopilotNextAction = !commerceCanWrite
+    ? 'Open managed activation controls'
+    : pendingAction
+      ? 'Finish owner approval'
+      : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
+        ? 'Open online request review'
+        : actionOrders.length
+          ? 'Open fulfilment queue'
+          : activePurchaseOrders.length
+            ? 'Open receiving queue'
+            : lowStock.length
+              ? 'Open reorder queue'
+              : !commerce.inventoryFoundation || !managedInventoryProjection
+                ? 'Open inventory setup'
+                : 'Open counter'
+  const shopAutopilotRows = [
+    ['Track', pendingAction ? 'Owner review' : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting || actionOrders.length ? 'Orders' : activePurchaseOrders.length || lowStock.length || !commerce.inventoryFoundation || !managedInventoryProjection ? 'Inventory' : 'Counter'],
+    ['Stage', shopAutopilotStage],
+    ['Next', shopAutopilotNextAction],
+    ['Learning', 'Records behavior only'],
+    ['Boundary', 'No auto write'],
+  ] as const
+  function runShopAutopilot() {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: 'commerce',
+      route: commerceLocation.pathname + commerceLocation.search,
+      detail: `Shop autopilot: ${shopAutopilotStage}`,
+    })
+    if (pendingAction) {
+      setNotice('Finish or cancel the pending Shop review before starting another step.')
+      return
+    }
+    navigate(shopAgentPath)
+  }
+  const shopCommandCenter = <section aria-label="Shop Autopilot" className="shop-command-center">
+    <div>
+      <span className="core-eyebrow">Shop Autopilot</span>
+      <h2>{shopAutopilotStage}</h2>
+      <p>One button chooses the next safe owner action from online requests, orders, payment exceptions, purchase orders, low stock, inventory foundation, and write-readiness state. AI may prepare records and packets; it does not send customers, charge payments, book delivery, move stock, reconcile cash, or write Shop records here.</p>
+    </div>
+    <div className="shop-command-center-rows">{shopAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+    <button className="core-button primary compact" onClick={runShopAutopilot} type="button">Run next step</button>
+  </section>
   const shopAgentQueue = <section aria-label="Recommended Shop agent job" className="shop-agent-queue">
     <div>
       <span className="core-eyebrow">Shop agent queue</span>
@@ -4561,6 +4620,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
+    {shopCommandCenter}
     {shopAgentQueue}
     <ShopCounter disabled={commerceControlsDisabled} items={commerce.items} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} />
     {actionGate}
@@ -4568,6 +4628,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
 
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
+    {shopCommandCenter}
     {shopAgentQueue}
     <section className="core-panel order-queue-panel order-workspace">
       <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span>{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={openOrderComposer} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
@@ -4737,6 +4798,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
 
   if (tab === 'inventory') return <div className="operation-module">
     {commerceBoundary}
+    {shopCommandCenter}
     {shopAgentQueue}
     <section className="core-panel inventory-panel">
       <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : 'Count stock'}</button></div></div>
