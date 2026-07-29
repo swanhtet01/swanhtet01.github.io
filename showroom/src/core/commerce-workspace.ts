@@ -589,6 +589,30 @@ export type CommerceStorefrontRequestLineV2 = {
   lineTotalMmk: number
 }
 
+export type CommerceStorefrontCustomerProfile = {
+  schema: 'supermega.ecommerce.customer_profile_snapshot.v1'
+  id: string
+  revision: number
+  name: string
+  phone: string
+  savedAt: string
+  previousDigest: string | null
+  profileDigest: string
+}
+
+export type CommerceStorefrontDeliveryAddress = {
+  schema: 'supermega.ecommerce.delivery_address_snapshot.v1'
+  id: string
+  revision: number
+  line1: string
+  township: string
+  city: string
+  instructions: string | null
+  savedAt: string
+  previousDigest: string | null
+  addressDigest: string
+}
+
 export type CommerceStorefrontRequestV2 = {
   schema: 'supermega.ecommerce.order_request.v2'
   mode: 'browser-local-request'
@@ -601,6 +625,8 @@ export type CommerceStorefrontRequestV2 = {
   sourceStorefrontRevision: number | null
   sourceStorefrontActionId: string | null
   customerReference: string
+  customerProfile?: CommerceStorefrontCustomerProfile
+  deliveryAddress?: CommerceStorefrontDeliveryAddress | null
   fulfilment: 'pickup' | 'delivery'
   currency: 'MMK'
   lines: CommerceStorefrontRequestLineV2[]
@@ -615,6 +641,8 @@ export type CommerceStorefrontRequestV2 = {
     pimDigest: string
     currency: 'MMK'
     customerReference: string
+    customerProfile?: CommerceStorefrontCustomerProfile
+    deliveryAddress?: CommerceStorefrontDeliveryAddress | null
     fulfilment: 'pickup' | 'delivery'
     lines: CommerceStorefrontRequestLineV2[]
     subtotalMmk: number
@@ -918,6 +946,8 @@ const websiteFingerprintPattern = /^web-[a-f0-9]{8}$/
 const storefrontRequestIdPattern = /^ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const storefrontIdempotencyPattern = /^ECI-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const storefrontQuoteIdPattern = /^ECQ-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
+const storefrontCustomerIdPattern = /^CUS-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
+const storefrontAddressIdPattern = /^ADR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const sha256DigestPattern = /^sha256:[a-f0-9]{64}$/
 const maxStorefrontRequests = 100
 const maxPurchaseOrders = 100
@@ -1069,12 +1099,74 @@ function sameStorefrontRequestLinesV2(left: CommerceStorefrontRequestLineV2[], r
   })
 }
 
+function storefrontCustomerProfile(value: unknown, field: string): CommerceStorefrontCustomerProfile {
+  if (!isRecord(value) || !hasExactKeys(value, [
+    'schema', 'id', 'revision', 'name', 'phone', 'savedAt', 'previousDigest', 'profileDigest',
+  ]) || value.schema !== 'supermega.ecommerce.customer_profile_snapshot.v1') throw new Error(`${field} is invalid.`)
+  const id = canonicalText(value.id, `${field}.id`, 40)
+  const phone = canonicalText(value.phone, `${field}.phone`, 32)
+  const digitCount = phone.replace(/\D/g, '').length
+  if (!storefrontCustomerIdPattern.test(id)
+    || !/^\+?[0-9][0-9 ()-]{5,31}$/.test(phone)
+    || digitCount < 6
+    || digitCount > 15
+    || !validTimestamp(value.savedAt)
+    || typeof value.profileDigest !== 'string'
+    || !sha256DigestPattern.test(value.profileDigest)
+    || value.previousDigest !== null && (typeof value.previousDigest !== 'string' || !sha256DigestPattern.test(value.previousDigest))) {
+    throw new Error(`${field} identity or evidence is invalid.`)
+  }
+  assertSafeInteger(value.revision, `${field}.revision`, 1)
+  return {
+    schema: 'supermega.ecommerce.customer_profile_snapshot.v1',
+    id,
+    revision: Number(value.revision),
+    name: canonicalText(value.name, `${field}.name`, 80),
+    phone,
+    savedAt: String(value.savedAt),
+    previousDigest: value.previousDigest as string | null,
+    profileDigest: value.profileDigest,
+  }
+}
+
+function storefrontDeliveryAddress(value: unknown, field: string): CommerceStorefrontDeliveryAddress {
+  if (!isRecord(value) || !hasExactKeys(value, [
+    'schema', 'id', 'revision', 'line1', 'township', 'city', 'instructions',
+    'savedAt', 'previousDigest', 'addressDigest',
+  ]) || value.schema !== 'supermega.ecommerce.delivery_address_snapshot.v1') throw new Error(`${field} is invalid.`)
+  const id = canonicalText(value.id, `${field}.id`, 40)
+  if (!storefrontAddressIdPattern.test(id)
+    || !validTimestamp(value.savedAt)
+    || typeof value.addressDigest !== 'string'
+    || !sha256DigestPattern.test(value.addressDigest)
+    || value.previousDigest !== null && (typeof value.previousDigest !== 'string' || !sha256DigestPattern.test(value.previousDigest))) {
+    throw new Error(`${field} identity or evidence is invalid.`)
+  }
+  assertSafeInteger(value.revision, `${field}.revision`, 1)
+  if (value.instructions !== null) canonicalText(value.instructions, `${field}.instructions`, 160)
+  return {
+    schema: 'supermega.ecommerce.delivery_address_snapshot.v1',
+    id,
+    revision: Number(value.revision),
+    line1: canonicalText(value.line1, `${field}.line1`, 120),
+    township: canonicalText(value.township, `${field}.township`, 80),
+    city: canonicalText(value.city, `${field}.city`, 80),
+    instructions: value.instructions as string | null,
+    savedAt: String(value.savedAt),
+    previousDigest: value.previousDigest as string | null,
+    addressDigest: value.addressDigest,
+  }
+}
+
 function storefrontRequestV2(value: Record<string, unknown>, field: string): CommerceStorefrontRequestV2 {
-  const requestFields = [
+  const baseRequestFields = [
     'schema', 'mode', 'state', 'scope', 'id', 'idempotencyKey', 'createdAt', 'sourcePreviewDigest',
     'sourceStorefrontRevision', 'sourceStorefrontActionId', 'customerReference', 'fulfilment', 'currency',
     'lines', 'quote', 'totalMmk',
   ]
+  const structuredFields = ['customerProfile', 'deliveryAddress']
+  const structured = structuredFields.some((key) => key in value)
+  const requestFields = structured ? [...baseRequestFields, ...structuredFields] : baseRequestFields
   if (!hasExactKeys(value, requestFields)
     || value.schema !== 'supermega.ecommerce.order_request.v2'
     || value.mode !== 'browser-local-request'
@@ -1096,6 +1188,16 @@ function storefrontRequestV2(value: Record<string, unknown>, field: string): Com
   }
   canonicalText(value.customerReference, `${field}.customerReference`, 80)
   if (value.fulfilment !== 'pickup' && value.fulfilment !== 'delivery') throw new Error(`${field}.fulfilment is invalid.`)
+  const customerProfile = structured ? storefrontCustomerProfile(value.customerProfile, `${field}.customerProfile`) : null
+  const deliveryAddress = structured
+    ? value.deliveryAddress === null ? null : storefrontDeliveryAddress(value.deliveryAddress, `${field}.deliveryAddress`)
+    : null
+  if (structured
+    && ((value.fulfilment === 'delivery') !== Boolean(deliveryAddress)
+      || Date.parse(customerProfile!.savedAt) > Date.parse(String(value.createdAt))
+      || deliveryAddress && Date.parse(deliveryAddress.savedAt) > Date.parse(String(value.createdAt)))) {
+    throw new Error(`${field} customer or delivery identity is invalid.`)
+  }
   if (value.currency !== 'MMK' || !Array.isArray(value.lines) || value.lines.length < 1 || value.lines.length > maxOrderLines) throw new Error(`${field} currency or lines are invalid.`)
   const lines = value.lines.map((line, index) => storefrontRequestLineV2(line, `${field}.lines[${index}]`))
   if (lines.some((line, index) => index > 0 && compareCanonicalText(lines[index - 1].sku, line.sku) >= 0)) throw new Error(`${field}.lines must use unique canonical SKU order.`)
@@ -1106,11 +1208,12 @@ function storefrontRequestV2(value: Record<string, unknown>, field: string): Com
 
   if (!isRecord(value.quote)) throw new Error(`${field}.quote is invalid.`)
   const quote = value.quote
-  const quoteFields = [
+  const baseQuoteFields = [
     'schema', 'scope', 'quoteId', 'idempotencyKey', 'quotedAt', 'expiresAt', 'sourcePreviewDigest',
     'pimDigest', 'currency', 'customerReference', 'fulfilment', 'lines', 'subtotalMmk', 'promotion',
     'tax', 'shipping', 'payment', 'totalMmk', 'quoteDigest',
   ]
+  const quoteFields = structured ? [...baseQuoteFields, ...structuredFields] : baseQuoteFields
   if (!hasExactKeys(quote, quoteFields)
     || quote.schema !== 'supermega.ecommerce.checkout_quote.v1'
     || quote.scope !== scope
@@ -1121,6 +1224,12 @@ function storefrontRequestV2(value: Record<string, unknown>, field: string): Com
     || quote.customerReference !== value.customerReference
     || quote.fulfilment !== value.fulfilment
     || !Array.isArray(quote.lines)) throw new Error(`${field}.quote does not match the request.`)
+  if (structured) {
+    const quoteCustomerProfile = storefrontCustomerProfile(quote.customerProfile, `${field}.quote.customerProfile`)
+    const quoteDeliveryAddress = quote.deliveryAddress === null ? null : storefrontDeliveryAddress(quote.deliveryAddress, `${field}.quote.deliveryAddress`)
+    if (JSON.stringify(quoteCustomerProfile) !== JSON.stringify(customerProfile)
+      || JSON.stringify(quoteDeliveryAddress) !== JSON.stringify(deliveryAddress)) throw new Error(`${field}.quote customer identity does not match the request.`)
+  }
   const quoteId = canonicalText(quote.quoteId, `${field}.quote.quoteId`, 40)
   if (!storefrontQuoteIdPattern.test(quoteId) || quoteId.slice(4) !== idempotencyKey.slice(4)) throw new Error(`${field}.quote identity is invalid.`)
   if (!validTimestamp(quote.expiresAt)

@@ -7,6 +7,8 @@ import {
 
 export const ECOMMERCE_PIM_SCHEMA = 'supermega.ecommerce.pim_projection.v1' as const
 export const ECOMMERCE_QUOTE_SCHEMA = 'supermega.ecommerce.checkout_quote.v1' as const
+export const ECOMMERCE_CUSTOMER_PROFILE_SCHEMA = 'supermega.ecommerce.customer_profile_snapshot.v1' as const
+export const ECOMMERCE_DELIVERY_ADDRESS_SCHEMA = 'supermega.ecommerce.delivery_address_snapshot.v1' as const
 export const ECOMMERCE_REQUEST_SCHEMA_V2 = 'supermega.ecommerce.order_request.v2' as const
 export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V3 = 'supermega.ecommerce.shop_draft.v3' as const
 export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V2 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V3
@@ -41,6 +43,30 @@ export type EcommerceCartLine = {
   quantity: number
 }
 
+export type EcommerceCustomerProfileSnapshot = {
+  schema: typeof ECOMMERCE_CUSTOMER_PROFILE_SCHEMA
+  id: string
+  revision: number
+  name: string
+  phone: string
+  savedAt: string
+  previousDigest: string | null
+  profileDigest: string
+}
+
+export type EcommerceDeliveryAddressSnapshot = {
+  schema: typeof ECOMMERCE_DELIVERY_ADDRESS_SCHEMA
+  id: string
+  revision: number
+  line1: string
+  township: string
+  city: string
+  instructions: string | null
+  savedAt: string
+  previousDigest: string | null
+  addressDigest: string
+}
+
 export type EcommerceQuoteLine = {
   sku: string
   name: string
@@ -61,6 +87,8 @@ export type EcommerceCheckoutQuote = {
   pimDigest: string
   currency: 'MMK'
   customerReference: string
+  customerProfile?: EcommerceCustomerProfileSnapshot
+  deliveryAddress?: EcommerceDeliveryAddressSnapshot | null
   fulfilment: EcommerceFulfilment
   lines: EcommerceQuoteLine[]
   subtotalMmk: number
@@ -101,6 +129,8 @@ export type EcommerceOrderRequestV2 = {
   sourceStorefrontRevision: number | null
   sourceStorefrontActionId: string | null
   customerReference: string
+  customerProfile?: EcommerceCustomerProfileSnapshot
+  deliveryAddress?: EcommerceDeliveryAddressSnapshot | null
   fulfilment: EcommerceFulfilment
   currency: 'MMK'
   lines: EcommerceQuoteLine[]
@@ -120,6 +150,8 @@ export type EcommerceShopDraftV2 = {
   createdAt: string
   confirmedAt: string
   customerReference: string
+  customerProfile?: EcommerceCustomerProfileSnapshot
+  deliveryAddress?: EcommerceDeliveryAddressSnapshot | null
   fulfilment: EcommerceFulfilment
   currency: 'MMK'
   operatingContext: {
@@ -207,6 +239,8 @@ const uuidPattern = '[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9
 const quoteIdPattern = new RegExp(`^ECQ-${uuidPattern}$`)
 const requestIdPattern = new RegExp(`^ECR-${uuidPattern}$`)
 const checkoutKeyPattern = new RegExp(`^ECI-${uuidPattern}$`)
+const customerIdPattern = new RegExp(`^CUS-${uuidPattern}$`)
+const addressIdPattern = new RegExp(`^ADR-${uuidPattern}$`)
 const returnIdPattern = new RegExp(`^ERR-${uuidPattern}$`)
 const returnKeyPattern = new RegExp(`^ERI-${uuidPattern}$`)
 const timestampPattern = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$/
@@ -217,6 +251,7 @@ const maxSafeInteger = Number.MAX_SAFE_INTEGER
 const maxLines = 20
 const maxQuantity = 99
 const maxRecords = 100
+const phonePattern = /^\+?[0-9][0-9 ()-]{5,31}$/
 
 export function ecommercePaymentMatchesFulfilment(
   fulfilment: EcommerceFulfilment,
@@ -396,6 +431,135 @@ export async function validateEcommercePimProjection(value: unknown): Promise<Ec
   return { ...core, pimDigest: digest }
 }
 
+function customerPhone(value: unknown, field: string) {
+  const phone = canonicalText(value, field, 32)
+  const digitCount = phone.replace(/\D/g, '').length
+  if (!phonePattern.test(phone) || digitCount < 6 || digitCount > 15) {
+    throw new Error(`${field} must be a usable phone number.`)
+  }
+  return phone
+}
+
+function customerProfileSnapshotShape(value: unknown, field = 'customer profile'): EcommerceCustomerProfileSnapshot {
+  const source = exactObject(value, field, [
+    'schema', 'id', 'revision', 'name', 'phone', 'savedAt', 'previousDigest', 'profileDigest',
+  ])
+  const id = canonicalText(source.id, `${field}.id`, 40)
+  if (source.schema !== ECOMMERCE_CUSTOMER_PROFILE_SCHEMA || !customerIdPattern.test(id)) {
+    throw new Error(`${field} identity is invalid.`)
+  }
+  const core = {
+    schema: ECOMMERCE_CUSTOMER_PROFILE_SCHEMA,
+    id,
+    revision: safeInteger(source.revision, `${field}.revision`, 1),
+    name: canonicalText(source.name, `${field}.name`, 80),
+    phone: customerPhone(source.phone, `${field}.phone`),
+    savedAt: canonicalTimestamp(source.savedAt, `${field}.savedAt`),
+    previousDigest: source.previousDigest === null ? null : canonicalDigest(source.previousDigest, `${field}.previousDigest`),
+  }
+  const profileDigest = canonicalDigest(source.profileDigest, `${field}.profileDigest`)
+  return { ...core, profileDigest }
+}
+
+async function customerProfileSnapshot(value: unknown, field = 'customer profile'): Promise<EcommerceCustomerProfileSnapshot> {
+  const profile = customerProfileSnapshotShape(value, field)
+  const { profileDigest, ...core } = profile
+  if (await ecommerceLifecycleDigest(core) !== profileDigest) throw new Error(`${field} digest is invalid.`)
+  return profile
+}
+
+function deliveryAddressSnapshotShape(value: unknown, field = 'delivery address'): EcommerceDeliveryAddressSnapshot {
+  const source = exactObject(value, field, [
+    'schema', 'id', 'revision', 'line1', 'township', 'city', 'instructions',
+    'savedAt', 'previousDigest', 'addressDigest',
+  ])
+  const id = canonicalText(source.id, `${field}.id`, 40)
+  if (source.schema !== ECOMMERCE_DELIVERY_ADDRESS_SCHEMA || !addressIdPattern.test(id)) {
+    throw new Error(`${field} identity is invalid.`)
+  }
+  const core = {
+    schema: ECOMMERCE_DELIVERY_ADDRESS_SCHEMA,
+    id,
+    revision: safeInteger(source.revision, `${field}.revision`, 1),
+    line1: canonicalText(source.line1, `${field}.line1`, 120),
+    township: canonicalText(source.township, `${field}.township`, 80),
+    city: canonicalText(source.city, `${field}.city`, 80),
+    instructions: source.instructions === null ? null : canonicalText(source.instructions, `${field}.instructions`, 160),
+    savedAt: canonicalTimestamp(source.savedAt, `${field}.savedAt`),
+    previousDigest: source.previousDigest === null ? null : canonicalDigest(source.previousDigest, `${field}.previousDigest`),
+  }
+  const addressDigest = canonicalDigest(source.addressDigest, `${field}.addressDigest`)
+  return { ...core, addressDigest }
+}
+
+async function deliveryAddressSnapshot(value: unknown, field = 'delivery address'): Promise<EcommerceDeliveryAddressSnapshot> {
+  const address = deliveryAddressSnapshotShape(value, field)
+  const { addressDigest, ...core } = address
+  if (await ecommerceLifecycleDigest(core) !== addressDigest) throw new Error(`${field} digest is invalid.`)
+  return address
+}
+
+export async function buildEcommerceCustomerProfileSnapshot(input: {
+  name: string
+  phone: string
+  savedAt: string
+  idempotencyKey: string
+  previous?: EcommerceCustomerProfileSnapshot | null
+}) {
+  const key = canonicalText(input.idempotencyKey, 'customer profile.idempotencyKey', 40)
+  if (!checkoutKeyPattern.test(key)) throw new Error('Customer profile checkout identity is invalid.')
+  const name = canonicalText(input.name, 'customer profile.name', 80)
+  const phone = customerPhone(input.phone, 'customer profile.phone')
+  const savedAt = canonicalTimestamp(input.savedAt, 'customer profile.savedAt')
+  const previous = input.previous ? await customerProfileSnapshot(input.previous) : null
+  if (previous && previous.name === name && previous.phone === phone) return previous
+  const core = {
+    schema: ECOMMERCE_CUSTOMER_PROFILE_SCHEMA,
+    id: previous?.id ?? `CUS-${key.slice(4)}`,
+    revision: (previous?.revision ?? 0) + 1,
+    name,
+    phone,
+    savedAt,
+    previousDigest: previous?.profileDigest ?? null,
+  }
+  return customerProfileSnapshot({ ...core, profileDigest: await ecommerceLifecycleDigest(core) })
+}
+
+export async function buildEcommerceDeliveryAddressSnapshot(input: {
+  line1: string
+  township: string
+  city: string
+  instructions: string | null
+  savedAt: string
+  idempotencyKey: string
+  previous?: EcommerceDeliveryAddressSnapshot | null
+}) {
+  const key = canonicalText(input.idempotencyKey, 'delivery address.idempotencyKey', 40)
+  if (!checkoutKeyPattern.test(key)) throw new Error('Delivery address checkout identity is invalid.')
+  const values = {
+    line1: canonicalText(input.line1, 'delivery address.line1', 120),
+    township: canonicalText(input.township, 'delivery address.township', 80),
+    city: canonicalText(input.city, 'delivery address.city', 80),
+    instructions: input.instructions === null ? null : canonicalText(input.instructions, 'delivery address.instructions', 160),
+  }
+  const savedAt = canonicalTimestamp(input.savedAt, 'delivery address.savedAt')
+  const previous = input.previous ? await deliveryAddressSnapshot(input.previous) : null
+  if (previous
+    && previous.line1 === values.line1
+    && previous.township === values.township
+    && previous.city === values.city
+    && previous.instructions === values.instructions) return previous
+  const core = {
+    schema: ECOMMERCE_DELIVERY_ADDRESS_SCHEMA,
+    id: previous?.id ?? `ADR-${key.slice(4)}`,
+    revision: (previous?.revision ?? 0) + 1,
+    ...values,
+    savedAt,
+    previousDigest: previous?.addressDigest ?? null,
+  }
+  return deliveryAddressSnapshot({ ...core, addressDigest: await ecommerceLifecycleDigest(core) })
+}
+
 function quoteLine(value: unknown, field: string): EcommerceQuoteLine {
   const source = exactObject(value, field, ['sku', 'name', 'variant', 'quantity', 'unitPriceMmk', 'lineTotalMmk'])
   const quantity = safeInteger(source.quantity, `${field}.quantity`, 1, maxQuantity)
@@ -412,12 +576,15 @@ function quoteLine(value: unknown, field: string): EcommerceQuoteLine {
   }
 }
 
-function quoteCore(value: unknown): Omit<EcommerceCheckoutQuote, 'quoteDigest'> {
-  const source = exactObject(value, 'checkout quote', [
+async function quoteCore(value: unknown): Promise<Omit<EcommerceCheckoutQuote, 'quoteDigest'>> {
+  const baseFields = [
     'schema', 'scope', 'quoteId', 'idempotencyKey', 'quotedAt', 'expiresAt',
     'sourcePreviewDigest', 'pimDigest', 'currency', 'customerReference', 'fulfilment',
     'lines', 'subtotalMmk', 'promotion', 'tax', 'shipping', 'payment', 'totalMmk',
-  ])
+  ]
+  const structuredFields = ['customerProfile', 'deliveryAddress']
+  const structured = isRecord(value) && structuredFields.some((field) => field in value)
+  const source = exactObject(value, 'checkout quote', structured ? [...baseFields, ...structuredFields] : baseFields)
   const quoteId = canonicalText(source.quoteId, 'checkout quote.quoteId', 40)
   const idempotencyKey = canonicalText(source.idempotencyKey, 'checkout quote.idempotencyKey', 40)
   if (!quoteIdPattern.test(quoteId)
@@ -450,6 +617,20 @@ function quoteCore(value: unknown): Omit<EcommerceCheckoutQuote, 'quoteDigest'> 
     throw new Error('Checkout tax boundary is invalid.')
   }
   const fulfilment = source.fulfilment as EcommerceFulfilment
+  const customerProfile = structured
+    ? await customerProfileSnapshot(source.customerProfile, 'checkout quote.customerProfile')
+    : undefined
+  const deliveryAddress = structured
+    ? source.deliveryAddress === null
+      ? null
+      : await deliveryAddressSnapshot(source.deliveryAddress, 'checkout quote.deliveryAddress')
+    : undefined
+  if (structured
+    && (Date.parse(customerProfile!.savedAt) > Date.parse(quotedAt)
+      || (deliveryAddress && Date.parse(deliveryAddress.savedAt) > Date.parse(quotedAt))
+      || (fulfilment === 'delivery') !== Boolean(deliveryAddress))) {
+    throw new Error('Checkout customer and delivery identity are inconsistent.')
+  }
   const shipping = exactObject(source.shipping, 'checkout quote.shipping', ['adapter', 'status', 'amountMmk'])
   const expectedShipping = fulfilment === 'pickup'
     ? { adapter: 'pickup', status: 'included', amountMmk: 0 }
@@ -476,6 +657,7 @@ function quoteCore(value: unknown): Omit<EcommerceCheckoutQuote, 'quoteDigest'> 
     pimDigest: canonicalDigest(source.pimDigest, 'checkout quote.pimDigest'),
     currency: 'MMK',
     customerReference: canonicalText(source.customerReference, 'checkout quote.customerReference', 80),
+    ...(customerProfile ? { customerProfile, deliveryAddress: deliveryAddress ?? null } : {}),
     fulfilment,
     lines,
     subtotalMmk,
@@ -500,6 +682,8 @@ export async function buildEcommerceCheckoutQuote(input: {
   pim: EcommercePimProjection
   cart: EcommerceCartLine[]
   customerReference: string
+  customerProfile?: { name: string; phone: string; previous?: EcommerceCustomerProfileSnapshot | null }
+  deliveryAddress?: { line1: string; township: string; city: string; instructions: string | null; previous?: EcommerceDeliveryAddressSnapshot | null } | null
   fulfilment: EcommerceFulfilment
   paymentAdapter: EcommercePaymentAdapter
   promotionCode: string | null
@@ -542,7 +726,23 @@ export async function buildEcommerceCheckoutQuote(input: {
   })
   const subtotalMmk = lines.reduce((total, line) => total + line.lineTotalMmk, 0)
   if (!Number.isSafeInteger(subtotalMmk)) throw new Error('Cart exceeds the supported whole-MMK range.')
-  const core = quoteCore({
+  const customerProfile = input.customerProfile
+    ? await buildEcommerceCustomerProfileSnapshot({
+        ...input.customerProfile,
+        savedAt: input.quotedAt,
+        idempotencyKey: key,
+      })
+    : undefined
+  const deliveryAddress = input.customerProfile
+    ? input.fulfilment === 'delivery'
+      ? await buildEcommerceDeliveryAddressSnapshot({
+          ...(input.deliveryAddress ?? { line1: '', township: '', city: '', instructions: null }),
+          savedAt: input.quotedAt,
+          idempotencyKey: key,
+        })
+      : null
+    : undefined
+  const core = await quoteCore({
     schema: ECOMMERCE_QUOTE_SCHEMA,
     scope: pim.scope,
     quoteId: `ECQ-${key.slice(4)}`,
@@ -553,6 +753,7 @@ export async function buildEcommerceCheckoutQuote(input: {
     pimDigest: pim.pimDigest,
     currency: 'MMK',
     customerReference: input.customerReference,
+    ...(customerProfile ? { customerProfile, deliveryAddress } : {}),
     fulfilment: input.fulfilment,
     lines,
     subtotalMmk,
@@ -573,13 +774,16 @@ export async function buildEcommerceCheckoutQuote(input: {
 }
 
 export async function validateEcommerceCheckoutQuote(value: unknown): Promise<EcommerceCheckoutQuote> {
-  const source = exactObject(value, 'checkout quote', [
+  const baseFields = [
     'schema', 'scope', 'quoteId', 'idempotencyKey', 'quotedAt', 'expiresAt',
     'sourcePreviewDigest', 'pimDigest', 'currency', 'customerReference', 'fulfilment',
     'lines', 'subtotalMmk', 'promotion', 'tax', 'shipping', 'payment', 'totalMmk', 'quoteDigest',
-  ])
+  ]
+  const structuredFields = ['customerProfile', 'deliveryAddress']
+  const structured = isRecord(value) && structuredFields.some((field) => field in value)
+  const source = exactObject(value, 'checkout quote', structured ? [...baseFields, ...structuredFields] : baseFields)
   const { quoteDigest: rawDigest, ...rawCore } = source
-  const core = quoteCore(rawCore)
+  const core = await quoteCore(rawCore)
   const quoteDigest = canonicalDigest(rawDigest, 'checkout quote.quoteDigest')
   if (await ecommerceLifecycleDigest(core) !== quoteDigest) throw new Error('Checkout quote digest is invalid.')
   return { ...core, quoteDigest }
@@ -602,6 +806,10 @@ export async function buildEcommerceOrderRequestV2(
     sourceStorefrontRevision: sourceStorefront ? safeInteger(sourceStorefront.revision, 'sourceStorefront.revision', 1) : null,
     sourceStorefrontActionId: sourceStorefront ? canonicalToken(sourceStorefront.actionId, 'sourceStorefront.actionId') : null,
     customerReference: quote.customerReference,
+    ...(quote.customerProfile ? {
+      customerProfile: canonicalCopy(quote.customerProfile),
+      deliveryAddress: quote.deliveryAddress ? canonicalCopy(quote.deliveryAddress) : null,
+    } : {}),
     fulfilment: quote.fulfilment,
     currency: 'MMK',
     lines: canonicalCopy(quote.lines),
@@ -612,11 +820,14 @@ export async function buildEcommerceOrderRequestV2(
 }
 
 export async function validateEcommerceOrderRequestV2(value: unknown): Promise<EcommerceOrderRequestV2> {
-  const source = exactObject(value, 'Ecommerce request', [
+  const baseFields = [
     'schema', 'mode', 'state', 'scope', 'id', 'idempotencyKey', 'createdAt',
     'sourcePreviewDigest', 'sourceStorefrontRevision', 'sourceStorefrontActionId',
     'customerReference', 'fulfilment', 'currency', 'lines', 'quote', 'totalMmk',
-  ])
+  ]
+  const structuredFields = ['customerProfile', 'deliveryAddress']
+  const structured = isRecord(value) && structuredFields.some((field) => field in value)
+  const source = exactObject(value, 'Ecommerce request', structured ? [...baseFields, ...structuredFields] : baseFields)
   if (source.schema !== ECOMMERCE_REQUEST_SCHEMA_V2
     || source.mode !== 'browser-local-request'
     || source.state !== 'pending_shop_review') throw new Error('Ecommerce request boundary is invalid.')
@@ -635,6 +846,14 @@ export async function validateEcommerceOrderRequestV2(value: unknown): Promise<E
     ? null
     : canonicalToken(source.sourceStorefrontActionId, 'sourceStorefrontActionId')
   if ((revision === null) !== (actionId === null)) throw new Error('Ecommerce request storefront provenance is incomplete.')
+  const customerProfile = structured
+    ? await customerProfileSnapshot(source.customerProfile, 'Ecommerce request.customerProfile')
+    : undefined
+  const deliveryAddress = structured
+    ? source.deliveryAddress === null
+      ? null
+      : await deliveryAddressSnapshot(source.deliveryAddress, 'Ecommerce request.deliveryAddress')
+    : undefined
   const request: EcommerceOrderRequestV2 = {
     schema: ECOMMERCE_REQUEST_SCHEMA_V2,
     mode: 'browser-local-request',
@@ -647,6 +866,7 @@ export async function validateEcommerceOrderRequestV2(value: unknown): Promise<E
     sourceStorefrontRevision: revision,
     sourceStorefrontActionId: actionId,
     customerReference: canonicalText(source.customerReference, 'Ecommerce request.customerReference', 80),
+    ...(customerProfile ? { customerProfile, deliveryAddress: deliveryAddress ?? null } : {}),
     fulfilment: source.fulfilment as EcommerceFulfilment,
     currency: source.currency as 'MMK',
     lines,
@@ -658,6 +878,8 @@ export async function validateEcommerceOrderRequestV2(value: unknown): Promise<E
     || request.idempotencyKey !== quote.idempotencyKey
     || request.sourcePreviewDigest !== quote.sourcePreviewDigest
     || request.customerReference !== quote.customerReference
+    || canonicalJson(request.customerProfile ?? null) !== canonicalJson(quote.customerProfile ?? null)
+    || canonicalJson(request.deliveryAddress ?? null) !== canonicalJson(quote.deliveryAddress ?? null)
     || request.fulfilment !== quote.fulfilment
     || request.currency !== 'MMK'
     || canonicalJson(request.lines) !== canonicalJson(quote.lines)
@@ -1042,6 +1264,10 @@ export async function prepareEcommerceShopDraftV2(input: {
     createdAt: request.createdAt,
     confirmedAt,
     customerReference: request.customerReference,
+    ...(request.customerProfile ? {
+      customerProfile: canonicalCopy(request.customerProfile),
+      deliveryAddress: request.deliveryAddress ? canonicalCopy(request.deliveryAddress) : null,
+    } : {}),
     fulfilment: request.fulfilment,
     currency: 'MMK',
     operatingContext: {
@@ -1097,11 +1323,14 @@ export function ecommerceShopDraftV2MatchesCatalog(value: unknown, catalogValue:
 }
 
 export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraftV2 {
-  const source = exactObject(value, 'Shop draft', [
+  const baseFields = [
     'schema', 'mode', 'state', 'id', 'sourceRequestId', 'sourcePreviewDigest',
     'quoteDigest', 'quoteExpiresAt', 'createdAt', 'confirmedAt', 'customerReference',
     'fulfilment', 'currency', 'operatingContext', 'lines', 'pricing', 'totalMmk', 'evidenceReference',
-  ])
+  ]
+  const structuredFields = ['customerProfile', 'deliveryAddress']
+  const structured = isRecord(value) && structuredFields.some((field) => field in value)
+  const source = exactObject(value, 'Shop draft', structured ? [...baseFields, ...structuredFields] : baseFields)
   if (source.schema !== ECOMMERCE_SHOP_DRAFT_SCHEMA_V3
     || source.mode !== 'browser-memory-shop-draft'
     || source.state !== 'review_required'
@@ -1123,6 +1352,17 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
   }
   const fulfilment = source.fulfilment
   if (!fulfilmentMethods.includes(fulfilment as EcommerceFulfilment)) throw new Error('Shop draft fulfilment is invalid.')
+  const customerProfile = structured
+    ? customerProfileSnapshotShape(source.customerProfile, 'Shop draft.customerProfile')
+    : undefined
+  const deliveryAddress = structured
+    ? source.deliveryAddress === null
+      ? null
+      : deliveryAddressSnapshotShape(source.deliveryAddress, 'Shop draft.deliveryAddress')
+    : undefined
+  if (structured && (fulfilment === 'delivery') !== Boolean(deliveryAddress)) {
+    throw new Error('Shop draft customer and delivery identity are invalid.')
+  }
   if (source.currency !== 'MMK') throw new Error('Shop draft currency is invalid.')
   const operatingContext = exactObject(source.operatingContext, 'Shop draft.operatingContext', [
     'organizationScope', 'operatingUnitLocationId', 'sourceAuthority', 'targetAuthority', 'recordType', 'writePolicy',
@@ -1180,6 +1420,7 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
     createdAt,
     confirmedAt,
     customerReference: canonicalText(source.customerReference, 'Shop draft.customerReference', 80),
+    ...(customerProfile ? { customerProfile, deliveryAddress: deliveryAddress ?? null } : {}),
     fulfilment: fulfilment as EcommerceFulfilment,
     currency: 'MMK',
     operatingContext: {

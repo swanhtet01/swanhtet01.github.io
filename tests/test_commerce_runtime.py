@@ -478,6 +478,18 @@ def storefront_request_v2(state: dict[str, object]) -> dict[str, object]:
         idempotency_key=f"ECI-{STOREFRONT_REQUEST_UUID}",
         quoted_at=NOW,
         expires_at="2026-07-23T09:15:00.000Z",
+        customer_profile_input={
+            "name": "Customer A",
+            "phone": "09 123 456 789",
+            "previous": None,
+        },
+        delivery_address_input={
+            "line1": "12 Insein Road, Ward 3",
+            "township": "Hlaing",
+            "city": "Yangon",
+            "instructions": "Call at the gate",
+            "previous": None,
+        },
     )
     return build_ecommerce_order_request(
         quote_value,
@@ -1693,6 +1705,8 @@ class CommerceRuntimeTests(unittest.TestCase):
 
         self.assertEqual(accepted["storefrontRequests"], [request])
         self.assertEqual(len(request["lines"]), 2)  # type: ignore[arg-type]
+        self.assertEqual(request["customerProfile"]["phone"], "09 123 456 789")  # type: ignore[index]
+        self.assertEqual(request["deliveryAddress"]["township"], "Hlaing")  # type: ignore[index]
         for field in ("items", "orders", "movements", "closes"):
             self.assertEqual(accepted[field], current[field])
 
@@ -1703,6 +1717,16 @@ class CommerceRuntimeTests(unittest.TestCase):
                 current,
                 "commerce.storefront_request.received",
                 tampered_quote,
+                storefront_evidence(request),
+            )
+
+        tampered_profile = deepcopy(next_state)
+        tampered_profile["storefrontRequests"][0]["customerProfile"]["phone"] = "09 999 999 999"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.storefront_request.received",
+                tampered_profile,
                 storefront_evidence(request),
             )
 

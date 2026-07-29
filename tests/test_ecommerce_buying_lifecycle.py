@@ -163,6 +163,78 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         for forbidden in ("chargeid", "paymentintent", "providersecret", "authorizationid"):
             self.assertNotIn(forbidden, serialized)
 
+    def test_customer_and_delivery_snapshots_are_versioned_digest_bound_and_handed_to_shop(self) -> None:
+        profile_input = {"name": "Ma Su", "phone": "09 123 456 789", "previous": None}
+        address_input = {
+            "line1": "12 Insein Road, Ward 3",
+            "township": "Hlaing",
+            "city": "Yangon",
+            "instructions": "Call at the gate",
+            "previous": None,
+        }
+        first = quote(
+            customer_profile_input=profile_input,
+            delivery_address_input=address_input,
+        )
+        self.assertEqual(first["customerProfile"]["revision"], 1)
+        self.assertEqual(first["customerProfile"]["name"], "Ma Su")
+        self.assertEqual(first["deliveryAddress"]["township"], "Hlaing")
+        self.assertTrue(str(first["customerProfile"]["profileDigest"]).startswith("sha256:"))
+        self.assertTrue(str(first["deliveryAddress"]["addressDigest"]).startswith("sha256:"))
+
+        customer_request = build_ecommerce_order_request(first)
+        state = record_ecommerce_order_request(
+            create_empty_ecommerce_lifecycle_state(SCOPE),
+            customer_request,
+            expected_head_digest="sha256:" + "0" * 64,
+        )
+        draft = prepare_ecommerce_shop_handoff(
+            customer_request,
+            current_catalog=current_catalog(),
+            confirmed_at="2026-07-26T10:10:00+06:30",
+        )
+        self.assertEqual(draft["customerProfile"], first["customerProfile"])
+        self.assertEqual(draft["deliveryAddress"], first["deliveryAddress"])
+        self.assertEqual(state["requests"][0]["deliveryAddress"], first["deliveryAddress"])
+
+        next_key = "ECI-12345678-1234-4ABC-8ABC-1234567890AC"
+        revised = quote(
+            idempotency_key=next_key,
+            customer_profile_input={**profile_input, "previous": first["customerProfile"]},
+            delivery_address_input={
+                **address_input,
+                "line1": "14 Insein Road, Ward 3",
+                "previous": first["deliveryAddress"],
+            },
+        )
+        self.assertEqual(revised["customerProfile"], first["customerProfile"])
+        self.assertEqual(revised["deliveryAddress"]["id"], first["deliveryAddress"]["id"])
+        self.assertEqual(revised["deliveryAddress"]["revision"], 2)
+        self.assertEqual(revised["deliveryAddress"]["previousDigest"], first["deliveryAddress"]["addressDigest"])
+
+        tampered = deepcopy(first)
+        tampered["customerProfile"]["phone"] = "09 999 999 999"
+        with self.assertRaisesRegex(EcommerceLifecycleValidationError, "digest"):
+            validate_ecommerce_checkout_quote(tampered)
+
+    def test_structured_delivery_identity_fails_closed_when_incomplete_or_inapplicable(self) -> None:
+        profile_input = {"name": "Ma Su", "phone": "09 123 456 789", "previous": None}
+        with self.assertRaises(EcommerceLifecycleValidationError):
+            quote(customer_profile_input=profile_input, delivery_address_input=None)
+        with self.assertRaises(EcommerceLifecycleValidationError):
+            quote(
+                fulfilment="pickup",
+                payment_adapter="pay_on_pickup",
+                customer_profile_input=profile_input,
+                delivery_address_input={
+                    "line1": "12 Insein Road",
+                    "township": "Hlaing",
+                    "city": "Yangon",
+                    "instructions": None,
+                    "previous": None,
+                },
+            )
+
     def test_pickup_boundary_is_zero_and_included(self) -> None:
         candidate = quote(
             fulfilment="pickup",

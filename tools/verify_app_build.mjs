@@ -10436,6 +10436,8 @@ async function verifyStorefrontRuntime() {
       fulfilment: 'delivery',
       paymentAdapter: 'kbzpay_manual',
       promotionCode: 'WELCOME',
+      customerProfile: { name: 'Ma Su', phone: '09 123 456', previous: null },
+      deliveryAddress: { line1: '12 Insein Road, Ward 3', township: 'Hlaing', city: 'Yangon', instructions: 'Call at the gate', previous: null },
       idempotencyKey: 'ECI-22345678-1234-4ABC-8ABC-1234567890AB',
       quotedAt: '2026-07-24T09:00:00.000Z',
       expiresAt: '2026-07-24T09:15:00.000Z',
@@ -10450,6 +10452,8 @@ async function verifyStorefrontRuntime() {
       fulfilment: 'delivery',
       paymentAdapter: 'kbzpay_manual',
       promotionCode: 'WELCOME',
+      customerProfile: { name: 'Ma Su', phone: '09 123 456', previous: null },
+      deliveryAddress: { line1: '12 Insein Road, Ward 3', township: 'Hlaing', city: 'Yangon', instructions: 'Call at the gate', previous: null },
       idempotencyKey: 'ECI-22345678-1234-4ABC-8ABC-1234567890AB',
       quotedAt: '2026-07-24T09:00:00.000Z',
       expiresAt: '2026-07-24T09:15:00.000Z',
@@ -10458,6 +10462,13 @@ async function verifyStorefrontRuntime() {
       && buyingQuote.lines.length === 2
       && buyingQuote.totalMmk === buyingQuote.lines.reduce((total, line) => total + line.lineTotalMmk, 0),
     'ecommerce_buying_quote_not_canonical_multi_line')
+    buyingAssert(buyingQuote.customerProfile?.name === 'Ma Su'
+      && buyingQuote.customerProfile?.phone === '09 123 456'
+      && buyingQuote.customerProfile?.revision === 1
+      && buyingQuote.deliveryAddress?.township === 'Hlaing'
+      && buyingQuote.deliveryAddress?.city === 'Yangon'
+      && buyingQuote.deliveryAddress?.revision === 1,
+    'ecommerce_buying_customer_or_delivery_snapshot_missing')
     buyingAssert(buyingQuote.promotion.status === 'pending_shop_review'
       && buyingQuote.promotion.amountMmk === 0
       && buyingQuote.tax.status === 'included'
@@ -10494,6 +10505,8 @@ async function verifyStorefrontRuntime() {
     buyingAssert(buyingRequest.schema === 'supermega.ecommerce.order_request.v2'
       && buyingRequest.scope === buyingScope
       && buyingRequest.id === 'ECR-22345678-1234-4ABC-8ABC-1234567890AB'
+      && buyingRequest.customerProfile?.profileDigest === buyingQuote.customerProfile?.profileDigest
+      && buyingRequest.deliveryAddress?.addressDigest === buyingQuote.deliveryAddress?.addressDigest
       && JSON.stringify(buyingRequest.lines) === JSON.stringify(buyingQuote.lines),
     'ecommerce_buying_request_lost_quote_or_scope')
     const managedRequestProof = {
@@ -10664,6 +10677,8 @@ async function verifyStorefrontRuntime() {
       confirmedAt: '2026-07-24T09:10:00.000Z',
     })
     buyingAssert(managedBuyingDraft.lines.length === 2
+      && managedBuyingDraft.customerProfile?.phone === '09 123 456'
+      && managedBuyingDraft.deliveryAddress?.line1 === '12 Insein Road, Ward 3'
       && managedBuyingDraft.operatingContext.operatingUnitLocationId === 'LOC-MAIN'
       && managedBuyingDraft.operatingContext.targetAuthority === 'commerce'
       && buyingModel.ecommerceShopDraftV2MatchesCatalog(managedBuyingDraft, catalog),
@@ -10700,6 +10715,8 @@ async function verifyStorefrontRuntime() {
     })
     buyingAssert(buyingDraft.schema === 'supermega.ecommerce.shop_draft.v3'
       && buyingDraft.lines.length === 2
+      && buyingDraft.customerProfile?.name === 'Ma Su'
+      && buyingDraft.deliveryAddress?.township === 'Hlaing'
       && buyingDraft.pricing.payment.status === 'not_authorized'
       && buyingDraft.operatingContext.organizationScope === buyingScope
       && buyingDraft.operatingContext.operatingUnitLocationId === 'LOC-MAIN'
@@ -10721,6 +10738,11 @@ async function verifyStorefrontRuntime() {
     let scopeTamperRejected = false
     try { buyingModel.validateEcommerceShopDraftV2(scopeTamper) } catch { scopeTamperRejected = true }
     buyingAssert(scopeTamperRejected, 'ecommerce_buying_shop_draft_scope_tamper_accepted')
+    const customerTamper = structuredClone(buyingRequest)
+    customerTamper.customerProfile.phone = '09 999 999 999'
+    let customerTamperRejected = false
+    try { await buyingModel.validateEcommerceOrderRequestV2(customerTamper) } catch { customerTamperRejected = true }
+    buyingAssert(customerTamperRejected, 'ecommerce_buying_customer_snapshot_tamper_accepted')
     let expiredBuyingRejected = false
     try {
       await buyingModel.prepareEcommerceShopDraftV2({

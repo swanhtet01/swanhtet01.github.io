@@ -19,6 +19,8 @@ from typing import Any
 
 ECOMMERCE_PIM_SCHEMA = "supermega.ecommerce.pim_projection.v1"
 ECOMMERCE_QUOTE_SCHEMA = "supermega.ecommerce.checkout_quote.v1"
+ECOMMERCE_CUSTOMER_PROFILE_SCHEMA = "supermega.ecommerce.customer_profile_snapshot.v1"
+ECOMMERCE_DELIVERY_ADDRESS_SCHEMA = "supermega.ecommerce.delivery_address_snapshot.v1"
 ECOMMERCE_REQUEST_SCHEMA = "supermega.ecommerce.order_request.v2"
 ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v3"
 ECOMMERCE_RETURN_INTENT_SCHEMA = "supermega.ecommerce.return_intent.v1"
@@ -32,6 +34,8 @@ _UUID = r"[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 _QUOTE_ID = re.compile(rf"^ECQ-{_UUID}$")
 _REQUEST_ID = re.compile(rf"^ECR-{_UUID}$")
 _CHECKOUT_KEY = re.compile(rf"^ECI-{_UUID}$")
+_CUSTOMER_ID = re.compile(rf"^CUS-{_UUID}$")
+_ADDRESS_ID = re.compile(rf"^ADR-{_UUID}$")
 _RETURN_ID = re.compile(rf"^ERR-{_UUID}$")
 _RETURN_KEY = re.compile(rf"^ERI-{_UUID}$")
 _ISO_TIMESTAMP = re.compile(
@@ -47,6 +51,7 @@ _PAYMENT_ADAPTERS = frozenset(
 )
 _FULFILMENT_METHODS = frozenset({"pickup", "delivery"})
 _RETURN_DISPOSITIONS = frozenset({"restock", "not_restocked"})
+_PHONE = re.compile(r"^\+?[0-9][0-9 ()-]{5,31}$")
 
 
 class EcommerceLifecycleValidationError(ValueError):
@@ -255,6 +260,119 @@ def validate_ecommerce_pim_projection(value: object) -> dict[str, Any]:
     return expected
 
 
+def _customer_phone(value: object, field: str) -> str:
+    phone = _text(value, field, maximum=32)
+    digit_count = sum(character.isdigit() for character in phone)
+    if _PHONE.fullmatch(phone) is None or not 6 <= digit_count <= 15:
+        raise _fail(f"{field} must be a usable phone number.")
+    return phone
+
+
+def validate_ecommerce_customer_profile(value: object) -> dict[str, Any]:
+    source = _object(
+        value,
+        "customer profile",
+        ("schema", "id", "revision", "name", "phone", "savedAt", "previousDigest", "profileDigest"),
+    )
+    profile_id = _text(source["id"], "customer profile.id", maximum=40)
+    if source["schema"] != ECOMMERCE_CUSTOMER_PROFILE_SCHEMA or _CUSTOMER_ID.fullmatch(profile_id) is None:
+        raise _fail("Customer profile identity is invalid.")
+    core = {
+        "schema": ECOMMERCE_CUSTOMER_PROFILE_SCHEMA,
+        "id": profile_id,
+        "revision": _integer(source["revision"], "customer profile.revision", minimum=1),
+        "name": _text(source["name"], "customer profile.name", maximum=80),
+        "phone": _customer_phone(source["phone"], "customer profile.phone"),
+        "savedAt": _timestamp(source["savedAt"], "customer profile.savedAt"),
+        "previousDigest": None if source["previousDigest"] is None else _digest(source["previousDigest"], "customer profile.previousDigest"),
+    }
+    profile_digest = _digest(source["profileDigest"], "customer profile.profileDigest")
+    if profile_digest != _canonical_digest(core):
+        raise _fail("Customer profile digest is invalid.")
+    return {**core, "profileDigest": profile_digest}
+
+
+def validate_ecommerce_delivery_address(value: object) -> dict[str, Any]:
+    source = _object(
+        value,
+        "delivery address",
+        (
+            "schema", "id", "revision", "line1", "township", "city", "instructions",
+            "savedAt", "previousDigest", "addressDigest",
+        ),
+    )
+    address_id = _text(source["id"], "delivery address.id", maximum=40)
+    if source["schema"] != ECOMMERCE_DELIVERY_ADDRESS_SCHEMA or _ADDRESS_ID.fullmatch(address_id) is None:
+        raise _fail("Delivery address identity is invalid.")
+    core = {
+        "schema": ECOMMERCE_DELIVERY_ADDRESS_SCHEMA,
+        "id": address_id,
+        "revision": _integer(source["revision"], "delivery address.revision", minimum=1),
+        "line1": _text(source["line1"], "delivery address.line1", maximum=120),
+        "township": _text(source["township"], "delivery address.township", maximum=80),
+        "city": _text(source["city"], "delivery address.city", maximum=80),
+        "instructions": _optional_text(source["instructions"], "delivery address.instructions", maximum=160),
+        "savedAt": _timestamp(source["savedAt"], "delivery address.savedAt"),
+        "previousDigest": None if source["previousDigest"] is None else _digest(source["previousDigest"], "delivery address.previousDigest"),
+    }
+    address_digest = _digest(source["addressDigest"], "delivery address.addressDigest")
+    if address_digest != _canonical_digest(core):
+        raise _fail("Delivery address digest is invalid.")
+    return {**core, "addressDigest": address_digest}
+
+
+def build_ecommerce_customer_profile(
+    *, name: str, phone: str, saved_at: str, idempotency_key: str,
+    previous: Mapping[str, object] | None = None,
+) -> dict[str, Any]:
+    key = _text(idempotency_key, "customer profile.idempotencyKey", maximum=40)
+    if _CHECKOUT_KEY.fullmatch(key) is None:
+        raise _fail("Customer profile checkout identity is invalid.")
+    prior = validate_ecommerce_customer_profile(previous) if previous is not None else None
+    canonical_name = _text(name, "customer profile.name", maximum=80)
+    canonical_phone = _customer_phone(phone, "customer profile.phone")
+    if prior and prior["name"] == canonical_name and prior["phone"] == canonical_phone:
+        return prior
+    core = {
+        "schema": ECOMMERCE_CUSTOMER_PROFILE_SCHEMA,
+        "id": prior["id"] if prior else f"CUS-{key[4:]}",
+        "revision": (prior["revision"] if prior else 0) + 1,
+        "name": canonical_name,
+        "phone": canonical_phone,
+        "savedAt": _timestamp(saved_at, "customer profile.savedAt"),
+        "previousDigest": prior["profileDigest"] if prior else None,
+    }
+    return validate_ecommerce_customer_profile({**core, "profileDigest": _canonical_digest(core)})
+
+
+def build_ecommerce_delivery_address(
+    *, line1: str, township: str, city: str, instructions: str | None,
+    saved_at: str, idempotency_key: str,
+    previous: Mapping[str, object] | None = None,
+) -> dict[str, Any]:
+    key = _text(idempotency_key, "delivery address.idempotencyKey", maximum=40)
+    if _CHECKOUT_KEY.fullmatch(key) is None:
+        raise _fail("Delivery address checkout identity is invalid.")
+    prior = validate_ecommerce_delivery_address(previous) if previous is not None else None
+    values = {
+        "line1": _text(line1, "delivery address.line1", maximum=120),
+        "township": _text(township, "delivery address.township", maximum=80),
+        "city": _text(city, "delivery address.city", maximum=80),
+        "instructions": _optional_text(instructions, "delivery address.instructions", maximum=160),
+    }
+    if prior and all(prior[key] == value for key, value in values.items()):
+        return prior
+    core = {
+        "schema": ECOMMERCE_DELIVERY_ADDRESS_SCHEMA,
+        "id": prior["id"] if prior else f"ADR-{key[4:]}",
+        "revision": (prior["revision"] if prior else 0) + 1,
+        **values,
+        "savedAt": _timestamp(saved_at, "delivery address.savedAt"),
+        "previousDigest": prior["addressDigest"] if prior else None,
+    }
+    return validate_ecommerce_delivery_address({**core, "addressDigest": _canonical_digest(core)})
+
+
 def _quote_line(value: object, field: str) -> dict[str, Any]:
     source = _object(
         value,
@@ -281,29 +399,17 @@ def _quote_line(value: object, field: str) -> dict[str, Any]:
 
 
 def _quote_core(value: object) -> dict[str, Any]:
+    base_fields = (
+        "schema", "scope", "quoteId", "idempotencyKey", "quotedAt", "expiresAt",
+        "sourcePreviewDigest", "pimDigest", "currency", "customerReference", "fulfilment",
+        "lines", "subtotalMmk", "promotion", "tax", "shipping", "payment", "totalMmk",
+    )
+    structured_fields = ("customerProfile", "deliveryAddress")
+    structured = isinstance(value, Mapping) and any(field in value for field in structured_fields)
     source = _object(
         value,
         "checkout quote",
-        (
-            "schema",
-            "scope",
-            "quoteId",
-            "idempotencyKey",
-            "quotedAt",
-            "expiresAt",
-            "sourcePreviewDigest",
-            "pimDigest",
-            "currency",
-            "customerReference",
-            "fulfilment",
-            "lines",
-            "subtotalMmk",
-            "promotion",
-            "tax",
-            "shipping",
-            "payment",
-            "totalMmk",
-        ),
+        (*base_fields, *structured_fields) if structured else base_fields,
     )
     if source["schema"] != ECOMMERCE_QUOTE_SCHEMA:
         raise _fail("Checkout quote schema is invalid.")
@@ -322,6 +428,20 @@ def _quote_core(value: object) -> dict[str, Any]:
     fulfilment = source["fulfilment"]
     if fulfilment not in _FULFILMENT_METHODS:
         raise _fail("Checkout fulfilment is unsupported.")
+    customer_profile = (
+        validate_ecommerce_customer_profile(source["customerProfile"])
+        if structured else None
+    )
+    delivery_address = (
+        None if source["deliveryAddress"] is None
+        else validate_ecommerce_delivery_address(source["deliveryAddress"])
+    ) if structured else None
+    if structured and (
+        _instant(customer_profile["savedAt"]) > _instant(quoted_at)
+        or delivery_address is not None and _instant(delivery_address["savedAt"]) > _instant(quoted_at)
+        or (fulfilment == "delivery") != (delivery_address is not None)
+    ):
+        raise _fail("Checkout customer and delivery identity are inconsistent.")
     lines = [
         _quote_line(candidate, f"checkout quote.lines[{index}]")
         for index, candidate in enumerate(
@@ -415,6 +535,10 @@ def _quote_core(value: object) -> dict[str, Any]:
         "customerReference": _text(
             source["customerReference"], "checkout quote.customerReference", maximum=80
         ),
+        **({
+            "customerProfile": customer_profile,
+            "deliveryAddress": delivery_address,
+        } if customer_profile is not None else {}),
         "fulfilment": fulfilment,
         "lines": lines,
         "subtotalMmk": subtotal,
@@ -442,6 +566,8 @@ def build_ecommerce_checkout_quote(
     idempotency_key: str,
     quoted_at: str,
     expires_at: str,
+    customer_profile_input: Mapping[str, object] | None = None,
+    delivery_address_input: Mapping[str, object] | None = None,
 ) -> dict[str, Any]:
     """Build one deterministic quote without financial or operational effects."""
 
@@ -491,6 +617,40 @@ def build_ecommerce_checkout_quote(
     subtotal = sum(line["lineTotalMmk"] for line in lines)
     if subtotal > _MAX_SAFE_INTEGER:
         raise _fail("Cart exceeds the supported whole-MMK range.")
+    customer_profile = None
+    delivery_address = None
+    if customer_profile_input is not None:
+        profile_input = _object(
+            customer_profile_input,
+            "customerProfileInput",
+            ("name", "phone", "previous"),
+        )
+        customer_profile = build_ecommerce_customer_profile(
+            name=profile_input["name"],
+            phone=profile_input["phone"],
+            saved_at=quoted_at,
+            idempotency_key=key,
+            previous=profile_input["previous"],
+        )
+        if fulfilment == "delivery":
+            address_input = _object(
+                delivery_address_input,
+                "deliveryAddressInput",
+                ("line1", "township", "city", "instructions", "previous"),
+            )
+            delivery_address = build_ecommerce_delivery_address(
+                line1=address_input["line1"],
+                township=address_input["township"],
+                city=address_input["city"],
+                instructions=address_input["instructions"],
+                saved_at=quoted_at,
+                idempotency_key=key,
+                previous=address_input["previous"],
+            )
+        elif delivery_address_input is not None:
+            raise _fail("Pickup checkout cannot retain a delivery address.")
+    elif delivery_address_input is not None:
+        raise _fail("Delivery address requires a customer profile.")
     quote: dict[str, Any] = {
         "schema": ECOMMERCE_QUOTE_SCHEMA,
         "scope": projection["scope"],
@@ -504,6 +664,10 @@ def build_ecommerce_checkout_quote(
         "customerReference": _text(
             customer_reference, "customerReference", maximum=80
         ),
+        **({
+            "customerProfile": customer_profile,
+            "deliveryAddress": delivery_address,
+        } if customer_profile is not None else {}),
         "fulfilment": fulfilment,
         "lines": lines,
         "subtotalMmk": subtotal,
@@ -540,30 +704,18 @@ def build_ecommerce_checkout_quote(
 
 
 def validate_ecommerce_checkout_quote(value: object) -> dict[str, Any]:
+    base_fields = (
+        "schema", "scope", "quoteId", "idempotencyKey", "quotedAt", "expiresAt",
+        "sourcePreviewDigest", "pimDigest", "currency", "customerReference", "fulfilment",
+        "lines", "subtotalMmk", "promotion", "tax", "shipping", "payment", "totalMmk",
+        "quoteDigest",
+    )
+    structured_fields = ("customerProfile", "deliveryAddress")
+    structured = isinstance(value, Mapping) and any(field in value for field in structured_fields)
     source = _object(
         value,
         "checkout quote",
-        (
-            "schema",
-            "scope",
-            "quoteId",
-            "idempotencyKey",
-            "quotedAt",
-            "expiresAt",
-            "sourcePreviewDigest",
-            "pimDigest",
-            "currency",
-            "customerReference",
-            "fulfilment",
-            "lines",
-            "subtotalMmk",
-            "promotion",
-            "tax",
-            "shipping",
-            "payment",
-            "totalMmk",
-            "quoteDigest",
-        ),
+        (*base_fields, *structured_fields) if structured else base_fields,
     )
     core = _quote_core({key: source[key] for key in source if key != "quoteDigest"})
     if _digest(source["quoteDigest"], "checkout quote.quoteDigest") != _canonical_digest(core):
@@ -605,6 +757,10 @@ def build_ecommerce_order_request(
         "sourceStorefrontRevision": revision,
         "sourceStorefrontActionId": action_id,
         "customerReference": quote["customerReference"],
+        **({
+            "customerProfile": _canonical_copy(quote["customerProfile"]),
+            "deliveryAddress": _canonical_copy(quote["deliveryAddress"]),
+        } if "customerProfile" in quote else {}),
         "fulfilment": quote["fulfilment"],
         "currency": "MMK",
         "lines": _canonical_copy(quote["lines"]),
@@ -615,27 +771,17 @@ def build_ecommerce_order_request(
 
 
 def validate_ecommerce_order_request(value: object) -> dict[str, Any]:
+    base_fields = (
+        "schema", "mode", "state", "scope", "id", "idempotencyKey", "createdAt",
+        "sourcePreviewDigest", "sourceStorefrontRevision", "sourceStorefrontActionId",
+        "customerReference", "fulfilment", "currency", "lines", "quote", "totalMmk",
+    )
+    structured_fields = ("customerProfile", "deliveryAddress")
+    structured = isinstance(value, Mapping) and any(field in value for field in structured_fields)
     source = _object(
         value,
         "Ecommerce request",
-        (
-            "schema",
-            "mode",
-            "state",
-            "scope",
-            "id",
-            "idempotencyKey",
-            "createdAt",
-            "sourcePreviewDigest",
-            "sourceStorefrontRevision",
-            "sourceStorefrontActionId",
-            "customerReference",
-            "fulfilment",
-            "currency",
-            "lines",
-            "quote",
-            "totalMmk",
-        ),
+        (*base_fields, *structured_fields) if structured else base_fields,
     )
     if (
         source["schema"] != ECOMMERCE_REQUEST_SCHEMA
@@ -665,6 +811,14 @@ def validate_ecommerce_order_request(value: object) -> dict[str, Any]:
     if revision is not None:
         revision = _integer(revision, "sourceStorefrontRevision", minimum=1)
         action_id = _token(action_id, "sourceStorefrontActionId")
+    customer_profile = (
+        validate_ecommerce_customer_profile(source["customerProfile"])
+        if structured else None
+    )
+    delivery_address = (
+        None if source["deliveryAddress"] is None
+        else validate_ecommerce_delivery_address(source["deliveryAddress"])
+    ) if structured else None
     request = {
         "schema": ECOMMERCE_REQUEST_SCHEMA,
         "mode": "browser-local-request",
@@ -681,6 +835,10 @@ def validate_ecommerce_order_request(value: object) -> dict[str, Any]:
         "customerReference": _text(
             source["customerReference"], "Ecommerce request.customerReference", maximum=80
         ),
+        **({
+            "customerProfile": customer_profile,
+            "deliveryAddress": delivery_address,
+        } if customer_profile is not None else {}),
         "fulfilment": source["fulfilment"],
         "currency": source["currency"],
         "lines": lines,
@@ -693,6 +851,8 @@ def validate_ecommerce_order_request(value: object) -> dict[str, Any]:
         or request["idempotencyKey"] != quote["idempotencyKey"]
         or request["sourcePreviewDigest"] != quote["sourcePreviewDigest"]
         or request["customerReference"] != quote["customerReference"]
+        or request.get("customerProfile") != quote.get("customerProfile")
+        or request.get("deliveryAddress") != quote.get("deliveryAddress")
         or request["fulfilment"] != quote["fulfilment"]
         or request["currency"] != quote["currency"]
         or request["lines"] != quote["lines"]
@@ -759,6 +919,10 @@ def prepare_ecommerce_shop_handoff(
         "createdAt": request["createdAt"],
         "confirmedAt": confirmed,
         "customerReference": request["customerReference"],
+        **({
+            "customerProfile": _canonical_copy(request["customerProfile"]),
+            "deliveryAddress": _canonical_copy(request["deliveryAddress"]),
+        } if "customerProfile" in request else {}),
         "fulfilment": request["fulfilment"],
         "currency": "MMK",
         "operatingContext": {

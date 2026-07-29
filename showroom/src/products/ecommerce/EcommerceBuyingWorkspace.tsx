@@ -89,7 +89,12 @@ export function EcommerceBuyingWorkspace({
     status: 'checking' | 'empty' | 'ready' | 'invalid' | 'unavailable'
     issue: string
   }>({ scope, status: 'checking', issue: '' })
-  const [customerReference, setCustomerReference] = useState('')
+  const [customerName, setCustomerName] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
+  const [addressLine1, setAddressLine1] = useState('')
+  const [addressTownship, setAddressTownship] = useState('')
+  const [addressCity, setAddressCity] = useState('Yangon')
+  const [deliveryInstructions, setDeliveryInstructions] = useState('')
   const [fulfilment, setFulfilment] = useState<EcommerceFulfilment>('pickup')
   const [paymentAdapter, setPaymentAdapter] = useState<EcommercePaymentAdapter>('pay_on_pickup')
   const [promotionCode, setPromotionCode] = useState('')
@@ -123,7 +128,12 @@ export function EcommerceBuyingWorkspace({
       setRecoveryRead({ scope, status: result.status, issue: result.error })
       setBuyingState(recoveredState)
       onCartChange([])
-      setCustomerReference('')
+      setCustomerName('')
+      setCustomerPhone('')
+      setAddressLine1('')
+      setAddressTownship('')
+      setAddressCity('Yangon')
+      setDeliveryInstructions('')
       setFulfilment('pickup')
       setPaymentAdapter('pay_on_pickup')
       setPromotionCode('')
@@ -135,7 +145,12 @@ export function EcommerceBuyingWorkspace({
       const latest = recoveredState.requests[0]
       if (!latest || latest.sourcePreviewDigest !== sourcePreviewDigest) return
       onCartChange(latest.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
-      setCustomerReference(latest.customerReference)
+      setCustomerName(latest.customerProfile?.name ?? latest.customerReference)
+      setCustomerPhone(latest.customerProfile?.phone ?? '')
+      setAddressLine1(latest.deliveryAddress?.line1 ?? '')
+      setAddressTownship(latest.deliveryAddress?.township ?? '')
+      setAddressCity(latest.deliveryAddress?.city ?? 'Yangon')
+      setDeliveryInstructions(latest.deliveryAddress?.instructions ?? '')
       setFulfilment(latest.fulfilment)
       setPaymentAdapter(latest.quote.payment.adapter)
       setPromotionCode(latest.quote.promotion.code ?? '')
@@ -200,9 +215,13 @@ export function EcommerceBuyingWorkspace({
     const localOnlyRequests = activeBuyingState.requests.filter((request) => !sharedRequestIds.has(request.id))
     return commerceStorefrontOrderTimeline(commerceState, [...sharedRequests, ...localOnlyRequests])
   }, [activeBuyingState.requests, commerceState])
-  const trackedCustomerReference = customerReference.trim() || latestRequest?.customerReference || ''
+  const customerReference = [customerName.trim(), customerPhone.trim()].filter(Boolean).join(' · ')
+  const trackedCustomerReference = customerReference || latestRequest?.customerReference || ''
   const customerOrderTimeline = combinedOrderTimeline.filter((entry) => (
-    trackedCustomerReference && entry.request.customerReference === trackedCustomerReference
+    trackedCustomerReference && (entry.request.schema === 'supermega.ecommerce.order_request.v2'
+      && entry.request.customerProfile?.phone
+      ? entry.request.customerProfile.phone === customerPhone.trim()
+      : entry.request.customerReference === trackedCustomerReference)
   ))
   const completedCustomerOrders = customerOrderTimeline.filter((entry) => entry.stage === 'completed' && entry.order?.completion)
   const returnDraftEntry = returnDraft
@@ -226,7 +245,14 @@ export function EcommerceBuyingWorkspace({
     && latestRequest.id === freshQuoteId
     && latestRequest.scope === scope
     && latestRequest.sourcePreviewDigest === sourcePreviewDigest
-    && latestRequest.customerReference === customerReference.trim()
+    && latestRequest.customerReference === customerReference
+    && (!latestRequest.customerProfile || latestRequest.customerProfile.name === customerName.trim())
+    && (!latestRequest.customerProfile || latestRequest.customerProfile.phone === customerPhone.trim())
+    && (latestRequest.fulfilment !== 'delivery' || Boolean(latestRequest.deliveryAddress
+      && latestRequest.deliveryAddress.line1 === addressLine1.trim()
+      && latestRequest.deliveryAddress.township === addressTownship.trim()
+      && latestRequest.deliveryAddress.city === addressCity.trim()
+      && (latestRequest.deliveryAddress.instructions ?? '') === deliveryInstructions.trim()))
     && latestRequest.fulfilment === fulfilment
     && latestRequest.quote.payment.adapter === paymentAdapter
     && (latestRequest.quote.promotion.code ?? '') === promotionCode.trim()
@@ -295,7 +321,12 @@ export function EcommerceBuyingWorkspace({
       return
     }
     onCartChange(nextCart)
-    setCustomerReference(entry.request.customerReference)
+    setCustomerName(entry.request.schema === 'supermega.ecommerce.order_request.v2' ? entry.request.customerProfile?.name ?? entry.request.customerReference : entry.request.customerReference)
+    setCustomerPhone(entry.request.schema === 'supermega.ecommerce.order_request.v2' ? entry.request.customerProfile?.phone ?? '' : '')
+    setAddressLine1(entry.request.schema === 'supermega.ecommerce.order_request.v2' ? entry.request.deliveryAddress?.line1 ?? '' : '')
+    setAddressTownship(entry.request.schema === 'supermega.ecommerce.order_request.v2' ? entry.request.deliveryAddress?.township ?? '' : '')
+    setAddressCity(entry.request.schema === 'supermega.ecommerce.order_request.v2' ? entry.request.deliveryAddress?.city ?? 'Yangon' : 'Yangon')
+    setDeliveryInstructions(entry.request.schema === 'supermega.ecommerce.order_request.v2' ? entry.request.deliveryAddress?.instructions ?? '' : '')
     changeFulfilment(entry.request.fulfilment)
     setPromotionCode('')
     setHandoffConfirmed(false)
@@ -393,7 +424,14 @@ export function EcommerceBuyingWorkspace({
         && retained.sourcePreviewDigest === sourcePreviewDigest
         && retained.sourceStorefrontRevision === (sourceStorefront?.revision ?? null)
         && retained.sourceStorefrontActionId === (sourceStorefront?.actionId ?? null)
-        && retained.customerReference === customerReference.trim()
+        && retained.customerReference === customerReference
+        && retained.customerProfile?.name === customerName.trim()
+        && retained.customerProfile.phone === customerPhone.trim()
+        && (retained.fulfilment !== 'delivery' || Boolean(retained.deliveryAddress
+          && retained.deliveryAddress.line1 === addressLine1.trim()
+          && retained.deliveryAddress.township === addressTownship.trim()
+          && retained.deliveryAddress.city === addressCity.trim()
+          && (retained.deliveryAddress.instructions ?? '') === deliveryInstructions.trim()))
         && retained.fulfilment === fulfilment
         && retained.quote.payment.adapter === paymentAdapter
         && (retained.quote.promotion.code ?? '') === promotionCode.trim()
@@ -416,6 +454,18 @@ export function EcommerceBuyingWorkspace({
         pim,
         cart,
         customerReference,
+        customerProfile: {
+          name: customerName,
+          phone: customerPhone,
+          previous: activeBuyingState.requests.find((request) => request.customerProfile?.phone === customerPhone.trim())?.customerProfile ?? null,
+        },
+        deliveryAddress: fulfilment === 'delivery' ? {
+          line1: addressLine1,
+          township: addressTownship,
+          city: addressCity,
+          instructions: deliveryInstructions.trim() || null,
+          previous: activeBuyingState.requests.find((request) => request.customerProfile?.phone === customerPhone.trim() && request.deliveryAddress)?.deliveryAddress ?? null,
+        } : null,
         fulfilment,
         paymentAdapter,
         promotionCode: promotionCode.trim() || null,
@@ -519,8 +569,12 @@ export function EcommerceBuyingWorkspace({
 
           <form onSubmit={(event) => void reviewOrder(event)}>
             <label>
-              <span>{fulfilment === 'delivery' ? 'Phone and delivery area' : 'Name and phone'}</span>
-              <input maxLength={80} onChange={(event) => { setCustomerReference(event.target.value); setHandoffConfirmed(false) }} placeholder={fulfilment === 'delivery' ? 'e.g. 09… · Hlaing' : 'e.g. Ma Su · 09…'} required value={customerReference} />
+              <span>Name</span>
+              <input autoComplete="name" maxLength={80} onChange={(event) => { setCustomerName(event.target.value); setHandoffConfirmed(false) }} placeholder="e.g. Ma Su" required value={customerName} />
+            </label>
+            <label>
+              <span>Phone</span>
+              <input autoComplete="tel" inputMode="tel" maxLength={32} onChange={(event) => { setCustomerPhone(event.target.value); setHandoffConfirmed(false) }} placeholder="e.g. 09 123 456 789" required value={customerPhone} />
             </label>
             <label>
               <span>Receive order</span>
@@ -529,6 +583,24 @@ export function EcommerceBuyingWorkspace({
                 <option value="delivery">Delivery · Shop confirms</option>
               </select>
             </label>
+            {fulfilment === 'delivery' ? <>
+              <label>
+                <span>Address</span>
+                <input autoComplete="street-address" maxLength={120} onChange={(event) => { setAddressLine1(event.target.value); setHandoffConfirmed(false) }} placeholder="Building, street, ward" required value={addressLine1} />
+              </label>
+              <label>
+                <span>Township</span>
+                <input autoComplete="address-level2" maxLength={80} onChange={(event) => { setAddressTownship(event.target.value); setHandoffConfirmed(false) }} placeholder="e.g. Hlaing" required value={addressTownship} />
+              </label>
+              <label>
+                <span>City</span>
+                <input autoComplete="address-level1" maxLength={80} onChange={(event) => { setAddressCity(event.target.value); setHandoffConfirmed(false) }} placeholder="e.g. Yangon" required value={addressCity} />
+              </label>
+              <label>
+                <span>Delivery note <small>optional</small></span>
+                <input maxLength={160} onChange={(event) => { setDeliveryInstructions(event.target.value); setHandoffConfirmed(false) }} placeholder="Landmark or safe handoff note" value={deliveryInstructions} />
+              </label>
+            </> : null}
             <label>
               <span>Payment</span>
               <select onChange={(event) => { setPaymentAdapter(event.target.value as EcommercePaymentAdapter); setHandoffConfirmed(false) }} value={paymentAdapter}>
@@ -554,6 +626,7 @@ export function EcommerceBuyingWorkspace({
               <b>{formatMmk(latestRequest.totalMmk)}</b>
               <div className="ecommerce-quote-boundaries">
                 <span><small>Receive order</small><b>{receiveOrderLabel(latestRequest.fulfilment)}</b></span>
+                {latestRequest.deliveryAddress ? <span><small>Deliver to</small><b>{latestRequest.deliveryAddress.township} · {latestRequest.deliveryAddress.city}</b></span> : null}
                 <span><small>Tax</small><b>Included in listed price</b></span>
                 <span><small>Payment</small><b>{paymentLabel(latestRequest.quote.payment.adapter)} · not charged</b></span>
               </div>

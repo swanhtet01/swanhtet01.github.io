@@ -2137,9 +2137,15 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
           setNotice('The Ecommerce request no longer matches the current Shop catalog. Nothing was prepared.')
           return
         }
+        const navigationCustomer = ecommerceNavigationDraft.schema === 'supermega.ecommerce.shop_draft.v3'
+          ? ecommerceNavigationDraft.customerProfile?.name ?? ecommerceNavigationDraft.customerReference
+          : ecommerceNavigationDraft.customerReference
+        const navigationAddress = ecommerceNavigationDraft.schema === 'supermega.ecommerce.shop_draft.v3'
+          ? ecommerceNavigationDraft.deliveryAddress
+          : null
         setPreparedChannelDraft(null)
         setPreparedEcommerceDraft(ecommerceNavigationDraft)
-        setCustomer(ecommerceNavigationDraft.customerReference)
+        setCustomer(navigationCustomer)
         setChannel('Ecommerce')
         const draftLines = ecommerceShopDraftLines(ecommerceNavigationDraft)
         setSku(draftLines[0].sku)
@@ -2147,7 +2153,9 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
         setExtraOrderLines(draftLines.slice(1).map((line) => ({ sku: line.sku, quantity: line.quantity })))
         setPayment(ecommerceShopDraftPayment(ecommerceNavigationDraft))
         setFulfilment(ecommerceNavigationDraft.fulfilment)
-        setFulfilmentReference(ecommerceNavigationDraft.sourceRequestId)
+        setFulfilmentReference(navigationAddress
+          ? `${navigationAddress.line1} · ${navigationAddress.township} · ${navigationAddress.city}${navigationAddress.instructions ? ` · ${navigationAddress.instructions}` : ''}`
+          : ecommerceNavigationDraft.sourceRequestId)
         setPromisedAt(defaultOrderPromiseInput())
         setOrderEntryMode('manual')
         setOrderDraftActive(true)
@@ -3000,14 +3008,16 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
         if (!firstLine) throw new Error('The managed Ecommerce request has no reviewed item.')
         setPreparedChannelDraft(null)
         setPreparedEcommerceDraft(draft)
-        setCustomer(draft.customerReference)
+        setCustomer(draft.customerProfile?.name ?? draft.customerReference)
         setChannel('Ecommerce')
         setSku(firstLine.sku)
         setQuantity(firstLine.quantity)
         setExtraOrderLines(remainingLines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
         setPayment('')
         setFulfilment(draft.fulfilment)
-        setFulfilmentReference(draft.sourceRequestId)
+        setFulfilmentReference(draft.deliveryAddress
+          ? `${draft.deliveryAddress.line1} · ${draft.deliveryAddress.township} · ${draft.deliveryAddress.city}${draft.deliveryAddress.instructions ? ` · ${draft.deliveryAddress.instructions}` : ''}`
+          : draft.sourceRequestId)
         setPromisedAt(defaultOrderPromiseInput())
         setOrderEntryMode('manual')
         setNotice(`${request.id} loaded from the authenticated inbox with ${draft.lines.length} ${draft.lines.length === 1 ? 'item' : 'items'}. Confirm the promise and payment, then use the separate Shop action gate.`)
@@ -3238,6 +3248,9 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
           ? 'KBZPay'
           : 'Cash'
       : ''
+    const ecommerceCustomer = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v3'
+      ? ecommerceDraft.customerProfile?.name ?? ecommerceDraft.customerReference
+      : ecommerceDraft?.customerReference ?? ''
     if (ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v3'
       && commerce.inventoryFoundation
       && !managedInventoryProjection?.locations.some((candidate) => candidate.id === ecommerceDraft.operatingContext.operatingUnitLocationId)) {
@@ -3245,7 +3258,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
       setNotice('The Shop operating location changed after Ecommerce review. Reopen the request; no order was prepared.')
       return
     }
-    if (ecommerceDraft && (customer.trim() !== ecommerceDraft.customerReference
+    if (ecommerceDraft && (customer.trim() !== ecommerceCustomer
       || channel !== 'Ecommerce'
       || fulfilment !== ecommerceDraft.fulfilment
       || Boolean(ecommercePayment && payment !== ecommercePayment)
@@ -4433,7 +4446,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
       {orderEntryMode === 'manual' ? <>
         <div className="order-entry-panel" data-mode="manual">
         {preparedEcommerceDraft ? <div className="channel-source-ready">
-          <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.schema === 'supermega.ecommerce.shop_draft.v3' ? `${preparedEcommerceDraft.operatingContext.operatingUnitLocationId} · governed handoff · ` : ''}{preparedEcommerceDraft.fulfilment} · price locked · no stock reserved</small></div>
+          <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.schema === 'supermega.ecommerce.shop_draft.v3' ? `${preparedEcommerceDraft.operatingContext.operatingUnitLocationId} · ${preparedEcommerceDraft.customerProfile?.phone ? `${preparedEcommerceDraft.customerProfile.phone} · ` : ''}${preparedEcommerceDraft.deliveryAddress ? `${preparedEcommerceDraft.deliveryAddress.township}, ${preparedEcommerceDraft.deliveryAddress.city} · ` : ''}governed handoff · ` : ''}{preparedEcommerceDraft.fulfilment} · price locked · no stock reserved</small></div>
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ channel: false }); setNotice('Ecommerce source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
         </div> : null}
         {preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? <div className="channel-source-ready" ref={preparedChannelRef} tabIndex={-1}>
