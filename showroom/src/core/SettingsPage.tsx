@@ -47,6 +47,7 @@ import {
 import {
   type ManagedEcommerceOrderQueueValidation,
   buildManagedEcommerceOrderQueueValidation,
+  createManagedApproval,
   currentManagedWorkspace,
   loadManagedBootstrap,
   managedTrialAuthConfigured,
@@ -128,6 +129,25 @@ function safePacketFilename(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'store'
 }
 
+function settingsCommandUuid() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16))
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const value = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`
+}
+
+function settingsFingerprint(value: unknown) {
+  const input = JSON.stringify(value)
+  let hash = 2166136261
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return `fnv1a:${(hash >>> 0).toString(16).padStart(8, '0')}`
+}
+
 function useSchedulerActivation() {
   const [schedulerActivation, setSchedulerActivation] = useState<SchedulerActivation | null>(null)
 
@@ -183,6 +203,7 @@ export function SettingsPage() {
   const [ecommerceOrderQueueReadinessPacket, setEcommerceOrderQueueReadinessPacket] = useState<EcommerceOrderQueueReadinessPacket | null>(null)
   const [ecommerceOrderQueueServerValidation, setEcommerceOrderQueueServerValidation] = useState<ManagedEcommerceOrderQueueValidation | null>(null)
   const [ecommerceOrderQueueServerBusy, setEcommerceOrderQueueServerBusy] = useState(false)
+  const [ecommerceOrderQueueApprovalBusy, setEcommerceOrderQueueApprovalBusy] = useState(false)
   const completion = pilotProgress(setup)
   const isPilotReady = pilotReady(setup)
   const workflowReady = Boolean(setup.workspace.trim() && setup.owner.trim() && setup.entryPoint.trim())
@@ -725,6 +746,80 @@ export function SettingsPage() {
     }
   }
 
+  async function requestManagedEcommerceOrderQueueApproval() {
+    if (!managedIdentity || !ecommerceOrderQueueApprovalPacket || !ecommerceOrderQueueServerValidation) {
+      setNotice('Run the managed queue check before requesting owner approval.')
+      return
+    }
+    setEcommerceOrderQueueApprovalBusy(true)
+    try {
+      const createdAt = new Date().toISOString()
+      const packet = {
+        contract: 'decision_packet.v1' as const,
+        subject: { kind: 'ecommerce_order_queue', id: ecommerceOrderQueueApprovalPacket.storeName, version: 1 as const },
+        decision: ecommerceOrderQueueApprovalPacket.ownerDecision,
+        claims: [
+          {
+            id: 'queue-validation-zero-write',
+            claimType: 'fact' as const,
+            statement: `Backend validation ${ecommerceOrderQueueApprovalPacket.validationContract} returned ${ecommerceOrderQueueApprovalPacket.validationStatus} with zero external writes.`,
+            sourceReference: ecommerceOrderQueueApprovalFilename,
+            capturedAt: createdAt,
+            status: 'verified' as const,
+            uncertainty: 'low' as const,
+            visibility: 'private' as const,
+            digest: settingsFingerprint(ecommerceOrderQueueServerValidation),
+          },
+          {
+            id: 'queue-row-counts',
+            claimType: 'fact' as const,
+            statement: `${ecommerceOrderQueueApprovalPacket.readyRows} of ${ecommerceOrderQueueApprovalPacket.rowCount} Ecommerce order rows are ready; ${ecommerceOrderQueueApprovalPacket.blockedRows} remain blocked.`,
+            sourceReference: ecommerceOrderQueueApprovalFilename,
+            capturedAt: createdAt,
+            status: 'verified' as const,
+            uncertainty: 'low' as const,
+            visibility: 'private' as const,
+          },
+          {
+            id: 'queue-write-boundary',
+            claimType: 'analysis' as const,
+            statement: `Approval may unlock only ${ecommerceOrderQueueApprovalPacket.requiredCapability}; ${ecommerceOrderQueueApprovalPacket.forbiddenUntilApproved.join(', ')} remain forbidden until a named owner decision exists.`,
+            sourceReference: ecommerceOrderQueueApprovalFilename,
+            capturedAt: createdAt,
+            status: 'observed' as const,
+            uncertainty: 'low' as const,
+            visibility: 'private' as const,
+          },
+        ],
+        baseline: 'Order queue import is blocked after zero-write validation.',
+        target: 'Named owner approves exactly one managed Shop queue import.',
+        result: `${ecommerceOrderQueueApprovalPacket.readyRows}/${ecommerceOrderQueueApprovalPacket.rowCount} rows ready for owner review.`,
+        acceptance: 'Support records owner approval before any idempotent managed Shop queue import runs.',
+        artifactReference: ecommerceOrderQueueApprovalFilename,
+      }
+      const approval = {
+        id: `APR-${settingsCommandUuid()}`.toUpperCase(),
+        commandId: settingsCommandUuid(),
+        createdAt,
+        title: `Approve Ecommerce queue import for ${ecommerceOrderQueueApprovalPacket.storeName}`,
+        requestedBy: managedIdentity.email,
+        requestedActorKind: 'human' as const,
+        packet,
+        packetFingerprint: settingsFingerprint(packet),
+        status: 'pending' as const,
+      }
+      const request = toManagedApprovalRequest(approval)
+      if (!request) throw new Error('The owner approval request packet is incomplete.')
+      const managedRecord = await createManagedApproval(request)
+      setApprovals((current) => mergeManagedApprovals(current, [managedRecord]))
+      setNotice('Managed owner approval request recorded. No Shop queue import, customer message, payment, delivery, stock move, or activation ran.')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Managed owner approval request failed. No Shop import ran.')
+    } finally {
+      setEcommerceOrderQueueApprovalBusy(false)
+    }
+  }
+
   async function resetDemoWorkspace() {
     setResetBusy(true)
     try {
@@ -789,6 +884,7 @@ export function SettingsPage() {
     await signOutManagedTrial()
     setManagedIdentity(null)
     setEcommerceOrderQueueServerValidation(null)
+    setEcommerceOrderQueueApprovalBusy(false)
     setApprovals((current) => current.filter((approval) => !approval.managed))
     setManagedNotice('Managed account disconnected.')
     setManagedBusy(false)
@@ -863,7 +959,7 @@ export function SettingsPage() {
                   <div className="context-quality-rows">{ecommerceOrderReviewPacketReview.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{label === 'Boundary' ? 'Review only; Shop queue still requires managed proof.' : 'Local order packet check'}</em></span>)}</div>
                   <div aria-label="Managed order queue check" className="context-quality-rows">{ecommerceOrderQueueManagedRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
                   <div aria-label="Order queue owner approval packet" className="context-quality-rows">{ecommerceOrderQueueApprovalRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
-                  <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceOrderReviewPacket} type="button">Load sample order packet</button><button className="core-button" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={reviewEcommerceOrderReviewPacket} type="button">Check order packet locally</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueReadinessPacket || ecommerceOrderQueueServerBusy} onClick={() => void runManagedEcommerceOrderQueueCheck()} type="button">{ecommerceOrderQueueServerBusy ? 'Checking managed queue...' : 'Run managed queue check'}</button><button className="core-button" disabled={!ecommerceOrderQueueReadinessPacket} onClick={downloadEcommerceOrderQueueReadinessPacket} type="button">Download queue packet</button>{ecommerceOrderQueueApprovalPacket ? <a className="core-button" download={ecommerceOrderQueueApprovalFilename} href={ecommerceOrderQueueApprovalHref}>Download approval packet</a> : <button className="core-button" disabled type="button">Download approval packet</button>}<button className="text-link" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={clearEcommerceOrderReviewPacketReview} type="button">Clear order packet</button></div>
+                  <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceOrderReviewPacket} type="button">Load sample order packet</button><button className="core-button" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={reviewEcommerceOrderReviewPacket} type="button">Check order packet locally</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueReadinessPacket || ecommerceOrderQueueServerBusy} onClick={() => void runManagedEcommerceOrderQueueCheck()} type="button">{ecommerceOrderQueueServerBusy ? 'Checking managed queue...' : 'Run managed queue check'}</button><button className="core-button" disabled={!ecommerceOrderQueueReadinessPacket} onClick={downloadEcommerceOrderQueueReadinessPacket} type="button">Download queue packet</button>{ecommerceOrderQueueApprovalPacket ? <a className="core-button" download={ecommerceOrderQueueApprovalFilename} href={ecommerceOrderQueueApprovalHref}>Download approval packet</a> : <button className="core-button" disabled type="button">Download approval packet</button>}<button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueApprovalPacket || ecommerceOrderQueueApprovalBusy} onClick={() => void requestManagedEcommerceOrderQueueApproval()} type="button">{ecommerceOrderQueueApprovalBusy ? 'Recording approval...' : 'Record owner approval request'}</button><button className="text-link" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={clearEcommerceOrderReviewPacketReview} type="button">Clear order packet</button></div>
                 </div>
                 <div aria-label="Ecommerce activation packet review" className="learning-plan-agent context-quality-panel">
                   <div><span className="core-eyebrow">Ecommerce activation packet</span><h3>Review before managed setup</h3><p>Paste the downloaded Ecommerce activation JSON. The browser validates schema, source, queue, and forbidden actions locally; no import, managed activation, Shop write, payment, delivery, stock, or customer action runs.</p></div>
