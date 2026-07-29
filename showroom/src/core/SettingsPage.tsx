@@ -45,6 +45,7 @@ import {
   type SetupProductId,
 } from './CoreApp'
 import {
+  type ManagedEcommerceOrderQueueApplyPreflight,
   type ManagedEcommerceOrderQueueImportPlan,
   type ManagedEcommerceOrderQueueValidation,
   buildManagedEcommerceOrderQueueValidation,
@@ -53,6 +54,7 @@ import {
   loadManagedBootstrap,
   managedTrialAuthConfigured,
   planManagedEcommerceOrderQueueImport,
+  preflightManagedEcommerceOrderQueueApply,
   signInManagedTrial,
   signOutManagedTrial,
   validateManagedEcommerceOrderQueue,
@@ -205,9 +207,11 @@ export function SettingsPage() {
   const [ecommerceOrderQueueReadinessPacket, setEcommerceOrderQueueReadinessPacket] = useState<EcommerceOrderQueueReadinessPacket | null>(null)
   const [ecommerceOrderQueueServerValidation, setEcommerceOrderQueueServerValidation] = useState<ManagedEcommerceOrderQueueValidation | null>(null)
   const [ecommerceOrderQueueImportPlan, setEcommerceOrderQueueImportPlan] = useState<ManagedEcommerceOrderQueueImportPlan | null>(null)
+  const [ecommerceOrderQueueApplyPreflight, setEcommerceOrderQueueApplyPreflight] = useState<ManagedEcommerceOrderQueueApplyPreflight | null>(null)
   const [ecommerceOrderQueueServerBusy, setEcommerceOrderQueueServerBusy] = useState(false)
   const [ecommerceOrderQueueApprovalBusy, setEcommerceOrderQueueApprovalBusy] = useState(false)
   const [ecommerceOrderQueueImportPlanBusy, setEcommerceOrderQueueImportPlanBusy] = useState(false)
+  const [ecommerceOrderQueueApplyPreflightBusy, setEcommerceOrderQueueApplyPreflightBusy] = useState(false)
   const completion = pilotProgress(setup)
   const isPilotReady = pilotReady(setup)
   const workflowReady = Boolean(setup.workspace.trim() && setup.owner.trim() && setup.entryPoint.trim())
@@ -508,6 +512,24 @@ export function SettingsPage() {
         ['Import plan', 'Waiting', 'Prepare after managed queue check and owner approval packet.'],
         ['Boundary', 'Locked', 'No Shop queue import command has been created.'],
       ]
+  const approvedEcommerceQueueApproval = ecommerceOrderQueueImportPlan
+    ? approvals.find((approval) => approval.managed
+      && approval.status === 'approved'
+      && approval.decidedActorKind === 'human'
+      && approval.packet.subject.kind === 'ecommerce_order_queue'
+      && approval.packet.subject.id === ecommerceOrderQueueImportPlan.store_name)
+    : undefined
+  const ecommerceOrderQueueApplyPreflightRows: Array<readonly [string, string, string]> = ecommerceOrderQueueApplyPreflight
+    ? [
+        ['Apply preflight', ecommerceOrderQueueApplyPreflight.status, 'Approved owner decision is bound to this plan.'],
+        ['Approval', ecommerceOrderQueueApplyPreflight.approval_id, `${ecommerceOrderQueueApplyPreflight.approved_by} at ${formatTime(ecommerceOrderQueueApplyPreflight.approved_at)}`],
+        ['Idempotency', ecommerceOrderQueueApplyPreflight.idempotency_key, 'Future apply must use this retry-safe key.'],
+        ['Boundary', ecommerceOrderQueueApplyPreflight.external_writes_performed ? 'Unsafe' : 'Zero write', 'Preflight only; no Shop queue import ran.'],
+      ]
+    : [
+        ['Apply preflight', approvedEcommerceQueueApproval ? 'Ready to check' : 'Waiting', approvedEcommerceQueueApproval ? 'Run preflight before any managed apply command.' : 'Approve the managed owner decision before apply preflight.'],
+        ['Boundary', 'Locked', 'No Shop queue import apply command has been created.'],
+      ]
 
   useEffect(() => {
     if (!requestedProduct || requestedProduct === setup.product) return
@@ -674,6 +696,7 @@ export function SettingsPage() {
       setEcommerceOrderQueueReadinessPacket(queueReadinessPacket)
       setEcommerceOrderQueueServerValidation(null)
       setEcommerceOrderQueueImportPlan(null)
+      setEcommerceOrderQueueApplyPreflight(null)
       setEcommerceOrderReviewPacketReview([
         ['Status', packet.review.status === 'ready' ? 'Ready packet' : 'Blocked packet'],
         ['Schema', packet.schema],
@@ -688,6 +711,7 @@ export function SettingsPage() {
       setEcommerceOrderQueueReadinessPacket(null)
       setEcommerceOrderQueueServerValidation(null)
       setEcommerceOrderQueueImportPlan(null)
+      setEcommerceOrderQueueApplyPreflight(null)
       setEcommerceOrderReviewPacketReview([
         ['Status', 'Rejected'],
         ['Reason', error instanceof Error ? error.message : 'Invalid order review packet'],
@@ -727,6 +751,7 @@ export function SettingsPage() {
     setEcommerceOrderQueueReadinessPacket(null)
     setEcommerceOrderQueueServerValidation(null)
     setEcommerceOrderQueueImportPlan(null)
+    setEcommerceOrderQueueApplyPreflight(null)
     setNotice('Sample Ecommerce order review packet loaded locally. Review it to test the order handoff gate.')
   }
 
@@ -735,6 +760,7 @@ export function SettingsPage() {
     setEcommerceOrderQueueReadinessPacket(null)
     setEcommerceOrderQueueServerValidation(null)
     setEcommerceOrderQueueImportPlan(null)
+    setEcommerceOrderQueueApplyPreflight(null)
     setEcommerceOrderReviewPacketReview([
       ['Status', 'Waiting for packet'],
       ['Boundary', 'Review only'],
@@ -758,10 +784,12 @@ export function SettingsPage() {
       const validation = await validateManagedEcommerceOrderQueue(ecommerceOrderQueueReadinessPacket, managedIdentity)
       setEcommerceOrderQueueServerValidation(validation)
       setEcommerceOrderQueueImportPlan(null)
+      setEcommerceOrderQueueApplyPreflight(null)
       setNotice('Managed Ecommerce order queue check passed with zero records written. Owner approval is still required before any Shop queue import.')
     } catch (error) {
       setEcommerceOrderQueueServerValidation(null)
       setEcommerceOrderQueueImportPlan(null)
+      setEcommerceOrderQueueApplyPreflight(null)
       setNotice(error instanceof Error ? error.message : 'Managed Ecommerce order queue check failed. No write ran.')
     } finally {
       setEcommerceOrderQueueServerBusy(false)
@@ -855,12 +883,40 @@ export function SettingsPage() {
         approvalPacket: ecommerceOrderQueueApprovalPacket,
       })
       setEcommerceOrderQueueImportPlan(plan)
+      setEcommerceOrderQueueApplyPreflight(null)
       setNotice('Managed Shop queue import plan prepared with zero external writes. Apply still requires a decided human approval record and managed write gates.')
     } catch (error) {
       setEcommerceOrderQueueImportPlan(null)
+      setEcommerceOrderQueueApplyPreflight(null)
       setNotice(error instanceof Error ? error.message : 'Managed Shop queue import plan failed. No Shop import ran.')
     } finally {
       setEcommerceOrderQueueImportPlanBusy(false)
+    }
+  }
+
+  async function runManagedEcommerceOrderQueueApplyPreflight() {
+    if (!managedIdentity || !ecommerceOrderQueueImportPlan || !approvedEcommerceQueueApproval?.decidedBy || !approvedEcommerceQueueApproval.decidedAt) {
+      setNotice('Approve the managed owner decision and prepare the import plan before apply preflight.')
+      return
+    }
+    setEcommerceOrderQueueApplyPreflightBusy(true)
+    try {
+      const preflight = await preflightManagedEcommerceOrderQueueApply({
+        identity: managedIdentity,
+        plan: ecommerceOrderQueueImportPlan,
+        approval: {
+          approval_id: approvedEcommerceQueueApproval.id,
+          decided_by: approvedEcommerceQueueApproval.decidedBy,
+          decided_at: approvedEcommerceQueueApproval.decidedAt,
+        },
+      })
+      setEcommerceOrderQueueApplyPreflight(preflight)
+      setNotice('Managed Ecommerce apply preflight passed with zero external writes. The future Shop queue apply must use the approved digest and idempotency key.')
+    } catch (error) {
+      setEcommerceOrderQueueApplyPreflight(null)
+      setNotice(error instanceof Error ? error.message : 'Managed Ecommerce apply preflight failed. No Shop import ran.')
+    } finally {
+      setEcommerceOrderQueueApplyPreflightBusy(false)
     }
   }
 
@@ -909,6 +965,7 @@ export function SettingsPage() {
       setManagedIdentity(identity)
       setEcommerceOrderQueueServerValidation(null)
       setEcommerceOrderQueueImportPlan(null)
+      setEcommerceOrderQueueApplyPreflight(null)
       setManagedPassword('')
       try {
         const bootstrap = await loadManagedBootstrap(identity)
@@ -930,8 +987,10 @@ export function SettingsPage() {
     setManagedIdentity(null)
     setEcommerceOrderQueueServerValidation(null)
     setEcommerceOrderQueueImportPlan(null)
+    setEcommerceOrderQueueApplyPreflight(null)
     setEcommerceOrderQueueApprovalBusy(false)
     setEcommerceOrderQueueImportPlanBusy(false)
+    setEcommerceOrderQueueApplyPreflightBusy(false)
     setApprovals((current) => current.filter((approval) => !approval.managed))
     setManagedNotice('Managed account disconnected.')
     setManagedBusy(false)
@@ -1007,7 +1066,8 @@ export function SettingsPage() {
                   <div aria-label="Managed order queue check" className="context-quality-rows">{ecommerceOrderQueueManagedRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
                   <div aria-label="Order queue owner approval packet" className="context-quality-rows">{ecommerceOrderQueueApprovalRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
                   <div aria-label="Shop queue import plan" className="context-quality-rows">{ecommerceOrderQueueImportPlanRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
-                  <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceOrderReviewPacket} type="button">Load sample order packet</button><button className="core-button" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={reviewEcommerceOrderReviewPacket} type="button">Check order packet locally</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueReadinessPacket || ecommerceOrderQueueServerBusy} onClick={() => void runManagedEcommerceOrderQueueCheck()} type="button">{ecommerceOrderQueueServerBusy ? 'Checking managed queue...' : 'Run managed queue check'}</button><button className="core-button" disabled={!ecommerceOrderQueueReadinessPacket} onClick={downloadEcommerceOrderQueueReadinessPacket} type="button">Download queue packet</button>{ecommerceOrderQueueApprovalPacket ? <a className="core-button" download={ecommerceOrderQueueApprovalFilename} href={ecommerceOrderQueueApprovalHref}>Download approval packet</a> : <button className="core-button" disabled type="button">Download approval packet</button>}<button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueApprovalPacket || ecommerceOrderQueueApprovalBusy} onClick={() => void requestManagedEcommerceOrderQueueApproval()} type="button">{ecommerceOrderQueueApprovalBusy ? 'Recording approval...' : 'Record owner approval request'}</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueApprovalPacket || ecommerceOrderQueueImportPlanBusy} onClick={() => void prepareManagedEcommerceOrderQueueImportPlan()} type="button">{ecommerceOrderQueueImportPlanBusy ? 'Preparing plan...' : 'Prepare import plan'}</button><button className="text-link" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={clearEcommerceOrderReviewPacketReview} type="button">Clear order packet</button></div>
+                  <div aria-label="Shop queue apply preflight" className="context-quality-rows">{ecommerceOrderQueueApplyPreflightRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+                  <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceOrderReviewPacket} type="button">Load sample order packet</button><button className="core-button" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={reviewEcommerceOrderReviewPacket} type="button">Check order packet locally</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueReadinessPacket || ecommerceOrderQueueServerBusy} onClick={() => void runManagedEcommerceOrderQueueCheck()} type="button">{ecommerceOrderQueueServerBusy ? 'Checking managed queue...' : 'Run managed queue check'}</button><button className="core-button" disabled={!ecommerceOrderQueueReadinessPacket} onClick={downloadEcommerceOrderQueueReadinessPacket} type="button">Download queue packet</button>{ecommerceOrderQueueApprovalPacket ? <a className="core-button" download={ecommerceOrderQueueApprovalFilename} href={ecommerceOrderQueueApprovalHref}>Download approval packet</a> : <button className="core-button" disabled type="button">Download approval packet</button>}<button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueApprovalPacket || ecommerceOrderQueueApprovalBusy} onClick={() => void requestManagedEcommerceOrderQueueApproval()} type="button">{ecommerceOrderQueueApprovalBusy ? 'Recording approval...' : 'Record owner approval request'}</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueApprovalPacket || ecommerceOrderQueueImportPlanBusy} onClick={() => void prepareManagedEcommerceOrderQueueImportPlan()} type="button">{ecommerceOrderQueueImportPlanBusy ? 'Preparing plan...' : 'Prepare import plan'}</button><button className="core-button" disabled={!managedIdentity || !ecommerceOrderQueueImportPlan || !approvedEcommerceQueueApproval || ecommerceOrderQueueApplyPreflightBusy} onClick={() => void runManagedEcommerceOrderQueueApplyPreflight()} type="button">{ecommerceOrderQueueApplyPreflightBusy ? 'Checking apply...' : 'Run apply preflight'}</button><button className="text-link" disabled={!ecommerceOrderReviewPacketText.trim()} onClick={clearEcommerceOrderReviewPacketReview} type="button">Clear order packet</button></div>
                 </div>
                 <div aria-label="Ecommerce activation packet review" className="learning-plan-agent context-quality-panel">
                   <div><span className="core-eyebrow">Ecommerce activation packet</span><h3>Review before managed setup</h3><p>Paste the downloaded Ecommerce activation JSON. The browser validates schema, source, queue, and forbidden actions locally; no import, managed activation, Shop write, payment, delivery, stock, or customer action runs.</p></div>

@@ -734,6 +734,69 @@ def _ecommerce_order_queue_import_plan(
     }
 
 
+def _ecommerce_order_queue_import_plan_packet(value: object) -> Mapping[str, Any]:
+    plan_keys = [
+        "contract",
+        "status",
+        "workspace_id",
+        "product",
+        "target_surface",
+        "target_adapter",
+        "required_capability",
+        "idempotency_key",
+        "plan_digest",
+        "store_name",
+        "row_count",
+        "ready_rows",
+        "blocked_rows",
+        "selected_skus",
+        "required_controls",
+        "required_approval_contract",
+        "external_writes_performed",
+        "forbidden_until_applied",
+        "apply_boundary",
+        "next_step",
+    ]
+    if not _is_record(value):
+        raise ValueError("Ecommerce Shop queue import plan must be an object.")
+    plan = value
+    selected_skus = plan.get("selected_skus")
+    if (
+        not _exact_keys(plan, plan_keys)
+        or plan.get("contract") != _ECOMMERCE_ORDER_QUEUE_IMPORT_PLAN_CONTRACT
+        or plan.get("status") not in {"ready_for_managed_apply", "blocked"}
+        or not _canonical_text(plan.get("workspace_id"), 128)
+        or plan.get("product") != "ecommerce"
+        or plan.get("target_surface") != "commerce"
+        or plan.get("target_adapter") != "shop_order_queue"
+        or plan.get("required_capability") != "commerce.write"
+        or not isinstance(plan.get("idempotency_key"), str)
+        or not str(plan["idempotency_key"]).startswith("ecommerce-shop-queue:")
+        or not isinstance(plan.get("plan_digest"), str)
+        or not str(plan["plan_digest"]).startswith("sha256:")
+        or len(str(plan["plan_digest"])) != 71
+        or not _canonical_text(plan.get("store_name"), 60)
+        or not _safe_non_negative_integer(plan.get("row_count"))
+        or not _safe_non_negative_integer(plan.get("ready_rows"))
+        or not _safe_non_negative_integer(plan.get("blocked_rows"))
+        or not isinstance(selected_skus, list)
+        or len(selected_skus) > 8
+        or not all(_canonical_text(item, 80) for item in selected_skus)
+        or not _same_string_array(plan.get("required_controls"), _ECOMMERCE_ORDER_QUEUE_REQUIRED_CONTROLS)
+        or plan.get("required_approval_contract") != _ECOMMERCE_ORDER_QUEUE_OWNER_APPROVAL_CONTRACT
+        or plan.get("external_writes_performed") is not False
+        or not _same_string_array(plan.get("forbidden_until_applied"), _ECOMMERCE_ORDER_QUEUE_FORBIDDEN_UNTIL_APPLIED)
+        or not _canonical_text(plan.get("apply_boundary"), 240)
+        or not _canonical_text(plan.get("next_step"), 180)
+    ):
+        raise ValueError("Ecommerce Shop queue import plan failed validation.")
+    if int(plan["ready_rows"]) + int(plan["blocked_rows"]) != int(plan["row_count"]):
+        raise ValueError("Ecommerce Shop queue import plan row counts do not reconcile.")
+    if plan["status"] == "ready_for_managed_apply" and int(plan["blocked_rows"]) != 0:
+        raise ValueError("Ready Ecommerce Shop queue import plans cannot include blocked rows.")
+    return plan
+
+
 def _ecommerce_order_queue_identity(request: Request, body: Mapping[str, Any]) -> tuple[str, str]:
     try:
         principal = resolve_trial_principal(request)
@@ -752,6 +815,67 @@ def _ecommerce_order_queue_identity(request: Request, body: Mapping[str, Any]) -
     if not _canonical_text(workspace_id, 128):
         raise HTTPException(status_code=400, detail="workspace_id is required.")
     return workspace_id, "isolated_demo_untrusted_workspace"
+
+
+def _ecommerce_order_queue_managed_principal(request: Request) -> TrialPrincipal:
+    try:
+        principal = resolve_trial_principal(request)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="trial_auth_unavailable") from exc
+    if principal is None:
+        raise HTTPException(status_code=401, detail="trial_auth_required")
+    return principal.normalized()
+
+
+def _ecommerce_order_queue_apply_preflight(
+    *,
+    plan: Mapping[str, Any],
+    approval_id: str,
+    approval_records: list[Any],
+    workspace_id: str,
+) -> dict[str, Any]:
+    if plan["workspace_id"] != workspace_id:
+        raise ValueError("Ecommerce Shop queue import plan workspace does not match trusted identity.")
+    if plan["status"] != "ready_for_managed_apply":
+        raise ValueError("Ecommerce Shop queue import plan is not ready for managed apply.")
+    approval = next((record for record in approval_records if record.approval_id == approval_id), None)
+    if approval is None:
+        raise ValueError("Approved Ecommerce queue owner decision was not found.")
+    proposal = approval.proposal
+    subject = proposal.get("subject") if isinstance(proposal, dict) else None
+    claims = proposal.get("claims") if isinstance(proposal, dict) else None
+    claim_sources = [
+        claim.get("source_reference")
+        for claim in claims
+        if isinstance(claim, dict) and isinstance(claim.get("source_reference"), str)
+    ] if isinstance(claims, list) else []
+    if (
+        approval.status != "approved"
+        or approval.decided_actor_kind != "human"
+        or not approval.decided_by
+        or not approval.decision_note
+        or not isinstance(subject, dict)
+        or subject.get("kind") != "ecommerce_order_queue"
+        or subject.get("id") != plan["store_name"]
+        or plan["required_approval_contract"] != _ECOMMERCE_ORDER_QUEUE_OWNER_APPROVAL_CONTRACT
+        or not any("order-approval" in source for source in claim_sources)
+    ):
+        raise ValueError("Ecommerce queue import requires a matching approved human owner decision.")
+    return {
+        "contract": "supermega.ecommerce.shop_queue_apply_preflight.v1",
+        "status": "ready_for_idempotent_apply",
+        "workspace_id": workspace_id,
+        "approval_id": approval.approval_id,
+        "approved_by": approval.decided_by,
+        "approved_at": approval.decided_at,
+        "plan_digest": plan["plan_digest"],
+        "idempotency_key": plan["idempotency_key"],
+        "required_capability": "commerce.write",
+        "target_adapter": "shop_order_queue",
+        "external_writes_performed": False,
+        "apply_boundary": "Preflight only. The next command must be a human-authenticated, idempotent commerce.write apply using this plan digest.",
+        "next_step": "Submit exactly one managed apply command with this digest, approval id, and idempotency key after final operator review.",
+    }
 
 
 def create_app() -> FastAPI:
@@ -935,6 +1059,44 @@ def create_app() -> FastAPI:
             "status": "ready",
             "plan": plan,
             "identity_authority": identity_authority,
+            "external_writes_performed": False,
+            "secret_values_exposed": False,
+        }
+
+    @app.post("/api/trial/v1/ecommerce/order-queue/apply-preflight")
+    async def preflight_ecommerce_order_queue_apply(request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="Request body must be JSON.") from exc
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="Request body must be an object.")
+        principal = _ecommerce_order_queue_managed_principal(request)
+        readiness = store.readiness(principal)
+        if not readiness.write_ready:
+            raise HTTPException(status_code=503, detail={"code": "trial_not_ready", "blockers": list(readiness.blockers)})
+        if "commerce.write" not in readiness.capabilities:
+            raise HTTPException(status_code=403, detail={"code": "trial_capability_required", "required_capability": "commerce.write"})
+        approval_id = _text(body.get("approval_id"))
+        if not _IDENTIFIER.fullmatch(approval_id):
+            raise HTTPException(status_code=400, detail="approval_id is required.")
+        if not _is_record(body.get("plan")):
+            raise HTTPException(status_code=400, detail="plan is required.")
+        try:
+            plan = _ecommerce_order_queue_import_plan_packet(body["plan"])
+            approvals = store.list_approvals(principal, limit=100)
+            preflight = _ecommerce_order_queue_apply_preflight(
+                plan=plan,
+                approval_id=approval_id,
+                approval_records=approvals,
+                workspace_id=principal.workspace_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {
+            "status": "ready",
+            "preflight": preflight,
+            "identity_authority": "trusted_managed_identity",
             "external_writes_performed": False,
             "secret_values_exposed": False,
         }

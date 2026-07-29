@@ -714,9 +714,11 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !settingsPageSource.includes('const [ecommerceOrderQueueReadinessPacket, setEcommerceOrderQueueReadinessPacket] = useState')
   || !settingsPageSource.includes('const [ecommerceOrderQueueServerValidation, setEcommerceOrderQueueServerValidation] = useState')
   || !settingsPageSource.includes('const [ecommerceOrderQueueImportPlan, setEcommerceOrderQueueImportPlan] = useState')
+  || !settingsPageSource.includes('const [ecommerceOrderQueueApplyPreflight, setEcommerceOrderQueueApplyPreflight] = useState')
   || !settingsPageSource.includes('const [ecommerceOrderQueueServerBusy, setEcommerceOrderQueueServerBusy] = useState')
   || !settingsPageSource.includes('const [ecommerceOrderQueueApprovalBusy, setEcommerceOrderQueueApprovalBusy] = useState')
   || !settingsPageSource.includes('const [ecommerceOrderQueueImportPlanBusy, setEcommerceOrderQueueImportPlanBusy] = useState')
+  || !settingsPageSource.includes('const [ecommerceOrderQueueApplyPreflightBusy, setEcommerceOrderQueueApplyPreflightBusy] = useState')
   || !settingsPageSource.includes('const ecommerceOrderQueueReadinessFilename =')
   || !settingsPageSource.includes('const ecommerceOrderQueueManagedValidation =')
   || !settingsPageSource.includes('const ecommerceOrderQueueManagedRows')
@@ -727,19 +729,27 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !settingsPageSource.includes('forbiddenUntilApproved: ecommerceOrderQueueServerValidation.forbidden_until_applied')
   || !settingsPageSource.includes('const ecommerceOrderQueueApprovalRows')
   || !settingsPageSource.includes('const ecommerceOrderQueueImportPlanRows')
+  || !settingsPageSource.includes('const ecommerceOrderQueueApplyPreflightRows')
   || !settingsPageSource.includes('aria-label="Order queue owner approval packet"')
   || !settingsPageSource.includes('aria-label="Shop queue import plan"')
+  || !settingsPageSource.includes('aria-label="Shop queue apply preflight"')
   || !settingsPageSource.includes('Download approval packet')
   || !settingsPageSource.includes('Prepare import plan')
+  || !settingsPageSource.includes('Run apply preflight')
+  || !settingsPageSource.includes('No Shop queue import apply command has been created.')
   || !settingsPageSource.includes('Run managed queue check before preparing owner approval.')
   || !settingsPageSource.includes('Approval may unlock only one managed Shop queue import.')
   || !settingsPageSource.includes('Retry-safe key for the future managed apply command.')
+  || !settingsPageSource.includes('Preflight only; no Shop queue import ran.')
   || !settingsPageSource.includes('async function runManagedEcommerceOrderQueueCheck()')
   || !settingsPageSource.includes('async function requestManagedEcommerceOrderQueueApproval()')
   || !settingsPageSource.includes('async function prepareManagedEcommerceOrderQueueImportPlan()')
+  || !settingsPageSource.includes('async function runManagedEcommerceOrderQueueApplyPreflight()')
   || !settingsPageSource.includes('createManagedApproval(request)')
   || !settingsPageSource.includes('Managed Shop queue import plan prepared with zero external writes. Apply still requires a decided human approval record and managed write gates.')
   || !settingsPageSource.includes('Managed Shop queue import plan failed. No Shop import ran.')
+  || !settingsPageSource.includes('Managed Ecommerce apply preflight passed with zero external writes. The future Shop queue apply must use the approved digest and idempotency key.')
+  || !settingsPageSource.includes('Managed Ecommerce apply preflight failed. No Shop import ran.')
   || !settingsPageSource.includes('Record owner approval request')
   || !settingsPageSource.includes('Managed owner approval request recorded. No Shop queue import, customer message, payment, delivery, stock move, or activation ran.')
   || !settingsPageSource.includes('Managed owner approval request failed. No Shop import ran.')
@@ -946,24 +956,33 @@ if (!serviceRuntimeSource.includes('def _activation_steps(')
   || !serviceRuntimeSource.includes('sum(1 for step in activation_steps if step["ready"])')) fail('managed_activation_health_steps_missing')
 if (!serviceRuntimeSource.includes('@app.post("/api/trial/v1/ecommerce/order-queue/validate")')
   || !serviceRuntimeSource.includes('@app.post("/api/trial/v1/ecommerce/order-queue/import-plan")')
+  || !serviceRuntimeSource.includes('@app.post("/api/trial/v1/ecommerce/order-queue/apply-preflight")')
   || !serviceRuntimeSource.includes('def _ecommerce_order_queue_packet(')
   || !serviceRuntimeSource.includes('def _ecommerce_order_queue_validation(')
   || !serviceRuntimeSource.includes('def _ecommerce_order_queue_owner_approval_packet(')
   || !serviceRuntimeSource.includes('def _ecommerce_order_queue_import_plan(')
+  || !serviceRuntimeSource.includes('def _ecommerce_order_queue_import_plan_packet(')
+  || !serviceRuntimeSource.includes('def _ecommerce_order_queue_managed_principal(')
+  || !serviceRuntimeSource.includes('def _ecommerce_order_queue_apply_preflight(')
   || !serviceRuntimeSource.includes('_ECOMMERCE_ORDER_QUEUE_VALIDATION_CONTRACT = "supermega.ecommerce.order_queue_readiness_validation.v1"')
   || !serviceRuntimeSource.includes('_ECOMMERCE_ORDER_QUEUE_OWNER_APPROVAL_CONTRACT = "supermega.ecommerce.order_queue_owner_approval.v1"')
   || !serviceRuntimeSource.includes('_ECOMMERCE_ORDER_QUEUE_IMPORT_PLAN_CONTRACT = "supermega.ecommerce.shop_queue_import_plan.v1"')
+  || !serviceRuntimeSource.includes('"contract": "supermega.ecommerce.shop_queue_apply_preflight.v1"')
   || !serviceRuntimeSource.includes('_ECOMMERCE_ORDER_QUEUE_READINESS_PACKET_SCHEMA = "supermega.ecommerce.order_queue_readiness.v1"')
   || !serviceRuntimeSource.includes('_ECOMMERCE_ORDER_IMPORT_REVIEW_PACKET_SCHEMA = "supermega.ecommerce.order_import_review_packet.v1"')
   || !serviceRuntimeSource.includes('"target_adapter": "shop_order_queue"')
   || !serviceRuntimeSource.includes('"idempotency_key": f"ecommerce-shop-queue:{digest[:24]}"')
+  || !serviceRuntimeSource.includes('"status": "ready_for_idempotent_apply"')
   || !serviceRuntimeSource.includes('"external_writes_performed": False')
   || !serviceRuntimeSource.includes('def _ecommerce_order_queue_identity(')
   || !serviceRuntimeSource.includes('return workspace_id, "trusted_managed_identity"')
   || !serviceRuntimeSource.includes('return workspace_id, "isolated_demo_untrusted_workspace"')
   || !serviceRuntimeSource.includes('raise HTTPException(status_code=401, detail="trial_auth_required")')
+  || !serviceRuntimeSource.includes('"identity_authority": "trusted_managed_identity"')
   || !serviceRuntimeSource.includes('"identity_authority": identity_authority')
   || !serviceRuntimeSource.includes('"required_capability": "commerce.write"')
+  || !serviceRuntimeSource.includes('store.list_approvals(principal, limit=100)')
+  || !serviceRuntimeSource.includes('decided_actor_kind')
   || !serviceRuntimeSource.includes('"external_writes_performed": False')
   || !serviceRuntimeSource.includes('"secret_values_exposed": False')
   || !serviceRuntimeSource.includes('"production_queue_write"')
@@ -971,9 +990,13 @@ if (!serviceRuntimeSource.includes('@app.post("/api/trial/v1/ecommerce/order-que
   || !serviceRuntimeSource.includes('raise HTTPException(status_code=422')
   || !localDevSource.includes('/api/trial/v1/ecommerce/order-queue/validate')
   || !localDevSource.includes('/api/trial/v1/ecommerce/order-queue/import-plan')
+  || !localDevSource.includes('/api/trial/v1/ecommerce/order-queue/apply-preflight')
   || !localDevSource.includes("payload.identity_authority === 'isolated_demo_untrusted_workspace'")
   || !localDevSource.includes('tamperedOrderQueueImportPlan.response.status === 422')
-  || !localDevSource.includes('tamperRejected === true')) fail('ecommerce_order_queue_api_contract_missing')
+  || !localDevSource.includes('orderQueueApplyPreflightUnauthorized.response.status === 401')
+  || !localDevSource.includes('applyPreflightAuthRequired: orderQueueApplyPreflightUnauthorized.response.status === 401')
+  || !localDevSource.includes('report.ecommerceOrderQueueValidation?.tamperRejected === true')
+  || !localDevSource.includes('report.ecommerceOrderQueueImportPlan?.tamperRejected === true')) fail('ecommerce_order_queue_api_contract_missing')
 if (!coreSource.includes('const plantRows = [')
   || !coreSource.includes("['Jobs', `${activeJobs.length} active`]")
   || !coreSource.includes("['Quality', `${heldJobs.length} held`]")
@@ -2702,9 +2725,16 @@ if (!managedTrialSource.includes('export async function validateManagedClientImp
   || !managedTrialSource.includes('export function assertManagedEcommerceOrderQueueImportPlan')
   || !managedTrialSource.includes('export async function planManagedEcommerceOrderQueueImport')
   || !managedTrialSource.includes("'/api/trial/v1/ecommerce/order-queue/import-plan'")
+  || !managedTrialSource.includes('export type ManagedEcommerceOrderQueueApplyPreflight = {')
+  || !managedTrialSource.includes("contract: 'supermega.ecommerce.shop_queue_apply_preflight.v1'")
+  || !managedTrialSource.includes('export function assertManagedEcommerceOrderQueueApplyPreflight')
+  || !managedTrialSource.includes('export async function preflightManagedEcommerceOrderQueueApply')
+  || !managedTrialSource.includes("'/api/trial/v1/ecommerce/order-queue/apply-preflight'")
+  || !managedTrialSource.includes("status: 'ready_for_idempotent_apply'")
   || !managedTrialSource.includes("target_adapter: 'shop_order_queue'")
   || !managedTrialSource.includes("response.identity_authority !== 'trusted_managed_identity'")
   || !managedTrialSource.includes("code: 'managed_ecommerce_order_queue_identity_untrusted'")
+  || !managedTrialSource.includes("code: 'managed_ecommerce_order_queue_apply_preflight_invalid'")
   || !managedTrialSource.includes('export function buildManagedEcommerceOrderQueueValidation')
   || !managedTrialSource.includes('export function assertManagedEcommerceOrderQueueValidation')
   || !managedTrialSource.includes("'production_queue_write'")
@@ -4670,6 +4700,50 @@ async function verifyManagedClientImportRuntime() {
       orderQueueApprovalPacket,
       identity,
     ) === orderQueueImportPlan, 'managed_ecommerce_order_queue_import_plan_rejected')
+    const orderQueueApprovalRecord = {
+      approval_id: 'approval-queue-001',
+      decided_by: 'OP-IMPORT',
+      decided_at: '2026-07-29T01:04:00.000Z',
+    }
+    const orderQueueApplyPreflight = {
+      contract: 'supermega.ecommerce.shop_queue_apply_preflight.v1',
+      status: 'ready_for_idempotent_apply',
+      workspace_id: identity.workspaceId,
+      approval_id: orderQueueApprovalRecord.approval_id,
+      approved_by: orderQueueApprovalRecord.decided_by,
+      approved_at: orderQueueApprovalRecord.decided_at,
+      plan_digest: orderQueueImportPlan.plan_digest,
+      idempotency_key: orderQueueImportPlan.idempotency_key,
+      required_capability: 'commerce.write',
+      target_adapter: 'shop_order_queue',
+      external_writes_performed: false,
+      apply_boundary: 'Preflight only. The apply command must re-check the plan digest, idempotency key, managed write readiness, audit logging, and owner approval before writing.',
+      next_step: 'Support may create the one-use apply command from this approved plan. Do not run from browser local mode.',
+    }
+    assert(managedTrial.assertManagedEcommerceOrderQueueApplyPreflight(
+      { preflight: orderQueueApplyPreflight, identity_authority: 'trusted_managed_identity' },
+      orderQueueImportPlan,
+      orderQueueApprovalRecord,
+      identity,
+    ) === orderQueueApplyPreflight, 'managed_ecommerce_order_queue_apply_preflight_rejected')
+    rejects(
+      () => managedTrial.assertManagedEcommerceOrderQueueApplyPreflight(
+        { preflight: { ...orderQueueApplyPreflight, external_writes_performed: true }, identity_authority: 'trusted_managed_identity' },
+        orderQueueImportPlan,
+        orderQueueApprovalRecord,
+        identity,
+      ),
+      'managed_ecommerce_order_queue_apply_preflight_write_tamper_accepted',
+    )
+    rejects(
+      () => managedTrial.assertManagedEcommerceOrderQueueApplyPreflight(
+        { preflight: orderQueueApplyPreflight, identity_authority: 'isolated_demo_untrusted_workspace' },
+        orderQueueImportPlan,
+        orderQueueApprovalRecord,
+        identity,
+      ),
+      'managed_ecommerce_order_queue_apply_preflight_untrusted_identity_accepted',
+    )
     rejects(
       () => managedTrial.assertManagedEcommerceOrderQueueImportPlan(
         { plan: { ...orderQueueImportPlan, external_writes_performed: true }, identity_authority: 'trusted_managed_identity' },
@@ -4723,7 +4797,7 @@ async function verifyManagedClientImportRuntime() {
       ),
       'managed_ecommerce_order_queue_import_plan_untrusted_identity_accepted',
     )
-    managedClientImportRuntimeChecks += 3
+    managedClientImportRuntimeChecks += 6
     assert(await managedTrial.managedClientImportPackageDigest(staged) === packageDigest, 'managed_client_import_package_digest_not_deterministic')
     assert(await managedTrial.managedClientImportPackageDigest({ ...staged, owner: 'Different owner' }) !== packageDigest, 'managed_client_import_context_not_digest_bound')
 

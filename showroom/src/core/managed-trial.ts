@@ -261,6 +261,22 @@ export type ManagedEcommerceOrderQueueImportPlan = {
   next_step: string
 }
 
+export type ManagedEcommerceOrderQueueApplyPreflight = {
+  contract: 'supermega.ecommerce.shop_queue_apply_preflight.v1'
+  status: 'ready_for_idempotent_apply'
+  workspace_id: string
+  approval_id: string
+  approved_by: string
+  approved_at: string
+  plan_digest: string
+  idempotency_key: string
+  required_capability: 'commerce.write'
+  target_adapter: 'shop_order_queue'
+  external_writes_performed: false
+  apply_boundary: string
+  next_step: string
+}
+
 type ManagedApprovalRequest = {
   command_id: string
   title: string
@@ -597,6 +613,44 @@ export function assertManagedEcommerceOrderQueueImportPlan(
     })
   }
   return plan as unknown as ManagedEcommerceOrderQueueImportPlan
+}
+
+export function assertManagedEcommerceOrderQueueApplyPreflight(
+  response: unknown,
+  plan: ManagedEcommerceOrderQueueImportPlan,
+  approval: { approval_id: string; decided_by: string; decided_at: string },
+  expectedIdentity: ManagedIdentity,
+): ManagedEcommerceOrderQueueApplyPreflight {
+  if (!isRecord(response) || !isRecord(response.preflight)) {
+    throw new ManagedTrialError('The managed workspace returned an invalid Ecommerce apply preflight.', {
+      code: 'managed_ecommerce_order_queue_apply_preflight_invalid',
+    })
+  }
+  if (response.identity_authority !== 'trusted_managed_identity') {
+    throw new ManagedTrialError('The managed Ecommerce apply preflight was not bound to trusted workspace identity.', {
+      code: 'managed_ecommerce_order_queue_identity_untrusted',
+    })
+  }
+  const preflight = response.preflight as Record<string, unknown>
+  if (preflight.contract !== 'supermega.ecommerce.shop_queue_apply_preflight.v1'
+    || preflight.status !== 'ready_for_idempotent_apply'
+    || preflight.workspace_id !== expectedIdentity.workspaceId
+    || preflight.approval_id !== approval.approval_id
+    || preflight.approved_by !== approval.decided_by
+    || preflight.approved_at !== approval.decided_at
+    || preflight.plan_digest !== plan.plan_digest
+    || preflight.idempotency_key !== plan.idempotency_key
+    || preflight.required_capability !== 'commerce.write'
+    || preflight.target_adapter !== 'shop_order_queue'
+    || preflight.external_writes_performed !== false
+    || typeof preflight.apply_boundary !== 'string'
+    || !preflight.apply_boundary.includes('Preflight only')
+    || typeof preflight.next_step !== 'string') {
+    throw new ManagedTrialError('The managed Ecommerce apply preflight does not match the approved import plan.', {
+      code: 'managed_ecommerce_order_queue_apply_preflight_invalid',
+    })
+  }
+  return preflight as unknown as ManagedEcommerceOrderQueueApplyPreflight
 }
 
 async function sha256Text(value: string) {
@@ -1376,6 +1430,26 @@ export async function planManagedEcommerceOrderQueueImport(request: {
     request.identity,
   )
   return assertManagedEcommerceOrderQueueImportPlan(response, request.packet, request.approvalPacket, request.identity)
+}
+
+export async function preflightManagedEcommerceOrderQueueApply(request: {
+  approval: { approval_id: string; decided_by: string; decided_at: string }
+  identity: ManagedIdentity
+  plan: ManagedEcommerceOrderQueueImportPlan
+}) {
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/ecommerce/order-queue/apply-preflight',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        approval_id: request.approval.approval_id,
+        plan: request.plan,
+      }),
+    },
+    true,
+    request.identity,
+  )
+  return assertManagedEcommerceOrderQueueApplyPreflight(response, request.plan, request.approval, request.identity)
 }
 
 export async function applyManagedClientImport(request: {

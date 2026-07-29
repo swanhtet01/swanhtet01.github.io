@@ -407,6 +407,16 @@ async function run() {
       (response, payload) => response.status === 422
         && String(payload?.detail ?? '').includes('does not match'),
     )
+    const orderQueueApplyPreflightUnauthorized = await postJson(
+      `${uiUrl}/api/trial/v1/ecommerce/order-queue/apply-preflight`,
+      {
+        approval_id: 'approval-queue-001',
+        plan: orderQueueImportPlan.body.plan,
+      },
+      uiState,
+      (response, payload) => response.status === 401
+        && String(payload?.detail ?? '').includes('trial_auth_required'),
+    )
 
     const body = proxiedHealth.body
     const report = {
@@ -452,6 +462,11 @@ async function run() {
         writesPerformed: orderQueueImportPlan.body.plan.external_writes_performed,
         identityAuthority: orderQueueImportPlan.body.identity_authority,
         tamperRejected: tamperedOrderQueueImportPlan.response.status === 422,
+      },
+      ecommerceOrderQueueApplyPreflight: {
+        authRequired: orderQueueApplyPreflightUnauthorized.response.status === 401,
+        writesPerformed: false,
+        applyPreflightAuthRequired: orderQueueApplyPreflightUnauthorized.response.status === 401,
       },
     }
 

@@ -38,6 +38,11 @@ requireContract('runner proves ecommerce Shop queue import plan through the app 
   && runnerSource.includes("payload.identity_authority === 'isolated_demo_untrusted_workspace'")
   && runnerSource.includes('payload.plan.external_writes_performed === false')
   && runnerSource.includes('tamperedOrderQueueImportPlan.response.status === 422'))
+requireContract('runner proves ecommerce Shop queue apply preflight is managed-auth only',
+  runnerSource.includes('/api/trial/v1/ecommerce/order-queue/apply-preflight')
+  && runnerSource.includes('orderQueueApplyPreflightUnauthorized.response.status === 401')
+  && runnerSource.includes("String(payload?.detail ?? '').includes('trial_auth_required')")
+  && runnerSource.includes('applyPreflightAuthRequired: orderQueueApplyPreflightUnauthorized.response.status === 401'))
 requireContract('runner is loopback-only and connects Vite explicitly',
   runnerSource.includes("const loopbackHost = '127.0.0.1'")
   && runnerSource.includes('SUPERMEGA_LOCAL_API: apiUrl')
@@ -186,6 +191,10 @@ requireContract('full stack proves zero-write ecommerce Shop queue import plan',
   && report.ecommerceOrderQueueImportPlan?.identityAuthority === 'isolated_demo_untrusted_workspace'
   && report.ecommerceOrderQueueImportPlan?.writesPerformed === false
   && report.ecommerceOrderQueueImportPlan?.tamperRejected === true)
+requireContract('full stack proves ecommerce Shop queue apply preflight is auth-gated',
+  report.ecommerceOrderQueueApplyPreflight?.authRequired === true
+  && report.ecommerceOrderQueueApplyPreflight?.applyPreflightAuthRequired === true
+  && report.ecommerceOrderQueueApplyPreflight?.writesPerformed === false)
 
 if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_local_full_stack', failures, report }, null, 2))
@@ -195,7 +204,7 @@ if (failures.length) {
 console.log(JSON.stringify({
   ok: true,
   contract: 'supermega_local_full_stack',
-  checks: 12,
+  checks: 14,
   operatingMode: report.runtime.operatingMode,
   writesEnabled: report.runtime.writesEnabled,
   loopbackOnly: report.safety.loopbackOnly,
