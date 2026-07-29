@@ -368,6 +368,34 @@ export function SettingsPage() {
     ['Activation', contextHandoffManifest.activationRequired ? 'Required' : 'Ready', contextHandoffManifest.activationRequired ? 'Managed controls must pass before premium learns from customer data.' : 'Managed evidence gates are ready for import review.'],
     ['Owner action', contextHandoffReady ? 'Export context' : 'Collect proof', contextHandoffManifest.nextAction],
   ] as const
+  const aiContextReadinessGates = [
+    ['Records', localRecordCount > 0, localRecordCount ? `${localRecordCount} local records prepared.` : 'Use or import one product workspace first.'],
+    ['Behavior', agentBehaviorSignals.length > 0, agentBehaviorSignals.length ? `${agentBehaviorSignals.length} agent queue signals captured.` : 'Open product queues and choose a recommended action.'],
+    ['Decisions', managedApprovalRequests.length + approvals.length > 0, managedApprovalRequests.length || approvals.length ? `${managedApprovalRequests.length || approvals.length} human review packets ready.` : 'Record one approval or decline before premium learns from decisions.'],
+    ['Controls', runtime.writesReady && evidencePlanReady, runtime.writesReady && evidencePlanReady ? 'Managed evidence gates are ready.' : 'Managed Postgres, identity, audit, and write gates remain locked.'],
+    ['Products', aiProductSourceMap.products.some((product) => product.prepared), aiProductSourceMap.products.some((product) => product.prepared) ? 'At least one product has a usable source package.' : 'Create Shop, Plant, Website, or Ecommerce evidence.'],
+    ['Owner setup', Boolean(setup.savedAt), setup.savedAt ? 'Trial plan is saved for handoff.' : 'Save the trial plan before requesting managed activation.'],
+  ] as const
+  const aiContextReadyGateCount = aiContextReadinessGates.filter(([, ready]) => ready).length
+  const aiContextReadinessScore = Math.round((aiContextReadyGateCount / aiContextReadinessGates.length) * 100)
+  const aiContextNextMove = !localRecordCount
+    ? 'Create or import product records'
+    : !agentBehaviorSignals.length
+      ? 'Use agent queues'
+      : !(managedApprovalRequests.length || approvals.length)
+        ? 'Record owner decision'
+        : !setup.savedAt
+          ? 'Save trial plan'
+          : !runtime.writesReady || !evidencePlanReady
+            ? 'Request managed activation'
+            : 'Export context for review'
+  const aiContextReadinessScoreRows = [
+    ['Score', `${aiContextReadinessScore}%`, `${aiContextReadyGateCount}/${aiContextReadinessGates.length} gates ready for premium context review.`],
+    ['Next move', aiContextNextMove, 'Follow this before asking premium AI to learn from customer data.'],
+    ['Records', localRecordCount ? `${localRecordCount} prepared` : 'Need records', aiContextReadinessGates[0][2]],
+    ['Behavior', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} signals` : 'Need usage', aiContextReadinessGates[1][2]],
+    ['Controls', runtime.writesReady && evidencePlanReady ? 'Ready' : 'Locked', aiContextReadinessGates[3][2]],
+  ] as const
   const provisioningReady = isPilotReady && localRecordCount > 0 && managedApprovalRequests.length + approvals.length > 0
   const managedWorkspaceProvisioningPacket = {
     contract: 'supermega.managed_workspace_provisioning.v1',
@@ -486,7 +514,7 @@ export function SettingsPage() {
       ]),
     ['Coverage', `${runtime.coverageScore}%`],
   ]
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 23, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 23, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
   const ecommerceOrderQueueReadinessFilename = ecommerceOrderQueueReadinessPacket
     ? `supermega-ecommerce-order-queue-${safePacketFilename(ecommerceOrderQueueReadinessPacket.storeName)}.json`
@@ -1106,6 +1134,10 @@ export function SettingsPage() {
               <div aria-label="AI context handoff manifest" className="learning-plan-agent context-quality-panel">
                 <div><span className="core-eyebrow">AI context handoff</span><h3>What premium receives</h3><p>This manifest tells support and the managed agent what it may use, what it must ignore, and which actions remain forbidden.</p></div>
                 <div className="context-quality-rows">{contextHandoffRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+              </div>
+              <div aria-label="AI context readiness score" className="learning-plan-agent context-quality-panel">
+                <div><span className="core-eyebrow">AI context score</span><h3>{aiContextNextMove}</h3><p>This score explains whether premium can safely review the exported context package. It does not activate learning, train models, send messages, move stock, write production records, publish domains, or call managed APIs.</p></div>
+                <div className="context-quality-rows">{aiContextReadinessScoreRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
               </div>
               <div aria-label="Managed workspace provisioning packet" className="learning-plan-agent context-quality-panel">
                 <div><span className="core-eyebrow">Provisioning packet</span><h3>How this becomes a real workspace</h3><p>Premium activation creates a managed tenant from exported evidence only after roles, data, controls, and write gates are verified.</p></div>
