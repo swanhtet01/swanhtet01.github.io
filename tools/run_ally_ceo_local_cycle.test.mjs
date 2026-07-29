@@ -93,6 +93,28 @@ const audit = (eligible = true) => JSON.stringify({
   },
 })
 
+const trimReceipt = JSON.stringify({
+  ok: true,
+  contract: 'supermega.ally-working-set-trim.v1',
+  mode: 'apply',
+  targetScope: 'verified_codex_process_tree',
+  targetCount: 35,
+  beforeWorkingSetMb: 2806,
+  afterWorkingSetMb: 268.3,
+  releasedWorkingSetMb: 2537.7,
+  trimSucceeded: 35,
+  trimFailed: 0,
+  controls: {
+    processMutation: true,
+    processTerminationCalls: 0,
+    filesModified: 0,
+    networkRequests: 0,
+    commandLinesRead: false,
+    environmentRead: false,
+    secretValuesReturned: false,
+  },
+})
+
 const health = JSON.stringify({
   installed_models: ['qwen3.5:0.8b'],
   active_jobs: 0,
@@ -143,13 +165,20 @@ const knowledgeRefresh = JSON.stringify({
 
 function harness(overrides = {}) {
   const calls = []
+  let auditIndex = 0
   let knowledgeAuditIndex = 0
   const queueId = '123456789abc'
   const jobId = 'abcdef123456'
   const runCommand = async (request) => {
     calls.push(structuredClone(request))
     const args = request.args
-    if (request.kind === 'audit') return overrides.audit || audit()
+    if (request.kind === 'audit') {
+      const sequence = overrides.auditSequence || [overrides.audit || audit()]
+      const response = sequence[Math.min(auditIndex, sequence.length - 1)]
+      auditIndex += 1
+      return response
+    }
+    if (request.kind === 'trim') return overrides.trimReceipt || trimReceipt
     if (args[0] === 'health') return health
     if (args[0] === 'knowledge' && args[1] === 'audit') {
       const sequence = overrides.knowledgeSequence || [overrides.knowledge || knowledge]
@@ -806,4 +835,72 @@ test('host pressure and a rejected exact preflight fail closed', async () => {
     /ally_ceo_local_cycle_queue_preflight_rejected/,
   )
   assert.equal(rejected.calls.some((call) => call.args?.[1] === 'cancel'), true)
+})
+
+test('one idle memory-only blocker receives a bounded trim and fresh admission audit', async () => {
+  const recovered = harness({ auditSequence: [audit(false), audit(true), audit(true)] })
+  const result = await runAllyCeoLocalCycle(
+    { execute: true },
+    {
+      plan: plan(),
+      runCommand: recovered.runCommand,
+      inspectReport: async () => ({
+        path: 'C:\\state\\outputs\\recovered.md',
+        bytes: Buffer.byteLength(acceptedStructuredReport),
+        digest: 'sha256:' + '8'.repeat(64),
+        text: acceptedStructuredReport,
+      }),
+    },
+  )
+  assert.equal(result.status, 'accepted')
+  assert.deepEqual(result.host.memoryRecovery, {
+    attempted: true,
+    initialMemoryUsedPercent: 90,
+    targetCount: 35,
+    beforeWorkingSetMb: 2806,
+    afterWorkingSetMb: 268.3,
+    releasedWorkingSetMb: 2537.7,
+    processTerminations: 0,
+  })
+  assert.equal(recovered.calls.filter((call) => call.kind === 'trim').length, 1)
+  assert.equal(recovered.calls.filter((call) => call.kind === 'audit').length, 3)
+})
+
+test('memory recovery is execution-only, opt-out capable, and never handles another blocker', async () => {
+  const preview = harness({ audit: audit(false) })
+  await assert.rejects(
+    runAllyCeoLocalCycle({ execute: false }, { plan: plan(), runCommand: preview.runCommand }),
+    /ally_ceo_local_cycle_host_blocked:memory_pressure_critical/,
+  )
+  assert.equal(preview.calls.some((call) => call.kind === 'trim'), false)
+
+  const optedOut = harness({ audit: audit(false) })
+  await assert.rejects(
+    runAllyCeoLocalCycle({ execute: true, recoverMemory: false }, { plan: plan(), runCommand: optedOut.runCommand }),
+    /ally_ceo_local_cycle_host_blocked:memory_pressure_critical/,
+  )
+  assert.equal(optedOut.calls.some((call) => call.kind === 'trim'), false)
+
+  const otherBlocker = JSON.parse(audit(false))
+  otherBlocker.hostAdmission.blockers = ['ambiguous_listener']
+  const unsafe = harness({ audit: JSON.stringify(otherBlocker) })
+  await assert.rejects(
+    runAllyCeoLocalCycle({ execute: true }, { plan: plan(), runCommand: unsafe.runCommand }),
+    /ally_ceo_local_cycle_host_blocked:ambiguous_listener/,
+  )
+  assert.equal(unsafe.calls.some((call) => call.kind === 'trim'), false)
+})
+
+test('malformed memory recovery evidence fails before queue, model, or retry', async () => {
+  const invalid = harness({
+    audit: audit(false),
+    trimReceipt: JSON.stringify({ ...JSON.parse(trimReceipt), controls: { processTerminationCalls: 1 } }),
+  })
+  await assert.rejects(
+    runAllyCeoLocalCycle({ execute: true }, { plan: plan(), runCommand: invalid.runCommand }),
+    /ally_ceo_local_cycle_memory_recovery_invalid/,
+  )
+  assert.equal(invalid.calls.filter((call) => call.kind === 'trim').length, 1)
+  assert.equal(invalid.calls.filter((call) => call.kind === 'audit').length, 1)
+  assert.equal(invalid.calls.some((call) => call.args?.includes('queue')), false)
 })

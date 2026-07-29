@@ -19,8 +19,9 @@ const defaultLocalCompanyHome = resolve(root, '..', 'supermega-local-company-sta
 const powershell = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const MAX_COMMAND_BYTES = 512 * 1024
 const MAX_REPORT_BYTES = 256 * 1024
-const EXECUTION_SPEC_VERSION = '2026-07-29.18'
-const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
+const EXECUTION_SPEC_VERSION = '2026-07-29.19'
+const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
+const MEMORY_RECOVERY_BLOCKERS = Object.freeze(new Set(['memory_pressure_critical', 'codex_working_set_high']))
 
 const AGENT_ROLE_MAP = Object.freeze({
   'operations-analyst': 'operations',
@@ -187,6 +188,64 @@ function validateAudit(audit) {
     memoryUsedPercent: Number(audit.memory?.usedPercent),
     maxConcurrentLocalRuns: 1,
     loadedModels: 0,
+  }
+}
+
+function hostIsIdle(audit) {
+  return audit?.localModels?.loaded === 0
+    && audit?.localCompany?.activeJobs === 0
+    && audit?.localCompany?.queuedMissions === 0
+    && audit?.localCompany?.runningMissions === 0
+    && audit?.localCompany?.pendingApprovals === 0
+    && audit?.localCompany?.pendingReportFinalizations === 0
+    && audit?.localCompany?.pendingEvaluations === 0
+}
+
+function canAttemptMemoryRecovery(audit) {
+  const blockers = audit?.hostAdmission?.blockers
+  return audit?.contract === 'supermega.ally-runtime-audit.v1'
+    && audit.mode === 'read_only'
+    && audit.hostAdmission?.contract === 'supermega.ally-host-admission.v1'
+    && audit.hostAdmission.eligible === false
+    && Array.isArray(blockers)
+    && blockers.length > 0
+    && blockers.every((blocker) => MEMORY_RECOVERY_BLOCKERS.has(blocker))
+    && hostIsIdle(audit)
+}
+
+function validateMemoryRecovery(receipt, beforeAudit) {
+  const beforeWorkingSetMb = Number(receipt?.beforeWorkingSetMb)
+  const afterWorkingSetMb = Number(receipt?.afterWorkingSetMb)
+  const releasedWorkingSetMb = Number(receipt?.releasedWorkingSetMb)
+  if (receipt?.contract !== 'supermega.ally-working-set-trim.v1'
+    || receipt.mode !== 'apply'
+    || receipt.ok !== true
+    || receipt.targetScope !== 'verified_codex_process_tree'
+    || !Number.isInteger(receipt.targetCount)
+    || receipt.targetCount < 1
+    || !Number.isFinite(beforeWorkingSetMb)
+    || !Number.isFinite(afterWorkingSetMb)
+    || !Number.isFinite(releasedWorkingSetMb)
+    || beforeWorkingSetMb < afterWorkingSetMb
+    || releasedWorkingSetMb < 0
+    || receipt.trimFailed !== 0
+    || receipt.controls?.processMutation !== true
+    || receipt.controls?.processTerminationCalls !== 0
+    || receipt.controls?.filesModified !== 0
+    || receipt.controls?.networkRequests !== 0
+    || receipt.controls?.commandLinesRead !== false
+    || receipt.controls?.environmentRead !== false
+    || receipt.controls?.secretValuesReturned !== false) {
+    fail('ally_ceo_local_cycle_memory_recovery_invalid')
+  }
+  return {
+    attempted: true,
+    initialMemoryUsedPercent: Number(beforeAudit.memory?.usedPercent),
+    targetCount: receipt.targetCount,
+    beforeWorkingSetMb,
+    afterWorkingSetMb,
+    releasedWorkingSetMb,
+    processTerminations: 0,
   }
 }
 
@@ -389,13 +448,22 @@ async function defaultCommandRunner({ kind, args, timeoutMs, localCompanyRoot, l
     commandArgs = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', resolve(root, 'tools', 'audit_ally_runtime.ps1'), '-Json']
     cwd = root
     env = limitedEnvironment(localCompanyRoot)
+  } else if (kind === 'trim') {
+    file = powershell
+    commandArgs = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', resolve(root, 'tools', 'trim_codex_working_sets.ps1'), '-Apply', '-Json']
+    cwd = root
+    env = limitedEnvironment(localCompanyRoot)
   } else {
     file = resolve(localCompanyRoot, '.venv', 'Scripts', 'python.exe')
     commandArgs = ['-m', 'local_company.cli', '--home', localCompanyHome, ...args]
     cwd = localCompanyRoot
     env = limitedEnvironment(localCompanyRoot)
   }
-  for (const candidate of [file, ...(kind === 'local' ? [resolve(localCompanyRoot, 'src', 'local_company', 'cli.py')] : [])]) {
+  for (const candidate of [
+    file,
+    ...(kind === 'local' ? [resolve(localCompanyRoot, 'src', 'local_company', 'cli.py')] : []),
+    ...(kind === 'trim' ? [resolve(root, 'tools', 'trim_codex_working_sets.ps1')] : []),
+  ]) {
     const stat = await lstat(candidate).catch(() => null)
     if (!stat?.isFile() || stat.isSymbolicLink()) fail('ally_ceo_local_cycle_runtime_untrusted')
   }
@@ -578,6 +646,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   const execute = input.execute === true
   const refreshKnowledge = input.refreshKnowledge === true
   const repairRejected = input.repairRejected === true
+  const recoverMemory = input.recoverMemory !== false
   const provider = input.provider || 'ollama'
   const model = input.model || 'qwen3.5:0.8b'
   if (refreshKnowledge && !execute) fail('ally_ceo_local_cycle_knowledge_refresh_requires_execution')
@@ -592,8 +661,25 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   const cycleNow = input.now ?? new Date()
   const buildPlan = dependencies.buildPlan || ((completedOutcomeIds) => currentPlan(cycleNow, completedOutcomeIds))
 
-  const audit = parseJson(await runCommand({ kind: 'audit', args: [], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_audit_json_invalid')
-  const host = validateAudit(audit)
+  let audit = parseJson(await runCommand({ kind: 'audit', args: [], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_audit_json_invalid')
+  let memoryRecovery = {
+    attempted: false,
+    initialMemoryUsedPercent: Number(audit.memory?.usedPercent),
+    targetCount: 0,
+    beforeWorkingSetMb: 0,
+    afterWorkingSetMb: 0,
+    releasedWorkingSetMb: 0,
+    processTerminations: 0,
+  }
+  if (execute && recoverMemory && canAttemptMemoryRecovery(audit)) {
+    const receipt = parseJson(
+      await runCommand({ kind: 'trim', args: [], timeoutMs: 30_000 }),
+      'ally_ceo_local_cycle_memory_recovery_json_invalid',
+    )
+    memoryRecovery = validateMemoryRecovery(receipt, audit)
+    audit = parseJson(await runCommand({ kind: 'audit', args: [], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_recovery_audit_json_invalid')
+  }
+  const host = { ...validateAudit(audit), memoryRecovery }
   const health = parseJson(await runCommand({ kind: 'local', args: ['health'], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_health_invalid')
   validateHealth(health, provider, model)
   const knowledge = parseJson(await runCommand({ kind: 'local', args: ['knowledge', 'audit', '--project', 'SuperMega'], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_knowledge_invalid')
@@ -791,12 +877,13 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
 }
 
 function parseArgs(argv) {
-  const result = { execute: false, refreshKnowledge: false, repairRejected: false, provider: 'ollama' }
+  const result = { execute: false, refreshKnowledge: false, repairRejected: false, recoverMemory: true, provider: 'ollama' }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--execute') result.execute = true
     else if (arg === '--refresh-knowledge') result.refreshKnowledge = true
     else if (arg === '--repair-rejected') result.repairRejected = true
+    else if (arg === '--no-memory-recovery') result.recoverMemory = false
     else if (arg === '--provider') result.provider = argv[++index]
     else if (arg === '--help' || arg === '-h') result.help = true
     else fail(`ally_ceo_local_cycle_unknown_argument:${arg}`)
@@ -815,6 +902,7 @@ async function main() {
       '  npm run company:ally:repair',
       '',
       'Preflight is read-only. Run refreshes changed registered sources, then queues and executes one exact local mission.',
+      'Run may trim the verified idle Codex process tree once when memory pressure is the only host blocker; it never terminates a process.',
       'Repair replaces at most one rejected prior-version artifact; a current-version failure is never retried.',
       'Missing, unavailable, unstable, or malformed source evidence fails before queue or model work.',
       'No connector, deployment, payment, message, or customer action is available.',
