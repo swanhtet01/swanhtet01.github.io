@@ -99,6 +99,13 @@ export type BusinessCommandAnswer = {
   boundary: string
 }
 
+export type BusinessAttentionRank = {
+  intent: Exclude<BusinessCommandIntent, 'attention'>
+  level: number
+  load: number
+  order: number
+}
+
 const EMPTY_SHOP: LocalBusinessSnapshot['shop'] = {
   status: 'missing',
   itemCount: 0,
@@ -366,20 +373,44 @@ function sourceCount(snapshot: LocalBusinessSnapshot) {
   return [snapshot.shop, snapshot.plant, snapshot.website, snapshot.ecommerce].filter((source) => source.status === 'ready').length
 }
 
+export function rankBusinessAttention(snapshot: LocalBusinessSnapshot): BusinessAttentionRank[] {
+  const shop = snapshot.shop
+  const plant = snapshot.plant
+  const website = snapshot.website
+  const ecommerce = snapshot.ecommerce
+  return [
+    {
+      intent: 'shop_inventory' as const,
+      level: shop.status === 'invalid' ? 3 : shop.status === 'ready' ? (shop.paymentExceptions || shop.refundsDue ? 3 : shop.lowStock ? 2 : shop.activeOrders || shop.openPurchaseOrders ? 1 : 0) : -1,
+      load: shop.status === 'ready' ? (shop.paymentExceptions + shop.refundsDue) * 3 + shop.lowStock * 2 + shop.activeOrders + shop.openPurchaseOrders : shop.status === 'invalid' ? 1 : -1,
+      order: 0,
+    },
+    {
+      intent: 'plant_control' as const,
+      level: plant.status === 'invalid' ? 5 : plant.status === 'ready' ? (plant.stoppedMachines ? 4 : plant.priorityIssues || plant.heldJobs ? 3 : plant.openIssues || plant.unfinishedJobs ? 1 : 0) : -1,
+      load: plant.status === 'ready' ? plant.priorityIssues * 4 + plant.heldJobs * 3 + plant.stoppedMachines * 6 + plant.openIssues * 2 + plant.unfinishedJobs : plant.status === 'invalid' ? 1 : -1,
+      order: 1,
+    },
+    {
+      intent: 'website_readiness' as const,
+      level: website.status === 'invalid' ? 3 : website.status === 'ready' ? (!website.approved || !website.released ? 2 : website.readyPages < website.pageCount || website.readinessPassed < website.readinessTotal ? 1 : 0) : -1,
+      load: website.status === 'ready' ? (website.approved ? 0 : 2) + (website.released ? 0 : 2) + website.pageCount - website.readyPages + website.readinessTotal - website.readinessPassed : website.status === 'invalid' ? 1 : -1,
+      order: 2,
+    },
+    {
+      intent: 'ecommerce_readiness' as const,
+      level: ecommerce.status === 'invalid' ? 3 : ecommerce.status === 'ready' ? (!ecommerce.shopSourceReady ? 2 : ecommerce.incomingRequests ? 1 : 0) : -1,
+      load: ecommerce.status === 'ready' ? ecommerce.incomingRequests + (ecommerce.shopSourceReady ? 0 : 3) + (ecommerce.draftState === 'legacy' ? 2 : 0) : ecommerce.status === 'invalid' ? 1 : -1,
+      order: 3,
+    },
+  ].filter((row) => row.level >= 0)
+    .sort((left, right) => right.level - left.level || right.load - left.load || left.order - right.order)
+}
+
 function attentionAnswer(snapshot: LocalBusinessSnapshot): BusinessCommandAnswer {
-  const sources = [snapshot.shop, snapshot.plant, snapshot.website, snapshot.ecommerce]
-  const invalidIndex = sources.findIndex((source) => source.status === 'invalid')
-  if (invalidIndex >= 0) {
-    const answer = [
-      () => unavailableAnswer('attention', 'shop', 'invalid'),
-      () => unavailableAnswer('attention', 'plant', 'invalid'),
-      () => unavailableAnswer('attention', 'website', 'invalid'),
-      () => unavailableAnswer('attention', 'ecommerce', 'invalid'),
-    ][invalidIndex]()
-    return { ...answer, sourceCount: sourceCount(snapshot), title: `Start here: ${answer.title}` }
-  }
   const availableSources = sourceCount(snapshot)
-  if (availableSources === 0) {
+  const ranked = rankBusinessAttention(snapshot)
+  if (availableSources === 0 && ranked.length === 0) {
     return {
       contract: 'supermega.local_business_answer.v1',
       intent: 'attention',
@@ -397,12 +428,6 @@ function attentionAnswer(snapshot: LocalBusinessSnapshot): BusinessCommandAnswer
     }
   }
 
-  const ranked = [
-    { intent: 'shop_inventory' as const, score: snapshot.shop.status === 'ready' ? snapshot.shop.lowStock * 3 + snapshot.shop.paymentExceptions * 3 + snapshot.shop.refundsDue * 3 + snapshot.shop.activeOrders + snapshot.shop.openPurchaseOrders : -1 },
-    { intent: 'plant_control' as const, score: snapshot.plant.status === 'ready' ? snapshot.plant.priorityIssues * 4 + snapshot.plant.heldJobs * 4 + snapshot.plant.stoppedMachines * 4 + snapshot.plant.openIssues * 2 + snapshot.plant.unfinishedJobs : -1 },
-    { intent: 'website_readiness' as const, score: snapshot.website.status === 'ready' ? snapshot.website.readinessTotal - snapshot.website.readinessPassed + (snapshot.website.approved ? 0 : 2) + (snapshot.website.released ? 0 : 2) : -1 },
-    { intent: 'ecommerce_readiness' as const, score: snapshot.ecommerce.status === 'ready' ? snapshot.ecommerce.incomingRequests * 2 + (snapshot.ecommerce.shopSourceReady ? 0 : 3) + (snapshot.ecommerce.draftState === 'legacy' ? 2 : 0) : -1 },
-  ].sort((left, right) => right.score - left.score)
   const selected = ranked[0].intent === 'shop_inventory'
     ? shopAnswer(snapshot)
     : ranked[0].intent === 'plant_control'

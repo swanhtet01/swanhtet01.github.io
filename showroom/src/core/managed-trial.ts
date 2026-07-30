@@ -210,6 +210,48 @@ export type ManagedCompanyBriefRetention = {
   idempotentReplay: boolean
 }
 
+export type ManagedOwnerControlItem = {
+  itemId: string
+  intent: Exclude<ManagedCompanyBriefIntent, 'attention'>
+  product: 'shop' | 'plant' | 'website' | 'ecommerce'
+  priority: 'critical' | 'high' | 'routine'
+  title: string
+  summary: string
+  facts: ManagedCompanyBrief['facts']
+  nextAction: ManagedCompanyBrief['nextAction']
+  status: 'pending' | 'acknowledged'
+}
+
+export type ManagedOwnerControlRun = {
+  contract: 'supermega.managed_owner_control_run.v1'
+  workspaceId: string
+  sourceVersions: ManagedCompanyBrief['sourceVersions']
+  operatingBaselineDigest: string
+  items: ManagedOwnerControlItem[]
+  runDigest: string
+  sourceCount: number
+  pendingCount: number
+  acknowledgedCount: number
+  primaryItemId: string | null
+  title: string
+  summary: string
+  operatingBaseline: OperatingBaseline
+  boundary: string
+  companyVersion: number
+  externalWritesPerformed: false
+}
+
+export type ManagedOwnerControlRetention = {
+  contract: 'supermega.managed_owner_control_retention.v1'
+  status: 'acknowledged' | 'already_acknowledged'
+  runDigest: string
+  itemId: string
+  companyVersion: number
+  internalWritePerformed: boolean
+  externalWritesPerformed: false
+  idempotentReplay: boolean
+}
+
 export type ManagedClientImportPackage = ReturnType<typeof buildClientImportStagingPackage>
 
 export type ManagedClientImportValidation = {
@@ -526,6 +568,237 @@ function assertManagedCompanyBrief(value: unknown, expectedIdentity: ManagedIden
     throw new ManagedTrialError('Managed Company Brief failed its tenant and evidence checks.', { code: 'managed_company_brief_invalid' })
   }
   return brief as unknown as ManagedCompanyBrief
+}
+
+function expectedManagedOwnerControlRank(baseline: OperatingBaseline) {
+  const ranked = ([
+    ['shop_inventory', 'shop', 0],
+    ['plant_control', 'plant', 1],
+    ['website_readiness', 'website', 2],
+    ['ecommerce_readiness', 'ecommerce', 3],
+  ] as const)
+    .filter(([, product]) => baseline.products[product].status !== 'missing'
+      && !(product === 'ecommerce'
+        && baseline.products.ecommerce.status === 'invalid'
+        && baseline.products.shop.status === 'invalid'))
+    .map(([intent, product, order]) => {
+      const current = baseline.products[product]
+      const level = current.status === 'invalid' ? (product === 'plant' ? 5 : 3) : current.attentionLevel
+      return { intent, product, order, level, load: current.reviewLoad }
+    })
+    .sort((left, right) => right.level - left.level || right.load - left.load || left.order - right.order)
+    .slice(0, 3)
+  const selected = ranked.length ? ranked : [{ intent: 'shop_inventory' as const, product: 'shop' as const, order: 0, level: 0, load: 0 }]
+  return selected.map((item) => ({
+    ...item,
+    priority: item.level >= 4 ? 'critical' : item.level >= 2 ? 'high' : 'routine',
+  }))
+}
+
+export function assertManagedOwnerControlRun(value: unknown, expectedIdentity: ManagedIdentity): ManagedOwnerControlRun {
+  if (!isRecord(value)
+    || !exactRecordKeys(value, ['identity', 'run'])
+    || !isRecord(value.identity)
+    || !isRecord(value.run)
+    || !exactRecordKeys(value.identity, ['actor_id', 'actor_kind', 'workspace_id'])) {
+    throw new ManagedTrialError('Managed Owner Control response is invalid.', { code: 'managed_owner_control_invalid' })
+  }
+  const run = value.run
+  const identity = value.identity
+  const sourceVersions = run.sourceVersions
+  const baseline = run.operatingBaseline
+  const items = run.items
+  const validBaseline = structurallyValidOperatingBaseline(baseline, expectedIdentity.workspaceId)
+  const expectedRank = validBaseline ? expectedManagedOwnerControlRank(baseline as OperatingBaseline) : []
+  const validSources = Array.isArray(sourceVersions)
+    && sourceVersions.length <= 3
+    && new Set(sourceVersions.map((source) => isRecord(source) ? source.surface : '')).size === sourceVersions.length
+    && sourceVersions.every((source) => isRecord(source)
+      && exactRecordKeys(source, ['projectionDigest', 'surface', 'updatedAt', 'version'])
+      && ['commerce', 'production', 'website'].includes(String(source.surface))
+      && managedBriefCount(source.version)
+      && typeof source.updatedAt === 'string'
+      && source.updatedAt.length <= 64
+      && typeof source.projectionDigest === 'string'
+      && SHA256_DIGEST.test(source.projectionDigest))
+  const validBaselineSources = validBaseline
+    && validSources
+    && sourceVersions.length === (baseline as OperatingBaseline).sourceVersions.length
+    && sourceVersions.every((source, index) => {
+      if (!isRecord(source)) return false
+      const expected = (baseline as OperatingBaseline).sourceVersions[index]
+      return source.surface === expected.surface
+        && source.version === expected.version
+        && source.updatedAt === expected.updatedAt
+        && source.projectionDigest === expected.projectionDigest
+    })
+  const validItems = Array.isArray(items)
+    && items.length >= 1
+    && items.length <= 3
+    && new Set(items.map((item) => isRecord(item) ? item.itemId : '')).size === items.length
+    && items.length === expectedRank.length
+    && items.every((item, index) => {
+      if (!isRecord(item)
+        || !exactRecordKeys(item, ['facts', 'intent', 'itemId', 'nextAction', 'priority', 'product', 'status', 'summary', 'title'])
+        || !MANAGED_COMPANY_BRIEF_INTENTS.has(item.intent as ManagedCompanyBriefIntent)
+        || item.intent === 'attention'
+        || !['shop', 'plant', 'website', 'ecommerce'].includes(String(item.product))
+        || !['critical', 'high', 'routine'].includes(String(item.priority))
+        || !['pending', 'acknowledged'].includes(String(item.status))
+        || typeof item.itemId !== 'string'
+        || !SHA256_DIGEST.test(item.itemId)
+        || !boundedManagedBriefText(item.title, 180)
+        || !boundedManagedBriefText(item.summary, 500)
+        || !Array.isArray(item.facts)
+        || item.facts.length !== 4
+        || !item.facts.every((fact) => isRecord(fact)
+          && exactRecordKeys(fact, ['detail', 'label', 'value'])
+          && boundedManagedBriefText(fact.label, 80)
+          && boundedManagedBriefText(fact.value, 120)
+          && boundedManagedBriefText(fact.detail, 240))
+        || !isRecord(item.nextAction)
+        || !exactRecordKeys(item.nextAction, ['label', 'path', 'product'])
+        || item.nextAction.product !== item.product
+        || !boundedManagedBriefText(item.nextAction.label, 80)) return false
+      const routes = MANAGED_COMPANY_BRIEF_ROUTES.get(item.product as ManagedOwnerControlItem['product'])
+      const expectedProduct = {
+        shop_inventory: 'shop',
+        plant_control: 'plant',
+        website_readiness: 'website',
+        ecommerce_readiness: 'ecommerce',
+      }[String(item.intent)]
+      const expected = expectedRank[index]
+      return item.product === expectedProduct
+        && item.intent === expected?.intent
+        && item.product === expected?.product
+        && item.priority === expected?.priority
+        && routes?.has(String(item.nextAction.path) as never)
+    })
+  const pendingItems = validItems
+    ? (items as Array<Record<string, unknown>>).filter((item) => item.status === 'pending')
+    : []
+  const acknowledgedItems = validItems
+    ? (items as Array<Record<string, unknown>>).filter((item) => item.status === 'acknowledged')
+    : []
+  const primaryItemId = pendingItems[0]?.itemId ?? null
+  if (!exactRecordKeys(run, [
+      'acknowledgedCount', 'boundary', 'companyVersion', 'contract', 'externalWritesPerformed',
+      'items', 'operatingBaseline', 'operatingBaselineDigest', 'pendingCount', 'primaryItemId', 'runDigest',
+      'sourceCount', 'sourceVersions', 'summary', 'title', 'workspaceId',
+    ])
+    || run.contract !== 'supermega.managed_owner_control_run.v1'
+    || run.workspaceId !== expectedIdentity.workspaceId
+    || !validSources
+    || !validBaseline
+    || !validBaselineSources
+    || typeof run.operatingBaselineDigest !== 'string'
+    || !SHA256_DIGEST.test(run.operatingBaselineDigest)
+    || run.operatingBaselineDigest !== (baseline as OperatingBaseline).baselineDigest
+    || !validItems
+    || typeof run.runDigest !== 'string'
+    || !SHA256_DIGEST.test(run.runDigest)
+    || !managedBriefCount(run.sourceCount, 4)
+    || run.sourceCount !== (baseline as OperatingBaseline).coverage.readyProducts
+    || run.pendingCount !== pendingItems.length
+    || run.acknowledgedCount !== acknowledgedItems.length
+    || run.primaryItemId !== primaryItemId
+    || !boundedManagedBriefText(run.title, 180)
+    || !boundedManagedBriefText(run.summary, 500)
+    || !boundedManagedBriefText(run.boundary, 600)
+    || !managedBriefCount(run.companyVersion)
+    || run.externalWritesPerformed !== false
+    || identity.workspace_id !== expectedIdentity.workspaceId
+    || identity.actor_id !== expectedIdentity.userId
+    || identity.actor_kind !== 'human') {
+    throw new ManagedTrialError('Managed Owner Control failed its tenant and evidence checks.', { code: 'managed_owner_control_invalid' })
+  }
+  return run as unknown as ManagedOwnerControlRun
+}
+
+function canonicalManagedJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map((item) => canonicalManagedJson(item)).join(',')}]`
+  if (isRecord(value)) {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalManagedJson(value[key])}`).join(',')}}`
+  }
+  const serialized = JSON.stringify(value)
+  if (serialized === undefined) throw new ManagedTrialError('Managed Owner Control digest input is invalid.', { code: 'managed_owner_control_digest_invalid' })
+  return serialized
+}
+
+export async function assertManagedOwnerControlIntegrity(run: ManagedOwnerControlRun) {
+  const baselineBasis: Record<string, unknown> = { ...run.operatingBaseline }
+  delete baselineBasis.baselineDigest
+  const expectedBaselineDigest = await sha256Text(canonicalManagedJson(baselineBasis))
+  if (run.operatingBaseline.baselineDigest !== expectedBaselineDigest
+    || run.operatingBaselineDigest !== expectedBaselineDigest) {
+    throw new ManagedTrialError('Managed Owner Control baseline digest is invalid.', { code: 'managed_owner_control_digest_invalid' })
+  }
+  for (const item of run.items) {
+    const expectedItemId = await sha256Text(canonicalManagedJson({
+      action: item.nextAction,
+      baselineDigest: run.operatingBaselineDigest,
+      contract: 'supermega.managed_owner_control_item.v1',
+      intent: item.intent,
+    }))
+    if (item.itemId !== expectedItemId) {
+      throw new ManagedTrialError('Managed Owner Control item digest is invalid.', { code: 'managed_owner_control_digest_invalid' })
+    }
+  }
+  const expectedRunDigest = await sha256Text(canonicalManagedJson({
+    contract: run.contract,
+    items: run.items.map((item) => ({
+      facts: item.facts,
+      intent: item.intent,
+      itemId: item.itemId,
+      nextAction: item.nextAction,
+      priority: item.priority,
+      product: item.product,
+      summary: item.summary,
+      title: item.title,
+    })),
+    operatingBaselineDigest: run.operatingBaselineDigest,
+    sourceVersions: run.sourceVersions,
+    workspaceId: run.workspaceId,
+  }))
+  if (run.runDigest !== expectedRunDigest) {
+    throw new ManagedTrialError('Managed Owner Control run digest is invalid.', { code: 'managed_owner_control_digest_invalid' })
+  }
+  return run
+}
+
+function assertManagedOwnerControlRetention(
+  value: unknown,
+  expectedIdentity: ManagedIdentity,
+  expectedRunDigest: string,
+  expectedItemId: string,
+) {
+  if (!isRecord(value) || !isRecord(value.retention)) {
+    throw new ManagedTrialError('Managed Owner Control acknowledgement is invalid.', { code: 'managed_owner_control_retention_invalid' })
+  }
+  const run = assertManagedOwnerControlRun({ identity: value.identity, run: value.run }, expectedIdentity)
+  const retention = value.retention
+  const wrote = retention.status === 'acknowledged'
+    && retention.internalWritePerformed === true
+    && retention.idempotentReplay === false
+  const replay = retention.status === 'already_acknowledged'
+    && retention.internalWritePerformed === false
+    && retention.idempotentReplay === true
+  const item = run.items.find((candidate) => candidate.itemId === expectedItemId)
+  if (!exactRecordKeys(value, ['identity', 'retention', 'run'])
+    || !exactRecordKeys(retention, [
+      'companyVersion', 'contract', 'externalWritesPerformed', 'idempotentReplay', 'internalWritePerformed',
+      'itemId', 'runDigest', 'status',
+    ])
+    || retention.contract !== 'supermega.managed_owner_control_retention.v1'
+    || (!wrote && !replay)
+    || retention.runDigest !== expectedRunDigest
+    || retention.itemId !== expectedItemId
+    || retention.companyVersion !== run.companyVersion
+    || retention.externalWritesPerformed !== false
+    || item?.status !== 'acknowledged') {
+    throw new ManagedTrialError('Managed Owner Control acknowledgement failed verification.', { code: 'managed_owner_control_retention_invalid' })
+  }
+  return { run, retention: retention as unknown as ManagedOwnerControlRetention }
 }
 
 export async function assertManagedContextValidation(
@@ -2058,6 +2331,46 @@ export async function retainManagedCompanyBrief(request: {
     request.identity,
   )
   return assertManagedCompanyBriefRetention(response, request.identity, request.brief.briefDigest)
+}
+
+export async function loadManagedOwnerControlRun(expectedIdentity: ManagedIdentity) {
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/owner-control',
+    { method: 'GET' },
+    true,
+    expectedIdentity,
+  )
+  return assertManagedOwnerControlIntegrity(assertManagedOwnerControlRun(response, expectedIdentity))
+}
+
+export async function acknowledgeManagedOwnerControlItem(request: {
+  run: ManagedOwnerControlRun
+  itemId: string
+  commandId: string
+  identity: ManagedIdentity
+}) {
+  if (!CLIENT_IMPORT_COMMAND_ID.test(request.commandId)
+    || !SHA256_DIGEST.test(request.itemId)
+    || !request.run.items.some((item) => item.itemId === request.itemId && item.status === 'pending')) {
+    throw new ManagedTrialError('Managed Owner Control acknowledgement request is invalid.', { code: 'managed_owner_control_command_invalid' })
+  }
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/owner-control/acknowledgements',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        command_id: request.commandId,
+        expected_company_version: request.run.companyVersion,
+        run_digest: request.run.runDigest,
+        item_id: request.itemId,
+      }),
+    },
+    true,
+    request.identity,
+  )
+  const validated = assertManagedOwnerControlRetention(response, request.identity, request.run.runDigest, request.itemId)
+  await assertManagedOwnerControlIntegrity(validated.run)
+  return validated
 }
 
 export async function validateManagedContextProfile(

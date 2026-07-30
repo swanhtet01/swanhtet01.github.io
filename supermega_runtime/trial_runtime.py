@@ -22,6 +22,12 @@ from supermega_runtime.company_brief import (
     company_brief_receipt,
     company_state_with_receipt,
 )
+from supermega_runtime.owner_control import (
+    assert_owner_control_sources_unchanged,
+    build_managed_owner_control_run,
+    company_state_with_owner_control_acknowledgement,
+    owner_control_acknowledgement,
+)
 from supermega_runtime.managed_context import (
     MANAGED_CONTEXT_RETENTION_CONTRACT,
     MANAGED_CONTEXT_VALIDATION_CONTRACT,
@@ -57,6 +63,7 @@ from supermega_runtime.trial_store import (
     TrialPermissionDenied,
     TrialPrincipal,
     TrialReadiness,
+    TrialState,
     TrialStore,
     TrialStoreError,
     TrialValidationError,
@@ -167,6 +174,13 @@ class TrialCompanyBriefReceiptRequest(TrialCompanyBriefRequest):
     command_id: UUID
     brief_digest: str = Field(min_length=71, max_length=71, pattern=r"^sha256:[0-9a-f]{64}$")
     expected_company_version: int = Field(ge=0)
+
+
+class TrialOwnerControlAcknowledgementRequest(_StrictRequest):
+    command_id: UUID
+    expected_company_version: int = Field(ge=0)
+    run_digest: str = Field(min_length=71, max_length=71, pattern=r"^sha256:[0-9a-f]{64}$")
+    item_id: str = Field(min_length=71, max_length=71, pattern=r"^sha256:[0-9a-f]{64}$")
 
 
 class TrialManagedContextValidateRequest(_StrictRequest):
@@ -1029,6 +1043,161 @@ def create_trial_router(
                 "actor_kind": principal.actor_kind,
             },
             **_command_response(result),
+        }
+
+    @router.get("/owner-control")
+    def trial_owner_control(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_read_ready(readiness)
+        states, _, company_version = _company_brief_context(store, principal, readiness)
+        run = _invoke(
+            lambda: build_managed_owner_control_run(
+                workspace_id=principal.workspace_id,
+                states=states,
+            )
+        )
+        return {
+            "run": {**run, "companyVersion": company_version},
+            "identity": {
+                "workspace_id": principal.workspace_id,
+                "actor_id": principal.actor_id,
+                "actor_kind": principal.actor_kind,
+            },
+        }
+
+    @router.post("/owner-control/acknowledgements")
+    def trial_owner_control_acknowledgement(
+        request: Request,
+        body: TrialOwnerControlAcknowledgementRequest,
+    ) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        readiness = _readiness(store, principal)
+        _require_write_ready(readiness, "company.write")
+        if "company.control.approve" not in readiness.capabilities:
+            raise _error(
+                403,
+                "trial_capability_required",
+                required_capability="company.control.approve",
+            )
+        states, _, _ = _company_brief_context(store, principal, readiness)
+        company = states.get("company")
+        if company is None:
+            raise _error(403, "trial_capability_required", required_capability="company.read")
+        run = _invoke(
+            lambda: build_managed_owner_control_run(
+                workspace_id=principal.workspace_id,
+                states=states,
+            )
+        )
+        if body.run_digest != run["runDigest"]:
+            raise _error(409, "owner_control_changed")
+        selected = next(
+            (
+                item
+                for item in run["items"]
+                if isinstance(item, Mapping) and item.get("itemId") == body.item_id
+            ),
+            None,
+        )
+        if selected is None:
+            raise _error(409, "owner_control_item_changed")
+        if selected["status"] != "pending":
+            return {
+                "run": {**run, "companyVersion": company.version},
+                "retention": {
+                    "contract": "supermega.managed_owner_control_retention.v1",
+                    "status": "already_acknowledged",
+                    "runDigest": run["runDigest"],
+                    "itemId": body.item_id,
+                    "companyVersion": company.version,
+                    "internalWritePerformed": False,
+                    "externalWritesPerformed": False,
+                    "idempotentReplay": True,
+                },
+                "identity": {
+                    "workspace_id": principal.workspace_id,
+                    "actor_id": principal.actor_id,
+                    "actor_kind": principal.actor_kind,
+                },
+            }
+        acknowledgement = _invoke(
+            lambda: owner_control_acknowledgement(
+                run,
+                item_id=body.item_id,
+                retained_by=principal.actor_id,
+            )
+        )
+        next_company = _invoke(
+            lambda: company_state_with_owner_control_acknowledgement(company.state, acknowledgement)
+        )
+        source_versions = run["sourceVersions"]
+        related_surfaces = tuple(str(source["surface"]) for source in source_versions)
+        expected_related_versions = {
+            str(source["surface"]): int(source["version"])
+            for source in source_versions
+        }
+
+        def require_same_owner_control_sources(
+            current_company: Mapping[str, Any],
+            related_states: Mapping[str, Mapping[str, Any]],
+        ) -> None:
+            if current_company != company.state:
+                raise TrialValidationError("Owner control history changed before acknowledgement.")
+            assert_owner_control_sources_unchanged(
+                run,
+                related_states,
+                workspace_id=principal.workspace_id,
+            )
+
+        result = _invoke(
+            lambda: store.apply_command(
+                principal,
+                command_id=body.command_id,
+                surface="company",
+                event_type="company.snapshot.saved",
+                expected_version=body.expected_company_version,
+                payload={"state": next_company},
+                related_surfaces=related_surfaces,
+                expected_related_versions=expected_related_versions,
+                state_precondition=require_same_owner_control_sources,
+            )
+        )
+        updated_states = {
+            **states,
+            "company": TrialState(
+                principal.workspace_id,
+                "company",
+                result.version,
+                result.state,
+                principal.actor_id,
+            ),
+        }
+        updated_run = _invoke(
+            lambda: build_managed_owner_control_run(
+                workspace_id=principal.workspace_id,
+                states=updated_states,
+            )
+        )
+        return {
+            "run": {**updated_run, "companyVersion": result.version},
+            "retention": {
+                "contract": "supermega.managed_owner_control_retention.v1",
+                "status": "already_acknowledged" if result.idempotent_replay else "acknowledged",
+                "runDigest": run["runDigest"],
+                "itemId": body.item_id,
+                "companyVersion": result.version,
+                "internalWritePerformed": not result.idempotent_replay,
+                "externalWritesPerformed": False,
+                "idempotentReplay": result.idempotent_replay,
+            },
+            "identity": {
+                "workspace_id": principal.workspace_id,
+                "actor_id": principal.actor_id,
+                "actor_kind": principal.actor_kind,
+            },
         }
 
     @router.post("/managed-context/validate")

@@ -35,6 +35,7 @@ let websiteReleaseRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 let businessCommandRuntimeChecks = 0
+let ownerControlRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
 const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productHomeReadinessSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
@@ -118,6 +119,8 @@ const managedContextSource = await readFile(resolve(root, 'showroom', 'src', 'co
 const managedContextUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedContextConsent.tsx'), 'utf8')
 const managedContextPythonSource = await readFile(resolve(root, 'supermega_runtime', 'managed_context.py'), 'utf8')
 const operatingBaselineSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'operating-baseline.ts'), 'utf8')
+const ownerControlSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'owner-control.ts'), 'utf8')
+const ownerControlPythonSource = await readFile(resolve(root, 'supermega_runtime', 'owner_control.py'), 'utf8')
 
 if (!managedContextSource.includes("supermega.managed_context_profile_request.v1")
   || !managedContextSource.includes('buildManagedContextProfileRequest')
@@ -806,7 +809,39 @@ if (!companyBriefRuntimeSource.includes('supermega.managed_company_brief.v1')
   || !managedTrialSource.includes("'/api/trial/v1/company-brief'")
   || !managedTrialSource.includes("'/api/trial/v1/company-brief/receipts'")
   || !managedTrialSource.includes('assertManagedCompanyBriefRetention')) fail('managed_company_brief_contract_missing')
+if (!ownerControlSource.includes('supermega.local_owner_control_run.v1')
+  || !ownerControlSource.includes('supermega.local_owner_control_acknowledgement.v1')
+  || !ownerControlSource.includes('sourceFingerprint')
+  || !ownerControlSource.includes('rankBusinessAttention(snapshot)')
+  || !ownerControlSource.includes('Changed records automatically open a new run.')
+  || !ownerControlPythonSource.includes('supermega.managed_owner_control_run.v1')
+  || !ownerControlPythonSource.includes('supermega.managed_owner_control_acknowledgement.v1')
+  || !ownerControlPythonSource.includes('"acknowledgedCount"')
+  || ownerControlPythonSource.includes('"reviewedCount"')
+  || ownerControlPythonSource.includes('approvalSummary')
+  || !ownerControlPythonSource.includes('_MAX_ACKNOWLEDGEMENTS = len(_PRODUCTS)')
+  || !ownerControlPythonSource.includes('assert_owner_control_sources_unchanged')
+  || !managedTrialRuntimeSource.includes('@router.get("/owner-control")')
+  || !managedTrialRuntimeSource.includes('@router.post("/owner-control/acknowledgements")')
+  || !managedTrialRuntimeSource.includes('company.control.approve')
+  || !managedTrialSource.includes("'/api/trial/v1/owner-control'")
+  || !managedTrialSource.includes("'/api/trial/v1/owner-control/acknowledgements'")
+  || !managedTrialSource.includes('expectedManagedOwnerControlRank')
+  || !managedTrialSource.includes('export function assertManagedOwnerControlRun')
+  || !managedTrialSource.includes('export async function assertManagedOwnerControlIntegrity')
+  || !productHomeReadinessSource.includes('aria-label="Owner Control run"')
+  || !productHomeReadinessSource.includes('Acknowledge review')
+  || !productHomeReadinessSource.includes('Acknowledgement confirms review only.')
+  || !productHomeReadinessSource.includes('Changed records will reopen the run.')
+  || !productHomeReadinessSource.includes('currentRun.sourceFingerprint !== localOwnerControl.sourceFingerprint')
+  || !productHomeReadinessSource.includes("window.addEventListener('focus', refreshOnFocus)")
+  || !productHomeReadinessSource.includes("window.addEventListener('storage', refreshOnStorage)")
+  || !productHomeReadinessSource.includes('Follow Owner Control:')
+  || !businessCommandSource.includes('export function rankBusinessAttention')) fail('owner_control_contract_missing')
 if (!coreCssSource.includes('.product-home-command-queue')
+  || !coreCssSource.includes('.owner-control-run')
+  || !coreCssSource.includes('.owner-control-primary')
+  || !coreCssSource.includes('.owner-control-queue > div { grid-template-columns: 1fr; }')
   || !coreCssSource.includes('.business-command-form')
   || !coreCssSource.includes('.business-command-prompts')
   || !coreCssSource.includes('.business-command-answer')
@@ -839,6 +874,10 @@ if (!appLiveVerifierSource.includes('Ask SuperMega')
   || !appLiveVerifierSource.includes('Open Plant')
   || !appLiveVerifierSource.includes('Open Website')
   || !appLiveVerifierSource.includes('Open Ecommerce')
+  || !appLiveVerifierSource.includes('Owner Control run')
+  || !appLiveVerifierSource.includes('Acknowledge review')
+  || !appLiveVerifierSource.includes('Acknowledgement confirms review only.')
+  || !appLiveVerifierSource.includes('Changed records will reopen the run.')
   || !appLiveVerifierSource.includes('agent_job_chosen')) fail('live_verifier_missing_business_command_contract')
 if (!businessCommandSource.includes("export type BusinessCommandIntent")
   || !businessCommandSource.includes("contract: 'supermega.local_business_snapshot.v1'")
@@ -10676,6 +10715,154 @@ async function verifyBusinessCommandRuntime() {
   }
 }
 
+async function verifyOwnerControlRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    ownerControlRuntimeChecks += 1
+  }
+  try {
+    const nonce = Date.now()
+    const control = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'owner-control.ts')).href}?owner-control=${nonce}`)
+    const command = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'business-command.ts')).href}?owner-control-command=${nonce}`)
+    const managed = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'managed-trial.ts')).href}?owner-control-managed=${nonce}`)
+    const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?owner-control-commerce=${nonce}`)
+    const production = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts')).href}?owner-control-production=${nonce}`)
+    const values = new Map()
+    const storage = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, String(value)),
+      removeItem: (key) => values.delete(key),
+    }
+
+    const emptySnapshot = command.readLocalBusinessSnapshot(storage)
+    const emptyRun = control.buildLocalOwnerControlRun(emptySnapshot, [])
+    assert(emptyRun.contract === 'supermega.local_owner_control_run.v1' && emptyRun.sourceCount === 0, 'owner_control_empty_contract_wrong')
+    assert(emptyRun.primary?.product === 'shop' && emptyRun.pendingCount === 1, 'owner_control_empty_start_not_actionable')
+    const acknowledgements = control.acknowledgeLocalOwnerControlItem(storage, emptyRun, emptyRun.primary)
+    const acknowledgedRun = control.buildLocalOwnerControlRun(emptySnapshot, acknowledgements)
+    assert(acknowledgedRun.pendingCount === 0 && acknowledgedRun.acknowledgedCount === 1, 'owner_control_acknowledgement_not_applied')
+    assert(!JSON.stringify(acknowledgements).includes('completed') && !JSON.stringify(acknowledgements).includes('not_relevant'), 'owner_control_claimed_unverified_outcome')
+    const replay = control.acknowledgeLocalOwnerControlItem(storage, emptyRun, emptyRun.primary)
+    assert(replay.length === 1, 'owner_control_acknowledgement_not_idempotent')
+
+    const productionState = production.createSeedProduction()
+    productionState.machines[0] = { ...productionState.machines[0], state: 'stopped' }
+    values.set(production.PRODUCTION_KEY, JSON.stringify(productionState))
+    values.set(commerce.COMMERCE_KEY, '{broken')
+    const safetySnapshot = command.readLocalBusinessSnapshot(storage)
+    const safetyRun = control.buildLocalOwnerControlRun(safetySnapshot, control.readLocalOwnerControlAcknowledgements(storage))
+    assert(safetyRun.primary?.product === 'plant' && safetyRun.primary?.priority === 'critical', 'owner_control_plant_safety_not_first')
+    assert(safetyRun.items.some((item) => item.product === 'shop' && item.priority === 'high'), 'owner_control_invalid_shop_repair_missing')
+    assert(safetyRun.runKey !== emptyRun.runKey && safetyRun.primary?.status === 'pending', 'owner_control_changed_source_did_not_reopen')
+    const collisionAcknowledgement = {
+      ...acknowledgements[0],
+      runKey: safetyRun.runKey,
+      itemId: safetyRun.primary.itemId,
+      product: safetyRun.primary.product,
+      sourceFingerprint: emptyRun.sourceFingerprint,
+    }
+    const collisionRun = control.buildLocalOwnerControlRun(safetySnapshot, [collisionAcknowledgement])
+    assert(collisionRun.primary?.status === 'pending', 'owner_control_snapshot_hash_collision_reused_acknowledgement')
+    assert(safetyRun.externalWritesPerformed === false, 'owner_control_reported_external_write')
+
+    const digestA = `sha256:${'a'.repeat(64)}`
+    const digestB = `sha256:${'b'.repeat(64)}`
+    const digestC = `sha256:${'c'.repeat(64)}`
+    const managedBaseline = {
+      contract: 'supermega.operating_baseline.v1',
+      version: 1,
+      workspaceId: 'workspace-a',
+      sourceVersions: [],
+      coverage: { readyProducts: 0, missingProducts: 4, invalidProducts: 0 },
+      products: {
+        shop: { status: 'missing', attentionLevel: 0, reviewLoad: 0, itemCount: 0, lowStock: 0, activeOrders: 0, moneyExceptions: 0, incomingRequests: 0 },
+        plant: { status: 'missing', attentionLevel: 0, reviewLoad: 0, jobCount: 0, unfinishedJobs: 0, heldJobs: 0, criticalIssues: 0, highIssues: 0, openIssues: 0, stoppedMachines: 0 },
+        website: { status: 'missing', attentionLevel: 0, reviewLoad: 0, pageCount: 0, readyPages: 0, approved: false, released: false },
+        ecommerce: { status: 'missing', attentionLevel: 0, reviewLoad: 0, selectedSkus: 0, incomingRequests: 0, shopSourceReady: false },
+      },
+      rawRecordsIncluded: false,
+      baselineDigest: digestA,
+    }
+    const managedResponse = {
+      identity: { workspace_id: 'workspace-a', actor_id: 'owner-a', actor_kind: 'human' },
+      run: {
+        acknowledgedCount: 0,
+        boundary: 'Review only. No external action.',
+        companyVersion: 0,
+        contract: 'supermega.managed_owner_control_run.v1',
+        externalWritesPerformed: false,
+        items: [{
+          facts: [
+            { label: 'Source', value: 'Not connected', detail: 'No operational fact was inferred.' },
+            { label: 'Evidence', value: 'Not enough', detail: 'The answer fails closed.' },
+            { label: 'Approvals', value: 'Unchanged', detail: 'Existing decisions remain intact.' },
+            { label: 'Write gate', value: 'Blocked', detail: 'No external action runs.' },
+          ],
+          intent: 'shop_inventory',
+          itemId: digestB,
+          nextAction: { label: 'Prepare Shop', path: '/settings/?product=shop', product: 'shop' },
+          priority: 'routine',
+          product: 'shop',
+          status: 'pending',
+          summary: 'Import or prepare one product.',
+          title: 'Shop needs managed source data',
+        }],
+        operatingBaseline: managedBaseline,
+        operatingBaselineDigest: digestA,
+        pendingCount: 1,
+        primaryItemId: digestB,
+        runDigest: digestC,
+        sourceCount: 0,
+        sourceVersions: [],
+        summary: 'Import one product before relying on a managed recommendation.',
+        title: 'Start with one trusted business source',
+        workspaceId: 'workspace-a',
+      },
+    }
+    const canonicalFixtureJson = (value) => Array.isArray(value)
+      ? `[${value.map((item) => canonicalFixtureJson(item)).join(',')}]`
+      : value && typeof value === 'object'
+        ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalFixtureJson(value[key])}`).join(',')}}`
+        : JSON.stringify(value)
+    const fixtureDigest = (value) => `sha256:${createHash('sha256').update(canonicalFixtureJson(value), 'utf8').digest('hex')}`
+    const { baselineDigest: _fixtureBaselineDigest, ...fixtureBaselineBasis } = managedBaseline
+    managedBaseline.baselineDigest = fixtureDigest(fixtureBaselineBasis)
+    managedResponse.run.operatingBaselineDigest = managedBaseline.baselineDigest
+    managedResponse.run.items[0].itemId = fixtureDigest({
+      action: managedResponse.run.items[0].nextAction,
+      baselineDigest: managedResponse.run.operatingBaselineDigest,
+      contract: 'supermega.managed_owner_control_item.v1',
+      intent: managedResponse.run.items[0].intent,
+    })
+    managedResponse.run.primaryItemId = managedResponse.run.items[0].itemId
+    managedResponse.run.runDigest = fixtureDigest({
+      contract: managedResponse.run.contract,
+      items: managedResponse.run.items.map(({ status, ...item }) => item),
+      operatingBaselineDigest: managedResponse.run.operatingBaselineDigest,
+      sourceVersions: managedResponse.run.sourceVersions,
+      workspaceId: managedResponse.run.workspaceId,
+    })
+    const managedIdentity = { workspaceId: 'workspace-a', userId: 'owner-a', accessToken: 'test-token' }
+    assert(managed.assertManagedOwnerControlRun(managedResponse, managedIdentity).acknowledgedCount === 0, 'managed_owner_control_wire_contract_rejected')
+    await managed.assertManagedOwnerControlIntegrity(managedResponse.run)
+    ownerControlRuntimeChecks += 1
+    let rankRejected = false
+    try { managed.assertManagedOwnerControlRun({ ...managedResponse, run: { ...managedResponse.run, items: [{ ...managedResponse.run.items[0], priority: 'critical' }] } }, managedIdentity) } catch { rankRejected = true }
+    assert(rankRejected, 'managed_owner_control_rank_mismatch_accepted')
+    let keyRejected = false
+    try { const { acknowledgedCount, ...wrongKeys } = managedResponse.run; managed.assertManagedOwnerControlRun({ ...managedResponse, run: { ...wrongKeys, reviewedCount: acknowledgedCount } }, managedIdentity) } catch { keyRejected = true }
+    assert(keyRejected, 'managed_owner_control_wire_key_mismatch_accepted')
+    let digestRejected = false
+    try { await managed.assertManagedOwnerControlIntegrity({ ...managedResponse.run, runDigest: digestC }) } catch { digestRejected = true }
+    assert(digestRejected, 'managed_owner_control_digest_mismatch_accepted')
+    let baselineRejected = false
+    try { await managed.assertManagedOwnerControlIntegrity({ ...managedResponse.run, operatingBaseline: { ...managedBaseline, baselineDigest: digestA } }) } catch { baselineRejected = true }
+    assert(baselineRejected, 'managed_owner_control_baseline_digest_mismatch_accepted')
+  } catch (error) {
+    fail(`owner_control_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 await verifyChannelOrderRuntime()
 await verifyShopInventoryRuntime()
 await verifyPlantOrderRuntime()
@@ -10696,6 +10883,7 @@ await verifyEcommerceActivationRuntime()
 await verifyCommerceRuntime()
 await verifyProductionRuntime()
 await verifyBusinessCommandRuntime()
+await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
 if (bytes > 2_500_000) fail(`artifact_budget:${bytes}`)
@@ -10710,4 +10898,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

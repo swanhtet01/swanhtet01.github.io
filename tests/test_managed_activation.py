@@ -338,6 +338,7 @@ class ManagedActivationPlanTests(unittest.TestCase):
         self.assertIn("commerce.write", first["ownerCapabilities"])
         self.assertNotIn("production.write", first["ownerCapabilities"])
         self.assertIn("company.baseline.approve", first["ownerCapabilities"])
+        self.assertIn("company.control.approve", first["ownerCapabilities"])
         self.assertEqual(first["rollback"]["authorizationScope"], "automatic_activation_compensation")
         self.assertEqual(first["rollback"]["trigger"], "downstream_release_gate_failure")
         serialized = json.dumps(first, sort_keys=True)
