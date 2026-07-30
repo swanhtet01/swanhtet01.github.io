@@ -55,7 +55,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 - Current checkpoints: Plant implementation `33508cc`, release `a388603`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
 - App/local gates pass: 45 focused Python tests, lint/build, 290 Production, 26 pilot-outcome, 71 workflow, 83 security, and 11 privacy checks plus the full release/database/Vercel/HQ suite.
-- PostgreSQL 17 rehearsal passes 52 loopback checks: migrations, isolation, four-product journeys, human approvals, authenticated managed-context validation/retention/readback, TLS, backup/restore, and cleanup. Hosted Storage privacy remains unproven (`33508cc`).
+- PostgreSQL 17 rehearsal passes 52 loopback checks, now including signed context retention and restore. Hosted Storage privacy remains unproven (`33508cc`).
 - Plant shift review and close preparation pass at 390 and 1365 px without overflow or console errors. Managed close parity remains model/runtime verified.
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
 - Both `supermega.dev` and `app.supermega.dev` serve exact commit `a3886039f08b834ea55dd5b443ea7b9962157ff5`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Protected promotion, exact paired release identity, and live verifiers pass at catalog `2026-07-30.2`.
