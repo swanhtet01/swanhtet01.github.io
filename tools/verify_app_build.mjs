@@ -135,6 +135,11 @@ const companyBackupUiSource = await readFile(resolve(root, 'showroom', 'src', 'c
 
 if (!managedContextSource.includes("supermega.managed_context_profile_request.v1")
   || !managedContextSource.includes('buildManagedContextProfileRequest')
+  || !managedContextSource.includes("supermega.ai_context_export.v1")
+  || !managedContextSource.includes('buildManagedAiContextExport')
+  || !managedContextSource.includes('structurallyValidManagedAiContextExport')
+  || !managedContextSource.includes('rawBehaviorEntriesIncluded: false')
+  || !managedContextSource.includes('rawDecisionRecordsIncluded: false')
   || !managedContextSource.includes('managedContextValidationProjection')
   || !managedContextSource.includes('rawProductRecordsIncluded: false')
   || !managedContextSource.includes('modelTrainingAllowed: false')
@@ -1181,7 +1186,17 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !settingsPageSource.includes('Ecommerce activation packet reviewed locally. No import, managed activation, Shop write, payment, delivery, stock, or customer action ran.')
   || !settingsPageSource.includes('Ecommerce activation packet rejected locally. No managed action ran.')
   || !settingsPageSource.includes("setup.product === 'ecommerce'")
-  || !settingsPageSource.includes('Export AI context package')
+  || !settingsPageSource.includes('aria-label="Approved AI context export"')
+  || !settingsPageSource.includes('Review the summary AI can receive.')
+  || !settingsPageSource.includes('Contains counts and a preferred product only. Raw product records, behavior entries, decision records, notes, and browser text are excluded.')
+  || !settingsPageSource.includes("pilotOutcomeReport.review.reviewedBy === setup.owner")
+  || !settingsPageSource.includes('I approve this summary-only context package for managed AI review.')
+  || !settingsPageSource.includes('acceptedAiContextOutcome,\n        setup.owner,')
+  || !settingsPageSource.includes('Download approved context')
+  || !settingsPageSource.includes('The download performs no upload, managed write, model training, customer action, or external send.')
+  || !settingsPageSource.includes('The full evidence export includes local product records for private backup or support review.')
+  || !settingsPageSource.includes('Export full evidence')
+  || settingsPageSource.includes('Export AI context package')
   || !settingsPageSource.includes('Premium can rank next actions from reviewed workspace behavior after import.')
   || !settingsPageSource.includes('Free mode prepares the evidence package. Premium imports approved data, behavior, and decisions only after managed controls pass.')
   || !settingsPageSource.includes('The agent prepares the next workflow from this product setup; managed writes stay locked until the activation gates pass.')
@@ -5362,6 +5377,59 @@ async function verifyManagedContextRuntime() {
       product: 'shop', templateId: 'social-commerce', selectedProductRecords: 7, behaviorSignals: 3,
       reviewedDecisions: 1, behaviorPreference: { ...behaviorPreference, preferred: null },
     }) === null, 'managed_context_missing_owner_pattern_accepted')
+    const approvedExport = model.buildManagedAiContextExport({
+      product: 'shop',
+      templateId: 'social-commerce',
+      selectedProductRecords: 7,
+      behaviorSignals: 3,
+      reviewedDecisions: 1,
+      behaviorPreference,
+      outcomeStatus: 'target_met',
+      outcomeDigest: `sha256:${'c'.repeat(64)}`,
+      reviewedBy: 'Business owner',
+      reviewedAt: '2026-07-31T00:00:00.000Z',
+    })
+    assert(approvedExport?.contract === 'supermega.ai_context_export.v1'
+      && model.structurallyValidManagedAiContextExport(approvedExport)
+      && approvedExport.contextDigest.startsWith('sha256:')
+      && approvedExport.ownerReview.status === 'approved_for_managed_review'
+      && approvedExport.outcome.status === 'target_met'
+      && approvedExport.outcome.accepted === true
+      && approvedExport.handoff.route === 'managed_activation_review'
+      && approvedExport.handoff.activationRequired === true
+      && approvedExport.privacyBoundary.rawProductRecordsIncluded === false
+      && approvedExport.privacyBoundary.rawBehaviorEntriesIncluded === false
+      && approvedExport.privacyBoundary.rawDecisionRecordsIncluded === false
+      && approvedExport.privacyBoundary.externalSendPerformed === false
+      && approvedExport.privacyBoundary.managedWritePerformed === false
+      && approvedExport.privacyBoundary.modelTrainingAllowed === false,
+    'managed_ai_context_export_not_summary_only')
+    const approvedExportText = JSON.stringify(approvedExport)
+    assert(!approvedExportText.includes('Browser-local customer wording')
+      && !approvedExportText.includes('commerce.items')
+      && !approvedExportText.includes('decisionNote')
+      && !approvedExportText.includes('behaviorTrail'),
+    'managed_ai_context_export_leaked_raw_context')
+    assert(!model.structurallyValidManagedAiContextExport({
+      ...approvedExport,
+      sourceCounts: { ...approvedExport.sourceCounts, selectedProductRecords: 8 },
+    }), 'managed_ai_context_export_digest_tamper_accepted')
+    assert(!model.structurallyValidManagedAiContextExport({ ...approvedExport, behaviorTrail: [] }), 'managed_ai_context_export_extra_raw_field_accepted')
+    assert(model.buildManagedAiContextExport({
+      product: 'shop', templateId: 'social-commerce', selectedProductRecords: 7, behaviorSignals: 3,
+      reviewedDecisions: 1, behaviorPreference, outcomeStatus: 'target_met', outcomeDigest: `sha256:${'c'.repeat(64)}`,
+      reviewedBy: '   ', reviewedAt: '2026-07-31T00:00:00.000Z',
+    }) === null, 'managed_ai_context_export_blank_owner_accepted')
+    assert(model.buildManagedAiContextExport({
+      product: 'shop', templateId: 'social-commerce', selectedProductRecords: 7, behaviorSignals: 3,
+      reviewedDecisions: 1, behaviorPreference, outcomeStatus: 'target_met', outcomeDigest: `sha256:${'c'.repeat(64)}`,
+      reviewedBy: 'Business owner', reviewedAt: '2026-07-31',
+    }) === null, 'managed_ai_context_export_noncanonical_time_accepted')
+    assert(model.buildManagedAiContextExport({
+      product: 'shop', templateId: 'social-commerce', selectedProductRecords: 7, behaviorSignals: 3,
+      reviewedDecisions: 1, behaviorPreference, outcomeStatus: 'unchanged', outcomeDigest: `sha256:${'c'.repeat(64)}`,
+      reviewedBy: 'Business owner', reviewedAt: '2026-07-31T00:00:00.000Z',
+    }) === null, 'managed_ai_context_export_unaccepted_outcome_accepted')
     const profileDigest = `sha256:${createHash('sha256').update(JSON.stringify(model.managedContextProfileProjection(request, identity))).digest('hex')}`
     const profile = {
       contract: 'supermega.managed_context_profile.v1',
