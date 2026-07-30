@@ -5870,6 +5870,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ? maintenanceMachineId
     : availableMaintenanceMachines[0]?.id ?? ''
   const selectedMaintenanceMachine = availableMaintenanceMachines.find((machine) => machine.id === selectedMaintenanceMachineId)
+  const selectedMaintenanceStrategy = production.equipmentMaster?.assets.find((asset) => asset.id === selectedMaintenanceMachineId)?.maintenanceStrategy
+  const selectedMaintenanceOwner = selectedMaintenanceStrategy?.maintenanceOwner ?? maintenanceOwner.trim()
   const selectedShopDemand = shopDemandSignals.find((signal) => signal.sourceDigest === selectedShopDemandDigest)
   const nextShopDemand = shopDemandSignals.find((signal) => !signal.existingActiveJobIds.length) ?? shopDemandSignals[0]
   const plantRows = [
@@ -6956,7 +6958,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
   function reviewMaintenanceStart(event: FormEvent) {
     event.preventDefault()
-    const owner = maintenanceOwner.trim()
+    const owner = selectedMaintenanceOwner
     if (!selectedMaintenanceMachine || !owner || owner.length > 120) {
       setNotice('Choose one recorded machine and a named maintenance owner.')
       return
@@ -6969,7 +6971,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       subjectId: machine.id,
       summary: `Start maintenance for ${machine.name}`,
       before: `${machine.name} · no open maintenance work · machine status and downtime records unchanged`,
-      after: `${machine.name} · maintenance owned by ${owner} with scope and evidence · no equipment command`,
+      after: selectedMaintenanceStrategy
+        ? `${machine.name} · strategy R${selectedMaintenanceStrategy.revision} procedure bound to ${owner} with evidence · no equipment command`
+        : `${machine.name} · maintenance owned by ${owner} with scope and evidence · no equipment command`,
       apply: async (record) => {
         await mutateProduction('production.maintenance.started', record.commandId, productionActionProof(record), (current) => startProductionMaintenance(current, machine.id, owner, productionActionProof(record)))
         setMaintenanceMachineId('')
@@ -6988,7 +6992,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       subjectId: machine.id,
       summary: `Complete maintenance for ${machine.name}`,
       before: `${machine.name} · open maintenance owned by ${record.owner} since ${formatTime(record.startedAt)}`,
-      after: `${machine.name} · maintenance completed with outcome and evidence · machine status and downtime records unchanged`,
+      after: record.strategy
+        ? `${machine.name} · reviewed completion advances next due from the strategy interval · machine status and downtime unchanged`
+        : `${machine.name} · maintenance completed with outcome and evidence · machine status and downtime records unchanged`,
       apply: async (action) => {
         await mutateProduction('production.maintenance.completed', action.commandId, productionActionProof(action), (current) => completeProductionMaintenance(current, machine.id, record.startActionId, productionActionProof(action)))
       },
@@ -7278,16 +7284,17 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       <div className="panel-head"><div><span className="core-eyebrow">Owned work</span><h2 id="maintenance-dialog-title">Machine maintenance</h2></div><button aria-label="Close maintenance work" className="text-link" onClick={closeMaintenanceDialog} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
       {openMaintenanceRecords.length ? <div className="issue-list">{openMaintenanceRecords.map((record, index) => <article key={record.startActionId}>
         <span aria-hidden="true" className="issue-mark">MX</span>
-        <div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started {formatTime(record.startedAt)} by {record.startedBy}</small><small style={wrappedIssueDetail}>Scope: {record.scope}</small><small style={wrappedIssueDetail}>Evidence: {record.startEvidenceReference} · Action: {record.startActionId}</small></div>
+        <div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started {formatTime(record.startedAt)} by {record.startedBy}</small>{record.strategy ? <small style={wrappedIssueDetail}>Strategy R{record.strategy.revision} · Due {formatIssueDue(record.strategy.plannedDueAt)} · {record.strategy.procedureReference}</small> : null}<small style={wrappedIssueDetail}>Scope: {record.scope}</small><small style={wrappedIssueDetail}>Evidence: {record.startEvidenceReference} · Action: {record.startActionId}</small></div>
         <button className="core-button" data-maintenance-primary={index === 0 ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => reviewMaintenanceCompletion(record)} type="button">Review complete</button>
       </article>)}</div> : <p className="panel-copy">No machine has open maintenance work.</p>}
       {availableMaintenanceMachines.length ? <form autoComplete="off" className="core-form compact-form" onSubmit={reviewMaintenanceStart}>
-        <label>Machine<select data-maintenance-primary={!openMaintenanceRecords.length ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setMaintenanceMachineId(event.target.value)} value={selectedMaintenanceMachineId}>{availableMaintenanceMachines.map((machine) => <option key={machine.id} value={machine.id}>{machine.name} · {machine.id} · recorded {productionMachineStateLabels[machine.state]}</option>)}</select></label>
-        <label>Owner<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setMaintenanceOwner(event.target.value)} placeholder="Named person or role" required value={maintenanceOwner} /></label>
-        <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaintenanceMachine || !maintenanceOwner.trim() || maintenanceOwner.trim().length > 120} type="submit">Review start</button>
+        <label>Machine<select data-maintenance-primary={!openMaintenanceRecords.length ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setMaintenanceMachineId(event.target.value)} value={selectedMaintenanceMachineId}>{availableMaintenanceMachines.map((machine) => { const strategy = production.equipmentMaster?.assets.find((asset) => asset.id === machine.id)?.maintenanceStrategy; return <option key={machine.id} value={machine.id}>{machine.name} · {strategy ? `planned R${strategy.revision}` : `recorded ${productionMachineStateLabels[machine.state]}`}</option> })}</select></label>
+        {selectedMaintenanceStrategy ? <p className="panel-copy"><strong>Strategy R{selectedMaintenanceStrategy.revision}</strong> · Due {formatIssueDue(selectedMaintenanceStrategy.nextDueAt)}<br />Procedure: {selectedMaintenanceStrategy.procedureReference}</p> : null}
+        <label>{selectedMaintenanceStrategy ? 'Strategy owner' : 'Owner'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setMaintenanceOwner(event.target.value)} placeholder="Named person or role" readOnly={Boolean(selectedMaintenanceStrategy)} required value={selectedMaintenanceStrategy ? selectedMaintenanceOwner : maintenanceOwner} /></label>
+        <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaintenanceMachine || !selectedMaintenanceOwner || selectedMaintenanceOwner.length > 120} type="submit">Review start</button>
       </form> : <p className="panel-copy">Every recorded machine already has open maintenance work.</p>}
-      {recentMaintenanceRecords.length ? <><p className="panel-copy"><strong>Recent completed work</strong></p><div className="action-history-list">{recentMaintenanceRecords.map((record) => <article key={record.startActionId}><div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started: {record.startedBy} · {record.scope} · {record.startEvidenceReference}</small><small style={wrappedIssueDetail}>Completed: {record.completion?.completedBy} · {record.completion?.outcome} · {record.completion?.evidenceReference}</small><small style={wrappedIssueDetail}>{formatTime(record.startedAt)} to {formatTime(record.completion?.completedAt ?? record.startedAt)}</small></div></article>)}</div></> : null}
-      <p className="panel-copy">The accountable review records work scope or completion outcome. It does not control equipment, change machine status, open downtime, buy parts, or change jobs.</p>
+      {recentMaintenanceRecords.length ? <><p className="panel-copy"><strong>Recent completed work</strong></p><div className="action-history-list">{recentMaintenanceRecords.map((record) => <article key={record.startActionId}><div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started: {record.startedBy} · {record.scope} · {record.startEvidenceReference}</small><small style={wrappedIssueDetail}>Completed: {record.completion?.completedBy} · {record.completion?.outcome} · {record.completion?.evidenceReference}</small>{record.completion?.nextDueAt ? <small style={wrappedIssueDetail}>Next due: {formatIssueDue(record.completion.nextDueAt)} · Strategy R{record.strategy?.revision}</small> : null}<small style={wrappedIssueDetail}>{formatTime(record.startedAt)} to {formatTime(record.completion?.completedAt ?? record.startedAt)}</small></div></article>)}</div></> : null}
+      <p className="panel-copy">A commissioned asset uses its reviewed owner, procedure, revision, and due date. Completion advances the next due from the strategy interval. No equipment command, telemetry, parts purchase, status change, downtime, or job change occurs.</p>
     </dialog>
     <dialog aria-labelledby="machine-observation-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMachineObservation() }} ref={machineDialogRef}>
       {observedMachine && machineObservation ? <>

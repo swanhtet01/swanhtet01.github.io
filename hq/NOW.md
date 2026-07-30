@@ -42,6 +42,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Ecommerce return intent opens the exact completed Shop order; Shop alone records return and refund evidence.
 - Ecommerce carries versioned contact/address snapshots through recovery and Shop handoff; hosted identity and provider execution remain absent.
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, release, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE. Shop-driven jobs retain customer-free digest-bound demand, and one read-only batch genealogy joins source orders, lots, good/scrap output, quality, and controlled execution without operational actions.
+- Plant maintenance binds active strategy, owner, revision, procedure, and due evidence; reviewed completion alone advances next due. It performs no dispatch, control, telemetry, or parts action.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 - CEO status is output-free across weekly briefs. Company Week separates recorded from delivered and fails incomplete delivery to attention; Company Health shows receipt counts (`8d97d4d`, `ece46ce`).
@@ -49,7 +50,8 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 ## Verified baseline
 
-- Current local checkpoints: workspace recovery `81c1db0`, database contracts `dd0d84a`, and Shop receivables `8402162`; the full app gate and all 359 Python tests pass. Ecommerce reports 61 buying, 290 Commerce, and 273 Production checks.
+- Current local checkpoints: workspace recovery `81c1db0`, database contracts `dd0d84a`, and Shop receivables `8402162`; the full app gate and all 359 Python tests pass.
+- The current candidate passes 378 Python, 274 Production, 318 Kernel, 69 connector, and 15 crew checks. Headless Edge verifies Plant maintenance at desktop and 390 px without overflow or runtime errors.
 - Client preparation passes 186 onboarding, 74 security, six preparation, recovery, release, privacy, database, Vercel, HQ, approval, and tamper-before-write checks.
 - Browser proof: one Manufacturing kit installed all four products, persisted prepared records, completed a Shop sale (OIL-1L 48 to 47; orders four to five), reset cleanly, and reprovisioned. Desktop/mobile had no overflow or browser warnings.
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
@@ -85,9 +87,6 @@ Every slice must keep one primary action, progressive disclosure, mobile accepta
 
 ## Next evidence
 
-1. Repeat the proven private-package path with founder-selected client CSVs for all four products and validate reconciliation, correction, and rollback evidence.
-2. On approved isolated Supabase, use the workspace package to prove Storage, RLS, isolation, exact restore, and one tenant before writes.
-3. Repeat all 12 profiles live, including mobile, reload, import repair, duplicate handoff, export, and reset.
-4. Recruit one founder-approved Shop design partner with a named operator, baseline, five-day evidence plan, and explicit acceptance criteria.
-5. Keep AI and hosted scheduling dormant until the managed-security, durable-budget, recovery, and owner-approval gates pass; registered roles must continue to consume zero idle compute.
-6. Review and integrate the exact current candidate through current `main`, then require protected preview, paired live verification, observability, rollback, and fresh `hq:verify:live` before marketing or another CEO repair.
+1. Rehearse founder-selected client CSVs across all four products, including reconciliation, rollback, mobile, reload, duplicate handoff, export, and reset.
+2. On approved isolated Supabase, prove Storage, RLS, tenant isolation, and exact restore before writes.
+3. Recruit one approved Shop design partner, then require protected preview, paired verification, observability, rollback, and fresh live HQ evidence before marketing. Keep AI and scheduling dormant until their gates pass.

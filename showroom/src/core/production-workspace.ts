@@ -169,6 +169,10 @@ export type ProductionEvent = {
   downtimeStartActionId?: string
   maintenanceOwner?: string
   maintenanceStartActionId?: string
+  maintenanceStrategyActionId?: string
+  maintenanceStrategyRevision?: number
+  maintenanceProcedureReference?: string
+  maintenancePlannedDueAt?: string
   equipmentIds?: string[]
   installedAt?: string
   workCentreId?: string
@@ -350,12 +354,19 @@ export type ProductionMaintenanceRecord = {
   startedBy: string
   scope: string
   startEvidenceReference: string
+  strategy?: {
+    actionId: string
+    revision: number
+    procedureReference: string
+    plannedDueAt: string
+  }
   completion?: {
     actionId: string
     completedAt: string
     completedBy: string
     outcome: string
     evidenceReference: string
+    nextDueAt?: string
   }
 }
 
@@ -373,8 +384,9 @@ const qualityHoldEventFields = baseEventFields
 const materialEventFields = [...baseEventFields, 'quantity', 'shiftRef', 'materialRef', 'materialUnit']
 const materialOptionalEventFields = ['materialLot']
 const downtimeEndEventFields = [...baseEventFields, 'downtimeStartActionId']
-const maintenanceStartEventFields = [...baseEventFields, 'maintenanceOwner']
-const maintenanceCompleteEventFields = [...baseEventFields, 'maintenanceStartActionId']
+const maintenanceStrategyBindingFields = ['maintenanceStrategyActionId', 'maintenanceStrategyRevision', 'maintenanceProcedureReference', 'maintenancePlannedDueAt']
+const maintenanceStartEventFields = [...baseEventFields, 'maintenanceOwner', ...maintenanceStrategyBindingFields]
+const maintenanceCompleteEventFields = [...baseEventFields, 'maintenanceStartActionId', ...maintenanceStrategyBindingFields, 'nextDueAt']
 const equipmentImportEventFields = [...baseEventFields, 'equipmentIds']
 const equipmentCommissionEventFields = [...baseEventFields, 'installedAt', 'toState', 'workCentreId']
 const equipmentMaintenanceStrategyEventFields = [...baseEventFields, 'strategyRevision', 'maintenanceOwner', 'intervalDays', 'nextDueAt', 'procedureReference']
@@ -840,8 +852,7 @@ export function validateProductionState(value: unknown): ProductionState {
           assertSafeInteger(strategy.intervalDays, `equipmentMaster.assets[${index}].maintenanceStrategy.intervalDays`, 1)
           if (Number(strategy.intervalDays) > 3650) throw new Error(`equipmentMaster.assets[${index}].maintenanceStrategy.intervalDays is too large.`)
           if (!validDowntimeTimestamp(strategy.savedAt) || !validDowntimeTimestamp(strategy.nextDueAt)) throw new Error(`equipmentMaster.assets[${index}].maintenanceStrategy timestamps are invalid.`)
-          if (timestampAtOrBefore(strategy.nextDueAt as string, strategy.savedAt as string)
-            || Date.parse(strategy.nextDueAt as string) > Date.parse(strategy.savedAt as string) + Number(strategy.intervalDays) * 86_400_000) throw new Error(`equipmentMaster.assets[${index}].maintenanceStrategy.nextDueAt is outside its interval.`)
+          if (timestampAtOrBefore(strategy.nextDueAt as string, strategy.savedAt as string)) throw new Error(`equipmentMaster.assets[${index}].maintenanceStrategy.nextDueAt must follow strategy save time.`)
         }
       } else if (candidate.maintenanceStrategy !== undefined) {
         throw new Error(`equipmentMaster.assets[${index}] cannot retain a maintenance strategy before commissioning.`)
@@ -905,7 +916,7 @@ export function validateProductionState(value: unknown): ProductionState {
     const issueSnapshotFields = ['issueSeverity', 'issueOwner', 'issueDueAt', 'issueContainment'] as const
     const issueSnapshotFieldCount = issueSnapshotFields.filter((field) => candidate[field] !== undefined).length
     const materialFieldCount = ['materialRef', 'materialLot', 'materialUnit'].filter((field) => candidate[field] !== undefined).length
-    const maintenanceFieldCount = ['maintenanceOwner', 'maintenanceStartActionId'].filter((field) => candidate[field] !== undefined).length
+    const maintenanceFieldCount = ['maintenanceOwner', 'maintenanceStartActionId', ...maintenanceStrategyBindingFields, 'nextDueAt'].filter((field) => candidate[field] !== undefined).length
     if (candidate.kind === 'equipment_master_imported') {
       if (candidate.subjectId !== 'equipment-master') throw new Error(`events[${index}] must reference the equipment master authority.`)
       if (!Array.isArray(candidate.equipmentIds) || candidate.equipmentIds.length < 1 || candidate.equipmentIds.length > 100) throw new Error(`events[${index}].equipmentIds are invalid.`)
@@ -1015,10 +1026,24 @@ export function validateProductionState(value: unknown): ProductionState {
     } else if (candidate.kind === 'maintenance_started' || candidate.kind === 'maintenance_completed') {
       if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
       if (!validDowntimeTimestamp(candidate.createdAt)) throw new Error(`events[${index}].createdAt must be a canonical UTC millisecond timestamp for maintenance.`)
-      const expectedFields = candidate.kind === 'maintenance_started' ? maintenanceStartEventFields : maintenanceCompleteEventFields
+      const bindingFieldCount = maintenanceStrategyBindingFields.filter((field) => candidate[field] !== undefined).length
+      const strategyBound = bindingFieldCount === maintenanceStrategyBindingFields.length
+      if (bindingFieldCount !== 0 && !strategyBound) throw new Error(`events[${index}] maintenance strategy binding is incomplete.`)
+      const expectedFields = candidate.kind === 'maintenance_started'
+        ? (strategyBound ? maintenanceStartEventFields : [...baseEventFields, 'maintenanceOwner'])
+        : (strategyBound ? maintenanceCompleteEventFields : [...baseEventFields, 'maintenanceStartActionId'])
       if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...expectedFields].sort())) throw new Error(`events[${index}] maintenance event fields are invalid.`)
       if (candidate.kind === 'maintenance_started') canonicalText(candidate.maintenanceOwner, `events[${index}].maintenanceOwner`, 120)
       else canonicalText(candidate.maintenanceStartActionId, `events[${index}].maintenanceStartActionId`, 160)
+      if (strategyBound) {
+        canonicalText(candidate.maintenanceStrategyActionId, `events[${index}].maintenanceStrategyActionId`, 160)
+        assertSafeInteger(candidate.maintenanceStrategyRevision, `events[${index}].maintenanceStrategyRevision`, 1)
+        canonicalText(candidate.maintenanceProcedureReference, `events[${index}].maintenanceProcedureReference`, 240)
+        if (!validDowntimeTimestamp(candidate.maintenancePlannedDueAt)) throw new Error(`events[${index}].maintenancePlannedDueAt is invalid.`)
+        if (candidate.kind === 'maintenance_completed') {
+          if (!validDowntimeTimestamp(candidate.nextDueAt) || timestampAtOrBefore(candidate.nextDueAt as string, candidate.createdAt as string)) throw new Error(`events[${index}].nextDueAt must follow reviewed completion.`)
+        }
+      }
     } else if (candidate.kind === 'issue_opened') {
       if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
       if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || maintenanceFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
@@ -1085,6 +1110,7 @@ export function validateProductionState(value: unknown): ProductionState {
     if (postOpeningIds.length !== commissionedIds.size || postOpeningIds.some((id) => !commissionedIds.has(id))) throw new Error('Every runtime machine added after opening requires equipment commissioning.')
   }
   const equipmentMaintenanceStrategyEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'equipment_maintenance_strategy_saved')
+  const equipmentMaintenanceEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && (event.kind === 'maintenance_started' || event.kind === 'maintenance_completed'))
   let retainedEquipmentMaintenanceStrategyEvents = 0
   for (const asset of equipmentAssets) {
     const equipmentId = String(asset.id)
@@ -1100,13 +1126,32 @@ export function validateProductionState(value: unknown): ProductionState {
     if (JSON.stringify(matches.map((event) => event.strategyRevision)) !== JSON.stringify(expectedRevisions)) throw new Error('Equipment maintenance strategy revisions must be complete and newest first.')
     if (matches.some((event) => timestampBefore(event.createdAt as string, commissioning.commissionedAt as string))) throw new Error('Equipment maintenance strategy history cannot predate commissioning.')
     const latest = matches[0]
+    const assetMaintenanceEvents = equipmentMaintenanceEvents.filter((event) => event.subjectId === equipmentId)
+    for (const maintenanceEvent of assetMaintenanceEvents) {
+      const applicableStrategy = matches.find((strategyEvent) => !timestampBefore(maintenanceEvent.createdAt as string, strategyEvent.createdAt as string))
+      const isBound = maintenanceEvent.maintenanceStrategyActionId !== undefined
+      if (Boolean(applicableStrategy) !== isBound) throw new Error('Commissioned equipment maintenance must bind the strategy active at execution time.')
+      if (!applicableStrategy) continue
+      if (maintenanceEvent.maintenanceStrategyActionId !== applicableStrategy.actionId
+        || maintenanceEvent.maintenanceStrategyRevision !== applicableStrategy.strategyRevision
+        || maintenanceEvent.maintenanceProcedureReference !== applicableStrategy.procedureReference
+        || maintenanceEvent.maintenancePlannedDueAt !== applicableStrategy.nextDueAt
+        || (maintenanceEvent.kind === 'maintenance_started' && maintenanceEvent.maintenanceOwner !== applicableStrategy.maintenanceOwner)) throw new Error('Equipment maintenance execution does not match its immutable strategy revision.')
+      if (maintenanceEvent.kind === 'maintenance_completed') {
+        const expectedNextDueAt = new Date(Date.parse(maintenanceEvent.createdAt as string) + Number(applicableStrategy.intervalDays) * 86_400_000).toISOString()
+        if (maintenanceEvent.nextDueAt !== expectedNextDueAt) throw new Error('Equipment maintenance completion next due does not match its strategy interval.')
+      }
+    }
+    const latestCompletion = assetMaintenanceEvents.find((event) => event.kind === 'maintenance_completed'
+      && event.maintenanceStrategyActionId === latest?.actionId)
+    const expectedCurrentNextDueAt = latestCompletion?.nextDueAt ?? latest?.nextDueAt
     if (!latest
       || strategy.actionId !== latest.actionId
       || strategy.savedAt !== latest.createdAt
       || strategy.savedBy !== latest.actor
       || strategy.maintenanceOwner !== latest.maintenanceOwner
       || strategy.intervalDays !== latest.intervalDays
-      || strategy.nextDueAt !== latest.nextDueAt
+      || strategy.nextDueAt !== expectedCurrentNextDueAt
       || strategy.procedureReference !== latest.procedureReference
       || strategy.safetyBaselineReference !== latest.evidenceReference) throw new Error('Equipment maintenance strategy does not match its latest immutable event.')
     retainedEquipmentMaintenanceStrategyEvents += matches.length
@@ -1493,6 +1538,14 @@ function deriveProductionMaintenanceRecords(
           startedBy: event.actor,
           scope: event.reason,
           startEvidenceReference: event.evidenceReference,
+          ...(event.maintenanceStrategyActionId === undefined ? {} : {
+            strategy: {
+              actionId: event.maintenanceStrategyActionId,
+              revision: event.maintenanceStrategyRevision as number,
+              procedureReference: event.maintenanceProcedureReference as string,
+              plannedDueAt: event.maintenancePlannedDueAt as string,
+            },
+          }),
         }
         records.push(activeRecord)
         continue
@@ -1500,12 +1553,18 @@ function deriveProductionMaintenanceRecords(
       if (!activeRecord) throw new Error(`Maintenance history for ${machine.id} completes work that is not open.`)
       if (event.maintenanceStartActionId !== activeRecord.startActionId) throw new Error(`Maintenance completion for ${machine.id} does not reference its open record.`)
       if (event.summary !== `Completed maintenance for ${machine.name}`) throw new Error(`Maintenance completion summary for ${machine.id} is not canonical.`)
+      if (Boolean(event.maintenanceStrategyActionId) !== Boolean(activeRecord.strategy)) throw new Error(`Maintenance completion for ${machine.id} has a mismatched strategy binding.`)
+      if (activeRecord.strategy && (event.maintenanceStrategyActionId !== activeRecord.strategy.actionId
+        || event.maintenanceStrategyRevision !== activeRecord.strategy.revision
+        || event.maintenanceProcedureReference !== activeRecord.strategy.procedureReference
+        || event.maintenancePlannedDueAt !== activeRecord.strategy.plannedDueAt)) throw new Error(`Maintenance completion for ${machine.id} does not match its reviewed strategy.`)
       activeRecord.completion = {
         actionId: event.actionId,
         completedAt: event.createdAt,
         completedBy: event.actor,
         outcome: event.reason,
         evidenceReference: event.evidenceReference,
+        ...(event.nextDueAt === undefined ? {} : { nextDueAt: event.nextDueAt }),
       }
       activeRecord = undefined
     }
@@ -2624,11 +2683,13 @@ export function startProductionMaintenance(
     && existing.maintenanceOwner === maintenanceOwner
     && sameProof(existing, proof) ? state : null
   const machine = state.machines.find((candidate) => candidate.id === machineId)
+  const strategy = state.equipmentMaster?.assets.find((candidate) => candidate.id === machineId)?.maintenanceStrategy
   const openRecord = productionMaintenanceRecords(state).find((record) => record.machineId === machineId && !record.completion)
   const latestLifecycleEvent = state.events.find((event) => event.subjectId === machineId
     && (event.kind === 'maintenance_started' || event.kind === 'maintenance_completed'))
   if (!machine
     || openRecord
+    || (strategy !== undefined && maintenanceOwner !== strategy.maintenanceOwner)
     || (latestLifecycleEvent && timestampBefore(proof.capturedAt, latestLifecycleEvent.createdAt))
     || actionIdIsUsed(state, proof.actionId)
     || state.revision >= Number.MAX_SAFE_INTEGER) return null
@@ -2637,6 +2698,12 @@ export function startProductionMaintenance(
     subjectId: machineId,
     summary: `Started maintenance for ${machine.name}`,
     maintenanceOwner,
+    ...(strategy === undefined ? {} : {
+      maintenanceStrategyActionId: strategy.actionId,
+      maintenanceStrategyRevision: strategy.revision,
+      maintenanceProcedureReference: strategy.procedureReference,
+      maintenancePlannedDueAt: strategy.nextDueAt,
+    }),
   })
   const next = structuredClone(state)
   return validateProductionState({
@@ -2662,6 +2729,8 @@ export function completeProductionMaintenance(
     && existing.maintenanceStartActionId === maintenanceStartActionId
     && sameProof(existing, proof) ? state : null
   const machine = state.machines.find((candidate) => candidate.id === machineId)
+  const equipmentAsset = state.equipmentMaster?.assets.find((candidate) => candidate.id === machineId)
+  const strategy = equipmentAsset?.maintenanceStrategy
   const openRecord = productionMaintenanceRecords(state).find((record) => record.machineId === machineId && !record.completion)
   if (!machine
     || !openRecord
@@ -2669,13 +2738,33 @@ export function completeProductionMaintenance(
     || timestampBefore(proof.capturedAt, openRecord.startedAt)
     || actionIdIsUsed(state, proof.actionId)
     || state.revision >= Number.MAX_SAFE_INTEGER) return null
+  if (Boolean(strategy) !== Boolean(openRecord.strategy)
+    || (strategy && openRecord.strategy && (strategy.actionId !== openRecord.strategy.actionId
+      || strategy.revision !== openRecord.strategy.revision
+      || strategy.procedureReference !== openRecord.strategy.procedureReference
+      || strategy.nextDueAt !== openRecord.strategy.plannedDueAt))) return null
+  const nextDueAt = strategy === undefined
+    ? undefined
+    : new Date(Date.parse(proof.capturedAt) + strategy.intervalDays * 86_400_000).toISOString()
   const event = eventFor(proof, {
     kind: 'maintenance_completed',
     subjectId: machineId,
     summary: `Completed maintenance for ${machine.name}`,
     maintenanceStartActionId,
+    ...(strategy === undefined || nextDueAt === undefined ? {} : {
+      maintenanceStrategyActionId: strategy.actionId,
+      maintenanceStrategyRevision: strategy.revision,
+      maintenanceProcedureReference: strategy.procedureReference,
+      maintenancePlannedDueAt: strategy.nextDueAt,
+      nextDueAt,
+    }),
   })
   const next = structuredClone(state)
+  if (strategy && nextDueAt && next.equipmentMaster) {
+    const nextAsset = next.equipmentMaster.assets.find((candidate) => candidate.id === machineId)
+    if (!nextAsset?.maintenanceStrategy) return null
+    nextAsset.maintenanceStrategy.nextDueAt = nextDueAt
+  }
   return validateProductionState({
     ...next,
     revision: next.revision + 1,

@@ -52,6 +52,61 @@ def _strategy_payload(
     }
 
 
+def _maintenance_evidence(
+    action_id: str,
+    captured_at: str,
+    reason: str,
+) -> dict[str, str]:
+    return {
+        "actionId": action_id,
+        "capturedAt": captured_at,
+        "actor": "plant-owner",
+        "reason": reason,
+        "evidenceReference": f"EVIDENCE-{action_id}",
+    }
+
+
+def _strategy_maintenance_state(
+    current: dict[str, object],
+    evidence: dict[str, str],
+    *,
+    start_action_id: str | None = None,
+) -> dict[str, object]:
+    state = deepcopy(current)
+    asset = state["equipmentMaster"]["assets"][0]
+    strategy = asset["maintenanceStrategy"]
+    machine = state["machines"][0]
+    completing = start_action_id is not None
+    event = {
+        "id": f"EVT-{evidence['actionId']}",
+        "actionId": evidence["actionId"],
+        "createdAt": evidence["capturedAt"],
+        "actor": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "kind": "maintenance_completed" if completing else "maintenance_started",
+        "subjectId": machine["id"],
+        "summary": (
+            f"Completed maintenance for {machine['name']}"
+            if completing
+            else f"Started maintenance for {machine['name']}"
+        ),
+        "maintenanceStrategyActionId": strategy["actionId"],
+        "maintenanceStrategyRevision": strategy["revision"],
+        "maintenanceProcedureReference": strategy["procedureReference"],
+        "maintenancePlannedDueAt": strategy["nextDueAt"],
+    }
+    if completing:
+        event["maintenanceStartActionId"] = start_action_id
+        event["nextDueAt"] = "2026-09-15T10:00:00.000Z"
+        strategy["nextDueAt"] = event["nextDueAt"]
+    else:
+        event["maintenanceOwner"] = strategy["maintenanceOwner"]
+    state["revision"] += 1
+    state["events"] = [event, *state["events"]]
+    return state
+
+
 class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
     def test_strategy_is_versioned_without_starting_maintenance(self) -> None:
         current = _commissioned_state()
@@ -138,6 +193,124 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         for candidate in cases:
             with self.subTest(candidate=candidate), self.assertRaises(TrialValidationError):
                 validate_production_state(candidate)
+
+    def test_reviewed_execution_binds_strategy_and_advances_due_after_completion(self) -> None:
+        saved = reduce_production_state(
+            "production.equipment_maintenance_strategy.saved",
+            _commissioned_state(),
+            _strategy_payload(),
+        )
+        start_evidence = _maintenance_evidence(
+            "ACT-EQUIPMENT-MAINTENANCE-START-501",
+            "2026-08-15T09:00:00.000Z",
+            "Performed reviewed mixer preventive maintenance procedure",
+        )
+        started = reduce_production_state(
+            "production.maintenance.started",
+            saved,
+            {
+                "state": _strategy_maintenance_state(saved, start_evidence),
+                "evidence": start_evidence,
+            },
+        )
+        self.assertEqual(
+            started["equipmentMaster"]["assets"][0]["maintenanceStrategy"]["nextDueAt"],
+            "2026-08-15T09:00:00.000Z",
+        )
+        self.assertEqual(
+            started["events"][0]["maintenanceProcedureReference"],
+            "SOP-PM-MIXER-001-R3",
+        )
+
+        completion_evidence = _maintenance_evidence(
+            "ACT-EQUIPMENT-MAINTENANCE-COMPLETE-501",
+            "2026-08-16T10:00:00.000Z",
+            "Inspected, lubricated, and returned mixer to reviewed service condition",
+        )
+        completed = reduce_production_state(
+            "production.maintenance.completed",
+            started,
+            {
+                "state": _strategy_maintenance_state(
+                    started,
+                    completion_evidence,
+                    start_action_id=start_evidence["actionId"],
+                ),
+                "evidence": completion_evidence,
+            },
+        )
+        self.assertEqual(
+            completed["events"][0]["nextDueAt"],
+            "2026-09-15T10:00:00.000Z",
+        )
+        self.assertEqual(
+            completed["equipmentMaster"]["assets"][0]["maintenanceStrategy"]["nextDueAt"],
+            "2026-09-15T10:00:00.000Z",
+        )
+        self.assertEqual(saved["equipmentMaster"]["assets"][0]["maintenanceStrategy"]["nextDueAt"], "2026-08-15T09:00:00.000Z")
+
+    def test_strategy_execution_tamper_and_unbound_start_fail_closed(self) -> None:
+        saved = reduce_production_state(
+            "production.equipment_maintenance_strategy.saved",
+            _commissioned_state(),
+            _strategy_payload(),
+        )
+        start_evidence = _maintenance_evidence(
+            "ACT-EQUIPMENT-MAINTENANCE-START-502",
+            "2026-08-15T09:00:00.000Z",
+            "Performed reviewed mixer preventive maintenance procedure",
+        )
+        valid_start = _strategy_maintenance_state(saved, start_evidence)
+        cases = []
+        unbound = deepcopy(valid_start)
+        for field in (
+            "maintenanceStrategyActionId",
+            "maintenanceStrategyRevision",
+            "maintenanceProcedureReference",
+            "maintenancePlannedDueAt",
+        ):
+            unbound["events"][0].pop(field)
+        cases.append(unbound)
+        wrong_owner = deepcopy(valid_start)
+        wrong_owner["events"][0]["maintenanceOwner"] = "Unassigned contractor"
+        cases.append(wrong_owner)
+        wrong_procedure = deepcopy(valid_start)
+        wrong_procedure["events"][0]["maintenanceProcedureReference"] = "SOP-OTHER"
+        cases.append(wrong_procedure)
+        changed_master = deepcopy(valid_start)
+        changed_master["equipmentMaster"]["assets"][0]["owner"] = "Other owner"
+        cases.append(changed_master)
+        for candidate in cases:
+            with self.subTest(candidate=candidate), self.assertRaises(TrialValidationError):
+                reduce_production_state(
+                    "production.maintenance.started",
+                    saved,
+                    {"state": candidate, "evidence": start_evidence},
+                )
+
+        started = reduce_production_state(
+            "production.maintenance.started",
+            saved,
+            {"state": valid_start, "evidence": start_evidence},
+        )
+        completion_evidence = _maintenance_evidence(
+            "ACT-EQUIPMENT-MAINTENANCE-COMPLETE-502",
+            "2026-08-16T10:00:00.000Z",
+            "Completed reviewed preventive maintenance",
+        )
+        forged_completion = _strategy_maintenance_state(
+            started,
+            completion_evidence,
+            start_action_id=start_evidence["actionId"],
+        )
+        forged_completion["events"][0]["nextDueAt"] = "2026-09-14T10:00:00.000Z"
+        forged_completion["equipmentMaster"]["assets"][0]["maintenanceStrategy"]["nextDueAt"] = "2026-09-14T10:00:00.000Z"
+        with self.assertRaises(TrialValidationError):
+            reduce_production_state(
+                "production.maintenance.completed",
+                started,
+                {"state": forged_completion, "evidence": completion_evidence},
+            )
 
 
 class PlantEquipmentMaintenanceStrategyRouteTests(unittest.TestCase):

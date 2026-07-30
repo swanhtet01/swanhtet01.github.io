@@ -220,6 +220,17 @@ _MATERIAL_EVENT_FIELDS = frozenset(
     {"materialRef", "quantity", "materialUnit", "shiftRef"}
 )
 _MATERIAL_EVENT_OPTIONAL_FIELDS = frozenset({"materialLot"})
+_MAINTENANCE_STRATEGY_BINDING_FIELDS = frozenset(
+    {
+        "maintenanceStrategyActionId",
+        "maintenanceStrategyRevision",
+        "maintenanceProcedureReference",
+        "maintenancePlannedDueAt",
+    }
+)
+_MAINTENANCE_COMPLETION_STRATEGY_FIELDS = (
+    _MAINTENANCE_STRATEGY_BINDING_FIELDS | {"nextDueAt"}
+)
 _TIMESTAMP_PATTERN = re.compile(
     r"^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})"
     r"(?:\.([0-9]{1,6}))?(Z|([+-])([0-9]{2}):([0-9]{2}))$"
@@ -755,13 +766,9 @@ def _validate_equipment_asset(candidate: object, index: int) -> dict[str, Any]:
             f"{field}.maintenanceStrategy.nextDueAt",
             "equipment maintenance strategy",
         )
-        if next_due_at <= saved_at or datetime.fromisoformat(
-            next_due_at.replace("Z", "+00:00")
-        ) > datetime.fromisoformat(saved_at.replace("Z", "+00:00")) + timedelta(
-            days=interval_days
-        ):
+        if next_due_at <= saved_at:
             raise TrialValidationError(
-                f"{field}.maintenanceStrategy.nextDueAt must follow save time within its interval."
+                f"{field}.maintenanceStrategy.nextDueAt must follow strategy save time."
             )
         _text(
             strategy_record["procedureReference"],
@@ -955,6 +962,10 @@ def _validate_event(
             if kind == "material_consumed"
             else _ISSUE_EVENT_FIELDS
             if kind == "issue_opened"
+            else _MAINTENANCE_STRATEGY_BINDING_FIELDS
+            if kind == "maintenance_started"
+            else _MAINTENANCE_COMPLETION_STRATEGY_FIELDS
+            if kind == "maintenance_completed"
             else frozenset()
         ),
     )
@@ -1200,6 +1211,48 @@ def _validate_event(
                 f"{field}.maintenanceStartActionId",
                 maximum=160,
             )
+        binding_fields = _MAINTENANCE_STRATEGY_BINDING_FIELDS.intersection(event)
+        if binding_fields and binding_fields != _MAINTENANCE_STRATEGY_BINDING_FIELDS:
+            raise TrialValidationError(
+                f"{field} maintenance strategy binding must be complete or absent."
+            )
+        if kind == "maintenance_completed" and (
+            ("nextDueAt" in event) != bool(binding_fields)
+        ):
+            raise TrialValidationError(
+                f"{field} strategy-bound completion requires one next due timestamp."
+            )
+        if binding_fields:
+            _text(
+                event["maintenanceStrategyActionId"],
+                f"{field}.maintenanceStrategyActionId",
+                maximum=160,
+            )
+            _integer(
+                event["maintenanceStrategyRevision"],
+                f"{field}.maintenanceStrategyRevision",
+                minimum=1,
+            )
+            _text(
+                event["maintenanceProcedureReference"],
+                f"{field}.maintenanceProcedureReference",
+                maximum=240,
+            )
+            _maintenance_timestamp(
+                event["maintenancePlannedDueAt"],
+                f"{field}.maintenancePlannedDueAt",
+            )
+            if kind == "maintenance_completed":
+                next_due_at = _parsed_timestamp(
+                    event["nextDueAt"], f"{field}.nextDueAt"
+                )[1]
+                completed_at = _parsed_timestamp(
+                    event["createdAt"], f"{field}.createdAt"
+                )[1]
+                if next_due_at <= completed_at:
+                    raise TrialValidationError(
+                        f"{field}.nextDueAt must follow reviewed completion."
+                    )
     elif kind == "issue_opened":
         if subject_id not in issue_ids:
             raise TrialValidationError(f"{field} references an unknown issue.")
@@ -2002,6 +2055,19 @@ def _validate_maintenance_history(
                 raise TrialValidationError(
                     f"machines[{index}] maintenance completion summary is not canonical."
                 )
+            start_is_bound = "maintenanceStrategyActionId" in active_start
+            completion_is_bound = "maintenanceStrategyActionId" in event
+            if start_is_bound != completion_is_bound:
+                raise TrialValidationError(
+                    f"machines[{index}] maintenance completion strategy binding is inconsistent."
+                )
+            if start_is_bound and any(
+                event[field] != active_start[field]
+                for field in _MAINTENANCE_STRATEGY_BINDING_FIELDS
+            ):
+                raise TrialValidationError(
+                    f"machines[{index}] maintenance completion does not match its reviewed strategy."
+                )
             active_start = None
 
 
@@ -2160,11 +2226,73 @@ def _validate_equipment_maintenance_strategy_history(
         for event in events
         if event["kind"] == "equipment_maintenance_strategy_saved"
     ]
+    maintenance_events = [
+        event
+        for event in events
+        if event["kind"] in {"maintenance_started", "maintenance_completed"}
+    ]
     retained_events = 0
     for asset in assets:
         matches = [
             event for event in strategy_events if event["subjectId"] == asset["id"]
         ]
+        asset_maintenance_events = [
+            event for event in maintenance_events if event["subjectId"] == asset["id"]
+        ]
+        for maintenance_event in asset_maintenance_events:
+            maintenance_at = _parsed_timestamp(
+                maintenance_event["createdAt"], "maintenance execution createdAt"
+            )[1]
+            applicable_strategy = next(
+                (
+                    strategy_event
+                    for strategy_event in matches
+                    if _parsed_timestamp(
+                        strategy_event["createdAt"],
+                        "maintenance strategy createdAt",
+                    )[1]
+                    <= maintenance_at
+                ),
+                None,
+            )
+            is_bound = "maintenanceStrategyActionId" in maintenance_event
+            if (applicable_strategy is not None) != is_bound:
+                raise TrialValidationError(
+                    "Commissioned equipment maintenance must bind the strategy active at execution time."
+                )
+            if applicable_strategy is None:
+                continue
+            if (
+                maintenance_event["maintenanceStrategyActionId"]
+                != applicable_strategy["actionId"]
+                or maintenance_event["maintenanceStrategyRevision"]
+                != applicable_strategy["strategyRevision"]
+                or maintenance_event["maintenanceProcedureReference"]
+                != applicable_strategy["procedureReference"]
+                or maintenance_event["maintenancePlannedDueAt"]
+                != applicable_strategy["nextDueAt"]
+                or (
+                    maintenance_event["kind"] == "maintenance_started"
+                    and maintenance_event["maintenanceOwner"]
+                    != applicable_strategy["maintenanceOwner"]
+                )
+            ):
+                raise TrialValidationError(
+                    "Equipment maintenance execution does not match its immutable strategy revision."
+                )
+            if maintenance_event["kind"] == "maintenance_completed":
+                expected_next_due = (
+                    maintenance_at
+                    + timedelta(days=applicable_strategy["intervalDays"])
+                ).astimezone(timezone.utc).isoformat(
+                    timespec="milliseconds"
+                ).replace(
+                    "+00:00", "Z"
+                )
+                if maintenance_event["nextDueAt"] != expected_next_due:
+                    raise TrialValidationError(
+                        "Equipment maintenance completion next due does not match its strategy interval."
+                    )
         strategy = asset.get("maintenanceStrategy")
         if strategy is None:
             if matches:
@@ -2194,13 +2322,27 @@ def _validate_equipment_maintenance_strategy_history(
                 "Equipment maintenance strategy history cannot predate commissioning."
             )
         latest = matches[0]
+        latest_completion = next(
+            (
+                event
+                for event in asset_maintenance_events
+                if event["kind"] == "maintenance_completed"
+                and event.get("maintenanceStrategyActionId") == latest["actionId"]
+            ),
+            None,
+        )
+        expected_current_next_due = (
+            latest_completion["nextDueAt"]
+            if latest_completion is not None
+            else latest["nextDueAt"]
+        )
         if (
             strategy["actionId"] != latest["actionId"]
             or strategy["savedAt"] != latest["createdAt"]
             or strategy["savedBy"] != latest["actor"]
             or strategy["maintenanceOwner"] != latest["maintenanceOwner"]
             or strategy["intervalDays"] != latest["intervalDays"]
-            or strategy["nextDueAt"] != latest["nextDueAt"]
+            or strategy["nextDueAt"] != expected_current_next_due
             or strategy["procedureReference"] != latest["procedureReference"]
             or strategy["safetyBaselineReference"] != latest["evidenceReference"]
         ):
@@ -2914,6 +3056,10 @@ def _validate_maintenance_started(
     event: Mapping[str, Any],
 ) -> None:
     _require_unchanged(current, next_state, "jobs", "issues", "machines")
+    if current.get("equipmentMaster") != next_state.get("equipmentMaster"):
+        raise TrialValidationError(
+            "maintenance start cannot change the equipment master."
+        )
     machine = next(
         (
             candidate
@@ -2930,6 +3076,31 @@ def _validate_maintenance_started(
         )
     if event["summary"] != f"Started maintenance for {machine['name']}":
         raise TrialValidationError("maintenance start summary is not canonical.")
+    asset = next(
+        (
+            candidate
+            for candidate in current.get("equipmentMaster", {}).get("assets", [])
+            if candidate["id"] == machine["id"]
+        ),
+        None,
+    )
+    strategy = asset.get("maintenanceStrategy") if asset is not None else None
+    is_bound = "maintenanceStrategyActionId" in event
+    if (strategy is not None) != is_bound:
+        raise TrialValidationError(
+            "commissioned equipment maintenance must bind its current strategy."
+        )
+    if strategy is not None and (
+        event["maintenanceOwner"] != strategy["maintenanceOwner"]
+        or event["maintenanceStrategyActionId"] != strategy["actionId"]
+        or event["maintenanceStrategyRevision"] != strategy["revision"]
+        or event["maintenanceProcedureReference"]
+        != strategy["procedureReference"]
+        or event["maintenancePlannedDueAt"] != strategy["nextDueAt"]
+    ):
+        raise TrialValidationError(
+            "maintenance start does not match the current reviewed strategy."
+        )
 
 
 def _validate_maintenance_completed(
@@ -2957,6 +3128,65 @@ def _validate_maintenance_completed(
         )
     if event["summary"] != f"Completed maintenance for {machine['name']}":
         raise TrialValidationError("maintenance completion summary is not canonical.")
+    start_is_bound = "maintenanceStrategyActionId" in open_event
+    completion_is_bound = "maintenanceStrategyActionId" in event
+    if start_is_bound != completion_is_bound:
+        raise TrialValidationError(
+            "maintenance completion must retain the open strategy binding."
+        )
+    if not start_is_bound:
+        if current.get("equipmentMaster") != next_state.get("equipmentMaster"):
+            raise TrialValidationError(
+                "legacy maintenance completion cannot change the equipment master."
+            )
+        return
+    assets = current.get("equipmentMaster", {}).get("assets", [])
+    asset_index = next(
+        (
+            index
+            for index, candidate in enumerate(assets)
+            if candidate["id"] == machine["id"]
+        ),
+        None,
+    )
+    if asset_index is None:
+        raise TrialValidationError(
+            "strategy-bound maintenance must reference commissioned equipment."
+        )
+    strategy = assets[asset_index].get("maintenanceStrategy")
+    if strategy is None or any(
+        event[field] != open_event[field]
+        for field in _MAINTENANCE_STRATEGY_BINDING_FIELDS
+    ) or (
+        event["maintenanceStrategyActionId"] != strategy["actionId"]
+        or event["maintenanceStrategyRevision"] != strategy["revision"]
+        or event["maintenanceProcedureReference"]
+        != strategy["procedureReference"]
+        or event["maintenancePlannedDueAt"] != strategy["nextDueAt"]
+    ):
+        raise TrialValidationError(
+            "maintenance completion does not match its open reviewed strategy."
+        )
+    completed_at = _parsed_timestamp(
+        event["createdAt"], "maintenance completion createdAt"
+    )[1]
+    expected_next_due = (
+        completed_at + timedelta(days=strategy["intervalDays"])
+    ).astimezone(timezone.utc).isoformat(timespec="milliseconds").replace(
+        "+00:00", "Z"
+    )
+    if event["nextDueAt"] != expected_next_due:
+        raise TrialValidationError(
+            "maintenance completion next due does not match its strategy interval."
+        )
+    expected_master = deepcopy(current["equipmentMaster"])
+    expected_master["assets"][asset_index]["maintenanceStrategy"][
+        "nextDueAt"
+    ] = expected_next_due
+    if next_state.get("equipmentMaster") != expected_master:
+        raise TrialValidationError(
+            "maintenance completion may advance only the selected strategy next due."
+        )
 
 
 def _reduce_equipment_master_import(
