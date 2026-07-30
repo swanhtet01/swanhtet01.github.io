@@ -19,6 +19,7 @@ from typing import Any
 
 ECOMMERCE_PIM_SCHEMA = "supermega.ecommerce.pim_projection.v1"
 ECOMMERCE_QUOTE_SCHEMA = "supermega.ecommerce.checkout_quote.v1"
+ECOMMERCE_TAX_DECISION_SCHEMA = "supermega.ecommerce.tax-decision.v1"
 ECOMMERCE_CUSTOMER_PROFILE_SCHEMA = "supermega.ecommerce.customer_profile_snapshot.v1"
 ECOMMERCE_DELIVERY_ADDRESS_SCHEMA = "supermega.ecommerce.delivery_address_snapshot.v1"
 ECOMMERCE_REQUEST_SCHEMA = "supermega.ecommerce.order_request.v2"
@@ -877,6 +878,219 @@ def _current_catalog_item(value: object, field: str) -> dict[str, Any]:
         "price": _integer(source["price"], f"{field}.price", minimum=1),
         "onHand": _integer(source["onHand"], f"{field}.onHand"),
     }
+
+
+def _tax_configuration(
+    value: object,
+    field: str,
+    *,
+    expected_revision: int,
+) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or any(not isinstance(key, str) for key in value):
+        raise _fail(f"{field} must be an object.")
+    legacy_keys = frozenset(("revision", "code", "label", "rateBasisPoints", "mode", "proof"))
+    scheduled_keys = legacy_keys | frozenset(("jurisdictionCode", "effectiveFrom"))
+    keys = frozenset(value)
+    if keys not in {legacy_keys, scheduled_keys}:
+        raise _fail(f"{field} fields do not match the contract.")
+    revision = _integer(value["revision"], f"{field}.revision", minimum=1)
+    if revision != expected_revision:
+        raise _fail(f"{field}.revision breaks the newest-first sequence.")
+    code = _text(value["code"], f"{field}.code", maximum=12)
+    if re.fullmatch(r"[A-Z0-9][A-Z0-9_-]{0,11}", code) is None:
+        raise _fail(f"{field}.code is invalid.")
+    mode = value["mode"]
+    if mode not in {"exclusive", "inclusive"}:
+        raise _fail(f"{field}.mode is invalid.")
+    proof = _object(
+        value["proof"],
+        f"{field}.proof",
+        ("actionId", "capturedAt", "actor", "reason", "evidenceReference"),
+    )
+    captured_at = _timestamp(proof["capturedAt"], f"{field}.proof.capturedAt")
+    configuration: dict[str, Any] = {
+        "revision": revision,
+        "code": code,
+        "label": _text(value["label"], f"{field}.label", maximum=80),
+        "rateBasisPoints": _integer(
+            value["rateBasisPoints"],
+            f"{field}.rateBasisPoints",
+            maximum=10_000,
+        ),
+        "mode": mode,
+        "proof": {
+            "actionId": _text(proof["actionId"], f"{field}.proof.actionId", maximum=160),
+            "capturedAt": captured_at,
+            "actor": _text(proof["actor"], f"{field}.proof.actor", maximum=180),
+            "reason": _text(proof["reason"], f"{field}.proof.reason", maximum=180),
+            "evidenceReference": _text(
+                proof["evidenceReference"],
+                f"{field}.proof.evidenceReference",
+                maximum=180,
+            ),
+        },
+    }
+    if keys == scheduled_keys:
+        jurisdiction_code = _text(
+            value["jurisdictionCode"],
+            f"{field}.jurisdictionCode",
+            maximum=16,
+        )
+        if re.fullmatch(r"[A-Z0-9][A-Z0-9_-]{1,15}", jurisdiction_code) is None:
+            raise _fail(f"{field}.jurisdictionCode is invalid.")
+        effective_from = _timestamp(value["effectiveFrom"], f"{field}.effectiveFrom")
+        if _instant(effective_from) < _instant(captured_at):
+            raise _fail(f"{field}.effectiveFrom precedes its review proof.")
+        configuration["jurisdictionCode"] = jurisdiction_code
+        configuration["effectiveFrom"] = effective_from
+    return configuration
+
+
+def _round_ecommerce_tax(numerator: int, denominator: int) -> int:
+    return (numerator * 2 + denominator) // (denominator * 2)
+
+
+def review_ecommerce_tax(
+    configurations: Sequence[Mapping[str, object]],
+    listed_subtotal_mmk: int,
+    reviewed_at: str,
+    catalog_revision: int,
+) -> dict[str, Any]:
+    """Resolve one exact Shop-owned tax revision without filing or posting."""
+
+    listed = _integer(listed_subtotal_mmk, "listedSubtotalMmk", minimum=1)
+    reviewed = _timestamp(reviewed_at, "reviewedAt")
+    catalog = _integer(catalog_revision, "catalogRevision")
+    rows = [
+        _tax_configuration(
+            candidate,
+            f"taxConfigurations[{index}]",
+            expected_revision=len(configurations) - index,
+        )
+        for index, candidate in enumerate(configurations)
+    ]
+    for index, candidate in enumerate(rows[1:], start=1):
+        newer = rows[index - 1]
+        if (
+            _instant(newer["proof"]["capturedAt"])
+            < _instant(candidate["proof"]["capturedAt"])
+            or _instant(newer.get("effectiveFrom", newer["proof"]["capturedAt"]))
+            < _instant(candidate.get("effectiveFrom", candidate["proof"]["capturedAt"]))
+        ):
+            raise _fail(f"taxConfigurations[{index}] breaks newest-first chronology.")
+    configuration = next(
+        (
+            candidate
+            for candidate in rows
+            if _instant(candidate["proof"]["capturedAt"]) <= _instant(reviewed)
+            and _instant(candidate.get("effectiveFrom", candidate["proof"]["capturedAt"]))
+            <= _instant(reviewed)
+        ),
+        None,
+    )
+    if configuration is None:
+        return {
+            "schema": ECOMMERCE_TAX_DECISION_SCHEMA,
+            "status": "not_configured",
+            "catalogRevision": catalog,
+            "taxConfigurationRevision": None,
+            "taxCode": None,
+            "taxJurisdictionCode": None,
+            "taxEffectiveFrom": None,
+            "taxRateBasisPoints": 0,
+            "taxMode": "not_configured",
+            "listedSubtotalMmk": listed,
+            "subtotalMmk": listed,
+            "taxMmk": 0,
+            "totalMmk": listed,
+            "policyActionId": None,
+            "reviewedAt": reviewed,
+        }
+    rate = configuration["rateBasisPoints"]
+    tax = (
+        _round_ecommerce_tax(listed * rate, 10_000)
+        if configuration["mode"] == "exclusive"
+        else _round_ecommerce_tax(listed * rate, 10_000 + rate)
+    )
+    subtotal = listed if configuration["mode"] == "exclusive" else listed - tax
+    total = listed + tax if configuration["mode"] == "exclusive" else listed
+    if subtotal < 0 or tax < 0 or not 1 <= total <= _MAX_SAFE_INTEGER:
+        raise _fail("The Shop tax decision exceeds the safe whole-MMK boundary.")
+    return {
+        "schema": ECOMMERCE_TAX_DECISION_SCHEMA,
+        "status": "configured",
+        "catalogRevision": catalog,
+        "taxConfigurationRevision": configuration["revision"],
+        "taxCode": configuration["code"],
+        "taxJurisdictionCode": configuration.get("jurisdictionCode"),
+        "taxEffectiveFrom": configuration.get("effectiveFrom"),
+        "taxRateBasisPoints": rate,
+        "taxMode": configuration["mode"],
+        "listedSubtotalMmk": listed,
+        "subtotalMmk": subtotal,
+        "taxMmk": tax,
+        "totalMmk": total,
+        "policyActionId": configuration["proof"]["actionId"],
+        "reviewedAt": reviewed,
+    }
+
+
+def validate_ecommerce_tax_decision(
+    value: object,
+    configurations: Sequence[Mapping[str, object]],
+) -> dict[str, Any]:
+    """Reject stale or forged tax evidence by exact deterministic replay."""
+
+    source = _object(value, "taxDecision", (
+        "schema", "status", "catalogRevision", "taxConfigurationRevision", "taxCode",
+        "taxJurisdictionCode", "taxEffectiveFrom", "taxRateBasisPoints", "taxMode",
+        "listedSubtotalMmk", "subtotalMmk", "taxMmk", "totalMmk", "policyActionId",
+        "reviewedAt",
+    ))
+    if source["status"] not in {"configured", "not_configured"}:
+        raise _fail("taxDecision.status is invalid.")
+    if source["taxMode"] not in {"exclusive", "inclusive", "not_configured"}:
+        raise _fail("taxDecision.taxMode is invalid.")
+    decision = {
+        "schema": source["schema"],
+        "status": source["status"],
+        "catalogRevision": _integer(source["catalogRevision"], "taxDecision.catalogRevision"),
+        "taxConfigurationRevision": None if source["taxConfigurationRevision"] is None else _integer(
+            source["taxConfigurationRevision"], "taxDecision.taxConfigurationRevision", minimum=1
+        ),
+        "taxCode": _optional_text(source["taxCode"], "taxDecision.taxCode", maximum=12),
+        "taxJurisdictionCode": _optional_text(
+            source["taxJurisdictionCode"], "taxDecision.taxJurisdictionCode", maximum=16
+        ),
+        "taxEffectiveFrom": None if source["taxEffectiveFrom"] is None else _timestamp(
+            source["taxEffectiveFrom"], "taxDecision.taxEffectiveFrom"
+        ),
+        "taxRateBasisPoints": _integer(
+            source["taxRateBasisPoints"], "taxDecision.taxRateBasisPoints", maximum=10_000
+        ),
+        "taxMode": source["taxMode"],
+        "listedSubtotalMmk": _integer(
+            source["listedSubtotalMmk"], "taxDecision.listedSubtotalMmk", minimum=1
+        ),
+        "subtotalMmk": _integer(source["subtotalMmk"], "taxDecision.subtotalMmk"),
+        "taxMmk": _integer(source["taxMmk"], "taxDecision.taxMmk"),
+        "totalMmk": _integer(source["totalMmk"], "taxDecision.totalMmk", minimum=1),
+        "policyActionId": _optional_text(
+            source["policyActionId"], "taxDecision.policyActionId", maximum=160
+        ),
+        "reviewedAt": _timestamp(source["reviewedAt"], "taxDecision.reviewedAt"),
+    }
+    expected = review_ecommerce_tax(
+        configurations,
+        decision["listedSubtotalMmk"],
+        decision["reviewedAt"],
+        decision["catalogRevision"],
+    )
+    if decision["schema"] != ECOMMERCE_TAX_DECISION_SCHEMA or decision != expected:
+        raise _fail(
+            "The Ecommerce tax decision is stale, forged, or inconsistent with the Shop tax schedule."
+        )
+    return decision
 
 
 def _promotion_policy(value: object, field: str) -> dict[str, Any]:

@@ -10,6 +10,7 @@ import {
   type CommerceShippingPolicy,
   type CommercePaymentDecision,
   type CommercePaymentPolicy,
+  type CommerceTaxConfiguration,
 } from '../../core/commerce-workspace.ts'
 import {
   storefrontPreviewDigest,
@@ -36,8 +37,213 @@ export const EMPTY_ECOMMERCE_BUYING_DIGEST = `sha256:${'0'.repeat(64)}`
 
 export type EcommercePaymentAdapter = 'pay_on_pickup' | 'cash_on_delivery' | 'kbzpay_manual'
 export type EcommerceFulfilment = 'pickup' | 'delivery'
+export type EcommerceTaxDecision = {
+  schema: 'supermega.ecommerce.tax-decision.v1'
+  status: 'configured' | 'not_configured'
+  catalogRevision: number
+  taxConfigurationRevision: number | null
+  taxCode: string | null
+  taxJurisdictionCode: string | null
+  taxEffectiveFrom: string | null
+  taxRateBasisPoints: number
+  taxMode: 'exclusive' | 'inclusive' | 'not_configured'
+  listedSubtotalMmk: number
+  subtotalMmk: number
+  taxMmk: number
+  totalMmk: number
+  policyActionId: string | null
+  reviewedAt: string
+}
 export type EcommerceReturnDisposition = 'restock' | 'not_restocked'
 export type EcommerceSupportCategory = 'order_status' | 'delivery_issue' | 'payment_question' | 'item_issue' | 'other'
+
+function roundedTax(numerator: bigint, denominator: bigint) {
+  return (numerator * 2n + denominator) / (denominator * 2n)
+}
+
+function taxTimestampMicros(value: unknown, field: string) {
+  const timestamp = canonicalTimestamp(value, field)
+  const fraction = /\.([0-9]{1,6})/.exec(timestamp)?.[1]?.padEnd(6, '0') ?? '000000'
+  return BigInt(Date.parse(timestamp)) * 1_000n + BigInt(fraction.slice(3))
+}
+
+function ecommerceTaxConfiguration(value: unknown, index: number, count: number): CommerceTaxConfiguration {
+  if (!isRecord(value)) throw new Error(`taxConfigurations[${index}] must be an object.`)
+  const legacyKeys = ['revision', 'code', 'label', 'rateBasisPoints', 'mode', 'proof']
+  const scheduledKeys = [...legacyKeys.slice(0, -1), 'jurisdictionCode', 'effectiveFrom', 'proof']
+  const actualKeys = Object.keys(value)
+  const hasExactShape = (keys: string[]) => actualKeys.length === keys.length && keys.every((key) => actualKeys.includes(key))
+  if (!hasExactShape(legacyKeys) && !hasExactShape(scheduledKeys)) {
+    throw new Error(`taxConfigurations[${index}] fields do not match the contract.`)
+  }
+  const revision = safeInteger(value.revision, `taxConfigurations[${index}].revision`, 1)
+  if (revision !== count - index) throw new Error(`taxConfigurations[${index}].revision breaks the newest-first sequence.`)
+  const code = canonicalText(value.code, `taxConfigurations[${index}].code`, 12)
+  if (!/^[A-Z0-9][A-Z0-9_-]{0,11}$/.test(code)) throw new Error(`taxConfigurations[${index}].code is invalid.`)
+  const label = canonicalText(value.label, `taxConfigurations[${index}].label`, 80)
+  const rateBasisPoints = safeInteger(value.rateBasisPoints, `taxConfigurations[${index}].rateBasisPoints`, 0, 10_000)
+  if (value.mode !== 'exclusive' && value.mode !== 'inclusive') throw new Error(`taxConfigurations[${index}].mode is invalid.`)
+  const proof = exactObject(value.proof, `taxConfigurations[${index}].proof`, [
+    'actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference',
+  ])
+  const capturedAt = canonicalTimestamp(proof.capturedAt, `taxConfigurations[${index}].proof.capturedAt`)
+  const configuration: CommerceTaxConfiguration = {
+    revision,
+    code,
+    label,
+    rateBasisPoints,
+    mode: value.mode,
+    proof: {
+      actionId: canonicalText(proof.actionId, `taxConfigurations[${index}].proof.actionId`, 160),
+      capturedAt,
+      actor: canonicalText(proof.actor, `taxConfigurations[${index}].proof.actor`, 180),
+      reason: canonicalText(proof.reason, `taxConfigurations[${index}].proof.reason`, 180),
+      evidenceReference: canonicalText(proof.evidenceReference, `taxConfigurations[${index}].proof.evidenceReference`, 180),
+    },
+  }
+  if (hasExactShape(scheduledKeys)) {
+    const jurisdictionCode = canonicalText(value.jurisdictionCode, `taxConfigurations[${index}].jurisdictionCode`, 16)
+    if (!/^[A-Z0-9][A-Z0-9_-]{1,15}$/.test(jurisdictionCode)) {
+      throw new Error(`taxConfigurations[${index}].jurisdictionCode is invalid.`)
+    }
+    const effectiveFrom = canonicalTimestamp(value.effectiveFrom, `taxConfigurations[${index}].effectiveFrom`)
+    if (taxTimestampMicros(effectiveFrom, `taxConfigurations[${index}].effectiveFrom`)
+      < taxTimestampMicros(capturedAt, `taxConfigurations[${index}].proof.capturedAt`)) {
+      throw new Error(`taxConfigurations[${index}].effectiveFrom precedes its review proof.`)
+    }
+    configuration.jurisdictionCode = jurisdictionCode
+    configuration.effectiveFrom = effectiveFrom
+  }
+  return configuration
+}
+
+export function reviewEcommerceTax(
+  configurations: readonly CommerceTaxConfiguration[],
+  listedSubtotalMmkValue: number,
+  reviewedAtValue: string,
+  catalogRevisionValue: number,
+): EcommerceTaxDecision {
+  const listedSubtotalMmk = safeInteger(listedSubtotalMmkValue, 'listedSubtotalMmk', 1)
+  const catalogRevision = safeInteger(catalogRevisionValue, 'catalogRevision')
+  const reviewedAt = canonicalTimestamp(reviewedAtValue, 'reviewedAt')
+  const reviewedAtMicros = taxTimestampMicros(reviewedAt, 'reviewedAt')
+  const rows = configurations.map((candidate, index) => ecommerceTaxConfiguration(candidate, index, configurations.length))
+  rows.forEach((candidate, index) => {
+    const newer = rows[index - 1]
+    if (newer && (taxTimestampMicros(newer.proof.capturedAt, `taxConfigurations[${index - 1}].proof.capturedAt`)
+      < taxTimestampMicros(candidate.proof.capturedAt, `taxConfigurations[${index}].proof.capturedAt`)
+      || taxTimestampMicros(newer.effectiveFrom ?? newer.proof.capturedAt, `taxConfigurations[${index - 1}].effectiveFrom`)
+      < taxTimestampMicros(candidate.effectiveFrom ?? candidate.proof.capturedAt, `taxConfigurations[${index}].effectiveFrom`))) {
+      throw new Error(`taxConfigurations[${index}] breaks newest-first chronology.`)
+    }
+  })
+  const configuration = rows.find((candidate) => {
+    const effectiveFrom = candidate.effectiveFrom ?? candidate.proof.capturedAt
+    return taxTimestampMicros(candidate.proof.capturedAt, 'taxConfiguration.proof.capturedAt') <= reviewedAtMicros
+      && taxTimestampMicros(effectiveFrom, 'taxConfiguration.effectiveFrom') <= reviewedAtMicros
+  })
+  if (!configuration) return {
+    schema: 'supermega.ecommerce.tax-decision.v1',
+    status: 'not_configured',
+    catalogRevision,
+    taxConfigurationRevision: null,
+    taxCode: null,
+    taxJurisdictionCode: null,
+    taxEffectiveFrom: null,
+    taxRateBasisPoints: 0,
+    taxMode: 'not_configured',
+    listedSubtotalMmk,
+    subtotalMmk: listedSubtotalMmk,
+    taxMmk: 0,
+    totalMmk: listedSubtotalMmk,
+    policyActionId: null,
+    reviewedAt,
+  }
+  const listed = BigInt(listedSubtotalMmk)
+  const rate = BigInt(configuration.rateBasisPoints)
+  const tax = configuration.mode === 'exclusive'
+    ? roundedTax(listed * rate, 10_000n)
+    : roundedTax(listed * rate, 10_000n + rate)
+  const subtotal = configuration.mode === 'exclusive' ? listed : listed - tax
+  const total = configuration.mode === 'exclusive' ? listed + tax : listed
+  if (subtotal < 0n || tax < 0n || total < 1n || total > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error('The Shop tax decision exceeds the safe whole-MMK boundary.')
+  }
+  return {
+    schema: 'supermega.ecommerce.tax-decision.v1',
+    status: 'configured',
+    catalogRevision,
+    taxConfigurationRevision: configuration.revision,
+    taxCode: canonicalText(configuration.code, 'taxConfiguration.code', 12),
+    taxJurisdictionCode: configuration.jurisdictionCode
+      ? canonicalText(configuration.jurisdictionCode, 'taxConfiguration.jurisdictionCode', 16)
+      : null,
+    taxEffectiveFrom: configuration.effectiveFrom
+      ? canonicalTimestamp(configuration.effectiveFrom, 'taxConfiguration.effectiveFrom')
+      : null,
+    taxRateBasisPoints: configuration.rateBasisPoints,
+    taxMode: configuration.mode,
+    listedSubtotalMmk,
+    subtotalMmk: Number(subtotal),
+    taxMmk: Number(tax),
+    totalMmk: Number(total),
+    policyActionId: canonicalText(configuration.proof.actionId, 'taxConfiguration.proof.actionId', 160),
+    reviewedAt,
+  }
+}
+
+export function validateEcommerceTaxDecision(
+  value: unknown,
+  configurations: readonly CommerceTaxConfiguration[],
+): EcommerceTaxDecision {
+  const source = exactObject(value, 'taxDecision', [
+    'schema', 'status', 'catalogRevision', 'taxConfigurationRevision', 'taxCode', 'taxJurisdictionCode',
+    'taxEffectiveFrom', 'taxRateBasisPoints', 'taxMode', 'listedSubtotalMmk', 'subtotalMmk', 'taxMmk',
+    'totalMmk', 'policyActionId', 'reviewedAt',
+  ])
+  const status = source.status
+  const taxMode = source.taxMode
+  if ((status !== 'configured' && status !== 'not_configured')
+    || (taxMode !== 'exclusive' && taxMode !== 'inclusive' && taxMode !== 'not_configured')) {
+    throw new Error('The Ecommerce tax decision status is invalid.')
+  }
+  const decision: EcommerceTaxDecision = {
+    schema: source.schema as EcommerceTaxDecision['schema'],
+    status,
+    catalogRevision: safeInteger(source.catalogRevision, 'taxDecision.catalogRevision'),
+    taxConfigurationRevision: source.taxConfigurationRevision === null
+      ? null
+      : safeInteger(source.taxConfigurationRevision, 'taxDecision.taxConfigurationRevision', 1),
+    taxCode: source.taxCode === null ? null : canonicalText(source.taxCode, 'taxDecision.taxCode', 12),
+    taxJurisdictionCode: source.taxJurisdictionCode === null
+      ? null
+      : canonicalText(source.taxJurisdictionCode, 'taxDecision.taxJurisdictionCode', 16),
+    taxEffectiveFrom: source.taxEffectiveFrom === null
+      ? null
+      : canonicalTimestamp(source.taxEffectiveFrom, 'taxDecision.taxEffectiveFrom'),
+    taxRateBasisPoints: safeInteger(source.taxRateBasisPoints, 'taxDecision.taxRateBasisPoints', 0, 10_000),
+    taxMode,
+    listedSubtotalMmk: safeInteger(source.listedSubtotalMmk, 'taxDecision.listedSubtotalMmk', 1),
+    subtotalMmk: safeInteger(source.subtotalMmk, 'taxDecision.subtotalMmk'),
+    taxMmk: safeInteger(source.taxMmk, 'taxDecision.taxMmk'),
+    totalMmk: safeInteger(source.totalMmk, 'taxDecision.totalMmk', 1),
+    policyActionId: source.policyActionId === null
+      ? null
+      : canonicalText(source.policyActionId, 'taxDecision.policyActionId', 160),
+    reviewedAt: canonicalTimestamp(source.reviewedAt, 'taxDecision.reviewedAt'),
+  }
+  const expected = reviewEcommerceTax(
+    configurations,
+    decision.listedSubtotalMmk,
+    decision.reviewedAt,
+    decision.catalogRevision,
+  )
+  if (decision.schema !== 'supermega.ecommerce.tax-decision.v1'
+    || canonicalJson(decision) !== canonicalJson(expected)) {
+    throw new Error('The Ecommerce tax decision is stale, forged, or inconsistent with the Shop tax schedule.')
+  }
+  return decision
+}
 
 export type EcommercePimItem = {
   sku: string

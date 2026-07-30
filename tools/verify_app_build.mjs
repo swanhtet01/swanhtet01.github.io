@@ -10980,6 +10980,46 @@ async function verifyStorefrontRuntime() {
     const promotionPolicies = seededBuyingCommerce.promotionPolicies ?? []
     const shippingPolicies = seededBuyingCommerce.shippingPolicies ?? []
     const paymentPolicies = seededBuyingCommerce.paymentPolicies ?? []
+    const taxConfigurations = [{
+      revision: 1,
+      code: 'COMMERCIAL',
+      label: 'Commercial tax',
+      rateBasisPoints: 500,
+      mode: 'exclusive',
+      jurisdictionCode: 'MM-YGN',
+      effectiveFrom: '2026-07-24T08:55:00.000Z',
+      proof: {
+        actionId: 'ACT-TAX-COMMERCIAL-R1',
+        capturedAt: '2026-07-24T08:50:00.000Z',
+        actor: 'Finance manager',
+        reason: 'Approve the reviewed commercial tax schedule.',
+        evidenceReference: 'TAX-COMMERCIAL-R1',
+      },
+    }]
+    const exclusiveTax = buyingModel.reviewEcommerceTax(taxConfigurations, 50_850, '2026-07-24T09:10:00.000Z', 0)
+    const shopExclusiveTax = commerce.commerceOrderCalculation(
+      { ...commerce.createEmptyCommerce(), taxConfigurations },
+      50_850,
+      '2026-07-24T09:10:00.000Z',
+    )
+    buyingAssert(exclusiveTax.taxMmk === 2_543
+      && exclusiveTax.subtotalMmk === 50_850
+      && exclusiveTax.totalMmk === 53_393
+      && exclusiveTax.policyActionId === 'ACT-TAX-COMMERCIAL-R1'
+      && shopExclusiveTax?.taxMmk === exclusiveTax.taxMmk
+      && shopExclusiveTax?.totalMmk === exclusiveTax.totalMmk,
+    'ecommerce_buying_exclusive_tax_diverged_from_shop')
+    const inclusiveConfigurations = [{ ...taxConfigurations[0], mode: 'inclusive' }]
+    const inclusiveTax = buyingModel.reviewEcommerceTax(inclusiveConfigurations, 50_850, '2026-07-24T09:10:00.000Z', 0)
+    buyingAssert(inclusiveTax.taxMmk === 2_421
+      && inclusiveTax.subtotalMmk === 48_429
+      && inclusiveTax.totalMmk === 50_850,
+    'ecommerce_buying_inclusive_tax_rounding_invalid')
+    let forgedTaxRejected = false
+    try {
+      buyingModel.validateEcommerceTaxDecision({ ...exclusiveTax, taxMmk: exclusiveTax.taxMmk + 1 }, taxConfigurations)
+    } catch { forgedTaxRejected = true }
+    buyingAssert(forgedTaxRejected, 'ecommerce_buying_forged_tax_decision_accepted')
     const pim = await buyingModel.buildEcommercePimProjection(buyingScope, firstDigest, preview)
     const pimRetry = await buyingModel.buildEcommercePimProjection(buyingScope, firstDigest, reordered)
     buyingAssert(pim.schema === 'supermega.ecommerce.pim_projection.v1'

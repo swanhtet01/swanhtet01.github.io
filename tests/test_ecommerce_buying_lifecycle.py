@@ -10,6 +10,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     ECOMMERCE_RETURN_INTENT_SCHEMA,
     ECOMMERCE_SUPPORT_INTENT_SCHEMA,
     ECOMMERCE_SHOP_DRAFT_SCHEMA,
+    ECOMMERCE_TAX_DECISION_SCHEMA,
     EcommerceLifecycleValidationError,
     build_ecommerce_checkout_quote,
     build_ecommerce_order_request,
@@ -19,12 +20,14 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     create_empty_ecommerce_lifecycle_state,
     ecommerce_payment_matches_fulfilment,
     prepare_ecommerce_shop_handoff,
+    review_ecommerce_tax,
     record_ecommerce_order_request,
     record_ecommerce_return_intent,
     record_ecommerce_support_intent,
     validate_ecommerce_checkout_quote,
     validate_ecommerce_lifecycle_state,
     validate_ecommerce_order_request,
+    validate_ecommerce_tax_decision,
 )
 
 
@@ -181,6 +184,25 @@ def payment_policies() -> list[dict[str, object]]:
     ]
 
 
+def tax_configurations(mode: str = "exclusive") -> list[dict[str, object]]:
+    return [{
+        "revision": 1,
+        "code": "COMMERCIAL",
+        "label": "Commercial tax",
+        "rateBasisPoints": 500,
+        "mode": mode,
+        "jurisdictionCode": "MM-YGN",
+        "effectiveFrom": "2026-07-26T09:00:00+06:30",
+        "proof": {
+            "actionId": "ACT-TAX-COMMERCIAL-R1",
+            "capturedAt": "2026-07-26T08:55:00+06:30",
+            "actor": "Finance manager",
+            "reason": "Approve the reviewed commercial tax schedule.",
+            "evidenceReference": "TAX-COMMERCIAL-R1",
+        },
+    }]
+
+
 def completed_order() -> dict[str, object]:
     return {
         "id": "ORD-1001",
@@ -238,6 +260,80 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         serialized = str(first).lower()
         for forbidden in ("chargeid", "paymentintent", "providersecret", "authorizationid"):
             self.assertNotIn(forbidden, serialized)
+
+    def test_shop_tax_review_is_exact_for_exclusive_and_inclusive_whole_mmk(self) -> None:
+        exclusive = review_ecommerce_tax(
+            tax_configurations("exclusive"),
+            50_850,
+            "2026-07-26T10:10:00+06:30",
+            7,
+        )
+        self.assertEqual(exclusive["schema"], ECOMMERCE_TAX_DECISION_SCHEMA)
+        self.assertEqual(exclusive["status"], "configured")
+        self.assertEqual(exclusive["taxMmk"], 2_543)
+        self.assertEqual(exclusive["subtotalMmk"], 50_850)
+        self.assertEqual(exclusive["totalMmk"], 53_393)
+        self.assertEqual(exclusive["taxConfigurationRevision"], 1)
+        self.assertEqual(exclusive["policyActionId"], "ACT-TAX-COMMERCIAL-R1")
+        self.assertEqual(validate_ecommerce_tax_decision(exclusive, tax_configurations()), exclusive)
+
+        inclusive = review_ecommerce_tax(
+            tax_configurations("inclusive"),
+            50_850,
+            "2026-07-26T10:10:00+06:30",
+            7,
+        )
+        self.assertEqual(inclusive["taxMmk"], 2_421)
+        self.assertEqual(inclusive["subtotalMmk"], 48_429)
+        self.assertEqual(inclusive["totalMmk"], 50_850)
+
+    def test_shop_tax_review_selects_effective_revision_and_rejects_forged_evidence(self) -> None:
+        current = tax_configurations()[0]
+        future = deepcopy(current)
+        future.update({
+            "revision": 2,
+            "rateBasisPoints": 700,
+            "effectiveFrom": "2026-07-26T10:20:00+06:30",
+        })
+        future["proof"].update({
+            "actionId": "ACT-TAX-COMMERCIAL-R2",
+            "capturedAt": "2026-07-26T10:15:00+06:30",
+            "evidenceReference": "TAX-COMMERCIAL-R2",
+        })
+        configurations = [future, current]
+        decision = review_ecommerce_tax(
+            configurations,
+            50_850,
+            "2026-07-26T10:10:00+06:30",
+            7,
+        )
+        self.assertEqual(decision["taxConfigurationRevision"], 1)
+        self.assertEqual(decision["taxRateBasisPoints"], 500)
+
+        forged = deepcopy(decision)
+        forged["taxMmk"] += 1
+        with self.assertRaisesRegex(EcommerceLifecycleValidationError, "stale, forged"):
+            validate_ecommerce_tax_decision(forged, configurations)
+
+        invalid_schedule = tax_configurations()
+        invalid_schedule[0]["effectiveFrom"] = "2026-07-26T08:50:00+06:30"
+        with self.assertRaisesRegex(EcommerceLifecycleValidationError, "precedes"):
+            review_ecommerce_tax(
+                invalid_schedule,
+                50_850,
+                "2026-07-26T10:10:00+06:30",
+                7,
+            )
+
+        no_schedule = review_ecommerce_tax(
+            [],
+            50_850,
+            "2026-07-26T10:10:00+06:30",
+            7,
+        )
+        self.assertEqual(no_schedule["status"], "not_configured")
+        self.assertEqual(no_schedule["taxMmk"], 0)
+        self.assertEqual(no_schedule["totalMmk"], 50_850)
 
     def test_customer_and_delivery_snapshots_are_versioned_digest_bound_and_handed_to_shop(self) -> None:
         profile_input = {"name": "Ma Su", "phone": "09 123 456 789", "previous": None}
