@@ -3725,7 +3725,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }
     const canonicalPromisedAt = promisedTime.toISOString()
     const paymentDueAt = paymentTermsDays === 0
-      ? canonicalPromisedAt
+      ? undefined
       : new Date(reviewedAt.getTime() + paymentTermsDays * 24 * 60 * 60 * 1000).toISOString()
     const sourceDraft = preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? preparedChannelDraft : null
     const ecommerceDraft = preparedEcommerceDraft
@@ -3892,7 +3892,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       fulfilment,
       fulfilmentReference: handoffReference,
       promisedAt: canonicalPromisedAt,
-      paymentDueAt,
+      ...(paymentDueAt ? { paymentDueAt } : {}),
       sourceRecordId,
       evidenceReference: sourceEvidence,
       ...(!sourceBacked || orderLines.length > 1 || promotionDecision ? { lines: orderLines } : {}),
@@ -3960,7 +3960,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       subjectId: order.id,
       summary: ecommerceDraft ? 'Review Ecommerce order' : `Confirm order for ${order.customer}`,
       before: `${sourceRecordId ? `Request ${sourceRecordId} · ` : ''}Customer ${order.customer} · ${lineReview}`,
-      after: `Order ${order.id} · ${formatCommerceCalculation(calculationReview)}${promotionDecision?.status === 'approved' ? ` · promotion ${promotionDecision.code} -${formatMoney(promotionDecision.discountMmk)} under policy R${promotionDecision.policyRevision}` : promotionDecision?.status === 'rejected' ? ` · promotion ${promotionDecision.code} rejected (${promotionDecision.reason.replaceAll('_', ' ')})` : ''} · Payment ${payment} · due ${formatIssueDue(paymentDueAt)}${paymentTermsDays ? ` · credit ${formatMoney(creditReview.exposureBeforeMmk)} → ${formatMoney(creditReview.exposureAfterMmk)} under policy R${creditReview.policy?.revision}` : ''} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
+      after: `Order ${order.id} · ${formatCommerceCalculation(calculationReview)}${promotionDecision?.status === 'approved' ? ` · promotion ${promotionDecision.code} -${formatMoney(promotionDecision.discountMmk)} under policy R${promotionDecision.policyRevision}` : promotionDecision?.status === 'rejected' ? ` · promotion ${promotionDecision.code} rejected (${promotionDecision.reason.replaceAll('_', ' ')})` : ''} · Payment ${payment} · due ${paymentDueAt ? formatIssueDue(paymentDueAt) : 'at handoff'}${paymentTermsDays ? ` · credit ${formatMoney(creditReview.exposureBeforeMmk)} → ${formatMoney(creditReview.exposureAfterMmk)} under policy R${creditReview.policy?.revision}` : ''} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
       evidenceReferenceSuggestion: confirmationEvidence,
       evidenceReferenceLocked: Boolean(sourceRecordId),
       reasonSuggestion: ecommerceDraft
@@ -5748,7 +5748,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     {actionGate}
   </div>
 
-  if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine ? ' has-return-draft' : ''}`}>
+  if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || correctionDraft ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
     {shopGuidance}
     <Suspense fallback={null}><ShopOperatingFlow
@@ -6530,14 +6530,15 @@ function ClosedOrderHistory({
   if (!orders.length) return null
   const pageCount = Math.ceil(orders.length / pageSize)
   const returnOrderIndex = returnDraft ? orders.findIndex((order) => order.id === returnDraft.orderId) : -1
+  const correctionOrderIndex = correctionDraft ? orders.findIndex((order) => order.id === correctionDraft.orderId) : -1
   const supportOrderId = supportDraft?.intent.orderId ?? supportReopenDraft?.orderId ?? supportServiceDraft?.orderId ?? supportResolutionDraft?.orderId
   const supportOrderIndex = supportOrderId ? orders.findIndex((order) => order.id === supportOrderId) : -1
-  const focusedOrderIndex = returnOrderIndex >= 0 ? returnOrderIndex : supportOrderIndex
+  const focusedOrderIndex = returnOrderIndex >= 0 ? returnOrderIndex : correctionOrderIndex >= 0 ? correctionOrderIndex : supportOrderIndex
   const currentPage = focusedOrderIndex >= 0 ? Math.floor(focusedOrderIndex / pageSize) : Math.min(page, pageCount - 1)
   const visibleOrders = orders.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
   const supportWorkQueue = commerceSupportQueue(orders, supportClock)
   const supportSla = commerceSupportSlaSummary(orders, supportClock)
-  return <details className="order-archive" id="shop-order-history" open={Boolean(returnDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) || undefined}>
+  return <details className="order-archive" id="shop-order-history" open={Boolean(returnDraft || correctionDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) || undefined}>
     <summary><span>Completed and cancelled orders</span><small>{supportWorkQueue.length ? `${supportSla.openCases} help open · ${supportSla.overdueCases} overdue · ` : ''}{orders.length} {orders.length === 1 ? 'record' : 'records'}</small></summary>
     {supportWorkloadDownload ? <section aria-label="Support workload export" className="order-return-records" data-support-workload="privacy-minimal">
       <div><strong>Support workload record</strong><small>{supportWorkloadDownload.artifact.summary.totalCases} cases · {supportWorkloadDownload.artifact.summary.reopenedCases} repeat contacts · {supportWorkloadDownload.artifact.summary.responseTargetMisses} target misses</small></div>

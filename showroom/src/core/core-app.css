@@ -473,7 +473,8 @@ textarea { min-height: 72px; resize: vertical; }
 .today-more[open] > summary { border-bottom: 1px solid var(--core-line); }
 .today-more-content { display: grid; gap: 12px; padding: 15px 16px 17px; }
 
-.orders-module > .order-workspace { flex: 1; }
+.orders-module { overflow-y: auto; padding: 0 2px 128px 0; scrollbar-gutter: stable; }
+.orders-module > .order-workspace { flex: 0 0 auto; }
 .shop-operating-flow { display: grid; gap: 10px; }
 .shop-next-work { align-items: center; background: linear-gradient(135deg, color-mix(in srgb, var(--core-green) 13%, var(--core-panel)), var(--core-panel)); border: 1px solid color-mix(in srgb, var(--core-green) 28%, var(--core-line)); border-radius: var(--core-radius); display: flex; gap: 16px; justify-content: space-between; padding: 14px 16px; }
 .shop-next-work > div { display: grid; gap: 3px; min-width: 0; }

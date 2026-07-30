@@ -542,12 +542,16 @@ export function EcommerceBuyingWorkspace({
   }
 
   function orderStageLabel(entry: CommerceStorefrontOrderTimelineEntry) {
-    if (entry.stage === 'waiting_shop_review') return 'Waiting for Shop review'
+    if (entry.stage === 'waiting_shop_review') return quoteExpiredWithoutOrder(entry) ? 'Quote expired' : 'Waiting for Shop review'
     if (entry.stage === 'confirmed') return 'Confirmed'
     if (entry.stage === 'preparing') return 'Preparing'
     if (entry.stage === 'ready') return entry.request.fulfilment === 'pickup' ? 'Ready for pickup' : 'Ready for delivery'
     if (entry.stage === 'completed') return 'Completed'
     return 'Cancelled'
+  }
+
+  function quoteExpiredWithoutOrder(entry: CommerceStorefrontOrderTimelineEntry) {
+    return !entry.order && Date.parse(entry.request.quote.expiresAt) <= quoteClock
   }
 
   function openReturnRequest(entry: CommerceStorefrontOrderTimelineEntry) {
@@ -1250,7 +1254,7 @@ export function EcommerceBuyingWorkspace({
 
           <section className="ecommerce-order-tracking" aria-label="Customer order tracking">
             <div className="ecommerce-order-tracking-head">
-              <span><strong>Your orders</strong><small>One request, followed through Shop</small></span>
+              <span><strong>Your orders</strong><small>Quotes and orders, followed through Shop</small></span>
               <b>{customerOrderTimeline.length ? `${customerOrderTimeline.length} found` : 'Enter contact above'}</b>
             </div>
             {customerOrderTimeline.length ? (
@@ -1265,7 +1269,7 @@ export function EcommerceBuyingWorkspace({
                     <div>
                       <small>{entry.request.fulfilment === 'pickup' ? 'Pickup' : 'Delivery'}</small>
                       <small>{entry.paymentStatus === 'reconciled' ? 'Payment confirmed' : entry.paymentStatus === 'pending' ? 'Payment pending' : 'Payment not charged'}</small>
-                       {entry.order?.promisedAt ? <small>Promise {new Date(entry.order.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small> : <small>Shop confirms the promise</small>}
+                       {entry.order?.promisedAt ? <small>Promise {new Date(entry.order.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small> : quoteExpiredWithoutOrder(entry) ? <small>Review again for the current total</small> : <small>Shop confirms the promise</small>}
                        {entry.returnedQuantity ? <small>{entry.returnedQuantity} returned in Shop</small> : null}
                     </div>
                     <button className="core-button secondary" disabled={disabled} onClick={() => reorder(entry)} type="button">Reorder</button>
