@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
-import { managedTrialRequestUrl, PageHeading, type RuntimeHealth } from './CoreApp'
+import { managedAccountPath, managedAccountRequestUrl, PageHeading, type RuntimeHealth } from './CoreApp'
 import {
   beginManagedAccountSetup,
   completeManagedAccountPassword,
@@ -13,10 +13,10 @@ import {
   type ManagedWorkspaceSignIn,
 } from './managed-trial'
 
-function ManagedUnavailable() {
+function ManagedUnavailable({ productIntent }: { productIntent: string | null }) {
   return <section className="managed-login-panel" aria-label="Managed account unavailable">
     <div><span className="core-eyebrow">Premium activation</span><h2>Managed account access is not active in this release.</h2><p>Use the complete local workspace now, or request a managed company account.</p></div>
-    <div className="managed-login-actions"><Link className="core-button primary" to="/">Open free workspace</Link><a className="core-button" href={managedTrialRequestUrl('commerce', 'managed-account')}>Request managed activation</a></div>
+    <div className="managed-login-actions"><Link className="core-button primary" to="/">Open free workspace</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request managed activation</a></div>
   </section>
 }
 
@@ -24,6 +24,7 @@ export function ManagedAccountPage() {
   const runtime = useOutletContext<RuntimeHealth>()
   const location = useLocation()
   const navigate = useNavigate()
+  const productIntent = new URLSearchParams(location.search).get('product')
   const recoveryRequest = location.pathname === '/account/recovery' || location.pathname === '/account/recovery/'
   const managedReady = runtime.authReady && managedTrialAuthConfigured()
   const [email, setEmail] = useState('')
@@ -118,14 +119,14 @@ export function ManagedAccountPage() {
   if (recoveryRequest) {
     return <div className="workspace-screen managed-login-screen">
       <PageHeading eyebrow="Managed account" title="Recover your account." copy="Enter your work email. We will send one secure password link." />
-      {!managedReady ? <ManagedUnavailable /> : sent ? <section className="managed-login-panel" aria-label="Recovery link requested">
+      {!managedReady ? <ManagedUnavailable productIntent={productIntent} /> : sent ? <section className="managed-login-panel" aria-label="Recovery link requested">
         <div><span className="core-eyebrow">Check your inbox</span><h2>Recovery requested.</h2><p>{notice}</p></div>
-        <div className="managed-login-actions"><Link className="core-button primary" to="/login">Back to sign in</Link><button className="core-button account-link-button" onClick={() => { setSent(false); setNotice('') }} type="button">Try another email</button></div>
+        <div className="managed-login-actions"><Link className="core-button primary" to={managedAccountPath('/login', productIntent)}>Back to sign in</Link><button className="core-button account-link-button" onClick={() => { setSent(false); setNotice('') }} type="button">Try another email</button></div>
       </section> : <form className="managed-login-panel core-form" onSubmit={(event) => void requestRecovery(event)}>
         <div><span className="core-eyebrow">Password recovery</span><h2>Send a secure link.</h2><p>For privacy, the result is the same whether or not the address has an account.</p></div>
         <label>Work email<input autoComplete="email" maxLength={160} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Sending...' : 'Send recovery link'}</button>
-        <Link className="account-inline-link" to="/login">Back to sign in</Link>
+        <Link className="account-inline-link" to={managedAccountPath('/login', productIntent)}>Back to sign in</Link>
         {notice ? <p className="form-notice" role="status">{notice}</p> : null}
       </form>}
     </div>
@@ -133,7 +134,7 @@ export function ManagedAccountPage() {
 
   return <div className="workspace-screen managed-login-screen">
     <PageHeading eyebrow="Managed account" title="Secure your account." copy="Accept your invitation or recovery link, then set one strong password." />
-    {!managedReady ? <ManagedUnavailable /> : directory ? <form className="managed-login-panel core-form" onSubmit={(event) => void chooseWorkspace(event)}>
+    {!managedReady ? <ManagedUnavailable productIntent={productIntent} /> : directory ? <form className="managed-login-panel core-form" onSubmit={(event) => void chooseWorkspace(event)}>
       <div><span className="core-eyebrow">Account ready</span><h2>Choose your company.</h2><p>Only active companies assigned to this named account are shown.</p></div>
       <label>Company<select onChange={(event) => setWorkspaceId(event.target.value)} required value={workspaceId}>{directory.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label>
       <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Opening...' : 'Open company'}</button>
@@ -146,7 +147,7 @@ export function ManagedAccountPage() {
       {notice ? <p className="form-notice" role="status">{notice}</p> : null}
     </form> : <section className="managed-login-panel" aria-label="Checking managed account link">
       <div><span className="core-eyebrow">Secure link</span><h2>{notice.startsWith('This account link') ? 'Link unavailable.' : 'Checking your link.'}</h2><p>{notice || 'Checking your secure account link...'}</p></div>
-      {notice.startsWith('This account link') ? <div className="managed-login-actions"><Link className="core-button primary" to="/account/recovery">Request a new link</Link><Link className="core-button" to="/login">Back to sign in</Link></div> : null}
+      {notice.startsWith('This account link') ? <div className="managed-login-actions"><Link className="core-button primary" to={managedAccountPath('/account/recovery', productIntent)}>Request a new link</Link><Link className="core-button" to={managedAccountPath('/login', productIntent)}>Back to sign in</Link></div> : null}
     </section>}
   </div>
 }
