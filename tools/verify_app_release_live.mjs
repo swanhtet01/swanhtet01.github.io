@@ -150,9 +150,9 @@ const assetCorpus = (await Promise.all([...scriptPaths, ...cssPaths].map(async (
 const productHomeReadinessChunkPath = /assets\/ProductHomeReadiness-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!productHomeReadinessChunkPath) throw new Error('product_home_readiness_chunk_missing')
 const productHomeReadinessChunk = (await get(`/${productHomeReadinessChunkPath}`)).body
-const businessCommandChunkPath = /assets\/business-command-[A-Za-z0-9_-]+\.js/.exec(productHomeReadinessChunk)?.[0]
-if (!businessCommandChunkPath) throw new Error('business_command_chunk_missing')
-const businessCommandChunk = (await get(`/${businessCommandChunkPath}`)).body
+const businessCommandChunkName = /business-command-[A-Za-z0-9_-]+\.js/.exec(productHomeReadinessChunk)?.[0]
+if (!businessCommandChunkName) throw new Error('business_command_chunk_missing')
+const businessCommandChunk = (await get(`/assets/${businessCommandChunkName}`)).body
 const productHomeReadinessCorpus = `${productHomeReadinessChunk}\n${businessCommandChunk}`
 const operationsChunkPath = /assets\/CoreApp-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!operationsChunkPath) throw new Error('operations_chunk_missing')
