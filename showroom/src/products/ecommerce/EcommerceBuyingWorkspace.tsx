@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   buildEcommerceCheckoutQuote,
   buildEcommerceCancellationIntent,
+  buildEcommerceOrderAmendmentIntent,
   buildEcommerceOrderRequestV2,
   buildEcommercePimProjection,
   buildEcommerceReturnIntent,
@@ -14,11 +15,13 @@ import {
   readEcommerceBuyingState,
   saveEcommerceOrderRequestV2,
   saveEcommerceCancellationIntent,
+  saveEcommerceOrderAmendment,
   saveEcommerceReturnIntent,
   saveEcommerceSupportIntent,
   type EcommerceBuyingState,
   type EcommerceCancellationIntent,
   type EcommerceCancellationReasonCode,
+  type EcommerceOrderAmendmentIntent,
   type EcommerceCartLine,
   type EcommerceFulfilment,
   type EcommercePaymentAdapter,
@@ -47,6 +50,7 @@ type EcommerceBuyingWorkspaceProps = {
   onDraft: (draft: EcommerceShopDraftV2) => void
   onOpenManagedRequest?: (requestId: string) => void
   onOpenCancellation: (intent: EcommerceCancellationIntent) => void
+  onOpenAmendment: (intent: EcommerceOrderAmendmentIntent) => void
   onOpenReturns: (intent: EcommerceReturnIntent) => void
   onOpenSupport: (intent: EcommerceSupportIntent) => void
   onRecordManagedRequest?: (request: EcommerceBuyingState['requests'][number]) => Promise<void>
@@ -61,6 +65,12 @@ type EcommerceCancellationOutcome = {
   kind: 'kept' | 'cancelled'
   decidedAt: string
   refundStatus: 'none' | 'due' | 'settled'
+}
+
+type EcommerceAmendmentStatus = {
+  intent: EcommerceOrderAmendmentIntent
+  state: 'waiting_shop_review' | 'replacement_needed' | 'replacement_created' | 'review_required'
+  replacementOrderId: string
 }
 
 function formatMmk(value: number) {
@@ -95,6 +105,7 @@ export function EcommerceBuyingWorkspace({
   onDraft,
   onOpenManagedRequest,
   onOpenCancellation,
+  onOpenAmendment,
   onOpenReturns,
   onOpenSupport,
   onRecordManagedRequest,
@@ -145,10 +156,19 @@ export function EcommerceBuyingWorkspace({
     reason: string
   } | null>(null)
   const [cancellationBusy, setCancellationBusy] = useState(false)
+  const [amendmentDraft, setAmendmentDraft] = useState<{
+    orderId: string
+    fulfilment: EcommerceFulfilment
+    lines: Array<{ sku: string; name: string; quantity: string }>
+    reason: string
+  } | null>(null)
+  const [amendmentBusy, setAmendmentBusy] = useState(false)
   const confirmationRef = useRef<HTMLInputElement>(null)
 
   const emptyBuyingState = useMemo(() => createEmptyEcommerceBuyingState(scope), [scope])
-  const activeBuyingState = buyingState.scope === scope ? buyingState : emptyBuyingState
+  const activeBuyingState = buyingState.scope === scope
+    ? { ...buyingState, amendmentIntents: buyingState.amendmentIntents ?? [] }
+    : emptyBuyingState
   const recoveryStatus = recoveryRead.scope === scope ? recoveryRead.status : 'checking'
   const recoveryIssue = recoveryRead.scope === scope ? recoveryRead.issue : ''
 
@@ -174,6 +194,8 @@ export function EcommerceBuyingWorkspace({
       setFreshQuoteId('')
       setReturnDraft(null)
       setSupportDraft(null)
+      setCancellationDraft(null)
+      setAmendmentDraft(null)
       setNotice('')
       const latest = recoveredState.requests[0]
       if (!latest || latest.sourcePreviewDigest !== sourcePreviewDigest) return
@@ -250,12 +272,13 @@ export function EcommerceBuyingWorkspace({
   }, [activeBuyingState.requests, commerceState])
   const customerReference = [customerName.trim(), customerPhone.trim()].filter(Boolean).join(' · ')
   const trackedCustomerReference = customerReference || latestRequest?.customerReference || ''
+  const amendmentReplacementRequestIds = new Set(activeBuyingState.amendmentIntents.map((intent) => intent.replacementRequestId))
   const customerOrderTimeline = combinedOrderTimeline.filter((entry) => (
     trackedCustomerReference && (entry.request.schema === 'supermega.ecommerce.order_request.v2'
       && entry.request.customerProfile?.phone
       ? entry.request.customerProfile.phone === customerPhone.trim()
       : entry.request.customerReference === trackedCustomerReference)
-  ))
+  )).filter((entry) => !amendmentReplacementRequestIds.has(entry.request.id) || Boolean(entry.order))
   const completedCustomerOrders = customerOrderTimeline.filter((entry) => entry.stage === 'completed' && entry.order?.completion)
   const activeCustomerOrders = customerOrderTimeline.filter((entry) => (
     entry.order && ['confirmed', 'preparing', 'ready'].includes(entry.order.status)
@@ -301,6 +324,31 @@ export function EcommerceBuyingWorkspace({
     }
     return outcomes
   }, [])
+  const customerSourceRequestIds = new Set(customerOrderTimeline.map((entry) => entry.request.id))
+  const amendmentStatuses = activeBuyingState.amendmentIntents.filter((intent) => customerSourceRequestIds.has(intent.sourceRequestId)).reduce<EcommerceAmendmentStatus[]>((statuses, intent) => {
+    const originalEntry = customerOrderTimeline.find((entry) => entry.order?.id === intent.orderId)
+    const replacementEntry = combinedOrderTimeline.find((entry) => entry.request.id === intent.replacementRequestId)
+    if (replacementEntry?.order) {
+      statuses.push({ intent, state: 'replacement_created', replacementOrderId: replacementEntry.order.id })
+      return statuses
+    }
+    const acknowledgement = originalEntry?.order ? commerceOrderAcknowledgement(commerceState, originalEntry.order.id) : null
+    if (acknowledgement?.cancellation.state === 'cancelled'
+      && acknowledgement.cancellation.evidenceReference === intent.evidenceReference) {
+      statuses.push({ intent, state: 'replacement_needed', replacementOrderId: '' })
+      return statuses
+    }
+    if (acknowledgement?.status === 'confirmed'
+      && acknowledgement.digest === intent.sourceAcknowledgementDigest
+      && acknowledgement.payment.status === 'pending'
+      && acknowledgement.cancellation.state === 'not_cancelled') {
+      statuses.push({ intent, state: 'waiting_shop_review', replacementOrderId: '' })
+      return statuses
+    }
+    statuses.push({ intent, state: 'review_required', replacementOrderId: '' })
+    return statuses
+  }, [])
+  const pendingAmendmentIntents = amendmentStatuses.filter((status) => status.state !== 'replacement_created')
   const visibleSupportCases = completedCustomerOrders.flatMap((entry) => (
     (entry.order?.supportCases ?? []).map((supportCase) => ({ orderId: entry.order?.id ?? '', supportCase }))
   ))
@@ -445,6 +493,119 @@ export function EcommerceBuyingWorkspace({
     setSupportDraft(null)
     setCancellationDraft({ orderId: order.id, reasonCode: 'changed_mind', reason: '' })
     setNotice('Tell Shop why you want to cancel. The order, stock, payment, refund, and customer messages stay unchanged until Shop approves.')
+  }
+
+  function openAmendmentRequest(entry: CommerceStorefrontOrderTimelineEntry) {
+    const order = entry.order
+    const lines = order?.lines ?? []
+    if (!order || order.status !== 'confirmed' || order.paymentStatus !== 'pending' || order.refundStatus !== 'none' || !lines.length) {
+      setNotice('Order changes are available only before preparation and payment confirmation.')
+      return
+    }
+    if (activeBuyingState.amendmentIntents.some((intent) => intent.orderId === order.id)) {
+      setNotice('This order already has one recoverable change request.')
+      return
+    }
+    setCancellationDraft(null)
+    setReturnDraft(null)
+    setSupportDraft(null)
+    setAmendmentDraft({
+      orderId: order.id,
+      fulfilment: entry.request.fulfilment,
+      lines: lines.map((line) => ({ sku: line.sku, name: line.name, quantity: String(line.quantity) })),
+      reason: '',
+    })
+    setNotice('Change quantities, then Shop will cancel the original only after it proves a current replacement quote. The replacement order still needs a second human confirmation.')
+  }
+
+  async function openAmendmentInShop(intent: EcommerceOrderAmendmentIntent) {
+    const replacementRequest = activeBuyingState.requests.find((request) => request.id === intent.replacementRequestId)
+    if (!replacementRequest) {
+      setNotice('The replacement request is missing from recovery. Nothing was opened in Shop.')
+      return
+    }
+    try {
+      if (onRecordManagedRequest) await onRecordManagedRequest(replacementRequest)
+      onOpenAmendment(intent)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The managed replacement request could not be synchronized. It remains saved locally.')
+    }
+  }
+
+  async function submitAmendmentRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!amendmentDraft || amendmentBusy || disabled || recoveryBlocked) return
+    const entry = activeCustomerOrders.find((candidate) => candidate.order?.id === amendmentDraft.orderId)
+    if (!entry?.order || entry.request.schema !== 'supermega.ecommerce.order_request.v2' || !globalThis.crypto?.randomUUID) {
+      setNotice('Secure amendment identity or current Ecommerce order evidence is unavailable. Nothing was recorded.')
+      return
+    }
+    const replacementCart = amendmentDraft.lines.map((line) => ({
+      sku: line.sku,
+      quantity: /^(?:[1-9]\d*)$/.test(line.quantity) ? Number(line.quantity) : Number.NaN,
+    }))
+    if (replacementCart.some((line) => !Number.isSafeInteger(line.quantity) || line.quantity < 1 || line.quantity > 99)) {
+      setNotice('Each replacement quantity must be a whole number from 1 to 99.')
+      return
+    }
+    setAmendmentBusy(true)
+    setNotice('')
+    try {
+      const quotedAt = new Date()
+      const pim = await buildEcommercePimProjection(scope, sourcePreviewDigest, preview)
+      const originalRequest = entry.request
+      const originalPayment = originalRequest.quote.payment.adapter
+      const replacementPayment = ecommercePaymentMatchesFulfilment(amendmentDraft.fulfilment, originalPayment)
+        ? originalPayment
+        : amendmentDraft.fulfilment === 'delivery' ? 'cash_on_delivery' : 'pay_on_pickup'
+      if (amendmentDraft.fulfilment === 'delivery' && !originalRequest.deliveryAddress) {
+        throw new Error('A pickup order cannot change to delivery until a verified delivery address is captured.')
+      }
+      const quote = await buildEcommerceCheckoutQuote({
+        pim,
+        cart: replacementCart,
+        customerReference: originalRequest.customerReference,
+        customerProfile: originalRequest.customerProfile ? {
+          name: originalRequest.customerProfile.name,
+          phone: originalRequest.customerProfile.phone,
+          previous: originalRequest.customerProfile,
+        } : undefined,
+        deliveryAddress: amendmentDraft.fulfilment === 'delivery' && originalRequest.deliveryAddress ? {
+          line1: originalRequest.deliveryAddress.line1,
+          township: originalRequest.deliveryAddress.township,
+          city: originalRequest.deliveryAddress.city,
+          instructions: originalRequest.deliveryAddress.instructions,
+          previous: originalRequest.deliveryAddress,
+        } : null,
+        fulfilment: amendmentDraft.fulfilment,
+        paymentAdapter: replacementPayment,
+        promotionCode: originalRequest.quote.promotion.code,
+        idempotencyKey: `ECI-${globalThis.crypto.randomUUID().toUpperCase()}`,
+        quotedAt: quotedAt.toISOString(),
+        expiresAt: new Date(quotedAt.getTime() + 30 * 60 * 1000).toISOString(),
+      })
+      const replacementRequest = await buildEcommerceOrderRequestV2(quote, sourceStorefront)
+      const intent = await buildEcommerceOrderAmendmentIntent({
+        scope,
+        commerceState,
+        orderId: entry.order.id,
+        replacementRequest,
+        reason: amendmentDraft.reason,
+        idempotencyKey: `AMI-${globalThis.crypto.randomUUID().toUpperCase()}`,
+        createdAt: quotedAt.toISOString(),
+      })
+      const saved = await saveEcommerceOrderAmendment(scope, replacementRequest, intent, activeBuyingState.headDigest)
+      setBuyingState(saved)
+      setRecoveryRead({ scope, status: 'ready', issue: '' })
+      setAmendmentDraft(null)
+      setNotice(`${intent.id} and ${replacementRequest.id} are saved together. No order, stock, payment, refund, message, or provider changed.`)
+      if (onRecordManagedRequest) await onRecordManagedRequest(replacementRequest)
+      onOpenAmendment(intent)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Order amendment failed closed.')
+    } finally {
+      setAmendmentBusy(false)
+    }
   }
 
   async function submitCancellationRequest(event: FormEvent<HTMLFormElement>) {
@@ -843,10 +1004,17 @@ export function EcommerceBuyingWorkspace({
         </div>
       </details>
 
-      <details className="ecommerce-after-purchase" open={Boolean(cancellationDraft || returnDraft || supportDraft) || undefined}>
-        <summary><span><strong>Order help</strong><small>Cancel active orders or get help after completion</small></span><b>{pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length ? `${pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length} waiting` : 'Shop review'}</b></summary>
+      <details className="ecommerce-after-purchase" open={Boolean(amendmentDraft || cancellationDraft || returnDraft || supportDraft) || undefined}>
+        <summary><span><strong>Order help</strong><small>Change or cancel before preparation; get help after completion</small></span><b>{pendingAmendmentIntents.length + pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length ? `${pendingAmendmentIntents.length + pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length} waiting` : 'Shop review'}</b></summary>
         <div className="ecommerce-return-workspace">
-          <p>No refund starts here. Shop reviews every cancellation, return, and help request. Nothing here changes stock, payment, refund, delivery, or customer messages by itself.</p>
+          <p>Shop reviews every change, cancellation, return, and help request. Nothing here changes an order, stock, payment, refund, delivery, provider, or customer message by itself.</p>
+          {pendingAmendmentIntents.map(({ intent, state }) => <article className="ecommerce-return-status" key={intent.id}>
+            <span><strong>{state === 'replacement_needed' ? 'Replacement needs confirmation' : state === 'review_required' ? 'Change needs fresh review' : 'Order change waiting'}</strong><small>{intent.orderId} / {intent.lineChanges.map((line) => `${line.sku} ${line.fromQuantity}→${line.toQuantity}`).join(', ') || `${intent.fromFulfilment}→${intent.toFulfilment}`}</small></span>
+            <button className="core-button secondary" disabled={disabled} onClick={() => void openAmendmentInShop(intent)} type="button">Continue in Shop</button>
+          </article>)}
+          {amendmentStatuses.filter((status) => status.state === 'replacement_created').slice(0, 3).map(({ intent, replacementOrderId }) => <article className="ecommerce-return-status" key={`amendment:${intent.id}`}>
+            <span><strong>Order updated</strong><small>{intent.orderId} replaced by {replacementOrderId}</small></span><b>Confirmed</b>
+          </article>)}
           {pendingCancellationIntents.map((intent) => <article className="ecommerce-return-status" key={intent.id}>
             <span><strong>Cancellation waiting</strong><small>{intent.orderId} / {intent.reasonCode.replaceAll('_', ' ')}</small></span>
             <button className="core-button secondary" disabled={disabled} onClick={() => onOpenCancellation(intent)} type="button">Continue in Shop</button>
@@ -867,17 +1035,26 @@ export function EcommerceBuyingWorkspace({
             <span><strong>{supportCase.status === 'resolved' ? 'Help resolved' : 'Help open'}</strong><small>{orderId} / {supportCase.category.replaceAll('_', ' ')}</small></span>
             <b>{supportCase.status}</b>
           </article>)}
-          {!cancellationDraft && !returnDraft && !supportDraft ? activeCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
+          {!amendmentDraft && !cancellationDraft && !returnDraft && !supportDraft ? activeCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
             <span><strong>{entry.order?.id}</strong><small>{orderStageLabel(entry)} / {formatMmk(entry.order?.total ?? entry.request.totalMmk)}</small></span>
-            {!activeBuyingState.cancellationIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openCancellationRequest(entry)} type="button">Request cancellation</button> : null}
+            <div className="ecommerce-return-actions">
+              {entry.order?.status === 'confirmed' && entry.order.paymentStatus === 'pending' && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openAmendmentRequest(entry)} type="button">Change order</button> : null}
+              {!activeBuyingState.cancellationIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openCancellationRequest(entry)} type="button">Cancel order</button> : null}
+            </div>
           </article>) : null}
-          {!cancellationDraft && !returnDraft && !supportDraft ? completedCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
+          {!amendmentDraft && !cancellationDraft && !returnDraft && !supportDraft ? completedCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
             <span><strong>{entry.order?.id}</strong><small>{entry.order?.lines?.map((line) => `${line.name} x ${line.quantity}`).join(' / ') ?? entry.order?.item}</small></span>
             <div className="ecommerce-return-actions">
               {!pendingReturnIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openReturnRequest(entry)} type="button">Return</button> : null}
               {!pendingSupportIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openSupportRequest(entry)} type="button">Get help</button> : null}
             </div>
           </article>) : null}
+          {amendmentDraft ? <form className="ecommerce-return-form" onSubmit={(event) => void submitAmendmentRequest(event)}>
+            <span><strong>Change {amendmentDraft.orderId}</strong><small>Shop will reprice the replacement before cancelling the original. A second confirmation creates the replacement order.</small></span>
+            {amendmentDraft.lines.map((line) => <label key={line.sku}>{line.name}<input disabled={disabled || amendmentBusy} inputMode="numeric" max="99" min="1" onChange={(event) => setAmendmentDraft((current) => current ? { ...current, lines: current.lines.map((candidate) => candidate.sku === line.sku ? { ...candidate, quantity: event.target.value } : candidate) } : current)} required step="1" type="number" value={line.quantity} /></label>)}
+            <label className="ecommerce-return-reason">Why change it?<textarea disabled={disabled || amendmentBusy} maxLength={300} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, reason: event.target.value } : current)} placeholder="One clear reason for Shop review" required rows={2} value={amendmentDraft.reason} /></label>
+            <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || amendmentBusy} type="submit">{amendmentBusy ? 'Saving…' : 'Send change to Shop'}</button><button className="core-button secondary" disabled={disabled || amendmentBusy} onClick={() => { setAmendmentDraft(null); setNotice('Order change closed. Nothing changed.') }} type="button">Close</button></div>
+          </form> : null}
           {cancellationDraft ? <form className="ecommerce-return-form" onSubmit={(event) => void submitCancellationRequest(event)}>
             <span><strong>Cancel {cancellationDraft.orderId}</strong><small>Shop must recheck the order, reserved stock, payment, and refund impact.</small></span>
             <label>Reason<select disabled={disabled || cancellationBusy} onChange={(event) => setCancellationDraft((current) => current ? { ...current, reasonCode: event.target.value as EcommerceCancellationReasonCode } : current)} value={cancellationDraft.reasonCode}><option value="changed_mind">Changed my mind</option><option value="duplicate_order">Duplicate order</option><option value="order_error">Order details are wrong</option><option value="delivery_too_slow">Delivery will be too late</option><option value="other">Other</option></select></label>
@@ -898,7 +1075,7 @@ export function EcommerceBuyingWorkspace({
             <label className="ecommerce-return-reason">What do you need?<textarea disabled={disabled || supportBusy} maxLength={300} onChange={(event) => setSupportDraft((current) => current ? { ...current, description: event.target.value } : current)} placeholder="One clear description for Shop" required rows={2} value={supportDraft.description} /></label>
             <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || supportBusy} type="submit">{supportBusy ? 'Saving...' : 'Send to Shop review'}</button><button className="core-button secondary" disabled={disabled || supportBusy} onClick={() => { setSupportDraft(null); setNotice('Help request closed. Nothing changed.') }} type="button">Cancel</button></div>
           </form> : null}
-          {!activeCustomerOrders.length && !completedCustomerOrders.length && !pendingCancellationIntents.length && !pendingReturnIntents.length && !pendingSupportIntents.length ? <p>Active and completed orders for this exact contact will appear here.</p> : null}
+          {!activeCustomerOrders.length && !completedCustomerOrders.length && !pendingAmendmentIntents.length && !pendingCancellationIntents.length && !pendingReturnIntents.length && !pendingSupportIntents.length ? <p>Active and completed orders for this exact contact will appear here.</p> : null}
         </div>
       </details>
     </>

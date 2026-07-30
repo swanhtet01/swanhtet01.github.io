@@ -39,6 +39,7 @@ export const ECOMMERCE_RETURN_INTENT_SCHEMA = 'supermega.ecommerce.return_intent
 export const ECOMMERCE_SUPPORT_INTENT_SCHEMA = 'supermega.ecommerce.support_intent.v1' as const
 export const ECOMMERCE_CANCELLATION_INTENT_SCHEMA = 'supermega.ecommerce.cancellation_intent.v1' as const
 export const ECOMMERCE_CANCELLATION_DECISION_SCHEMA = 'supermega.ecommerce.cancellation_decision.v1' as const
+export const ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA = 'supermega.ecommerce.order_amendment_intent.v1' as const
 export const ECOMMERCE_BUYING_STATE_SCHEMA = 'supermega.ecommerce.buying_lifecycle.v1' as const
 export const ECOMMERCE_BUYING_EVENT_SCHEMA = 'supermega.ecommerce.buying_event.v1' as const
 export const ECOMMERCE_BUYING_STATE_KEY_PREFIX = 'supermega.ecommerce.buying_lifecycle.v1.'
@@ -501,10 +502,46 @@ export type EcommerceCancellationDecision = {
   providerCalled: false
 }
 
+export type EcommerceOrderAmendmentLineChange = {
+  sku: string
+  name: string
+  fromQuantity: number
+  toQuantity: number
+}
+
+export type EcommerceOrderAmendmentIntent = {
+  schema: typeof ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA
+  state: 'pending_shop_review'
+  scope: string
+  id: string
+  idempotencyKey: string
+  createdAt: string
+  orderId: string
+  sourceRequestId: string
+  sourceAcknowledgementDigest: string
+  orderStatus: 'confirmed'
+  paymentStatus: 'pending'
+  refundStatus: 'none'
+  originalTotalMmk: number
+  replacementRequestId: string
+  replacementRequestDigest: string
+  lineChanges: EcommerceOrderAmendmentLineChange[]
+  fromFulfilment: EcommerceFulfilment
+  toFulfilment: EcommerceFulfilment
+  reason: string
+  customerMessageSent: false
+  orderChanged: false
+  stockChanged: false
+  paymentChanged: false
+  refundStarted: false
+  providerCalled: false
+  evidenceReference: string
+}
+
 export type EcommerceBuyingEvent = {
   schema: typeof ECOMMERCE_BUYING_EVENT_SCHEMA
   sequence: number
-  action: 'request_recorded' | 'return_intent_recorded' | 'support_intent_recorded' | 'cancellation_intent_recorded' | 'cancellation_decision_recorded'
+  action: 'request_recorded' | 'return_intent_recorded' | 'support_intent_recorded' | 'cancellation_intent_recorded' | 'cancellation_decision_recorded' | 'order_amendment_intent_recorded'
   subjectId: string
   idempotencyKey: string
   payloadDigest: string
@@ -522,6 +559,7 @@ export type EcommerceBuyingState = {
   supportIntents: EcommerceSupportIntent[]
   cancellationIntents: EcommerceCancellationIntent[]
   cancellationDecisions: EcommerceCancellationDecision[]
+  amendmentIntents: EcommerceOrderAmendmentIntent[]
   events: EcommerceBuyingEvent[]
 }
 
@@ -561,6 +599,8 @@ const cancellationIdPattern = new RegExp(`^ECN-${uuidPattern}$`)
 const cancellationKeyPattern = new RegExp(`^CNI-${uuidPattern}$`)
 const cancellationDecisionIdPattern = new RegExp(`^ECD-${uuidPattern}$`)
 const cancellationDecisionKeyPattern = new RegExp(`^CDI-${uuidPattern}$`)
+const amendmentIdPattern = new RegExp(`^EAM-${uuidPattern}$`)
+const amendmentKeyPattern = new RegExp(`^AMI-${uuidPattern}$`)
 const timestampPattern = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$/
 const paymentAdapters: EcommercePaymentAdapter[] = ['cash_on_delivery', 'kbzpay_manual', 'pay_on_pickup']
 const fulfilmentMethods: EcommerceFulfilment[] = ['delivery', 'pickup']
@@ -1218,6 +1258,7 @@ export function createEmptyEcommerceBuyingState(scope: string): EcommerceBuyingS
     supportIntents: [],
     cancellationIntents: [],
     cancellationDecisions: [],
+    amendmentIntents: [],
     events: [],
   }
 }
@@ -1228,7 +1269,7 @@ async function validateBuyingEvent(value: unknown, field: string): Promise<Ecomm
     'previousDigest', 'eventDigest',
   ])
   if (source.schema !== ECOMMERCE_BUYING_EVENT_SCHEMA
-    || !['request_recorded', 'return_intent_recorded', 'support_intent_recorded', 'cancellation_intent_recorded', 'cancellation_decision_recorded'].includes(String(source.action))) {
+    || !['request_recorded', 'return_intent_recorded', 'support_intent_recorded', 'cancellation_intent_recorded', 'cancellation_decision_recorded', 'order_amendment_intent_recorded'].includes(String(source.action))) {
     throw new Error(`${field} boundary is invalid.`)
   }
   const core = {
@@ -1250,10 +1291,11 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
   const legacyKeys = ['schema', 'scope', 'revision', 'headDigest', 'requests', 'returnIntents', 'events']
   const currentKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'events']
   const cancellationKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'cancellationIntents', 'events']
-  const latestKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'cancellationIntents', 'cancellationDecisions', 'events']
+  const decisionKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'cancellationIntents', 'cancellationDecisions', 'events']
+  const latestKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'cancellationIntents', 'cancellationDecisions', 'amendmentIntents', 'events']
   const actualKeys = Object.keys(value)
   const hasExactShape = (keys: string[]) => actualKeys.length === keys.length && keys.every((key) => actualKeys.includes(key))
-  if (!hasExactShape(legacyKeys) && !hasExactShape(currentKeys) && !hasExactShape(cancellationKeys) && !hasExactShape(latestKeys)) throw new Error('Buying state fields do not match the contract.')
+  if (!hasExactShape(legacyKeys) && !hasExactShape(currentKeys) && !hasExactShape(cancellationKeys) && !hasExactShape(decisionKeys) && !hasExactShape(latestKeys)) throw new Error('Buying state fields do not match the contract.')
   const source = value
   if (source.schema !== ECOMMERCE_BUYING_STATE_SCHEMA
     || !Array.isArray(source.requests)
@@ -1261,13 +1303,15 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
     || source.supportIntents !== undefined && !Array.isArray(source.supportIntents)
     || source.cancellationIntents !== undefined && !Array.isArray(source.cancellationIntents)
     || source.cancellationDecisions !== undefined && !Array.isArray(source.cancellationDecisions)
+    || source.amendmentIntents !== undefined && !Array.isArray(source.amendmentIntents)
     || !Array.isArray(source.events)
     || source.requests.length > maxRecords
     || source.returnIntents.length > maxRecords
     || (source.supportIntents?.length ?? 0) > maxRecords
     || (source.cancellationIntents?.length ?? 0) > maxRecords
     || (source.cancellationDecisions?.length ?? 0) > maxRecords
-    || source.events.length > maxRecords * 5) throw new Error('Buying state contract is invalid.')
+    || (source.amendmentIntents?.length ?? 0) > maxRecords
+    || source.events.length > maxRecords * 6) throw new Error('Buying state contract is invalid.')
   const scope = canonicalToken(source.scope, 'buying state.scope')
   if (expectedScope && scope !== canonicalToken(expectedScope, 'expectedScope')) throw new Error('Buying state belongs to a different workspace.')
   const requests = await Promise.all(source.requests.map((request) => validateEcommerceOrderRequestV2(request)))
@@ -1275,6 +1319,7 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
   const supportIntents = (source.supportIntents ?? []).map((intent) => validateEcommerceSupportIntent(intent))
   const cancellationIntents = (source.cancellationIntents ?? []).map((intent) => validateEcommerceCancellationIntent(intent))
   const cancellationDecisions = (source.cancellationDecisions ?? []).map((decision) => validateEcommerceCancellationDecision(decision))
+  const amendmentIntents = (source.amendmentIntents ?? []).map((intent) => validateEcommerceOrderAmendmentIntent(intent))
   const events = await Promise.all(source.events.map((event, index) => validateBuyingEvent(event, `buying state.events[${index}]`)))
   const revision = safeInteger(source.revision, 'buying state.revision')
   if (revision !== events.length) throw new Error('Buying state revision does not match its history.')
@@ -1285,7 +1330,7 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
   })
   const headDigest = canonicalDigest(source.headDigest, 'buying state.headDigest')
   if (headDigest !== previousDigest) throw new Error('Buying state head digest is invalid.')
-  const records: EcommerceBuyingRecord[] = [...requests, ...returnIntents, ...supportIntents, ...cancellationIntents, ...cancellationDecisions]
+  const records: EcommerceBuyingRecord[] = [...requests, ...returnIntents, ...supportIntents, ...cancellationIntents, ...cancellationDecisions, ...amendmentIntents]
   if (records.some((record) => record.scope !== scope)
     || new Set(records.map((record) => record.id)).size !== records.length
     || new Set(records.map((record) => record.idempotencyKey)).size !== records.length
@@ -1323,6 +1368,26 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
       throw new Error('Cancellation decision is not bound to its exact recovered request.')
     }
   }
+  if (new Set(amendmentIntents.map((intent) => intent.orderId)).size !== amendmentIntents.length) {
+    throw new Error('Only one amendment request may exist for an Ecommerce order.')
+  }
+  const requestById = new Map(requests.map((request) => [request.id, request]))
+  for (const intent of amendmentIntents) {
+    const sourceRequest = requestById.get(intent.sourceRequestId)
+    const replacementRequest = requestById.get(intent.replacementRequestId)
+    if (!sourceRequest
+      || !replacementRequest
+      || sourceRequest.id === replacementRequest.id
+      || intent.replacementRequestDigest !== await ecommerceLifecycleDigest(replacementRequest)
+      || replacementRequest.scope !== intent.scope
+      || sourceRequest.scope !== intent.scope
+      || sourceRequest.customerReference !== replacementRequest.customerReference
+      || sourceRequest.customerProfile?.phone !== replacementRequest.customerProfile?.phone
+      || sourceRequest.fulfilment !== intent.fromFulfilment
+      || replacementRequest.fulfilment !== intent.toFulfilment) {
+      throw new Error('Order amendment is not bound to its original and replacement Ecommerce requests.')
+    }
+  }
   const byId = new Map(records.map((record) => [record.id, record]))
   for (const event of events) {
     const record = byId.get(event.subjectId)
@@ -1330,22 +1395,22 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
       || record.idempotencyKey !== event.idempotencyKey
       || await ecommerceLifecycleDigest(record) !== event.payloadDigest) throw new Error('Buying event does not match its record.')
   }
-  return { schema: ECOMMERCE_BUYING_STATE_SCHEMA, scope, revision, headDigest, requests, returnIntents, supportIntents, cancellationIntents, cancellationDecisions, events }
+  return { schema: ECOMMERCE_BUYING_STATE_SCHEMA, scope, revision, headDigest, requests, returnIntents, supportIntents, cancellationIntents, cancellationDecisions, amendmentIntents, events }
 }
 
-type EcommerceBuyingRecord = EcommerceOrderRequestV2 | EcommerceReturnIntent | EcommerceSupportIntent | EcommerceCancellationIntent | EcommerceCancellationDecision
+type EcommerceBuyingRecord = EcommerceOrderRequestV2 | EcommerceReturnIntent | EcommerceSupportIntent | EcommerceCancellationIntent | EcommerceCancellationDecision | EcommerceOrderAmendmentIntent
 
 async function appendBuyingRecord(
   stateValue: EcommerceBuyingState,
   record: EcommerceBuyingRecord,
-  collection: 'requests' | 'returnIntents' | 'supportIntents' | 'cancellationIntents' | 'cancellationDecisions',
+  collection: 'requests' | 'returnIntents' | 'supportIntents' | 'cancellationIntents' | 'cancellationDecisions' | 'amendmentIntents',
   action: EcommerceBuyingEvent['action'],
   expectedHeadDigest: string,
 ) {
   const state = await validateEcommerceBuyingState(stateValue)
   if (canonicalDigest(expectedHeadDigest, 'expectedHeadDigest') !== state.headDigest) throw new Error('Buying state changed before this record was applied.')
   if (record.scope !== state.scope) throw new Error('Buying record belongs to a different workspace.')
-  const allRecords: EcommerceBuyingRecord[] = [...state.requests, ...state.returnIntents, ...state.supportIntents, ...state.cancellationIntents, ...state.cancellationDecisions]
+  const allRecords: EcommerceBuyingRecord[] = [...state.requests, ...state.returnIntents, ...state.supportIntents, ...state.cancellationIntents, ...state.cancellationDecisions, ...state.amendmentIntents]
   const existing = allRecords.find((candidate) => candidate.id === record.id || candidate.idempotencyKey === record.idempotencyKey)
   if (existing) {
     if (canonicalJson(existing) !== canonicalJson(record)) throw new Error('Buying idempotency key conflicts with a different record.')
@@ -1765,6 +1830,194 @@ export function validateEcommerceCancellationDecision(value: unknown): Ecommerce
   }
 }
 
+export async function buildEcommerceOrderAmendmentIntent(input: {
+  scope: string
+  commerceState: CommerceState
+  orderId: string
+  replacementRequest: EcommerceOrderRequestV2
+  reason: string
+  idempotencyKey: string
+  createdAt: string
+}): Promise<EcommerceOrderAmendmentIntent> {
+  const scope = canonicalToken(input.scope, 'scope')
+  const orderId = canonicalToken(input.orderId, 'orderId')
+  const order = input.commerceState.orders.find((candidate) => candidate.id === orderId)
+  const acknowledgement = commerceOrderAcknowledgement(input.commerceState, orderId)
+  const replacementRequest = await validateEcommerceOrderRequestV2(input.replacementRequest)
+  if (!order
+    || !acknowledgement
+    || order.status !== 'confirmed'
+    || order.paymentStatus !== 'pending'
+    || order.refundStatus !== 'none'
+    || acknowledgement.status !== order.status
+    || acknowledgement.payment.status !== order.paymentStatus
+    || acknowledgement.payment.refundStatus !== order.refundStatus
+    || acknowledgement.cancellation.state !== 'not_cancelled'
+    || acknowledgement.totalMmk !== order.total
+    || !commerceOrderHasReleasableReservation(input.commerceState, orderId)) {
+    throw new Error('Order changes require one confirmed, unpaid, uncancelled Ecommerce order with exact reserved stock.')
+  }
+  const sourceRequestId = canonicalText(acknowledgement.evidence.sourceRecordId, 'order acknowledgement sourceRecordId', 40)
+  if (!requestIdPattern.test(sourceRequestId)
+    || replacementRequest.scope !== scope
+    || replacementRequest.id === sourceRequestId) throw new Error('Order change is not attributable to distinct Ecommerce requests in one workspace.')
+  const originalLines = acknowledgement.lines.map((line) => ({ sku: line.sku, name: line.name, quantity: line.quantity })).sort((left, right) => left.sku.localeCompare(right.sku))
+  const replacementLines = replacementRequest.lines.map((line) => ({ sku: line.sku, name: line.name, quantity: line.quantity })).sort((left, right) => left.sku.localeCompare(right.sku))
+  if (originalLines.length !== replacementLines.length
+    || originalLines.some((line, index) => line.sku !== replacementLines[index]?.sku)) {
+    throw new Error('This amendment version can change quantities or fulfilment, but cannot add or remove SKUs.')
+  }
+  const lineChanges = originalLines.flatMap((line, index): EcommerceOrderAmendmentLineChange[] => {
+    const replacement = replacementLines[index]
+    return replacement && replacement.quantity !== line.quantity
+      ? [{ sku: line.sku, name: line.name, fromQuantity: line.quantity, toQuantity: replacement.quantity }]
+      : []
+  })
+  const sourceRequest = input.commerceState.storefrontRequests?.find((request) => request.id === sourceRequestId)
+  const fromFulfilment = sourceRequest?.schema === ECOMMERCE_REQUEST_SCHEMA_V2
+    ? sourceRequest.fulfilment
+    : order.fulfilment as EcommerceFulfilment
+  if (!fulfilmentMethods.includes(fromFulfilment)
+    || (!lineChanges.length && fromFulfilment === replacementRequest.fulfilment)) {
+    throw new Error('Change at least one quantity or the fulfilment method before Shop review.')
+  }
+  const idempotencyKey = canonicalText(input.idempotencyKey, 'idempotencyKey', 40)
+  if (!amendmentKeyPattern.test(idempotencyKey)) throw new Error('Order amendment idempotency key is invalid.')
+  const createdAt = canonicalTimestamp(input.createdAt, 'createdAt')
+  if (taxTimestampMicros(createdAt, 'createdAt') < taxTimestampMicros(order.createdAt, 'order.createdAt')
+    || taxTimestampMicros(createdAt, 'createdAt') < taxTimestampMicros(replacementRequest.createdAt, 'replacementRequest.createdAt')) {
+    throw new Error('Order amendment cannot predate its order or replacement request.')
+  }
+  const replacementRequestDigest = await ecommerceLifecycleDigest(replacementRequest)
+  return validateEcommerceOrderAmendmentIntent({
+    schema: ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA,
+    state: 'pending_shop_review',
+    scope,
+    id: `EAM-${idempotencyKey.slice(4)}`,
+    idempotencyKey,
+    createdAt,
+    orderId,
+    sourceRequestId,
+    sourceAcknowledgementDigest: acknowledgement.digest,
+    orderStatus: 'confirmed',
+    paymentStatus: 'pending',
+    refundStatus: 'none',
+    originalTotalMmk: acknowledgement.totalMmk,
+    replacementRequestId: replacementRequest.id,
+    replacementRequestDigest,
+    lineChanges,
+    fromFulfilment,
+    toFulfilment: replacementRequest.fulfilment,
+    reason: canonicalText(input.reason, 'reason', 300),
+    customerMessageSent: false,
+    orderChanged: false,
+    stockChanged: false,
+    paymentChanged: false,
+    refundStarted: false,
+    providerCalled: false,
+    evidenceReference: `ECOMMERCE-AMENDMENT:${idempotencyKey.slice(4)}:${orderId}:${sourceRequestId}:${replacementRequest.id}:${replacementRequestDigest.slice(7, 15)}`,
+  })
+}
+
+export function validateEcommerceOrderAmendmentIntent(value: unknown): EcommerceOrderAmendmentIntent {
+  const source = exactObject(value, 'order amendment intent', [
+    'schema', 'state', 'scope', 'id', 'idempotencyKey', 'createdAt', 'orderId',
+    'sourceRequestId', 'sourceAcknowledgementDigest', 'orderStatus', 'paymentStatus',
+    'refundStatus', 'originalTotalMmk', 'replacementRequestId', 'replacementRequestDigest',
+    'lineChanges', 'fromFulfilment', 'toFulfilment', 'reason', 'customerMessageSent',
+    'orderChanged', 'stockChanged', 'paymentChanged', 'refundStarted', 'providerCalled',
+    'evidenceReference',
+  ])
+  const id = canonicalText(source.id, 'order amendment intent.id', 40)
+  const idempotencyKey = canonicalText(source.idempotencyKey, 'order amendment intent.idempotencyKey', 40)
+  const orderId = canonicalToken(source.orderId, 'order amendment intent.orderId')
+  const sourceRequestId = canonicalText(source.sourceRequestId, 'order amendment intent.sourceRequestId', 40)
+  const replacementRequestId = canonicalText(source.replacementRequestId, 'order amendment intent.replacementRequestId', 40)
+  const replacementRequestDigest = canonicalDigest(source.replacementRequestDigest, 'order amendment intent.replacementRequestDigest')
+  if (!Array.isArray(source.lineChanges) || source.lineChanges.length > maxLines) throw new Error('Order amendment line changes are invalid.')
+  const lineChanges = source.lineChanges.map((candidate, index): EcommerceOrderAmendmentLineChange => {
+    const line = exactObject(candidate, `order amendment intent.lineChanges[${index}]`, ['sku', 'name', 'fromQuantity', 'toQuantity'])
+    const fromQuantity = safeInteger(line.fromQuantity, `order amendment intent.lineChanges[${index}].fromQuantity`, 1, maxQuantity)
+    const toQuantity = safeInteger(line.toQuantity, `order amendment intent.lineChanges[${index}].toQuantity`, 1, maxQuantity)
+    if (fromQuantity === toQuantity) throw new Error('Order amendment line change must alter quantity.')
+    return {
+      sku: canonicalToken(line.sku, `order amendment intent.lineChanges[${index}].sku`),
+      name: canonicalText(line.name, `order amendment intent.lineChanges[${index}].name`, 180),
+      fromQuantity,
+      toQuantity,
+    }
+  }).sort((left, right) => left.sku.localeCompare(right.sku))
+  const fromFulfilment = source.fromFulfilment as EcommerceFulfilment
+  const toFulfilment = source.toFulfilment as EcommerceFulfilment
+  const evidenceReference = `ECOMMERCE-AMENDMENT:${idempotencyKey.slice(4)}:${orderId}:${sourceRequestId}:${replacementRequestId}:${replacementRequestDigest.slice(7, 15)}`
+  if (source.schema !== ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA
+    || source.state !== 'pending_shop_review'
+    || !amendmentIdPattern.test(id)
+    || !amendmentKeyPattern.test(idempotencyKey)
+    || id.slice(4) !== idempotencyKey.slice(4)
+    || !requestIdPattern.test(sourceRequestId)
+    || !requestIdPattern.test(replacementRequestId)
+    || sourceRequestId === replacementRequestId
+    || source.orderStatus !== 'confirmed'
+    || source.paymentStatus !== 'pending'
+    || source.refundStatus !== 'none'
+    || !fulfilmentMethods.includes(fromFulfilment)
+    || !fulfilmentMethods.includes(toFulfilment)
+    || (!lineChanges.length && fromFulfilment === toFulfilment)
+    || new Set(lineChanges.map((line) => line.sku)).size !== lineChanges.length
+    || source.customerMessageSent !== false
+    || source.orderChanged !== false
+    || source.stockChanged !== false
+    || source.paymentChanged !== false
+    || source.refundStarted !== false
+    || source.providerCalled !== false
+    || source.evidenceReference !== evidenceReference) throw new Error('Order amendment intent boundary is invalid.')
+  return {
+    schema: ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA,
+    state: 'pending_shop_review',
+    scope: canonicalToken(source.scope, 'order amendment intent.scope'),
+    id,
+    idempotencyKey,
+    createdAt: canonicalTimestamp(source.createdAt, 'order amendment intent.createdAt'),
+    orderId,
+    sourceRequestId,
+    sourceAcknowledgementDigest: canonicalDigest(source.sourceAcknowledgementDigest, 'order amendment intent.sourceAcknowledgementDigest'),
+    orderStatus: 'confirmed',
+    paymentStatus: 'pending',
+    refundStatus: 'none',
+    originalTotalMmk: safeInteger(source.originalTotalMmk, 'order amendment intent.originalTotalMmk', 1, maxSafeInteger),
+    replacementRequestId,
+    replacementRequestDigest,
+    lineChanges,
+    fromFulfilment,
+    toFulfilment,
+    reason: canonicalText(source.reason, 'order amendment intent.reason', 300),
+    customerMessageSent: false,
+    orderChanged: false,
+    stockChanged: false,
+    paymentChanged: false,
+    refundStarted: false,
+    providerCalled: false,
+    evidenceReference,
+  }
+}
+
+export async function recordEcommerceOrderAmendment(
+  state: EcommerceBuyingState,
+  replacementRequestValue: EcommerceOrderRequestV2,
+  intentValue: EcommerceOrderAmendmentIntent,
+  expectedHeadDigest: string,
+) {
+  const replacementRequest = await validateEcommerceOrderRequestV2(replacementRequestValue)
+  const intent = validateEcommerceOrderAmendmentIntent(intentValue)
+  if (intent.replacementRequestId !== replacementRequest.id
+    || intent.replacementRequestDigest !== await ecommerceLifecycleDigest(replacementRequest)) {
+    throw new Error('Order amendment does not match its replacement request.')
+  }
+  const withRequest = await appendBuyingRecord(state, replacementRequest, 'requests', 'request_recorded', expectedHeadDigest)
+  return appendBuyingRecord(withRequest, intent, 'amendmentIntents', 'order_amendment_intent_recorded', withRequest.headDigest)
+}
+
 export async function recordEcommerceReturnIntent(
   state: EcommerceBuyingState,
   intentValue: EcommerceReturnIntent,
@@ -2013,6 +2266,46 @@ export async function saveEcommerceCancellationDecision(
       throw error instanceof Error
         ? error
         : new Error('Cancellation decision recovery write failed. The previous value was restored.', { cause: error })
+    }
+  })
+}
+
+export async function saveEcommerceOrderAmendment(
+  scope: string,
+  replacementRequest: EcommerceOrderRequestV2,
+  intent: EcommerceOrderAmendmentIntent,
+  expectedHeadDigest: string,
+  options: { storage?: EcommerceBuyingStorage; locks?: EcommerceBuyingLocks } = {},
+) {
+  const canonicalScope = canonicalToken(scope, 'scope')
+  const storage = options.storage ?? browserStorage()
+  const locks = options.locks ?? browserLocks()
+  if (!storage) throw new Error('Browser recovery is unavailable. The order change was not saved.')
+  if (!locks) throw new Error('Safe browser locking is unavailable. The order change was not saved.')
+  const storageKey = ecommerceBuyingStateStorageKey(canonicalScope)
+  return locks.request(`supermega:ecommerce:buying-lifecycle:${encodeURIComponent(canonicalScope)}`, { mode: 'exclusive' }, async () => {
+    const currentRead = await readEcommerceBuyingState(canonicalScope, storage)
+    if (!currentRead.state || currentRead.status === 'invalid' || currentRead.status === 'unavailable') {
+      throw new Error(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
+    }
+    const next = await recordEcommerceOrderAmendment(currentRead.state, replacementRequest, intent, expectedHeadDigest)
+    const previousRaw = storage.getItem(storageKey)
+    const nextRaw = canonicalJson(next)
+    try {
+      storage.setItem(storageKey, nextRaw)
+      if (storage.getItem(storageKey) !== nextRaw) throw new Error('Order amendment recovery write could not be confirmed.')
+      return next
+    } catch (error) {
+      try {
+        if (previousRaw === null) storage.removeItem(storageKey)
+        else storage.setItem(storageKey, previousRaw)
+        if (storage.getItem(storageKey) !== previousRaw) throw new Error('rollback confirmation failed', { cause: error })
+      } catch (rollbackError) {
+        throw new Error('Order amendment recovery write failed and rollback could not be confirmed. Stop and export local evidence.', { cause: rollbackError })
+      }
+      throw error instanceof Error
+        ? error
+        : new Error('Order amendment recovery write failed. The previous value was restored.', { cause: error })
     }
   })
 }

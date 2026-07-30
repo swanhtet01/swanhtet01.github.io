@@ -4,7 +4,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useS
 import './core-app.css'
 import { WebsiteCommerceIntake } from '../products/WebsiteCommerceIntake'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
-import type { EcommerceCancellationIntent, EcommerceReturnIntent, EcommerceSupportIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
+import type { EcommerceCancellationIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceReturnIntent, EcommerceShopDraftV2, EcommerceSupportIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
 import { readWebsiteEcommerceHandoff, type WebsiteOrderRecord } from '../products/product-handoff'
 import {
   createManagedApproval,
@@ -369,6 +369,25 @@ function ecommerceCancellationMatchesCurrentShop(state: CommerceState, intent: E
     && acknowledgement.totalMmk === intent.totalMmk
     && acknowledgement.cancellation.state === 'not_cancelled'
     && commerceOrderHasReleasableReservation(state, intent.orderId))
+}
+
+function ecommerceOrderAmendmentShopState(state: CommerceState, intent: EcommerceOrderAmendmentIntent) {
+  const order = state.orders.find((candidate) => candidate.id === intent.orderId)
+  const acknowledgement = commerceOrderAcknowledgement(state, intent.orderId)
+  if (!order || !acknowledgement
+    || order.sourceRecordId !== intent.sourceRequestId
+    || acknowledgement.evidence.sourceRecordId !== intent.sourceRequestId
+    || acknowledgement.payment.status !== intent.paymentStatus
+    || acknowledgement.payment.refundStatus !== intent.refundStatus) return 'stale' as const
+  if (acknowledgement.status === intent.orderStatus
+    && acknowledgement.digest === intent.sourceAcknowledgementDigest
+    && acknowledgement.totalMmk === intent.originalTotalMmk
+    && acknowledgement.cancellation.state === 'not_cancelled'
+    && commerceOrderHasReleasableReservation(state, intent.orderId)) return 'active' as const
+  if (acknowledgement.status === 'cancelled'
+    && acknowledgement.cancellation.state === 'cancelled'
+    && acknowledgement.cancellation.evidenceReference === intent.evidenceReference) return 'replacement_needed' as const
+  return 'stale' as const
 }
 
 function productCanonicalPath(product: ProductId) {
@@ -1390,6 +1409,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   const ecommerceReturnNavigationIntent = (location.state as { ecommerceReturnIntent?: EcommerceReturnIntent } | null)?.ecommerceReturnIntent ?? null
   const ecommerceSupportNavigationIntent = (location.state as { ecommerceSupportIntent?: EcommerceSupportIntent } | null)?.ecommerceSupportIntent ?? null
   const ecommerceCancellationNavigationIntent = (location.state as { ecommerceCancellationIntent?: EcommerceCancellationIntent } | null)?.ecommerceCancellationIntent ?? null
+  const ecommerceOrderAmendmentNavigationIntent = (location.state as { ecommerceOrderAmendmentIntent?: EcommerceOrderAmendmentIntent } | null)?.ecommerceOrderAmendmentIntent ?? null
   const routeModule = location.pathname.split('/').filter(Boolean)[1]
   const requestedView = searchParams.get('view')
   const requestedSource = searchParams.get('source')
@@ -1441,7 +1461,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1626,9 +1646,10 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigationDraft, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, managedIdentity, requestedRequestId, requestedSource, tab }: {
+function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, managedIdentity, requestedRequestId, requestedSource, tab }: {
   ecommerceCancellationNavigationIntent: EcommerceCancellationIntent | null
   ecommerceNavigationDraft: EcommerceShopDraft | null
+  ecommerceOrderAmendmentNavigationIntent: EcommerceOrderAmendmentIntent | null
   ecommerceReturnNavigationIntent: EcommerceReturnIntent | null
   ecommerceSupportNavigationIntent: EcommerceSupportIntent | null
   managedIdentity: ManagedIdentity | null
@@ -1646,7 +1667,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
   const orderDraftScope = localCommerceOrderDraftScope(managedIdentity?.workspaceId)
   const ecommerceBuyingScope = managedIdentity ? `ecommerce:${managedIdentity.workspaceId}` : 'ecommerce:local'
   const commerceRef = useRef(commerce)
-  commerceRef.current = commerce
+  useEffect(() => {
+    commerceRef.current = commerce
+  }, [commerce])
   const [actions, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
   const [sku, setSku] = useState(commerce.items[0]?.sku ?? '')
@@ -1695,6 +1718,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
   const consumedEcommerceReturnIntentId = useRef('')
   const consumedEcommerceSupportIntentId = useRef('')
   const consumedEcommerceCancellationIntentId = useRef('')
+  const consumedEcommerceOrderAmendmentIntentId = useRef('')
   const consumedEcommerceInboxSource = useRef('')
   const orderDraftRevisionRef = useRef(orderDraftRead.draft?.revision ?? 0)
   const orderDraftSaveQueueRef = useRef(Promise.resolve())
@@ -1712,6 +1736,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
   const [cancellationDraft, setCancellationDraft] = useState<EcommerceCancellationIntent | null>(null)
+  const [orderAmendmentReview, setOrderAmendmentReview] = useState<{ intent: EcommerceOrderAmendmentIntent; replacementRequest: EcommerceOrderRequestV2; draft: EcommerceShopDraftV2 } | null>(null)
   const [supportDraft, setSupportDraft] = useState<CommerceSupportOpenDraft | null>(null)
   const [supportReopenDraft, setSupportReopenDraft] = useState<CommerceSupportReopenDraft | null>(null)
   const [supportServiceDraft, setSupportServiceDraft] = useState<CommerceSupportServiceDraft | null>(null)
@@ -2445,6 +2470,55 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
       })
     return () => { current = false }
   }, [commerce, ecommerceCancellationNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
+
+  useEffect(() => {
+    if (!ecommerceOrderAmendmentNavigationIntent
+      || tab !== 'orders'
+      || managedIdentity && workspaceMode !== 'managed-ready'
+      || consumedEcommerceOrderAmendmentIntentId.current === ecommerceOrderAmendmentNavigationIntent.id) return
+    let current = true
+    void import('../products/ecommerce/ecommerce-buying-lifecycle')
+      .then(async (lifecycle) => {
+        const intent = lifecycle.validateEcommerceOrderAmendmentIntent(ecommerceOrderAmendmentNavigationIntent)
+        const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
+        if (!current) return
+        consumedEcommerceOrderAmendmentIntentId.current = intent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        if (!recovered.state || recovered.status !== 'ready') throw new Error(recovered.error || 'Order amendment recovery is unavailable.')
+        const storedIntent = recovered.state.amendmentIntents.find((candidate) => candidate.id === intent.id)
+        const replacementRequest = recovered.state.requests.find((candidate) => candidate.id === intent.replacementRequestId)
+        if (!storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(intent) || !replacementRequest) {
+          throw new Error('Order amendment does not match its recovered request.')
+        }
+        if (ecommerceOrderAmendmentShopState(commerce, intent) === 'stale') {
+          throw new Error('The original order no longer matches this change request. Nothing was prepared.')
+        }
+        const draft = await lifecycle.prepareEcommerceShopDraftV2({
+          request: replacementRequest,
+          state: recovered.state,
+          currentCatalog: commerce.items,
+          currentPromotionPolicies: commerce.promotionPolicies ?? [],
+          currentShippingPolicies: commerce.shippingPolicies ?? [],
+          currentPaymentPolicies: commerce.paymentPolicies ?? [],
+          currentTaxConfigurations: commerce.taxConfigurations ?? [],
+          catalogRevision: commerce.catalogChanges?.length ?? 0,
+          confirmedAt: new Date().toISOString(),
+        })
+        if (!current) return
+        setCancellationDraft(null)
+        setOrderAmendmentReview({ intent, replacementRequest, draft })
+        setNotice(`${intent.id} is ready for a two-step Shop replacement. Review the repriced total before the original order is cancelled.`)
+        requestAnimationFrame(() => document.getElementById('shop-order-amendment-review')?.focus())
+      })
+      .catch((error) => {
+        if (!current) return
+        consumedEcommerceOrderAmendmentIntentId.current = ecommerceOrderAmendmentNavigationIntent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        setOrderAmendmentReview(null)
+        setNotice(error instanceof Error ? error.message : 'The order amendment could not be verified. Nothing was prepared.')
+      })
+    return () => { current = false }
+  }, [commerce, ecommerceBuyingScope, ecommerceOrderAmendmentNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
 
   useEffect(() => {
     if (!ecommerceSupportNavigationIntent
@@ -4432,6 +4506,115 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
     })
   }
 
+  async function prepareCurrentAmendmentDraft(intent: EcommerceOrderAmendmentIntent, currentCommerce: CommerceState) {
+    const lifecycle = await import('../products/ecommerce/ecommerce-buying-lifecycle')
+    const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
+    if (!recovered.state || recovered.status !== 'ready') {
+      throw new ShopReviewRequiredError(recovered.error || `${intent.id} recovery is unavailable. Nothing changed.`)
+    }
+    const storedIntent = recovered.state.amendmentIntents.find((candidate) => candidate.id === intent.id)
+    const replacementRequest = recovered.state.requests.find((candidate) => candidate.id === intent.replacementRequestId)
+    if (!storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(intent) || !replacementRequest) {
+      throw new ShopReviewRequiredError(`${intent.id} no longer matches its recovered replacement request. Nothing changed.`)
+    }
+    const draft = await lifecycle.prepareEcommerceShopDraftV2({
+      request: replacementRequest,
+      state: recovered.state,
+      currentCatalog: currentCommerce.items,
+      currentPromotionPolicies: currentCommerce.promotionPolicies ?? [],
+      currentShippingPolicies: currentCommerce.shippingPolicies ?? [],
+      currentPaymentPolicies: currentCommerce.paymentPolicies ?? [],
+      currentTaxConfigurations: currentCommerce.taxConfigurations ?? [],
+      catalogRevision: currentCommerce.catalogChanges?.length ?? 0,
+      confirmedAt: new Date().toISOString(),
+    })
+    return { draft, replacementRequest }
+  }
+
+  function openPreparedAmendmentReplacement(intent: EcommerceOrderAmendmentIntent, draft: EcommerceShopDraftV2) {
+    const [firstLine, ...remainingLines] = draft.lines
+    if (!firstLine) throw new ShopReviewRequiredError('The replacement request has no reviewed item. Nothing was prepared.')
+    setPreparedChannelDraft(null)
+    setPreparedEcommerceDraft(draft)
+    setCustomer(draft.customerProfile?.name ?? draft.customerReference)
+    setChannel('Ecommerce')
+    setSku(firstLine.sku)
+    setQuantity(firstLine.quantity)
+    setExtraOrderLines(remainingLines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
+    setPayment(draft.pricing.payment.adapter === 'kbzpay_manual' ? 'KBZPay' : draft.pricing.payment.adapter === 'cash_on_delivery' ? 'Cash on delivery' : 'Pay on pickup')
+    setFulfilment(draft.fulfilment)
+    setFulfilmentReference(draft.deliveryAddress
+      ? `${draft.deliveryAddress.line1} · ${draft.deliveryAddress.township} · ${draft.deliveryAddress.city}${draft.deliveryAddress.instructions ? ` · ${draft.deliveryAddress.instructions}` : ''}`
+      : draft.sourceRequestId)
+    setPromisedAt(defaultOrderPromiseInput())
+    setOrderEntryMode('manual')
+    setOrderDraftActive(true)
+    setResumedOrderDraft(null)
+    setOrderDraftConflict(false)
+    setOrderAmendmentReview(null)
+    setNotice(`${intent.orderId} is retained as cancelled evidence. Replacement ${draft.sourceRequestId} is repriced and ready for a separate accountable order confirmation.`)
+    requestAnimationFrame(() => {
+      const dialog = orderComposerRef.current
+      if (dialog && !dialog.open) dialog.showModal()
+      orderPaymentRef.current?.focus({ preventScroll: true })
+    })
+  }
+
+  async function prepareOrderAmendmentReplacement() {
+    if (!orderAmendmentReview) return
+    const { intent } = orderAmendmentReview
+    const currentCommerce = commerceRef.current
+    const currentState = ecommerceOrderAmendmentShopState(currentCommerce, intent)
+    if (currentState === 'stale') {
+      setOrderAmendmentReview(null)
+      setNotice(`${intent.id} no longer matches the current Shop order. Nothing changed.`)
+      return
+    }
+    if (currentState === 'replacement_needed') {
+      try {
+        const { draft } = await prepareCurrentAmendmentDraft(intent, currentCommerce)
+        openPreparedAmendmentReplacement(intent, draft)
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : 'The replacement draft could not be recovered. Nothing changed.')
+      }
+      return
+    }
+    queueAction({
+      kind: 'order_cancel',
+      subjectId: intent.orderId,
+      summary: `Cancel ${intent.orderId} and prepare replacement ${intent.replacementRequestId}`,
+      before: `${intent.orderStatus} · ${formatMoney(intent.originalTotalMmk)} · ${intent.lineChanges.map((line) => `${line.sku} ${line.fromQuantity}→${line.toQuantity}`).join(', ') || `${intent.fromFulfilment}→${intent.toFulfilment}`}`,
+      after: `original cancelled · exact stock released · replacement repriced for separate confirmation · no message or provider call`,
+      reasonSuggestion: intent.reason.slice(0, 180),
+      evidenceReferenceSuggestion: intent.evidenceReference,
+      evidenceReferenceLocked: true,
+      apply: async (action) => {
+        const latestCommerce = commerceRef.current
+        if (ecommerceOrderAmendmentShopState(latestCommerce, intent) !== 'active') {
+          setOrderAmendmentReview(null)
+          throw new ShopReviewRequiredError(`${intent.id} changed during review. Nothing was cancelled; reopen the request.`)
+        }
+        const { draft } = await prepareCurrentAmendmentDraft(intent, latestCommerce)
+        const proof = commerceActionProof(action)
+        let reviewRequired = false
+        try {
+          await mutateCommerce('commerce.order.cancelled', action.commandId, proof, (current) => {
+            if (ecommerceOrderAmendmentShopState(current, intent) !== 'active') {
+              reviewRequired = true
+              return null
+            }
+            return cancelCommerceOrder(current, intent.orderId, proof)
+          })
+        } catch (error) {
+          if (reviewRequired) throw new ShopReviewRequiredError(`${intent.id} changed during review. Nothing was cancelled; reopen the request.`)
+          throw error
+        }
+        if (reviewRequired) throw new ShopReviewRequiredError(`${intent.id} changed during review. Nothing was cancelled; reopen the request.`)
+        openPreparedAmendmentReplacement(intent, draft)
+      },
+    })
+  }
+
   function cancelOrder(orderId: string, sourceIntent?: EcommerceCancellationIntent) {
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
     if (!order || order.status === 'completed' || order.status === 'cancelled') return
@@ -5302,6 +5485,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
           {orderDraftRead.status !== 'unavailable' ? <button className="text-link danger-text" disabled={orderDraftSaving} onClick={() => void discardSavedOrderDraft()} type="button">{orderDraftRead.status === 'ready' ? 'Discard' : 'Discard unreadable draft'}</button> : null}
         </div>
       </div> : null}
+      {orderAmendmentReview ? <section aria-label="Customer order change review" className="order-draft-recovery" id="shop-order-amendment-review" tabIndex={-1}>
+        <div>
+          <strong>Customer asks to replace {orderAmendmentReview.intent.orderId}</strong>
+          <small>{orderAmendmentReview.intent.lineChanges.map((line) => `${line.name} ${line.fromQuantity}→${line.toQuantity}`).join(' · ') || `${orderAmendmentReview.intent.fromFulfilment}→${orderAmendmentReview.intent.toFulfilment}`} · {orderAmendmentReview.intent.reason}</small>
+          <small>{formatMoney(orderAmendmentReview.intent.originalTotalMmk)} original → {formatMoney(orderAmendmentReview.draft.totalMmk)} repriced · replacement {orderAmendmentReview.intent.replacementRequestId}</small>
+          <small>{ecommerceOrderAmendmentShopState(commerce, orderAmendmentReview.intent) === 'replacement_needed' ? 'The original is already cancelled with this exact evidence. Resume the recovered replacement draft.' : 'Step 1 cancels and releases the original under accountable review. Step 2 separately confirms the repriced replacement order.'}</small>
+        </div>
+        <div className="order-draft-recovery-actions">
+          <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={() => void prepareOrderAmendmentReplacement()} type="button">{ecommerceOrderAmendmentShopState(commerce, orderAmendmentReview.intent) === 'replacement_needed' ? 'Resume replacement' : 'Review replacement'}</button>
+          <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={() => { setOrderAmendmentReview(null); setNotice('Order change review closed. Nothing changed.') }} type="button">Close review</button>
+        </div>
+      </section> : null}
       {cancellationDraft ? <section aria-label="Customer cancellation review" className="order-draft-recovery" id="shop-cancellation-review" tabIndex={-1}>
         <div>
           <strong>Customer asks to cancel {cancellationDraft.orderId}</strong>

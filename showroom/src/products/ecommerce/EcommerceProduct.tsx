@@ -31,6 +31,7 @@ import { EcommerceBuyingWorkspace } from './EcommerceBuyingWorkspace'
 import {
   type EcommerceCartLine,
   type EcommerceCancellationIntent,
+  type EcommerceOrderAmendmentIntent,
   type EcommerceOrderRequestV2,
   type EcommerceReturnIntent,
   type EcommerceSupportIntent,
@@ -2173,6 +2174,7 @@ export function EcommerceProduct() {
               onDraft={openShopDraft}
               onOpenManagedRequest={managedIdentity ? (requestId) => navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestId)}`) : undefined}
               onOpenCancellation={(intent: EcommerceCancellationIntent) => navigate('/shop/?tab=orders', { state: { ecommerceCancellationIntent: intent } })}
+              onOpenAmendment={(intent: EcommerceOrderAmendmentIntent) => navigate('/shop/?tab=orders', { state: { ecommerceOrderAmendmentIntent: intent } })}
               onOpenReturns={(intent: EcommerceReturnIntent) => navigate('/shop/?tab=orders', { state: { ecommerceReturnIntent: intent } })}
               onOpenSupport={(intent: EcommerceSupportIntent) => navigate('/shop/?tab=orders', { state: { ecommerceSupportIntent: intent } })}
               onRecordManagedRequest={managedIdentity ? recordManagedBuyingRequest : undefined}

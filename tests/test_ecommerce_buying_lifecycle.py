@@ -11,6 +11,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     ECOMMERCE_SUPPORT_INTENT_SCHEMA,
     ECOMMERCE_CANCELLATION_INTENT_SCHEMA,
     ECOMMERCE_CANCELLATION_DECISION_SCHEMA,
+    ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA,
     ECOMMERCE_SHOP_DRAFT_SCHEMA,
     ECOMMERCE_TAX_DECISION_SCHEMA,
     EcommerceLifecycleValidationError,
@@ -21,6 +22,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     build_ecommerce_support_intent,
     build_ecommerce_cancellation_intent,
     build_ecommerce_cancellation_decision,
+    build_ecommerce_order_amendment_intent,
     create_empty_ecommerce_lifecycle_state,
     ecommerce_payment_matches_fulfilment,
     prepare_ecommerce_shop_handoff,
@@ -30,6 +32,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     record_ecommerce_support_intent,
     record_ecommerce_cancellation_intent,
     record_ecommerce_cancellation_decision,
+    record_ecommerce_order_amendment,
     validate_ecommerce_checkout_quote,
     validate_ecommerce_lifecycle_state,
     validate_ecommerce_order_request,
@@ -42,6 +45,7 @@ CHECKOUT_KEY = "ECI-12345678-1234-4ABC-8ABC-1234567890AB"
 RETURN_KEY = "ERI-12345678-1234-4ABC-8ABC-1234567890AC"
 SUPPORT_KEY = "ESI-12345678-1234-4ABC-8ABC-1234567890AD"
 CANCELLATION_KEY = "CNI-12345678-1234-4ABC-8ABC-1234567890AE"
+AMENDMENT_KEY = "AMI-12345678-1234-4ABC-8ABC-1234567890AF"
 SOURCE_DIGEST = "sha256:" + "1" * 64
 
 
@@ -101,6 +105,29 @@ def quote(**overrides: object) -> dict[str, object]:
 def request(scope: str = SCOPE) -> dict[str, object]:
     return build_ecommerce_order_request(
         quote(pim=projection(scope), fulfilment="pickup"),
+        source_storefront_revision=4,
+        source_storefront_action_id="ACT-STOREFRONT-R4",
+    )
+
+
+def order_source_request() -> dict[str, object]:
+    return build_ecommerce_order_request(
+        quote(
+            cart=[{"sku": "SKU-BLUE-M", "quantity": 2}],
+            fulfilment="delivery",
+        ),
+        source_storefront_revision=4,
+        source_storefront_action_id="ACT-STOREFRONT-R4",
+    )
+
+
+def replacement_request(quantity: int = 3) -> dict[str, object]:
+    return build_ecommerce_order_request(
+        quote(
+            cart=[{"sku": "SKU-BLUE-M", "quantity": quantity}],
+            fulfilment="delivery",
+            idempotency_key="ECI-22345678-1234-4ABC-8ABC-1234567890AF",
+        ),
         source_storefront_revision=4,
         source_storefront_action_id="ACT-STOREFRONT-R4",
     )
@@ -793,6 +820,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         legacy.pop("supportIntents")
         legacy.pop("cancellationIntents")
         legacy.pop("cancellationDecisions")
+        legacy.pop("amendmentIntents")
         migrated = validate_ecommerce_lifecycle_state(legacy)
         self.assertEqual(migrated["supportIntents"], [])
 
@@ -908,8 +936,95 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         legacy = deepcopy(state)
         legacy.pop("cancellationIntents")
         legacy.pop("cancellationDecisions")
+        legacy.pop("amendmentIntents")
         migrated = validate_ecommerce_lifecycle_state(legacy)
         self.assertEqual(migrated["cancellationIntents"], [])
+
+    def test_order_amendment_is_request_bound_atomic_recoverable_and_side_effect_free(self) -> None:
+        commerce_state = active_commerce_state()
+        source_request = order_source_request()
+        replacement = replacement_request()
+        intent = build_ecommerce_order_amendment_intent(
+            scope=SCOPE,
+            commerce_state=commerce_state,
+            order_id="ORD-ECOMMERCE-1001",
+            replacement_request=replacement,
+            reason="Use three shirts instead of two after Shop review.",
+            idempotency_key=AMENDMENT_KEY,
+            created_at="2026-07-26T10:25:00+06:30",
+        )
+        self.assertEqual(intent["schema"], ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA)
+        self.assertEqual(intent["sourceRequestId"], source_request["id"])
+        self.assertEqual(intent["replacementRequestId"], replacement["id"])
+        self.assertEqual(intent["lineChanges"], [{
+            "sku": "SKU-BLUE-M",
+            "name": "Everyday shirt",
+            "fromQuantity": 2,
+            "toQuantity": 3,
+        }])
+        for field in (
+            "customerMessageSent", "orderChanged", "stockChanged", "paymentChanged",
+            "refundStarted", "providerCalled",
+        ):
+            self.assertFalse(intent[field])
+
+        state = create_empty_ecommerce_lifecycle_state(SCOPE)
+        state = record_ecommerce_order_request(
+            state,
+            source_request,
+            expected_head_digest=state["headDigest"],
+        )
+        amended = record_ecommerce_order_amendment(
+            state,
+            replacement,
+            intent,
+            expected_head_digest=state["headDigest"],
+        )
+        self.assertEqual(amended["revision"], 3)
+        self.assertEqual(
+            [event["action"] for event in amended["events"][-2:]],
+            ["request_recorded", "order_amendment_intent_recorded"],
+        )
+        replay = record_ecommerce_order_amendment(
+            amended,
+            deepcopy(replacement),
+            deepcopy(intent),
+            expected_head_digest=amended["headDigest"],
+        )
+        self.assertEqual(replay, amended)
+
+        forged = deepcopy(amended)
+        forged["amendmentIntents"][0]["replacementRequestDigest"] = "sha256:" + "9" * 64
+        with self.assertRaisesRegex(EcommerceLifecycleValidationError, "boundary"):
+            validate_ecommerce_lifecycle_state(forged)
+
+        mismatched = replacement_request(quantity=4)
+        with self.assertRaisesRegex(EcommerceLifecycleValidationError, "does not match"):
+            record_ecommerce_order_amendment(
+                state,
+                mismatched,
+                intent,
+                expected_head_digest=state["headDigest"],
+            )
+        self.assertEqual(state["revision"], 1)
+
+        for changed in (
+            {"status": "preparing"},
+            {"status": "ready"},
+        ):
+            invalid_state = deepcopy(commerce_state)
+            invalid_state["orders"][0].update(changed)  # type: ignore[index]
+            with self.subTest(changed=changed):
+                with self.assertRaises((EcommerceLifecycleValidationError, ValueError)):
+                    build_ecommerce_order_amendment_intent(
+                        scope=SCOPE,
+                        commerce_state=invalid_state,
+                        order_id="ORD-ECOMMERCE-1001",
+                        replacement_request=replacement,
+                        reason="This stale order must fail closed.",
+                        idempotency_key=AMENDMENT_KEY,
+                        created_at="2026-07-26T10:25:00+06:30",
+                    )
 
     def test_strict_contract_rejects_extra_fields_and_forged_history(self) -> None:
         candidate_quote = quote()

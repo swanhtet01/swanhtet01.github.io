@@ -28,6 +28,7 @@ ECOMMERCE_RETURN_INTENT_SCHEMA = "supermega.ecommerce.return_intent.v1"
 ECOMMERCE_SUPPORT_INTENT_SCHEMA = "supermega.ecommerce.support_intent.v1"
 ECOMMERCE_CANCELLATION_INTENT_SCHEMA = "supermega.ecommerce.cancellation_intent.v1"
 ECOMMERCE_CANCELLATION_DECISION_SCHEMA = "supermega.ecommerce.cancellation_decision.v1"
+ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA = "supermega.ecommerce.order_amendment_intent.v1"
 ECOMMERCE_LIFECYCLE_STATE_SCHEMA = "supermega.ecommerce.buying_lifecycle.v1"
 ECOMMERCE_LIFECYCLE_EVENT_SCHEMA = "supermega.ecommerce.buying_event.v1"
 EMPTY_ECOMMERCE_LIFECYCLE_DIGEST = f"sha256:{'0' * 64}"
@@ -48,6 +49,8 @@ _CANCELLATION_ID = re.compile(rf"^ECN-{_UUID}$")
 _CANCELLATION_KEY = re.compile(rf"^CNI-{_UUID}$")
 _CANCELLATION_DECISION_ID = re.compile(rf"^ECD-{_UUID}$")
 _CANCELLATION_DECISION_KEY = re.compile(rf"^CDI-{_UUID}$")
+_AMENDMENT_ID = re.compile(rf"^EAM-{_UUID}$")
+_AMENDMENT_KEY = re.compile(rf"^AMI-{_UUID}$")
 _ISO_TIMESTAMP = re.compile(
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
     r"(?:\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$"
@@ -2033,6 +2036,334 @@ def validate_ecommerce_cancellation_decision(value: object) -> dict[str, Any]:
     }
 
 
+def _commerce_order_has_releasable_reservation(
+    commerce_state: Mapping[str, object], order: Mapping[str, object]
+) -> bool:
+    lines = order.get("lines")
+    movements = commerce_state.get("movements")
+    if not isinstance(lines, list) or not lines or not isinstance(movements, list):
+        return False
+    order_id = order.get("id")
+    reserves = [
+        movement
+        for movement in movements
+        if isinstance(movement, Mapping)
+        and movement.get("kind") == "reserve"
+        and movement.get("orderId") == order_id
+    ]
+    releases = [
+        movement
+        for movement in movements
+        if isinstance(movement, Mapping)
+        and movement.get("kind") == "release"
+        and movement.get("orderId") == order_id
+    ]
+    if len(reserves) != len(lines) or releases:
+        return False
+    return all(
+        isinstance(line, Mapping)
+        and len(
+            [
+                movement
+                for movement in reserves
+                if movement.get("sku") == line.get("sku")
+                and movement.get("quantityDelta") == -line.get("quantity", 0)
+            ]
+        )
+        == 1
+        for line in lines
+    )
+
+
+def build_ecommerce_order_amendment_intent(
+    *,
+    scope: str,
+    commerce_state: Mapping[str, object],
+    order_id: str,
+    replacement_request: Mapping[str, object],
+    reason: str,
+    idempotency_key: str,
+    created_at: str,
+) -> dict[str, Any]:
+    """Prepare a replacement request bound to one releasable Shop order."""
+
+    from supermega_runtime.commerce_runtime import commerce_order_acknowledgement
+
+    canonical_scope = _token(scope, "scope")
+    canonical_order_id = _token(order_id, "orderId")
+    orders = commerce_state.get("orders")
+    if not isinstance(orders, list):
+        raise _fail("Order changes require a Commerce order collection.")
+    order = next(
+        (
+            candidate
+            for candidate in orders
+            if isinstance(candidate, Mapping) and candidate.get("id") == canonical_order_id
+        ),
+        None,
+    )
+    acknowledgement = commerce_order_acknowledgement(commerce_state, canonical_order_id)
+    canonical_replacement = validate_ecommerce_order_request(replacement_request)
+    if (
+        order is None
+        or acknowledgement is None
+        or order.get("status") != "confirmed"
+        or order.get("paymentStatus") != "pending"
+        or order.get("refundStatus") != "none"
+        or acknowledgement.get("status") != order.get("status")
+        or acknowledgement.get("payment", {}).get("status") != order.get("paymentStatus")
+        or acknowledgement.get("payment", {}).get("refundStatus") != order.get("refundStatus")
+        or acknowledgement.get("cancellation", {}).get("state") != "not_cancelled"
+        or acknowledgement.get("totalMmk") != order.get("total")
+        or not _commerce_order_has_releasable_reservation(commerce_state, order)
+    ):
+        raise _fail(
+            "Order changes require one confirmed, unpaid, uncancelled Ecommerce order with exact reserved stock."
+        )
+    source_request_id = _text(
+        acknowledgement.get("evidence", {}).get("sourceRecordId"),
+        "order acknowledgement sourceRecordId",
+        maximum=40,
+    )
+    if (
+        _REQUEST_ID.fullmatch(source_request_id) is None
+        or canonical_replacement["scope"] != canonical_scope
+        or canonical_replacement["id"] == source_request_id
+    ):
+        raise _fail(
+            "Order change is not attributable to distinct Ecommerce requests in one workspace."
+        )
+    original_lines = sorted(
+        (
+            {
+                "sku": _token(line.get("sku"), "order acknowledgement line.sku"),
+                "name": _text(line.get("name"), "order acknowledgement line.name", maximum=180),
+                "quantity": _integer(
+                    line.get("quantity"),
+                    "order acknowledgement line.quantity",
+                    minimum=1,
+                    maximum=_MAX_QUANTITY,
+                ),
+            }
+            for line in acknowledgement.get("lines", [])
+            if isinstance(line, Mapping)
+        ),
+        key=lambda line: line["sku"],
+    )
+    replacement_lines = sorted(
+        (
+            {"sku": line["sku"], "name": line["name"], "quantity": line["quantity"]}
+            for line in canonical_replacement["lines"]
+        ),
+        key=lambda line: line["sku"],
+    )
+    if (
+        len(original_lines) != len(replacement_lines)
+        or any(
+            original["sku"] != replacement_lines[index]["sku"]
+            for index, original in enumerate(original_lines)
+        )
+    ):
+        raise _fail(
+            "This amendment version can change quantities or fulfilment, but cannot add or remove SKUs."
+        )
+    line_changes = [
+        {
+            "sku": original["sku"],
+            "name": original["name"],
+            "fromQuantity": original["quantity"],
+            "toQuantity": replacement_lines[index]["quantity"],
+        }
+        for index, original in enumerate(original_lines)
+        if original["quantity"] != replacement_lines[index]["quantity"]
+    ]
+    from_fulfilment = order.get("fulfilment")
+    if (
+        from_fulfilment not in _FULFILMENT_METHODS
+        or (not line_changes and from_fulfilment == canonical_replacement["fulfilment"])
+    ):
+        raise _fail("Change at least one quantity or the fulfilment method before Shop review.")
+    key = _text(idempotency_key, "idempotencyKey", maximum=40)
+    if _AMENDMENT_KEY.fullmatch(key) is None:
+        raise _fail("Order amendment idempotency key is invalid.")
+    canonical_created_at = _timestamp(created_at, "createdAt")
+    created_dt = datetime.fromisoformat(canonical_created_at.replace("Z", "+00:00"))
+    order_dt = datetime.fromisoformat(
+        _timestamp(order.get("createdAt"), "order.createdAt").replace("Z", "+00:00")
+    )
+    replacement_dt = datetime.fromisoformat(
+        canonical_replacement["createdAt"].replace("Z", "+00:00")
+    )
+    if created_dt < order_dt or created_dt < replacement_dt:
+        raise _fail("Order amendment cannot predate its order or replacement request.")
+    replacement_digest = _canonical_digest(canonical_replacement)
+    return validate_ecommerce_order_amendment_intent(
+        {
+            "schema": ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA,
+            "state": "pending_shop_review",
+            "scope": canonical_scope,
+            "id": f"EAM-{key[4:]}",
+            "idempotencyKey": key,
+            "createdAt": canonical_created_at,
+            "orderId": canonical_order_id,
+            "sourceRequestId": source_request_id,
+            "sourceAcknowledgementDigest": acknowledgement["digest"],
+            "orderStatus": "confirmed",
+            "paymentStatus": "pending",
+            "refundStatus": "none",
+            "originalTotalMmk": acknowledgement["totalMmk"],
+            "replacementRequestId": canonical_replacement["id"],
+            "replacementRequestDigest": replacement_digest,
+            "lineChanges": line_changes,
+            "fromFulfilment": from_fulfilment,
+            "toFulfilment": canonical_replacement["fulfilment"],
+            "reason": _text(reason, "reason", maximum=300),
+            "customerMessageSent": False,
+            "orderChanged": False,
+            "stockChanged": False,
+            "paymentChanged": False,
+            "refundStarted": False,
+            "providerCalled": False,
+            "evidenceReference": (
+                f"ECOMMERCE-AMENDMENT:{key[4:]}:{canonical_order_id}:"
+                f"{source_request_id}:{canonical_replacement['id']}:{replacement_digest[7:15]}"
+            ),
+        }
+    )
+
+
+def validate_ecommerce_order_amendment_intent(value: object) -> dict[str, Any]:
+    source = _object(
+        value,
+        "order amendment intent",
+        (
+            "schema", "state", "scope", "id", "idempotencyKey", "createdAt",
+            "orderId", "sourceRequestId", "sourceAcknowledgementDigest",
+            "orderStatus", "paymentStatus", "refundStatus", "originalTotalMmk",
+            "replacementRequestId", "replacementRequestDigest", "lineChanges",
+            "fromFulfilment", "toFulfilment", "reason", "customerMessageSent",
+            "orderChanged", "stockChanged", "paymentChanged", "refundStarted",
+            "providerCalled", "evidenceReference",
+        ),
+    )
+    amendment_id = _text(source["id"], "order amendment intent.id", maximum=40)
+    key = _text(source["idempotencyKey"], "order amendment intent.idempotencyKey", maximum=40)
+    order_id = _token(source["orderId"], "order amendment intent.orderId")
+    request_id = _text(source["sourceRequestId"], "order amendment intent.sourceRequestId", maximum=40)
+    replacement_id = _text(
+        source["replacementRequestId"],
+        "order amendment intent.replacementRequestId",
+        maximum=40,
+    )
+    replacement_digest = _digest(
+        source["replacementRequestDigest"],
+        "order amendment intent.replacementRequestDigest",
+    )
+    line_changes: list[dict[str, Any]] = []
+    for index, candidate in enumerate(
+        _array(source["lineChanges"], "order amendment intent.lineChanges", maximum=_MAX_LINES)
+    ):
+        line = _object(
+            candidate,
+            f"order amendment intent.lineChanges[{index}]",
+            ("sku", "name", "fromQuantity", "toQuantity"),
+        )
+        from_quantity = _integer(
+            line["fromQuantity"],
+            f"order amendment intent.lineChanges[{index}].fromQuantity",
+            minimum=1,
+            maximum=_MAX_QUANTITY,
+        )
+        to_quantity = _integer(
+            line["toQuantity"],
+            f"order amendment intent.lineChanges[{index}].toQuantity",
+            minimum=1,
+            maximum=_MAX_QUANTITY,
+        )
+        if from_quantity == to_quantity:
+            raise _fail("Order amendment line change must alter quantity.")
+        line_changes.append(
+            {
+                "sku": _token(line["sku"], f"order amendment intent.lineChanges[{index}].sku"),
+                "name": _text(
+                    line["name"],
+                    f"order amendment intent.lineChanges[{index}].name",
+                    maximum=180,
+                ),
+                "fromQuantity": from_quantity,
+                "toQuantity": to_quantity,
+            }
+        )
+    line_changes.sort(key=lambda line: line["sku"])
+    from_fulfilment = source["fromFulfilment"]
+    to_fulfilment = source["toFulfilment"]
+    expected_reference = (
+        f"ECOMMERCE-AMENDMENT:{key[4:]}:{order_id}:"
+        f"{request_id}:{replacement_id}:{replacement_digest[7:15]}"
+    )
+    if (
+        source["schema"] != ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA
+        or source["state"] != "pending_shop_review"
+        or _AMENDMENT_ID.fullmatch(amendment_id) is None
+        or _AMENDMENT_KEY.fullmatch(key) is None
+        or amendment_id[4:] != key[4:]
+        or _REQUEST_ID.fullmatch(request_id) is None
+        or _REQUEST_ID.fullmatch(replacement_id) is None
+        or request_id == replacement_id
+        or source["orderStatus"] != "confirmed"
+        or source["paymentStatus"] != "pending"
+        or source["refundStatus"] != "none"
+        or from_fulfilment not in _FULFILMENT_METHODS
+        or to_fulfilment not in _FULFILMENT_METHODS
+        or (not line_changes and from_fulfilment == to_fulfilment)
+        or len({line["sku"] for line in line_changes}) != len(line_changes)
+        or source["customerMessageSent"] is not False
+        or source["orderChanged"] is not False
+        or source["stockChanged"] is not False
+        or source["paymentChanged"] is not False
+        or source["refundStarted"] is not False
+        or source["providerCalled"] is not False
+        or source["evidenceReference"] != expected_reference
+    ):
+        raise _fail("Order amendment intent boundary is invalid.")
+    return {
+        "schema": ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA,
+        "state": "pending_shop_review",
+        "scope": _token(source["scope"], "order amendment intent.scope"),
+        "id": amendment_id,
+        "idempotencyKey": key,
+        "createdAt": _timestamp(source["createdAt"], "order amendment intent.createdAt"),
+        "orderId": order_id,
+        "sourceRequestId": request_id,
+        "sourceAcknowledgementDigest": _digest(
+            source["sourceAcknowledgementDigest"],
+            "order amendment intent.sourceAcknowledgementDigest",
+        ),
+        "orderStatus": "confirmed",
+        "paymentStatus": "pending",
+        "refundStatus": "none",
+        "originalTotalMmk": _integer(
+            source["originalTotalMmk"],
+            "order amendment intent.originalTotalMmk",
+            minimum=1,
+            maximum=_MAX_SAFE_INTEGER,
+        ),
+        "replacementRequestId": replacement_id,
+        "replacementRequestDigest": replacement_digest,
+        "lineChanges": line_changes,
+        "fromFulfilment": from_fulfilment,
+        "toFulfilment": to_fulfilment,
+        "reason": _text(source["reason"], "order amendment intent.reason", maximum=300),
+        "customerMessageSent": False,
+        "orderChanged": False,
+        "stockChanged": False,
+        "paymentChanged": False,
+        "refundStarted": False,
+        "providerCalled": False,
+        "evidenceReference": expected_reference,
+    }
+
+
 def create_empty_ecommerce_lifecycle_state(scope: str) -> dict[str, Any]:
     return {
         "schema": ECOMMERCE_LIFECYCLE_STATE_SCHEMA,
@@ -2044,6 +2375,7 @@ def create_empty_ecommerce_lifecycle_state(scope: str) -> dict[str, Any]:
         "supportIntents": [],
         "cancellationIntents": [],
         "cancellationDecisions": [],
+        "amendmentIntents": [],
         "events": [],
     }
 
@@ -2064,7 +2396,14 @@ def _event(value: object, field: str) -> dict[str, Any]:
         ),
     )
     action = source["action"]
-    if action not in {"request_recorded", "return_intent_recorded", "support_intent_recorded", "cancellation_intent_recorded", "cancellation_decision_recorded"}:
+    if action not in {
+        "request_recorded",
+        "return_intent_recorded",
+        "support_intent_recorded",
+        "cancellation_intent_recorded",
+        "cancellation_decision_recorded",
+        "order_amendment_intent_recorded",
+    }:
         raise _fail(f"{field}.action is unsupported.")
     core = {
         "schema": ECOMMERCE_LIFECYCLE_EVENT_SCHEMA,
@@ -2092,8 +2431,15 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
     )
     current_fields = frozenset({*legacy_fields, "supportIntents"})
     cancellation_fields = frozenset({*current_fields, "cancellationIntents"})
-    latest_fields = frozenset({*cancellation_fields, "cancellationDecisions"})
-    if frozenset(value) not in {legacy_fields, current_fields, cancellation_fields, latest_fields}:
+    decision_fields = frozenset({*cancellation_fields, "cancellationDecisions"})
+    latest_fields = frozenset({*decision_fields, "amendmentIntents"})
+    if frozenset(value) not in {
+        legacy_fields,
+        current_fields,
+        cancellation_fields,
+        decision_fields,
+        latest_fields,
+    }:
         raise _fail("lifecycle state fields do not match the contract.")
     source = value
     if source["schema"] != ECOMMERCE_LIFECYCLE_STATE_SCHEMA:
@@ -2135,10 +2481,18 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
             maximum=_MAX_RECORDS,
         )
     ]
+    amendment_intents = [
+        validate_ecommerce_order_amendment_intent(candidate)
+        for candidate in _array(
+            source.get("amendmentIntents", []),
+            "lifecycle state.amendmentIntents",
+            maximum=_MAX_RECORDS,
+        )
+    ]
     events = [
         _event(candidate, f"lifecycle state.events[{index}]")
         for index, candidate in enumerate(
-            _array(source["events"], "lifecycle state.events", maximum=_MAX_RECORDS * 5)
+            _array(source["events"], "lifecycle state.events", maximum=_MAX_RECORDS * 6)
         )
     ]
     revision = _integer(source["revision"], "lifecycle state.revision")
@@ -2152,7 +2506,14 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
     head = _digest(source["headDigest"], "lifecycle state.headDigest")
     if head != previous:
         raise _fail("Lifecycle state head digest is invalid.")
-    records = [*requests, *return_intents, *support_intents, *cancellation_intents, *cancellation_decisions]
+    records = [
+        *requests,
+        *return_intents,
+        *support_intents,
+        *cancellation_intents,
+        *cancellation_decisions,
+        *amendment_intents,
+    ]
     if len({record["id"] for record in records}) != len(records):
         raise _fail("Lifecycle record IDs must be unique.")
     if len({record["idempotencyKey"] for record in records}) != len(records):
@@ -2187,6 +2548,35 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
             or decision["intentDigest"] != _canonical_digest(intent)
         ):
             raise _fail("Cancellation decision is not bound to its exact recovered request.")
+    if len({intent["orderId"] for intent in amendment_intents}) != len(amendment_intents):
+        raise _fail("Only one amendment request may exist for an Ecommerce order.")
+    request_by_id = {request["id"]: request for request in requests}
+    for intent in amendment_intents:
+        source_request = request_by_id.get(intent["sourceRequestId"])
+        replacement_request = request_by_id.get(intent["replacementRequestId"])
+        source_profile = source_request.get("customerProfile") if source_request else None
+        replacement_profile = (
+            replacement_request.get("customerProfile") if replacement_request else None
+        )
+        source_phone = source_profile.get("phone") if isinstance(source_profile, Mapping) else None
+        replacement_phone = (
+            replacement_profile.get("phone") if isinstance(replacement_profile, Mapping) else None
+        )
+        if (
+            source_request is None
+            or replacement_request is None
+            or source_request["id"] == replacement_request["id"]
+            or intent["replacementRequestDigest"] != _canonical_digest(replacement_request)
+            or replacement_request["scope"] != intent["scope"]
+            or source_request["scope"] != intent["scope"]
+            or source_request["customerReference"] != replacement_request["customerReference"]
+            or source_phone != replacement_phone
+            or source_request["fulfilment"] != intent["fromFulfilment"]
+            or replacement_request["fulfilment"] != intent["toFulfilment"]
+        ):
+            raise _fail(
+                "Order amendment is not bound to its original and replacement Ecommerce requests."
+            )
     by_id = {record["id"]: record for record in records}
     if len(events) != len(records):
         raise _fail("Lifecycle history must contain one event per record.")
@@ -2208,6 +2598,7 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
         "supportIntents": support_intents,
         "cancellationIntents": cancellation_intents,
         "cancellationDecisions": cancellation_decisions,
+        "amendmentIntents": amendment_intents,
         "events": events,
     }
 
@@ -2226,7 +2617,14 @@ def _record_lifecycle_value(
         raise _fail("Lifecycle state changed before this record was applied.")
     if record["scope"] != state["scope"]:
         raise _fail("Lifecycle record belongs to a different scope.")
-    all_records = [*state["requests"], *state["returnIntents"], *state["supportIntents"], *state["cancellationIntents"], *state["cancellationDecisions"]]
+    all_records = [
+        *state["requests"],
+        *state["returnIntents"],
+        *state["supportIntents"],
+        *state["cancellationIntents"],
+        *state["cancellationDecisions"],
+        *state["amendmentIntents"],
+    ]
     existing = next(
         (
             candidate
@@ -2334,4 +2732,34 @@ def record_ecommerce_cancellation_decision(
         collection="cancellationDecisions",
         action="cancellation_decision_recorded",
         expected_head_digest=expected_head_digest,
+    )
+
+
+def record_ecommerce_order_amendment(
+    state: Mapping[str, object],
+    replacement_request: Mapping[str, object],
+    intent: Mapping[str, object],
+    *,
+    expected_head_digest: str,
+) -> dict[str, Any]:
+    canonical_request = validate_ecommerce_order_request(replacement_request)
+    canonical_intent = validate_ecommerce_order_amendment_intent(intent)
+    if (
+        canonical_intent["replacementRequestId"] != canonical_request["id"]
+        or canonical_intent["replacementRequestDigest"] != _canonical_digest(canonical_request)
+    ):
+        raise _fail("Order amendment does not match its replacement request.")
+    with_request = _record_lifecycle_value(
+        state,
+        canonical_request,
+        collection="requests",
+        action="request_recorded",
+        expected_head_digest=expected_head_digest,
+    )
+    return _record_lifecycle_value(
+        with_request,
+        canonical_intent,
+        collection="amendmentIntents",
+        action="order_amendment_intent_recorded",
+        expected_head_digest=with_request["headDigest"],
     )

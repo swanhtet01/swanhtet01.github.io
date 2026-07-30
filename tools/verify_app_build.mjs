@@ -2183,7 +2183,6 @@ if (addToCartStart < 0
   || ecommerceBuyingUiSource.includes('<small>Delivery</small>')
   || !ecommerceBuyingUiSource.includes('Included in listed price')
   || !ecommerceBuyingUiSource.includes('Payment remains unauthorized.')
-  || !ecommerceBuyingUiSource.includes('No refund starts here.')
   || !ecommerceBuyingLifecycleSource.includes('export function ecommercePaymentMatchesFulfilment(')
   || !ecommerceBuyingLifecycleSource.includes('Checkout payment does not match how the customer receives the order.')
   || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceReturnIntent(')
@@ -2194,13 +2193,27 @@ if (addToCartStart < 0
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceCancellationIntent(')
   || !ecommerceBuyingLifecycleSource.includes('export async function buildEcommerceCancellationDecision(')
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceCancellationDecision(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function buildEcommerceOrderAmendmentIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function recordEcommerceOrderAmendment(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceOrderAmendment(')
+  || !ecommerceBuyingLifecycleSource.includes('Order amendment is not bound to its original and replacement Ecommerce requests.')
   || !ecommerceBuyingLifecycleSource.includes('Cancellation decision is not bound to its exact recovered request.')
   || !ecommerceBuyingLifecycleSource.includes('Return intent is not attributable to one recovered Ecommerce request.')
-  || !ecommerceBuyingUiSource.includes('Request cancellation')
+  || !ecommerceBuyingUiSource.includes('Cancel order')
   || !ecommerceBuyingUiSource.includes('Send to Shop review')
   || !ecommerceBuyingUiSource.includes('No order, stock, payment, refund, provider, or customer message changed.')
   || !ecommerceBuyingUiSource.includes('Cancellation approved')
   || !ecommerceBuyingUiSource.includes('Order kept')
+  || !ecommerceBuyingUiSource.includes('Change order')
+  || !ecommerceBuyingUiSource.includes('Send change to Shop')
+  || !ecommerceBuyingUiSource.includes('No order, stock, payment, refund, message, or provider changed.')
+  || !ecommerceBuyingUiSource.includes('amendmentIntents: buyingState.amendmentIntents ?? []')
+  || !coreSource.includes('validateEcommerceOrderAmendmentIntent(ecommerceOrderAmendmentNavigationIntent)')
+  || !coreSource.includes('async function prepareOrderAmendmentReplacement()')
+  || !coreSource.includes("kind: 'order_cancel'")
+  || !coreSource.includes('Step 1 cancels and releases the original under accountable review. Step 2 separately confirms the repriced replacement order.')
+  || !managedEcommerceBuyingLifecycleSource.includes('def build_ecommerce_order_amendment_intent(')
+  || !managedEcommerceBuyingLifecycleSource.includes('def record_ecommerce_order_amendment(')
   || !coreSource.includes('ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent}')
   || !coreSource.includes('validateEcommerceCancellationIntent(ecommerceCancellationNavigationIntent)')
   || !coreSource.includes('function ecommerceCancellationMatchesCurrentShop(')
@@ -11961,6 +11974,117 @@ async function verifyStorefrontRuntime() {
       && !promotedAcknowledgementText.includes(promotionOrderProof.actor)
       && !promotedAcknowledgementText.includes(promotionOrderProof.reason),
     'ecommerce_order_acknowledgement_text_leaked_internal_review_or_overclaimed_action')
+    const replacementQuote = await buyingModel.buildEcommerceCheckoutQuote({
+      pim,
+      cart: [
+        { sku: 'SM-CARE-01', quantity: 1 },
+        { sku: 'SM-1001', quantity: 3 },
+      ],
+      customerReference: buyingRequest.customerReference,
+      fulfilment: buyingRequest.fulfilment,
+      paymentAdapter: buyingRequest.quote.payment.adapter,
+      promotionCode: buyingRequest.quote.promotion.code,
+      customerProfile: { name: 'Ma Su', phone: '09 123 456', previous: null },
+      deliveryAddress: { line1: '12 Insein Road, Ward 3', township: 'Hlaing', city: 'Yangon', instructions: 'Call at the gate', previous: null },
+      idempotencyKey: 'ECI-72345678-1234-4ABC-8ABC-1234567890AC',
+      quotedAt: '2026-07-24T09:11:00.000Z',
+      expiresAt: '2026-07-24T09:30:00.000Z',
+    })
+    const replacementRequest = await buyingModel.buildEcommerceOrderRequestV2(replacementQuote, {
+      revision: 1,
+      actionId: managedPreviewProof.actionId,
+    })
+    const amendmentIntent = await buyingModel.buildEcommerceOrderAmendmentIntent({
+      scope: buyingScope,
+      commerceState: promotedOrderState,
+      orderId: promotedOrder.id,
+      replacementRequest,
+      reason: 'Use three primary items instead of two after Shop review.',
+      idempotencyKey: 'AMI-82345678-1234-4ABC-8ABC-1234567890AD',
+      createdAt: '2026-07-24T09:12:00.000Z',
+    })
+    buyingAssert(amendmentIntent.schema === 'supermega.ecommerce.order_amendment_intent.v1'
+      && amendmentIntent.sourceRequestId === buyingRequest.id
+      && amendmentIntent.replacementRequestId === replacementRequest.id
+      && amendmentIntent.sourceAcknowledgementDigest === promotedAcknowledgement.digest
+      && amendmentIntent.lineChanges.length === 1
+      && amendmentIntent.lineChanges[0].fromQuantity === 2
+      && amendmentIntent.lineChanges[0].toQuantity === 3
+      && amendmentIntent.customerMessageSent === false
+      && amendmentIntent.orderChanged === false
+      && amendmentIntent.stockChanged === false
+      && amendmentIntent.paymentChanged === false
+      && amendmentIntent.refundStarted === false
+      && amendmentIntent.providerCalled === false,
+    'ecommerce_order_amendment_not_acknowledgement_bound_or_side_effect_free')
+    const amendedBuyingState = await buyingModel.recordEcommerceOrderAmendment(
+      recordedBuying,
+      replacementRequest,
+      amendmentIntent,
+      recordedBuying.headDigest,
+    )
+    const replayedAmendmentState = await buyingModel.recordEcommerceOrderAmendment(
+      amendedBuyingState,
+      structuredClone(replacementRequest),
+      structuredClone(amendmentIntent),
+      amendedBuyingState.headDigest,
+    )
+    buyingAssert(JSON.stringify(replayedAmendmentState) === JSON.stringify(amendedBuyingState)
+      && amendedBuyingState.revision === 3
+      && amendedBuyingState.requests.length === 2
+      && amendedBuyingState.amendmentIntents.length === 1
+      && amendedBuyingState.events.at(-2)?.action === 'request_recorded'
+      && amendedBuyingState.events.at(-1)?.action === 'order_amendment_intent_recorded',
+    'ecommerce_order_amendment_atomic_replay_or_history_invalid')
+    const forgedAmendmentState = structuredClone(amendedBuyingState)
+    forgedAmendmentState.amendmentIntents[0].replacementRequestDigest = `sha256:${'9'.repeat(64)}`
+    let forgedAmendmentRejected = false
+    try { await buyingModel.validateEcommerceBuyingState(forgedAmendmentState) } catch { forgedAmendmentRejected = true }
+    buyingAssert(forgedAmendmentRejected, 'ecommerce_forged_order_amendment_was_accepted')
+    const duplicateAmendmentIntent = await buyingModel.buildEcommerceOrderAmendmentIntent({
+      scope: buyingScope,
+      commerceState: promotedOrderState,
+      orderId: promotedOrder.id,
+      replacementRequest,
+      reason: 'A second amendment must not create another review record.',
+      idempotencyKey: 'AMI-92345678-1234-4ABC-8ABC-1234567890AD',
+      createdAt: '2026-07-24T09:13:00.000Z',
+    })
+    let duplicateAmendmentRejected = false
+    try {
+      await buyingModel.recordEcommerceOrderAmendment(
+        amendedBuyingState,
+        replacementRequest,
+        duplicateAmendmentIntent,
+        amendedBuyingState.headDigest,
+      )
+    } catch { duplicateAmendmentRejected = true }
+    buyingAssert(duplicateAmendmentRejected, 'ecommerce_duplicate_order_amendment_was_accepted')
+    const advancedPromotedOrderState = commerce.advanceCommerceOrder(
+      promotedOrderState,
+      promotedOrder.id,
+      'confirmed',
+      {
+        actionId: 'ACT-ECOMMERCE-AMENDMENT-STALE-1',
+        capturedAt: '2026-07-24T09:13:00.000Z',
+        actor: 'Shop owner',
+        reason: 'Advance the order before the stale amendment is reviewed.',
+        evidenceReference: 'ECOMMERCE-AMENDMENT-STALE-1',
+      },
+    )
+    let advancedAmendmentRejected = false
+    try {
+      await buyingModel.buildEcommerceOrderAmendmentIntent({
+        scope: buyingScope,
+        commerceState: advancedPromotedOrderState,
+        orderId: promotedOrder.id,
+        replacementRequest,
+        reason: 'This advanced order must fail closed.',
+        idempotencyKey: 'AMI-A2345678-1234-4ABC-8ABC-1234567890AD',
+        createdAt: '2026-07-24T09:14:00.000Z',
+      })
+    } catch { advancedAmendmentRejected = true }
+    buyingAssert(advancedAmendmentRejected, 'ecommerce_advanced_order_amendment_was_accepted')
     const cancellationIntent = buyingModel.buildEcommerceCancellationIntent({
       scope: buyingScope,
       commerceState: promotedOrderState,
