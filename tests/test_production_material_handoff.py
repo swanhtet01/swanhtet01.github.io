@@ -9,8 +9,10 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from supermega_runtime.plant_order_foundation import (
+    approve_plant_order_material_substitution,
     check_plant_order_availability,
     issue_plant_order_material,
+    issue_plant_order_substitute_material,
     plant_order_evidence_digest,
     record_plant_order_operation,
     release_plant_order,
@@ -86,6 +88,79 @@ def issued_production() -> dict[str, object]:
         quantity_milli=10_000,
         proof=action_evidence(
             "ACT-HANDOFF-ISSUE-001",
+            captured_at="2026-07-24T09:45:00.000Z",
+        ),
+        expected_head_digest=execution["headDigest"],
+    )["state"]
+    production["orderExecution"] = execution
+    return production
+
+
+def substitute_issued_production() -> dict[str, object]:
+    production = starting_workspace(target=10)
+    execution = planned_order_execution(
+        production,
+        action_evidence("ACT-SUB-HANDOFF-PLAN-001"),
+    )
+    execution = check_plant_order_availability(
+        execution,
+        check_id="CHK-SUB-HANDOFF-001",
+        source_digest=plant_order_evidence_digest({"warehouse": "observed"}),
+        materials=[
+            {
+                "materialId": "MAT-MANAGED-001",
+                "inputLotId": "LOT-MANAGED-001",
+                "availableQuantityMilli": 10_000,
+            }
+        ],
+        work_centres=[
+            {"workCentreId": "WC-MANAGED-001", "availableMinutes": 10}
+        ],
+        proof=action_evidence(
+            "ACT-SUB-HANDOFF-CHECK-001",
+            captured_at="2026-07-24T09:15:00.000Z",
+        ),
+        expected_head_digest=execution["headDigest"],
+    )["state"]
+    execution = release_plant_order(
+        execution,
+        release_id="REL-SUB-HANDOFF-001",
+        availability_check_id="CHK-SUB-HANDOFF-001",
+        proof=action_evidence(
+            "ACT-SUB-HANDOFF-RELEASE-001",
+            captured_at="2026-07-24T09:30:00.000Z",
+        ),
+        expected_head_digest=execution["headDigest"],
+    )["state"]
+    execution = approve_plant_order_material_substitution(
+        execution,
+        substitution_id="SUB-HANDOFF-001",
+        material_id="MAT-MANAGED-001",
+        substitute_material_id="MAT-MANAGED-ALT-001",
+        substitute_name="Approved managed alternate",
+        substitute_unit="kg",
+        original_quantity_per_unit_milli=1_000,
+        substitute_quantity_per_unit_milli=1_200,
+        approval_source_digest=plant_order_evidence_digest(
+            {"certificate": "CERT-MANAGED-ALT-001"}
+        ),
+        technical_basis="Engineering review approved 1.2 kg alternate per 1 kg BOM basis.",
+        proof=action_evidence(
+            "ACT-SUB-HANDOFF-APPROVAL-001",
+            captured_at="2026-07-24T09:35:00.000Z",
+        ),
+        expected_head_digest=execution["headDigest"],
+    )["state"]
+    execution = issue_plant_order_substitute_material(
+        execution,
+        issue_id="ISSUE-SUB-HANDOFF-001",
+        substitution_id="SUB-HANDOFF-001",
+        material_id="MAT-MANAGED-001",
+        substitute_material_id="MAT-MANAGED-ALT-001",
+        input_lot_id="LOT-MANAGED-ALT-001",
+        substitute_quantity_milli=12_000,
+        proof=action_evidence(
+            "ACT-SUB-HANDOFF-ISSUE-001",
             captured_at="2026-07-24T09:45:00.000Z",
         ),
         expected_head_digest=execution["headDigest"],
@@ -183,6 +258,41 @@ def production_return_movement(
 
 
 class ProductionMaterialHandoffTests(unittest.TestCase):
+    def test_substitute_handoff_uses_physical_stock_and_retains_original_bom(self) -> None:
+        production = substitute_issued_production()
+        request = production_material_requests(production)[0]
+        self.assertEqual(request["materialId"], "MAT-MANAGED-ALT-001")
+        self.assertEqual(request["inputLotId"], "LOT-MANAGED-ALT-001")
+        self.assertEqual(request["quantityMilli"], 12_000)
+        self.assertEqual(request["unit"], "kg")
+        self.assertEqual(
+            request["substitution"],
+            {
+                "approvalId": "SUB-HANDOFF-001",
+                "originalMaterialId": "MAT-MANAGED-001",
+                "originalMaterialName": "Managed material",
+                "originalQuantityMilli": 10_000,
+                "originalUnit": "kg",
+                "approvalSourceDigest": plant_order_evidence_digest(
+                    {"certificate": "CERT-MANAGED-ALT-001"}
+                ),
+                "technicalBasis": "Engineering review approved 1.2 kg alternate per 1 kg BOM basis.",
+            },
+        )
+
+        current = catalog_state()
+        accepted = issued_commerce(request)
+        require_shop_issue_matches_plant(current, accepted, production)
+        movement_record = accepted["movements"][0]
+        self.assertEqual(movement_record["productionMaterialId"], "MAT-MANAGED-ALT-001")
+        self.assertEqual(movement_record["productionInputLotId"], "LOT-MANAGED-ALT-001")
+        self.assertEqual(movement_record["productionQuantityMilli"], 12_000)
+
+        spoofed = deepcopy(accepted)
+        spoofed["movements"][0]["productionMaterialId"] = "MAT-MANAGED-001"  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "match one immutable Plant"):
+            require_shop_issue_matches_plant(current, spoofed, production)
+
     def test_shop_issue_must_match_exact_plant_command_digest(self) -> None:
         production = issued_production()
         request = production_material_requests(production)[0]

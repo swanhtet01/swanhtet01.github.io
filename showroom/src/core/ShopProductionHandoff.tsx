@@ -101,6 +101,10 @@ function formatPlantQuantity(request: ProductionMaterialHandoff) {
   return `${(request.quantityMilli / 1_000).toLocaleString(undefined, { maximumFractionDigits: 3 })} ${request.unit}`
 }
 
+function formatMilli(value: number) {
+  return (value / 1_000).toLocaleString(undefined, { maximumFractionDigits: 3 })
+}
+
 function materialReturnOptions(commerce: CommerceState, handoffs: ProductionMaterialHandoff[]) {
   const foundation = commerce.inventoryFoundation
   if (!foundation) return []
@@ -433,13 +437,14 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
     <span className="core-eyebrow">Plant request</span>
     <h3 id="production-material-handoff-title">{pending.length} material {pending.length === 1 ? 'issue' : 'issues'} waiting</h3>
     <p>{request.materialName} · {formatPlantQuantity(request)} · lot {request.inputLotId}. Shop remains the only stock authority.</p>
+    {request.substitution ? <div className="stock-receipt-preview" role="status"><small>Approved substitute · {request.substitution.approvalId}</small><strong>{request.materialId} replaces {request.substitution.originalMaterialId}; issuing {formatPlantQuantity(request)} credits {formatMilli(request.substitution.originalQuantityMilli)} {request.substitution.originalUnit} of the unchanged BOM.</strong><span>{request.substitution.technicalBasis}</span></div> : null}
     {!open ? <button className="core-button primary" disabled={disabled || !commerce.items.some((item) => item.onHand > 0)} onClick={begin} type="button">Review stock issue</button> : null}
     {open ? <form className="core-form compact-form" onSubmit={stage}>
       <label>Shop item<select disabled={disabled || busy || Boolean(review)} onChange={(event) => { setSku(event.target.value); setStockQuantity('1') }} required value={sku}><option value="">Choose stock</option>{commerce.items.map((item) => <option disabled={item.onHand < 1} key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
       <label>Stock units to issue<input disabled={disabled || busy || Boolean(review) || !selectedItem} inputMode="numeric" max={selectedItem?.onHand ?? 0} min="1" onChange={(event) => setStockQuantity(event.target.value)} required step="1" type="number" value={stockQuantity} /></label>
       <label>Conversion basis<input disabled={disabled || busy || Boolean(review)} maxLength={240} onChange={(event) => setConversionNote(event.target.value)} placeholder="Example: 2 bags provide the reviewed 10 kg" required value={conversionNote} /></label>
       {selectedItem ? <div className="stock-receipt-preview" role="status"><small>{request.requestId} → {request.jobId}</small><strong>{quantityValid ? `${selectedItem.onHand} → ${selectedItem.onHand - parsedQuantity} ${selectedItem.sku}${locationPicks.length ? `; pick ${locationPicks.join('; ')}` : ''}` : commerce.inventoryFoundation ? 'Choose a quantity available in managed location stock' : 'Enter available whole stock units'}</strong></div> : null}
-      {review ? <div className="stock-receipt-preview" role="status"><small>Final review</small><strong>Issue {review.stockQuantity} {review.sku}; Plant quantity remains {formatPlantQuantity(review.request)}{review.locationPicks.length ? `; pick ${review.locationPicks.join('; ')}` : ''}</strong></div> : null}
+      {review ? <div className="stock-receipt-preview" role="status"><small>Final review</small><strong>Issue {review.stockQuantity} {review.sku}; Plant quantity remains {formatPlantQuantity(review.request)}{review.request.substitution ? `; original BOM credit ${formatMilli(review.request.substitution.originalQuantityMilli)} ${review.request.substitution.originalUnit}` : ''}{review.locationPicks.length ? `; pick ${review.locationPicks.join('; ')}` : ''}</strong></div> : null}
       <div className="form-actions">
         <button className="core-button" disabled={busy} onClick={() => { setReview(null); setOpenRequestId(''); setNotice('') }} type="button">Cancel</button>
         {review ? <button className="core-button primary" disabled={disabled || busy} onClick={() => void confirm()} type="button">{busy ? 'Issuing…' : 'Confirm issue'}</button>

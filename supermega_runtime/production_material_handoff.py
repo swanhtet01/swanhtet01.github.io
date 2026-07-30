@@ -23,25 +23,63 @@ def production_material_requests(value: object) -> list[dict[str, Any]]:
     material_by_id = {
         material["materialId"]: material for material in plan["materials"]
     }
+    substitution_by_id = {
+        approval["id"]: approval
+        for approval in projection.get("materialSubstitutions", [])
+    }
     requests: list[dict[str, Any]] = []
     for command in execution["commands"]:
         payload = command["payload"]
-        if payload["kind"] != "issue_material":
+        if payload["kind"] not in {"issue_material", "issue_substitute_material"}:
             continue
         material = material_by_id.get(payload["materialId"])
         if material is None:
             raise TrialValidationError(
                 "Plant material issue is not present in its immutable plan."
             )
+        if payload["kind"] == "issue_material":
+            physical_material_id = payload["materialId"]
+            physical_quantity_milli = payload["quantityMilli"]
+            physical_unit = material["unit"]
+            substitution = None
+        else:
+            approval = substitution_by_id.get(payload["substitutionId"])
+            if (
+                approval is None
+                or approval["materialId"] != payload["materialId"]
+                or approval["substituteMaterialId"]
+                != payload["substituteMaterialId"]
+            ):
+                raise TrialValidationError(
+                    "Plant substitute issue does not reference its immutable approval."
+                )
+            physical_material_id = payload["substituteMaterialId"]
+            physical_quantity_milli = payload["substituteQuantityMilli"]
+            physical_unit = approval["substituteUnit"]
+            original_quantity_milli = (
+                physical_quantity_milli
+                * approval["originalQuantityPerUnitMilli"]
+                // approval["substituteQuantityPerUnitMilli"]
+            )
+            substitution = {
+                "approvalId": approval["id"],
+                "originalMaterialId": material["materialId"],
+                "originalMaterialName": material["name"],
+                "originalQuantityMilli": original_quantity_milli,
+                "originalUnit": material["unit"],
+                "approvalSourceDigest": approval["approvalSourceDigest"],
+                "technicalBasis": approval["technicalBasis"],
+            }
         requests.append(
             {
                 "requestId": payload["id"],
                 "sourceCommandDigest": command["digest"],
                 "jobId": plan["job"]["jobId"],
-                "materialId": payload["materialId"],
+                "materialId": physical_material_id,
                 "inputLotId": payload["inputLotId"],
-                "quantityMilli": payload["quantityMilli"],
-                "unit": material["unit"],
+                "quantityMilli": physical_quantity_milli,
+                "unit": physical_unit,
+                "substitution": substitution,
             }
         )
     return requests

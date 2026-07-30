@@ -7,11 +7,13 @@ import {
   PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
   PLANT_ORDER_WORKSPACE_UPDATED_EVENT,
   applyPlantOrderPlan,
+  approvePlantOrderMaterialSubstitution,
   buildPlantOrderControlledPlan,
   checkPlantOrderAvailability,
   createEmptyPlantOrderState,
   inspectPlantOrderOutput,
   issuePlantOrderMaterial,
+  issuePlantOrderSubstituteMaterial,
   loadPlantOrderWorkspace,
   mutatePlantOrderWorkspace,
   parsePlantOrderDowntimePaste,
@@ -101,6 +103,15 @@ type EffectivenessDraft = {
 }
 type CalibrationDraft = { workCentreId: string; certificateId: string; calibratedAt: string; validUntil: string; standardReference: string }
 type ReworkDraft = { operationId: string; actualMinutes: string; owner: string; cause: string; correctiveAction: string }
+type SubstitutionDraft = {
+  substituteMaterialId: string
+  substituteName: string
+  substituteUnit: PlantOrderMaterial['unit']
+  substituteQuantityPerUnit: string
+  sourceReference: string
+  technicalBasis: string
+  inputLotId: string
+}
 
 const setupMaterialUnits: PlantOrderMaterial['unit'][] = ['pcs', 'kg', 'g', 'l', 'ml', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm']
 
@@ -270,6 +281,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   const [effectivenessDraft, setEffectivenessDraft] = useState<EffectivenessDraft>({ windowStart: '', windowEnd: '', workCentres: {}, downtimeIntervals: '' })
   const [calibrationDraft, setCalibrationDraft] = useState<CalibrationDraft>(() => calibrationDefaults())
   const [reworkDraft, setReworkDraft] = useState<ReworkDraft>({ operationId: '', actualMinutes: '', owner: '', cause: '', correctiveAction: '' })
+  const [substitutionDraft, setSubstitutionDraft] = useState<SubstitutionDraft>({ substituteMaterialId: '', substituteName: '', substituteUnit: 'kg', substituteQuantityPerUnit: '', sourceReference: '', technicalBasis: '', inputLotId: '' })
   const [inspectionDraft, setInspectionDraft] = useState({ result: 'pass' as 'pass' | 'fail', rejected: '0' })
   const [review, setReview] = useState<ReviewedTransition | null>(null)
   const setupDialogRef = useRef<HTMLDialogElement>(null)
@@ -302,6 +314,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   const bindingCurrent = Boolean(!projection.plan || (boundJob && plantOrderEvidenceDigest(jobSnapshot(scope, boundJob)) === projection.plan.sourceDigest))
   const controlsDisabled = disabled || busy || Boolean(review) || (!bindingCurrent && projection.status !== 'released_to_stock')
   const nextMaterial = projection.materials.find((material) => material.remainingToIssueMilli > 0)
+  const nextMaterialSubstitution = nextMaterial ? projection.materialSubstitutions.find((approval) => approval.materialId === nextMaterial.materialId) : undefined
   const requiresOperationEvidence = projection.plan?.contract === PLANT_ORDER_EXECUTION_PLAN_CONTRACT || controlledPlan
   const nextOperation = requiresOperationEvidence ? projection.operations.find((operation) => operation.status === 'ready' || operation.status === 'in_progress') : undefined
   const nextOperationIndex = nextOperation ? projection.operations.findIndex((operation) => operation.operationId === nextOperation.operationId) : -1
@@ -350,7 +363,9 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         ? { title: 'Release the work package', detail: 'Confirm the reviewed plan before any material or operation record.' }
         : projection.status === 'released' || projection.status === 'in_process'
           ? awaitingWarehouse ? { title: 'Issue requested material in Shop', detail: 'Shop remains the stock authority; return here after the reviewed issue.' }
-            : nextMaterial ? { title: `Request ${nextMaterial.name}`, detail: 'Bind the next material lot to this output batch.' }
+            : nextMaterial ? nextMaterialSubstitution
+              ? { title: `Request ${nextMaterialSubstitution.substituteName}`, detail: `Use approved substitute ${nextMaterialSubstitution.substituteMaterialId} without changing the original BOM.` }
+              : { title: `Request ${nextMaterial.name}`, detail: 'Use the reviewed original lot or record one approved substitute.' }
               : nextOperation ? { title: `Record ${nextOperation.name}`, detail: 'Enter completed units and actual time for the current routing step.' }
                 : { title: 'Record batch output', detail: `${outputRemaining.toLocaleString()} units remain before inspection.` }
           : projection.status === 'inspection_due'
@@ -620,6 +635,58 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
     stage({ title: 'Material request', summary: `${formatMilli(nextMaterial.remainingToIssueMilli)} ${nextMaterial.unit} · ${nextMaterial.inputLotId}`, boundary: 'Creates genealogy and a linked Shop request. Shop stock changes only after a separate human-reviewed issue; no purchase, costing, or accounting entry occurs.', proof: actionProof, apply: (current) => issuePlantOrderMaterial(current, { issueId, materialId: nextMaterial.materialId, inputLotId: nextMaterial.inputLotId!, quantityMilli: nextMaterial.remainingToIssueMilli, proof: actionProof, expectedHeadDigest }) })
   }
 
+  function reviewSubstitutionApproval(event: FormEvent) {
+    event.preventDefault()
+    if (!nextMaterial || nextMaterialSubstitution) return
+    try {
+      const substituteMaterialId = substitutionDraft.substituteMaterialId.trim().toUpperCase()
+      const substituteName = substitutionDraft.substituteName.trim()
+      const substituteQuantityPerUnitMilli = parsePlantOrderQuantityMilli(substitutionDraft.substituteQuantityPerUnit)
+      const sourceReference = substitutionDraft.sourceReference.trim()
+      const technicalBasis = substitutionDraft.technicalBasis.trim()
+      if (!/^MAT-[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(substituteMaterialId) || substituteMaterialId === nextMaterial.materialId) throw new Error('Enter a distinct canonical substitute material ID.')
+      if (!substituteName || !substituteQuantityPerUnitMilli || !sourceReference || !technicalBasis) throw new Error('Enter the substitute name, exact per-unit quantity, approval reference, and technical basis.')
+      const substitutionId = commandId('SUB'); const expectedHeadDigest = state.headDigest
+      const approvalSourceDigest = plantOrderEvidenceDigest({ sourceReference, originalMaterialId: nextMaterial.materialId, substituteMaterialId, originalQuantityPerUnitMilli: nextMaterial.quantityPerUnitMilli, substituteQuantityPerUnitMilli })
+      const actionProof = { ...proof(actor, `substitute for ${nextMaterial.materialId}`), evidenceReference: sourceReference }
+      stage({
+        title: 'Material substitute',
+        summary: `${substituteName} · ${formatMilli(substituteQuantityPerUnitMilli)} ${substitutionDraft.substituteUnit} per output unit`,
+        details: [{ label: 'Original BOM', value: `${nextMaterial.materialId} · ${formatMilli(nextMaterial.quantityPerUnitMilli)} ${nextMaterial.unit}` }, { label: 'Approved substitute', value: `${substituteMaterialId} · ${formatMilli(substituteQuantityPerUnitMilli)} ${substitutionDraft.substituteUnit}` }, { label: 'Approval evidence', value: sourceReference }, { label: 'Technical basis', value: technicalBasis }],
+        boundary: 'Records one job-bound human approval only. It does not rewrite the BOM, issue stock, infer equivalence, post cost or accounting, or control equipment.',
+        proof: actionProof,
+        apply: (current) => approvePlantOrderMaterialSubstitution(current, { substitutionId, materialId: nextMaterial.materialId, substituteMaterialId, substituteName, substituteUnit: substitutionDraft.substituteUnit, originalQuantityPerUnitMilli: nextMaterial.quantityPerUnitMilli, substituteQuantityPerUnitMilli, approvalSourceDigest, technicalBasis, proof: actionProof, expectedHeadDigest }),
+      })
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'The substitute approval could not be prepared.')
+    }
+  }
+
+  function reviewSubstituteMaterialIssue(event: FormEvent) {
+    event.preventDefault()
+    if (!nextMaterial || !nextMaterialSubstitution) return
+    try {
+      const inputLotId = substitutionDraft.inputLotId.trim().toUpperCase()
+      if (!/^LOT-[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(inputLotId)) throw new Error('Enter the exact canonical substitute lot ID.')
+      const numerator = BigInt(nextMaterial.remainingToIssueMilli) * BigInt(nextMaterialSubstitution.substituteQuantityPerUnitMilli)
+      const denominator = BigInt(nextMaterialSubstitution.originalQuantityPerUnitMilli)
+      if (numerator % denominator !== 0n) throw new Error('The remaining BOM quantity cannot be converted exactly with this approval.')
+      const substituteQuantityMilli = Number(numerator / denominator)
+      if (!Number.isSafeInteger(substituteQuantityMilli) || substituteQuantityMilli < 1) throw new Error('The substitute issue quantity exceeds the supported range.')
+      const issueId = commandId('ISSUE'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, `approved substitute request for ${nextMaterial.materialId}`)
+      stage({
+        title: 'Substitute request',
+        summary: `${formatMilli(substituteQuantityMilli)} ${nextMaterialSubstitution.substituteUnit} · ${inputLotId}`,
+        details: [{ label: 'Original BOM credit', value: `${formatMilli(nextMaterial.remainingToIssueMilli)} ${nextMaterial.unit} · ${nextMaterial.materialId}` }, { label: 'Physical substitute', value: `${nextMaterialSubstitution.substituteMaterialId} · ${formatMilli(substituteQuantityMilli)} ${nextMaterialSubstitution.substituteUnit}` }, { label: 'Approval', value: nextMaterialSubstitution.id }],
+        boundary: 'Creates one linked Shop request for the physical substitute lot. Shop remains stock authority; the original BOM and approval remain immutable.',
+        proof: actionProof,
+        apply: (current) => issuePlantOrderSubstituteMaterial(current, { issueId, substitutionId: nextMaterialSubstitution.id, materialId: nextMaterial.materialId, substituteMaterialId: nextMaterialSubstitution.substituteMaterialId, inputLotId, substituteQuantityMilli, proof: actionProof, expectedHeadDigest }),
+      })
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'The substitute request could not be prepared.')
+    }
+  }
+
   function reviewOperation(event: FormEvent) {
     event.preventDefault()
     if (pendingWarehouseIssues.length) return setError('Shop must issue every linked material request before operation progress can be recorded.')
@@ -726,7 +793,21 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
       </form> : null}
 
       {!calibrationDueCentre && projection.status === 'ready' ? <button className="core-button primary" disabled={controlsDisabled} onClick={reviewOrderRelease} type="button">Review order release</button> : null}
-      {!calibrationDueCentre && (projection.status === 'released' || projection.status === 'in_process') && nextMaterial ? <button className="core-button primary" disabled={controlsDisabled} onClick={reviewMaterialIssue} type="button">Review material request</button> : null}
+      {!calibrationDueCentre && (projection.status === 'released' || projection.status === 'in_process') && nextMaterial && !nextMaterialSubstitution ? <div className="core-form compact-form">
+        <button className="core-button primary" disabled={controlsDisabled} onClick={reviewMaterialIssue} type="button">Request reviewed lot</button>
+        <details className="compact-disclosure production-history"><summary>Use an approved substitute <span>Optional</span></summary><form className="core-form compact-form" onSubmit={reviewSubstitutionApproval}>
+          <div className="form-row"><label>Substitute material ID<input disabled={controlsDisabled} maxLength={80} onChange={(event) => setSubstitutionDraft((current) => ({ ...current, substituteMaterialId: event.target.value }))} placeholder="MAT-FILTER-ALT-01" required value={substitutionDraft.substituteMaterialId} /></label><label>Substitute name<input disabled={controlsDisabled} maxLength={180} onChange={(event) => setSubstitutionDraft((current) => ({ ...current, substituteName: event.target.value }))} required value={substitutionDraft.substituteName} /></label></div>
+          <div className="form-row"><label>Substitute unit<select disabled={controlsDisabled} onChange={(event) => setSubstitutionDraft((current) => ({ ...current, substituteUnit: event.target.value as PlantOrderMaterial['unit'] }))} value={substitutionDraft.substituteUnit}>{setupMaterialUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></label><label>Per output unit<input disabled={controlsDisabled} inputMode="decimal" min="0.001" onChange={(event) => setSubstitutionDraft((current) => ({ ...current, substituteQuantityPerUnit: event.target.value }))} required step="0.001" type="number" value={substitutionDraft.substituteQuantityPerUnit} /></label></div>
+          <label>Approval / certificate reference<input disabled={controlsDisabled} maxLength={180} onChange={(event) => setSubstitutionDraft((current) => ({ ...current, sourceReference: event.target.value }))} required value={substitutionDraft.sourceReference} /></label>
+          <label>Technical basis<textarea disabled={controlsDisabled} maxLength={300} onChange={(event) => setSubstitutionDraft((current) => ({ ...current, technicalBasis: event.target.value }))} required rows={2} value={substitutionDraft.technicalBasis} /></label>
+          <button className="core-button" disabled={controlsDisabled} type="submit">Review substitute approval</button>
+        </form></details>
+      </div> : null}
+      {!calibrationDueCentre && (projection.status === 'released' || projection.status === 'in_process') && nextMaterial && nextMaterialSubstitution ? <form className="core-form compact-form" onSubmit={reviewSubstituteMaterialIssue}>
+        <div><strong>{nextMaterialSubstitution.substituteName}</strong><small>{nextMaterialSubstitution.substituteMaterialId} · approved for {nextMaterial.materialId}</small></div>
+        <label>Substitute lot ID<input disabled={controlsDisabled} maxLength={80} onChange={(event) => setSubstitutionDraft((current) => ({ ...current, inputLotId: event.target.value }))} placeholder={`LOT-${nextMaterialSubstitution.substituteMaterialId.replace(/^MAT-/, '')}`} required value={substitutionDraft.inputLotId} /></label>
+        <div className="form-actions"><button className="core-button" disabled={controlsDisabled} onClick={reviewMaterialIssue} type="button">Use original lot</button><button className="core-button primary" disabled={controlsDisabled} type="submit">Review substitute request</button></div>
+      </form> : null}
       {awaitingWarehouse ? <div className="stock-receipt-preview" role="status"><small>Warehouse handoff required</small><strong>{pendingWarehouseIssues.length} Plant material {pendingWarehouseIssues.length === 1 ? 'request needs' : 'requests need'} Shop stock issue</strong><a className="core-button primary compact" href="/shop/?tab=inventory">Review in Shop</a></div> : null}
       {!calibrationDueCentre && (projection.status === 'released' || projection.status === 'in_process') && !nextMaterial && !awaitingWarehouse && nextOperation ? <form className="core-form compact-form" onSubmit={reviewOperation}>
         <div><strong>{nextOperation.sequence}. {nextOperation.name}</strong><small>{nextOperation.workCentreId} · {nextOperation.completedQuantity.toLocaleString()} / {projection.metrics.targetQuantity.toLocaleString()} complete</small></div>
@@ -771,7 +852,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         <label>Closed downtime intervals (optional)<textarea disabled={controlsDisabled} maxLength={32_000} onChange={(event) => setEffectivenessDraft((current) => ({ ...current, downtimeIntervals: event.target.value }))} placeholder="DT-LINESTOP-01 | WC-ASSEMBLY-01 | 2026-07-28T08:20:00+06:30 | 2026-07-28T08:35:00+06:30" rows={3} value={effectivenessDraft.downtimeIntervals} /><small>One row per closed interval: downtime ID | work centre ID | started at | ended at. Intervals must be inside this order window and cannot overlap.</small></label>
         <button className="core-button" disabled={controlsDisabled} type="submit">Review effectiveness evidence</button>
       </form> : <p className="panel-copy">Release the reviewed order before recording its production window.</p>}</details> : null}
-      {projection.genealogy.length ? <details className="compact-disclosure production-history"><summary>Batch genealogy <span>{projection.genealogy.length}</span></summary><div className="issue-list">{projection.genealogy.map((row) => <article key={row.materialId}><span aria-hidden="true" className="issue-mark resolved">LOT</span><div><strong>{row.inputLotId} → {row.outputBatchId}</strong><small>{row.materialId} · {formatMilli(row.issuedQuantityMilli)} {row.unit}</small></div></article>)}</div></details> : null}
+      {projection.genealogy.length ? <details className="compact-disclosure production-history"><summary>Batch genealogy <span>{projection.genealogy.length}</span></summary><div className="issue-list">{projection.genealogy.map((row, index) => <article key={`${row.materialId}-${row.inputLotId}-${index}`}><span aria-hidden="true" className="issue-mark resolved">LOT</span><div><strong>{row.inputLotId} → {row.outputBatchId}</strong><small>{row.substituteMaterialId ? `${row.substituteMaterialId} · ${formatMilli(row.substituteQuantityMilli ?? 0)} ${row.substituteUnit} → ${row.materialId} credit ${formatMilli(row.issuedQuantityMilli)} ${row.unit}` : `${row.materialId} · ${formatMilli(row.issuedQuantityMilli)} ${row.unit}`}</small></div></article>)}</div></details> : null}
       <p aria-live="polite" className="form-notice">{error || notice || (projection.status === 'released_to_stock' ? 'Batch release is recorded. Post Shop receipt, costing, and accounting only through their own reviewed controls.' : `${managed ? 'Managed' : 'Local'} execution evidence only. No machine command, external send, inventory posting, payment, or accounting action occurs.`)}</p>
     </section>
 

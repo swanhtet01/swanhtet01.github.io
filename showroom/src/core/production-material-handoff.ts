@@ -13,6 +13,15 @@ import {
 
 export type ProductionMaterialHandoff = CommerceProductionMaterialRequest & {
   materialName: string
+  substitution: null | {
+    approvalId: string
+    originalMaterialId: string
+    originalMaterialName: string
+    originalQuantityMilli: number
+    originalUnit: CommerceProductionMaterialRequest['unit']
+    approvalSourceDigest: string
+    technicalBasis: string
+  }
   fulfilledBy: CommerceStockMovement | null
 }
 
@@ -41,21 +50,40 @@ export function productionMaterialHandoffs(
   const commerce = commerceValue ? validateCommerceState(commerceValue) : null
   return execution.commands.flatMap((command): ProductionMaterialHandoff[] => {
     const payload = command.payload
-    if (payload.kind !== 'issue_material') return []
+    if (payload.kind !== 'issue_material' && payload.kind !== 'issue_substitute_material') return []
     const material = plan.materials.find((candidate) => candidate.materialId === payload.materialId)
     if (!material) return []
+    const approval = payload.kind === 'issue_substitute_material'
+      ? projection.materialSubstitutions.find((candidate) => candidate.id === payload.substitutionId
+        && candidate.materialId === payload.materialId
+        && candidate.substituteMaterialId === payload.substituteMaterialId)
+      : null
+    if (payload.kind === 'issue_substitute_material' && !approval) return []
+    const quantityMilli = payload.kind === 'issue_material' ? payload.quantityMilli : payload.substituteQuantityMilli
+    const creditedQuantityMilli = payload.kind === 'issue_material'
+      ? payload.quantityMilli
+      : Number(BigInt(payload.substituteQuantityMilli) * BigInt(approval!.originalQuantityPerUnitMilli) / BigInt(approval!.substituteQuantityPerUnitMilli))
     const request: CommerceProductionMaterialRequest = {
       requestId: payload.id,
       sourceCommandDigest: command.digest,
       jobId: plan.job.jobId,
-      materialId: payload.materialId,
+      materialId: payload.kind === 'issue_material' ? payload.materialId : payload.substituteMaterialId,
       inputLotId: payload.inputLotId,
-      quantityMilli: payload.quantityMilli,
-      unit: material.unit,
+      quantityMilli,
+      unit: payload.kind === 'issue_material' ? material.unit : approval!.substituteUnit,
     }
     return [{
       ...request,
-      materialName: material.name,
+      materialName: payload.kind === 'issue_material' ? material.name : approval!.substituteName,
+      substitution: payload.kind === 'issue_material' ? null : {
+        approvalId: approval!.id,
+        originalMaterialId: material.materialId,
+        originalMaterialName: material.name,
+        originalQuantityMilli: creditedQuantityMilli,
+        originalUnit: material.unit,
+        approvalSourceDigest: approval!.approvalSourceDigest,
+        technicalBasis: approval!.technicalBasis,
+      },
       fulfilledBy: commerce?.movements.find((movement) => movementMatchesRequest(movement, request)) ?? null,
     }]
   })
