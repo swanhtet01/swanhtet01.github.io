@@ -244,6 +244,8 @@ export function ProductHomeToday({ runtimeStatus = 'demo' }: { runtimeStatus?: R
           <div className="product-home-report-list">
             {visibleEntries.length ? visibleEntries.map((entry) => <Link data-severity={entry.severity} key={entry.id} to={entry.route}><span><small>{productLabel[entry.product]} · {entry.id}</small><strong>{entry.label}</strong><em>{entry.detail}</em></span><b>{entry.count || 'Ready'}</b></Link>) : <p>No authorized entries match this saved view.</p>}
           </div>
+          <div className="form-row" aria-label="Authorized master data coverage">{report.masterData.dimensions.map((dimension) => <span className={`status-pill ${dimension.status === 'ready' ? 'bounded' : 'pending'}`} key={dimension.id}>{productLabel[dimension.product]} · {dimension.label} {dimension.recordCount}</span>)}</div>
+          <p className="product-home-report-source">Master data coverage uses counts only: {report.masterData.totalRecords} authorized records · {report.masterData.attentionDimensions} dimensions need setup or recovery. Customer and record values are excluded.</p>
           <p className="product-home-report-source">Sources: {report.sources.map((source) => `${source.surface} ${source.mode}${source.revision === null ? '' : ` r${source.revision}`}`).join(' · ')}. View filters are saved on this device; permissions always come from the managed bootstrap.</p>
           {notice ? <p className="form-notice" role="status">{notice}</p> : null}
         </div>

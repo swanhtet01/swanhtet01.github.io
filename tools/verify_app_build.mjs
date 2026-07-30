@@ -785,6 +785,8 @@ if (!productHomeTodaySource.includes('buildOperationalReport')
   || !operationalReportSource.includes('The source failed validation; no sample values were substituted.')
   || !productHomeTodaySource.includes('permissions always come from the managed bootstrap')
   || !productHomeTodaySource.includes('No customer values or external writes were included.')
+  || !productHomeTodaySource.includes('Authorized master data coverage')
+  || !productHomeTodaySource.includes('Customer and record values are excluded.')
   || !productHomeTodaySource.includes('This queue and report are read-only')
   || !productHomeTodaySource.includes("window.addEventListener('storage', refresh)")
   || !productHomeTodaySource.includes('window.localStorage.setItem(OPERATIONAL_REPORT_VIEW_KEY, JSON.stringify(view))')
@@ -792,7 +794,9 @@ if (!productHomeTodaySource.includes('buildOperationalReport')
   || productHomeTodaySource.includes('mutateCommerce')
   || productHomeTodaySource.includes('mutateProduction')
   || productHomeTodaySource.includes('removeItem(')
-  || !operationalReportSource.includes("OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v1'")
+  || !operationalReportSource.includes("OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v2'")
+  || !operationalReportSource.includes("OPERATIONAL_REPORT_EXPORT_CONTRACT = 'supermega.operational_report_export.v2'")
+  || !operationalReportSource.includes('export async function validateOperationalReportExport')
   || !operationalReportSource.includes('permissionFiltered: true')
   || !operationalReportSource.includes('containsCustomerValues: false')
   || !operationalReportSource.includes('safeToShareExternally: false')
@@ -14330,6 +14334,7 @@ async function verifyOperationalReportRuntime() {
     })
     assert(report.contract === model.OPERATIONAL_REPORT_CONTRACT && report.controls.permissionFiltered && report.controls.readOnly, 'operational_report_contract_invalid')
     assert(new Set(report.entries.map((entry) => entry.product)).size === 4 && report.allowedProducts.length === 4, 'operational_report_product_coverage_incomplete')
+    assert(report.masterData.dimensions.length === 10 && report.masterData.controls.countsOnly && report.masterData.totalRecords > 0, 'operational_report_master_data_coverage_missing')
     assert(!JSON.stringify(report).includes('May') && !JSON.stringify(report).includes('Ko Aung'), 'operational_report_exposed_customer_value')
     assert(report.entries.every((entry, index, entries) => !index || ({ critical: 4, warning: 3, action: 2, ready: 1 })[entries[index - 1].severity] >= ({ critical: 4, warning: 3, action: 2, ready: 1 })[entry.severity]), 'operational_report_priority_order_invalid')
 
@@ -14342,6 +14347,7 @@ async function verifyOperationalReportRuntime() {
     })
     assert(websiteOnly.entries.every((entry) => entry.product === 'website') && websiteOnly.sources.length === 1, 'operational_report_permission_filter_failed')
     assert(!JSON.stringify(websiteOnly).includes('commerce') && !JSON.stringify(websiteOnly).includes('production'), 'operational_report_hidden_product_metadata_leaked')
+    assert(websiteOnly.masterData.dimensions.length === 2 && websiteOnly.masterData.dimensions.every((dimension) => dimension.product === 'website' && dimension.consumers.length === 0), 'operational_report_master_data_permission_filter_failed')
 
     const unprovisioned = model.buildOperationalReport({
       mode: 'managed',
@@ -14370,6 +14376,12 @@ async function verifyOperationalReportRuntime() {
     const exported = await model.exportOperationalReport(websiteOnly, { product: 'website', urgency: 'all' })
     assert(exported.contract === model.OPERATIONAL_REPORT_EXPORT_CONTRACT && /^sha256:[0-9a-f]{64}$/.test(exported.digest), 'operational_report_export_not_digest_bound')
     assert(exported.entries.every((entry) => entry.product === 'website') && exported.controls.externalWritesPerformed === false, 'operational_report_export_broadened_scope')
+    assert((await model.validateOperationalReportExport(exported)).digest === exported.digest && exported.masterData.dimensions.length === 2, 'operational_report_export_not_revalidated')
+    const tamperedExport = structuredClone(exported)
+    tamperedExport.masterData.dimensions[0].recordCount += 1
+    let tamperedExportRejected = false
+    try { await model.validateOperationalReportExport(tamperedExport) } catch { tamperedExportRejected = true }
+    assert(tamperedExportRejected, 'operational_report_tampered_master_data_accepted')
   } catch (error) {
     fail(`operational_report_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }

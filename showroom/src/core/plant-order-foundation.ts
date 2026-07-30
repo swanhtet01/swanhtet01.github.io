@@ -1323,7 +1323,7 @@ export function buildPlantOrderCostReviewPacket(state: unknown): PlantOrderCostR
       payrollPosted: false,
       invoiceCreated: false,
       providerCalled: false,
-    },
+    } as const,
   }
   return { ...body, digest: canonicalDigest(body) }
 }

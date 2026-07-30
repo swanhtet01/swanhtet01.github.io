@@ -15,8 +15,8 @@ import {
   type WebsiteWorkspace,
 } from '../products/website/website-model.ts'
 
-export const OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v1' as const
-export const OPERATIONAL_REPORT_EXPORT_CONTRACT = 'supermega.operational_report_export.v1' as const
+export const OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v2' as const
+export const OPERATIONAL_REPORT_EXPORT_CONTRACT = 'supermega.operational_report_export.v2' as const
 export const OPERATIONAL_REPORT_VIEW_KEY = 'supermega.operational-report-view.v1'
 
 export const operationalProducts = ['commerce', 'production', 'website', 'ecommerce'] as const
@@ -44,6 +44,28 @@ export type OperationalReportEntry = {
   sourceRevision: number | null
 }
 
+export type OperationalMasterDataDimension = {
+  id: string
+  product: OperationalProduct
+  label: string
+  recordCount: number
+  status: 'ready' | 'attention' | 'unavailable'
+  consumers: OperationalProduct[]
+  sourceSurface: OperationalSurface
+  sourceRevision: number | null
+}
+
+export type OperationalMasterData = {
+  dimensions: OperationalMasterDataDimension[]
+  totalRecords: number
+  attentionDimensions: number
+  controls: {
+    countsOnly: true
+    customerValuesExcluded: true
+    permissionFiltered: true
+  }
+}
+
 export type OperationalReport = {
   contract: typeof OPERATIONAL_REPORT_CONTRACT
   observedAt: string
@@ -51,6 +73,7 @@ export type OperationalReport = {
   allowedProducts: OperationalProduct[]
   sources: OperationalSource[]
   entries: OperationalReportEntry[]
+  masterData: OperationalMasterData
   summary: {
     critical: number
     warning: number
@@ -96,6 +119,37 @@ const severityScore: Record<OperationalSeverity, number> = {
   ready: 10,
 }
 
+const masterDimensionIds: Record<OperationalProduct, readonly string[]> = {
+  commerce: ['commerce.catalog_items', 'commerce.orders', 'commerce.suppliers'],
+  production: ['production.jobs', 'production.equipment', 'production.problems'],
+  website: ['website.pages', 'website.releases'],
+  ecommerce: ['ecommerce.catalog_items', 'ecommerce.requests'],
+}
+
+const masterConsumers: Record<string, readonly OperationalProduct[]> = {
+  'commerce.catalog_items': ['production', 'ecommerce'],
+  'commerce.orders': ['production'],
+  'commerce.suppliers': ['production'],
+  'production.jobs': ['commerce'],
+  'website.pages': ['ecommerce'],
+  'website.releases': ['ecommerce'],
+  'ecommerce.catalog_items': ['commerce', 'website'],
+  'ecommerce.requests': ['commerce'],
+}
+
+const masterDimensionLabels: Record<string, string> = {
+  'commerce.catalog_items': 'Catalog items',
+  'commerce.orders': 'Orders',
+  'commerce.suppliers': 'Suppliers',
+  'production.jobs': 'Production jobs',
+  'production.equipment': 'Equipment',
+  'production.problems': 'Problems',
+  'website.pages': 'Website pages',
+  'website.releases': 'Website releases',
+  'ecommerce.catalog_items': 'Storefront products',
+  'ecommerce.requests': 'Storefront requests',
+}
+
 function exactIso(value: string) {
   try { return new Date(value).toISOString() === value } catch { return false }
 }
@@ -133,6 +187,70 @@ function task(
 ): OperationalReportEntry {
   if (!Number.isSafeInteger(count) || count < 0) throw new Error('Operational report count is invalid.')
   return { id, product, severity, label, detail, count, route, sourceSurface: source.surface, sourceRevision: source.revision }
+}
+
+function masterDimension(
+  allowedProducts: readonly OperationalProduct[],
+  source: OperationalSource,
+  product: OperationalProduct,
+  id: string,
+  label: string,
+  recordCount: number,
+  sourceAvailable: boolean,
+): OperationalMasterDataDimension {
+  if (!Number.isSafeInteger(recordCount) || recordCount < 0) throw new Error('Operational master-data count is invalid.')
+  return {
+    id,
+    product,
+    label,
+    recordCount,
+    status: !sourceAvailable ? 'unavailable' : recordCount ? 'ready' : 'attention',
+    consumers: operationalProducts.filter((candidate) => allowedProducts.includes(candidate) && masterConsumers[id]?.includes(candidate)),
+    sourceSurface: source.surface,
+    sourceRevision: source.revision,
+  }
+}
+
+function buildOperationalMasterData(input: OperationalReportInput, sources: readonly OperationalSource[], allowedProducts: readonly OperationalProduct[]): OperationalMasterData {
+  const bySurface = new Map(sources.map((source) => [source.surface, source]))
+  const dimensions = allowedProducts.flatMap((product): OperationalMasterDataDimension[] => {
+    const source = bySurface.get(productSurface[product]) as OperationalSource
+    const sourceAvailable = source.mode !== 'error' && !(source.mode === 'managed' && source.revision === 0)
+    if (product === 'commerce') {
+      const state = sourceAvailable ? input.commerce : undefined
+      return [
+        masterDimension(allowedProducts, source, product, 'commerce.catalog_items', 'Catalog items', state?.items.length ?? 0, sourceAvailable),
+        masterDimension(allowedProducts, source, product, 'commerce.orders', 'Orders', state?.orders.length ?? 0, sourceAvailable),
+        masterDimension(allowedProducts, source, product, 'commerce.suppliers', 'Suppliers', new Set(state ? commercePurchaseOrders(state).map((order) => order.supplier) : []).size, sourceAvailable),
+      ]
+    }
+    if (product === 'production') {
+      const state = sourceAvailable ? input.production : undefined
+      return [
+        masterDimension(allowedProducts, source, product, 'production.jobs', 'Production jobs', state?.jobs.length ?? 0, sourceAvailable),
+        masterDimension(allowedProducts, source, product, 'production.equipment', 'Equipment', state?.machines.length ?? 0, sourceAvailable),
+        masterDimension(allowedProducts, source, product, 'production.problems', 'Problems', state?.issues.length ?? 0, sourceAvailable),
+      ]
+    }
+    if (product === 'website') {
+      const state = sourceAvailable ? input.website : undefined
+      return [
+        masterDimension(allowedProducts, source, product, 'website.pages', 'Website pages', state?.pages.length ?? 0, sourceAvailable),
+        masterDimension(allowedProducts, source, product, 'website.releases', 'Website releases', state?.localPublishes.length ?? 0, sourceAvailable),
+      ]
+    }
+    const state = sourceAvailable ? input.commerce : undefined
+    return [
+      masterDimension(allowedProducts, source, product, 'ecommerce.catalog_items', 'Storefront products', state?.storefrontConfiguration?.selectedSkus.length ?? 0, sourceAvailable),
+      masterDimension(allowedProducts, source, product, 'ecommerce.requests', 'Storefront requests', state ? commerceStorefrontRequests(state).length : 0, sourceAvailable),
+    ]
+  })
+  return {
+    dimensions,
+    totalRecords: dimensions.reduce((total, dimension) => total + dimension.recordCount, 0),
+    attentionDimensions: dimensions.filter((dimension) => dimension.status !== 'ready').length,
+    controls: { countsOnly: true, customerValuesExcluded: true, permissionFiltered: true },
+  }
 }
 
 function sourceUnavailableTask(source: OperationalSource, product: OperationalProduct) {
@@ -235,6 +353,7 @@ export function buildOperationalReport(input: OperationalReportInput): Operation
     action: entries.filter((entry) => entry.severity === 'action').length,
     ready: entries.filter((entry) => entry.severity === 'ready').length,
   }
+  const masterData = buildOperationalMasterData(input, sources, allowedProducts)
   return {
     contract: OPERATIONAL_REPORT_CONTRACT,
     observedAt,
@@ -242,6 +361,7 @@ export function buildOperationalReport(input: OperationalReportInput): Operation
     allowedProducts: [...allowedProducts],
     sources,
     entries,
+    masterData,
     summary,
     controls: {
       permissionFiltered: true,
@@ -278,6 +398,49 @@ function hex(bytes: ArrayBuffer) {
   return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
+function exactKeys(value: unknown, keys: readonly string[]) {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value)
+    && JSON.stringify(Object.keys(value as Record<string, unknown>).sort()) === JSON.stringify([...keys].sort()))
+}
+
+function validateExportMasterData(value: unknown, allowedProducts: readonly OperationalProduct[], sources: readonly OperationalSource[]) {
+  if (!exactKeys(value, ['dimensions', 'totalRecords', 'attentionDimensions', 'controls'])) throw new Error('Operational report export master data is invalid.')
+  const masterData = value as OperationalMasterData
+  if (!Array.isArray(masterData.dimensions)
+    || !exactKeys(masterData.controls, ['countsOnly', 'customerValuesExcluded', 'permissionFiltered'])
+    || masterData.controls.countsOnly !== true || masterData.controls.customerValuesExcluded !== true || masterData.controls.permissionFiltered !== true) {
+    throw new Error('Operational report export master data is invalid.')
+  }
+  const expectedIds = allowedProducts.flatMap((product) => masterDimensionIds[product])
+  const bySurface = new Map(sources.map((source) => [source.surface, source]))
+  for (const [index, dimension] of masterData.dimensions.entries()) {
+    const source = bySurface.get(dimension.sourceSurface)
+    const sourceAvailable = source?.mode !== 'error' && !(source?.mode === 'managed' && source.revision === 0)
+    const expectedStatus = !sourceAvailable ? 'unavailable' : dimension.recordCount ? 'ready' : 'attention'
+    if (!exactKeys(dimension, ['id', 'product', 'label', 'recordCount', 'status', 'consumers', 'sourceSurface', 'sourceRevision'])
+      || dimension.id !== expectedIds[index] || !allowedProducts.includes(dimension.product)
+      || dimension.sourceSurface !== productSurface[dimension.product]
+      || dimension.sourceRevision !== source?.revision
+      || dimension.label !== masterDimensionLabels[dimension.id]
+      || !Number.isSafeInteger(dimension.recordCount) || dimension.recordCount < 0
+      || dimension.status !== expectedStatus || !sourceAvailable && dimension.recordCount !== 0
+      || !Array.isArray(dimension.consumers)
+      || JSON.stringify(dimension.consumers) !== JSON.stringify(operationalProducts.filter((product) => allowedProducts.includes(product) && masterConsumers[dimension.id]?.includes(product)))) {
+      throw new Error('Operational report export master-data dimension is invalid.')
+    }
+  }
+  if (masterData.dimensions.length !== expectedIds.length
+    || masterData.totalRecords !== masterData.dimensions.reduce((total, dimension) => total + dimension.recordCount, 0)
+    || masterData.attentionDimensions !== masterData.dimensions.filter((dimension) => dimension.status !== 'ready').length) {
+    throw new Error('Operational report export master-data totals are invalid.')
+  }
+  return masterData
+}
+
+async function digestPayload(value: unknown) {
+  return `sha256:${hex(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value))))}`
+}
+
 export async function exportOperationalReport(report: OperationalReport, view: OperationalReportView) {
   const safeView = restoreOperationalReportView(view, report.allowedProducts)
   const payload = {
@@ -289,8 +452,44 @@ export async function exportOperationalReport(report: OperationalReport, view: O
     sources: report.sources,
     view: safeView,
     entries: filterOperationalReport(report, safeView),
+    masterData: report.masterData,
     controls: report.controls,
   }
-  const digest = `sha256:${hex(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(payload))))}`
+  const digest = await digestPayload(payload)
   return { ...payload, digest }
+}
+
+export async function validateOperationalReportExport(value: unknown) {
+  if (!exactKeys(value, ['contract', 'reportContract', 'observedAt', 'mode', 'allowedProducts', 'sources', 'view', 'entries', 'masterData', 'controls', 'digest'])) throw new Error('Operational report export is invalid.')
+  const artifact = value as Awaited<ReturnType<typeof exportOperationalReport>>
+  if (artifact.contract !== OPERATIONAL_REPORT_EXPORT_CONTRACT || artifact.reportContract !== OPERATIONAL_REPORT_CONTRACT
+    || !exactIso(artifact.observedAt) || !['local', 'managed'].includes(artifact.mode)
+    || !Array.isArray(artifact.allowedProducts) || JSON.stringify(artifact.allowedProducts) !== JSON.stringify(canonicalProducts(artifact.allowedProducts))
+    || !artifact.allowedProducts.length || new Set(artifact.allowedProducts).size !== artifact.allowedProducts.length
+    || !Array.isArray(artifact.sources) || !Array.isArray(artifact.entries)
+    || JSON.stringify(artifact.view) !== JSON.stringify(restoreOperationalReportView(artifact.view, artifact.allowedProducts))
+    || !exactKeys(artifact.controls, ['permissionFiltered', 'sourceBacked', 'readOnly', 'containsCustomerValues', 'externalWritesPerformed', 'safeToShareExternally'])
+    || artifact.controls.permissionFiltered !== true || artifact.controls.sourceBacked !== true || artifact.controls.readOnly !== true
+    || artifact.controls.containsCustomerValues !== false || artifact.controls.externalWritesPerformed !== false || artifact.controls.safeToShareExternally !== false) {
+    throw new Error('Operational report export contract is invalid.')
+  }
+  const sources = validateSources(artifact.sources, artifact.allowedProducts)
+  const bySurface = new Map(sources.map((source) => [source.surface, source]))
+  for (const entry of artifact.entries) {
+    if (!exactKeys(entry, ['id', 'product', 'severity', 'label', 'detail', 'count', 'route', 'sourceSurface', 'sourceRevision'])
+      || !artifact.allowedProducts.includes(entry.product) || entry.sourceSurface !== productSurface[entry.product]
+      || entry.sourceRevision !== bySurface.get(entry.sourceSurface)?.revision
+      || typeof entry.id !== 'string' || !/^[a-z]+[.][a-z_]+$/.test(entry.id)
+      || !['critical', 'warning', 'action', 'ready'].includes(entry.severity)
+      || typeof entry.label !== 'string' || !entry.label || entry.label.length > 160
+      || typeof entry.detail !== 'string' || !entry.detail || entry.detail.length > 240
+      || !Number.isSafeInteger(entry.count) || entry.count < 0
+      || typeof entry.route !== 'string' || !entry.route.startsWith('/') || entry.route.startsWith('//')) {
+      throw new Error('Operational report export entry is invalid.')
+    }
+  }
+  validateExportMasterData(artifact.masterData, artifact.allowedProducts, sources)
+  const { digest, ...payload } = artifact
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) throw new Error('Operational report export digest is invalid.')
+  return structuredClone(artifact)
 }
