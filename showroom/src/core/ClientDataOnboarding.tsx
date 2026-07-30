@@ -346,7 +346,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             ? 'Clean package first'
             : 'Prepare first package'
   const activationHandoffReason = appliedIsCurrent
-    ? `${managedIdentity?.workspaceId ?? 'Managed workspace'} has a confirmed import receipt.`
+    ? 'This company has a confirmed import receipt.'
     : canApplyManagedImport
       ? 'The package is checked, the adapter is ready, and the owner approval box is selected.'
       : validationIsCurrent

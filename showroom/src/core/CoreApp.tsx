@@ -2085,7 +2085,7 @@ export function OverviewPage() {
         note,
       }))
       setApprovals((current) => current.map((candidate) => candidate.id === id ? updated : candidate))
-      setBriefNotice(`Decision recorded in ${managedIdentity?.workspaceId ?? 'the managed workspace'}.`)
+      setBriefNotice('Decision recorded for this company.')
     } else {
       setApprovals((current) => current.map((candidate) => candidate.id === id ? { ...candidate, status, decidedAt: new Date().toISOString(), decidedBy: reviewer, decidedActorKind: 'human', decisionNote: note } : candidate))
     }
