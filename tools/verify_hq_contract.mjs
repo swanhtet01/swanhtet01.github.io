@@ -51,6 +51,7 @@ const databaseImplementationPaths = [
   'supermega_runtime/managed_activation.py',
   'supermega_runtime/trial_store.py',
   'supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql',
+  'supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql',
   'tools/activate_supermega_database.ps1',
   'tools/rehearse_supermega_postgres17.py',
   'tools/validate_supermega_database_url.py',

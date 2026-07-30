@@ -32,6 +32,7 @@ from supermega_runtime.supabase_auth import SupabaseAuthConfig, verify_supabase_
 from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import (
     PostgresTrialStore,
+    TrialNotReadyError,
     TrialPrincipal,
     TrialValidationError,
 )
@@ -39,7 +40,7 @@ from supermega_runtime.website_runtime import reduce_website_state
 
 
 SERVICE_NAME = "supermega-service"
-SERVICE_VERSION = "1.1.0"
+SERVICE_VERSION = "1.2.0"
 TRIAL_EVENT_BY_SURFACE = {
     "company": "company.snapshot.saved",
     "setup": "setup.snapshot.saved",
@@ -269,6 +270,18 @@ def resolve_trial_principal(request: Request) -> TrialPrincipal | None:
         actor_kind="human",
         authenticated=True,
     )
+
+
+def resolve_workspace_discovery_actor(request: Request) -> str | None:
+    """Resolve only a verified named user for cross-workspace discovery."""
+
+    token = _bearer_token(request)
+    if not token:
+        return None
+    actor_id = verify_supabase_user_token(token, SupabaseAuthConfig.from_environment())
+    if not actor_id or not _IDENTIFIER.fullmatch(actor_id):
+        return None
+    return actor_id
 
 
 def _activation_requirements(*, database_ready: bool, role_ready: bool, schema_ready: bool, audit_ready: bool) -> list[str]:
@@ -1010,6 +1023,30 @@ def create_app() -> FastAPI:
                 "import_provisioning": import_provisioning,
                 "secret_values_exposed": False,
             },
+        }
+
+    @app.get("/api/trial/v1/workspaces")
+    def discover_managed_workspaces(request: Request) -> dict[str, Any]:
+        actor_id = resolve_workspace_discovery_actor(request)
+        if actor_id is None:
+            raise HTTPException(
+                status_code=401,
+                detail={"code": "managed_auth_required", "message": "Sign in with a managed account."},
+            )
+        try:
+            workspaces, truncated = store.list_actor_workspaces(actor_id, actor_kind="human", limit=50)
+        except TrialNotReadyError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "workspace_directory_not_ready", "blockers": list(exc.reasons)},
+            ) from exc
+        return {
+            "contract": "supermega.managed_workspace_directory.v1",
+            "status": "ready",
+            "workspaces": [workspace.to_dict() for workspace in workspaces],
+            "truncated": truncated,
+            "external_writes_performed": False,
+            "secret_values_exposed": False,
         }
 
     @app.post("/api/trial/v1/ecommerce/order-queue/validate")

@@ -569,7 +569,82 @@ class TrialStoreTests(unittest.TestCase):
             ],
         )
 
-    def test_postgres_schema_probe_requires_version_6_and_hardening_controls(self) -> None:
+    def test_workspace_discovery_is_read_only_bounded_and_uses_private_directory(self) -> None:
+        statements: list[tuple[str, tuple[object, ...]]] = []
+
+        class Cursor:
+            def __init__(self):
+                self.parameters: tuple[object, ...] = ()
+                self.query = ""
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def execute(self, query: str, parameters: tuple[object, ...] = ()) -> None:
+                self.query = " ".join(query.split()).lower()
+                self.parameters = parameters
+                statements.append((self.query, parameters))
+
+            def fetchall(self):
+                return [
+                    {
+                        "workspace_id": "company-a",
+                        "capabilities": ["company.write", "commerce.write"],
+                        "display_name": "Mingalar Fresh Mart",
+                    },
+                ]
+
+        class Transaction:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        class Connection:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def transaction(self):
+                return Transaction()
+
+            def cursor(self):
+                return Cursor()
+
+        class DirectoryStore(PostgresTrialStore):
+            def _connect(self):
+                return Connection()
+
+            def _assert_runtime_role(self, _cursor) -> None:
+                return None
+
+            def _assert_schema(self, _cursor) -> None:
+                return None
+
+        store = DirectoryStore("postgresql://runtime.invalid/db", reducer=self.reducer)
+        workspaces, truncated = store.list_actor_workspaces("actor-a", limit=2)
+
+        self.assertFalse(truncated)
+        self.assertEqual(
+            [workspace.to_dict() for workspace in workspaces],
+            [{"workspace_id": "company-a", "label": "Mingalar Fresh Mart", "access": "owner"}],
+        )
+        self.assertEqual(statements[0][0], "set transaction read only")
+        self.assertTrue(any("limit %s" in query and parameters[-1] == 3 for query, parameters in statements))
+        self.assertTrue(any("actor_workspace_directory()" in query for query, _parameters in statements))
+        self.assertFalse(any("workspace_memberships" in query for query, _parameters in statements))
+        self.assertFalse(any(query.startswith(("insert ", "update ", "delete ")) for query, _parameters in statements))
+
+        with self.assertRaises(TrialValidationError):
+            store.list_actor_workspaces("actor-a", limit=51)
+
+    def test_postgres_schema_probe_requires_version_7_and_hardening_controls(self) -> None:
         def canonical_trigger_rows() -> list[dict[str, object]]:
             return [
                 {
@@ -618,7 +693,7 @@ class TrialStoreTests(unittest.TestCase):
                 return self.trigger_rows
 
         ready = {
-            "schema_version": 6,
+            "schema_version": 7,
             "actor_decision_columns_ready": True,
             "workspace_access_control_ready": True,
             "security_constraints_ready": True,
@@ -636,7 +711,7 @@ class TrialStoreTests(unittest.TestCase):
         self.assertEqual(cursor.parameters, ())
 
         for field, value in (
-            ("schema_version", 5),
+            ("schema_version", 6),
             ("actor_decision_columns_ready", False),
             ("workspace_access_control_ready", False),
             ("security_constraints_ready", False),

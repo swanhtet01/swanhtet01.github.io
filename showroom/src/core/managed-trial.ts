@@ -39,6 +39,18 @@ export type ManagedIdentity = {
   workspaceId: string
 }
 
+export type ManagedWorkspaceDirectoryEntry = {
+  workspaceId: string
+  label: string
+  access: 'owner' | 'operator' | 'viewer'
+}
+
+export type ManagedWorkspaceSignIn = {
+  userId: string
+  email: string
+  workspaces: ManagedWorkspaceDirectoryEntry[]
+}
+
 export type ManagedApprovalRecord = {
   approval_id: string
   command_id: string
@@ -1962,6 +1974,14 @@ function rememberWorkspace(value: string) {
   return workspaceId
 }
 
+function forgetWorkspace() {
+  try {
+    window.localStorage.removeItem(WORKSPACE_STORAGE_KEY)
+  } catch {
+    // The server still checks every workspace request when storage is disabled.
+  }
+}
+
 function identity(session: Session, workspaceId: string): ManagedIdentity {
   return {
     userId: session.user.id,
@@ -1982,12 +2002,50 @@ export async function currentManagedIdentity(): Promise<ManagedIdentity | null> 
   return identity(data.session, workspaceId)
 }
 
-export async function signInManagedTrial(email: string, password: string, workspace: string) {
+function parseWorkspaceDirectory(value: unknown): ManagedWorkspaceDirectoryEntry[] {
+  if (!isRecord(value)
+    || value.contract !== 'supermega.managed_workspace_directory.v1'
+    || value.status !== 'ready'
+    || value.external_writes_performed !== false
+    || value.secret_values_exposed !== false
+    || !Array.isArray(value.workspaces)
+    || value.workspaces.length > 50) {
+    throw new ManagedTrialError('The managed workspace directory returned an invalid response.', {
+      code: 'workspace_directory_invalid',
+    })
+  }
+  const workspaces = value.workspaces.map((entry) => {
+    if (!isRecord(entry)
+      || typeof entry.workspace_id !== 'string'
+      || !WORKSPACE_ID.test(entry.workspace_id)
+      || typeof entry.label !== 'string'
+      || !entry.label.trim()
+      || entry.label.length > 120
+      || !['owner', 'operator', 'viewer'].includes(String(entry.access))) {
+      throw new ManagedTrialError('The managed workspace directory returned an invalid company.', {
+        code: 'workspace_directory_invalid',
+      })
+    }
+    return {
+      workspaceId: entry.workspace_id,
+      label: entry.label.trim(),
+      access: entry.access as ManagedWorkspaceDirectoryEntry['access'],
+    }
+  })
+  if (new Set(workspaces.map((entry) => entry.workspaceId)).size !== workspaces.length) {
+    throw new ManagedTrialError('The managed workspace directory returned duplicate companies.', {
+      code: 'workspace_directory_invalid',
+    })
+  }
+  return workspaces
+}
+
+export async function signInAndDiscoverManagedWorkspaces(email: string, password: string): Promise<ManagedWorkspaceSignIn> {
   const supabase = await authClient()
   if (!supabase) {
     throw new ManagedTrialError('Managed sign-in is not configured in this app build.', { code: 'auth_not_configured' })
   }
-  const workspaceId = rememberWorkspace(workspace)
+  forgetWorkspace()
   const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
   if (error || !data.session || data.user.is_anonymous !== false) {
     throw new ManagedTrialError('Sign-in failed. Check the account and password.', {
@@ -1995,12 +2053,62 @@ export async function signInManagedTrial(email: string, password: string, worksp
       code: error?.code ?? 'sign_in_failed',
     })
   }
+  try {
+    const response = await fetch('/api/trial/v1/workspaces', {
+      headers: {
+        accept: 'application/json',
+        authorization: `Bearer ${data.session.access_token}`,
+      },
+    })
+    if (!response.ok) throw await parseError(response)
+    const workspaces = parseWorkspaceDirectory(await response.json())
+    if (!workspaces.length) {
+      throw new ManagedTrialError('This account has no active SuperMega company. Ask the company owner to activate access.', {
+        code: 'workspace_membership_missing',
+      })
+    }
+    return {
+      userId: data.session.user.id,
+      email: data.session.user.email ?? 'Named user',
+      workspaces,
+    }
+  } catch (discoveryError) {
+    await supabase.auth.signOut({ scope: 'local' })
+    forgetWorkspace()
+    throw discoveryError
+  }
+}
+
+export async function completeManagedWorkspaceSignIn(
+  signIn: ManagedWorkspaceSignIn,
+  workspace: string,
+): Promise<ManagedIdentity> {
+  const workspaceId = normalizeWorkspaceId(workspace)
+  if (!signIn.workspaces.some((entry) => entry.workspaceId === workspaceId)) {
+    throw new ManagedTrialError('Choose one of the companies assigned to this account.', {
+      code: 'workspace_membership_missing',
+    })
+  }
+  const supabase = await authClient()
+  const { data, error } = await supabase?.auth.getSession() ?? { data: { session: null }, error: null }
+  if (error || !data.session || data.session.user.id !== signIn.userId || data.session.user.is_anonymous !== false) {
+    throw new ManagedTrialError('The managed session changed. Sign in again.', {
+      code: 'managed_identity_changed',
+    })
+  }
+  rememberWorkspace(workspaceId)
   return identity(data.session, workspaceId)
+}
+
+export async function signInManagedTrial(email: string, password: string, workspace: string) {
+  const signIn = await signInAndDiscoverManagedWorkspaces(email, password)
+  return completeManagedWorkspaceSignIn(signIn, workspace)
 }
 
 export async function signOutManagedTrial() {
   const supabase = await authClient()
   if (supabase) await supabase.auth.signOut({ scope: 'local' })
+  forgetWorkspace()
 }
 
 async function parseError(response: Response) {

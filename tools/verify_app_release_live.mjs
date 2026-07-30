@@ -160,6 +160,9 @@ const operationsChunk = (await get(`/${operationsChunkPath}`)).body
 const settingsChunkPath = /assets\/SettingsPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!settingsChunkPath) throw new Error('settings_chunk_missing')
 const settingsChunk = (await get(`/${settingsChunkPath}`)).body
+const managedLoginChunkPath = /assets\/ManagedLoginPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
+if (!managedLoginChunkPath) throw new Error('managed_login_chunk_missing')
+const managedLoginChunk = (await get(`/${managedLoginChunkPath}`)).body
 const companyBackupChunkPath = /assets\/CompanyBackupPanel-[A-Za-z0-9_-]+\.js/.exec(settingsChunk)?.[0]
 if (!companyBackupChunkPath) throw new Error('company_backup_chunk_missing')
 const companyBackupChunk = (await get(`/${companyBackupChunkPath}`)).body
@@ -235,8 +238,11 @@ for (const required of ['supermega.managed_trial_proof.v2', 'proof_contract', 'p
 for (const required of ['supermega.pilot_outcome_report.v1', 'Free outcome proof', 'Prove one result from real', 'Start proof run', 'Accept measured result', 'Download accepted proof', 'Aggregate counts only. No raw records', 'New product evidence will reopen the proof.']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_pilot_outcome_contract:${required}`)
 }
-for (const required of ['Premium pilot', 'Your business context, remembered.', 'SuperMega combines approved product data and owner patterns, then prepares one next move for review.', 'Owner pattern', 'Managed account', 'Approved sources', 'Counts only; raw source records are not shown here.', 'Managed company brief', 'AI learned', 'Reviewed next move', 'Verify this company, not a generic demo.', 'Connect and verify', 'Verify context', 'Keep learning checkpoint', 'Learning checkpoint kept in the managed audit. No external action ran.', 'Review only. No customer send, payment, stock move, production write, domain publish, or model training runs from this pilot.', 'Managed access recovery', 'Connect an existing workspace before rebuilding a local trial.', 'Recover managed access', 'Connect through Premium pilot after saving a trial.']) {
+for (const required of ['Premium pilot', 'Your business context, remembered.', 'SuperMega combines approved product data and owner patterns, then prepares one next move for review.', 'Owner pattern', 'Managed account', 'Approved sources', 'Counts only; raw source records are not shown here.', 'Managed company brief', 'AI learned', 'Reviewed next move', 'Verify this company, not a generic demo.', 'Find my company', 'Open company', 'Verify context', 'Keep learning checkpoint', 'Learning checkpoint kept in the managed audit. No external action ran.', 'Review only. No customer send, payment, stock move, production write, domain publish, or model training runs from this pilot.', 'Managed access recovery', 'Sign in and SuperMega will find the active companies assigned to you.', 'Recover managed access', 'Connect through Premium pilot after saving a trial.']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_premium_pilot_context:${required}`)
+}
+for (const required of ['Open your company.', 'Sign in once. SuperMega finds the companies assigned to you.', 'Use your work account.', 'No workspace code or technical setup is required.', 'Only active companies assigned to this account are shown.', 'Find my company', 'Open company', 'Open free workspace', 'Request managed activation']) {
+  if (!managedLoginChunk.includes(required)) throw new Error(`missing_live_managed_login_context:${required}`)
 }
 for (const required of ['supermega.company_backup.v1', 'supermega.local_company_snapshot.v1', 'AES-GCM', 'PBKDF2', 'Company backup', 'Move or recover this company.', 'Customer-owned and encrypted', 'Download encrypted backup', 'Inspect backup', 'Confirm restore', 'Auth sessions, managed workspace IDs, and credentials are excluded.', 'Nothing is uploaded, sent, or written to a managed workspace.', 'Backup integrity passed.', 'previous company state was restored']) {
   if (!companyBackupCorpus.includes(required)) throw new Error(`missing_live_company_backup_context:${required}`)

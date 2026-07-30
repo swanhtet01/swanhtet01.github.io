@@ -14,6 +14,7 @@ const expectedMigrations = [
   '20260723144500_private_trial_backend_v4_hardening.sql',
   '20260724204920_private_trial_backend_v5_read_capabilities.sql',
   '20260730113000_private_trial_backend_v6_managed_activation.sql',
+  '20260730123000_private_trial_backend_v7_workspace_discovery.sql',
 ]
 const expectedPolicyFingerprints = {
   approval_requests_access_gate: {
@@ -107,6 +108,13 @@ const expectedAccessFunction = {
   resultType: 'boolean',
   language: 'sql',
   sourceHash: 'db273aa3f0342e648db5b5e37560b08009ee22a3e274f9395718bdfbbd257a35',
+}
+const expectedDirectoryFunction = {
+  name: 'actor_workspace_directory',
+  identityArguments: '',
+  resultType: 'TABLE(workspace_id text, capabilities text[], display_name text)',
+  language: 'sql',
+  sourceHash: '6f7002c211b52aef98a7dd702a1ca112163570ceb03446883ee3d332bea867d0',
 }
 const expectedConstraintFingerprints = {
   approval_requests_decision_packet_v2_check:
@@ -216,6 +224,14 @@ const expectedIndexes = {
     true,
     'p',
   ],
+  workspace_memberships_actor_directory_idx: [
+    'workspace_memberships',
+    ['actor_id', 'actor_kind', 'status', 'workspace_id'],
+    [0, 0, 0, 0],
+    false,
+    false,
+    null,
+  ],
   workspace_state_pkey: [
     'workspace_state',
     ['workspace_id', 'surface'],
@@ -286,7 +302,7 @@ await applyMigrations(database)
 const version = await database.query(
   "select schema_version from app_private.trial_schema_meta where component = 'private_trial_backend'",
 )
-requireCheck('schema version six', version.rows[0]?.schema_version === 6)
+requireCheck('schema version seven', version.rows[0]?.schema_version === 7)
 
 const relations = await database.query(`
   select relation.relname as relation_name, relation.relkind::text as relation_kind,
@@ -361,6 +377,34 @@ requireCheck(
       expectedAccessFunction.sourceHash &&
     accessFunctionRows.rows[0].security_definer === false &&
     JSON.stringify(accessFunctionRows.rows[0].function_config) ===
+      JSON.stringify(['search_path=pg_catalog, app_private']),
+)
+
+const directoryFunctionRows = await database.query(`
+  select function_record.proname as function_name,
+         pg_get_function_identity_arguments(function_record.oid) as identity_arguments,
+         pg_get_function_result(function_record.oid) as result_type,
+         function_record.prosrc as function_source,
+         function_record.prosecdef as security_definer,
+         function_record.proconfig as function_config,
+         language_record.lanname as function_language
+  from pg_proc function_record
+  join pg_namespace schema_record on schema_record.oid = function_record.pronamespace
+  join pg_language language_record on language_record.oid = function_record.prolang
+  where schema_record.nspname = 'app_private'
+    and function_record.proname = 'actor_workspace_directory'
+`)
+requireCheck(
+  'exact actor workspace directory function',
+  directoryFunctionRows.rows.length === 1 &&
+    directoryFunctionRows.rows[0].function_name === expectedDirectoryFunction.name &&
+    directoryFunctionRows.rows[0].identity_arguments === expectedDirectoryFunction.identityArguments &&
+    directoryFunctionRows.rows[0].result_type === expectedDirectoryFunction.resultType &&
+    directoryFunctionRows.rows[0].function_language === expectedDirectoryFunction.language &&
+    normalizedSourceHash(directoryFunctionRows.rows[0].function_source) ===
+      expectedDirectoryFunction.sourceHash &&
+    directoryFunctionRows.rows[0].security_definer === true &&
+    JSON.stringify(directoryFunctionRows.rows[0].function_config) ===
       JSON.stringify(['search_path=pg_catalog, app_private']),
 )
 

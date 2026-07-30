@@ -10,6 +10,7 @@ const OperationsPage = lazy(() => import('./core/CoreApp').then((module) => ({ d
 const WebsiteProduct = lazy(() => import('./products/website/WebsiteProduct').then((module) => ({ default: module.WebsiteProduct })))
 const EcommerceProduct = lazy(() => import('./products/ecommerce/EcommerceProduct').then((module) => ({ default: module.EcommerceProduct })))
 const SettingsPage = lazy(() => import('./core/SettingsPage').then((module) => ({ default: module.SettingsPage })))
+const ManagedLoginPage = lazy(() => import('./core/ManagedLoginPage').then((module) => ({ default: module.ManagedLoginPage })))
 
 function ProductLoading({ name }: { name: string }) {
   return <div aria-live="polite" className="product-route-loading" role="status"><span>&gt;_</span><p>Loading {name}…</p></div>
@@ -61,8 +62,8 @@ export default function App() {
           <Route element={<Navigate replace to="/settings/" />} path="setup/*" />
           <Route element={<Navigate replace to="/settings/#controls" />} path="trust/*" />
           <Route element={<Navigate replace to="/" />} path="app/*" />
-          <Route element={<Navigate replace to="/" />} path="login" />
-          <Route element={<Navigate replace to="/" />} path="signup" />
+          <Route element={<Suspense fallback={<ProductLoading name="managed access" />}><ManagedLoginPage /></Suspense>} path="login" />
+          <Route element={<Navigate replace to="/login" />} path="signup" />
           <Route element={<Navigate replace to="/" />} path="*" />
         </Route>
       </Routes>

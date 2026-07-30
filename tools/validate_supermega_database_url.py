@@ -20,14 +20,14 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 
-CONTRACT = "supermega_private_trial_database_v6"
+CONTRACT = "supermega_private_trial_database_v7"
 REHEARSAL_PREFLIGHT_CONTRACT = "supermega_supabase_rehearsal_preflight_v1"
 ACTIVATION_TARGET_CONTRACT = "supermega_supabase_activation_target_v1"
 SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
 TRUSTED_OWNER = "postgres"
 SCHEMA_COMPONENT = "private_trial_backend"
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 EXPECTED_POSTGRES_MAJOR = 17
 SAFE_SSL_MODES = frozenset({"require", "verify-ca", "verify-full"})
 EXPECTED_TABLES = frozenset(
@@ -48,6 +48,7 @@ EXPECTED_INDEXES = frozenset(
     {
         "trial_schema_meta_pkey",
         "workspace_memberships_pkey",
+        "workspace_memberships_actor_directory_idx",
         "workspace_state_pkey",
         "workspace_events_pkey",
         "workspace_events_workspace_id_command_id_key",
@@ -76,6 +77,14 @@ EXPECTED_INDEX_CONTRACT: dict[str, dict[str, Any]] = {
         "unique": True,
         "primary": True,
         "constraint": "p",
+    },
+    "workspace_memberships_actor_directory_idx": {
+        "table": "workspace_memberships",
+        "keys": ("actor_id", "actor_kind", "status", "workspace_id"),
+        "options": (0, 0, 0, 0),
+        "unique": False,
+        "primary": False,
+        "constraint": None,
     },
     "workspace_state_pkey": {
         "table": "workspace_state",
@@ -165,9 +174,16 @@ EXPECTED_FUNCTIONS = {
     "guard_approval_mutation": ("", "trigger"),
     "guard_workspace_access_control": ("", "trigger"),
     "workspace_is_active": ("target_workspace_id text", "boolean"),
+    "actor_workspace_directory": (
+        "",
+        "table(workspace_id text, capabilities text[], display_name text)",
+    ),
 }
 WORKSPACE_ACCESS_FUNCTION_FINGERPRINT = (
     "db273aa3f0342e648db5b5e37560b08009ee22a3e274f9395718bdfbbd257a35"
+)
+WORKSPACE_DIRECTORY_FUNCTION_FINGERPRINT = (
+    "6f7002c211b52aef98a7dd702a1ca112163570ceb03446883ee3d332bea867d0"
 )
 EXPECTED_NON_OWNER_ACL = frozenset(
     {
@@ -184,6 +200,7 @@ EXPECTED_NON_OWNER_ACL = frozenset(
         ("table", "approval_requests", BACKEND_ROLE, "UPDATE", False),
         ("table", "workspace_access_controls", BACKEND_ROLE, "SELECT", False),
         ("function", "workspace_is_active", BACKEND_ROLE, "EXECUTE", False),
+        ("function", "actor_workspace_directory", BACKEND_ROLE, "EXECUTE", False),
     }
 )
 EXPECTED_BACKEND_ACL_DEPENDENCIES = frozenset(
@@ -200,6 +217,7 @@ EXPECTED_BACKEND_ACL_DEPENDENCIES = frozenset(
             f"{SCHEMA}.workspace_is_active(target_workspace_id text)",
             0,
         ),
+        ("function", f"{SCHEMA}.actor_workspace_directory()", 0),
     }
 )
 EVENT_SURFACE_CONSTRAINT = "workspace_events_approval_surface_v4_check"
@@ -1651,6 +1669,14 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             functions["workspace_is_active"].get("function_source")
         )
         == WORKSPACE_ACCESS_FUNCTION_FINGERPRINT
+        and str(functions["actor_workspace_directory"].get("function_language")) == "sql"
+        and functions["actor_workspace_directory"].get("security_definer") is True
+        and _ordered_texts(functions["actor_workspace_directory"].get("function_config"))
+        == ("search_path=pg_catalog, app_private",)
+        and _catalog_expression_fingerprint(
+            functions["actor_workspace_directory"].get("function_source")
+        )
+        == WORKSPACE_DIRECTORY_FUNCTION_FINGERPRINT
     )
     trusted_private_ownership = (
         str(schema.get("owner_name")) == TRUSTED_OWNER
@@ -2049,7 +2075,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--ensure-schema",
         action="store_true",
-        help="Require the complete v6 schema contract; this flag never applies migrations.",
+        help="Require the complete v7 schema contract; this flag never applies migrations.",
     )
     parser.add_argument("--require-ready", action="store_true")
     parser.add_argument(
