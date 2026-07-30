@@ -7,9 +7,11 @@ from supermega_runtime.plant_order_foundation import (
     EMPTY_PLANT_ORDER_DIGEST,
     PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
     PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
+    PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT,
     PLANT_ORDER_PLAN_CONTRACT,
     PlantOrderValidationError,
     apply_plant_order_plan,
+    approve_plant_order_material_substitution,
     build_plant_order_execution_plan,
     build_plant_order_controlled_plan,
     build_plant_order_plan,
@@ -820,6 +822,163 @@ class PlantOrderFoundationTests(unittest.TestCase):
                 proof=proof(3),
                 expected_head_digest=state["headDigest"],
             )
+
+    def test_material_substitution_is_reviewed_immutable_and_never_auto_issues(self) -> None:
+        state = create_empty_plant_order_state()
+        state = apply_plant_order_plan(
+            state,
+            reviewed_execution_plan(),
+            proof(1, "approved v2 BOM and routing"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        state = check_state(state)
+        state = release_plant_order(
+            state,
+            release_id="REL-20260726-001",
+            availability_check_id="CHK-20260726-001",
+            proof=proof(3, "released v2 order after reviewed availability"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        approval_source_digest = plant_order_evidence_digest(
+            {
+                "certificate": "CERT-FILTER-ALT-2026-07",
+                "originalMaterialId": "MAT-FILTER-001",
+                "substituteMaterialId": "MAT-FILTER-ALT-001",
+                "ratio": [1_500, 1_800],
+            }
+        )
+        approved = approve_plant_order_material_substitution(
+            state,
+            substitution_id="SUB-20260726-001",
+            material_id="MAT-FILTER-001",
+            substitute_material_id="MAT-FILTER-ALT-001",
+            substitute_name="Approved alternate filter media",
+            substitute_unit="kg",
+            original_quantity_per_unit_milli=1_500,
+            substitute_quantity_per_unit_milli=1_800,
+            approval_source_digest=approval_source_digest,
+            technical_basis="Engineering review approved 1.8 kg alternate for each 1.5 kg BOM requirement.",
+            proof=proof(4, "approved documented alternate without issuing stock"),
+            expected_head_digest=state["headDigest"],
+        )
+
+        projection = project_plant_order(approved["state"])
+        self.assertEqual(projection["status"], "released")
+        self.assertEqual(projection["metrics"]["issuedMaterialCount"], 0)
+        self.assertTrue(all(row["issuedQuantityMilli"] == 0 for row in projection["materials"]))
+        self.assertEqual(
+            projection["materialSubstitutions"],
+            [
+                {
+                    "kind": "approve_material_substitution",
+                    "contract": PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT,
+                    "id": "SUB-20260726-001",
+                    "materialId": "MAT-FILTER-001",
+                    "substituteMaterialId": "MAT-FILTER-ALT-001",
+                    "substituteName": "Approved alternate filter media",
+                    "substituteUnit": "kg",
+                    "originalQuantityPerUnitMilli": 1_500,
+                    "substituteQuantityPerUnitMilli": 1_800,
+                    "approvalSourceDigest": approval_source_digest,
+                    "technicalBasis": "Engineering review approved 1.8 kg alternate for each 1.5 kg BOM requirement.",
+                    "proof": proof(4, "approved documented alternate without issuing stock"),
+                }
+            ],
+        )
+
+        replay = approve_plant_order_material_substitution(
+            approved["state"],
+            substitution_id="SUB-20260726-001",
+            material_id="MAT-FILTER-001",
+            substitute_material_id="MAT-FILTER-ALT-001",
+            substitute_name="Approved alternate filter media",
+            substitute_unit="kg",
+            original_quantity_per_unit_milli=1_500,
+            substitute_quantity_per_unit_milli=1_800,
+            approval_source_digest=approval_source_digest,
+            technical_basis="Engineering review approved 1.8 kg alternate for each 1.5 kg BOM requirement.",
+            proof=proof(4, "approved documented alternate without issuing stock"),
+            expected_head_digest=state["headDigest"],
+        )
+        self.assertTrue(replay["replayed"])
+        self.assertEqual(replay["state"], approved["state"])
+
+        with self.assertRaisesRegex(PlantOrderValidationError, "lacks issued"):
+            record_plant_order_operation(
+                approved["state"],
+                operation_run_id="OPRUN-SUBSTITUTE-001",
+                operation_id="OP-ASSEMBLY-10",
+                quantity=1,
+                actual_minutes_milli=500,
+                proof=proof(5),
+                expected_head_digest=approved["state"]["headDigest"],
+            )
+
+        tampered = deepcopy(approved["state"])
+        tampered["commands"][-1]["payload"]["technicalBasis"] = "Unreviewed replacement"
+        with self.assertRaisesRegex(PlantOrderValidationError, "digest does not match"):
+            validate_plant_order_state(tampered)
+
+    def test_material_substitution_fails_closed_on_scope_basis_and_chronology(self) -> None:
+        state = released_state()
+        approval_source_digest = plant_order_evidence_digest({"certificate": "CERT-ALT-001"})
+
+        def approve(current: dict[str, object], **overrides: object) -> dict[str, object]:
+            values: dict[str, object] = {
+                "substitution_id": "SUB-20260726-001",
+                "material_id": "MAT-FILTER-001",
+                "substitute_material_id": "MAT-FILTER-ALT-001",
+                "substitute_name": "Approved alternate filter media",
+                "substitute_unit": "kg",
+                "original_quantity_per_unit_milli": 1_500,
+                "substitute_quantity_per_unit_milli": 1_800,
+                "approval_source_digest": approval_source_digest,
+                "technical_basis": "Reviewed engineering equivalence for this released order only.",
+                "proof": proof(4, "reviewed substitute scope and ratio"),
+                "expected_head_digest": current["headDigest"],
+            }
+            values.update(overrides)
+            return approve_plant_order_material_substitution(current, **values)
+
+        invalid_cases = (
+            ({"material_id": "MAT-UNKNOWN-001"}, "not in the reviewed BOM"),
+            ({"substitute_material_id": "MAT-FILTER-001"}, "distinct non-BOM material"),
+            ({"substitute_material_id": "MAT-SHELL-001"}, "distinct non-BOM material"),
+            ({"original_quantity_per_unit_milli": 1_499}, "match the reviewed BOM basis"),
+            ({"substitute_unit": "crate"}, "substituteUnit is unsupported"),
+            ({"technical_basis": ""}, "technicalBasis must be nonblank"),
+            ({"approval_source_digest": "not-a-digest"}, "approvalSourceDigest"),
+            ({"substitute_quantity_per_unit_milli": 9_007_199_254_740_991}, "supported quantity range"),
+        )
+        for overrides, message in invalid_cases:
+            with self.subTest(overrides=overrides):
+                with self.assertRaisesRegex(PlantOrderValidationError, message):
+                    approve(state, **overrides)
+
+        checked = check_state(planned_state())
+        with self.assertRaisesRegex(PlantOrderValidationError, "requires human order release"):
+            approve(checked)
+
+        approved = approve(state)["state"]
+        with self.assertRaisesRegex(PlantOrderValidationError, "second substitute"):
+            approve(
+                approved,
+                substitution_id="SUB-20260726-002",
+                substitute_material_id="MAT-FILTER-ALT-002",
+                proof=proof(5, "attempted second alternate"),
+            )
+
+        issued = issue_plant_order_material(
+            state,
+            issue_id="ISSUE-20260726-001",
+            material_id="MAT-FILTER-001",
+            input_lot_id="LOT-FILTER-2407",
+            quantity_milli=1_500,
+            proof=proof(4, "issued original material before substitution review"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        with self.assertRaisesRegex(PlantOrderValidationError, "must precede material issue"):
+            approve(issued, proof=proof(5, "late substitute approval"))
 
     def test_output_requires_proportional_bom_issue(self) -> None:
         state = released_state()

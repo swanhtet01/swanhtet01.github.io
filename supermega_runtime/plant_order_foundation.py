@@ -22,6 +22,9 @@ PLANT_ORDER_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v1"
 PLANT_ORDER_EXECUTION_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v2"
 PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v3"
 PLANT_ORDER_PROJECTION_CONTRACT = "supermega.plant.order_projection.v1"
+PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT = (
+    "supermega.plant.material-substitution-approval.v1"
+)
 EMPTY_PLANT_ORDER_DIGEST = f"sha256:{'0' * 64}"
 
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -40,6 +43,7 @@ _COMMAND_KINDS = frozenset(
         "release_order",
         "record_calibration",
         "record_quality_rework",
+        "approve_material_substitution",
         "issue_material",
         "record_effectiveness",
         "record_operation",
@@ -761,6 +765,68 @@ def _command_payload(value: object, field: str) -> dict[str, Any]:
             "proof": _proof(source["proof"], f"{field}.proof"),
         }
 
+    if kind == "approve_material_substitution":
+        source = _object(
+            value,
+            field,
+            (
+                "kind",
+                "contract",
+                "id",
+                "materialId",
+                "substituteMaterialId",
+                "substituteName",
+                "substituteUnit",
+                "originalQuantityPerUnitMilli",
+                "substituteQuantityPerUnitMilli",
+                "approvalSourceDigest",
+                "technicalBasis",
+                "proof",
+            ),
+        )
+        if source["contract"] != PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT:
+            raise _fail(f"{field}.contract is unsupported.")
+        substitute_unit = _text(
+            source["substituteUnit"], f"{field}.substituteUnit", maximum=12
+        )
+        if substitute_unit not in _MATERIAL_UNITS:
+            raise _fail(f"{field}.substituteUnit is unsupported.")
+        return {
+            "kind": kind,
+            "contract": PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT,
+            "id": _identifier(source["id"], f"{field}.id", "SUB"),
+            "materialId": _identifier(
+                source["materialId"], f"{field}.materialId", "MAT"
+            ),
+            "substituteMaterialId": _identifier(
+                source["substituteMaterialId"],
+                f"{field}.substituteMaterialId",
+                "MAT",
+            ),
+            "substituteName": _text(
+                source["substituteName"], f"{field}.substituteName", maximum=180
+            ),
+            "substituteUnit": substitute_unit,
+            "originalQuantityPerUnitMilli": _integer(
+                source["originalQuantityPerUnitMilli"],
+                f"{field}.originalQuantityPerUnitMilli",
+                minimum=1,
+            ),
+            "substituteQuantityPerUnitMilli": _integer(
+                source["substituteQuantityPerUnitMilli"],
+                f"{field}.substituteQuantityPerUnitMilli",
+                minimum=1,
+            ),
+            "approvalSourceDigest": _digest(
+                source["approvalSourceDigest"],
+                f"{field}.approvalSourceDigest",
+            ),
+            "technicalBasis": _text(
+                source["technicalBasis"], f"{field}.technicalBasis", maximum=300
+            ),
+            "proof": _proof(source["proof"], f"{field}.proof"),
+        }
+
     if kind == "record_calibration":
         source = _object(
             value,
@@ -1029,6 +1095,7 @@ def _empty_projection() -> dict[str, Any]:
         "orderRelease": None,
         "calibrations": [],
         "qualityReworks": [],
+        "materialSubstitutions": [],
         "effectivenessWindow": None,
         "materials": [],
         "routing": [],
@@ -1062,6 +1129,7 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
     effectiveness_window: dict[str, Any] | None = None
     calibrations: dict[str, dict[str, Any]] = {}
     quality_reworks: list[dict[str, Any]] = []
+    material_substitutions: dict[str, dict[str, Any]] = {}
     issued: dict[str, int] = {}
     operation_quantities: dict[str, int] = {}
     operation_minutes: dict[str, int] = {}
@@ -1153,6 +1221,45 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             continue
         if batch_release is not None:
             raise _fail(f"{field} follows final batch release.")
+
+        if kind == "approve_material_substitution":
+            material = next(
+                (
+                    row
+                    for row in plan["materials"]
+                    if row["materialId"] == command["materialId"]
+                ),
+                None,
+            )
+            if material is None:
+                raise _fail(f"{field}.materialId is not in the reviewed BOM.")
+            if command["substituteMaterialId"] == command["materialId"] or any(
+                row["materialId"] == command["substituteMaterialId"]
+                for row in plan["materials"]
+            ):
+                raise _fail(
+                    f"{field}.substituteMaterialId must be a distinct non-BOM material."
+                )
+            if (
+                command["originalQuantityPerUnitMilli"]
+                != material["quantityPerUnitMilli"]
+            ):
+                raise _fail(
+                    f"{field}.originalQuantityPerUnitMilli must match the reviewed BOM basis."
+                )
+            if issued[command["materialId"]] != 0:
+                raise _fail(f"{field} must precede material issue.")
+            if command["materialId"] in material_substitutions:
+                raise _fail(
+                    f"{field} attempts to approve a second substitute for one BOM material."
+                )
+            _safe_product(
+                plan["job"]["targetQuantity"],
+                command["substituteQuantityPerUnitMilli"],
+                f"{field}.substituteQuantityPerUnitMilli",
+            )
+            material_substitutions[command["materialId"]] = command
+            continue
 
         latest_inspection = inspections[-1] if inspections else None
         current_hold = bool(
@@ -1454,6 +1561,9 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
         "orderRelease": order_release,
         "calibrations": [calibrations[key] for key in sorted(calibrations)],
         "qualityReworks": quality_reworks,
+        "materialSubstitutions": [
+            material_substitutions[key] for key in sorted(material_substitutions)
+        ],
         "effectivenessWindow": effectiveness_window,
         "materials": material_rows,
         "routing": plan["routing"],
@@ -1696,6 +1806,41 @@ def issue_plant_order_material(
     )
 
 
+def approve_plant_order_material_substitution(
+    state: object,
+    *,
+    substitution_id: object,
+    material_id: object,
+    substitute_material_id: object,
+    substitute_name: object,
+    substitute_unit: object,
+    original_quantity_per_unit_milli: object,
+    substitute_quantity_per_unit_milli: object,
+    approval_source_digest: object,
+    technical_basis: object,
+    proof: object,
+    expected_head_digest: object,
+) -> dict[str, Any]:
+    return _append_command(
+        state,
+        {
+            "kind": "approve_material_substitution",
+            "contract": PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT,
+            "id": substitution_id,
+            "materialId": material_id,
+            "substituteMaterialId": substitute_material_id,
+            "substituteName": substitute_name,
+            "substituteUnit": substitute_unit,
+            "originalQuantityPerUnitMilli": original_quantity_per_unit_milli,
+            "substituteQuantityPerUnitMilli": substitute_quantity_per_unit_milli,
+            "approvalSourceDigest": approval_source_digest,
+            "technicalBasis": technical_basis,
+            "proof": _proof(proof, "proof"),
+        },
+        expected_head_digest=expected_head_digest,
+    )
+
+
 def record_plant_order_calibration(
     state: object,
     *,
@@ -1888,11 +2033,13 @@ __all__ = (
     "EMPTY_PLANT_ORDER_DIGEST",
     "PLANT_ORDER_CONTROLLED_PLAN_CONTRACT",
     "PLANT_ORDER_EXECUTION_PLAN_CONTRACT",
+    "PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT",
     "PLANT_ORDER_PLAN_CONTRACT",
     "PLANT_ORDER_PROJECTION_CONTRACT",
     "PLANT_ORDER_STATE_SCHEMA",
     "PlantOrderValidationError",
     "apply_plant_order_plan",
+    "approve_plant_order_material_substitution",
     "build_plant_order_execution_plan",
     "build_plant_order_controlled_plan",
     "build_plant_order_plan",
