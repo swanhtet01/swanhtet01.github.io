@@ -193,7 +193,7 @@ requireContract('one bounded agent operating model is authoritative',
     && product.localAutomation.workOrder?.trim()
     && product.localAutomation.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 5
+  && portfolio.completedLocalAutomations.length === 6
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
@@ -215,6 +215,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[4]?.productId === 'ecommerce'
   && portfolio.completedLocalAutomations[4]?.workOrderId === 'ecommerce-payment-method-policy-review'
   && portfolio.completedLocalAutomations[4]?.checkpoint === 'ENG-137'
+  && portfolio.completedLocalAutomations[5]?.productId === 'ecommerce'
+  && portfolio.completedLocalAutomations[5]?.workOrderId === 'ecommerce-tax-policy-review'
+  && portfolio.completedLocalAutomations[5]?.checkpoint === 'ENG-138'
+  && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-order-acknowledgement'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').map((product) => product.id).join(',') === 'ecommerce'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
@@ -528,7 +532,7 @@ requireContract('agent roster consolidation is recorded',
   && workboard.includes('| OPS-043 | CEO + Agent Operations / Delivery Security Codex | done-local |')
   && workboard.includes('Checkpoints `cafdafe` and `f626ee7` add `supermega.ceo-outcome-delivery.v1`')
   && workboard.includes('Current accepted agent-operations checkpoint: `a2e1b89`')
-  && now.includes('Current local checkpoints: Ecommerce tax authority `b70d3412`, governed v7 Shop handoff `1975c550`, and tax-inclusive payment limits `0eb180f9`')
+  && now.includes('Current local checkpoints: Ecommerce tax authority `b70d3412`, governed v7 Shop handoff `1975c550`, tax-inclusive limits `0eb180f9`, and order proof `9ff26ba3`')
   && now.includes('Ally stays zero-subagent: its audit requires exactly one `[features] multi_agent = false` declaration')
   && now.includes('no duplicate dev server or loaded local model')
   && now.includes('Idle Ollama hosts were stopped')
@@ -673,7 +677,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && workboard.includes('Checkpoints `0831ad7` and `920c13d` add an immutable reviewed BOM/routing package')
   && workboard.includes('Checkpoints `0f3dc09` and `03e1f1b` add tenant-bound')
   && workboard.includes('Retain the completed Shop, Plant, Website, and Ecommerce checkpoints')
-  && now.includes('Current local checkpoints: Ecommerce tax authority `b70d3412`, governed v7 Shop handoff `1975c550`, and tax-inclusive payment limits `0eb180f9`')
+  && now.includes('Current local checkpoints: Ecommerce tax authority `b70d3412`, governed v7 Shop handoff `1975c550`, tax-inclusive limits `0eb180f9`, and order proof `9ff26ba3`')
   && now.includes('First-action QA routes Shop, Plant, and Website blockers to the next task')
   && now.includes('The active delivery focus is:')
   && now.includes('Production `4c300c00` and the local candidate diverge from common base `5d1c5d7c`')

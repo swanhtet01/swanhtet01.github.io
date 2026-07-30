@@ -28,6 +28,11 @@
       "productId": "ecommerce",
       "workOrderId": "ecommerce-payment-method-policy-review",
       "checkpoint": "ENG-137"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-tax-policy-review",
+      "checkpoint": "ENG-138"
     }
   ],
   "agentOperatingModel": {
@@ -187,13 +192,13 @@
       "localAutomation": {
         "contract": "supermega.product-work-authority.v2",
         "productId": "ecommerce",
-        "workOrderId": "ecommerce-tax-policy-review",
+        "workOrderId": "ecommerce-order-acknowledgement",
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Ecommerce: resolve the existing Shop-owned versioned tax schedule at confirmed handoff, retain the exact inclusive or exclusive calculation in the draft and order, and reject stale or forged tax decisions without filing or posting externally.",
-        "reason": "ENG-137 completed deterministic payment-method eligibility, fulfilment fit, order limits, instructions, and real-order revalidation. The remaining zero-value checkout placeholder is tax, even though Shop already owns a versioned tax schedule and deterministic order calculation."
+        "workOrder": "Ecommerce: derive one customer-safe order acknowledgement from the confirmed Shop order with exact lines, promotion, delivery, tax, payment status, promise, cancellation state, and immutable order evidence; download locally without sending a message, issuing a tax invoice, filing tax, or calling a payment provider.",
+        "reason": "ENG-138 completed the governed tax decision from Shop schedule through Ecommerce draft and immutable Shop order. The next practical customer outcome is a truthful portable order acknowledgement that remains subordinate to Shop and cannot be mistaken for provider settlement or statutory invoicing."
       },
-      "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
+      "nextGate": "Prove the completed cart-to-Shop handoff and customer-safe acknowledgement on a protected preview and isolated managed tenant, then add tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }
   ],
   "sharedCapabilities": [

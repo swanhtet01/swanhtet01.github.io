@@ -41,7 +41,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Shop keeps a balanced accounting-review CSV grouped by payment method and a human-approved versioned tax code, rate, and inclusive/exclusive treatment. Receiving separates accepted stock from rejected supplier units and measures defects; no posting occurs (`d47f5d9`, `39b7fc2`, `a37c933c`, `552ed20a`).
 - Ecommerce return intent opens the exact completed Shop order; Shop alone records return and refund evidence.
 - Ecommerce carries versioned contact/address snapshots through recovery and Shop handoff; hosted identity and provider execution remain absent.
-- Shop owns versioned delivery zones, fee, promise, tax schedule, and payment-method eligibility/limits. Ecommerce draft v7 remains unauthorized; it retains the exact tax revision, policy action, inclusive/exclusive whole-MMK calculation, and final payable total. Shop rechecks current authority and tax-inclusive payment limits before reserving stock (`ENG-136`, `ENG-137`, `b70d3412`, `1975c550`, `0eb180f9`).
+- Shop owns versioned delivery zones, fee, promise, tax schedule, and payment-method eligibility/limits. Ecommerce draft v7 and the Shop order retain the exact tax decision; Shop rechecks authority and tax-inclusive payment limits before reserving stock (`ENG-136`, `ENG-137`, `ENG-138`, `9ff26ba3`).
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Shop remains stock authority for exact returns and substitution. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
 - Plant maintenance binds strategy, due work, structured results, evidence-linked finding problems, and corrective-action closeout with final human disposition. It performs no automatic problem opening, dispatch, control, telemetry, status, or parts action.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
@@ -51,13 +51,13 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 ## Verified baseline
 
-- Current local checkpoints: Ecommerce tax authority `b70d3412`, governed v7 Shop handoff `1975c550`, and tax-inclusive payment limits `0eb180f9`; all gates pass.
+- Current local checkpoints: Ecommerce tax authority `b70d3412`, governed v7 Shop handoff `1975c550`, tax-inclusive limits `0eb180f9`, and order proof `9ff26ba3`; all gates pass.
 - Product checks pass: 70 Ecommerce, 305 Commerce, 274 Production, 77 security, 216 onboarding, and 82 managed import.
 - First-action QA routes Shop, Plant, and Website blockers to the next task.
 - Client preparation passes 186 onboarding, 74 security, six preparation, recovery, release, privacy, database, Vercel, HQ, approval, and tamper-before-write checks.
 - Both domains serve deployed `4c300c001a9e2575cabff620ccffa0d737f4cfe3`; paired brand, context, and catalog identities match. The coordinated release and public live-health workflows passed. The local live-product verifier still reports context drift, so this is not a release-ready candidate.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-- Ally remains serial at 4,096/768/0s. `supermega.ally-working-set-trim.v1` released 2,949.3 MB without Codex process stops. Audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Stable IDs block ENG-130/134/135/136/137; Ecommerce tax review is complete locally. Four CEO outcomes are accepted; Finance/Risk remains quarantined.
+- Ally remains serial at 4,096/768/0s. `supermega.ally-working-set-trim.v1` released 2,949.3 MB without Codex process stops. Audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Stable IDs block ENG-130/134/135/136/137/138; Ecommerce tax review is complete locally. Four CEO outcomes are accepted; Finance/Risk remains quarantined.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
 ## Owner-gated actions
