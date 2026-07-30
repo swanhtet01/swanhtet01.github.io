@@ -1395,6 +1395,7 @@ textarea { min-height: 72px; resize: vertical; }
 .counter-confirm-proof span { min-width: 0; display: grid; gap: 4px; border: 1px solid var(--core-line); border-radius: 10px; padding: 10px; background: var(--core-surface-soft); }
 .counter-confirm-proof small { color: var(--core-green); font-family: var(--core-mono); font-size: 8px; text-transform: uppercase; }
 .counter-confirm-proof strong { overflow: hidden; color: var(--core-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.counter-local-boundary { margin: 0; border-left: 3px solid var(--core-green); padding: 9px 10px; color: var(--core-ink); background: var(--core-green-soft); }
 
 :focus-visible { outline: 3px solid rgba(11,116,94,.32); outline-offset: 2px; }
 
