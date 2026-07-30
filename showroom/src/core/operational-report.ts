@@ -63,6 +63,7 @@ export type OperationalMasterDataDimension = {
 
 export type OperationalMasterData = {
   registryContract: typeof SHARED_MASTER_DATA_CONTRACT
+  duplicateCandidates: number
   dimensions: OperationalMasterDataDimension[]
   totalRecords: number
   attentionDimensions: number
@@ -256,6 +257,7 @@ function buildOperationalMasterData(registry: SharedMasterDataRegistry, sources:
   })
   return {
     registryContract: SHARED_MASTER_DATA_CONTRACT,
+    duplicateCandidates: registry.duplicateReview.candidates.length,
     dimensions,
     totalRecords: dimensions.reduce((total, dimension) => total + dimension.recordCount, 0),
     attentionDimensions: dimensions.filter((dimension) => dimension.status !== 'ready').length,
@@ -415,9 +417,9 @@ function exactKeys(value: unknown, keys: readonly string[]) {
 }
 
 function validateExportMasterData(value: unknown, allowedProducts: readonly OperationalProduct[], sources: readonly OperationalSource[]) {
-  if (!exactKeys(value, ['registryContract', 'dimensions', 'totalRecords', 'attentionDimensions', 'controls'])) throw new Error('Operational report export master data is invalid.')
+  if (!exactKeys(value, ['registryContract', 'duplicateCandidates', 'dimensions', 'totalRecords', 'attentionDimensions', 'controls'])) throw new Error('Operational report export master data is invalid.')
   const masterData = value as OperationalMasterData
-  if (masterData.registryContract !== SHARED_MASTER_DATA_CONTRACT || !Array.isArray(masterData.dimensions)
+  if (masterData.registryContract !== SHARED_MASTER_DATA_CONTRACT || !Number.isSafeInteger(masterData.duplicateCandidates) || masterData.duplicateCandidates < 0 || !Array.isArray(masterData.dimensions)
     || !exactKeys(masterData.controls, ['countsOnly', 'customerValuesExcluded', 'permissionFiltered'])
     || masterData.controls.countsOnly !== true || masterData.controls.customerValuesExcluded !== true || masterData.controls.permissionFiltered !== true) {
     throw new Error('Operational report export master data is invalid.')

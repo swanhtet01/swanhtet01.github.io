@@ -787,7 +787,8 @@ if (!productHomeTodaySource.includes('buildOperationalReport')
   || !productHomeTodaySource.includes('permissions always come from the managed bootstrap')
   || !productHomeTodaySource.includes('No customer values or external writes were included.')
   || !productHomeTodaySource.includes('Authorized master data coverage')
-  || !productHomeTodaySource.includes('Customer and record values are excluded.')
+  || !productHomeTodaySource.includes('Customer and record values are excluded')
+  || !productHomeTodaySource.includes('no merge is automatic')
   || !productHomeTodaySource.includes('This queue and report are read-only')
   || !productHomeTodaySource.includes("window.addEventListener('storage', refresh)")
   || !productHomeTodaySource.includes('window.localStorage.setItem(OPERATIONAL_REPORT_VIEW_KEY, JSON.stringify(view))')
@@ -803,6 +804,8 @@ if (!productHomeTodaySource.includes('buildOperationalReport')
   || !sharedMasterDataSource.includes('export function buildSharedMasterDataRegistry')
   || !sharedMasterDataSource.includes('export function validateSharedMasterDataRegistry')
   || !sharedMasterDataSource.includes('recordValuesExcluded: true')
+  || !sharedMasterDataSource.includes('automaticMergeAllowed: false')
+  || !sharedMasterDataSource.includes("reason: 'normalized_identity_collision'")
   || !operationalReportSource.includes('permissionFiltered: true')
   || !operationalReportSource.includes('containsCustomerValues: false')
   || !operationalReportSource.includes('safeToShareExternally: false')
@@ -14315,12 +14318,13 @@ async function verifyOperationalReportRuntime() {
   }
   try {
     const nonce = Date.now()
-    const [model, commerce, production, website, masterData] = await Promise.all([
+    const [model, commerce, production, website, masterData, inventory] = await Promise.all([
       import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'operational-report.ts')).href}?operational-report=${nonce}`),
       import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?operational-report-commerce=${nonce}`),
       import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts')).href}?operational-report-production=${nonce}`),
       import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?operational-report-website=${nonce}`),
       import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shared-master-data.ts')).href}?operational-report-master-data=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-inventory-foundation.ts')).href}?operational-report-inventory=${nonce}`),
     ])
     const now = Date.parse('2026-07-29T12:00:00.000Z')
     const commerceState = commerce.createSeedCommerce()
@@ -14341,7 +14345,7 @@ async function verifyOperationalReportRuntime() {
     })
     assert(report.contract === model.OPERATIONAL_REPORT_CONTRACT && report.controls.permissionFiltered && report.controls.readOnly, 'operational_report_contract_invalid')
     assert(new Set(report.entries.map((entry) => entry.product)).size === 4 && report.allowedProducts.length === 4, 'operational_report_product_coverage_incomplete')
-    assert(report.masterData.registryContract === masterData.SHARED_MASTER_DATA_CONTRACT && report.masterData.dimensions.length === 12 && report.masterData.controls.countsOnly && report.masterData.totalRecords > 0, 'operational_report_master_data_coverage_missing')
+    assert(report.masterData.registryContract === masterData.SHARED_MASTER_DATA_CONTRACT && report.masterData.dimensions.length === 12 && report.masterData.duplicateCandidates === 0 && report.masterData.controls.countsOnly && report.masterData.totalRecords > 0, 'operational_report_master_data_coverage_missing')
     const registry = masterData.buildSharedMasterDataRegistry({ allowedProducts: masterData.sharedMasterDataProducts, commerce: commerceState, production: productionState, website: websiteState })
     assert(registry.contract === masterData.SHARED_MASTER_DATA_CONTRACT && registry.records.length === registry.summary.totalRecords && registry.controls.readOnly, 'shared_master_data_registry_contract_invalid')
     assert(registry.records.every((record) => !('name' in record) && !('value' in record)) && !JSON.stringify(registry).includes('May') && !JSON.stringify(registry).includes('Ko Aung'), 'shared_master_data_registry_exposed_record_values')
@@ -14357,6 +14361,28 @@ async function verifyOperationalReportRuntime() {
     assert(authorityTamperRejected, 'shared_master_data_registry_authority_drift_accepted')
     const websiteRegistry = masterData.buildSharedMasterDataRegistry({ allowedProducts: ['website'], website: websiteState })
     assert(Object.keys(websiteRegistry.summary.byOwner).join(',') === 'website' && websiteRegistry.records.every((record) => record.ownerProduct === 'website' && record.consumers.length === 0), 'shared_master_data_registry_permission_filter_failed')
+    const duplicateCatalog = commerceState.items.map((item) => item.sku)
+    const duplicatePackage = inventory.buildShopInventoryImportPackage({
+      importId: 'IMP-DUPLICATE-REVIEW-001',
+      sourceDigest: 'sha256:2b3fdf05c4dda454998927370bf2cf20b0c17bcf1e3d3f294a550e341033ed61',
+      catalogSkus: duplicateCatalog,
+      clients: [{ id: 'CLI-DUPLICATE-001', name: 'Acme Company' }],
+      vendors: [{ id: 'VEN-DUPLICATE-001', name: 'acme company' }],
+      locations: [{ id: 'LOC-DUPLICATE-A', name: 'Main store' }, { id: 'LOC-DUPLICATE-B', name: 'Warehouse' }],
+      stockUnits: [{ id: 'LOT-DUPLICATE-001', sku: duplicateCatalog[0], tracking: 'lot', trackingCode: 'OPENING-001' }],
+      openings: [{ stockUnitId: 'LOT-DUPLICATE-001', locationId: 'LOC-DUPLICATE-A', vendorId: 'VEN-DUPLICATE-001', quantity: 1 }],
+    })
+    const duplicateInventory = inventory.applyShopInventoryImport(inventory.createEmptyShopInventoryState(), duplicatePackage, {
+      actionId: 'ACT-DUPLICATE-IMPORT-001', capturedAt: '2026-07-29T11:30:00+06:30', actor: 'Master data owner', reason: 'Review duplicate detection without merging records.', evidenceReference: 'EVIDENCE-DUPLICATE-001',
+    }, duplicateCatalog, inventory.EMPTY_SHOP_INVENTORY_DIGEST).state
+    const duplicateRegistry = masterData.buildSharedMasterDataRegistry({ allowedProducts: masterData.sharedMasterDataProducts, commerce: { ...commerceState, inventoryFoundation: duplicateInventory }, production: productionState, website: websiteState })
+    assert(duplicateRegistry.duplicateReview.candidates.length === 1 && duplicateRegistry.duplicateReview.candidates[0].kind === 'business_partner' && duplicateRegistry.duplicateReview.mergePerformed === false, 'shared_master_data_duplicate_candidate_missing')
+    assert(!JSON.stringify(duplicateRegistry).includes('Acme Company') && !JSON.stringify(duplicateRegistry).includes('acme company'), 'shared_master_data_duplicate_candidate_exposed_values')
+    const mergeTamper = structuredClone(duplicateRegistry)
+    mergeTamper.duplicateReview.mergePerformed = true
+    let mergeTamperRejected = false
+    try { masterData.validateSharedMasterDataRegistry(mergeTamper) } catch { mergeTamperRejected = true }
+    assert(mergeTamperRejected, 'shared_master_data_automatic_merge_authority_accepted')
     assert(!JSON.stringify(report).includes('May') && !JSON.stringify(report).includes('Ko Aung'), 'operational_report_exposed_customer_value')
     assert(report.entries.every((entry, index, entries) => !index || ({ critical: 4, warning: 3, action: 2, ready: 1 })[entries[index - 1].severity] >= ({ critical: 4, warning: 3, action: 2, ready: 1 })[entry.severity]), 'operational_report_priority_order_invalid')
 
