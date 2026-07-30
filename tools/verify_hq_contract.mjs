@@ -193,7 +193,7 @@ requireContract('one bounded agent operating model is authoritative',
     && product.localAutomation.workOrder?.trim()
     && product.localAutomation.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 7
+  && portfolio.completedLocalAutomations.length === 8
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
@@ -221,7 +221,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[6]?.productId === 'ecommerce'
   && portfolio.completedLocalAutomations[6]?.workOrderId === 'ecommerce-order-acknowledgement'
   && portfolio.completedLocalAutomations[6]?.checkpoint === 'ENG-139'
-  && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-cancellation-request'
+  && portfolio.completedLocalAutomations[7]?.productId === 'ecommerce'
+  && portfolio.completedLocalAutomations[7]?.workOrderId === 'ecommerce-cancellation-request'
+  && portfolio.completedLocalAutomations[7]?.checkpoint === 'ENG-140'
+  && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-order-amendment-request'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').map((product) => product.id).join(',') === 'ecommerce'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false

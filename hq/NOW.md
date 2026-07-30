@@ -43,6 +43,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Ecommerce carries versioned contact/address snapshots through recovery and Shop handoff; hosted identity and provider execution remain absent.
 - Shop owns versioned delivery zones, fee, promise, tax schedule, and payment-method eligibility/limits. Ecommerce draft v7 and the Shop order retain the exact tax decision; Shop rechecks authority and tax-inclusive payment limits before reserving stock (`ENG-136`, `ENG-137`, `ENG-138`, `9ff26ba3`).
 - Shop Orders downloads digest-bound acknowledgements from exact evidence; no invoice, receipt, message, or provider action (`ENG-139`, `263434db`).
+- Ecommerce cancellation is digest-bound to one active order. Shop revalidates stock and payment before cancel or keep; Ecommerce recovers the outcome without claiming a message or provider action (`ENG-140`).
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Shop remains stock authority for exact returns and substitution. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
 - Plant maintenance binds strategy, due work, structured results, evidence-linked finding problems, and corrective-action closeout with final human disposition. It performs no automatic problem opening, dispatch, control, telemetry, status, or parts action.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
@@ -53,12 +54,13 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 ## Verified baseline
 
 - Current local checkpoints: Ecommerce tax authority `b70d3412`, governed v7 Shop handoff `1975c550`, tax-inclusive limits `0eb180f9`, and order proof `9ff26ba3`; all gates pass.
-- Checks pass: 75 Ecommerce, 305 Commerce, 274 Production, 64 managed Commerce, 77 security, 216 onboarding, and 82 managed import.
+- Cancellation request `ae0b3e47` and decision recovery `7a083854` pass focused gates.
+- Checks pass: 81 Ecommerce, 305 Commerce, 274 Production, 64 managed Commerce, 77 security, 216 onboarding, and 82 managed import.
 - First-action QA routes Shop, Plant, and Website blockers to the next task.
 - Client preparation passes 186 onboarding, 74 security, six preparation, recovery, release, privacy, database, Vercel, HQ, approval, and tamper-before-write checks.
-- Both domains serve deployed `d268bd6366848e76e64ea2991048589f608984e3`; paired brand, context, and catalog identities match. The coordinated release and public live-health workflows passed. The local live-product verifier still reports context drift, so this is not a release-ready candidate.
-- Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-- Ally remains serial at 4,096/768/0s. `supermega.ally-working-set-trim.v1` released 2,949.3 MB without Codex process stops. Audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Stable IDs block ENG-130/134/135/136/137/138; Ecommerce tax review is complete locally. Four CEO outcomes are accepted; Finance/Risk remains quarantined.
+- Both domains serve deployed `d268bd6366848e76e64ea2991048589f608984e3`; paired brand, context, and catalog identities match, but local context drift blocks release readiness.
+- Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
+- `supermega.ally-working-set-trim.v1` released 2,949.3 MB without Codex process stops; audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Stable IDs block ENG-130/134/135/136/137/138/139/140. Four CEO outcomes are accepted; Finance/Risk remains quarantined.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
 ## Owner-gated actions
@@ -71,7 +73,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - `supermegabase` is not a trial target: it has existing records, one recorded migration, and 27 public RLS tables without policies. No isolated branch is verified, so managed writes remain off.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
 - Production `d268bd63` and the local candidate diverge from common base `5d1c5d7c`; direct release is unsafe. Integrate selectively from current `origin/main`; PR #258 is historical only.
-- Production `d268bd6366848e76e64ea2991048589f608984e3` does not match the local product-context contract. Live HQ reports `app_product_contract_drift` without release acceptance. Preview, promotion, marketing readiness, and managed activation remain blocked; any external handoff must pass `release:handoff:verify`.
+- Live HQ reports `app_product_contract_drift`; preview, marketing, and managed activation remain blocked; any external handoff must pass `release:handoff:verify`.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 
