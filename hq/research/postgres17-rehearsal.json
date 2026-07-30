@@ -2,13 +2,14 @@
   "schemaVersion": "supermega.hq.database-rehearsal.v1",
   "recordedAt": "2026-07-30",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "3225f5ba011ab03d22ad1f6e3a8e7da8f70ebdc8",
+  "implementationCommit": "27351f391df57b55ab02e1da7b5df7ec1f451321",
   "implementation": {
-    "digest": "sha256:1a3344508e45abaeef749d2246ab4a57240fd0874bb81aaee3830c8178ed27bf",
+    "digest": "sha256:e1a7be367f55b7fb3be6f8c2a6e92e560c059818e27ccfd2cf652f2ba2f509b8",
     "paths": [
       "supermega_runtime/managed_activation.py",
       "supermega_runtime/trial_store.py",
       "supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql",
+      "supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql",
       "tools/activate_supermega_database.ps1",
       "tools/rehearse_supermega_postgres17.py",
       "tools/validate_supermega_database_url.py",
@@ -34,8 +35,8 @@
     "loopbackOnly": true
   },
   "migration": {
-    "count": 7,
-    "schemaVersion": 6,
+    "count": 8,
+    "schemaVersion": 7,
     "productionValidatorReady": true
   },
   "runtime": {
@@ -73,6 +74,8 @@
     "managedSuspensionDatabaseEnforced": true,
     "managedSuspensionBlocksAdditionalMember": true,
     "managedSuspensionWriteDenied": true,
+    "managedWorkspaceDiscoveryActorScoped": true,
+    "managedWorkspaceDiscoverySuspensionFiltered": true,
     "managedProductionJobToOutput": true,
     "managedWebsiteToCommerceJourney": true,
     "migrationChainApplied": true,

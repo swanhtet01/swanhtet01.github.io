@@ -555,10 +555,10 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.engine?.loopbackOnly === true
   && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
   && databaseRehearsal.runtime?.explicitTransaction === true
-  && databaseRehearsal.migration?.count === 7
-  && databaseRehearsal.migration?.schemaVersion === 6
+  && databaseRehearsal.migration?.count === 8
+  && databaseRehearsal.migration?.schemaVersion === 7
   && databaseRehearsal.migration?.productionValidatorReady === true
-  && Object.keys(databaseRehearsal.checks || {}).length === 43
+  && Object.keys(databaseRehearsal.checks || {}).length === 45
   && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
   && databaseRehearsal.checks?.capabilityScopedReads === true
   && databaseRehearsal.checks?.capabilityScopedEventReads === true
@@ -571,6 +571,8 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.checks?.managedSuspensionDatabaseEnforced === true
   && databaseRehearsal.checks?.managedSuspensionBlocksAdditionalMember === true
   && databaseRehearsal.checks?.managedSuspensionWriteDenied === true
+  && databaseRehearsal.checks?.managedWorkspaceDiscoveryActorScoped === true
+  && databaseRehearsal.checks?.managedWorkspaceDiscoverySuspensionFiltered === true
   && databaseRehearsal.safety?.cleanupComplete === true
   && databaseRehearsal.safety?.secretValuesExposed === false
   && databaseRehearsal.safety?.productionMutated === false
