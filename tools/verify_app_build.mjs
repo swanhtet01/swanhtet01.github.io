@@ -106,6 +106,7 @@ const localClientImportSource = await readFile(resolve(root, 'showroom', 'src', 
 const plantEquipmentImportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-equipment-import.ts'), 'utf8')
 const plantEquipmentOnboardingSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantEquipmentOnboarding.tsx'), 'utf8')
 const plantEquipmentCommissioningSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantEquipmentCommissioning.tsx'), 'utf8')
+const plantEquipmentMaintenanceStrategySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantEquipmentMaintenanceStrategy.tsx'), 'utf8')
 const settingsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'SettingsPage.tsx'), 'utf8')
 const productSetupSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'product-setup.ts'), 'utf8')
 const workspaceRuntimeSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'workspace-runtime.ts'), 'utf8')
@@ -3361,6 +3362,16 @@ if (!plantEquipmentCommissioningSource.includes('Load equipment')
   || !managedTrialSource.includes('assertManagedPlantEquipmentCommissioning')
   || !managedTrialRuntimeSource.includes('@router.post("/production/equipment/commission")')
   || !managedTrialRuntimeSource.includes('confirmation != f"COMMISSION {body.equipment_id}"')) fail('plant_equipment_commissioning_contract_missing')
+if (!plantEquipmentMaintenanceStrategySource.includes('Load commissioned equipment')
+  || !plantEquipmentMaintenanceStrategySource.includes('Save strategy')
+  || !plantEquipmentMaintenanceStrategySource.includes('slice(0, 20)')
+  || !plantEquipmentMaintenanceStrategySource.includes('does not start work, create a work order, control equipment, or connect telemetry')
+  || plantEquipmentMaintenanceStrategySource.includes('useEffect')
+  || !plantEquipmentOnboardingSource.includes('<PlantEquipmentMaintenanceStrategy')
+  || !managedTrialSource.includes("'/api/trial/v1/production/equipment/maintenance-strategy'")
+  || !managedTrialSource.includes('assertManagedPlantEquipmentMaintenanceStrategy')
+  || !managedTrialRuntimeSource.includes('@router.post("/production/equipment/maintenance-strategy")')
+  || !managedTrialRuntimeSource.includes('confirmation != f"SAVE MAINTENANCE {body.equipment_id}"')) fail('plant_equipment_maintenance_strategy_contract_missing')
 const manifestPlantPackIds = manifest.customerProducts.find((product) => product.id === 'plant')?.internalTemplatePacks?.map((pack) => pack.id) ?? []
 if (manifestPlantPackIds.join(',') !== 'general-manufacturing,batch-process,food-beverage,apparel,assembly'
   || !manifestPlantPackIds.every((id) => plantIndustryPacksSource.includes(`id: '${id}'`))
@@ -7168,6 +7179,90 @@ async function verifyPlantEquipmentImportRuntime() {
       ['bulk', { ...commissioningResponse, commissioning: { ...commissioningResponse.commissioning, bulk_commissioning_performed: true } }],
       ['evidence', { ...commissioningResponse, result: { ...commissioningResponse.result, state: { ...commissionedState, events: [{ ...commissionedState.events[0], evidenceReference: 'CHECKLIST-OTHER-R1' }, ...commissionedState.events.slice(1)] } } }],
     ]) rejects(() => managedTrial.assertManagedPlantEquipmentCommissioning(response, commissioningInput, identity, commissioningCommandId, 2, importedState), `plant_equipment_commissioning_${label}_tamper_accepted`)
+
+    const strategyCommandId = '00000000-0000-4000-8000-000000000303'
+    const strategyActionId = `ACT-EQUIPMENT-MAINTENANCE-STRATEGY-${strategyCommandId}`
+    const strategyInput = {
+      equipmentId: commissionedAsset.id,
+      maintenanceOwner: 'Maintenance lead',
+      intervalDays: 30,
+      nextDueAt: '2026-08-15T09:00:00.000Z',
+      procedureReference: 'SOP-PM-MIXER-001-R3',
+      safetyBaselineReference: 'SAFETY-PM-MIX-01-R1',
+    }
+    const strategySavedAt = '2026-07-30T09:00:00.000Z'
+    const strategyEvent = {
+      id: `EVT-${strategyActionId}`,
+      actionId: strategyActionId,
+      createdAt: strategySavedAt,
+      actor: identity.userId,
+      reason: 'Saved reviewed preventive maintenance strategy',
+      evidenceReference: strategyInput.safetyBaselineReference,
+      kind: 'equipment_maintenance_strategy_saved',
+      subjectId: commissionedAsset.id,
+      summary: `Saved maintenance strategy R1 for ${commissionedAsset.id}`,
+      strategyRevision: 1,
+      maintenanceOwner: strategyInput.maintenanceOwner,
+      intervalDays: strategyInput.intervalDays,
+      nextDueAt: strategyInput.nextDueAt,
+      procedureReference: strategyInput.procedureReference,
+    }
+    const strategyState = production.validateProductionState({
+      ...commissionedState,
+      revision: 3,
+      events: [strategyEvent, ...commissionedState.events],
+      equipmentMaster: {
+        ...commissionedState.equipmentMaster,
+        assets: commissionedState.equipmentMaster.assets.map((asset) => asset.id === commissionedAsset.id ? {
+          ...asset,
+          maintenanceStrategy: {
+            revision: 1,
+            actionId: strategyActionId,
+            savedAt: strategySavedAt,
+            savedBy: identity.userId,
+            maintenanceOwner: strategyInput.maintenanceOwner,
+            intervalDays: strategyInput.intervalDays,
+            nextDueAt: strategyInput.nextDueAt,
+            procedureReference: strategyInput.procedureReference,
+            safetyBaselineReference: strategyInput.safetyBaselineReference,
+          },
+        } : asset),
+      },
+    })
+    const strategyResponse = {
+      maintenance_strategy: {
+        contract: 'supermega.production.equipment-maintenance-strategy.v1',
+        status: 'saved',
+        equipment_id: commissionedAsset.id,
+        workspace_id: identity.workspaceId,
+        maintenance_execution_started: false,
+        work_order_created: false,
+        equipment_command_performed: false,
+        telemetry_connected: false,
+        bulk_strategy_created: false,
+      },
+      result: {
+        command_id: strategyCommandId,
+        surface: 'production',
+        event_type: 'production.equipment_maintenance_strategy.saved',
+        version: 4,
+        state: strategyState,
+        idempotent_replay: false,
+      },
+    }
+    assert(managedTrial.assertManagedPlantEquipmentMaintenanceStrategy(strategyResponse, strategyInput, identity, strategyCommandId, 3, commissionedState) === strategyResponse, 'plant_equipment_valid_maintenance_strategy_rejected')
+    const replayedStrategy = { ...strategyResponse, result: { ...strategyResponse.result, idempotent_replay: true } }
+    assert(managedTrial.assertManagedPlantEquipmentMaintenanceStrategy(replayedStrategy, strategyInput, identity, strategyCommandId, 3, commissionedState) === replayedStrategy, 'plant_equipment_maintenance_strategy_replay_rejected')
+    for (const [label, response] of [
+      ['machine', { ...strategyResponse, result: { ...strategyResponse.result, state: { ...strategyState, machines: [{ ...strategyState.machines[0], state: 'running' }] } } }],
+      ['job', { ...strategyResponse, result: { ...strategyResponse.result, state: { ...strategyState, jobs: [{ ...strategyState.jobs[0], target: 101 }] } } }],
+      ['execution', { ...strategyResponse, maintenance_strategy: { ...strategyResponse.maintenance_strategy, maintenance_execution_started: true } }],
+      ['work_order', { ...strategyResponse, maintenance_strategy: { ...strategyResponse.maintenance_strategy, work_order_created: true } }],
+      ['command', { ...strategyResponse, maintenance_strategy: { ...strategyResponse.maintenance_strategy, equipment_command_performed: true } }],
+      ['telemetry', { ...strategyResponse, maintenance_strategy: { ...strategyResponse.maintenance_strategy, telemetry_connected: true } }],
+      ['bulk', { ...strategyResponse, maintenance_strategy: { ...strategyResponse.maintenance_strategy, bulk_strategy_created: true } }],
+      ['evidence', { ...strategyResponse, result: { ...strategyResponse.result, state: { ...strategyState, events: [{ ...strategyState.events[0], evidenceReference: 'SAFETY-OTHER-R1' }, ...strategyState.events.slice(1)] } } }],
+    ]) rejects(() => managedTrial.assertManagedPlantEquipmentMaintenanceStrategy(response, strategyInput, identity, strategyCommandId, 3, commissionedState), `plant_equipment_maintenance_strategy_${label}_tamper_accepted`)
   } catch (error) {
     fail(`plant_equipment_import_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }

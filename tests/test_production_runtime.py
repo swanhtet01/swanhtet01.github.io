@@ -650,6 +650,7 @@ class ProductionRuntimeTests(unittest.TestCase):
             "production.machine_state.changed",
             "production.equipment_master.imported",
             "production.equipment.commissioned",
+            "production.equipment_maintenance_strategy.saved",
             "production.order_execution.recorded",
             "production.downtime.started",
             "production.downtime.ended",

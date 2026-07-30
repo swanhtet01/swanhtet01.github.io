@@ -74,6 +74,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "production.machine_state.changed",
         "production.equipment_master.imported",
         "production.equipment.commissioned",
+        "production.equipment_maintenance_strategy.saved",
         "production.order_execution.recorded",
         "production.downtime.started",
         "production.downtime.ended",
@@ -640,6 +641,7 @@ def _authoritative_command_payload(
     if surface == "production" and event_type in {
         "production.equipment_master.imported",
         "production.equipment.commissioned",
+        "production.equipment_maintenance_strategy.saved",
     }:
         evidence = authoritative.get("evidence")
         if not isinstance(evidence, Mapping):

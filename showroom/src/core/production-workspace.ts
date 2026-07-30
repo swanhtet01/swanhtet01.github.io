@@ -94,6 +94,18 @@ export type ProductionEquipmentCommissioning = {
   safetyBaselineReference: string
 }
 
+export type ProductionEquipmentMaintenanceStrategy = {
+  revision: number
+  actionId: string
+  savedAt: string
+  savedBy: string
+  maintenanceOwner: string
+  intervalDays: number
+  nextDueAt: string
+  procedureReference: string
+  safetyBaselineReference: string
+}
+
 export type ProductionEquipmentAsset = {
   id: string
   name: string
@@ -102,6 +114,7 @@ export type ProductionEquipmentAsset = {
   owner: string
   commissioningStatus: 'not_commissioned' | 'commissioned'
   commissioning?: ProductionEquipmentCommissioning
+  maintenanceStrategy?: ProductionEquipmentMaintenanceStrategy
   sourceActionId: string
   sourcePackageDigest: string
   importedAt: string
@@ -121,7 +134,7 @@ export type ProductionOpeningPlan = {
   machineIds: string[]
 }
 
-export type ProductionEventKind = 'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed' | 'equipment_master_imported' | 'equipment_commissioned' | 'downtime_started' | 'downtime_ended' | 'maintenance_started' | 'maintenance_completed'
+export type ProductionEventKind = 'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed' | 'equipment_master_imported' | 'equipment_commissioned' | 'equipment_maintenance_strategy_saved' | 'downtime_started' | 'downtime_ended' | 'maintenance_started' | 'maintenance_completed'
 export type ProductionOutputKind = 'good' | 'scrap'
 
 export type ProductionEvent = {
@@ -159,6 +172,10 @@ export type ProductionEvent = {
   equipmentIds?: string[]
   installedAt?: string
   workCentreId?: string
+  strategyRevision?: number
+  intervalDays?: number
+  nextDueAt?: string
+  procedureReference?: string
 }
 
 export type ProductionState = {
@@ -347,7 +364,7 @@ export const productionIssueSeverities: ProductionIssueSeverity[] = ['critical',
 export const productionJobPriorities: ProductionJobPriority[] = ['urgent', 'normal', 'low']
 export const productionMachineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
 export const productionMaterialUnits: ProductionMaterialUnit[] = ['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm']
-const eventKinds: ProductionEventKind[] = ['job_created', 'job_schedule_updated', 'job_closed', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'equipment_master_imported', 'equipment_commissioned', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed']
+const eventKinds: ProductionEventKind[] = ['job_created', 'job_schedule_updated', 'job_closed', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'equipment_master_imported', 'equipment_commissioned', 'equipment_maintenance_strategy_saved', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed']
 const baseEventFields = ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'subjectId', 'summary']
 const jobCreatedEventFields = [...baseEventFields, 'jobPriority', 'jobDueAt', 'jobOwner']
 const jobScheduleUpdateEventFields = [...jobCreatedEventFields, 'fromJobPriority', 'fromJobDueAt', 'fromJobOwner']
@@ -360,6 +377,7 @@ const maintenanceStartEventFields = [...baseEventFields, 'maintenanceOwner']
 const maintenanceCompleteEventFields = [...baseEventFields, 'maintenanceStartActionId']
 const equipmentImportEventFields = [...baseEventFields, 'equipmentIds']
 const equipmentCommissionEventFields = [...baseEventFields, 'installedAt', 'toState', 'workCentreId']
+const equipmentMaintenanceStrategyEventFields = [...baseEventFields, 'strategyRevision', 'maintenanceOwner', 'intervalDays', 'nextDueAt', 'procedureReference']
 const productionStateFields = ['schema', 'revision', 'jobs', 'issues', 'machines', 'events', 'openingPlan', 'orderExecution', 'equipmentMaster']
 const productionOpeningPlanFields = ['contract', 'packageDigest', 'confirmedAt', 'industryPackId', 'jobIds', 'machineIds']
 const productionJobFields = ['id', 'line', 'product', 'target', 'output', 'owner', 'priority', 'dueAt', 'scrap', 'qualityHold', 'closure', 'shopDemandSource']
@@ -371,6 +389,7 @@ const productionMachineFields = ['id', 'name', 'state']
 const productionEquipmentMasterFields = ['contract', 'assets']
 const productionEquipmentAssetFields = ['id', 'name', 'workCentreId', 'criticality', 'owner', 'commissioningStatus', 'sourceActionId', 'sourcePackageDigest', 'importedAt']
 const productionEquipmentCommissioningFields = ['actionId', 'commissionedAt', 'commissionedBy', 'installedAt', 'initialState', 'safetyBaselineReference']
+const productionEquipmentMaintenanceStrategyFields = ['revision', 'actionId', 'savedAt', 'savedBy', 'maintenanceOwner', 'intervalDays', 'nextDueAt', 'procedureReference', 'safetyBaselineReference']
 const productionEquipmentCriticalities: ProductionEquipmentCriticality[] = ['critical', 'high', 'medium', 'low']
 const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
   job_created: jobCreatedEventFields,
@@ -385,6 +404,7 @@ const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
   machine_state_changed: [...baseEventFields, 'fromState', 'toState'],
   equipment_master_imported: equipmentImportEventFields,
   equipment_commissioned: equipmentCommissionEventFields,
+  equipment_maintenance_strategy_saved: equipmentMaintenanceStrategyEventFields,
   downtime_started: baseEventFields,
   downtime_ended: downtimeEndEventFields,
   maintenance_started: maintenanceStartEventFields,
@@ -784,7 +804,7 @@ export function validateProductionState(value: unknown): ProductionState {
       if (!isRecord(candidate)) throw new Error(`equipmentMaster.assets[${index}] is invalid.`)
       const commissioningStatus = candidate.commissioningStatus
       const expectedAssetFields = commissioningStatus === 'commissioned'
-        ? [...productionEquipmentAssetFields, 'commissioning']
+        ? [...productionEquipmentAssetFields, 'commissioning', ...(candidate.maintenanceStrategy === undefined ? [] : ['maintenanceStrategy'])]
         : productionEquipmentAssetFields
       if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...expectedAssetFields].sort())) throw new Error(`equipmentMaster.assets[${index}] fields are invalid.`)
       const equipmentId = canonicalText(candidate.id, `equipmentMaster.assets[${index}].id`, 80)
@@ -807,6 +827,24 @@ export function validateProductionState(value: unknown): ProductionState {
         if (!validDowntimeTimestamp(commissioning.commissionedAt) || !validDowntimeTimestamp(commissioning.installedAt)) throw new Error(`equipmentMaster.assets[${index}].commissioning timestamps are invalid.`)
         if (timestampBefore(commissioning.commissionedAt as string, candidate.importedAt as string) || timestampBefore(commissioning.commissionedAt as string, commissioning.installedAt as string)) throw new Error(`equipmentMaster.assets[${index}].commissioning chronology is invalid.`)
         if (!productionMachineStates.includes(commissioning.initialState as ProductionMachineState)) throw new Error(`equipmentMaster.assets[${index}].commissioning.initialState is invalid.`)
+        if (candidate.maintenanceStrategy !== undefined) {
+          if (!isRecord(candidate.maintenanceStrategy)) throw new Error(`equipmentMaster.assets[${index}].maintenanceStrategy is invalid.`)
+          const strategy = candidate.maintenanceStrategy
+          if (JSON.stringify(Object.keys(strategy).sort()) !== JSON.stringify([...productionEquipmentMaintenanceStrategyFields].sort())) throw new Error(`equipmentMaster.assets[${index}].maintenanceStrategy fields are invalid.`)
+          assertSafeInteger(strategy.revision, `equipmentMaster.assets[${index}].maintenanceStrategy.revision`, 1)
+          canonicalText(strategy.actionId, `equipmentMaster.assets[${index}].maintenanceStrategy.actionId`, 160)
+          canonicalText(strategy.savedBy, `equipmentMaster.assets[${index}].maintenanceStrategy.savedBy`, 120)
+          canonicalText(strategy.maintenanceOwner, `equipmentMaster.assets[${index}].maintenanceStrategy.maintenanceOwner`, 120)
+          canonicalText(strategy.procedureReference, `equipmentMaster.assets[${index}].maintenanceStrategy.procedureReference`, 240)
+          canonicalText(strategy.safetyBaselineReference, `equipmentMaster.assets[${index}].maintenanceStrategy.safetyBaselineReference`, 240)
+          assertSafeInteger(strategy.intervalDays, `equipmentMaster.assets[${index}].maintenanceStrategy.intervalDays`, 1)
+          if (Number(strategy.intervalDays) > 3650) throw new Error(`equipmentMaster.assets[${index}].maintenanceStrategy.intervalDays is too large.`)
+          if (!validDowntimeTimestamp(strategy.savedAt) || !validDowntimeTimestamp(strategy.nextDueAt)) throw new Error(`equipmentMaster.assets[${index}].maintenanceStrategy timestamps are invalid.`)
+          if (timestampAtOrBefore(strategy.nextDueAt as string, strategy.savedAt as string)
+            || Date.parse(strategy.nextDueAt as string) > Date.parse(strategy.savedAt as string) + Number(strategy.intervalDays) * 86_400_000) throw new Error(`equipmentMaster.assets[${index}].maintenanceStrategy.nextDueAt is outside its interval.`)
+        }
+      } else if (candidate.maintenanceStrategy !== undefined) {
+        throw new Error(`equipmentMaster.assets[${index}] cannot retain a maintenance strategy before commissioning.`)
       }
       equipmentIds.push(equipmentId)
       return candidate
@@ -882,6 +920,17 @@ export function validateProductionState(value: unknown): ProductionState {
       if (!productionMachineStates.includes(candidate.toState as ProductionMachineState)) throw new Error(`events[${index}].toState is invalid.`)
       const workCentreId = canonicalText(candidate.workCentreId, `events[${index}].workCentreId`, 80)
       if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(workCentreId)) throw new Error(`events[${index}].workCentreId is invalid.`)
+    } else if (candidate.kind === 'equipment_maintenance_strategy_saved') {
+      if (!equipmentIds.includes(candidate.subjectId as string) || !machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] must reference one commissioned equipment runtime.`)
+      assertSafeInteger(candidate.strategyRevision, `events[${index}].strategyRevision`, 1)
+      assertSafeInteger(candidate.intervalDays, `events[${index}].intervalDays`, 1)
+      if (Number(candidate.intervalDays) > 3650) throw new Error(`events[${index}].intervalDays is too large.`)
+      canonicalText(candidate.maintenanceOwner, `events[${index}].maintenanceOwner`, 120)
+      canonicalText(candidate.procedureReference, `events[${index}].procedureReference`, 240)
+      if (!validDowntimeTimestamp(candidate.createdAt) || !validDowntimeTimestamp(candidate.nextDueAt)) throw new Error(`events[${index}] maintenance strategy timestamps are invalid.`)
+      if (timestampAtOrBefore(candidate.nextDueAt as string, candidate.createdAt as string)
+        || Date.parse(candidate.nextDueAt as string) > Date.parse(candidate.createdAt as string) + Number(candidate.intervalDays) * 86_400_000) throw new Error(`events[${index}].nextDueAt is outside its interval.`)
+      if (candidate.summary !== `Saved maintenance strategy R${candidate.strategyRevision} for ${candidate.subjectId}`) throw new Error(`events[${index}] maintenance strategy summary is not canonical.`)
     } else if (candidate.kind === 'job_created' || candidate.kind === 'job_schedule_updated') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
       const scheduleSnapshotFields = ['jobPriority', 'jobDueAt'] as const
@@ -1026,7 +1075,7 @@ export function validateProductionState(value: unknown): ProductionState {
       || event.summary !== `Commissioned ${String(asset.name)} at ${String(asset.workCentreId)}`) throw new Error('Equipment commissioning record does not match its immutable event.')
     const laterLifecycle = events.filter((candidate): candidate is Record<string, unknown> => isRecord(candidate)
       && candidate.subjectId === equipmentId
-      && ['machine_state_changed', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed'].includes(String(candidate.kind)))
+      && ['machine_state_changed', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed', 'equipment_maintenance_strategy_saved'].includes(String(candidate.kind)))
     if (laterLifecycle.some((candidate) => timestampBefore(candidate.createdAt as string, event.createdAt as string))) throw new Error('Equipment lifecycle history cannot predate commissioning.')
     commissionedIds.add(equipmentId)
   }
@@ -1035,6 +1084,34 @@ export function validateProductionState(value: unknown): ProductionState {
     const postOpeningIds = machineIds.slice(openingMachineIds.length)
     if (postOpeningIds.length !== commissionedIds.size || postOpeningIds.some((id) => !commissionedIds.has(id))) throw new Error('Every runtime machine added after opening requires equipment commissioning.')
   }
+  const equipmentMaintenanceStrategyEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'equipment_maintenance_strategy_saved')
+  let retainedEquipmentMaintenanceStrategyEvents = 0
+  for (const asset of equipmentAssets) {
+    const equipmentId = String(asset.id)
+    const matches = equipmentMaintenanceStrategyEvents.filter((event) => event.subjectId === equipmentId)
+    if (asset.maintenanceStrategy === undefined) {
+      if (matches.length) throw new Error('Equipment without a maintenance strategy cannot retain strategy history.')
+      continue
+    }
+    if (asset.commissioningStatus !== 'commissioned' || !isRecord(asset.commissioning) || !isRecord(asset.maintenanceStrategy)) throw new Error('Only commissioned equipment can retain a maintenance strategy.')
+    const commissioning = asset.commissioning
+    const strategy = asset.maintenanceStrategy
+    const expectedRevisions = Array.from({ length: Number(strategy.revision) }, (_, index) => Number(strategy.revision) - index)
+    if (JSON.stringify(matches.map((event) => event.strategyRevision)) !== JSON.stringify(expectedRevisions)) throw new Error('Equipment maintenance strategy revisions must be complete and newest first.')
+    if (matches.some((event) => timestampBefore(event.createdAt as string, commissioning.commissionedAt as string))) throw new Error('Equipment maintenance strategy history cannot predate commissioning.')
+    const latest = matches[0]
+    if (!latest
+      || strategy.actionId !== latest.actionId
+      || strategy.savedAt !== latest.createdAt
+      || strategy.savedBy !== latest.actor
+      || strategy.maintenanceOwner !== latest.maintenanceOwner
+      || strategy.intervalDays !== latest.intervalDays
+      || strategy.nextDueAt !== latest.nextDueAt
+      || strategy.procedureReference !== latest.procedureReference
+      || strategy.safetyBaselineReference !== latest.evidenceReference) throw new Error('Equipment maintenance strategy does not match its latest immutable event.')
+    retainedEquipmentMaintenanceStrategyEvents += matches.length
+  }
+  if (retainedEquipmentMaintenanceStrategyEvents !== equipmentMaintenanceStrategyEvents.length) throw new Error('Equipment maintenance strategy history contains an unknown event.')
   if (openingJobIds) {
     const openingJobIdSet = new Set(openingJobIds)
     const creationEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'job_created')

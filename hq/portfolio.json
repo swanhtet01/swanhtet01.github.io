@@ -151,8 +151,8 @@
       "localAutomation": {
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Add one versioned, human-reviewed preventive-maintenance strategy for exactly one commissioned Plant asset inside the existing equipment setup and Problems flow, with accountable owner, interval and next-due basis, procedure reference, safety evidence, and immutable history; never auto-start maintenance, issue an equipment command, connect telemetry, or create a bulk plan.",
-        "reason": "Plant now converts exactly one reviewed equipment-master record into one evidence-bound runtime machine with an explicit initial operator observation. The next lifecycle gap is durable maintenance master data that can guide accountable work without pretending that a schedule, sensor, or maintenance execution already exists."
+        "workOrder": "Bind the existing human-confirmed maintenance start and completion flow for exactly one commissioned Plant asset to its latest approved preventive-maintenance strategy revision and procedure, retaining accountable execution and completion evidence and advancing next due only after reviewed completion; never auto-start, auto-dispatch, control equipment, or infer telemetry.",
+        "reason": "Plant now retains versioned preventive-maintenance master data for each commissioned asset without pretending that work has begun. The next lifecycle gap is an exact, auditable bridge from the latest approved strategy into the existing maintenance execution record and back to a reviewed next-due basis."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }

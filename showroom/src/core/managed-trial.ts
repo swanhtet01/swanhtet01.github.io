@@ -120,6 +120,7 @@ export type ManagedProductionEvent =
   | 'production.machine_state.changed'
   | 'production.equipment_master.imported'
   | 'production.equipment.commissioned'
+  | 'production.equipment_maintenance_strategy.saved'
   | 'production.order_execution.recorded'
   | 'production.downtime.started'
   | 'production.downtime.ended'
@@ -1172,6 +1173,106 @@ export function assertManagedPlantEquipmentCommissioning(
   return response as unknown as ManagedPlantEquipmentCommissioningResult
 }
 
+export function assertManagedPlantEquipmentMaintenanceStrategy(
+  response: unknown,
+  input: ManagedPlantEquipmentMaintenanceStrategyInput,
+  expectedIdentity: ManagedIdentity,
+  commandId: string,
+  expectedVersion: number,
+  priorState: ProductionState,
+): ManagedPlantEquipmentMaintenanceStrategyResult {
+  if (!CLIENT_IMPORT_COMMAND_ID.test(commandId)
+    || !Number.isSafeInteger(expectedVersion)
+    || expectedVersion < 1
+    || !isRecord(response)
+    || !isRecord(response.maintenance_strategy)
+    || !isRecord(response.result)) {
+    throw new ManagedTrialError('The managed maintenance strategy response is invalid.', {
+      code: 'managed_plant_equipment_maintenance_strategy_invalid',
+    })
+  }
+  const receipt = response.maintenance_strategy
+  const result = response.result
+  if (!hasExactKeys(receipt, ['bulk_strategy_created', 'contract', 'equipment_command_performed', 'equipment_id', 'maintenance_execution_started', 'status', 'telemetry_connected', 'work_order_created', 'workspace_id'])
+    || receipt.contract !== 'supermega.production.equipment-maintenance-strategy.v1'
+    || receipt.status !== 'saved'
+    || receipt.equipment_id !== input.equipmentId
+    || receipt.workspace_id !== expectedIdentity.workspaceId
+    || receipt.maintenance_execution_started !== false
+    || receipt.work_order_created !== false
+    || receipt.equipment_command_performed !== false
+    || receipt.telemetry_connected !== false
+    || receipt.bulk_strategy_created !== false
+    || !hasExactKeys(result, ['command_id', 'event_type', 'idempotent_replay', 'state', 'surface', 'version'])
+    || result.command_id !== commandId
+    || result.surface !== 'production'
+    || result.event_type !== 'production.equipment_maintenance_strategy.saved'
+    || result.version !== expectedVersion + 1
+    || typeof result.idempotent_replay !== 'boolean') {
+    throw new ManagedTrialError('The managed maintenance strategy receipt does not match the reviewed asset.', {
+      code: 'managed_plant_equipment_maintenance_strategy_invalid',
+    })
+  }
+  let accepted: ProductionState
+  let previous: ProductionState
+  try {
+    accepted = validateProductionState(result.state)
+    previous = validateProductionState(priorState)
+  } catch {
+    throw new ManagedTrialError('The managed workspace returned an invalid maintenance strategy state.', {
+      code: 'managed_plant_equipment_maintenance_strategy_invalid',
+    })
+  }
+  const priorAsset = previous.equipmentMaster?.assets.find((asset) => asset.id === input.equipmentId)
+  const acceptedAsset = accepted.equipmentMaster?.assets.find((asset) => asset.id === input.equipmentId)
+  const strategy = acceptedAsset?.maintenanceStrategy
+  const event = accepted.events[0]
+  const actionId = `ACT-EQUIPMENT-MAINTENANCE-STRATEGY-${commandId}`
+  const expectedStrategyRevision = (priorAsset?.maintenanceStrategy?.revision ?? 0) + 1
+  const unchangedFields = ['schema', 'jobs', 'issues', 'machines', 'openingPlan', 'orderExecution'] as const
+  const acceptedRecord = accepted as unknown as Record<string, unknown>
+  const previousRecord = previous as unknown as Record<string, unknown>
+  const unchangedAssets = previous.equipmentMaster?.assets.filter((asset) => asset.id !== input.equipmentId) ?? []
+  const acceptedUnchangedAssets = accepted.equipmentMaster?.assets.filter((asset) => asset.id !== input.equipmentId) ?? []
+  if (!priorAsset
+    || priorAsset.commissioningStatus !== 'commissioned'
+    || !acceptedAsset
+    || !strategy
+    || accepted.revision !== previous.revision + 1
+    || unchangedFields.some((field) => !sameManagedClientImportState(acceptedRecord[field], previousRecord[field]))
+    || !sameManagedClientImportState(accepted.events.slice(1), previous.events)
+    || !sameManagedClientImportState(acceptedUnchangedAssets, unchangedAssets)
+    || !sameManagedClientImportState(acceptedAsset, { ...priorAsset, maintenanceStrategy: strategy })
+    || !event
+    || event.kind !== 'equipment_maintenance_strategy_saved'
+    || event.id !== `EVT-${actionId}`
+    || event.actionId !== actionId
+    || event.actor !== expectedIdentity.userId
+    || event.reason !== 'Saved reviewed preventive maintenance strategy'
+    || event.evidenceReference !== input.safetyBaselineReference
+    || event.subjectId !== input.equipmentId
+    || event.summary !== `Saved maintenance strategy R${expectedStrategyRevision} for ${input.equipmentId}`
+    || event.strategyRevision !== expectedStrategyRevision
+    || event.maintenanceOwner !== input.maintenanceOwner
+    || event.intervalDays !== input.intervalDays
+    || event.nextDueAt !== input.nextDueAt
+    || event.procedureReference !== input.procedureReference
+    || strategy.revision !== expectedStrategyRevision
+    || strategy.actionId !== actionId
+    || strategy.savedAt !== event.createdAt
+    || strategy.savedBy !== expectedIdentity.userId
+    || strategy.maintenanceOwner !== input.maintenanceOwner
+    || strategy.intervalDays !== input.intervalDays
+    || strategy.nextDueAt !== input.nextDueAt
+    || strategy.procedureReference !== input.procedureReference
+    || strategy.safetyBaselineReference !== input.safetyBaselineReference) {
+    throw new ManagedTrialError('The managed maintenance strategy changed unrelated Production records.', {
+      code: 'managed_plant_equipment_maintenance_strategy_invalid',
+    })
+  }
+  return response as unknown as ManagedPlantEquipmentMaintenanceStrategyResult
+}
+
 export type ManagedPlantEquipmentValidation = {
   contract: 'supermega.production.equipment-import-validation.v1'
   status: 'valid'
@@ -1221,6 +1322,30 @@ export type ManagedPlantEquipmentCommissioningInput = {
   equipmentId: string
   installedAt: string
   initialState: 'running' | 'attention' | 'stopped'
+  safetyBaselineReference: string
+}
+
+export type ManagedPlantEquipmentMaintenanceStrategyResult = {
+  maintenance_strategy: {
+    contract: 'supermega.production.equipment-maintenance-strategy.v1'
+    status: 'saved'
+    equipment_id: string
+    workspace_id: string
+    maintenance_execution_started: false
+    work_order_created: false
+    equipment_command_performed: false
+    telemetry_connected: false
+    bulk_strategy_created: false
+  }
+  result: ManagedProductionCommandResult
+}
+
+export type ManagedPlantEquipmentMaintenanceStrategyInput = {
+  equipmentId: string
+  maintenanceOwner: string
+  intervalDays: number
+  nextDueAt: string
+  procedureReference: string
   safetyBaselineReference: string
 }
 
@@ -2000,6 +2125,73 @@ export async function commissionManagedPlantEquipment(request: {
     request.identity,
   )
   return assertManagedPlantEquipmentCommissioning(
+    response,
+    request.input,
+    request.identity,
+    request.commandId,
+    request.expectedVersion,
+    priorState,
+  )
+}
+
+export async function saveManagedPlantEquipmentMaintenanceStrategy(request: {
+  commandId: string
+  expectedVersion: number
+  identity: ManagedIdentity
+  priorState: ProductionState
+  input: ManagedPlantEquipmentMaintenanceStrategyInput
+}) {
+  let priorState: ProductionState
+  try {
+    priorState = validateProductionState(structuredClone(request.priorState))
+  } catch {
+    throw new ManagedTrialError('The Production workspace changed before maintenance strategy review.', {
+      code: 'managed_plant_equipment_maintenance_strategy_invalid',
+    })
+  }
+  const sourceAsset = priorState.equipmentMaster?.assets.find((asset) => asset.id === request.input.equipmentId)
+  const nextDueAt = new Date(request.input.nextDueAt)
+  const canonicalFields = [
+    [request.input.maintenanceOwner, 120],
+    [request.input.procedureReference, 240],
+    [request.input.safetyBaselineReference, 240],
+  ] as const
+  if (!CLIENT_IMPORT_COMMAND_ID.test(request.commandId)
+    || !Number.isSafeInteger(request.expectedVersion)
+    || request.expectedVersion < 1
+    || !sourceAsset
+    || sourceAsset.commissioningStatus !== 'commissioned'
+    || !Number.isSafeInteger(request.input.intervalDays)
+    || request.input.intervalDays < 1
+    || request.input.intervalDays > 3650
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(request.input.nextDueAt)
+    || !Number.isFinite(nextDueAt.getTime())
+    || nextDueAt.toISOString() !== request.input.nextDueAt
+    || canonicalFields.some(([value, maximum]) => !value || value !== value.trim() || value.length > maximum)) {
+    throw new ManagedTrialError('The reviewed maintenance strategy request is invalid.', {
+      code: 'managed_plant_equipment_maintenance_strategy_invalid',
+    })
+  }
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/production/equipment/maintenance-strategy',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        command_id: request.commandId,
+        expected_version: request.expectedVersion,
+        equipment_id: request.input.equipmentId,
+        maintenance_owner: request.input.maintenanceOwner,
+        interval_days: request.input.intervalDays,
+        next_due_at: request.input.nextDueAt,
+        procedure_reference: request.input.procedureReference,
+        safety_baseline_reference: request.input.safetyBaselineReference,
+        confirmation: `SAVE MAINTENANCE ${request.input.equipmentId}`,
+      }),
+    },
+    true,
+    request.identity,
+  )
+  return assertManagedPlantEquipmentMaintenanceStrategy(
     response,
     request.input,
     request.identity,

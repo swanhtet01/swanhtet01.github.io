@@ -138,6 +138,22 @@ class TrialPlantEquipmentCommissionRequest(_StrictRequest):
     confirmation: str = Field(min_length=12, max_length=91)
 
 
+class TrialPlantEquipmentMaintenanceStrategyRequest(_StrictRequest):
+    command_id: UUID
+    expected_version: int = Field(ge=1)
+    equipment_id: str = Field(
+        min_length=1,
+        max_length=80,
+        pattern=r"^[A-Z0-9][A-Z0-9._/-]{0,79}$",
+    )
+    maintenance_owner: str = Field(min_length=1, max_length=120)
+    interval_days: int = Field(ge=1, le=3650)
+    next_due_at: str = Field(min_length=24, max_length=24)
+    procedure_reference: str = Field(min_length=1, max_length=240)
+    safety_baseline_reference: str = Field(min_length=1, max_length=240)
+    confirmation: str = Field(min_length=18, max_length=98)
+
+
 class TrialOrderIntakeDraftRequest(_StrictRequest):
     source_label: str = Field(min_length=1, max_length=120)
     message: str = Field(min_length=1, max_length=MAX_ORDER_MESSAGE_LENGTH)
@@ -1043,6 +1059,67 @@ def create_trial_router(
                 "equipment_command_performed": False,
                 "telemetry_connected": False,
                 "bulk_commissioning_performed": False,
+            },
+            **_command_response(result),
+        }
+
+    @router.post("/production/equipment/maintenance-strategy")
+    async def trial_plant_equipment_maintenance_strategy(
+        request: Request,
+    ) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_write_ready(readiness, "production.write")
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        raw_body = await _bounded_json_body(request, maximum_bytes=6144)
+        try:
+            body = TrialPlantEquipmentMaintenanceStrategyRequest.model_validate(
+                raw_body
+            )
+        except ValidationError as exc:
+            raise _error(422, "plant_equipment_maintenance_strategy_invalid") from exc
+        if body.confirmation != f"SAVE MAINTENANCE {body.equipment_id}":
+            raise _error(
+                409,
+                "plant_equipment_maintenance_strategy_confirmation_mismatch",
+            )
+        command_id = str(body.command_id)
+        result = _invoke(
+            lambda: store.apply_command(
+                principal,
+                command_id=command_id,
+                surface="production",
+                event_type="production.equipment_maintenance_strategy.saved",
+                expected_version=body.expected_version,
+                payload={
+                    "equipmentId": body.equipment_id,
+                    "maintenanceOwner": body.maintenance_owner,
+                    "intervalDays": body.interval_days,
+                    "nextDueAt": body.next_due_at,
+                    "procedureReference": body.procedure_reference,
+                    "safetyBaselineReference": body.safety_baseline_reference,
+                    "evidence": {
+                        "actionId": f"ACT-EQUIPMENT-MAINTENANCE-STRATEGY-{command_id}",
+                        "capturedAt": "server-assigned",
+                        "actor": principal.actor_id,
+                        "reason": "Saved reviewed preventive maintenance strategy",
+                        "evidenceReference": body.safety_baseline_reference,
+                    },
+                },
+            )
+        )
+        return {
+            "maintenance_strategy": {
+                "contract": "supermega.production.equipment-maintenance-strategy.v1",
+                "status": "saved",
+                "equipment_id": body.equipment_id,
+                "workspace_id": principal.workspace_id,
+                "maintenance_execution_started": False,
+                "work_order_created": False,
+                "equipment_command_performed": False,
+                "telemetry_connected": False,
+                "bulk_strategy_created": False,
             },
             **_command_response(result),
         }

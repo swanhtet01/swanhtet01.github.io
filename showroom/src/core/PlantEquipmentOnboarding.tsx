@@ -17,6 +17,7 @@ import {
 } from './plant-equipment-import.ts'
 import { validateProductionState, type ProductionState } from './production-workspace.ts'
 import { PlantEquipmentCommissioning } from './PlantEquipmentCommissioning.tsx'
+import { PlantEquipmentMaintenanceStrategy } from './PlantEquipmentMaintenanceStrategy.tsx'
 
 type PlantEquipmentOnboardingProps = {
   workspace: string
@@ -210,6 +211,7 @@ export function PlantEquipmentOnboarding({ workspace, owner, managedIdentity }: 
           <div className="catalog-import-footer"><div><strong>{appliedIsCurrent && state.applied ? `${state.applied.activation.row_count} equipment records added in revision ${state.applied.result.version}.` : checkedIsCurrent ? 'Server checked; no records written yet.' : 'Ready for accountable setup.'}</strong><small>{appliedIsCurrent ? 'Equipment remains not commissioned until a separate safety-reviewed commissioning action exists.' : managedIdentity ? 'Check the package, then approve one atomic managed write.' : 'Download the staged package for owner review; local mode does not apply it.'}</small></div><div className="form-actions"><button className="core-button" disabled={state.busy} onClick={() => { requestRef.current += 1; setState(emptyState()) }} type="button">Clear</button>{!appliedIsCurrent && !checkedIsCurrent ? <button className="core-button primary" disabled={state.busy} onClick={() => void checkOrDownload()} type="button">{managedIdentity ? 'Check with workspace' : 'Download staged file'}</button> : null}</div></div>
         </div> : null}
         {managedIdentity ? <PlantEquipmentCommissioning key={`${managedIdentity.userId}:${managedIdentity.workspaceId}`} managedIdentity={managedIdentity} /> : null}
+        {managedIdentity ? <PlantEquipmentMaintenanceStrategy key={`maintenance:${managedIdentity.userId}:${managedIdentity.workspaceId}`} managedIdentity={managedIdentity} /> : null}
       </div>
     </details>
   )

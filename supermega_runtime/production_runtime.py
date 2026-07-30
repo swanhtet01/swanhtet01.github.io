@@ -35,6 +35,7 @@ PRODUCTION_EVENTS = frozenset(
         "production.machine_state.changed",
         "production.equipment_master.imported",
         "production.equipment.commissioned",
+        "production.equipment_maintenance_strategy.saved",
         "production.order_execution.recorded",
         "production.downtime.started",
         "production.downtime.ended",
@@ -65,6 +66,7 @@ _EVENT_KIND_BY_TYPE = {
     "production.machine_state.changed": "machine_state_changed",
     "production.equipment_master.imported": "equipment_master_imported",
     "production.equipment.commissioned": "equipment_commissioned",
+    "production.equipment_maintenance_strategy.saved": "equipment_maintenance_strategy_saved",
     "production.downtime.started": "downtime_started",
     "production.downtime.ended": "downtime_ended",
     "production.maintenance.started": "maintenance_started",
@@ -149,7 +151,7 @@ _EQUIPMENT_ASSET_FIELDS = frozenset(
         "importedAt",
     }
 )
-_EQUIPMENT_ASSET_OPTIONAL_FIELDS = frozenset({"commissioning"})
+_EQUIPMENT_ASSET_OPTIONAL_FIELDS = frozenset({"commissioning", "maintenanceStrategy"})
 _EQUIPMENT_COMMISSIONING_FIELDS = frozenset(
     {
         "actionId",
@@ -162,6 +164,29 @@ _EQUIPMENT_COMMISSIONING_FIELDS = frozenset(
 )
 _EQUIPMENT_COMMISSION_FIELDS = frozenset(
     {"equipmentId", "installedAt", "initialState", "safetyBaselineReference"}
+)
+_EQUIPMENT_MAINTENANCE_STRATEGY_FIELDS = frozenset(
+    {
+        "revision",
+        "actionId",
+        "savedAt",
+        "savedBy",
+        "maintenanceOwner",
+        "intervalDays",
+        "nextDueAt",
+        "procedureReference",
+        "safetyBaselineReference",
+    }
+)
+_EQUIPMENT_MAINTENANCE_STRATEGY_PAYLOAD_FIELDS = frozenset(
+    {
+        "equipmentId",
+        "maintenanceOwner",
+        "intervalDays",
+        "nextDueAt",
+        "procedureReference",
+        "safetyBaselineReference",
+    }
 )
 _EQUIPMENT_IMPORT_FIELDS = frozenset(
     {"id", "name", "workCentreId", "criticality", "owner"}
@@ -204,6 +229,15 @@ _ISSUE_EVENT_FIELDS = frozenset(
 )
 _EQUIPMENT_COMMISSION_EVENT_FIELDS = frozenset(
     {"installedAt", "toState", "workCentreId"}
+)
+_EQUIPMENT_MAINTENANCE_STRATEGY_EVENT_FIELDS = frozenset(
+    {
+        "strategyRevision",
+        "maintenanceOwner",
+        "intervalDays",
+        "nextDueAt",
+        "procedureReference",
+    }
 )
 
 
@@ -630,9 +664,9 @@ def _validate_equipment_asset(candidate: object, index: int) -> dict[str, Any]:
     )
     commissioning = asset.get("commissioning")
     if commissioning_status == "not_commissioned":
-        if commissioning is not None:
+        if commissioning is not None or asset.get("maintenanceStrategy") is not None:
             raise TrialValidationError(
-                f"{field} cannot retain commissioning evidence before commissioning."
+                f"{field} cannot retain commissioning or maintenance strategy evidence before commissioning."
             )
         return asset
     commissioning_record = _object(commissioning, f"{field}.commissioning")
@@ -674,6 +708,71 @@ def _validate_equipment_asset(candidate: object, index: int) -> dict[str, Any]:
         f"{field}.commissioning.safetyBaselineReference",
         maximum=240,
     )
+    strategy = asset.get("maintenanceStrategy")
+    if strategy is not None:
+        strategy_record = _object(strategy, f"{field}.maintenanceStrategy")
+        _exact_fields(
+            strategy_record,
+            f"{field}.maintenanceStrategy",
+            required=_EQUIPMENT_MAINTENANCE_STRATEGY_FIELDS,
+        )
+        _integer(
+            strategy_record["revision"],
+            f"{field}.maintenanceStrategy.revision",
+            minimum=1,
+        )
+        _text(
+            strategy_record["actionId"],
+            f"{field}.maintenanceStrategy.actionId",
+            maximum=160,
+        )
+        saved_at = _lifecycle_timestamp(
+            strategy_record["savedAt"],
+            f"{field}.maintenanceStrategy.savedAt",
+            "equipment maintenance strategy",
+        )
+        _text(
+            strategy_record["savedBy"],
+            f"{field}.maintenanceStrategy.savedBy",
+            maximum=120,
+        )
+        _text(
+            strategy_record["maintenanceOwner"],
+            f"{field}.maintenanceStrategy.maintenanceOwner",
+            maximum=120,
+        )
+        interval_days = _integer(
+            strategy_record["intervalDays"],
+            f"{field}.maintenanceStrategy.intervalDays",
+            minimum=1,
+        )
+        if interval_days > 3650:
+            raise TrialValidationError(
+                f"{field}.maintenanceStrategy.intervalDays cannot exceed 3650."
+            )
+        next_due_at = _lifecycle_timestamp(
+            strategy_record["nextDueAt"],
+            f"{field}.maintenanceStrategy.nextDueAt",
+            "equipment maintenance strategy",
+        )
+        if next_due_at <= saved_at or datetime.fromisoformat(
+            next_due_at.replace("Z", "+00:00")
+        ) > datetime.fromisoformat(saved_at.replace("Z", "+00:00")) + timedelta(
+            days=interval_days
+        ):
+            raise TrialValidationError(
+                f"{field}.maintenanceStrategy.nextDueAt must follow save time within its interval."
+            )
+        _text(
+            strategy_record["procedureReference"],
+            f"{field}.maintenanceStrategy.procedureReference",
+            maximum=240,
+        )
+        _text(
+            strategy_record["safetyBaselineReference"],
+            f"{field}.maintenanceStrategy.safetyBaselineReference",
+            maximum=240,
+        )
     return asset
 
 
@@ -824,6 +923,8 @@ def _validate_event(
         required = _EVENT_FIELDS | {"equipmentIds"}
     elif kind == "equipment_commissioned":
         required = _EVENT_FIELDS | _EQUIPMENT_COMMISSION_EVENT_FIELDS
+    elif kind == "equipment_maintenance_strategy_saved":
+        required = _EVENT_FIELDS | _EQUIPMENT_MAINTENANCE_STRATEGY_EVENT_FIELDS
     elif kind in {
         "job_created",
         "issue_opened",
@@ -919,6 +1020,39 @@ def _validate_event(
             raise TrialValidationError(
                 f"{field}.workCentreId must use a canonical equipment identifier."
             )
+    elif kind == "equipment_maintenance_strategy_saved":
+        if subject_id not in equipment_ids or subject_id not in machine_ids:
+            raise TrialValidationError(
+                f"{field} must reference one commissioned equipment runtime."
+            )
+        strategy_revision = _integer(
+            event["strategyRevision"],
+            f"{field}.strategyRevision",
+            minimum=1,
+        )
+        interval_days = _integer(
+            event["intervalDays"], f"{field}.intervalDays", minimum=1
+        )
+        if interval_days > 3650:
+            raise TrialValidationError(f"{field}.intervalDays cannot exceed 3650.")
+        saved_at = _lifecycle_timestamp(
+            event["createdAt"], f"{field}.createdAt", "equipment maintenance strategy"
+        )
+        next_due_at = _lifecycle_timestamp(
+            event["nextDueAt"], f"{field}.nextDueAt", "equipment maintenance strategy"
+        )
+        saved_time = datetime.fromisoformat(saved_at.replace("Z", "+00:00"))
+        due_time = datetime.fromisoformat(next_due_at.replace("Z", "+00:00"))
+        if due_time <= saved_time or due_time > saved_time + timedelta(days=interval_days):
+            raise TrialValidationError(
+                f"{field}.nextDueAt must follow save time within its interval."
+            )
+        owner = _text(event["maintenanceOwner"], f"{field}.maintenanceOwner", maximum=120)
+        procedure = _text(event["procedureReference"], f"{field}.procedureReference", maximum=240)
+        if event["summary"] != f"Saved maintenance strategy R{strategy_revision} for {subject_id}":
+            raise TrialValidationError(f"{field}.summary is not canonical.")
+        if not owner or not procedure:
+            raise TrialValidationError(f"{field} maintenance strategy is incomplete.")
     elif kind == "output_recorded":
         if subject_id not in job_ids:
             raise TrialValidationError(f"{field} references an unknown job.")
@@ -1989,6 +2123,7 @@ def _validate_equipment_commissioning_history(
                 "downtime_ended",
                 "maintenance_started",
                 "maintenance_completed",
+                "equipment_maintenance_strategy_saved",
             }
         ]
         if any(
@@ -2013,6 +2148,70 @@ def _validate_equipment_commissioning_history(
             raise TrialValidationError(
                 "Every runtime machine added after opening requires equipment commissioning."
             )
+
+
+def _validate_equipment_maintenance_strategy_history(
+    equipment_master: Mapping[str, Any] | None,
+    events: Sequence[dict[str, Any]],
+) -> None:
+    assets = equipment_master["assets"] if equipment_master is not None else []
+    strategy_events = [
+        event
+        for event in events
+        if event["kind"] == "equipment_maintenance_strategy_saved"
+    ]
+    retained_events = 0
+    for asset in assets:
+        matches = [
+            event for event in strategy_events if event["subjectId"] == asset["id"]
+        ]
+        strategy = asset.get("maintenanceStrategy")
+        if strategy is None:
+            if matches:
+                raise TrialValidationError(
+                    "Equipment without a maintenance strategy cannot retain strategy history."
+                )
+            continue
+        if asset["commissioningStatus"] != "commissioned":
+            raise TrialValidationError(
+                "Only commissioned equipment can retain a maintenance strategy."
+            )
+        expected_revisions = list(range(strategy["revision"], 0, -1))
+        if [event["strategyRevision"] for event in matches] != expected_revisions:
+            raise TrialValidationError(
+                "Equipment maintenance strategy revisions must be complete and newest first."
+            )
+        commissioning = asset["commissioning"]
+        commissioned_at = _timestamp(
+            commissioning["commissionedAt"], "equipment commissionedAt"
+        )
+        if any(
+            _timestamp(event["createdAt"], "maintenance strategy createdAt")
+            < commissioned_at
+            for event in matches
+        ):
+            raise TrialValidationError(
+                "Equipment maintenance strategy history cannot predate commissioning."
+            )
+        latest = matches[0]
+        if (
+            strategy["actionId"] != latest["actionId"]
+            or strategy["savedAt"] != latest["createdAt"]
+            or strategy["savedBy"] != latest["actor"]
+            or strategy["maintenanceOwner"] != latest["maintenanceOwner"]
+            or strategy["intervalDays"] != latest["intervalDays"]
+            or strategy["nextDueAt"] != latest["nextDueAt"]
+            or strategy["procedureReference"] != latest["procedureReference"]
+            or strategy["safetyBaselineReference"] != latest["evidenceReference"]
+        ):
+            raise TrialValidationError(
+                "Equipment maintenance strategy does not match its latest immutable event."
+            )
+        retained_events += len(matches)
+    if retained_events != len(strategy_events):
+        raise TrialValidationError(
+            "Equipment maintenance strategy history contains an unknown event."
+        )
 
 
 def validate_production_state(value: object) -> dict[str, Any]:
@@ -2131,6 +2330,7 @@ def validate_production_state(value: object) -> dict[str, Any]:
         events,
         opening_plan,
     )
+    _validate_equipment_maintenance_strategy_history(equipment_master, events)
     return deepcopy(state)
 
 
@@ -2954,6 +3154,124 @@ def _reduce_equipment_commission(
     return validate_production_state(next_state)
 
 
+def _reduce_equipment_maintenance_strategy(
+    current: Mapping[str, Any],
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    if set(payload) != _EQUIPMENT_MAINTENANCE_STRATEGY_PAYLOAD_FIELDS | {"evidence"}:
+        raise TrialValidationError(
+            "Equipment maintenance strategy must contain exactly one asset, owner, "
+            "interval, next due time, procedure, safety baseline, and evidence."
+        )
+    current_state = validate_production_state(current)
+    evidence = _evidence(payload.get("evidence"))
+    if evidence["reason"] != "Saved reviewed preventive maintenance strategy":
+        raise TrialValidationError(
+            "Equipment maintenance strategy reason is not canonical."
+        )
+    equipment_id = _text(payload["equipmentId"], "equipmentId", maximum=80)
+    asset = next(
+        (
+            candidate
+            for candidate in current_state.get("equipmentMaster", {}).get("assets", [])
+            if candidate["id"] == equipment_id
+        ),
+        None,
+    )
+    if asset is None or asset["commissioningStatus"] != "commissioned":
+        raise TrialValidationError(
+            "Maintenance strategy requires one commissioned equipment master record."
+        )
+    if not any(machine["id"] == equipment_id for machine in current_state["machines"]):
+        raise TrialValidationError(
+            "Maintenance strategy requires the retained equipment runtime."
+        )
+    if _open_maintenance_event(current_state["events"], equipment_id) is not None:
+        raise TrialValidationError(
+            "Complete open maintenance before revising its preventive strategy."
+        )
+    saved_at_text = _lifecycle_timestamp(
+        evidence["capturedAt"],
+        "evidence.capturedAt",
+        "equipment maintenance strategy",
+    )
+    saved_at = datetime.fromisoformat(saved_at_text.replace("Z", "+00:00"))
+    commissioned_at = datetime.fromisoformat(
+        asset["commissioning"]["commissionedAt"].replace("Z", "+00:00")
+    )
+    if saved_at < commissioned_at:
+        raise TrialValidationError(
+            "Equipment maintenance strategy cannot predate commissioning."
+        )
+    maintenance_owner = _text(
+        payload["maintenanceOwner"], "maintenanceOwner", maximum=120
+    )
+    interval_days = _integer(payload["intervalDays"], "intervalDays", minimum=1)
+    if interval_days > 3650:
+        raise TrialValidationError("intervalDays cannot exceed 3650.")
+    next_due_at_text = _lifecycle_timestamp(
+        payload["nextDueAt"], "nextDueAt", "equipment maintenance strategy"
+    )
+    next_due_at = datetime.fromisoformat(next_due_at_text.replace("Z", "+00:00"))
+    if next_due_at <= saved_at or next_due_at > saved_at + timedelta(days=interval_days):
+        raise TrialValidationError(
+            "nextDueAt must follow strategy save time within intervalDays."
+        )
+    procedure_reference = _text(
+        payload["procedureReference"], "procedureReference", maximum=240
+    )
+    safety_reference = _text(
+        payload["safetyBaselineReference"],
+        "safetyBaselineReference",
+        maximum=240,
+    )
+    if evidence["evidenceReference"] != safety_reference:
+        raise TrialValidationError(
+            "Maintenance strategy evidence must match the safety baseline."
+        )
+    strategy_revision = asset.get("maintenanceStrategy", {}).get("revision", 0) + 1
+    strategy = {
+        "revision": strategy_revision,
+        "actionId": evidence["actionId"],
+        "savedAt": saved_at_text,
+        "savedBy": evidence["actor"],
+        "maintenanceOwner": maintenance_owner,
+        "intervalDays": interval_days,
+        "nextDueAt": next_due_at_text,
+        "procedureReference": procedure_reference,
+        "safetyBaselineReference": safety_reference,
+    }
+    event = {
+        "id": f"EVT-{evidence['actionId']}",
+        "actionId": evidence["actionId"],
+        "createdAt": saved_at_text,
+        "actor": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "kind": "equipment_maintenance_strategy_saved",
+        "subjectId": equipment_id,
+        "summary": f"Saved maintenance strategy R{strategy_revision} for {equipment_id}",
+        "strategyRevision": strategy_revision,
+        "maintenanceOwner": maintenance_owner,
+        "intervalDays": interval_days,
+        "nextDueAt": next_due_at_text,
+        "procedureReference": procedure_reference,
+    }
+    next_state = deepcopy(current_state)
+    next_state["revision"] += 1
+    next_state["events"] = [event, *current_state["events"]]
+    next_state["equipmentMaster"] = {
+        "contract": _EQUIPMENT_MASTER_CONTRACT,
+        "assets": [
+            {**candidate, "maintenanceStrategy": strategy}
+            if candidate["id"] == equipment_id
+            else candidate
+            for candidate in current_state["equipmentMaster"]["assets"]
+        ],
+    }
+    return validate_production_state(next_state)
+
+
 def _validate_order_execution_recorded(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -3048,6 +3366,8 @@ def reduce_production_state(
         return _reduce_equipment_master_import(current, payload)
     if event_type == "production.equipment.commissioned":
         return _reduce_equipment_commission(current, payload)
+    if event_type == "production.equipment_maintenance_strategy.saved":
+        return _reduce_equipment_maintenance_strategy(current, payload)
     next_state, evidence = _payload(payload)
     if event_type == "production.workspace.initialized":
         if dict(current):
