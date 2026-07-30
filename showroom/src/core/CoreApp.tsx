@@ -6625,7 +6625,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         ['Step 3', 'Review one copied job'],
       ] as const
 
-  if (tab === 'production') return <div className="operation-module">
+  if (tab === 'production') return <div className="operation-module plant-production-module">
     {productionBoundary}
     {plantStatus}
     {plantCommandCenter}

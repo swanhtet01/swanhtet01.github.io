@@ -1413,6 +1413,12 @@ textarea { min-height: 72px; resize: vertical; }
   .purchase-order-editor[data-mode="create"] .form-actions { justify-content: flex-end; }
 }
 
+@media (min-width: 841px) {
+  .operations-screen:not(.commerce-screen) .workspace-view { overflow-y: auto; scrollbar-gutter: stable; }
+  .plant-production-module { height: auto; min-height: 100%; }
+  .plant-production-module > .production-view { min-height: 500px; flex: 0 0 clamp(500px,calc(100svh - 280px),620px); overflow: hidden; }
+}
+
 @media (max-width: 840px) {
   html { scroll-padding-block: 64px calc(80px + env(safe-area-inset-bottom)); }
   body { height: auto; min-height: 100%; overflow: auto; }
