@@ -75,6 +75,7 @@ const EXPECTED_RESOURCE_ENVELOPE = Object.freeze({
   recursiveDelegation: false,
   scaleToZero: true,
 })
+const EXPECTED_ROLE_CAPABILITY_COUNT = 15
 
 const AGENT_ROLE_MAP = Object.freeze({
   'operations-analyst': 'operations',
@@ -468,6 +469,9 @@ function validateCapacityAdmission(receipt, spec) {
   const listenerCounts = receipt?.runtime?.listener_counts
   const listenerKeys = ['11434', '5173', '8765', '8788']
   const effects = receipt?.effects
+  if (receipt?.company?.registered_roles !== EXPECTED_ROLE_CAPABILITY_COUNT) {
+    fail('ally_ceo_local_cycle_capacity_role_capabilities_invalid')
+  }
   if (receipt?.schema !== 'local-company.machine-capacity.v1'
     || receipt.status !== 'ready'
     || receipt.focus?.enabled !== true
@@ -510,8 +514,10 @@ function validateCapacityAdmission(receipt, spec) {
   return {
     status: 'ready',
     focusProjectId: receipt.focus.project_id,
-    maxRoles: receipt.focus.max_roles,
-    registeredRoles: receipt.company.registered_roles,
+    focusedRoleLimit: receipt.focus.max_roles,
+    registeredRoles: spec.resourceEnvelope.registeredRoleRecords,
+    roleCapabilitiesAvailable: receipt.company.registered_roles,
+    roleDefinitionsConsumeCompute: false,
     residentRoleProcesses: 0,
     executionParallelism: 1,
     availableMemoryBytes: receipt.runtime.available_memory_bytes,

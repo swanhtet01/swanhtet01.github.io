@@ -400,6 +400,10 @@ test('preflight binds the CEO plan to one local specialist without queue or mode
   assert.equal(result.capacityAdmission.status, 'ready')
   assert.equal(result.capacityAdmission.executionParallelism, 1)
   assert.equal(result.capacityAdmission.residentRoleProcesses, 0)
+  assert.equal(result.capacityAdmission.registeredRoles, 12)
+  assert.equal(result.capacityAdmission.roleCapabilitiesAvailable, 15)
+  assert.equal(result.capacityAdmission.focusedRoleLimit, 4)
+  assert.equal(result.capacityAdmission.roleDefinitionsConsumeCompute, false)
   assert.equal(result.liveHq.releaseCommit, 'a'.repeat(40))
   assert.equal(result.liveHq.performed, true)
   assert.equal(result.liveHq.launchReadinessCurrent, true)
@@ -407,6 +411,18 @@ test('preflight binds the CEO plan to one local specialist without queue or mode
   assert.deepEqual(result.liveHq.probeAttempts, [1, 2, 1, 1])
   assert.equal(state.calls.findIndex((call) => call.kind === 'hq_live') < state.calls.findIndex((call) => call.args?.[0] === 'knowledge'), true)
   assert.equal(state.calls.some((call) => call.args?.includes('add')), false)
+})
+
+test('historical swarm-sized role capability claims fail before live or model work', async () => {
+  const driftedReceipt = JSON.parse(capacity)
+  driftedReceipt.company.registered_roles = 175
+  const state = harness({ capacity: JSON.stringify(driftedReceipt) })
+  await assert.rejects(
+    runAllyCeoLocalCycle({ execute: false }, { plan: plan(), runCommand: state.runCommand }),
+    /ally_ceo_local_cycle_capacity_role_capabilities_invalid/,
+  )
+  assert.equal(state.calls.some((call) => call.kind === 'hq_live'), false)
+  assert.equal(state.calls.some((call) => call.args?.includes('run-next')), false)
 })
 
 test('machine capacity blocks before live HQ, queue, or model work', async () => {
