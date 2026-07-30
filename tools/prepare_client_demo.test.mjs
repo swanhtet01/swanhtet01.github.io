@@ -9,16 +9,21 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import {
   CLIENT_DEMO_PREPARATION_CONTRACT,
+  CLIENT_DEMO_REHEARSAL_OBSERVATIONS_CONTRACT,
   CLIENT_DEMO_REHEARSAL_PLAN_CONTRACT,
+  CLIENT_DEMO_REHEARSAL_RESULT_CONTRACT,
   CLIENT_INTAKE_WORKSPACE_CONTRACT,
   buildClientDemoRehearsalPlan,
+  buildClientDemoRehearsalResult,
   clientDemoPreparationSummary,
   initializeClientWorkspace,
   prepareClientDemo,
   verifyClientDemoPreparation,
   verifyClientDemoRehearsalPlan,
+  verifyClientDemoRehearsalResult,
   writeClientDemoPreparation,
   writeClientDemoRehearsalPlan,
+  writeClientDemoRehearsalResult,
 } from './prepare_client_demo.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -194,6 +199,112 @@ test('client rehearsal plan binds reconciliation, reload, mobile, replay, export
     assert.equal(verifyCli.status, 0, verifyCli.stderr)
     assert.deepEqual(JSON.parse(verifyCli.stdout).completedChecks, 0)
     assert.doesNotMatch(verifyCli.stdout, /Confidential client workspace|Founder reviewer/)
+  } finally {
+    await rm(source.directory, { recursive: true, force: true })
+  }
+})
+
+test('client rehearsal result records explicit partial browser evidence without self-certifying unrun checks', async () => {
+  const source = await fixture()
+  try {
+    const preparation = await prepareClientDemo({ kitPath: source.kitPath, preparedAt: PREPARED_AT })
+    const plan = buildClientDemoRehearsalPlan(preparation, '2026-07-29T05:00:00.000Z')
+    const observations = {
+      contract: CLIENT_DEMO_REHEARSAL_OBSERVATIONS_CONTRACT,
+      observedAt: '2026-07-31T10:00:00.000Z',
+      operator: { kind: 'codex_in_app_browser', label: 'Codex local product rehearsal' },
+      environment: {
+        origin: 'http://127.0.0.1:5173',
+        browser: 'Codex In-app Browser',
+        workspaceKind: 'sample_browser_local',
+      },
+      products: plan.products.map((product) => ({
+        product: product.product,
+        acceptance: {
+          baseline_exported: 'not_run',
+          local_apply_confirmed: 'not_run',
+          reload_verified: product.product === 'ecommerce' ? 'passed' : 'not_run',
+          mobile_390_verified: 'passed',
+          desktop_1280_verified: 'passed',
+          idempotent_replay_verified: 'not_run',
+          evidence_exported: 'not_run',
+          reset_verified: 'not_run',
+          baseline_restored: 'not_run',
+        },
+        scenario: {
+          id: {
+            commerce: 'sale_review_boundary',
+            production: 'execution_guard',
+            website: 'editor_mobile_preview',
+            ecommerce: 'cart_reload_persistence',
+          }[product.product],
+          status: 'passed',
+          evidence: {
+            commerce: 'Added one local sample item, opened the accountable sale review, cancelled it, and cleared the cart.',
+            production: 'Observed active jobs, material and routing controls, and the stale-plan reconciliation guard.',
+            website: 'Opened the real page editor and switched the local draft preview to its mobile layout.',
+            ecommerce: 'Observed one cart item and two tracked requests before and after a hard reload.',
+          }[product.product],
+        },
+      })),
+      controls: {
+        browserInteractionPerformed: true,
+        productRecordsChanged: false,
+        resetPerformed: false,
+        restorePerformed: false,
+        containsClientValues: false,
+        safeToShareExternally: false,
+        hostedWritesPerformed: false,
+        externalWritesPerformed: false,
+        connectorCallsPerformed: false,
+        modelCallsPerformed: false,
+      },
+    }
+    const result = buildClientDemoRehearsalResult(plan, preparation, observations)
+    assert.equal(result.contract, CLIENT_DEMO_REHEARSAL_RESULT_CONTRACT)
+    assert.equal(result.plan.digest, plan.digest)
+    assert.equal(result.run.status, 'partial')
+    assert.deepEqual(result.run, {
+      status: 'partial',
+      passedChecks: 9,
+      failedChecks: 0,
+      notRunChecks: 27,
+      totalChecks: 36,
+      passedScenarios: 4,
+      failedScenarios: 0,
+    })
+    assert.equal(result.controls.selfCertificationAllowed, false)
+    assert.equal(result.controls.productRecordsChanged, false)
+    assert.equal(verifyClientDemoRehearsalResult(result, plan, preparation).status, 'partial')
+    assert.doesNotMatch(JSON.stringify(result), /Confidential client workspace|Founder reviewer|RICE-25KG/)
+
+    const forgedObservation = structuredClone(observations)
+    forgedObservation.products[0].acceptance.local_apply_confirmed = 'passed'
+    assert.throws(() => buildClientDemoRehearsalResult(plan, preparation, forgedObservation), /client_demo_rehearsal_observation_control_drift/)
+    const tamperedResult = structuredClone(result)
+    tamperedResult.products[0].acceptance.idempotent_replay_verified = 'passed'
+    assert.throws(() => verifyClientDemoRehearsalResult(tamperedResult, plan, preparation), /client_demo_rehearsal_result_drift/)
+
+    const preparationPath = resolve(source.directory, 'prepared-result.json')
+    const planPath = resolve(source.directory, 'plan-result.json')
+    const observationsPath = resolve(source.directory, 'observations.json')
+    const resultPath = resolve(source.directory, 'result.json')
+    const directResultPath = resolve(source.directory, 'direct-result.json')
+    await writeClientDemoPreparation(preparation, preparationPath)
+    await writeClientDemoRehearsalPlan(plan, planPath)
+    await writeFile(observationsPath, JSON.stringify(observations), 'utf8')
+    assert.equal(await writeClientDemoRehearsalResult(result, directResultPath), directResultPath)
+    const recordCli = spawnSync(process.execPath, [
+      TOOL, '--record-rehearsal', planPath, '--preparation', preparationPath,
+      '--observations', observationsPath, '--out', resultPath,
+    ], { cwd: ROOT, encoding: 'utf8', maxBuffer: 1024 * 1024, windowsHide: true })
+    assert.equal(recordCli.status, 0, recordCli.stderr)
+    assert.equal(JSON.parse(recordCli.stdout).status, 'partial')
+    const verifyCli = spawnSync(process.execPath, [
+      TOOL, '--verify-rehearsal-result', resultPath, '--plan', planPath, '--preparation', preparationPath,
+    ], { cwd: ROOT, encoding: 'utf8', maxBuffer: 1024 * 1024, windowsHide: true })
+    assert.equal(verifyCli.status, 0, verifyCli.stderr)
+    assert.equal(JSON.parse(verifyCli.stdout).passedChecks, 9)
   } finally {
     await rm(source.directory, { recursive: true, force: true })
   }

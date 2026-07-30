@@ -3593,14 +3593,21 @@ if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermeg
   || !settingsPageSource.includes('applyPreparedLocalClientDemoProduct(artifact, product, preparedConfirmation)')) fail('private_client_demo_installer_contract_missing')
 if (rootPackage.scripts?.['client:rehearse:plan'] !== 'node tools/prepare_client_demo.mjs --rehearse'
   || rootPackage.scripts?.['client:rehearse:verify'] !== 'node tools/prepare_client_demo.mjs --verify-rehearsal'
+  || rootPackage.scripts?.['client:rehearse:record'] !== 'node tools/prepare_client_demo.mjs --record-rehearsal'
+  || rootPackage.scripts?.['client:rehearse:result:verify'] !== 'node tools/prepare_client_demo.mjs --verify-rehearsal-result'
   || !clientPreparationToolSource.includes("CLIENT_DEMO_REHEARSAL_PLAN_CONTRACT = 'supermega.client_demo_rehearsal_plan.v1'")
+  || !clientPreparationToolSource.includes("CLIENT_DEMO_REHEARSAL_RESULT_CONTRACT = 'supermega.client_demo_rehearsal_result.v1'")
   || !clientPreparationToolSource.includes('export function buildClientDemoRehearsalPlan')
   || !clientPreparationToolSource.includes('export function verifyClientDemoRehearsalPlan')
+  || !clientPreparationToolSource.includes('export function buildClientDemoRehearsalResult')
+  || !clientPreparationToolSource.includes('export function verifyClientDemoRehearsalResult')
   || !clientPreparationToolSource.includes("firstApplyEquation: 'created_plus_already_present_equals_row_count'")
   || !clientPreparationToolSource.includes("replayEquation: 'created_zero_and_already_present_equals_row_count'")
   || !clientPreparationToolSource.includes("method: 'restore_exact_pre_rehearsal_export'")
   || !clientPreparationToolSource.includes("'mobile_390_verified'")
   || !clientPreparationToolSource.includes("'desktop_1280_verified'")
+  || !clientPreparationToolSource.includes('selfCertificationAllowed: false')
+  || !clientPreparationToolSource.includes("return 'partial'")
   || !clientPreparationToolSource.includes('browserWritesPerformed: false')
   || !clientPreparationToolSource.includes('externalWritesPerformed: false')) fail('client_demo_rehearsal_plan_contract_missing')
 if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
