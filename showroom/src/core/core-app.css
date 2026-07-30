@@ -903,6 +903,9 @@ textarea { min-height: 72px; resize: vertical; }
 .managed-login-panel label { display: grid; gap: 6px; color: var(--core-muted); font-size: 10px; font-weight: 760; }
 .managed-login-panel input, .managed-login-panel select { width: 100%; min-width: 0; height: 42px; border: 1px solid var(--core-line); border-radius: 6px; padding: 0 10px; background: var(--core-panel-raised); color: var(--core-ink); font-size: 12px; }
 .managed-login-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.account-inline-link { width: fit-content; color: var(--core-accent); font-size: 11px; font-weight: 760; text-decoration: none; }
+.account-inline-link:hover { text-decoration: underline; }
+.account-link-button { font: inherit; cursor: pointer; }
 .premium-pilot-boundary { padding-top: 10px; border-top: 1px solid var(--core-line); }
 .settings-advanced { flex: 0 0 auto; margin-top: 2px; border: 1px solid var(--core-line); border-radius: 10px; background: var(--core-panel-raised); }
 .settings-advanced > summary { min-height: 52px; display: flex; align-items: center; gap: 12px; padding: 0 14px; color: var(--core-ink); font-size: 12px; font-weight: 760; cursor: pointer; list-style: none; }

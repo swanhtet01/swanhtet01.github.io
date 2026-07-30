@@ -73,6 +73,7 @@ export function ManagedLoginPage() {
         {directory ? <label>Company<select onChange={(event) => setWorkspaceId(event.target.value)} required value={workspaceId}>{directory.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label> : <>
           <label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
           <label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
+          <Link className="account-inline-link" to="/account/recovery">Forgot password?</Link>
         </>}
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : directory ? 'Open company' : 'Find my company'}</button>
         {notice ? <p className="form-notice" role="status">{notice}</p> : null}

@@ -275,9 +275,12 @@ export function CoreLayout() {
   const workspaceMainRef = useRef<HTMLElement>(null)
   const routeProduct = productFromPathname(location.pathname)
   const settingsProduct = location.pathname.startsWith('/settings/') ? setupProductFromQuery(new URLSearchParams(location.search).get('product')) : null
+  const sensitiveAccountRoute = location.pathname.startsWith('/account/')
   const routeName = location.pathname === '/login' || location.pathname === '/login/'
     ? 'Sign in'
-    : location.pathname.startsWith('/website/')
+    : sensitiveAccountRoute
+      ? (location.pathname.startsWith('/account/recovery') ? 'Account recovery' : 'Account setup')
+      : location.pathname.startsWith('/website/')
       ? 'Website'
       : location.pathname.startsWith('/ecommerce/')
       ? 'Ecommerce'
@@ -296,7 +299,7 @@ export function CoreLayout() {
   }, [location.pathname, location.search, routeName])
 
   useEffect(() => {
-    const route = `${location.pathname}${location.search}`
+    const route = sensitiveAccountRoute ? location.pathname : `${location.pathname}${location.search}`
     const product = routeProduct ?? settingsProduct ?? 'unknown'
     recordBehaviorSignal(window.localStorage, {
       event: location.pathname === '/'
@@ -308,9 +311,9 @@ export function CoreLayout() {
             : 'settings_opened',
       product,
       route,
-      detail: routeProduct ? `${productDisplayName(routeProduct)} workspace viewed.` : location.pathname.startsWith('/settings/') ? 'Setup and activation controls viewed.' : 'Product launcher viewed.',
+      detail: sensitiveAccountRoute ? 'Managed account access viewed.' : routeProduct ? `${productDisplayName(routeProduct)} workspace viewed.` : location.pathname.startsWith('/settings/') ? 'Setup and activation controls viewed.' : 'Product launcher viewed.',
     })
-  }, [location.pathname, location.search, routeProduct, settingsProduct])
+  }, [location.pathname, location.search, routeProduct, sensitiveAccountRoute, settingsProduct])
 
   useEffect(() => {
     document.documentElement.dataset.supermegaTheme = theme

@@ -32,6 +32,9 @@ const SUPABASE_URL = String(BUILD_ENV.VITE_SUPABASE_URL ?? '').trim()
 const SUPABASE_PUBLISHABLE_KEY = String(BUILD_ENV.VITE_SUPABASE_PUBLISHABLE_KEY ?? BUILD_ENV.VITE_SUPABASE_ANON_KEY ?? '').trim()
 const DEFAULT_WORKSPACE_ID = String(BUILD_ENV.VITE_SUPERMEGA_TRIAL_WORKSPACE_ID ?? '').trim()
 const WORKSPACE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
+const AUTH_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const AUTH_CODE = /^[A-Za-z0-9._~-]{16,2048}$/
+const AUTH_TOKEN = /^[A-Za-z0-9._~-]{16,16384}$/
 
 export type ManagedIdentity = {
   userId: string
@@ -49,6 +52,11 @@ export type ManagedWorkspaceSignIn = {
   userId: string
   email: string
   workspaces: ManagedWorkspaceDirectoryEntry[]
+}
+
+export type ManagedAccountSetup = {
+  purpose: 'account' | 'invite' | 'recovery'
+  email: string
 }
 
 export type ManagedApprovalRecord = {
@@ -1901,6 +1909,7 @@ export function requireManagedSurfaceState(
 }
 
 let clientPromise: Promise<SupabaseClient | null> | undefined
+let pendingManagedAccountSetup: Promise<ManagedAccountSetup> | undefined
 
 function validSupabaseUrl(value: string) {
   try {
@@ -2040,13 +2049,208 @@ function parseWorkspaceDirectory(value: unknown): ManagedWorkspaceDirectoryEntry
   return workspaces
 }
 
+function normalizeAuthEmail(value: string) {
+  const email = value.trim().toLowerCase()
+  if (!AUTH_EMAIL.test(email) || email.length > 160) {
+    throw new ManagedTrialError('Enter a valid work email.', { code: 'auth_email_invalid' })
+  }
+  return email
+}
+
+function managedAccountRedirectUrl() {
+  const origin = new URL(window.location.origin)
+  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)
+  if (origin.protocol !== 'https:' && !(origin.protocol === 'http:' && loopback)) {
+    throw new ManagedTrialError('Password recovery requires a secure SuperMega address.', {
+      code: 'auth_redirect_insecure',
+    })
+  }
+  const redirect = new URL('/account/setup', origin)
+  redirect.searchParams.set('mode', 'recovery')
+  return redirect.toString()
+}
+
+function accountLinkError() {
+  return new ManagedTrialError('This account link is invalid or expired. Request a new link.', {
+    code: 'account_link_invalid',
+  })
+}
+
+function exactAuthParameters(parameters: URLSearchParams, allowed: readonly string[]) {
+  const keys = [...parameters.keys()]
+  return keys.every((key, index) => allowed.includes(key) && keys.indexOf(key) === index)
+}
+
+function scrubManagedAccountCallback() {
+  window.history.replaceState(window.history.state, '', '/account/setup')
+}
+
+function accountPurpose(...values: Array<string | null>): ManagedAccountSetup['purpose'] {
+  const purposes = values.filter((value): value is string => Boolean(value))
+  if (purposes.some((value) => value !== 'invite' && value !== 'recovery') || new Set(purposes).size > 1) {
+    throw accountLinkError()
+  }
+  return (purposes[0] as ManagedAccountSetup['purpose'] | undefined) ?? 'account'
+}
+
+function validNamedUserSession(session: Session | null): session is Session {
+  return Boolean(session && session.user.is_anonymous === false && session.user.id)
+}
+
+export async function requestManagedPasswordRecovery(email: string) {
+  const supabase = await authClient()
+  if (!supabase) {
+    throw new ManagedTrialError('Managed password recovery is not configured in this app build.', {
+      code: 'auth_not_configured',
+    })
+  }
+  const { error } = await supabase.auth.resetPasswordForEmail(normalizeAuthEmail(email), {
+    redirectTo: managedAccountRedirectUrl(),
+  })
+  if (error) {
+    throw new ManagedTrialError('A recovery link could not be sent. Wait a moment and try again.', {
+      status: error.status,
+      code: 'password_recovery_failed',
+    })
+  }
+}
+
+async function initializeManagedAccountSetup(): Promise<ManagedAccountSetup> {
+  const supabase = await authClient()
+  if (!supabase) {
+    throw new ManagedTrialError('Managed account setup is not configured in this app build.', {
+      code: 'auth_not_configured',
+    })
+  }
+
+  const rawQuery = window.location.search
+  const rawFragment = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : ''
+  const hasCallback = Boolean(rawQuery || rawFragment)
+  if (rawQuery.length > 4096 || rawFragment.length > 40000) {
+    if (hasCallback) scrubManagedAccountCallback()
+    throw accountLinkError()
+  }
+  const query = new URLSearchParams(rawQuery)
+  const fragment = new URLSearchParams(rawFragment)
+  const purpose = accountPurpose(query.get('mode'), fragment.get('type'))
+  const queryAllowed = exactAuthParameters(query, ['code', 'mode', 'error', 'error_code', 'error_description'])
+  const fragmentAllowed = exactAuthParameters(fragment, ['access_token', 'refresh_token', 'expires_at', 'expires_in', 'token_type', 'type', 'error', 'error_code', 'error_description'])
+  const code = query.get('code') ?? ''
+  const accessToken = fragment.get('access_token') ?? ''
+  const refreshToken = fragment.get('refresh_token') ?? ''
+  const tokenType = fragment.get('token_type')
+  const expiresIn = fragment.get('expires_in')
+  const expiresAt = fragment.get('expires_at')
+  const providerError = query.has('error') || query.has('error_code') || query.has('error_description')
+    || fragment.has('error') || fragment.has('error_code') || fragment.has('error_description')
+
+  if (hasCallback) scrubManagedAccountCallback()
+  if (!queryAllowed
+    || !fragmentAllowed
+    || providerError
+    || (tokenType !== null && tokenType !== 'bearer')
+    || (expiresIn !== null && !/^\d{1,10}$/.test(expiresIn))
+    || (expiresAt !== null && !/^\d{1,12}$/.test(expiresAt))) throw accountLinkError()
+
+  let session: Session
+  if (code) {
+    if (!AUTH_CODE.test(code) || accessToken || refreshToken) throw accountLinkError()
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+    if (error || !validNamedUserSession(data.session)) throw accountLinkError()
+    session = data.session
+  } else if (accessToken || refreshToken) {
+    if (!AUTH_TOKEN.test(accessToken) || !AUTH_TOKEN.test(refreshToken)) throw accountLinkError()
+    const { data, error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    })
+    if (error || !validNamedUserSession(data.session)) throw accountLinkError()
+    session = data.session
+  } else {
+    throw accountLinkError()
+  }
+
+  forgetWorkspace()
+  return { purpose, email: session.user.email ?? 'Named user' }
+}
+
+export function beginManagedAccountSetup(): Promise<ManagedAccountSetup> {
+  if (pendingManagedAccountSetup) return pendingManagedAccountSetup
+  const attempt = initializeManagedAccountSetup()
+  pendingManagedAccountSetup = attempt
+  const release = () => {
+    if (pendingManagedAccountSetup === attempt) pendingManagedAccountSetup = undefined
+  }
+  void attempt.then(release, release)
+  return attempt
+}
+
+async function discoverManagedWorkspaces(session: Session): Promise<ManagedWorkspaceSignIn> {
+  const response = await fetch('/api/trial/v1/workspaces', {
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${session.access_token}`,
+    },
+  })
+  if (!response.ok) throw await parseError(response)
+  const workspaces = parseWorkspaceDirectory(await response.json())
+  if (!workspaces.length) {
+    throw new ManagedTrialError('This account has no active SuperMega company. Ask the company owner to activate access.', {
+      code: 'workspace_membership_missing',
+    })
+  }
+  return {
+    userId: session.user.id,
+    email: session.user.email ?? 'Named user',
+    workspaces,
+  }
+}
+
+export async function discoverManagedWorkspacesForCurrentSession(): Promise<ManagedWorkspaceSignIn> {
+  const supabase = await authClient()
+  if (!supabase) {
+    throw new ManagedTrialError('Managed sign-in is not configured in this app build.', { code: 'auth_not_configured' })
+  }
+  const { data, error } = await supabase.auth.getSession()
+  if (error || !validNamedUserSession(data.session)) throw accountLinkError()
+  try {
+    return await discoverManagedWorkspaces(data.session)
+  } catch (discoveryError) {
+    await supabase.auth.signOut({ scope: 'local' })
+    forgetWorkspace()
+    throw discoveryError
+  }
+}
+
+export async function completeManagedAccountPassword(password: string): Promise<ManagedWorkspaceSignIn> {
+  if (password.length < 12 || password.length > 128 || !password.trim()) {
+    throw new ManagedTrialError('Use a password with at least 12 characters.', {
+      code: 'password_too_weak',
+    })
+  }
+  const supabase = await authClient()
+  if (!supabase) {
+    throw new ManagedTrialError('Managed account setup is not configured in this app build.', {
+      code: 'auth_not_configured',
+    })
+  }
+  const { data, error } = await supabase.auth.updateUser({ password })
+  if (error || data.user.is_anonymous !== false) {
+    throw new ManagedTrialError('The password could not be saved. Request a new account link and try again.', {
+      status: error?.status,
+      code: 'password_update_failed',
+    })
+  }
+  return discoverManagedWorkspacesForCurrentSession()
+}
+
 export async function signInAndDiscoverManagedWorkspaces(email: string, password: string): Promise<ManagedWorkspaceSignIn> {
   const supabase = await authClient()
   if (!supabase) {
     throw new ManagedTrialError('Managed sign-in is not configured in this app build.', { code: 'auth_not_configured' })
   }
   forgetWorkspace()
-  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+  const { data, error } = await supabase.auth.signInWithPassword({ email: normalizeAuthEmail(email), password })
   if (error || !data.session || data.user.is_anonymous !== false) {
     throw new ManagedTrialError('Sign-in failed. Check the account and password.', {
       status: error?.status,
@@ -2054,24 +2258,7 @@ export async function signInAndDiscoverManagedWorkspaces(email: string, password
     })
   }
   try {
-    const response = await fetch('/api/trial/v1/workspaces', {
-      headers: {
-        accept: 'application/json',
-        authorization: `Bearer ${data.session.access_token}`,
-      },
-    })
-    if (!response.ok) throw await parseError(response)
-    const workspaces = parseWorkspaceDirectory(await response.json())
-    if (!workspaces.length) {
-      throw new ManagedTrialError('This account has no active SuperMega company. Ask the company owner to activate access.', {
-        code: 'workspace_membership_missing',
-      })
-    }
-    return {
-      userId: data.session.user.id,
-      email: data.session.user.email ?? 'Named user',
-      workspaces,
-    }
+    return await discoverManagedWorkspaces(data.session)
   } catch (discoveryError) {
     await supabase.auth.signOut({ scope: 'local' })
     forgetWorkspace()
