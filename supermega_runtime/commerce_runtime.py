@@ -1966,12 +1966,23 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             reviewed_at = _timestamp(decision["reviewedAt"], f"{decision_field}.reviewedAt")
             if datetime.fromisoformat(reviewed_at.replace("Z", "+00:00")) > order_created_at:
                 raise TrialValidationError(f"{decision_field}.reviewedAt cannot be later than order creation.")
+            reviewed_amount = priced_total
+            tax_configuration = _effective_tax_configuration(state, reviewed_at)
+            if tax_configuration is not None:
+                reviewed_calculation = _configured_order_calculation(
+                    tax_configuration,
+                    priced_total,
+                    len(catalog_changes),
+                )
+                if reviewed_calculation is None:
+                    raise TrialValidationError(f"{decision_field} tax-inclusive amount is invalid.")
+                reviewed_amount = reviewed_calculation["totalMmk"]
             try:
                 expected_payment = review_ecommerce_payment(
                     validated_payment_policies,
                     decision["adapter"],
                     str(order.get("fulfilment", "")),
-                    priced_total,
+                    reviewed_amount,
                     reviewed_at,
                 )
             except EcommerceLifecycleValidationError as exc:

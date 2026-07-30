@@ -5644,14 +5644,16 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
         && (promisedAt as bigint) < (timestampMicros(order.shippingDecision.reviewedAt) as bigint) + BigInt(order.shippingDecision.promiseMinutes) * 60_000_000n)) return null
   }
   if (order.paymentDecision) {
-    const reviewedAmount = (order.promotionDecision?.netSubtotalMmk ?? (order.lines
+    const reviewedListedSubtotal = (order.promotionDecision?.netSubtotalMmk ?? (order.lines
       ? order.lines.reduce((sum, line) => sum + line.unitPriceMmk * line.quantity, 0)
       : order.total - (order.shippingDecision?.feeMmk ?? 0))) + (order.shippingDecision?.feeMmk ?? 0)
+    const reviewedCalculation = commerceOrderCalculation(state, reviewedListedSubtotal, order.paymentDecision.reviewedAt)
+    if (!reviewedCalculation) return null
     const expectedPayment = commercePaymentDecision(
       commercePaymentPolicies(state),
       order.paymentDecision.adapter,
       order.fulfilment as 'pickup' | 'delivery',
-      reviewedAmount,
+      reviewedCalculation.totalMmk,
       order.paymentDecision.reviewedAt,
     )
     if (!order.sourceRecordId?.startsWith('ECR-')

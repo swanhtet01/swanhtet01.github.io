@@ -1133,6 +1133,18 @@ class CommerceRuntimeTests(unittest.TestCase):
         over_limit["paymentPolicies"][0]["maximumOrderMmk"] = 199  # type: ignore[index]
         with self.assertRaisesRegex(TrialValidationError, "versioned Shop policy"):
             validate_commerce_state(over_limit)
+        tax_inclusive_limit = deepcopy(state)
+        tax_inclusive_limit["taxConfigurations"] = [tax_configuration(1)]
+        tax_inclusive_limit["paymentPolicies"][0]["maximumOrderMmk"] = 205  # type: ignore[index]
+        tax_inclusive_limit["orders"][0]["paymentDecision"]["maximumOrderMmk"] = 205  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "versioned Shop policy"):
+            validate_commerce_state(tax_inclusive_limit)
+        tax_inclusive_limit["paymentPolicies"][0]["maximumOrderMmk"] = 210  # type: ignore[index]
+        tax_inclusive_limit["orders"][0]["paymentDecision"]["maximumOrderMmk"] = 210  # type: ignore[index]
+        self.assertEqual(
+            validate_commerce_state(tax_inclusive_limit)["orders"][0]["paymentDecision"]["maximumOrderMmk"],  # type: ignore[index]
+            210,
+        )
         wrong_evidence = action_evidence("ACT-PAYMENT-WRONG-EVIDENCE")
         with self.assertRaisesRegex(TrialValidationError, "payment policy proof"):
             apply_event(current, "commerce.payment_policy.saved", configured, wrong_evidence)

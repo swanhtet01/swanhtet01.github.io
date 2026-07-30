@@ -11936,6 +11936,23 @@ async function verifyStorefrontRuntime() {
       promotionOrderProof,
     ) === null,
     'ecommerce_forged_payment_authorization_reached_the_real_shop_order')
+    const taxLimitedPaymentPolicies = paymentPolicies.map((policy) => policy.adapter === promotedOrder.paymentDecision.adapter
+      ? { ...policy, maximumOrderMmk: buyingDraft.pricing.tax.listedSubtotalMmk }
+      : policy)
+    const preTaxApprovedPayment = commerce.commercePaymentDecision(
+      taxLimitedPaymentPolicies,
+      promotedOrder.paymentDecision.adapter,
+      promotedOrder.fulfilment,
+      buyingDraft.pricing.tax.listedSubtotalMmk,
+      promotedOrder.paymentDecision.reviewedAt,
+    )
+    buyingAssert(preTaxApprovedPayment?.status === 'approved'
+      && commerce.reserveCommerceOrder(
+        { ...promotionBuyingState, paymentPolicies: taxLimitedPaymentPolicies },
+        { ...promotedOrder, paymentDecision: preTaxApprovedPayment },
+        promotionOrderProof,
+      ) === null,
+    'ecommerce_tax_could_bypass_payment_policy_limit')
     buyingAssert(commerce.reserveCommerceOrder(
       promotionBuyingState,
       { ...promotedOrder, promisedAt: '2026-07-24T11:09:59.000Z' },
