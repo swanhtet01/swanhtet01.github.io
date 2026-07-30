@@ -792,7 +792,7 @@ export function EcommerceProduct() {
       setSummary(saved.summary)
       setSelectedSkus(saved.selectedSkus)
       setMerchandising(cloneMerchandising(saved.merchandising))
-      setDraftNotice(`Already saved in ${identity.workspaceId} as revision ${saved.revision}.`)
+      setDraftNotice(`Already saved for this company as revision ${saved.revision}.`)
       return
     }
     const commandId = globalThis.crypto.randomUUID()
@@ -828,7 +828,7 @@ export function EcommerceProduct() {
     setSelectedSkus(saved.selectedSkus)
     setMerchandising(cloneMerchandising(saved.merchandising))
     setMissingSelectionReviewed(false)
-    setDraftNotice(`Saved to ${identity.workspaceId} as revision ${saved.revision}.`)
+    setDraftNotice(`Saved for this company as revision ${saved.revision}.`)
   }
 
   async function saveCurrentStorefront() {
@@ -1089,7 +1089,7 @@ export function EcommerceProduct() {
   const sourceLabel = catalog.source === 'shop-local'
     ? 'Current local Shop catalog'
     : catalog.source === 'managed-shop'
-      ? `Managed Shop · ${managedInbox?.identity.workspaceId ?? 'authenticated'}`
+      ? 'Managed Shop - connected company'
       : catalog.source === 'sample'
       ? 'Sample Shop catalog'
       : 'Catalog unavailable'

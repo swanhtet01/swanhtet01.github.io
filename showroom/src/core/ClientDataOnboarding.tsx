@@ -259,7 +259,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     ['Confirm import', appliedIsCurrent ? 'Done' : state.preflighting ? 'Preflight' : state.applying ? 'Writing' : canApplyManagedImport ? 'Ready' : state.preview?.readyForStaging ? 'Prepare' : 'Locked'],
   ] as const
   const importStageMessage = appliedIsCurrent
-    ? `${productName} import is confirmed in ${managedIdentity?.workspaceId}.`
+    ? `${productName} import is confirmed for this company.`
     : state.preview
       ? mappingNeedsReview
         ? 'Choose the missing required columns. Rows stay read-only until the mapping is clean.'
@@ -708,9 +708,9 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           </div>
         </div>
         <p className="catalog-import-boundary">{appliedIsCurrent && state.applied
-          ? `${state.applied.receipt.activation.row_count} ${managedActivation?.createdLabel ?? 'records'} were imported into ${managedIdentity?.workspaceId}. Your source CSV was not uploaded or sent to AI.`
+          ? `${state.applied.receipt.activation.row_count} ${managedActivation?.createdLabel ?? 'records'} were imported for this company. Your source CSV was not uploaded or sent to AI.`
           : managedIdentity
-          ? `Your CSV stays in this tab. Only prepared rows are checked with ${managedIdentity.workspaceId}; nothing is written until you confirm the import.`
+          ? 'Your CSV stays in this tab. Only prepared rows are checked with your managed company; nothing is written until you confirm the import.'
           : `Your CSV stays in this browser. Nothing is sent to AI or added to ${productName} while you review it.`}</p>
         <div aria-label={`${productName} import autopilot`} className="catalog-import-autopilot">
           <div><strong>Import autopilot</strong><small>{importStageMessage}</small></div>
@@ -784,7 +784,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             <div className="form-actions"><button className="core-button primary" disabled={!canApplyManagedImport} onClick={() => void activateManagedImport()} type="button">{state.preflighting ? 'Running final preflight...' : state.applying ? managedActivation.busyLabel : `Import ${state.validation.stagingPackage.rows.length} ${managedActivation.reviewLabel}`}</button></div>
           </> : null}
           <div className="catalog-import-footer">
-            <div><strong>{appliedIsCurrent && state.applied ? `${state.applied.receipt.activation.row_count} ${managedActivation?.completedLabel ?? 'records'} ${managedActivation?.resultVerb ?? 'created'} in revision ${state.applied.receipt.result.version}.` : validationIsCurrent ? `Validated by ${managedIdentity?.workspaceId}.` : state.preview.readyForStaging && !importContextReady ? 'Add workspace and owner above.' : state.preview.readyForStaging ? 'Data check passed.' : 'Fix the highlighted rows first.'}</strong><small>{appliedIsCurrent && state.applied
+            <div><strong>{appliedIsCurrent && state.applied ? `${state.applied.receipt.activation.row_count} ${managedActivation?.completedLabel ?? 'records'} ${managedActivation?.resultVerb ?? 'created'} in revision ${state.applied.receipt.result.version}.` : validationIsCurrent ? 'Validated for this company.' : state.preview.readyForStaging && !importContextReady ? 'Add workspace and owner above.' : state.preview.readyForStaging ? 'Data check passed.' : 'Fix the highlighted rows first.'}</strong><small>{appliedIsCurrent && state.applied
               ? `The ${managedActivation?.productLabel ?? 'product'} import is confirmed.`
               : validationIsCurrent
               ? state.validation?.preflight ? 'Authority and revision preflight passed. The reviewed import remains bound to this exact receipt.' : 'Checked successfully. Review and confirm above; SuperMega runs a final authority and revision preflight before writing.'

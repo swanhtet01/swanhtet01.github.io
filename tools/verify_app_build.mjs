@@ -1966,6 +1966,26 @@ if (!appSource.includes("lazy(() => import('./core/ManagedLoginPage')")
   || !managedLoginPageSource.includes('Request managed activation')
   || !managedLoginPageSource.includes('Open free workspace')
   || managedLoginPageSource.includes('Workspace ID')) fail('managed_login_route_missing')
+const managedCustomerUiSources = [coreSource, productHomeReadinessSource, clientOnboardingUiSource, ecommerceSource]
+const managedInternalIdCopy = [
+  'Already saved in ${identity.workspaceId}',
+  'Saved to ${identity.workspaceId}',
+  'Managed Shop · ${managedInbox?.identity.workspaceId',
+  'Connected to ${managedIdentity.workspaceId}',
+  'Approval recorded in ${managedIdentity.workspaceId}',
+  'Workspace ${managedIdentity.workspaceId} · revision',
+  'Managed workspace ${identity.workspaceId}',
+  'confirmed in ${managedIdentity?.workspaceId}',
+  'imported into ${managedIdentity?.workspaceId}',
+  'checked with ${managedIdentity.workspaceId}',
+  'Validated by ${managedIdentity?.workspaceId}',
+]
+if (managedCustomerUiSources.some((source) => managedInternalIdCopy.some((copy) => source.includes(copy)))
+  || !coreSource.includes('Connected. Approval records are managed for this company.')
+  || !coreSource.includes('Company records - revision ${managedVersion ?? 0}. Writes are confirmed by the tenant API.')
+  || !productHomeReadinessSource.includes('Managed company / ${brief.sourceCount} validated product sources.')
+  || !clientOnboardingUiSource.includes('Validated for this company.')
+  || !ecommerceSource.includes('Managed Shop - connected company')) fail('managed_internal_workspace_id_visible')
 if (!appSource.includes('<Navigate replace to="/website/" />')
   || !appSource.includes('<Navigate replace to="/ecommerce/" />')
   || !appSource.includes('path="products/website/*"')
