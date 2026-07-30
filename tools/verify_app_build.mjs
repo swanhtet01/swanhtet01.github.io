@@ -11039,6 +11039,8 @@ if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !pilotOutcomeSource.includes("supermega.local_pilot_outcome_review.v1")
   || !pilotOutcomeSource.includes("PILOT_OUTCOME_STORAGE_KEY = 'supermega.pilot-outcome.v1'")
   || !pilotOutcomeSource.includes("if (current.value === 0) return 'target_met'")
+  || !pilotOutcomeSource.includes("if (source.status === 'invalid') return null")
+  || !pilotOutcomeSource.includes('Storefront not saved,')
   || !pilotOutcomeSource.includes("Only the named owner can accept a clear or improved pilot result.")
   || !pilotOutcomeUiSource.includes('Free outcome proof')
   || !pilotOutcomeUiSource.includes('Accept measured result')
@@ -11099,6 +11101,24 @@ try {
   const ecommerceMetric = outcome.buildPilotOutcomeMetric(snapshot, 'ecommerce')
   if (plantMetric?.value !== 2 || websiteMetric?.value !== 4 || ecommerceMetric?.value !== 0) fail('pilot_outcome_product_metrics_invalid')
   pilotOutcomeRuntimeChecks += 1
+  const ecommerceSetup = { product: 'ecommerce', workspace: 'Mingalar Online', owner: 'Swan Htet', templateId: 'catalog-orders' }
+  const ecommerceStorageValues = new Map()
+  const ecommerceStorage = { getItem: (key) => ecommerceStorageValues.get(key) ?? null, setItem: (key, value) => ecommerceStorageValues.set(key, value) }
+  const ecommerceMissingSnapshot = {
+    ...snapshot,
+    ecommerce: { status: 'missing', draftState: 'empty', selectedSkus: 0, incomingRequests: 0, shopSourceReady: true },
+  }
+  const ecommerceMissingMetric = outcome.buildPilotOutcomeMetric(ecommerceMissingSnapshot, ecommerceSetup.product)
+  if (ecommerceMissingMetric?.value !== 2 || !ecommerceMissingMetric.detail.includes('Storefront not saved')) fail('pilot_outcome_ecommerce_missing_baseline_invalid')
+  outcome.startPilotOutcome(ecommerceStorage, ecommerceSetup, ecommerceMissingMetric, new Date('2026-07-30T11:00:00.000Z'))
+  const ecommerceReadyReport = outcome.buildPilotOutcomeReport(ecommerceStorage, ecommerceSetup, ecommerceMetric, new Date('2026-07-30T11:05:00.000Z'))
+  if (ecommerceReadyReport?.outcomeStatus !== 'target_met' || ecommerceReadyReport.change !== -2 || ecommerceReadyReport.review !== null) fail('pilot_outcome_ecommerce_target_invalid')
+  const ecommerceReview = outcome.acceptPilotOutcome(ecommerceStorage, ecommerceReadyReport, ecommerceSetup.owner, new Date('2026-07-30T11:06:00.000Z'))
+  const ecommerceAccepted = outcome.buildPilotOutcomeReport(ecommerceStorage, ecommerceSetup, ecommerceMetric, new Date('2026-07-30T11:07:00.000Z'))
+  if (ecommerceAccepted?.review?.reportDigest !== ecommerceAccepted?.reportDigest || ecommerceAccepted?.review?.reviewedAt !== ecommerceReview.reviewedAt) fail('pilot_outcome_ecommerce_acceptance_invalid')
+  const invalidEcommerceMetric = outcome.buildPilotOutcomeMetric({ ...snapshot, ecommerce: { ...snapshot.ecommerce, status: 'invalid' } }, ecommerceSetup.product)
+  if (invalidEcommerceMetric !== null) fail('pilot_outcome_ecommerce_invalid_source_allowed')
+  pilotOutcomeRuntimeChecks += 4
   const tamperedState = JSON.parse(values.get(outcome.PILOT_OUTCOME_STORAGE_KEY))
   tamperedState.checkpoints[0].metric.value = 999
   values.set(outcome.PILOT_OUTCOME_STORAGE_KEY, JSON.stringify(tamperedState))
