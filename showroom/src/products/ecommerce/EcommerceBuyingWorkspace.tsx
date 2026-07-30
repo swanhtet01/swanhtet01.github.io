@@ -4,6 +4,7 @@ import {
   buildEcommerceCheckoutQuote,
   buildEcommerceCancellationIntent,
   buildEcommerceOrderAmendmentIntent,
+  buildEcommerceOrderRescheduleIntent,
   buildEcommerceOrderRequestV2,
   buildEcommercePimProjection,
   buildEcommerceReturnIntent,
@@ -16,12 +17,14 @@ import {
   saveEcommerceOrderRequestV2,
   saveEcommerceCancellationIntent,
   saveEcommerceOrderAmendment,
+  saveEcommerceOrderReschedule,
   saveEcommerceReturnIntent,
   saveEcommerceSupportIntent,
   type EcommerceBuyingState,
   type EcommerceCancellationIntent,
   type EcommerceCancellationReasonCode,
   type EcommerceOrderAmendmentIntent,
+  type EcommerceOrderRescheduleIntent,
   type EcommerceCartLine,
   type EcommerceFulfilment,
   type EcommercePaymentAdapter,
@@ -51,6 +54,7 @@ type EcommerceBuyingWorkspaceProps = {
   onOpenManagedRequest?: (requestId: string) => void
   onOpenCancellation: (intent: EcommerceCancellationIntent) => void
   onOpenAmendment: (intent: EcommerceOrderAmendmentIntent) => void
+  onOpenReschedule: (intent: EcommerceOrderRescheduleIntent) => void
   onOpenReturns: (intent: EcommerceReturnIntent) => void
   onOpenSupport: (intent: EcommerceSupportIntent) => void
   onRecordManagedRequest?: (request: EcommerceBuyingState['requests'][number]) => Promise<void>
@@ -73,6 +77,12 @@ type EcommerceAmendmentStatus = {
   replacementOrderId: string
 }
 
+type EcommerceRescheduleStatus = {
+  intent: EcommerceOrderRescheduleIntent
+  state: 'waiting_shop_review' | 'replacement_needed' | 'replacement_created' | 'review_required'
+  replacementOrderId: string
+}
+
 function formatMmk(value: number) {
   return `${value.toLocaleString()} MMK`
 }
@@ -86,6 +96,11 @@ function paymentLabel(value: EcommercePaymentAdapter) {
 function receiveOrderLabel(value: EcommerceFulfilment) {
   if (value === 'delivery') return 'Delivery · fee confirmed in Shop'
   return 'Pickup · no delivery fee'
+}
+
+function localPromiseInput(value: Date) {
+  const shifted = new Date(value.getTime() - value.getTimezoneOffset() * 60_000)
+  return shifted.toISOString().slice(0, 16)
 }
 
 function cartMatchesRequest(cart: EcommerceCartLine[], request: EcommerceBuyingState['requests'][number]) {
@@ -106,6 +121,7 @@ export function EcommerceBuyingWorkspace({
   onOpenManagedRequest,
   onOpenCancellation,
   onOpenAmendment,
+  onOpenReschedule,
   onOpenReturns,
   onOpenSupport,
   onRecordManagedRequest,
@@ -163,11 +179,17 @@ export function EcommerceBuyingWorkspace({
     reason: string
   } | null>(null)
   const [amendmentBusy, setAmendmentBusy] = useState(false)
+  const [rescheduleDraft, setRescheduleDraft] = useState<{ orderId: string; requestedPromisedAt: string; reason: string } | null>(null)
+  const [rescheduleBusy, setRescheduleBusy] = useState(false)
   const confirmationRef = useRef<HTMLInputElement>(null)
 
   const emptyBuyingState = useMemo(() => createEmptyEcommerceBuyingState(scope), [scope])
   const activeBuyingState = buyingState.scope === scope
-    ? { ...buyingState, amendmentIntents: buyingState.amendmentIntents ?? [] }
+    ? {
+      ...buyingState,
+      amendmentIntents: buyingState.amendmentIntents ?? [],
+      rescheduleIntents: buyingState.rescheduleIntents ?? [],
+    }
     : emptyBuyingState
   const recoveryStatus = recoveryRead.scope === scope ? recoveryRead.status : 'checking'
   const recoveryIssue = recoveryRead.scope === scope ? recoveryRead.issue : ''
@@ -196,6 +218,7 @@ export function EcommerceBuyingWorkspace({
       setSupportDraft(null)
       setCancellationDraft(null)
       setAmendmentDraft(null)
+      setRescheduleDraft(null)
       setNotice('')
       const latest = recoveredState.requests[0]
       if (!latest || latest.sourcePreviewDigest !== sourcePreviewDigest) return
@@ -272,13 +295,16 @@ export function EcommerceBuyingWorkspace({
   }, [activeBuyingState.requests, commerceState])
   const customerReference = [customerName.trim(), customerPhone.trim()].filter(Boolean).join(' · ')
   const trackedCustomerReference = customerReference || latestRequest?.customerReference || ''
-  const amendmentReplacementRequestIds = new Set(activeBuyingState.amendmentIntents.map((intent) => intent.replacementRequestId))
+  const replacementRequestIds = new Set([
+    ...activeBuyingState.amendmentIntents.map((intent) => intent.replacementRequestId),
+    ...activeBuyingState.rescheduleIntents.map((intent) => intent.replacementRequestId),
+  ])
   const customerOrderTimeline = combinedOrderTimeline.filter((entry) => (
     trackedCustomerReference && (entry.request.schema === 'supermega.ecommerce.order_request.v2'
       && entry.request.customerProfile?.phone
       ? entry.request.customerProfile.phone === customerPhone.trim()
       : entry.request.customerReference === trackedCustomerReference)
-  )).filter((entry) => !amendmentReplacementRequestIds.has(entry.request.id) || Boolean(entry.order))
+  )).filter((entry) => !replacementRequestIds.has(entry.request.id) || Boolean(entry.order))
   const completedCustomerOrders = customerOrderTimeline.filter((entry) => entry.stage === 'completed' && entry.order?.completion)
   const activeCustomerOrders = customerOrderTimeline.filter((entry) => (
     entry.order && ['confirmed', 'preparing', 'ready'].includes(entry.order.status)
@@ -349,6 +375,30 @@ export function EcommerceBuyingWorkspace({
     return statuses
   }, [])
   const pendingAmendmentIntents = amendmentStatuses.filter((status) => status.state !== 'replacement_created')
+  const rescheduleStatuses = activeBuyingState.rescheduleIntents.filter((intent) => customerSourceRequestIds.has(intent.sourceRequestId)).reduce<EcommerceRescheduleStatus[]>((statuses, intent) => {
+    const originalEntry = customerOrderTimeline.find((entry) => entry.order?.id === intent.orderId)
+    const replacementEntry = combinedOrderTimeline.find((entry) => entry.request.id === intent.replacementRequestId)
+    if (replacementEntry?.order) {
+      statuses.push({ intent, state: 'replacement_created', replacementOrderId: replacementEntry.order.id })
+      return statuses
+    }
+    const acknowledgement = originalEntry?.order ? commerceOrderAcknowledgement(commerceState, originalEntry.order.id) : null
+    if (acknowledgement?.cancellation.state === 'cancelled'
+      && acknowledgement.cancellation.evidenceReference === intent.evidenceReference) {
+      statuses.push({ intent, state: 'replacement_needed', replacementOrderId: '' })
+      return statuses
+    }
+    if (acknowledgement?.status === 'confirmed'
+      && acknowledgement.digest === intent.sourceAcknowledgementDigest
+      && acknowledgement.payment.status === 'pending'
+      && acknowledgement.cancellation.state === 'not_cancelled') {
+      statuses.push({ intent, state: 'waiting_shop_review', replacementOrderId: '' })
+      return statuses
+    }
+    statuses.push({ intent, state: 'review_required', replacementOrderId: '' })
+    return statuses
+  }, [])
+  const pendingRescheduleIntents = rescheduleStatuses.filter((status) => status.state !== 'replacement_created')
   const visibleSupportCases = completedCustomerOrders.flatMap((entry) => (
     (entry.order?.supportCases ?? []).map((supportCase) => ({ orderId: entry.order?.id ?? '', supportCase }))
   ))
@@ -489,8 +539,14 @@ export function EcommerceBuyingWorkspace({
       setNotice('This order already has a cancellation request waiting for Shop review.')
       return
     }
+    if (activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === order.id)) {
+      setNotice('This order already has one recoverable reschedule request.')
+      return
+    }
     setReturnDraft(null)
     setSupportDraft(null)
+    setAmendmentDraft(null)
+    setRescheduleDraft(null)
     setCancellationDraft({ orderId: order.id, reasonCode: 'changed_mind', reason: '' })
     setNotice('Tell Shop why you want to cancel. The order, stock, payment, refund, and customer messages stay unchanged until Shop approves.')
   }
@@ -502,13 +558,15 @@ export function EcommerceBuyingWorkspace({
       setNotice('Order changes are available only before preparation and payment confirmation.')
       return
     }
-    if (activeBuyingState.amendmentIntents.some((intent) => intent.orderId === order.id)) {
+    if (activeBuyingState.amendmentIntents.some((intent) => intent.orderId === order.id)
+      || activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === order.id)) {
       setNotice('This order already has one recoverable change request.')
       return
     }
     setCancellationDraft(null)
     setReturnDraft(null)
     setSupportDraft(null)
+    setRescheduleDraft(null)
     setAmendmentDraft({
       orderId: order.id,
       fulfilment: entry.request.fulfilment,
@@ -516,6 +574,46 @@ export function EcommerceBuyingWorkspace({
       reason: '',
     })
     setNotice('Change quantities, then Shop will cancel the original only after it proves a current replacement quote. The replacement order still needs a second human confirmation.')
+  }
+
+  function openRescheduleRequest(entry: CommerceStorefrontOrderTimelineEntry) {
+    const order = entry.order
+    if (!order || order.status !== 'confirmed' || order.paymentStatus !== 'pending' || order.refundStatus !== 'none' || !order.promisedAt) {
+      setNotice('Promise changes are available only before preparation and payment confirmation.')
+      return
+    }
+    if (activeBuyingState.amendmentIntents.some((intent) => intent.orderId === order.id)
+      || activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === order.id)
+      || activeBuyingState.cancellationIntents.some((intent) => intent.orderId === order.id)) {
+      setNotice('This order already has one recoverable change or cancellation request.')
+      return
+    }
+    const minimum = quoteClock + 2 * 60 * 60 * 1000
+    const afterOriginal = Date.parse(order.promisedAt) + 24 * 60 * 60 * 1000
+    setAmendmentDraft(null)
+    setCancellationDraft(null)
+    setReturnDraft(null)
+    setSupportDraft(null)
+    setRescheduleDraft({
+      orderId: order.id,
+      requestedPromisedAt: localPromiseInput(new Date(Math.max(minimum, afterOriginal))),
+      reason: '',
+    })
+    setNotice('Choose a new requested time. Shop will recheck the current promise policy before replacing the original order; no rider or message is sent.')
+  }
+
+  async function openRescheduleInShop(intent: EcommerceOrderRescheduleIntent) {
+    const replacementRequest = activeBuyingState.requests.find((request) => request.id === intent.replacementRequestId)
+    if (!replacementRequest) {
+      setNotice('The reschedule replacement request is missing from recovery. Nothing was opened in Shop.')
+      return
+    }
+    try {
+      if (onRecordManagedRequest) await onRecordManagedRequest(replacementRequest)
+      onOpenReschedule(intent)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The managed reschedule request could not be synchronized. It remains saved locally.')
+    }
   }
 
   async function openAmendmentInShop(intent: EcommerceOrderAmendmentIntent) {
@@ -605,6 +703,73 @@ export function EcommerceBuyingWorkspace({
       setNotice(error instanceof Error ? error.message : 'Order amendment failed closed.')
     } finally {
       setAmendmentBusy(false)
+    }
+  }
+
+  async function submitRescheduleRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!rescheduleDraft || rescheduleBusy || disabled || recoveryBlocked) return
+    const entry = activeCustomerOrders.find((candidate) => candidate.order?.id === rescheduleDraft.orderId)
+    if (!entry?.order || entry.request.schema !== 'supermega.ecommerce.order_request.v2' || !globalThis.crypto?.randomUUID) {
+      setNotice('Secure reschedule identity or current Ecommerce order evidence is unavailable. Nothing was recorded.')
+      return
+    }
+    const requestedPromise = new Date(rescheduleDraft.requestedPromisedAt)
+    if (Number.isNaN(requestedPromise.getTime()) || requestedPromise.getTime() <= quoteClock) {
+      setNotice('Choose a future date and time for Shop review.')
+      return
+    }
+    setRescheduleBusy(true)
+    setNotice('')
+    try {
+      const quotedAt = new Date()
+      const originalRequest = entry.request
+      const pim = await buildEcommercePimProjection(scope, sourcePreviewDigest, preview)
+      const quote = await buildEcommerceCheckoutQuote({
+        pim,
+        cart: (entry.order.lines ?? []).map((line) => ({ sku: line.sku, quantity: line.quantity })),
+        customerReference: originalRequest.customerReference,
+        customerProfile: originalRequest.customerProfile ? {
+          name: originalRequest.customerProfile.name,
+          phone: originalRequest.customerProfile.phone,
+          previous: originalRequest.customerProfile,
+        } : undefined,
+        deliveryAddress: originalRequest.fulfilment === 'delivery' && originalRequest.deliveryAddress ? {
+          line1: originalRequest.deliveryAddress.line1,
+          township: originalRequest.deliveryAddress.township,
+          city: originalRequest.deliveryAddress.city,
+          instructions: originalRequest.deliveryAddress.instructions,
+          previous: originalRequest.deliveryAddress,
+        } : null,
+        fulfilment: originalRequest.fulfilment,
+        paymentAdapter: originalRequest.quote.payment.adapter,
+        promotionCode: originalRequest.quote.promotion.code,
+        idempotencyKey: `ECI-${globalThis.crypto.randomUUID().toUpperCase()}`,
+        quotedAt: quotedAt.toISOString(),
+        expiresAt: new Date(quotedAt.getTime() + 30 * 60 * 1000).toISOString(),
+      })
+      const replacementRequest = await buildEcommerceOrderRequestV2(quote, sourceStorefront)
+      const intent = await buildEcommerceOrderRescheduleIntent({
+        scope,
+        commerceState,
+        orderId: entry.order.id,
+        replacementRequest,
+        requestedPromisedAt: requestedPromise.toISOString(),
+        reason: rescheduleDraft.reason,
+        idempotencyKey: `RSI-${globalThis.crypto.randomUUID().toUpperCase()}`,
+        createdAt: quotedAt.toISOString(),
+      })
+      const saved = await saveEcommerceOrderReschedule(scope, replacementRequest, intent, activeBuyingState.headDigest)
+      setBuyingState(saved)
+      setRecoveryRead({ scope, status: 'ready', issue: '' })
+      setRescheduleDraft(null)
+      setNotice(`${intent.id} and ${replacementRequest.id} are saved together. No order, stock, payment, refund, rider, message, or provider changed.`)
+      if (onRecordManagedRequest) await onRecordManagedRequest(replacementRequest)
+      onOpenReschedule(intent)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Order reschedule failed closed.')
+    } finally {
+      setRescheduleBusy(false)
     }
   }
 
@@ -1004,8 +1169,8 @@ export function EcommerceBuyingWorkspace({
         </div>
       </details>
 
-      <details className="ecommerce-after-purchase" open={Boolean(amendmentDraft || cancellationDraft || returnDraft || supportDraft) || undefined}>
-        <summary><span><strong>Order help</strong><small>Change or cancel before preparation; get help after completion</small></span><b>{pendingAmendmentIntents.length + pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length ? `${pendingAmendmentIntents.length + pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length} waiting` : 'Shop review'}</b></summary>
+      <details className="ecommerce-after-purchase" open={Boolean(amendmentDraft || rescheduleDraft || cancellationDraft || returnDraft || supportDraft) || undefined}>
+        <summary><span><strong>Order help</strong><small>Change time, items, or cancellation before preparation</small></span><b>{pendingAmendmentIntents.length + pendingRescheduleIntents.length + pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length ? `${pendingAmendmentIntents.length + pendingRescheduleIntents.length + pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length} waiting` : 'Shop review'}</b></summary>
         <div className="ecommerce-return-workspace">
           <p>Shop reviews every change, cancellation, return, and help request. Nothing here changes an order, stock, payment, refund, delivery, provider, or customer message by itself.</p>
           {pendingAmendmentIntents.map(({ intent, state }) => <article className="ecommerce-return-status" key={intent.id}>
@@ -1014,6 +1179,13 @@ export function EcommerceBuyingWorkspace({
           </article>)}
           {amendmentStatuses.filter((status) => status.state === 'replacement_created').slice(0, 3).map(({ intent, replacementOrderId }) => <article className="ecommerce-return-status" key={`amendment:${intent.id}`}>
             <span><strong>Order updated</strong><small>{intent.orderId} replaced by {replacementOrderId}</small></span><b>Confirmed</b>
+          </article>)}
+          {pendingRescheduleIntents.map(({ intent, state }) => <article className="ecommerce-return-status" key={intent.id}>
+            <span><strong>{state === 'replacement_needed' ? 'New promise needs confirmation' : state === 'review_required' ? 'Reschedule needs fresh review' : 'Reschedule waiting'}</strong><small>{intent.orderId} / requested {new Date(intent.requestedPromisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small></span>
+            <button className="core-button secondary" disabled={disabled} onClick={() => void openRescheduleInShop(intent)} type="button">Continue in Shop</button>
+          </article>)}
+          {rescheduleStatuses.filter((status) => status.state === 'replacement_created').slice(0, 3).map(({ intent, replacementOrderId }) => <article className="ecommerce-return-status" key={`reschedule:${intent.id}`}>
+            <span><strong>New promise confirmed</strong><small>{intent.orderId} replaced by {replacementOrderId} / {new Date(intent.requestedPromisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small></span><b>Confirmed</b>
           </article>)}
           {pendingCancellationIntents.map((intent) => <article className="ecommerce-return-status" key={intent.id}>
             <span><strong>Cancellation waiting</strong><small>{intent.orderId} / {intent.reasonCode.replaceAll('_', ' ')}</small></span>
@@ -1035,14 +1207,15 @@ export function EcommerceBuyingWorkspace({
             <span><strong>{supportCase.status === 'resolved' ? 'Help resolved' : 'Help open'}</strong><small>{orderId} / {supportCase.category.replaceAll('_', ' ')}</small></span>
             <b>{supportCase.status}</b>
           </article>)}
-          {!amendmentDraft && !cancellationDraft && !returnDraft && !supportDraft ? activeCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
+          {!amendmentDraft && !rescheduleDraft && !cancellationDraft && !returnDraft && !supportDraft ? activeCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
             <span><strong>{entry.order?.id}</strong><small>{orderStageLabel(entry)} / {formatMmk(entry.order?.total ?? entry.request.totalMmk)}</small></span>
             <div className="ecommerce-return-actions">
-              {entry.order?.status === 'confirmed' && entry.order.paymentStatus === 'pending' && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openAmendmentRequest(entry)} type="button">Change order</button> : null}
-              {!activeBuyingState.cancellationIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openCancellationRequest(entry)} type="button">Cancel order</button> : null}
+              {entry.order?.status === 'confirmed' && entry.order.paymentStatus === 'pending' && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openRescheduleRequest(entry)} type="button">Change time</button> : null}
+              {entry.order?.status === 'confirmed' && entry.order.paymentStatus === 'pending' && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openAmendmentRequest(entry)} type="button">Change order</button> : null}
+              {!activeBuyingState.cancellationIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openCancellationRequest(entry)} type="button">Cancel order</button> : null}
             </div>
           </article>) : null}
-          {!amendmentDraft && !cancellationDraft && !returnDraft && !supportDraft ? completedCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
+          {!amendmentDraft && !rescheduleDraft && !cancellationDraft && !returnDraft && !supportDraft ? completedCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
             <span><strong>{entry.order?.id}</strong><small>{entry.order?.lines?.map((line) => `${line.name} x ${line.quantity}`).join(' / ') ?? entry.order?.item}</small></span>
             <div className="ecommerce-return-actions">
               {!pendingReturnIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openReturnRequest(entry)} type="button">Return</button> : null}
@@ -1054,6 +1227,12 @@ export function EcommerceBuyingWorkspace({
             {amendmentDraft.lines.map((line) => <label key={line.sku}>{line.name}<input disabled={disabled || amendmentBusy} inputMode="numeric" max="99" min="1" onChange={(event) => setAmendmentDraft((current) => current ? { ...current, lines: current.lines.map((candidate) => candidate.sku === line.sku ? { ...candidate, quantity: event.target.value } : candidate) } : current)} required step="1" type="number" value={line.quantity} /></label>)}
             <label className="ecommerce-return-reason">Why change it?<textarea disabled={disabled || amendmentBusy} maxLength={300} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, reason: event.target.value } : current)} placeholder="One clear reason for Shop review" required rows={2} value={amendmentDraft.reason} /></label>
             <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || amendmentBusy} type="submit">{amendmentBusy ? 'Saving…' : 'Send change to Shop'}</button><button className="core-button secondary" disabled={disabled || amendmentBusy} onClick={() => { setAmendmentDraft(null); setNotice('Order change closed. Nothing changed.') }} type="button">Close</button></div>
+          </form> : null}
+          {rescheduleDraft ? <form className="ecommerce-return-form" onSubmit={(event) => void submitRescheduleRequest(event)}>
+            <span><strong>Change time for {rescheduleDraft.orderId}</strong><small>Shop checks current delivery and payment policy before cancelling the original. A second confirmation creates the replacement.</small></span>
+            <label>Requested date and time<input disabled={disabled || rescheduleBusy} min={localPromiseInput(new Date(quoteClock + 30 * 60 * 1000))} onChange={(event) => setRescheduleDraft((current) => current ? { ...current, requestedPromisedAt: event.target.value } : current)} required type="datetime-local" value={rescheduleDraft.requestedPromisedAt} /></label>
+            <label className="ecommerce-return-reason">Why change it?<textarea disabled={disabled || rescheduleBusy} maxLength={300} onChange={(event) => setRescheduleDraft((current) => current ? { ...current, reason: event.target.value } : current)} placeholder="One clear reason for Shop review" required rows={2} value={rescheduleDraft.reason} /></label>
+            <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || rescheduleBusy} type="submit">{rescheduleBusy ? 'Saving…' : 'Send time to Shop'}</button><button className="core-button secondary" disabled={disabled || rescheduleBusy} onClick={() => { setRescheduleDraft(null); setNotice('Reschedule closed. The order and promise are unchanged.') }} type="button">Close</button></div>
           </form> : null}
           {cancellationDraft ? <form className="ecommerce-return-form" onSubmit={(event) => void submitCancellationRequest(event)}>
             <span><strong>Cancel {cancellationDraft.orderId}</strong><small>Shop must recheck the order, reserved stock, payment, and refund impact.</small></span>
@@ -1075,7 +1254,7 @@ export function EcommerceBuyingWorkspace({
             <label className="ecommerce-return-reason">What do you need?<textarea disabled={disabled || supportBusy} maxLength={300} onChange={(event) => setSupportDraft((current) => current ? { ...current, description: event.target.value } : current)} placeholder="One clear description for Shop" required rows={2} value={supportDraft.description} /></label>
             <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || supportBusy} type="submit">{supportBusy ? 'Saving...' : 'Send to Shop review'}</button><button className="core-button secondary" disabled={disabled || supportBusy} onClick={() => { setSupportDraft(null); setNotice('Help request closed. Nothing changed.') }} type="button">Cancel</button></div>
           </form> : null}
-          {!activeCustomerOrders.length && !completedCustomerOrders.length && !pendingAmendmentIntents.length && !pendingCancellationIntents.length && !pendingReturnIntents.length && !pendingSupportIntents.length ? <p>Active and completed orders for this exact contact will appear here.</p> : null}
+          {!activeCustomerOrders.length && !completedCustomerOrders.length && !pendingAmendmentIntents.length && !pendingRescheduleIntents.length && !pendingCancellationIntents.length && !pendingReturnIntents.length && !pendingSupportIntents.length ? <p>Active and completed orders for this exact contact will appear here.</p> : null}
         </div>
       </details>
     </>

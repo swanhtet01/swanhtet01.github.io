@@ -2197,6 +2197,10 @@ if (addToCartStart < 0
   || !ecommerceBuyingLifecycleSource.includes('export async function recordEcommerceOrderAmendment(')
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceOrderAmendment(')
   || !ecommerceBuyingLifecycleSource.includes('Order amendment is not bound to its original and replacement Ecommerce requests.')
+  || !ecommerceBuyingLifecycleSource.includes('export async function buildEcommerceOrderRescheduleIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function recordEcommerceOrderReschedule(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceOrderReschedule(')
+  || !ecommerceBuyingLifecycleSource.includes('Order reschedule is not bound to its original and replacement Ecommerce requests.')
   || !ecommerceBuyingLifecycleSource.includes('Cancellation decision is not bound to its exact recovered request.')
   || !ecommerceBuyingLifecycleSource.includes('Return intent is not attributable to one recovered Ecommerce request.')
   || !ecommerceBuyingUiSource.includes('Cancel order')
@@ -2208,12 +2212,22 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('Send change to Shop')
   || !ecommerceBuyingUiSource.includes('No order, stock, payment, refund, message, or provider changed.')
   || !ecommerceBuyingUiSource.includes('amendmentIntents: buyingState.amendmentIntents ?? []')
+  || !ecommerceBuyingUiSource.includes('rescheduleIntents: buyingState.rescheduleIntents ?? []')
+  || !ecommerceBuyingUiSource.includes('Change time')
+  || !ecommerceBuyingUiSource.includes('Send time to Shop')
+  || !ecommerceBuyingUiSource.includes('No order, stock, payment, refund, rider, message, or provider changed.')
   || !coreSource.includes('validateEcommerceOrderAmendmentIntent(ecommerceOrderAmendmentNavigationIntent)')
   || !coreSource.includes('async function prepareOrderAmendmentReplacement()')
   || !coreSource.includes("kind: 'order_cancel'")
   || !coreSource.includes('Step 1 cancels and releases the original under accountable review. Step 2 separately confirms the repriced replacement order.')
+  || !coreSource.includes('validateEcommerceOrderRescheduleIntent(ecommerceOrderRescheduleNavigationIntent)')
+  || !coreSource.includes('function ecommerceReschedulePromiseAllowed(')
+  || !coreSource.includes('async function prepareOrderRescheduleReplacement()')
+  || !coreSource.includes('no rider, message, or provider call')
   || !managedEcommerceBuyingLifecycleSource.includes('def build_ecommerce_order_amendment_intent(')
   || !managedEcommerceBuyingLifecycleSource.includes('def record_ecommerce_order_amendment(')
+  || !managedEcommerceBuyingLifecycleSource.includes('def build_ecommerce_order_reschedule_intent(')
+  || !managedEcommerceBuyingLifecycleSource.includes('def record_ecommerce_order_reschedule(')
   || !coreSource.includes('ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent}')
   || !coreSource.includes('validateEcommerceCancellationIntent(ecommerceCancellationNavigationIntent)')
   || !coreSource.includes('function ecommerceCancellationMatchesCurrentShop(')
@@ -12085,6 +12099,120 @@ async function verifyStorefrontRuntime() {
       })
     } catch { advancedAmendmentRejected = true }
     buyingAssert(advancedAmendmentRejected, 'ecommerce_advanced_order_amendment_was_accepted')
+    const rescheduleQuote = await buyingModel.buildEcommerceCheckoutQuote({
+      pim,
+      cart: buyingRequest.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })),
+      customerReference: buyingRequest.customerReference,
+      fulfilment: buyingRequest.fulfilment,
+      paymentAdapter: buyingRequest.quote.payment.adapter,
+      promotionCode: buyingRequest.quote.promotion.code,
+      customerProfile: { name: 'Ma Su', phone: '09 123 456', previous: null },
+      deliveryAddress: { line1: '12 Insein Road, Ward 3', township: 'Hlaing', city: 'Yangon', instructions: 'Call at the gate', previous: null },
+      idempotencyKey: 'ECI-B2345678-1234-4ABC-8ABC-1234567890AC',
+      quotedAt: '2026-07-24T09:11:00.000Z',
+      expiresAt: '2026-07-24T09:30:00.000Z',
+    })
+    const rescheduleRequest = await buyingModel.buildEcommerceOrderRequestV2(rescheduleQuote, {
+      revision: 1,
+      actionId: managedPreviewProof.actionId,
+    })
+    const requestedPromisedAt = '2026-07-24T12:10:00.000Z'
+    const rescheduleIntent = await buyingModel.buildEcommerceOrderRescheduleIntent({
+      scope: buyingScope,
+      commerceState: promotedOrderState,
+      orderId: promotedOrder.id,
+      replacementRequest: rescheduleRequest,
+      requestedPromisedAt,
+      reason: 'Customer needs a later delivery window after Shop review.',
+      idempotencyKey: 'RSI-C2345678-1234-4ABC-8ABC-1234567890AD',
+      createdAt: '2026-07-24T09:12:00.000Z',
+    })
+    buyingAssert(rescheduleIntent.schema === 'supermega.ecommerce.order_reschedule_intent.v1'
+      && rescheduleIntent.sourceRequestId === buyingRequest.id
+      && rescheduleIntent.replacementRequestId === rescheduleRequest.id
+      && rescheduleIntent.sourceAcknowledgementDigest === promotedAcknowledgement.digest
+      && rescheduleIntent.originalPromisedAt === promotedOrder.promisedAt
+      && rescheduleIntent.requestedPromisedAt === requestedPromisedAt
+      && rescheduleIntent.customerMessageSent === false
+      && rescheduleIntent.orderChanged === false
+      && rescheduleIntent.stockChanged === false
+      && rescheduleIntent.paymentChanged === false
+      && rescheduleIntent.refundStarted === false
+      && rescheduleIntent.riderBooked === false
+      && rescheduleIntent.providerCalled === false,
+    'ecommerce_order_reschedule_not_acknowledgement_bound_or_side_effect_free')
+    const rescheduledBuyingState = await buyingModel.recordEcommerceOrderReschedule(
+      recordedBuying,
+      rescheduleRequest,
+      rescheduleIntent,
+      recordedBuying.headDigest,
+    )
+    const replayedRescheduleState = await buyingModel.recordEcommerceOrderReschedule(
+      rescheduledBuyingState,
+      structuredClone(rescheduleRequest),
+      structuredClone(rescheduleIntent),
+      rescheduledBuyingState.headDigest,
+    )
+    buyingAssert(JSON.stringify(replayedRescheduleState) === JSON.stringify(rescheduledBuyingState)
+      && rescheduledBuyingState.revision === 3
+      && rescheduledBuyingState.rescheduleIntents.length === 1
+      && rescheduledBuyingState.events.at(-2)?.action === 'request_recorded'
+      && rescheduledBuyingState.events.at(-1)?.action === 'order_reschedule_intent_recorded',
+    'ecommerce_order_reschedule_atomic_replay_or_history_invalid')
+    const rescheduledDraft = await buyingModel.prepareEcommerceShopDraftV2({
+      request: rescheduleRequest,
+      state: rescheduledBuyingState,
+      currentCatalog: catalog,
+      currentPromotionPolicies: promotionPolicies,
+      currentShippingPolicies: shippingPolicies,
+      currentPaymentPolicies: paymentPolicies,
+      currentTaxConfigurations: taxConfigurations,
+      catalogRevision: 0,
+      confirmedAt: '2026-07-24T09:13:00.000Z',
+    })
+    buyingAssert(rescheduledDraft.pricing.shipping.status === 'approved'
+      && rescheduledDraft.pricing.shipping.promiseMinutes !== null
+      && Date.parse(requestedPromisedAt) >= Date.parse(rescheduledDraft.confirmedAt) + rescheduledDraft.pricing.shipping.promiseMinutes * 60_000,
+    'ecommerce_order_reschedule_did_not_revalidate_current_promise_policy')
+    const forgedRescheduleState = structuredClone(rescheduledBuyingState)
+    forgedRescheduleState.rescheduleIntents[0].requestedPromisedAt = '2026-07-24T12:11:00.000Z'
+    let forgedRescheduleRejected = false
+    try { await buyingModel.validateEcommerceBuyingState(forgedRescheduleState) } catch { forgedRescheduleRejected = true }
+    buyingAssert(forgedRescheduleRejected, 'ecommerce_forged_order_reschedule_was_accepted')
+    const duplicateRescheduleIntent = await buyingModel.buildEcommerceOrderRescheduleIntent({
+      scope: buyingScope,
+      commerceState: promotedOrderState,
+      orderId: promotedOrder.id,
+      replacementRequest: rescheduleRequest,
+      requestedPromisedAt,
+      reason: 'A second reschedule must not create another review record.',
+      idempotencyKey: 'RSI-D2345678-1234-4ABC-8ABC-1234567890AD',
+      createdAt: '2026-07-24T09:13:00.000Z',
+    })
+    let duplicateRescheduleRejected = false
+    try {
+      await buyingModel.recordEcommerceOrderReschedule(
+        rescheduledBuyingState,
+        rescheduleRequest,
+        duplicateRescheduleIntent,
+        rescheduledBuyingState.headDigest,
+      )
+    } catch { duplicateRescheduleRejected = true }
+    buyingAssert(duplicateRescheduleRejected, 'ecommerce_duplicate_order_reschedule_was_accepted')
+    let advancedRescheduleRejected = false
+    try {
+      await buyingModel.buildEcommerceOrderRescheduleIntent({
+        scope: buyingScope,
+        commerceState: advancedPromotedOrderState,
+        orderId: promotedOrder.id,
+        replacementRequest: rescheduleRequest,
+        requestedPromisedAt,
+        reason: 'This advanced order must fail closed.',
+        idempotencyKey: 'RSI-E2345678-1234-4ABC-8ABC-1234567890AD',
+        createdAt: '2026-07-24T09:14:00.000Z',
+      })
+    } catch { advancedRescheduleRejected = true }
+    buyingAssert(advancedRescheduleRejected, 'ecommerce_advanced_order_reschedule_was_accepted')
     const cancellationIntent = buyingModel.buildEcommerceCancellationIntent({
       scope: buyingScope,
       commerceState: promotedOrderState,

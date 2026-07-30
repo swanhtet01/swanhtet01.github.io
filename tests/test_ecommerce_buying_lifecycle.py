@@ -12,6 +12,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     ECOMMERCE_CANCELLATION_INTENT_SCHEMA,
     ECOMMERCE_CANCELLATION_DECISION_SCHEMA,
     ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA,
+    ECOMMERCE_ORDER_RESCHEDULE_INTENT_SCHEMA,
     ECOMMERCE_SHOP_DRAFT_SCHEMA,
     ECOMMERCE_TAX_DECISION_SCHEMA,
     EcommerceLifecycleValidationError,
@@ -23,6 +24,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     build_ecommerce_cancellation_intent,
     build_ecommerce_cancellation_decision,
     build_ecommerce_order_amendment_intent,
+    build_ecommerce_order_reschedule_intent,
     create_empty_ecommerce_lifecycle_state,
     ecommerce_payment_matches_fulfilment,
     prepare_ecommerce_shop_handoff,
@@ -33,6 +35,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     record_ecommerce_cancellation_intent,
     record_ecommerce_cancellation_decision,
     record_ecommerce_order_amendment,
+    record_ecommerce_order_reschedule,
     validate_ecommerce_checkout_quote,
     validate_ecommerce_lifecycle_state,
     validate_ecommerce_order_request,
@@ -46,6 +49,8 @@ RETURN_KEY = "ERI-12345678-1234-4ABC-8ABC-1234567890AC"
 SUPPORT_KEY = "ESI-12345678-1234-4ABC-8ABC-1234567890AD"
 CANCELLATION_KEY = "CNI-12345678-1234-4ABC-8ABC-1234567890AE"
 AMENDMENT_KEY = "AMI-12345678-1234-4ABC-8ABC-1234567890AF"
+RESCHEDULE_KEY = "RSI-32345678-1234-4ABC-8ABC-1234567890AF"
+RESCHEDULE_CHECKOUT_KEY = "ECI-32345678-1234-4ABC-8ABC-1234567890AE"
 SOURCE_DIGEST = "sha256:" + "1" * 64
 
 
@@ -127,6 +132,18 @@ def replacement_request(quantity: int = 3) -> dict[str, object]:
             cart=[{"sku": "SKU-BLUE-M", "quantity": quantity}],
             fulfilment="delivery",
             idempotency_key="ECI-22345678-1234-4ABC-8ABC-1234567890AF",
+        ),
+        source_storefront_revision=4,
+        source_storefront_action_id="ACT-STOREFRONT-R4",
+    )
+
+
+def reschedule_request() -> dict[str, object]:
+    return build_ecommerce_order_request(
+        quote(
+            cart=[{"sku": "SKU-BLUE-M", "quantity": 2}],
+            fulfilment="delivery",
+            idempotency_key=RESCHEDULE_CHECKOUT_KEY,
         ),
         source_storefront_revision=4,
         source_storefront_action_id="ACT-STOREFRONT-R4",
@@ -821,6 +838,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         legacy.pop("cancellationIntents")
         legacy.pop("cancellationDecisions")
         legacy.pop("amendmentIntents")
+        legacy.pop("rescheduleIntents")
         migrated = validate_ecommerce_lifecycle_state(legacy)
         self.assertEqual(migrated["supportIntents"], [])
 
@@ -937,6 +955,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         legacy.pop("cancellationIntents")
         legacy.pop("cancellationDecisions")
         legacy.pop("amendmentIntents")
+        legacy.pop("rescheduleIntents")
         migrated = validate_ecommerce_lifecycle_state(legacy)
         self.assertEqual(migrated["cancellationIntents"], [])
 
@@ -1023,6 +1042,99 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
                         replacement_request=replacement,
                         reason="This stale order must fail closed.",
                         idempotency_key=AMENDMENT_KEY,
+                        created_at="2026-07-26T10:25:00+06:30",
+                    )
+
+    def test_order_reschedule_is_promise_bound_atomic_recoverable_and_side_effect_free(self) -> None:
+        commerce_state = active_commerce_state()
+        source_request = order_source_request()
+        replacement = reschedule_request()
+        intent = build_ecommerce_order_reschedule_intent(
+            scope=SCOPE,
+            commerce_state=commerce_state,
+            order_id="ORD-ECOMMERCE-1001",
+            replacement_request=replacement,
+            requested_promised_at="2026-07-26T17:00:00+06:30",
+            reason="Move delivery until after the customer returns home.",
+            idempotency_key=RESCHEDULE_KEY,
+            created_at="2026-07-26T10:25:00+06:30",
+        )
+        self.assertEqual(intent["schema"], ECOMMERCE_ORDER_RESCHEDULE_INTENT_SCHEMA)
+        self.assertEqual(intent["sourceRequestId"], source_request["id"])
+        self.assertEqual(intent["replacementRequestId"], replacement["id"])
+        self.assertEqual(intent["originalPromisedAt"], "2026-07-26T14:00:00+06:30")
+        self.assertEqual(intent["requestedPromisedAt"], "2026-07-26T17:00:00+06:30")
+        self.assertEqual(intent["fulfilment"], "delivery")
+        for field in (
+            "customerMessageSent", "orderChanged", "stockChanged", "paymentChanged",
+            "refundStarted", "riderBooked", "providerCalled",
+        ):
+            self.assertFalse(intent[field])
+
+        state = create_empty_ecommerce_lifecycle_state(SCOPE)
+        state = record_ecommerce_order_request(
+            state,
+            source_request,
+            expected_head_digest=state["headDigest"],
+        )
+        rescheduled = record_ecommerce_order_reschedule(
+            state,
+            replacement,
+            intent,
+            expected_head_digest=state["headDigest"],
+        )
+        self.assertEqual(rescheduled["revision"], 3)
+        self.assertEqual(
+            [event["action"] for event in rescheduled["events"][-2:]],
+            ["request_recorded", "order_reschedule_intent_recorded"],
+        )
+        replay = record_ecommerce_order_reschedule(
+            rescheduled,
+            deepcopy(replacement),
+            deepcopy(intent),
+            expected_head_digest=rescheduled["headDigest"],
+        )
+        self.assertEqual(replay, rescheduled)
+
+        forged = deepcopy(rescheduled)
+        forged["rescheduleIntents"][0]["requestedPromisedAt"] = "2026-07-26T18:00:00+06:30"
+        with self.assertRaisesRegex(EcommerceLifecycleValidationError, "boundary"):
+            validate_ecommerce_lifecycle_state(forged)
+
+        with self.assertRaisesRegex(EcommerceLifecycleValidationError, "does not match"):
+            record_ecommerce_order_reschedule(
+                state,
+                replacement_request(),
+                intent,
+                expected_head_digest=state["headDigest"],
+            )
+        self.assertEqual(state["revision"], 1)
+
+        with self.assertRaisesRegex(EcommerceLifecycleValidationError, "preserve every SKU"):
+            build_ecommerce_order_reschedule_intent(
+                scope=SCOPE,
+                commerce_state=commerce_state,
+                order_id="ORD-ECOMMERCE-1001",
+                replacement_request=replacement_request(),
+                requested_promised_at="2026-07-26T17:00:00+06:30",
+                reason="This quantity change must use the amendment workflow.",
+                idempotency_key=RESCHEDULE_KEY,
+                created_at="2026-07-26T10:25:00+06:30",
+            )
+
+        for changed in ({"status": "preparing"}, {"status": "ready"}):
+            invalid_state = deepcopy(commerce_state)
+            invalid_state["orders"][0].update(changed)  # type: ignore[index]
+            with self.subTest(changed=changed):
+                with self.assertRaises((EcommerceLifecycleValidationError, ValueError)):
+                    build_ecommerce_order_reschedule_intent(
+                        scope=SCOPE,
+                        commerce_state=invalid_state,
+                        order_id="ORD-ECOMMERCE-1001",
+                        replacement_request=replacement,
+                        requested_promised_at="2026-07-26T17:00:00+06:30",
+                        reason="This stale order must fail closed.",
+                        idempotency_key=RESCHEDULE_KEY,
                         created_at="2026-07-26T10:25:00+06:30",
                     )
 

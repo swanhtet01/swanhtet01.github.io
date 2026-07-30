@@ -4,7 +4,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useS
 import './core-app.css'
 import { WebsiteCommerceIntake } from '../products/WebsiteCommerceIntake'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
-import type { EcommerceCancellationIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceReturnIntent, EcommerceShopDraftV2, EcommerceSupportIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
+import type { EcommerceCancellationIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceReturnIntent, EcommerceShopDraftV2, EcommerceSupportIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
 import { readWebsiteEcommerceHandoff, type WebsiteOrderRecord } from '../products/product-handoff'
 import {
   createManagedApproval,
@@ -388,6 +388,36 @@ function ecommerceOrderAmendmentShopState(state: CommerceState, intent: Ecommerc
     && acknowledgement.cancellation.state === 'cancelled'
     && acknowledgement.cancellation.evidenceReference === intent.evidenceReference) return 'replacement_needed' as const
   return 'stale' as const
+}
+
+function ecommerceOrderRescheduleShopState(state: CommerceState, intent: EcommerceOrderRescheduleIntent) {
+  const order = state.orders.find((candidate) => candidate.id === intent.orderId)
+  const acknowledgement = commerceOrderAcknowledgement(state, intent.orderId)
+  if (!order || !acknowledgement
+    || order.sourceRecordId !== intent.sourceRequestId
+    || acknowledgement.evidence.sourceRecordId !== intent.sourceRequestId
+    || acknowledgement.payment.status !== intent.paymentStatus
+    || acknowledgement.payment.refundStatus !== intent.refundStatus) return 'stale' as const
+  if (acknowledgement.status === intent.orderStatus
+    && acknowledgement.digest === intent.sourceAcknowledgementDigest
+    && acknowledgement.totalMmk === intent.originalTotalMmk
+    && acknowledgement.delivery.promisedAt === intent.originalPromisedAt
+    && acknowledgement.cancellation.state === 'not_cancelled'
+    && commerceOrderHasReleasableReservation(state, intent.orderId)) return 'active' as const
+  if (acknowledgement.status === 'cancelled'
+    && acknowledgement.cancellation.state === 'cancelled'
+    && acknowledgement.cancellation.evidenceReference === intent.evidenceReference) return 'replacement_needed' as const
+  return 'stale' as const
+}
+
+function ecommerceReschedulePromiseAllowed(draft: EcommerceShopDraftV2, intent: EcommerceOrderRescheduleIntent) {
+  const requested = Date.parse(intent.requestedPromisedAt)
+  const reviewed = Date.parse(draft.confirmedAt)
+  if (!Number.isFinite(requested) || !Number.isFinite(reviewed) || requested <= reviewed) return false
+  if (intent.fulfilment === 'pickup') return draft.pricing.shipping.status === 'pickup'
+  return draft.pricing.shipping.status === 'approved'
+    && draft.pricing.shipping.promiseMinutes !== null
+    && requested >= reviewed + draft.pricing.shipping.promiseMinutes * 60_000
 }
 
 function productCanonicalPath(product: ProductId) {
@@ -1410,6 +1440,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   const ecommerceSupportNavigationIntent = (location.state as { ecommerceSupportIntent?: EcommerceSupportIntent } | null)?.ecommerceSupportIntent ?? null
   const ecommerceCancellationNavigationIntent = (location.state as { ecommerceCancellationIntent?: EcommerceCancellationIntent } | null)?.ecommerceCancellationIntent ?? null
   const ecommerceOrderAmendmentNavigationIntent = (location.state as { ecommerceOrderAmendmentIntent?: EcommerceOrderAmendmentIntent } | null)?.ecommerceOrderAmendmentIntent ?? null
+  const ecommerceOrderRescheduleNavigationIntent = (location.state as { ecommerceOrderRescheduleIntent?: EcommerceOrderRescheduleIntent } | null)?.ecommerceOrderRescheduleIntent ?? null
   const routeModule = location.pathname.split('/').filter(Boolean)[1]
   const requestedView = searchParams.get('view')
   const requestedSource = searchParams.get('source')
@@ -1461,7 +1492,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1646,10 +1677,11 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, managedIdentity, requestedRequestId, requestedSource, tab }: {
+function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceOrderRescheduleNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, managedIdentity, requestedRequestId, requestedSource, tab }: {
   ecommerceCancellationNavigationIntent: EcommerceCancellationIntent | null
   ecommerceNavigationDraft: EcommerceShopDraft | null
   ecommerceOrderAmendmentNavigationIntent: EcommerceOrderAmendmentIntent | null
+  ecommerceOrderRescheduleNavigationIntent: EcommerceOrderRescheduleIntent | null
   ecommerceReturnNavigationIntent: EcommerceReturnIntent | null
   ecommerceSupportNavigationIntent: EcommerceSupportIntent | null
   managedIdentity: ManagedIdentity | null
@@ -1719,6 +1751,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
   const consumedEcommerceSupportIntentId = useRef('')
   const consumedEcommerceCancellationIntentId = useRef('')
   const consumedEcommerceOrderAmendmentIntentId = useRef('')
+  const consumedEcommerceOrderRescheduleIntentId = useRef('')
   const consumedEcommerceInboxSource = useRef('')
   const orderDraftRevisionRef = useRef(orderDraftRead.draft?.revision ?? 0)
   const orderDraftSaveQueueRef = useRef(Promise.resolve())
@@ -1737,6 +1770,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
   const [cancellationDraft, setCancellationDraft] = useState<EcommerceCancellationIntent | null>(null)
   const [orderAmendmentReview, setOrderAmendmentReview] = useState<{ intent: EcommerceOrderAmendmentIntent; replacementRequest: EcommerceOrderRequestV2; draft: EcommerceShopDraftV2 } | null>(null)
+  const [orderRescheduleReview, setOrderRescheduleReview] = useState<{ intent: EcommerceOrderRescheduleIntent; replacementRequest: EcommerceOrderRequestV2; draft: EcommerceShopDraftV2 } | null>(null)
   const [supportDraft, setSupportDraft] = useState<CommerceSupportOpenDraft | null>(null)
   const [supportReopenDraft, setSupportReopenDraft] = useState<CommerceSupportReopenDraft | null>(null)
   const [supportServiceDraft, setSupportServiceDraft] = useState<CommerceSupportServiceDraft | null>(null)
@@ -2457,6 +2491,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
         }
         setReturnDraft(null)
         setSupportDraft(null)
+        setOrderAmendmentReview(null)
+        setOrderRescheduleReview(null)
         setCancellationDraft(intent)
         setNotice(`${intent.id} is ready for Shop review. Keeping the order changes nothing; cancellation still requires the accountable Shop gate.`)
         requestAnimationFrame(() => document.getElementById('shop-cancellation-review')?.focus())
@@ -2506,6 +2542,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
         })
         if (!current) return
         setCancellationDraft(null)
+        setOrderRescheduleReview(null)
         setOrderAmendmentReview({ intent, replacementRequest, draft })
         setNotice(`${intent.id} is ready for a two-step Shop replacement. Review the repriced total before the original order is cancelled.`)
         requestAnimationFrame(() => document.getElementById('shop-order-amendment-review')?.focus())
@@ -2519,6 +2556,59 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
       })
     return () => { current = false }
   }, [commerce, ecommerceBuyingScope, ecommerceOrderAmendmentNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
+
+  useEffect(() => {
+    if (!ecommerceOrderRescheduleNavigationIntent
+      || tab !== 'orders'
+      || managedIdentity && workspaceMode !== 'managed-ready'
+      || consumedEcommerceOrderRescheduleIntentId.current === ecommerceOrderRescheduleNavigationIntent.id) return
+    let current = true
+    void import('../products/ecommerce/ecommerce-buying-lifecycle')
+      .then(async (lifecycle) => {
+        const intent = lifecycle.validateEcommerceOrderRescheduleIntent(ecommerceOrderRescheduleNavigationIntent)
+        const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
+        if (!current) return
+        consumedEcommerceOrderRescheduleIntentId.current = intent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        if (!recovered.state || recovered.status !== 'ready') throw new Error(recovered.error || 'Order reschedule recovery is unavailable.')
+        const storedIntent = recovered.state.rescheduleIntents.find((candidate) => candidate.id === intent.id)
+        const replacementRequest = recovered.state.requests.find((candidate) => candidate.id === intent.replacementRequestId)
+        if (!storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(intent) || !replacementRequest) {
+          throw new Error('Order reschedule does not match its recovered request.')
+        }
+        if (ecommerceOrderRescheduleShopState(commerce, intent) === 'stale') {
+          throw new Error('The original order no longer matches this reschedule request. Nothing was prepared.')
+        }
+        const draft = await lifecycle.prepareEcommerceShopDraftV2({
+          request: replacementRequest,
+          state: recovered.state,
+          currentCatalog: commerce.items,
+          currentPromotionPolicies: commerce.promotionPolicies ?? [],
+          currentShippingPolicies: commerce.shippingPolicies ?? [],
+          currentPaymentPolicies: commerce.paymentPolicies ?? [],
+          currentTaxConfigurations: commerce.taxConfigurations ?? [],
+          catalogRevision: commerce.catalogChanges?.length ?? 0,
+          confirmedAt: new Date().toISOString(),
+        })
+        if (!ecommerceReschedulePromiseAllowed(draft, intent)) {
+          throw new Error('The requested promise no longer satisfies current Shop delivery policy. Nothing was prepared.')
+        }
+        if (!current) return
+        setCancellationDraft(null)
+        setOrderAmendmentReview(null)
+        setOrderRescheduleReview({ intent, replacementRequest, draft })
+        setNotice(`${intent.id} is ready for two-step Shop rescheduling. Review the current total and requested promise before cancelling the original.`)
+        requestAnimationFrame(() => document.getElementById('shop-order-reschedule-review')?.focus())
+      })
+      .catch((error) => {
+        if (!current) return
+        consumedEcommerceOrderRescheduleIntentId.current = ecommerceOrderRescheduleNavigationIntent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        setOrderRescheduleReview(null)
+        setNotice(error instanceof Error ? error.message : 'The order reschedule could not be verified. Nothing was prepared.')
+      })
+    return () => { current = false }
+  }, [commerce, ecommerceBuyingScope, ecommerceOrderRescheduleNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
 
   useEffect(() => {
     if (!ecommerceSupportNavigationIntent
@@ -4531,7 +4621,35 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
     return { draft, replacementRequest }
   }
 
-  function openPreparedAmendmentReplacement(intent: EcommerceOrderAmendmentIntent, draft: EcommerceShopDraftV2) {
+  async function prepareCurrentRescheduleDraft(intent: EcommerceOrderRescheduleIntent, currentCommerce: CommerceState) {
+    const lifecycle = await import('../products/ecommerce/ecommerce-buying-lifecycle')
+    const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
+    if (!recovered.state || recovered.status !== 'ready') {
+      throw new ShopReviewRequiredError(recovered.error || `${intent.id} recovery is unavailable. Nothing changed.`)
+    }
+    const storedIntent = recovered.state.rescheduleIntents.find((candidate) => candidate.id === intent.id)
+    const replacementRequest = recovered.state.requests.find((candidate) => candidate.id === intent.replacementRequestId)
+    if (!storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(intent) || !replacementRequest) {
+      throw new ShopReviewRequiredError(`${intent.id} no longer matches its recovered reschedule request. Nothing changed.`)
+    }
+    const draft = await lifecycle.prepareEcommerceShopDraftV2({
+      request: replacementRequest,
+      state: recovered.state,
+      currentCatalog: currentCommerce.items,
+      currentPromotionPolicies: currentCommerce.promotionPolicies ?? [],
+      currentShippingPolicies: currentCommerce.shippingPolicies ?? [],
+      currentPaymentPolicies: currentCommerce.paymentPolicies ?? [],
+      currentTaxConfigurations: currentCommerce.taxConfigurations ?? [],
+      catalogRevision: currentCommerce.catalogChanges?.length ?? 0,
+      confirmedAt: new Date().toISOString(),
+    })
+    if (!ecommerceReschedulePromiseAllowed(draft, intent)) {
+      throw new ShopReviewRequiredError(`${intent.id} no longer satisfies current Shop promise policy. Nothing changed.`)
+    }
+    return { draft, replacementRequest }
+  }
+
+  function openPreparedReplacement(intent: EcommerceOrderAmendmentIntent | EcommerceOrderRescheduleIntent, draft: EcommerceShopDraftV2, promisedAt?: string) {
     const [firstLine, ...remainingLines] = draft.lines
     if (!firstLine) throw new ShopReviewRequiredError('The replacement request has no reviewed item. Nothing was prepared.')
     setPreparedChannelDraft(null)
@@ -4546,13 +4664,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
     setFulfilmentReference(draft.deliveryAddress
       ? `${draft.deliveryAddress.line1} · ${draft.deliveryAddress.township} · ${draft.deliveryAddress.city}${draft.deliveryAddress.instructions ? ` · ${draft.deliveryAddress.instructions}` : ''}`
       : draft.sourceRequestId)
-    setPromisedAt(defaultOrderPromiseInput())
+    setPromisedAt(promisedAt ? localDateTimeInputValue(new Date(promisedAt)) : defaultOrderPromiseInput())
     setOrderEntryMode('manual')
     setOrderDraftActive(true)
     setResumedOrderDraft(null)
     setOrderDraftConflict(false)
     setOrderAmendmentReview(null)
-    setNotice(`${intent.orderId} is retained as cancelled evidence. Replacement ${draft.sourceRequestId} is repriced and ready for a separate accountable order confirmation.`)
+    setOrderRescheduleReview(null)
+    setNotice(`${intent.orderId} is retained as cancelled evidence. Replacement ${draft.sourceRequestId} is repriced${promisedAt ? ` for ${formatTime(promisedAt)}` : ''} and ready for a separate accountable order confirmation.`)
     requestAnimationFrame(() => {
       const dialog = orderComposerRef.current
       if (dialog && !dialog.open) dialog.showModal()
@@ -4573,7 +4692,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
     if (currentState === 'replacement_needed') {
       try {
         const { draft } = await prepareCurrentAmendmentDraft(intent, currentCommerce)
-        openPreparedAmendmentReplacement(intent, draft)
+        openPreparedReplacement(intent, draft)
       } catch (error) {
         setNotice(error instanceof Error ? error.message : 'The replacement draft could not be recovered. Nothing changed.')
       }
@@ -4610,7 +4729,62 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
           throw error
         }
         if (reviewRequired) throw new ShopReviewRequiredError(`${intent.id} changed during review. Nothing was cancelled; reopen the request.`)
-        openPreparedAmendmentReplacement(intent, draft)
+        openPreparedReplacement(intent, draft)
+      },
+    })
+  }
+
+  async function prepareOrderRescheduleReplacement() {
+    if (!orderRescheduleReview) return
+    const { intent } = orderRescheduleReview
+    const currentCommerce = commerceRef.current
+    const currentState = ecommerceOrderRescheduleShopState(currentCommerce, intent)
+    if (currentState === 'stale') {
+      setOrderRescheduleReview(null)
+      setNotice(`${intent.id} no longer matches the current Shop order. Nothing changed.`)
+      return
+    }
+    if (currentState === 'replacement_needed') {
+      try {
+        const { draft } = await prepareCurrentRescheduleDraft(intent, currentCommerce)
+        openPreparedReplacement(intent, draft, intent.requestedPromisedAt)
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : 'The rescheduled replacement draft could not be recovered. Nothing changed.')
+      }
+      return
+    }
+    queueAction({
+      kind: 'order_cancel',
+      subjectId: intent.orderId,
+      summary: `Cancel ${intent.orderId} and prepare rescheduled replacement ${intent.replacementRequestId}`,
+      before: `${intent.orderStatus} · ${formatMoney(intent.originalTotalMmk)} · promised ${formatTime(intent.originalPromisedAt)}`,
+      after: `original cancelled · exact stock released · replacement repriced for ${formatTime(intent.requestedPromisedAt)} · separate confirmation · no rider, message, or provider call`,
+      reasonSuggestion: intent.reason.slice(0, 180),
+      evidenceReferenceSuggestion: intent.evidenceReference,
+      evidenceReferenceLocked: true,
+      apply: async (action) => {
+        const latestCommerce = commerceRef.current
+        if (ecommerceOrderRescheduleShopState(latestCommerce, intent) !== 'active') {
+          setOrderRescheduleReview(null)
+          throw new ShopReviewRequiredError(`${intent.id} changed during review. Nothing was cancelled; reopen the request.`)
+        }
+        const { draft } = await prepareCurrentRescheduleDraft(intent, latestCommerce)
+        const proof = commerceActionProof(action)
+        let reviewRequired = false
+        try {
+          await mutateCommerce('commerce.order.cancelled', action.commandId, proof, (current) => {
+            if (ecommerceOrderRescheduleShopState(current, intent) !== 'active') {
+              reviewRequired = true
+              return null
+            }
+            return cancelCommerceOrder(current, intent.orderId, proof)
+          })
+        } catch (error) {
+          if (reviewRequired) throw new ShopReviewRequiredError(`${intent.id} changed during review. Nothing was cancelled; reopen the request.`)
+          throw error
+        }
+        if (reviewRequired) throw new ShopReviewRequiredError(`${intent.id} changed during review. Nothing was cancelled; reopen the request.`)
+        openPreparedReplacement(intent, draft, intent.requestedPromisedAt)
       },
     })
   }
@@ -5485,6 +5659,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
           {orderDraftRead.status !== 'unavailable' ? <button className="text-link danger-text" disabled={orderDraftSaving} onClick={() => void discardSavedOrderDraft()} type="button">{orderDraftRead.status === 'ready' ? 'Discard' : 'Discard unreadable draft'}</button> : null}
         </div>
       </div> : null}
+      {orderRescheduleReview ? <section aria-label="Customer order reschedule review" className="order-draft-recovery" id="shop-order-reschedule-review" tabIndex={-1}>
+        <div>
+          <strong>Customer asks to change the promise for {orderRescheduleReview.intent.orderId}</strong>
+          <small>{formatTime(orderRescheduleReview.intent.originalPromisedAt)} → {formatTime(orderRescheduleReview.intent.requestedPromisedAt)} · {orderRescheduleReview.intent.reason}</small>
+          <small>{formatMoney(orderRescheduleReview.intent.originalTotalMmk)} original → {formatMoney(orderRescheduleReview.draft.totalMmk)} currently repriced · replacement {orderRescheduleReview.intent.replacementRequestId}</small>
+          <small>{ecommerceOrderRescheduleShopState(commerce, orderRescheduleReview.intent) === 'replacement_needed' ? 'The original is already cancelled with this exact evidence. Resume the recovered replacement at the requested promise.' : 'Step 1 rechecks current promise policy, cancels, and releases the original. Step 2 separately confirms the repriced replacement and requested time.'}</small>
+        </div>
+        <div className="order-draft-recovery-actions">
+          <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={() => void prepareOrderRescheduleReplacement()} type="button">{ecommerceOrderRescheduleShopState(commerce, orderRescheduleReview.intent) === 'replacement_needed' ? 'Resume reschedule' : 'Review reschedule'}</button>
+          <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={() => { setOrderRescheduleReview(null); setNotice('Reschedule review closed. Nothing changed.') }} type="button">Close review</button>
+        </div>
+      </section> : null}
       {orderAmendmentReview ? <section aria-label="Customer order change review" className="order-draft-recovery" id="shop-order-amendment-review" tabIndex={-1}>
         <div>
           <strong>Customer asks to replace {orderAmendmentReview.intent.orderId}</strong>

@@ -29,6 +29,7 @@ ECOMMERCE_SUPPORT_INTENT_SCHEMA = "supermega.ecommerce.support_intent.v1"
 ECOMMERCE_CANCELLATION_INTENT_SCHEMA = "supermega.ecommerce.cancellation_intent.v1"
 ECOMMERCE_CANCELLATION_DECISION_SCHEMA = "supermega.ecommerce.cancellation_decision.v1"
 ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA = "supermega.ecommerce.order_amendment_intent.v1"
+ECOMMERCE_ORDER_RESCHEDULE_INTENT_SCHEMA = "supermega.ecommerce.order_reschedule_intent.v1"
 ECOMMERCE_LIFECYCLE_STATE_SCHEMA = "supermega.ecommerce.buying_lifecycle.v1"
 ECOMMERCE_LIFECYCLE_EVENT_SCHEMA = "supermega.ecommerce.buying_event.v1"
 EMPTY_ECOMMERCE_LIFECYCLE_DIGEST = f"sha256:{'0' * 64}"
@@ -51,6 +52,8 @@ _CANCELLATION_DECISION_ID = re.compile(rf"^ECD-{_UUID}$")
 _CANCELLATION_DECISION_KEY = re.compile(rf"^CDI-{_UUID}$")
 _AMENDMENT_ID = re.compile(rf"^EAM-{_UUID}$")
 _AMENDMENT_KEY = re.compile(rf"^AMI-{_UUID}$")
+_RESCHEDULE_ID = re.compile(rf"^ERS-{_UUID}$")
+_RESCHEDULE_KEY = re.compile(rf"^RSI-{_UUID}$")
 _ISO_TIMESTAMP = re.compile(
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
     r"(?:\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$"
@@ -2364,6 +2367,273 @@ def validate_ecommerce_order_amendment_intent(value: object) -> dict[str, Any]:
     }
 
 
+def build_ecommerce_order_reschedule_intent(
+    *,
+    scope: str,
+    commerce_state: Mapping[str, object],
+    order_id: str,
+    replacement_request: Mapping[str, object],
+    requested_promised_at: str,
+    reason: str,
+    idempotency_key: str,
+    created_at: str,
+) -> dict[str, Any]:
+    """Prepare an evidence-bound request to replace one promised Shop order."""
+
+    from supermega_runtime.commerce_runtime import commerce_order_acknowledgement
+
+    canonical_scope = _token(scope, "scope")
+    canonical_order_id = _token(order_id, "orderId")
+    orders = commerce_state.get("orders")
+    if not isinstance(orders, list):
+        raise _fail("Order rescheduling requires a Commerce order collection.")
+    order = next(
+        (
+            candidate
+            for candidate in orders
+            if isinstance(candidate, Mapping) and candidate.get("id") == canonical_order_id
+        ),
+        None,
+    )
+    acknowledgement = commerce_order_acknowledgement(commerce_state, canonical_order_id)
+    canonical_replacement = validate_ecommerce_order_request(replacement_request)
+    if (
+        order is None
+        or acknowledgement is None
+        or order.get("status") != "confirmed"
+        or order.get("paymentStatus") != "pending"
+        or order.get("refundStatus") != "none"
+        or acknowledgement.get("status") != order.get("status")
+        or acknowledgement.get("payment", {}).get("status") != order.get("paymentStatus")
+        or acknowledgement.get("payment", {}).get("refundStatus") != order.get("refundStatus")
+        or acknowledgement.get("cancellation", {}).get("state") != "not_cancelled"
+        or acknowledgement.get("totalMmk") != order.get("total")
+        or not order.get("promisedAt")
+        or not _commerce_order_has_releasable_reservation(commerce_state, order)
+    ):
+        raise _fail(
+            "Rescheduling requires one confirmed, unpaid, uncancelled Ecommerce order with exact reserved stock and promise evidence."
+        )
+    source_request_id = _text(
+        acknowledgement.get("evidence", {}).get("sourceRecordId"),
+        "order acknowledgement sourceRecordId",
+        maximum=40,
+    )
+    if (
+        _REQUEST_ID.fullmatch(source_request_id) is None
+        or canonical_replacement["scope"] != canonical_scope
+        or canonical_replacement["id"] == source_request_id
+    ):
+        raise _fail(
+            "Order reschedule is not attributable to distinct Ecommerce requests in one workspace."
+        )
+    original_lines = sorted(
+        (
+            {
+                "sku": _token(line.get("sku"), "order acknowledgement line.sku"),
+                "quantity": _integer(
+                    line.get("quantity"),
+                    "order acknowledgement line.quantity",
+                    minimum=1,
+                    maximum=_MAX_QUANTITY,
+                ),
+            }
+            for line in acknowledgement.get("lines", [])
+            if isinstance(line, Mapping)
+        ),
+        key=lambda line: line["sku"],
+    )
+    replacement_lines = sorted(
+        (
+            {"sku": line["sku"], "quantity": line["quantity"]}
+            for line in canonical_replacement["lines"]
+        ),
+        key=lambda line: line["sku"],
+    )
+    if (
+        _canonical_json(original_lines) != _canonical_json(replacement_lines)
+        or canonical_replacement["fulfilment"] != order.get("fulfilment")
+    ):
+        raise _fail(
+            "A reschedule must preserve every SKU, quantity, and fulfilment method; use Change order for other corrections."
+        )
+    key = _text(idempotency_key, "idempotencyKey", maximum=40)
+    if _RESCHEDULE_KEY.fullmatch(key) is None:
+        raise _fail("Order reschedule idempotency key is invalid.")
+    canonical_created_at = _timestamp(created_at, "createdAt")
+    original_promised_at = _timestamp(order.get("promisedAt"), "order.promisedAt")
+    canonical_requested_at = _timestamp(requested_promised_at, "requestedPromisedAt")
+    created_dt = datetime.fromisoformat(canonical_created_at.replace("Z", "+00:00"))
+    order_dt = datetime.fromisoformat(
+        _timestamp(order.get("createdAt"), "order.createdAt").replace("Z", "+00:00")
+    )
+    replacement_dt = datetime.fromisoformat(
+        canonical_replacement["createdAt"].replace("Z", "+00:00")
+    )
+    requested_dt = datetime.fromisoformat(canonical_requested_at.replace("Z", "+00:00"))
+    if (
+        created_dt < order_dt
+        or created_dt < replacement_dt
+        or requested_dt <= created_dt
+        or canonical_requested_at == original_promised_at
+    ):
+        raise _fail(
+            "Requested promise must be a different future time and the request cannot predate its order or replacement quote."
+        )
+    replacement_digest = _canonical_digest(canonical_replacement)
+    return validate_ecommerce_order_reschedule_intent(
+        {
+            "schema": ECOMMERCE_ORDER_RESCHEDULE_INTENT_SCHEMA,
+            "state": "pending_shop_review",
+            "scope": canonical_scope,
+            "id": f"ERS-{key[4:]}",
+            "idempotencyKey": key,
+            "createdAt": canonical_created_at,
+            "orderId": canonical_order_id,
+            "sourceRequestId": source_request_id,
+            "sourceAcknowledgementDigest": acknowledgement["digest"],
+            "orderStatus": "confirmed",
+            "paymentStatus": "pending",
+            "refundStatus": "none",
+            "originalTotalMmk": acknowledgement["totalMmk"],
+            "originalPromisedAt": original_promised_at,
+            "replacementRequestId": canonical_replacement["id"],
+            "replacementRequestDigest": replacement_digest,
+            "requestedPromisedAt": canonical_requested_at,
+            "fulfilment": canonical_replacement["fulfilment"],
+            "reason": _text(reason, "reason", maximum=300),
+            "customerMessageSent": False,
+            "orderChanged": False,
+            "stockChanged": False,
+            "paymentChanged": False,
+            "refundStarted": False,
+            "riderBooked": False,
+            "providerCalled": False,
+            "evidenceReference": (
+                f"ECOMMERCE-RESCHEDULE:{key[4:]}:{canonical_order_id}:"
+                f"{source_request_id}:{canonical_replacement['id']}:"
+                f"{replacement_digest[7:15]}:{canonical_requested_at}"
+            ),
+        }
+    )
+
+
+def validate_ecommerce_order_reschedule_intent(value: object) -> dict[str, Any]:
+    source = _object(
+        value,
+        "order reschedule intent",
+        (
+            "schema", "state", "scope", "id", "idempotencyKey", "createdAt",
+            "orderId", "sourceRequestId", "sourceAcknowledgementDigest",
+            "orderStatus", "paymentStatus", "refundStatus", "originalTotalMmk",
+            "originalPromisedAt", "replacementRequestId", "replacementRequestDigest",
+            "requestedPromisedAt", "fulfilment", "reason", "customerMessageSent",
+            "orderChanged", "stockChanged", "paymentChanged", "refundStarted",
+            "riderBooked", "providerCalled", "evidenceReference",
+        ),
+    )
+    intent_id = _text(source["id"], "order reschedule intent.id", maximum=40)
+    key = _text(
+        source["idempotencyKey"],
+        "order reschedule intent.idempotencyKey",
+        maximum=40,
+    )
+    order_id = _token(source["orderId"], "order reschedule intent.orderId")
+    request_id = _text(
+        source["sourceRequestId"],
+        "order reschedule intent.sourceRequestId",
+        maximum=40,
+    )
+    replacement_id = _text(
+        source["replacementRequestId"],
+        "order reschedule intent.replacementRequestId",
+        maximum=40,
+    )
+    replacement_digest = _digest(
+        source["replacementRequestDigest"],
+        "order reschedule intent.replacementRequestDigest",
+    )
+    canonical_created_at = _timestamp(
+        source["createdAt"], "order reschedule intent.createdAt"
+    )
+    original_promised_at = _timestamp(
+        source["originalPromisedAt"], "order reschedule intent.originalPromisedAt"
+    )
+    requested_promised_at = _timestamp(
+        source["requestedPromisedAt"], "order reschedule intent.requestedPromisedAt"
+    )
+    if datetime.fromisoformat(requested_promised_at.replace("Z", "+00:00")) <= datetime.fromisoformat(
+        canonical_created_at.replace("Z", "+00:00")
+    ):
+        raise _fail("Order reschedule requested promise must remain after its request.")
+    fulfilment = source["fulfilment"]
+    expected_reference = (
+        f"ECOMMERCE-RESCHEDULE:{key[4:]}:{order_id}:{request_id}:"
+        f"{replacement_id}:{replacement_digest[7:15]}:{requested_promised_at}"
+    )
+    if (
+        source["schema"] != ECOMMERCE_ORDER_RESCHEDULE_INTENT_SCHEMA
+        or source["state"] != "pending_shop_review"
+        or _RESCHEDULE_ID.fullmatch(intent_id) is None
+        or _RESCHEDULE_KEY.fullmatch(key) is None
+        or intent_id[4:] != key[4:]
+        or _REQUEST_ID.fullmatch(request_id) is None
+        or _REQUEST_ID.fullmatch(replacement_id) is None
+        or request_id == replacement_id
+        or source["orderStatus"] != "confirmed"
+        or source["paymentStatus"] != "pending"
+        or source["refundStatus"] != "none"
+        or fulfilment not in _FULFILMENT_METHODS
+        or requested_promised_at == original_promised_at
+        or source["customerMessageSent"] is not False
+        or source["orderChanged"] is not False
+        or source["stockChanged"] is not False
+        or source["paymentChanged"] is not False
+        or source["refundStarted"] is not False
+        or source["riderBooked"] is not False
+        or source["providerCalled"] is not False
+        or source["evidenceReference"] != expected_reference
+    ):
+        raise _fail("Order reschedule intent boundary is invalid.")
+    return {
+        "schema": ECOMMERCE_ORDER_RESCHEDULE_INTENT_SCHEMA,
+        "state": "pending_shop_review",
+        "scope": _token(source["scope"], "order reschedule intent.scope"),
+        "id": intent_id,
+        "idempotencyKey": key,
+        "createdAt": canonical_created_at,
+        "orderId": order_id,
+        "sourceRequestId": request_id,
+        "sourceAcknowledgementDigest": _digest(
+            source["sourceAcknowledgementDigest"],
+            "order reschedule intent.sourceAcknowledgementDigest",
+        ),
+        "orderStatus": "confirmed",
+        "paymentStatus": "pending",
+        "refundStatus": "none",
+        "originalTotalMmk": _integer(
+            source["originalTotalMmk"],
+            "order reschedule intent.originalTotalMmk",
+            minimum=1,
+            maximum=_MAX_SAFE_INTEGER,
+        ),
+        "originalPromisedAt": original_promised_at,
+        "replacementRequestId": replacement_id,
+        "replacementRequestDigest": replacement_digest,
+        "requestedPromisedAt": requested_promised_at,
+        "fulfilment": fulfilment,
+        "reason": _text(source["reason"], "order reschedule intent.reason", maximum=300),
+        "customerMessageSent": False,
+        "orderChanged": False,
+        "stockChanged": False,
+        "paymentChanged": False,
+        "refundStarted": False,
+        "riderBooked": False,
+        "providerCalled": False,
+        "evidenceReference": expected_reference,
+    }
+
+
 def create_empty_ecommerce_lifecycle_state(scope: str) -> dict[str, Any]:
     return {
         "schema": ECOMMERCE_LIFECYCLE_STATE_SCHEMA,
@@ -2376,6 +2646,7 @@ def create_empty_ecommerce_lifecycle_state(scope: str) -> dict[str, Any]:
         "cancellationIntents": [],
         "cancellationDecisions": [],
         "amendmentIntents": [],
+        "rescheduleIntents": [],
         "events": [],
     }
 
@@ -2403,6 +2674,7 @@ def _event(value: object, field: str) -> dict[str, Any]:
         "cancellation_intent_recorded",
         "cancellation_decision_recorded",
         "order_amendment_intent_recorded",
+        "order_reschedule_intent_recorded",
     }:
         raise _fail(f"{field}.action is unsupported.")
     core = {
@@ -2432,12 +2704,14 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
     current_fields = frozenset({*legacy_fields, "supportIntents"})
     cancellation_fields = frozenset({*current_fields, "cancellationIntents"})
     decision_fields = frozenset({*cancellation_fields, "cancellationDecisions"})
-    latest_fields = frozenset({*decision_fields, "amendmentIntents"})
+    amendment_fields = frozenset({*decision_fields, "amendmentIntents"})
+    latest_fields = frozenset({*amendment_fields, "rescheduleIntents"})
     if frozenset(value) not in {
         legacy_fields,
         current_fields,
         cancellation_fields,
         decision_fields,
+        amendment_fields,
         latest_fields,
     }:
         raise _fail("lifecycle state fields do not match the contract.")
@@ -2489,10 +2763,18 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
             maximum=_MAX_RECORDS,
         )
     ]
+    reschedule_intents = [
+        validate_ecommerce_order_reschedule_intent(candidate)
+        for candidate in _array(
+            source.get("rescheduleIntents", []),
+            "lifecycle state.rescheduleIntents",
+            maximum=_MAX_RECORDS,
+        )
+    ]
     events = [
         _event(candidate, f"lifecycle state.events[{index}]")
         for index, candidate in enumerate(
-            _array(source["events"], "lifecycle state.events", maximum=_MAX_RECORDS * 6)
+            _array(source["events"], "lifecycle state.events", maximum=_MAX_RECORDS * 7)
         )
     ]
     revision = _integer(source["revision"], "lifecycle state.revision")
@@ -2513,6 +2795,7 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
         *cancellation_intents,
         *cancellation_decisions,
         *amendment_intents,
+        *reschedule_intents,
     ]
     if len({record["id"] for record in records}) != len(records):
         raise _fail("Lifecycle record IDs must be unique.")
@@ -2577,6 +2860,40 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
             raise _fail(
                 "Order amendment is not bound to its original and replacement Ecommerce requests."
             )
+    if len({intent["orderId"] for intent in reschedule_intents}) != len(reschedule_intents):
+        raise _fail("Only one reschedule request may exist for an Ecommerce order.")
+    replacement_orders = [
+        *(intent["orderId"] for intent in amendment_intents),
+        *(intent["orderId"] for intent in reschedule_intents),
+    ]
+    if len(set(replacement_orders)) != len(replacement_orders):
+        raise _fail("Only one replacement workflow may exist for an Ecommerce order.")
+    for intent in reschedule_intents:
+        source_request = request_by_id.get(intent["sourceRequestId"])
+        replacement_request = request_by_id.get(intent["replacementRequestId"])
+        source_profile = source_request.get("customerProfile") if source_request else None
+        replacement_profile = (
+            replacement_request.get("customerProfile") if replacement_request else None
+        )
+        source_phone = source_profile.get("phone") if isinstance(source_profile, Mapping) else None
+        replacement_phone = (
+            replacement_profile.get("phone") if isinstance(replacement_profile, Mapping) else None
+        )
+        if (
+            source_request is None
+            or replacement_request is None
+            or source_request["id"] == replacement_request["id"]
+            or intent["replacementRequestDigest"] != _canonical_digest(replacement_request)
+            or replacement_request["scope"] != intent["scope"]
+            or source_request["scope"] != intent["scope"]
+            or source_request["customerReference"] != replacement_request["customerReference"]
+            or source_phone != replacement_phone
+            or source_request["fulfilment"] != intent["fulfilment"]
+            or replacement_request["fulfilment"] != intent["fulfilment"]
+        ):
+            raise _fail(
+                "Order reschedule is not bound to its original and replacement Ecommerce requests."
+            )
     by_id = {record["id"]: record for record in records}
     if len(events) != len(records):
         raise _fail("Lifecycle history must contain one event per record.")
@@ -2599,6 +2916,7 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
         "cancellationIntents": cancellation_intents,
         "cancellationDecisions": cancellation_decisions,
         "amendmentIntents": amendment_intents,
+        "rescheduleIntents": reschedule_intents,
         "events": events,
     }
 
@@ -2624,6 +2942,7 @@ def _record_lifecycle_value(
         *state["cancellationIntents"],
         *state["cancellationDecisions"],
         *state["amendmentIntents"],
+        *state["rescheduleIntents"],
     ]
     existing = next(
         (
@@ -2761,5 +3080,35 @@ def record_ecommerce_order_amendment(
         canonical_intent,
         collection="amendmentIntents",
         action="order_amendment_intent_recorded",
+        expected_head_digest=with_request["headDigest"],
+    )
+
+
+def record_ecommerce_order_reschedule(
+    state: Mapping[str, object],
+    replacement_request: Mapping[str, object],
+    intent: Mapping[str, object],
+    *,
+    expected_head_digest: str,
+) -> dict[str, Any]:
+    canonical_request = validate_ecommerce_order_request(replacement_request)
+    canonical_intent = validate_ecommerce_order_reschedule_intent(intent)
+    if (
+        canonical_intent["replacementRequestId"] != canonical_request["id"]
+        or canonical_intent["replacementRequestDigest"] != _canonical_digest(canonical_request)
+    ):
+        raise _fail("Order reschedule does not match its replacement request.")
+    with_request = _record_lifecycle_value(
+        state,
+        canonical_request,
+        collection="requests",
+        action="request_recorded",
+        expected_head_digest=expected_head_digest,
+    )
+    return _record_lifecycle_value(
+        with_request,
+        canonical_intent,
+        collection="rescheduleIntents",
+        action="order_reschedule_intent_recorded",
         expected_head_digest=with_request["headDigest"],
     )
