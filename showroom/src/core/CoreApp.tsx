@@ -390,6 +390,14 @@ function ecommerceOrderAmendmentShopState(state: CommerceState, intent: Ecommerc
   return 'stale' as const
 }
 
+function ecommerceOrderAmendmentSummary(intent: EcommerceOrderAmendmentIntent) {
+  if (intent.lineChanges.length) {
+    return intent.lineChanges.map((line) => `${line.name} ${line.fromQuantity}→${line.toQuantity}`).join(' · ')
+  }
+  if (intent.fromFulfilment !== intent.toFulfilment) return `${intent.fromFulfilment}→${intent.toFulfilment}`
+  return 'Customer contact or delivery details'
+}
+
 function ecommerceOrderRescheduleShopState(state: CommerceState, intent: EcommerceOrderRescheduleIntent) {
   const order = state.orders.find((candidate) => candidate.id === intent.orderId)
   const acknowledgement = commerceOrderAcknowledgement(state, intent.orderId)
@@ -4831,7 +4839,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       kind: 'order_cancel',
       subjectId: intent.orderId,
       summary: `Cancel ${intent.orderId} and prepare replacement ${intent.replacementRequestId}`,
-      before: `${intent.orderStatus} · ${formatMoney(intent.originalTotalMmk)} · ${intent.lineChanges.map((line) => `${line.sku} ${line.fromQuantity}→${line.toQuantity}`).join(', ') || `${intent.fromFulfilment}→${intent.toFulfilment}`}`,
+      before: `${intent.orderStatus} · ${formatMoney(intent.originalTotalMmk)} · ${ecommerceOrderAmendmentSummary(intent)}`,
       after: `original cancelled · exact stock released · replacement repriced for separate confirmation · no message or provider call`,
       reasonSuggestion: intent.reason.slice(0, 180),
       evidenceReferenceSuggestion: intent.evidenceReference,
@@ -5803,7 +5811,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       {orderAmendmentReview ? <section aria-label="Customer order change review" className="order-draft-recovery" id="shop-order-amendment-review" tabIndex={-1}>
         <div>
           <strong>Customer asks to replace {orderAmendmentReview.intent.orderId}</strong>
-          <small>{orderAmendmentReview.intent.lineChanges.map((line) => `${line.name} ${line.fromQuantity}→${line.toQuantity}`).join(' · ') || `${orderAmendmentReview.intent.fromFulfilment}→${orderAmendmentReview.intent.toFulfilment}`} · {orderAmendmentReview.intent.reason}</small>
+          <small>{ecommerceOrderAmendmentSummary(orderAmendmentReview.intent)} · {orderAmendmentReview.intent.reason}</small>
           <small>{formatMoney(orderAmendmentReview.intent.originalTotalMmk)} original → {formatMoney(orderAmendmentReview.draft.totalMmk)} repriced · replacement {orderAmendmentReview.intent.replacementRequestId}</small>
           <small>{ecommerceOrderAmendmentShopState(commerce, orderAmendmentReview.intent) === 'replacement_needed' ? 'The original is already cancelled with this exact evidence. Resume the recovered replacement draft.' : 'Step 1 cancels and releases the original under accountable review. Step 2 separately confirms the repriced replacement order.'}</small>
         </div>

@@ -2207,6 +2207,7 @@ if (addToCartStart < 0
   || !ecommerceBuyingLifecycleSource.includes('export async function recordEcommerceOrderAmendment(')
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceOrderAmendment(')
   || !ecommerceBuyingLifecycleSource.includes('Order amendment is not bound to its original and replacement Ecommerce requests.')
+  || !ecommerceBuyingLifecycleSource.includes('Contact or delivery corrections must advance the exact prior customer and address snapshots.')
   || !ecommerceBuyingLifecycleSource.includes('export async function buildEcommerceOrderRescheduleIntent(')
   || !ecommerceBuyingLifecycleSource.includes('export async function recordEcommerceOrderReschedule(')
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceOrderReschedule(')
@@ -2218,8 +2219,9 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('No order, stock, payment, refund, provider, or customer message changed.')
   || !ecommerceBuyingUiSource.includes('Cancellation approved')
   || !ecommerceBuyingUiSource.includes('Order kept')
-  || !ecommerceBuyingUiSource.includes('Change order')
-  || !ecommerceBuyingUiSource.includes('Send change to Shop')
+  || !ecommerceBuyingUiSource.includes('Change details')
+  || !ecommerceBuyingUiSource.includes('Contact or delivery details')
+  || !ecommerceBuyingUiSource.includes('Send correction to Shop')
   || !ecommerceBuyingUiSource.includes('No order, stock, payment, refund, message, or provider changed.')
   || !ecommerceBuyingUiSource.includes('amendmentIntents: buyingState.amendmentIntents ?? []')
   || !ecommerceBuyingUiSource.includes('rescheduleIntents: buyingState.rescheduleIntents ?? []')
@@ -12134,8 +12136,8 @@ async function verifyStorefrontRuntime() {
       fulfilment: buyingRequest.fulfilment,
       paymentAdapter: buyingRequest.quote.payment.adapter,
       promotionCode: buyingRequest.quote.promotion.code,
-      customerProfile: { name: 'Ma Su', phone: '09 123 456', previous: null },
-      deliveryAddress: { line1: '12 Insein Road, Ward 3', township: 'Hlaing', city: 'Yangon', instructions: 'Call at the gate', previous: null },
+      customerProfile: { name: 'Ma Su', phone: '09 123 456', previous: buyingRequest.customerProfile },
+      deliveryAddress: { line1: '12 Insein Road, Ward 3', township: 'Hlaing', city: 'Yangon', instructions: 'Call at the gate', previous: buyingRequest.deliveryAddress },
       idempotencyKey: 'ECI-72345678-1234-4ABC-8ABC-1234567890AC',
       quotedAt: '2026-07-24T09:11:00.000Z',
       expiresAt: '2026-07-24T09:30:00.000Z',
@@ -12235,6 +12237,53 @@ async function verifyStorefrontRuntime() {
       })
     } catch { advancedAmendmentRejected = true }
     buyingAssert(advancedAmendmentRejected, 'ecommerce_advanced_order_amendment_was_accepted')
+    const contactCorrectionQuote = await buyingModel.buildEcommerceCheckoutQuote({
+      pim,
+      cart: buyingRequest.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })),
+      customerReference: 'Ma Su · 09 999 456',
+      fulfilment: buyingRequest.fulfilment,
+      paymentAdapter: buyingRequest.quote.payment.adapter,
+      promotionCode: buyingRequest.quote.promotion.code,
+      customerProfile: { name: 'Ma Su', phone: '09 999 456', previous: buyingRequest.customerProfile },
+      deliveryAddress: { line1: '88 Insein Road, Ward 3', township: 'Hlaing', city: 'Yangon', instructions: 'Call the corrected number', previous: buyingRequest.deliveryAddress },
+      idempotencyKey: 'ECI-D2345678-1234-4ABC-8ABC-1234567890AC',
+      quotedAt: '2026-07-24T09:15:00.000Z',
+      expiresAt: '2026-07-24T09:30:00.000Z',
+    })
+    const contactCorrectionRequest = await buyingModel.buildEcommerceOrderRequestV2(contactCorrectionQuote, {
+      revision: 1,
+      actionId: managedPreviewProof.actionId,
+    })
+    const contactCorrectionIntent = await buyingModel.buildEcommerceOrderAmendmentIntent({
+      scope: buyingScope,
+      commerceState: promotedOrderState,
+      orderId: promotedOrder.id,
+      replacementRequest: contactCorrectionRequest,
+      reason: 'Correct the customer phone and delivery address before preparation.',
+      idempotencyKey: 'AMI-E2345678-1234-4ABC-8ABC-1234567890AD',
+      createdAt: '2026-07-24T09:16:00.000Z',
+    })
+    const contactCorrectionState = await buyingModel.recordEcommerceOrderAmendment(
+      recordedBuying,
+      contactCorrectionRequest,
+      contactCorrectionIntent,
+      recordedBuying.headDigest,
+    )
+    buyingAssert(contactCorrectionIntent.lineChanges.length === 0
+      && contactCorrectionIntent.fromFulfilment === contactCorrectionIntent.toFulfilment
+      && contactCorrectionRequest.customerProfile.revision === buyingRequest.customerProfile.revision + 1
+      && contactCorrectionRequest.customerProfile.previousDigest === buyingRequest.customerProfile.profileDigest
+      && contactCorrectionRequest.deliveryAddress.revision === buyingRequest.deliveryAddress.revision + 1
+      && contactCorrectionRequest.deliveryAddress.previousDigest === buyingRequest.deliveryAddress.addressDigest
+      && contactCorrectionState.amendmentIntents.length === 1
+      && contactCorrectionIntent.customerMessageSent === false
+      && contactCorrectionIntent.orderChanged === false,
+    'ecommerce_contact_correction_not_snapshot_bound_or_side_effect_free')
+    const forgedContactCorrectionState = structuredClone(contactCorrectionState)
+    forgedContactCorrectionState.requests[0].customerProfile.previousDigest = `sha256:${'8'.repeat(64)}`
+    let forgedContactCorrectionRejected = false
+    try { await buyingModel.validateEcommerceBuyingState(forgedContactCorrectionState) } catch { forgedContactCorrectionRejected = true }
+    buyingAssert(forgedContactCorrectionRejected, 'ecommerce_forged_contact_correction_was_accepted')
     const rescheduleQuote = await buyingModel.buildEcommerceCheckoutQuote({
       pim,
       cart: buyingRequest.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })),

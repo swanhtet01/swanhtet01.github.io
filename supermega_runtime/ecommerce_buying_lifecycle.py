@@ -2525,6 +2525,72 @@ def _commerce_order_has_releasable_reservation(
     )
 
 
+def _replacement_identity_is_bound(
+    source: Mapping[str, object],
+    replacement: Mapping[str, object],
+) -> bool:
+    source_profile = source.get("customerProfile")
+    replacement_profile = replacement.get("customerProfile")
+    profile_same = source_profile == replacement_profile
+    profile_advanced = bool(
+        isinstance(source_profile, Mapping)
+        and isinstance(replacement_profile, Mapping)
+        and replacement_profile.get("id") == source_profile.get("id")
+        and replacement_profile.get("revision") == source_profile.get("revision", 0) + 1
+        and replacement_profile.get("previousDigest") == source_profile.get("profileDigest")
+        and replacement_profile.get("profileDigest") != source_profile.get("profileDigest")
+    )
+    source_address = source.get("deliveryAddress")
+    replacement_address = replacement.get("deliveryAddress")
+    address_same = source_address == replacement_address
+    address_advanced = bool(
+        isinstance(source_address, Mapping)
+        and isinstance(replacement_address, Mapping)
+        and replacement_address.get("id") == source_address.get("id")
+        and replacement_address.get("revision") == source_address.get("revision", 0) + 1
+        and replacement_address.get("previousDigest") == source_address.get("addressDigest")
+        and replacement_address.get("addressDigest") != source_address.get("addressDigest")
+    )
+    address_created_for_delivery = bool(
+        source_address is None
+        and replacement.get("fulfilment") == "delivery"
+        and isinstance(replacement_address, Mapping)
+        and replacement_address.get("revision") == 1
+        and replacement_address.get("previousDigest") is None
+    )
+    address_cleared_for_pickup = bool(
+        isinstance(source_address, Mapping)
+        and replacement.get("fulfilment") == "pickup"
+        and replacement_address is None
+    )
+    replacement_reference = (
+        f"{replacement_profile.get('name')} · {replacement_profile.get('phone')}"
+        if isinstance(replacement_profile, Mapping)
+        else replacement.get("customerReference")
+    )
+    return bool(
+        (profile_same or profile_advanced)
+        and (
+            address_same
+            or address_advanced
+            or address_created_for_delivery
+            or address_cleared_for_pickup
+        )
+        and replacement.get("customerReference") == replacement_reference
+    )
+
+
+def _replacement_identity_changed(
+    source: Mapping[str, object],
+    replacement: Mapping[str, object],
+) -> bool:
+    return bool(
+        source.get("customerReference") != replacement.get("customerReference")
+        or source.get("customerProfile") != replacement.get("customerProfile")
+        or source.get("deliveryAddress") != replacement.get("deliveryAddress")
+    )
+
+
 def build_ecommerce_order_amendment_intent(
     *,
     scope: str,
@@ -2627,12 +2693,42 @@ def build_ecommerce_order_amendment_intent(
         for index, original in enumerate(original_lines)
         if original["quantity"] != replacement_lines[index]["quantity"]
     ]
-    from_fulfilment = order.get("fulfilment")
+    storefront_requests = commerce_state.get("storefrontRequests", [])
+    source_request = next(
+        (
+            candidate
+            for candidate in storefront_requests
+            if isinstance(candidate, Mapping) and candidate.get("id") == source_request_id
+        ),
+        None,
+    ) if isinstance(storefront_requests, list) else None
+    from_fulfilment = (
+        source_request.get("fulfilment")
+        if isinstance(source_request, Mapping)
+        and source_request.get("schema") == ECOMMERCE_REQUEST_SCHEMA
+        else order.get("fulfilment")
+    )
+    identity_changed = bool(
+        isinstance(source_request, Mapping)
+        and _replacement_identity_changed(source_request, canonical_replacement)
+    )
+    if isinstance(source_request, Mapping) and not _replacement_identity_is_bound(
+        source_request, canonical_replacement
+    ):
+        raise _fail(
+            "Contact or delivery corrections must advance the exact prior customer and address snapshots."
+        )
     if (
         from_fulfilment not in _FULFILMENT_METHODS
-        or (not line_changes and from_fulfilment == canonical_replacement["fulfilment"])
+        or (
+            not line_changes
+            and from_fulfilment == canonical_replacement["fulfilment"]
+            and not identity_changed
+        )
     ):
-        raise _fail("Change at least one quantity or the fulfilment method before Shop review.")
+        raise _fail(
+            "Change a quantity, fulfilment method, contact, or delivery detail before Shop review."
+        )
     key = _text(idempotency_key, "idempotencyKey", maximum=40)
     if _AMENDMENT_KEY.fullmatch(key) is None:
         raise _fail("Order amendment idempotency key is invalid.")
@@ -2765,7 +2861,6 @@ def validate_ecommerce_order_amendment_intent(value: object) -> dict[str, Any]:
         or source["refundStatus"] != "none"
         or from_fulfilment not in _FULFILMENT_METHODS
         or to_fulfilment not in _FULFILMENT_METHODS
-        or (not line_changes and from_fulfilment == to_fulfilment)
         or len({line["sku"] for line in line_changes}) != len(line_changes)
         or source["customerMessageSent"] is not False
         or source["orderChanged"] is not False
@@ -3299,14 +3394,6 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
     for intent in amendment_intents:
         source_request = request_by_id.get(intent["sourceRequestId"])
         replacement_request = request_by_id.get(intent["replacementRequestId"])
-        source_profile = source_request.get("customerProfile") if source_request else None
-        replacement_profile = (
-            replacement_request.get("customerProfile") if replacement_request else None
-        )
-        source_phone = source_profile.get("phone") if isinstance(source_profile, Mapping) else None
-        replacement_phone = (
-            replacement_profile.get("phone") if isinstance(replacement_profile, Mapping) else None
-        )
         if (
             source_request is None
             or replacement_request is None
@@ -3314,8 +3401,7 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
             or intent["replacementRequestDigest"] != _canonical_digest(replacement_request)
             or replacement_request["scope"] != intent["scope"]
             or source_request["scope"] != intent["scope"]
-            or source_request["customerReference"] != replacement_request["customerReference"]
-            or source_phone != replacement_phone
+            or not _replacement_identity_is_bound(source_request, replacement_request)
             or source_request["fulfilment"] != intent["fromFulfilment"]
             or replacement_request["fulfilment"] != intent["toFulfilment"]
         ):

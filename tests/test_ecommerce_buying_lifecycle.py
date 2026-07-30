@@ -1274,6 +1274,99 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
                         created_at="2026-07-26T10:25:00+06:30",
                     )
 
+    def test_order_amendment_accepts_only_digest_bound_contact_and_delivery_corrections(self) -> None:
+        profile_input = {"name": "Ma Su", "phone": "09 123 456 789", "previous": None}
+        address_input = {
+            "line1": "12 Insein Road, Ward 3",
+            "township": "Hlaing",
+            "city": "Yangon",
+            "instructions": "Call at the gate",
+            "previous": None,
+        }
+        source_request = build_ecommerce_order_request(
+            quote(
+                cart=[{"sku": "SKU-BLUE-M", "quantity": 2}],
+                customer_reference="Ma Su · 09 123 456 789",
+                customer_profile_input=profile_input,
+                delivery_address_input=address_input,
+            ),
+            source_storefront_revision=4,
+            source_storefront_action_id="ACT-STOREFRONT-R4",
+        )
+        replacement = build_ecommerce_order_request(
+            quote(
+                cart=[{"sku": "SKU-BLUE-M", "quantity": 2}],
+                customer_reference="Ma Su · 09 777 456 789",
+                customer_profile_input={
+                    **profile_input,
+                    "phone": "09 777 456 789",
+                    "previous": source_request["customerProfile"],
+                },
+                delivery_address_input={
+                    **address_input,
+                    "line1": "14 Insein Road, Ward 3",
+                    "previous": source_request["deliveryAddress"],
+                },
+                idempotency_key="ECI-42345678-1234-4ABC-8ABC-1234567890AF",
+            ),
+            source_storefront_revision=4,
+            source_storefront_action_id="ACT-STOREFRONT-R4",
+        )
+        commerce_state = active_commerce_state()
+        commerce_state["storefrontRequests"] = [source_request]
+        intent = build_ecommerce_order_amendment_intent(
+            scope=SCOPE,
+            commerce_state=commerce_state,
+            order_id="ORD-ECOMMERCE-1001",
+            replacement_request=replacement,
+            reason="Correct the customer phone and delivery address before preparation.",
+            idempotency_key="AMI-42345678-1234-4ABC-8ABC-1234567890AF",
+            created_at="2026-07-26T10:25:00+06:30",
+        )
+        self.assertEqual(intent["lineChanges"], [])
+        self.assertEqual(intent["fromFulfilment"], intent["toFulfilment"])
+        self.assertEqual(replacement["customerProfile"]["revision"], 2)
+        self.assertEqual(
+            replacement["customerProfile"]["previousDigest"],
+            source_request["customerProfile"]["profileDigest"],
+        )
+        self.assertEqual(
+            replacement["deliveryAddress"]["previousDigest"],
+            source_request["deliveryAddress"]["addressDigest"],
+        )
+        for field in (
+            "customerMessageSent", "orderChanged", "stockChanged", "paymentChanged",
+            "refundStarted", "providerCalled",
+        ):
+            self.assertFalse(intent[field])
+
+        state = create_empty_ecommerce_lifecycle_state(SCOPE)
+        state = record_ecommerce_order_request(
+            state,
+            source_request,
+            expected_head_digest=state["headDigest"],
+        )
+        amended = record_ecommerce_order_amendment(
+            state,
+            replacement,
+            intent,
+            expected_head_digest=state["headDigest"],
+        )
+        self.assertEqual(len(amended["amendmentIntents"]), 1)
+
+        forged = deepcopy(replacement)
+        forged["customerProfile"]["previousDigest"] = "sha256:" + "9" * 64
+        with self.assertRaises(EcommerceLifecycleValidationError):
+            build_ecommerce_order_amendment_intent(
+                scope=SCOPE,
+                commerce_state=commerce_state,
+                order_id="ORD-ECOMMERCE-1001",
+                replacement_request=forged,
+                reason="This unbound replacement must fail closed.",
+                idempotency_key="AMI-52345678-1234-4ABC-8ABC-1234567890AF",
+                created_at="2026-07-26T10:25:00+06:30",
+            )
+
     def test_order_reschedule_is_promise_bound_atomic_recoverable_and_side_effect_free(self) -> None:
         commerce_state = active_commerce_state()
         source_request = order_source_request()

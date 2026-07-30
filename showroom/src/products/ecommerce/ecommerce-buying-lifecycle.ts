@@ -726,6 +726,53 @@ export type EcommerceBuyingLocks = {
   ) => Promise<T>
 }
 
+function replacementIdentityIsBound(
+  source: EcommerceOrderRequestV2,
+  replacement: EcommerceOrderRequestV2,
+) {
+  const sourceProfile = source.customerProfile ?? null
+  const replacementProfile = replacement.customerProfile ?? null
+  const profileSame = canonicalJson(sourceProfile) === canonicalJson(replacementProfile)
+  const profileAdvanced = Boolean(sourceProfile
+    && replacementProfile
+    && replacementProfile.id === sourceProfile.id
+    && replacementProfile.revision === sourceProfile.revision + 1
+    && replacementProfile.previousDigest === sourceProfile.profileDigest
+    && replacementProfile.profileDigest !== sourceProfile.profileDigest)
+  const sourceAddress = source.deliveryAddress ?? null
+  const replacementAddress = replacement.deliveryAddress ?? null
+  const addressSame = canonicalJson(sourceAddress) === canonicalJson(replacementAddress)
+  const addressAdvanced = Boolean(sourceAddress
+    && replacementAddress
+    && replacementAddress.id === sourceAddress.id
+    && replacementAddress.revision === sourceAddress.revision + 1
+    && replacementAddress.previousDigest === sourceAddress.addressDigest
+    && replacementAddress.addressDigest !== sourceAddress.addressDigest)
+  const addressCreatedForDelivery = Boolean(!sourceAddress
+    && replacement.fulfilment === 'delivery'
+    && replacementAddress
+    && replacementAddress.revision === 1
+    && replacementAddress.previousDigest === null)
+  const addressClearedForPickup = Boolean(sourceAddress
+    && replacement.fulfilment === 'pickup'
+    && !replacementAddress)
+  const replacementReference = replacementProfile
+    ? `${replacementProfile.name} · ${replacementProfile.phone}`
+    : replacement.customerReference
+  return (profileSame || profileAdvanced)
+    && (addressSame || addressAdvanced || addressCreatedForDelivery || addressClearedForPickup)
+    && replacement.customerReference === replacementReference
+}
+
+function replacementIdentityChanged(
+  source: EcommerceOrderRequestV2,
+  replacement: EcommerceOrderRequestV2,
+) {
+  return source.customerReference !== replacement.customerReference
+    || canonicalJson(source.customerProfile ?? null) !== canonicalJson(replacement.customerProfile ?? null)
+    || canonicalJson(source.deliveryAddress ?? null) !== canonicalJson(replacement.deliveryAddress ?? null)
+}
+
 const digestPattern = /^sha256:[0-9a-f]{64}$/
 const tokenPattern = /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,179}$/
 const uuidPattern = '[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}'
@@ -1544,8 +1591,7 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
       || intent.replacementRequestDigest !== await ecommerceLifecycleDigest(replacementRequest)
       || replacementRequest.scope !== intent.scope
       || sourceRequest.scope !== intent.scope
-      || sourceRequest.customerReference !== replacementRequest.customerReference
-      || sourceRequest.customerProfile?.phone !== replacementRequest.customerProfile?.phone
+      || !replacementIdentityIsBound(sourceRequest, replacementRequest)
       || sourceRequest.fulfilment !== intent.fromFulfilment
       || replacementRequest.fulfilment !== intent.toFulfilment) {
       throw new Error('Order amendment is not bound to its original and replacement Ecommerce requests.')
@@ -2406,9 +2452,16 @@ export async function buildEcommerceOrderAmendmentIntent(input: {
   const fromFulfilment = sourceRequest?.schema === ECOMMERCE_REQUEST_SCHEMA_V2
     ? sourceRequest.fulfilment
     : order.fulfilment as EcommerceFulfilment
+  const identityChanged = sourceRequest?.schema === ECOMMERCE_REQUEST_SCHEMA_V2
+    ? replacementIdentityChanged(sourceRequest, replacementRequest)
+    : false
+  if (sourceRequest?.schema === ECOMMERCE_REQUEST_SCHEMA_V2
+    && !replacementIdentityIsBound(sourceRequest, replacementRequest)) {
+    throw new Error('Contact or delivery corrections must advance the exact prior customer and address snapshots.')
+  }
   if (!fulfilmentMethods.includes(fromFulfilment)
-    || (!lineChanges.length && fromFulfilment === replacementRequest.fulfilment)) {
-    throw new Error('Change at least one quantity or the fulfilment method before Shop review.')
+    || (!lineChanges.length && fromFulfilment === replacementRequest.fulfilment && !identityChanged)) {
+    throw new Error('Change a quantity, fulfilment method, contact, or delivery detail before Shop review.')
   }
   const idempotencyKey = canonicalText(input.idempotencyKey, 'idempotencyKey', 40)
   if (!amendmentKeyPattern.test(idempotencyKey)) throw new Error('Order amendment idempotency key is invalid.')
@@ -2492,7 +2545,6 @@ export function validateEcommerceOrderAmendmentIntent(value: unknown): Ecommerce
     || source.refundStatus !== 'none'
     || !fulfilmentMethods.includes(fromFulfilment)
     || !fulfilmentMethods.includes(toFulfilment)
-    || (!lineChanges.length && fromFulfilment === toFulfilment)
     || new Set(lineChanges.map((line) => line.sku)).size !== lineChanges.length
     || source.customerMessageSent !== false
     || source.orderChanged !== false

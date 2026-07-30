@@ -193,8 +193,15 @@ export function EcommerceBuyingWorkspace({
   const [cancellationBusy, setCancellationBusy] = useState(false)
   const [amendmentDraft, setAmendmentDraft] = useState<{
     orderId: string
+    mode: 'details' | 'items'
     fulfilment: EcommerceFulfilment
     lines: Array<{ sku: string; name: string; quantity: string }>
+    customerName: string
+    customerPhone: string
+    addressLine1: string
+    addressTownship: string
+    addressCity: string
+    deliveryInstructions: string
     reason: string
   } | null>(null)
   const [amendmentBusy, setAmendmentBusy] = useState(false)
@@ -590,8 +597,13 @@ export function EcommerceBuyingWorkspace({
   function openAmendmentRequest(entry: CommerceStorefrontOrderTimelineEntry) {
     const order = entry.order
     const lines = order?.lines ?? []
+    const request = entry.request
     if (!order || order.status !== 'confirmed' || order.paymentStatus !== 'pending' || order.refundStatus !== 'none' || !lines.length) {
       setNotice('Order changes are available only before preparation and payment confirmation.')
+      return
+    }
+    if (request.schema !== 'supermega.ecommerce.order_request.v2' || !request.customerProfile) {
+      setNotice('This order predates verified customer details and cannot be corrected through the replacement workflow.')
       return
     }
     if (activeBuyingState.amendmentIntents.some((intent) => intent.orderId === order.id)
@@ -605,11 +617,18 @@ export function EcommerceBuyingWorkspace({
     setRescheduleDraft(null)
     setAmendmentDraft({
       orderId: order.id,
-      fulfilment: entry.request.fulfilment,
+      mode: 'details',
+      fulfilment: request.fulfilment,
       lines: lines.map((line) => ({ sku: line.sku, name: line.name, quantity: String(line.quantity) })),
+      customerName: request.customerProfile.name,
+      customerPhone: request.customerProfile.phone,
+      addressLine1: request.deliveryAddress?.line1 ?? '',
+      addressTownship: request.deliveryAddress?.township ?? '',
+      addressCity: request.deliveryAddress?.city ?? 'Yangon',
+      deliveryInstructions: request.deliveryAddress?.instructions ?? '',
       reason: '',
     })
-    setNotice('Change quantities, then Shop will cancel the original only after it proves a current replacement quote. The replacement order still needs a second human confirmation.')
+    setNotice('Correct contact, delivery, or item details. Shop replaces the accepted order only after revalidating the exact original and current policies; the replacement still needs human confirmation.')
   }
 
   function openRescheduleRequest(entry: CommerceStorefrontOrderTimelineEntry) {
@@ -692,24 +711,25 @@ export function EcommerceBuyingWorkspace({
       const replacementPayment = ecommercePaymentMatchesFulfilment(amendmentDraft.fulfilment, originalPayment)
         ? originalPayment
         : amendmentDraft.fulfilment === 'delivery' ? 'cash_on_delivery' : 'pay_on_pickup'
-      if (amendmentDraft.fulfilment === 'delivery' && !originalRequest.deliveryAddress) {
-        throw new Error('A pickup order cannot change to delivery until a verified delivery address is captured.')
+      if (!originalRequest.customerProfile) {
+        throw new Error('This order predates verified contact snapshots. Re-enter it with current customer details before requesting a correction.')
       }
+      const replacementReference = `${amendmentDraft.customerName.trim()} · ${amendmentDraft.customerPhone.trim()}`
       const quote = await buildEcommerceCheckoutQuote({
         pim,
         cart: replacementCart,
-        customerReference: originalRequest.customerReference,
-        customerProfile: originalRequest.customerProfile ? {
-          name: originalRequest.customerProfile.name,
-          phone: originalRequest.customerProfile.phone,
+        customerReference: replacementReference,
+        customerProfile: {
+          name: amendmentDraft.customerName,
+          phone: amendmentDraft.customerPhone,
           previous: originalRequest.customerProfile,
-        } : undefined,
-        deliveryAddress: amendmentDraft.fulfilment === 'delivery' && originalRequest.deliveryAddress ? {
-          line1: originalRequest.deliveryAddress.line1,
-          township: originalRequest.deliveryAddress.township,
-          city: originalRequest.deliveryAddress.city,
-          instructions: originalRequest.deliveryAddress.instructions,
-          previous: originalRequest.deliveryAddress,
+        },
+        deliveryAddress: amendmentDraft.fulfilment === 'delivery' ? {
+          line1: amendmentDraft.addressLine1,
+          township: amendmentDraft.addressTownship,
+          city: amendmentDraft.addressCity,
+          instructions: amendmentDraft.deliveryInstructions.trim() || null,
+          previous: originalRequest.deliveryAddress ?? null,
         } : null,
         fulfilment: amendmentDraft.fulfilment,
         paymentAdapter: replacementPayment,
@@ -1317,7 +1337,7 @@ export function EcommerceBuyingWorkspace({
             <span><strong>{entry.order?.id}</strong><small>{orderStageLabel(entry)} / {formatMmk(entry.order?.total ?? entry.request.totalMmk)}</small></span>
             <div className="ecommerce-return-actions">
               {entry.order?.status === 'confirmed' && entry.order.paymentStatus === 'pending' && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openRescheduleRequest(entry)} type="button">Change time</button> : null}
-              {entry.order?.status === 'confirmed' && entry.order.paymentStatus === 'pending' && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openAmendmentRequest(entry)} type="button">Change order</button> : null}
+              {entry.order?.status === 'confirmed' && entry.order.paymentStatus === 'pending' && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openAmendmentRequest(entry)} type="button">Change details</button> : null}
               {!activeBuyingState.cancellationIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openCancellationRequest(entry)} type="button">Cancel order</button> : null}
             </div>
           </article>) : null}
@@ -1330,10 +1350,20 @@ export function EcommerceBuyingWorkspace({
             </div>
           </article>) : null}
           {amendmentDraft ? <form className="ecommerce-return-form" onSubmit={(event) => void submitAmendmentRequest(event)}>
-            <span><strong>Change {amendmentDraft.orderId}</strong><small>Shop will reprice the replacement before cancelling the original. A second confirmation creates the replacement order.</small></span>
-            {amendmentDraft.lines.map((line) => <label key={line.sku}>{line.name}<input disabled={disabled || amendmentBusy} inputMode="numeric" max="99" min="1" onChange={(event) => setAmendmentDraft((current) => current ? { ...current, lines: current.lines.map((candidate) => candidate.sku === line.sku ? { ...candidate, quantity: event.target.value } : candidate) } : current)} required step="1" type="number" value={line.quantity} /></label>)}
+            <span><strong>Change {amendmentDraft.orderId}</strong><small>Shop keeps the accepted order immutable, revalidates this correction, then prepares a separately confirmed replacement.</small></span>
+            <label>What needs correcting?<select disabled={disabled || amendmentBusy} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, mode: event.target.value as 'details' | 'items' } : current)} value={amendmentDraft.mode}><option value="details">Contact or delivery details</option><option value="items">Item quantities</option></select></label>
+            {amendmentDraft.mode === 'details' ? <>
+              <label>Name<input autoComplete="name" disabled={disabled || amendmentBusy} maxLength={80} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, customerName: event.target.value } : current)} required value={amendmentDraft.customerName} /></label>
+              <label>Phone<input autoComplete="tel" disabled={disabled || amendmentBusy} inputMode="tel" maxLength={32} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, customerPhone: event.target.value } : current)} required value={amendmentDraft.customerPhone} /></label>
+              {amendmentDraft.fulfilment === 'delivery' ? <>
+                <label>Delivery address<input autoComplete="street-address" disabled={disabled || amendmentBusy} maxLength={120} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, addressLine1: event.target.value } : current)} required value={amendmentDraft.addressLine1} /></label>
+                <label>Township<input disabled={disabled || amendmentBusy} maxLength={80} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, addressTownship: event.target.value } : current)} required value={amendmentDraft.addressTownship} /></label>
+                <label>City<input disabled={disabled || amendmentBusy} maxLength={80} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, addressCity: event.target.value } : current)} required value={amendmentDraft.addressCity} /></label>
+                <label>Delivery note<input disabled={disabled || amendmentBusy} maxLength={160} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, deliveryInstructions: event.target.value } : current)} value={amendmentDraft.deliveryInstructions} /></label>
+              </> : null}
+            </> : amendmentDraft.lines.map((line) => <label key={line.sku}>{line.name}<input disabled={disabled || amendmentBusy} inputMode="numeric" max="99" min="1" onChange={(event) => setAmendmentDraft((current) => current ? { ...current, lines: current.lines.map((candidate) => candidate.sku === line.sku ? { ...candidate, quantity: event.target.value } : candidate) } : current)} required step="1" type="number" value={line.quantity} /></label>)}
             <label className="ecommerce-return-reason">Why change it?<textarea disabled={disabled || amendmentBusy} maxLength={300} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, reason: event.target.value } : current)} placeholder="One clear reason for Shop review" required rows={2} value={amendmentDraft.reason} /></label>
-            <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || amendmentBusy} type="submit">{amendmentBusy ? 'Saving…' : 'Send change to Shop'}</button><button className="core-button secondary" disabled={disabled || amendmentBusy} onClick={() => { setAmendmentDraft(null); setNotice('Order change closed. Nothing changed.') }} type="button">Close</button></div>
+            <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || amendmentBusy} type="submit">{amendmentBusy ? 'Saving…' : 'Send correction to Shop'}</button><button className="core-button secondary" disabled={disabled || amendmentBusy} onClick={() => { setAmendmentDraft(null); setNotice('Order correction closed. Nothing changed.') }} type="button">Close</button></div>
           </form> : null}
           {rescheduleDraft ? <form className="ecommerce-return-form" onSubmit={(event) => void submitRescheduleRequest(event)}>
             <span><strong>Change time for {rescheduleDraft.orderId}</strong><small>Shop checks current delivery and payment policy before cancelling the original. A second confirmation creates the replacement.</small></span>
