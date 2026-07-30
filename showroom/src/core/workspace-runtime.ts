@@ -114,6 +114,7 @@ export type ActionKind =
   | 'order_create'
   | 'order_status'
   | 'order_cancel'
+  | 'order_cancellation_review'
   | 'order_return'
   | 'order_support_open'
   | 'order_support_reopen'

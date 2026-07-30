@@ -1,10 +1,12 @@
 import {
   COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA,
   commerceOrderAcknowledgement,
+  commerceOrderHasReleasableReservation,
   commercePromotionDecision,
   commerceShippingDecision,
   commercePaymentDecision,
   type CommerceItem,
+  type CommerceActionProof,
   type CommerceOrder,
   type CommerceState,
   type CommercePromotionDecision,
@@ -36,6 +38,7 @@ export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V2 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V7
 export const ECOMMERCE_RETURN_INTENT_SCHEMA = 'supermega.ecommerce.return_intent.v1' as const
 export const ECOMMERCE_SUPPORT_INTENT_SCHEMA = 'supermega.ecommerce.support_intent.v1' as const
 export const ECOMMERCE_CANCELLATION_INTENT_SCHEMA = 'supermega.ecommerce.cancellation_intent.v1' as const
+export const ECOMMERCE_CANCELLATION_DECISION_SCHEMA = 'supermega.ecommerce.cancellation_decision.v1' as const
 export const ECOMMERCE_BUYING_STATE_SCHEMA = 'supermega.ecommerce.buying_lifecycle.v1' as const
 export const ECOMMERCE_BUYING_EVENT_SCHEMA = 'supermega.ecommerce.buying_event.v1' as const
 export const ECOMMERCE_BUYING_STATE_KEY_PREFIX = 'supermega.ecommerce.buying_lifecycle.v1.'
@@ -473,10 +476,35 @@ export type EcommerceCancellationIntent = {
   evidenceReference: string
 }
 
+export type EcommerceCancellationDecision = {
+  schema: typeof ECOMMERCE_CANCELLATION_DECISION_SCHEMA
+  state: 'kept_by_shop'
+  scope: string
+  id: string
+  idempotencyKey: string
+  createdAt: string
+  intentId: string
+  intentDigest: string
+  orderId: string
+  sourceRequestId: string
+  sourceAcknowledgementDigest: string
+  orderStatus: 'confirmed' | 'preparing' | 'ready'
+  paymentStatus: 'pending' | 'reconciled'
+  refundStatus: 'none'
+  totalMmk: number
+  actor: string
+  reason: string
+  evidenceReference: string
+  customerMessageSent: false
+  orderCancelled: false
+  refundStarted: false
+  providerCalled: false
+}
+
 export type EcommerceBuyingEvent = {
   schema: typeof ECOMMERCE_BUYING_EVENT_SCHEMA
   sequence: number
-  action: 'request_recorded' | 'return_intent_recorded' | 'support_intent_recorded' | 'cancellation_intent_recorded'
+  action: 'request_recorded' | 'return_intent_recorded' | 'support_intent_recorded' | 'cancellation_intent_recorded' | 'cancellation_decision_recorded'
   subjectId: string
   idempotencyKey: string
   payloadDigest: string
@@ -493,6 +521,7 @@ export type EcommerceBuyingState = {
   returnIntents: EcommerceReturnIntent[]
   supportIntents: EcommerceSupportIntent[]
   cancellationIntents: EcommerceCancellationIntent[]
+  cancellationDecisions: EcommerceCancellationDecision[]
   events: EcommerceBuyingEvent[]
 }
 
@@ -530,6 +559,8 @@ const supportIdPattern = new RegExp(`^ESR-${uuidPattern}$`)
 const supportKeyPattern = new RegExp(`^ESI-${uuidPattern}$`)
 const cancellationIdPattern = new RegExp(`^ECN-${uuidPattern}$`)
 const cancellationKeyPattern = new RegExp(`^CNI-${uuidPattern}$`)
+const cancellationDecisionIdPattern = new RegExp(`^ECD-${uuidPattern}$`)
+const cancellationDecisionKeyPattern = new RegExp(`^CDI-${uuidPattern}$`)
 const timestampPattern = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$/
 const paymentAdapters: EcommercePaymentAdapter[] = ['cash_on_delivery', 'kbzpay_manual', 'pay_on_pickup']
 const fulfilmentMethods: EcommerceFulfilment[] = ['delivery', 'pickup']
@@ -1186,6 +1217,7 @@ export function createEmptyEcommerceBuyingState(scope: string): EcommerceBuyingS
     returnIntents: [],
     supportIntents: [],
     cancellationIntents: [],
+    cancellationDecisions: [],
     events: [],
   }
 }
@@ -1196,7 +1228,7 @@ async function validateBuyingEvent(value: unknown, field: string): Promise<Ecomm
     'previousDigest', 'eventDigest',
   ])
   if (source.schema !== ECOMMERCE_BUYING_EVENT_SCHEMA
-    || !['request_recorded', 'return_intent_recorded', 'support_intent_recorded', 'cancellation_intent_recorded'].includes(String(source.action))) {
+    || !['request_recorded', 'return_intent_recorded', 'support_intent_recorded', 'cancellation_intent_recorded', 'cancellation_decision_recorded'].includes(String(source.action))) {
     throw new Error(`${field} boundary is invalid.`)
   }
   const core = {
@@ -1217,28 +1249,32 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
   if (!isRecord(value)) throw new Error('Buying state must be an object.')
   const legacyKeys = ['schema', 'scope', 'revision', 'headDigest', 'requests', 'returnIntents', 'events']
   const currentKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'events']
-  const latestKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'cancellationIntents', 'events']
+  const cancellationKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'cancellationIntents', 'events']
+  const latestKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'cancellationIntents', 'cancellationDecisions', 'events']
   const actualKeys = Object.keys(value)
   const hasExactShape = (keys: string[]) => actualKeys.length === keys.length && keys.every((key) => actualKeys.includes(key))
-  if (!hasExactShape(legacyKeys) && !hasExactShape(currentKeys) && !hasExactShape(latestKeys)) throw new Error('Buying state fields do not match the contract.')
+  if (!hasExactShape(legacyKeys) && !hasExactShape(currentKeys) && !hasExactShape(cancellationKeys) && !hasExactShape(latestKeys)) throw new Error('Buying state fields do not match the contract.')
   const source = value
   if (source.schema !== ECOMMERCE_BUYING_STATE_SCHEMA
     || !Array.isArray(source.requests)
     || !Array.isArray(source.returnIntents)
     || source.supportIntents !== undefined && !Array.isArray(source.supportIntents)
     || source.cancellationIntents !== undefined && !Array.isArray(source.cancellationIntents)
+    || source.cancellationDecisions !== undefined && !Array.isArray(source.cancellationDecisions)
     || !Array.isArray(source.events)
     || source.requests.length > maxRecords
     || source.returnIntents.length > maxRecords
     || (source.supportIntents?.length ?? 0) > maxRecords
     || (source.cancellationIntents?.length ?? 0) > maxRecords
-    || source.events.length > maxRecords * 4) throw new Error('Buying state contract is invalid.')
+    || (source.cancellationDecisions?.length ?? 0) > maxRecords
+    || source.events.length > maxRecords * 5) throw new Error('Buying state contract is invalid.')
   const scope = canonicalToken(source.scope, 'buying state.scope')
   if (expectedScope && scope !== canonicalToken(expectedScope, 'expectedScope')) throw new Error('Buying state belongs to a different workspace.')
   const requests = await Promise.all(source.requests.map((request) => validateEcommerceOrderRequestV2(request)))
   const returnIntents = source.returnIntents.map((intent) => validateEcommerceReturnIntent(intent))
   const supportIntents = (source.supportIntents ?? []).map((intent) => validateEcommerceSupportIntent(intent))
   const cancellationIntents = (source.cancellationIntents ?? []).map((intent) => validateEcommerceCancellationIntent(intent))
+  const cancellationDecisions = (source.cancellationDecisions ?? []).map((decision) => validateEcommerceCancellationDecision(decision))
   const events = await Promise.all(source.events.map((event, index) => validateBuyingEvent(event, `buying state.events[${index}]`)))
   const revision = safeInteger(source.revision, 'buying state.revision')
   if (revision !== events.length) throw new Error('Buying state revision does not match its history.')
@@ -1249,7 +1285,7 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
   })
   const headDigest = canonicalDigest(source.headDigest, 'buying state.headDigest')
   if (headDigest !== previousDigest) throw new Error('Buying state head digest is invalid.')
-  const records: Array<EcommerceOrderRequestV2 | EcommerceReturnIntent | EcommerceSupportIntent | EcommerceCancellationIntent> = [...requests, ...returnIntents, ...supportIntents, ...cancellationIntents]
+  const records: EcommerceBuyingRecord[] = [...requests, ...returnIntents, ...supportIntents, ...cancellationIntents, ...cancellationDecisions]
   if (records.some((record) => record.scope !== scope)
     || new Set(records.map((record) => record.id)).size !== records.length
     || new Set(records.map((record) => record.idempotencyKey)).size !== records.length
@@ -1267,6 +1303,26 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
   if (new Set(cancellationIntents.map((intent) => intent.orderId)).size !== cancellationIntents.length) {
     throw new Error('Only one cancellation request may exist for an Ecommerce order.')
   }
+  const cancellationIntentById = new Map(cancellationIntents.map((intent) => [intent.id, intent]))
+  if (new Set(cancellationDecisions.map((decision) => decision.intentId)).size !== cancellationDecisions.length) {
+    throw new Error('Only one Shop decision may exist for an Ecommerce cancellation request.')
+  }
+  for (const decision of cancellationDecisions) {
+    const intent = cancellationIntentById.get(decision.intentId)
+    if (!intent
+      || decision.scope !== intent.scope
+      || decision.orderId !== intent.orderId
+      || decision.sourceRequestId !== intent.sourceRequestId
+      || decision.sourceAcknowledgementDigest !== intent.sourceAcknowledgementDigest
+      || decision.orderStatus !== intent.orderStatus
+      || decision.paymentStatus !== intent.paymentStatus
+      || decision.refundStatus !== intent.refundStatus
+      || decision.totalMmk !== intent.totalMmk
+      || decision.evidenceReference !== intent.evidenceReference
+      || decision.intentDigest !== await ecommerceLifecycleDigest(intent)) {
+      throw new Error('Cancellation decision is not bound to its exact recovered request.')
+    }
+  }
   const byId = new Map(records.map((record) => [record.id, record]))
   for (const event of events) {
     const record = byId.get(event.subjectId)
@@ -1274,20 +1330,22 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
       || record.idempotencyKey !== event.idempotencyKey
       || await ecommerceLifecycleDigest(record) !== event.payloadDigest) throw new Error('Buying event does not match its record.')
   }
-  return { schema: ECOMMERCE_BUYING_STATE_SCHEMA, scope, revision, headDigest, requests, returnIntents, supportIntents, cancellationIntents, events }
+  return { schema: ECOMMERCE_BUYING_STATE_SCHEMA, scope, revision, headDigest, requests, returnIntents, supportIntents, cancellationIntents, cancellationDecisions, events }
 }
+
+type EcommerceBuyingRecord = EcommerceOrderRequestV2 | EcommerceReturnIntent | EcommerceSupportIntent | EcommerceCancellationIntent | EcommerceCancellationDecision
 
 async function appendBuyingRecord(
   stateValue: EcommerceBuyingState,
-  record: EcommerceOrderRequestV2 | EcommerceReturnIntent | EcommerceSupportIntent | EcommerceCancellationIntent,
-  collection: 'requests' | 'returnIntents' | 'supportIntents' | 'cancellationIntents',
+  record: EcommerceBuyingRecord,
+  collection: 'requests' | 'returnIntents' | 'supportIntents' | 'cancellationIntents' | 'cancellationDecisions',
   action: EcommerceBuyingEvent['action'],
   expectedHeadDigest: string,
 ) {
   const state = await validateEcommerceBuyingState(stateValue)
   if (canonicalDigest(expectedHeadDigest, 'expectedHeadDigest') !== state.headDigest) throw new Error('Buying state changed before this record was applied.')
   if (record.scope !== state.scope) throw new Error('Buying record belongs to a different workspace.')
-  const allRecords: Array<EcommerceOrderRequestV2 | EcommerceReturnIntent | EcommerceSupportIntent | EcommerceCancellationIntent> = [...state.requests, ...state.returnIntents, ...state.supportIntents, ...state.cancellationIntents]
+  const allRecords: EcommerceBuyingRecord[] = [...state.requests, ...state.returnIntents, ...state.supportIntents, ...state.cancellationIntents, ...state.cancellationDecisions]
   const existing = allRecords.find((candidate) => candidate.id === record.id || candidate.idempotencyKey === record.idempotencyKey)
   if (existing) {
     if (canonicalJson(existing) !== canonicalJson(record)) throw new Error('Buying idempotency key conflicts with a different record.')
@@ -1594,6 +1652,119 @@ export function validateEcommerceCancellationIntent(value: unknown): EcommerceCa
   }
 }
 
+export function ecommerceCancellationMatchesCurrentShop(state: CommerceState, intentValue: EcommerceCancellationIntent) {
+  const intent = validateEcommerceCancellationIntent(intentValue)
+  const order = state.orders.find((candidate) => candidate.id === intent.orderId)
+  const acknowledgement = commerceOrderAcknowledgement(state, intent.orderId)
+  return Boolean(order
+    && acknowledgement
+    && order.sourceRecordId === intent.sourceRequestId
+    && acknowledgement.digest === intent.sourceAcknowledgementDigest
+    && acknowledgement.status === intent.orderStatus
+    && acknowledgement.payment.status === intent.paymentStatus
+    && acknowledgement.payment.refundStatus === intent.refundStatus
+    && acknowledgement.totalMmk === intent.totalMmk
+    && acknowledgement.cancellation.state === 'not_cancelled'
+    && commerceOrderHasReleasableReservation(state, intent.orderId))
+}
+
+export async function buildEcommerceCancellationDecision(input: {
+  scope: string
+  commerceState: CommerceState
+  intent: EcommerceCancellationIntent
+  proof: CommerceActionProof
+}): Promise<EcommerceCancellationDecision> {
+  const intent = validateEcommerceCancellationIntent(input.intent)
+  if (canonicalToken(input.scope, 'scope') !== intent.scope) throw new Error('Cancellation decision belongs to a different Ecommerce workspace.')
+  if (!ecommerceCancellationMatchesCurrentShop(input.commerceState, intent)) {
+    throw new Error('Cancellation decision requires the exact active Shop order reviewed by the customer request.')
+  }
+  const proof = exactObject(input.proof, 'cancellation decision proof', [
+    'actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference',
+  ])
+  const createdAt = canonicalTimestamp(proof.capturedAt, 'cancellation decision proof.capturedAt')
+  if (taxTimestampMicros(createdAt, 'cancellation decision proof.capturedAt') < taxTimestampMicros(intent.createdAt, 'cancellation intent.createdAt')) {
+    throw new Error('Cancellation decision cannot predate the customer request.')
+  }
+  if (proof.evidenceReference !== intent.evidenceReference) throw new Error('Cancellation decision evidence must remain fixed to the customer request.')
+  const suffix = intent.id.slice(4)
+  return validateEcommerceCancellationDecision({
+    schema: ECOMMERCE_CANCELLATION_DECISION_SCHEMA,
+    state: 'kept_by_shop',
+    scope: intent.scope,
+    id: `ECD-${suffix}`,
+    idempotencyKey: `CDI-${suffix}`,
+    createdAt,
+    intentId: intent.id,
+    intentDigest: await ecommerceLifecycleDigest(intent),
+    orderId: intent.orderId,
+    sourceRequestId: intent.sourceRequestId,
+    sourceAcknowledgementDigest: intent.sourceAcknowledgementDigest,
+    orderStatus: intent.orderStatus,
+    paymentStatus: intent.paymentStatus,
+    refundStatus: intent.refundStatus,
+    totalMmk: intent.totalMmk,
+    actor: canonicalText(proof.actor, 'cancellation decision proof.actor', 120),
+    reason: canonicalText(proof.reason, 'cancellation decision proof.reason', 180),
+    evidenceReference: intent.evidenceReference,
+    customerMessageSent: false,
+    orderCancelled: false,
+    refundStarted: false,
+    providerCalled: false,
+  })
+}
+
+export function validateEcommerceCancellationDecision(value: unknown): EcommerceCancellationDecision {
+  const source = exactObject(value, 'cancellation decision', [
+    'schema', 'state', 'scope', 'id', 'idempotencyKey', 'createdAt', 'intentId',
+    'intentDigest', 'orderId', 'sourceRequestId', 'sourceAcknowledgementDigest',
+    'orderStatus', 'paymentStatus', 'refundStatus', 'totalMmk', 'actor', 'reason',
+    'evidenceReference', 'customerMessageSent', 'orderCancelled', 'refundStarted', 'providerCalled',
+  ])
+  const id = canonicalText(source.id, 'cancellation decision.id', 40)
+  const idempotencyKey = canonicalText(source.idempotencyKey, 'cancellation decision.idempotencyKey', 40)
+  const intentId = canonicalText(source.intentId, 'cancellation decision.intentId', 40)
+  if (source.schema !== ECOMMERCE_CANCELLATION_DECISION_SCHEMA
+    || source.state !== 'kept_by_shop'
+    || !cancellationDecisionIdPattern.test(id)
+    || !cancellationDecisionKeyPattern.test(idempotencyKey)
+    || !cancellationIdPattern.test(intentId)
+    || id.slice(4) !== idempotencyKey.slice(4)
+    || id.slice(4) !== intentId.slice(4)
+    || !requestIdPattern.test(String(source.sourceRequestId))
+    || !['confirmed', 'preparing', 'ready'].includes(String(source.orderStatus))
+    || !['pending', 'reconciled'].includes(String(source.paymentStatus))
+    || source.refundStatus !== 'none'
+    || source.customerMessageSent !== false
+    || source.orderCancelled !== false
+    || source.refundStarted !== false
+    || source.providerCalled !== false) throw new Error('Cancellation decision boundary is invalid.')
+  return {
+    schema: ECOMMERCE_CANCELLATION_DECISION_SCHEMA,
+    state: 'kept_by_shop',
+    scope: canonicalToken(source.scope, 'cancellation decision.scope'),
+    id,
+    idempotencyKey,
+    createdAt: canonicalTimestamp(source.createdAt, 'cancellation decision.createdAt'),
+    intentId,
+    intentDigest: canonicalDigest(source.intentDigest, 'cancellation decision.intentDigest'),
+    orderId: canonicalToken(source.orderId, 'cancellation decision.orderId'),
+    sourceRequestId: canonicalText(source.sourceRequestId, 'cancellation decision.sourceRequestId', 40),
+    sourceAcknowledgementDigest: canonicalDigest(source.sourceAcknowledgementDigest, 'cancellation decision.sourceAcknowledgementDigest'),
+    orderStatus: source.orderStatus as EcommerceCancellationDecision['orderStatus'],
+    paymentStatus: source.paymentStatus as EcommerceCancellationDecision['paymentStatus'],
+    refundStatus: 'none',
+    totalMmk: safeInteger(source.totalMmk, 'cancellation decision.totalMmk', 1, maxSafeInteger),
+    actor: canonicalText(source.actor, 'cancellation decision.actor', 120),
+    reason: canonicalText(source.reason, 'cancellation decision.reason', 180),
+    evidenceReference: canonicalText(source.evidenceReference, 'cancellation decision.evidenceReference', 180),
+    customerMessageSent: false,
+    orderCancelled: false,
+    refundStarted: false,
+    providerCalled: false,
+  }
+}
+
 export async function recordEcommerceReturnIntent(
   state: EcommerceBuyingState,
   intentValue: EcommerceReturnIntent,
@@ -1668,6 +1839,14 @@ export async function recordEcommerceCancellationIntent(
   expectedHeadDigest: string,
 ) {
   return appendBuyingRecord(state, validateEcommerceCancellationIntent(intentValue), 'cancellationIntents', 'cancellation_intent_recorded', expectedHeadDigest)
+}
+
+export async function recordEcommerceCancellationDecision(
+  state: EcommerceBuyingState,
+  decisionValue: EcommerceCancellationDecision,
+  expectedHeadDigest: string,
+) {
+  return appendBuyingRecord(state, validateEcommerceCancellationDecision(decisionValue), 'cancellationDecisions', 'cancellation_decision_recorded', expectedHeadDigest)
 }
 
 export async function recordEcommerceSupportIntent(
@@ -1794,6 +1973,46 @@ export async function saveEcommerceCancellationIntent(
       throw error instanceof Error
         ? error
         : new Error('Cancellation request recovery write failed. The previous value was restored.', { cause: error })
+    }
+  })
+}
+
+export async function saveEcommerceCancellationDecision(
+  scope: string,
+  decision: EcommerceCancellationDecision,
+  expectedHeadDigest: string,
+  options: { storage?: EcommerceBuyingStorage; locks?: EcommerceBuyingLocks } = {},
+) {
+  const canonicalScope = canonicalToken(scope, 'scope')
+  const storage = options.storage ?? browserStorage()
+  const locks = options.locks ?? browserLocks()
+  if (!storage) throw new Error('Browser recovery is unavailable. The cancellation decision was not saved.')
+  if (!locks) throw new Error('Safe browser locking is unavailable. The cancellation decision was not saved.')
+  const storageKey = ecommerceBuyingStateStorageKey(canonicalScope)
+  return locks.request(`supermega:ecommerce:buying-lifecycle:${encodeURIComponent(canonicalScope)}`, { mode: 'exclusive' }, async () => {
+    const currentRead = await readEcommerceBuyingState(canonicalScope, storage)
+    if (!currentRead.state || currentRead.status === 'invalid' || currentRead.status === 'unavailable') {
+      throw new Error(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
+    }
+    const next = await recordEcommerceCancellationDecision(currentRead.state, decision, expectedHeadDigest)
+    if (next === currentRead.state || canonicalJson(next) === canonicalJson(currentRead.state)) return next
+    const previousRaw = storage.getItem(storageKey)
+    const nextRaw = canonicalJson(next)
+    try {
+      storage.setItem(storageKey, nextRaw)
+      if (storage.getItem(storageKey) !== nextRaw) throw new Error('Cancellation decision recovery write could not be confirmed.')
+      return next
+    } catch (error) {
+      try {
+        if (previousRaw === null) storage.removeItem(storageKey)
+        else storage.setItem(storageKey, previousRaw)
+        if (storage.getItem(storageKey) !== previousRaw) throw new Error('rollback confirmation failed', { cause: error })
+      } catch (rollbackError) {
+        throw new Error('Cancellation decision recovery write failed and rollback could not be confirmed. Stop and export local evidence.', { cause: rollbackError })
+      }
+      throw error instanceof Error
+        ? error
+        : new Error('Cancellation decision recovery write failed. The previous value was restored.', { cause: error })
     }
   })
 }

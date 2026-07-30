@@ -2192,16 +2192,24 @@ if (addToCartStart < 0
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceSupportIntent(')
   || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceCancellationIntent(')
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceCancellationIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function buildEcommerceCancellationDecision(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceCancellationDecision(')
+  || !ecommerceBuyingLifecycleSource.includes('Cancellation decision is not bound to its exact recovered request.')
   || !ecommerceBuyingLifecycleSource.includes('Return intent is not attributable to one recovered Ecommerce request.')
   || !ecommerceBuyingUiSource.includes('Request cancellation')
   || !ecommerceBuyingUiSource.includes('Send to Shop review')
   || !ecommerceBuyingUiSource.includes('No order, stock, payment, refund, provider, or customer message changed.')
+  || !ecommerceBuyingUiSource.includes('Cancellation approved')
+  || !ecommerceBuyingUiSource.includes('Order kept')
   || !coreSource.includes('ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent}')
   || !coreSource.includes('validateEcommerceCancellationIntent(ecommerceCancellationNavigationIntent)')
   || !coreSource.includes('function ecommerceCancellationMatchesCurrentShop(')
   || !coreSource.includes('acknowledgement.digest === intent.sourceAcknowledgementDigest')
   || !coreSource.includes('commerceOrderHasReleasableReservation(state, intent.orderId)')
   || !coreSource.includes('ecommerceCancellationMatchesCurrentShop(current, sourceIntent)')
+  || !coreSource.includes("kind: 'order_cancellation_review'")
+  || !coreSource.includes('saveEcommerceCancellationDecision(')
+  || !workspaceRuntimeSource.includes("| 'order_cancellation_review'")
   || !coreSource.includes('no customer message or provider call')
   || !coreSource.includes('ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent}')
   || !coreSource.includes('validateEcommerceReturnIntent(ecommerceReturnNavigationIntent)')
@@ -11988,6 +11996,48 @@ async function verifyStorefrontRuntime() {
       && cancellationBuyingState.cancellationIntents.length === 1
       && cancellationBuyingState.events.at(-1)?.action === 'cancellation_intent_recorded',
     'ecommerce_cancellation_request_replay_or_history_not_exact')
+    const cancellationDecisionProof = {
+      actionId: 'ACT-CANCELLATION-KEEP-1001',
+      capturedAt: new Date(Date.parse(promotedOrder.createdAt) + 180_000).toISOString(),
+      actor: 'Shop owner',
+      reason: 'The confirmed order matches the reviewed customer request.',
+      evidenceReference: cancellationIntent.evidenceReference,
+    }
+    const cancellationDecision = await buyingModel.buildEcommerceCancellationDecision({
+      scope: buyingScope,
+      commerceState: promotedOrderState,
+      intent: cancellationIntent,
+      proof: cancellationDecisionProof,
+    })
+    buyingAssert(cancellationDecision.schema === 'supermega.ecommerce.cancellation_decision.v1'
+      && cancellationDecision.state === 'kept_by_shop'
+      && cancellationDecision.intentId === cancellationIntent.id
+      && cancellationDecision.intentDigest === await buyingModel.ecommerceLifecycleDigest(cancellationIntent)
+      && cancellationDecision.evidenceReference === cancellationIntent.evidenceReference
+      && cancellationDecision.customerMessageSent === false
+      && cancellationDecision.orderCancelled === false
+      && cancellationDecision.refundStarted === false
+      && cancellationDecision.providerCalled === false,
+    'ecommerce_cancellation_decision_not_request_bound_or_side_effect_free')
+    const cancellationDecisionState = await buyingModel.recordEcommerceCancellationDecision(
+      cancellationBuyingState,
+      cancellationDecision,
+      cancellationBuyingState.headDigest,
+    )
+    const replayedCancellationDecisionState = await buyingModel.recordEcommerceCancellationDecision(
+      cancellationDecisionState,
+      structuredClone(cancellationDecision),
+      cancellationDecisionState.headDigest,
+    )
+    buyingAssert(JSON.stringify(replayedCancellationDecisionState) === JSON.stringify(cancellationDecisionState)
+      && cancellationDecisionState.cancellationDecisions.length === 1
+      && cancellationDecisionState.events.at(-1)?.action === 'cancellation_decision_recorded',
+    'ecommerce_cancellation_decision_replay_or_history_not_exact')
+    const forgedCancellationDecisionState = structuredClone(cancellationDecisionState)
+    forgedCancellationDecisionState.cancellationDecisions[0].totalMmk += 1
+    let forgedCancellationDecisionRejected = false
+    try { await buyingModel.validateEcommerceBuyingState(forgedCancellationDecisionState) } catch { forgedCancellationDecisionRejected = true }
+    buyingAssert(forgedCancellationDecisionRejected, 'ecommerce_forged_cancellation_decision_was_accepted')
     const duplicateCancellationIntent = buyingModel.buildEcommerceCancellationIntent({
       scope: buyingScope,
       commerceState: promotedOrderState,

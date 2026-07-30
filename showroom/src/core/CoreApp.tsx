@@ -1644,6 +1644,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
   const currentAccountMappingConfiguration = commerceCurrentAccountMappingConfiguration(commerce)
   const orderDraftScope = localCommerceOrderDraftScope(managedIdentity?.workspaceId)
+  const ecommerceBuyingScope = managedIdentity ? `ecommerce:${managedIdentity.workspaceId}` : 'ecommerce:local'
+  const commerceRef = useRef(commerce)
+  commerceRef.current = commerce
   const [actions, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
   const [sku, setSku] = useState(commerce.items[0]?.sku ?? '')
@@ -4388,8 +4391,45 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
       setNotice(`${cancellationDraft.id} no longer matches the current Shop order. Nothing changed.`)
       return
     }
-    setCancellationDraft(null)
-    setNotice(`${cancellationDraft.id} was not approved. The order, stock, payment, refund, provider, and customer messages are unchanged; the customer request remains recoverable in Ecommerce.`)
+    const sourceIntent = cancellationDraft
+    queueAction({
+      kind: 'order_cancellation_review',
+      subjectId: sourceIntent.orderId,
+      summary: `Decline ${sourceIntent.id} and keep ${sourceIntent.orderId}`,
+      before: `${sourceIntent.orderStatus} · cancellation waiting · ${sourceIntent.reasonCode.replaceAll('_', ' ')}`,
+      after: `${sourceIntent.orderStatus} · order and stock unchanged · customer decision receipt saved locally`,
+      reasonSuggestion: `Keep the reviewed order active: ${sourceIntent.reason}`.slice(0, 180),
+      evidenceReferenceSuggestion: sourceIntent.evidenceReference,
+      evidenceReferenceLocked: true,
+      apply: async (action) => {
+        const currentCommerce = commerceRef.current
+        if (!ecommerceCancellationMatchesCurrentShop(currentCommerce, sourceIntent)) {
+          setCancellationDraft(null)
+          throw new ShopReviewRequiredError(`${sourceIntent.id} changed during review. No decision was saved and the order was not changed; reopen the current request.`)
+        }
+        const lifecycle = await import('../products/ecommerce/ecommerce-buying-lifecycle')
+        const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
+        if (!recovered.state || recovered.status !== 'ready') {
+          throw new ShopReviewRequiredError(recovered.error || `${sourceIntent.id} recovery is unavailable. No decision was saved and the order was not changed.`)
+        }
+        const storedIntent = recovered.state.cancellationIntents.find((candidate) => candidate.id === sourceIntent.id)
+        if (!storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(sourceIntent)) {
+          throw new ShopReviewRequiredError(`${sourceIntent.id} no longer matches its recovered Ecommerce request. No decision was saved and the order was not changed.`)
+        }
+        const decision = await lifecycle.buildEcommerceCancellationDecision({
+          scope: ecommerceBuyingScope,
+          commerceState: currentCommerce,
+          intent: storedIntent,
+          proof: commerceActionProof(action),
+        })
+        await lifecycle.saveEcommerceCancellationDecision(
+          ecommerceBuyingScope,
+          decision,
+          recovered.state.headDigest,
+        )
+        setCancellationDraft(null)
+      },
+    })
   }
 
   function cancelOrder(orderId: string, sourceIntent?: EcommerceCancellationIntent) {

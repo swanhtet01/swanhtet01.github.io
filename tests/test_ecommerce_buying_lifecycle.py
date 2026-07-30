@@ -10,6 +10,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     ECOMMERCE_RETURN_INTENT_SCHEMA,
     ECOMMERCE_SUPPORT_INTENT_SCHEMA,
     ECOMMERCE_CANCELLATION_INTENT_SCHEMA,
+    ECOMMERCE_CANCELLATION_DECISION_SCHEMA,
     ECOMMERCE_SHOP_DRAFT_SCHEMA,
     ECOMMERCE_TAX_DECISION_SCHEMA,
     EcommerceLifecycleValidationError,
@@ -19,6 +20,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     build_ecommerce_return_intent,
     build_ecommerce_support_intent,
     build_ecommerce_cancellation_intent,
+    build_ecommerce_cancellation_decision,
     create_empty_ecommerce_lifecycle_state,
     ecommerce_payment_matches_fulfilment,
     prepare_ecommerce_shop_handoff,
@@ -27,6 +29,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     record_ecommerce_return_intent,
     record_ecommerce_support_intent,
     record_ecommerce_cancellation_intent,
+    record_ecommerce_cancellation_decision,
     validate_ecommerce_checkout_quote,
     validate_ecommerce_lifecycle_state,
     validate_ecommerce_order_request,
@@ -789,6 +792,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         legacy = deepcopy(state)
         legacy.pop("supportIntents")
         legacy.pop("cancellationIntents")
+        legacy.pop("cancellationDecisions")
         migrated = validate_ecommerce_lifecycle_state(legacy)
         self.assertEqual(migrated["supportIntents"], [])
 
@@ -831,6 +835,41 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         self.assertEqual(replay, retained)
         self.assertEqual(retained["events"][-1]["action"], "cancellation_intent_recorded")
 
+        decision = build_ecommerce_cancellation_decision(
+            scope=SCOPE,
+            commerce_state=commerce_state,
+            intent=intent,
+            proof={
+                "actionId": "ACT-CANCELLATION-KEEP-1001",
+                "capturedAt": "2026-07-26T10:27:00+06:30",
+                "actor": "Shop owner",
+                "reason": "The confirmed quantity is correct after checking the source request.",
+                "evidenceReference": intent["evidenceReference"],
+            },
+        )
+        self.assertEqual(decision["schema"], ECOMMERCE_CANCELLATION_DECISION_SCHEMA)
+        self.assertEqual(decision["state"], "kept_by_shop")
+        self.assertEqual(decision["intentId"], intent["id"])
+        self.assertFalse(decision["orderCancelled"])
+        self.assertFalse(decision["refundStarted"])
+        self.assertFalse(decision["providerCalled"])
+        decided = record_ecommerce_cancellation_decision(
+            retained,
+            decision,
+            expected_head_digest=retained["headDigest"],
+        )
+        replayed_decision = record_ecommerce_cancellation_decision(
+            decided,
+            deepcopy(decision),
+            expected_head_digest=decided["headDigest"],
+        )
+        self.assertEqual(replayed_decision, decided)
+        self.assertEqual(decided["events"][-1]["action"], "cancellation_decision_recorded")
+        forged_decision = deepcopy(decided)
+        forged_decision["cancellationDecisions"][0]["totalMmk"] += 1
+        with self.assertRaisesRegex(EcommerceLifecycleValidationError, "exact recovered request"):
+            validate_ecommerce_lifecycle_state(forged_decision)
+
         duplicate = build_ecommerce_cancellation_intent(
             scope=SCOPE,
             commerce_state=commerce_state,
@@ -868,6 +907,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
 
         legacy = deepcopy(state)
         legacy.pop("cancellationIntents")
+        legacy.pop("cancellationDecisions")
         migrated = validate_ecommerce_lifecycle_state(legacy)
         self.assertEqual(migrated["cancellationIntents"], [])
 

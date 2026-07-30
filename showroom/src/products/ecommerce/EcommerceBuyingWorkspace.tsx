@@ -29,6 +29,7 @@ import {
   type EcommerceShopDraftV2,
 } from './ecommerce-buying-lifecycle'
 import {
+  commerceOrderAcknowledgement,
   commerceStorefrontOrderTimeline,
   commerceStorefrontRequests,
   type CommerceItem,
@@ -53,6 +54,13 @@ type EcommerceBuyingWorkspaceProps = {
   scope: string
   sourcePreviewDigest: string
   sourceStorefront: { revision: number; actionId: string } | null
+}
+
+type EcommerceCancellationOutcome = {
+  intent: EcommerceCancellationIntent
+  kind: 'kept' | 'cancelled'
+  decidedAt: string
+  refundStatus: 'none' | 'due' | 'settled'
 }
 
 function formatMmk(value: number) {
@@ -273,10 +281,26 @@ export function EcommerceBuyingWorkspace({
     const order = completedCustomerOrders.find((entry) => entry.order?.id === intent.orderId)?.order
     return Boolean(order && !(order.supportCases ?? []).some((supportCase) => supportCase.sourceIntentId === intent.id))
   })
+  const cancellationDecisionByIntentId = new Map(activeBuyingState.cancellationDecisions.map((decision) => [decision.intentId, decision]))
   const pendingCancellationIntents = activeBuyingState.cancellationIntents.filter((intent) => {
     const order = activeCustomerOrders.find((entry) => entry.order?.id === intent.orderId)?.order
-    return Boolean(order && order.sourceRecordId === intent.sourceRequestId)
+    return Boolean(order && order.sourceRecordId === intent.sourceRequestId && !cancellationDecisionByIntentId.has(intent.id))
   })
+  const cancellationOutcomes = activeBuyingState.cancellationIntents.reduce<EcommerceCancellationOutcome[]>((outcomes, intent) => {
+    const entry = customerOrderTimeline.find((candidate) => candidate.order?.id === intent.orderId)
+    const decision = cancellationDecisionByIntentId.get(intent.id)
+    if (decision && entry?.order?.sourceRecordId === intent.sourceRequestId) {
+      outcomes.push({ intent, kind: 'kept', decidedAt: decision.createdAt, refundStatus: 'none' })
+      return outcomes
+    }
+    const acknowledgement = entry?.order ? commerceOrderAcknowledgement(commerceState, entry.order.id) : null
+    if (acknowledgement?.cancellation.state === 'cancelled'
+      && acknowledgement.evidence.sourceRecordId === intent.sourceRequestId
+      && acknowledgement.cancellation.evidenceReference === intent.evidenceReference) {
+      outcomes.push({ intent, kind: 'cancelled', decidedAt: acknowledgement.cancellation.cancelledAt ?? entry?.order?.createdAt ?? intent.createdAt, refundStatus: acknowledgement.payment.refundStatus })
+    }
+    return outcomes
+  }, [])
   const visibleSupportCases = completedCustomerOrders.flatMap((entry) => (
     (entry.order?.supportCases ?? []).map((supportCase) => ({ orderId: entry.order?.id ?? '', supportCase }))
   ))
@@ -827,6 +851,10 @@ export function EcommerceBuyingWorkspace({
             <span><strong>Cancellation waiting</strong><small>{intent.orderId} / {intent.reasonCode.replaceAll('_', ' ')}</small></span>
             <button className="core-button secondary" disabled={disabled} onClick={() => onOpenCancellation(intent)} type="button">Continue in Shop</button>
           </article>)}
+          {cancellationOutcomes.slice(0, 3).map((outcome) => <article className="ecommerce-return-status" key={`outcome:${outcome.intent.id}`}>
+            <span><strong>{outcome.kind === 'cancelled' ? 'Cancellation approved' : 'Order kept'}</strong><small>{outcome.intent.orderId} / reviewed {new Date(outcome.decidedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small></span>
+            <b>{outcome.kind === 'cancelled' ? outcome.refundStatus === 'due' ? 'Refund due' : 'Cancelled' : 'Active'}</b>
+          </article>)}
           {pendingReturnIntents.map((intent) => <article className="ecommerce-return-status" key={intent.id}>
             <span><strong>Waiting for Shop review</strong><small>{intent.quantity} {intent.sku} / {intent.orderId}</small></span>
             <button className="core-button secondary" disabled={disabled} onClick={() => onOpenReturns(intent)} type="button">Continue in Shop</button>
@@ -841,7 +869,7 @@ export function EcommerceBuyingWorkspace({
           </article>)}
           {!cancellationDraft && !returnDraft && !supportDraft ? activeCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
             <span><strong>{entry.order?.id}</strong><small>{orderStageLabel(entry)} / {formatMmk(entry.order?.total ?? entry.request.totalMmk)}</small></span>
-            {!pendingCancellationIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openCancellationRequest(entry)} type="button">Request cancellation</button> : null}
+            {!activeBuyingState.cancellationIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openCancellationRequest(entry)} type="button">Request cancellation</button> : null}
           </article>) : null}
           {!cancellationDraft && !returnDraft && !supportDraft ? completedCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
             <span><strong>{entry.order?.id}</strong><small>{entry.order?.lines?.map((line) => `${line.name} x ${line.quantity}`).join(' / ') ?? entry.order?.item}</small></span>
