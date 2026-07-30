@@ -12,6 +12,29 @@ const outcomeAgents = {
   'finance-risk-control': ['cash-reconciler'],
 }
 const outcomeSequence = Object.keys(outcomeAgents)
+const resourceEnvelope = {
+  contract: 'supermega.ally-ceo-resource-envelope.v1',
+  registeredRoleRecords: 12,
+  selectedAgents: 1,
+  maxActiveAssignments: 2,
+  maxConcurrentCycles: 1,
+  execution: 'sequential',
+  providerPolicy: 'local_ollama_or_test_mock',
+  maxModelCalls: 3,
+  modelContextTokens: 4_096,
+  modelOutputTokens: 768,
+  modelKeepAlive: '0s',
+  cycleTimeoutMs: 480_000,
+  loadedModelsBefore: 0,
+  loadedModelsAfter: 0,
+  connectorRequests: 0,
+  externalWrites: false,
+  vercelActions: 0,
+  hostedSchedulerActions: 0,
+  dynamicDelegation: false,
+  recursiveDelegation: false,
+  scaleToZero: true,
+}
 
 test('HQ live command failures retain only recognized contract categories', () => {
   assert.equal(commandFailureReason('hq_live', {
@@ -25,6 +48,19 @@ test('HQ live command failures retain only recognized contract categories', () =
   assert.equal(commandFailureReason('hq_live', {
     code: 1,
     stderr: JSON.stringify({ contract: 'supermega.hq-live-state.v1', error: 'token=must-not-escape' }),
+  }), 'ally_ceo_local_cycle_command_failed:hq_live:1')
+  assert.equal(commandFailureReason('hq_live', {
+    code: 1,
+    stdout: JSON.stringify({
+      ok: false,
+      contract: 'supermega.hq-live-state.v1',
+      failures: ['hq_release_commit_stale', 'snapshot_stale'],
+      release: { commit: 'must-not-escape' },
+    }),
+  }), 'ally_ceo_local_cycle_hq_live_failed:hq_release_commit_stale,snapshot_stale')
+  assert.equal(commandFailureReason('hq_live', {
+    code: 1,
+    stdout: JSON.stringify({ contract: 'supermega.hq-live-state.v1', failures: ['token_must_not_escape'] }),
   }), 'ally_ceo_local_cycle_command_failed:hq_live:1')
   assert.equal(commandFailureReason('local', { code: 2, stderr: 'private output' }), 'ally_ceo_local_cycle_command_failed:local:2')
 })
@@ -55,7 +91,12 @@ function plan({ outcomeId = 'daily-company-control', hashCharacter = 'a' } = {})
       cycleId: `ally-ceo-20260729-${outcomeId}`,
       agents: outcomeAgents[outcomeId],
       roleBudget: 3,
-      evidence: outcomeId === 'product-portfolio-control' ? { 'delivery-planner': { productFocus: structuredClone(productFocus) } } : {},
+      evidence: {
+        [outcomeAgents[outcomeId][0]]: {
+          resourceEnvelope: structuredClone(resourceEnvelope),
+          ...(outcomeId === 'product-portfolio-control' ? { productFocus: structuredClone(productFocus) } : {}),
+        },
+      },
     },
     preflight: { expectedPlanHash: hashCharacter.repeat(64), expectedWorkOrderId: 'company-order:' + 'b'.repeat(40) },
     plan: { budget: { plannedRoles: 3, remainingRoles: 0 } },
@@ -67,6 +108,7 @@ function plan({ outcomeId = 'daily-company-control', hashCharacter = 'a' } = {})
       maxConcurrentAllyRuns: 1,
       scaleToZero: true,
     },
+    resourceEnvelope: structuredClone(resourceEnvelope),
   }
 }
 
@@ -637,6 +679,7 @@ test('execution claims the exact reviewed mission once and accepts only a qualit
   assert.equal(result.jobId, state.jobId)
   assert.equal(result.qualityPassed, true)
   assert.equal(result.modelCalls, 3)
+  assert.deepEqual(result.resourceEnvelope, resourceEnvelope)
   const add = state.calls.find((call) => call.args?.[1] === 'add')
   assert.equal(add.args.includes('--roles'), true)
   assert.equal(add.args.includes('operations'), true)
@@ -646,8 +689,31 @@ test('execution claims the exact reviewed mission once and accepts only a qualit
   assert.match(add.args[2], /Do not end a clause with a conjunction, helper verb, or unfinished phrase/)
   const run = state.calls.find((call) => call.args?.[1] === 'run-next')
   assert.deepEqual(run.args.slice(0, 4), ['queue', 'run-next', '--queue-id', state.queueId])
-  assert.equal(run.args.includes('0s'), true)
-  assert.equal(run.args.includes('768'), true)
+  assert.deepEqual(run.args.slice(-6), ['--num-ctx', '4096', '--num-predict', '768', '--keep-alive', '0s'])
+  assert.equal(run.timeoutMs, 480_000)
+})
+
+test('resource envelope drift fails before HQ, knowledge, queue, model, Vercel, or scheduler work', async () => {
+  const mutations = [
+    (candidate) => { candidate.resourceEnvelope.selectedAgents = 175 },
+    (candidate) => { candidate.resourceEnvelope.maxModelCalls = 4 },
+    (candidate) => { candidate.resourceEnvelope.vercelActions = 1 },
+    (candidate) => { candidate.resourceEnvelope.hostedSchedulerActions = 1 },
+    (candidate) => { candidate.resourceEnvelope.dynamicDelegation = true },
+    (candidate) => { candidate.manifest.evidence['operations-analyst'].resourceEnvelope.modelContextTokens = 8_192 },
+    (candidate) => { candidate.resourceEnvelope.unbounded = true },
+  ]
+  for (const mutate of mutations) {
+    const candidate = plan()
+    mutate(candidate)
+    const state = harness()
+    await assert.rejects(
+      runAllyCeoLocalCycle({ execute: true }, { plan: candidate, runCommand: state.runCommand }),
+      /ally_ceo_local_cycle_resource_envelope_invalid/,
+    )
+    assert.equal(state.calls.some((call) => ['hq_live', 'trim'].includes(call.kind)), false)
+    assert.equal(state.calls.some((call) => call.args?.[0] === 'knowledge' || call.args?.[1] === 'add' || call.args?.[1] === 'run-next'), false)
+  }
 })
 
 test('execution can atomically refresh changed registered evidence before queue or model work', async () => {

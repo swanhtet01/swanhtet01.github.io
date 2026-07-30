@@ -84,6 +84,30 @@ test('CEO planning selects one scale-to-zero specialist with deterministic contr
   assert.equal(result.controls.maxConcurrentAllyRuns, 1)
   assert.equal(result.controls.maxAgents, 1)
   assert.equal(result.controls.scaleToZero, true)
+  assert.deepEqual(result.manifest.evidence['operations-analyst'].resourceEnvelope, result.resourceEnvelope)
+  assert.deepEqual(result.resourceEnvelope, {
+    contract: 'supermega.ally-ceo-resource-envelope.v1',
+    registeredRoleRecords: 12,
+    selectedAgents: 1,
+    maxActiveAssignments: 2,
+    maxConcurrentCycles: 1,
+    execution: 'sequential',
+    providerPolicy: 'local_ollama_or_test_mock',
+    maxModelCalls: 3,
+    modelContextTokens: 4_096,
+    modelOutputTokens: 768,
+    modelKeepAlive: '0s',
+    cycleTimeoutMs: 480_000,
+    loadedModelsBefore: 0,
+    loadedModelsAfter: 0,
+    connectorRequests: 0,
+    externalWrites: false,
+    vercelActions: 0,
+    hostedSchedulerActions: 0,
+    dynamicDelegation: false,
+    recursiveDelegation: false,
+    scaleToZero: true,
+  })
   assert.equal(result.experiment.contract, 'supermega.ally-ceo-cycle-experiment.v1')
   assert.equal(result.experiment.outcomeId, result.outcomeId)
   assert.equal(result.experiment.treatment.specialists, 1)
@@ -99,6 +123,38 @@ test('CEO planning selects one scale-to-zero specialist with deterministic contr
   assert.equal(result.preflight.expectedRunId, result.plan.runId)
   assert.equal(result.preflight.controls.planOnlyDefault, true)
   assert.equal(JSON.stringify(result.manifest).includes('instagram.com'), false)
+})
+
+test('growing Workboard history stays out of active context while current execution order remains bounded', async () => {
+  const historicalLedger = `# Workboard\n\n${'historical completed row\n'.repeat(12_000)}\n## Execution order\n1. Keep the four products stable.\n2. Prove managed isolation before writes.\n`
+  const result = await buildAllyCeoCompanyPlan({
+    now: '2026-07-29T00:00:00.000Z',
+    hqNow: now,
+    workboard: historicalLedger,
+    portfolioText: portfolio(),
+  })
+  assert.equal(result.ok, true)
+  assert.equal(JSON.stringify(result.manifest).includes('historical completed row'), false)
+  assert.equal(result.manifest.evidence['operations-analyst'].currentState.length, 5)
+
+  await assert.rejects(
+    buildAllyCeoCompanyPlan({
+      now: '2026-07-29T00:00:00.000Z',
+      hqNow: now,
+      workboard: `# Workboard\n${'x'.repeat(512 * 1024)}\n## Execution order\n1. Safe.`,
+      portfolioText: portfolio(),
+    }),
+    /ally_ceo_company_plan_invalid_workboard/,
+  )
+  await assert.rejects(
+    buildAllyCeoCompanyPlan({
+      now: '2026-07-29T00:00:00.000Z',
+      hqNow: now,
+      workboard: `# Workboard\n\n## Execution order\n${'x'.repeat(65 * 1024)}`,
+      portfolioText: portfolio(),
+    }),
+    /ally_ceo_company_plan_hq_section_empty/,
+  )
 })
 
 test('completed outcomes rotate through all five fixed teams and then stop', async () => {

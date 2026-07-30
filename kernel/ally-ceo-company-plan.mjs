@@ -7,8 +7,11 @@ import { selectCeoOutcome } from './supermega-hq-authority.mjs'
 export const ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'
 export const ALLY_CEO_CYCLE_EXPERIMENT_CONTRACT = 'supermega.ally-ceo-cycle-experiment.v1'
 export const ALLY_CEO_PRODUCT_FOCUS_CONTRACT = 'supermega.ally-ceo-product-focus.v2'
+export const ALLY_CEO_RESOURCE_ENVELOPE_CONTRACT = 'supermega.ally-ceo-resource-envelope.v1'
 
 const MAX_SOURCE_BYTES = 256 * 1024
+const MAX_WORKBOARD_BYTES = 512 * 1024
+const MAX_SECTION_BYTES = 64 * 1024
 const REQUIRED_PRODUCTS = ['shop', 'plant', 'website', 'ecommerce']
 const SOCIAL_SIGNAL_RE = /(?:https?:\/\/)?(?:[^\s/]+\.)?(?:instagram\.com|linkedin\.com|lnkd\.in)(?:[/:?\s]|$)/i
 const SENSITIVE_VALUE_RE = /(?:-----BEGIN [A-Z ]+PRIVATE KEY-----|\b(?:sk-proj|ghp|gho|glpat|xoxb|xoxp|xoxa|xoxr)-[A-Za-z0-9_-]{16,})/i
@@ -50,10 +53,10 @@ function digest(value) {
   return createHash('sha256').update(value).digest('hex')
 }
 
-function boundedSource(value, label) {
+function boundedSource(value, label, maximumBytes = MAX_SOURCE_BYTES) {
   const text = typeof value === 'string' ? value.trim() : ''
   const bytes = Buffer.byteLength(text, 'utf8')
-  if (!text || bytes > MAX_SOURCE_BYTES || /\u0000/.test(text)) fail(`ally_ceo_company_plan_invalid_${label}`)
+  if (!text || bytes > maximumBytes || /\u0000/.test(text)) fail(`ally_ceo_company_plan_invalid_${label}`)
   return text
 }
 
@@ -64,7 +67,7 @@ function markdownSection(source, heading) {
   const contentStart = start + marker.length
   const next = source.indexOf('\n## ', contentStart)
   const body = source.slice(contentStart, next < 0 ? source.length : next).trim()
-  if (!body) fail('ally_ceo_company_plan_hq_section_empty')
+  if (!body || Buffer.byteLength(body, 'utf8') > MAX_SECTION_BYTES) fail('ally_ceo_company_plan_hq_section_empty')
   return { heading, body }
 }
 
@@ -220,10 +223,36 @@ function buildCycleExperiment(selection, agentId) {
   return { ...definition, experimentDigest: `sha256:${digest(stableStringify(definition))}` }
 }
 
+function buildResourceEnvelope() {
+  return {
+    contract: ALLY_CEO_RESOURCE_ENVELOPE_CONTRACT,
+    registeredRoleRecords: 12,
+    selectedAgents: 1,
+    maxActiveAssignments: 2,
+    maxConcurrentCycles: 1,
+    execution: 'sequential',
+    providerPolicy: 'local_ollama_or_test_mock',
+    maxModelCalls: 3,
+    modelContextTokens: 4_096,
+    modelOutputTokens: 768,
+    modelKeepAlive: '0s',
+    cycleTimeoutMs: 8 * 60_000,
+    loadedModelsBefore: 0,
+    loadedModelsAfter: 0,
+    connectorRequests: 0,
+    externalWrites: false,
+    vercelActions: 0,
+    hostedSchedulerActions: 0,
+    dynamicDelegation: false,
+    recursiveDelegation: false,
+    scaleToZero: true,
+  }
+}
+
 export async function buildAllyCeoCompanyPlan(input = {}) {
   const generatedAt = canonicalInstant(input.now ?? new Date())
   const hqNow = boundedSource(input.hqNow, 'hq_now')
-  const workboard = boundedSource(input.workboard, 'workboard')
+  const workboard = boundedSource(input.workboard, 'workboard', MAX_WORKBOARD_BYTES)
   const portfolioText = boundedSource(input.portfolioText, 'portfolio')
   let portfolio
   try { portfolio = portfolioView(JSON.parse(portfolioText)) }
@@ -288,6 +317,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
     products: portfolio.products.map(({ id, status, nextGate }) => ({ id, status, nextGate })),
     limits: portfolio.limits,
   }
+  const resourceEnvelope = buildResourceEnvelope()
   const evidence = {
     [agents[0]]: {
       objective: selection.selected.objective,
@@ -299,6 +329,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
       portfolio: portfolioEvidence,
       ...(productFocus ? { productFocus } : {}),
       sourceReceipts,
+      resourceEnvelope,
       controls: sharedControls,
     },
   }
@@ -342,6 +373,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
     preflight,
     plan,
     experiment,
+    resourceEnvelope,
     controls: {
       planningModelCalls: 0,
       planningConnectorRequests: 0,
@@ -358,5 +390,6 @@ export default {
   ALLY_CEO_COMPANY_PLAN_CONTRACT,
   ALLY_CEO_CYCLE_EXPERIMENT_CONTRACT,
   ALLY_CEO_PRODUCT_FOCUS_CONTRACT,
+  ALLY_CEO_RESOURCE_ENVELOPE_CONTRACT,
   buildAllyCeoCompanyPlan,
 }

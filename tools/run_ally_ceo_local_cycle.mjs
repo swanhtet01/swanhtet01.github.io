@@ -8,7 +8,7 @@ import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 
-import { buildAllyCeoCompanyPlan } from '../kernel/ally-ceo-company-plan.mjs'
+import { ALLY_CEO_RESOURCE_ENVELOPE_CONTRACT, buildAllyCeoCompanyPlan } from '../kernel/ally-ceo-company-plan.mjs'
 
 export const ALLY_CEO_LOCAL_CYCLE_CONTRACT = 'supermega.ally-ceo-local-cycle.v1'
 
@@ -19,11 +19,61 @@ const defaultLocalCompanyHome = resolve(root, '..', 'supermega-local-company-sta
 const powershell = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const MAX_COMMAND_BYTES = 512 * 1024
 const MAX_REPORT_BYTES = 256 * 1024
-const EXECUTION_SPEC_VERSION = '2026-07-29.22'
-const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
+const EXECUTION_SPEC_VERSION = '2026-07-29.23'
+const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.22', '2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
 const MEMORY_RECOVERY_BLOCKERS = Object.freeze(new Set(['memory_pressure_critical', 'codex_working_set_high']))
+const SAFE_HQ_LIVE_FAILURES = Object.freeze(new Set([
+  'app_release_contract_invalid',
+  'public_release_contract_invalid',
+  'paired_release_identity_mismatch',
+  'hq_release_commit_stale',
+  'app_canonical_domain_invalid',
+  'hq_operating_mode_invalid',
+  'hq_scheduler_status_invalid',
+  'hq_scheduler_configuration_invalid',
+  'hq_managed_persistence_readiness_invalid',
+  'hq_security_readiness_invalid',
+  'health_not_ready',
+  'operating_mode_drift',
+  'managed_persistence_readiness_drift',
+  'security_readiness_drift',
+  'scheduler_status_drift',
+  'scheduler_configuration_drift',
+  'scheduler_pc_dependency_forbidden',
+  'scheduler_budget_grant_required',
+  'scheduler_batch_limit_exceeded',
+  'capacity_not_scale_to_zero',
+  'idle_execution_target_nonzero',
+  'registered_specialists_consume_compute',
+  'external_action_policy_drift',
+  'snapshot_from_future',
+  'snapshot_stale',
+]))
 const PRODUCT_IDS = Object.freeze(['shop', 'plant', 'website', 'ecommerce'])
 const PRODUCT_FOCUS_UNSAFE_RE = /[\u0000-\u001f]|\[(?:ALLY_CEO_[A-Z_]+|EVIDENCE):|(?:instagram\.com|linkedin\.com|lnkd\.in)|-----BEGIN [A-Z ]+PRIVATE KEY-----|\b(?:sk-proj|ghp|gho|glpat|xoxb|xoxp|xoxa|xoxr)-[A-Za-z0-9_-]{16,}/i
+const EXPECTED_RESOURCE_ENVELOPE = Object.freeze({
+  contract: ALLY_CEO_RESOURCE_ENVELOPE_CONTRACT,
+  registeredRoleRecords: 12,
+  selectedAgents: 1,
+  maxActiveAssignments: 2,
+  maxConcurrentCycles: 1,
+  execution: 'sequential',
+  providerPolicy: 'local_ollama_or_test_mock',
+  maxModelCalls: 3,
+  modelContextTokens: 4_096,
+  modelOutputTokens: 768,
+  modelKeepAlive: '0s',
+  cycleTimeoutMs: 8 * 60_000,
+  loadedModelsBefore: 0,
+  loadedModelsAfter: 0,
+  connectorRequests: 0,
+  externalWrites: false,
+  vercelActions: 0,
+  hostedSchedulerActions: 0,
+  dynamicDelegation: false,
+  recursiveDelegation: false,
+  scaleToZero: true,
+})
 
 const AGENT_ROLE_MAP = Object.freeze({
   'operations-analyst': 'operations',
@@ -83,6 +133,19 @@ function parseJson(text, reason) {
   }
 }
 
+function validatedResourceEnvelope(plan, agentId) {
+  const envelope = plan?.resourceEnvelope
+  const retained = plan?.manifest?.evidence?.[agentId]?.resourceEnvelope
+  const expectedKeys = Object.keys(EXPECTED_RESOURCE_ENVELOPE).sort()
+  const valid = [envelope, retained].every((candidate) => candidate
+    && typeof candidate === 'object'
+    && !Array.isArray(candidate)
+    && Object.keys(candidate).sort().join(',') === expectedKeys.join(',')
+    && expectedKeys.every((key) => candidate[key] === EXPECTED_RESOURCE_ENVELOPE[key]))
+  if (!valid) fail('ally_ceo_local_cycle_resource_envelope_invalid')
+  return { ...EXPECTED_RESOURCE_ENVELOPE }
+}
+
 function within(base, target) {
   const rel = relative(resolve(base), resolve(target))
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
@@ -119,6 +182,7 @@ function planSpec(plan) {
   if (roles.some((role) => !role) || new Set(roles).size !== 1 || !OUTCOME_BRIEFS[outcomeId]) {
     fail('ally_ceo_local_cycle_team_invalid')
   }
+  const resourceEnvelope = validatedResourceEnvelope(plan, agents[0])
   const productFocusRequired = outcomeId === 'product-portfolio-control'
   const manifestProductFocus = plan.manifest?.evidence?.['delivery-planner']?.productFocus
   const productFocusValid = productFocusRequired
@@ -215,6 +279,7 @@ function planSpec(plan) {
     objectiveDigest: `sha256:${sha256(objective)}`,
     repairObjective,
     repairObjectiveDigest: `sha256:${sha256(repairObjective)}`,
+    resourceEnvelope,
   }
 }
 
@@ -552,17 +617,23 @@ export function commandFailureReason(kind, error) {
   const code = typeof error?.code === 'number' ? error.code : 'error'
   const fallback = `ally_ceo_local_cycle_command_failed:${kind}:${code}`
   if (kind !== 'hq_live') return fallback
-  try {
-    const receipt = JSON.parse(String(error?.stderr || '').trim())
-    const detail = String(receipt?.error || '')
-    if (receipt?.contract !== 'supermega.hq-live-state.v1'
-      || !/^live_app_product_contract_failed:(?:missing_live_[a-z0-9_]+|live_[a-z0-9_]+|[a-z0-9_]+_(?:missing|wrong|invalid|mismatch|rejected))(?::[A-Za-z0-9_.=/-]+){0,3}$/.test(detail)) {
-      return fallback
+  for (const stream of [error?.stderr, error?.stdout]) {
+    try {
+      const receipt = JSON.parse(String(stream || '').trim())
+      if (receipt?.contract !== 'supermega.hq-live-state.v1') continue
+      const detail = String(receipt?.error || '')
+      if (/^live_app_product_contract_failed:(?:missing_live_[a-z0-9_]+|live_[a-z0-9_]+|[a-z0-9_]+_(?:missing|wrong|invalid|mismatch|rejected))(?::[A-Za-z0-9_.=/-]+){0,3}$/.test(detail)) {
+        return `ally_ceo_local_cycle_hq_live_failed:${detail}`
+      }
+      const failures = Array.isArray(receipt?.failures) ? receipt.failures : []
+      if (failures.length > 0 && failures.every((failure) => SAFE_HQ_LIVE_FAILURES.has(failure))) {
+        return `ally_ceo_local_cycle_hq_live_failed:${failures.join(',')}`
+      }
+    } catch {
+      continue
     }
-    return `ally_ceo_local_cycle_hq_live_failed:${detail}`
-  } catch {
-    return fallback
   }
+  return fallback
 }
 
 async function defaultCommandRunner({ kind, args, timeoutMs, localCompanyRoot, localCompanyHome }) {
@@ -961,6 +1032,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
         agents: spec.agents,
         roles: spec.roles,
         objectiveDigest: spec.objectiveDigest,
+        resourceEnvelope: spec.resourceEnvelope,
         queueId: existing.queueId,
         jobId: existing.jobId,
         queueStatus: existing.status,
@@ -997,6 +1069,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     agents: spec.agents,
     roles: spec.roles,
     objectiveDigest: repair ? spec.repairObjectiveDigest : spec.objectiveDigest,
+    resourceEnvelope: spec.resourceEnvelope,
     repair,
     host,
     liveHq,
@@ -1030,11 +1103,11 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
       'queue', 'run-next', '--queue-id', queueId,
       '--provider', provider,
       '--model', model,
-      '--num-ctx', '4096',
-      '--num-predict', '768',
-      '--keep-alive', '0s',
+      '--num-ctx', String(spec.resourceEnvelope.modelContextTokens),
+      '--num-predict', String(spec.resourceEnvelope.modelOutputTokens),
+      '--keep-alive', spec.resourceEnvelope.modelKeepAlive,
     ],
-    timeoutMs: 8 * 60_000,
+    timeoutMs: spec.resourceEnvelope.cycleTimeoutMs,
   })
   const result = parseQueueResult(execution, queueId)
   const detail = parseJson(
@@ -1050,7 +1123,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     fail('ally_ceo_local_cycle_job_rejected')
   }
   const modelCalls = detail.events.filter((event) => Array.isArray(event) && event[0] === 'model_metrics').length
-  if (modelCalls < spec.roles.length || modelCalls > spec.roles.length + 2) {
+  if (modelCalls < spec.roles.length || modelCalls > spec.resourceEnvelope.maxModelCalls) {
     fail('ally_ceo_local_cycle_model_count_invalid')
   }
   const report = validateAcceptedReport(await inspectReport(result.reportPath), spec.roles)

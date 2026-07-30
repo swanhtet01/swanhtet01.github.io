@@ -4,8 +4,8 @@ Updated: 2026-07-30
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `221c08ba84c83452eb4114c9f7fe2007d89bd824`
-Live state observed: `2026-07-29T18:22:17Z`
+Live release commit: `df4d26ca3eb427578607c6a5016848d046bdb34f`
+Live state observed: `2026-07-30T03:41:21.086Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -55,9 +55,9 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Client preparation passes 186 onboarding, 74 security, six preparation, recovery, release, privacy, database, Vercel, HQ, approval, and tamper-before-write checks.
 - Browser proof: one Manufacturing kit installed all four products, persisted prepared records, completed a Shop sale (OIL-1L 48 to 47; orders four to five), reset cleanly, and reprovisioned. Desktop/mobile had no overflow or browser warnings.
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
-- Both domains serve deployed `221c08ba84c83452eb4114c9f7fe2007d89bd824`; paired brand, context, and catalog identities match.
+- Both domains serve deployed `df4d26ca3eb427578607c6a5016848d046bdb34f`; paired brand, context, and catalog identities match.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-- `supermega.ally-working-set-trim.v1` released 2,190.5 MB without process stops; admission reopened at 82.2% RAM. Audit reports one frontend, one backend, one idle worker, zero loaded models, zero configured local subagents, and one-run admission. Four CEO outcomes are accepted; Finance/Risk remains quarantined.
+- Ally cycles hash-bind one serial specialist to zero external/Vercel/scheduler actions, three local calls at most, 4,096/768 tokens, and `keep-alive 0s`. `supermega.ally-working-set-trim.v1` released 2,949.3 MB without Codex process stops; an unrelated six-role run was interrupted and reconciled without rerun. Audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Four CEO outcomes are accepted; Finance/Risk remains quarantined.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
 ## Owner-gated actions
@@ -70,7 +70,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - `supermegabase` is not a trial target: it has existing records, one recorded migration, and 27 public RLS tables without policies. No isolated branch is verified, so managed writes remain off.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
 - Production `221c08ba` and the local candidate diverge from common base `5d1c5d7c`; the candidate is verified locally but is not a safe direct release. The histories now contain nine production-only and 191 candidate-only commits.
-- Production `221c08ba84c83452eb4114c9f7fe2007d89bd824` fails the candidate launch-readiness contract. Live HQ reports this drift without release acceptance. Preview, promotion, marketing readiness, and managed activation remain blocked; any external handoff must pass `release:handoff:verify`.
+- Production `df4d26ca3eb427578607c6a5016848d046bdb34f` lacks the live launch-readiness context. Live HQ reports this drift without release acceptance. Preview, promotion, marketing readiness, and managed activation remain blocked; any external handoff must pass `release:handoff:verify`.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 
