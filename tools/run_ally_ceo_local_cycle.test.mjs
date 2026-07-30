@@ -129,6 +129,40 @@ function rotatingPlan(completedOutcomeIds) {
   return plan({ outcomeId, hashCharacter: String.fromCharCode(97 + completedOutcomeIds.length) })
 }
 
+function rotatingPlanWithGatedProduct(completedOutcomeIds) {
+  if (completedOutcomeIds.length === 2) {
+    return {
+      ok: true,
+      contract: 'supermega.ally-ceo-company-plan.v1',
+      generatedAt: '2026-07-29T00:00:00.000Z',
+      declined: false,
+      skipped: true,
+      reason: 'no_executable_product_focus',
+      outcomeId: 'product-portfolio-control',
+      productFocus: null,
+      gatedProductWork: ['shop', 'plant', 'website', 'ecommerce'].map((productId) => ({
+        productId,
+        status: 'owner-gated',
+        workOrderId: `${productId}-managed-pilot`,
+      })),
+      sourceReceipts: ['hq/NOW.md', 'hq/WORKBOARD.md#execution-order', 'hq/portfolio.json']
+        .map((path) => ({ path, digest: 'sha256:' + 'a'.repeat(64) })),
+      manifest: null,
+      preflight: null,
+      plan: null,
+      controls: {
+        planningModelCalls: 0,
+        planningConnectorRequests: 0,
+        planningExternalWrites: false,
+        maxAgents: 0,
+        maxConcurrentAllyRuns: 0,
+        scaleToZero: true,
+      },
+    }
+  }
+  return rotatingPlan(completedOutcomeIds)
+}
+
 function completedOutcomeLine(outcomeId, index = 0, status = 'complete') {
   const queueId = (index + 1).toString(16).padStart(12, '0')
   const jobId = (index + 101).toString(16).padStart(12, '0')
@@ -587,6 +621,56 @@ test('accepted daily evidence rotates the next serial run to Engineering despite
   assert.deepEqual(result.roles, ['engineering'])
   assert.equal(result.modelCalls, 0)
   assert.equal(state.calls.filter((call) => call.args?.[0] === 'show').length, 1)
+})
+
+test('gated product work consumes no model call and lets Growth continue', async () => {
+  const queueList = completedOutcomeLine('daily-company-control', 0) + completedOutcomeLine('engineering-release-control', 1)
+  const state = harness({ queueList })
+  const result = await runAllyCeoLocalCycle(
+    { execute: false },
+    {
+      buildPlan: async (completedOutcomeIds) => rotatingPlanWithGatedProduct(completedOutcomeIds),
+      runCommand: state.runCommand,
+      inspectReport: async (path) => ({
+        path,
+        bytes: Buffer.byteLength(acceptedStructuredReport),
+        digest: 'sha256:' + '8'.repeat(64),
+        text: acceptedStructuredReport,
+      }),
+    },
+  )
+  assert.equal(result.status, 'ready')
+  assert.equal(result.outcomeId, 'growth-pipeline-control')
+  assert.deepEqual(result.completedOutcomeIds, ['daily-company-control', 'engineering-release-control'])
+  assert.deepEqual(result.skippedOutcomes.map((item) => item.outcomeId), ['product-portfolio-control'])
+  assert.equal(result.skippedOutcomes[0].gatedProductWork.length, 4)
+  assert.equal(result.modelCalls, 0)
+  assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)
+})
+
+test('a gated product outcome keeps a fully observed period incomplete without useful work', async () => {
+  const acceptedOutcomes = ['daily-company-control', 'engineering-release-control', 'growth-pipeline-control', 'finance-risk-control']
+  const queueList = acceptedOutcomes.map((outcomeId, index) => completedOutcomeLine(outcomeId, index)).join('')
+  const state = harness({ queueList })
+  const result = await runAllyCeoLocalCycle(
+    { execute: true, refreshKnowledge: true },
+    {
+      buildPlan: async (completedOutcomeIds) => rotatingPlanWithGatedProduct(completedOutcomeIds),
+      runCommand: state.runCommand,
+      inspectReport: async (path) => ({
+        path,
+        bytes: Buffer.byteLength(acceptedStructuredReport),
+        digest: 'sha256:' + '8'.repeat(64),
+        text: acceptedStructuredReport,
+      }),
+    },
+  )
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 'period_incomplete')
+  assert.deepEqual(result.rejectedOutcomes, [])
+  assert.deepEqual(result.skippedOutcomes.map((item) => item.outcomeId), ['product-portfolio-control'])
+  assert.equal(result.modelCalls, 0)
+  assert.equal(result.queueWrites, 0)
 })
 
 test('five accepted outcomes close the UTC period with zero queue or model work', async () => {

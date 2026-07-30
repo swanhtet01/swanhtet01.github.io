@@ -191,7 +191,7 @@ function productFocusFor(portfolio, outcomeId) {
     .sort((left, right) => right.localAutomation.priority - left.localAutomation.priority
       || REQUIRED_PRODUCTS.indexOf(left.id) - REQUIRED_PRODUCTS.indexOf(right.id))
   const product = candidates[0]
-  if (!product) fail('ally_ceo_company_plan_no_executable_product_focus')
+  if (!product) return null
   return {
     contract: ALLY_CEO_PRODUCT_FOCUS_CONTRACT,
     selection: 'portfolio_priority_ready',
@@ -310,6 +310,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
       contract: ALLY_CEO_COMPANY_PLAN_CONTRACT,
       generatedAt,
       declined: true,
+      skipped: false,
       reason: selection.reason || 'no_authorized_ceo_outcome',
       authorityId: selection.authorityId,
       authorityDigest: selection.authorityDigest,
@@ -339,6 +340,39 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
     { path: 'hq/WORKBOARD.md#execution-order', digest: `sha256:${digest(stableStringify(executionOrder))}` },
     { path: 'hq/portfolio.json', digest: `sha256:${digest(portfolioText)}` },
   ]
+  if (selection.selected.id === 'product-portfolio-control' && !productFocus) {
+    return {
+      ok: true,
+      contract: ALLY_CEO_COMPANY_PLAN_CONTRACT,
+      generatedAt,
+      declined: false,
+      skipped: true,
+      reason: 'no_executable_product_focus',
+      authorityId: selection.authorityId,
+      authorityDigest: selection.authorityDigest,
+      outcomeId: selection.selected.id,
+      productFocus: null,
+      successMeasureDigest: selection.selected.successMeasureDigest,
+      gatedProductWork: portfolio.products.map((product) => ({
+        productId: product.id,
+        status: product.localAutomation.status,
+        workOrderId: product.localAutomation.workOrderId,
+      })),
+      sourceReceipts,
+      manifest: null,
+      preflight: null,
+      plan: null,
+      controls: {
+        planningModelCalls: 0,
+        planningConnectorRequests: 0,
+        planningExternalWrites: false,
+        maxAgents: 0,
+        maxConcurrentAllyRuns: 0,
+        scaleToZero: true,
+        executionRequiresSeparateApproval: true,
+      },
+    }
+  }
   const compactDate = generatedAt.slice(0, 10).replaceAll('-', '')
   const cycleId = `ally-ceo-${compactDate}-${selection.selected.id}`
   const sharedControls = {
@@ -405,6 +439,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
     contract: ALLY_CEO_COMPANY_PLAN_CONTRACT,
     generatedAt,
     declined: false,
+    skipped: false,
     authorityId: selection.authorityId,
     authorityDigest: selection.authorityDigest,
     outcomeId: selection.selected.id,

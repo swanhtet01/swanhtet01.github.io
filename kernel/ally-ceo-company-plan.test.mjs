@@ -242,7 +242,7 @@ test('product control selects the highest-priority ready local work order withou
   }
 })
 
-test('product control skips gated priorities and rejects malformed or fully gated automation before work', async () => {
+test('product control skips gated priorities and records fully gated automation without work', async () => {
   const selected = await buildAllyCeoCompanyPlan({
     now: '2026-07-29T12:00:00.000Z',
     hqNow: now,
@@ -267,16 +267,26 @@ test('product control skips gated priorities and rejects malformed or fully gate
     }),
     /ally_ceo_company_plan_product_automation_invalid/,
   )
-  await assert.rejects(
-    buildAllyCeoCompanyPlan({
-      now: '2026-07-29T12:00:00.000Z',
-      hqNow: now,
-      workboard,
-      portfolioText: portfolio({}, { ecommerce: { status: 'owner-gated' } }),
-      completedOutcomeIds: ['daily-company-control', 'engineering-release-control'],
-    }),
-    /ally_ceo_company_plan_no_executable_product_focus/,
-  )
+  const gated = await buildAllyCeoCompanyPlan({
+    now: '2026-07-29T12:00:00.000Z',
+    hqNow: now,
+    workboard,
+    portfolioText: portfolio({}, { ecommerce: { status: 'owner-gated' } }),
+    completedOutcomeIds: ['daily-company-control', 'engineering-release-control'],
+  })
+  assert.equal(gated.outcomeId, 'product-portfolio-control')
+  assert.equal(gated.skipped, true)
+  assert.equal(gated.reason, 'no_executable_product_focus')
+  assert.equal(gated.manifest, null)
+  assert.equal(gated.plan, null)
+  assert.deepEqual(gated.gatedProductWork.map(({ productId, status }) => ({ productId, status })), [
+    { productId: 'shop', status: 'owner-gated' },
+    { productId: 'plant', status: 'owner-gated' },
+    { productId: 'website', status: 'owner-gated' },
+    { productId: 'ecommerce', status: 'owner-gated' },
+  ])
+  assert.equal(gated.controls.maxAgents, 0)
+  assert.equal(gated.controls.planningModelCalls, 0)
   await assert.rejects(
     buildAllyCeoCompanyPlan({
       now: '2026-07-29T12:00:00.000Z',

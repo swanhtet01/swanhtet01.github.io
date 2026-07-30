@@ -643,6 +643,47 @@ function existingForSpec(queueText, spec) {
   return null
 }
 
+function validateSkippedOutcome(plan, expectedOutcomeId, expectedPeriod = null) {
+  const generatedAt = String(plan?.generatedAt || '')
+  const period = generatedAt.slice(0, 10)
+  const productIds = ['shop', 'plant', 'website', 'ecommerce']
+  if (!plan
+    || plan.ok !== true
+    || plan.contract !== 'supermega.ally-ceo-company-plan.v1'
+    || plan.declined !== false
+    || plan.skipped !== true
+    || plan.reason !== 'no_executable_product_focus'
+    || plan.outcomeId !== expectedOutcomeId
+    || expectedOutcomeId !== 'product-portfolio-control'
+    || !/^\d{4}-\d{2}-\d{2}T/.test(generatedAt)
+    || expectedPeriod && period !== expectedPeriod
+    || plan.productFocus !== null
+    || plan.manifest !== null
+    || plan.preflight !== null
+    || plan.plan !== null
+    || !Array.isArray(plan.gatedProductWork)
+    || plan.gatedProductWork.length !== productIds.length
+    || plan.gatedProductWork.some((item, index) => item?.productId !== productIds[index]
+      || !['owner-gated', 'external-blocked'].includes(item.status)
+      || !new RegExp(`^${productIds[index]}-[a-z0-9-]{2,79}$`).test(String(item.workOrderId || '')))
+    || !Array.isArray(plan.sourceReceipts)
+    || plan.sourceReceipts.map((receipt) => receipt?.path).join(',') !== 'hq/NOW.md,hq/WORKBOARD.md#execution-order,hq/portfolio.json'
+    || plan.sourceReceipts.some((receipt) => !/^sha256:[a-f0-9]{64}$/.test(String(receipt?.digest || '')))
+    || plan.controls?.planningModelCalls !== 0
+    || plan.controls?.planningConnectorRequests !== 0
+    || plan.controls?.planningExternalWrites !== false
+    || plan.controls?.maxAgents !== 0
+    || plan.controls?.maxConcurrentAllyRuns !== 0
+    || plan.controls?.scaleToZero !== true) {
+    fail('ally_ceo_local_cycle_skipped_outcome_invalid')
+  }
+  return {
+    outcomeId: plan.outcomeId,
+    reason: plan.reason,
+    gatedProductWork: structuredClone(plan.gatedProductWork),
+  }
+}
+
 function validateQueuePreflight(preflight, queueId, roles) {
   if (preflight?.schema !== 'local-company.queue-preflight.v1'
     || preflight.status !== 'ready'
@@ -920,16 +961,24 @@ async function selectRotatingPlan({ buildPlan, queueText, runCommand, inspectRep
   const completedOutcomeIds = []
   const processedOutcomeIds = []
   const rejectedOutcomes = []
+  const skippedOutcomes = []
   let period = null
   for (const expectedOutcomeId of OUTCOME_SEQUENCE) {
     const plan = await buildPlan([...processedOutcomeIds])
+    if (plan?.skipped === true) {
+      const skipped = validateSkippedOutcome(plan, expectedOutcomeId, period)
+      period ??= plan.generatedAt.slice(0, 10)
+      skippedOutcomes.push(skipped)
+      processedOutcomeIds.push(expectedOutcomeId)
+      continue
+    }
     const spec = planSpec(plan)
     if (spec.outcomeId !== expectedOutcomeId || period && spec.period !== period) {
       fail('ally_ceo_local_cycle_rotation_sequence_invalid')
     }
     period ??= spec.period
     const existing = existingForSpec(queueText, spec)
-    if (!existing) return { allDone: false, periodIncomplete: false, plan, spec, existing: null, inspection: null, completedOutcomeIds, rejectedOutcomes }
+    if (!existing) return { allDone: false, periodIncomplete: false, plan, spec, existing: null, inspection: null, completedOutcomeIds, rejectedOutcomes, skippedOutcomes }
     const inspection = await inspectExistingCycle(existing, spec, runCommand, inspectReport)
     if (inspection.accepted) completedOutcomeIds.push(spec.outcomeId)
     else {
@@ -955,6 +1004,7 @@ async function selectRotatingPlan({ buildPlan, queueText, runCommand, inspectRep
           inspection,
           completedOutcomeIds,
           rejectedOutcomes,
+          skippedOutcomes,
         }
       }
     }
@@ -971,11 +1021,12 @@ async function selectRotatingPlan({ buildPlan, queueText, runCommand, inspectRep
     fail('ally_ceo_local_cycle_rotation_completion_invalid')
   }
   return {
-    allDone: rejectedOutcomes.length === 0,
-    periodIncomplete: rejectedOutcomes.length > 0,
+    allDone: rejectedOutcomes.length === 0 && skippedOutcomes.length === 0,
+    periodIncomplete: rejectedOutcomes.length > 0 || skippedOutcomes.length > 0,
     period,
     completedOutcomeIds,
     rejectedOutcomes,
+    skippedOutcomes,
   }
 }
 
@@ -1034,6 +1085,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
           existing: existingForSpec(queueText, spec),
           inspection: null,
           completedOutcomeIds: [],
+          skippedOutcomes: [],
         }
       })()
     : await selectRotatingPlan({ buildPlan, queueText, runCommand, inspectReport, repairRejected })
@@ -1046,7 +1098,10 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
       period: rotation.period,
       outcomeId: rotation.allDone ? null : undefined,
       completedOutcomeIds: rotation.completedOutcomeIds,
-      ...(rotation.periodIncomplete ? { rejectedOutcomes: rotation.rejectedOutcomes } : {}),
+      ...(rotation.periodIncomplete ? {
+        rejectedOutcomes: rotation.rejectedOutcomes,
+        skippedOutcomes: rotation.skippedOutcomes,
+      } : {}),
       host,
       liveHq: { performed: false, skipped: 'period_closed' },
       sourceCount: null,
@@ -1097,7 +1152,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     performed: refreshedSources > 0,
     refreshedSources,
   }
-  const { spec, existing, completedOutcomeIds, rejectedOutcomes = [] } = rotation
+  const { spec, existing, completedOutcomeIds, rejectedOutcomes = [], skippedOutcomes = [] } = rotation
   let repair = null
   if (existing) {
     const inspected = rotation.inspection || await inspectExistingCycle(existing, spec, runCommand, inspectReport)
@@ -1119,6 +1174,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
         outcomeId: spec.outcomeId,
         productFocus: spec.productFocus,
         completedOutcomeIds,
+        skippedOutcomes,
         planHash: spec.planHash,
         cycleHash: spec.cycleHash,
         workOrderId: spec.workOrderId,
@@ -1157,6 +1213,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     productFocus: spec.productFocus,
     completedOutcomeIds,
     rejectedOutcomes,
+    skippedOutcomes,
     planHash: spec.planHash,
     cycleHash: spec.cycleHash,
     workOrderId: spec.workOrderId,
