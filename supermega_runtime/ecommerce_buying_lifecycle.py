@@ -26,6 +26,7 @@ ECOMMERCE_REQUEST_SCHEMA = "supermega.ecommerce.order_request.v2"
 ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v7"
 ECOMMERCE_RETURN_INTENT_SCHEMA = "supermega.ecommerce.return_intent.v1"
 ECOMMERCE_SUPPORT_INTENT_SCHEMA = "supermega.ecommerce.support_intent.v1"
+ECOMMERCE_CANCELLATION_INTENT_SCHEMA = "supermega.ecommerce.cancellation_intent.v1"
 ECOMMERCE_LIFECYCLE_STATE_SCHEMA = "supermega.ecommerce.buying_lifecycle.v1"
 ECOMMERCE_LIFECYCLE_EVENT_SCHEMA = "supermega.ecommerce.buying_event.v1"
 EMPTY_ECOMMERCE_LIFECYCLE_DIGEST = f"sha256:{'0' * 64}"
@@ -42,6 +43,8 @@ _RETURN_ID = re.compile(rf"^ERR-{_UUID}$")
 _RETURN_KEY = re.compile(rf"^ERI-{_UUID}$")
 _SUPPORT_ID = re.compile(rf"^ESR-{_UUID}$")
 _SUPPORT_KEY = re.compile(rf"^ESI-{_UUID}$")
+_CANCELLATION_ID = re.compile(rf"^ECN-{_UUID}$")
+_CANCELLATION_KEY = re.compile(rf"^CNI-{_UUID}$")
 _ISO_TIMESTAMP = re.compile(
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
     r"(?:\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$"
@@ -57,6 +60,9 @@ _FULFILMENT_METHODS = frozenset({"pickup", "delivery"})
 _RETURN_DISPOSITIONS = frozenset({"restock", "not_restocked"})
 _SUPPORT_CATEGORIES = frozenset(
     {"order_status", "delivery_issue", "payment_question", "item_issue", "other"}
+)
+_CANCELLATION_REASON_CODES = frozenset(
+    {"changed_mind", "duplicate_order", "order_error", "delivery_too_slow", "other"}
 )
 _PHONE = re.compile(r"^\+?[0-9][0-9 ()-]{5,31}$")
 
@@ -1705,6 +1711,169 @@ def validate_ecommerce_support_intent(value: object) -> dict[str, Any]:
     }
 
 
+def build_ecommerce_cancellation_intent(
+    *,
+    scope: str,
+    commerce_state: Mapping[str, object],
+    order_id: str,
+    reason_code: str,
+    reason: str,
+    idempotency_key: str,
+    created_at: str,
+) -> dict[str, Any]:
+    """Prepare a Shop-reviewed cancellation request without changing the order."""
+
+    from supermega_runtime.commerce_runtime import commerce_order_acknowledgement
+
+    canonical_order_id = _token(order_id, "orderId")
+    orders = commerce_state.get("orders")
+    if not isinstance(orders, list):
+        raise _fail("Cancellation requests require a Commerce order collection.")
+    order = next(
+        (
+            candidate
+            for candidate in orders
+            if isinstance(candidate, Mapping) and candidate.get("id") == canonical_order_id
+        ),
+        None,
+    )
+    acknowledgement = commerce_order_acknowledgement(commerce_state, canonical_order_id)
+    if (
+        order is None
+        or acknowledgement is None
+        or acknowledgement.get("schema") != "supermega.commerce.order-acknowledgement.v1"
+        or order.get("status") not in {"confirmed", "preparing", "ready"}
+        or acknowledgement.get("status") != order.get("status")
+        or acknowledgement.get("cancellation", {}).get("state") != "not_cancelled"
+        or acknowledgement.get("payment", {}).get("status") != order.get("paymentStatus")
+        or acknowledgement.get("payment", {}).get("refundStatus") != "none"
+        or acknowledgement.get("totalMmk") != order.get("total")
+    ):
+        raise _fail(
+            "Cancellation requests require one attributable active Shop order acknowledgement."
+        )
+    request_id = _text(
+        acknowledgement["evidence"].get("sourceRecordId"),
+        "order acknowledgement sourceRecordId",
+        maximum=40,
+    )
+    if _REQUEST_ID.fullmatch(request_id) is None:
+        raise _fail("Cancellation order is not attributable to an Ecommerce request.")
+    if reason_code not in _CANCELLATION_REASON_CODES:
+        raise _fail("Cancellation reason code is unsupported.")
+    key = _text(idempotency_key, "idempotencyKey", maximum=40)
+    if _CANCELLATION_KEY.fullmatch(key) is None:
+        raise _fail("Cancellation idempotency key is invalid.")
+    canonical_created_at = _timestamp(created_at, "createdAt")
+    order_created_at = _timestamp(order.get("createdAt"), "order.createdAt")
+    if datetime.fromisoformat(canonical_created_at.replace("Z", "+00:00")) < datetime.fromisoformat(
+        order_created_at.replace("Z", "+00:00")
+    ):
+        raise _fail("Cancellation request cannot predate the Shop order.")
+    acknowledgement_digest = _digest(
+        acknowledgement.get("digest"), "order acknowledgement digest"
+    )
+    return validate_ecommerce_cancellation_intent(
+        {
+            "schema": ECOMMERCE_CANCELLATION_INTENT_SCHEMA,
+            "state": "pending_shop_review",
+            "scope": _token(scope, "scope"),
+            "id": f"ECN-{key[4:]}",
+            "idempotencyKey": key,
+            "createdAt": canonical_created_at,
+            "orderId": canonical_order_id,
+            "sourceRequestId": request_id,
+            "sourceAcknowledgementDigest": acknowledgement_digest,
+            "orderStatus": order["status"],
+            "paymentStatus": order["paymentStatus"],
+            "refundStatus": "none",
+            "totalMmk": acknowledgement["totalMmk"],
+            "reasonCode": reason_code,
+            "reason": _text(reason, "reason", maximum=300),
+            "customerMessageSent": False,
+            "orderCancelled": False,
+            "refundStarted": False,
+            "evidenceReference": (
+                f"ECOMMERCE-CANCELLATION:{key[4:]}:{canonical_order_id}:"
+                f"{request_id}:{acknowledgement_digest[7:15]}"
+            ),
+        }
+    )
+
+
+def validate_ecommerce_cancellation_intent(value: object) -> dict[str, Any]:
+    source = _object(
+        value,
+        "cancellation intent",
+        (
+            "schema", "state", "scope", "id", "idempotencyKey", "createdAt",
+            "orderId", "sourceRequestId", "sourceAcknowledgementDigest",
+            "orderStatus", "paymentStatus", "refundStatus", "totalMmk",
+            "reasonCode", "reason", "customerMessageSent", "orderCancelled",
+            "refundStarted", "evidenceReference",
+        ),
+    )
+    cancellation_id = _text(source["id"], "cancellation intent.id", maximum=40)
+    key = _text(
+        source["idempotencyKey"], "cancellation intent.idempotencyKey", maximum=40
+    )
+    request_id = _text(
+        source["sourceRequestId"], "cancellation intent.sourceRequestId", maximum=40
+    )
+    order_id = _token(source["orderId"], "cancellation intent.orderId")
+    acknowledgement_digest = _digest(
+        source["sourceAcknowledgementDigest"],
+        "cancellation intent.sourceAcknowledgementDigest",
+    )
+    expected_reference = (
+        f"ECOMMERCE-CANCELLATION:{key[4:]}:{order_id}:"
+        f"{request_id}:{acknowledgement_digest[7:15]}"
+    )
+    if (
+        source["schema"] != ECOMMERCE_CANCELLATION_INTENT_SCHEMA
+        or source["state"] != "pending_shop_review"
+        or _CANCELLATION_ID.fullmatch(cancellation_id) is None
+        or _CANCELLATION_KEY.fullmatch(key) is None
+        or cancellation_id[4:] != key[4:]
+        or _REQUEST_ID.fullmatch(request_id) is None
+        or source["orderStatus"] not in {"confirmed", "preparing", "ready"}
+        or source["paymentStatus"] not in {"pending", "reconciled"}
+        or source["refundStatus"] != "none"
+        or source["reasonCode"] not in _CANCELLATION_REASON_CODES
+        or source["customerMessageSent"] is not False
+        or source["orderCancelled"] is not False
+        or source["refundStarted"] is not False
+        or source["evidenceReference"] != expected_reference
+    ):
+        raise _fail("Cancellation intent boundary is invalid.")
+    return {
+        "schema": ECOMMERCE_CANCELLATION_INTENT_SCHEMA,
+        "state": "pending_shop_review",
+        "scope": _token(source["scope"], "cancellation intent.scope"),
+        "id": cancellation_id,
+        "idempotencyKey": key,
+        "createdAt": _timestamp(source["createdAt"], "cancellation intent.createdAt"),
+        "orderId": order_id,
+        "sourceRequestId": request_id,
+        "sourceAcknowledgementDigest": acknowledgement_digest,
+        "orderStatus": source["orderStatus"],
+        "paymentStatus": source["paymentStatus"],
+        "refundStatus": "none",
+        "totalMmk": _integer(
+            source["totalMmk"],
+            "cancellation intent.totalMmk",
+            minimum=1,
+            maximum=_MAX_SAFE_INTEGER,
+        ),
+        "reasonCode": source["reasonCode"],
+        "reason": _text(source["reason"], "cancellation intent.reason", maximum=300),
+        "customerMessageSent": False,
+        "orderCancelled": False,
+        "refundStarted": False,
+        "evidenceReference": expected_reference,
+    }
+
+
 def create_empty_ecommerce_lifecycle_state(scope: str) -> dict[str, Any]:
     return {
         "schema": ECOMMERCE_LIFECYCLE_STATE_SCHEMA,
@@ -1714,6 +1883,7 @@ def create_empty_ecommerce_lifecycle_state(scope: str) -> dict[str, Any]:
         "requests": [],
         "returnIntents": [],
         "supportIntents": [],
+        "cancellationIntents": [],
         "events": [],
     }
 
@@ -1734,7 +1904,7 @@ def _event(value: object, field: str) -> dict[str, Any]:
         ),
     )
     action = source["action"]
-    if action not in {"request_recorded", "return_intent_recorded", "support_intent_recorded"}:
+    if action not in {"request_recorded", "return_intent_recorded", "support_intent_recorded", "cancellation_intent_recorded"}:
         raise _fail(f"{field}.action is unsupported.")
     core = {
         "schema": ECOMMERCE_LIFECYCLE_EVENT_SCHEMA,
@@ -1761,7 +1931,8 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
         {"schema", "scope", "revision", "headDigest", "requests", "returnIntents", "events"}
     )
     current_fields = frozenset({*legacy_fields, "supportIntents"})
-    if frozenset(value) not in {legacy_fields, current_fields}:
+    latest_fields = frozenset({*current_fields, "cancellationIntents"})
+    if frozenset(value) not in {legacy_fields, current_fields, latest_fields}:
         raise _fail("lifecycle state fields do not match the contract.")
     source = value
     if source["schema"] != ECOMMERCE_LIFECYCLE_STATE_SCHEMA:
@@ -1787,10 +1958,18 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
             maximum=_MAX_RECORDS,
         )
     ]
+    cancellation_intents = [
+        validate_ecommerce_cancellation_intent(candidate)
+        for candidate in _array(
+            source.get("cancellationIntents", []),
+            "lifecycle state.cancellationIntents",
+            maximum=_MAX_RECORDS,
+        )
+    ]
     events = [
         _event(candidate, f"lifecycle state.events[{index}]")
         for index, candidate in enumerate(
-            _array(source["events"], "lifecycle state.events", maximum=_MAX_RECORDS * 3)
+            _array(source["events"], "lifecycle state.events", maximum=_MAX_RECORDS * 4)
         )
     ]
     revision = _integer(source["revision"], "lifecycle state.revision")
@@ -1804,7 +1983,7 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
     head = _digest(source["headDigest"], "lifecycle state.headDigest")
     if head != previous:
         raise _fail("Lifecycle state head digest is invalid.")
-    records = [*requests, *return_intents, *support_intents]
+    records = [*requests, *return_intents, *support_intents, *cancellation_intents]
     if len({record["id"] for record in records}) != len(records):
         raise _fail("Lifecycle record IDs must be unique.")
     if len({record["idempotencyKey"] for record in records}) != len(records):
@@ -1816,6 +1995,10 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
         raise _fail("Return intent is not attributable to one recovered Ecommerce request.")
     if any(intent["sourceRequestId"] not in request_ids for intent in support_intents):
         raise _fail("Support intent is not attributable to one recovered Ecommerce request.")
+    if any(intent["sourceRequestId"] not in request_ids for intent in cancellation_intents):
+        raise _fail("Cancellation intent is not attributable to one recovered Ecommerce request.")
+    if len({intent["orderId"] for intent in cancellation_intents}) != len(cancellation_intents):
+        raise _fail("Only one cancellation request may exist for an Ecommerce order.")
     by_id = {record["id"]: record for record in records}
     if len(events) != len(records):
         raise _fail("Lifecycle history must contain one event per record.")
@@ -1835,6 +2018,7 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
         "requests": requests,
         "returnIntents": return_intents,
         "supportIntents": support_intents,
+        "cancellationIntents": cancellation_intents,
         "events": events,
     }
 
@@ -1853,7 +2037,7 @@ def _record_lifecycle_value(
         raise _fail("Lifecycle state changed before this record was applied.")
     if record["scope"] != state["scope"]:
         raise _fail("Lifecycle record belongs to a different scope.")
-    all_records = [*state["requests"], *state["returnIntents"], *state["supportIntents"]]
+    all_records = [*state["requests"], *state["returnIntents"], *state["supportIntents"], *state["cancellationIntents"]]
     existing = next(
         (
             candidate
@@ -1930,5 +2114,20 @@ def record_ecommerce_support_intent(
         validate_ecommerce_support_intent(intent),
         collection="supportIntents",
         action="support_intent_recorded",
+        expected_head_digest=expected_head_digest,
+    )
+
+
+def record_ecommerce_cancellation_intent(
+    state: Mapping[str, object],
+    intent: Mapping[str, object],
+    *,
+    expected_head_digest: str,
+) -> dict[str, Any]:
+    return _record_lifecycle_value(
+        state,
+        validate_ecommerce_cancellation_intent(intent),
+        collection="cancellationIntents",
+        action="cancellation_intent_recorded",
         expected_head_digest=expected_head_digest,
     )

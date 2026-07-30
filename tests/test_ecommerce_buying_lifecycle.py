@@ -9,6 +9,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     ECOMMERCE_REQUEST_SCHEMA,
     ECOMMERCE_RETURN_INTENT_SCHEMA,
     ECOMMERCE_SUPPORT_INTENT_SCHEMA,
+    ECOMMERCE_CANCELLATION_INTENT_SCHEMA,
     ECOMMERCE_SHOP_DRAFT_SCHEMA,
     ECOMMERCE_TAX_DECISION_SCHEMA,
     EcommerceLifecycleValidationError,
@@ -17,6 +18,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     build_ecommerce_pim_projection,
     build_ecommerce_return_intent,
     build_ecommerce_support_intent,
+    build_ecommerce_cancellation_intent,
     create_empty_ecommerce_lifecycle_state,
     ecommerce_payment_matches_fulfilment,
     prepare_ecommerce_shop_handoff,
@@ -24,6 +26,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     record_ecommerce_order_request,
     record_ecommerce_return_intent,
     record_ecommerce_support_intent,
+    record_ecommerce_cancellation_intent,
     validate_ecommerce_checkout_quote,
     validate_ecommerce_lifecycle_state,
     validate_ecommerce_order_request,
@@ -35,6 +38,7 @@ SCOPE = "ecommerce:client-demo"
 CHECKOUT_KEY = "ECI-12345678-1234-4ABC-8ABC-1234567890AB"
 RETURN_KEY = "ERI-12345678-1234-4ABC-8ABC-1234567890AC"
 SUPPORT_KEY = "ESI-12345678-1234-4ABC-8ABC-1234567890AD"
+CANCELLATION_KEY = "CNI-12345678-1234-4ABC-8ABC-1234567890AE"
 SOURCE_DIGEST = "sha256:" + "1" * 64
 
 
@@ -214,6 +218,80 @@ def completed_order() -> dict[str, object]:
         ],
         "returns": [{"sku": "SKU-BLUE-M", "quantity": 1}],
         "completion": {"actionId": "ACT-COMPLETE-001"},
+    }
+
+
+def active_commerce_state() -> dict[str, object]:
+    order_id = "ORD-ECOMMERCE-1001"
+    created_at = "2026-07-26T10:20:00+06:30"
+    evidence_reference = f"ECOMMERCE:{request()['id']}:ORDER"
+    return {
+        "schema": "supermega.commerce.workspace.v2",
+        "items": [
+            {
+                "sku": "SKU-BLUE-M",
+                "name": "Everyday shirt",
+                "variant": "Blue / M",
+                "onHand": 8,
+                "reorderAt": 2,
+                "price": 24_000,
+            }
+        ],
+        "orders": [
+            {
+                "id": order_id,
+                "createdAt": created_at,
+                "customer": "Ma Su",
+                "owner": "Shop owner",
+                "channel": "Ecommerce",
+                "item": "Everyday shirt",
+                "itemSku": "SKU-BLUE-M",
+                "quantity": 2,
+                "payment": "KBZPay",
+                "paymentStatus": "pending",
+                "refundStatus": "none",
+                "fulfilment": "delivery",
+                "fulfilmentReference": request()["id"],
+                "promisedAt": "2026-07-26T14:00:00+06:30",
+                "sourceRecordId": request()["id"],
+                "evidenceReference": evidence_reference,
+                "lines": [
+                    {
+                        "sku": "SKU-BLUE-M",
+                        "name": "Everyday shirt",
+                        "variant": "Blue / M",
+                        "quantity": 2,
+                        "unitPriceMmk": 24_000,
+                    }
+                ],
+                "calculation": {
+                    "schema": "supermega.commerce.order-calculation.v1",
+                    "currency": "MMK",
+                    "catalogRevision": 0,
+                    "subtotalMmk": 48_000,
+                    "taxMode": "not_configured",
+                    "taxMmk": 0,
+                    "totalMmk": 48_000,
+                },
+                "total": 48_000,
+                "status": "confirmed",
+            }
+        ],
+        "movements": [
+            {
+                "id": "MOV2:ACT-ECOMMERCE-ORDER-1001",
+                "actionId": "ACT-ECOMMERCE-ORDER-1001",
+                "createdAt": created_at,
+                "actor": "Shop owner",
+                "reason": "Confirmed the Ecommerce request in Shop.",
+                "evidenceReference": evidence_reference,
+                "kind": "reserve",
+                "sku": "SKU-BLUE-M",
+                "quantityDelta": -2,
+                "orderId": order_id,
+            }
+        ],
+        "closes": [],
     }
 
 
@@ -710,8 +788,88 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
 
         legacy = deepcopy(state)
         legacy.pop("supportIntents")
+        legacy.pop("cancellationIntents")
         migrated = validate_ecommerce_lifecycle_state(legacy)
         self.assertEqual(migrated["supportIntents"], [])
+
+    def test_cancellation_request_is_acknowledgement_bound_duplicate_safe_and_side_effect_free(self) -> None:
+        commerce_state = active_commerce_state()
+        intent = build_ecommerce_cancellation_intent(
+            scope=SCOPE,
+            commerce_state=commerce_state,
+            order_id="ORD-ECOMMERCE-1001",
+            reason_code="order_error",
+            reason="The customer noticed the wrong quantity after confirmation.",
+            idempotency_key=CANCELLATION_KEY,
+            created_at="2026-07-26T10:25:00+06:30",
+        )
+        self.assertEqual(intent["schema"], ECOMMERCE_CANCELLATION_INTENT_SCHEMA)
+        self.assertEqual(intent["state"], "pending_shop_review")
+        self.assertEqual(intent["orderStatus"], "confirmed")
+        self.assertEqual(intent["paymentStatus"], "pending")
+        self.assertRegex(intent["sourceAcknowledgementDigest"], r"^sha256:[a-f0-9]{64}$")
+        self.assertFalse(intent["customerMessageSent"])
+        self.assertFalse(intent["orderCancelled"])
+        self.assertFalse(intent["refundStarted"])
+
+        state = create_empty_ecommerce_lifecycle_state(SCOPE)
+        state = record_ecommerce_order_request(
+            state,
+            request(),
+            expected_head_digest=state["headDigest"],
+        )
+        retained = record_ecommerce_cancellation_intent(
+            state,
+            intent,
+            expected_head_digest=state["headDigest"],
+        )
+        replay = record_ecommerce_cancellation_intent(
+            retained,
+            deepcopy(intent),
+            expected_head_digest=retained["headDigest"],
+        )
+        self.assertEqual(replay, retained)
+        self.assertEqual(retained["events"][-1]["action"], "cancellation_intent_recorded")
+
+        duplicate = build_ecommerce_cancellation_intent(
+            scope=SCOPE,
+            commerce_state=commerce_state,
+            order_id="ORD-ECOMMERCE-1001",
+            reason_code="changed_mind",
+            reason="A second request must not create another review record.",
+            idempotency_key="CNI-22345678-1234-4ABC-8ABC-1234567890AE",
+            created_at="2026-07-26T10:26:00+06:30",
+        )
+        with self.assertRaisesRegex(EcommerceLifecycleValidationError, "Only one"):
+            record_ecommerce_cancellation_intent(
+                retained,
+                duplicate,
+                expected_head_digest=retained["headDigest"],
+            )
+
+        for changed in (
+            {"status": "completed"},
+            {"status": "cancelled", "refundStatus": "none"},
+            {"sourceRecordId": "MANUAL-ORDER", "evidenceReference": "MANUAL-EVIDENCE"},
+        ):
+            invalid_state = deepcopy(commerce_state)
+            invalid_state["orders"][0].update(changed)  # type: ignore[index]
+            with self.subTest(changed=changed):
+                with self.assertRaises((EcommerceLifecycleValidationError, ValueError)):
+                    build_ecommerce_cancellation_intent(
+                        scope=SCOPE,
+                        commerce_state=invalid_state,
+                        order_id="ORD-ECOMMERCE-1001",
+                        reason_code="other",
+                        reason="This invalid order must fail closed.",
+                        idempotency_key=CANCELLATION_KEY,
+                        created_at="2026-07-26T10:25:00+06:30",
+                    )
+
+        legacy = deepcopy(state)
+        legacy.pop("cancellationIntents")
+        migrated = validate_ecommerce_lifecycle_state(legacy)
+        self.assertEqual(migrated["cancellationIntents"], [])
 
     def test_strict_contract_rejects_extra_fields_and_forged_history(self) -> None:
         candidate_quote = quote()

@@ -2142,7 +2142,7 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('Cart and checkout')
   || !ecommerceBuyingUiSource.includes('Review order')
   || !ecommerceBuyingUiSource.includes('Open in Shop')
-  || !ecommerceBuyingUiSource.includes('Returns and help')
+  || !ecommerceBuyingUiSource.includes('Order help')
   || !ecommerceBuyingUiSource.includes('Send to Shop review')
   || !ecommerceBuyingUiSource.includes('Continue in Shop')
   || !ecommerceBuyingUiSource.includes('buildEcommerceReturnIntent')
@@ -2190,7 +2190,19 @@ if (addToCartStart < 0
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceReturnIntent(')
   || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceSupportIntent(')
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceSupportIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceCancellationIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceCancellationIntent(')
   || !ecommerceBuyingLifecycleSource.includes('Return intent is not attributable to one recovered Ecommerce request.')
+  || !ecommerceBuyingUiSource.includes('Request cancellation')
+  || !ecommerceBuyingUiSource.includes('Send to Shop review')
+  || !ecommerceBuyingUiSource.includes('No order, stock, payment, refund, provider, or customer message changed.')
+  || !coreSource.includes('ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent}')
+  || !coreSource.includes('validateEcommerceCancellationIntent(ecommerceCancellationNavigationIntent)')
+  || !coreSource.includes('function ecommerceCancellationMatchesCurrentShop(')
+  || !coreSource.includes('acknowledgement.digest === intent.sourceAcknowledgementDigest')
+  || !coreSource.includes('commerceOrderHasReleasableReservation(state, intent.orderId)')
+  || !coreSource.includes('ecommerceCancellationMatchesCurrentShop(current, sourceIntent)')
+  || !coreSource.includes('no customer message or provider call')
   || !coreSource.includes('ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent}')
   || !coreSource.includes('validateEcommerceReturnIntent(ecommerceReturnNavigationIntent)')
   || !coreSource.includes('validateEcommerceSupportIntent(ecommerceSupportNavigationIntent)')
@@ -11941,6 +11953,59 @@ async function verifyStorefrontRuntime() {
       && !promotedAcknowledgementText.includes(promotionOrderProof.actor)
       && !promotedAcknowledgementText.includes(promotionOrderProof.reason),
     'ecommerce_order_acknowledgement_text_leaked_internal_review_or_overclaimed_action')
+    const cancellationIntent = buyingModel.buildEcommerceCancellationIntent({
+      scope: buyingScope,
+      commerceState: promotedOrderState,
+      orderId: promotedOrder.id,
+      reasonCode: 'order_error',
+      reason: 'The customer noticed the wrong quantity after confirmation.',
+      idempotencyKey: 'CNI-52345678-1234-4ABC-8ABC-1234567890AB',
+      createdAt: new Date(Date.parse(promotedOrder.createdAt) + 60_000).toISOString(),
+    })
+    buyingAssert(cancellationIntent.schema === 'supermega.ecommerce.cancellation_intent.v1'
+      && cancellationIntent.state === 'pending_shop_review'
+      && cancellationIntent.sourceRequestId === buyingRequest.id
+      && cancellationIntent.sourceAcknowledgementDigest === promotedAcknowledgement.digest
+      && cancellationIntent.orderStatus === 'confirmed'
+      && cancellationIntent.paymentStatus === 'pending'
+      && cancellationIntent.refundStatus === 'none'
+      && cancellationIntent.totalMmk === storedPromotedOrder?.total
+      && cancellationIntent.customerMessageSent === false
+      && cancellationIntent.orderCancelled === false
+      && cancellationIntent.refundStarted === false,
+    'ecommerce_cancellation_request_not_acknowledgement_bound_or_side_effect_free')
+    const cancellationBuyingState = await buyingModel.recordEcommerceCancellationIntent(
+      recordedBuying,
+      cancellationIntent,
+      recordedBuying.headDigest,
+    )
+    const replayedCancellationBuyingState = await buyingModel.recordEcommerceCancellationIntent(
+      cancellationBuyingState,
+      structuredClone(cancellationIntent),
+      cancellationBuyingState.headDigest,
+    )
+    buyingAssert(JSON.stringify(replayedCancellationBuyingState) === JSON.stringify(cancellationBuyingState)
+      && cancellationBuyingState.cancellationIntents.length === 1
+      && cancellationBuyingState.events.at(-1)?.action === 'cancellation_intent_recorded',
+    'ecommerce_cancellation_request_replay_or_history_not_exact')
+    const duplicateCancellationIntent = buyingModel.buildEcommerceCancellationIntent({
+      scope: buyingScope,
+      commerceState: promotedOrderState,
+      orderId: promotedOrder.id,
+      reasonCode: 'changed_mind',
+      reason: 'A second cancellation request must not create another review record.',
+      idempotencyKey: 'CNI-62345678-1234-4ABC-8ABC-1234567890AB',
+      createdAt: new Date(Date.parse(promotedOrder.createdAt) + 120_000).toISOString(),
+    })
+    let duplicateCancellationRejected = false
+    try {
+      await buyingModel.recordEcommerceCancellationIntent(
+        cancellationBuyingState,
+        duplicateCancellationIntent,
+        cancellationBuyingState.headDigest,
+      )
+    } catch { duplicateCancellationRejected = true }
+    buyingAssert(duplicateCancellationRejected, 'ecommerce_duplicate_cancellation_request_was_accepted')
     const acknowledgementGoldenState = commerce.validateCommerceState({
       schema: 'supermega.commerce.workspace.v2',
       items: [{ sku: 'SKU-1', name: 'Test item', onHand: 8, reorderAt: 2, price: 100 }],

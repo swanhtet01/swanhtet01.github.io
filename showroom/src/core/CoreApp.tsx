@@ -4,7 +4,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useS
 import './core-app.css'
 import { WebsiteCommerceIntake } from '../products/WebsiteCommerceIntake'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
-import type { EcommerceReturnIntent, EcommerceSupportIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
+import type { EcommerceCancellationIntent, EcommerceReturnIntent, EcommerceSupportIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
 import { readWebsiteEcommerceHandoff, type WebsiteOrderRecord } from '../products/product-handoff'
 import {
   createManagedApproval,
@@ -355,6 +355,21 @@ const commerceSupportServiceActionLabels: Record<CommerceSupportServiceEventKind
 }
 
 type ProductId = 'commerce' | 'production'
+
+function ecommerceCancellationMatchesCurrentShop(state: CommerceState, intent: EcommerceCancellationIntent) {
+  const order = state.orders.find((candidate) => candidate.id === intent.orderId)
+  const acknowledgement = commerceOrderAcknowledgement(state, intent.orderId)
+  return Boolean(order
+    && acknowledgement
+    && order.sourceRecordId === intent.sourceRequestId
+    && acknowledgement.digest === intent.sourceAcknowledgementDigest
+    && acknowledgement.status === intent.orderStatus
+    && acknowledgement.payment.status === intent.paymentStatus
+    && acknowledgement.payment.refundStatus === intent.refundStatus
+    && acknowledgement.totalMmk === intent.totalMmk
+    && acknowledgement.cancellation.state === 'not_cancelled'
+    && commerceOrderHasReleasableReservation(state, intent.orderId))
+}
 
 function productCanonicalPath(product: ProductId) {
   return product === 'commerce' ? '/shop/' : '/plant/'
@@ -1374,6 +1389,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   const ecommerceNavigationDraft = (location.state as { ecommerceShopDraft?: EcommerceShopDraft } | null)?.ecommerceShopDraft ?? null
   const ecommerceReturnNavigationIntent = (location.state as { ecommerceReturnIntent?: EcommerceReturnIntent } | null)?.ecommerceReturnIntent ?? null
   const ecommerceSupportNavigationIntent = (location.state as { ecommerceSupportIntent?: EcommerceSupportIntent } | null)?.ecommerceSupportIntent ?? null
+  const ecommerceCancellationNavigationIntent = (location.state as { ecommerceCancellationIntent?: EcommerceCancellationIntent } | null)?.ecommerceCancellationIntent ?? null
   const routeModule = location.pathname.split('/').filter(Boolean)[1]
   const requestedView = searchParams.get('view')
   const requestedSource = searchParams.get('source')
@@ -1425,7 +1441,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1610,7 +1626,8 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, managedIdentity, requestedRequestId, requestedSource, tab }: {
+function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigationDraft, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, managedIdentity, requestedRequestId, requestedSource, tab }: {
+  ecommerceCancellationNavigationIntent: EcommerceCancellationIntent | null
   ecommerceNavigationDraft: EcommerceShopDraft | null
   ecommerceReturnNavigationIntent: EcommerceReturnIntent | null
   ecommerceSupportNavigationIntent: EcommerceSupportIntent | null
@@ -1674,6 +1691,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
   const consumedEcommerceDraftId = useRef('')
   const consumedEcommerceReturnIntentId = useRef('')
   const consumedEcommerceSupportIntentId = useRef('')
+  const consumedEcommerceCancellationIntentId = useRef('')
   const consumedEcommerceInboxSource = useRef('')
   const orderDraftRevisionRef = useRef(orderDraftRead.draft?.revision ?? 0)
   const orderDraftSaveQueueRef = useRef(Promise.resolve())
@@ -1690,6 +1708,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
+  const [cancellationDraft, setCancellationDraft] = useState<EcommerceCancellationIntent | null>(null)
   const [supportDraft, setSupportDraft] = useState<CommerceSupportOpenDraft | null>(null)
   const [supportReopenDraft, setSupportReopenDraft] = useState<CommerceSupportReopenDraft | null>(null)
   const [supportServiceDraft, setSupportServiceDraft] = useState<CommerceSupportServiceDraft | null>(null)
@@ -2390,6 +2409,39 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
       })
     return () => { current = false }
   }, [commerce, ecommerceReturnNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
+
+  useEffect(() => {
+    if (!ecommerceCancellationNavigationIntent
+      || tab !== 'orders'
+      || managedIdentity && workspaceMode !== 'managed-ready'
+      || consumedEcommerceCancellationIntentId.current === ecommerceCancellationNavigationIntent.id) return
+    let current = true
+    void import('../products/ecommerce/ecommerce-buying-lifecycle')
+      .then(({ validateEcommerceCancellationIntent }) => {
+        if (!current) return
+        const intent = validateEcommerceCancellationIntent(ecommerceCancellationNavigationIntent)
+        consumedEcommerceCancellationIntentId.current = intent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        if (!ecommerceCancellationMatchesCurrentShop(commerce, intent)) {
+          setCancellationDraft(null)
+          setNotice('The cancellation request no longer matches the current Shop order, payment, refund, or reserved stock. Nothing was prepared.')
+          return
+        }
+        setReturnDraft(null)
+        setSupportDraft(null)
+        setCancellationDraft(intent)
+        setNotice(`${intent.id} is ready for Shop review. Keeping the order changes nothing; cancellation still requires the accountable Shop gate.`)
+        requestAnimationFrame(() => document.getElementById('shop-cancellation-review')?.focus())
+      })
+      .catch(() => {
+        if (!current) return
+        consumedEcommerceCancellationIntentId.current = ecommerceCancellationNavigationIntent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        setCancellationDraft(null)
+        setNotice('The cancellation request could not be verified. Nothing was prepared.')
+      })
+    return () => { current = false }
+  }, [commerce, ecommerceCancellationNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
 
   useEffect(() => {
     if (!ecommerceSupportNavigationIntent
@@ -4329,9 +4381,25 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
     }, correctionTriggerRefs.current.get(input.orderId))
   }
 
-  function cancelOrder(orderId: string) {
+  function keepOrderFromCancellation() {
+    if (!cancellationDraft) return
+    if (!ecommerceCancellationMatchesCurrentShop(commerce, cancellationDraft)) {
+      setCancellationDraft(null)
+      setNotice(`${cancellationDraft.id} no longer matches the current Shop order. Nothing changed.`)
+      return
+    }
+    setCancellationDraft(null)
+    setNotice(`${cancellationDraft.id} was not approved. The order, stock, payment, refund, provider, and customer messages are unchanged; the customer request remains recoverable in Ecommerce.`)
+  }
+
+  function cancelOrder(orderId: string, sourceIntent?: EcommerceCancellationIntent) {
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
     if (!order || order.status === 'completed' || order.status === 'cancelled') return
+    if (sourceIntent && !ecommerceCancellationMatchesCurrentShop(commerce, sourceIntent)) {
+      setCancellationDraft(null)
+      setNotice(`${sourceIntent.id} no longer matches the current Shop order. Nothing changed.`)
+      return
+    }
     if (!commerceOrderHasReleasableReservation(commerce, orderId)) return setNotice(`${order.id} has no unmatched, attributable reservation. Cancellation failed closed without changing stock.`)
     const lines = order.lines ?? (order.itemSku ? [{ sku: order.itemSku, quantity: order.quantity }] : [])
     const stockLines = lines.map((line) => {
@@ -4346,10 +4414,34 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
     queueAction({
       kind: 'order_cancel',
       subjectId: orderId,
-      summary: `Cancel ${order.id} and release ${lines.length} stock ${lines.length === 1 ? 'line' : 'lines'}`,
-      before: `${order.status} · ${order.paymentStatus} · ${stockLines.map((line) => `${line?.sku} ${line?.onHand}`).join(', ')}`,
-      after: `cancelled · ${paymentAfter} · ${stockLines.map((line) => `${line?.sku} ${(line?.onHand ?? 0) + (line?.quantity ?? 0)}`).join(', ')}`,
-      apply: (action) => mutateCommerce('commerce.order.cancelled', action.commandId, commerceActionProof(action), (current) => cancelCommerceOrder(current, orderId, commerceActionProof(action))),
+      summary: sourceIntent ? `Approve ${sourceIntent.id} and cancel ${order.id}` : `Cancel ${order.id} and release ${lines.length} stock ${lines.length === 1 ? 'line' : 'lines'}`,
+      before: `${order.status} · ${order.paymentStatus} · ${stockLines.map((line) => `${line?.sku} ${line?.onHand}`).join(', ')}${sourceIntent ? ` · request ${sourceIntent.reasonCode.replaceAll('_', ' ')}` : ''}`,
+      after: `cancelled · ${paymentAfter} · ${stockLines.map((line) => `${line?.sku} ${(line?.onHand ?? 0) + (line?.quantity ?? 0)}`).join(', ')} · no customer message or provider call`,
+      ...(sourceIntent ? {
+        reasonSuggestion: `${sourceIntent.reasonCode.replaceAll('_', ' ')}: ${sourceIntent.reason}`.slice(0, 180),
+        evidenceReferenceSuggestion: sourceIntent.evidenceReference,
+        evidenceReferenceLocked: true,
+      } : {}),
+      apply: async (action) => {
+        let reviewRequired = false
+        const proof = commerceActionProof(action)
+        try {
+          await mutateCommerce('commerce.order.cancelled', action.commandId, proof, (current) => {
+            if (sourceIntent) {
+              if (!ecommerceCancellationMatchesCurrentShop(current, sourceIntent)) {
+                reviewRequired = true
+                return null
+              }
+            }
+            return cancelCommerceOrder(current, orderId, proof)
+          })
+        } catch (error) {
+          if (reviewRequired) throw new ShopReviewRequiredError(`${sourceIntent?.id ?? order.id} changed during review. Nothing was cancelled; reopen the current request.`)
+          throw error
+        }
+        if (reviewRequired) throw new ShopReviewRequiredError(`${sourceIntent?.id ?? order.id} changed during review. Nothing was cancelled; reopen the current request.`)
+        if (sourceIntent) setCancellationDraft(null)
+      },
     })
   }
 
@@ -5170,6 +5262,18 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
           {orderDraftRead.status !== 'unavailable' ? <button className="text-link danger-text" disabled={orderDraftSaving} onClick={() => void discardSavedOrderDraft()} type="button">{orderDraftRead.status === 'ready' ? 'Discard' : 'Discard unreadable draft'}</button> : null}
         </div>
       </div> : null}
+      {cancellationDraft ? <section aria-label="Customer cancellation review" className="order-draft-recovery" id="shop-cancellation-review" tabIndex={-1}>
+        <div>
+          <strong>Customer asks to cancel {cancellationDraft.orderId}</strong>
+          <small>{cancellationDraft.reasonCode.replaceAll('_', ' ')} · {cancellationDraft.reason}</small>
+          <small>{cancellationDraft.id} · requested {new Date(cancellationDraft.createdAt).toLocaleString()} · {formatMoney(cancellationDraft.totalMmk)} · payment {cancellationDraft.paymentStatus}</small>
+          <small>Shop rechecked the exact acknowledgement, active order, reserved stock, payment, and refund state. No message, refund, provider call, or cancellation has run.</small>
+        </div>
+        <div className="order-draft-recovery-actions">
+          <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={() => cancelOrder(cancellationDraft.orderId, cancellationDraft)} type="button">Review cancellation</button>
+          <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={keepOrderFromCancellation} type="button">Keep order</button>
+        </div>
+      </section> : null}
       <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />
     </section>
     <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={commerceControlsDisabled} /></Suspense>
