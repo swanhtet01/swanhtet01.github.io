@@ -27,6 +27,7 @@ const databaseValidator = await readFile(resolve(root, 'tools/validate_supermega
 const migrationVerifier = await readFile(resolve(root, 'tools/verify_private_trial_migrations.mjs'), 'utf8')
 const rollbackResolver = await readFile(resolve(root, 'tools/resolve_vercel_rollback_target.mjs'), 'utf8')
 const releaseHandoff = await readFile(resolve(root, 'tools/prepare_release_handoff.mjs'), 'utf8')
+const releaseIntegrationPlan = await readFile(resolve(root, 'tools/prepare_release_integration_plan.mjs'), 'utf8')
 const retiredAliasVerifier = await readFile(resolve(root, 'tools/verify_retired_vercel_alias_state.mjs'), 'utf8')
 const previewServer = await readFile(resolve(root, 'tools/serve_solution.py'), 'utf8')
 const previewLauncher = await readFile(resolve(root, 'tools/deploy_preview.sh'), 'utf8')
@@ -70,6 +71,24 @@ requireContract('release handoff is exact, review-only, and cannot deploy',
   && releaseHandoff.includes("args: ['/d', '/s', '/c', 'npm.cmd run app:verify']")
   && releaseHandoff.includes("return { file: 'npm', args: ['run', 'app:verify'] }")
   && !/\b(?:vercel|gh)\s+(?:deploy|promote|rollback|workflow|api)\b/i.test(releaseHandoff))
+requireContract('diverged release candidates produce one exact no-write integration plan',
+  packageJson.scripts?.['release:integration:prepare'] === 'node tools/prepare_release_integration_plan.mjs'
+  && packageJson.scripts?.['release:integration:self-test'] === 'node --test tools/prepare_release_integration_plan.test.mjs'
+  && releaseIntegrationPlan.includes("export const RELEASE_INTEGRATION_PLAN_CONTRACT = 'supermega.release-integration-plan.v1'")
+  && releaseIntegrationPlan.includes("mode: 'owner_review_only_no_git_mutation'")
+  && releaseIntegrationPlan.includes("strategy: 'new_owner_approved_integration_branch_from_origin_main'")
+  && releaseIntegrationPlan.includes("git('ls-remote', '--heads', 'origin', 'main')")
+  && releaseIntegrationPlan.includes("['merge-tree', '--write-tree', '--name-only', '--no-messages', mainCommit, candidateCommit]")
+  && releaseIntegrationPlan.includes('branchCreationApproved: false')
+  && releaseIntegrationPlan.includes('mergeApproved: false')
+  && releaseIntegrationPlan.includes('conflictResolutionApproved: false')
+  && releaseIntegrationPlan.includes('pushApproved: false')
+  && releaseIntegrationPlan.includes('deploymentApproved: false')
+  && releaseIntegrationPlan.includes('forcePushAllowed: false')
+  && releaseIntegrationPlan.includes("fail('release_integration_remote_tracking_stale')")
+  && releaseIntegrationPlan.includes("fail('release_integration_state_changed')")
+  && !/\b(?:merge|rebase|cherry-pick|push|reset|checkout|switch)\b/.test(releaseIntegrationPlan.match(/function git\([\s\S]+?function remoteMainHead/)?.[0] || '')
+  && !/\b(?:vercel|gh)\s+(?:deploy|promote|rollback|workflow|api)\b/i.test(releaseIntegrationPlan))
 
 function runRollbackResolver(args, payload) {
   return spawnSync(
