@@ -9,12 +9,16 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import {
   CLIENT_DEMO_PREPARATION_CONTRACT,
+  CLIENT_DEMO_REHEARSAL_PLAN_CONTRACT,
   CLIENT_INTAKE_WORKSPACE_CONTRACT,
+  buildClientDemoRehearsalPlan,
   clientDemoPreparationSummary,
   initializeClientWorkspace,
   prepareClientDemo,
   verifyClientDemoPreparation,
+  verifyClientDemoRehearsalPlan,
   writeClientDemoPreparation,
+  writeClientDemoRehearsalPlan,
 } from './prepare_client_demo.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -131,6 +135,65 @@ test('client preparation compiles one validated four-product founder-review arti
     const topologyTamper = structuredClone(artifact)
     topologyTamper.topology.recordAuthorities[3].consumesFrom = []
     assert.throws(() => verifyClientDemoPreparation(topologyTamper), /client_demo_topology_drift/)
+  } finally {
+    await rm(source.directory, { recursive: true, force: true })
+  }
+})
+
+test('client rehearsal plan binds reconciliation, reload, mobile, replay, export, reset, and rollback without claiming execution', async () => {
+  const source = await fixture()
+  try {
+    const preparation = await prepareClientDemo({ kitPath: source.kitPath, preparedAt: PREPARED_AT })
+    const plan = buildClientDemoRehearsalPlan(preparation, '2026-07-29T05:00:00.000Z')
+    assert.equal(plan.contract, CLIENT_DEMO_REHEARSAL_PLAN_CONTRACT)
+    assert.equal(plan.preparation.bundleDigest, preparation.bundleDigest)
+    assert.deepEqual(plan.run, {
+      status: 'not_started',
+      installOrder: ['commerce', 'production', 'website', 'ecommerce'],
+      viewportWidths: [390, 1280],
+      completedChecks: 0,
+      totalChecks: 36,
+    })
+    assert.equal(plan.products.every((product) => product.status === 'not_started' && product.rollback.status === 'pending'), true)
+    assert.equal(plan.products.every((product) => Object.values(product.acceptance).every((status) => status === 'pending')), true)
+    assert.equal(plan.products[0].reconciliation.firstApplyEquation, 'created_plus_already_present_equals_row_count')
+    assert.equal(plan.products[0].reconciliation.replayEquation, 'created_zero_and_already_present_equals_row_count')
+    assert.deepEqual(plan.controls, {
+      planOnly: true,
+      containsClientValues: false,
+      safeToShareExternally: false,
+      localBrowserRehearsalRequired: true,
+      browserWritesPerformed: false,
+      resetPerformed: false,
+      restorePerformed: false,
+      hostedWritesPerformed: false,
+      externalWritesPerformed: false,
+      connectorCallsPerformed: false,
+      modelCallsPerformed: false,
+      activationStatus: 'not_applied',
+    })
+    assert.doesNotMatch(JSON.stringify(plan), /Confidential client workspace|Founder reviewer|RICE-25KG/)
+    assert.equal(verifyClientDemoRehearsalPlan(plan, preparation).status, 'not_started')
+    const tampered = structuredClone(plan)
+    tampered.products[0].acceptance.local_apply_confirmed = 'passed'
+    assert.throws(() => verifyClientDemoRehearsalPlan(tampered, preparation), /client_demo_rehearsal_drift/)
+
+    const preparationPath = resolve(source.directory, 'prepared.json')
+    const planPath = resolve(source.directory, 'rehearsal.json')
+    const cliPlanPath = resolve(source.directory, 'cli-rehearsal.json')
+    await writeClientDemoPreparation(preparation, preparationPath)
+    assert.equal(await writeClientDemoRehearsalPlan(plan, planPath), planPath)
+    const planCli = spawnSync(process.execPath, [TOOL, '--rehearse', preparationPath, '--out', cliPlanPath], {
+      cwd: ROOT, encoding: 'utf8', maxBuffer: 1024 * 1024, windowsHide: true,
+    })
+    assert.equal(planCli.status, 0, planCli.stderr)
+    assert.equal(JSON.parse(planCli.stdout).status, 'not_started')
+    const verifyCli = spawnSync(process.execPath, [TOOL, '--verify-rehearsal', cliPlanPath, '--preparation', preparationPath], {
+      cwd: ROOT, encoding: 'utf8', maxBuffer: 1024 * 1024, windowsHide: true,
+    })
+    assert.equal(verifyCli.status, 0, verifyCli.stderr)
+    assert.deepEqual(JSON.parse(verifyCli.stdout).completedChecks, 0)
+    assert.doesNotMatch(verifyCli.stdout, /Confidential client workspace|Founder reviewer/)
   } finally {
     await rm(source.directory, { recursive: true, force: true })
   }

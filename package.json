@@ -50,6 +50,8 @@
     "client:prepare": "node tools/prepare_client_demo.mjs",
     "client:workspace:init": "node tools/prepare_client_demo.mjs --init",
     "client:prepare:verify": "node tools/prepare_client_demo.mjs --verify",
+    "client:rehearse:plan": "node tools/prepare_client_demo.mjs --rehearse",
+    "client:rehearse:verify": "node tools/prepare_client_demo.mjs --verify-rehearsal",
     "client:prepare:self-test": "node --test tools/prepare_client_demo.test.mjs",
     "workspace:recovery": "node tools/run_python_tool.mjs tools/manage_workspace_recovery.py",
     "workspace:recovery:self-test": "node tools/run_python_tool.mjs tools/manage_workspace_recovery.py --self-test",

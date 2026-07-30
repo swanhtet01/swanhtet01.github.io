@@ -90,6 +90,7 @@ const [manifestText, appPackageText, appSource, coreSource, coreShellSource, pro
 ])
 const manifest = JSON.parse(manifestText)
 const appPackage = JSON.parse(appPackageText)
+const rootPackage = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 const schedulerAuthority = JSON.parse(await readFile(resolve(root, 'tools', 'supermega_scheduler_authority.json'), 'utf8'))
 let schedulerExecutionBudget
 try { schedulerExecutionBudget = validateSchedulerExecutionBudget(schedulerAuthority) } catch { fail('scheduler_execution_budget_invalid') }
@@ -104,6 +105,7 @@ const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'c
 const shopInventoryPythonSource = await readFile(resolve(root, 'supermega_runtime', 'shop_inventory_runtime.py'), 'utf8')
 const managedActivationRunbookSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedActivationRunbook.tsx'), 'utf8')
 const localClientImportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'local-client-import.ts'), 'utf8')
+const clientPreparationToolSource = await readFile(resolve(root, 'tools', 'prepare_client_demo.mjs'), 'utf8')
 const plantEquipmentImportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-equipment-import.ts'), 'utf8')
 const plantEquipmentOnboardingSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantEquipmentOnboarding.tsx'), 'utf8')
 const plantEquipmentCommissioningSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantEquipmentCommissioning.tsx'), 'utf8')
@@ -3589,6 +3591,18 @@ if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermeg
   || !settingsPageSource.includes("await import('./local-client-import')")
   || !settingsPageSource.includes('preparedLocalClientDemoInstallOrder(artifact)')
   || !settingsPageSource.includes('applyPreparedLocalClientDemoProduct(artifact, product, preparedConfirmation)')) fail('private_client_demo_installer_contract_missing')
+if (rootPackage.scripts?.['client:rehearse:plan'] !== 'node tools/prepare_client_demo.mjs --rehearse'
+  || rootPackage.scripts?.['client:rehearse:verify'] !== 'node tools/prepare_client_demo.mjs --verify-rehearsal'
+  || !clientPreparationToolSource.includes("CLIENT_DEMO_REHEARSAL_PLAN_CONTRACT = 'supermega.client_demo_rehearsal_plan.v1'")
+  || !clientPreparationToolSource.includes('export function buildClientDemoRehearsalPlan')
+  || !clientPreparationToolSource.includes('export function verifyClientDemoRehearsalPlan')
+  || !clientPreparationToolSource.includes("firstApplyEquation: 'created_plus_already_present_equals_row_count'")
+  || !clientPreparationToolSource.includes("replayEquation: 'created_zero_and_already_present_equals_row_count'")
+  || !clientPreparationToolSource.includes("method: 'restore_exact_pre_rehearsal_export'")
+  || !clientPreparationToolSource.includes("'mobile_390_verified'")
+  || !clientPreparationToolSource.includes("'desktop_1280_verified'")
+  || !clientPreparationToolSource.includes('browserWritesPerformed: false')
+  || !clientPreparationToolSource.includes('externalWritesPerformed: false')) fail('client_demo_rehearsal_plan_contract_missing')
 if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !productSetupSource.includes("website: requireProductContract('website')")
   || !productSetupSource.includes("ecommerce: requireProductContract('ecommerce')")

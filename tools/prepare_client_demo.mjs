@@ -9,6 +9,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const CLIENT_DEMO_PREPARATION_CONTRACT = 'supermega.client_demo_preparation.v3'
 export const CLIENT_DEMO_PREPARATION_VALIDATION_CONTRACT = 'supermega.client_demo_preparation_validation.v1'
 export const CLIENT_DEMO_PREPARATION_MAX_BYTES = 5 * 1024 * 1024
+export const CLIENT_DEMO_REHEARSAL_PLAN_CONTRACT = 'supermega.client_demo_rehearsal_plan.v1'
+export const CLIENT_DEMO_REHEARSAL_PLAN_MAX_BYTES = 512 * 1024
 const CLIENT_DEMO_KIT_MAX_BYTES = 128 * 1024
 const CLIENT_PROFILE_MAX_BYTES = 16 * 1024
 const CLIENT_DATA_MAX_BYTES = 512 * 1024
@@ -53,6 +55,17 @@ const REVIEW_CHECKLIST = Object.freeze([
   'Open each product demo path and complete its operational proof scenario.',
   'Confirm Shop, Plant, Website, and Ecommerce cross-product checks.',
   'Approve this exact bundle digest before any managed activation.',
+])
+const REHEARSAL_ACCEPTANCE = Object.freeze([
+  'baseline_exported',
+  'local_apply_confirmed',
+  'reload_verified',
+  'mobile_390_verified',
+  'desktop_1280_verified',
+  'idempotent_replay_verified',
+  'evidence_exported',
+  'reset_verified',
+  'baseline_restored',
 ])
 
 class PreparationError extends Error {
@@ -544,8 +557,98 @@ export function verifyClientDemoPreparation(value) {
   }
 }
 
-export async function writeClientDemoPreparation(artifact, outputPath) {
-  if (!artifact || artifact.contract !== CLIENT_DEMO_PREPARATION_CONTRACT || typeof outputPath !== 'string' || !outputPath.trim()) {
+function clientDemoRehearsalPayload(preparation, plannedAt) {
+  const products = preparation.products.map((product, index) => ({
+    id: `REHEARSE-${String(index + 1).padStart(2, '0')}`,
+    product: product.product,
+    label: product.label,
+    sourceMode: product.sourceMode,
+    rowCount: product.rowCount,
+    packageDigest: product.packageDigest,
+    demoPath: product.demoPath,
+    reconciliation: {
+      firstApplyEquation: 'created_plus_already_present_equals_row_count',
+      replayEquation: 'created_zero_and_already_present_equals_row_count',
+      duplicateHandling: 'shared_master_review_required_if_candidates_exist',
+    },
+    rollback: {
+      baselineExportRequired: true,
+      method: 'restore_exact_pre_rehearsal_export',
+      status: 'pending',
+    },
+    acceptance: Object.fromEntries(REHEARSAL_ACCEPTANCE.map((check) => [check, 'pending'])),
+    status: 'not_started',
+  }))
+  return {
+    contract: CLIENT_DEMO_REHEARSAL_PLAN_CONTRACT,
+    plannedAt,
+    preparation: {
+      contract: preparation.contract,
+      bundleDigest: preparation.bundleDigest,
+      productCount: preparation.products.length,
+      clientDataFiles: preparation.products.filter((product) => product.sourceMode === 'client_csv').length,
+    },
+    authorityDigest: sha256(JSON.stringify({ client: preparation.client, foundation: preparation.foundation, topology: preparation.topology })),
+    products,
+    reconciliation: {
+      status: 'ready_for_rehearsal',
+      checks: Object.entries(preparation.checks).map(([id, passed]) => ({ id, passed })),
+      integrations: preparation.integrations.map(({ from, to }) => ({ from, to, status: 'pending_rehearsal' })),
+      unresolvedIssues: 0,
+    },
+    run: {
+      status: 'not_started',
+      installOrder: products.map((product) => product.product),
+      viewportWidths: [390, 1280],
+      completedChecks: 0,
+      totalChecks: products.length * REHEARSAL_ACCEPTANCE.length,
+    },
+    controls: {
+      planOnly: true,
+      containsClientValues: false,
+      safeToShareExternally: false,
+      localBrowserRehearsalRequired: true,
+      browserWritesPerformed: false,
+      resetPerformed: false,
+      restorePerformed: false,
+      hostedWritesPerformed: false,
+      externalWritesPerformed: false,
+      connectorCallsPerformed: false,
+      modelCallsPerformed: false,
+      activationStatus: 'not_applied',
+    },
+  }
+}
+
+export function buildClientDemoRehearsalPlan(preparationValue, plannedAt = new Date().toISOString()) {
+  verifyClientDemoPreparation(preparationValue)
+  const timestamp = canonicalTimestamp(plannedAt)
+  if (!timestamp) fail('client_demo_rehearsal_planned_at_invalid')
+  const payload = clientDemoRehearsalPayload(preparationValue, timestamp)
+  const plan = { ...payload, digest: sha256(JSON.stringify(payload)) }
+  if (Buffer.byteLength(JSON.stringify(plan), 'utf8') > CLIENT_DEMO_REHEARSAL_PLAN_MAX_BYTES) fail('client_demo_rehearsal_too_large')
+  return plan
+}
+
+export function verifyClientDemoRehearsalPlan(value, preparationValue) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || value.contract !== CLIENT_DEMO_REHEARSAL_PLAN_CONTRACT
+    || !canonicalTimestamp(value.plannedAt) || typeof value.digest !== 'string') fail('client_demo_rehearsal_contract_invalid')
+  const expected = buildClientDemoRehearsalPlan(preparationValue, value.plannedAt)
+  if (JSON.stringify(value) !== JSON.stringify(expected)) fail('client_demo_rehearsal_drift')
+  return {
+    ok: true,
+    contract: CLIENT_DEMO_REHEARSAL_PLAN_CONTRACT,
+    preparationDigest: value.preparation.bundleDigest,
+    productCount: value.products.length,
+    status: value.run.status,
+    completedChecks: value.run.completedChecks,
+    totalChecks: value.run.totalChecks,
+    planOnly: true,
+  }
+}
+
+async function writeClientDemoArtifact(artifact, outputPath, contract, maximum) {
+  if (!artifact || artifact.contract !== contract || typeof outputPath !== 'string' || !outputPath.trim()) {
     fail('client_demo_output_invalid')
   }
   const target = resolve(outputPath)
@@ -557,7 +660,7 @@ export async function writeClientDemoPreparation(artifact, outputPath) {
     if (error instanceof PreparationError) throw error
   }
   const serialized = `${JSON.stringify(artifact, null, 2)}\n`
-  if (Buffer.byteLength(serialized, 'utf8') > CLIENT_DEMO_PREPARATION_MAX_BYTES) fail('client_demo_preparation_too_large')
+  if (Buffer.byteLength(serialized, 'utf8') > maximum) fail('client_demo_artifact_too_large')
   const temporary = resolve(parent, `.${basename(target)}.${randomUUID()}.tmp`)
   let handle
   try {
@@ -577,6 +680,14 @@ export async function writeClientDemoPreparation(artifact, outputPath) {
   return target
 }
 
+export async function writeClientDemoPreparation(artifact, outputPath) {
+  return writeClientDemoArtifact(artifact, outputPath, CLIENT_DEMO_PREPARATION_CONTRACT, CLIENT_DEMO_PREPARATION_MAX_BYTES)
+}
+
+export async function writeClientDemoRehearsalPlan(artifact, outputPath) {
+  return writeClientDemoArtifact(artifact, outputPath, CLIENT_DEMO_REHEARSAL_PLAN_CONTRACT, CLIENT_DEMO_REHEARSAL_PLAN_MAX_BYTES)
+}
+
 export function clientDemoPreparationSummary(artifact, outputPath) {
   return {
     ok: true,
@@ -591,9 +702,26 @@ export function clientDemoPreparationSummary(artifact, outputPath) {
   }
 }
 
+export function clientDemoRehearsalPlanSummary(plan, outputPath) {
+  return {
+    ok: true,
+    contract: CLIENT_DEMO_REHEARSAL_PLAN_CONTRACT,
+    output: resolve(outputPath),
+    preparationDigest: plan.preparation.bundleDigest,
+    productCount: plan.products.length,
+    status: plan.run.status,
+    completedChecks: plan.run.completedChecks,
+    totalChecks: plan.run.totalChecks,
+    browserWritesPerformed: plan.controls.browserWritesPerformed,
+    externalWritesPerformed: plan.controls.externalWritesPerformed,
+  }
+}
+
 function parseArguments(argv) {
   if (argv.length === 1 && argv[0] === '--help') return { mode: 'help' }
   if (argv.length === 2 && argv[0] === '--verify' && argv[1]) return { mode: 'verify', artifactPath: argv[1] }
+  if (argv.length === 4 && argv[0] === '--rehearse' && argv[1] && argv[2] === '--out' && argv[3]) return { mode: 'rehearse', preparationPath: argv[1], outputPath: argv[3] }
+  if (argv.length === 4 && argv[0] === '--verify-rehearsal' && argv[1] && argv[2] === '--preparation' && argv[3]) return { mode: 'verify-rehearsal', artifactPath: argv[1], preparationPath: argv[3] }
   if (argv.length >= 2 && argv[0] === '--init' && argv[1]) {
     const parsed = { mode: 'init', directory: argv[1], presetId: 'manufacturing', products: [...PRODUCT_ORDER] }
     for (let index = 2; index < argv.length; index += 2) {
@@ -624,10 +752,12 @@ function parseArguments(argv) {
 }
 
 async function main() {
+  let outputContract = CLIENT_DEMO_PREPARATION_CONTRACT
   try {
     const options = parseArguments(process.argv.slice(2))
+    if (options.mode === 'rehearse' || options.mode === 'verify-rehearsal') outputContract = CLIENT_DEMO_REHEARSAL_PLAN_CONTRACT
     if (options.mode === 'help') {
-      console.log('Create private intake: npm run client:workspace:init -- <new-private-directory> [--preset manufacturing] [--products shop,plant,website,ecommerce]\nOne-folder prepare: put client.json and selected product CSVs in a private directory, then run npm run client:prepare -- --data-dir <private-client-directory> --out <private-review.json>\nExisting-kit prepare: npm run client:prepare -- --kit <setup-kit.json> [--data-dir <private-csv-directory>] --out <private-review.json>\nVerify: npm run client:prepare:verify -- <private-review.json>')
+      console.log('Create private intake: npm run client:workspace:init -- <new-private-directory> [--preset manufacturing] [--products shop,plant,website,ecommerce]\nOne-folder prepare: put client.json and selected product CSVs in a private directory, then run npm run client:prepare -- --data-dir <private-client-directory> --out <private-review.json>\nExisting-kit prepare: npm run client:prepare -- --kit <setup-kit.json> [--data-dir <private-csv-directory>] --out <private-review.json>\nVerify preparation: npm run client:prepare:verify -- <private-review.json>\nPlan rehearsal: npm run client:rehearse:plan -- <private-review.json> --out <rehearsal-plan.json>\nVerify rehearsal: npm run client:rehearse:verify -- <rehearsal-plan.json> --preparation <private-review.json>')
       return
     }
     if (options.mode === 'init') {
@@ -641,12 +771,28 @@ async function main() {
       console.log(JSON.stringify(verifyClientDemoPreparation(value)))
       return
     }
+    if (options.mode === 'rehearse' || options.mode === 'verify-rehearsal') {
+      const preparationText = await readableFile(resolve(options.preparationPath), CLIENT_DEMO_PREPARATION_MAX_BYTES, 'client_demo_preparation')
+      let preparation
+      try { preparation = JSON.parse(preparationText) } catch { fail('client_demo_preparation_json_invalid') }
+      if (options.mode === 'rehearse') {
+        const plan = buildClientDemoRehearsalPlan(preparation)
+        const output = await writeClientDemoRehearsalPlan(plan, options.outputPath)
+        console.log(JSON.stringify(clientDemoRehearsalPlanSummary(plan, output)))
+      } else {
+        const planText = await readableFile(resolve(options.artifactPath), CLIENT_DEMO_REHEARSAL_PLAN_MAX_BYTES, 'client_demo_rehearsal')
+        let plan
+        try { plan = JSON.parse(planText) } catch { fail('client_demo_rehearsal_json_invalid') }
+        console.log(JSON.stringify(verifyClientDemoRehearsalPlan(plan, preparation)))
+      }
+      return
+    }
     const artifact = await prepareClientDemo(options)
     const output = await writeClientDemoPreparation(artifact, options.outputPath)
     console.log(JSON.stringify(clientDemoPreparationSummary(artifact, output)))
   } catch (error) {
     const code = error instanceof PreparationError ? error.code : 'client_demo_preparation_failed'
-    console.error(JSON.stringify({ ok: false, contract: CLIENT_DEMO_PREPARATION_CONTRACT, error: code }))
+    console.error(JSON.stringify({ ok: false, contract: outputContract, error: code }))
     process.exitCode = 1
   }
 }
