@@ -51,7 +51,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 ## Verified baseline
 
 - Current local checkpoints: workspace recovery `81c1db0`, database contracts `dd0d84a`, and Shop receivables `8402162`; the full app gate and all 359 Python tests pass.
-- The candidate passes 387 Python, 290 Commerce, 274 Production, 77 security, lint, build, and the complete app gate. Checkpoints `73134144`, `f97c50f2`, and `ba9a9ef9` add controlled substitute approval, exact issue/genealogy, and Shop review. The webview did not attach; ENG-128 makes no rendered claim.
+- Current candidate: 387 Python, 290 Commerce, 274 Production, 77 security, lint, build, and full app gate pass. Shop opens on Today with one next action, four metrics, and six connected workspaces; 1280/390 px have no overflow or browser errors. Plant substitution remains `73134144`, `f97c50f2`, and `ba9a9ef9`.
 - Client preparation passes 186 onboarding, 74 security, six preparation, recovery, release, privacy, database, Vercel, HQ, approval, and tamper-before-write checks.
 - Browser proof: one Manufacturing kit installed all four products, persisted prepared records, completed a Shop sale (OIL-1L 48 to 47; orders four to five), reset cleanly, and reprovisioned. Desktop/mobile had no overflow or browser warnings.
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).

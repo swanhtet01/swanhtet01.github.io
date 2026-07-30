@@ -209,6 +209,7 @@ const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((modul
 const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').then((module) => ({ default: module.ShopInventoryFoundation })))
 const ShopOperatingFlow = lazy(() => import('./ShopOperatingFlow').then((module) => ({ default: module.ShopOperatingFlow })))
 const ShopServiceSchedule = lazy(() => import('./ShopServiceSchedule').then((module) => ({ default: module.ShopServiceSchedule })))
+const ShopToday = lazy(() => import('./ShopToday').then((module) => ({ default: module.ShopToday })))
 const PlantOrderFoundation = lazy(() => import('./PlantOrderFoundation').then((module) => ({ default: module.PlantOrderFoundation })))
 const ProductHomeReadiness = lazy(() => import('./ProductHomeReadiness').then((module) => ({ default: module.ProductHomeReadiness })))
 
@@ -382,7 +383,7 @@ export type RuntimeHealth = {
   importProvisioning: RuntimeImportProvisioning | null
 }
 
-type CommerceTab = 'counter' | 'orders' | 'inventory'
+type CommerceTab = 'today' | 'counter' | 'orders' | 'inventory'
 type ProductionTab = 'production' | 'control'
 
 const THEME_KEY = 'supermega.interface.theme.v1'
@@ -425,6 +426,7 @@ const navigation = [
 ] as const
 
 const commerceTabs: Array<{ id: CommerceTab; label: string }> = [
+  { id: 'today', label: 'Today' },
   { id: 'counter', label: 'Sell' },
   { id: 'orders', label: 'Orders' },
   { id: 'inventory', label: 'Stock' },
@@ -1340,7 +1342,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   const isProductRoute = Boolean(product) || routeModule === 'commerce' || routeModule === 'production'
   const view: ProductId = product ?? (routeModule === 'production' || requestedView === 'production' || requestedView === 'plant' ? 'production' : 'commerce')
   const requestedTab = searchParams.get('tab')
-  const commerceTab = commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'counter'
+  const commerceTab = commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'today'
   const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'
   const activeTab = view === 'commerce' ? commerceTab : productionTab
   const requestedTabIsCanonical = requestedTab === activeTab
@@ -1358,6 +1360,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   const tabs = view === 'commerce' ? commerceTabs : productionTabs
   const productCopy = view === 'commerce'
     ? {
+        today: 'See the next priority, key numbers, and every connected Shop workspace.',
         counter: 'Tap an item, choose payment, and confirm the sale.',
         orders: 'Finish fulfilment, follow up payment, and handle exceptions.',
         inventory: 'Count stock, replenish items, and review location availability.',
@@ -4788,6 +4791,31 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
     <div><span className="core-eyebrow">Accounting export packet</span><strong>{latestCloseDownload ? 'Ready for accountant review' : closePreview ? 'Close before export' : 'No export package yet'}</strong><small>AI packages the reviewed daily close, payment proof, refund evidence, stock exceptions, supplier receipt exposure, and tax status for accounting review. No ledger post, tax filing, payable creation, bank settlement, refund, payment, inventory, or Shop write runs from this packet.</small></div>
     <div className="shop-order-control-rows">{shopAccountingPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
+
+  const afterSalesCount = commerce.orders.reduce((total, order) => (
+    total + (order.returns?.length ?? 0) + (order.supportCases?.length ?? 0)
+  ), 0)
+  const incomingRequestCount = pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)
+  const shopTodayMetrics = [
+    { label: 'Open orders', value: String(openOrders.length), tone: actionOrders.length ? 'attention' as const : 'ready' as const },
+    { label: 'Catalog items', value: String(commerce.items.length) },
+    { label: 'Stock alerts', value: String(lowStock.length), tone: lowStock.length ? 'attention' as const : 'ready' as const },
+    { label: 'Outstanding', value: formatMoney(receivablesAging.totalOutstandingMmk), tone: receivablesAging.overdueOrders ? 'attention' as const : 'ready' as const },
+  ]
+  const shopTodayModules = [
+    { label: 'Sell & POS', detail: 'Counter, cart, payment choice, tax and receipt evidence', status: `${commerce.items.length} items`, to: '/shop/?tab=counter' },
+    { label: 'Orders & fulfilment', detail: 'Channel intake, allocation, promise, delivery and returns', status: actionOrders.length ? `${actionOrders.length} need action` : `${openOrders.length} open`, to: '/shop/?tab=orders', tone: actionOrders.length ? 'attention' as const : 'ready' as const },
+    { label: 'Inventory & purchasing', detail: 'Locations, lots, ATP, counts, suppliers and receiving', status: lowStock.length ? `${lowStock.length} low` : activePurchaseOrders.length ? `${activePurchaseOrders.length} PO` : 'Ready', to: '/shop/?tab=inventory', tone: lowStock.length || overduePurchaseOrders.length ? 'attention' as const : 'ready' as const },
+    { label: 'Customers & after-sales', detail: 'Credit, receivables, appointments, support and warranty trail', status: afterSalesCount ? `${afterSalesCount} records` : 'Ready', to: '/shop/?tab=orders#shop-order-history' },
+    { label: 'Finance controls', detail: 'Payment review, daily close, settlement and accounting export', status: paymentReview.length ? `${paymentReview.length} review` : latestClose ? 'Close recorded' : 'Ready to close', to: '/shop/?tab=orders#shop-close-controls', tone: paymentReview.length ? 'attention' as const : 'ready' as const },
+    { label: 'Online channels', detail: 'Website and Ecommerce requests enter one Shop authority', status: incomingRequestCount ? `${incomingRequestCount} waiting` : 'Inbox clear', to: '/shop/?tab=orders', tone: incomingRequestCount ? 'attention' as const : 'ready' as const },
+  ]
+
+  if (tab === 'today') return <div className="operation-module shop-today-module">
+    {commerceBoundary}
+    <Suspense fallback={null}><ShopToday metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextDetail={shopAgentReason} nextTo={shopAgentPath} /></Suspense>
+    {actionGate}
+  </div>
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
