@@ -102,7 +102,7 @@ export function PilotOutcomePanel({
   }
 
   return (
-    <section aria-label="Free pilot outcome proof" className="pilot-outcome-proof">
+    <section aria-label="Free pilot outcome proof" className="pilot-outcome-proof" id="pilot-outcome-proof">
       <div className="pilot-outcome-head">
         <div>
           <span className="core-eyebrow">Free outcome proof</span>
