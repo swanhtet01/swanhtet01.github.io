@@ -2310,6 +2310,78 @@ export async function prepareManagedOrderIntakeDraft(request: {
   )
 }
 
+function managedCounterOrderIntent(state: Record<string, unknown>, evidence: ManagedCommandEvidence) {
+  const orders = Array.isArray(state.orders) ? state.orders : []
+  const movements = Array.isArray(state.movements) ? state.movements : []
+  const reservation = movements.find((candidate) => isRecord(candidate)
+    && candidate.kind === 'reserve'
+    && candidate.actionId === evidence.actionId
+    && typeof candidate.orderId === 'string')
+  const order = isRecord(reservation)
+    ? orders.find((candidate) => isRecord(candidate) && candidate.id === reservation.orderId)
+    : null
+  if (!isRecord(order)) {
+    throw new ManagedTrialError('The managed Shop order intent could not be isolated from the reviewed action.', {
+      code: 'managed_order_intent_invalid',
+    })
+  }
+  const advancedFields = [
+    'sourceRecordId', 'evidenceReference', 'promotionDecision', 'shippingDecision',
+    'taxDecision', 'paymentDecision', 'returns', 'supportCases', 'corrections',
+  ]
+  if (advancedFields.some((field) => order[field] !== undefined)) return null
+  if (!Array.isArray(order.lines)
+    || !order.lines.length
+    || order.lines.some((line) => !isRecord(line)
+      || typeof line.sku !== 'string'
+      || typeof line.quantity !== 'number'
+      || !Number.isSafeInteger(line.quantity)
+      || line.quantity < 1)
+    || typeof order.id !== 'string'
+    || typeof order.customer !== 'string'
+    || typeof order.channel !== 'string'
+    || typeof order.payment !== 'string'
+    || (order.fulfilment !== 'pickup' && order.fulfilment !== 'delivery')
+    || typeof order.fulfilmentReference !== 'string'
+    || typeof order.promisedAt !== 'string'
+    || typeof order.createdAt !== 'string') {
+    throw new ManagedTrialError('The managed Shop order is missing required server-intent fields.', {
+      code: 'managed_order_intent_invalid',
+    })
+  }
+  let paymentTermsDays: 0 | 7 | 30 = 0
+  if (order.paymentDueAt !== undefined) {
+    if (typeof order.paymentDueAt !== 'string') {
+      throw new ManagedTrialError('The managed Shop payment term is invalid.', {
+        code: 'managed_order_intent_invalid',
+      })
+    }
+    const createdAt = Date.parse(order.createdAt)
+    const paymentDueAt = Date.parse(order.paymentDueAt)
+    const days = (paymentDueAt - createdAt) / 86_400_000
+    if (days !== 7 && days !== 30) {
+      throw new ManagedTrialError('The managed Shop payment term is unsupported.', {
+        code: 'managed_order_intent_invalid',
+      })
+    }
+    paymentTermsDays = days
+  }
+  return {
+    orderId: order.id,
+    customer: order.customer,
+    channel: order.channel,
+    payment: order.payment,
+    fulfilment: order.fulfilment,
+    fulfilmentReference: order.fulfilmentReference,
+    promisedAt: order.promisedAt,
+    paymentTermsDays,
+    lines: order.lines.map((line) => ({
+      sku: (line as Record<string, unknown>).sku,
+      quantity: (line as Record<string, unknown>).quantity,
+    })),
+  }
+}
+
 export async function saveManagedCommerceCommand(request: {
   commandId: string
   evidence: ManagedCommandEvidence
@@ -2318,6 +2390,9 @@ export async function saveManagedCommerceCommand(request: {
   identity?: ManagedIdentity
   state: Record<string, unknown>
 }) {
+  const counterOrderIntent = request.eventType === 'commerce.order.created'
+    ? managedCounterOrderIntent(request.state, request.evidence)
+    : null
   const response = await authorizedRequest<{ result: ManagedCommandResult }>(
     '/api/trial/v1/commands',
     {
@@ -2327,7 +2402,9 @@ export async function saveManagedCommerceCommand(request: {
         surface: 'commerce',
         event_type: request.eventType,
         expected_version: request.expectedVersion,
-        payload: { state: request.state, evidence: request.evidence },
+        payload: counterOrderIntent
+          ? { intent: counterOrderIntent, evidence: request.evidence }
+          : { state: request.state, evidence: request.evidence },
       }),
     },
     true,

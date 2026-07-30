@@ -935,6 +935,15 @@ def _authoritative_command_payload(
         return authoritative
     if event_type == "commerce.order.created":
         evidence = authoritative.get("evidence")
+        if isinstance(authoritative.get("intent"), Mapping):
+            if not isinstance(evidence, Mapping):
+                return authoritative
+            authoritative["evidence"] = {
+                **dict(evidence),
+                "actor": principal.actor_id,
+                "capturedAt": captured_at,
+            }
+            return authoritative
         state = authoritative.get("state")
         orders = state.get("orders") if isinstance(state, Mapping) else None
         movements = state.get("movements") if isinstance(state, Mapping) else None

@@ -28,6 +28,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
 )
 from supermega_runtime.shop_inventory_runtime import (
     ShopInventoryValidationError,
+    reserve_shop_inventory_order,
     shop_inventory_available_balances,
     shop_inventory_balances,
     shop_inventory_business_partners,
@@ -4588,6 +4589,220 @@ def _configured_order_calculation(
     return calculation
 
 
+def create_commerce_order_from_intent(
+    current_value: Mapping[str, Any],
+    intent_value: Mapping[str, Any],
+    evidence_value: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build a priced, attributable order and reservation inside the state lock."""
+
+    current = validate_commerce_state(current_value)
+    intent = _object(intent_value, "order intent")
+    _exact_fields(
+        intent,
+        "order intent",
+        required=frozenset(
+            {
+                "orderId",
+                "customer",
+                "channel",
+                "payment",
+                "fulfilment",
+                "fulfilmentReference",
+                "promisedAt",
+                "paymentTermsDays",
+                "lines",
+            }
+        ),
+    )
+    evidence = _action_proof(evidence_value, "evidence")
+    order_id = _text(intent["orderId"], "order intent.orderId", maximum=160)
+    customer = _text(intent["customer"], "order intent.customer", maximum=180)
+    channel = _text(intent["channel"], "order intent.channel", maximum=180)
+    payment = _text(intent["payment"], "order intent.payment", maximum=180)
+    fulfilment = _text(intent["fulfilment"], "order intent.fulfilment", maximum=32)
+    if fulfilment not in {"pickup", "delivery"}:
+        raise TrialValidationError("order intent.fulfilment must be pickup or delivery.")
+    fulfilment_reference = _text(
+        intent["fulfilmentReference"],
+        "order intent.fulfilmentReference",
+        maximum=160,
+    )
+    promised_at = _timestamp(intent["promisedAt"], "order intent.promisedAt")
+    created_at = evidence["capturedAt"]
+    if datetime.fromisoformat(promised_at.replace("Z", "+00:00")) <= datetime.fromisoformat(
+        created_at.replace("Z", "+00:00")
+    ):
+        raise TrialValidationError("order intent.promisedAt must remain in the future.")
+    payment_terms_days = _integer(
+        intent["paymentTermsDays"],
+        "order intent.paymentTermsDays",
+    )
+    if payment_terms_days not in _CUSTOMER_CREDIT_TERMS:
+        raise TrialValidationError("order intent.paymentTermsDays is unsupported.")
+
+    item_by_sku = {item["sku"]: item for item in current["items"]}
+    raw_lines = _list(intent["lines"], "order intent.lines")
+    if not 1 <= len(raw_lines) <= _MAX_ORDER_LINES:
+        raise TrialValidationError(
+            f"order intent.lines must contain 1 to {_MAX_ORDER_LINES} entries."
+        )
+    lines: list[dict[str, Any]] = []
+    skus: list[str] = []
+    quantity = 0
+    listed_subtotal = 0
+    next_balances: dict[str, int] = {}
+    for index, candidate in enumerate(raw_lines):
+        field = f"order intent.lines[{index}]"
+        row = _object(candidate, field)
+        _exact_fields(row, field, required=frozenset({"sku", "quantity"}))
+        sku = _text(row["sku"], f"{field}.sku", maximum=80)
+        line_quantity = _integer(row["quantity"], f"{field}.quantity", minimum=1)
+        item = item_by_sku.get(sku)
+        if item is None:
+            raise TrialValidationError(f"{field}.sku is not in the current Shop catalog.")
+        if item["onHand"] < line_quantity:
+            raise TrialValidationError(f"{field}.quantity exceeds available Shop stock.")
+        line_total = item["price"] * line_quantity
+        quantity += line_quantity
+        listed_subtotal += line_total
+        if quantity > _MAX_SAFE_INTEGER or listed_subtotal > _MAX_SAFE_INTEGER:
+            raise TrialValidationError("order intent totals exceed the safe integer limit.")
+        lines.append(
+            {
+                "sku": sku,
+                "name": item["name"],
+                **({"variant": item["variant"]} if "variant" in item else {}),
+                "quantity": line_quantity,
+                "unitPriceMmk": item["price"],
+            }
+        )
+        skus.append(sku)
+        next_balances[sku] = item["onHand"] - line_quantity
+    _unique(skus, "order intent line SKU")
+
+    tax_configuration = _effective_tax_configuration(current, created_at)
+    calculation = (
+        _configured_order_calculation(
+            tax_configuration,
+            listed_subtotal,
+            len(_catalog_changes(current)),
+        )
+        if tax_configuration is not None
+        else {
+            "schema": _ORDER_CALCULATION_SCHEMA,
+            "currency": "MMK",
+            "catalogRevision": len(_catalog_changes(current)),
+            "subtotalMmk": listed_subtotal,
+            "taxMode": "not_configured",
+            "taxMmk": 0,
+            "totalMmk": listed_subtotal,
+        }
+    )
+    if calculation is None:
+        raise TrialValidationError("order intent cannot produce a safe pricing calculation.")
+    total = calculation["totalMmk"]
+    payment_due_at = (
+        None
+        if payment_terms_days == 0
+        else (
+            datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            + timedelta(days=payment_terms_days)
+        ).isoformat()
+    )
+    credit_decision: dict[str, Any] | None = None
+    if payment_terms_days:
+        policy = _effective_customer_credit_policy(current, customer, created_at)
+        exposure_before = _customer_credit_exposure(current, customer)
+        exposure_after = exposure_before + total
+        if (
+            policy is None
+            or policy["status"] != "active"
+            or payment_terms_days > policy["maxPaymentTermsDays"]
+            or exposure_after > policy["creditLimitMmk"]
+            or exposure_after > _MAX_SAFE_INTEGER
+        ):
+            raise TrialValidationError(
+                "order intent requires an active customer credit policy with available limit."
+            )
+        credit_decision = {
+            "policyRevision": policy["revision"],
+            "policyActionId": policy["proof"]["actionId"],
+            "creditLimitMmk": policy["creditLimitMmk"],
+            "exposureBeforeMmk": exposure_before,
+            "orderAmountMmk": total,
+            "exposureAfterMmk": exposure_after,
+            "maxPaymentTermsDays": policy["maxPaymentTermsDays"],
+            "paymentTermsDays": payment_terms_days,
+            "status": "approved",
+        }
+    order = {
+        "id": order_id,
+        "createdAt": created_at,
+        "customer": customer,
+        "owner": evidence["actor"],
+        "channel": channel,
+        "item": _order_item_summary(lines),
+        **({"itemSku": lines[0]["sku"]} if len(lines) == 1 else {}),
+        "quantity": quantity,
+        "payment": payment,
+        "paymentStatus": "pending",
+        "refundStatus": "none",
+        "fulfilment": fulfilment,
+        "fulfilmentReference": fulfilment_reference,
+        "promisedAt": promised_at,
+        **({"paymentDueAt": payment_due_at} if payment_due_at is not None else {}),
+        **({"creditDecision": credit_decision} if credit_decision is not None else {}),
+        "lines": lines,
+        "calculation": calculation,
+        "total": total,
+        "status": "confirmed",
+    }
+    movements = [
+        {
+            "id": _movement_id(
+                evidence["actionId"],
+                f"L{index + 1}" if len(lines) > 1 else None,
+            ),
+            "actionId": evidence["actionId"],
+            "createdAt": created_at,
+            "actor": evidence["actor"],
+            "reason": evidence["reason"],
+            "evidenceReference": evidence["evidenceReference"],
+            "kind": "reserve",
+            "sku": line["sku"],
+            "quantityDelta": -line["quantity"],
+            "orderId": order_id,
+        }
+        for index, line in enumerate(lines)
+    ]
+    next_state = {
+        **current,
+        "items": [
+            {**item, "onHand": next_balances[item["sku"]]}
+            if item["sku"] in next_balances
+            else item
+            for item in current["items"]
+        ],
+        "orders": [order, *current["orders"]],
+        "movements": [*movements, *current["movements"]],
+    }
+    foundation = current.get("inventoryFoundation")
+    if foundation is not None:
+        try:
+            next_state["inventoryFoundation"] = reserve_shop_inventory_order(
+                foundation,
+                order_id=order_id,
+                customer_reference=customer,
+                lines=[{"sku": line["sku"], "quantity": line["quantity"]} for line in lines],
+                proof=evidence,
+                catalog_skus=[item["sku"] for item in current["items"]],
+            )
+        except ShopInventoryValidationError as exc:
+            raise TrialValidationError(str(exc)) from exc
+    return validate_commerce_state(next_state)
+
+
 def _catalog_baselines(state: Mapping[str, Any]) -> list[Any]:
     return state.get("catalogBaselines", [])
 
@@ -8479,6 +8694,15 @@ def reduce_commerce_state(
         raise TrialValidationError("event_type must be a supported Commerce lifecycle event.")
     if event_type == "commerce.storefront.merchandising.imported":
         return _apply_storefront_merchandising_import(current, payload)
+    if event_type == "commerce.order.created" and isinstance(payload.get("intent"), Mapping):
+        payload = {
+            "state": create_commerce_order_from_intent(
+                current,
+                payload["intent"],
+                payload.get("evidence", {}),
+            ),
+            "evidence": payload.get("evidence"),
+        }
     next_state, evidence = _payload(payload)
     if event_type == "commerce.workspace.initialized":
         if dict(current):
@@ -8568,6 +8792,7 @@ __all__ = [
     "commerce_order_calculation_digest",
     "commerce_order_acknowledgement",
     "commerce_order_acknowledgement_text",
+    "create_commerce_order_from_intent",
     "commerce_accounting_handoff",
     "commerce_accounting_handoff_csv",
     "commerce_daily_close_csv",

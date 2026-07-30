@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 import unittest
 from uuid import uuid4
 
@@ -693,6 +694,140 @@ class TrialRuntimeTests(unittest.TestCase):
                 )
                 self.assertEqual(agent.status_code, 403)
                 self.assertEqual(agent.json()["detail"]["code"], "trial_human_approval_required")
+
+    def test_managed_shop_order_intent_is_server_priced_scoped_and_replay_safe(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        self._provision(store)
+        store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-agent-manager",
+            actor_kind="agent",
+            capabilities=("commerce.write",),
+        )
+        client = self._client(store)
+        try:
+            initialized = store.apply_command(
+                self.operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.workspace.initialized",
+                expected_version=0,
+                payload={
+                    "state": {
+                        "schema": "supermega.commerce.workspace.v2",
+                        "items": [
+                            {
+                                "sku": "SKU-1",
+                                "name": "Current catalog item",
+                                "onHand": 10,
+                                "reorderAt": 2,
+                                "price": 12_500,
+                            }
+                        ],
+                        "orders": [],
+                        "movements": [],
+                        "closes": [],
+                    },
+                    "evidence": {
+                        "actionId": "ACT-SHOP-INIT-001",
+                        "capturedAt": "2026-01-01T00:00:00.000Z",
+                        "actor": self.operator.actor_id,
+                        "reason": "Initialize the reviewed Shop catalog.",
+                        "evidenceReference": "SHOP-INIT-001",
+                    },
+                },
+            )
+            command_id = str(uuid4())
+            body = {
+                "command_id": command_id,
+                "surface": "commerce",
+                "event_type": "commerce.order.created",
+                "expected_version": initialized.version,
+                "payload": {
+                    "intent": {
+                        "orderId": "ORD-MANAGED-001",
+                        "customer": "Walk-in customer",
+                        "channel": "Counter",
+                        "payment": "Cash",
+                        "fulfilment": "pickup",
+                        "fulfilmentReference": "Counter ORD-MANAGED-001",
+                        "promisedAt": "2099-01-01T01:00:00.000Z",
+                        "paymentTermsDays": 0,
+                        "lines": [{"sku": "SKU-1", "quantity": 2}],
+                    },
+                    "evidence": {
+                        "actionId": "ACT-SHOP-ORDER-001",
+                        "capturedAt": "1970-01-01T00:00:00.000Z",
+                        "actor": self.operator.actor_id,
+                        "reason": "Counter sale reviewed by the operator.",
+                        "evidenceReference": "COUNTER-ORD-MANAGED-001",
+                    },
+                },
+            }
+            created = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=body,
+            )
+            self.assertEqual(created.status_code, 200, created.text)
+            result = created.json()["result"]
+            order = result["state"]["orders"][0]
+            self.assertEqual(order["owner"], self.operator.actor_id)
+            self.assertEqual(order["lines"][0]["name"], "Current catalog item")
+            self.assertEqual(order["lines"][0]["unitPriceMmk"], 12_500)
+            self.assertEqual(order["total"], 25_000)
+            self.assertEqual(result["state"]["items"][0]["onHand"], 8)
+            self.assertNotEqual(order["createdAt"], "1970-01-01T00:00:00.000Z")
+
+            replay = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=body,
+            )
+            self.assertEqual(replay.status_code, 200, replay.text)
+            self.assertTrue(replay.json()["result"]["idempotent_replay"])
+            self.assertEqual(replay.json()["result"]["version"], result["version"])
+
+            changed = deepcopy(body)
+            changed["payload"]["intent"]["lines"][0]["quantity"] = 3
+            conflict = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=changed,
+            )
+            self.assertEqual(conflict.status_code, 409)
+            self.assertEqual(conflict.json()["detail"]["code"], "trial_idempotency_conflict")
+
+            stale = deepcopy(body)
+            stale["command_id"] = str(uuid4())
+            stale["expected_version"] = initialized.version
+            stale["payload"]["evidence"]["actionId"] = "ACT-SHOP-ORDER-STALE"
+            stale["payload"]["evidence"]["evidenceReference"] = "COUNTER-STALE"
+            stale["payload"]["intent"]["orderId"] = "ORD-MANAGED-STALE"
+            version_conflict = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=stale,
+            )
+            self.assertEqual(version_conflict.status_code, 409)
+            self.assertEqual(version_conflict.json()["detail"]["code"], "trial_version_conflict")
+
+            agent = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers("agent-manager-session"),
+                json={**body, "command_id": str(uuid4())},
+            )
+            self.assertEqual(agent.status_code, 422)
+            self.assertEqual(agent.json()["detail"]["code"], "commerce_actor_evidence_required")
+
+            other = client.get(
+                "/api/trial/v1/bootstrap",
+                headers=self._headers("other-operator-session"),
+            )
+            self.assertEqual(other.status_code, 200)
+            self.assertEqual(other.json()["states"]["commerce"]["state"], {})
+        finally:
+            client.close()
 
     def test_retained_website_source_preserves_exact_command_replay_only(self) -> None:
         source = {

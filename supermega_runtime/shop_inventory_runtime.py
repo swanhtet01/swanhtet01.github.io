@@ -1590,6 +1590,135 @@ def validate_shop_inventory_state(
     )
 
 
+def reserve_shop_inventory_order(
+    value: object,
+    *,
+    order_id: str,
+    customer_reference: str,
+    lines: Sequence[Mapping[str, Any]],
+    proof: Mapping[str, Any],
+    catalog_skus: Sequence[str],
+) -> dict[str, Any]:
+    """Append one deterministic location reservation from server-owned order intent."""
+
+    trusted_catalog = sorted({_text(sku, "catalog sku", 80) for sku in catalog_skus})
+    if len(trusted_catalog) != len(catalog_skus):
+        raise ShopInventoryValidationError("catalog skus contain duplicates.")
+    current = validate_shop_inventory_state(value, trusted_catalog)
+    canonical_order_id = _text(order_id, "order reservation.orderId", 160)
+    canonical_customer = _text(
+        customer_reference,
+        "order reservation.customerReference",
+        180,
+    )
+    canonical_lines: list[dict[str, Any]] = []
+    for index, candidate in enumerate(_list(list(lines), "order reservation.lines", 1, 20)):
+        row = _exact(candidate, f"order reservation.lines[{index}]", {"sku", "quantity"})
+        sku = _text(row["sku"], f"order reservation.lines[{index}].sku", 80)
+        if sku not in trusted_catalog:
+            raise ShopInventoryValidationError(
+                f"order reservation.lines[{index}].sku is not in the Shop catalog."
+            )
+        canonical_lines.append(
+            {
+                "sku": sku,
+                "quantity": _integer(
+                    row["quantity"],
+                    f"order reservation.lines[{index}].quantity",
+                    1,
+                ),
+            }
+        )
+    canonical_lines.sort(key=lambda row: row["sku"])
+    if len({row["sku"] for row in canonical_lines}) != len(canonical_lines):
+        raise ShopInventoryValidationError("order reservation line SKUs are duplicated.")
+
+    command_id = _order_inventory_command_id("ORS", canonical_order_id)
+    if any(command["payload"]["id"] == command_id for command in current["commands"]):
+        raise ShopInventoryValidationError(
+            "the order location reservation is already recorded."
+        )
+
+    projection = _project([command["payload"] for command in current["commands"]])
+    allocations: list[dict[str, Any]] = []
+    for line in canonical_lines:
+        remaining = line["quantity"]
+        candidates: list[dict[str, Any]] = []
+        for (stock_unit_id, location_id), balance in projection["balances"].items():
+            unit = projection["units"][stock_unit_id]
+            available = balance["onHand"] - balance["reserved"]
+            if unit["sku"] == line["sku"] and available > 0:
+                candidates.append(
+                    {
+                        "stockUnitId": stock_unit_id,
+                        "locationId": location_id,
+                        "available": available,
+                    }
+                )
+        candidates.sort(
+            key=lambda row: (
+                -row["available"],
+                f"{row['locationId']}|{row['stockUnitId']}",
+            )
+        )
+        for candidate in candidates:
+            if remaining == 0:
+                break
+            quantity = min(remaining, candidate["available"])
+            allocation = {
+                "sku": line["sku"],
+                "stockUnitId": candidate["stockUnitId"],
+                "locationId": candidate["locationId"],
+                "quantity": quantity,
+            }
+            allocations.append(
+                {
+                    "reservationId": _order_inventory_reservation_id(
+                        canonical_order_id,
+                        allocation,
+                    ),
+                    **allocation,
+                }
+            )
+            remaining -= quantity
+        if remaining:
+            raise ShopInventoryValidationError(
+                f"location stock cannot allocate {line['quantity']} units of {line['sku']}."
+            )
+    allocations.sort(
+        key=lambda row: (
+            f"{row['sku']}|{row['locationId']}|{row['stockUnitId']}|{row['reservationId']}"
+        )
+    )
+    payload = _payload(
+        {
+            "kind": "order_reserve",
+            "id": command_id,
+            "orderId": canonical_order_id,
+            "customerReference": canonical_customer,
+            "allocations": allocations,
+            "proof": proof,
+        },
+        "order reservation payload",
+        trusted_catalog,
+    )
+    body = {
+        "sequence": current["revision"] + 1,
+        "previousDigest": current["headDigest"],
+        "payload": payload,
+    }
+    envelope = {**body, "digest": _canonical_digest(body)}
+    return validate_shop_inventory_state(
+        {
+            "schema": SHOP_INVENTORY_SCHEMA,
+            "revision": body["sequence"],
+            "headDigest": envelope["digest"],
+            "commands": [*current["commands"], envelope],
+        },
+        trusted_catalog,
+    )
+
+
 def shop_inventory_sku_totals(
     value: object, catalog_skus: Sequence[str]
 ) -> dict[str, int]:
@@ -1704,6 +1833,7 @@ __all__ = [
     "SHOP_INVENTORY_SCHEMA",
     "ShopInventoryValidationError",
     "restamp_latest_shop_inventory_command",
+    "reserve_shop_inventory_order",
     "shop_inventory_available_balances",
     "shop_inventory_balances",
     "shop_inventory_business_partners",
