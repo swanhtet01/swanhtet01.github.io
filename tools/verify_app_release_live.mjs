@@ -235,6 +235,9 @@ for (const required of ['Start guided sample', 'Request managed trial', 'Your AI
 for (const required of ['supermega.ai_memory_preview.v1', 'AI memory preview', 'Download AI memory', 'Request managed AI', 'Raw product records stay out of this preview.', 'No customer message, payment, stock move, production write, domain publish, managed write, or model training runs from this preview.']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_ai_memory_preview_context:${required}`)
 }
+for (const required of ['Review one owner decision', 'Finish proof run', 'Start proof run', 'pilot-outcome-proof']) {
+  if (!settingsChunk.includes(required)) throw new Error(`missing_live_managed_trial_request_gate:${required}`)
+}
 for (const required of ['supermega.managed_trial_proof.v2', 'proof_contract', 'proof_digest', 'proof_readiness', 'proof_sources', 'proof_behavior', 'proof_decisions', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'proof_raw_records']) {
   if (!operationsChunk.includes(required)) throw new Error(`missing_live_managed_trial_proof_contract:${required}`)
 }
