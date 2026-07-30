@@ -2252,7 +2252,7 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !coreSource.includes('const draftLines = ecommerceShopDraftLines(ecommerceNavigationDraft)')
   || !coreSource.includes('setExtraOrderLines(draftLines.slice(1).map')
   || !coreSource.includes('setPayment(ecommerceShopDraftPayment(ecommerceNavigationDraft))')
-  || !coreSource.includes("ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v6'")
+  || !coreSource.includes("ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v7'")
   || !coreSource.includes("setNotice('The Ecommerce request has no valid Shop operating authority. Nothing was prepared.')")
   || !coreSource.includes("setNotice('The Shop operating location changed after Ecommerce review. Reopen the request; no order was prepared.')")
   || !coreSource.includes('governed handoff')
@@ -2282,7 +2282,9 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !coreSource.includes('credit ${formatMoney(creditReview.exposureBeforeMmk)} → ${formatMoney(creditReview.exposureAfterMmk)} under policy R${creditReview.policy?.revision}')
   || !coreSource.includes('Stock ${reservationReview}')
   || !coreCssSource.includes('.order-ecommerce-payment')
-  || !ecommerceBuyingLifecycleSource.includes("ECOMMERCE_SHOP_DRAFT_SCHEMA_V6 = 'supermega.ecommerce.shop_draft.v6'")
+  || !ecommerceBuyingLifecycleSource.includes("ECOMMERCE_SHOP_DRAFT_SCHEMA_V7 = 'supermega.ecommerce.shop_draft.v7'")
+  || !coreSource.includes('const draftTaxCalculation = commerceOrderCalculation(')
+  || !coreSource.includes('(draftTaxConfiguration?.proof.actionId ?? null) !== taxDecision.policyActionId')
   || !ecommerceBuyingLifecycleSource.includes('commercePromotionDecision(')
   || !ecommerceBuyingLifecycleSource.includes('commercePaymentDecision(')
   || !commerceSource.includes("schema: 'supermega.commerce.promotion-decision.v1'")
@@ -2291,7 +2293,7 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !commerceSource.includes('paymentPolicies?: CommercePaymentPolicy[]')
   || !ecommerceBuyingLifecycleSource.includes("operatingUnitLocationId: 'LOC-MAIN'")
   || !ecommerceBuyingLifecycleSource.includes("writePolicy: 'human_review_required'")
-  || !managedEcommerceBuyingLifecycleSource.includes('ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v6"')
+  || !managedEcommerceBuyingLifecycleSource.includes('ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v7"')
   || !managedEcommerceBuyingLifecycleSource.includes('"operatingUnitLocationId": "LOC-MAIN"')
   || !coreSource.includes("import('../products/ecommerce/ecommerce-shop-handoff')")
   || ['setItem(', 'removeItem(', 'localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest', 'navigator.locks', 'convertCommerceWebsiteIntake', 'reserveCommerceOrder', 'mutateCommerceWorkspace'].some((marker) => ecommerceConfirmSource.includes(marker) || ecommerceHandoffSource.includes(marker))) fail('ecommerce_shop_handoff_contract_missing_or_mutating')
@@ -11761,6 +11763,8 @@ async function verifyStorefrontRuntime() {
       currentPromotionPolicies: promotionPolicies,
       currentShippingPolicies: shippingPolicies,
       currentPaymentPolicies: paymentPolicies,
+      currentTaxConfigurations: taxConfigurations,
+      catalogRevision: 0,
       confirmedAt: '2026-07-24T09:10:00.000Z',
     })
     buyingAssert(managedBuyingDraft.lines.length === 2
@@ -11807,9 +11811,12 @@ async function verifyStorefrontRuntime() {
       currentPromotionPolicies: promotionPolicies,
       currentShippingPolicies: shippingPolicies,
       currentPaymentPolicies: paymentPolicies,
+      currentTaxConfigurations: taxConfigurations,
+      catalogRevision: 0,
       confirmedAt: '2026-07-24T09:10:00.000Z',
     })
-    buyingAssert(buyingDraft.schema === 'supermega.ecommerce.shop_draft.v6'
+    const buyingDraftListedSubtotal = buyingDraft.pricing.promotion.netSubtotalMmk + buyingDraft.pricing.shipping.feeMmk
+    buyingAssert(buyingDraft.schema === 'supermega.ecommerce.shop_draft.v7'
       && buyingDraft.lines.length === 2
       && buyingDraft.customerProfile?.name === 'Ma Su'
       && buyingDraft.deliveryAddress?.township === 'Hlaing'
@@ -11822,7 +11829,10 @@ async function verifyStorefrontRuntime() {
       && buyingDraft.pricing.shipping.status === 'approved'
       && buyingDraft.pricing.shipping.zoneCode === 'YGN-CENTRAL'
       && buyingDraft.pricing.shipping.feeMmk === 3_000
-      && buyingDraft.totalMmk === buyingDraft.pricing.subtotalMmk - buyingDraft.pricing.promotion.discountMmk + buyingDraft.pricing.shipping.feeMmk
+      && buyingDraft.pricing.tax.taxConfigurationRevision === 1
+      && buyingDraft.pricing.tax.policyActionId === 'ACT-TAX-COMMERCIAL-R1'
+      && buyingDraft.pricing.tax.listedSubtotalMmk === buyingDraftListedSubtotal
+      && buyingDraft.totalMmk === buyingDraftListedSubtotal + buyingDraft.pricing.tax.taxMmk
       && buyingDraft.operatingContext.organizationScope === buyingScope
       && buyingDraft.operatingContext.operatingUnitLocationId === 'LOC-MAIN'
       && buyingDraft.operatingContext.sourceAuthority === 'ecommerce'
@@ -11838,6 +11848,7 @@ async function verifyStorefrontRuntime() {
       promotionPolicies,
       shippingPolicies,
       paymentPolicies,
+      taxConfigurations,
     })
     const promotionOrderProof = {
       actionId: 'ACT-ECOMMERCE-PROMOTION-ORDER-1',
@@ -11874,7 +11885,7 @@ async function verifyStorefrontRuntime() {
       promotionDecision: buyingDraft.pricing.promotion,
       shippingDecision: buyingDraft.pricing.shipping,
       paymentDecision: buyingDraft.pricing.payment,
-      total: buyingDraft.totalMmk,
+      total: buyingDraft.pricing.tax.listedSubtotalMmk,
       status: 'confirmed',
     }
     const promotedOrderState = commerce.reserveCommerceOrder(
@@ -11884,8 +11895,8 @@ async function verifyStorefrontRuntime() {
     )
     const storedPromotedOrder = promotedOrderState?.orders.find((order) => order.id === promotedOrder.id)
     buyingAssert(storedPromotedOrder?.total === buyingDraft.totalMmk
-      && storedPromotedOrder.total === buyingDraft.pricing.promotion.netSubtotalMmk + buyingDraft.pricing.shipping.feeMmk
-      && storedPromotedOrder.calculation?.subtotalMmk === buyingDraft.pricing.promotion.netSubtotalMmk + buyingDraft.pricing.shipping.feeMmk
+      && storedPromotedOrder.calculation?.listedSubtotalMmk === buyingDraft.pricing.tax.listedSubtotalMmk
+      && storedPromotedOrder.calculation?.taxMmk === buyingDraft.pricing.tax.taxMmk
       && storedPromotedOrder.promotionDecision?.policyRevision === 1
       && storedPromotedOrder.shippingDecision?.policyRevision === 1
       && storedPromotedOrder.paymentDecision?.policyRevision === 3
@@ -11955,6 +11966,8 @@ async function verifyStorefrontRuntime() {
         currentPromotionPolicies: promotionPolicies,
         currentShippingPolicies: shippingPolicies,
         currentPaymentPolicies: paymentPolicies,
+        currentTaxConfigurations: taxConfigurations,
+        catalogRevision: 0,
         confirmedAt: '2026-07-24T09:15:01.000Z',
       })
     } catch { expiredBuyingRejected = true }
@@ -11968,6 +11981,8 @@ async function verifyStorefrontRuntime() {
         currentPromotionPolicies: promotionPolicies,
         currentShippingPolicies: shippingPolicies,
         currentPaymentPolicies: paymentPolicies,
+        currentTaxConfigurations: taxConfigurations,
+        catalogRevision: 0,
         confirmedAt: '2026-07-24T09:10:00.000Z',
       })
     } catch { repricedBuyingRejected = true }

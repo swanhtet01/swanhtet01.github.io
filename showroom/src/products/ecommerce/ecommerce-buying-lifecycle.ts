@@ -23,11 +23,12 @@ export const ECOMMERCE_QUOTE_SCHEMA = 'supermega.ecommerce.checkout_quote.v1' as
 export const ECOMMERCE_CUSTOMER_PROFILE_SCHEMA = 'supermega.ecommerce.customer_profile_snapshot.v1' as const
 export const ECOMMERCE_DELIVERY_ADDRESS_SCHEMA = 'supermega.ecommerce.delivery_address_snapshot.v1' as const
 export const ECOMMERCE_REQUEST_SCHEMA_V2 = 'supermega.ecommerce.order_request.v2' as const
-export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V6 = 'supermega.ecommerce.shop_draft.v6' as const
-export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V5 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V6
-export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V4 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V6
-export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V3 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V6
-export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V2 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V6
+export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V7 = 'supermega.ecommerce.shop_draft.v7' as const
+export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V6 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V7
+export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V5 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V7
+export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V4 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V7
+export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V3 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V7
+export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V2 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V7
 export const ECOMMERCE_RETURN_INTENT_SCHEMA = 'supermega.ecommerce.return_intent.v1' as const
 export const ECOMMERCE_SUPPORT_INTENT_SCHEMA = 'supermega.ecommerce.support_intent.v1' as const
 export const ECOMMERCE_BUYING_STATE_SCHEMA = 'supermega.ecommerce.buying_lifecycle.v1' as const
@@ -194,7 +195,7 @@ export function reviewEcommerceTax(
 
 export function validateEcommerceTaxDecision(
   value: unknown,
-  configurations: readonly CommerceTaxConfiguration[],
+  configurations?: readonly CommerceTaxConfiguration[],
 ): EcommerceTaxDecision {
   const source = exactObject(value, 'taxDecision', [
     'schema', 'status', 'catalogRevision', 'taxConfigurationRevision', 'taxCode', 'taxJurisdictionCode',
@@ -232,14 +233,43 @@ export function validateEcommerceTaxDecision(
       : canonicalText(source.policyActionId, 'taxDecision.policyActionId', 160),
     reviewedAt: canonicalTimestamp(source.reviewedAt, 'taxDecision.reviewedAt'),
   }
-  const expected = reviewEcommerceTax(
-    configurations,
-    decision.listedSubtotalMmk,
-    decision.reviewedAt,
-    decision.catalogRevision,
-  )
-  if (decision.schema !== 'supermega.ecommerce.tax-decision.v1'
-    || canonicalJson(decision) !== canonicalJson(expected)) {
+  if (decision.schema !== 'supermega.ecommerce.tax-decision.v1') {
+    throw new Error('The Ecommerce tax decision schema is invalid.')
+  }
+  const listed = BigInt(decision.listedSubtotalMmk)
+  const rate = BigInt(decision.taxRateBasisPoints)
+  const expectedTax = decision.taxMode === 'exclusive'
+    ? roundedTax(listed * rate, 10_000n)
+    : decision.taxMode === 'inclusive'
+      ? roundedTax(listed * rate, 10_000n + rate)
+      : 0n
+  const expectedSubtotal = decision.taxMode === 'inclusive' ? listed - expectedTax : listed
+  const expectedTotal = decision.taxMode === 'exclusive' ? listed + expectedTax : listed
+  const configured = decision.status === 'configured'
+    && decision.taxMode !== 'not_configured'
+    && decision.taxConfigurationRevision !== null
+    && decision.taxCode !== null
+    && decision.policyActionId !== null
+    && Number(expectedTax) === decision.taxMmk
+    && Number(expectedSubtotal) === decision.subtotalMmk
+    && Number(expectedTotal) === decision.totalMmk
+  const notConfigured = decision.status === 'not_configured'
+    && decision.taxMode === 'not_configured'
+    && decision.taxConfigurationRevision === null
+    && decision.taxCode === null
+    && decision.taxJurisdictionCode === null
+    && decision.taxEffectiveFrom === null
+    && decision.taxRateBasisPoints === 0
+    && decision.policyActionId === null
+    && decision.subtotalMmk === decision.listedSubtotalMmk
+    && decision.taxMmk === 0
+    && decision.totalMmk === decision.listedSubtotalMmk
+  if (!configured && !notConfigured) {
+    throw new Error('The Ecommerce tax decision calculation is invalid.')
+  }
+  if (configurations === undefined) return decision
+  const expected = reviewEcommerceTax(configurations, decision.listedSubtotalMmk, decision.reviewedAt, decision.catalogRevision)
+  if (canonicalJson(decision) !== canonicalJson(expected)) {
     throw new Error('The Ecommerce tax decision is stale, forged, or inconsistent with the Shop tax schedule.')
   }
   return decision
@@ -362,7 +392,7 @@ export type EcommerceOrderRequestV2 = {
 }
 
 export type EcommerceShopDraftV2 = {
-  schema: typeof ECOMMERCE_SHOP_DRAFT_SCHEMA_V6
+  schema: typeof ECOMMERCE_SHOP_DRAFT_SCHEMA_V7
   mode: 'browser-memory-shop-draft'
   state: 'review_required'
   id: string
@@ -389,7 +419,7 @@ export type EcommerceShopDraftV2 = {
   pricing: {
     subtotalMmk: number
     promotion: CommercePromotionDecision
-    tax: EcommerceCheckoutQuote['tax']
+    tax: EcommerceTaxDecision
     shipping: CommerceShippingDecision
     payment: CommercePaymentDecision
     totalMmk: number
@@ -1610,6 +1640,8 @@ export async function prepareEcommerceShopDraftV2(input: {
   currentPromotionPolicies: readonly CommercePromotionPolicy[]
   currentShippingPolicies: readonly CommerceShippingPolicy[]
   currentPaymentPolicies: readonly CommercePaymentPolicy[]
+  currentTaxConfigurations: readonly CommerceTaxConfiguration[]
+  catalogRevision: number
   confirmedAt: string
 }): Promise<EcommerceShopDraftV2> {
   const request = await validateEcommerceOrderRequestV2(input.request)
@@ -1644,8 +1676,15 @@ export async function prepareEcommerceShopDraftV2(input: {
   )
   if (!shipping) throw new Error('The Shop shipping decision is invalid.')
   if (shipping.status === 'rejected') throw new Error(`Shop delivery is unavailable for ${shipping.township ?? 'this township'} (${shipping.reason}).`)
-  const totalMmk = promotion.netSubtotalMmk + shipping.feeMmk
-  if (!Number.isSafeInteger(totalMmk) || totalMmk < 1) throw new Error('The Shop total exceeds the safe MMK boundary.')
+  const listedSubtotalMmk = promotion.netSubtotalMmk + shipping.feeMmk
+  if (!Number.isSafeInteger(listedSubtotalMmk) || listedSubtotalMmk < 1) throw new Error('The Shop total exceeds the safe MMK boundary.')
+  const tax = reviewEcommerceTax(
+    input.currentTaxConfigurations,
+    listedSubtotalMmk,
+    confirmedAt,
+    input.catalogRevision,
+  )
+  const totalMmk = tax.totalMmk
   const payment = commercePaymentDecision(
     input.currentPaymentPolicies,
     request.quote.payment.adapter,
@@ -1656,7 +1695,7 @@ export async function prepareEcommerceShopDraftV2(input: {
   if (!payment) throw new Error('The Shop payment decision is invalid.')
   if (payment.status === 'rejected') throw new Error(`Shop payment method is unavailable (${payment.reason}).`)
   return {
-    schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V6,
+    schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V7,
     mode: 'browser-memory-shop-draft',
     state: 'review_required',
     id: `ESD-${request.id.slice(4)}`,
@@ -1685,13 +1724,13 @@ export async function prepareEcommerceShopDraftV2(input: {
     pricing: {
       subtotalMmk: request.quote.subtotalMmk,
       promotion,
-      tax: canonicalCopy(request.quote.tax),
+      tax,
       shipping,
       payment,
       totalMmk,
     },
     totalMmk,
-    evidenceReference: `ECOMMERCE:${request.id}:${request.sourcePreviewDigest}:${request.quote.quoteDigest}:${request.scope}:LOC-MAIN:ecommerce>commerce:human_review_required:${promotion.status}:${promotion.policyRevision ?? 'none'}:${promotion.discountMmk}:shipping:${shipping.status}:${shipping.policyRevision ?? 'none'}:${shipping.feeMmk}:payment:${payment.status}:${payment.policyRevision ?? 'none'}:${payment.adapter}`,
+    evidenceReference: `ECOMMERCE:${request.id}:${request.sourcePreviewDigest}:${request.quote.quoteDigest}:${request.scope}:LOC-MAIN:ecommerce>commerce:human_review_required:${promotion.status}:${promotion.policyRevision ?? 'none'}:${promotion.discountMmk}:shipping:${shipping.status}:${shipping.policyRevision ?? 'none'}:${shipping.feeMmk}:tax:${tax.status}:${tax.taxConfigurationRevision ?? 'none'}:${tax.policyActionId ?? 'none'}:${tax.taxMode}:${tax.taxMmk}:${tax.totalMmk}:payment:${payment.status}:${payment.policyRevision ?? 'none'}:${payment.adapter}`,
   }
 }
 
@@ -1701,6 +1740,8 @@ export async function prepareManagedEcommerceShopDraftV2(input: {
   currentPromotionPolicies: readonly CommercePromotionPolicy[]
   currentShippingPolicies: readonly CommerceShippingPolicy[]
   currentPaymentPolicies: readonly CommercePaymentPolicy[]
+  currentTaxConfigurations: readonly CommerceTaxConfiguration[]
+  catalogRevision: number
   confirmedAt: string
 }) {
   const request = await validateEcommerceOrderRequestV2(input.request)
@@ -1737,7 +1778,7 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
   const structuredFields = ['customerProfile', 'deliveryAddress']
   const structured = isRecord(value) && structuredFields.some((field) => field in value)
   const source = exactObject(value, 'Shop draft', structured ? [...baseFields, ...structuredFields] : baseFields)
-  if (source.schema !== ECOMMERCE_SHOP_DRAFT_SCHEMA_V6
+  if (source.schema !== ECOMMERCE_SHOP_DRAFT_SCHEMA_V7
     || source.mode !== 'browser-memory-shop-draft'
     || source.state !== 'review_required'
     || !Array.isArray(source.lines)
@@ -1830,10 +1871,7 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
     || netSubtotalMmk !== grossSubtotalMmk - discountMmk
     || reviewedAt !== confirmedAt
     ) throw new Error('Shop draft promotion boundary is invalid.')
-  const tax = exactObject(pricing.tax, 'Shop draft.pricing.tax', ['adapter', 'status', 'amountMmk'])
-  if (tax.adapter !== 'price_inclusive' || tax.status !== 'included' || tax.amountMmk !== 0) {
-    throw new Error('Shop draft tax boundary is invalid.')
-  }
+  const tax = validateEcommerceTaxDecision(pricing.tax)
   const shipping = exactObject(pricing.shipping, 'Shop draft.pricing.shipping', [
     'schema', 'status', 'reason', 'township', 'zoneCode', 'policyRevision', 'policyActionId', 'feeMmk', 'promiseMinutes', 'reviewedAt',
   ])
@@ -1854,7 +1892,8 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
   if (shipping.schema !== 'supermega.commerce.shipping-decision.v1'
     || (!pickupShipping && !approvedShipping)
     || shippingReviewedAt !== confirmedAt
-    || pricingTotal !== netSubtotalMmk + shippingFeeMmk
+    || tax.listedSubtotalMmk !== netSubtotalMmk + shippingFeeMmk
+    || pricingTotal !== tax.totalMmk
     || totalMmk !== pricingTotal) throw new Error('Shop draft shipping boundary is invalid.')
   const payment = exactObject(pricing.payment, 'Shop draft.pricing.payment', [
     'schema', 'status', 'reason', 'adapter', 'policyRevision', 'policyActionId', 'maximumOrderMmk', 'instructions', 'reviewedAt', 'authorized',
@@ -1871,10 +1910,11 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
     || paymentReviewedAt !== confirmedAt || payment.authorized !== false
     || !ecommercePaymentMatchesFulfilment(fulfilment as EcommerceFulfilment, payment.adapter as EcommercePaymentAdapter)
     || paymentMaximumOrderMmk !== null && totalMmk > paymentMaximumOrderMmk) throw new Error('Shop draft payment boundary is invalid.')
-  const evidenceReference = `ECOMMERCE:${sourceRequestId}:${sourcePreviewDigest}:${quoteDigest}:${organizationScope}:LOC-MAIN:ecommerce>commerce:human_review_required:${promotionStatus}:${policyRevision ?? 'none'}:${discountMmk}:shipping:${shipping.status}:${shippingPolicyRevision ?? 'none'}:${shippingFeeMmk}:payment:${payment.status}:${paymentPolicyRevision}:${payment.adapter}`
+  if (tax.reviewedAt !== confirmedAt) throw new Error('Shop draft tax review time is invalid.')
+  const evidenceReference = `ECOMMERCE:${sourceRequestId}:${sourcePreviewDigest}:${quoteDigest}:${organizationScope}:LOC-MAIN:ecommerce>commerce:human_review_required:${promotionStatus}:${policyRevision ?? 'none'}:${discountMmk}:shipping:${shipping.status}:${shippingPolicyRevision ?? 'none'}:${shippingFeeMmk}:tax:${tax.status}:${tax.taxConfigurationRevision ?? 'none'}:${tax.policyActionId ?? 'none'}:${tax.taxMode}:${tax.taxMmk}:${tax.totalMmk}:payment:${payment.status}:${paymentPolicyRevision}:${payment.adapter}`
   if (source.evidenceReference !== evidenceReference) throw new Error('Shop draft evidence reference is invalid.')
   return {
-    schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V6,
+    schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V7,
     mode: 'browser-memory-shop-draft',
     state: 'review_required',
     id,
@@ -1912,7 +1952,7 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
         reviewedAt,
         reason: promotionReason as CommercePromotionDecision['reason'],
       },
-      tax: { adapter: 'price_inclusive', status: 'included', amountMmk: 0 },
+      tax,
       shipping: {
         schema: 'supermega.commerce.shipping-decision.v1',
         status: shipping.status as CommerceShippingDecision['status'],

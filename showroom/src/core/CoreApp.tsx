@@ -1743,7 +1743,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
   }))
   const manualOrderQuantity = manualOrderLineDrafts.reduce((total, line) => total + Math.max(line.quantity, 0), 0)
   const manualOrderTotal = manualOrderLineItems.reduce((total, line) => total + (line.item?.price ?? 0) * Math.max(line.quantity, 0), 0)
-  const manualOrderPricedTotal = preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v6'
+  const manualOrderPricedTotal = preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
     ? preparedEcommerceDraft.totalMmk
     : manualOrderTotal
   const orderCreditCalculation = commerceOrderCalculation(commerce, manualOrderPricedTotal, new Date(purchaseOrderClock).toISOString())
@@ -2299,10 +2299,10 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
           setNotice('The Ecommerce request no longer matches the current Shop catalog. Nothing was prepared.')
           return
         }
-        const navigationCustomer = ecommerceNavigationDraft.schema === 'supermega.ecommerce.shop_draft.v6'
+        const navigationCustomer = ecommerceNavigationDraft.schema === 'supermega.ecommerce.shop_draft.v7'
           ? ecommerceNavigationDraft.customerProfile?.name ?? ecommerceNavigationDraft.customerReference
           : ecommerceNavigationDraft.customerReference
-        const navigationAddress = ecommerceNavigationDraft.schema === 'supermega.ecommerce.shop_draft.v6'
+        const navigationAddress = ecommerceNavigationDraft.schema === 'supermega.ecommerce.shop_draft.v7'
           ? ecommerceNavigationDraft.deliveryAddress
           : null
         setPreparedChannelDraft(null)
@@ -3214,6 +3214,8 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
           currentPromotionPolicies: commerce.promotionPolicies ?? [],
           currentShippingPolicies: commerce.shippingPolicies ?? [],
           currentPaymentPolicies: commerce.paymentPolicies ?? [],
+          currentTaxConfigurations: commerce.taxConfigurations ?? [],
+          catalogRevision: commerce.catalogChanges?.length ?? 0,
           confirmedAt: new Date().toISOString(),
         })
         const [firstLine, ...remainingLines] = draft.lines
@@ -3453,37 +3455,62 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
       return
     }
     const ecommerceLines = ecommerceDraft
-      ? ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v6'
+      ? ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v7'
         ? ecommerceDraft.lines
         : [ecommerceDraft.line]
       : []
-    const ecommercePayment = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v6'
+    const ecommercePayment = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
       ? ecommerceDraft.pricing.payment.adapter === 'cash_on_delivery'
         ? 'Cash on delivery'
         : ecommerceDraft.pricing.payment.adapter === 'kbzpay_manual'
           ? 'KBZPay'
           : 'Cash'
       : ''
-    const ecommerceCustomer = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v6'
+    const ecommerceCustomer = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
       ? ecommerceDraft.customerProfile?.name ?? ecommerceDraft.customerReference
       : ecommerceDraft?.customerReference ?? ''
-    if (ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v6'
+    if (ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
       && commerce.inventoryFoundation
       && !managedInventoryProjection?.locations.some((candidate) => candidate.id === ecommerceDraft.operatingContext.operatingUnitLocationId)) {
       detachPreparedOrderSources({ ecommerce: true })
       setNotice('The Shop operating location changed after Ecommerce review. Reopen the request; no order was prepared.')
       return
     }
-    const promotionDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v6'
+    const promotionDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
       ? ecommerceDraft.pricing.promotion
       : undefined
-    const shippingDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v6'
+    const shippingDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
       ? ecommerceDraft.pricing.shipping
       : undefined
-    const paymentDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v6'
+    const paymentDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
       ? ecommerceDraft.pricing.payment
       : undefined
-    const pricedOrderTotal = (promotionDecision?.netSubtotalMmk ?? orderTotal) + (shippingDecision?.feeMmk ?? 0)
+    const taxDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+      ? ecommerceDraft.pricing.tax
+      : undefined
+    if (taxDecision) {
+      const draftTaxCalculation = commerceOrderCalculation(
+        commerce,
+        taxDecision.listedSubtotalMmk,
+        taxDecision.reviewedAt,
+      )
+      const draftTaxConfiguration = taxDecision.taxConfigurationRevision === null
+        ? null
+        : (commerce.taxConfigurations ?? []).find((candidate) => candidate.revision === taxDecision.taxConfigurationRevision) ?? null
+      if (!draftTaxCalculation
+        || draftTaxCalculation.totalMmk !== taxDecision.totalMmk
+        || draftTaxCalculation.taxMmk !== taxDecision.taxMmk
+        || ('taxConfigurationRevision' in draftTaxCalculation
+          ? draftTaxCalculation.taxConfigurationRevision !== taxDecision.taxConfigurationRevision
+          : taxDecision.taxConfigurationRevision !== null)
+        || (draftTaxConfiguration?.proof.actionId ?? null) !== taxDecision.policyActionId) {
+        detachPreparedOrderSources({ channel: false })
+        setNotice('The Shop tax schedule changed after Ecommerce review. Reopen the request; no order was prepared.')
+        return
+      }
+    }
+    const listedOrderTotal = (promotionDecision?.netSubtotalMmk ?? orderTotal) + (shippingDecision?.feeMmk ?? 0)
+    const pricedOrderTotal = taxDecision?.totalMmk ?? listedOrderTotal
     if (shippingDecision?.promiseMinutes
       && Date.parse(canonicalPromisedAt) < Date.parse(shippingDecision.reviewedAt) + shippingDecision.promiseMinutes * 60_000) {
       setNotice(`Choose a promise at least ${shippingDecision.promiseMinutes} minutes after the governed delivery review.`)
@@ -3541,7 +3568,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
       ...(promotionDecision ? { promotionDecision } : {}),
       ...(shippingDecision ? { shippingDecision } : {}),
       ...(paymentDecision ? { paymentDecision } : {}),
-      total: pricedOrderTotal,
+      total: listedOrderTotal,
       status: 'confirmed',
     }
     const lineReview = orderLines.map((line) => `${line.sku} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(', ')
@@ -3562,9 +3589,21 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
         return
       }
     }
-    const calculationReview = commerceOrderCalculation(commerce, pricedOrderTotal, reviewedAt.toISOString())
+    const calculationReview = commerceOrderCalculation(commerce, listedOrderTotal, reviewedAt.toISOString())
     if (!calculationReview) {
       setNotice('The order total cannot be calculated safely. Review item prices and tax setup before continuing.')
+      return
+    }
+    if (taxDecision && (calculationReview.totalMmk !== taxDecision.totalMmk
+      || calculationReview.taxMmk !== taxDecision.taxMmk
+      || ('listedSubtotalMmk' in calculationReview
+        ? calculationReview.listedSubtotalMmk
+        : calculationReview.subtotalMmk) !== taxDecision.listedSubtotalMmk
+      || ('taxConfigurationRevision' in calculationReview
+        ? calculationReview.taxConfigurationRevision !== taxDecision.taxConfigurationRevision
+        : taxDecision.taxConfigurationRevision !== null))) {
+      detachPreparedOrderSources({ channel: false })
+      setNotice('The governed Ecommerce tax total no longer matches Shop. Reopen the request; no order was queued.')
       return
     }
     const creditReview = commerceCustomerCreditReview(
@@ -5170,7 +5209,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
       {orderEntryMode === 'manual' ? <>
         <div className="order-entry-panel" data-mode="manual">
         {preparedEcommerceDraft ? <div className="channel-source-ready">
-          <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.schema === 'supermega.ecommerce.shop_draft.v6' ? `${preparedEcommerceDraft.operatingContext.operatingUnitLocationId} · ${preparedEcommerceDraft.customerProfile?.phone ? `${preparedEcommerceDraft.customerProfile.phone} · ` : ''}${preparedEcommerceDraft.deliveryAddress ? `${preparedEcommerceDraft.deliveryAddress.township}, ${preparedEcommerceDraft.deliveryAddress.city} · ` : ''}${preparedEcommerceDraft.pricing.promotion.status === 'approved' ? `${preparedEcommerceDraft.pricing.promotion.code} approved · -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)} · ` : preparedEcommerceDraft.pricing.promotion.status === 'rejected' ? `${preparedEcommerceDraft.pricing.promotion.code} rejected · ` : ''}${preparedEcommerceDraft.pricing.shipping.status === 'approved' ? `${preparedEcommerceDraft.pricing.shipping.zoneCode} delivery · ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)} · ` : ''}${preparedEcommerceDraft.pricing.payment.adapter.replaceAll('_', ' ')} · policy ${preparedEcommerceDraft.pricing.payment.policyRevision} · governed handoff · ` : ''}{preparedEcommerceDraft.fulfilment} · price locked · payment not authorized · no stock reserved</small></div>
+          <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.schema === 'supermega.ecommerce.shop_draft.v7' ? `${preparedEcommerceDraft.operatingContext.operatingUnitLocationId} · ${preparedEcommerceDraft.customerProfile?.phone ? `${preparedEcommerceDraft.customerProfile.phone} · ` : ''}${preparedEcommerceDraft.deliveryAddress ? `${preparedEcommerceDraft.deliveryAddress.township}, ${preparedEcommerceDraft.deliveryAddress.city} · ` : ''}${preparedEcommerceDraft.pricing.promotion.status === 'approved' ? `${preparedEcommerceDraft.pricing.promotion.code} approved · -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)} · ` : preparedEcommerceDraft.pricing.promotion.status === 'rejected' ? `${preparedEcommerceDraft.pricing.promotion.code} rejected · ` : ''}${preparedEcommerceDraft.pricing.shipping.status === 'approved' ? `${preparedEcommerceDraft.pricing.shipping.zoneCode} delivery · ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)} · ` : ''}${preparedEcommerceDraft.pricing.tax.status === 'configured' ? `${preparedEcommerceDraft.pricing.tax.taxCode} tax ${formatMoney(preparedEcommerceDraft.pricing.tax.taxMmk)} · ` : 'tax not configured · '}${preparedEcommerceDraft.pricing.payment.adapter.replaceAll('_', ' ')} · policy ${preparedEcommerceDraft.pricing.payment.policyRevision} · governed handoff · ` : ''}{preparedEcommerceDraft.fulfilment} · price locked · payment not authorized · no stock reserved</small></div>
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ channel: false }); setNotice('Ecommerce source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
         </div> : null}
         {preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? <div className="channel-source-ready" ref={preparedChannelRef} tabIndex={-1}>
@@ -5193,7 +5232,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
             <label>Handoff reference<input disabled={commerceControlsDisabled} maxLength={160} onChange={(event) => setFulfilmentReference(event.target.value)} placeholder="Pickup ticket or delivery route" required value={fulfilmentReference} /></label>
             <label>{extraOrderLines.length ? 'Item 1' : 'Item'}<select disabled={commerceControlsDisabled} value={selectedSku} onChange={(event) => { setSku(event.target.value); detachPreparedOrderSources() }}>{!commerce.items.some((item) => item.sku === selectedSku) && selectedSku ? <option disabled value={selectedSku}>{selectedSku} · no longer in Shop</option> : null}{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
             <label>{extraOrderLines.length ? 'Quantity 1' : 'Quantity'}<input disabled={commerceControlsDisabled} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); detachPreparedOrderSources() }} /></label>
-            <div className="order-total"><span>{manualOrderLineDrafts.length} {manualOrderLineDrafts.length === 1 ? 'item' : 'items'} · {manualOrderQuantity} units{preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v6' && preparedEcommerceDraft.pricing.promotion.status === 'approved' ? ` · ${preparedEcommerceDraft.pricing.promotion.code} -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)}` : ''}{preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v6' && preparedEcommerceDraft.pricing.shipping.feeMmk ? ` · delivery ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)}` : ''}</span><strong>{formatMoney(manualOrderPricedTotal)}</strong></div>
+            <div className="order-total"><span>{manualOrderLineDrafts.length} {manualOrderLineDrafts.length === 1 ? 'item' : 'items'} · {manualOrderQuantity} units{preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7' && preparedEcommerceDraft.pricing.promotion.status === 'approved' ? ` · ${preparedEcommerceDraft.pricing.promotion.code} -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)}` : ''}{preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7' && preparedEcommerceDraft.pricing.shipping.feeMmk ? ` · delivery ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)}` : ''}{preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7' && preparedEcommerceDraft.pricing.tax.taxMmk ? ` · tax ${formatMoney(preparedEcommerceDraft.pricing.tax.taxMmk)}` : ''}</span><strong>{formatMoney(manualOrderPricedTotal)}</strong></div>
           </div>
           {paymentTermsDays !== 0 ? <p className="form-notice" data-customer-credit-review={orderCreditReview?.reason ?? 'calculation_unavailable'}>
             {orderCreditReview?.allowed

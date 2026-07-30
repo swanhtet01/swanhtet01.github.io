@@ -367,12 +367,16 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
             current_promotion_policies=promotion_policies(),
             current_shipping_policies=shipping_policies(),
             current_payment_policies=payment_policies(),
+            current_tax_configurations=tax_configurations(),
+            catalog_revision=7,
             confirmed_at="2026-07-26T10:10:00+06:30",
         )
         self.assertEqual(draft["customerProfile"], first["customerProfile"])
         self.assertEqual(draft["deliveryAddress"], first["deliveryAddress"])
         self.assertEqual(draft["pricing"]["shipping"]["zoneCode"], "YGN-WEST")
         self.assertEqual(draft["pricing"]["shipping"]["feeMmk"], 3_000)
+        self.assertEqual(draft["pricing"]["tax"]["taxMmk"], 2_693)
+        self.assertEqual(draft["totalMmk"], 56_543)
         self.assertEqual(state["requests"][0]["deliveryAddress"], first["deliveryAddress"])
 
         next_key = "ECI-12345678-1234-4ABC-8ABC-1234567890AC"
@@ -485,6 +489,8 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
             current_promotion_policies=promotion_policies(),
             current_shipping_policies=shipping_policies(),
             current_payment_policies=payment_policies(),
+            current_tax_configurations=tax_configurations(),
+            catalog_revision=7,
             confirmed_at="2026-07-26T10:10:00+06:30",
         )
         self.assertEqual(draft["schema"], ECOMMERCE_SHOP_DRAFT_SCHEMA)
@@ -496,7 +502,10 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         self.assertEqual(draft["pricing"]["promotion"]["status"], "approved")
         self.assertEqual(draft["pricing"]["promotion"]["policyRevision"], 1)
         self.assertEqual(draft["pricing"]["promotion"]["discountMmk"], 5_650)
-        self.assertEqual(draft["totalMmk"], 50_850)
+        self.assertEqual(draft["pricing"]["tax"]["listedSubtotalMmk"], 50_850)
+        self.assertEqual(draft["pricing"]["tax"]["taxMmk"], 2_543)
+        self.assertEqual(draft["pricing"]["tax"]["policyActionId"], "ACT-TAX-COMMERCIAL-R1")
+        self.assertEqual(draft["totalMmk"], 53_393)
         with self.assertRaisesRegex(EcommerceLifecycleValidationError, "expired"):
             prepare_ecommerce_shop_handoff(
                 candidate,
@@ -504,6 +513,8 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
                 current_promotion_policies=promotion_policies(),
                 current_shipping_policies=shipping_policies(),
                 current_payment_policies=payment_policies(),
+                current_tax_configurations=tax_configurations(),
+                catalog_revision=7,
                 confirmed_at="2026-07-26T10:15:01+06:30",
             )
 
@@ -525,6 +536,8 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
                         current_promotion_policies=promotion_policies(),
                         current_shipping_policies=shipping_policies(),
                         current_payment_policies=payment_policies(),
+                        current_tax_configurations=tax_configurations(),
+                        catalog_revision=7,
                         confirmed_at="2026-07-26T10:10:00+06:30",
                     )
                 self.assertEqual(catalog, before)

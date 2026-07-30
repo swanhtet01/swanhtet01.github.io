@@ -23,7 +23,7 @@ ECOMMERCE_TAX_DECISION_SCHEMA = "supermega.ecommerce.tax-decision.v1"
 ECOMMERCE_CUSTOMER_PROFILE_SCHEMA = "supermega.ecommerce.customer_profile_snapshot.v1"
 ECOMMERCE_DELIVERY_ADDRESS_SCHEMA = "supermega.ecommerce.delivery_address_snapshot.v1"
 ECOMMERCE_REQUEST_SCHEMA = "supermega.ecommerce.order_request.v2"
-ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v6"
+ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v7"
 ECOMMERCE_RETURN_INTENT_SCHEMA = "supermega.ecommerce.return_intent.v1"
 ECOMMERCE_SUPPORT_INTENT_SCHEMA = "supermega.ecommerce.support_intent.v1"
 ECOMMERCE_LIFECYCLE_STATE_SCHEMA = "supermega.ecommerce.buying_lifecycle.v1"
@@ -1344,6 +1344,8 @@ def prepare_ecommerce_shop_handoff(
     current_promotion_policies: Sequence[Mapping[str, object]],
     current_shipping_policies: Sequence[Mapping[str, object]],
     current_payment_policies: Sequence[Mapping[str, object]],
+    current_tax_configurations: Sequence[Mapping[str, object]],
+    catalog_revision: int,
     confirmed_at: str,
 ) -> dict[str, Any]:
     """Revalidate quote intent and prepare one review-only Shop draft."""
@@ -1388,7 +1390,14 @@ def prepare_ecommerce_shop_handoff(
     )
     if shipping["status"] == "rejected":
         raise _fail(f"Shop delivery is unavailable for {shipping['township']} ({shipping['reason']}).")
-    total_mmk = promotion["netSubtotalMmk"] + shipping["feeMmk"]
+    listed_subtotal_mmk = promotion["netSubtotalMmk"] + shipping["feeMmk"]
+    tax = review_ecommerce_tax(
+        current_tax_configurations,
+        listed_subtotal_mmk,
+        confirmed,
+        catalog_revision,
+    )
+    total_mmk = tax["totalMmk"]
     payment = review_ecommerce_payment(
         current_payment_policies,
         quote["payment"]["adapter"],
@@ -1428,7 +1437,7 @@ def prepare_ecommerce_shop_handoff(
         "pricing": {
             "subtotalMmk": quote["subtotalMmk"],
             "promotion": promotion,
-            "tax": _canonical_copy(quote["tax"]),
+            "tax": tax,
             "shipping": shipping,
             "payment": payment,
             "totalMmk": total_mmk,
@@ -1441,7 +1450,10 @@ def prepare_ecommerce_shop_handoff(
             f"{promotion['policyRevision'] if promotion['policyRevision'] is not None else 'none'}:"
             f"{promotion['discountMmk']}:shipping:{shipping['status']}:"
             f"{shipping['policyRevision'] if shipping['policyRevision'] is not None else 'none'}:"
-            f"{shipping['feeMmk']}:payment:{payment['status']}:"
+            f"{shipping['feeMmk']}:tax:{tax['status']}:"
+            f"{tax['taxConfigurationRevision'] if tax['taxConfigurationRevision'] is not None else 'none'}:"
+            f"{tax['policyActionId'] if tax['policyActionId'] is not None else 'none'}:"
+            f"{tax['taxMode']}:{tax['taxMmk']}:{tax['totalMmk']}:payment:{payment['status']}:"
             f"{payment['policyRevision'] if payment['policyRevision'] is not None else 'none'}:"
             f"{payment['adapter']}"
         ),

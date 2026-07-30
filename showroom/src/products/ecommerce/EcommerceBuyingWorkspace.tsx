@@ -580,13 +580,15 @@ export function EcommerceBuyingWorkspace({
         currentPromotionPolicies: commerceState.promotionPolicies ?? [],
         currentShippingPolicies: commerceState.shippingPolicies ?? [],
         currentPaymentPolicies: commerceState.paymentPolicies ?? [],
+        currentTaxConfigurations: commerceState.taxConfigurations ?? [],
+        catalogRevision: commerceState.catalogChanges?.length ?? 0,
         confirmedAt: new Date().toISOString(),
       })
       if (onOpenManagedRequest) {
         setNotice(`${latestRequest.id} is ready in the managed Shop inbox. Payment remains unauthorized.`)
         onOpenManagedRequest(latestRequest.id)
       } else {
-        setNotice(`${draft.id} is ready for Shop review. ${draft.pricing.promotion.status === 'approved' ? `${formatMmk(draft.pricing.promotion.discountMmk)} promotion approved.` : draft.pricing.promotion.status === 'rejected' ? 'The promotion code was rejected by Shop policy.' : 'No promotion requested.'} Payment remains unauthorized.`)
+        setNotice(`${draft.id} is ready for Shop review at ${formatMmk(draft.totalMmk)}. ${draft.pricing.promotion.status === 'approved' ? `${formatMmk(draft.pricing.promotion.discountMmk)} promotion approved.` : draft.pricing.promotion.status === 'rejected' ? 'The promotion code was rejected by Shop policy.' : 'No promotion requested.'} ${draft.pricing.tax.status === 'configured' ? `${formatMmk(draft.pricing.tax.taxMmk)} tax uses ${draft.pricing.tax.taxCode} revision ${draft.pricing.tax.taxConfigurationRevision}.` : 'No Shop tax schedule is configured.'} Payment remains unauthorized.`)
         onDraft(draft)
       }
     } catch (error) {
