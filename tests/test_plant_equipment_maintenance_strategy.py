@@ -181,6 +181,43 @@ def _maintenance_finding_issue_state(
     return state
 
 
+def _maintenance_finding_resolution_state(
+    current: dict[str, object],
+    evidence: dict[str, str],
+    corrective_action: dict[str, object],
+) -> dict[str, object]:
+    state = deepcopy(current)
+    issue = next(candidate for candidate in state["issues"] if "maintenanceFindingSource" in candidate)
+    resolution = {
+        "actionId": evidence["actionId"],
+        "resolvedAt": evidence["capturedAt"],
+        "resolvedBy": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "maintenanceCorrectiveAction": deepcopy(corrective_action),
+    }
+    state["issues"] = [
+        {**candidate, "status": "resolved", "resolution": resolution}
+        if candidate["id"] == issue["id"]
+        else candidate
+        for candidate in state["issues"]
+    ]
+    state["revision"] += 1
+    state["events"] = [{
+        "id": f"EVT-{evidence['actionId']}",
+        "actionId": evidence["actionId"],
+        "createdAt": evidence["capturedAt"],
+        "actor": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "kind": "issue_resolved",
+        "subjectId": issue["id"],
+        "summary": f"Resolved {issue['kind']} issue for {issue['area']}",
+        "maintenanceCorrectiveAction": deepcopy(corrective_action),
+    }, *state["events"]]
+    return state
+
+
 class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
     def test_strategy_is_versioned_without_starting_maintenance(self) -> None:
         current = _commissioned_state()
@@ -530,6 +567,66 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
                 opened,
                 {"state": duplicate, "evidence": duplicate_evidence},
             )
+
+        resolution_evidence = _maintenance_evidence(
+            "ACT-MAINTENANCE-CORRECTIVE-CLOSE-504",
+            "2026-08-16T12:00:00.000Z",
+            "Reviewed corrective action and final service disposition",
+        )
+        corrective_action = {
+            "contract": "supermega.production.maintenance-corrective-action.v1",
+            "correctiveAction": "Replaced the worn seal and retained the removed part reference",
+            "verificationResult": "Leak inspection passed at reviewed operating pressure",
+            "finalDisposition": "recommended",
+        }
+        proposed_resolution = _maintenance_finding_resolution_state(
+            opened,
+            resolution_evidence,
+            corrective_action,
+        )
+        resolved = reduce_production_state(
+            "production.issue.resolved",
+            opened,
+            {"state": proposed_resolution, "evidence": resolution_evidence},
+        )
+        self.assertEqual(
+            resolved["issues"][0]["resolution"]["maintenanceCorrectiveAction"],
+            corrective_action,
+        )
+        self.assertEqual(
+            resolved["events"][0]["maintenanceCorrectiveAction"],
+            corrective_action,
+        )
+        self.assertEqual(resolved["jobs"], opened["jobs"])
+        self.assertEqual(resolved["machines"], opened["machines"])
+        self.assertEqual(resolved["equipmentMaster"], opened["equipmentMaster"])
+
+        resolution_tamper = []
+        missing_result = deepcopy(proposed_resolution)
+        missing_result["issues"][0]["resolution"].pop("maintenanceCorrectiveAction")
+        missing_result["events"][0].pop("maintenanceCorrectiveAction")
+        resolution_tamper.append(missing_result)
+        mismatched_event = deepcopy(proposed_resolution)
+        mismatched_event["events"][0]["maintenanceCorrectiveAction"]["finalDisposition"] = "restricted"
+        resolution_tamper.append(mismatched_event)
+        invalid_contract = deepcopy(proposed_resolution)
+        invalid_contract["issues"][0]["resolution"]["maintenanceCorrectiveAction"]["contract"] = "unsupported"
+        invalid_contract["events"][0]["maintenanceCorrectiveAction"]["contract"] = "unsupported"
+        resolution_tamper.append(invalid_contract)
+        blank_verification = deepcopy(proposed_resolution)
+        blank_verification["issues"][0]["resolution"]["maintenanceCorrectiveAction"]["verificationResult"] = ""
+        blank_verification["events"][0]["maintenanceCorrectiveAction"]["verificationResult"] = ""
+        resolution_tamper.append(blank_verification)
+        changed_master_on_close = deepcopy(proposed_resolution)
+        changed_master_on_close["equipmentMaster"]["assets"][0]["owner"] = "Other asset owner"
+        resolution_tamper.append(changed_master_on_close)
+        for candidate in resolution_tamper:
+            with self.subTest(candidate=candidate), self.assertRaises(TrialValidationError):
+                reduce_production_state(
+                    "production.issue.resolved",
+                    opened,
+                    {"state": candidate, "evidence": resolution_evidence},
+                )
 
     def test_due_queue_orders_real_strategies_and_retains_completion_basis(self) -> None:
         first_commissioned = _commissioned_state()

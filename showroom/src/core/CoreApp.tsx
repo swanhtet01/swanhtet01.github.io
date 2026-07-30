@@ -188,6 +188,7 @@ import {
   type ProductionJob,
   type ProductionJobPriority,
   type ProductionMaintenanceOutcome,
+  type ProductionMaintenanceCorrectiveAction,
   type ProductionMaintenanceFindingSource,
   type ProductionMaintenanceRecord,
   type ProductionMaintenanceResult,
@@ -5752,6 +5753,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [issueClock, setIssueClock] = useState(Date.now)
   const [issueDialogOpen, setIssueDialogOpen] = useState(false)
   const [issueMaintenanceFindingSource, setIssueMaintenanceFindingSource] = useState<ProductionMaintenanceFindingSource | null>(null)
+  const [maintenanceCorrectiveDraft, setMaintenanceCorrectiveDraft] = useState<{
+    issueId: string
+    correctiveAction: string
+    verificationResult: string
+    finalDisposition: ProductionMaintenanceReturnToService
+  } | null>(null)
   const [machineObservation, setMachineObservation] = useState<{ machineId: string; toState: ProductionMachineState } | null>(null)
   const [downtimeDialogOpen, setDowntimeDialogOpen] = useState(false)
   const [downtimeMachineId, setDowntimeMachineId] = useState(production.machines[0]?.id ?? '')
@@ -5799,6 +5806,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [planBusy, setPlanBusy] = useState(false)
   const [planError, setPlanError] = useState('')
   const issueDialogRef = useRef<HTMLDialogElement>(null)
+  const maintenanceCorrectiveDialogRef = useRef<HTMLDialogElement>(null)
   const issueTriggerRef = useRef<HTMLButtonElement>(null)
   const machineDialogRef = useRef<HTMLDialogElement>(null)
   const machineTriggerRef = useRef<HTMLButtonElement | null>(null)
@@ -6228,6 +6236,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
     if (!issueDialogOpen && dialog.open) dialog.close()
   }, [issueDialogOpen, tab])
+
+  useEffect(() => {
+    const dialog = maintenanceCorrectiveDialogRef.current
+    if (!dialog) return
+    if (maintenanceCorrectiveDraft && !dialog.open) dialog.showModal()
+    if (!maintenanceCorrectiveDraft && dialog.open) dialog.close()
+  }, [maintenanceCorrectiveDraft, tab])
 
   useEffect(() => {
     const dialog = machineDialogRef.current
@@ -6879,14 +6894,51 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   function resolveIssue(issueId: string) {
     const issue = production.issues.find((candidate) => candidate.id === issueId)
     if (!issue || issue.status === 'resolved') return
+    if (issue.maintenanceFindingSource) {
+      setMaintenanceCorrectiveDraft({
+        issueId,
+        correctiveAction: '',
+        verificationResult: '',
+        finalDisposition: issue.maintenanceFindingSource.returnToService,
+      })
+      return
+    }
+    queueIssueResolution(issue)
+  }
+
+  function reviewMaintenanceCorrectiveResolution(event: FormEvent) {
+    event.preventDefault()
+    if (!maintenanceCorrectiveDraft) return
+    const issue = production.issues.find((candidate) => candidate.id === maintenanceCorrectiveDraft.issueId)
+    const correctiveAction = maintenanceCorrectiveDraft.correctiveAction.trim()
+    const verificationResult = maintenanceCorrectiveDraft.verificationResult.trim()
+    if (!issue?.maintenanceFindingSource || !correctiveAction || !verificationResult) {
+      setNotice('Record the corrective action and verification result before review.')
+      return
+    }
+    const result: ProductionMaintenanceCorrectiveAction = {
+      contract: 'supermega.production.maintenance-corrective-action.v1',
+      correctiveAction,
+      verificationResult,
+      finalDisposition: maintenanceCorrectiveDraft.finalDisposition,
+    }
+    maintenanceCorrectiveDialogRef.current?.close()
+    setMaintenanceCorrectiveDraft(null)
+    queueIssueResolution(issue, result)
+  }
+
+  function queueIssueResolution(issue: ProductionIssue, maintenanceCorrectiveAction?: ProductionMaintenanceCorrectiveAction) {
+    const issueId = issue.id
     queueAction({
       kind: 'issue_resolution',
       subjectId: issueId,
       summary: `Resolve ${issueId}`,
       before: issue.owner && issue.containment ? `${issue.status} · owner ${issue.owner} · containment: ${issue.containment}` : `${issue.status} · legacy issue without assigned owner`,
-      after: 'resolved with operator evidence',
+      after: maintenanceCorrectiveAction
+        ? `resolved with corrective action and ${maintenanceCorrectiveAction.finalDisposition.replaceAll('_', ' ')} disposition; machine status unchanged`
+        : 'resolved with operator evidence',
       apply: async (record) => {
-        await mutateProduction('production.issue.resolved', record.commandId, productionActionProof(record), (current) => resolveProductionIssue(current, issueId, productionActionProof(record)))
+        await mutateProduction('production.issue.resolved', record.commandId, productionActionProof(record), (current) => resolveProductionIssue(current, issueId, productionActionProof(record), maintenanceCorrectiveAction))
       },
     })
   }
@@ -7436,6 +7488,18 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <div className="form-actions"><button className="core-button" onClick={closeIssueDialog} type="button">Cancel</button><button className="core-button primary" type="submit">Review problem</button></div>
       </form>
     </dialog>
+    <dialog aria-labelledby="maintenance-corrective-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); setMaintenanceCorrectiveDraft(null) }} ref={maintenanceCorrectiveDialogRef}>
+      {maintenanceCorrectiveDraft ? <>
+        <div className="panel-head"><div><span className="core-eyebrow">Maintenance closeout</span><h2 id="maintenance-corrective-title">Review corrective action</h2></div><button aria-label="Close corrective action form" className="text-link" onClick={() => setMaintenanceCorrectiveDraft(null)} type="button">Close</button></div>
+        <form autoComplete="off" className="core-form" onSubmit={reviewMaintenanceCorrectiveResolution}>
+          <label>Corrective action<textarea autoFocus maxLength={360} onChange={(event) => setMaintenanceCorrectiveDraft((current) => current ? { ...current, correctiveAction: event.target.value } : current)} placeholder="What was corrected or controlled?" required value={maintenanceCorrectiveDraft.correctiveAction} /></label>
+          <label>Verification result<textarea maxLength={360} onChange={(event) => setMaintenanceCorrectiveDraft((current) => current ? { ...current, verificationResult: event.target.value } : current)} placeholder="What evidence shows the action was effective?" required value={maintenanceCorrectiveDraft.verificationResult} /></label>
+          <label>Final return-to-service disposition<select onChange={(event) => setMaintenanceCorrectiveDraft((current) => current ? { ...current, finalDisposition: event.target.value as ProductionMaintenanceReturnToService } : current)} value={maintenanceCorrectiveDraft.finalDisposition}><option value="recommended">Recommended</option><option value="restricted">Restricted service</option><option value="not_recommended">Not recommended</option></select></label>
+          <p className="panel-copy">This closes the problem record only. It does not change machine status, dispatch work, buy parts, or control equipment.</p>
+          <div className="form-actions"><button className="core-button" onClick={() => setMaintenanceCorrectiveDraft(null)} type="button">Cancel</button><button className="core-button primary" type="submit">Review closeout</button></div>
+        </form>
+      </> : null}
+    </dialog>
     {actionControls}
   </div>
 
@@ -7482,7 +7546,9 @@ function IssueList({ disabled = false, issues, now, onResolve }: { disabled?: bo
           <small style={wrappedIssueDetail}>{overdue ? 'OVERDUE' : `Due ${formatIssueDue(issue.dueAt ?? '')}`} · Owner {issue.owner}</small>
           <small style={wrappedIssueDetail}>Next: {issue.containment}</small>
         </> : <small style={wrappedIssueDetail}>Legacy problem · owner, due time, and containment were not recorded</small>}
+        {issue.maintenanceFindingSource ? <small style={wrappedIssueDetail}>Maintenance finding · {issue.maintenanceFindingSource.equipmentName} · Strategy R{issue.maintenanceFindingSource.strategyRevision} · Source {issue.maintenanceFindingSource.completionActionId}</small> : null}
         {issue.status === 'resolved' ? <small style={wrappedIssueDetail}>{issue.resolution ? `Resolved by ${issue.resolution.resolvedBy} · Evidence: ${issue.resolution.evidenceReference}` : 'Legacy resolution · no attributed proof was available'}</small> : null}
+        {issue.resolution?.maintenanceCorrectiveAction ? <small style={wrappedIssueDetail}>Corrective action: {issue.resolution.maintenanceCorrectiveAction.correctiveAction} · Verified: {issue.resolution.maintenanceCorrectiveAction.verificationResult} · Final disposition: {issue.resolution.maintenanceCorrectiveAction.finalDisposition.replaceAll('_', ' ')}</small> : null}
       </div>
       {issue.status === 'open' ? <button className="text-link" disabled={disabled} onClick={() => onResolve(issue.id)} type="button">Review close</button> : <b>Resolved</b>}
     </article>

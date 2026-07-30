@@ -151,8 +151,8 @@
       "localAutomation": {
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Require one maintenance-finding problem to close with a structured corrective-action result and reviewed return-to-service disposition linked to the original completion and issue; never change machine state automatically, dispatch work, buy parts, control equipment, or infer telemetry.",
-        "reason": "Plant now opens exactly one evidence-bound problem from a limiting maintenance result. The next operational gap is a governed closeout that proves what was corrected and preserves the final human disposition without pretending that issue resolution controls the asset."
+        "workOrder": "Let a named human turn one released Plant output batch into one exact Shop inventory receipt at a reviewed location and lot, duplicate-safe and evidence-linked; never move stock automatically, rewrite Plant output, post costing or accounting, or infer telemetry.",
+        "reason": "Plant maintenance now has a governed finding-to-closeout lifecycle. The highest-value integration gap is the other side of manufacturing flow: released finished goods should enter Shop inventory through one accountable receipt instead of manual duplicate entry or a second stock authority."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }

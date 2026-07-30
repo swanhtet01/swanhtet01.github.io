@@ -210,6 +210,10 @@ _EQUIPMENT_CRITICALITIES = frozenset({"critical", "high", "medium", "low"})
 _EQUIPMENT_ID_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9._/-]{0,79}$")
 _EVIDENCE_FIELDS = frozenset({"actionId", "capturedAt", "actor", "reason", "evidenceReference"})
 _RESOLUTION_FIELDS = frozenset({"actionId", "resolvedAt", "resolvedBy", "reason", "evidenceReference"})
+_RESOLUTION_OPTIONAL_FIELDS = frozenset({"maintenanceCorrectiveAction"})
+_MAINTENANCE_CORRECTIVE_ACTION_FIELDS = frozenset(
+    {"contract", "correctiveAction", "verificationResult", "finalDisposition"}
+)
 _EVENT_FIELDS = frozenset(
     {
         "id",
@@ -266,6 +270,7 @@ _ISSUE_EVENT_FIELDS = frozenset(
     {"issueSeverity", "issueOwner", "issueDueAt", "issueContainment"}
 )
 _ISSUE_EVENT_OPTIONAL_FIELDS = _ISSUE_EVENT_FIELDS | {"maintenanceFindingSource"}
+_ISSUE_RESOLVED_EVENT_OPTIONAL_FIELDS = frozenset({"maintenanceCorrectiveAction"})
 _EQUIPMENT_COMMISSION_EVENT_FIELDS = frozenset(
     {"installedAt", "toState", "workCentreId"}
 )
@@ -445,14 +450,36 @@ def _evidence(value: object) -> dict[str, str]:
     }
 
 
+def _maintenance_corrective_action(candidate: object, field: str) -> dict[str, Any]:
+    action = _object(candidate, field)
+    _exact_fields(action, field, required=_MAINTENANCE_CORRECTIVE_ACTION_FIELDS)
+    if action["contract"] != "supermega.production.maintenance-corrective-action.v1":
+        raise TrialValidationError(f"{field}.contract is unsupported.")
+    _text(action["correctiveAction"], f"{field}.correctiveAction", maximum=360)
+    _text(action["verificationResult"], f"{field}.verificationResult", maximum=360)
+    if action["finalDisposition"] not in _MAINTENANCE_RETURN_TO_SERVICE:
+        raise TrialValidationError(f"{field}.finalDisposition is unsupported.")
+    return action
+
+
 def _resolution(value: object, field: str) -> dict[str, Any]:
     resolution = _object(value, field)
-    _exact_fields(resolution, field, required=_RESOLUTION_FIELDS)
+    _exact_fields(
+        resolution,
+        field,
+        required=_RESOLUTION_FIELDS,
+        optional=_RESOLUTION_OPTIONAL_FIELDS,
+    )
     _text(resolution["actionId"], f"{field}.actionId", maximum=160)
     _timestamp(resolution["resolvedAt"], f"{field}.resolvedAt")
     _text(resolution["resolvedBy"], f"{field}.resolvedBy")
     _text(resolution["reason"], f"{field}.reason")
     _text(resolution["evidenceReference"], f"{field}.evidenceReference")
+    if "maintenanceCorrectiveAction" in resolution:
+        _maintenance_corrective_action(
+            resolution["maintenanceCorrectiveAction"],
+            f"{field}.maintenanceCorrectiveAction",
+        )
     return resolution
 
 
@@ -679,7 +706,13 @@ def _validate_issue(candidate: object, index: int) -> dict[str, Any]:
     elif "resolution" not in issue:
         raise TrialValidationError(f"{field} is resolved without resolution evidence.")
     else:
-        _resolution(issue["resolution"], f"{field}.resolution")
+        resolution = _resolution(issue["resolution"], f"{field}.resolution")
+        if ("maintenanceFindingSource" in issue) != (
+            "maintenanceCorrectiveAction" in resolution
+        ):
+            raise TrialValidationError(
+                f"{field} maintenance finding resolution requires one structured corrective action only."
+            )
     return issue
 
 
@@ -1024,6 +1057,8 @@ def _validate_event(
             if kind == "material_consumed"
             else _ISSUE_EVENT_OPTIONAL_FIELDS
             if kind == "issue_opened"
+            else _ISSUE_RESOLVED_EVENT_OPTIONAL_FIELDS
+            if kind == "issue_resolved"
             else _MAINTENANCE_STRATEGY_BINDING_FIELDS
             if kind == "maintenance_started"
             else _MAINTENANCE_COMPLETION_STRATEGY_FIELDS
@@ -1386,6 +1421,14 @@ def _validate_event(
                 event["maintenanceFindingSource"],
                 f"{field}.maintenanceFindingSource",
             )
+    elif kind == "issue_resolved":
+        if subject_id not in issue_ids:
+            raise TrialValidationError(f"{field} references an unknown issue.")
+        if "maintenanceCorrectiveAction" in event:
+            _maintenance_corrective_action(
+                event["maintenanceCorrectiveAction"],
+                f"{field}.maintenanceCorrectiveAction",
+            )
     elif subject_id not in issue_ids:
         raise TrialValidationError(f"{field} references an unknown issue.")
     return event
@@ -1539,6 +1582,8 @@ def _validate_issue_history(
             or event["actor"] != resolution["resolvedBy"]
             or event["reason"] != resolution["reason"]
             or event["evidenceReference"] != resolution["evidenceReference"]
+            or event.get("maintenanceCorrectiveAction")
+            != resolution.get("maintenanceCorrectiveAction")
         ):
             raise TrialValidationError(
                 f"issues[{index}] resolution does not match its immutable event."
@@ -3114,6 +3159,10 @@ def _validate_issue_resolved(
     event: Mapping[str, Any],
 ) -> None:
     _require_unchanged(current, next_state, "jobs", "machines")
+    if current.get("equipmentMaster") != next_state.get("equipmentMaster"):
+        raise TrialValidationError(
+            "resolving a Production issue cannot change the equipment master."
+        )
     before, after = _one_changed(
         current["issues"],
         next_state["issues"],
@@ -3127,7 +3176,18 @@ def _validate_issue_resolved(
         "resolvedBy": event["actor"],
         "reason": event["reason"],
         "evidenceReference": event["evidenceReference"],
+        **(
+            {"maintenanceCorrectiveAction": event["maintenanceCorrectiveAction"]}
+            if "maintenanceCorrectiveAction" in event
+            else {}
+        ),
     }
+    if ("maintenanceFindingSource" in before) != (
+        "maintenanceCorrectiveAction" in event
+    ):
+        raise TrialValidationError(
+            "maintenance finding resolution requires one structured corrective action only."
+        )
     if after != {**before, "status": "resolved", "resolution": resolution}:
         raise TrialValidationError(
             "issue resolution may change only status and exact command evidence."
