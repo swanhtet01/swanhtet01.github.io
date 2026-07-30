@@ -124,6 +124,20 @@ class TrialClientImportApplyRequest(_StrictRequest):
     package: dict[str, Any]
 
 
+class TrialPlantEquipmentCommissionRequest(_StrictRequest):
+    command_id: UUID
+    expected_version: int = Field(ge=1)
+    equipment_id: str = Field(
+        min_length=1,
+        max_length=80,
+        pattern=r"^[A-Z0-9][A-Z0-9._/-]{0,79}$",
+    )
+    installed_at: str = Field(min_length=24, max_length=24)
+    initial_state: Literal["running", "attention", "stopped"]
+    safety_baseline_reference: str = Field(min_length=1, max_length=240)
+    confirmation: str = Field(min_length=12, max_length=91)
+
+
 class TrialOrderIntakeDraftRequest(_StrictRequest):
     source_label: str = Field(min_length=1, max_length=120)
     message: str = Field(min_length=1, max_length=MAX_ORDER_MESSAGE_LENGTH)
@@ -978,6 +992,57 @@ def create_trial_router(
                 "workspace_id": principal.workspace_id,
                 "external_writes_performed": True,
                 "commissioning_performed": False,
+            },
+            **_command_response(result),
+        }
+
+    @router.post("/production/equipment/commission")
+    async def trial_plant_equipment_commission(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_write_ready(readiness, "production.write")
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        raw_body = await _bounded_json_body(request, maximum_bytes=4096)
+        try:
+            body = TrialPlantEquipmentCommissionRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "plant_equipment_commission_invalid") from exc
+        if body.confirmation != f"COMMISSION {body.equipment_id}":
+            raise _error(409, "plant_equipment_commission_confirmation_mismatch")
+        command_id = str(body.command_id)
+        result = _invoke(
+            lambda: store.apply_command(
+                principal,
+                command_id=command_id,
+                surface="production",
+                event_type="production.equipment.commissioned",
+                expected_version=body.expected_version,
+                payload={
+                    "equipmentId": body.equipment_id,
+                    "installedAt": body.installed_at,
+                    "initialState": body.initial_state,
+                    "safetyBaselineReference": body.safety_baseline_reference,
+                    "evidence": {
+                        "actionId": f"ACT-EQUIPMENT-COMMISSION-{command_id}",
+                        "capturedAt": "server-assigned",
+                        "actor": principal.actor_id,
+                        "reason": "Commissioned reviewed Plant equipment",
+                        "evidenceReference": body.safety_baseline_reference,
+                    },
+                },
+            )
+        )
+        return {
+            "commissioning": {
+                "contract": "supermega.production.equipment-commissioning.v1",
+                "status": "commissioned",
+                "equipment_id": body.equipment_id,
+                "workspace_id": principal.workspace_id,
+                "runtime_machine_created": True,
+                "equipment_command_performed": False,
+                "telemetry_connected": False,
+                "bulk_commissioning_performed": False,
             },
             **_command_response(result),
         }

@@ -34,6 +34,7 @@ PRODUCTION_EVENTS = frozenset(
         "production.quality_hold.released",
         "production.machine_state.changed",
         "production.equipment_master.imported",
+        "production.equipment.commissioned",
         "production.order_execution.recorded",
         "production.downtime.started",
         "production.downtime.ended",
@@ -63,6 +64,7 @@ _EVENT_KIND_BY_TYPE = {
     "production.quality_hold.released": "quality_hold_released",
     "production.machine_state.changed": "machine_state_changed",
     "production.equipment_master.imported": "equipment_master_imported",
+    "production.equipment.commissioned": "equipment_commissioned",
     "production.downtime.started": "downtime_started",
     "production.downtime.ended": "downtime_ended",
     "production.maintenance.started": "maintenance_started",
@@ -147,6 +149,20 @@ _EQUIPMENT_ASSET_FIELDS = frozenset(
         "importedAt",
     }
 )
+_EQUIPMENT_ASSET_OPTIONAL_FIELDS = frozenset({"commissioning"})
+_EQUIPMENT_COMMISSIONING_FIELDS = frozenset(
+    {
+        "actionId",
+        "commissionedAt",
+        "commissionedBy",
+        "installedAt",
+        "initialState",
+        "safetyBaselineReference",
+    }
+)
+_EQUIPMENT_COMMISSION_FIELDS = frozenset(
+    {"equipmentId", "installedAt", "initialState", "safetyBaselineReference"}
+)
 _EQUIPMENT_IMPORT_FIELDS = frozenset(
     {"id", "name", "workCentreId", "criticality", "owner"}
 )
@@ -185,6 +201,9 @@ _TIMESTAMP_PATTERN = re.compile(
 )
 _ISSUE_EVENT_FIELDS = frozenset(
     {"issueSeverity", "issueOwner", "issueDueAt", "issueContainment"}
+)
+_EQUIPMENT_COMMISSION_EVENT_FIELDS = frozenset(
+    {"installedAt", "toState", "workCentreId"}
 )
 
 
@@ -574,7 +593,12 @@ def _validate_machine(candidate: object, index: int) -> dict[str, Any]:
 def _validate_equipment_asset(candidate: object, index: int) -> dict[str, Any]:
     field = f"production state.equipmentMaster.assets[{index}]"
     asset = _object(candidate, field)
-    _exact_fields(asset, field, required=_EQUIPMENT_ASSET_FIELDS)
+    _exact_fields(
+        asset,
+        field,
+        required=_EQUIPMENT_ASSET_FIELDS,
+        optional=_EQUIPMENT_ASSET_OPTIONAL_FIELDS,
+    )
     equipment_id = _text(asset["id"], f"{field}.id", maximum=80)
     work_centre_id = _text(
         asset["workCentreId"], f"{field}.workCentreId", maximum=80
@@ -590,10 +614,9 @@ def _validate_equipment_asset(candidate: object, index: int) -> dict[str, Any]:
     _text(asset["owner"], f"{field}.owner", maximum=120)
     if asset["criticality"] not in _EQUIPMENT_CRITICALITIES:
         raise TrialValidationError(f"{field}.criticality is unsupported.")
-    if asset["commissioningStatus"] != "not_commissioned":
-        raise TrialValidationError(
-            f"{field} cannot claim commissioning from a master-data import."
-        )
+    commissioning_status = asset["commissioningStatus"]
+    if commissioning_status not in {"not_commissioned", "commissioned"}:
+        raise TrialValidationError(f"{field}.commissioningStatus is unsupported.")
     _text(asset["sourceActionId"], f"{field}.sourceActionId", maximum=160)
     package_digest = _text(
         asset["sourcePackageDigest"],
@@ -602,7 +625,55 @@ def _validate_equipment_asset(candidate: object, index: int) -> dict[str, Any]:
     )
     if _DIGEST_PATTERN.fullmatch(package_digest) is None:
         raise TrialValidationError(f"{field}.sourcePackageDigest must use SHA-256.")
-    _lifecycle_timestamp(asset["importedAt"], f"{field}.importedAt", "equipment import")
+    imported_at = _lifecycle_timestamp(
+        asset["importedAt"], f"{field}.importedAt", "equipment import"
+    )
+    commissioning = asset.get("commissioning")
+    if commissioning_status == "not_commissioned":
+        if commissioning is not None:
+            raise TrialValidationError(
+                f"{field} cannot retain commissioning evidence before commissioning."
+            )
+        return asset
+    commissioning_record = _object(commissioning, f"{field}.commissioning")
+    _exact_fields(
+        commissioning_record,
+        f"{field}.commissioning",
+        required=_EQUIPMENT_COMMISSIONING_FIELDS,
+    )
+    _text(
+        commissioning_record["actionId"],
+        f"{field}.commissioning.actionId",
+        maximum=160,
+    )
+    commissioned_at = _lifecycle_timestamp(
+        commissioning_record["commissionedAt"],
+        f"{field}.commissioning.commissionedAt",
+        "equipment commissioning",
+    )
+    _text(
+        commissioning_record["commissionedBy"],
+        f"{field}.commissioning.commissionedBy",
+        maximum=120,
+    )
+    installed_at = _lifecycle_timestamp(
+        commissioning_record["installedAt"],
+        f"{field}.commissioning.installedAt",
+        "equipment installation",
+    )
+    if commissioned_at < imported_at or installed_at > commissioned_at:
+        raise TrialValidationError(
+            f"{field} commissioning chronology is invalid."
+        )
+    if commissioning_record["initialState"] not in _MACHINE_STATES:
+        raise TrialValidationError(
+            f"{field}.commissioning.initialState is unsupported."
+        )
+    _text(
+        commissioning_record["safetyBaselineReference"],
+        f"{field}.commissioning.safetyBaselineReference",
+        maximum=240,
+    )
     return asset
 
 
@@ -702,9 +773,10 @@ def _validate_opening_plan(
         raise TrialValidationError(
             "production state.openingPlan jobs must remain the immutable job suffix."
         )
-    if [machine["id"] for machine in machines] != machine_ids:
+    retained_machine_ids = [machine["id"] for machine in machines]
+    if retained_machine_ids[: len(machine_ids)] != machine_ids:
         raise TrialValidationError(
-            "production state.openingPlan machines must match the retained machines."
+            "production state.openingPlan machines must remain the immutable machine prefix."
         )
     return plan
 
@@ -750,6 +822,8 @@ def _validate_event(
         required = _EVENT_FIELDS | {"maintenanceStartActionId"}
     elif kind == "equipment_master_imported":
         required = _EVENT_FIELDS | {"equipmentIds"}
+    elif kind == "equipment_commissioned":
+        required = _EVENT_FIELDS | _EQUIPMENT_COMMISSION_EVENT_FIELDS
     elif kind in {
         "job_created",
         "issue_opened",
@@ -820,6 +894,30 @@ def _validate_event(
         if _DIGEST_PATTERN.fullmatch(event["evidenceReference"]) is None:
             raise TrialValidationError(
                 f"{field}.evidenceReference must bind the reviewed package digest."
+            )
+    elif kind == "equipment_commissioned":
+        if subject_id not in equipment_ids or subject_id not in machine_ids:
+            raise TrialValidationError(
+                f"{field} must reference one retained equipment and runtime machine."
+            )
+        installed_at = _lifecycle_timestamp(
+            event["installedAt"], f"{field}.installedAt", "equipment installation"
+        )
+        commissioned_at = _lifecycle_timestamp(
+            event["createdAt"], f"{field}.createdAt", "equipment commissioning"
+        )
+        if installed_at > commissioned_at:
+            raise TrialValidationError(
+                f"{field}.installedAt cannot follow commissioning."
+            )
+        if event["toState"] not in _MACHINE_STATES:
+            raise TrialValidationError(f"{field}.toState is unsupported.")
+        work_centre_id = _text(
+            event["workCentreId"], f"{field}.workCentreId", maximum=80
+        )
+        if _EQUIPMENT_ID_PATTERN.fullmatch(work_centre_id) is None:
+            raise TrialValidationError(
+                f"{field}.workCentreId must use a canonical equipment identifier."
             )
     elif kind == "output_recorded":
         if subject_id not in job_ids:
@@ -1617,6 +1715,22 @@ def _validate_machine_history(
     events: Sequence[dict[str, Any]],
 ) -> None:
     for index, machine in enumerate(machines):
+        commissioning_events = [
+            event
+            for event in events
+            if event["kind"] == "equipment_commissioned"
+            and event["subjectId"] == machine["id"]
+        ]
+        if len(commissioning_events) > 1:
+            raise TrialValidationError(
+                f"machines[{index}] has duplicate commissioning history."
+            )
+        commissioning_event = commissioning_events[0] if commissioning_events else None
+        initial_state = (
+            commissioning_event["toState"]
+            if commissioning_event is not None
+            else "running"
+        )
         newest_first = [
             event
             for event in events
@@ -1624,15 +1738,23 @@ def _validate_machine_history(
             and event["subjectId"] == machine["id"]
         ]
         if not newest_first:
-            if machine["state"] != "running":
+            if machine["state"] != initial_state:
                 raise TrialValidationError(
-                    f"machines[{index}] must begin running before state changes."
+                    f"machines[{index}] must match its initial observed state."
                 )
             continue
         oldest_first = list(reversed(newest_first))
-        if oldest_first[0]["fromState"] != "running":
+        if oldest_first[0]["fromState"] != initial_state:
             raise TrialValidationError(
-                f"machines[{index}] history must begin from running."
+                f"machines[{index}] history must begin from its initial observed state."
+            )
+        if (
+            commissioning_event is not None
+            and _timestamp(oldest_first[0]["createdAt"], "machine event createdAt")
+            < _timestamp(commissioning_event["createdAt"], "commissioning createdAt")
+        ):
+            raise TrialValidationError(
+                f"machines[{index}] state history predates commissioning."
             )
         for before, after in zip(oldest_first, oldest_first[1:], strict=False):
             if before["toState"] != after["fromState"]:
@@ -1765,7 +1887,11 @@ def _validate_equipment_import_history(
             )
         return
     machine_ids = {machine["id"] for machine in machines}
-    if any(asset["id"] in machine_ids for asset in assets):
+    if any(
+        asset["commissioningStatus"] == "not_commissioned"
+        and asset["id"] in machine_ids
+        for asset in assets
+    ):
         raise TrialValidationError(
             "Uncommissioned equipment master records cannot appear as runtime machines."
         )
@@ -1800,6 +1926,93 @@ def _validate_equipment_import_history(
         raise TrialValidationError(
             "Every equipment master record requires one immutable import event."
         )
+
+
+def _validate_equipment_commissioning_history(
+    equipment_master: Mapping[str, Any] | None,
+    machines: Sequence[dict[str, Any]],
+    events: Sequence[dict[str, Any]],
+    opening_plan: Mapping[str, Any] | None,
+) -> None:
+    assets = equipment_master["assets"] if equipment_master is not None else []
+    machine_by_id = {machine["id"]: machine for machine in machines}
+    commission_events = [
+        event for event in events if event["kind"] == "equipment_commissioned"
+    ]
+    commissioned_ids: set[str] = set()
+    for asset in assets:
+        matches = [
+            event
+            for event in commission_events
+            if event["subjectId"] == asset["id"]
+        ]
+        machine = machine_by_id.get(asset["id"])
+        if asset["commissioningStatus"] == "not_commissioned":
+            if matches or machine is not None:
+                raise TrialValidationError(
+                    "Uncommissioned equipment cannot retain runtime commissioning history."
+                )
+            continue
+        if len(matches) != 1 or machine is None:
+            raise TrialValidationError(
+                "Commissioned equipment requires one runtime machine and one immutable event."
+            )
+        event = matches[0]
+        commissioning = asset["commissioning"]
+        if (
+            commissioning["actionId"] != event["actionId"]
+            or commissioning["commissionedAt"] != event["createdAt"]
+            or commissioning["commissionedBy"] != event["actor"]
+            or commissioning["installedAt"] != event["installedAt"]
+            or commissioning["initialState"] != event["toState"]
+            or commissioning["safetyBaselineReference"]
+            != event["evidenceReference"]
+            or asset["workCentreId"] != event["workCentreId"]
+            or machine["name"] != asset["name"]
+            or event["summary"]
+            != f"Commissioned {asset['name']} at {asset['workCentreId']}"
+        ):
+            raise TrialValidationError(
+                "Equipment commissioning record does not match its immutable event."
+            )
+        commissioned_at = _timestamp(
+            event["createdAt"], "equipment commissioning createdAt"
+        )
+        later_lifecycle = [
+            candidate
+            for candidate in events
+            if candidate["subjectId"] == asset["id"]
+            and candidate["kind"]
+            in {
+                "machine_state_changed",
+                "downtime_started",
+                "downtime_ended",
+                "maintenance_started",
+                "maintenance_completed",
+            }
+        ]
+        if any(
+            _timestamp(candidate["createdAt"], "equipment lifecycle createdAt")
+            < commissioned_at
+            for candidate in later_lifecycle
+        ):
+            raise TrialValidationError(
+                "Equipment lifecycle history cannot predate commissioning."
+            )
+        commissioned_ids.add(asset["id"])
+    if len(commission_events) != len(commissioned_ids):
+        raise TrialValidationError(
+            "Equipment commissioning history contains an unknown or duplicate event."
+        )
+    if opening_plan is not None:
+        opening_count = len(opening_plan["machineIds"])
+        post_opening_ids = [machine["id"] for machine in machines[opening_count:]]
+        if set(post_opening_ids) != commissioned_ids or len(post_opening_ids) != len(
+            commissioned_ids
+        ):
+            raise TrialValidationError(
+                "Every runtime machine added after opening requires equipment commissioning."
+            )
 
 
 def validate_production_state(value: object) -> dict[str, Any]:
@@ -1912,6 +2125,12 @@ def validate_production_state(value: object) -> dict[str, Any]:
     _validate_downtime_history(machines, events)
     _validate_maintenance_history(machines, events)
     _validate_equipment_import_history(equipment_master, machines, events)
+    _validate_equipment_commissioning_history(
+        equipment_master,
+        machines,
+        events,
+        opening_plan,
+    )
     return deepcopy(state)
 
 
@@ -2632,6 +2851,109 @@ def _reduce_equipment_master_import(
     return validate_production_state(next_state)
 
 
+def _reduce_equipment_commission(
+    current: Mapping[str, Any],
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    if set(payload) != _EQUIPMENT_COMMISSION_FIELDS | {"evidence"}:
+        raise TrialValidationError(
+            "Equipment commissioning must contain exactly one asset, installation, "
+            "initial observation, safety baseline, and evidence."
+        )
+    current_state = validate_production_state(current)
+    evidence = _evidence(payload.get("evidence"))
+    if evidence["reason"] != "Commissioned reviewed Plant equipment":
+        raise TrialValidationError("Equipment commissioning reason is not canonical.")
+    equipment_id = _text(payload["equipmentId"], "equipmentId", maximum=80)
+    asset = next(
+        (
+            candidate
+            for candidate in current_state.get("equipmentMaster", {}).get("assets", [])
+            if candidate["id"] == equipment_id
+        ),
+        None,
+    )
+    if asset is None:
+        raise TrialValidationError(
+            "Equipment commissioning requires one reviewed master record."
+        )
+    if asset["commissioningStatus"] != "not_commissioned":
+        raise TrialValidationError("Equipment is already commissioned.")
+    if any(machine["id"] == equipment_id for machine in current_state["machines"]):
+        raise TrialValidationError(
+            "Equipment commissioning cannot replace a runtime machine."
+        )
+    if len(current_state["machines"]) >= _MAX_MACHINES:
+        raise TrialValidationError("Production runtime machine limit is reached.")
+    installed_at_text = _text(payload["installedAt"], "installedAt", maximum=40)
+    installed_at = _lifecycle_timestamp(
+        installed_at_text, "installedAt", "equipment installation"
+    )
+    commissioned_at = _lifecycle_timestamp(
+        evidence["capturedAt"],
+        "evidence.capturedAt",
+        "equipment commissioning",
+    )
+    imported_at = _lifecycle_timestamp(
+        asset["importedAt"], "equipment.importedAt", "equipment import"
+    )
+    if installed_at > commissioned_at or commissioned_at < imported_at:
+        raise TrialValidationError("Equipment commissioning chronology is invalid.")
+    initial_state = payload["initialState"]
+    if initial_state not in _MACHINE_STATES:
+        raise TrialValidationError("initialState is unsupported.")
+    safety_reference = _text(
+        payload["safetyBaselineReference"],
+        "safetyBaselineReference",
+        maximum=240,
+    )
+    if evidence["evidenceReference"] != safety_reference:
+        raise TrialValidationError(
+            "Equipment commissioning evidence must match the safety baseline."
+        )
+    commissioned_asset = {
+        **asset,
+        "commissioningStatus": "commissioned",
+        "commissioning": {
+            "actionId": evidence["actionId"],
+            "commissionedAt": evidence["capturedAt"],
+            "commissionedBy": evidence["actor"],
+            "installedAt": installed_at_text,
+            "initialState": initial_state,
+            "safetyBaselineReference": safety_reference,
+        },
+    }
+    event = {
+        "id": f"EVT-{evidence['actionId']}",
+        "actionId": evidence["actionId"],
+        "createdAt": evidence["capturedAt"],
+        "actor": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "kind": "equipment_commissioned",
+        "subjectId": equipment_id,
+        "summary": f"Commissioned {asset['name']} at {asset['workCentreId']}",
+        "installedAt": installed_at_text,
+        "toState": initial_state,
+        "workCentreId": asset["workCentreId"],
+    }
+    next_state = deepcopy(current_state)
+    next_state["revision"] += 1
+    next_state["events"] = [event, *current_state["events"]]
+    next_state["machines"] = [
+        *current_state["machines"],
+        {"id": equipment_id, "name": asset["name"], "state": initial_state},
+    ]
+    next_state["equipmentMaster"] = {
+        "contract": _EQUIPMENT_MASTER_CONTRACT,
+        "assets": [
+            commissioned_asset if candidate["id"] == equipment_id else candidate
+            for candidate in current_state["equipmentMaster"]["assets"]
+        ],
+    }
+    return validate_production_state(next_state)
+
+
 def _validate_order_execution_recorded(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -2724,6 +3046,8 @@ def reduce_production_state(
         )
     if event_type == "production.equipment_master.imported":
         return _reduce_equipment_master_import(current, payload)
+    if event_type == "production.equipment.commissioned":
+        return _reduce_equipment_commission(current, payload)
     next_state, evidence = _payload(payload)
     if event_type == "production.workspace.initialized":
         if dict(current):

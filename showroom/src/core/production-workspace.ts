@@ -85,13 +85,23 @@ export type ProductionMachine = {
 
 export type ProductionEquipmentCriticality = 'critical' | 'high' | 'medium' | 'low'
 
+export type ProductionEquipmentCommissioning = {
+  actionId: string
+  commissionedAt: string
+  commissionedBy: string
+  installedAt: string
+  initialState: ProductionMachineState
+  safetyBaselineReference: string
+}
+
 export type ProductionEquipmentAsset = {
   id: string
   name: string
   workCentreId: string
   criticality: ProductionEquipmentCriticality
   owner: string
-  commissioningStatus: 'not_commissioned'
+  commissioningStatus: 'not_commissioned' | 'commissioned'
+  commissioning?: ProductionEquipmentCommissioning
   sourceActionId: string
   sourcePackageDigest: string
   importedAt: string
@@ -111,7 +121,7 @@ export type ProductionOpeningPlan = {
   machineIds: string[]
 }
 
-export type ProductionEventKind = 'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed' | 'equipment_master_imported' | 'downtime_started' | 'downtime_ended' | 'maintenance_started' | 'maintenance_completed'
+export type ProductionEventKind = 'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed' | 'equipment_master_imported' | 'equipment_commissioned' | 'downtime_started' | 'downtime_ended' | 'maintenance_started' | 'maintenance_completed'
 export type ProductionOutputKind = 'good' | 'scrap'
 
 export type ProductionEvent = {
@@ -147,6 +157,8 @@ export type ProductionEvent = {
   maintenanceOwner?: string
   maintenanceStartActionId?: string
   equipmentIds?: string[]
+  installedAt?: string
+  workCentreId?: string
 }
 
 export type ProductionState = {
@@ -335,7 +347,7 @@ export const productionIssueSeverities: ProductionIssueSeverity[] = ['critical',
 export const productionJobPriorities: ProductionJobPriority[] = ['urgent', 'normal', 'low']
 export const productionMachineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
 export const productionMaterialUnits: ProductionMaterialUnit[] = ['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm']
-const eventKinds: ProductionEventKind[] = ['job_created', 'job_schedule_updated', 'job_closed', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'equipment_master_imported', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed']
+const eventKinds: ProductionEventKind[] = ['job_created', 'job_schedule_updated', 'job_closed', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'equipment_master_imported', 'equipment_commissioned', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed']
 const baseEventFields = ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'subjectId', 'summary']
 const jobCreatedEventFields = [...baseEventFields, 'jobPriority', 'jobDueAt', 'jobOwner']
 const jobScheduleUpdateEventFields = [...jobCreatedEventFields, 'fromJobPriority', 'fromJobDueAt', 'fromJobOwner']
@@ -347,6 +359,7 @@ const downtimeEndEventFields = [...baseEventFields, 'downtimeStartActionId']
 const maintenanceStartEventFields = [...baseEventFields, 'maintenanceOwner']
 const maintenanceCompleteEventFields = [...baseEventFields, 'maintenanceStartActionId']
 const equipmentImportEventFields = [...baseEventFields, 'equipmentIds']
+const equipmentCommissionEventFields = [...baseEventFields, 'installedAt', 'toState', 'workCentreId']
 const productionStateFields = ['schema', 'revision', 'jobs', 'issues', 'machines', 'events', 'openingPlan', 'orderExecution', 'equipmentMaster']
 const productionOpeningPlanFields = ['contract', 'packageDigest', 'confirmedAt', 'industryPackId', 'jobIds', 'machineIds']
 const productionJobFields = ['id', 'line', 'product', 'target', 'output', 'owner', 'priority', 'dueAt', 'scrap', 'qualityHold', 'closure', 'shopDemandSource']
@@ -357,6 +370,7 @@ const productionIssueResolutionFields = ['actionId', 'resolvedAt', 'resolvedBy',
 const productionMachineFields = ['id', 'name', 'state']
 const productionEquipmentMasterFields = ['contract', 'assets']
 const productionEquipmentAssetFields = ['id', 'name', 'workCentreId', 'criticality', 'owner', 'commissioningStatus', 'sourceActionId', 'sourcePackageDigest', 'importedAt']
+const productionEquipmentCommissioningFields = ['actionId', 'commissionedAt', 'commissionedBy', 'installedAt', 'initialState', 'safetyBaselineReference']
 const productionEquipmentCriticalities: ProductionEquipmentCriticality[] = ['critical', 'high', 'medium', 'low']
 const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
   job_created: jobCreatedEventFields,
@@ -370,6 +384,7 @@ const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
   quality_hold_released: qualityHoldEventFields,
   machine_state_changed: [...baseEventFields, 'fromState', 'toState'],
   equipment_master_imported: equipmentImportEventFields,
+  equipment_commissioned: equipmentCommissionEventFields,
   downtime_started: baseEventFields,
   downtime_ended: downtimeEndEventFields,
   maintenance_started: maintenanceStartEventFields,
@@ -659,6 +674,7 @@ export function validateProductionState(value: unknown): ProductionState {
   const eventIds: string[] = []
   const actionIds: string[] = []
   let openingJobIds: string[] | null = null
+  let openingMachineIds: string[] | null = null
   const shiftTotals = new Map<string, { goodUnits: number; scrapUnits: number }>()
   const materialShiftTotals = new Map<string, number>()
 
@@ -766,22 +782,37 @@ export function validateProductionState(value: unknown): ProductionState {
     if (!Array.isArray(value.equipmentMaster.assets) || value.equipmentMaster.assets.length < 1 || value.equipmentMaster.assets.length > 100) throw new Error('Production equipment master assets are invalid.')
     equipmentAssets = value.equipmentMaster.assets.map((candidate, index) => {
       if (!isRecord(candidate)) throw new Error(`equipmentMaster.assets[${index}] is invalid.`)
-      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...productionEquipmentAssetFields].sort())) throw new Error(`equipmentMaster.assets[${index}] fields are invalid.`)
+      const commissioningStatus = candidate.commissioningStatus
+      const expectedAssetFields = commissioningStatus === 'commissioned'
+        ? [...productionEquipmentAssetFields, 'commissioning']
+        : productionEquipmentAssetFields
+      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...expectedAssetFields].sort())) throw new Error(`equipmentMaster.assets[${index}] fields are invalid.`)
       const equipmentId = canonicalText(candidate.id, `equipmentMaster.assets[${index}].id`, 80)
       const workCentreId = canonicalText(candidate.workCentreId, `equipmentMaster.assets[${index}].workCentreId`, 80)
       if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(equipmentId) || !/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(workCentreId)) throw new Error(`equipmentMaster.assets[${index}] IDs are invalid.`)
       canonicalText(candidate.name, `equipmentMaster.assets[${index}].name`, 180)
       canonicalText(candidate.owner, `equipmentMaster.assets[${index}].owner`, 120)
       if (!productionEquipmentCriticalities.includes(candidate.criticality as ProductionEquipmentCriticality)) throw new Error(`equipmentMaster.assets[${index}].criticality is invalid.`)
-      if (candidate.commissioningStatus !== 'not_commissioned') throw new Error(`equipmentMaster.assets[${index}] cannot claim commissioning from an import.`)
+      if (commissioningStatus !== 'not_commissioned' && commissioningStatus !== 'commissioned') throw new Error(`equipmentMaster.assets[${index}].commissioningStatus is invalid.`)
       canonicalText(candidate.sourceActionId, `equipmentMaster.assets[${index}].sourceActionId`, 160)
       if (typeof candidate.sourcePackageDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(candidate.sourcePackageDigest)) throw new Error(`equipmentMaster.assets[${index}].sourcePackageDigest is invalid.`)
       if (!validDowntimeTimestamp(candidate.importedAt)) throw new Error(`equipmentMaster.assets[${index}].importedAt is invalid.`)
+      if (commissioningStatus === 'commissioned') {
+        if (!isRecord(candidate.commissioning)) throw new Error(`equipmentMaster.assets[${index}].commissioning is invalid.`)
+        const commissioning = candidate.commissioning
+        if (JSON.stringify(Object.keys(commissioning).sort()) !== JSON.stringify([...productionEquipmentCommissioningFields].sort())) throw new Error(`equipmentMaster.assets[${index}].commissioning fields are invalid.`)
+        canonicalText(commissioning.actionId, `equipmentMaster.assets[${index}].commissioning.actionId`, 160)
+        canonicalText(commissioning.commissionedBy, `equipmentMaster.assets[${index}].commissioning.commissionedBy`, 120)
+        canonicalText(commissioning.safetyBaselineReference, `equipmentMaster.assets[${index}].commissioning.safetyBaselineReference`, 240)
+        if (!validDowntimeTimestamp(commissioning.commissionedAt) || !validDowntimeTimestamp(commissioning.installedAt)) throw new Error(`equipmentMaster.assets[${index}].commissioning timestamps are invalid.`)
+        if (timestampBefore(commissioning.commissionedAt as string, candidate.importedAt as string) || timestampBefore(commissioning.commissionedAt as string, commissioning.installedAt as string)) throw new Error(`equipmentMaster.assets[${index}].commissioning chronology is invalid.`)
+        if (!productionMachineStates.includes(commissioning.initialState as ProductionMachineState)) throw new Error(`equipmentMaster.assets[${index}].commissioning.initialState is invalid.`)
+      }
       equipmentIds.push(equipmentId)
       return candidate
     })
     assertUnique(equipmentIds, 'Production equipment ID')
-    if (equipmentIds.some((id) => machineIds.includes(id))) throw new Error('Uncommissioned equipment cannot appear as a runtime machine.')
+    if (equipmentAssets.some((asset) => asset.commissioningStatus === 'not_commissioned' && machineIds.includes(String(asset.id)))) throw new Error('Uncommissioned equipment cannot appear as a runtime machine.')
   }
 
   if (Object.hasOwn(value, 'openingPlan')) {
@@ -802,8 +833,9 @@ export function validateProductionState(value: unknown): ProductionState {
     assertUnique(planJobIds, 'Production opening job ID')
     assertUnique(planMachineIds, 'Production opening machine ID')
     if (JSON.stringify(jobIds.slice(-planJobIds.length)) !== JSON.stringify(planJobIds)) throw new Error('Production opening jobs are not the immutable job suffix.')
-    if (JSON.stringify(machineIds) !== JSON.stringify(planMachineIds)) throw new Error('Production opening machines do not match the retained machines.')
+    if (JSON.stringify(machineIds.slice(0, planMachineIds.length)) !== JSON.stringify(planMachineIds)) throw new Error('Production opening machines are not the immutable machine prefix.')
     openingJobIds = planJobIds
+    openingMachineIds = planMachineIds
   }
 
   if (Object.hasOwn(value, 'orderExecution')) {
@@ -844,6 +876,12 @@ export function validateProductionState(value: unknown): ProductionState {
       if (importedEquipmentIds.some((id) => !equipmentIds.includes(id))) throw new Error(`events[${index}] references unknown equipment.`)
       if (candidate.summary !== `Imported ${importedEquipmentIds.length} equipment master records`) throw new Error(`events[${index}] equipment import summary is not canonical.`)
       if (typeof candidate.evidenceReference !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(candidate.evidenceReference)) throw new Error(`events[${index}] equipment import evidence is invalid.`)
+    } else if (candidate.kind === 'equipment_commissioned') {
+      if (!equipmentIds.includes(candidate.subjectId as string) || !machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] must reference one retained equipment runtime.`)
+      if (!validDowntimeTimestamp(candidate.installedAt) || timestampBefore(candidate.createdAt as string, candidate.installedAt as string)) throw new Error(`events[${index}] equipment installation timestamp is invalid.`)
+      if (!productionMachineStates.includes(candidate.toState as ProductionMachineState)) throw new Error(`events[${index}].toState is invalid.`)
+      const workCentreId = canonicalText(candidate.workCentreId, `events[${index}].workCentreId`, 80)
+      if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(workCentreId)) throw new Error(`events[${index}].workCentreId is invalid.`)
     } else if (candidate.kind === 'job_created' || candidate.kind === 'job_schedule_updated') {
       if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
       const scheduleSnapshotFields = ['jobPriority', 'jobDueAt'] as const
@@ -964,6 +1002,39 @@ export function validateProductionState(value: unknown): ProductionState {
     }
   }
   if (equipmentAssetsWithEvidence.size !== equipmentAssets.length) throw new Error('Every equipment master record requires one immutable import event.')
+  const equipmentCommissionEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'equipment_commissioned')
+  const commissionedIds = new Set<string>()
+  for (const asset of equipmentAssets) {
+    const equipmentId = String(asset.id)
+    const matches = equipmentCommissionEvents.filter((event) => event.subjectId === equipmentId)
+    const machine = machines.find((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.id === equipmentId)
+    if (asset.commissioningStatus === 'not_commissioned') {
+      if (matches.length || machine) throw new Error('Uncommissioned equipment cannot retain runtime commissioning history.')
+      continue
+    }
+    if (matches.length !== 1 || !machine || !isRecord(asset.commissioning)) throw new Error('Commissioned equipment requires one runtime machine and one immutable event.')
+    const event = matches[0]
+    const commissioning = asset.commissioning
+    if (commissioning.actionId !== event.actionId
+      || commissioning.commissionedAt !== event.createdAt
+      || commissioning.commissionedBy !== event.actor
+      || commissioning.installedAt !== event.installedAt
+      || commissioning.initialState !== event.toState
+      || commissioning.safetyBaselineReference !== event.evidenceReference
+      || asset.workCentreId !== event.workCentreId
+      || machine.name !== asset.name
+      || event.summary !== `Commissioned ${String(asset.name)} at ${String(asset.workCentreId)}`) throw new Error('Equipment commissioning record does not match its immutable event.')
+    const laterLifecycle = events.filter((candidate): candidate is Record<string, unknown> => isRecord(candidate)
+      && candidate.subjectId === equipmentId
+      && ['machine_state_changed', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed'].includes(String(candidate.kind)))
+    if (laterLifecycle.some((candidate) => timestampBefore(candidate.createdAt as string, event.createdAt as string))) throw new Error('Equipment lifecycle history cannot predate commissioning.')
+    commissionedIds.add(equipmentId)
+  }
+  if (equipmentCommissionEvents.length !== commissionedIds.size) throw new Error('Equipment commissioning history contains an unknown or duplicate event.')
+  if (openingMachineIds) {
+    const postOpeningIds = machineIds.slice(openingMachineIds.length)
+    if (postOpeningIds.length !== commissionedIds.size || postOpeningIds.some((id) => !commissionedIds.has(id))) throw new Error('Every runtime machine added after opening requires equipment commissioning.')
+  }
   if (openingJobIds) {
     const openingJobIdSet = new Set(openingJobIds)
     const creationEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'job_created')
@@ -1243,10 +1314,15 @@ export function validateProductionState(value: unknown): ProductionState {
   }
   for (const machineId of machineIds) {
     const machine = machines.find((candidate) => isRecord(candidate) && candidate.id === machineId)
+    const commissioningEvent = events.find((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.kind === 'equipment_commissioned' && candidate.subjectId === machineId)
     const machineEvents = events.filter((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.kind === 'machine_state_changed' && candidate.subjectId === machineId)
+    const initialState = commissioningEvent?.toState ?? (machineEvents.length ? 'running' : isRecord(machine) ? machine.state : 'running')
     const latestEvent = machineEvents[0]
     if (latestEvent && (!isRecord(machine) || latestEvent.toState !== machine.state)) throw new Error(`Latest machine event does not match ${machineId}.`)
+    if (!latestEvent && (!isRecord(machine) || machine.state !== initialState)) throw new Error(`Machine ${machineId} does not match its initial observed state.`)
     const oldestFirst = [...machineEvents].reverse()
+    if (oldestFirst.length && oldestFirst[0].fromState !== initialState) throw new Error(`Machine history for ${machineId} does not begin from its initial observed state.`)
+    if (oldestFirst.length && commissioningEvent && timestampBefore(oldestFirst[0].createdAt as string, commissioningEvent.createdAt as string)) throw new Error(`Machine history for ${machineId} predates commissioning.`)
     for (let index = 1; index < oldestFirst.length; index += 1) {
       if (oldestFirst[index - 1].toState !== oldestFirst[index].fromState) throw new Error(`Machine history for ${machineId} contains a state gap.`)
     }

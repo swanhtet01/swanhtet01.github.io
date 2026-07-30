@@ -304,6 +304,7 @@ const expectedHumanCommerceEvents = [
 const expectedHumanProductionEvents = [
   'production.downtime.ended',
   'production.downtime.started',
+  'production.equipment.commissioned',
   'production.equipment_master.imported',
   'production.issue.opened',
   'production.issue.resolved',

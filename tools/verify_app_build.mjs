@@ -105,6 +105,7 @@ const managedActivationRunbookSource = await readFile(resolve(root, 'showroom', 
 const localClientImportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'local-client-import.ts'), 'utf8')
 const plantEquipmentImportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-equipment-import.ts'), 'utf8')
 const plantEquipmentOnboardingSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantEquipmentOnboarding.tsx'), 'utf8')
+const plantEquipmentCommissioningSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantEquipmentCommissioning.tsx'), 'utf8')
 const settingsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'SettingsPage.tsx'), 'utf8')
 const productSetupSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'product-setup.ts'), 'utf8')
 const workspaceRuntimeSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'workspace-runtime.ts'), 'utf8')
@@ -3350,6 +3351,16 @@ if (!plantEquipmentImportSource.includes("PLANT_EQUIPMENT_IMPORT_SCHEMA = 'super
   || !plantEquipmentOnboardingSource.includes('This does not start or commission a machine.')
   || !clientOnboardingUiSource.includes("product === 'production' ? <PlantEquipmentOnboarding")) fail('plant_equipment_onboarding_contract_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => plantEquipmentImportSource.toLowerCase().includes(marker.toLowerCase()))) fail('plant_equipment_import_external_or_persistent_side_effect_added')
+if (!plantEquipmentCommissioningSource.includes('Load equipment')
+  || !plantEquipmentCommissioningSource.includes('Commission 1 equipment')
+  || !plantEquipmentCommissioningSource.includes('slice(0, 20)')
+  || !plantEquipmentCommissioningSource.includes('does not send a machine command or connect telemetry')
+  || plantEquipmentCommissioningSource.includes('useEffect')
+  || !plantEquipmentOnboardingSource.includes('<PlantEquipmentCommissioning')
+  || !managedTrialSource.includes("'/api/trial/v1/production/equipment/commission'")
+  || !managedTrialSource.includes('assertManagedPlantEquipmentCommissioning')
+  || !managedTrialRuntimeSource.includes('@router.post("/production/equipment/commission")')
+  || !managedTrialRuntimeSource.includes('confirmation != f"COMMISSION {body.equipment_id}"')) fail('plant_equipment_commissioning_contract_missing')
 const manifestPlantPackIds = manifest.customerProducts.find((product) => product.id === 'plant')?.internalTemplatePacks?.map((pack) => pack.id) ?? []
 if (manifestPlantPackIds.join(',') !== 'general-manufacturing,batch-process,food-beverage,apparel,assembly'
   || !manifestPlantPackIds.every((id) => plantIndustryPacksSource.includes(`id: '${id}'`))
@@ -7080,6 +7091,83 @@ async function verifyPlantEquipmentImportRuntime() {
       ['commissioning', { ...activationResponse, activation: { ...activationResponse.activation, commissioning_performed: true } }],
       ['evidence', { ...activationResponse, result: { ...activationResponse.result, state: { ...importedState, equipmentMaster: { ...importedState.equipmentMaster, assets: importedState.equipmentMaster.assets.map((asset, index) => index ? asset : { ...asset, sourcePackageDigest: `sha256:${'0'.repeat(64)}` }) } } } }],
     ]) rejects(() => managedTrial.assertManagedPlantEquipmentActivation(response, preview.package, receipt, identity, commandId, 1, priorState), `plant_equipment_${label}_tamper_accepted`)
+
+    const commissionedAsset = importedState.equipmentMaster.assets[0]
+    const commissioningCommandId = '00000000-0000-4000-8000-000000000302'
+    const commissioningActionId = `ACT-EQUIPMENT-COMMISSION-${commissioningCommandId}`
+    const commissioningInput = {
+      equipmentId: commissionedAsset.id,
+      installedAt: '2026-07-30T06:30:00.000Z',
+      initialState: 'stopped',
+      safetyBaselineReference: 'CHECKLIST-MIX-01-R1',
+    }
+    const commissionedAt = '2026-07-30T08:00:00.000Z'
+    const commissioningEvent = {
+      id: `EVT-${commissioningActionId}`,
+      actionId: commissioningActionId,
+      createdAt: commissionedAt,
+      actor: identity.userId,
+      reason: 'Commissioned reviewed Plant equipment',
+      evidenceReference: commissioningInput.safetyBaselineReference,
+      kind: 'equipment_commissioned',
+      subjectId: commissionedAsset.id,
+      summary: `Commissioned ${commissionedAsset.name} at ${commissionedAsset.workCentreId}`,
+      installedAt: commissioningInput.installedAt,
+      toState: commissioningInput.initialState,
+      workCentreId: commissionedAsset.workCentreId,
+    }
+    const commissionedState = production.validateProductionState({
+      ...importedState,
+      revision: 2,
+      machines: [...importedState.machines, { id: commissionedAsset.id, name: commissionedAsset.name, state: commissioningInput.initialState }],
+      events: [commissioningEvent, ...importedState.events],
+      equipmentMaster: {
+        ...importedState.equipmentMaster,
+        assets: importedState.equipmentMaster.assets.map((asset) => asset.id === commissionedAsset.id ? {
+          ...asset,
+          commissioningStatus: 'commissioned',
+          commissioning: {
+            actionId: commissioningActionId,
+            commissionedAt,
+            commissionedBy: identity.userId,
+            installedAt: commissioningInput.installedAt,
+            initialState: commissioningInput.initialState,
+            safetyBaselineReference: commissioningInput.safetyBaselineReference,
+          },
+        } : asset),
+      },
+    })
+    const commissioningResponse = {
+      commissioning: {
+        contract: 'supermega.production.equipment-commissioning.v1',
+        status: 'commissioned',
+        equipment_id: commissionedAsset.id,
+        workspace_id: identity.workspaceId,
+        runtime_machine_created: true,
+        equipment_command_performed: false,
+        telemetry_connected: false,
+        bulk_commissioning_performed: false,
+      },
+      result: {
+        command_id: commissioningCommandId,
+        surface: 'production',
+        event_type: 'production.equipment.commissioned',
+        version: 3,
+        state: commissionedState,
+        idempotent_replay: false,
+      },
+    }
+    assert(managedTrial.assertManagedPlantEquipmentCommissioning(commissioningResponse, commissioningInput, identity, commissioningCommandId, 2, importedState) === commissioningResponse, 'plant_equipment_valid_commissioning_rejected')
+    const replayedCommissioning = { ...commissioningResponse, result: { ...commissioningResponse.result, idempotent_replay: true } }
+    assert(managedTrial.assertManagedPlantEquipmentCommissioning(replayedCommissioning, commissioningInput, identity, commissioningCommandId, 2, importedState) === replayedCommissioning, 'plant_equipment_commissioning_replay_rejected')
+    for (const [label, response] of [
+      ['machine_state', { ...commissioningResponse, result: { ...commissioningResponse.result, state: { ...commissionedState, machines: [{ ...commissionedState.machines[0], state: 'running' }] } } }],
+      ['job', { ...commissioningResponse, result: { ...commissioningResponse.result, state: { ...commissionedState, jobs: [{ ...commissionedState.jobs[0], target: 101 }] } } }],
+      ['command', { ...commissioningResponse, commissioning: { ...commissioningResponse.commissioning, equipment_command_performed: true } }],
+      ['telemetry', { ...commissioningResponse, commissioning: { ...commissioningResponse.commissioning, telemetry_connected: true } }],
+      ['bulk', { ...commissioningResponse, commissioning: { ...commissioningResponse.commissioning, bulk_commissioning_performed: true } }],
+      ['evidence', { ...commissioningResponse, result: { ...commissioningResponse.result, state: { ...commissionedState, events: [{ ...commissionedState.events[0], evidenceReference: 'CHECKLIST-OTHER-R1' }, ...commissionedState.events.slice(1)] } } }],
+    ]) rejects(() => managedTrial.assertManagedPlantEquipmentCommissioning(response, commissioningInput, identity, commissioningCommandId, 2, importedState), `plant_equipment_commissioning_${label}_tamper_accepted`)
   } catch (error) {
     fail(`plant_equipment_import_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }

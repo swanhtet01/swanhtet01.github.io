@@ -16,6 +16,7 @@ import {
   type PlantEquipmentImportPreview,
 } from './plant-equipment-import.ts'
 import { validateProductionState, type ProductionState } from './production-workspace.ts'
+import { PlantEquipmentCommissioning } from './PlantEquipmentCommissioning.tsx'
 
 type PlantEquipmentOnboardingProps = {
   workspace: string
@@ -208,6 +209,7 @@ export function PlantEquipmentOnboarding({ workspace, owner, managedIdentity }: 
           {checkedIsCurrent && state.checked && !appliedIsCurrent ? <><label className="website-intake-confirm"><input checked={state.approved} disabled={state.busy} onChange={(event) => setState((current) => ({ ...current, approved: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.checked.preview.package.rows.length} equipment records and approve adding them as not commissioned.</span></label><div className="form-actions"><button className="core-button primary" disabled={!state.approved || state.busy} onClick={() => void apply()} type="button">Add equipment master</button></div></> : null}
           <div className="catalog-import-footer"><div><strong>{appliedIsCurrent && state.applied ? `${state.applied.activation.row_count} equipment records added in revision ${state.applied.result.version}.` : checkedIsCurrent ? 'Server checked; no records written yet.' : 'Ready for accountable setup.'}</strong><small>{appliedIsCurrent ? 'Equipment remains not commissioned until a separate safety-reviewed commissioning action exists.' : managedIdentity ? 'Check the package, then approve one atomic managed write.' : 'Download the staged package for owner review; local mode does not apply it.'}</small></div><div className="form-actions"><button className="core-button" disabled={state.busy} onClick={() => { requestRef.current += 1; setState(emptyState()) }} type="button">Clear</button>{!appliedIsCurrent && !checkedIsCurrent ? <button className="core-button primary" disabled={state.busy} onClick={() => void checkOrDownload()} type="button">{managedIdentity ? 'Check with workspace' : 'Download staged file'}</button> : null}</div></div>
         </div> : null}
+        {managedIdentity ? <PlantEquipmentCommissioning key={`${managedIdentity.userId}:${managedIdentity.workspaceId}`} managedIdentity={managedIdentity} /> : null}
       </div>
     </details>
   )

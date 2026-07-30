@@ -119,6 +119,7 @@ export type ManagedProductionEvent =
   | 'production.quality_hold.released'
   | 'production.machine_state.changed'
   | 'production.equipment_master.imported'
+  | 'production.equipment.commissioned'
   | 'production.order_execution.recorded'
   | 'production.downtime.started'
   | 'production.downtime.ended'
@@ -1072,6 +1073,105 @@ export function assertManagedPlantEquipmentActivation(
   return response as unknown as ManagedPlantEquipmentActivationResult
 }
 
+export function assertManagedPlantEquipmentCommissioning(
+  response: unknown,
+  input: ManagedPlantEquipmentCommissioningInput,
+  expectedIdentity: ManagedIdentity,
+  commandId: string,
+  expectedVersion: number,
+  priorState: ProductionState,
+): ManagedPlantEquipmentCommissioningResult {
+  if (!CLIENT_IMPORT_COMMAND_ID.test(commandId)
+    || !Number.isSafeInteger(expectedVersion)
+    || expectedVersion < 1
+    || !isRecord(response)
+    || !isRecord(response.commissioning)
+    || !isRecord(response.result)) {
+    throw new ManagedTrialError('The managed equipment commissioning response is invalid.', {
+      code: 'managed_plant_equipment_commissioning_invalid',
+    })
+  }
+  const commissioningReceipt = response.commissioning
+  const result = response.result
+  if (!hasExactKeys(commissioningReceipt, ['bulk_commissioning_performed', 'contract', 'equipment_command_performed', 'equipment_id', 'runtime_machine_created', 'status', 'telemetry_connected', 'workspace_id'])
+    || commissioningReceipt.contract !== 'supermega.production.equipment-commissioning.v1'
+    || commissioningReceipt.status !== 'commissioned'
+    || commissioningReceipt.equipment_id !== input.equipmentId
+    || commissioningReceipt.workspace_id !== expectedIdentity.workspaceId
+    || commissioningReceipt.runtime_machine_created !== true
+    || commissioningReceipt.equipment_command_performed !== false
+    || commissioningReceipt.telemetry_connected !== false
+    || commissioningReceipt.bulk_commissioning_performed !== false
+    || !hasExactKeys(result, ['command_id', 'event_type', 'idempotent_replay', 'state', 'surface', 'version'])
+    || result.command_id !== commandId
+    || result.surface !== 'production'
+    || result.event_type !== 'production.equipment.commissioned'
+    || result.version !== expectedVersion + 1
+    || typeof result.idempotent_replay !== 'boolean') {
+    throw new ManagedTrialError('The managed commissioning receipt does not match the reviewed equipment.', {
+      code: 'managed_plant_equipment_commissioning_invalid',
+    })
+  }
+  let accepted: ProductionState
+  let previous: ProductionState
+  try {
+    accepted = validateProductionState(result.state)
+    previous = validateProductionState(priorState)
+  } catch {
+    throw new ManagedTrialError('The managed workspace returned invalid commissioned equipment state.', {
+      code: 'managed_plant_equipment_commissioning_invalid',
+    })
+  }
+  const priorAsset = previous.equipmentMaster?.assets.find((asset) => asset.id === input.equipmentId)
+  const acceptedAsset = accepted.equipmentMaster?.assets.find((asset) => asset.id === input.equipmentId)
+  const event = accepted.events[0]
+  const machine = accepted.machines.at(-1)
+  const actionId = `ACT-EQUIPMENT-COMMISSION-${commandId}`
+  const unchangedFields = ['schema', 'jobs', 'issues', 'openingPlan', 'orderExecution'] as const
+  const acceptedRecord = accepted as unknown as Record<string, unknown>
+  const previousRecord = previous as unknown as Record<string, unknown>
+  const unchangedAssets = previous.equipmentMaster?.assets.filter((asset) => asset.id !== input.equipmentId) ?? []
+  const acceptedUnchangedAssets = accepted.equipmentMaster?.assets.filter((asset) => asset.id !== input.equipmentId) ?? []
+  if (!priorAsset
+    || priorAsset.commissioningStatus !== 'not_commissioned'
+    || !acceptedAsset
+    || acceptedAsset.commissioningStatus !== 'commissioned'
+    || !acceptedAsset.commissioning
+    || accepted.revision !== previous.revision + 1
+    || unchangedFields.some((field) => !sameManagedClientImportState(acceptedRecord[field], previousRecord[field]))
+    || !sameManagedClientImportState(accepted.events.slice(1), previous.events)
+    || !sameManagedClientImportState(accepted.machines.slice(0, -1), previous.machines)
+    || !sameManagedClientImportState(acceptedUnchangedAssets, unchangedAssets)
+    || accepted.machines.length !== previous.machines.length + 1
+    || !machine
+    || machine.id !== input.equipmentId
+    || machine.name !== priorAsset.name
+    || machine.state !== input.initialState
+    || !event
+    || event.kind !== 'equipment_commissioned'
+    || event.id !== `EVT-${actionId}`
+    || event.actionId !== actionId
+    || event.actor !== expectedIdentity.userId
+    || event.reason !== 'Commissioned reviewed Plant equipment'
+    || event.evidenceReference !== input.safetyBaselineReference
+    || event.subjectId !== input.equipmentId
+    || event.summary !== `Commissioned ${priorAsset.name} at ${priorAsset.workCentreId}`
+    || event.installedAt !== input.installedAt
+    || event.toState !== input.initialState
+    || event.workCentreId !== priorAsset.workCentreId
+    || acceptedAsset.commissioning.actionId !== actionId
+    || acceptedAsset.commissioning.commissionedAt !== event.createdAt
+    || acceptedAsset.commissioning.commissionedBy !== expectedIdentity.userId
+    || acceptedAsset.commissioning.installedAt !== input.installedAt
+    || acceptedAsset.commissioning.initialState !== input.initialState
+    || acceptedAsset.commissioning.safetyBaselineReference !== input.safetyBaselineReference) {
+    throw new ManagedTrialError('The managed commissioning changed unrelated Production records.', {
+      code: 'managed_plant_equipment_commissioning_invalid',
+    })
+  }
+  return response as unknown as ManagedPlantEquipmentCommissioningResult
+}
+
 export type ManagedPlantEquipmentValidation = {
   contract: 'supermega.production.equipment-import-validation.v1'
   status: 'valid'
@@ -1101,6 +1201,27 @@ export type ManagedPlantEquipmentActivationResult = {
     commissioning_performed: false
   }
   result: ManagedProductionCommandResult
+}
+
+export type ManagedPlantEquipmentCommissioningResult = {
+  commissioning: {
+    contract: 'supermega.production.equipment-commissioning.v1'
+    status: 'commissioned'
+    equipment_id: string
+    workspace_id: string
+    runtime_machine_created: true
+    equipment_command_performed: false
+    telemetry_connected: false
+    bulk_commissioning_performed: false
+  }
+  result: ManagedProductionCommandResult
+}
+
+export type ManagedPlantEquipmentCommissioningInput = {
+  equipmentId: string
+  installedAt: string
+  initialState: 'running' | 'attention' | 'stopped'
+  safetyBaselineReference: string
 }
 
 export function assertManagedWebsiteImportState(
@@ -1821,6 +1942,66 @@ export async function applyManagedPlantEquipmentImport(request: {
     response,
     submittedPackage,
     request.validation,
+    request.identity,
+    request.commandId,
+    request.expectedVersion,
+    priorState,
+  )
+}
+
+export async function commissionManagedPlantEquipment(request: {
+  commandId: string
+  expectedVersion: number
+  identity: ManagedIdentity
+  priorState: ProductionState
+  input: ManagedPlantEquipmentCommissioningInput
+}) {
+  let priorState: ProductionState
+  try {
+    priorState = validateProductionState(structuredClone(request.priorState))
+  } catch {
+    throw new ManagedTrialError('The Production workspace changed before commissioning.', {
+      code: 'managed_plant_equipment_commissioning_invalid',
+    })
+  }
+  const installedAt = new Date(request.input.installedAt)
+  const sourceAsset = priorState.equipmentMaster?.assets.find((asset) => asset.id === request.input.equipmentId)
+  if (!CLIENT_IMPORT_COMMAND_ID.test(request.commandId)
+    || !Number.isSafeInteger(request.expectedVersion)
+    || request.expectedVersion < 1
+    || !sourceAsset
+    || sourceAsset.commissioningStatus !== 'not_commissioned'
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(request.input.installedAt)
+    || !Number.isFinite(installedAt.getTime())
+    || installedAt.toISOString() !== request.input.installedAt
+    || !['running', 'attention', 'stopped'].includes(request.input.initialState)
+    || !request.input.safetyBaselineReference
+    || request.input.safetyBaselineReference !== request.input.safetyBaselineReference.trim()
+    || request.input.safetyBaselineReference.length > 240) {
+    throw new ManagedTrialError('The reviewed equipment commissioning request is invalid.', {
+      code: 'managed_plant_equipment_commissioning_invalid',
+    })
+  }
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/production/equipment/commission',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        command_id: request.commandId,
+        expected_version: request.expectedVersion,
+        equipment_id: request.input.equipmentId,
+        installed_at: request.input.installedAt,
+        initial_state: request.input.initialState,
+        safety_baseline_reference: request.input.safetyBaselineReference,
+        confirmation: `COMMISSION ${request.input.equipmentId}`,
+      }),
+    },
+    true,
+    request.identity,
+  )
+  return assertManagedPlantEquipmentCommissioning(
+    response,
+    request.input,
     request.identity,
     request.commandId,
     request.expectedVersion,
