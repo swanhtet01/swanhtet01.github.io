@@ -64,6 +64,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "production.downtime.ended",
         "production.maintenance.started",
         "production.maintenance.completed",
+        "production.shift.closed",
         "website.evidence.recorded",
         "website.revision.approved",
         "website.snapshot.recorded",

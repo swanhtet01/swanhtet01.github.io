@@ -6,6 +6,8 @@ from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta, timezone
+import hashlib
+import json
 import re
 from typing import Any, Callable
 
@@ -37,6 +39,7 @@ PRODUCTION_EVENTS = frozenset(
         "production.downtime.ended",
         "production.maintenance.started",
         "production.maintenance.completed",
+        "production.shift.closed",
     }
 )
 PRODUCTION_HUMAN_EVENTS = PRODUCTION_EVENTS
@@ -64,6 +67,7 @@ _EVENT_KIND_BY_TYPE = {
     "production.downtime.ended": "downtime_ended",
     "production.maintenance.started": "maintenance_started",
     "production.maintenance.completed": "maintenance_completed",
+    "production.shift.closed": "shift_closed",
 }
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _MAX_JOBS = 100
@@ -130,6 +134,17 @@ _MATERIAL_EVENT_FIELDS = frozenset(
     {"materialRef", "quantity", "materialUnit", "shiftRef"}
 )
 _MATERIAL_EVENT_OPTIONAL_FIELDS = frozenset({"materialLot"})
+_SHIFT_CLOSE_EVENT_FIELDS = frozenset(
+    {
+        "shiftRef",
+        "sourceRevision",
+        "sourceDigest",
+        "goodUnits",
+        "scrapUnits",
+        "outputEntryCount",
+        "materialEntryCount",
+    }
+)
 _TIMESTAMP_PATTERN = re.compile(
     r"^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})"
     r"(?:\.([0-9]{1,6}))?(Z|([+-])([0-9]{2}):([0-9]{2}))$"
@@ -552,6 +567,8 @@ def _validate_event(
         required = _EVENT_FIELDS | {"maintenanceOwner"}
     elif kind == "maintenance_completed":
         required = _EVENT_FIELDS | {"maintenanceStartActionId"}
+    elif kind == "shift_closed":
+        required = _EVENT_FIELDS | _SHIFT_CLOSE_EVENT_FIELDS
     elif kind in {
         "job_created",
         "issue_opened",
@@ -743,6 +760,26 @@ def _validate_event(
                 f"{field}.maintenanceStartActionId",
                 maximum=160,
             )
+    elif kind == "shift_closed":
+        shift_ref = _text(event["shiftRef"], f"{field}.shiftRef", maximum=80)
+        if subject_id != shift_ref:
+            raise TrialValidationError(
+                f"{field} shift close subject must match its shift reference."
+            )
+        _integer(event["sourceRevision"], f"{field}.sourceRevision", minimum=0)
+        source_digest = event["sourceDigest"]
+        if not isinstance(source_digest, str) or _DIGEST_PATTERN.fullmatch(source_digest) is None:
+            raise TrialValidationError(f"{field}.sourceDigest is invalid.")
+        good_units = _integer(event["goodUnits"], f"{field}.goodUnits", minimum=1)
+        scrap_units = _integer(event["scrapUnits"], f"{field}.scrapUnits", minimum=0)
+        output_entries = _integer(event["outputEntryCount"], f"{field}.outputEntryCount", minimum=1)
+        material_entries = _integer(event["materialEntryCount"], f"{field}.materialEntryCount", minimum=1)
+        expected_summary = (
+            f"Closed shift {shift_ref} with {good_units} good, {scrap_units} scrap, "
+            f"{output_entries} output entries, {material_entries} material entries"
+        )
+        if event["summary"] != expected_summary:
+            raise TrialValidationError(f"{field}.summary is not canonical.")
     elif kind == "issue_opened":
         if subject_id not in issue_ids:
             raise TrialValidationError(f"{field} references an unknown issue.")
@@ -1597,7 +1634,13 @@ def validate_production_state(value: object) -> dict[str, Any]:
         raise TrialValidationError(
             "Production revision must equal the append-only event count."
         )
-
+    for index, event in enumerate(events):
+        if event["kind"] != "shift_closed":
+            continue
+        if event["sourceRevision"] != len(events) - index - 1:
+            raise TrialValidationError(
+                f"events[{index}] shift close source revision does not match its append position."
+            )
     _validate_job_history(
         jobs,
         events,
@@ -1634,6 +1677,26 @@ def _require_unchanged(
     changed = [field for field in fields if current[field] != next_state[field]]
     if changed:
         raise TrialValidationError(f"event cannot change: {', '.join(changed)}.")
+
+
+def _canonical_value(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {
+            key: _canonical_value(value[key])
+            for key in sorted(value)
+        }
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_canonical_value(item) for item in value]
+    return value
+
+
+def _production_source_digest(state: Mapping[str, Any]) -> str:
+    canonical = json.dumps(
+        _canonical_value(state),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return f"sha256:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
 
 
 def _one_changed(
@@ -2231,6 +2294,113 @@ def _validate_maintenance_completed(
         raise TrialValidationError("maintenance completion summary is not canonical.")
 
 
+def _validate_shift_closed(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    event: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "jobs", "issues", "machines")
+    latest_close_is_current = False
+    if current["events"] and current["events"][0]["kind"] == "shift_closed":
+        source_state = dict(current)
+        source_state["revision"] = current["revision"] - 1
+        source_state["events"] = current["events"][1:]
+        latest_close_is_current = (
+            current["events"][0]["sourceDigest"]
+            == _production_source_digest(source_state)
+        )
+    if latest_close_is_current:
+        raise TrialValidationError(
+            "a new Plant event is required before another shift can be closed."
+        )
+    if current["events"]:
+        latest_at = _parsed_timestamp(
+            current["events"][0]["createdAt"],
+            "current.events[0].createdAt",
+        )[1]
+        close_at = _parsed_timestamp(event["createdAt"], "event.createdAt")[1]
+        if close_at < latest_at:
+            raise TrialValidationError(
+                "shift close confirmation cannot predate the latest Plant event."
+            )
+    order_execution = current.get("orderExecution")
+    if order_execution and order_execution["commands"]:
+        latest_execution_at = _parsed_timestamp(
+            order_execution["commands"][-1]["payload"]["proof"]["capturedAt"],
+            "current.orderExecution.commands[-1].payload.proof.capturedAt",
+        )[1]
+        close_at = _parsed_timestamp(event["createdAt"], "event.createdAt")[1]
+        if close_at < latest_execution_at:
+            raise TrialValidationError(
+                "shift close confirmation cannot predate the latest Plant execution command."
+            )
+    shift_ref = event["shiftRef"]
+    output_events = [
+        item
+        for item in current["events"]
+        if item["kind"] == "output_recorded" and item.get("shiftRef") == shift_ref
+    ]
+    material_events = [
+        item
+        for item in current["events"]
+        if item["kind"] == "material_consumed" and item["shiftRef"] == shift_ref
+    ]
+    good_units = sum(
+        item["quantity"]
+        for item in output_events
+        if item.get("outputKind", "good") == "good"
+    )
+    scrap_units = sum(
+        item["quantity"]
+        for item in output_events
+        if item.get("outputKind") == "scrap"
+    )
+    expected = {
+        "sourceRevision": current["revision"],
+        "sourceDigest": _production_source_digest(current),
+        "goodUnits": good_units,
+        "scrapUnits": scrap_units,
+        "outputEntryCount": len(output_events),
+        "materialEntryCount": len(material_events),
+    }
+    if any(event[field] != value for field, value in expected.items()):
+        raise TrialValidationError(
+            "shift close counts, revision, or source digest do not match current Plant evidence."
+        )
+    if good_units < 1 or not output_events or not material_events:
+        raise TrialValidationError(
+            "shift close requires good output and same-shift material trace."
+        )
+    if any("qualityHold" in job for job in current["jobs"]):
+        raise TrialValidationError("shift close requires every quality hold to be cleared.")
+    if any(
+        issue["status"] == "open" and issue["kind"] == "quality"
+        for issue in current["issues"]
+    ):
+        raise TrialValidationError("shift close requires every quality issue to be resolved.")
+    if any(
+        issue["status"] == "open" and issue.get("severity") in {"critical", "high"}
+        for issue in current["issues"]
+    ):
+        raise TrialValidationError("shift close requires critical and high problems to be resolved.")
+    if any(
+        _open_downtime_event(current["events"], machine["id"]) is not None
+        for machine in current["machines"]
+    ):
+        raise TrialValidationError("shift close requires every downtime record to be ended.")
+    if any(
+        _open_maintenance_event(current["events"], machine["id"]) is not None
+        for machine in current["machines"]
+    ):
+        raise TrialValidationError("shift close requires every maintenance record to be completed.")
+    expected_summary = (
+        f"Closed shift {shift_ref} with {good_units} good, {scrap_units} scrap, "
+        f"{len(output_events)} output entries, {len(material_events)} material entries"
+    )
+    if event["summary"] != expected_summary or event["subjectId"] != shift_ref:
+        raise TrialValidationError("shift close summary or subject is not canonical.")
+
+
 def _validate_order_execution_recorded(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -2265,6 +2435,19 @@ def _validate_order_execution_recorded(
         raise TrialValidationError(
             "Plant execution command proof must match the authenticated Production evidence."
         )
+    if current["events"]:
+        command_at = _parsed_timestamp(
+            command["payload"]["proof"]["capturedAt"],
+            "orderExecution.commands[-1].payload.proof.capturedAt",
+        )[1]
+        latest_event_at = _parsed_timestamp(
+            current["events"][0]["createdAt"],
+            "current.events[0].createdAt",
+        )[1]
+        if command_at < latest_event_at:
+            raise TrialValidationError(
+                "Plant execution command cannot predate the latest operating event."
+            )
     projection = project_plant_order(after)
     plan = projection["plan"]
     if not isinstance(plan, Mapping):
@@ -2307,6 +2490,7 @@ _TRANSITION_VALIDATORS: dict[
     "production.downtime.ended": _validate_downtime_ended,
     "production.maintenance.started": _validate_maintenance_started,
     "production.maintenance.completed": _validate_maintenance_completed,
+    "production.shift.closed": _validate_shift_closed,
 }
 
 

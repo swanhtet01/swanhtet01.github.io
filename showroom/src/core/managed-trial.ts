@@ -138,6 +138,7 @@ export type ManagedProductionEvent =
   | 'production.downtime.ended'
   | 'production.maintenance.started'
   | 'production.maintenance.completed'
+  | 'production.shift.closed'
 
 export type ManagedCommandResult = {
   command_id: string

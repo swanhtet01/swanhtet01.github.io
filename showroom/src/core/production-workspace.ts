@@ -1,4 +1,5 @@
 import type { PlantOrderState } from './plant-order-foundation'
+import { sha256Hex } from './managed-trial-proof.ts'
 
 export const PRODUCTION_WORKSPACE_SCHEMA = 'supermega.production.workspace.v2' as const
 export const PRODUCTION_KEY = 'supermega.production.workspace.v2'
@@ -79,7 +80,7 @@ export type ProductionOpeningPlan = {
   machineIds: string[]
 }
 
-export type ProductionEventKind = 'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed' | 'downtime_started' | 'downtime_ended' | 'maintenance_started' | 'maintenance_completed'
+export type ProductionEventKind = 'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed' | 'downtime_started' | 'downtime_ended' | 'maintenance_started' | 'maintenance_completed' | 'shift_closed'
 export type ProductionOutputKind = 'good' | 'scrap'
 
 export type ProductionEvent = {
@@ -114,6 +115,12 @@ export type ProductionEvent = {
   downtimeStartActionId?: string
   maintenanceOwner?: string
   maintenanceStartActionId?: string
+  sourceRevision?: number
+  sourceDigest?: string
+  goodUnits?: number
+  scrapUnits?: number
+  outputEntryCount?: number
+  materialEntryCount?: number
 }
 
 export type ProductionState = {
@@ -245,6 +252,16 @@ export type ProductionShiftHandoff = {
     openedBy: string
     evidenceReference: string
   }>
+  openQualityIssues: Array<{
+    id: string
+    severity: ProductionIssueSeverity
+    area: string
+    summary: string
+    owner: string
+    dueAt: string
+    containment: string
+  }>
+  activeDowntime: ProductionDowntimeInterval[]
   activeMaintenance: Array<Omit<ProductionMaintenanceRecord, 'completion'>>
   machineObservations: Array<{
     id: string
@@ -301,7 +318,7 @@ export const productionIssueSeverities: ProductionIssueSeverity[] = ['critical',
 export const productionJobPriorities: ProductionJobPriority[] = ['urgent', 'normal', 'low']
 export const productionMachineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
 export const productionMaterialUnits: ProductionMaterialUnit[] = ['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm']
-const eventKinds: ProductionEventKind[] = ['job_created', 'job_schedule_updated', 'job_closed', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed']
+const eventKinds: ProductionEventKind[] = ['job_created', 'job_schedule_updated', 'job_closed', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed', 'shift_closed']
 const baseEventFields = ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'subjectId', 'summary']
 const jobCreatedEventFields = [...baseEventFields, 'jobPriority', 'jobDueAt', 'jobOwner']
 const jobScheduleUpdateEventFields = [...jobCreatedEventFields, 'fromJobPriority', 'fromJobDueAt', 'fromJobOwner']
@@ -312,6 +329,7 @@ const materialOptionalEventFields = ['materialLot']
 const downtimeEndEventFields = [...baseEventFields, 'downtimeStartActionId']
 const maintenanceStartEventFields = [...baseEventFields, 'maintenanceOwner']
 const maintenanceCompleteEventFields = [...baseEventFields, 'maintenanceStartActionId']
+const shiftClosedEventFields = [...baseEventFields, 'shiftRef', 'sourceRevision', 'sourceDigest', 'goodUnits', 'scrapUnits', 'outputEntryCount', 'materialEntryCount']
 const productionStateFields = ['schema', 'revision', 'jobs', 'issues', 'machines', 'events', 'openingPlan', 'orderExecution']
 const productionOpeningPlanFields = ['contract', 'packageDigest', 'confirmedAt', 'jobIds', 'machineIds']
 const productionJobFields = ['id', 'line', 'product', 'target', 'output', 'owner', 'priority', 'dueAt', 'scrap', 'qualityHold', 'closure']
@@ -333,6 +351,7 @@ const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
   downtime_ended: downtimeEndEventFields,
   maintenance_started: maintenanceStartEventFields,
   maintenance_completed: maintenanceCompleteEventFields,
+  shift_closed: shiftClosedEventFields,
 }
 const deterministicSeedNow = Date.parse('2026-07-23T08:00:00.000Z')
 
@@ -789,6 +808,19 @@ export function validateProductionState(value: unknown): ProductionState {
       if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...expectedFields].sort())) throw new Error(`events[${index}] maintenance event fields are invalid.`)
       if (candidate.kind === 'maintenance_started') canonicalText(candidate.maintenanceOwner, `events[${index}].maintenanceOwner`, 120)
       else canonicalText(candidate.maintenanceStartActionId, `events[${index}].maintenanceStartActionId`, 160)
+    } else if (candidate.kind === 'shift_closed') {
+      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...shiftClosedEventFields].sort())) throw new Error(`events[${index}] shift close event fields are invalid.`)
+      const shiftRef = canonicalText(candidate.shiftRef, `events[${index}].shiftRef`, 80)
+      if (candidate.subjectId !== shiftRef) throw new Error(`events[${index}] shift close subject must match its shift reference.`)
+      assertSafeInteger(candidate.sourceRevision, `events[${index}].sourceRevision`)
+      if (candidate.sourceRevision !== events.length - index - 1) throw new Error(`events[${index}] shift close source revision does not match its append position.`)
+      if (typeof candidate.sourceDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(candidate.sourceDigest)) throw new Error(`events[${index}].sourceDigest is invalid.`)
+      assertSafeInteger(candidate.goodUnits, `events[${index}].goodUnits`, 1)
+      assertSafeInteger(candidate.scrapUnits, `events[${index}].scrapUnits`)
+      assertSafeInteger(candidate.outputEntryCount, `events[${index}].outputEntryCount`, 1)
+      assertSafeInteger(candidate.materialEntryCount, `events[${index}].materialEntryCount`, 1)
+      const expectedSummary = `Closed shift ${shiftRef} with ${candidate.goodUnits} good, ${candidate.scrapUnits} scrap, ${candidate.outputEntryCount} output entries, ${candidate.materialEntryCount} material entries`
+      if (candidate.summary !== expectedSummary) throw new Error(`events[${index}] shift close summary is not canonical.`)
     } else if (candidate.kind === 'issue_opened') {
       if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
       if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || maintenanceFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
@@ -1486,6 +1518,17 @@ export function buildProductionShiftHandoff(state: ProductionState, shiftRef: st
       remainingUnits: Math.max(0, job.target - job.output - (job.scrap ?? 0)),
       qualityHold: { ...job.qualityHold },
     }))
+  const openQualityIssues = current.issues
+    .filter((issue) => issue.status === 'open' && issue.kind === 'quality')
+    .map((issue) => ({
+      id: issue.id,
+      severity: issue.severity ?? 'medium',
+      area: issue.area,
+      summary: issue.summary,
+      owner: issue.owner ?? 'Unassigned',
+      dueAt: issue.dueAt ?? issue.createdAt,
+      containment: issue.containment ?? 'No containment recorded',
+    }))
   const priorityProblems = current.issues
     .filter((issue): issue is ProductionIssue & {
       severity: 'critical' | 'high'
@@ -1530,6 +1573,8 @@ export function buildProductionShiftHandoff(state: ProductionState, shiftRef: st
       scope: record.scope,
       startEvidenceReference: record.startEvidenceReference,
     }))
+  const activeDowntime = deriveProductionDowntimeIntervals(current.machines, current.events)
+    .filter((interval) => !interval.end)
   const machineObservations = current.machines.map((machine) => {
     const observationEvent = current.events.find((event) => event.kind === 'machine_state_changed' && event.subjectId === machine.id)
     return {
@@ -1557,6 +1602,8 @@ export function buildProductionShiftHandoff(state: ProductionState, shiftRef: st
     unfinishedJobs,
     activeHolds,
     priorityProblems,
+    openQualityIssues,
+    activeDowntime,
     activeMaintenance,
     machineObservations,
   }
@@ -1608,10 +1655,20 @@ export function formatProductionShiftHandoff(handoff: ProductionShiftHandoff) {
   for (const heldJob of handoff.activeHolds) {
     lines.push(`- ${handoffLine(heldJob.id)} · ${handoffLine(heldJob.product)} · ${handoffLine(heldJob.line)} · target ${heldJob.target} · ${heldJob.goodUnits} good · ${heldJob.scrapUnits} scrap · ${heldJob.remainingUnits} remaining · held ${heldJob.qualityHold.heldAt} by ${handoffLine(heldJob.qualityHold.heldBy)} · ${handoffLine(heldJob.qualityHold.reason)} · evidence ${handoffLine(heldJob.qualityHold.evidenceReference)} · action ${handoffLine(heldJob.qualityHold.actionId)}`)
   }
+  lines.push('', `Open quality problems (${handoff.openQualityIssues.length})`)
+  if (!handoff.openQualityIssues.length) lines.push('- None')
+  for (const problem of handoff.openQualityIssues) {
+    lines.push(`- ${problem.severity.toUpperCase()} | ${handoffLine(problem.id)} | ${handoffLine(problem.area)} | ${handoffLine(problem.summary)} | owner ${handoffLine(problem.owner)} | due ${problem.dueAt} | next ${handoffLine(problem.containment)}`)
+  }
   lines.push('', `Critical/high problems (${handoff.priorityProblems.length})`)
   if (!handoff.priorityProblems.length) lines.push('- None')
   for (const problem of handoff.priorityProblems) {
     lines.push(`- ${problem.severity.toUpperCase()} · ${handoffLine(problem.id)} · ${handoffLine(problem.area)} · ${handoffLine(problem.summary)} · opened ${problem.openedAt} by ${handoffLine(problem.openedBy)} · owner ${handoffLine(problem.owner)} · due ${problem.dueAt} · next ${handoffLine(problem.containment)} · evidence ${handoffLine(problem.evidenceReference)} · action ${handoffLine(problem.actionId)}`)
+  }
+  lines.push('', `Active downtime (${handoff.activeDowntime.length})`)
+  if (!handoff.activeDowntime.length) lines.push('- None')
+  for (const interval of handoff.activeDowntime) {
+    lines.push(`- ${handoffLine(interval.machineId)} | ${handoffLine(interval.machineName)} | started ${interval.startedAt} by ${handoffLine(interval.startedBy)} | ${handoffLine(interval.startReason)} | evidence ${handoffLine(interval.startEvidenceReference)} | action ${handoffLine(interval.startActionId)}`)
   }
   lines.push('', `Active maintenance (${handoff.activeMaintenance.length})`)
   if (!handoff.activeMaintenance.length) lines.push('- None')
@@ -1628,6 +1685,112 @@ export function formatProductionShiftHandoff(handoff: ProductionShiftHandoff) {
     lines.push(`- ${handoffLine(machine.id)} · ${handoffLine(machine.name)} · recorded ${machine.state} · observed ${machine.observation.observedAt} by ${handoffLine(machine.observation.observedBy)} · ${handoffLine(machine.observation.reason)} · evidence ${handoffLine(machine.observation.evidenceReference)} · action ${handoffLine(machine.observation.actionId)}`)
   }
   return lines.join('\n')
+}
+
+export function productionShiftCloseSourceDigest(handoff: ProductionShiftHandoff) {
+  return `sha256:${sha256Hex(handoff.sourceCanonical)}`
+}
+
+function shiftCloseSummary(
+  shiftRef: string,
+  goodUnits: number,
+  scrapUnits: number,
+  outputEntryCount: number,
+  materialEntryCount: number,
+) {
+  return `Closed shift ${shiftRef} with ${goodUnits} good, ${scrapUnits} scrap, ${outputEntryCount} output entries, ${materialEntryCount} material entries`
+}
+
+export function currentProductionShiftClose(state: ProductionState, shiftRef?: string) {
+  const current = validateProductionState(state)
+  const event = current.events[0]
+  if (!event
+    || event.kind !== 'shift_closed'
+    || event.sourceRevision !== current.revision - 1
+    || (shiftRef !== undefined && event.shiftRef !== shiftRef)) return null
+  const sourceState = validateProductionState({
+    ...current,
+    revision: current.revision - 1,
+    events: current.events.slice(1),
+  })
+  if (`sha256:${sha256Hex(productionCanonical(sourceState))}` !== event.sourceDigest) return null
+  const handoff = buildProductionShiftHandoff(sourceState, event.shiftRef)
+  if (!handoff
+    || handoff.sourceRevision !== event.sourceRevision
+    || handoff.shiftOutput.goodUnits !== event.goodUnits
+    || handoff.shiftOutput.scrapUnits !== event.scrapUnits
+    || handoff.shiftOutput.entryCount !== event.outputEntryCount
+    || handoff.materialEntries.length !== event.materialEntryCount
+    || handoff.shiftOutput.goodUnits < 1
+    || handoff.shiftOutput.entryCount < 1
+    || handoff.materialEntries.length < 1
+    || handoff.activeHolds.length > 0
+    || handoff.openQualityIssues.length > 0
+    || handoff.priorityProblems.length > 0
+    || handoff.activeDowntime.length > 0
+    || handoff.activeMaintenance.length > 0) return null
+  return event
+}
+
+export function recordProductionShiftClose(
+  state: ProductionState,
+  handoff: ProductionShiftHandoff,
+  proof: ProductionActionProof,
+) {
+  if (!validProof(proof) || !handoff || !validCanonicalText(handoff.shiftRef, 80)) return null
+  const current = validateProductionState(state)
+  const sourceDigest = productionShiftCloseSourceDigest(handoff)
+  const goodUnits = handoff.shiftOutput.goodUnits
+  const scrapUnits = handoff.shiftOutput.scrapUnits
+  const outputEntryCount = handoff.shiftOutput.entryCount
+  const materialEntryCount = handoff.materialEntries.length
+  const existing = current.events.find((event) => event.actionId === proof.actionId)
+  if (existing) return existing.kind === 'shift_closed'
+    && existing.subjectId === handoff.shiftRef
+    && existing.shiftRef === handoff.shiftRef
+    && existing.sourceRevision === handoff.sourceRevision
+    && existing.sourceDigest === sourceDigest
+    && existing.goodUnits === goodUnits
+    && existing.scrapUnits === scrapUnits
+    && existing.outputEntryCount === outputEntryCount
+    && existing.materialEntryCount === materialEntryCount
+    && sameProof(existing, proof) ? current : null
+  const expectedHandoff = buildProductionShiftHandoff(current, handoff.shiftRef)
+  if (!expectedHandoff || JSON.stringify(expectedHandoff) !== JSON.stringify(handoff)) return null
+  const latestEvent = current.events[0]
+  if (actionIdIsUsed(current, proof.actionId)
+    || current.revision >= Number.MAX_SAFE_INTEGER
+    || currentProductionShiftClose(current) !== null
+    || (latestEvent && timestampBefore(proof.capturedAt, latestEvent.createdAt))
+    || (current.orderExecution?.commands.length
+      && timestampBefore(proof.capturedAt, current.orderExecution.commands[current.orderExecution.commands.length - 1].payload.proof.capturedAt))
+    || handoff.sourceRevision !== current.revision
+    || handoff.sourceCanonical !== productionCanonical(current)
+    || goodUnits < 1
+    || outputEntryCount < 1
+    || materialEntryCount < 1
+    || handoff.activeHolds.length > 0
+    || handoff.openQualityIssues.length > 0
+    || handoff.priorityProblems.length > 0
+    || handoff.activeDowntime.length > 0
+    || handoff.activeMaintenance.length > 0) return null
+  const event = eventFor(proof, {
+    kind: 'shift_closed',
+    subjectId: handoff.shiftRef,
+    summary: shiftCloseSummary(handoff.shiftRef, goodUnits, scrapUnits, outputEntryCount, materialEntryCount),
+    shiftRef: handoff.shiftRef,
+    sourceRevision: handoff.sourceRevision,
+    sourceDigest,
+    goodUnits,
+    scrapUnits,
+    outputEntryCount,
+    materialEntryCount,
+  })
+  return validateProductionState({
+    ...current,
+    revision: current.revision + 1,
+    events: [event, ...current.events],
+  })
 }
 
 export function registerProductionJob(state: ProductionState, job: ProductionJob, proof: ProductionActionProof) {

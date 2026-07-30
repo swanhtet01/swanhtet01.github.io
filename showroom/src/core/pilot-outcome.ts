@@ -31,16 +31,21 @@ type GuidedShopSaleAction = {
   evidenceReference: string
 }
 
-type GuidedPlantOutputAction = {
-  capturedAt: string
-  domain: string
+type GuidedPlantShiftCloseEvent = {
+  createdAt: string
   kind: string
   subjectId: string
+  shiftRef?: string
   summary: string
-  actorKind: string
   actor: string
   reason: string
   evidenceReference: string
+  sourceRevision?: number
+  sourceDigest?: string
+  goodUnits?: number
+  scrapUnits?: number
+  outputEntryCount?: number
+  materialEntryCount?: number
 }
 
 type PilotOutcomeCheckpoint = {
@@ -99,7 +104,6 @@ type StoredPilotOutcomes = {
 
 const PRODUCT_IDS = new Set<PilotOutcomeProduct>(['commerce', 'production', 'website', 'ecommerce'])
 const SHA256_DIGEST = /^sha256:[0-9a-f]{64}$/
-const PLANT_GUIDED_OUTPUT_SUMMARY = /^Record ([1-9][0-9]*) good units for (.+?) · (.+)$/
 
 function digest(value: unknown) {
   return `sha256:${sha256Hex(JSON.stringify(value))}`
@@ -286,44 +290,62 @@ export function buildShopGuidedSaleOutcomeMetric(
   }
 }
 
-export function buildPlantGuidedOutputOutcomeMetric(
-  actions: readonly GuidedPlantOutputAction[],
+export function buildPlantGuidedShiftCloseOutcomeMetric(
+  events: readonly GuidedPlantShiftCloseEvent[],
   trialStartedAt: string,
 ): PilotOutcomeMetric | null {
   const startedAt = Date.parse(trialStartedAt)
   if (!Number.isFinite(startedAt)) return null
-  const completedOutputCount = actions.filter((action) => {
-    const subjectId = visibleText(action.subjectId, 120)
-    const summaryMatch = PLANT_GUIDED_OUTPUT_SUMMARY.exec(action.summary)
-    const quantity = Number(summaryMatch?.[1])
-    const summarySubjectId = visibleText(summaryMatch?.[2], 120)
-    const shiftReference = visibleText(summaryMatch?.[3], 80)
-    return action.domain === 'production'
-      && action.kind === 'production_output'
-      && action.actorKind === 'human'
-      && Boolean(subjectId)
-      && Boolean(visibleText(action.actor, 80))
-      && Boolean(visibleText(action.reason, 240))
-      && Boolean(visibleText(action.evidenceReference, 180))
-      && visibleText(action.summary, 240) === action.summary
-      && Number.isSafeInteger(quantity)
-      && quantity > 0
-      && summarySubjectId === subjectId
+  const completedShiftCloses = events.filter((event) => {
+    const shiftReference = visibleText(event.shiftRef, 80)
+    const goodUnits = event.goodUnits
+    const scrapUnits = event.scrapUnits
+    const outputEntryCount = event.outputEntryCount
+    const materialEntryCount = event.materialEntryCount
+    const expectedSummary = `Closed shift ${shiftReference} with ${goodUnits} good, ${scrapUnits} scrap, ${outputEntryCount} output entries, ${materialEntryCount} material entries`
+    return event.kind === 'shift_closed'
+      && visibleText(event.subjectId, 80) === shiftReference
       && Boolean(shiftReference)
-      && !shiftReference.includes(' · ')
-      && Number.isFinite(Date.parse(action.capturedAt))
-      && Date.parse(action.capturedAt) >= startedAt
-  }).length
+      && Boolean(visibleText(event.actor, 80))
+      && Boolean(visibleText(event.reason, 240))
+      && Boolean(visibleText(event.evidenceReference, 180))
+      && Number.isSafeInteger(event.sourceRevision)
+      && Number(event.sourceRevision) >= 0
+      && typeof event.sourceDigest === 'string'
+      && SHA256_DIGEST.test(event.sourceDigest)
+      && Number.isSafeInteger(goodUnits)
+      && Number(goodUnits) > 0
+      && Number.isSafeInteger(scrapUnits)
+      && Number(scrapUnits) >= 0
+      && Number.isSafeInteger(outputEntryCount)
+      && Number(outputEntryCount) > 0
+      && Number.isSafeInteger(materialEntryCount)
+      && Number(materialEntryCount) > 0
+      && event.summary === expectedSummary
+      && Number.isFinite(Date.parse(event.createdAt))
+      && Date.parse(event.createdAt) >= startedAt
+  })
+  const completedShiftCloseCount = completedShiftCloses.length
+  const aggregateSource = completedShiftCloses.map((event) => ({
+    shiftRef: visibleText(event.shiftRef, 80),
+    sourceRevision: event.sourceRevision,
+    sourceDigest: event.sourceDigest,
+    goodUnits: event.goodUnits,
+    scrapUnits: event.scrapUnits,
+    outputEntryCount: event.outputEntryCount,
+    materialEntryCount: event.materialEntryCount,
+    createdAt: event.createdAt,
+  }))
   return {
-    metricId: 'plant-guided-output-gap',
-    label: 'Guided Plant output gap',
-    value: completedOutputCount > 0 ? 0 : 1,
+    metricId: 'plant-guided-shift-close-gap',
+    label: 'Guided Plant shift-close gap',
+    value: completedShiftCloseCount > 0 ? 0 : 1,
     unit: 'gaps',
     better: 'lower',
-    detail: completedOutputCount > 0
-      ? `${completedOutputCount} named-owner good-output record${completedOutputCount === 1 ? '' : 's'} completed after the trial started.`
-      : 'No named-owner good-output record completed after the trial started.',
-    sourceDigest: digest(['supermega.plant_guided_output_outcome_source.v1', trialStartedAt, completedOutputCount]),
+    detail: completedShiftCloseCount > 0
+      ? `${completedShiftCloseCount} named-owner Plant shift-close record${completedShiftCloseCount === 1 ? '' : 's'} completed after the trial started.`
+      : 'No named-owner Plant shift-close record completed after the trial started.',
+    sourceDigest: digest(['supermega.plant_guided_shift_close_outcome_source.v1', trialStartedAt, aggregateSource]),
   }
 }
 

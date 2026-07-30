@@ -290,6 +290,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, jobs, man
       reviewed.commandId,
       reviewed.proof,
       (current) => {
+        if (current.events[0] && Date.parse(reviewed.proof.capturedAt) < Date.parse(current.events[0].createdAt)) return null
         const currentExecution = validatePlantOrderState(current.orderExecution ?? createEmptyPlantOrderState())
         const result = reviewed.apply(currentExecution)
         applied = result

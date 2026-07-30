@@ -3,6 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timedelta
 from decimal import Decimal
+import hashlib
+import json
 import unittest
 from uuid import uuid4
 
@@ -340,6 +342,67 @@ def material_state(
     return state
 
 
+def production_source_digest(state: dict[str, object]) -> str:
+    canonical = json.dumps(
+        state,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return f"sha256:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
+
+
+def shift_closed_state(
+    current: dict[str, object],
+    evidence: dict[str, str],
+    *,
+    shift_ref: str = "2026-07-24 Day",
+) -> dict[str, object]:
+    state = deepcopy(current)
+    output_events = [
+        event
+        for event in current["events"]
+        if event["kind"] == "output_recorded" and event.get("shiftRef") == shift_ref
+    ]
+    material_events = [
+        event
+        for event in current["events"]
+        if event["kind"] == "material_consumed" and event["shiftRef"] == shift_ref
+    ]
+    good_units = sum(
+        event["quantity"]
+        for event in output_events
+        if event.get("outputKind", "good") == "good"
+    )
+    scrap_units = sum(
+        event["quantity"]
+        for event in output_events
+        if event.get("outputKind") == "scrap"
+    )
+    summary = (
+        f"Closed shift {shift_ref} with {good_units} good, {scrap_units} scrap, "
+        f"{len(output_events)} output entries, {len(material_events)} material entries"
+    )
+    state["revision"] += 1
+    state["events"] = [
+        production_event(
+            evidence,
+            kind="shift_closed",
+            subject_id=shift_ref,
+            summary=summary,
+            shiftRef=shift_ref,
+            sourceRevision=current["revision"],
+            sourceDigest=production_source_digest(current),
+            goodUnits=good_units,
+            scrapUnits=scrap_units,
+            outputEntryCount=len(output_events),
+            materialEntryCount=len(material_events),
+        ),
+        *state["events"],
+    ]
+    return state
+
+
 def closed_job_state(
     current: dict[str, object],
     evidence: dict[str, str],
@@ -651,9 +714,139 @@ class ProductionRuntimeTests(unittest.TestCase):
             "production.downtime.ended",
             "production.maintenance.started",
             "production.maintenance.completed",
+            "production.shift.closed",
         }
         self.assertEqual(PRODUCTION_EVENTS, expected_events)
         self.assertEqual(PRODUCTION_HUMAN_EVENTS, expected_events)
+
+    def test_shift_close_binds_exact_clear_shift_evidence(self) -> None:
+        base = starting_workspace(target=20)
+        output_evidence = action_evidence("ACT-SHIFT-OUTPUT", captured_at=NOW)
+        output = apply_event(
+            base,
+            "production.output.recorded",
+            output_state(base, 3, output_evidence),
+            output_evidence,
+        )
+        material_evidence = action_evidence("ACT-SHIFT-MATERIAL", captured_at=LATER)
+        traced = apply_event(
+            output,
+            "production.material.consumed",
+            material_state(output, 1.25, material_evidence),
+            material_evidence,
+        )
+        close_evidence = action_evidence("ACT-SHIFT-CLOSE", captured_at=LATEST)
+        closed = apply_event(
+            traced,
+            "production.shift.closed",
+            shift_closed_state(traced, close_evidence),
+            close_evidence,
+        )
+        close_event = closed["events"][0]
+        self.assertEqual(close_event["kind"], "shift_closed")
+        self.assertEqual(close_event["sourceRevision"], traced["revision"])
+        self.assertEqual(close_event["sourceDigest"], production_source_digest(traced))
+        self.assertEqual(close_event["goodUnits"], 3)
+        self.assertEqual(close_event["scrapUnits"], 0)
+        self.assertEqual(close_event["outputEntryCount"], 1)
+        self.assertEqual(close_event["materialEntryCount"], 1)
+        self.assertEqual(closed["jobs"], traced["jobs"])
+        self.assertEqual(closed["issues"], traced["issues"])
+        self.assertEqual(closed["machines"], traced["machines"])
+
+        missing_material = shift_closed_state(output, close_evidence)
+        with self.assertRaises(TrialValidationError):
+            apply_event(output, "production.shift.closed", missing_material, close_evidence)
+
+        tampered_digest = shift_closed_state(traced, close_evidence)
+        tampered_digest["events"][0]["sourceDigest"] = f"sha256:{'0' * 64}"
+        with self.assertRaises(TrialValidationError):
+            apply_event(traced, "production.shift.closed", tampered_digest, close_evidence)
+
+        issue_evidence = action_evidence(
+            "ACT-SHIFT-QUALITY",
+            captured_at="2026-07-24T09:20:00.000Z",
+        )
+        quality_blocked = apply_event(
+            traced,
+            "production.issue.opened",
+            opened_issue_state(traced, issue_evidence),
+            issue_evidence,
+        )
+        blocked_close_evidence = action_evidence(
+            "ACT-SHIFT-CLOSE-QUALITY",
+            captured_at="2026-07-24T09:40:00.000Z",
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                quality_blocked,
+                "production.shift.closed",
+                shift_closed_state(quality_blocked, blocked_close_evidence),
+                blocked_close_evidence,
+            )
+
+        downtime_evidence = action_evidence(
+            "ACT-SHIFT-DOWNTIME",
+            captured_at="2026-07-24T09:20:00.000Z",
+        )
+        wcm_blocked = apply_event(
+            traced,
+            "production.downtime.started",
+            started_downtime_state(traced, downtime_evidence),
+            downtime_evidence,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                wcm_blocked,
+                "production.shift.closed",
+                shift_closed_state(wcm_blocked, blocked_close_evidence),
+                blocked_close_evidence,
+            )
+
+        second_close_evidence = action_evidence(
+            "ACT-SHIFT-CLOSE-AGAIN",
+            captured_at="2026-07-24T09:45:00.000Z",
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                closed,
+                "production.shift.closed",
+                shift_closed_state(closed, second_close_evidence),
+                second_close_evidence,
+            )
+
+        execution_evidence = action_evidence(
+            "ACT-SHIFT-EXECUTION",
+            captured_at="2026-07-24T09:45:00.000Z",
+        )
+        execution_changed = deepcopy(closed)
+        execution_changed["orderExecution"] = planned_order_execution(
+            closed,
+            execution_evidence,
+            target=17,
+        )
+        execution_changed = apply_event(
+            closed,
+            "production.order_execution.recorded",
+            execution_changed,
+            execution_evidence,
+        )
+        renewed_close_evidence = action_evidence(
+            "ACT-SHIFT-CLOSE-AFTER-EXECUTION",
+            captured_at="2026-07-24T10:00:00.000Z",
+        )
+        renewed = apply_event(
+            execution_changed,
+            "production.shift.closed",
+            shift_closed_state(execution_changed, renewed_close_evidence),
+            renewed_close_evidence,
+        )
+        self.assertEqual(renewed["events"][0]["kind"], "shift_closed")
+        self.assertEqual(renewed["events"][1]["kind"], "shift_closed")
+        self.assertNotEqual(
+            renewed["events"][0]["sourceDigest"],
+            renewed["events"][1]["sourceDigest"],
+        )
 
     def test_managed_order_execution_appends_one_bound_command(self) -> None:
         current = starting_workspace(target=10)
@@ -671,6 +864,30 @@ class ProductionRuntimeTests(unittest.TestCase):
         self.assertEqual(accepted["revision"], current["revision"])
         self.assertEqual(accepted["events"], current["events"])
         self.assertEqual(accepted["orderExecution"]["revision"], 1)  # type: ignore[index]
+
+        output_evidence = action_evidence(
+            "ACT-ORDER-EXECUTION-LATEST-OUTPUT",
+            captured_at=LATER,
+        )
+        output_current = apply_event(
+            current,
+            "production.output.recorded",
+            output_state(current, 1, output_evidence),
+            output_evidence,
+        )
+        stale_execution = deepcopy(output_current)
+        stale_execution["orderExecution"] = planned_order_execution(
+            output_current,
+            plan_evidence,
+            target=9,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                output_current,
+                "production.order_execution.recorded",
+                stale_execution,
+                plan_evidence,
+            )
 
         availability_evidence = action_evidence(
             "ACT-ORDER-EXECUTION-002",
