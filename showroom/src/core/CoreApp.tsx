@@ -6708,21 +6708,26 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         ['Step 2', 'AI checks MES fields locally'],
         ['Step 3', 'Review one copied job'],
       ] as const
+  const plantEnterpriseContext = <details aria-label="Plant enterprise evidence" className="plant-execution-disclosure plant-enterprise-disclosure">
+    <summary><span><strong>MES, MRP, ERP &amp; ISO evidence</strong><small>Open detailed status, readiness, trace, quality, costing, and audit context</small></span><b>Open</b></summary>
+    <div className="plant-enterprise-stack">
+      {plantAgentQueue}
+      {mesDispatch}
+      {plantControl}
+      {plantLifecycle}
+      {plantMrp}
+      {plantCostReadiness}
+      {plantCostPacket}
+      {plantQualityRelease}
+      {plantInspectionControl}
+      {plantComplianceDossier}
+    </div>
+  </details>
 
   if (tab === 'production') return <div className="operation-module plant-production-module">
     {productionBoundary}
     {plantStatus}
     {plantCommandCenter}
-    {plantAgentQueue}
-    {mesDispatch}
-    {plantControl}
-    {plantLifecycle}
-    {plantMrp}
-    {plantCostReadiness}
-    {plantCostPacket}
-    {plantQualityRelease}
-    {plantInspectionControl}
-    {plantComplianceDossier}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
@@ -6805,6 +6810,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       <summary><span><strong>Batch control</strong><small>BOM, routing, materials, inspection, and release</small></span><b>Open</b></summary>
       <Suspense fallback={<p className="form-notice" role="status">Loading batch control…</p>}><PlantOrderFoundation actor={managedIdentity?.userId ?? 'Local Plant supervisor'} commerceState={relatedCommerce} disabled={!productionCanWrite || Boolean(pendingAction)} jobs={production.jobs} key={`plant-order:${managedWorkspaceId ?? managedIdentity?.workspaceId ?? 'local-sample'}:${production.orderExecution?.headDigest ?? 'empty'}`} managedState={managedIdentity ? production.orderExecution ?? null : undefined} onManagedCommand={managedIdentity ? mutateProduction : undefined} scope={`plant:${managedWorkspaceId ?? managedIdentity?.workspaceId ?? 'local-sample'}`} /></Suspense>
     </details>
+    {plantEnterpriseContext}
     <dialog aria-labelledby="job-schedule-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeJobSchedule() }} ref={scheduleDialogRef}>
       {scheduleDraft ? <>
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2 id="job-schedule-title">Change {scheduleDraft.jobId} plan</h2></div><button aria-label="Close job schedule" className="text-link" onClick={closeJobSchedule} type="button">Close</button></div>
@@ -6824,16 +6830,6 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {productionBoundary}
     {plantStatus}
     {plantCommandCenter}
-    {plantAgentQueue}
-    {mesDispatch}
-    {plantControl}
-    {plantLifecycle}
-    {plantMrp}
-    {plantCostReadiness}
-    {plantCostPacket}
-    {plantQualityRelease}
-    {plantInspectionControl}
-    {plantComplianceDossier}
     <div className="control-workspace">
       <div className="split-workspace">
         <section className="core-panel production-issue-launcher">
@@ -6874,6 +6870,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         </section>
       </div>
     </div>
+    {plantEnterpriseContext}
     <dialog aria-labelledby="downtime-dialog-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeDowntimeDialog() }} ref={downtimeDialogRef}>
       <div className="panel-head"><div><span className="core-eyebrow">Equipment record</span><h2 id="downtime-dialog-title">Machine downtime</h2></div><button aria-label="Close downtime records" className="text-link" onClick={closeDowntimeDialog} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
       {openDowntimeIntervals.length ? <div className="issue-list">{openDowntimeIntervals.map((interval, index) => <article key={interval.startActionId}>

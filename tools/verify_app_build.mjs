@@ -1627,7 +1627,7 @@ if (!coreSource.includes('const plantRows = [')
   || !coreSource.includes("['Materials', materialEntries.length ? `${materialEntries.length} trace rows` : 'Need trace']")
   || !coreSource.includes("['Release', heldJobs.length || openQualityIssues.length ? 'Quality blocked' : plantHandoffReady ? 'Evidence ready' : 'Need handoff']")
   || !coreSource.includes("['ERP handoff', plantCostPacketReady ? 'Review package' : 'Blocked']")
-  || (coreSource.match(/\{plantCostPacket\}/g) || []).length !== 2
+  || (coreSource.match(/\{plantCostPacket\}/g) || []).length !== 1
   || !coreSource.includes('const plantQualityReleaseNext =')
   || !coreSource.includes('const plantQualityReleaseRows = [')
   || !coreSource.includes('aria-label="Plant quality release"')
@@ -1676,7 +1676,7 @@ if (!coreSource.includes('const plantRows = [')
   || !coreSource.includes("['ISO', openQualityIssues.length || heldJobs.length ? `${openQualityIssues.length + heldJobs.length} blocked` : 'Clear']")
   || !coreSource.includes("['Output', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} good` : 'No output']")
   || !coreSource.includes("['Boundary', 'No auto release']")
-  || (coreSource.match(/\{plantComplianceDossier\}/g) || []).length !== 2
+  || (coreSource.match(/\{plantComplianceDossier\}/g) || []).length !== 1
   || !coreSource.includes("['Plan', activeJobs.length ? `${activeJobs.length} active` : 'Add job']")
   || !coreSource.includes("['Execute', activeJobs[0] ? `${activeJobs[0].id} next` : 'No active job']")
   || !coreSource.includes("['Trace', materialEntries.length ? `${materialEntries.length} material` : 'No trace']")
@@ -1698,6 +1698,14 @@ if (!coreSource.includes('const plantRows = [')
   || !coreSource.includes('One button chooses the next safe owner action from jobs, quality, WCM, material trace, handoff, and write-readiness state.')
   || !coreSource.includes('AI may prepare records and packets; it does not command equipment, release quality, consume materials, close maintenance, or write Plant records here.')
   || !coreSource.includes('Run next step')
+  || !coreSource.includes('const plantEnterpriseContext = <details aria-label="Plant enterprise evidence"')
+  || !coreSource.includes('MES, MRP, ERP &amp; ISO evidence')
+  || !coreSource.includes('Open detailed status, readiness, trace, quality, costing, and audit context')
+  || (coreSource.match(/\{plantEnterpriseContext\}/g) || []).length !== 2
+  || (coreSource.match(/\{plantStatus\}/g) || []).length !== 2
+  || !coreCssSource.includes('.plant-enterprise-stack { display: grid; gap: 10px; padding: 10px; }')
+  || !coreCssSource.includes('.plant-mes-strip { grid-template-columns: repeat(3,minmax(0,1fr)); }')
+  || !coreCssSource.includes('.plant-command-center p { display: none; }')
   || !coreSource.includes('const PLANT_JOB_IMPORT_MAX_BYTES = 180 * 1024')
   || !coreSource.includes('const PLANT_JOB_IMPORT_MAX_ROWS = 50')
   || !coreSource.includes('function plantJobImportCsvCell(value: string | number)')
@@ -4023,6 +4031,28 @@ if (productionTabsContract.includes("{ id: 'today', label: 'Today' }") || !produ
 const productionPageContract = coreSource.slice(coreSource.indexOf('function ProductionPage'), coreSource.indexOf('function JobList'))
 const productionJobsContract = productionPageContract.slice(productionPageContract.indexOf("if (tab === 'production')"), productionPageContract.indexOf("if (tab === 'control')"))
 const productionControlContract = productionPageContract.slice(productionPageContract.indexOf("if (tab === 'control')"))
+const productionStatusPosition = productionJobsContract.indexOf('{plantStatus}')
+const productionCommandPosition = productionJobsContract.indexOf('{plantCommandCenter}')
+const productionWorkPosition = productionJobsContract.indexOf('<h2>Jobs to finish</h2>')
+const productionEnterprisePosition = productionJobsContract.indexOf('{plantEnterpriseContext}')
+const controlStatusPosition = productionControlContract.indexOf('{plantStatus}')
+const controlCommandPosition = productionControlContract.indexOf('{plantCommandCenter}')
+const controlWorkPosition = productionControlContract.indexOf('<h2>Open problems</h2>')
+const controlEnterprisePosition = productionControlContract.indexOf('{plantEnterpriseContext}')
+if (productionStatusPosition < 0
+  || productionCommandPosition < 0
+  || productionWorkPosition < 0
+  || productionEnterprisePosition < 0
+  || productionStatusPosition > productionCommandPosition
+  || productionCommandPosition > productionWorkPosition
+  || productionWorkPosition > productionEnterprisePosition
+  || controlStatusPosition < 0
+  || controlCommandPosition < 0
+  || controlWorkPosition < 0
+  || controlEnterprisePosition < 0
+  || controlStatusPosition > controlCommandPosition
+  || controlCommandPosition > controlWorkPosition
+  || controlWorkPosition > controlEnterprisePosition) fail('plant_primary_work_not_before_enterprise_evidence')
 const productionProblemsPosition = productionControlContract.indexOf('<h2>Open problems</h2>')
 const productionEquipmentPosition = productionControlContract.indexOf('<h2>Recorded status</h2>')
 if (productionProblemsPosition < 0
