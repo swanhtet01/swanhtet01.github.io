@@ -1,7 +1,7 @@
 {
   "schemaVersion": "supermega.site-context.v2",
-  "contextVersion": "2026-07-30.1",
-  "catalogVersion": "2026-07-30.1",
+  "contextVersion": "2026-07-30.2",
+  "catalogVersion": "2026-07-30.2",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",

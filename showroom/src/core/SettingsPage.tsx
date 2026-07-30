@@ -6,19 +6,13 @@ import {
   WEBSITE_ECOMMERCE_HANDOFF_KEY,
   WEBSITE_STORAGE_KEY,
 } from '../products/product-handoff'
-import { COMMERCE_KEY, LEGACY_COMMERCE_KEYS } from './commerce-workspace'
-import { BEHAVIOR_TRAIL_KEY, readBehaviorTrail, recordBehaviorSignal, summarizeBehaviorPreferences } from './behavior-trail'
+import { readBehaviorTrail, recordBehaviorSignal, summarizeBehaviorPreferences } from './behavior-trail'
 import { ManagedContextConsent } from './ManagedContextConsent'
 import { buildManagedContextProfileRequest, managedContextProductLabel } from './managed-context'
 import { operatingChangeCopy } from './operating-baseline'
 import {
-  ACTION_KEY,
-  APPROVAL_KEY,
   collectLocalProductRecords,
   clientSetupPath,
-  LEGACY_APPROVAL_KEYS,
-  LEGACY_SETUP_KEYS,
-  LEGACY_STOREFRONT_DRAFT_RESET_KEY,
   LEGACY_STOREFRONT_DRAFT_RESET_PREFIX,
   managedTrialRequestUrl,
   mergeManagedApprovals,
@@ -28,11 +22,8 @@ import {
   productContracts,
   productDisplayName,
   RuntimeBadge,
-  SETUP_KEY,
   setupProductFromQuery,
   setupProductPreviewPath,
-  SHOP_ORDER_DRAFT_RESET_EPOCH_KEY,
-  SHOP_ORDER_DRAFT_RESET_PREFIX,
   STOREFRONT_DRAFT_RESET_PREFIX,
   templateFor,
   templatesFor,
@@ -75,14 +66,15 @@ import {
   validateEcommerceOrderImportReviewPacket,
   type EcommerceOrderQueueReadinessPacket,
 } from '../products/ecommerce/ecommerce-order-review-packet'
-import { LEGACY_PRODUCTION_KEYS, PRODUCTION_KEY } from './production-workspace'
-import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } from './team-work'
+import { formatTime, useTeamWorkspace } from './team-work'
 import { buildManagedTrialProof } from './managed-trial-proof'
 import { PilotOutcomePanel } from './PilotOutcomePanel'
 import { useLocalPilotOutcome } from './useLocalPilotOutcome'
+import { listResettableCompanyStorageKeys } from './company-backup'
 
 const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding').then((module) => ({ default: module.ClientDataOnboarding })))
 const ManagedActivationRunbook = lazy(() => import('./ManagedActivationRunbook').then((module) => ({ default: module.ManagedActivationRunbook })))
+const CompanyBackupPanel = lazy(() => import('./CompanyBackupPanel').then((module) => ({ default: module.CompanyBackupPanel })))
 
 type RecommendedSetupDraft = Pick<SetupState, 'workspace' | 'owner' | 'currentRecord' | 'baseline' | 'targetOutcome' | 'authorityBoundary' | 'acceptanceEvidence'>
 
@@ -1326,30 +1318,8 @@ export function SettingsPage() {
     try {
       const { resetCommerceOrderDraftRecovery } = await import('./commerce-order-draft')
       await resetCommerceOrderDraftRecovery()
-      const retainedKeys = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index))
-        .filter((key): key is string => Boolean(key?.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)
-          || key?.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)
-          || key?.startsWith(SHOP_ORDER_DRAFT_RESET_PREFIX)))
-      ;[
-        COMMERCE_KEY,
-        PRODUCTION_KEY,
-        APPROVAL_KEY,
-        SETUP_KEY,
-        ACTION_KEY,
-        BEHAVIOR_TRAIL_KEY,
-        SHOP_ORDER_DRAFT_RESET_EPOCH_KEY,
-        TEAM_WORK_KEY,
-        WEBSITE_STORAGE_KEY,
-        LEGACY_WEBSITE_STORAGE_KEY,
-        WEBSITE_ECOMMERCE_HANDOFF_KEY,
-        LEGACY_STOREFRONT_DRAFT_RESET_KEY,
-        ...retainedKeys,
-        ...LEGACY_TEAM_WORK_KEYS,
-        ...LEGACY_COMMERCE_KEYS,
-        ...LEGACY_PRODUCTION_KEYS,
-        ...LEGACY_APPROVAL_KEYS,
-        ...LEGACY_SETUP_KEYS,
-      ].forEach((key) => window.localStorage.removeItem(key))
+      const resettableKeys = listResettableCompanyStorageKeys(window.localStorage)
+      resettableKeys.forEach((key) => window.localStorage.removeItem(key))
       window.location.assign('/')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The local trial could not be reset safely.')
@@ -1595,7 +1565,10 @@ export function SettingsPage() {
             {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
             <p className="authority-note">AI learns from imported records; owners approve consequential actions.</p>
           </section>
-          <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset.</h2><p>Reset clears Shop, unfinished order drafts, Plant, Website, Ecommerce setup, and handoff records.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting...' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section>
+          <div className="settings-control-stack">
+            <Suspense fallback={<section className="core-panel company-backup-panel"><p className="form-notice" role="status">Loading encrypted company backup...</p></section>}><CompanyBackupPanel /></Suspense>
+            <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset.</h2><p>Reset clears every current Shop, Plant, Website, Ecommerce, owner-control, outcome, setup, unfinished order drafts, and local AI-memory record.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting...' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section>
+          </div>
         </div>
       </details>
     </div>

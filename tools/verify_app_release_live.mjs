@@ -160,6 +160,10 @@ const operationsChunk = (await get(`/${operationsChunkPath}`)).body
 const settingsChunkPath = /assets\/SettingsPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!settingsChunkPath) throw new Error('settings_chunk_missing')
 const settingsChunk = (await get(`/${settingsChunkPath}`)).body
+const companyBackupChunkPath = /assets\/CompanyBackupPanel-[A-Za-z0-9_-]+\.js/.exec(settingsChunk)?.[0]
+if (!companyBackupChunkPath) throw new Error('company_backup_chunk_missing')
+const companyBackupChunk = (await get(`/${companyBackupChunkPath}`)).body
+const companyBackupCorpus = `${settingsChunk}\n${companyBackupChunk}`
 const clientDataOnboardingChunkPath = /assets\/ClientDataOnboarding-[A-Za-z0-9_-]+\.js/.exec(settingsChunk)?.[0]
 if (!clientDataOnboardingChunkPath) throw new Error('client_data_onboarding_chunk_missing')
 const clientDataOnboardingChunk = (await get(`/${clientDataOnboardingChunkPath}`)).body
@@ -233,6 +237,9 @@ for (const required of ['supermega.pilot_outcome_report.v1', 'Free outcome proof
 }
 for (const required of ['Premium pilot', 'Your business context, remembered.', 'SuperMega combines approved product data and owner patterns, then prepares one next move for review.', 'Owner pattern', 'Managed account', 'Approved sources', 'Counts only; raw source records are not shown here.', 'Managed company brief', 'AI learned', 'Reviewed next move', 'Verify this company, not a generic demo.', 'Connect and verify', 'Verify context', 'Keep learning checkpoint', 'Learning checkpoint kept in the managed audit. No external action ran.', 'Review only. No customer send, payment, stock move, production write, domain publish, or model training runs from this pilot.', 'Managed access recovery', 'Connect an existing workspace before rebuilding a local trial.', 'Recover managed access', 'Connect through Premium pilot after saving a trial.']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_premium_pilot_context:${required}`)
+}
+for (const required of ['supermega.company_backup.v1', 'supermega.local_company_snapshot.v1', 'AES-GCM', 'PBKDF2', 'Company backup', 'Move or recover this company.', 'Customer-owned and encrypted', 'Download encrypted backup', 'Inspect backup', 'Confirm restore', 'Auth sessions, managed workspace IDs, and credentials are excluded.', 'Nothing is uploaded, sent, or written to a managed workspace.', 'Backup integrity passed.', 'previous company state was restored']) {
+  if (!companyBackupCorpus.includes(required)) throw new Error(`missing_live_company_backup_context:${required}`)
 }
 for (const required of ['Managed memory', 'Remember how this owner works.', 'Raw records and browser text stay out.', 'Human decisions', 'Approved or declined', 'Recommendations only', 'Keep managed context', 'Managed context retained', 'I approve these summarized source counts, owner behavior pattern, and reviewed decision counts for managed AI recommendations.']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_managed_context_consent:${required}`)
