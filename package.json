@@ -25,7 +25,7 @@
     "storage:privacy:preflight": "node tools/run_python_tool.mjs tools/verify_private_storage_privacy.py --preflight",
     "vercel:deploy": "node tools/deny_stale_public_deploy.mjs",
     "vercel:deploy:prod": "node tools/deny_stale_public_deploy.mjs",
-    "vercel:contracts:test": "node tools/test_vercel_environment_state.mjs && node tools/test_vercel_project_state.mjs && node tools/test_vercel_domain_state.mjs",
+    "vercel:contracts:test": "node tools/test_vercel_environment_state.mjs && node tools/verify_managed_runtime_environment_values.mjs --self-test && node tools/test_vercel_project_state.mjs && node tools/test_vercel_domain_state.mjs",
     "public:release:guard": "node tools/verify_public_deploy_guard.mjs",
     "public:build": "node tools/create_public_vercel_output.mjs",
     "public:verify": "node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/test_public_contact_function.mjs && npm run vercel:contracts:test && npm run hq:verify",

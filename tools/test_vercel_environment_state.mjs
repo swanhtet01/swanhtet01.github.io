@@ -42,9 +42,11 @@ const dormantSchedulerEnvironment = [
 ]
 const managedTrial = [
   env('SUPERMEGA_DATABASE_URL', { type: 'secret' }),
-  env('SUPERMEGA_TRIAL_IDENTITY_SECRET'),
   env('SUPERMEGA_TRIAL_WRITES_ENABLED', { type: 'plain' }),
+  env('VITE_SUPABASE_URL', { type: 'plain' }),
+  env('VITE_SUPABASE_PUBLISHABLE_KEY', { type: 'plain' }),
 ]
+const managedGateway = env('SUPERMEGA_TRIAL_IDENTITY_SECRET')
 
 const isolated = run('app', [])
 assert.equal(isolated.status, 0, 'isolated_app_contract_failed')
@@ -53,11 +55,22 @@ assert.equal(parse(isolated).schedulerActivation, 'dormant', 'dormant_scheduler_
 
 const managed = run('app', managedTrial)
 assert.equal(managed.status, 0, 'managed_app_contract_failed')
-assert.equal(parse(managed).operatingMode, 'managed_trial', 'managed_app_mode_failed')
+assert.equal(parse(managed).operatingMode, 'managed_trial_candidate', 'managed_app_mode_failed')
+assert.equal(parse(managed).valueVerificationRequired, true)
 
 const partialManaged = run('app', [managedTrial[0]])
 assert.notEqual(partialManaged.status, 0, 'partial_managed_app_allowed')
 assert.ok(parse(partialManaged).failures.includes('managed_trial_environment_incomplete'))
+assert.ok(parse(partialManaged).missing.includes('VITE_SUPABASE_URL'))
+assert.ok(parse(partialManaged).missing.includes('VITE_SUPABASE_PUBLISHABLE_KEY'))
+
+const serverOnlyManaged = run('app', [managedTrial[0], managedTrial[1], managedGateway])
+assert.notEqual(serverOnlyManaged.status, 0, 'managed_mode_without_browser_auth_allowed')
+assert.ok(parse(serverOnlyManaged).failures.includes('managed_trial_environment_incomplete'))
+
+const managedWithGateway = run('app', [...managedTrial, managedGateway])
+assert.equal(managedWithGateway.status, 0, 'optional_gateway_identity_rejected')
+assert.equal(parse(managedWithGateway).operatingMode, 'managed_trial_candidate')
 
 const dormantScheduler = run('app', dormantSchedulerEnvironment)
 assert.notEqual(dormantScheduler.status, 0, 'dormant_scheduler_environment_allowed')
@@ -127,7 +140,7 @@ assert.notEqual(browserSecret.status, 0, 'browser_secret_allowed')
 assert.ok(parse(browserSecret).failures.includes('browser_exposed_secret_name_present'))
 
 const previewLeakage = run('app', [
-  ...managedTrial.filter((entry) => entry.key !== 'SUPERMEGA_TRIAL_IDENTITY_SECRET'),
+  ...managedTrial,
   env('SUPERMEGA_TRIAL_IDENTITY_SECRET', { target: ['production', 'preview'] }),
 ])
 assert.notEqual(previewLeakage.status, 0, 'preview_scope_leakage_allowed')
@@ -135,25 +148,25 @@ assert.ok(parse(previewLeakage).failures.includes('allowed_environment_scope_not
 assert.deepEqual(parse(previewLeakage).invalidScopeVariables, ['SUPERMEGA_TRIAL_IDENTITY_SECRET'])
 
 const plainCredential = run('app', [
-  ...managedTrial.filter((entry) => entry.key !== 'SUPERMEGA_TRIAL_IDENTITY_SECRET'),
+  ...managedTrial,
   env('SUPERMEGA_TRIAL_IDENTITY_SECRET', { type: 'plain' }),
 ])
 assert.notEqual(plainCredential.status, 0, 'plain_credential_allowed')
 assert.ok(parse(plainCredential).failures.includes('credential_environment_type_not_protected'))
 
 const missingCredentialType = run('app', [
-  ...managedTrial.filter((entry) => entry.key !== 'SUPERMEGA_TRIAL_IDENTITY_SECRET'),
+  ...managedTrial,
   env('SUPERMEGA_TRIAL_IDENTITY_SECRET', { omitType: true }),
 ])
 assert.notEqual(missingCredentialType.status, 0, 'missing_credential_type_allowed')
 assert.ok(parse(missingCredentialType).unprotectedCredentialVariables.includes('SUPERMEGA_TRIAL_IDENTITY_SECRET'))
 
-const duplicate = run('app', [...managedTrial, env('SUPERMEGA_TRIAL_IDENTITY_SECRET')])
+const duplicate = run('app', [...managedTrial, managedGateway, env('SUPERMEGA_TRIAL_IDENTITY_SECRET')])
 assert.notEqual(duplicate.status, 0, 'duplicate_environment_definition_allowed')
 assert.ok(parse(duplicate).failures.includes('duplicate_environment_variables_present'))
 assert.deepEqual(parse(duplicate).duplicateEnvironmentKeys, ['SUPERMEGA_TRIAL_IDENTITY_SECRET'])
 
-const conflicting = run('app', [...managedTrial, env('SUPERMEGA_TRIAL_IDENTITY_SECRET', { target: ['preview'], type: 'plain' })])
+const conflicting = run('app', [...managedTrial, managedGateway, env('SUPERMEGA_TRIAL_IDENTITY_SECRET', { target: ['preview'], type: 'plain' })])
 assert.notEqual(conflicting.status, 0, 'conflicting_environment_definition_allowed')
 assert.ok(parse(conflicting).failures.includes('conflicting_environment_definitions_present'))
 assert.deepEqual(parse(conflicting).conflictingEnvironmentKeys, ['SUPERMEGA_TRIAL_IDENTITY_SECRET'])
@@ -173,10 +186,10 @@ assert.deepEqual(parse(diagnosticCleanup).cleanupCandidates, ['LEGACY_FLAG'])
 
 const sentinel = 'must-never-appear-in-verifier-output'
 const redaction = run('app', [
-  ...managedTrial.filter((entry) => entry.key !== 'SUPERMEGA_TRIAL_IDENTITY_SECRET'),
+  ...managedTrial,
   env('SUPERMEGA_TRIAL_IDENTITY_SECRET', { value: sentinel }),
 ])
 assert.equal(redaction.status, 0, 'redaction_fixture_failed')
 assert.equal(`${redaction.stdout}${redaction.stderr}`.includes(sentinel), false, 'environment_value_disclosed')
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_vercel_environment_state_tests', checks: 20 }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_vercel_environment_state_tests', checks: 23 }, null, 2))

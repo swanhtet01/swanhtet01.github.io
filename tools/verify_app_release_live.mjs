@@ -79,6 +79,8 @@ if (expectedCommit && String(release.commit || '').toLowerCase() !== expectedCom
 const health = JSON.parse((await get('/api/health')).body)
 if (health.status !== 'ready' || health.service !== 'supermega-service') throw new Error('canonical_api_unavailable')
 if (!['isolated_demo', 'managed_trial'].includes(health.operating_mode)) throw new Error('unknown_operating_mode')
+const expectedOperatingMode = String(process.env.EXPECTED_OPERATING_MODE || '').trim()
+if (expectedOperatingMode && health.operating_mode !== expectedOperatingMode) throw new Error('selected_operating_mode_runtime_mismatch')
 if (health.trial_backend?.browser_service_role_exposed !== false) throw new Error('unsafe_browser_service_role_contract')
 if (typeof health.trial_backend?.role_ready !== 'boolean') throw new Error('runtime_database_role_contract_missing')
 const activationSteps = health.enterprise_activation?.steps

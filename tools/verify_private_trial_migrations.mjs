@@ -13,44 +13,100 @@ const expectedMigrations = [
   '20260723094500_private_trial_backend_v3_website.sql',
   '20260723144500_private_trial_backend_v4_hardening.sql',
   '20260724204920_private_trial_backend_v5_read_capabilities.sql',
+  '20260730113000_private_trial_backend_v6_managed_activation.sql',
 ]
 const expectedPolicyFingerprints = {
+  approval_requests_access_gate: {
+    command: 'ALL',
+    permissive: 'RESTRICTIVE',
+    qual: '62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b',
+    check: '62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b',
+  },
   approval_requests_capability_insert: {
+    command: 'INSERT',
+    permissive: 'PERMISSIVE',
     qual: null,
     check: 'f47353f3c26c797e3216f3197dc2f0b10ec86632815135720719dd47bfd0151f',
   },
   approval_requests_capability_update: {
+    command: 'UPDATE',
+    permissive: 'PERMISSIVE',
     qual: '755a51d7490c8803959e92f46e77feeb754aa436d8ebeb788392f809c63986f8',
     check: '33e38466ad153ad850fb4620e290dd1c78c0bae1fe18d89e4f7bbefe0ce091fd',
   },
   approval_requests_member_read: {
+    command: 'SELECT',
+    permissive: 'PERMISSIVE',
     qual: '969b01b90e58965bad2d36edd64b57f331a6c7c23c335e47c28a5c84b02f148a',
     check: null,
   },
+  workspace_access_controls_member_read: {
+    command: 'SELECT',
+    permissive: 'PERMISSIVE',
+    qual: 'daef66070ab4a84d31066b2e149765ce39f8a42d7e885d2224852d9759ed4461',
+    check: null,
+  },
+  workspace_events_access_gate: {
+    command: 'ALL',
+    permissive: 'RESTRICTIVE',
+    qual: '62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b',
+    check: '62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b',
+  },
   workspace_events_capability_insert: {
+    command: 'INSERT',
+    permissive: 'PERMISSIVE',
     qual: null,
     check: 'c66753e2421b833b77a5b47f7248bc6fa8a7907fc7a217b520a1eb0af2b91462',
   },
   workspace_events_member_read: {
+    command: 'SELECT',
+    permissive: 'PERMISSIVE',
     qual: 'b0a36ce4bd6d748d8f81f6329e07170a7db2bf945871b1d7f33d50c8c5b8c2e6',
     check: null,
   },
+  workspace_memberships_access_gate: {
+    command: 'ALL',
+    permissive: 'RESTRICTIVE',
+    qual: '62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b',
+    check: '62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b',
+  },
   workspace_memberships_self_read: {
+    command: 'SELECT',
+    permissive: 'PERMISSIVE',
     qual: '4c3f673c1afe3e423619aed98c55d2a41a7cd22c408a35542e546bc3a0dc0c21',
     check: null,
   },
+  workspace_state_access_gate: {
+    command: 'ALL',
+    permissive: 'RESTRICTIVE',
+    qual: '62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b',
+    check: '62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b',
+  },
   workspace_state_capability_insert: {
+    command: 'INSERT',
+    permissive: 'PERMISSIVE',
     qual: null,
     check: '467bb07bd20d8980c3f389caf0378871d70f5018bd7af8d95c6947e14f8670d8',
   },
   workspace_state_capability_update: {
+    command: 'UPDATE',
+    permissive: 'PERMISSIVE',
     qual: '526eb69cc66c78743dc9f35f33c1c189d03b746e18706a7b3c977b907ceb15fd',
     check: '5ba3422b3b6e3439bab09012219d76dde5e1770a47f7a35b70baee218a086d9c',
   },
   workspace_state_member_read: {
+    command: 'SELECT',
+    permissive: 'PERMISSIVE',
     qual: '8737b02ce9573202ada4159efafbabb0eb641da45361f297c456e6aa2b903b8d',
     check: null,
   },
+}
+const expectedAccessFunction = {
+  name: 'workspace_is_active',
+  identityArguments: 'target_workspace_id text',
+  resultType: 'boolean',
+  language: 'sql',
+  sourceHash: 'db273aa3f0342e648db5b5e37560b08009ee22a3e274f9395718bdfbbd257a35',
 }
 const expectedConstraintFingerprints = {
   approval_requests_decision_packet_v2_check:
@@ -61,6 +117,12 @@ const expectedConstraintFingerprints = {
     '61c55fa60aa2b47ea8cbc5292aad5351fd54a43d15752413c0d6c511d1f5ea10',
 }
 const expectedTriggerContract = {
+  workspace_access_control_guard: {
+    table: 'workspace_access_controls',
+    eventMask: 31,
+    functionName: 'guard_workspace_access_control',
+    sourceHash: '51191bb0425231cab316424b5fbe6cf397e7a27468d8f4df1a771cdbeab272a4',
+  },
   approval_requests_controlled_mutation: {
     table: 'approval_requests',
     eventMask: 31,
@@ -105,6 +167,30 @@ const expectedIndexes = {
     'u',
   ],
   trial_schema_meta_pkey: ['trial_schema_meta', ['component'], [0], true, true, 'p'],
+  workspace_access_controls_activation_id_key: [
+    'workspace_access_controls',
+    ['activation_id'],
+    [0],
+    true,
+    false,
+    'u',
+  ],
+  workspace_access_controls_authorization_id_key: [
+    'workspace_access_controls',
+    ['authorization_id'],
+    [0],
+    true,
+    false,
+    'u',
+  ],
+  workspace_access_controls_pkey: [
+    'workspace_access_controls',
+    ['workspace_id'],
+    [0],
+    true,
+    true,
+    'p',
+  ],
   workspace_events_pkey: ['workspace_events', ['event_id'], [0], true, true, 'p'],
   workspace_events_timeline_idx: [
     'workspace_events',
@@ -200,7 +286,7 @@ await applyMigrations(database)
 const version = await database.query(
   "select schema_version from app_private.trial_schema_meta where component = 'private_trial_backend'",
 )
-requireCheck('schema version five', version.rows[0]?.schema_version === 5)
+requireCheck('schema version six', version.rows[0]?.schema_version === 6)
 
 const relations = await database.query(`
   select relation.relname as relation_name, relation.relkind::text as relation_kind,
@@ -219,6 +305,7 @@ requireCheck(
       [
         'approval_requests',
         'trial_schema_meta',
+        'workspace_access_controls',
         'workspace_events',
         'workspace_memberships',
         'workspace_state',
@@ -227,7 +314,7 @@ requireCheck(
 )
 
 const policyRows = await database.query(`
-  select policyname, qual, with_check
+  select policyname, cmd, permissive, qual, with_check
   from pg_policies
   where schemaname = 'app_private'
   order by policyname
@@ -235,13 +322,46 @@ const policyRows = await database.query(`
 const observedPolicyFingerprints = Object.fromEntries(
   policyRows.rows.map((row) => [
     row.policyname,
-    { qual: fingerprint(row.qual), check: fingerprint(row.with_check) },
+    {
+      command: row.cmd,
+      permissive: row.permissive,
+      qual: fingerprint(row.qual),
+      check: fingerprint(row.with_check),
+    },
   ]),
 )
 requireCheck(
   'exact policy fingerprints',
   JSON.stringify(observedPolicyFingerprints) ===
     JSON.stringify(expectedPolicyFingerprints),
+)
+
+const accessFunctionRows = await database.query(`
+  select function_record.proname as function_name,
+         pg_get_function_identity_arguments(function_record.oid) as identity_arguments,
+         pg_get_function_result(function_record.oid) as result_type,
+         function_record.prosrc as function_source,
+         function_record.prosecdef as security_definer,
+         function_record.proconfig as function_config,
+         language_record.lanname as function_language
+  from pg_proc function_record
+  join pg_namespace schema_record on schema_record.oid = function_record.pronamespace
+  join pg_language language_record on language_record.oid = function_record.prolang
+  where schema_record.nspname = 'app_private'
+    and function_record.proname = 'workspace_is_active'
+`)
+requireCheck(
+  'exact workspace access function',
+  accessFunctionRows.rows.length === 1 &&
+    accessFunctionRows.rows[0].function_name === expectedAccessFunction.name &&
+    accessFunctionRows.rows[0].identity_arguments === expectedAccessFunction.identityArguments &&
+    accessFunctionRows.rows[0].result_type === expectedAccessFunction.resultType &&
+    accessFunctionRows.rows[0].function_language === expectedAccessFunction.language &&
+    normalizedSourceHash(accessFunctionRows.rows[0].function_source) ===
+      expectedAccessFunction.sourceHash &&
+    accessFunctionRows.rows[0].security_definer === false &&
+    JSON.stringify(accessFunctionRows.rows[0].function_config) ===
+      JSON.stringify(['search_path=pg_catalog, app_private']),
 )
 
 const constraintRows = await database.query(`

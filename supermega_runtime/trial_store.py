@@ -19,7 +19,7 @@ from supermega_runtime.shop_inventory_runtime import (
 
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
-TRIAL_SCHEMA_VERSION = 5
+TRIAL_SCHEMA_VERSION = 6
 TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
 TRUSTED_ACTOR_KINDS = frozenset({"human", "service", "agent"})
 HUMAN_ACTOR_KIND = "human"
@@ -91,6 +91,42 @@ StateReducer = Callable[[str, str, Mapping[str, Any], Mapping[str, Any]], Mappin
 StatePrecondition = Callable[[Mapping[str, Any], Mapping[str, Mapping[str, Any]]], None]
 
 _PRIVATE_HARDENING_TRIGGER_CONTRACT: dict[tuple[str, str], dict[str, Any]] = {
+    ("workspace_access_controls", "workspace_access_control_guard"): {
+        "event_mask": 31,
+        "function_name": "guard_workspace_access_control",
+        "function_source": """
+            begin
+              if tg_op = 'INSERT' then
+                new.activated_at := transaction_timestamp();
+                new.updated_at := transaction_timestamp();
+                if new.status = 'suspended' then
+                  new.suspended_at := transaction_timestamp();
+                end if;
+                return new;
+              end if;
+              if tg_op = 'DELETE' then
+                raise exception using errcode = '55000', message = 'workspace access controls cannot be deleted';
+              end if;
+              if new.workspace_id is distinct from old.workspace_id
+                 or new.activation_id is distinct from old.activation_id
+                 or new.authorization_id is distinct from old.authorization_id
+                 or new.authorization_contract is distinct from old.authorization_contract
+                 or new.plan_digest is distinct from old.plan_digest
+                 or new.owner_actor_id is distinct from old.owner_actor_id
+                 or new.project_ref is distinct from old.project_ref
+                 or new.release_commit is distinct from old.release_commit
+                 or new.activated_at is distinct from old.activated_at then
+                raise exception using errcode = '55000', message = 'workspace activation identity is immutable';
+              end if;
+              if old.status <> 'active' or new.status <> 'suspended' then
+                raise exception using errcode = '55000', message = 'workspace access can only transition from active to suspended';
+              end if;
+              new.suspended_at := transaction_timestamp();
+              new.updated_at := transaction_timestamp();
+              return new;
+            end
+        """,
+    },
     ("workspace_state", "workspace_state_version_guard"): {
         "event_mask": 23,
         "function_name": "guard_workspace_state_update",
@@ -1946,6 +1982,8 @@ class PostgresTrialStore:
                     ('approval_requests', 'decision_contract_version')
                   )
               ) as actor_decision_columns_ready,
+              to_regclass('app_private.workspace_access_controls') is not null
+                as workspace_access_control_ready,
               (
                 select count(*) = 3
                   and bool_and(
@@ -1993,6 +2031,7 @@ class PostgresTrialStore:
             not row
             or int(row["schema_version"]) != TRIAL_SCHEMA_VERSION
             or not bool(row.get("actor_decision_columns_ready"))
+            or not bool(row.get("workspace_access_control_ready"))
             or not bool(row.get("security_constraints_ready"))
         ):
             raise TrialNotReadyError(("schema_ready",))
@@ -2173,9 +2212,14 @@ class PostgresTrialStore:
     def _load_membership(cursor: Any, principal: TrialPrincipal) -> frozenset[str]:
         cursor.execute(
             """
-            select actor_kind, capabilities
-            from app_private.workspace_memberships
-            where workspace_id = %s and actor_id = %s and status = 'active'
+            select membership.actor_kind, membership.capabilities
+            from app_private.workspace_memberships membership
+            join app_private.workspace_access_controls access_control
+              on access_control.workspace_id = membership.workspace_id
+             and access_control.status = 'active'
+            where membership.workspace_id = %s
+              and membership.actor_id = %s
+              and membership.status = 'active'
             """,
             (principal.workspace_id, principal.actor_id),
         )

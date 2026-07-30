@@ -95,15 +95,21 @@ if (kind === 'app') {
     'SUPERMEGA_CLOUD_TASKS_ALLOWED_HOSTS',
   ]
   const core = schedulerActive ? schedulerEnvironment : []
-  const managedTrial = [
+  const managedRuntime = [
     'SUPERMEGA_DATABASE_URL',
-    'SUPERMEGA_TRIAL_IDENTITY_SECRET',
     'SUPERMEGA_TRIAL_WRITES_ENABLED',
   ]
-  const optional = ['SUPERMEGA_CORS_ORIGINS']
+  const managedBrowserAuth = [
+    'VITE_SUPABASE_URL',
+    'VITE_SUPABASE_PUBLISHABLE_KEY',
+  ]
+  const managedTrial = [...managedRuntime, ...managedBrowserAuth]
+  const optional = ['SUPERMEGA_CORS_ORIGINS', 'SUPERMEGA_TRIAL_IDENTITY_SECRET']
   requireKeys(core)
   const managedCount = managedTrial.filter((key) => productionKeys.has(key)).length
-  if (managedCount > 0 && managedCount < managedTrial.length) {
+  const managedSignalCount = [...managedTrial, 'SUPERMEGA_TRIAL_IDENTITY_SECRET']
+    .filter((key) => productionKeys.has(key)).length
+  if (managedSignalCount > 0 && managedCount < managedTrial.length) {
     addFailure('managed_trial_environment_incomplete')
     for (const key of managedTrial) if (!productionKeys.has(key)) missing.push(key)
   }
@@ -118,7 +124,7 @@ if (kind === 'app') {
     entriesByKey.get(key)?.some((entry) => !protectedTypes.has(entry.type)))) {
     addFailure('scheduler_activation_environment_not_protected')
   }
-  operatingMode = managedCount === managedTrial.length ? 'managed_trial' : 'isolated_demo'
+  operatingMode = managedCount === managedTrial.length ? 'managed_trial_candidate' : 'isolated_demo'
   allowed = new Set([...core, ...managedTrial, ...optional])
 } else {
   const required = ['SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET']
@@ -162,6 +168,7 @@ const unprotectedCredentialVariables = environmentKeys
   .filter(
     (key) =>
       isCredentialLike(key) &&
+      key !== 'VITE_SUPABASE_PUBLISHABLE_KEY' &&
       entriesByKey.get(key).some((entry) => !protectedTypes.has(entry.type)),
   )
   .sort()
@@ -185,6 +192,7 @@ const result = {
   productionVariableCount: productionKeys.size,
   environmentVariableCount: environmentKeys.length,
   operatingMode,
+  valueVerificationRequired: kind === 'app' && operatingMode === 'managed_trial_candidate',
   schedulerActivation: kind === 'app' ? schedulerAuthority.activation.state : null,
   deliveryModes,
   missing: [...new Set(missing)].sort(),

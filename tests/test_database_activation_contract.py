@@ -20,6 +20,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / "tools" / "validate_supermega_database_url.py"
 ACTIVATOR = ROOT / "tools" / "activate_supermega_database.ps1"
+MANAGED_ACTIVATION = ROOT / "supermega_runtime" / "managed_activation.py"
 SUPABASE_PREFLIGHT = ROOT / "tools" / "preflight_supermega_supabase.ps1"
 ACTIVATION_RUNBOOK = ROOT / "docs" / "supermega-enterprise-activation.md"
 PACKAGE_JSON = ROOT / "package.json"
@@ -64,6 +65,12 @@ MIGRATION_V5 = (
     / "migrations"
     / "20260724204920_private_trial_backend_v5_read_capabilities.sql"
 )
+MIGRATION_V6 = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / "20260730113000_private_trial_backend_v6_managed_activation.sql"
+)
 MIGRATIONS = (
     MIGRATION_PREFLIGHT,
     MIGRATION_V1,
@@ -71,6 +78,7 @@ MIGRATIONS = (
     MIGRATION_V3,
     MIGRATION_V4,
     MIGRATION_V5,
+    MIGRATION_V6,
 )
 
 PRIVATE_SCHEMA = "app_private"
@@ -81,29 +89,37 @@ EXPECTED_TABLES = (
     "workspace_state",
     "workspace_events",
     "approval_requests",
+    "workspace_access_controls",
 )
 RLS_TABLES = (
     "workspace_memberships",
     "workspace_state",
     "workspace_events",
     "approval_requests",
+    "workspace_access_controls",
 )
 EXPECTED_POLICIES = (
+    "approval_requests_access_gate",
+    "workspace_memberships_access_gate",
     "workspace_memberships_self_read",
+    "workspace_state_access_gate",
     "workspace_state_member_read",
     "workspace_state_capability_insert",
     "workspace_state_capability_update",
     "workspace_events_member_read",
     "workspace_events_capability_insert",
+    "workspace_events_access_gate",
     "approval_requests_member_read",
     "approval_requests_capability_insert",
     "approval_requests_capability_update",
+    "workspace_access_controls_member_read",
 )
 EXPECTED_TRIGGERS = (
     "workspace_events_immutable",
     "workspace_events_server_timestamp",
     "workspace_state_version_guard",
     "approval_requests_controlled_mutation",
+    "workspace_access_control_guard",
 )
 EVENT_SURFACE_CONSTRAINT = "workspace_events_approval_surface_v4_check"
 EXPECTED_INDEXES = (
@@ -116,6 +132,9 @@ EXPECTED_INDEXES = (
     "approval_requests_pkey",
     "approval_requests_workspace_id_command_id_key",
     "approval_requests_queue_idx",
+    "workspace_access_controls_pkey",
+    "workspace_access_controls_activation_id_key",
+    "workspace_access_controls_authorization_id_key",
 )
 EXPLICIT_INDEXES = (
     "workspace_events_timeline_idx",
@@ -171,13 +190,14 @@ def _first_sql_token(statement: str) -> str:
 
 
 class MigrationSecurityEvidenceTests(unittest.TestCase):
-    def test_historical_migrations_are_unchanged_and_v5_is_additive(self) -> None:
+    def test_historical_migrations_are_unchanged_and_v6_is_additive(self) -> None:
         preflight = _normalized_sql(MIGRATION_PREFLIGHT)
         v1 = _normalized_sql(MIGRATION_V1)
         v2 = _normalized_sql(MIGRATION_V2)
         v3 = _normalized_sql(MIGRATION_V3)
         v4 = _normalized_sql(MIGRATION_V4)
         v5 = _normalized_sql(MIGRATION_V5)
+        v6 = _normalized_sql(MIGRATION_V6)
         self.assertIn("pre-existing supermega trial backend role attributes are unsafe", preflight)
         self.assertIn("membership.roleid = backend_record.oid", preflight)
         self.assertIn("dependency.refclassid = 'pg_authid'::regclass", preflight)
@@ -206,6 +226,12 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
         self.assertIn("'approvals.read' = any(membership.capabilities)", v5)
         self.assertIn("approval_requests.requested_by = current_setting('app.actor_id', true)", v5)
         self.assertIn("set schema_version = 5", v5)
+        self.assertIn("private trial backend v6 requires schema version 5", v6)
+        self.assertIn("create table app_private.workspace_access_controls", v6)
+        self.assertIn("workspace access can only transition from active to suspended", v6)
+        self.assertIn("'legacy_migration_v1'", v6)
+        self.assertIn("'suspended'", v6)
+        self.assertIn("set schema_version = 6", v6)
 
     def test_private_schema_and_runtime_role_are_restricted(self) -> None:
         sql = _normalized_sql()
@@ -336,6 +362,23 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
 
 
 class ActivationWrapperContractTests(unittest.TestCase):
+    def test_production_activation_binds_tls_checkout_and_live_release_provenance(self) -> None:
+        source = _read(MANAGED_ACTIVATION)
+        for expected in (
+            'configured_sslmode != "verify-full"',
+            'connection_parameters.get("sslrootcert"',
+            'Administrative TLS CA does not match the owner-reviewed activation plan.',
+            '["git", "fetch", "--quiet", "origin", "main"]',
+            'refs/remotes/origin/main',
+            'https://app.supermega.dev/__release.json',
+            'payload.get("service") != "supermega-app"',
+            'payload.get("commit") != release_commit',
+            'if production and args.command in {"authorize", "apply"}:',
+            '"localProjectionTrusted": False',
+            '"verification": "requery_required"',
+        ):
+            self.assertIn(expected, source)
+
     def test_activation_wrapper_requires_the_read_only_validator(self) -> None:
         self.assertTrue(
             VALIDATOR.is_file(),
@@ -346,11 +389,19 @@ class ActivationWrapperContractTests(unittest.TestCase):
         source = _read(ACTIVATOR)
         validator_position = source.index("& uv run python $ValidatorPath")
         exit_guard_position = source.index("if ($LASTEXITCODE -ne 0)", validator_position)
-        validate_only_position = source.index("if ($ValidateOnly)", exit_guard_position)
-        vercel_position = source.index("vercel env ", validate_only_position)
+        workspace_preflight_position = source.index("$ActivationModule validate", exit_guard_position)
+        validate_only_position = source.index("if ($ValidateOnly)", workspace_preflight_position)
+        isolated_vercel_check_position = source.index("$EnvironmentValueVerifier isolated_demo", validate_only_position)
+        authorization_position = source.index("$ActivationModule authorize", isolated_vercel_check_position)
+        vercel_stage_position = source.index("Add-ManagedEnvironmentValue -Key 'SUPERMEGA_DATABASE_URL'", authorization_position)
+        workspace_apply_position = source.index("$ActivationModule apply", vercel_stage_position)
         self.assertLess(validator_position, exit_guard_position)
-        self.assertLess(exit_guard_position, validate_only_position)
-        self.assertLess(validate_only_position, vercel_position)
+        self.assertLess(exit_guard_position, workspace_preflight_position)
+        self.assertLess(workspace_preflight_position, validate_only_position)
+        self.assertLess(validate_only_position, isolated_vercel_check_position)
+        self.assertLess(isolated_vercel_check_position, authorization_position)
+        self.assertLess(authorization_position, vercel_stage_position)
+        self.assertLess(vercel_stage_position, workspace_apply_position)
         self.assertIn("--env-key SUPERMEGA_DATABASE_URL", source)
         self.assertIn("--storage-audit-env-key SUPERMEGA_STORAGE_AUDIT_DATABASE_URL", source)
         self.assertIn("--activation-target", source)
@@ -385,6 +436,8 @@ class ActivationWrapperContractTests(unittest.TestCase):
             "Remove-Item Env:SUPERMEGA_STORAGE_AUDIT_DATABASE_URL",
             source,
         )
+        self.assertIn("$resolvedPublishableKey = $null", source)
+        self.assertNotIn("Write-Output $resolvedPublishableKey", source)
 
     def test_wrapper_binds_target_and_gates_every_external_mutation(self) -> None:
         source = _read(ACTIVATOR)
@@ -392,6 +445,11 @@ class ActivationWrapperContractTests(unittest.TestCase):
         self.assertIn("[string]$StorageAuditDatabaseUrlFile", parameter_block)
         self.assertIn("[string]$ExpectedProjectRef", parameter_block)
         self.assertIn("[string]$ApprovalId", parameter_block)
+        self.assertIn("[string]$AdminDatabaseUrlFile", parameter_block)
+        self.assertIn("[string]$SupabasePublishableKeyFile", parameter_block)
+        self.assertIn("[string]$OwnerAccessTokenFile", parameter_block)
+        self.assertIn("[string]$ActivationPlanFile", parameter_block)
+        self.assertIn("[string]$ActivationReceiptFile", parameter_block)
         self.assertIn("[switch]$ProductionHandoff", parameter_block)
         self.assertIn("status --porcelain -- package.json", source)
         self.assertIn("productionSupabaseProjectRef", source)
@@ -406,6 +464,40 @@ class ActivationWrapperContractTests(unittest.TestCase):
             "elseif ($ExpectedProjectRef -eq $TrustedProductionProjectRef)",
             source,
         )
+        self.assertIn("supermega.managed_workspace_activation_plan.v1", source)
+        self.assertIn("--confirm-owner-approval $ApprovalId", source)
+        self.assertIn("--production-handoff", source)
+        self.assertIn("$ActivationModule suspend", source)
+        self.assertIn("Activation compensation after a downstream release gate failure.", source)
+        self.assertIn("$activationPlan.rollback.authorizationId", source)
+        self.assertIn("$activationApplyResult.externalMutationPerformed", source)
+        self.assertIn("activation command failed; reconcile PostgreSQL", source)
+        self.assertIn("[string]$recoveryInspect.status -eq 'active_replay'", source)
+        self.assertIn("database_state_confirmed_safe", source)
+        self.assertIn("Managed activation never overwrites", source)
+        self.assertIn("Remove-StagedEnvironmentValues", source)
+        self.assertIn("workspace_access_gate", source)
+        self.assertIn("vercel@56.1.0", source)
+        self.assertIn("prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG", source)
+        self.assertIn("team_wI4l7ZgSxcEztQPSlCCYVeJ5", source)
+        self.assertIn("$env:VERCEL_PROJECT_ID = $AppVercelProjectId", source)
+        self.assertIn("$env:VERCEL_ORG_ID = $VercelOrgId", source)
+        self.assertIn("--cwd", source)
+        self.assertNotIn("--project", source)
+
+    def test_browser_auth_and_write_enablement_are_complete_and_ordered(self) -> None:
+        source = _read(ACTIVATOR)
+        database_position = source.index("Add-ManagedEnvironmentValue -Key 'SUPERMEGA_DATABASE_URL'")
+        browser_url_position = source.index("Add-ManagedEnvironmentValue -Key 'VITE_SUPABASE_URL'")
+        browser_key_position = source.index("Add-ManagedEnvironmentValue -Key 'VITE_SUPABASE_PUBLISHABLE_KEY'")
+        writes_position = source.index("Add-ManagedEnvironmentValue -Key 'SUPERMEGA_TRIAL_WRITES_ENABLED'")
+        self.assertLess(database_position, browser_url_position)
+        self.assertLess(browser_url_position, browser_key_position)
+        self.assertLess(browser_key_position, writes_position)
+        self.assertIn("^sb_publishable_", source)
+        self.assertIn("writes_enabled_last", source)
+        self.assertIn("$EnvironmentValueVerifier staged", source)
+        self.assertIn("$EnvironmentValueVerifier managed_trial", source)
 
     def test_runtime_readiness_queries_are_non_mutating(self) -> None:
         source = _read(TRIAL_STORE)
@@ -985,35 +1077,44 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                     "workspace_state",
                     "workspace_events",
                     "approval_requests",
+                    "workspace_access_controls",
                 ]
                 RLS_TABLES = [
                     "workspace_memberships",
                     "workspace_state",
                     "workspace_events",
                     "approval_requests",
+                    "workspace_access_controls",
                 ]
                 POLICIES = [
+                    "approval_requests_access_gate",
+                    "workspace_memberships_access_gate",
                     "workspace_memberships_self_read",
+                    "workspace_state_access_gate",
                     "workspace_state_member_read",
                     "workspace_state_capability_insert",
                     "workspace_state_capability_update",
                     "workspace_events_member_read",
                     "workspace_events_capability_insert",
+                    "workspace_events_access_gate",
                     "approval_requests_member_read",
                     "approval_requests_capability_insert",
                     "approval_requests_capability_update",
+                    "workspace_access_controls_member_read",
                 ]
                 TRIGGERS = [
                     "workspace_events_immutable",
                     "workspace_events_server_timestamp",
                     "workspace_state_version_guard",
                     "approval_requests_controlled_mutation",
+                    "workspace_access_control_guard",
                 ]
                 TRIGGER_TYPES = {
                     "workspace_events_immutable": 27,
                     "workspace_events_server_timestamp": 7,
                     "workspace_state_version_guard": 23,
                     "approval_requests_controlled_mutation": 31,
+                    "workspace_access_control_guard": 31,
                 }
                 FUNCTION_SOURCES = {
                     "reject_workspace_event_mutation": (
@@ -1070,6 +1171,28 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         "message = 'approval decision requires a named human and nonblank note'; "
                         "end if; new.decided_at := transaction_timestamp(); return new; end"
                     ),
+                    "guard_workspace_access_control": (
+                        "begin if tg_op = 'INSERT' then "
+                        "new.activated_at := transaction_timestamp(); "
+                        "new.updated_at := transaction_timestamp(); "
+                        "if new.status = 'suspended' then new.suspended_at := transaction_timestamp(); "
+                        "end if; return new; end if; if tg_op = 'DELETE' then "
+                        "raise exception using errcode = '55000', message = 'workspace access controls cannot be deleted'; "
+                        "end if; if new.workspace_id is distinct from old.workspace_id "
+                        "or new.activation_id is distinct from old.activation_id "
+                        "or new.authorization_id is distinct from old.authorization_id "
+                        "or new.authorization_contract is distinct from old.authorization_contract "
+                        "or new.plan_digest is distinct from old.plan_digest "
+                        "or new.owner_actor_id is distinct from old.owner_actor_id "
+                        "or new.project_ref is distinct from old.project_ref "
+                        "or new.release_commit is distinct from old.release_commit "
+                        "or new.activated_at is distinct from old.activated_at then "
+                        "raise exception using errcode = '55000', message = 'workspace activation identity is immutable'; "
+                        "end if; if old.status <> 'active' or new.status <> 'suspended' then "
+                        "raise exception using errcode = '55000', message = 'workspace access can only transition from active to suspended'; "
+                        "end if; new.suspended_at := transaction_timestamp(); "
+                        "new.updated_at := transaction_timestamp(); return new; end"
+                    ),
                 }
                 INDEXES = [
                     "trial_schema_meta_pkey",
@@ -1081,6 +1204,9 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                     "approval_requests_pkey",
                     "approval_requests_workspace_id_command_id_key",
                     "approval_requests_queue_idx",
+                    "workspace_access_controls_pkey",
+                    "workspace_access_controls_activation_id_key",
+                    "workspace_access_controls_authorization_id_key",
                 ]
                 POLICY_CONTRACTS = json.loads(r"""
                 {
@@ -1100,6 +1226,12 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                     "table": "approval_requests",
                     "command": "SELECT",
                     "qual": "((workspace_id = current_setting('app.workspace_id', true)) and (current_setting('app.actor_kind', true) = any (array['human', 'service', 'agent'])) and (exists ( select 1 from app_private.workspace_memberships membership where ((membership.workspace_id = approval_requests.workspace_id) and (membership.actor_id = current_setting('app.actor_id', true)) and (membership.actor_kind = current_setting('app.actor_kind', true)) and (membership.status = 'active') and (('approvals.read' = any (membership.capabilities)) or ('approvals.decide' = any (membership.capabilities)) or (('approvals.request' = any (membership.capabilities)) and (approval_requests.requested_by = current_setting('app.actor_id', true))))))))",
+                    "with_check": null
+                  },
+                  "workspace_access_controls_member_read": {
+                    "table": "workspace_access_controls",
+                    "command": "SELECT",
+                    "qual": "((workspace_id = current_setting('app.workspace_id', true)) and (exists ( select 1 from app_private.workspace_memberships membership where ((membership.workspace_id = workspace_access_controls.workspace_id) and (membership.actor_id = current_setting('app.actor_id', true)) and (membership.actor_kind = current_setting('app.actor_kind', true)) and (membership.status = 'active')))))",
                     "with_check": null
                   },
                   "workspace_events_capability_insert": {
@@ -1140,6 +1272,42 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                   }
                 }
                 """)
+                POLICY_CONTRACTS["workspace_access_controls_member_read"]["qual"] = (
+                    "((workspace_id = current_setting('app.workspace_id', true)) "
+                    "and (status = 'active'))"
+                )
+                POLICY_CONTRACTS.update({
+                    "approval_requests_access_gate": {
+                        "table": "approval_requests",
+                        "command": "ALL",
+                        "permissive": "RESTRICTIVE",
+                        "qual": "app_private.workspace_is_active(workspace_id)",
+                        "with_check": "app_private.workspace_is_active(workspace_id)",
+                    },
+                    "workspace_memberships_access_gate": {
+                        "table": "workspace_memberships",
+                        "command": "ALL",
+                        "permissive": "RESTRICTIVE",
+                        "qual": "app_private.workspace_is_active(workspace_id)",
+                        "with_check": "app_private.workspace_is_active(workspace_id)",
+                    },
+                    "workspace_state_access_gate": {
+                        "table": "workspace_state",
+                        "command": "ALL",
+                        "permissive": "RESTRICTIVE",
+                        "qual": "app_private.workspace_is_active(workspace_id)",
+                        "with_check": "app_private.workspace_is_active(workspace_id)",
+                    },
+                    "workspace_events_access_gate": {
+                        "table": "workspace_events",
+                        "command": "ALL",
+                        "permissive": "RESTRICTIVE",
+                        "qual": "app_private.workspace_is_active(workspace_id)",
+                        "with_check": "app_private.workspace_is_active(workspace_id)",
+                    },
+                })
+                for contract in POLICY_CONTRACTS.values():
+                    contract.setdefault("permissive", "PERMISSIVE")
                 INDEX_CONTRACTS = {
                     "trial_schema_meta_pkey": (
                         "trial_schema_meta", ["component"], [0], True, True, "p"
@@ -1193,6 +1361,15 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         False,
                         None,
                     ),
+                    "workspace_access_controls_pkey": (
+                        "workspace_access_controls", ["workspace_id"], [0], True, True, "p"
+                    ),
+                    "workspace_access_controls_activation_id_key": (
+                        "workspace_access_controls", ["activation_id"], [0], True, False, "u"
+                    ),
+                    "workspace_access_controls_authorization_id_key": (
+                        "workspace_access_controls", ["authorization_id"], [0], True, False, "u"
+                    ),
                 }
                 ACL_ENTRIES = [
                     ("schema", "app_private", "supermega_trial_backend", "USAGE"),
@@ -1206,6 +1383,8 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                     ("table", "approval_requests", "supermega_trial_backend", "SELECT"),
                     ("table", "approval_requests", "supermega_trial_backend", "INSERT"),
                     ("table", "approval_requests", "supermega_trial_backend", "UPDATE"),
+                    ("table", "workspace_access_controls", "supermega_trial_backend", "SELECT"),
+                    ("function", "workspace_is_active", "supermega_trial_backend", "EXECUTE"),
                 ]
 
                 class Row(dict):
@@ -1245,13 +1424,13 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         schema_exists=scenario != "missing_schema",
                         schema_ready=scenario != "missing_schema",
                         component="private_trial_backend",
-                        schema_version=0 if scenario == "wrong_version" else 5,
+                        schema_version=0 if scenario == "wrong_version" else 6,
                         tables=tables,
                         table_names=tables,
                         table_count=len(tables),
                         rls_tables=list(RLS_TABLES),
-                        rls_count=3 if scenario == "missing_rls" else 4,
-                        force_rls_count=3 if scenario == "missing_rls" else 4,
+                        rls_count=4 if scenario == "missing_rls" else 5,
+                        force_rls_count=4 if scenario == "missing_rls" else 5,
                         forbidden_grant_count=1 if scenario == "forbidden_grant" else 0,
                         forbidden_grants=[] if scenario != "forbidden_grant" else ["anon:SELECT"],
                         policies=policies,
@@ -1347,6 +1526,12 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                             ("relation", "app_private.workspace_state", 0),
                             ("relation", "app_private.workspace_events", 0),
                             ("relation", "app_private.approval_requests", 0),
+                            ("relation", "app_private.workspace_access_controls", 0),
+                            (
+                                "function",
+                                "app_private.workspace_is_active(target_workspace_id text)",
+                                0,
+                            ),
                         ]
                         if scenario == "backend_outside_grant":
                             dependencies.append(("relation", "public.sensitive_data", 0))
@@ -1396,7 +1581,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                             return []
                         return [
                             _snapshot(
-                                schema_version=0 if scenario == "wrong_version" else 5,
+                                schema_version=0 if scenario == "wrong_version" else 6,
                             )
                         ]
                     if "buckets_table_exists" in q and "objects_table_exists" in q:
@@ -1485,7 +1670,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                             rows.append(_snapshot(
                                 table_name=contract["table"],
                                 policy_name=name,
-                                permissive="PERMISSIVE",
+                                permissive=contract["permissive"],
                                 roles=["supermega_trial_backend"],
                                 command=contract["command"],
                                 qual=qual,
@@ -1597,6 +1782,10 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                                 "approval_requests",
                                 "guard_approval_mutation",
                             ),
+                            "workspace_access_control_guard": (
+                                "workspace_access_controls",
+                                "guard_workspace_access_control",
+                            ),
                         }
                         rows = []
                         for name in _snapshot()["triggers"]:
@@ -1640,19 +1829,34 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                             "guard_workspace_state_update",
                             "stamp_workspace_event_insert",
                             "guard_approval_mutation",
+                            "guard_workspace_access_control",
+                            "workspace_is_active",
                         ]
                         if scenario == "extra_function":
                             names.append("unexpected_private_function")
-                        return [
-                            _snapshot(
+                        rows = []
+                        for name in names:
+                            access_function = name == "workspace_is_active"
+                            rows.append(_snapshot(
                                 function_name=name,
                                 owner_name="runtime_login" if scenario == "wrong_owner" else "postgres",
                                 function_kind="f",
-                                identity_arguments="",
-                                result_type="trigger",
-                            )
-                            for name in names
-                        ]
+                                identity_arguments=(
+                                    "target_workspace_id text" if access_function else ""
+                                ),
+                                result_type="boolean" if access_function else "trigger",
+                                function_source=(
+                                    "select exists ( select 1 from "
+                                    "app_private.workspace_access_controls access_control "
+                                    "where access_control.workspace_id = target_workspace_id "
+                                    "and access_control.status = 'active' )"
+                                    if access_function else FUNCTION_SOURCES.get(name, "")
+                                ),
+                                security_definer=False,
+                                function_config=["search_path=pg_catalog, app_private"],
+                                function_language="sql" if access_function else "plpgsql",
+                            ))
+                        return rows
                     if "pg_indexes" in q or "pg_index" in q:
                         rows = []
                         for name in _snapshot()["indexes"]:
@@ -2025,7 +2229,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         payload = _extract_json(result.stdout + result.stderr)
         serialized = json.dumps(payload, sort_keys=True).lower()
         self.assertTrue(payload.get("ok") is True or payload.get("status") == "ready")
-        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v5")
+        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v6")
         checks = payload.get("checks")
         self.assertIsInstance(checks, dict)
         assert isinstance(checks, dict)
@@ -2069,7 +2273,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             {
                 "name": PRIVATE_SCHEMA,
                 "component": "private_trial_backend",
-                "version": 5,
+                "version": 6,
             },
         )
         self.assertEqual(
@@ -2091,8 +2295,8 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         self.assertEqual(
             evidence.get("grant"),
             {
-                "runtime_acl_entries": 11,
-                "expected_runtime_acl_entries": 11,
+                "runtime_acl_entries": 13,
+                "expected_runtime_acl_entries": 13,
                 "default_acl_entries": 0,
             },
         )

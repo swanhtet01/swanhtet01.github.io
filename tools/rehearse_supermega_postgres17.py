@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 import json
 import os
 import re
@@ -35,6 +36,7 @@ MIGRATIONS = (
     "20260723094500_private_trial_backend_v3_website.sql",
     "20260723144500_private_trial_backend_v4_hardening.sql",
     "20260724204920_private_trial_backend_v5_read_capabilities.sql",
+    "20260730113000_private_trial_backend_v6_managed_activation.sql",
 )
 VALIDATOR = ROOT / "tools" / "validate_supermega_database_url.py"
 CONTRACT = "supermega_postgres17_rehearsal_v1"
@@ -42,6 +44,15 @@ RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
 EXPECTED_POSTGRES_MAJOR = 17
+IMPLEMENTATION_PATHS = (
+    "supermega_runtime/managed_activation.py",
+    "supermega_runtime/trial_store.py",
+    "supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql",
+    "tools/activate_supermega_database.ps1",
+    "tools/rehearse_supermega_postgres17.py",
+    "tools/validate_supermega_database_url.py",
+    "tools/verify_managed_runtime_environment_values.mjs",
+)
 JOURNEY_PRODUCT_WORKSPACE = "rehearsal-product"
 JOURNEY_PRODUCT_ACTOR = "owner-product"
 JOURNEY_PRODUCTION_WORKSPACE = "rehearsal-b"
@@ -51,11 +62,25 @@ APPROVAL_AGENT_ACTOR = "approval-agent"
 APPROVAL_SERVICE_ACTOR = "approval-service"
 APPROVAL_HUMAN_ACTOR = "approval-owner"
 APPROVAL_IDENTITY_AUTHORITY = "trusted_backend_transaction_context"
+MANAGED_WORKSPACE = "rehearsal-managed"
+MANAGED_OWNER_ACTOR = "c63af44e-b7c1-4dbf-970d-389d5bba93a7"
+MANAGED_SECOND_ACTOR = "f3ea98a2-9954-413c-ad4d-c6dc7ce8a23c"
+MANAGED_APPROVAL_ID = "7f201a3b-d6d9-4c1a-b6c6-3d0d1e123731"
 DATABASE_REJECTION_SQLSTATES = frozenset({"23514", "40001", "42501", "55000"})
 
 
 class RehearsalFailure(RuntimeError):
     """A fail-closed error with a safe, credential-free code."""
+
+
+def _implementation_digest() -> str:
+    digest = sha256()
+    for relative_path in IMPLEMENTATION_PATHS:
+        digest.update(relative_path.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update((ROOT / relative_path).read_bytes().replace(b"\r\n", b"\n"))
+        digest.update(b"\0")
+    return f"sha256:{digest.hexdigest()}"
 
 
 def _default_postgres_bin() -> Path:
@@ -570,6 +595,32 @@ def _seed_rehearsal_data(admin_database_url: str) -> None:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
+                insert into app_private.workspace_access_controls (
+                  workspace_id, activation_id, authorization_id,
+                  authorization_contract, plan_digest, owner_actor_id,
+                  project_ref, release_commit, status
+                )
+                select
+                  workspace_id,
+                  md5('rehearsal-activation:' || workspace_id)::uuid,
+                  md5('rehearsal-authorization:' || workspace_id)::uuid,
+                  'legacy_migration_v1',
+                  md5('rehearsal-plan-a:' || workspace_id)
+                    || md5('rehearsal-plan-b:' || workspace_id),
+                  owner_actor_id,
+                  repeat('0', 20),
+                  repeat('0', 40),
+                  'active'
+                from (values
+                  ('rehearsal-a', 'owner-a'),
+                  ('rehearsal-b', 'owner-b'),
+                  ('rehearsal-product', 'owner-product'),
+                  ('rehearsal-approval', 'approval-owner')
+                ) as fixture(workspace_id, owner_actor_id)
+                """
+            )
+            cursor.execute(
+                """
                 insert into app_private.workspace_memberships
                   (workspace_id, actor_id, status, capabilities, actor_kind)
                 values
@@ -591,6 +642,292 @@ def _seed_rehearsal_data(admin_database_url: str) -> None:
                    array['approvals.decide']::text[], 'human')
                 """
             )
+
+
+def _managed_activation_request() -> dict[str, Any]:
+    data_package = {
+        "evidenceFilename": "supermega-trial-evidence.json",
+        "localRecords": 12,
+        "storagePackages": 1,
+        "selectedProductRecords": 12,
+        "productSources": ["commerce"],
+        "approvalPackets": 2,
+        "behaviorSignals": 4,
+    }
+    return {
+        "contract": "supermega.managed_trial_request.v1",
+        "version": 1,
+        "createdAt": "2026-07-30T11:40:00.000Z",
+        "product": "Shop",
+        "productSlug": "shop",
+        "templateId": "retail-wholesale",
+        "templateName": "Retail and wholesale",
+        "workspace": "Managed rehearsal workspace",
+        "owner": "Rehearsal Owner",
+        "pilotReady": True,
+        "localRecords": 12,
+        "approvalPackets": 2,
+        "behaviorSignals": 4,
+        "evidenceVersion": 23,
+        "managedWorkspaceProvisioningPacket": {
+            "contract": "supermega.managed_workspace_provisioning.v1",
+            "version": 1,
+            "createdAt": "2026-07-30T11:40:00.000Z",
+            "evidenceVersion": 23,
+            "workspace": "Managed rehearsal workspace",
+            "owner": "Rehearsal Owner",
+            "product": "Shop",
+            "template": "Retail and wholesale",
+            "tenantMode": "managed_required",
+            "dataPackage": data_package,
+            "requiredControls": [
+                "dedicated_postgres_rls",
+                "trusted_identity_gateway",
+                "private_storage",
+                "audit_trail",
+                "owner_write_approvals",
+                "scheduler_budget_limits",
+            ],
+            "firstSafeActivation": "Create one reviewed managed workspace.",
+            "forbiddenUntilProvisioned": [
+                "copy_browser_storage_to_production",
+                "enable_hosted_scheduler",
+                "send_customer_messages",
+                "capture_payments",
+                "publish_domains",
+            ],
+        },
+        "importProvisioningPacket": {
+            "contract": "supermega.import_provisioning_readiness.v1",
+            "status": "blocked",
+            "secretValuesExposed": False,
+        },
+        "noExternalSend": True,
+    }
+
+
+def _exercise_managed_activation_control(
+    runtime_database_url: str,
+    admin_database_url: str,
+) -> dict[str, bool]:
+    """Prove durable authorization, atomic activation, and DB-level suspension."""
+
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from supermega_runtime.managed_activation import (
+        ManagedWorkspaceProvisioner,
+        compile_activation_plan,
+    )
+
+    now = datetime.now(timezone.utc)
+    plan = compile_activation_plan(
+        _managed_activation_request(),
+        workspace_id=MANAGED_WORKSPACE,
+        owner_actor_id=MANAGED_OWNER_ACTOR,
+        approval_id=MANAGED_APPROVAL_ID,
+        approved_by="Rehearsal Owner",
+        approved_at=now.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        project_ref="zvtzwcimpvvtkowflhda",
+        release_commit="a" * 40,
+        admin_ca_sha256="sha256:" + "1" * 64,
+        now=now,
+    )
+    provisioner = ManagedWorkspaceProvisioner(admin_database_url)
+    authorization = provisioner.authorize(
+        plan,
+        verified_owner_actor_id=MANAGED_OWNER_ACTOR,
+        decision_note="Owner approved the bounded PostgreSQL rehearsal.",
+    )
+    if authorization.get("status") != "approved" or authorization.get("replayed") is not False:
+        raise RehearsalFailure("managed_authorization_failed")
+    if provisioner.inspect(plan).get("status") != "ready_to_apply":
+        raise RehearsalFailure("managed_authorization_not_durable")
+
+    with _connect(admin_database_url, autocommit=True) as administrator:
+        administrator.execute(
+            """
+            create function app_private.fail_rehearsal_managed_membership()
+            returns trigger language plpgsql security invoker
+            set search_path = pg_catalog, app_private
+            as $function$
+            begin
+              if new.workspace_id = 'rehearsal-managed' then
+                raise exception using errcode = '55000', message = 'rehearsal activation failure';
+              end if;
+              return new;
+            end
+            $function$
+            """
+        )
+        administrator.execute(
+            """
+            create trigger fail_rehearsal_managed_membership
+            before insert on app_private.workspace_memberships
+            for each row execute function app_private.fail_rehearsal_managed_membership()
+            """
+        )
+    try:
+        try:
+            provisioner.apply(plan)
+        except Exception as exc:
+            if str(getattr(exc, "sqlstate", "")) != "55000":
+                raise RehearsalFailure("managed_atomic_failure_unexpected") from exc
+        else:
+            raise RehearsalFailure("managed_atomic_failure_not_raised")
+    finally:
+        with _connect(admin_database_url, autocommit=True) as administrator:
+            administrator.execute(
+                "drop trigger if exists fail_rehearsal_managed_membership "
+                "on app_private.workspace_memberships"
+            )
+            administrator.execute(
+                "drop function if exists app_private.fail_rehearsal_managed_membership()"
+            )
+
+    with _connect(admin_database_url, autocommit=True) as administrator:
+        partial_counts = administrator.execute(
+            """
+            select
+              (select count(*) from app_private.workspace_access_controls where workspace_id = %s),
+              (select count(*) from app_private.workspace_memberships where workspace_id = %s),
+              (select count(*) from app_private.workspace_events where workspace_id = %s)
+            """,
+            (MANAGED_WORKSPACE, MANAGED_WORKSPACE, MANAGED_WORKSPACE),
+        ).fetchone()
+    if partial_counts != (0, 0, 0):
+        raise RehearsalFailure("managed_atomic_rollback_failed")
+
+    receipt = provisioner.apply(plan)
+    replay = provisioner.apply(plan)
+    if receipt.get("status") != "active" or receipt.get("replayed") is not False:
+        raise RehearsalFailure("managed_activation_failed")
+    receipt_projection = {
+        key: value for key, value in receipt.items() if key not in {"replayed", "projectionDigest"}
+    }
+    replay_projection = {
+        key: value for key, value in replay.items() if key not in {"replayed", "projectionDigest"}
+    }
+    if replay_projection != receipt_projection or replay.get("replayed") is not True:
+        raise RehearsalFailure("managed_activation_replay_failed")
+
+    with _connect(admin_database_url, autocommit=True) as administrator:
+        administrator.execute(
+            """
+            insert into app_private.workspace_memberships
+              (workspace_id, actor_id, status, capabilities, actor_kind)
+            values (
+              %s, %s, 'active',
+              array['company.read', 'company.write', 'approvals.read']::text[],
+              'human'
+            )
+            """,
+            (MANAGED_WORKSPACE, MANAGED_SECOND_ACTOR),
+        )
+        administrator.execute(
+            """
+            insert into app_private.workspace_state
+              (workspace_id, surface, version, state_json, updated_by)
+            values (%s, 'company', 1, '{"managed": true}'::jsonb, %s)
+            """,
+            (MANAGED_WORKSPACE, MANAGED_OWNER_ACTOR),
+        )
+
+    def visible_counts() -> tuple[int, int, int, int, int]:
+        with _connect(runtime_database_url) as runtime:
+            with runtime.transaction():
+                with runtime.cursor() as cursor:
+                    _set_identity(
+                        cursor,
+                        workspace=MANAGED_WORKSPACE,
+                        actor=MANAGED_SECOND_ACTOR,
+                        actor_kind="human",
+                    )
+                    cursor.execute(
+                        """
+                        select
+                          (select count(*) from app_private.workspace_access_controls),
+                          (select count(*) from app_private.workspace_memberships),
+                          (select count(*) from app_private.workspace_state),
+                          (select count(*) from app_private.workspace_events),
+                          (select count(*) from app_private.approval_requests)
+                        """
+                    )
+                    return tuple(int(value) for value in cursor.fetchone())
+
+    def append_runtime_probe(event_id: str, command_id: str) -> None:
+        with _connect(runtime_database_url) as runtime:
+            with runtime.transaction():
+                with runtime.cursor() as cursor:
+                    _set_identity(
+                        cursor,
+                        workspace=MANAGED_WORKSPACE,
+                        actor=MANAGED_SECOND_ACTOR,
+                        actor_kind="human",
+                    )
+                    cursor.execute(
+                        """
+                        insert into app_private.workspace_events (
+                          event_id, workspace_id, command_id, command_fingerprint,
+                          surface, event_type, actor_id, actor_kind,
+                          payload_json, result_json
+                        ) values (
+                          %s, %s, %s, repeat('e', 64),
+                          'company', 'company.suspension-probe', %s, 'human',
+                          '{}'::jsonb, '{"probe": true}'::jsonb
+                        )
+                        """,
+                        (
+                            event_id,
+                            MANAGED_WORKSPACE,
+                            command_id,
+                            MANAGED_SECOND_ACTOR,
+                        ),
+                    )
+
+    append_runtime_probe(
+        "7846eac4-9f91-4a0a-af04-9fd4c7074188",
+        "203c1184-3007-4be7-b0cb-22bc0414c91d",
+    )
+    if visible_counts() != (1, 1, 1, 2, 1):
+        raise RehearsalFailure("managed_active_workspace_visibility_failed")
+    suspension = provisioner.suspend(
+        plan,
+        suspension_approval_id=plan["rollback"]["authorizationId"],
+        suspended_by=MANAGED_OWNER_ACTOR,
+        reason="Activation compensation after a downstream release gate failure.",
+    )
+    if suspension.get("status") != "suspended" or suspension.get("customerDataDeleted") is not False:
+        raise RehearsalFailure("managed_suspension_failed")
+    if visible_counts() != (0, 0, 0, 0, 0):
+        raise RehearsalFailure("managed_suspension_rls_bypass")
+    suspension_write_denied = False
+    try:
+        append_runtime_probe(
+            "b2f82adb-173f-48c0-b959-cabf2ec60908",
+            "274f3e46-b014-4710-b9b3-8537e5811f13",
+        )
+    except Exception as exc:
+        if str(getattr(exc, "sqlstate", "")) not in DATABASE_REJECTION_SQLSTATES:
+            raise RehearsalFailure("managed_suspension_write_unexpected") from exc
+        suspension_write_denied = True
+    if not suspension_write_denied:
+        raise RehearsalFailure("managed_suspension_write_allowed")
+    with _connect(admin_database_url, autocommit=True) as administrator:
+        probe_count = administrator.execute(
+            "select count(*) from app_private.workspace_events where workspace_id = %s and event_type = 'company.suspension-probe'",
+            (MANAGED_WORKSPACE,),
+        ).fetchone()[0]
+    if probe_count != 1:
+        raise RehearsalFailure("managed_suspension_write_persisted")
+
+    return {
+        "managed_owner_authorization_durable": True,
+        "managed_activation_atomic_rollback": True,
+        "managed_activation_idempotent_replay": True,
+        "managed_suspension_database_enforced": True,
+        "managed_suspension_blocks_additional_member": True,
+        "managed_suspension_write_denied": True,
+    }
 
 
 def _journey_evidence(
@@ -2280,7 +2617,7 @@ def _verify_restored_data(
               (select count(*) from app_private.approval_requests)
             """
         ).fetchone()
-    if row != (5, 9, 6, 16, 2):
+    if row != (6, 11, 7, 19, 3):
         raise RehearsalFailure("restored_data_mismatch")
     restored_approval_authority_snapshot = _approval_authority_snapshot(
         admin_database_url
@@ -2419,6 +2756,11 @@ def _run_rehearsal(
             )
             phase = "runtime_behaviour"
             behaviour = _exercise_runtime(runtime_database_url, admin_database_url)
+            phase = "managed_activation_control"
+            managed_activation = _exercise_managed_activation_control(
+                runtime_database_url,
+                admin_database_url,
+            )
             phase = "database_backup"
             _backup_database(
                 postgres_bin=postgres_bin,
@@ -2508,6 +2850,10 @@ def _run_rehearsal(
                 "ready": True,
                 "status": "rehearsed",
                 "contract": CONTRACT,
+                "implementation": {
+                    "paths": list(IMPLEMENTATION_PATHS),
+                    "digest": _implementation_digest(),
+                },
                 "engine": {
                     "major": major,
                     "version": version,
@@ -2516,7 +2862,7 @@ def _run_rehearsal(
                 },
                 "migrations": {
                     "count": len(MIGRATIONS),
-                    "schema_version": 5,
+                    "schema_version": 6,
                     "production_validator_ready": primary_validation.get("ready") is True,
                 },
                 "storage": {
@@ -2532,6 +2878,7 @@ def _run_rehearsal(
                     **product_journeys,
                     **approval_authority,
                     **behaviour,
+                    **managed_activation,
                     "backup_created": True,
                     "restore_completed": True,
                     "restored_database_validated": restored_validation.get("ready") is True,
@@ -2545,7 +2892,7 @@ def _run_rehearsal(
                 "recovery": {
                     "format": "pg_dump_custom",
                     "backup_nonempty": True,
-                    "restored_schema_version": 5,
+                    "restored_schema_version": 6,
                 },
                 "cleanup_complete": False,
                 "secret_values_exposed": False,
