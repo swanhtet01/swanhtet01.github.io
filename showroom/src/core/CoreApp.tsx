@@ -1670,7 +1670,9 @@ export function CoreLayout() {
   const workspaceMainRef = useRef<HTMLElement>(null)
   const routeProduct = productFromPathname(location.pathname)
   const settingsProduct = location.pathname.startsWith('/settings/') ? setupProductFromQuery(new URLSearchParams(location.search).get('product')) : null
-  const routeName = location.pathname.startsWith('/website/')
+  const routeName = location.pathname === '/login' || location.pathname === '/login/'
+    ? 'Sign in'
+    : location.pathname.startsWith('/website/')
       ? 'Website'
     : location.pathname.startsWith('/ecommerce/')
       ? 'Ecommerce'

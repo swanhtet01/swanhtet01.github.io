@@ -1913,6 +1913,7 @@ if (coreLayoutRouteStart < 0
   || !coreSource.includes("location.pathname.startsWith('/website/')")
   || !coreSource.includes("location.pathname.startsWith('/shop/')")
   || !coreSource.includes("location.pathname.startsWith('/plant/')")
+  || !coreShellSource.includes("location.pathname === '/login' || location.pathname === '/login/'")
   || websiteSource.includes('className="website-topbar"')
   || websiteSource.includes('className="website-brand"')
   || websiteSource.includes('<main id="website-workspace"')
