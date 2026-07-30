@@ -950,6 +950,7 @@ test('execution claims the exact reviewed mission once and accepts only a qualit
   assert.equal(add.args.includes('--roles'), true)
   assert.equal(add.args.includes('operations'), true)
   assert.match(add.args[2], /Proposed next action, Assumption, and Missing proof/)
+  assert.match(add.args[2], /Department deliverable: Reconcile the current four-product readiness ledger and name every blocked proof\./)
   assert.match(add.args[2], /plain text on one line with no Markdown markers and no filenames/)
   assert.match(add.args[2], /Not verified or performed: Proposed next action: review \[one bounded local gap\]\. Assumption:/)
   assert.match(add.args[2], /may replace review only with inspect, compare, or draft/)

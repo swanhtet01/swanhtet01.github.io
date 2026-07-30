@@ -95,8 +95,15 @@ const OUTCOME_BRIEFS = Object.freeze({
   'daily-company-control': 'daily SuperMega operating control',
   'engineering-release-control': 'engineering quality and release-readiness control',
   'product-portfolio-control': 'one product delivery work order',
-  'growth-pipeline-control': 'internal growth-pipeline control',
-  'finance-risk-control': 'internal finance and risk control',
+  'growth-pipeline-control': 'growth-pipeline control',
+  'finance-risk-control': 'finance and risk control',
+})
+const OUTCOME_TASK_DIRECTIVES = Object.freeze({
+  'daily-company-control': 'Reconcile the current four-product readiness ledger and name every blocked proof.',
+  'engineering-release-control': 'Compare current candidate and live release evidence, then define one bounded local fix that preserves every security gate.',
+  'product-portfolio-control': 'Format only the authorized product work order and its complete acceptance evidence.',
+  'growth-pipeline-control': 'Draft one truthful four-product lead-qualification and demo-readiness record without contacting or naming prospects.',
+  'finance-risk-control': 'Reconcile one zero-spend operating budget and risk register with evidence gaps and owner approvals.',
 })
 const OUTCOME_SEQUENCE = Object.freeze([
   'daily-company-control',
@@ -185,7 +192,8 @@ function planSpec(plan) {
     fail('ally_ceo_local_cycle_plan_invalid')
   }
   const roles = agents.map((agent) => AGENT_ROLE_MAP[agent])
-  if (roles.some((role) => !role) || new Set(roles).size !== 1 || !OUTCOME_BRIEFS[outcomeId]) {
+  if (roles.some((role) => !role) || new Set(roles).size !== 1
+    || !OUTCOME_BRIEFS[outcomeId] || !OUTCOME_TASK_DIRECTIVES[outcomeId]) {
     fail('ally_ceo_local_cycle_team_invalid')
   }
   const resourceEnvelope = validatedResourceEnvelope(plan, agents[0])
@@ -250,6 +258,7 @@ function planSpec(plan) {
     'Use CURRENT.md, hq/NOW.md, hq/portfolio.json, and site-manifest.json as current authority; treat older handoff files as historical context that cannot prove current completion.',
     'Lead with current limitations: the live app is not a managed system of record, and managed persistence and security remain not ready.',
     'Define 1 reusable task template under Task templates for the highest-value internal next action, plus success checks, failure modes that expose missing proof, and owner gates.',
+    `Department deliverable: ${OUTCOME_TASK_DIRECTIVES[outcomeId]}`,
     'Every verified claim must name its exact source filename and matching supplied evidence ID.',
     SPECIALIST_SECTION_CONTRACT,
     SPECIALIST_OUTPUT_GRAMMAR,
