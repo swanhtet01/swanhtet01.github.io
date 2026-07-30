@@ -153,6 +153,20 @@ const catalog: Record<ClientSolutionId, readonly Omit<ClientCapability, 'product
   ],
 }
 
+export function productCapabilityCatalog(product: ClientSolutionId): ClientCapability[] {
+  return catalog[product].map((capability) => ({ ...capability, product }))
+}
+
+export function productCapabilitySummary(product: ClientSolutionId) {
+  const capabilities = productCapabilityCatalog(product)
+  return {
+    demoReady: capabilities.filter((capability) => capability.delivery === 'demo').length,
+    configureNext: capabilities.filter((capability) => capability.delivery === 'configure').length,
+    scaleLater: capabilities.filter((capability) => capability.delivery === 'roadmap').length,
+    total: capabilities.length,
+  }
+}
+
 export function buildClientCapabilityPlan(blueprint: ClientDemoBlueprint, generatedAt: string): ClientCapabilityPlan {
   const products = blueprint.products.map(({ product, label, templateId }) => ({ product, label, templateId }))
   const selected = new Set(products.map(({ product }) => product))

@@ -3,9 +3,11 @@ import { Link, NavLink, Outlet, useLocation, useOutletContext } from 'react-rout
 
 import './core-app.css'
 import { recordBehaviorSignal } from './behavior-trail'
+import type { ClientSolutionId } from './client-onboarding'
 
 const ProductHomeReadiness = lazy(() => import('./ProductHomeReadiness').then((module) => ({ default: module.ProductHomeReadiness })))
 const ProductHomeToday = lazy(() => import('./ProductHomeToday').then((module) => ({ default: module.ProductHomeToday })))
+const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
 
@@ -107,7 +109,7 @@ function initialInterfaceTheme(): InterfaceTheme {
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-function productFromPathname(pathname: string) {
+function productFromPathname(pathname: string): ClientSolutionId | null {
   if (pathname.startsWith('/shop/')) return 'commerce'
   if (pathname.startsWith('/plant/')) return 'production'
   if (pathname.startsWith('/website/')) return 'website'
@@ -303,7 +305,8 @@ export function CoreLayout() {
       <div className="core-stage">
         <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta"><button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '*' : 'o'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
         <nav className="mobile-nav" aria-label="Mobile application">{navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={'end' in item ? item.end : undefined} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
-        <main id="workspace-main" className={`core-main${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
+        <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
+          {routeProduct ? <Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} product={routeProduct} /></Suspense> : null}
           <div className="core-route-content"><Outlet context={runtime} /></div>
         </main>
       </div>
