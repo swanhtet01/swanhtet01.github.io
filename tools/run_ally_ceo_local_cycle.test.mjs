@@ -179,6 +179,16 @@ function legacyDailyHash(version = '2026-07-29.10') {
   ].join('|')).digest('hex').slice(0, 12)
 }
 
+function currentDailyHash() {
+  return createHash('sha256').update([
+    'supermega.ally-ceo-local-cycle.v1',
+    '2026-07-29.23',
+    'a'.repeat(64),
+    'daily-company-control',
+    'operations',
+  ].join('|')).digest('hex').slice(0, 12)
+}
+
 const audit = (eligible = true) => JSON.stringify({
   contract: 'supermega.ally-runtime-audit.v1',
   mode: 'read_only',
@@ -343,7 +353,11 @@ function harness(overrides = {}) {
     if (request.kind === 'trim') return overrides.trimReceipt || trimReceipt
     if (request.kind === 'hq_live') return overrides.hqLive || hqLive
     if (args[0] === 'health') return health
-    if (args[0] === 'capacity') return overrides.capacity || capacity
+    if (args[0] === 'capacity') {
+      return typeof overrides.capacity === 'function'
+        ? overrides.capacity({ knowledgeAuditIndex })
+        : overrides.capacity || capacity
+    }
     if (args[0] === 'knowledge' && args[1] === 'audit') {
       const sequence = overrides.knowledgeSequence || [overrides.knowledge || knowledge]
       const response = sequence[Math.min(knowledgeAuditIndex, sequence.length - 1)]
@@ -447,7 +461,8 @@ test('preflight binds the CEO plan to one local specialist without queue or mode
   assert.equal(result.liveHq.launchReadinessCurrent, true)
   assert.equal(result.liveHq.productContractStatus, 'current')
   assert.deepEqual(result.liveHq.probeAttempts, [1, 2, 1, 1])
-  assert.equal(state.calls.findIndex((call) => call.kind === 'hq_live') < state.calls.findIndex((call) => call.args?.[0] === 'knowledge'), true)
+  assert.equal(state.calls.findIndex((call) => call.args?.[0] === 'knowledge') < state.calls.findIndex((call) => call.args?.[0] === 'capacity'), true)
+  assert.equal(state.calls.findIndex((call) => call.args?.[0] === 'capacity') < state.calls.findIndex((call) => call.kind === 'hq_live'), true)
   assert.equal(state.calls.some((call) => call.args?.includes('add')), false)
 })
 
@@ -588,14 +603,15 @@ test('read-only CEO work can report bounded live product drift without weakening
   )
 })
 
-test('fresh outcomes fail before knowledge, queue, or model work when live HQ truth is rejected', async () => {
+test('fresh outcomes audit current knowledge but fail before refresh, queue, or model work when live HQ truth is rejected', async () => {
   const state = harness({ hqLive: JSON.stringify({ ok: false, contract: 'supermega.hq-live-state.v1', failures: ['snapshot_stale'] }) })
   await assert.rejects(
     runAllyCeoLocalCycle({ execute: true, refreshKnowledge: true }, { plan: plan(), runCommand: state.runCommand }),
     /ally_ceo_local_cycle_hq_live_rejected/,
   )
   assert.equal(state.calls.filter((call) => call.kind === 'hq_live').length, 1)
-  assert.equal(state.calls.some((call) => call.args?.[0] === 'knowledge'), false)
+  assert.equal(state.calls.filter((call) => call.args?.slice(0, 2).join(' ') === 'knowledge audit').length, 1)
+  assert.equal(state.calls.some((call) => call.args?.slice(0, 2).join(' ') === 'knowledge refresh'), false)
   assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)
   assert.equal(state.calls.some((call) => call.args?.[1] === 'run-next'), false)
 })
@@ -1034,8 +1050,45 @@ test('execution can atomically refresh changed registered evidence before queue 
   assert.deepEqual(result.knowledgeRefresh, { requested: true, performed: true, refreshedSources: 1 })
   const localCalls = state.calls.filter((call) => call.kind === 'local').map((call) => call.args.slice(0, 2).join(' '))
   assert.deepEqual(localCalls.slice(1, 6), [
-    'queue list', 'capacity --project', 'knowledge audit', 'knowledge refresh', 'knowledge audit',
+    'queue list', 'knowledge audit', 'knowledge refresh', 'knowledge audit', 'capacity --project',
   ])
+})
+
+test('explicit knowledge refresh clears changed-source company attention before final capacity admission', async () => {
+  const changedSourceAttention = JSON.parse(capacity)
+  changedSourceAttention.status = 'attention_required'
+  changedSourceAttention.company_attention = {
+    status: 'attention_required',
+    next_action: 'review_then_refresh_changed_project_sources',
+  }
+  changedSourceAttention.blockers = ['company_attention_required']
+  changedSourceAttention.next_action = 'review_then_refresh_changed_project_sources'
+  const state = harness({
+    knowledgeSequence: [changedKnowledge, knowledge],
+    capacity: ({ knowledgeAuditIndex }) => knowledgeAuditIndex >= 2 ? capacity : JSON.stringify(changedSourceAttention),
+    modelEventCount: 2,
+  })
+  const result = await runAllyCeoLocalCycle(
+    { execute: true, refreshKnowledge: true },
+    {
+      plan: plan(),
+      runCommand: state.runCommand,
+      inspectReport: async () => ({
+        path: 'C:\\state\\outputs\\fresh-capacity.md',
+        bytes: Buffer.byteLength(acceptedStructuredReport),
+        digest: 'sha256:' + '8'.repeat(64),
+        text: acceptedStructuredReport,
+      }),
+    },
+  )
+  assert.equal(result.status, 'accepted')
+  assert.deepEqual(result.knowledgeRefresh, { requested: true, performed: true, refreshedSources: 1 })
+  assert.equal(result.capacityAdmission.status, 'ready')
+  assert.equal(state.calls.filter((call) => call.args?.[0] === 'capacity').length, 1)
+  const refreshIndex = state.calls.findIndex((call) => call.args?.slice(0, 2).join(' ') === 'knowledge refresh')
+  const capacityIndex = state.calls.findIndex((call) => call.args?.[0] === 'capacity')
+  const queueWriteIndex = state.calls.findIndex((call) => call.args?.[1] === 'add')
+  assert.equal(refreshIndex < capacityIndex && capacityIndex < queueWriteIndex, true)
 })
 
 test('knowledge refresh is execution-only and stale evidence still fails without the explicit control', async () => {
@@ -1315,6 +1368,45 @@ test('newest versioned repair takes precedence over an older unversioned repair'
   )
   assert.equal(result.status, 'existing_rejected')
   assert.equal(result.queueId, recentQueueId)
+  assert.equal(state.calls.filter((call) => call.args?.[0] === 'show').length, 1)
+})
+
+test('exact current repair takes precedence over its rejected original sharing the cycle marker', async () => {
+  const originalQueueId = '5'.repeat(12)
+  const originalJobId = '4'.repeat(12)
+  const repairQueueId = '3'.repeat(12)
+  const repairJobId = '2'.repeat(12)
+  const cycleHash = currentDailyHash()
+  const cycleMarker = `[ALLY_CEO_CYCLE:${cycleHash}]`
+  const repairMarker = `[ALLY_CEO_REPAIR:2026-07-29:daily-company-control:${cycleHash}]`
+  const state = harness({
+    queueList: [
+      `${originalQueueId}  complete        p=100  2026-07-29T00:00:00Z  project=SuperMega  playbook=-  job=${originalJobId}  ${cycleMarker} [ALLY_CEO_OUTCOME:2026-07-29:daily-company-control] original`,
+      `${repairQueueId}  complete        p=100  2026-07-29T00:01:00Z  project=SuperMega  playbook=-  job=${repairJobId}  ${repairMarker} ${cycleMarker} repair`,
+      '',
+    ].join('\n'),
+    jobObjectives: {
+      [originalJobId]: `${cycleMarker} original`,
+      [repairJobId]: `${repairMarker} ${cycleMarker} accepted repair`,
+    },
+    reportPaths: {
+      [originalJobId]: 'C:\\state\\outputs\\original.md',
+      [repairJobId]: 'C:\\state\\outputs\\repair.md',
+    },
+  })
+  const result = await runAllyCeoLocalCycle(
+    { execute: false },
+    { plan: plan(), runCommand: state.runCommand, inspectReport: async (path) => ({
+      path,
+      bytes: Buffer.byteLength(acceptedStructuredReport),
+      digest: 'sha256:' + '7'.repeat(64),
+      text: acceptedStructuredReport,
+    }) },
+  )
+  assert.equal(result.status, 'existing')
+  assert.equal(result.queueId, repairQueueId)
+  assert.equal(result.jobId, repairJobId)
+  assert.equal(result.qualityPassed, true)
   assert.equal(state.calls.filter((call) => call.args?.[0] === 'show').length, 1)
 })
 

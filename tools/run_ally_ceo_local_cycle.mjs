@@ -670,9 +670,9 @@ function findExistingCycle(queueText, marker) {
 
 function existingForSpec(queueText, spec) {
   const markers = [
-    `[ALLY_CEO_CYCLE:${spec.shortHash}]`,
     spec.repairMarker,
     ...spec.legacyRepairMarkers,
+    `[ALLY_CEO_CYCLE:${spec.shortHash}]`,
     spec.outcomeMarker,
     ...spec.legacyShortHashes.map((hash) => `[ALLY_CEO_CYCLE:${hash}]`),
   ]
@@ -1157,14 +1157,6 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   }
   const host = { ...validateAudit(audit), memoryRecovery }
   validateHealth(health, provider, model)
-  const capacityAdmission = validateCapacityAdmission(parseJson(
-    await runCommand({ kind: 'local', args: ['capacity', '--project', 'SuperMega'], timeoutMs: 30_000 }),
-    'ally_ceo_local_cycle_capacity_invalid',
-  ), rotation.spec)
-  const liveHq = validateHqLiveReceipt(parseJson(
-    await runCommand({ kind: 'hq_live', args: [], timeoutMs: 90_000 }),
-    'ally_ceo_local_cycle_hq_live_invalid',
-  ))
   const knowledge = parseJson(await runCommand({ kind: 'local', args: ['knowledge', 'audit', '--project', 'SuperMega'], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_knowledge_invalid')
   const initialKnowledge = knowledgeStatus(knowledge)
   if (initialKnowledge.missing > 0 || initialKnowledge.unavailable > 0) {
@@ -1193,6 +1185,17 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     performed: refreshedSources > 0,
     refreshedSources,
   }
+  // Changed registered sources are themselves a company-attention blocker. Reconcile
+  // that no-model condition before final capacity admission so --refresh-knowledge
+  // cannot deadlock behind the stale evidence it is explicitly authorized to repair.
+  const capacityAdmission = validateCapacityAdmission(parseJson(
+    await runCommand({ kind: 'local', args: ['capacity', '--project', 'SuperMega'], timeoutMs: 30_000 }),
+    'ally_ceo_local_cycle_capacity_invalid',
+  ), rotation.spec)
+  const liveHq = validateHqLiveReceipt(parseJson(
+    await runCommand({ kind: 'hq_live', args: [], timeoutMs: 90_000 }),
+    'ally_ceo_local_cycle_hq_live_invalid',
+  ))
   const { spec, existing, completedOutcomeIds, rejectedOutcomes = [], skippedOutcomes = [] } = rotation
   let repair = null
   if (existing) {
