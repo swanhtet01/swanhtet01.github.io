@@ -353,7 +353,10 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
     northStar: portfolio.northStar,
     products: portfolio.products.map(({ id, status, nextGate }) => ({ id, status, nextGate })),
     limits: portfolio.limits,
-    completedLocalAutomations: portfolio.completedLocalAutomations,
+    completedLocalAutomationSummary: {
+      count: portfolio.completedLocalAutomations.length,
+      digest: `sha256:${digest(stableStringify(portfolio.completedLocalAutomations))}`,
+    },
   }
   const resourceEnvelope = buildResourceEnvelope()
   const evidence = {

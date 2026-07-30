@@ -158,6 +158,29 @@ test('growing Workboard history stays out of active context while current execut
   )
 })
 
+test('completed automation history is receipt-bound instead of copied into every agent context', async () => {
+  const largePortfolio = JSON.parse(portfolio())
+  largePortfolio.completedLocalAutomations = Array.from({ length: 180 }, (_, index) => ({
+    productId: 'ecommerce',
+    workOrderId: `ecommerce-completed-${String(index).padStart(3, '0')}`,
+    checkpoint: `ENG-${String(index).padStart(3, '0')}`,
+  }))
+  const result = await buildAllyCeoCompanyPlan({
+    now: '2026-07-29T12:00:00.000Z',
+    hqNow: now,
+    workboard,
+    portfolioText: JSON.stringify(largePortfolio),
+    completedOutcomeIds: ['daily-company-control'],
+  })
+  const evidence = result.manifest.evidence['proof-builder']
+
+  assert.equal(result.outcomeId, 'engineering-release-control')
+  assert.equal(evidence.portfolio.completedLocalAutomationSummary.count, 180)
+  assert.match(evidence.portfolio.completedLocalAutomationSummary.digest, /^sha256:[a-f0-9]{64}$/)
+  assert.equal(JSON.stringify(evidence).includes('ecommerce-completed-000'), false)
+  assert.ok(Buffer.byteLength(JSON.stringify(evidence), 'utf8') <= 8_192)
+})
+
 test('completed outcomes rotate through all five fixed teams and then stop', async () => {
   const sequence = [
     ['daily-company-control', ['operations-analyst']],

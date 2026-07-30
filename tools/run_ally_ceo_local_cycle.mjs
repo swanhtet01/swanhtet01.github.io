@@ -117,7 +117,7 @@ const LEGACY_REPAIRABLE_REASONS = Object.freeze(new Set([
   'ally_ceo_local_cycle_specialist_section_rejected',
 ]))
 const SPECIALIST_SECTION_CONTRACT = 'Each specialist section must be at most 90 words and contain exactly these advisory labels: Proposed next action, Assumption, and Missing proof. Specialists must not claim execution or verified facts; the evidence-grounded executive synthesis remains code-owned. The executive synthesis must be at most 120 words and end with: Owner review required.'
-const SPECIALIST_OUTPUT_GRAMMAR = 'Write each specialist section as complete sentences on one line. The Proposed next action must begin with exactly one of these advisory verbs: review, inspect, compare, or draft. Do not end a clause with a conjunction, helper verb, or unfinished phrase, and do not append canned scope warnings after a semicolon.'
+const SPECIALIST_OUTPUT_GRAMMAR = 'Write each specialist section as plain text on one line with no Markdown markers and no filenames. Preserve this literal skeleton and replace only the bracketed phrases: Not verified or performed: Proposed next action: review [one bounded local gap]. Assumption: [one unverified premise]. Missing proof: [one named proof item]. The Proposed next action may replace review only with inspect, compare, or draft. End every clause as a complete sentence. Do not end a clause with a conjunction, helper verb, or unfinished phrase, and do not append canned scope warnings after a semicolon.'
 
 function fail(reason) {
   throw new Error(reason)
