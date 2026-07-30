@@ -9,7 +9,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import {
   CLIENT_DEMO_PREPARATION_CONTRACT,
+  CLIENT_INTAKE_WORKSPACE_CONTRACT,
   clientDemoPreparationSummary,
+  initializeClientWorkspace,
   prepareClientDemo,
   verifyClientDemoPreparation,
   writeClientDemoPreparation,
@@ -226,6 +228,58 @@ test('one private client folder builds the setup kit and four-product review art
     assert.equal(JSON.parse(cli.stdout).clientDataFiles, 1)
     assert.doesNotMatch(cli.stdout, /One-folder client|Implementation owner/)
     assert.equal(JSON.parse(await readFile(cliOutput, 'utf8')).review.status, 'awaiting_founder_review')
+  } finally {
+    await rm(source.directory, { recursive: true, force: true })
+  }
+})
+
+test('one command creates a private four-product intake workspace that becomes a verified review artifact', async () => {
+  const source = await fixture()
+  try {
+    const intakeDirectory = resolve(source.directory, 'new-client-intake')
+    const initialized = await initializeClientWorkspace({ directory: intakeDirectory })
+    assert.deepEqual(initialized, {
+      ok: true,
+      contract: CLIENT_INTAKE_WORKSPACE_CONTRACT,
+      presetId: 'manufacturing',
+      productCount: 4,
+      templateCount: 4,
+      containsClientData: false,
+      externalWritesPerformed: false,
+      modelCallsPerformed: false,
+      activationStatus: 'not_applied',
+    })
+    const profilePath = resolve(intakeDirectory, 'client.json')
+    const profile = JSON.parse(await readFile(profilePath, 'utf8'))
+    assert.deepEqual(profile.products, ['commerce', 'production', 'website', 'ecommerce'])
+    assert.equal(profile.workspace, 'REPLACE WITH CLIENT WORKSPACE')
+    assert.match(await readFile(resolve(intakeDirectory, 'START-HERE.md'), 'utf8'), /No model, connector, hosted write, activation, inventory change, order, or production action occurs/)
+    for (const product of ['commerce', 'production', 'website', 'ecommerce']) {
+      assert.ok((await stat(resolve(intakeDirectory, '_templates', `${product}.csv`))).size > 0)
+    }
+    await assert.rejects(prepareClientDemo({ dataDirectory: intakeDirectory, preparedAt: PREPARED_AT }), /client_profile_contract_invalid/)
+    await writeFile(profilePath, JSON.stringify({ ...profile, workspace: 'Prepared client', owner: 'Implementation owner' }), 'utf8')
+    await writeFile(resolve(intakeDirectory, 'commerce.csv'), await readFile(resolve(intakeDirectory, '_templates', 'commerce.csv'), 'utf8'), 'utf8')
+    const artifact = await prepareClientDemo({ dataDirectory: intakeDirectory, preparedAt: PREPARED_AT })
+    assert.equal(artifact.products.length, 4)
+    assert.equal(artifact.products[0].sourceMode, 'client_csv')
+    assert.equal(verifyClientDemoPreparation(artifact).status, 'verified_not_applied')
+    await assert.rejects(initializeClientWorkspace({ directory: intakeDirectory }), /client_workspace_init_exists/)
+
+    const cliDirectory = resolve(source.directory, 'cli-client-intake')
+    const cli = spawnSync(process.execPath, [TOOL, '--init', cliDirectory, '--preset', 'service-business', '--products', 'shop,website,ecommerce'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+    })
+    assert.equal(cli.status, 0, cli.stderr)
+    const cliSummary = JSON.parse(cli.stdout)
+    assert.equal(cliSummary.contract, CLIENT_INTAKE_WORKSPACE_CONTRACT)
+    assert.equal(cliSummary.productCount, 3)
+    assert.equal(cliSummary.containsClientData, false)
+    assert.doesNotMatch(cli.stdout, /cli-client-intake|REPLACE WITH/)
+    assert.deepEqual(JSON.parse(await readFile(resolve(cliDirectory, 'client.json'), 'utf8')).products, ['commerce', 'website', 'ecommerce'])
   } finally {
     await rm(source.directory, { recursive: true, force: true })
   }

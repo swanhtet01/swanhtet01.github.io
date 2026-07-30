@@ -48,6 +48,7 @@
     "smoke:public": "npm run public:prebuilt",
     "audit:lead-ledger": "node tools/audit_lead_ledger.mjs",
     "client:prepare": "node tools/prepare_client_demo.mjs",
+    "client:workspace:init": "node tools/prepare_client_demo.mjs --init",
     "client:prepare:verify": "node tools/prepare_client_demo.mjs --verify",
     "client:prepare:self-test": "node --test tools/prepare_client_demo.test.mjs",
     "workspace:recovery": "node tools/run_python_tool.mjs tools/manage_workspace_recovery.py",

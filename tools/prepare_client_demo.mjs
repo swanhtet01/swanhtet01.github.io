@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { constants as fsConstants, existsSync } from 'node:fs'
-import { access, chmod, link, lstat, open, readFile, readdir, realpath, unlink } from 'node:fs/promises'
+import { access, chmod, link, lstat, mkdir, open, readFile, readdir, realpath, unlink } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -23,6 +23,9 @@ const PRODUCT_PATHS = Object.freeze({
 })
 const CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v3'
 const CLIENT_PROFILE_SCHEMA = 'supermega.client_profile.v1'
+export const CLIENT_INTAKE_WORKSPACE_CONTRACT = 'supermega.client_intake_workspace.v1'
+const CLIENT_PROFILE_WORKSPACE_PLACEHOLDER = 'REPLACE WITH CLIENT WORKSPACE'
+const CLIENT_PROFILE_OWNER_PLACEHOLDER = 'REPLACE WITH IMPLEMENTATION OWNER'
 const CLIENT_OPERATING_FOUNDATION_SCHEMA = 'supermega.client_operating_foundation.v1'
 const CLIENT_OPERATIONAL_TOPOLOGY_SCHEMA = 'supermega.client_operational_topology.v1'
 const OPERATING_UNIT_KIND = Object.freeze({
@@ -171,6 +174,7 @@ async function clientProfileKit(directoryRealPath, timestamp, model) {
   try { profile = JSON.parse(profileText) } catch { fail('client_profile_json_invalid') }
   if (!hasExactKeys(profile, ['schema', 'workspace', 'owner', 'presetId', 'products'])
     || profile.schema !== CLIENT_PROFILE_SCHEMA
+    || profile.workspace === CLIENT_PROFILE_WORKSPACE_PLACEHOLDER || profile.owner === CLIENT_PROFILE_OWNER_PLACEHOLDER
     || !Array.isArray(profile.products) || profile.products.length < 1 || profile.products.length > PRODUCT_ORDER.length
     || profile.products.some((product) => !PRODUCT_ORDER.includes(product))
     || new Set(profile.products).size !== profile.products.length
@@ -198,6 +202,89 @@ async function clientProfileKit(directoryRealPath, timestamp, model) {
   } catch (error) {
     if (error instanceof PreparationError) throw error
     fail('client_profile_contract_invalid')
+  }
+}
+
+async function writePrivateStarterFile(path, content) {
+  let handle
+  try {
+    handle = await open(path, 'wx', 0o600)
+    await handle.writeFile(content, 'utf8')
+    await handle.sync()
+    await handle.close()
+    handle = null
+    await chmod(path, 0o600).catch(() => null)
+  } catch {
+    if (handle) await handle.close().catch(() => null)
+    fail('client_workspace_init_write_failed')
+  }
+}
+
+export async function initializeClientWorkspace({ directory, presetId = 'manufacturing', products = PRODUCT_ORDER }) {
+  if (typeof directory !== 'string' || !directory.trim() || typeof presetId !== 'string'
+    || !Array.isArray(products) || products.length < 1 || products.length > PRODUCT_ORDER.length
+    || products.some((product) => !PRODUCT_ORDER.includes(product)) || new Set(products).size !== products.length
+    || JSON.stringify(products) !== JSON.stringify(PRODUCT_ORDER.filter((product) => products.includes(product)))) {
+    fail('client_workspace_init_arguments_invalid')
+  }
+  const target = resolve(directory)
+  const parent = dirname(target)
+  const parentMetadata = await lstat(parent).catch(() => fail('client_workspace_init_parent_invalid'))
+  if (!parentMetadata.isDirectory() || parentMetadata.isSymbolicLink()) fail('client_workspace_init_parent_invalid')
+  try { await access(target, fsConstants.F_OK); fail('client_workspace_init_exists') } catch (error) {
+    if (error instanceof PreparationError) throw error
+  }
+  const model = await import(`${pathToFileURL(resolve(ROOT, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?client-workspace-init=${Date.now()}`)
+  let preset
+  try { preset = model.clientDemoPreset(presetId) } catch { fail('client_workspace_init_preset_invalid') }
+  const recommended = new Map(preset.selections.map((selection) => [selection.product, selection.templateId]))
+  const selections = products.map((product) => ({
+    product,
+    templateId: recommended.get(product) ?? model.clientImportWorkflowTemplateIds(product)[0],
+  }))
+  if (selections.some((selection) => !selection.templateId)) fail('client_workspace_init_preset_invalid')
+  const blueprint = model.buildClientDemoBlueprint({
+    workspace: CLIENT_PROFILE_WORKSPACE_PLACEHOLDER,
+    owner: CLIENT_PROFILE_OWNER_PLACEHOLDER,
+    presetId: preset.id,
+    shopIndustryPackId: preset.shopIndustryPackId,
+    plantIndustryPackId: preset.plantIndustryPackId,
+    selections,
+  })
+  try {
+    await mkdir(target, { mode: 0o700 })
+    await chmod(target, 0o700).catch(() => null)
+    const templateDirectory = resolve(target, '_templates')
+    await mkdir(templateDirectory, { mode: 0o700 })
+    await chmod(templateDirectory, 0o700).catch(() => null)
+    const profile = {
+      schema: CLIENT_PROFILE_SCHEMA,
+      workspace: CLIENT_PROFILE_WORKSPACE_PLACEHOLDER,
+      owner: CLIENT_PROFILE_OWNER_PLACEHOLDER,
+      presetId: preset.id,
+      products: [...products],
+    }
+    await writePrivateStarterFile(resolve(target, 'client.json'), `${JSON.stringify(profile, null, 2)}\n`)
+    for (const product of blueprint.products) {
+      await writePrivateStarterFile(resolve(templateDirectory, PRODUCT_FILE[product.product]), product.sampleCsv)
+    }
+    const selectedFiles = blueprint.products.map((product) => `- ${PRODUCT_LABEL[product.product]}: copy _templates/${PRODUCT_FILE[product.product]} to ${PRODUCT_FILE[product.product]}, then replace every sample row with reviewed client data.`).join('\n')
+    const guide = `# SuperMega private client intake\n\nThis folder is local and private. It contains no client data yet and is not safe to share after real data is added.\n\n1. Edit client.json and replace both uppercase placeholders.\n2. Use only the products listed in client.json.\n3. For each client-supplied dataset you want to use:\n${selectedFiles}\n4. Leave a product CSV absent to use its clearly labelled demo fixture.\n5. Prepare and verify without applying anything:\n\n   npm run client:prepare -- --data-dir "<this-folder>" --out "<private-review.json>"\n   npm run client:prepare:verify -- "<private-review.json>"\n\nNo model, connector, hosted write, activation, inventory change, order, or production action occurs during preparation.\n`
+    await writePrivateStarterFile(resolve(target, 'START-HERE.md'), guide)
+  } catch (error) {
+    if (error instanceof PreparationError) throw error
+    fail('client_workspace_init_write_failed')
+  }
+  return {
+    ok: true,
+    contract: CLIENT_INTAKE_WORKSPACE_CONTRACT,
+    presetId: preset.id,
+    productCount: products.length,
+    templateCount: products.length,
+    containsClientData: false,
+    externalWritesPerformed: false,
+    modelCallsPerformed: false,
+    activationStatus: 'not_applied',
   }
 }
 
@@ -507,6 +594,20 @@ export function clientDemoPreparationSummary(artifact, outputPath) {
 function parseArguments(argv) {
   if (argv.length === 1 && argv[0] === '--help') return { mode: 'help' }
   if (argv.length === 2 && argv[0] === '--verify' && argv[1]) return { mode: 'verify', artifactPath: argv[1] }
+  if (argv.length >= 2 && argv[0] === '--init' && argv[1]) {
+    const parsed = { mode: 'init', directory: argv[1], presetId: 'manufacturing', products: [...PRODUCT_ORDER] }
+    for (let index = 2; index < argv.length; index += 2) {
+      if (!argv[index + 1]) fail('client_workspace_init_arguments_invalid')
+      if (argv[index] === '--preset') parsed.presetId = argv[index + 1]
+      else if (argv[index] === '--products') {
+        const aliases = { shop: 'commerce', plant: 'production', website: 'website', ecommerce: 'ecommerce' }
+        const requested = argv[index + 1].split(',').map((value) => aliases[value.trim().toLowerCase()]).filter(Boolean)
+        if (!requested.length || requested.length !== argv[index + 1].split(',').length || new Set(requested).size !== requested.length) fail('client_workspace_init_arguments_invalid')
+        parsed.products = PRODUCT_ORDER.filter((product) => requested.includes(product))
+      } else fail('client_workspace_init_arguments_invalid')
+    }
+    return parsed
+  }
   const parsed = { mode: 'prepare', kitPath: '', dataDirectory: '', outputPath: '' }
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]
@@ -526,7 +627,11 @@ async function main() {
   try {
     const options = parseArguments(process.argv.slice(2))
     if (options.mode === 'help') {
-      console.log('One-folder prepare: put client.json and selected product CSVs in a private directory, then run npm run client:prepare -- --data-dir <private-client-directory> --out <private-review.json>\nExisting-kit prepare: npm run client:prepare -- --kit <setup-kit.json> [--data-dir <private-csv-directory>] --out <private-review.json>\nVerify: npm run client:prepare:verify -- <private-review.json>')
+      console.log('Create private intake: npm run client:workspace:init -- <new-private-directory> [--preset manufacturing] [--products shop,plant,website,ecommerce]\nOne-folder prepare: put client.json and selected product CSVs in a private directory, then run npm run client:prepare -- --data-dir <private-client-directory> --out <private-review.json>\nExisting-kit prepare: npm run client:prepare -- --kit <setup-kit.json> [--data-dir <private-csv-directory>] --out <private-review.json>\nVerify: npm run client:prepare:verify -- <private-review.json>')
+      return
+    }
+    if (options.mode === 'init') {
+      console.log(JSON.stringify(await initializeClientWorkspace(options)))
       return
     }
     if (options.mode === 'verify') {
