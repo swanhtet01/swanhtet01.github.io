@@ -70,6 +70,9 @@ const executionOrderMarker = '## Execution order'
 const workboardExecutionOrder = workboard.includes(executionOrderMarker)
   ? workboard.slice(workboard.indexOf(executionOrderMarker))
   : ''
+const hqUpdatedAt = now.match(/^Updated: (\d{4}-\d{2}-\d{2})$/m)?.[1] ?? ''
+const hqLiveReleaseCommit = now.match(/^Live release commit: `([0-9a-f]{40})`$/m)?.[1] ?? ''
+const workboardAcceptedReleaseCommit = workboard.match(/^Current accepted release checkpoint: `([0-9a-f]{40})`$/m)?.[1] ?? ''
 const kernelRoster = listCompanyAgents()
 const kernelCrewCapabilities = kernelRoster.flatMap((agent) => [agent.crew, ...agent.capabilityCrews])
 const ceoOutcomeSelection = selectCeoOutcome()
@@ -81,9 +84,11 @@ const internalSystem = (id) => portfolio.internalSystems?.find((entry) => entry.
 
 requireContract('portfolio schema', portfolio.schemaVersion === 'supermega.hq.portfolio.v3')
 requireContract('portfolio is current',
-  portfolio.updatedAt === '2026-07-27'
-  && now.includes('Updated: 2026-07-27')
-  && current.includes('Last confirmed: 2026-07-27'))
+  typeof portfolio.updatedAt === 'string'
+  && /^\d{4}-\d{2}-\d{2}$/.test(portfolio.updatedAt)
+  && current.includes(`Last confirmed: ${portfolio.updatedAt}`)
+  && /^\d{4}-\d{2}-\d{2}$/.test(hqUpdatedAt)
+  && Date.parse(`${hqUpdatedAt}T00:00:00Z`) >= Date.parse(`${portfolio.updatedAt}T00:00:00Z`))
 requireContract('customer portfolio is explicit',
   portfolio.products?.map((entry) => entry.id).join(',') === 'shop,plant,website,ecommerce')
 requireContract('customer paths are canonical',
@@ -375,7 +380,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && workboard.includes('Checkpoints `0831ad7` and `920c13d` add an immutable reviewed BOM/routing package')
   && workboard.includes('Checkpoints `0f3dc09` and `03e1f1b` add tenant-bound')
   && workboard.includes('Retain the completed Shop, Plant, Website, and Ecommerce checkpoints')
-  && now.includes('Current checkpoints: product `17b458f`, release `39642eb`')
+  && now.includes(`Current checkpoints: Plant implementation \`33508cc\`, release \`${hqLiveReleaseCommit.slice(0, 7)}\``)
   && now.includes('First-action QA routes Shop, Plant, and Website blockers to the next task')
   && now.includes('The active delivery focus is:')
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
@@ -393,12 +398,16 @@ requireContract('release history is retained and current live state is discovera
   workboard.includes('| OPS-006 | Release / Codex integrator | done-local |')
   && workboard.includes('strict fast-forward descendant of open draft PR #258 head `338b6fd`')
   && workboard.includes('release-reconciliation-2026-07-26.md')
-  && now.includes('Both `supermega.dev` and `app.supermega.dev` serve exact commit `39642eb7a881a09899a030bbdfb68a5687f12fc6`')
+  && /^[0-9a-f]{40}$/.test(hqLiveReleaseCommit)
+  && now.includes(`Both \`supermega.dev\` and \`app.supermega.dev\` serve exact commit \`${hqLiveReleaseCommit}\``)
   && workboard.includes('| CEO-010 | CEO / Codex integrator | done-live |')
-  && workboard.includes('focused bottom sheet with backdrop, Escape/Close actions, 44 px controls, and focus return'))
+  && workboard.includes('focused bottom sheet with backdrop, Escape/Close actions, 44 px controls, and focus return')
+  && workboard.includes('| CEO-011 | CEO / Codex integrator | done-live |')
+  && workboard.includes('one append-only shift close only after positive good output, same-shift material trace'))
 requireContract('workboard release authority and active execution order are current',
   workboard.includes('Integration branch: `main`')
-  && workboard.includes('Current accepted release checkpoint: `39642eb7a881a09899a030bbdfb68a5687f12fc6`')
+  && /^[0-9a-f]{40}$/.test(workboardAcceptedReleaseCommit)
+  && workboardAcceptedReleaseCommit === hqLiveReleaseCommit
   && workboard.includes('| UX-005 | Website + Product UX Codex | released |')
   && workboard.includes('standalone HTML download; connected managed workspaces add evidence, approval, and release records')
   && workboardExecutionOrder.includes('usable Website download checkpoint `e18fc6bc`')
