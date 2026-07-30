@@ -24,6 +24,8 @@ import {
 export const OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v2' as const
 export const OPERATIONAL_REPORT_EXPORT_CONTRACT = 'supermega.operational_report_export.v2' as const
 export const SHARED_MASTER_DATA_REVIEW_PACKET_CONTRACT = 'supermega.shared_master_data_review_packet.v1' as const
+export const SHARED_MASTER_DATA_DECISION_CONTRACT = 'supermega.shared_master_data_decision.v1' as const
+export const SHARED_MASTER_DATA_DRY_RUN_CONTRACT = 'supermega.shared_master_data_dry_run.v1' as const
 export const OPERATIONAL_REPORT_VIEW_KEY = 'supermega.operational-report-view.v1'
 
 export const operationalProducts = ['commerce', 'production', 'website', 'ecommerce'] as const
@@ -103,6 +105,14 @@ export type OperationalReport = {
 export type OperationalReportView = {
   product: 'all' | OperationalProduct
   urgency: 'all' | 'attention' | 'critical'
+}
+
+export type SharedMasterDataResolution = 'retain_separate_roles' | 'link_shared_party' | 'retain_separate_locations' | 'merge_in_owner'
+
+export type SharedMasterDataDecisionInput = {
+  decidedBy: string
+  evidenceReference: string
+  decisions: Array<{ candidateId: string; resolution: SharedMasterDataResolution }>
 }
 
 type OperationalReportInput = {
@@ -530,7 +540,15 @@ export async function validateSharedMasterDataReviewPacket(value: unknown) {
     throw new Error('Shared master-data review packet contract is invalid.')
   }
   const projectedReview = {
-    candidates: packet.candidates.map(({ allowedResolutions: _allowedResolutions, ...candidate }) => candidate),
+    candidates: packet.candidates.map((candidate) => ({
+      id: candidate.id,
+      kind: candidate.kind,
+      recordIds: candidate.recordIds,
+      ownerProducts: candidate.ownerProducts,
+      sourceAuthorities: candidate.sourceAuthorities,
+      reason: candidate.reason,
+      reviewRequired: candidate.reviewRequired,
+    })),
     automaticMergeAllowed: false as const,
     mergePerformed: false as const,
     externalWritesPerformed: false as const,
@@ -544,6 +562,147 @@ export async function validateSharedMasterDataReviewPacket(value: unknown) {
   const { digest, ...payload } = packet
   if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) throw new Error('Shared master-data review packet digest is invalid.')
   return structuredClone(packet)
+}
+
+function decisionText(value: unknown, label: string, maximum: number) {
+  if (typeof value !== 'string' || value !== value.trim() || value.normalize('NFC') !== value || value.length < 2 || value.length > maximum
+    || [...value].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) {
+    throw new Error(`Shared master-data ${label} is invalid.`)
+  }
+  return value
+}
+
+function allowedResolutions(kind: 'business_partner' | 'location'): readonly SharedMasterDataResolution[] {
+  return kind === 'business_partner' ? ['retain_separate_roles', 'link_shared_party'] : ['retain_separate_locations', 'merge_in_owner']
+}
+
+export async function buildSharedMasterDataDecisionPacket(
+  reviewValue: unknown,
+  input: SharedMasterDataDecisionInput,
+  decidedAt = new Date().toISOString(),
+) {
+  const reviewPacket = await validateSharedMasterDataReviewPacket(reviewValue)
+  const decidedBy = decisionText(input.decidedBy, 'decision owner', 120)
+  const evidenceReference = decisionText(input.evidenceReference, 'decision evidence', 240)
+  if (!exactIso(decidedAt) || !Array.isArray(input.decisions) || input.decisions.length !== reviewPacket.candidates.length) {
+    throw new Error('Shared master-data decision is incomplete.')
+  }
+  const supplied = new Map<string, SharedMasterDataResolution>()
+  for (const decision of input.decisions) {
+    if (!exactKeys(decision, ['candidateId', 'resolution']) || typeof decision.candidateId !== 'string' || supplied.has(decision.candidateId)) {
+      throw new Error('Shared master-data decision is invalid.')
+    }
+    supplied.set(decision.candidateId, decision.resolution)
+  }
+  const decisions = reviewPacket.candidates.map((candidate) => {
+    const resolution = supplied.get(candidate.id)
+    if (!resolution || !allowedResolutions(candidate.kind).includes(resolution)) throw new Error('Shared master-data resolution is invalid.')
+    return { candidateId: candidate.id, resolution }
+  })
+  const payload = {
+    contract: SHARED_MASTER_DATA_DECISION_CONTRACT,
+    decidedAt,
+    decidedBy,
+    evidenceReference,
+    reviewPacket,
+    decisions,
+    controls: {
+      complete: true as const,
+      humanConfirmed: true as const,
+      decisionOnly: true as const,
+      automaticMergeAllowed: false as const,
+      sourceMutationPerformed: false as const,
+      externalWritesPerformed: false as const,
+    },
+  }
+  return { ...payload, digest: await digestPayload(payload) }
+}
+
+export async function validateSharedMasterDataDecisionPacket(value: unknown) {
+  if (!exactKeys(value, ['contract', 'decidedAt', 'decidedBy', 'evidenceReference', 'reviewPacket', 'decisions', 'controls', 'digest'])) throw new Error('Shared master-data decision packet is invalid.')
+  const packet = value as Awaited<ReturnType<typeof buildSharedMasterDataDecisionPacket>>
+  if (packet.contract !== SHARED_MASTER_DATA_DECISION_CONTRACT || !exactIso(packet.decidedAt)
+    || !exactKeys(packet.controls, ['complete', 'humanConfirmed', 'decisionOnly', 'automaticMergeAllowed', 'sourceMutationPerformed', 'externalWritesPerformed'])
+    || packet.controls.complete !== true || packet.controls.humanConfirmed !== true || packet.controls.decisionOnly !== true
+    || packet.controls.automaticMergeAllowed !== false || packet.controls.sourceMutationPerformed !== false || packet.controls.externalWritesPerformed !== false
+    || !Array.isArray(packet.decisions)) throw new Error('Shared master-data decision contract is invalid.')
+  decisionText(packet.decidedBy, 'decision owner', 120)
+  decisionText(packet.evidenceReference, 'decision evidence', 240)
+  const reviewPacket = await validateSharedMasterDataReviewPacket(packet.reviewPacket)
+  if (packet.decisions.length !== reviewPacket.candidates.length) throw new Error('Shared master-data decision is incomplete.')
+  for (const [index, decision] of packet.decisions.entries()) {
+    const candidate = reviewPacket.candidates[index]
+    if (!exactKeys(decision, ['candidateId', 'resolution']) || decision.candidateId !== candidate.id
+      || !allowedResolutions(candidate.kind).includes(decision.resolution)) throw new Error('Shared master-data resolution is invalid.')
+  }
+  const { digest, ...payload } = packet
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) throw new Error('Shared master-data decision digest is invalid.')
+  return structuredClone(packet)
+}
+
+function buildSharedMasterDataDryRunRoutes(decisionPacket: Awaited<ReturnType<typeof buildSharedMasterDataDecisionPacket>>) {
+  return decisionPacket.decisions.map((decision, index) => {
+    const candidate = decisionPacket.reviewPacket.candidates[index]
+    if (candidate.ownerProducts.length !== 1 || candidate.sourceAuthorities.length !== 1) throw new Error('Shared master-data decision has no exclusive owner route.')
+    const retain = decision.resolution === 'retain_separate_roles' || decision.resolution === 'retain_separate_locations'
+    const merge = decision.resolution === 'merge_in_owner'
+    return {
+      candidateId: candidate.id,
+      targetOwnerProduct: candidate.ownerProducts[0],
+      targetSourceAuthority: candidate.sourceAuthorities[0],
+      recordIds: [...candidate.recordIds],
+      resolution: decision.resolution,
+      proposedAction: retain ? 'retain_without_change' as const : merge ? 'merge_owner_records' as const : 'link_owner_records' as const,
+      consequence: retain ? 'none' as const : merge ? 'destructive' as const : 'reversible' as const,
+      requiredApprovals: retain
+        ? ['master_data_owner'] as const
+        : merge
+          ? ['master_data_owner', 'source_system_owner', 'security_reviewer'] as const
+          : ['master_data_owner', 'source_system_owner'] as const,
+      executionAllowed: false as const,
+    }
+  })
+}
+
+export async function buildSharedMasterDataDryRunPlan(
+  reviewValue: unknown,
+  input: SharedMasterDataDecisionInput,
+  decidedAt = new Date().toISOString(),
+) {
+  const decisionPacket = await buildSharedMasterDataDecisionPacket(reviewValue, input, decidedAt)
+  const routes = buildSharedMasterDataDryRunRoutes(decisionPacket)
+  const payload = {
+    contract: SHARED_MASTER_DATA_DRY_RUN_CONTRACT,
+    decisionPacket,
+    routes,
+    controls: {
+      reviewOnly: true as const,
+      recordValuesExcluded: true as const,
+      sourceBackupRequiredBeforeExecution: routes.some((route) => route.consequence !== 'none'),
+      executionAllowed: false as const,
+      mutationsPerformed: false as const,
+      externalWritesPerformed: false as const,
+    },
+  }
+  return { ...payload, digest: await digestPayload(payload) }
+}
+
+export async function validateSharedMasterDataDryRunPlan(value: unknown) {
+  if (!exactKeys(value, ['contract', 'decisionPacket', 'routes', 'controls', 'digest'])) throw new Error('Shared master-data dry-run plan is invalid.')
+  const plan = value as Awaited<ReturnType<typeof buildSharedMasterDataDryRunPlan>>
+  if (plan.contract !== SHARED_MASTER_DATA_DRY_RUN_CONTRACT || !Array.isArray(plan.routes)
+    || !exactKeys(plan.controls, ['reviewOnly', 'recordValuesExcluded', 'sourceBackupRequiredBeforeExecution', 'executionAllowed', 'mutationsPerformed', 'externalWritesPerformed'])
+    || plan.controls.reviewOnly !== true || plan.controls.recordValuesExcluded !== true || plan.controls.executionAllowed !== false
+    || plan.controls.mutationsPerformed !== false || plan.controls.externalWritesPerformed !== false) throw new Error('Shared master-data dry-run contract is invalid.')
+  const decisionPacket = await validateSharedMasterDataDecisionPacket(plan.decisionPacket)
+  const expectedRoutes = buildSharedMasterDataDryRunRoutes(decisionPacket)
+  if (JSON.stringify(plan.routes) !== JSON.stringify(expectedRoutes)
+    || plan.controls.sourceBackupRequiredBeforeExecution !== expectedRoutes.some((route) => route.consequence !== 'none')) {
+    throw new Error('Shared master-data dry-run route is invalid.')
+  }
+  const { digest, ...payload } = plan
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) throw new Error('Shared master-data dry-run digest is invalid.')
+  return structuredClone(plan)
 }
 
 export async function exportOperationalReport(report: OperationalReport, view: OperationalReportView) {

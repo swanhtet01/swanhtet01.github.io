@@ -181,6 +181,14 @@ a { color: inherit; }
 .product-home-report-list em { color: var(--core-muted); font-size: 9px; font-style: normal; }
 .product-home-report-list b { flex: 0 0 auto; font-family: var(--core-mono); font-size: 10px; }
 .product-home-report-list > p, .product-home-report-source { margin: 0; color: var(--core-muted); font-size: 9px; line-height: 1.45; }
+.master-data-review-workflow { display: grid; gap: 8px; border: 1px solid var(--core-line); border-radius: 10px; padding: 10px; background: var(--core-panel); }
+.master-data-review-workflow > div:first-child { display: grid; gap: 2px; }
+.master-data-review-workflow strong { font-size: 11px; }
+.master-data-review-workflow small { color: var(--core-muted); font-size: 9px; line-height: 1.45; }
+.master-data-review-workflow label { min-width: 0; display: grid; gap: 4px; color: var(--core-muted); font-size: 9px; font-weight: 750; }
+.master-data-review-workflow label > span { overflow-wrap: anywhere; }
+.master-data-review-workflow select, .master-data-review-workflow input { min-width: 0; min-height: 44px; border: 1px solid var(--core-line); border-radius: 9px; padding: 0 10px; background: var(--core-bg); color: var(--core-ink); }
+.master-data-review-workflow > .core-button { min-height: 44px; justify-self: start; }
 .product-home-setup { border: 1px solid var(--core-line); border-radius: var(--core-radius); background: rgba(255,255,255,.66); }
 .product-home-setup > summary { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 15px; cursor: pointer; list-style: none; }
 .product-home-setup > summary::-webkit-details-marker { display: none; }

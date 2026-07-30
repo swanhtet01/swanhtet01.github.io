@@ -783,6 +783,7 @@ if (!productHomeTodaySource.includes('buildOperationalReport')
   || !productHomeTodaySource.includes('filterOperationalReport')
   || !productHomeTodaySource.includes('exportOperationalReport')
   || !productHomeTodaySource.includes('exportSharedMasterDataReviewPacket')
+  || !productHomeTodaySource.includes('buildSharedMasterDataDryRunPlan')
   || !productHomeTodaySource.includes('validateProductionState')
   || !operationalReportSource.includes('The source failed validation; no sample values were substituted.')
   || !productHomeTodaySource.includes('permissions always come from the managed bootstrap')
@@ -791,6 +792,8 @@ if (!productHomeTodaySource.includes('buildOperationalReport')
   || !productHomeTodaySource.includes('Customer and record values are excluded')
   || !productHomeTodaySource.includes('no merge is automatic')
   || !productHomeTodaySource.includes('Download duplicate review')
+  || !productHomeTodaySource.includes('Download owner-routed dry run')
+  || !productHomeTodaySource.includes('No source record was changed.')
   || !productHomeTodaySource.includes('No names, merge, source mutation, or external write was included.')
   || !productHomeTodaySource.includes('This queue and report are read-only')
   || !productHomeTodaySource.includes("window.addEventListener('storage', refresh)")
@@ -802,9 +805,15 @@ if (!productHomeTodaySource.includes('buildOperationalReport')
   || !operationalReportSource.includes("OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v2'")
   || !operationalReportSource.includes("OPERATIONAL_REPORT_EXPORT_CONTRACT = 'supermega.operational_report_export.v2'")
   || !operationalReportSource.includes("SHARED_MASTER_DATA_REVIEW_PACKET_CONTRACT = 'supermega.shared_master_data_review_packet.v1'")
+  || !operationalReportSource.includes("SHARED_MASTER_DATA_DECISION_CONTRACT = 'supermega.shared_master_data_decision.v1'")
+  || !operationalReportSource.includes("SHARED_MASTER_DATA_DRY_RUN_CONTRACT = 'supermega.shared_master_data_dry_run.v1'")
   || !operationalReportSource.includes('export async function validateOperationalReportExport')
   || !operationalReportSource.includes('export async function exportSharedMasterDataReviewPacket')
   || !operationalReportSource.includes('export async function validateSharedMasterDataReviewPacket')
+  || !operationalReportSource.includes('export async function buildSharedMasterDataDecisionPacket')
+  || !operationalReportSource.includes('export async function validateSharedMasterDataDecisionPacket')
+  || !operationalReportSource.includes('export async function buildSharedMasterDataDryRunPlan')
+  || !operationalReportSource.includes('export async function validateSharedMasterDataDryRunPlan')
   || !operationalReportSource.includes('buildSharedMasterDataRegistry')
   || !sharedMasterDataSource.includes("SHARED_MASTER_DATA_CONTRACT = 'supermega.shared_master_data_registry.v1'")
   || !sharedMasterDataSource.includes('export function buildSharedMasterDataRegistry')
@@ -14374,7 +14383,7 @@ async function verifyOperationalReportRuntime() {
       catalogSkus: duplicateCatalog,
       clients: [{ id: 'CLI-DUPLICATE-001', name: 'Acme Company' }],
       vendors: [{ id: 'VEN-DUPLICATE-001', name: 'acme company' }],
-      locations: [{ id: 'LOC-DUPLICATE-A', name: 'Main store' }, { id: 'LOC-DUPLICATE-B', name: 'Warehouse' }],
+      locations: [{ id: 'LOC-DUPLICATE-A', name: 'Main store' }, { id: 'LOC-DUPLICATE-B', name: 'main store' }],
       stockUnits: [{ id: 'LOT-DUPLICATE-001', sku: duplicateCatalog[0], tracking: 'lot', trackingCode: 'OPENING-001' }],
       openings: [{ stockUnitId: 'LOT-DUPLICATE-001', locationId: 'LOC-DUPLICATE-A', vendorId: 'VEN-DUPLICATE-001', quantity: 1 }],
     })
@@ -14383,7 +14392,7 @@ async function verifyOperationalReportRuntime() {
     }, duplicateCatalog, inventory.EMPTY_SHOP_INVENTORY_DIGEST).state
     const duplicateCommerceState = { ...commerceState, inventoryFoundation: duplicateInventory }
     const duplicateRegistry = masterData.buildSharedMasterDataRegistry({ allowedProducts: masterData.sharedMasterDataProducts, commerce: duplicateCommerceState, production: productionState, website: websiteState })
-    assert(duplicateRegistry.duplicateReview.candidates.length === 1 && duplicateRegistry.duplicateReview.candidates[0].kind === 'business_partner' && duplicateRegistry.duplicateReview.mergePerformed === false, 'shared_master_data_duplicate_candidate_missing')
+    assert(duplicateRegistry.duplicateReview.candidates.length === 2 && duplicateRegistry.duplicateReview.candidates[0].kind === 'business_partner' && duplicateRegistry.duplicateReview.candidates[1].kind === 'location' && duplicateRegistry.duplicateReview.mergePerformed === false, 'shared_master_data_duplicate_candidate_missing')
     assert(!JSON.stringify(duplicateRegistry).includes('Acme Company') && !JSON.stringify(duplicateRegistry).includes('acme company'), 'shared_master_data_duplicate_candidate_exposed_values')
     const mergeTamper = structuredClone(duplicateRegistry)
     mergeTamper.duplicateReview.mergePerformed = true
@@ -14399,7 +14408,7 @@ async function verifyOperationalReportRuntime() {
       ],
       commerce: duplicateCommerceState, production: productionState, website: websiteState, now,
     })
-    assert(duplicateReport.masterData.duplicateCandidates === 1 && duplicateReport.masterData.duplicateReview.candidates.length === 1, 'operational_report_duplicate_review_not_projected')
+    assert(duplicateReport.masterData.duplicateCandidates === 2 && duplicateReport.masterData.duplicateReview.candidates.length === 2, 'operational_report_duplicate_review_not_projected')
     const reviewPacket = await model.exportSharedMasterDataReviewPacket(duplicateReport)
     assert(reviewPacket.contract === model.SHARED_MASTER_DATA_REVIEW_PACKET_CONTRACT && reviewPacket.controls.mergePerformed === false && (await model.validateSharedMasterDataReviewPacket(reviewPacket)).digest === reviewPacket.digest, 'shared_master_data_review_packet_invalid')
     assert(!JSON.stringify(reviewPacket).includes('Acme Company') && !JSON.stringify(reviewPacket).includes('acme company'), 'shared_master_data_review_packet_exposed_values')
@@ -14408,6 +14417,24 @@ async function verifyOperationalReportRuntime() {
     let resolutionTamperRejected = false
     try { await model.validateSharedMasterDataReviewPacket(resolutionTamper) } catch { resolutionTamperRejected = true }
     assert(resolutionTamperRejected, 'shared_master_data_review_resolution_tamper_accepted')
+    const decisionInput = {
+      decidedBy: 'Master data owner', evidenceReference: 'EVIDENCE-MASTER-REVIEW-001',
+      decisions: [{ candidateId: 'DUP-001', resolution: 'link_shared_party' }, { candidateId: 'DUP-002', resolution: 'merge_in_owner' }],
+    }
+    const decisionPacket = await model.buildSharedMasterDataDecisionPacket(reviewPacket, decisionInput, '2026-07-30T12:00:00.000Z')
+    assert(decisionPacket.contract === model.SHARED_MASTER_DATA_DECISION_CONTRACT && decisionPacket.controls.humanConfirmed === true && (await model.validateSharedMasterDataDecisionPacket(decisionPacket)).digest === decisionPacket.digest, 'shared_master_data_decision_packet_invalid')
+    const dryRunPlan = await model.buildSharedMasterDataDryRunPlan(reviewPacket, decisionInput, '2026-07-30T12:00:00.000Z')
+    assert(dryRunPlan.contract === model.SHARED_MASTER_DATA_DRY_RUN_CONTRACT && dryRunPlan.routes.length === 2 && dryRunPlan.controls.executionAllowed === false && dryRunPlan.controls.mutationsPerformed === false && dryRunPlan.controls.sourceBackupRequiredBeforeExecution === true, 'shared_master_data_dry_run_invalid')
+    assert(dryRunPlan.routes[0].targetOwnerProduct === 'commerce' && dryRunPlan.routes[0].targetSourceAuthority === 'shop_inventory_command_chain' && dryRunPlan.routes[0].consequence === 'reversible' && dryRunPlan.routes[1].consequence === 'destructive' && dryRunPlan.routes[1].requiredApprovals.includes('security_reviewer'), 'shared_master_data_dry_run_route_invalid')
+    assert((await model.validateSharedMasterDataDryRunPlan(dryRunPlan)).digest === dryRunPlan.digest && !JSON.stringify(dryRunPlan).includes('Acme Company') && !JSON.stringify(dryRunPlan).includes('main store'), 'shared_master_data_dry_run_exposed_values')
+    const dryRunRouteTamper = structuredClone(dryRunPlan)
+    dryRunRouteTamper.routes[1].targetOwnerProduct = 'production'
+    let dryRunRouteTamperRejected = false
+    try { await model.validateSharedMasterDataDryRunPlan(dryRunRouteTamper) } catch { dryRunRouteTamperRejected = true }
+    assert(dryRunRouteTamperRejected, 'shared_master_data_dry_run_route_tamper_accepted')
+    let incompleteDecisionRejected = false
+    try { await model.buildSharedMasterDataDecisionPacket(reviewPacket, { ...decisionInput, decisions: decisionInput.decisions.slice(0, 1) }, '2026-07-30T12:00:00.000Z') } catch { incompleteDecisionRejected = true }
+    assert(incompleteDecisionRejected, 'shared_master_data_incomplete_decision_accepted')
     assert(!JSON.stringify(report).includes('May') && !JSON.stringify(report).includes('Ko Aung'), 'operational_report_exposed_customer_value')
     assert(report.entries.every((entry, index, entries) => !index || ({ critical: 4, warning: 3, action: 2, ready: 1 })[entries[index - 1].severity] >= ({ critical: 4, warning: 3, action: 2, ready: 1 })[entry.severity]), 'operational_report_priority_order_invalid')
 
