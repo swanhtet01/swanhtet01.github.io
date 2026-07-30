@@ -18,6 +18,9 @@ from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, urlopen
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+from supermega_runtime.managed_context import validate_managed_ai_context_export
+from supermega_runtime.trial_store import TrialValidationError
+
 
 SOURCE_REQUEST_CONTRACT = "supermega.managed_trial_request.v1"
 ACTIVATION_PLAN_CONTRACT = "supermega.managed_workspace_activation_plan.v1"
@@ -41,6 +44,12 @@ _PRODUCT_ALIASES = {
     "shop": "shop",
     "production": "plant",
     "plant": "plant",
+    "website": "website",
+    "ecommerce": "ecommerce",
+}
+_PRODUCT_BEHAVIOR = {
+    "shop": "commerce",
+    "plant": "production",
     "website": "website",
     "ecommerce": "ecommerce",
 }
@@ -365,6 +374,34 @@ def _source_request(value: object) -> dict[str, Any]:
         owner=owner_label,
         template_id=template_id,
     )
+    try:
+        approved_context = validate_managed_ai_context_export(value.get("approvedAiContext"))
+    except TrialValidationError as exc:
+        raise ManagedActivationError("Managed activation requires an exact owner-approved AI context export.") from exc
+    context_counts = approved_context["sourceCounts"]
+    context_behavior = approved_context["behaviorPreference"]
+    context_outcome = approved_context["outcome"]
+    context_owner_review = approved_context["ownerReview"]
+    assert isinstance(context_counts, Mapping)
+    assert isinstance(context_behavior, Mapping)
+    assert isinstance(context_outcome, Mapping)
+    assert isinstance(context_owner_review, Mapping)
+    pilot_review = pilot_outcome["review"]
+    assert isinstance(pilot_review, Mapping)
+    if (
+        approved_context["product"] != product
+        or approved_context["templateId"] != template_id
+        or context_counts["selectedProductRecords"] != local_records
+        or context_counts["reviewedDecisions"] != approval_packets
+        or context_counts["behaviorSignals"] != behavior_signals
+        or context_behavior["product"] != _PRODUCT_BEHAVIOR[product]
+        or context_outcome["status"] != pilot_outcome["outcomeStatus"]
+        or context_outcome["digest"] != pilot_outcome["reportDigest"]
+        or context_owner_review["reviewedBy"] != owner_label
+        or _timestamp(context_owner_review["reviewedAt"], "Approved AI context timestamp")
+            < _timestamp(pilot_review["reviewedAt"], "Pilot outcome review timestamp")
+    ):
+        raise ManagedActivationError("Approved AI context changed from the managed trial evidence.")
     provisioning = _exact(
         value.get("managedWorkspaceProvisioningPacket"),
         (
@@ -421,6 +458,13 @@ def _source_request(value: object) -> dict[str, Any]:
             "evidenceVersion": _count(value.get("evidenceVersion"), "Evidence version", minimum=1, maximum=10_000),
             "pilotOutcomeDigest": pilot_outcome["reportDigest"],
             "pilotOutcomeStatus": pilot_outcome["outcomeStatus"],
+            "approvedContextContract": approved_context["contract"],
+            "approvedContextDigest": approved_context["contextDigest"],
+            "approvedContextOutcomeDigest": context_outcome["digest"],
+            "approvedContextApprovedBy": context_owner_review["reviewedBy"],
+            "approvedContextApprovedAt": context_owner_review["reviewedAt"],
+            "approvedContextRawRecordsIncluded": False,
+            "approvedContextModelTrainingAllowed": False,
         },
     }
 
@@ -567,6 +611,8 @@ def validate_activation_plan(
         raise ManagedActivationError("Managed activation digest is invalid.")
     workspace = _identifier(plan["workspaceId"], "Workspace ID")
     owner_actor = _uuid(plan["ownerActorId"], "Owner actor ID")
+    _visible_text(plan["workspaceLabel"], "Workspace label", 180)
+    owner_label = _visible_text(plan["ownerLabel"], "Owner label", 180)
     product = _visible_text(plan["product"], "Activation product", 24)
     if product not in _PRODUCT_CAPABILITIES:
         raise ManagedActivationError("Managed activation product is unsupported.")
@@ -575,7 +621,8 @@ def validate_activation_plan(
         raise ManagedActivationError("Managed activation owner capabilities are invalid.")
     approval = _exact(plan["approval"], ("approvalId", "approvedBy", "approvedAt"), "Activation approval")
     _approval_id(approval["approvalId"], "Owner approval ID")
-    _visible_text(approval["approvedBy"], "Owner approver", 160)
+    if _visible_text(approval["approvedBy"], "Owner approver", 160).casefold() != owner_label.casefold():
+        raise ManagedActivationError("Activation approver changed from the named owner.")
     _timestamp(approval["approvedAt"], "Owner approval timestamp")
     target = _exact(
         plan["target"],
@@ -592,7 +639,21 @@ def validate_activation_plan(
         raise ManagedActivationError("Activation target schema version is invalid.")
     evidence = _exact(
         plan["evidence"],
-        ("localRecords", "approvalPackets", "behaviorSignals", "evidenceVersion", "pilotOutcomeDigest", "pilotOutcomeStatus"),
+        (
+            "approvalPackets",
+            "approvedContextApprovedAt",
+            "approvedContextApprovedBy",
+            "approvedContextContract",
+            "approvedContextDigest",
+            "approvedContextModelTrainingAllowed",
+            "approvedContextOutcomeDigest",
+            "approvedContextRawRecordsIncluded",
+            "behaviorSignals",
+            "evidenceVersion",
+            "localRecords",
+            "pilotOutcomeDigest",
+            "pilotOutcomeStatus",
+        ),
         "Activation evidence",
     )
     _count(evidence["localRecords"], "Activation local records", minimum=1)
@@ -601,6 +662,19 @@ def validate_activation_plan(
     _count(evidence["evidenceVersion"], "Activation evidence version", minimum=1, maximum=10_000)
     if not isinstance(evidence["pilotOutcomeDigest"], str) or not _SHA256.fullmatch(evidence["pilotOutcomeDigest"]):
         raise ManagedActivationError("Activation pilot outcome digest is invalid.")
+    if (
+        evidence["approvedContextContract"] != "supermega.ai_context_export.v1"
+        or not isinstance(evidence["approvedContextDigest"], str)
+        or not _SHA256.fullmatch(evidence["approvedContextDigest"])
+        or not isinstance(evidence["approvedContextOutcomeDigest"], str)
+        or not _SHA256.fullmatch(evidence["approvedContextOutcomeDigest"])
+        or evidence["approvedContextOutcomeDigest"] != evidence["pilotOutcomeDigest"]
+        or _visible_text(evidence["approvedContextApprovedBy"], "Approved AI context owner", 120) != owner_label
+        or _timestamp(evidence["approvedContextApprovedAt"], "Approved AI context timestamp") > created
+        or evidence["approvedContextRawRecordsIncluded"] is not False
+        or evidence["approvedContextModelTrainingAllowed"] is not False
+    ):
+        raise ManagedActivationError("Activation approved AI context evidence is invalid.")
     if evidence["pilotOutcomeStatus"] not in {"target_met", "improved"}:
         raise ManagedActivationError("Activation pilot outcome status is invalid.")
     if plan["operations"] != [

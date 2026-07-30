@@ -18,6 +18,7 @@ from supermega_runtime.managed_context import (
     MANAGED_CONTEXT_ALLOWED_USES,
     MANAGED_CONTEXT_FORBIDDEN_ACTIONS,
     build_managed_context_profile,
+    managed_ai_context_export_digest,
 )
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_runtime import create_trial_router
@@ -100,7 +101,12 @@ def website_state() -> dict[str, object]:
     }
 
 
-def managed_context_profile(preferred_product: str) -> dict[str, object]:
+def managed_context_profile(
+    preferred_product: str,
+    *,
+    workspace_id: str = "workspace-a",
+    actor_id: str = "owner-a",
+) -> dict[str, object]:
     product = {
         "commerce": "shop",
         "production": "plant",
@@ -113,29 +119,42 @@ def managed_context_profile(preferred_product: str) -> dict[str, object]:
         "website": "business-presence",
         "ecommerce": "social-storefront",
     }[preferred_product]
-    return build_managed_context_profile(
-        {
-            "contract": "supermega.managed_context_profile_request.v1",
-            "version": 1,
-            "product": product,
-            "templateId": template,
-            "sourceCounts": {
-                "selectedProductRecords": 2,
-                "behaviorSignals": 2,
-                "reviewedDecisions": 1,
-            },
-            "behaviorPreference": {
-                "product": preferred_product,
-                "chosenCount": 2,
-            },
-            "allowedUses": list(MANAGED_CONTEXT_ALLOWED_USES),
-            "forbiddenActions": list(MANAGED_CONTEXT_FORBIDDEN_ACTIONS),
-            "ownerApproved": True,
+    body: dict[str, object] = {
+        "contract": "supermega.ai_context_export.v1",
+        "version": 1,
+        "product": product,
+        "templateId": template,
+        "sourceCounts": {
+            "selectedProductRecords": 2,
+            "behaviorSignals": 2,
+            "reviewedDecisions": 1,
+        },
+        "behaviorPreference": {
+            "product": preferred_product,
+            "chosenCount": 2,
+        },
+        "outcome": {"status": "improved", "digest": "sha256:" + "b" * 64, "accepted": True},
+        "allowedUses": list(MANAGED_CONTEXT_ALLOWED_USES),
+        "forbiddenActions": list(MANAGED_CONTEXT_FORBIDDEN_ACTIONS),
+        "handoff": {"route": "managed_activation_review", "activationRequired": True},
+        "ownerReview": {
+            "status": "approved_for_managed_review",
+            "reviewedBy": "Business owner",
+            "reviewedAt": "2026-07-30T12:00:00.000Z",
+        },
+        "privacyBoundary": {
             "rawProductRecordsIncluded": False,
+            "rawBehaviorEntriesIncluded": False,
+            "rawDecisionRecordsIncluded": False,
+            "externalSendPerformed": False,
+            "managedWritePerformed": False,
             "modelTrainingAllowed": False,
         },
-        workspace_id="workspace-a",
-        actor_id="owner-a",
+    }
+    return build_managed_context_profile(
+        {**body, "contextDigest": managed_ai_context_export_digest(body)},
+        workspace_id=workspace_id,
+        actor_id=actor_id,
     )
 
 
@@ -241,7 +260,10 @@ class CompanyBriefUnitTests(unittest.TestCase):
 
         self.assertEqual(brief["nextAction"]["product"], "website")
         self.assertEqual(brief["ownerContext"]["profileDigest"], profile["profileDigest"])
-        self.assertEqual(set(brief["ownerContext"]), {"contract", "version", "profileDigest", "preferredProduct"})
+        self.assertEqual(
+            set(brief["ownerContext"]),
+            {"contract", "version", "profileDigest", "approvedContextDigest", "acceptedOutcomeDigest", "preferredProduct"},
+        )
         self.assertNotIn("Low stock item", str(brief))
 
     def test_operational_severity_still_wins_over_retained_owner_preference(self) -> None:
@@ -290,25 +312,7 @@ class CompanyBriefUnitTests(unittest.TestCase):
         self.assertEqual(brief["nextAction"]["product"], "plant")
 
     def test_cross_tenant_owner_context_is_not_exposed_or_used(self) -> None:
-        foreign_profile = build_managed_context_profile(
-            {
-                **{
-                    "contract": "supermega.managed_context_profile_request.v1",
-                    "version": 1,
-                    "product": "website",
-                    "templateId": "business-presence",
-                    "sourceCounts": {"selectedProductRecords": 1, "behaviorSignals": 1, "reviewedDecisions": 1},
-                    "behaviorPreference": {"product": "website", "chosenCount": 1},
-                    "allowedUses": list(MANAGED_CONTEXT_ALLOWED_USES),
-                    "forbiddenActions": list(MANAGED_CONTEXT_FORBIDDEN_ACTIONS),
-                    "ownerApproved": True,
-                    "rawProductRecordsIncluded": False,
-                    "modelTrainingAllowed": False,
-                }
-            },
-            workspace_id="workspace-b",
-            actor_id="owner-b",
-        )
+        foreign_profile = managed_context_profile("website", workspace_id="workspace-b", actor_id="owner-b")
         brief = build_managed_company_brief(
             workspace_id="workspace-a",
             intent="attention",

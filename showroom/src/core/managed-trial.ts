@@ -12,9 +12,9 @@ import {
   managedContextValidationProjection,
   structurallyValidManagedContextBriefProjection,
   structurallyValidManagedContextProfile,
+  type ManagedAiContextExport,
   type ManagedContextBriefProjection,
   type ManagedContextProfile,
-  type ManagedContextProfileRequest,
   type ManagedContextRetention,
   type ManagedContextValidation,
 } from './managed-context.ts'
@@ -824,13 +824,13 @@ function assertManagedOwnerControlRetention(
 
 export async function assertManagedContextValidation(
   value: unknown,
-  request: ManagedContextProfileRequest,
+  approvedContext: ManagedAiContextExport,
   expectedIdentity: ManagedIdentity,
 ) {
   if (!isRecord(value)
     || !isRecord(value.identity)
     || !isRecord(value.validation)
-    || !structurallyValidManagedContextProfile(value.profile, request, expectedIdentity)) {
+    || !structurallyValidManagedContextProfile(value.profile, approvedContext, expectedIdentity)) {
     throw new ManagedTrialError('The managed context validation response is invalid.', {
       code: 'managed_context_validation_invalid',
     })
@@ -838,9 +838,9 @@ export async function assertManagedContextValidation(
   const validation = value.validation
   const profile = value.profile
   const identity = value.identity
-  const expectedProfileDigest = await sha256Text(JSON.stringify(managedContextProfileProjection(request, expectedIdentity)))
+  const expectedProfileDigest = await sha256Text(JSON.stringify(managedContextProfileProjection(approvedContext, expectedIdentity)))
   if (profile.profileDigest !== expectedProfileDigest
-    || validation.contract !== 'supermega.managed_context_profile_validation.v1'
+    || validation.contract !== 'supermega.managed_context_profile_validation.v2'
     || validation.status !== 'ready_for_owner_confirmation'
     || validation.profileDigest !== expectedProfileDigest
     || !managedBriefCount(validation.companyVersion)
@@ -874,7 +874,7 @@ export async function assertManagedContextValidation(
 
 export async function assertManagedContextRetention(
   value: unknown,
-  request: ManagedContextProfileRequest,
+  approvedContext: ManagedAiContextExport,
   validation: ManagedContextValidation,
   expectedIdentity: ManagedIdentity,
 ) {
@@ -882,7 +882,7 @@ export async function assertManagedContextRetention(
     || !isRecord(value.identity)
     || !isRecord(value.retention)
     || !isRecord(value.result)
-    || !structurallyValidManagedContextProfile(value.profile, request, expectedIdentity)) {
+    || !structurallyValidManagedContextProfile(value.profile, approvedContext, expectedIdentity)) {
     throw new ManagedTrialError('The managed context retention response is invalid.', {
       code: 'managed_context_retention_invalid',
     })
@@ -890,10 +890,10 @@ export async function assertManagedContextRetention(
   const profile = value.profile
   const retention = value.retention
   const identity = value.identity
-  const expectedProfileDigest = await sha256Text(JSON.stringify(managedContextProfileProjection(request, expectedIdentity)))
+  const expectedProfileDigest = await sha256Text(JSON.stringify(managedContextProfileProjection(approvedContext, expectedIdentity)))
   if (profile.profileDigest !== expectedProfileDigest
     || validation.profileDigest !== expectedProfileDigest
-    || retention.contract !== 'supermega.managed_context_profile_retention.v1'
+    || retention.contract !== 'supermega.managed_context_profile_retention.v2'
     || retention.status !== 'retained'
     || retention.profileDigest !== expectedProfileDigest
     || !managedBriefCount(retention.companyVersion, Number.MAX_SAFE_INTEGER)
@@ -2670,21 +2670,21 @@ export async function acknowledgeManagedOwnerControlItem(request: {
 }
 
 export async function validateManagedContextProfile(
-  contextPackage: ManagedContextProfileRequest,
+  approvedContext: ManagedAiContextExport,
   identity: ManagedIdentity,
 ) {
   const response = await authorizedRequest<unknown>(
     '/api/trial/v1/managed-context/validate',
-    { method: 'POST', body: JSON.stringify({ package: contextPackage }) },
+    { method: 'POST', body: JSON.stringify({ package: approvedContext }) },
     true,
     identity,
   )
-  return assertManagedContextValidation(response, contextPackage, identity)
+  return assertManagedContextValidation(response, approvedContext, identity)
 }
 
 export async function retainManagedContextProfile(request: {
   commandId: string
-  contextPackage: ManagedContextProfileRequest
+  approvedContext: ManagedAiContextExport
   identity: ManagedIdentity
   validation: ManagedContextValidation
 }) {
@@ -2700,7 +2700,7 @@ export async function retainManagedContextProfile(request: {
         expected_company_version: request.validation.companyVersion,
         profile_digest: request.validation.profileDigest,
         validation_digest: request.validation.validationDigest,
-        package: request.contextPackage,
+        package: request.approvedContext,
       }),
     },
     true,
@@ -2708,7 +2708,7 @@ export async function retainManagedContextProfile(request: {
   )
   return assertManagedContextRetention(
     response,
-    request.contextPackage,
+    request.approvedContext,
     request.validation,
     request.identity,
   )

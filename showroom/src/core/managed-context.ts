@@ -51,19 +51,47 @@ export type ManagedContextProfileRequest = {
   modelTrainingAllowed: false
 }
 
-export type ManagedContextProfile = Omit<ManagedContextProfileRequest, 'contract' | 'ownerApproved'> & {
-  contract: 'supermega.managed_context_profile.v1'
+export type ManagedContextProfile = {
+  contract: 'supermega.managed_context_profile.v2'
+  version: 2
   workspaceId: string
   retainedBy: string
+  approvedContextDigest: string
+  product: ManagedContextProduct
+  templateId: string
+  sourceCounts: ManagedContextProfileRequest['sourceCounts']
+  behaviorPreference: ManagedContextProfileRequest['behaviorPreference']
+  outcome: {
+    status: 'target_met' | 'improved'
+    digest: string
+    accepted: true
+  }
+  approvedBy: string
+  approvedAt: string
+  allowedUses: [...typeof MANAGED_CONTEXT_ALLOWED_USES]
+  forbiddenActions: [...typeof MANAGED_CONTEXT_FORBIDDEN_ACTIONS]
   profileDigest: string
+  rawProductRecordsIncluded: false
+  rawBehaviorEntriesIncluded: false
+  rawDecisionRecordsIncluded: false
+  modelTrainingAllowed: false
 }
 
-export type ManagedContextBriefProjection = {
-  contract: 'supermega.managed_context_brief_projection.v1'
-  version: 1
-  profileDigest: string
-  preferredProduct: ManagedBehaviorProduct
-}
+export type ManagedContextBriefProjection =
+  | {
+      contract: 'supermega.managed_context_brief_projection.v1'
+      version: 1
+      profileDigest: string
+      preferredProduct: ManagedBehaviorProduct
+    }
+  | {
+      contract: 'supermega.managed_context_brief_projection.v2'
+      version: 2
+      profileDigest: string
+      approvedContextDigest: string
+      acceptedOutcomeDigest: string
+      preferredProduct: ManagedBehaviorProduct
+    }
 
 export type ManagedAiContextExport = {
   contract: 'supermega.ai_context_export.v1'
@@ -100,7 +128,7 @@ export type ManagedAiContextExport = {
 }
 
 export type ManagedContextValidation = {
-  contract: 'supermega.managed_context_profile_validation.v1'
+  contract: 'supermega.managed_context_profile_validation.v2'
   status: 'ready_for_owner_confirmation'
   profileDigest: string
   validationDigest: string
@@ -110,7 +138,7 @@ export type ManagedContextValidation = {
 }
 
 export type ManagedContextRetention = {
-  contract: 'supermega.managed_context_profile_retention.v1'
+  contract: 'supermega.managed_context_profile_retention.v2'
   status: 'retained'
   profileDigest: string
   companyVersion: number
@@ -340,24 +368,34 @@ export function buildManagedContextProfileRequest(input: {
 }
 
 export function managedContextProfileProjection(
-  request: ManagedContextProfileRequest,
+  approvedContext: ManagedAiContextExport,
   identity: ManagedIdentity,
 ) {
   return [
-    'supermega.managed_context_profile.v1',
-    1,
+    'supermega.managed_context_profile.v2',
+    2,
     identity.workspaceId,
     identity.userId,
-    request.product,
-    request.templateId,
-    request.sourceCounts.selectedProductRecords,
-    request.sourceCounts.behaviorSignals,
-    request.sourceCounts.reviewedDecisions,
-    request.behaviorPreference.product,
-    request.behaviorPreference.chosenCount,
+    approvedContext.contextDigest,
+    approvedContext.product,
+    approvedContext.templateId,
+    approvedContext.sourceCounts.selectedProductRecords,
+    approvedContext.sourceCounts.behaviorSignals,
+    approvedContext.sourceCounts.reviewedDecisions,
+    approvedContext.behaviorPreference.product,
+    approvedContext.behaviorPreference.chosenCount,
+    approvedContext.outcome.status,
+    approvedContext.outcome.digest,
+    approvedContext.outcome.accepted,
+    approvedContext.ownerReview.reviewedBy,
+    approvedContext.ownerReview.reviewedAt,
     ...MANAGED_CONTEXT_ALLOWED_USES,
     '|',
     ...MANAGED_CONTEXT_FORBIDDEN_ACTIONS,
+    false,
+    false,
+    false,
+    false,
   ]
 }
 
@@ -367,8 +405,8 @@ export function managedContextValidationProjection(
   identity: ManagedIdentity,
 ) {
   return [
-    'supermega.managed_context_profile_validation.v1',
-    1,
+    'supermega.managed_context_profile_validation.v2',
+    2,
     identity.workspaceId,
     identity.userId,
     profileDigest,
@@ -378,38 +416,52 @@ export function managedContextValidationProjection(
 
 export function structurallyValidManagedContextProfile(
   value: unknown,
-  request: ManagedContextProfileRequest,
+  approvedContext: ManagedAiContextExport,
   identity: ManagedIdentity,
 ): value is ManagedContextProfile {
   if (!isRecord(value)
     || !exactKeys(value, [
-      'allowedUses', 'behaviorPreference', 'contract', 'forbiddenActions', 'modelTrainingAllowed',
-      'product', 'profileDigest', 'rawProductRecordsIncluded', 'retainedBy', 'sourceCounts', 'templateId',
-      'version', 'workspaceId',
+      'allowedUses', 'approvedAt', 'approvedBy', 'approvedContextDigest', 'behaviorPreference', 'contract',
+      'forbiddenActions', 'modelTrainingAllowed', 'outcome', 'product', 'profileDigest',
+      'rawBehaviorEntriesIncluded', 'rawDecisionRecordsIncluded', 'rawProductRecordsIncluded', 'retainedBy',
+      'sourceCounts', 'templateId', 'version', 'workspaceId',
     ])
     || !isRecord(value.sourceCounts)
     || !exactKeys(value.sourceCounts, ['behaviorSignals', 'reviewedDecisions', 'selectedProductRecords'])
     || !isRecord(value.behaviorPreference)
     || !exactKeys(value.behaviorPreference, ['chosenCount', 'product'])
+    || !isRecord(value.outcome)
+    || !exactKeys(value.outcome, ['accepted', 'digest', 'status'])
     || !Array.isArray(value.allowedUses)
     || !Array.isArray(value.forbiddenActions)
     || !sameStrings(value.allowedUses as string[], MANAGED_CONTEXT_ALLOWED_USES)
     || !sameStrings(value.forbiddenActions as string[], MANAGED_CONTEXT_FORBIDDEN_ACTIONS)
     || !isManagedContextProduct(value.product)
     || !isManagedBehaviorProduct(value.behaviorPreference.product)) return false
-  return value.contract === 'supermega.managed_context_profile.v1'
-    && value.version === 1
+  return structurallyValidManagedAiContextExport(approvedContext)
+    && value.contract === 'supermega.managed_context_profile.v2'
+    && value.version === 2
     && value.workspaceId === identity.workspaceId
     && value.retainedBy === identity.userId
-    && value.product === request.product
-    && value.templateId === request.templateId
-    && value.sourceCounts.selectedProductRecords === request.sourceCounts.selectedProductRecords
-    && value.sourceCounts.behaviorSignals === request.sourceCounts.behaviorSignals
-    && value.sourceCounts.reviewedDecisions === request.sourceCounts.reviewedDecisions
-    && value.behaviorPreference.product === request.behaviorPreference.product
-    && value.behaviorPreference.chosenCount === request.behaviorPreference.chosenCount
+    && value.approvedContextDigest === approvedContext.contextDigest
+    && value.product === approvedContext.product
+    && value.templateId === approvedContext.templateId
+    && value.sourceCounts.selectedProductRecords === approvedContext.sourceCounts.selectedProductRecords
+    && value.sourceCounts.behaviorSignals === approvedContext.sourceCounts.behaviorSignals
+    && value.sourceCounts.reviewedDecisions === approvedContext.sourceCounts.reviewedDecisions
+    && value.behaviorPreference.product === approvedContext.behaviorPreference.product
+    && value.behaviorPreference.chosenCount === approvedContext.behaviorPreference.chosenCount
+    && value.outcome.status === approvedContext.outcome.status
+    && value.outcome.digest === approvedContext.outcome.digest
+    && value.outcome.accepted === true
+    && value.approvedBy === approvedContext.ownerReview.reviewedBy
+    && value.approvedAt === approvedContext.ownerReview.reviewedAt
     && value.rawProductRecordsIncluded === false
+    && value.rawBehaviorEntriesIncluded === false
+    && value.rawDecisionRecordsIncluded === false
     && value.modelTrainingAllowed === false
+    && typeof value.approvedContextDigest === 'string'
+    && /^sha256:[0-9a-f]{64}$/.test(value.approvedContextDigest)
     && typeof value.profileDigest === 'string'
     && /^sha256:[0-9a-f]{64}$/.test(value.profileDigest)
 }
@@ -417,11 +469,20 @@ export function structurallyValidManagedContextProfile(
 export function structurallyValidManagedContextBriefProjection(
   value: unknown,
 ): value is ManagedContextBriefProjection {
-  return isRecord(value)
-    && exactKeys(value, ['contract', 'preferredProduct', 'profileDigest', 'version'])
-    && value.contract === 'supermega.managed_context_brief_projection.v1'
-    && value.version === 1
-    && typeof value.profileDigest === 'string'
-    && /^sha256:[0-9a-f]{64}$/.test(value.profileDigest)
-    && isManagedBehaviorProduct(value.preferredProduct)
+  if (!isRecord(value)
+    || typeof value.profileDigest !== 'string'
+    || !/^sha256:[0-9a-f]{64}$/.test(value.profileDigest)
+    || !isManagedBehaviorProduct(value.preferredProduct)) return false
+  if (value.contract === 'supermega.managed_context_brief_projection.v1') {
+    return value.version === 1 && exactKeys(value, ['contract', 'preferredProduct', 'profileDigest', 'version'])
+  }
+  return value.contract === 'supermega.managed_context_brief_projection.v2'
+    && value.version === 2
+    && exactKeys(value, [
+      'acceptedOutcomeDigest', 'approvedContextDigest', 'contract', 'preferredProduct', 'profileDigest', 'version',
+    ])
+    && typeof value.approvedContextDigest === 'string'
+    && /^sha256:[0-9a-f]{64}$/.test(value.approvedContextDigest)
+    && typeof value.acceptedOutcomeDigest === 'string'
+    && /^sha256:[0-9a-f]{64}$/.test(value.acceptedOutcomeDigest)
 }

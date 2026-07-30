@@ -647,6 +647,12 @@ def _seed_rehearsal_data(admin_database_url: str) -> None:
 
 
 def _managed_activation_request() -> dict[str, Any]:
+    from supermega_runtime.managed_context import (
+        MANAGED_CONTEXT_ALLOWED_USES,
+        MANAGED_CONTEXT_FORBIDDEN_ACTIONS,
+        managed_ai_context_export_digest,
+    )
+
     started_at = "2026-07-30T11:30:00.000Z"
     reviewed_at = "2026-07-30T11:35:00.000Z"
     checkpoint_digest = "sha256:" + "2" * 64
@@ -722,6 +728,46 @@ def _managed_activation_request() -> dict[str, Any]:
         "behaviorSignals": 4,
         "pilotOutcomeDigest": report_digest,
     }
+    approved_context = {
+        "contract": "supermega.ai_context_export.v1",
+        "version": 1,
+        "product": "shop",
+        "templateId": "retail-wholesale",
+        "sourceCounts": {
+            "selectedProductRecords": 12,
+            "behaviorSignals": 4,
+            "reviewedDecisions": 2,
+        },
+        "behaviorPreference": {
+            "product": "commerce",
+            "chosenCount": 3,
+        },
+        "outcome": {
+            "status": "improved",
+            "digest": report_digest,
+            "accepted": True,
+        },
+        "allowedUses": list(MANAGED_CONTEXT_ALLOWED_USES),
+        "forbiddenActions": list(MANAGED_CONTEXT_FORBIDDEN_ACTIONS),
+        "handoff": {
+            "route": "managed_activation_review",
+            "activationRequired": True,
+        },
+        "ownerReview": {
+            "status": "approved_for_managed_review",
+            "reviewedBy": "Rehearsal Owner",
+            "reviewedAt": "2026-07-30T11:36:00.000Z",
+        },
+        "privacyBoundary": {
+            "rawProductRecordsIncluded": False,
+            "rawBehaviorEntriesIncluded": False,
+            "rawDecisionRecordsIncluded": False,
+            "externalSendPerformed": False,
+            "managedWritePerformed": False,
+            "modelTrainingAllowed": False,
+        },
+    }
+    approved_context["contextDigest"] = managed_ai_context_export_digest(approved_context)
     return {
         "contract": "supermega.managed_trial_request.v1",
         "version": 1,
@@ -738,6 +784,7 @@ def _managed_activation_request() -> dict[str, Any]:
         "behaviorSignals": 4,
         "evidenceVersion": 24,
         "pilotOutcomeReport": outcome,
+        "approvedAiContext": approved_context,
         "managedWorkspaceProvisioningPacket": {
             "contract": "supermega.managed_workspace_provisioning.v1",
             "version": 1,
