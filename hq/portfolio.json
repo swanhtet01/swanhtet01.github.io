@@ -151,8 +151,8 @@
       "localAutomation": {
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Let a named human turn exactly one restricted or not-recommended strategy maintenance result into a prefilled Plant problem review linked to the completion evidence, owner, asset, and finding; never open the problem automatically, change machine state, dispatch work, buy parts, control equipment, or infer telemetry.",
-        "reason": "Plant now retains a structured maintenance result without pretending that a recommendation changes the asset. The next operational gap is an explicit, evidence-linked path from a limiting finding into the existing accountable problem lifecycle instead of leaving the finding buried in history."
+        "workOrder": "Require one maintenance-finding problem to close with a structured corrective-action result and reviewed return-to-service disposition linked to the original completion and issue; never change machine state automatically, dispatch work, buy parts, control equipment, or infer telemetry.",
+        "reason": "Plant now opens exactly one evidence-bound problem from a limiting maintenance result. The next operational gap is a governed closeout that proves what was corrected and preserves the final human disposition without pretending that issue resolution controls the asset."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }

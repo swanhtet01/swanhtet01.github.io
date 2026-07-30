@@ -63,6 +63,20 @@ export type ProductionIssueResolution = {
   evidenceReference: string
 }
 
+export type ProductionMaintenanceFindingSource = {
+  contract: 'supermega.production.maintenance-finding-source.v1'
+  equipmentId: string
+  equipmentName: string
+  maintenanceOwner: string
+  completionActionId: string
+  completedAt: string
+  strategyActionId: string
+  strategyRevision: number
+  returnToService: 'restricted' | 'not_recommended'
+  findings: string
+  evidenceReference: string
+}
+
 export type ProductionIssue = {
   id: string
   createdAt: string
@@ -74,6 +88,7 @@ export type ProductionIssue = {
   owner?: string
   dueAt?: string
   containment?: string
+  maintenanceFindingSource?: ProductionMaintenanceFindingSource
   resolution?: ProductionIssueResolution
 }
 
@@ -177,6 +192,7 @@ export type ProductionEvent = {
   maintenanceFindings?: string
   maintenanceProcedureCompleted?: boolean
   maintenanceReturnToService?: ProductionMaintenanceReturnToService
+  maintenanceFindingSource?: ProductionMaintenanceFindingSource
   equipmentIds?: string[]
   installedAt?: string
   workCentreId?: string
@@ -433,7 +449,8 @@ const productionOpeningPlanFields = ['contract', 'packageDigest', 'confirmedAt',
 const productionJobFields = ['id', 'line', 'product', 'target', 'output', 'owner', 'priority', 'dueAt', 'scrap', 'qualityHold', 'closure', 'shopDemandSource']
 const productionShopDemandSourceFields = ['contract', 'sourceDigest', 'evidenceReference', 'snapshot']
 const productionShopDemandSnapshotFields = ['schema', 'operatingUnitLocationId', 'sku', 'productName', 'sourceOrderIds', 'activeDemandUnits', 'uncoveredDemandUnits', 'availableToPromiseUnits', 'reorderAtUnits', 'replenishmentGapUnits', 'recommendedBatchUnits']
-const productionIssueFields = ['id', 'createdAt', 'area', 'kind', 'summary', 'status', 'severity', 'owner', 'dueAt', 'containment', 'resolution']
+const productionIssueFields = ['id', 'createdAt', 'area', 'kind', 'summary', 'status', 'severity', 'owner', 'dueAt', 'containment', 'maintenanceFindingSource', 'resolution']
+const productionMaintenanceFindingSourceFields = ['contract', 'equipmentId', 'equipmentName', 'maintenanceOwner', 'completionActionId', 'completedAt', 'strategyActionId', 'strategyRevision', 'returnToService', 'findings', 'evidenceReference']
 const productionIssueResolutionFields = ['actionId', 'resolvedAt', 'resolvedBy', 'reason', 'evidenceReference']
 const productionMachineFields = ['id', 'name', 'state']
 const productionEquipmentMasterFields = ['contract', 'assets']
@@ -449,7 +466,7 @@ const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
   job_closed: jobClosedEventFields,
   output_recorded: [...baseEventFields, 'quantity', 'shiftRef', 'outputKind'],
   material_consumed: [...materialEventFields, ...materialOptionalEventFields],
-  issue_opened: [...baseEventFields, 'issueSeverity', 'issueOwner', 'issueDueAt', 'issueContainment'],
+  issue_opened: [...baseEventFields, 'issueSeverity', 'issueOwner', 'issueDueAt', 'issueContainment', 'maintenanceFindingSource'],
   issue_resolved: baseEventFields,
   quality_hold_placed: qualityHoldEventFields,
   quality_hold_released: qualityHoldEventFields,
@@ -596,6 +613,23 @@ function assertSafeInteger(value: unknown, field: string, minimum = 0) {
 
 function assertUnique(values: string[], field: string) {
   if (new Set(values).size !== values.length) throw new Error(`${field} values must be unique.`)
+}
+
+function validateProductionMaintenanceFindingSource(value: unknown, field: string): ProductionMaintenanceFindingSource {
+  if (!isRecord(value)) throw new Error(`${field} is invalid.`)
+  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...productionMaintenanceFindingSourceFields].sort())) throw new Error(`${field} fields are invalid.`)
+  if (value.contract !== 'supermega.production.maintenance-finding-source.v1') throw new Error(`${field}.contract is invalid.`)
+  canonicalText(value.equipmentId, `${field}.equipmentId`, 80)
+  canonicalText(value.equipmentName, `${field}.equipmentName`, 120)
+  canonicalText(value.maintenanceOwner, `${field}.maintenanceOwner`, 120)
+  canonicalText(value.completionActionId, `${field}.completionActionId`, 160)
+  if (!validDowntimeTimestamp(value.completedAt)) throw new Error(`${field}.completedAt is invalid.`)
+  canonicalText(value.strategyActionId, `${field}.strategyActionId`, 160)
+  assertSafeInteger(value.strategyRevision, `${field}.strategyRevision`, 1)
+  if (value.returnToService !== 'restricted' && value.returnToService !== 'not_recommended') throw new Error(`${field}.returnToService is invalid.`)
+  canonicalText(value.findings, `${field}.findings`, 360)
+  canonicalText(value.evidenceReference, `${field}.evidenceReference`)
+  return value as unknown as ProductionMaintenanceFindingSource
 }
 
 function validateProductionShopDemandSource(value: unknown, field: string): ProductionShopDemandSource {
@@ -822,6 +856,11 @@ export function validateProductionState(value: unknown): ProductionState {
       if (!validTimestamp(candidate.dueAt)) throw new Error(`issues[${index}].dueAt is invalid.`)
       if (timestampAtOrBefore(candidate.dueAt as string, candidate.createdAt as string)) throw new Error(`issues[${index}].dueAt must follow its creation time.`)
       canonicalText(candidate.containment, `issues[${index}].containment`, 240)
+    }
+    if (candidate.maintenanceFindingSource !== undefined) {
+      const source = validateProductionMaintenanceFindingSource(candidate.maintenanceFindingSource, `issues[${index}].maintenanceFindingSource`)
+      if (candidate.kind !== 'maintenance') throw new Error(`issues[${index}] maintenance finding source requires a maintenance issue.`)
+      if (timestampBefore(candidate.createdAt as string, source.completedAt)) throw new Error(`issues[${index}] cannot predate its maintenance finding.`)
     }
     if (candidate.status === 'open' && candidate.resolution !== undefined) throw new Error(`issues[${index}] is open but has resolution evidence.`)
     if (candidate.resolution !== undefined) {
@@ -1108,6 +1147,7 @@ export function validateProductionState(value: unknown): ProductionState {
         if (timestampAtOrBefore(candidate.issueDueAt as string, candidate.createdAt as string)) throw new Error(`events[${index}].issueDueAt must follow confirmation.`)
         canonicalText(candidate.issueContainment, `events[${index}].issueContainment`, 240)
       }
+      if (candidate.maintenanceFindingSource !== undefined) validateProductionMaintenanceFindingSource(candidate.maintenanceFindingSource, `events[${index}].maintenanceFindingSource`)
     } else {
       if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
       if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || maintenanceFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
@@ -1330,8 +1370,28 @@ export function validateProductionState(value: unknown): ProductionState {
       } else if (actionFieldCount !== 0) {
         throw new Error(`issues[${index}] legacy opening event cannot acquire action fields.`)
       }
-    } else if (actionFieldCount !== 0) {
-      throw new Error(`issues[${index}] action fields require an immutable opening event.`)
+      const issueSource = candidate.maintenanceFindingSource === undefined ? undefined : validateProductionMaintenanceFindingSource(candidate.maintenanceFindingSource, `issues[${index}].maintenanceFindingSource`)
+      const eventSource = openingEvent.maintenanceFindingSource === undefined ? undefined : validateProductionMaintenanceFindingSource(openingEvent.maintenanceFindingSource, `issues[${index}] opening maintenanceFindingSource`)
+      if (Boolean(issueSource) !== Boolean(eventSource) || (issueSource && JSON.stringify(issueSource) !== JSON.stringify(eventSource))) throw new Error(`issues[${index}] maintenance finding source does not match its immutable opening event.`)
+      if (issueSource) {
+        const completionEvent = events.find((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'maintenance_completed' && event.actionId === issueSource.completionActionId)
+        const startEvent = completionEvent === undefined ? undefined : events.find((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'maintenance_started' && event.actionId === completionEvent.maintenanceStartActionId)
+        const machine = machines.find((entry): entry is Record<string, unknown> => isRecord(entry) && entry.id === issueSource.equipmentId)
+        if (!completionEvent || !startEvent || !machine
+          || completionEvent.subjectId !== issueSource.equipmentId
+          || machine.name !== issueSource.equipmentName
+          || startEvent.maintenanceOwner !== issueSource.maintenanceOwner
+          || completionEvent.createdAt !== issueSource.completedAt
+          || completionEvent.maintenanceStrategyActionId !== issueSource.strategyActionId
+          || completionEvent.maintenanceStrategyRevision !== issueSource.strategyRevision
+          || completionEvent.maintenanceReturnToService !== issueSource.returnToService
+          || completionEvent.maintenanceFindings !== issueSource.findings
+          || completionEvent.evidenceReference !== issueSource.evidenceReference) throw new Error(`issues[${index}] maintenance finding source does not match reviewed completion evidence.`)
+        if (events.indexOf(openingEvent) >= events.indexOf(completionEvent)) throw new Error(`issues[${index}] maintenance finding problem must follow its reviewed completion.`)
+        if (issues.filter((entry): entry is Record<string, unknown> => isRecord(entry) && isRecord(entry.maintenanceFindingSource) && entry.maintenanceFindingSource.completionActionId === issueSource.completionActionId).length !== 1) throw new Error(`issues[${index}] duplicates a maintenance finding problem.`)
+      }
+    } else if (actionFieldCount !== 0 || candidate.maintenanceFindingSource !== undefined) {
+      throw new Error(`issues[${index}] action fields and maintenance source require an immutable opening event.`)
     }
 
     if (candidate.status === 'open') {
@@ -1829,6 +1889,35 @@ export function productionDowntimeIntervals(state: ProductionState) {
 export function productionMaintenanceRecords(state: ProductionState) {
   const current = validateProductionState(state)
   return deriveProductionMaintenanceRecords(current.machines, current.events)
+}
+
+export function productionMaintenanceFindingSource(
+  state: ProductionState,
+  completionActionId: string,
+): ProductionMaintenanceFindingSource | null {
+  if (!validCanonicalText(completionActionId, 160)) return null
+  const current = validateProductionState(state)
+  if (current.issues.some((issue) => issue.maintenanceFindingSource?.completionActionId === completionActionId)) return null
+  const record = deriveProductionMaintenanceRecords(current.machines, current.events)
+    .find((candidate) => candidate.completion?.actionId === completionActionId)
+  const completion = record?.completion
+  const result = completion?.result
+  const strategy = record?.strategy
+  if (!record || !completion || !result || !strategy
+    || (result.returnToService !== 'restricted' && result.returnToService !== 'not_recommended')) return null
+  return {
+    contract: 'supermega.production.maintenance-finding-source.v1',
+    equipmentId: record.machineId,
+    equipmentName: record.machineName,
+    maintenanceOwner: record.owner,
+    completionActionId: completion.actionId,
+    completedAt: completion.completedAt,
+    strategyActionId: strategy.actionId,
+    strategyRevision: strategy.revision,
+    returnToService: result.returnToService,
+    findings: result.findings,
+    evidenceReference: completion.evidenceReference,
+  }
 }
 
 export function productionMaintenanceDueQueue(
@@ -2642,6 +2731,7 @@ export function openProductionIssue(state: ProductionState, issue: ProductionIss
     issueOwner: issue.owner,
     issueDueAt: issue.dueAt,
     issueContainment: issue.containment,
+    ...(issue.maintenanceFindingSource === undefined ? {} : { maintenanceFindingSource: issue.maintenanceFindingSource }),
   })
   return validateProductionState({ ...state, revision: state.revision + 1, issues: [issue, ...state.issues], events: [event, ...state.events] })
 }

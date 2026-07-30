@@ -162,6 +162,7 @@ import {
   productionIssueSeverities,
   productionJobPriorities,
   productionMaintenanceDueQueue,
+  productionMaintenanceFindingSource,
   productionMaintenanceRecords,
   productionMaterialUnits,
   productionMachineStates,
@@ -187,6 +188,7 @@ import {
   type ProductionJob,
   type ProductionJobPriority,
   type ProductionMaintenanceOutcome,
+  type ProductionMaintenanceFindingSource,
   type ProductionMaintenanceRecord,
   type ProductionMaintenanceResult,
   type ProductionMaintenanceReturnToService,
@@ -5749,6 +5751,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [summary, setSummary] = useState('')
   const [issueClock, setIssueClock] = useState(Date.now)
   const [issueDialogOpen, setIssueDialogOpen] = useState(false)
+  const [issueMaintenanceFindingSource, setIssueMaintenanceFindingSource] = useState<ProductionMaintenanceFindingSource | null>(null)
   const [machineObservation, setMachineObservation] = useState<{ machineId: string; toState: ProductionMachineState } | null>(null)
   const [downtimeDialogOpen, setDowntimeDialogOpen] = useState(false)
   const [downtimeMachineId, setDowntimeMachineId] = useState(production.machines[0]?.id ?? '')
@@ -5877,6 +5880,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const maintenanceRecords = productionMaintenanceRecords(production)
   const openMaintenanceRecords = maintenanceRecords.filter((record) => !record.completion)
   const recentMaintenanceRecords = maintenanceRecords.filter((record) => record.completion).slice(0, 3)
+  const maintenanceFindingSources = new Map(recentMaintenanceRecords.flatMap((record) => {
+    const source = record.completion ? productionMaintenanceFindingSource(production, record.completion.actionId) : null
+    return source ? [[record.completion?.actionId ?? '', source] as const] : []
+  }))
   const selectedMaintenanceCompletionRecord = maintenanceCompletionDraft
     ? openMaintenanceRecords.find((record) => record.startActionId === maintenanceCompletionDraft.startActionId)
     : undefined
@@ -6785,14 +6792,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     const canonicalOwner = issueOwner.trim()
     const canonicalContainment = containment.trim()
     const canonicalSummary = summary.trim()
-    if (!canonicalSummary || !canonicalOwner || !canonicalContainment || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= createdAt.getTime()) {
-      setNotice('Add an owner, a future due time, and the next containment action before review.')
+    const canonicalArea = area.trim()
+    if (!canonicalArea || canonicalArea.length > 120 || !canonicalSummary || !canonicalOwner || !canonicalContainment || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= createdAt.getTime()) {
+      setNotice('Add an area, an owner, a future due time, and the next containment action before review.')
       return
     }
     const issue: ProductionIssue = {
       id: uid('ISS'),
       createdAt: createdAt.toISOString(),
-      area,
+      area: canonicalArea,
       kind,
       summary: canonicalSummary,
       status: 'open',
@@ -6800,6 +6808,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       owner: canonicalOwner,
       dueAt: dueAt.toISOString(),
       containment: canonicalContainment,
+      ...(issueMaintenanceFindingSource ? { maintenanceFindingSource: issueMaintenanceFindingSource } : {}),
     }
     issueDialogRef.current?.close()
     setIssueDialogOpen(false)
@@ -6816,11 +6825,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         setContainment('')
         setSeverity('medium')
         setIssueDueInput(defaultIssueDueInput())
+        setIssueMaintenanceFindingSource(null)
       },
     }, issueTriggerRef.current)
   }
 
   function startInspectionNcr() {
+    setIssueMaintenanceFindingSource(null)
     setKind('quality')
     setArea('Quality')
     setSeverity('high')
@@ -6828,6 +6839,40 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     setSummary('Inspection sample needs NCR review')
     setContainment('Hold affected output until sample evidence, root cause, and corrective action are reviewed.')
     setIssueDueInput(defaultIssueDueInput())
+    setIssueDialogOpen(true)
+  }
+
+  function openManualIssueDialog() {
+    setIssueMaintenanceFindingSource(null)
+    setIssueDialogOpen(true)
+  }
+
+  function closeIssueDialog() {
+    setIssueDialogOpen(false)
+    setIssueMaintenanceFindingSource(null)
+    requestAnimationFrame(() => issueTriggerRef.current?.focus())
+  }
+
+  function startMaintenanceFindingProblem(record: ProductionMaintenanceRecord) {
+    const completionActionId = record.completion?.actionId
+    const source = completionActionId ? productionMaintenanceFindingSource(production, completionActionId) : null
+    if (!source) {
+      setNotice('This maintenance result is already linked or no longer eligible for a problem review.')
+      return
+    }
+    setIssueMaintenanceFindingSource(source)
+    setKind('maintenance')
+    setArea(source.equipmentName)
+    setSeverity(source.returnToService === 'not_recommended' ? 'high' : 'medium')
+    setIssueOwner(source.maintenanceOwner)
+    setSummary(`Maintenance finding: ${source.findings}`.slice(0, 240).trim())
+    setContainment(source.returnToService === 'not_recommended'
+      ? 'Keep the asset out of service pending reviewed corrective action.'
+      : 'Define restricted-service controls and corrective action before normal operation.')
+    setIssueDueInput(defaultIssueDueInput())
+    maintenanceDialogRef.current?.close()
+    setMaintenanceDialogOpen(false)
+    setMaintenanceCompletionDraft(null)
     setIssueDialogOpen(true)
   }
 
@@ -7283,7 +7328,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           <div className="panel-head"><div><span className="core-eyebrow">Shift review</span><h2>Open problems</h2></div><span className="panel-note">{urgentIssueCount ? `${urgentIssueCount} urgent · ` : ''}{openIssues.length} open</span></div>
           <IssueList disabled={!productionCanWrite || Boolean(pendingAction)} issues={openIssues} now={issueClock} onResolve={resolveIssue} />
           <ResolvedIssueHistory issues={resolvedIssues} now={issueClock} />
-          <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => setIssueDialogOpen(true)} ref={issueTriggerRef} type="button">Record problem</button>
+          <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={openManualIssueDialog} ref={issueTriggerRef} type="button">Record problem</button>
           <details className="compact-disclosure production-history" open={heldJobs.length ? true : undefined}>
             <summary>Quality holds <span>{heldJobs.length}</span></summary>
             <QualityHoldList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={heldJobs} onRelease={releaseQualityHold} />
@@ -7361,7 +7406,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <label>{selectedMaintenanceStrategy ? 'Strategy owner' : 'Owner'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setMaintenanceOwner(event.target.value)} placeholder="Named person or role" readOnly={Boolean(selectedMaintenanceStrategy)} required value={selectedMaintenanceStrategy ? selectedMaintenanceOwner : maintenanceOwner} /></label>
         <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaintenanceMachine || !selectedMaintenanceOwner || selectedMaintenanceOwner.length > 120} type="submit">Review start</button>
       </form> : <p className="panel-copy">Every recorded machine already has open maintenance work.</p>}
-      {recentMaintenanceRecords.length ? <><p className="panel-copy"><strong>Recent completed work</strong></p><div className="action-history-list">{recentMaintenanceRecords.map((record) => <article key={record.startActionId}><div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started: {record.startedBy} · {record.scope} · {record.startEvidenceReference}</small><small style={wrappedIssueDetail}>Completed: {record.completion?.completedBy} · {record.completion?.outcome} · {record.completion?.evidenceReference}</small>{record.completion?.result ? <small style={wrappedIssueDetail}>{record.completion.result.outcome.replaceAll('_', ' ')} · Return: {record.completion.result.returnToService.replaceAll('_', ' ')} · {record.completion.result.findings}</small> : null}{record.completion?.nextDueAt ? <small style={wrappedIssueDetail}>Next due: {formatIssueDue(record.completion.nextDueAt)} · Strategy R{record.strategy?.revision}</small> : null}<small style={wrappedIssueDetail}>{formatTime(record.startedAt)} to {formatTime(record.completion?.completedAt ?? record.startedAt)}</small></div></article>)}</div></> : null}
+      {recentMaintenanceRecords.length ? <><p className="panel-copy"><strong>Recent completed work</strong></p><div className="action-history-list">{recentMaintenanceRecords.map((record) => {
+        const findingSource = record.completion ? maintenanceFindingSources.get(record.completion.actionId) : undefined
+        return <article key={record.startActionId}><div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started: {record.startedBy} · {record.scope} · {record.startEvidenceReference}</small><small style={wrappedIssueDetail}>Completed: {record.completion?.completedBy} · {record.completion?.outcome} · {record.completion?.evidenceReference}</small>{record.completion?.result ? <small style={wrappedIssueDetail}>{record.completion.result.outcome.replaceAll('_', ' ')} · Return: {record.completion.result.returnToService.replaceAll('_', ' ')} · {record.completion.result.findings}</small> : null}{record.completion?.nextDueAt ? <small style={wrappedIssueDetail}>Next due: {formatIssueDue(record.completion.nextDueAt)} · Strategy R{record.strategy?.revision}</small> : null}<small style={wrappedIssueDetail}>{formatTime(record.startedAt)} to {formatTime(record.completion?.completedAt ?? record.startedAt)}</small></div>{findingSource ? <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => startMaintenanceFindingProblem(record)} type="button">Review problem</button> : null}</article>
+      })}</div></> : null}
       <p className="panel-copy">Strategy-bound completion retains outcome, findings, procedure confirmation, recommendation, and next due. It performs no equipment command, telemetry, parts purchase, status change, downtime, or job change.</p>
     </dialog>
     <dialog aria-labelledby="machine-observation-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMachineObservation() }} ref={machineDialogRef}>
@@ -7375,16 +7423,17 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         </form>
       </> : null}
     </dialog>
-    <dialog aria-labelledby="production-issue-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); setIssueDialogOpen(false); requestAnimationFrame(() => issueTriggerRef.current?.focus()) }} ref={issueDialogRef}>
-      <div className="panel-head"><div><span className="core-eyebrow">Plant problem</span><h2 id="production-issue-title">Record an observation</h2></div><button aria-label="Close problem form" className="text-link" onClick={() => { setIssueDialogOpen(false); requestAnimationFrame(() => issueTriggerRef.current?.focus()) }} type="button">Close</button></div>
+    <dialog aria-labelledby="production-issue-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeIssueDialog() }} ref={issueDialogRef}>
+      <div className="panel-head"><div><span className="core-eyebrow">Plant problem</span><h2 id="production-issue-title">{issueMaintenanceFindingSource ? 'Review maintenance finding' : 'Record an observation'}</h2></div><button aria-label="Close problem form" className="text-link" onClick={closeIssueDialog} type="button">Close</button></div>
       <form autoComplete="off" className="core-form" onSubmit={createIssue}>
-        <div className="form-row"><label>Type<select value={kind} onChange={(event) => setKind(event.target.value as ProductionIssue['kind'])}><option value="quality">Quality</option><option value="maintenance">Maintenance</option><option value="materials">Materials</option><option value="operations">Operations</option></select></label><label>Area<select value={area} onChange={(event) => setArea(event.target.value)}><option>Line 01</option><option>Line 02</option><option>Line 03</option><option>Materials</option><option>Quality</option></select></label></div>
+        {issueMaintenanceFindingSource ? <p className="form-notice" role="status"><strong>Linked completion</strong><br />{issueMaintenanceFindingSource.equipmentName} · Strategy R{issueMaintenanceFindingSource.strategyRevision} · {issueMaintenanceFindingSource.returnToService.replaceAll('_', ' ')}<br />Owner: {issueMaintenanceFindingSource.maintenanceOwner} · Evidence: {issueMaintenanceFindingSource.evidenceReference}</p> : null}
+        <div className="form-row"><label>Type<select disabled={Boolean(issueMaintenanceFindingSource)} value={kind} onChange={(event) => setKind(event.target.value as ProductionIssue['kind'])}><option value="quality">Quality</option><option value="maintenance">Maintenance</option><option value="materials">Materials</option><option value="operations">Operations</option></select></label><label>Area<input maxLength={120} onChange={(event) => setArea(event.target.value)} placeholder="Line, machine, or work centre" required value={area} /></label></div>
         <label>Observation<textarea autoFocus maxLength={240} required value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="Describe what happened, not the assumption." /></label>
         <div className="form-row"><label>Priority<select value={severity} onChange={(event) => setSeverity(event.target.value as ProductionIssueSeverity)}>{productionIssueSeverities.map((candidate) => <option key={candidate} value={candidate}>{productionIssueSeverityLabels[candidate]}</option>)}</select></label><label>Owner<input autoComplete="off" maxLength={120} name="plant-issue-owner" onChange={(event) => setIssueOwner(event.target.value)} placeholder="Named person or role" required value={issueOwner} /></label></div>
         <label>Due time<input autoComplete="off" min={localDateTimeInputValue(new Date())} name="plant-issue-due" onChange={(event) => setIssueDueInput(event.target.value)} required type="datetime-local" value={issueDueInput} /></label>
         <label>Containment / next action<textarea maxLength={240} onChange={(event) => setContainment(event.target.value)} placeholder="What happens next, and what stays on hold?" required value={containment} /></label>
-        <p className="panel-copy">Nothing is saved until the next accountable review is confirmed.</p>
-        <div className="form-actions"><button className="core-button" onClick={() => { setIssueDialogOpen(false); requestAnimationFrame(() => issueTriggerRef.current?.focus()) }} type="button">Cancel</button><button className="core-button primary" type="submit">Review problem</button></div>
+        <p className="panel-copy">{issueMaintenanceFindingSource ? 'The completion link is immutable. This review opens one problem only; it does not change machine status, dispatch work, buy parts, or control equipment.' : 'Nothing is saved until the next accountable review is confirmed.'}</p>
+        <div className="form-actions"><button className="core-button" onClick={closeIssueDialog} type="button">Cancel</button><button className="core-button primary" type="submit">Review problem</button></div>
       </form>
     </dialog>
     {actionControls}

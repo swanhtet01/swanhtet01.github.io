@@ -75,6 +75,9 @@ def _strategy_maintenance_state(
     evidence: dict[str, str],
     *,
     start_action_id: str | None = None,
+    outcome: str = "completed",
+    findings: str = "No findings outside the reviewed procedure",
+    return_to_service: str = "recommended",
 ) -> dict[str, object]:
     state = deepcopy(current)
     asset = state["equipmentMaster"]["assets"][0]
@@ -102,15 +105,78 @@ def _strategy_maintenance_state(
     }
     if completing:
         event["maintenanceStartActionId"] = start_action_id
-        event["maintenanceOutcome"] = "completed"
-        event["maintenanceFindings"] = "No findings outside the reviewed procedure"
+        event["maintenanceOutcome"] = outcome
+        event["maintenanceFindings"] = findings
         event["maintenanceProcedureCompleted"] = True
-        event["maintenanceReturnToService"] = "recommended"
+        event["maintenanceReturnToService"] = return_to_service
         event["nextDueAt"] = "2026-09-15T10:00:00.000Z"
         strategy["nextDueAt"] = event["nextDueAt"]
     else:
         event["maintenanceOwner"] = strategy["maintenanceOwner"]
     state["revision"] += 1
+    state["events"] = [event, *state["events"]]
+    return state
+
+
+def _maintenance_finding_issue_state(
+    current: dict[str, object],
+    evidence: dict[str, str],
+    *,
+    issue_id: str = "ISS-MAINTENANCE-FINDING-501",
+) -> dict[str, object]:
+    state = deepcopy(current)
+    completion = next(event for event in state["events"] if event["kind"] == "maintenance_completed")
+    start = next(
+        event
+        for event in state["events"]
+        if event["kind"] == "maintenance_started"
+        and event["actionId"] == completion["maintenanceStartActionId"]
+    )
+    machine = next(machine for machine in state["machines"] if machine["id"] == completion["subjectId"])
+    source = {
+        "contract": "supermega.production.maintenance-finding-source.v1",
+        "equipmentId": machine["id"],
+        "equipmentName": machine["name"],
+        "maintenanceOwner": start["maintenanceOwner"],
+        "completionActionId": completion["actionId"],
+        "completedAt": completion["createdAt"],
+        "strategyActionId": completion["maintenanceStrategyActionId"],
+        "strategyRevision": completion["maintenanceStrategyRevision"],
+        "returnToService": completion["maintenanceReturnToService"],
+        "findings": completion["maintenanceFindings"],
+        "evidenceReference": completion["evidenceReference"],
+    }
+    issue = {
+        "id": issue_id,
+        "createdAt": evidence["capturedAt"],
+        "area": machine["name"],
+        "kind": "maintenance",
+        "summary": f"Maintenance finding: {completion['maintenanceFindings']}",
+        "status": "open",
+        "severity": "high",
+        "owner": start["maintenanceOwner"],
+        "dueAt": "2026-08-17T12:00:00.000Z",
+        "containment": "Keep the asset out of service pending reviewed corrective action.",
+        "maintenanceFindingSource": source,
+    }
+    event = {
+        "id": f"EVT-{evidence['actionId']}",
+        "actionId": evidence["actionId"],
+        "createdAt": evidence["capturedAt"],
+        "actor": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "kind": "issue_opened",
+        "subjectId": issue_id,
+        "summary": f"Opened maintenance issue for {machine['name']}",
+        "issueSeverity": issue["severity"],
+        "issueOwner": issue["owner"],
+        "issueDueAt": issue["dueAt"],
+        "issueContainment": issue["containment"],
+        "maintenanceFindingSource": source,
+    }
+    state["revision"] += 1
+    state["issues"] = [issue, *state["issues"]]
     state["events"] = [event, *state["events"]]
     return state
 
@@ -358,6 +424,112 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
                     started,
                     {"state": candidate, "evidence": completion_evidence},
                 )
+
+    def test_restricted_completion_can_open_one_evidence_bound_problem_only(self) -> None:
+        saved = reduce_production_state(
+            "production.equipment_maintenance_strategy.saved",
+            _commissioned_state(),
+            _strategy_payload(),
+        )
+        start_evidence = _maintenance_evidence(
+            "ACT-EQUIPMENT-MAINTENANCE-START-504",
+            "2026-08-15T09:00:00.000Z",
+            "Performed reviewed mixer preventive maintenance procedure",
+        )
+        started = reduce_production_state(
+            "production.maintenance.started",
+            saved,
+            {"state": _strategy_maintenance_state(saved, start_evidence), "evidence": start_evidence},
+        )
+        completion_evidence = _maintenance_evidence(
+            "ACT-EQUIPMENT-MAINTENANCE-COMPLETE-504",
+            "2026-08-16T10:00:00.000Z",
+            "Completed reviewed preventive maintenance with a limiting finding",
+        )
+        completed = reduce_production_state(
+            "production.maintenance.completed",
+            started,
+            {
+                "state": _strategy_maintenance_state(
+                    started,
+                    completion_evidence,
+                    start_action_id=start_evidence["actionId"],
+                    outcome="completed_with_findings",
+                    findings="Seal wear requires restricted service pending replacement",
+                    return_to_service="restricted",
+                ),
+                "evidence": completion_evidence,
+            },
+        )
+        issue_evidence = _maintenance_evidence(
+            "ACT-MAINTENANCE-FINDING-PROBLEM-504",
+            "2026-08-16T11:00:00.000Z",
+            "Reviewed maintenance finding and assigned corrective action",
+        )
+        proposed = _maintenance_finding_issue_state(completed, issue_evidence)
+        opened = reduce_production_state(
+            "production.issue.opened",
+            completed,
+            {"state": proposed, "evidence": issue_evidence},
+        )
+        source = opened["issues"][0]["maintenanceFindingSource"]
+        self.assertEqual(source["completionActionId"], completion_evidence["actionId"])
+        self.assertEqual(source, opened["events"][0]["maintenanceFindingSource"])
+        self.assertEqual(opened["jobs"], completed["jobs"])
+        self.assertEqual(opened["machines"], completed["machines"])
+        self.assertEqual(opened["equipmentMaster"], completed["equipmentMaster"])
+
+        tampered_states = []
+        for field, value in (
+            ("maintenanceOwner", "Other owner"),
+            ("equipmentName", "Other mixer"),
+            ("findings", "No issue found"),
+            ("evidenceReference", "OTHER-EVIDENCE"),
+            ("returnToService", "recommended"),
+        ):
+            candidate = deepcopy(proposed)
+            candidate["issues"][0]["maintenanceFindingSource"][field] = value
+            candidate["events"][0]["maintenanceFindingSource"][field] = value
+            tampered_states.append(candidate)
+        wrong_kind = deepcopy(proposed)
+        wrong_kind["issues"][0]["kind"] = "quality"
+        wrong_kind["events"][0]["summary"] = "Opened quality issue for Mixer 01"
+        tampered_states.append(wrong_kind)
+        predating = deepcopy(proposed)
+        predating["issues"][0]["createdAt"] = "2026-08-16T09:59:59.000Z"
+        predating["events"][0]["createdAt"] = "2026-08-16T09:59:59.000Z"
+        predating["events"][0]["issueDueAt"] = "2026-08-17T12:00:00.000Z"
+        tampered_states.append(predating)
+        missing_event_source = deepcopy(proposed)
+        missing_event_source["events"][0].pop("maintenanceFindingSource")
+        tampered_states.append(missing_event_source)
+        changed_master = deepcopy(proposed)
+        changed_master["equipmentMaster"]["assets"][0]["owner"] = "Other asset owner"
+        tampered_states.append(changed_master)
+        for candidate in tampered_states:
+            with self.subTest(candidate=candidate), self.assertRaises(TrialValidationError):
+                reduce_production_state(
+                    "production.issue.opened",
+                    completed,
+                    {"state": candidate, "evidence": issue_evidence},
+                )
+
+        duplicate_evidence = _maintenance_evidence(
+            "ACT-MAINTENANCE-FINDING-PROBLEM-505",
+            "2026-08-16T11:30:00.000Z",
+            "Attempted duplicate maintenance finding problem",
+        )
+        duplicate = _maintenance_finding_issue_state(
+            opened,
+            duplicate_evidence,
+            issue_id="ISS-MAINTENANCE-FINDING-502",
+        )
+        with self.assertRaises(TrialValidationError):
+            reduce_production_state(
+                "production.issue.opened",
+                opened,
+                {"state": duplicate, "evidence": duplicate_evidence},
+            )
 
     def test_due_queue_orders_real_strategies_and_retains_completion_basis(self) -> None:
         first_commissioned = _commissioned_state()

@@ -134,7 +134,22 @@ _JOB_CLOSURE_FIELDS = frozenset(
 )
 _ISSUE_REQUIRED_FIELDS = frozenset({"id", "createdAt", "area", "kind", "summary", "status"})
 _ISSUE_ACTION_FIELDS = frozenset({"severity", "owner", "dueAt", "containment"})
-_ISSUE_OPTIONAL_FIELDS = _ISSUE_ACTION_FIELDS | {"resolution"}
+_ISSUE_OPTIONAL_FIELDS = _ISSUE_ACTION_FIELDS | {"maintenanceFindingSource", "resolution"}
+_MAINTENANCE_FINDING_SOURCE_FIELDS = frozenset(
+    {
+        "contract",
+        "equipmentId",
+        "equipmentName",
+        "maintenanceOwner",
+        "completionActionId",
+        "completedAt",
+        "strategyActionId",
+        "strategyRevision",
+        "returnToService",
+        "findings",
+        "evidenceReference",
+    }
+)
 _MACHINE_FIELDS = frozenset({"id", "name", "state"})
 _EQUIPMENT_MASTER_CONTRACT = "supermega.production.equipment-master.v1"
 _EQUIPMENT_MASTER_FIELDS = frozenset({"contract", "assets"})
@@ -250,6 +265,7 @@ _TIMESTAMP_PATTERN = re.compile(
 _ISSUE_EVENT_FIELDS = frozenset(
     {"issueSeverity", "issueOwner", "issueDueAt", "issueContainment"}
 )
+_ISSUE_EVENT_OPTIONAL_FIELDS = _ISSUE_EVENT_FIELDS | {"maintenanceFindingSource"}
 _EQUIPMENT_COMMISSION_EVENT_FIELDS = frozenset(
     {"installedAt", "toState", "workCentreId"}
 )
@@ -585,6 +601,25 @@ def _validate_job(candidate: object, index: int) -> dict[str, Any]:
     return job
 
 
+def _maintenance_finding_source(candidate: object, field: str) -> dict[str, Any]:
+    source = _object(candidate, field)
+    _exact_fields(source, field, required=_MAINTENANCE_FINDING_SOURCE_FIELDS)
+    if source["contract"] != "supermega.production.maintenance-finding-source.v1":
+        raise TrialValidationError(f"{field}.contract is unsupported.")
+    _text(source["equipmentId"], f"{field}.equipmentId", maximum=80)
+    _text(source["equipmentName"], f"{field}.equipmentName", maximum=120)
+    _text(source["maintenanceOwner"], f"{field}.maintenanceOwner", maximum=120)
+    _text(source["completionActionId"], f"{field}.completionActionId", maximum=160)
+    _maintenance_timestamp(source["completedAt"], f"{field}.completedAt")
+    _text(source["strategyActionId"], f"{field}.strategyActionId", maximum=160)
+    _integer(source["strategyRevision"], f"{field}.strategyRevision", minimum=1)
+    if source["returnToService"] not in {"restricted", "not_recommended"}:
+        raise TrialValidationError(f"{field}.returnToService is unsupported.")
+    _text(source["findings"], f"{field}.findings", maximum=360)
+    _text(source["evidenceReference"], f"{field}.evidenceReference")
+    return source
+
+
 def _validate_issue(candidate: object, index: int) -> dict[str, Any]:
     field = f"issues[{index}]"
     issue = _object(candidate, field)
@@ -618,6 +653,21 @@ def _validate_issue(candidate: object, index: int) -> dict[str, Any]:
         ):
             raise TrialValidationError(f"{field}.dueAt must follow its creation time.")
         _text(issue["containment"], f"{field}.containment", maximum=240)
+    if "maintenanceFindingSource" in issue:
+        source = _maintenance_finding_source(
+            issue["maintenanceFindingSource"],
+            f"{field}.maintenanceFindingSource",
+        )
+        if issue["kind"] != "maintenance":
+            raise TrialValidationError(
+                f"{field} maintenance finding source requires a maintenance issue."
+            )
+        if datetime.fromisoformat(created_at.replace("Z", "+00:00")) < datetime.fromisoformat(
+            source["completedAt"].replace("Z", "+00:00")
+        ):
+            raise TrialValidationError(
+                f"{field} cannot predate its maintenance finding."
+            )
     if (
         not isinstance(issue["status"], str)
         or issue["status"] not in {"open", "resolved"}
@@ -972,7 +1022,7 @@ def _validate_event(
             if kind == "job_schedule_updated"
             else _MATERIAL_EVENT_OPTIONAL_FIELDS
             if kind == "material_consumed"
-            else _ISSUE_EVENT_FIELDS
+            else _ISSUE_EVENT_OPTIONAL_FIELDS
             if kind == "issue_opened"
             else _MAINTENANCE_STRATEGY_BINDING_FIELDS
             if kind == "maintenance_started"
@@ -1331,6 +1381,11 @@ def _validate_event(
                 f"{field}.issueContainment",
                 maximum=240,
             )
+        if "maintenanceFindingSource" in event:
+            _maintenance_finding_source(
+                event["maintenanceFindingSource"],
+                f"{field}.maintenanceFindingSource",
+            )
     elif subject_id not in issue_ids:
         raise TrialValidationError(f"{field} references an unknown issue.")
     return event
@@ -1339,6 +1394,7 @@ def _validate_event(
 def _validate_issue_history(
     issues: Sequence[dict[str, Any]],
     events: Sequence[dict[str, Any]],
+    machines: Sequence[dict[str, Any]],
 ) -> None:
     for index, issue in enumerate(issues):
         opened = [
@@ -1382,6 +1438,89 @@ def _validate_issue_history(
             raise TrialValidationError(
                 f"issues[{index}] legacy opening event cannot acquire action fields."
             )
+        issue_source = (
+            _maintenance_finding_source(
+                issue["maintenanceFindingSource"],
+                f"issues[{index}].maintenanceFindingSource",
+            )
+            if "maintenanceFindingSource" in issue
+            else None
+        )
+        event_source = (
+            _maintenance_finding_source(
+                opening_event["maintenanceFindingSource"],
+                f"issues[{index}] opening maintenanceFindingSource",
+            )
+            if "maintenanceFindingSource" in opening_event
+            else None
+        )
+        if issue_source != event_source:
+            raise TrialValidationError(
+                f"issues[{index}] maintenance finding source does not match its immutable opening event."
+            )
+        if issue_source is not None:
+            completions = [
+                event
+                for event in events
+                if event["kind"] == "maintenance_completed"
+                and event["actionId"] == issue_source["completionActionId"]
+            ]
+            if len(completions) != 1:
+                raise TrialValidationError(
+                    f"issues[{index}] maintenance finding source requires exactly one reviewed completion."
+                )
+            completion = completions[0]
+            starts = [
+                event
+                for event in events
+                if event["kind"] == "maintenance_started"
+                and event["actionId"] == completion["maintenanceStartActionId"]
+            ]
+            source_machines = [
+                machine
+                for machine in machines
+                if machine["id"] == issue_source["equipmentId"]
+            ]
+            if len(starts) != 1 or len(source_machines) != 1:
+                raise TrialValidationError(
+                    f"issues[{index}] maintenance finding source is not bound to one asset and start record."
+            )
+            start = starts[0]
+            machine = source_machines[0]
+            if (
+                completion["subjectId"] != issue_source["equipmentId"]
+                or machine["name"] != issue_source["equipmentName"]
+                or start["maintenanceOwner"] != issue_source["maintenanceOwner"]
+                or completion["createdAt"] != issue_source["completedAt"]
+                or completion.get("maintenanceStrategyActionId")
+                != issue_source["strategyActionId"]
+                or completion.get("maintenanceStrategyRevision")
+                != issue_source["strategyRevision"]
+                or completion.get("maintenanceReturnToService")
+                != issue_source["returnToService"]
+                or completion.get("maintenanceFindings") != issue_source["findings"]
+                or completion["evidenceReference"]
+                != issue_source["evidenceReference"]
+            ):
+                raise TrialValidationError(
+                    f"issues[{index}] maintenance finding source does not match reviewed completion evidence."
+                )
+            if events.index(opening_event) >= events.index(completion):
+                raise TrialValidationError(
+                    f"issues[{index}] maintenance finding problem must follow its reviewed completion."
+                )
+            duplicates = sum(
+                1
+                for candidate in issues
+                if candidate.get("maintenanceFindingSource", {}).get(
+                    "completionActionId"
+                )
+                == issue_source["completionActionId"]
+            )
+            if duplicates != 1:
+                raise TrialValidationError(
+                    f"issues[{index}] duplicates a maintenance finding problem."
+                )
         if issue["status"] == "open":
             if resolved:
                 raise TrialValidationError(
@@ -2512,7 +2651,7 @@ def validate_production_state(value: object) -> dict[str, Any]:
     _validate_output_history(jobs, events)
     _validate_material_history(jobs, events)
     _validate_quality_hold_history(jobs, events)
-    _validate_issue_history(issues, events)
+    _validate_issue_history(issues, events, machines)
     _validate_machine_history(machines, events)
     _validate_downtime_history(machines, events)
     _validate_maintenance_history(machines, events)
@@ -2918,6 +3057,10 @@ def _validate_issue_opened(
     event: Mapping[str, Any],
 ) -> None:
     _require_unchanged(current, next_state, "jobs", "machines")
+    if current.get("equipmentMaster") != next_state.get("equipmentMaster"):
+        raise TrialValidationError(
+            "opening a Production issue cannot change the equipment master."
+        )
     if (
         len(next_state["issues"]) != len(current["issues"]) + 1
         or next_state["issues"][1:] != current["issues"]
@@ -2941,6 +3084,10 @@ def _validate_issue_opened(
     if any(event.get(field) != value for field, value in expected_snapshot.items()):
         raise TrialValidationError(
             "new Production issue action fields must match the opening event."
+        )
+    if issue.get("maintenanceFindingSource") != event.get("maintenanceFindingSource"):
+        raise TrialValidationError(
+            "new Production issue maintenance source must match the opening event."
         )
     if datetime.fromisoformat(event["createdAt"].replace("Z", "+00:00")) < datetime.fromisoformat(
         issue["createdAt"].replace("Z", "+00:00")
