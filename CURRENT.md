@@ -110,7 +110,7 @@ AI and delegated agents may not independently send customer messages, charge or 
 - Internal hosted runtime project: `megaos`; it is not public domain authority
 - Coordinated workflow: `.github/workflows/supermega-public-release.yml`
 - PR #258 is merged and is historical release evidence, not an active handoff target.
-- Current production and `origin/main` resolve to `bb9f2eeb589b1809ea55e4dc8a734cca96bf1161`; this candidate diverges from common base `5d1c5d7c903e9154cfa0af0f12991fea1071b51b` and must not be fast-forwarded.
+- Current production and `origin/main` resolve to `4c300c001a9e2575cabff620ccffa0d737f4cfe3`; this candidate diverges from common base `5d1c5d7c903e9154cfa0af0f12991fea1071b51b` (51 main-only / 250 candidate-only commits at the 2026-07-30 audit) and must not be fast-forwarded.
 - Both production domains must expose matching `__release.json` metadata for the reviewed commit and context versions.
 - Direct local production deployment is blocked. The coordinated GitHub workflow is the only production release path.
 
