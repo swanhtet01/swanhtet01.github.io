@@ -1524,8 +1524,10 @@ if (!websiteSource.includes('aria-labelledby="website-today-title"')
   || !websiteSource.includes('Export lead record')
   || !websiteSource.includes('Managed Website inquiries require the managed form endpoint. No local customer record was created.')
   || !websiteSource.includes('No message, CRM write, or external send ran.')
-  || !websiteSource.includes("['Approval', approvalIsCurrent ? 'Recorded' : 'Needed']")
-  || !websiteSource.includes("['Site package', publishIsCurrent ? 'Ready' : 'Needed']")
+  || !websiteSource.includes('const statusWorkspace = hasUnsavedChanges ? editorWorkspace : workspace')
+  || !websiteSource.includes("['Readiness', hasUnsavedChanges ? 'Review draft'")
+  || !websiteSource.includes("['Approval', hasUnsavedChanges ? 'Blocked by draft' : approvalIsCurrent ? 'Recorded' : 'Needed']")
+  || !websiteSource.includes("['Site package', hasUnsavedChanges ? 'Blocked by draft' : publishIsCurrent ? 'Ready' : 'Needed']")
   || !websiteSource.includes("? 'Review new inquiries'")
   || !websiteSource.includes("? 'Review inquiries'")
   || !websiteSource.includes('function runWebsiteAutopilot()')
@@ -2443,6 +2445,9 @@ if (!websiteSource.includes('starterSetupActive')
   || !websiteStarterSetupSource.includes('const SAMPLE_BRIEF: WebsiteStarterBrief = {')
   || !websiteStarterSetupSource.includes("businessName: 'Mingalar Fresh Mart'")
   || !websiteStarterSetupSource.includes("audience: 'families and office buyers in Yangon'")
+  || !websiteStarterSetupSource.includes("templateId: 'catalog-showcase'")
+  || !websiteStarterSetupSource.includes('websiteStarterTemplates.map')
+  || !websiteStarterSetupSource.includes('Three-page starter')
   || !websiteStarterSetupSource.includes("function loadSampleBrief()")
   || !websiteStarterSetupSource.includes('Load sample brief')
   || !websiteStarterSetupSource.includes('Start with your business')
@@ -7490,6 +7495,7 @@ async function verifyWebsiteRuntime() {
     const seed = model.createInitialWorkspace()
     const fingerprint = model.workspaceFingerprint(seed)
     const starterBrief = {
+      templateId: 'catalog-showcase',
       businessName: 'Shwe Family Store',
       audience: 'Families in Yangon',
       offer: 'Fresh everyday groceries with same-day local delivery.',
@@ -7498,18 +7504,27 @@ async function verifyWebsiteRuntime() {
     }
     assert(starter.isUntouchedWebsiteStarter(seed), 'website_clean_seed_was_not_recognized_as_starter')
     assert(starter.websiteStarterBriefIssues(starterBrief).length === 0, 'website_valid_starter_brief_was_rejected')
+    assert(starter.websiteStarterBriefIssues({ ...starterBrief, templateId: 'unsupported' }).length === 1, 'website_unsupported_starter_template_was_accepted')
     assert(starter.websiteStarterBriefIssues({ ...starterBrief, contactHref: 'http://unsafe.example' }).length === 1, 'website_unsafe_starter_destination_was_accepted')
     assert(starter.websiteStarterBriefIssues({ ...starterBrief, businessName: '\u0001' }).length === 1, 'website_starter_control_character_was_accepted')
     const briefPreview = starter.applyWebsiteStarterBrief(seed, starterBrief, at(50))
     assert(briefPreview !== seed
       && briefPreview.siteName === starterBrief.businessName
-      && briefPreview.pages.length === 1
+      && briefPreview.pages.length === 3
       && briefPreview.pages[0].slug === '/'
-      && briefPreview.pages[0].stage === 'draft'
+      && briefPreview.pages.every((page) => page.stage === 'draft')
+      && briefPreview.pages[1].slug === '/catalog'
+      && briefPreview.pages[2].slug === '/contact'
       && briefPreview.pages[0].hero.headline === starterBrief.offer
-      && briefPreview.pages[0].hero.summary === `${starterBrief.businessName} · ${starterBrief.audience}`
+      && briefPreview.pages[0].hero.summary === `${starterBrief.businessName} helps ${starterBrief.audience}.`
       && briefPreview.pages[0].sections[0].body === starterBrief.proof
-      && briefPreview.pages[0].hero.ctaHref === starterBrief.contactHref, 'website_starter_brief_did_not_create_exact_home_draft')
+      && briefPreview.pages[0].hero.ctaHref === '/catalog'
+      && briefPreview.pages[1].hero.ctaHref === starterBrief.contactHref
+      && briefPreview.pages[2].hero.ctaHref === starterBrief.contactHref, 'website_starter_brief_did_not_create_complete_catalog_draft')
+    const businessPreview = starter.applyWebsiteStarterBrief(seed, { ...starterBrief, templateId: 'business-presence' }, at(51))
+    const leadPreview = starter.applyWebsiteStarterBrief(seed, { ...starterBrief, templateId: 'lead-generation' }, at(52))
+    assert(businessPreview.pages.map((page) => page.slug).join(',') === '/,/about,/contact', 'website_business_presence_template_pages_missing')
+    assert(leadPreview.pages.map((page) => page.slug).join(',') === '/,/services,/contact', 'website_lead_generation_template_pages_missing')
     assert(briefPreview.revision === 0
       && briefPreview.contentRevision === 0
       && briefPreview.evidence.length === 0
@@ -7517,8 +7532,8 @@ async function verifyWebsiteRuntime() {
       && briefPreview.localPublishes.length === 0
       && briefPreview.events.length === 0, 'website_starter_brief_forged_authoritative_history')
     assert(!starter.isUntouchedWebsiteStarter(briefPreview), 'website_business_preview_still_matched_starter')
-    assert(starter.applyWebsiteStarterBrief(briefPreview, starterBrief, at(51)) === briefPreview, 'website_starter_overwrote_existing_work')
-    assert(starter.applyWebsiteStarterBrief(seed, { ...starterBrief, offer: '' }, at(52)) === seed, 'website_invalid_starter_brief_changed_sample')
+    assert(starter.applyWebsiteStarterBrief(briefPreview, starterBrief, at(53)) === briefPreview, 'website_starter_overwrote_existing_work')
+    assert(starter.applyWebsiteStarterBrief(seed, { ...starterBrief, offer: '' }, at(54)) === seed, 'website_invalid_starter_brief_changed_sample')
     assert(starter.applyWebsiteStarterBrief(seed, starterBrief, 'not-a-time') === seed, 'website_starter_accepted_noncanonical_time')
     const committedBrief = model.applyWebsiteWorkspaceUpdate(seed, () => briefPreview)
     assert(committedBrief.ok

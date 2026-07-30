@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react'
 
 import {
+  websiteStarterTemplates,
   websiteStarterBriefIssues,
   type WebsiteStarterBrief,
 } from './website-starter'
@@ -11,6 +12,7 @@ type WebsiteStarterSetupProps = {
 }
 
 const EMPTY_BRIEF: WebsiteStarterBrief = {
+  templateId: 'business-presence',
   businessName: '',
   audience: '',
   offer: '',
@@ -19,6 +21,7 @@ const EMPTY_BRIEF: WebsiteStarterBrief = {
 }
 
 const SAMPLE_BRIEF: WebsiteStarterBrief = {
+  templateId: 'catalog-showcase',
   businessName: 'Mingalar Fresh Mart',
   audience: 'families and office buyers in Yangon',
   offer: 'Daily groceries, pantry packs, and local delivery with clear pickup windows.',
@@ -40,7 +43,7 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
   const offerIssue = issueFor('offer')
   const proofIssue = issueFor('proof')
 
-  function updateBrief(field: keyof WebsiteStarterBrief, value: string) {
+  function updateBrief<Field extends keyof WebsiteStarterBrief>(field: Field, value: WebsiteStarterBrief[Field]) {
     setBrief((current) => ({ ...current, [field]: value }))
   }
 
@@ -68,15 +71,21 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
     <section className="website-editor-panel website-starter-setup" aria-labelledby="website-starter-title">
       <header className="website-panel-head">
         <div>
-          <span className="website-eyebrow">One-page starter</span>
+          <span className="website-eyebrow">Three-page starter</span>
           <h2 id="website-starter-title">Start with your business</h2>
-          <p>Answer five short questions. Preview before saving; no website or domain changes here.</p>
+          <p>Choose a layout and answer five short questions. Preview before saving; no website or domain changes here.</p>
         </div>
         <span className="website-status is-draft">Not saved</span>
       </header>
 
       <form className="website-editor-scroll website-starter-form" noValidate onSubmit={submit} ref={starterFormRef}>
         <div className="website-form-grid two-columns website-starter-identity-grid">
+          <label>
+            <span>Website layout</span>
+            <select onChange={(event) => updateBrief('templateId', event.target.value as WebsiteStarterBrief['templateId'])} value={brief.templateId}>
+              {websiteStarterTemplates.map((template) => <option key={template.id} value={template.id}>{template.label} — {template.detail}</option>)}
+            </select>
+          </label>
           <label>
             <span>Business name</span>
             <input

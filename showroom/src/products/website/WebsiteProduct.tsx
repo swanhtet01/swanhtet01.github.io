@@ -219,7 +219,7 @@ export function WebsiteProduct() {
     : starterSetupActive
     ? {
         title: 'Start your website',
-        copy: 'Answer five short questions, then preview before anything is saved.',
+        copy: 'Choose a three-page layout, answer five short questions, then preview before anything is saved.',
       }
     : view === 'content' && surface === 'preview'
     ? {
@@ -606,7 +606,7 @@ export function WebsiteProduct() {
       route: location.pathname + location.search,
       detail: `Website starter brief generated: ${brief.businessName}`,
     })
-    setNotice('Your one-page site is ready as an unsaved preview. Review it, then Save or Discard.')
+    setNotice('Your three-page site is ready as an unsaved preview. Review every page, then Save or Discard.')
   }
 
   function openStarterSetup() {
@@ -839,12 +839,13 @@ export function WebsiteProduct() {
       : hasUnsavedChanges || failingContentChecks.length || leadCounts.new
         ? 'attention'
         : 'ready'
+  const statusWorkspace = hasUnsavedChanges ? editorWorkspace : workspace
   const websiteTodayMetrics = [
-    ['Pages', `${workspace.pages.filter((page) => page.stage === 'ready').length}/${workspace.pages.length} ready`],
-    ['Readiness', failingContentChecks.length ? `${failingContentChecks.length} to fix` : 'Clear'],
+    ['Pages', `${statusWorkspace.pages.filter((page) => page.stage === 'ready').length}/${statusWorkspace.pages.length} ready`],
+    ['Readiness', hasUnsavedChanges ? 'Review draft' : failingContentChecks.length ? `${failingContentChecks.length} to fix` : 'Clear'],
     ['Inquiries', leadCounts.new ? `${leadCounts.new} new` : websiteLeads.length ? `${websiteLeads.length} total` : 'None yet'],
-    ['Approval', approvalIsCurrent ? 'Recorded' : 'Needed'],
-    ['Site package', publishIsCurrent ? 'Ready' : 'Needed'],
+    ['Approval', hasUnsavedChanges ? 'Blocked by draft' : approvalIsCurrent ? 'Recorded' : 'Needed'],
+    ['Site package', hasUnsavedChanges ? 'Blocked by draft' : publishIsCurrent ? 'Ready' : 'Needed'],
   ] as const
   const websiteTodaySource = storageMode === 'managed'
     ? `Managed Website · ${managedActorId || 'authenticated workspace'}`
