@@ -593,14 +593,25 @@ class ManagedWorkspaceProvisionerTests(unittest.TestCase):
         proposal = self.database.approvals[0]["proposal_json"]
         self.assertEqual(proposal["contract"], "decision_packet.v1")
         self.assertEqual(
-            proposal["subject"]["contract"],
-            "supermega.managed_workspace_activation_authorization.v1",
+            proposal["subject"],
+            {
+                "kind": "managed_workspace_activation",
+                "id": self.plan["activationId"],
+                "version": 1,
+            },
         )
         self.assertEqual(len(proposal["claims"]), 4)
         self.assertEqual(
-            proposal["subject"]["automaticCompensationAuthorizationId"],
-            self.plan["rollback"]["authorizationId"],
+            {claim["id"] for claim in proposal["claims"]},
+            {
+                "named-owner-authorized-exact-plan",
+                "release-and-database-target-bound",
+                "source-request-bound",
+                "automatic-compensation-authorized",
+            },
         )
+        self.assertIn(self.plan["rollback"]["authorizationId"], proposal["acceptance"])
+        self.assertTrue(all(claim["status"] == "verified" for claim in proposal["claims"]))
         self.assertTrue(self.authorize()["replayed"])
         self.assertEqual(self.provisioner.inspect(self.plan)["status"], "ready_to_apply")
 

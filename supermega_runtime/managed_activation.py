@@ -870,48 +870,78 @@ class ManagedWorkspaceProvisioner:
 
     @staticmethod
     def _authorization_projection(plan: Mapping[str, Any]) -> dict[str, Any]:
+        captured_at = plan["approval"]["approvedAt"]
+        plan_digest = plan["planDigest"]
+        source_digest = plan["sourceRequestDigest"]
         return {
             "contract": "decision_packet.v1",
             "subject": {
-                "contract": ACTIVATION_AUTHORIZATION_CONTRACT,
+                "kind": "managed_workspace_activation",
+                "id": plan["activationId"],
                 "version": 1,
-                "activationId": plan["activationId"],
-                "planDigest": plan["planDigest"],
-                "sourceRequestDigest": plan["sourceRequestDigest"],
-                "workspaceId": plan["workspaceId"],
-                "ownerActorId": plan["ownerActorId"],
-                "projectRef": plan["target"]["projectRef"],
-                "releaseCommit": plan["target"]["releaseCommit"],
-                "adminCaSha256": plan["target"]["adminCaSha256"],
-                "schemaVersion": plan["target"]["schemaVersion"],
-                "automaticCompensationAuthorizationId": plan["rollback"]["authorizationId"],
             },
+            "decision": f"Activate managed workspace {plan['workspaceId']} under the exact approved plan.",
             "claims": [
                 {
-                    "claim": "named_owner_authorized_exact_plan",
-                    "value": plan["ownerActorId"],
+                    "id": "named-owner-authorized-exact-plan",
+                    "claim_type": "fact",
+                    "statement": f"Owner actor {plan['ownerActorId']} authorized the exact activation plan.",
+                    "source_reference": plan_digest,
+                    "captured_at": captured_at,
+                    "status": "verified",
+                    "uncertainty": "low",
+                    "visibility": "private",
+                    "digest": plan_digest,
                 },
                 {
-                    "claim": "release_and_database_target_bound",
-                    "value": (
-                        f"{plan['target']['projectRef']}:"
-                        f"{plan['target']['releaseCommit']}:"
-                        f"{plan['target']['adminCaSha256']}:"
-                        f"v{plan['target']['schemaVersion']}"
+                    "id": "release-and-database-target-bound",
+                    "claim_type": "fact",
+                    "statement": (
+                        f"Activation is bound to project {plan['target']['projectRef']}, "
+                        f"release {plan['target']['releaseCommit']}, and schema "
+                        f"v{plan['target']['schemaVersion']}."
                     ),
+                    "source_reference": plan_digest,
+                    "captured_at": captured_at,
+                    "status": "verified",
+                    "uncertainty": "low",
+                    "visibility": "private",
+                    "digest": plan_digest,
                 },
                 {
-                    "claim": "activation_plan_digest",
-                    "value": plan["planDigest"],
+                    "id": "source-request-bound",
+                    "claim_type": "fact",
+                    "statement": "The activation plan is bound to the reviewed managed-trial request.",
+                    "source_reference": source_digest,
+                    "captured_at": captured_at,
+                    "status": "verified",
+                    "uncertainty": "low",
+                    "visibility": "private",
+                    "digest": source_digest,
                 },
                 {
-                    "claim": "automatic_compensation_authorized",
-                    "value": (
-                        f"{plan['rollback']['authorizationId']}:"
-                        f"{plan['rollback']['trigger']}:retain_customer_data"
+                    "id": "automatic-compensation-authorized",
+                    "claim_type": "fact",
+                    "statement": (
+                        f"Compensation authorization {plan['rollback']['authorizationId']} "
+                        "may suspend access after the bounded downstream failure trigger."
                     ),
+                    "source_reference": plan_digest,
+                    "captured_at": captured_at,
+                    "status": "verified",
+                    "uncertainty": "low",
+                    "visibility": "private",
+                    "digest": plan_digest,
                 },
             ],
+            "baseline": "The managed workspace is not active and production writes remain disabled.",
+            "target": "Create one tenant-scoped workspace with durable owner authority and RLS.",
+            "result": "The owner authorized the exact activation plan for controlled provisioning.",
+            "acceptance": (
+                f"Apply plan {plan_digest} once, retain immutable evidence, and use "
+                f"compensation authorization {plan['rollback']['authorizationId']} if required."
+            ),
+            "artifact_reference": f"managed-activation://{plan['workspaceId']}/{plan['activationId']}",
         }
 
     @classmethod
