@@ -256,9 +256,12 @@ export function buildPilotOutcomeMetric(snapshot: LocalBusinessSnapshot, product
     return metric(product, source, 'website-release-gaps', 'Website release gaps', gaps, 'gaps', `${source.readinessPassed}/${source.readinessTotal} checks, approval ${source.approved ? 'current' : 'missing'}, release record ${source.released ? 'current' : 'missing'}.`)
   }
   const source = snapshot.ecommerce
-  if (source.status !== 'ready') return null
+  if (source.status === 'invalid') return null
   const gaps = (source.draftState === 'ready' ? 0 : 1) + (source.shopSourceReady ? 0 : 1) + (source.selectedSkus > 0 ? 0 : 1)
-  return metric(product, source, 'ecommerce-readiness-gaps', 'Ecommerce readiness gaps', gaps, 'gaps', `${source.selectedSkus} selected SKUs, Shop source ${source.shopSourceReady ? 'ready' : 'missing'}, draft ${source.draftState}.`)
+  const detail = source.status === 'missing'
+    ? `Storefront not saved, ${source.selectedSkus} selected SKUs, Shop source ${source.shopSourceReady ? 'ready' : 'missing'}.`
+    : `${source.selectedSkus} selected SKUs, Shop source ${source.shopSourceReady ? 'ready' : 'missing'}, draft ${source.draftState}.`
+  return metric(product, source, 'ecommerce-readiness-gaps', 'Ecommerce readiness gaps', gaps, 'gaps', detail)
 }
 
 export function startPilotOutcome(
