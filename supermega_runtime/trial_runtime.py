@@ -17,7 +17,10 @@ from supermega_runtime.client_import_runtime import (
     ClientImportValidationError,
     validate_client_import_staging_package,
 )
-from supermega_runtime.production_runtime import PRODUCTION_HUMAN_EVENTS
+from supermega_runtime.production_runtime import (
+    PRODUCTION_HUMAN_EVENTS,
+    require_shop_demand_source_current,
+)
 from supermega_runtime.order_intake import (
     MAX_ORDER_MESSAGE_LENGTH,
     OrderIntakeCatalogItem,
@@ -1391,6 +1394,26 @@ def create_trial_router(
 
                 related_surfaces = ("commerce",)
                 state_precondition = require_shop_issue
+        elif (
+            body.surface == "production"
+            and body.event_type == "production.job.created"
+            and isinstance(body.payload.get("intent"), Mapping)
+            and isinstance(body.payload["intent"].get("shopDemandSource"), Mapping)
+        ):
+            submitted_source = deepcopy(body.payload["intent"]["shopDemandSource"])
+
+            def require_current_shop_demand(
+                production_state: Mapping[str, Any],
+                related_states: Mapping[str, Mapping[str, Any]],
+            ) -> None:
+                require_shop_demand_source_current(
+                    production_state,
+                    related_states.get("commerce", {}),
+                    submitted_source,
+                )
+
+            related_surfaces = ("commerce",)
+            state_precondition = require_current_shop_demand
         result = _invoke(
             lambda: store.apply_command(
                 principal,

@@ -2428,7 +2428,11 @@ function managedProductionJobIntent(state: Record<string, unknown>, evidence: Ma
       code: 'managed_production_job_intent_invalid',
     })
   }
-  if (job.shopDemandSource !== undefined) return null
+  if (job.shopDemandSource !== undefined && !isRecord(job.shopDemandSource)) {
+    throw new ManagedTrialError('The managed Plant Shop-demand source is invalid.', {
+      code: 'managed_production_job_intent_invalid',
+    })
+  }
   if (typeof job.id !== 'string'
     || typeof job.line !== 'string'
     || typeof job.product !== 'string'
@@ -2450,6 +2454,7 @@ function managedProductionJobIntent(state: Record<string, unknown>, evidence: Ma
     owner: job.owner,
     priority: job.priority,
     dueAt: job.dueAt,
+    ...(job.shopDemandSource !== undefined ? { shopDemandSource: job.shopDemandSource } : {}),
   }
 }
 

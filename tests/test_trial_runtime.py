@@ -12,6 +12,7 @@ from supermega_runtime.commerce_runtime import (
     commerce_catalog_digest,
     commerce_storefront_preview_digest,
 )
+from supermega_runtime.plant_order_foundation import plant_order_evidence_digest
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal
@@ -846,6 +847,37 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         client = self._client(store)
         try:
+            store.apply_command(
+                self.operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.workspace.initialized",
+                expected_version=0,
+                payload={
+                    "state": {
+                        "schema": "supermega.commerce.workspace.v2",
+                        "items": [
+                            {
+                                "sku": "SKU-DEMAND",
+                                "name": "Demand item",
+                                "onHand": 10,
+                                "reorderAt": 15,
+                                "price": 5_000,
+                            }
+                        ],
+                        "orders": [],
+                        "movements": [],
+                        "closes": [],
+                    },
+                    "evidence": {
+                        "actionId": "ACT-SHOP-DEMAND-INIT",
+                        "capturedAt": "2026-01-01T00:00:00.000Z",
+                        "actor": self.operator.actor_id,
+                        "reason": "Initialize Shop demand authority.",
+                        "evidenceReference": "SHOP-DEMAND-INIT",
+                    },
+                },
+            )
             initialized = store.apply_command(
                 self.operator,
                 command_id=str(uuid4()),
@@ -941,6 +973,90 @@ class TrialRuntimeTests(unittest.TestCase):
             )
             self.assertEqual(conflict.status_code, 409)
             self.assertEqual(conflict.json()["detail"]["code"], "trial_idempotency_conflict")
+
+            stale_snapshot = {
+                "schema": "supermega.shop_production_demand.v1",
+                "operatingUnitLocationId": "LOC-MAIN",
+                "sku": "SKU-DEMAND",
+                "productName": "Demand item",
+                "sourceOrderIds": [],
+                "activeDemandUnits": 0,
+                "uncoveredDemandUnits": 0,
+                "availableToPromiseUnits": 9,
+                "reorderAtUnits": 15,
+                "replenishmentGapUnits": 6,
+                "recommendedBatchUnits": 6,
+            }
+
+            def demand_body(snapshot: dict[str, object], job_id: str) -> dict[str, object]:
+                source_digest = plant_order_evidence_digest(snapshot)
+                evidence_reference = f"SHOP-DEMAND:{source_digest}:LOC-MAIN"
+                return {
+                    "command_id": str(uuid4()),
+                    "surface": "production",
+                    "event_type": "production.job.created",
+                    "expected_version": result["version"],
+                    "payload": {
+                        "intent": {
+                            "jobId": job_id,
+                            "line": "Packing team",
+                            "product": "Demand item",
+                            "target": snapshot["recommendedBatchUnits"],
+                            "owner": "Packing lead",
+                            "priority": "urgent",
+                            "dueAt": "2099-02-01T00:00:00.000Z",
+                            "shopDemandSource": {
+                                "contract": "supermega.production.shop-demand-source.v1",
+                                "sourceDigest": source_digest,
+                                "evidenceReference": evidence_reference,
+                                "snapshot": snapshot,
+                            },
+                        },
+                        "evidence": {
+                            "actionId": f"ACT-{job_id}",
+                            "capturedAt": "1970-01-01T00:00:00.000Z",
+                            "actor": self.operator.actor_id,
+                            "reason": "Create a job from current Shop demand.",
+                            "evidenceReference": evidence_reference,
+                        },
+                    },
+                }
+
+            stale_demand = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=demand_body(stale_snapshot, "JOB-DEMAND-STALE"),
+            )
+            self.assertEqual(stale_demand.status_code, 422)
+            self.assertEqual(stale_demand.json()["detail"]["code"], "trial_validation_error")
+
+            current_snapshot = {
+                **stale_snapshot,
+                "availableToPromiseUnits": 10,
+                "replenishmentGapUnits": 5,
+                "recommendedBatchUnits": 5,
+            }
+            current_body = demand_body(current_snapshot, "JOB-DEMAND-CURRENT")
+            current_demand = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=current_body,
+            )
+            self.assertEqual(current_demand.status_code, 200, current_demand.text)
+            demand_result = current_demand.json()["result"]
+            retained_source = demand_result["state"]["jobs"][0]["shopDemandSource"]
+            self.assertEqual(retained_source["snapshot"], current_snapshot)
+            self.assertNotIn("customer", str(retained_source).lower())
+
+            duplicate_body = demand_body(current_snapshot, "JOB-DEMAND-DUPLICATE")
+            duplicate_body["expected_version"] = demand_result["version"]
+            duplicate_demand = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=duplicate_body,
+            )
+            self.assertEqual(duplicate_demand.status_code, 422)
+            self.assertEqual(duplicate_demand.json()["detail"]["code"], "trial_validation_error")
 
             other = client.get(
                 "/api/trial/v1/bootstrap",

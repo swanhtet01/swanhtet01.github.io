@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 import re
 from typing import Any, Callable
 
+from supermega_runtime.commerce_runtime import validate_commerce_state
 from supermega_runtime.plant_order_foundation import (
     PlantOrderValidationError,
     create_empty_plant_order_state,
@@ -3924,6 +3925,7 @@ def create_production_job_from_intent(
         required=frozenset(
             {"jobId", "line", "product", "target", "owner", "priority", "dueAt"}
         ),
+        optional=frozenset({"shopDemandSource"}),
     )
     evidence = _evidence(evidence_value)
     job_id = _text(intent["jobId"], "production job intent.jobId", maximum=80)
@@ -3951,6 +3953,16 @@ def create_production_job_from_intent(
         "owner": owner,
         "priority": priority,
         "dueAt": due_at,
+        **(
+            {
+                "shopDemandSource": _shop_demand_source(
+                    intent["shopDemandSource"],
+                    "production job intent.shopDemandSource",
+                )
+            }
+            if "shopDemandSource" in intent
+            else {}
+        ),
     }
     event = {
         "id": f"EVT-{evidence['actionId']}",
@@ -3974,6 +3986,75 @@ def create_production_job_from_intent(
             "events": [event, *current["events"]],
         }
     )
+
+
+def require_shop_demand_source_current(
+    production_value: Mapping[str, Any],
+    commerce_value: Mapping[str, Any],
+    source_value: Mapping[str, Any],
+) -> None:
+    """Reject a Plant job when its immutable Shop demand snapshot is stale."""
+
+    production = validate_production_state(production_value)
+    commerce = validate_commerce_state(commerce_value)
+    source = _shop_demand_source(source_value, "production job intent.shopDemandSource")
+    snapshot = source["snapshot"]
+    matches = [item for item in commerce["items"] if item["sku"] == snapshot["sku"]]
+    if len(matches) != 1 or matches[0]["name"] != snapshot["productName"]:
+        raise TrialValidationError("Shop demand source no longer matches the current catalog.")
+    item = matches[0]
+    active_orders = sorted(
+        (
+            order
+            for order in commerce["orders"]
+            if order["status"] in {"confirmed", "preparing", "ready"}
+        ),
+        key=lambda order: order["id"],
+    )
+    source_order_ids: list[str] = []
+    active_demand_units = 0
+    for order in active_orders:
+        lines = (
+            order["lines"]
+            if isinstance(order.get("lines"), list) and order["lines"]
+            else [{"sku": order["itemSku"], "quantity": order["quantity"]}]
+            if order.get("itemSku")
+            else []
+        )
+        matching_lines = [line for line in lines if line["sku"] == item["sku"]]
+        if not matching_lines:
+            continue
+        active_demand_units += sum(line["quantity"] for line in matching_lines)
+        source_order_ids.append(order["id"])
+    available = item["onHand"]
+    uncovered = max(0, active_demand_units - available)
+    replenishment_gap = max(0, item["reorderAt"] - available)
+    if not uncovered and not replenishment_gap:
+        raise TrialValidationError("Shop no longer has uncovered or reorder demand.")
+    expected_snapshot = {
+        "schema": _SHOP_DEMAND_SCHEMA,
+        "operatingUnitLocationId": "LOC-MAIN",
+        "sku": item["sku"],
+        "productName": item["name"],
+        "sourceOrderIds": sorted(source_order_ids),
+        "activeDemandUnits": active_demand_units,
+        "uncoveredDemandUnits": uncovered,
+        "availableToPromiseUnits": available,
+        "reorderAtUnits": item["reorderAt"],
+        "replenishmentGapUnits": replenishment_gap,
+        "recommendedBatchUnits": max(1, uncovered, replenishment_gap),
+    }
+    if snapshot != expected_snapshot:
+        raise TrialValidationError("Shop demand source changed before Plant job creation.")
+    product_keys = {item["sku"].casefold(), item["name"].casefold()}
+    if any(
+        "closure" not in job
+        and "qualityHold" not in job
+        and job["output"] + job.get("scrap", 0) < job["target"]
+        and job["product"].strip().casefold() in product_keys
+        for job in production["jobs"]
+    ):
+        raise TrialValidationError("Shop demand is already covered by an active Plant job.")
 
 
 def reduce_production_state(
@@ -4092,6 +4173,7 @@ __all__ = [
     "PRODUCTION_HUMAN_EVENTS",
     "PRODUCTION_SCHEMA",
     "create_production_job_from_intent",
+    "require_shop_demand_source_current",
     "project_production_maintenance_due_queue",
     "reduce_production_state",
     "validate_production_state",
