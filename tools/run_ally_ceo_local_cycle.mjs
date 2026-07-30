@@ -11,6 +11,7 @@ import { promisify } from 'node:util'
 import { ALLY_CEO_RESOURCE_ENVELOPE_CONTRACT, buildAllyCeoCompanyPlan } from '../kernel/ally-ceo-company-plan.mjs'
 
 export const ALLY_CEO_LOCAL_CYCLE_CONTRACT = 'supermega.ally-ceo-local-cycle.v1'
+export const ALLY_CEO_OWNER_BRIEF_CONTRACT = 'supermega.ally-ceo-owner-brief.v1'
 
 const execFileAsync = promisify(execFile)
 const root = resolve(import.meta.dirname, '..')
@@ -129,6 +130,76 @@ const SPECIALIST_OUTPUT_GRAMMAR = 'Write each specialist section as plain text o
 
 function fail(reason) {
   throw new Error(reason)
+}
+
+function buildOwnerBrief({
+  status,
+  outcomeId = null,
+  completedOutcomeIds = [],
+  rejectedOutcomes = [],
+  skippedOutcomes = [],
+  capacityAdmission = null,
+}) {
+  const attention = []
+  if (rejectedOutcomes.length > 0) {
+    attention.push({
+      code: 'quality_review_required',
+      count: rejectedOutcomes.length,
+      outcomeIds: rejectedOutcomes.map((item) => item.outcomeId),
+    })
+  }
+  const gatedProduct = skippedOutcomes.find((item) => item.outcomeId === 'product-portfolio-control')
+  if (gatedProduct) {
+    attention.push({
+      code: 'managed_pilot_authorization_required',
+      count: gatedProduct.gatedProductWork.length,
+      productIds: gatedProduct.gatedProductWork.map((item) => item.productId),
+    })
+  }
+  if (capacityAdmission?.companyAttentionStatus === 'attention_required') {
+    attention.push({
+      code: 'retained_company_quality_attention',
+      count: capacityAdmission.companyAdvisories.length,
+      advisories: [...capacityAdmission.companyAdvisories],
+    })
+  }
+
+  let briefStatus = 'no_action'
+  let headline = 'No owner decision is required for this local cycle.'
+  let nextAction = 'leave_external_gates_closed'
+  if (attention.some((item) => item.code === 'quality_review_required' || item.code === 'retained_company_quality_attention')) {
+    briefStatus = 'quality_review_required'
+    headline = 'Review retained quality evidence before retrying any failed company outcome.'
+    nextAction = 'review_quality_failures_before_retry'
+  } else if (gatedProduct) {
+    briefStatus = 'decision_required'
+    headline = 'Four internal outcomes are complete; choose at most one managed product pilot to authorize.'
+    nextAction = 'authorize_one_managed_pilot_or_leave_all_external_gates_closed'
+  } else if (status === 'ready' || status === 'executing') {
+    briefStatus = 'local_action_ready'
+    headline = `One bounded local ${outcomeId || 'company'} outcome is ready.`
+    nextAction = 'run_one_local_company_outcome'
+  } else if (status === 'accepted' || status === 'existing') {
+    briefStatus = 'review_required'
+    headline = `One bounded local ${outcomeId || 'company'} brief is ready for review.`
+    nextAction = 'review_accepted_local_brief'
+  }
+
+  return {
+    contract: ALLY_CEO_OWNER_BRIEF_CONTRACT,
+    status: briefStatus,
+    reviewBudgetMinutes: 10,
+    headline,
+    nextAction,
+    completedOutcomeCount: completedOutcomeIds.length,
+    attentionCount: attention.length,
+    attention,
+    controls: {
+      codeOwned: true,
+      externalActionPerformed: false,
+      connectorRequests: 0,
+    },
+  }
 }
 
 function sha256(value) {
@@ -1143,6 +1214,12 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
       },
       modelCalls: 0,
       queueWrites: 0,
+      ownerBrief: buildOwnerBrief({
+        status: rotation.allDone ? 'period_complete' : 'period_incomplete',
+        completedOutcomeIds: rotation.completedOutcomeIds,
+        rejectedOutcomes: rotation.rejectedOutcomes,
+        skippedOutcomes: rotation.skippedOutcomes,
+      }),
       controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
     }
   }
@@ -1239,6 +1316,13 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
         knowledgeRefresh,
         modelCalls: 0,
         queueWrites: 0,
+        ownerBrief: buildOwnerBrief({
+          status: inspected.reason ? 'existing_rejected' : 'existing',
+          outcomeId: spec.outcomeId,
+          completedOutcomeIds,
+          skippedOutcomes,
+          capacityAdmission,
+        }),
         controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
       }
     }
@@ -1271,6 +1355,14 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     liveHq,
     sourceCount,
     knowledgeRefresh,
+    ownerBrief: buildOwnerBrief({
+      status: execute ? 'executing' : 'ready',
+      outcomeId: spec.outcomeId,
+      completedOutcomeIds,
+      rejectedOutcomes,
+      skippedOutcomes,
+      capacityAdmission,
+    }),
     controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
   }
   if (!execute) return { ...base, status: 'ready', modelCalls: 0, queueWrites: 0 }
@@ -1339,6 +1431,14 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     modelCalls,
     queueWrites: 1,
     finalHost,
+    ownerBrief: buildOwnerBrief({
+      status: result.qualityPassed ? 'accepted' : 'quality_failed',
+      outcomeId: spec.outcomeId,
+      completedOutcomeIds,
+      rejectedOutcomes,
+      skippedOutcomes,
+      capacityAdmission,
+    }),
   }
 }
 
@@ -1388,4 +1488,4 @@ if (invokedDirectly) {
   })
 }
 
-export default { ALLY_CEO_LOCAL_CYCLE_CONTRACT, runAllyCeoLocalCycle }
+export default { ALLY_CEO_LOCAL_CYCLE_CONTRACT, ALLY_CEO_OWNER_BRIEF_CONTRACT, runAllyCeoLocalCycle }

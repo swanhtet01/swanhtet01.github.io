@@ -116,8 +116,11 @@ function Get-LocalCompanyHealthPayload {
     $request.Accept = 'application/json'
     $request.AllowAutoRedirect = $false
     $request.Proxy = $null
-    $request.Timeout = 2000
-    $request.ReadWriteTimeout = 2000
+    # The Ally can take more than two seconds to schedule even this bounded
+    # loopback response under memory pressure. Stay finite, but avoid rejecting
+    # a healthy exact worker solely because the host is low power.
+    $request.Timeout = 6000
+    $request.ReadWriteTimeout = 6000
     $response = $request.GetResponse()
     try {
         if ($response.StatusCode -ne [System.Net.HttpStatusCode]::OK) { throw 'local_company_health_http_invalid' }
