@@ -50,6 +50,7 @@ _BASE_OWNER_CAPABILITIES = frozenset(
         "approvals.read",
         "approvals.request",
         "company.baseline.approve",
+        "company.control.approve",
         "company.read",
         "company.write",
         "setup.read",

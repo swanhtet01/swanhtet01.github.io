@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 
 import { readBehaviorTrail, recordBehaviorSignal, summarizeBehaviorPreferences, type BehaviorProductId, type BehaviorTrailEntry } from './behavior-trail'
@@ -11,13 +11,23 @@ import {
   type BusinessCommandIntent,
 } from './business-command'
 import {
+  acknowledgeManagedOwnerControlItem,
   currentManagedIdentity,
+  loadManagedOwnerControlRun,
   loadManagedCompanyBrief,
   retainManagedCompanyBrief,
   type ManagedCompanyBrief,
   type ManagedIdentity,
+  type ManagedOwnerControlRun,
 } from './managed-trial'
 import { operatingChangeCopy } from './operating-baseline'
+import {
+  acknowledgeLocalOwnerControlItem,
+  buildLocalOwnerControlRun,
+  readLocalOwnerControlAcknowledgements,
+  type LocalOwnerControlRun,
+  type OwnerControlItem,
+} from './owner-control'
 
 type ProductHomeReadinessProps = {
   activationCoverage: number
@@ -37,9 +47,17 @@ const productContinuations = {
 export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHostedAction, progress, ready }: ProductHomeReadinessProps) {
   const commandInputRef = useRef<HTMLInputElement>(null)
   const managedRequestRef = useRef(0)
+  const ownerControlRequestRef = useRef(0)
   const [behaviorTrail] = useState<BehaviorTrailEntry[]>(() => readBehaviorTrail(window.localStorage))
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState<BusinessCommandAnswer | ManagedCompanyBrief>(() => buildBusinessCommandAnswer(readLocalBusinessSnapshot(window.localStorage), 'attention'))
+  const [localOwnerControl, setLocalOwnerControl] = useState<LocalOwnerControlRun>(() => buildLocalOwnerControlRun(
+    readLocalBusinessSnapshot(window.localStorage),
+    readLocalOwnerControlAcknowledgements(window.localStorage),
+  ))
+  const [managedOwnerControl, setManagedOwnerControl] = useState<{ run: ManagedOwnerControlRun; identity: ManagedIdentity } | null>(null)
+  const [ownerControlNotice, setOwnerControlNotice] = useState('')
+  const [ownerControlPending, setOwnerControlPending] = useState(false)
   const [managedContext, setManagedContext] = useState<{ brief: ManagedCompanyBrief; identity: ManagedIdentity } | null>(null)
   const [managedNotice, setManagedNotice] = useState('')
   const [managedPending, setManagedPending] = useState(false)
@@ -48,6 +66,9 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
   const preferredContinuation = behaviorPreference.preferred ? productContinuations[behaviorPreference.preferred.product] : null
   const managedBriefRetained = managedContext?.brief.retention === 'persisted_managed_audit'
   const managedLearning = managedContext ? operatingChangeCopy(managedContext.brief.operatingChange) : null
+  const ownerControl = managedOwnerControl?.run ?? localOwnerControl
+  const ownerControlPrimary = ownerControl.items.find((item) => item.status === 'pending') ?? null
+  const ownerControlMode = managedOwnerControl ? 'managed' : 'local'
   const commandPath = ready && preferredContinuation ? preferredContinuation.path : ready ? '/settings/#controls' : '/settings/'
   const commandLabel = ready && preferredContinuation ? `Continue ${preferredContinuation.label}` : ready ? 'Export evidence' : 'Finish setup'
   const trackActionRows = [
@@ -75,6 +96,40 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
     ['Operate products', behaviorProducts ? `${behaviorProducts}/4 touched` : 'Pick one product', 'Shop, Plant, Website, and Ecommerce stay separate apps but share one evidence and approval system.'],
   ] as const
 
+  const refreshLocalOwnerControl = useCallback(() => {
+    setLocalOwnerControl(buildLocalOwnerControlRun(
+      readLocalBusinessSnapshot(window.localStorage),
+      readLocalOwnerControlAcknowledgements(window.localStorage),
+    ))
+    setOwnerControlNotice('')
+  }, [])
+
+  const refreshManagedOwnerControl = useCallback(async (successNotice = '') => {
+    const requestId = ownerControlRequestRef.current + 1
+    ownerControlRequestRef.current = requestId
+    const identity = await currentManagedIdentity()
+    if (requestId !== ownerControlRequestRef.current) return
+    if (!identity) {
+      setManagedOwnerControl(null)
+      setOwnerControlNotice('')
+      setOwnerControlPending(false)
+      return
+    }
+    setOwnerControlPending(true)
+    try {
+      const run = await loadManagedOwnerControlRun(identity)
+      if (requestId !== ownerControlRequestRef.current) return
+      setManagedOwnerControl({ run, identity })
+      setOwnerControlNotice(successNotice || `Managed workspace ${identity.workspaceId} / exact-source owner control.`)
+    } catch {
+      if (requestId !== ownerControlRequestRef.current) return
+      setManagedOwnerControl(null)
+      setOwnerControlNotice('Managed owner control is unavailable. The validated local run remains active.')
+    } finally {
+      if (requestId === ownerControlRequestRef.current) setOwnerControlPending(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (window.location.hash !== '#command-center') return
     window.requestAnimationFrame(() => {
@@ -82,6 +137,23 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
       commandInputRef.current?.focus()
     })
   }, [])
+
+  useEffect(() => {
+    const initialRefreshFrame = window.requestAnimationFrame(() => void refreshManagedOwnerControl())
+    const refreshOnFocus = () => {
+      refreshLocalOwnerControl()
+      void refreshManagedOwnerControl('Owner control refreshed from current managed evidence.')
+    }
+    const refreshOnStorage = () => refreshLocalOwnerControl()
+    window.addEventListener('focus', refreshOnFocus)
+    window.addEventListener('storage', refreshOnStorage)
+    return () => {
+      window.cancelAnimationFrame(initialRefreshFrame)
+      window.removeEventListener('focus', refreshOnFocus)
+      window.removeEventListener('storage', refreshOnStorage)
+      ownerControlRequestRef.current += 1
+    }
+  }, [refreshLocalOwnerControl, refreshManagedOwnerControl])
 
   async function refreshManagedBrief(intent: BusinessCommandIntent) {
     const requestId = managedRequestRef.current + 1
@@ -151,6 +223,65 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
     })
   }
 
+  function recordOwnerControlFollow(item: OwnerControlItem | ManagedOwnerControlRun['items'][number]) {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_chosen',
+      product: item.product === 'shop'
+        ? 'commerce'
+        : item.product === 'plant'
+          ? 'production'
+          : item.product,
+      route: window.location.pathname + window.location.search + window.location.hash,
+      detail: `Follow Owner Control: ${item.intent}`,
+    })
+  }
+
+  async function acknowledgeOwnerControl() {
+    if (!ownerControlPrimary || ownerControlPending) return
+    if (managedOwnerControl) {
+      const requestId = ownerControlRequestRef.current + 1
+      ownerControlRequestRef.current = requestId
+      setOwnerControlPending(true)
+      setOwnerControlNotice('Acknowledging this exact managed evidence...')
+      try {
+        const response = await acknowledgeManagedOwnerControlItem({
+          run: managedOwnerControl.run,
+          itemId: ownerControlPrimary.itemId,
+          commandId: crypto.randomUUID(),
+          identity: managedOwnerControl.identity,
+        })
+        if (requestId !== ownerControlRequestRef.current) return
+        setManagedOwnerControl({ ...managedOwnerControl, run: response.run })
+        setOwnerControlNotice(response.retention.idempotentReplay
+          ? 'This exact evidence was already acknowledged.'
+          : 'Owner acknowledgement retained. Changed source evidence will open a new run.')
+      } catch {
+        if (requestId !== ownerControlRequestRef.current) return
+        setOwnerControlNotice('Nothing was acknowledged. Refreshing current managed evidence...')
+        await refreshManagedOwnerControl('Managed evidence changed. SuperMega opened the current control run.')
+      } finally {
+        if (requestId === ownerControlRequestRef.current) setOwnerControlPending(false)
+      }
+      return
+    }
+    const currentAcknowledgements = readLocalOwnerControlAcknowledgements(window.localStorage)
+    const currentRun = buildLocalOwnerControlRun(readLocalBusinessSnapshot(window.localStorage), currentAcknowledgements)
+    if (currentRun.runKey !== localOwnerControl.runKey
+      || currentRun.sourceFingerprint !== localOwnerControl.sourceFingerprint
+      || !currentRun.items.some((item) => item.itemId === ownerControlPrimary.itemId && item.status === 'pending')) {
+      setLocalOwnerControl(currentRun)
+      setOwnerControlNotice('Business records changed. SuperMega opened a fresh control run before acknowledgement.')
+      return
+    }
+    try {
+      const acknowledgements = acknowledgeLocalOwnerControlItem(window.localStorage, currentRun, ownerControlPrimary as OwnerControlItem)
+      setLocalOwnerControl(buildLocalOwnerControlRun(readLocalBusinessSnapshot(window.localStorage), acknowledgements))
+      setOwnerControlNotice('Local acknowledgement kept for this exact source revision. Changed records will reopen the run.')
+    } catch {
+      setOwnerControlNotice('Nothing was acknowledged. Browser storage is unavailable or the source revision changed.')
+    }
+  }
+
   async function retainBrief() {
     if (!managedContext || managedPending) return
     const requestId = managedRequestRef.current
@@ -202,6 +333,33 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
             <h2>Ask what needs attention.</h2>
             <p>Free mode answers from validated local Shop, Plant, Website, and Ecommerce records. Premium can add approved managed history and cross-workflow context.</p>
           </div>
+        </div>
+        <div className="owner-control-run" aria-label="Owner Control run" data-mode={ownerControlMode}>
+          <div className="owner-control-run-head">
+            <div>
+              <span>{ownerControlMode === 'managed' ? 'Premium managed control' : 'Free local control'} · {ownerControl.sourceCount}/4 validated sources</span>
+              <h3>{ownerControl.title}</h3>
+              <p>{ownerControl.summary}</p>
+            </div>
+            <strong>{ownerControl.pendingCount} open · {ownerControl.acknowledgedCount} acknowledged</strong>
+          </div>
+          {ownerControlPrimary ? <div className="owner-control-primary" data-priority={ownerControlPrimary.priority}>
+            <div>
+              <span>{ownerControlPrimary.priority} priority · {ownerControlPrimary.product}</span>
+              <strong>{ownerControlPrimary.title}</strong>
+              <small>{ownerControlPrimary.summary}</small>
+            </div>
+            <div className="form-actions">
+              <button className="core-button" disabled={ownerControlPending} onClick={() => void acknowledgeOwnerControl()} type="button">Acknowledge review</button>
+              <Link className="core-button primary" onClick={() => recordOwnerControlFollow(ownerControlPrimary)} to={ownerControlPrimary.nextAction.path}>{ownerControlPrimary.nextAction.label}</Link>
+            </div>
+          </div> : <p className="owner-control-clear">No repeated check is required for unchanged evidence. A new validated source revision opens the next run automatically.</p>}
+          {ownerControl.items.length > 1 ? <details className="owner-control-queue">
+            <summary>Review queue <span>{ownerControl.items.length}</span></summary>
+            <div>{ownerControl.items.map((item) => <span key={item.itemId}><strong>{item.product}</strong><small>{item.status} · {item.title}</small></span>)}</div>
+          </details> : null}
+          <p className="business-command-boundary">Acknowledgement confirms review only. It does not claim resolution or run any product or external action.</p>
+          {ownerControlNotice ? <p className="form-notice" role="status">{ownerControlNotice}</p> : null}
         </div>
         <form className="business-command-form" onSubmit={submitBusinessQuestion}>
           <label htmlFor="business-command-question">Business question</label>
