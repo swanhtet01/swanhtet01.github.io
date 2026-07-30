@@ -190,6 +190,35 @@ export type CommerceShippingDecision = {
   reviewedAt: string
 }
 
+export type CommercePaymentAdapter = 'pay_on_pickup' | 'cash_on_delivery' | 'kbzpay_manual'
+
+export type CommercePaymentPolicy = {
+  revision: number
+  adapter: CommercePaymentAdapter
+  allowedFulfilments: Array<'pickup' | 'delivery'>
+  maximumOrderMmk: number | null
+  instructions: string
+  status: 'active' | 'inactive'
+  effectiveFrom: string
+  effectiveUntil: string | null
+  proof: CommerceActionProof
+}
+
+export type CommercePaymentPolicyInput = Omit<CommercePaymentPolicy, 'revision' | 'proof'>
+
+export type CommercePaymentDecision = {
+  schema: 'supermega.commerce.payment-decision.v1'
+  status: 'approved' | 'rejected'
+  reason: 'approved' | 'not_found' | 'inactive' | 'not_effective' | 'fulfilment_not_allowed' | 'amount_exceeded'
+  adapter: CommercePaymentAdapter
+  policyRevision: number | null
+  policyActionId: string | null
+  maximumOrderMmk: number | null
+  instructions: string | null
+  reviewedAt: string
+  authorized: false
+}
+
 export type CommercePromotionDecisionReason = 'approved' | 'not_requested' | 'not_found' | 'inactive' | 'not_effective' | 'minimum_not_met'
 
 export type CommercePromotionDecision = {
@@ -347,6 +376,7 @@ export type CommerceOrder = {
   creditDecision?: CommerceOrderCreditDecision
   promotionDecision?: CommercePromotionDecision
   shippingDecision?: CommerceShippingDecision
+  paymentDecision?: CommercePaymentDecision
   sourceRecordId?: string
   evidenceReference?: string
   lines?: CommerceOrderLine[]
@@ -906,6 +936,7 @@ export type CommerceState = {
   customerCreditPolicies?: CommerceCustomerCreditPolicy[]
   promotionPolicies?: CommercePromotionPolicy[]
   shippingPolicies?: CommerceShippingPolicy[]
+  paymentPolicies?: CommercePaymentPolicy[]
   websiteIntakes?: CommerceWebsiteIntake[]
   storefrontRequests?: CommerceStorefrontRequest[]
   storefrontConfiguration?: CommerceStorefrontConfiguration
@@ -1156,6 +1187,7 @@ const maxAccountMappingConfigurations = 100
 const maxCustomerCreditPolicies = 500
 const maxPromotionPolicies = 200
 const maxShippingPolicies = 200
+const maxPaymentPolicies = 200
 const customerCreditTerms = new Set([0, 7, 30])
 const maxOrderLines = 20
 const maxReturnsPerOrder = 100
@@ -1728,7 +1760,7 @@ export function commerceOrderLocationAllocationPreview(state: CommerceState, ord
 }
 
 export function createEmptyCommerce(): CommerceState {
-  return { schema: COMMERCE_WORKSPACE_SCHEMA, items: [], orders: [], movements: [], closes: [], catalogBaselines: [], catalogChanges: [], promotionPolicies: [], shippingPolicies: [], websiteIntakes: [], storefrontRequests: [], purchaseOrders: [] }
+  return { schema: COMMERCE_WORKSPACE_SCHEMA, items: [], orders: [], movements: [], closes: [], catalogBaselines: [], catalogChanges: [], promotionPolicies: [], shippingPolicies: [], paymentPolicies: [], websiteIntakes: [], storefrontRequests: [], purchaseOrders: [] }
 }
 
 export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
@@ -1828,6 +1860,35 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
         evidenceReference: 'DEMO-SEED-SHIPPING-YGN-CENTRAL',
       },
     }],
+    paymentPolicies: [
+      {
+        revision: 3,
+        adapter: 'kbzpay_manual',
+        allowedFulfilments: ['delivery', 'pickup'],
+        maximumOrderMmk: 5_000_000,
+        instructions: 'Confirm the exact KBZPay reference in Shop before reconciliation.',
+        status: 'active', effectiveFrom: baselineProof.capturedAt, effectiveUntil: null,
+        proof: { ...baselineProof, actionId: 'ACT-DEMO-PAYMENT-KBZPAY', reason: 'Approve manual KBZPay review for the sample store.', evidenceReference: 'DEMO-SEED-PAYMENT-KBZPAY' },
+      },
+      {
+        revision: 2,
+        adapter: 'cash_on_delivery',
+        allowedFulfilments: ['delivery'],
+        maximumOrderMmk: 500_000,
+        instructions: 'Collect at delivery and reconcile the courier cash handoff in Shop.',
+        status: 'active', effectiveFrom: baselineProof.capturedAt, effectiveUntil: null,
+        proof: { ...baselineProof, actionId: 'ACT-DEMO-PAYMENT-COD', reason: 'Approve bounded cash on delivery for the sample store.', evidenceReference: 'DEMO-SEED-PAYMENT-COD' },
+      },
+      {
+        revision: 1,
+        adapter: 'pay_on_pickup',
+        allowedFulfilments: ['pickup'],
+        maximumOrderMmk: null,
+        instructions: 'Collect and reconcile payment at the Shop pickup handoff.',
+        status: 'active', effectiveFrom: baselineProof.capturedAt, effectiveUntil: null,
+        proof: { ...baselineProof, actionId: 'ACT-DEMO-PAYMENT-PICKUP', reason: 'Approve payment on pickup for the sample store.', evidenceReference: 'DEMO-SEED-PAYMENT-PICKUP' },
+      },
+    ],
     websiteIntakes: [],
     storefrontRequests: [],
     purchaseOrders: [{
@@ -1848,6 +1909,24 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
   }
 }
 
+export function upgradeCommerceSeedPolicies(stateValue: CommerceState) {
+  const state = validateCommerceState(stateValue)
+  const baseline = state.catalogBaselines?.find((candidate) => candidate.proof.actionId === 'ACT-DEMO-CATALOG-BASELINE')
+  const baselineTime = baseline ? Date.parse(baseline.proof.capturedAt) : Number.NaN
+  if (!baseline || Number.isNaN(baselineTime)) return state
+  const seed = createSeedCommerce(baselineTime)
+  const needsPromotion = (state.promotionPolicies?.length ?? 0) === 0
+  const needsShipping = (state.shippingPolicies?.length ?? 0) === 0
+  const needsPayment = (state.paymentPolicies?.length ?? 0) === 0
+  if (!needsPromotion && !needsShipping && !needsPayment) return state
+  return validateCommerceState({
+    ...state,
+    ...(needsPromotion ? { promotionPolicies: seed.promotionPolicies } : {}),
+    ...(needsShipping ? { shippingPolicies: seed.shippingPolicies } : {}),
+    ...(needsPayment ? { paymentPolicies: seed.paymentPolicies } : {}),
+  })
+}
+
 export function validateCommerceState(value: unknown): CommerceState {
   if (!isRecord(value) || value.schema !== COMMERCE_WORKSPACE_SCHEMA) throw new Error('Commerce workspace schema is not v2.')
   if (!Array.isArray(value.items) || !Array.isArray(value.orders) || !Array.isArray(value.movements) || !Array.isArray(value.closes)) throw new Error('Commerce workspace collections are incomplete.')
@@ -1858,6 +1937,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (value.customerCreditPolicies !== undefined && !Array.isArray(value.customerCreditPolicies)) throw new Error('Commerce customer credit policies must be an array when present.')
   if (value.promotionPolicies !== undefined && !Array.isArray(value.promotionPolicies)) throw new Error('Commerce promotion policies must be an array when present.')
   if (value.shippingPolicies !== undefined && !Array.isArray(value.shippingPolicies)) throw new Error('Commerce shipping policies must be an array when present.')
+  if (value.paymentPolicies !== undefined && !Array.isArray(value.paymentPolicies)) throw new Error('Commerce payment policies must be an array when present.')
   if (value.websiteIntakes !== undefined && !Array.isArray(value.websiteIntakes)) throw new Error('Commerce Website intakes must be an array when present.')
   if (value.storefrontRequests !== undefined && !Array.isArray(value.storefrontRequests)) throw new Error('Commerce storefront requests must be an array when present.')
   if (value.storefrontConfiguration !== undefined && !isRecord(value.storefrontConfiguration)) throw new Error('Commerce storefront configuration must be an object when present.')
@@ -1889,6 +1969,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const customerCreditPolicies = (value.customerCreditPolicies ?? []) as unknown[]
   const promotionPolicies = (value.promotionPolicies ?? []) as unknown[]
   const shippingPolicies = (value.shippingPolicies ?? []) as unknown[]
+  const paymentPolicies = (value.paymentPolicies ?? []) as unknown[]
   const websiteIntakes = (value.websiteIntakes ?? []) as unknown[]
   const storefrontRequests = (value.storefrontRequests ?? []) as unknown[]
   const storefrontConfiguration = value.storefrontConfiguration
@@ -1900,6 +1981,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (customerCreditPolicies.length > maxCustomerCreditPolicies) throw new Error(`Commerce customer credit policies cannot exceed ${maxCustomerCreditPolicies}.`)
   if (promotionPolicies.length > maxPromotionPolicies) throw new Error(`Commerce promotion policies cannot exceed ${maxPromotionPolicies}.`)
   if (shippingPolicies.length > maxShippingPolicies) throw new Error(`Commerce shipping policies cannot exceed ${maxShippingPolicies}.`)
+  if (paymentPolicies.length > maxPaymentPolicies) throw new Error(`Commerce payment policies cannot exceed ${maxPaymentPolicies}.`)
   if (storefrontRequests.length > maxStorefrontRequests) throw new Error(`Commerce storefront requests cannot exceed ${maxStorefrontRequests}.`)
   if (purchaseOrders.length > maxPurchaseOrders) throw new Error(`Commerce purchase orders cannot exceed ${maxPurchaseOrders}.`)
   const itemSkus: string[] = []
@@ -1931,6 +2013,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const customerCreditPolicyActionIds: string[] = []
   const promotionPolicyActionIds: string[] = []
   const shippingPolicyActionIds: string[] = []
+  const paymentPolicyActionIds: string[] = []
   const purchaseOrderActionIds: string[] = []
   const purchaseOrderIds: string[] = []
   const activePurchaseOrderSkus: string[] = []
@@ -2236,6 +2319,37 @@ export function validateCommerceState(value: unknown): CommerceState {
     shippingPolicyActionIds.push(policy.proof.actionId)
   }
 
+  let newerPaymentPolicy: CommercePaymentPolicy | null = null
+  for (const [index, candidate] of paymentPolicies.entries()) {
+    const field = `paymentPolicies[${index}]`
+    if (!isRecord(candidate) || !hasExactKeys(candidate, [
+      'revision', 'adapter', 'allowedFulfilments', 'maximumOrderMmk', 'instructions',
+      'status', 'effectiveFrom', 'effectiveUntil', 'proof',
+    ])) throw new Error(`${field} is invalid.`)
+    assertSafeInteger(candidate.revision, `${field}.revision`, 1)
+    if (candidate.revision !== paymentPolicies.length - index) throw new Error(`${field}.revision breaks the newest-first sequence.`)
+    if (!['pay_on_pickup', 'cash_on_delivery', 'kbzpay_manual'].includes(String(candidate.adapter))) throw new Error(`${field}.adapter is invalid.`)
+    const allowedFulfilments = candidate.allowedFulfilments
+    if (!Array.isArray(allowedFulfilments) || allowedFulfilments.length < 1 || allowedFulfilments.length > 2
+      || allowedFulfilments.some((value) => !['delivery', 'pickup'].includes(String(value)))
+      || allowedFulfilments.some((value, fulfilmentIndex) => fulfilmentIndex > 0 && allowedFulfilments[fulfilmentIndex - 1] >= value)) throw new Error(`${field}.allowedFulfilments is invalid.`)
+    if (candidate.maximumOrderMmk !== null) assertSafeInteger(candidate.maximumOrderMmk, `${field}.maximumOrderMmk`, 1)
+    canonicalText(candidate.instructions, `${field}.instructions`, 240)
+    if (candidate.status !== 'active' && candidate.status !== 'inactive') throw new Error(`${field}.status is invalid.`)
+    if (!validTimestamp(candidate.effectiveFrom)
+      || candidate.effectiveUntil !== null && (!validTimestamp(candidate.effectiveUntil)
+        || (timestampMicros(candidate.effectiveUntil) as bigint) <= (timestampMicros(candidate.effectiveFrom) as bigint))) throw new Error(`${field} effective window is invalid.`)
+    if (!isRecord(candidate.proof)
+      || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !validProof(candidate.proof as CommerceActionProof)
+      || (timestampMicros(candidate.proof.capturedAt) as bigint) > (timestampMicros(candidate.effectiveFrom) as bigint)) throw new Error(`${field}.proof is invalid.`)
+    const policy = candidate as unknown as CommercePaymentPolicy
+    if (newerPaymentPolicy
+      && (timestampMicros(newerPaymentPolicy.proof.capturedAt) as bigint) < (timestampMicros(policy.proof.capturedAt) as bigint)) throw new Error(`${field} breaks the newest-first chronology.`)
+    newerPaymentPolicy = policy
+    paymentPolicyActionIds.push(policy.proof.actionId)
+  }
+
   for (const [index, candidate] of purchaseOrders.entries()) {
     if (!isRecord(candidate) || !hasExactKeys(
       candidate,
@@ -2452,6 +2566,25 @@ export function validateCommerceState(value: unknown): CommerceState {
       const deliveredTotal = pricedSubtotal + decision.feeMmk
       if (!Number.isSafeInteger(deliveredTotal)) throw new Error(`${field} exceeds the safe MMK boundary.`)
       pricedSubtotal = deliveredTotal
+    }
+    if (candidate.paymentDecision !== undefined) {
+      const field = `orders[${index}].paymentDecision`
+      if (!isRecord(candidate.paymentDecision) || !hasExactKeys(candidate.paymentDecision, [
+        'schema', 'status', 'reason', 'adapter', 'policyRevision', 'policyActionId',
+        'maximumOrderMmk', 'instructions', 'reviewedAt', 'authorized',
+      ]) || pricedSubtotal === null || !String(candidate.sourceRecordId ?? '').startsWith('ECR-')) throw new Error(`${field} is invalid.`)
+      const decision = candidate.paymentDecision as unknown as CommercePaymentDecision
+      const expected = commercePaymentDecision(
+        paymentPolicies as CommercePaymentPolicy[],
+        decision.adapter,
+        candidate.fulfilment as 'pickup' | 'delivery',
+        pricedSubtotal,
+        decision.reviewedAt,
+      )
+      if (!expected || JSON.stringify(expected) !== JSON.stringify(decision)
+        || decision.status !== 'approved' || decision.authorized !== false
+        || candidate.payment !== commercePaymentAdapterLabel(decision.adapter)
+        || (timestampMicros(decision.reviewedAt) as bigint) > (timestampMicros(candidate.createdAt) as bigint)) throw new Error(`${field} does not match the Shop payment policy.`)
     }
     if (candidate.calculation !== undefined) {
       if (!isRecord(candidate.calculation)) throw new Error(`orders[${index}].calculation is invalid.`)
@@ -3510,6 +3643,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     ...customerCreditPolicyActionIds,
     ...promotionPolicyActionIds,
     ...shippingPolicyActionIds,
+    ...paymentPolicyActionIds,
     ...websiteIntakeCreationActionIds,
     ...closeActionIds,
     ...purchaseOrderActionIds,
@@ -3625,7 +3759,11 @@ export function loadCommerceWorkspace(storage = browserStorage()): CommerceWorks
   try { currentRaw = storage.getItem(COMMERCE_KEY) } catch { return { state: createEmptyCommerce(), source: 'recovery', error: 'Commerce storage could not be read. No local data was replaced.' } }
   if (currentRaw !== null) {
     try {
-      return { state: validateCommerceState(JSON.parse(currentRaw)), source: 'current', error: '' }
+      const current = validateCommerceState(JSON.parse(currentRaw))
+      const upgraded = upgradeCommerceSeedPolicies(current)
+      return upgraded === current
+        ? { state: current, source: 'current', error: '' }
+        : persistInitialState(storage, upgraded, 'current')
     } catch {
       return { state: createEmptyCommerce(), source: 'recovery', error: 'Commerce v2 data is malformed. Recovery failed closed without restoring or replacing older data.' }
     }
@@ -3737,6 +3875,7 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || commerceCustomerCreditPolicies(state).some((policy) => policy.proof.actionId === actionId)
     || commercePromotionPolicies(state).some((policy) => policy.proof.actionId === actionId)
     || commerceShippingPolicies(state).some((policy) => policy.proof.actionId === actionId)
+    || commercePaymentPolicies(state).some((policy) => policy.proof.actionId === actionId)
     || commerceWebsiteIntakes(state).some((intake) => intake.creation.actionId === actionId || intake.conversion?.actionId === actionId)
     || commercePurchaseOrders(state).some((purchaseOrder) => purchaseOrder.creation.actionId === actionId || purchaseOrder.cancellation?.actionId === actionId)
     || state.storefrontConfiguration?.saved.actionId === actionId
@@ -4000,6 +4139,57 @@ export function commercePromotionPolicies(state: CommerceState) {
 
 export function commerceShippingPolicies(state: CommerceState) {
   return state.shippingPolicies ?? []
+}
+
+export function commercePaymentPolicies(state: CommerceState) {
+  return state.paymentPolicies ?? []
+}
+
+export function commerceCurrentPaymentPolicy(state: CommerceState, adapter: CommercePaymentAdapter, atTime?: string) {
+  const atMicros = atTime === undefined ? null : timestampMicros(atTime)
+  if (!['pay_on_pickup', 'cash_on_delivery', 'kbzpay_manual'].includes(adapter) || (atTime !== undefined && atMicros === null)) return null
+  return commercePaymentPolicies(state).find((policy) => policy.adapter === adapter
+    && (atMicros === null || (timestampMicros(policy.proof.capturedAt) as bigint) <= atMicros)) ?? null
+}
+
+export function commercePaymentDecision(
+  policies: readonly CommercePaymentPolicy[],
+  adapter: CommercePaymentAdapter,
+  fulfilment: 'pickup' | 'delivery',
+  orderAmountMmk: number,
+  reviewedAtValue: string,
+): CommercePaymentDecision | null {
+  if (!['pay_on_pickup', 'cash_on_delivery', 'kbzpay_manual'].includes(adapter)
+    || !['pickup', 'delivery'].includes(fulfilment)
+    || !Number.isSafeInteger(orderAmountMmk) || orderAmountMmk < 1
+    || !validTimestamp(reviewedAtValue)) return null
+  const reviewedAt = new Date(reviewedAtValue).toISOString()
+  const reviewedMicros = timestampMicros(reviewedAt) as bigint
+  const policy = policies.find((candidate) => candidate.adapter === adapter
+    && (timestampMicros(candidate.proof.capturedAt) as bigint) <= reviewedMicros) ?? null
+  const base = {
+    schema: 'supermega.commerce.payment-decision.v1' as const,
+    adapter,
+    policyRevision: policy?.revision ?? null,
+    policyActionId: policy?.proof.actionId ?? null,
+    maximumOrderMmk: policy?.maximumOrderMmk ?? null,
+    instructions: policy?.instructions ?? null,
+    reviewedAt,
+    authorized: false as const,
+  }
+  if (!policy) return { ...base, status: 'rejected', reason: 'not_found' }
+  if (policy.status !== 'active') return { ...base, status: 'rejected', reason: 'inactive' }
+  if ((timestampMicros(policy.effectiveFrom) as bigint) > reviewedMicros
+    || policy.effectiveUntil !== null && reviewedMicros >= (timestampMicros(policy.effectiveUntil) as bigint)) return { ...base, status: 'rejected', reason: 'not_effective' }
+  if (!policy.allowedFulfilments.includes(fulfilment)) return { ...base, status: 'rejected', reason: 'fulfilment_not_allowed' }
+  if (policy.maximumOrderMmk !== null && orderAmountMmk > policy.maximumOrderMmk) return { ...base, status: 'rejected', reason: 'amount_exceeded' }
+  return { ...base, status: 'approved', reason: 'approved' }
+}
+
+export function commercePaymentAdapterLabel(adapter: CommercePaymentAdapter) {
+  if (adapter === 'cash_on_delivery') return 'Cash on delivery'
+  if (adapter === 'kbzpay_manual') return 'KBZPay'
+  return 'Cash'
 }
 
 export function commerceCurrentShippingPolicy(state: CommerceState, zoneValue: string, atTime?: string) {
@@ -5318,6 +5508,50 @@ export function configureCommerceShippingPolicy(
   return validateCommerceState({ ...current, shippingPolicies: [policy, ...history] })
 }
 
+export function configureCommercePaymentPolicy(
+  state: CommerceState,
+  input: CommercePaymentPolicyInput,
+  proof: CommerceActionProof,
+) {
+  if (!validProof(proof)
+    || !['pay_on_pickup', 'cash_on_delivery', 'kbzpay_manual'].includes(input?.adapter)
+    || !Array.isArray(input.allowedFulfilments) || input.allowedFulfilments.length < 1 || input.allowedFulfilments.length > 2
+    || input.allowedFulfilments.some((value) => !['delivery', 'pickup'].includes(value))
+    || input.allowedFulfilments.some((value, index) => index > 0 && input.allowedFulfilments[index - 1] >= value)
+    || (input.maximumOrderMmk !== null && (!Number.isSafeInteger(input.maximumOrderMmk) || input.maximumOrderMmk < 1))
+    || typeof input.instructions !== 'string' || input.instructions !== input.instructions.trim() || !input.instructions || input.instructions.length > 240
+    || (input.status !== 'active' && input.status !== 'inactive')
+    || !validTimestamp(input.effectiveFrom)
+    || (timestampMicros(proof.capturedAt) as bigint) > (timestampMicros(input.effectiveFrom) as bigint)
+    || (input.effectiveUntil !== null && (!validTimestamp(input.effectiveUntil)
+      || (timestampMicros(input.effectiveUntil) as bigint) <= (timestampMicros(input.effectiveFrom) as bigint)))) return null
+  const current = validateCommerceState(state)
+  const history = commercePaymentPolicies(current)
+  const replay = history.find((policy) => policy.proof.actionId === proof.actionId)
+  if (replay) return replay.adapter === input.adapter
+    && JSON.stringify(replay.allowedFulfilments) === JSON.stringify(input.allowedFulfilments)
+    && replay.maximumOrderMmk === input.maximumOrderMmk
+    && replay.instructions === input.instructions
+    && replay.status === input.status
+    && replay.effectiveFrom === input.effectiveFrom
+    && replay.effectiveUntil === input.effectiveUntil
+    && sameActionProof(replay.proof, proof) ? current : null
+  const latest = history[0]
+  const currentPolicy = commerceCurrentPaymentPolicy(current, input.adapter)
+  if (history.length >= maxPaymentPolicies
+    || actionIdIsUsed(current, proof.actionId)
+    || (currentPolicy
+      && JSON.stringify(currentPolicy.allowedFulfilments) === JSON.stringify(input.allowedFulfilments)
+      && currentPolicy.maximumOrderMmk === input.maximumOrderMmk
+      && currentPolicy.instructions === input.instructions
+      && currentPolicy.status === input.status
+      && currentPolicy.effectiveFrom === input.effectiveFrom
+      && currentPolicy.effectiveUntil === input.effectiveUntil)
+    || (latest && (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(latest.proof.capturedAt) as bigint))) return null
+  const policy: CommercePaymentPolicy = { revision: history.length + 1, ...input, proof: { ...proof } }
+  return validateCommerceState({ ...current, paymentPolicies: [policy, ...history] })
+}
+
 function validatedOrderLineSnapshots(order: CommerceOrder): CommerceOrderLine[] | null {
   if (!Array.isArray(order.lines) || order.lines.length < 1 || order.lines.length > maxOrderLines) return null
   const skus = new Set<string>()
@@ -5408,6 +5642,23 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
       || (timestampMicros(order.shippingDecision.reviewedAt) as bigint) > (timestampMicros(order.createdAt) as bigint)
       || (order.shippingDecision.promiseMinutes !== null
         && (promisedAt as bigint) < (timestampMicros(order.shippingDecision.reviewedAt) as bigint) + BigInt(order.shippingDecision.promiseMinutes) * 60_000_000n)) return null
+  }
+  if (order.paymentDecision) {
+    const reviewedAmount = (order.promotionDecision?.netSubtotalMmk ?? (order.lines
+      ? order.lines.reduce((sum, line) => sum + line.unitPriceMmk * line.quantity, 0)
+      : order.total - (order.shippingDecision?.feeMmk ?? 0))) + (order.shippingDecision?.feeMmk ?? 0)
+    const expectedPayment = commercePaymentDecision(
+      commercePaymentPolicies(state),
+      order.paymentDecision.adapter,
+      order.fulfilment as 'pickup' | 'delivery',
+      reviewedAmount,
+      order.paymentDecision.reviewedAt,
+    )
+    if (!order.sourceRecordId?.startsWith('ECR-')
+      || !expectedPayment || expectedPayment.status !== 'approved'
+      || JSON.stringify(expectedPayment) !== JSON.stringify(order.paymentDecision)
+      || order.payment !== commercePaymentAdapterLabel(order.paymentDecision.adapter)
+      || (timestampMicros(order.paymentDecision.reviewedAt) as bigint) > (timestampMicros(order.createdAt) as bigint)) return null
   }
   const proofMovements = state.movements.filter((movement) => movement.actionId === proof.actionId)
   if (proofMovements.length) {

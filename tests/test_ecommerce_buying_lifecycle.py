@@ -149,6 +149,38 @@ def shipping_policies() -> list[dict[str, object]]:
     }]
 
 
+def payment_policies() -> list[dict[str, object]]:
+    base_proof = {
+        "capturedAt": "2026-07-26T09:00:00+06:30",
+        "actor": "Commerce manager",
+        "reason": "Approve the payment method boundary for reviewed Shop orders.",
+    }
+    return [
+        {
+            "revision": 2,
+            "adapter": "kbzpay_manual",
+            "allowedFulfilments": ["delivery", "pickup"],
+            "maximumOrderMmk": 5_000_000,
+            "instructions": "Verify the customer proof before reconciling payment in Shop.",
+            "status": "active",
+            "effectiveFrom": "2026-07-26T09:00:00+06:30",
+            "effectiveUntil": None,
+            "proof": {**base_proof, "actionId": "ACT-PAYMENT-KBZPAY-R2", "evidenceReference": "PAYMENT-KBZPAY-R2"},
+        },
+        {
+            "revision": 1,
+            "adapter": "pay_on_pickup",
+            "allowedFulfilments": ["pickup"],
+            "maximumOrderMmk": None,
+            "instructions": "Collect at the pickup counter and reconcile in Shop.",
+            "status": "active",
+            "effectiveFrom": "2026-07-26T09:00:00+06:30",
+            "effectiveUntil": None,
+            "proof": {**base_proof, "actionId": "ACT-PAYMENT-PICKUP-R1", "evidenceReference": "PAYMENT-PICKUP-R1"},
+        },
+    ]
+
+
 def completed_order() -> dict[str, object]:
     return {
         "id": "ORD-1001",
@@ -238,6 +270,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
             current_catalog=current_catalog(),
             current_promotion_policies=promotion_policies(),
             current_shipping_policies=shipping_policies(),
+            current_payment_policies=payment_policies(),
             confirmed_at="2026-07-26T10:10:00+06:30",
         )
         self.assertEqual(draft["customerProfile"], first["customerProfile"])
@@ -355,12 +388,15 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
             current_catalog=current_catalog(),
             current_promotion_policies=promotion_policies(),
             current_shipping_policies=shipping_policies(),
+            current_payment_policies=payment_policies(),
             confirmed_at="2026-07-26T10:10:00+06:30",
         )
         self.assertEqual(draft["schema"], ECOMMERCE_SHOP_DRAFT_SCHEMA)
         self.assertEqual(draft["state"], "review_required")
         self.assertEqual(draft["lines"], candidate["lines"])
-        self.assertEqual(draft["pricing"]["payment"]["status"], "not_authorized")
+        self.assertEqual(draft["pricing"]["payment"]["status"], "approved")
+        self.assertFalse(draft["pricing"]["payment"]["authorized"])
+        self.assertEqual(draft["pricing"]["payment"]["policyRevision"], 2)
         self.assertEqual(draft["pricing"]["promotion"]["status"], "approved")
         self.assertEqual(draft["pricing"]["promotion"]["policyRevision"], 1)
         self.assertEqual(draft["pricing"]["promotion"]["discountMmk"], 5_650)
@@ -371,6 +407,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
                 current_catalog=current_catalog(),
                 current_promotion_policies=promotion_policies(),
                 current_shipping_policies=shipping_policies(),
+                current_payment_policies=payment_policies(),
                 confirmed_at="2026-07-26T10:15:01+06:30",
             )
 
@@ -391,6 +428,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
                         current_catalog=catalog,
                         current_promotion_policies=promotion_policies(),
                         current_shipping_policies=shipping_policies(),
+                        current_payment_policies=payment_policies(),
                         confirmed_at="2026-07-26T10:10:00+06:30",
                     )
                 self.assertEqual(catalog, before)

@@ -22,7 +22,7 @@ ECOMMERCE_QUOTE_SCHEMA = "supermega.ecommerce.checkout_quote.v1"
 ECOMMERCE_CUSTOMER_PROFILE_SCHEMA = "supermega.ecommerce.customer_profile_snapshot.v1"
 ECOMMERCE_DELIVERY_ADDRESS_SCHEMA = "supermega.ecommerce.delivery_address_snapshot.v1"
 ECOMMERCE_REQUEST_SCHEMA = "supermega.ecommerce.order_request.v2"
-ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v5"
+ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v6"
 ECOMMERCE_RETURN_INTENT_SCHEMA = "supermega.ecommerce.return_intent.v1"
 ECOMMERCE_SUPPORT_INTENT_SCHEMA = "supermega.ecommerce.support_intent.v1"
 ECOMMERCE_LIFECYCLE_STATE_SCHEMA = "supermega.ecommerce.buying_lifecycle.v1"
@@ -1036,12 +1036,100 @@ def review_ecommerce_promotion(
     return _promotion_decision(policies, code, gross_subtotal_mmk, _timestamp(reviewed_at, "reviewedAt"))
 
 
+def _payment_policy(value: object, field: str) -> dict[str, Any]:
+    source = _object(value, field, (
+        "revision", "adapter", "allowedFulfilments", "maximumOrderMmk", "instructions",
+        "status", "effectiveFrom", "effectiveUntil", "proof",
+    ))
+    adapter = source["adapter"]
+    if adapter not in {"pay_on_pickup", "cash_on_delivery", "kbzpay_manual"}:
+        raise _fail(f"{field}.adapter is invalid.")
+    allowed_fulfilments = [
+        _text(candidate, f"{field}.allowedFulfilments[{index}]", maximum=8)
+        for index, candidate in enumerate(_array(source["allowedFulfilments"], f"{field}.allowedFulfilments", minimum=1, maximum=2))
+    ]
+    if any(candidate not in {"delivery", "pickup"} for candidate in allowed_fulfilments) or allowed_fulfilments != sorted(set(allowed_fulfilments)):
+        raise _fail(f"{field}.allowedFulfilments must use unique canonical order.")
+    maximum_order_mmk = None if source["maximumOrderMmk"] is None else _integer(source["maximumOrderMmk"], f"{field}.maximumOrderMmk", minimum=1)
+    proof = _object(source["proof"], f"{field}.proof", ("actionId", "capturedAt", "actor", "reason", "evidenceReference"))
+    effective_from = _timestamp(source["effectiveFrom"], f"{field}.effectiveFrom")
+    effective_until = None if source["effectiveUntil"] is None else _timestamp(source["effectiveUntil"], f"{field}.effectiveUntil")
+    if effective_until is not None and _instant(effective_until) <= _instant(effective_from):
+        raise _fail(f"{field} effective window is invalid.")
+    captured_at = _timestamp(proof["capturedAt"], f"{field}.proof.capturedAt")
+    if _instant(captured_at) > _instant(effective_from):
+        raise _fail(f"{field}.proof is later than its effective start.")
+    if source["status"] not in {"active", "inactive"}:
+        raise _fail(f"{field}.status is invalid.")
+    return {
+        "revision": _integer(source["revision"], f"{field}.revision", minimum=1),
+        "adapter": adapter,
+        "allowedFulfilments": allowed_fulfilments,
+        "maximumOrderMmk": maximum_order_mmk,
+        "instructions": _text(source["instructions"], f"{field}.instructions", maximum=240),
+        "status": source["status"],
+        "effectiveFrom": effective_from,
+        "effectiveUntil": effective_until,
+        "proof": {
+            "actionId": _text(proof["actionId"], f"{field}.proof.actionId", maximum=160),
+            "capturedAt": captured_at,
+            "actor": _text(proof["actor"], f"{field}.proof.actor", maximum=180),
+            "reason": _text(proof["reason"], f"{field}.proof.reason", maximum=180),
+            "evidenceReference": _text(proof["evidenceReference"], f"{field}.proof.evidenceReference", maximum=180),
+        },
+    }
+
+
+def validate_ecommerce_payment_policy(value: object, field: str = "paymentPolicy") -> dict[str, Any]:
+    return _payment_policy(value, field)
+
+
+def review_ecommerce_payment(
+    policies: Sequence[Mapping[str, object]],
+    adapter_value: object,
+    fulfilment: str,
+    order_amount_mmk: int,
+    reviewed_at: str,
+) -> dict[str, Any]:
+    reviewed = _timestamp(reviewed_at, "reviewedAt")
+    adapter = _text(adapter_value, "paymentAdapter", maximum=40)
+    if adapter not in {"pay_on_pickup", "cash_on_delivery", "kbzpay_manual"}:
+        raise _fail("paymentAdapter is invalid.")
+    if fulfilment not in {"pickup", "delivery"}:
+        raise _fail("fulfilment is invalid.")
+    amount = _integer(order_amount_mmk, "orderAmountMmk", minimum=1)
+    rows = [_payment_policy(value, f"paymentPolicies[{index}]") for index, value in enumerate(policies)]
+    policy = next((row for row in rows if row["adapter"] == adapter and _instant(row["proof"]["capturedAt"]) <= _instant(reviewed)), None)
+    base = {
+        "schema": "supermega.commerce.payment-decision.v1",
+        "adapter": adapter,
+        "policyRevision": policy["revision"] if policy else None,
+        "policyActionId": policy["proof"]["actionId"] if policy else None,
+        "maximumOrderMmk": policy["maximumOrderMmk"] if policy else None,
+        "instructions": policy["instructions"] if policy else None,
+        "reviewedAt": reviewed,
+        "authorized": False,
+    }
+    if policy is None:
+        return {**base, "status": "rejected", "reason": "not_found"}
+    if policy["status"] != "active":
+        return {**base, "status": "rejected", "reason": "inactive"}
+    if _instant(policy["effectiveFrom"]) > _instant(reviewed) or policy["effectiveUntil"] is not None and _instant(reviewed) >= _instant(policy["effectiveUntil"]):
+        return {**base, "status": "rejected", "reason": "not_effective"}
+    if fulfilment not in policy["allowedFulfilments"]:
+        return {**base, "status": "rejected", "reason": "fulfilment_not_allowed"}
+    if policy["maximumOrderMmk"] is not None and amount > policy["maximumOrderMmk"]:
+        return {**base, "status": "rejected", "reason": "amount_exceeded"}
+    return {**base, "status": "approved", "reason": "approved"}
+
+
 def prepare_ecommerce_shop_handoff(
     request_value: Mapping[str, object],
     *,
     current_catalog: Sequence[Mapping[str, object]],
     current_promotion_policies: Sequence[Mapping[str, object]],
     current_shipping_policies: Sequence[Mapping[str, object]],
+    current_payment_policies: Sequence[Mapping[str, object]],
     confirmed_at: str,
 ) -> dict[str, Any]:
     """Revalidate quote intent and prepare one review-only Shop draft."""
@@ -1087,6 +1175,15 @@ def prepare_ecommerce_shop_handoff(
     if shipping["status"] == "rejected":
         raise _fail(f"Shop delivery is unavailable for {shipping['township']} ({shipping['reason']}).")
     total_mmk = promotion["netSubtotalMmk"] + shipping["feeMmk"]
+    payment = review_ecommerce_payment(
+        current_payment_policies,
+        quote["payment"]["adapter"],
+        request["fulfilment"],
+        total_mmk,
+        confirmed,
+    )
+    if payment["status"] == "rejected":
+        raise _fail(f"Shop payment method is unavailable ({payment['reason']}).")
     draft = {
         "schema": ECOMMERCE_SHOP_DRAFT_SCHEMA,
         "mode": "browser-memory-shop-draft",
@@ -1119,7 +1216,7 @@ def prepare_ecommerce_shop_handoff(
             "promotion": promotion,
             "tax": _canonical_copy(quote["tax"]),
             "shipping": shipping,
-            "payment": _canonical_copy(quote["payment"]),
+            "payment": payment,
             "totalMmk": total_mmk,
         },
         "totalMmk": total_mmk,
@@ -1130,7 +1227,9 @@ def prepare_ecommerce_shop_handoff(
             f"{promotion['policyRevision'] if promotion['policyRevision'] is not None else 'none'}:"
             f"{promotion['discountMmk']}:shipping:{shipping['status']}:"
             f"{shipping['policyRevision'] if shipping['policyRevision'] is not None else 'none'}:"
-            f"{shipping['feeMmk']}"
+            f"{shipping['feeMmk']}:payment:{payment['status']}:"
+            f"{payment['policyRevision'] if payment['policyRevision'] is not None else 'none'}:"
+            f"{payment['adapter']}"
         ),
     }
     return _canonical_copy(draft)

@@ -285,6 +285,7 @@ const expectedHumanCommerceEvents = [
   'commerce.order.support_case_resolved',
   'commerce.order.support_case_service_recorded',
   'commerce.payment.reconciled',
+  'commerce.payment_policy.saved',
   'commerce.production_batch.received',
   'commerce.production_material.issued',
   'commerce.production_material.returned',

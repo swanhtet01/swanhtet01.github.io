@@ -877,6 +877,8 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         return dict(next_state["promotionPolicies"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.shipping_policy.saved":
         return dict(next_state["shippingPolicies"][0]["proof"])  # type: ignore[index,arg-type]
+    if event_type == "commerce.payment_policy.saved":
+        return dict(next_state["paymentPolicies"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.order.advanced":
         completed_orders = [
             order
@@ -1081,6 +1083,60 @@ def apply_event(
 
 
 class CommerceRuntimeTests(unittest.TestCase):
+    def test_ecommerce_payment_is_policy_bound_limited_and_never_authorized(self) -> None:
+        current = created_state("ORD-PAYMENT-POLICY-1")
+        configured = deepcopy(current)
+        configured["paymentPolicies"] = [{
+            "revision": 1,
+            "adapter": "pay_on_pickup",
+            "allowedFulfilments": ["pickup"],
+            "maximumOrderMmk": 250,
+            "instructions": "Collect at the counter and reconcile the receipt in Shop.",
+            "status": "active",
+            "effectiveFrom": "2026-07-23T08:00:00.000Z",
+            "effectiveUntil": None,
+            "proof": action_evidence(
+                "ACT-PAYMENT-PICKUP-R1",
+                captured_at="2026-07-23T08:00:00.000Z",
+                reason="Approved the pickup payment boundary.",
+            ),
+        }]
+        state = apply_event(current, "commerce.payment_policy.saved", configured)
+        self.assertEqual(apply_event(current, "commerce.payment_policy.saved", configured), state)
+
+        order = state["orders"][0]  # type: ignore[index]
+        order.update({
+            "sourceRecordId": "ECR-00000000-0000-4000-8000-000000000097",
+            "lines": [{"sku": "SKU-1", "name": "Test item", "quantity": 2, "unitPriceMmk": 100}],
+            "payment": "Cash",
+            "paymentDecision": {
+                "schema": "supermega.commerce.payment-decision.v1",
+                "status": "approved",
+                "reason": "approved",
+                "adapter": "pay_on_pickup",
+                "policyRevision": 1,
+                "policyActionId": "ACT-PAYMENT-PICKUP-R1",
+                "maximumOrderMmk": 250,
+                "instructions": "Collect at the counter and reconcile the receipt in Shop.",
+                "reviewedAt": NOW,
+                "authorized": False,
+            },
+        })
+        self.assertEqual(validate_commerce_state(state)["orders"][0]["payment"], "Cash")  # type: ignore[index]
+
+        for field, value in (("authorized", True), ("maximumOrderMmk", 500), ("policyRevision", 2)):
+            tampered = deepcopy(state)
+            tampered["orders"][0]["paymentDecision"][field] = value  # type: ignore[index]
+            with self.assertRaisesRegex(TrialValidationError, "versioned Shop policy"):
+                validate_commerce_state(tampered)
+        over_limit = deepcopy(state)
+        over_limit["paymentPolicies"][0]["maximumOrderMmk"] = 199  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "versioned Shop policy"):
+            validate_commerce_state(over_limit)
+        wrong_evidence = action_evidence("ACT-PAYMENT-WRONG-EVIDENCE")
+        with self.assertRaisesRegex(TrialValidationError, "payment policy proof"):
+            apply_event(current, "commerce.payment_policy.saved", configured, wrong_evidence)
+
     def test_ecommerce_shipping_is_policy_bound_and_prices_the_shop_order(self) -> None:
         current = created_state("ORD-SHIPPING-1")
         configured = deepcopy(current)
@@ -2648,6 +2704,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.customer_credit_policy.saved",
                     "commerce.promotion_policy.saved",
                     "commerce.shipping_policy.saved",
+                    "commerce.payment_policy.saved",
                     "commerce.service_schedule.initialized",
                     "commerce.service_schedule.saved",
                 }
@@ -2660,6 +2717,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIn("commerce.customer_credit_policy.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.promotion_policy.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.shipping_policy.saved", COMMERCE_EVENTS)
+        self.assertIn("commerce.payment_policy.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.service_schedule.initialized", COMMERCE_EVENTS)
         self.assertIn("commerce.service_schedule.saved", COMMERCE_EVENTS)
 

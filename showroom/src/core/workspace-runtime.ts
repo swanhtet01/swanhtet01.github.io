@@ -136,6 +136,7 @@ export type ActionKind =
   | 'customer_credit_policy'
   | 'promotion_policy'
   | 'shipping_policy'
+  | 'payment_policy'
   | 'production_job'
   | 'production_job_schedule'
   | 'production_job_close'

@@ -1,12 +1,15 @@
 import {
   commercePromotionDecision,
   commerceShippingDecision,
+  commercePaymentDecision,
   type CommerceItem,
   type CommerceOrder,
   type CommercePromotionDecision,
   type CommercePromotionPolicy,
   type CommerceShippingDecision,
   type CommerceShippingPolicy,
+  type CommercePaymentDecision,
+  type CommercePaymentPolicy,
 } from '../../core/commerce-workspace.ts'
 import {
   storefrontPreviewDigest,
@@ -19,10 +22,11 @@ export const ECOMMERCE_QUOTE_SCHEMA = 'supermega.ecommerce.checkout_quote.v1' as
 export const ECOMMERCE_CUSTOMER_PROFILE_SCHEMA = 'supermega.ecommerce.customer_profile_snapshot.v1' as const
 export const ECOMMERCE_DELIVERY_ADDRESS_SCHEMA = 'supermega.ecommerce.delivery_address_snapshot.v1' as const
 export const ECOMMERCE_REQUEST_SCHEMA_V2 = 'supermega.ecommerce.order_request.v2' as const
-export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V5 = 'supermega.ecommerce.shop_draft.v5' as const
-export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V4 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V5
-export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V3 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V5
-export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V2 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V5
+export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V6 = 'supermega.ecommerce.shop_draft.v6' as const
+export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V5 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V6
+export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V4 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V6
+export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V3 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V6
+export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V2 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V6
 export const ECOMMERCE_RETURN_INTENT_SCHEMA = 'supermega.ecommerce.return_intent.v1' as const
 export const ECOMMERCE_SUPPORT_INTENT_SCHEMA = 'supermega.ecommerce.support_intent.v1' as const
 export const ECOMMERCE_BUYING_STATE_SCHEMA = 'supermega.ecommerce.buying_lifecycle.v1' as const
@@ -152,7 +156,7 @@ export type EcommerceOrderRequestV2 = {
 }
 
 export type EcommerceShopDraftV2 = {
-  schema: typeof ECOMMERCE_SHOP_DRAFT_SCHEMA_V5
+  schema: typeof ECOMMERCE_SHOP_DRAFT_SCHEMA_V6
   mode: 'browser-memory-shop-draft'
   state: 'review_required'
   id: string
@@ -181,7 +185,7 @@ export type EcommerceShopDraftV2 = {
     promotion: CommercePromotionDecision
     tax: EcommerceCheckoutQuote['tax']
     shipping: CommerceShippingDecision
-    payment: EcommerceCheckoutQuote['payment']
+    payment: CommercePaymentDecision
     totalMmk: number
   }
   totalMmk: number
@@ -1399,6 +1403,7 @@ export async function prepareEcommerceShopDraftV2(input: {
   currentCatalog: CommerceItem[]
   currentPromotionPolicies: readonly CommercePromotionPolicy[]
   currentShippingPolicies: readonly CommerceShippingPolicy[]
+  currentPaymentPolicies: readonly CommercePaymentPolicy[]
   confirmedAt: string
 }): Promise<EcommerceShopDraftV2> {
   const request = await validateEcommerceOrderRequestV2(input.request)
@@ -1435,8 +1440,17 @@ export async function prepareEcommerceShopDraftV2(input: {
   if (shipping.status === 'rejected') throw new Error(`Shop delivery is unavailable for ${shipping.township ?? 'this township'} (${shipping.reason}).`)
   const totalMmk = promotion.netSubtotalMmk + shipping.feeMmk
   if (!Number.isSafeInteger(totalMmk) || totalMmk < 1) throw new Error('The Shop total exceeds the safe MMK boundary.')
+  const payment = commercePaymentDecision(
+    input.currentPaymentPolicies,
+    request.quote.payment.adapter,
+    request.fulfilment,
+    totalMmk,
+    confirmedAt,
+  )
+  if (!payment) throw new Error('The Shop payment decision is invalid.')
+  if (payment.status === 'rejected') throw new Error(`Shop payment method is unavailable (${payment.reason}).`)
   return {
-    schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V5,
+    schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V6,
     mode: 'browser-memory-shop-draft',
     state: 'review_required',
     id: `ESD-${request.id.slice(4)}`,
@@ -1467,11 +1481,11 @@ export async function prepareEcommerceShopDraftV2(input: {
       promotion,
       tax: canonicalCopy(request.quote.tax),
       shipping,
-      payment: canonicalCopy(request.quote.payment),
+      payment,
       totalMmk,
     },
     totalMmk,
-    evidenceReference: `ECOMMERCE:${request.id}:${request.sourcePreviewDigest}:${request.quote.quoteDigest}:${request.scope}:LOC-MAIN:ecommerce>commerce:human_review_required:${promotion.status}:${promotion.policyRevision ?? 'none'}:${promotion.discountMmk}:shipping:${shipping.status}:${shipping.policyRevision ?? 'none'}:${shipping.feeMmk}`,
+    evidenceReference: `ECOMMERCE:${request.id}:${request.sourcePreviewDigest}:${request.quote.quoteDigest}:${request.scope}:LOC-MAIN:ecommerce>commerce:human_review_required:${promotion.status}:${promotion.policyRevision ?? 'none'}:${promotion.discountMmk}:shipping:${shipping.status}:${shipping.policyRevision ?? 'none'}:${shipping.feeMmk}:payment:${payment.status}:${payment.policyRevision ?? 'none'}:${payment.adapter}`,
   }
 }
 
@@ -1480,6 +1494,7 @@ export async function prepareManagedEcommerceShopDraftV2(input: {
   currentCatalog: CommerceItem[]
   currentPromotionPolicies: readonly CommercePromotionPolicy[]
   currentShippingPolicies: readonly CommerceShippingPolicy[]
+  currentPaymentPolicies: readonly CommercePaymentPolicy[]
   confirmedAt: string
 }) {
   const request = await validateEcommerceOrderRequestV2(input.request)
@@ -1516,7 +1531,7 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
   const structuredFields = ['customerProfile', 'deliveryAddress']
   const structured = isRecord(value) && structuredFields.some((field) => field in value)
   const source = exactObject(value, 'Shop draft', structured ? [...baseFields, ...structuredFields] : baseFields)
-  if (source.schema !== ECOMMERCE_SHOP_DRAFT_SCHEMA_V5
+  if (source.schema !== ECOMMERCE_SHOP_DRAFT_SCHEMA_V6
     || source.mode !== 'browser-memory-shop-draft'
     || source.state !== 'review_required'
     || !Array.isArray(source.lines)
@@ -1635,14 +1650,25 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
     || shippingReviewedAt !== confirmedAt
     || pricingTotal !== netSubtotalMmk + shippingFeeMmk
     || totalMmk !== pricingTotal) throw new Error('Shop draft shipping boundary is invalid.')
-  const payment = exactObject(pricing.payment, 'Shop draft.pricing.payment', ['adapter', 'status', 'amountMmk'])
-  if (!paymentAdapters.includes(payment.adapter as EcommercePaymentAdapter)
-    || payment.status !== 'not_authorized'
-    || payment.amountMmk !== 0) throw new Error('Shop draft payment boundary is invalid.')
-  const evidenceReference = `ECOMMERCE:${sourceRequestId}:${sourcePreviewDigest}:${quoteDigest}:${organizationScope}:LOC-MAIN:ecommerce>commerce:human_review_required:${promotionStatus}:${policyRevision ?? 'none'}:${discountMmk}:shipping:${shipping.status}:${shippingPolicyRevision ?? 'none'}:${shippingFeeMmk}`
+  const payment = exactObject(pricing.payment, 'Shop draft.pricing.payment', [
+    'schema', 'status', 'reason', 'adapter', 'policyRevision', 'policyActionId', 'maximumOrderMmk', 'instructions', 'reviewedAt', 'authorized',
+  ])
+  if (!paymentAdapters.includes(payment.adapter as EcommercePaymentAdapter)) throw new Error('Shop draft payment boundary is invalid.')
+  const paymentPolicyRevision = payment.policyRevision === null ? null : safeInteger(payment.policyRevision, 'Shop draft.pricing.payment.policyRevision', 1)
+  const paymentPolicyActionId = payment.policyActionId === null ? null : canonicalText(payment.policyActionId, 'Shop draft.pricing.payment.policyActionId', 160)
+  const paymentMaximumOrderMmk = payment.maximumOrderMmk === null ? null : safeInteger(payment.maximumOrderMmk, 'Shop draft.pricing.payment.maximumOrderMmk', 1)
+  const paymentInstructions = payment.instructions === null ? null : canonicalText(payment.instructions, 'Shop draft.pricing.payment.instructions', 240)
+  const paymentReviewedAt = canonicalTimestamp(payment.reviewedAt, 'Shop draft.pricing.payment.reviewedAt')
+  if (payment.schema !== 'supermega.commerce.payment-decision.v1'
+    || payment.status !== 'approved' || payment.reason !== 'approved'
+    || paymentPolicyRevision === null || paymentPolicyActionId === null || paymentInstructions === null
+    || paymentReviewedAt !== confirmedAt || payment.authorized !== false
+    || !ecommercePaymentMatchesFulfilment(fulfilment as EcommerceFulfilment, payment.adapter as EcommercePaymentAdapter)
+    || paymentMaximumOrderMmk !== null && totalMmk > paymentMaximumOrderMmk) throw new Error('Shop draft payment boundary is invalid.')
+  const evidenceReference = `ECOMMERCE:${sourceRequestId}:${sourcePreviewDigest}:${quoteDigest}:${organizationScope}:LOC-MAIN:ecommerce>commerce:human_review_required:${promotionStatus}:${policyRevision ?? 'none'}:${discountMmk}:shipping:${shipping.status}:${shippingPolicyRevision ?? 'none'}:${shippingFeeMmk}:payment:${payment.status}:${paymentPolicyRevision}:${payment.adapter}`
   if (source.evidenceReference !== evidenceReference) throw new Error('Shop draft evidence reference is invalid.')
   return {
-    schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V5,
+    schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V6,
     mode: 'browser-memory-shop-draft',
     state: 'review_required',
     id,
@@ -1694,10 +1720,17 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
         reviewedAt: shippingReviewedAt,
       },
       payment: {
+        schema: 'supermega.commerce.payment-decision.v1',
+        status: 'approved',
+        reason: 'approved',
         adapter: payment.adapter as EcommercePaymentAdapter,
-        status: 'not_authorized',
-        amountMmk: 0,
-      },
+        policyRevision: paymentPolicyRevision,
+        policyActionId: paymentPolicyActionId,
+        maximumOrderMmk: paymentMaximumOrderMmk,
+        instructions: paymentInstructions,
+        reviewedAt: paymentReviewedAt,
+        authorized: false,
+      } as CommercePaymentDecision,
       totalMmk: pricingTotal,
     },
     totalMmk,

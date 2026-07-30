@@ -17,8 +17,10 @@ from supermega_runtime.client_import_runtime import (
 )
 from supermega_runtime.ecommerce_buying_lifecycle import (
     EcommerceLifecycleValidationError,
+    review_ecommerce_payment,
     review_ecommerce_promotion,
     review_ecommerce_shipping,
+    validate_ecommerce_payment_policy,
     validate_ecommerce_promotion_policy,
     validate_ecommerce_shipping_policy,
     validate_ecommerce_order_request,
@@ -49,6 +51,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.customer_credit_policy.saved",
         "commerce.promotion_policy.saved",
         "commerce.shipping_policy.saved",
+        "commerce.payment_policy.saved",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
@@ -92,6 +95,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.customer_credit_policy.saved",
         "commerce.promotion_policy.saved",
         "commerce.shipping_policy.saved",
+        "commerce.payment_policy.saved",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
@@ -183,6 +187,7 @@ _MAX_ACCOUNT_MAPPING_CONFIGURATIONS = 100
 _MAX_CUSTOMER_CREDIT_POLICIES = 500
 _MAX_PROMOTION_POLICIES = 200
 _MAX_SHIPPING_POLICIES = 200
+_MAX_PAYMENT_POLICIES = 200
 _MAX_ORDER_LINES = 20
 _MAX_RETURNS_PER_ORDER = 100
 _MAX_SUPPORT_CASES_PER_ORDER = 100
@@ -304,6 +309,7 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "creditDecision",
         "promotionDecision",
         "shippingDecision",
+        "paymentDecision",
         "owner",
         "sourceRecordId",
         "evidenceReference",
@@ -1049,6 +1055,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "customerCreditPolicies",
                 "promotionPolicies",
                 "shippingPolicies",
+                "paymentPolicies",
                 "inventoryFoundation",
                 "serviceSchedule",
             }
@@ -1098,6 +1105,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         state.get("shippingPolicies", []),
         "commerce state.shippingPolicies",
     )
+    payment_policies = _list(
+        state.get("paymentPolicies", []),
+        "commerce state.paymentPolicies",
+    )
     if "serviceSchedule" in state:
         _validate_service_schedule(state["serviceSchedule"])
     if "storefrontConfiguration" in state and state["storefrontConfiguration"] is None:
@@ -1144,6 +1155,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         raise TrialValidationError(
             "commerce state.shippingPolicies cannot exceed "
             f"{_MAX_SHIPPING_POLICIES}."
+        )
+    if len(payment_policies) > _MAX_PAYMENT_POLICIES:
+        raise TrialValidationError(
+            "commerce state.paymentPolicies cannot exceed "
+            f"{_MAX_PAYMENT_POLICIES}."
         )
 
     item_skus: list[str] = []
@@ -1513,6 +1529,25 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         newer_shipping_policy = policy
         validated_shipping_policies.append(policy)
         shipping_policy_action_ids.append(policy["proof"]["actionId"])
+
+    payment_policy_action_ids: list[str] = []
+    validated_payment_policies: list[dict[str, Any]] = []
+    newer_payment_policy: dict[str, Any] | None = None
+    for index, candidate in enumerate(payment_policies):
+        field = f"paymentPolicies[{index}]"
+        try:
+            policy = validate_ecommerce_payment_policy(candidate, field)
+        except EcommerceLifecycleValidationError as exc:
+            raise TrialValidationError(f"commerce state.{field} is invalid: {exc}") from exc
+        if policy["revision"] != len(payment_policies) - index:
+            raise TrialValidationError(f"{field}.revision breaks the newest-first sequence.")
+        if newer_payment_policy is not None and datetime.fromisoformat(
+            str(newer_payment_policy["proof"]["capturedAt"]).replace("Z", "+00:00")
+        ) < datetime.fromisoformat(str(policy["proof"]["capturedAt"]).replace("Z", "+00:00")):
+            raise TrialValidationError(f"{field} payment policies must be newest first.")
+        newer_payment_policy = policy
+        validated_payment_policies.append(policy)
+        payment_policy_action_ids.append(policy["proof"]["actionId"])
 
     purchase_order_ids: list[str] = []
     purchase_order_action_ids: list[str] = []
@@ -1919,6 +1954,35 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 if promised < minimum_promise:
                     raise TrialValidationError(f"{decision_field} promise is earlier than the Shop policy.")
             priced_total += expected_shipping["feeMmk"]
+        if "paymentDecision" in order:
+            decision_field = f"orders[{index}].paymentDecision"
+            decision = _object(order["paymentDecision"], decision_field)
+            _exact_fields(decision, decision_field, required=frozenset({
+                "schema", "status", "reason", "adapter", "policyRevision",
+                "policyActionId", "maximumOrderMmk", "instructions", "reviewedAt", "authorized",
+            }))
+            if priced_total is None or not str(order.get("sourceRecordId", "")).startswith("ECR-"):
+                raise TrialValidationError(f"{decision_field} requires immutable Ecommerce lines and an ECR source.")
+            reviewed_at = _timestamp(decision["reviewedAt"], f"{decision_field}.reviewedAt")
+            if datetime.fromisoformat(reviewed_at.replace("Z", "+00:00")) > order_created_at:
+                raise TrialValidationError(f"{decision_field}.reviewedAt cannot be later than order creation.")
+            try:
+                expected_payment = review_ecommerce_payment(
+                    validated_payment_policies,
+                    decision["adapter"],
+                    str(order.get("fulfilment", "")),
+                    priced_total,
+                    reviewed_at,
+                )
+            except EcommerceLifecycleValidationError as exc:
+                raise TrialValidationError(f"{decision_field} is invalid: {exc}") from exc
+            payment_label = {
+                "cash_on_delivery": "Cash on delivery",
+                "kbzpay_manual": "KBZPay",
+                "pay_on_pickup": "Cash",
+            }.get(str(decision.get("adapter")))
+            if dict(decision) != expected_payment or expected_payment["status"] != "approved" or decision["authorized"] is not False or order["payment"] != payment_label:
+                raise TrialValidationError(f"{decision_field} does not match the versioned Shop policy.")
         calculation_candidate = order.get("calculation")
         if calculation_candidate is not None:
             calculation = _object(
@@ -3705,6 +3769,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *customer_credit_policy_action_ids,
             *promotion_policy_action_ids,
             *shipping_policy_action_ids,
+            *payment_policy_action_ids,
             *storefront_action_ids,
             *(
                 [storefront_configuration_action_id]
@@ -3941,6 +4006,12 @@ def _validate_event_evidence(
         if not _proof_matches_evidence(proof, evidence):
             raise TrialValidationError(
                 "command evidence must match the saved shipping policy proof."
+            )
+    elif event_type == "commerce.payment_policy.saved":
+        proof = next_state["paymentPolicies"][0]["proof"]
+        if not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the saved payment policy proof."
             )
     elif event_type == "commerce.service_schedule.initialized":
         schedule = next_state["serviceSchedule"]
@@ -4397,6 +4468,10 @@ def _promotion_policies(state: Mapping[str, Any]) -> list[Any]:
 
 def _shipping_policies(state: Mapping[str, Any]) -> list[Any]:
     return state.get("shippingPolicies", [])
+
+
+def _payment_policies(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("paymentPolicies", [])
 
 
 def _effective_customer_credit_policy(
@@ -5803,6 +5878,14 @@ def _require_shipping_policies_unchanged(
 ) -> None:
     if _shipping_policies(current) != _shipping_policies(next_state):
         raise TrialValidationError("event cannot change: shippingPolicies.")
+
+
+def _require_payment_policies_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _payment_policies(current) != _payment_policies(next_state):
+        raise TrialValidationError("event cannot change: paymentPolicies.")
 
 
 def _validate_inventory_master_created(
@@ -7914,6 +7997,30 @@ def _validate_shipping_policy_saved(
         raise TrialValidationError("an unchanged shipping policy cannot advance.")
 
 
+def _validate_payment_policy_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    current_without = dict(current)
+    current_without.pop("paymentPolicies", None)
+    next_without = dict(next_state)
+    next_without.pop("paymentPolicies", None)
+    if current_without != next_without:
+        raise TrialValidationError("commerce.payment_policy.saved may change only paymentPolicies.")
+    before = _payment_policies(current)
+    after = _payment_policies(next_state)
+    if len(after) != len(before) + 1 or after[1:] != before:
+        raise TrialValidationError("commerce.payment_policy.saved must prepend exactly one payment policy.")
+    policy = after[0]
+    if policy["revision"] != len(before) + 1:
+        raise TrialValidationError("payment policy revision must advance exactly once.")
+    prior = next((candidate for candidate in before if candidate.get("adapter") == policy["adapter"]), None)
+    if prior is not None and all(prior[field] == policy[field] for field in (
+        "adapter", "allowedFulfilments", "maximumOrderMmk", "instructions", "status", "effectiveFrom", "effectiveUntil",
+    )):
+        raise TrialValidationError("an unchanged payment policy cannot advance.")
+
+
 def _service_schedule(state: Mapping[str, Any]) -> dict[str, Any] | None:
     value = state.get("serviceSchedule")
     return _validate_service_schedule(value) if value is not None else None
@@ -8091,6 +8198,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.customer_credit_policy.saved": _validate_customer_credit_policy_saved,
     "commerce.promotion_policy.saved": _validate_promotion_policy_saved,
     "commerce.shipping_policy.saved": _validate_shipping_policy_saved,
+    "commerce.payment_policy.saved": _validate_payment_policy_saved,
     "commerce.service_schedule.initialized": _validate_service_schedule_initialized,
     "commerce.service_schedule.saved": _validate_service_schedule_saved,
 }
@@ -8126,6 +8234,7 @@ def reduce_commerce_state(
             or _customer_credit_policies(next_state)
             or _promotion_policies(next_state)
             or _shipping_policies(next_state)
+            or _payment_policies(next_state)
         ):
             raise TrialValidationError("Commerce initialization requires a non-empty catalog and no operating history.")
         return next_state
@@ -8149,6 +8258,8 @@ def reduce_commerce_state(
         _require_promotion_policies_unchanged(current_state, next_state)
     if event_type != "commerce.shipping_policy.saved":
         _require_shipping_policies_unchanged(current_state, next_state)
+    if event_type != "commerce.payment_policy.saved":
+        _require_payment_policies_unchanged(current_state, next_state)
     if event_type not in {
         "commerce.service_schedule.initialized",
         "commerce.service_schedule.saved",

@@ -579,6 +579,7 @@ export function EcommerceBuyingWorkspace({
         currentCatalog,
         currentPromotionPolicies: commerceState.promotionPolicies ?? [],
         currentShippingPolicies: commerceState.shippingPolicies ?? [],
+        currentPaymentPolicies: commerceState.paymentPolicies ?? [],
         confirmedAt: new Date().toISOString(),
       })
       if (onOpenManagedRequest) {

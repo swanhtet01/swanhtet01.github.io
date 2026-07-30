@@ -2252,7 +2252,7 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !coreSource.includes('const draftLines = ecommerceShopDraftLines(ecommerceNavigationDraft)')
   || !coreSource.includes('setExtraOrderLines(draftLines.slice(1).map')
   || !coreSource.includes('setPayment(ecommerceShopDraftPayment(ecommerceNavigationDraft))')
-  || !coreSource.includes("ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v5'")
+  || !coreSource.includes("ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v6'")
   || !coreSource.includes("setNotice('The Ecommerce request has no valid Shop operating authority. Nothing was prepared.')")
   || !coreSource.includes("setNotice('The Shop operating location changed after Ecommerce review. Reopen the request; no order was prepared.')")
   || !coreSource.includes('governed handoff')
@@ -2266,7 +2266,7 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || ecommercePaymentPosition < 0
   || ecommerceReviewPosition < ecommercePaymentPosition
   || !ecommerceOrderSubmit.includes("data-ecommerce-payment={preparedEcommerceDraft ? 'true' : 'false'}")
-  || !ecommerceOrderSubmit.includes('form="commerce-manual-order-form" ref={orderPaymentRef} required value={payment}')
+  || !ecommerceOrderSubmit.includes('aria-readonly="true" disabled form="commerce-manual-order-form" ref={orderPaymentRef} value={payment}')
   || !ecommerceOrderSubmit.includes('disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || orderCreditBlocked || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))}')
   || !ecommerceOrderSubmit.includes('ref={orderReviewRef}')
   || !ecommerceOrderSubmit.includes("!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : orderCreditBlocked ? 'Credit policy required'")
@@ -2282,13 +2282,16 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !coreSource.includes('credit ${formatMoney(creditReview.exposureBeforeMmk)} → ${formatMoney(creditReview.exposureAfterMmk)} under policy R${creditReview.policy?.revision}')
   || !coreSource.includes('Stock ${reservationReview}')
   || !coreCssSource.includes('.order-ecommerce-payment')
-  || !ecommerceBuyingLifecycleSource.includes("ECOMMERCE_SHOP_DRAFT_SCHEMA_V5 = 'supermega.ecommerce.shop_draft.v5'")
+  || !ecommerceBuyingLifecycleSource.includes("ECOMMERCE_SHOP_DRAFT_SCHEMA_V6 = 'supermega.ecommerce.shop_draft.v6'")
   || !ecommerceBuyingLifecycleSource.includes('commercePromotionDecision(')
+  || !ecommerceBuyingLifecycleSource.includes('commercePaymentDecision(')
   || !commerceSource.includes("schema: 'supermega.commerce.promotion-decision.v1'")
+  || !commerceSource.includes("schema: 'supermega.commerce.payment-decision.v1'")
   || !commerceSource.includes('promotionPolicies?: CommercePromotionPolicy[]')
+  || !commerceSource.includes('paymentPolicies?: CommercePaymentPolicy[]')
   || !ecommerceBuyingLifecycleSource.includes("operatingUnitLocationId: 'LOC-MAIN'")
   || !ecommerceBuyingLifecycleSource.includes("writePolicy: 'human_review_required'")
-  || !managedEcommerceBuyingLifecycleSource.includes('ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v5"')
+  || !managedEcommerceBuyingLifecycleSource.includes('ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v6"')
   || !managedEcommerceBuyingLifecycleSource.includes('"operatingUnitLocationId": "LOC-MAIN"')
   || !coreSource.includes("import('../products/ecommerce/ecommerce-shop-handoff')")
   || ['setItem(', 'removeItem(', 'localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest', 'navigator.locks', 'convertCommerceWebsiteIntake', 'reserveCommerceOrder', 'mutateCommerceWorkspace'].some((marker) => ecommerceConfirmSource.includes(marker) || ecommerceHandoffSource.includes(marker))) fail('ecommerce_shop_handoff_contract_missing_or_mutating')
@@ -2999,6 +3002,15 @@ if (!coreSource.includes('data-shipping-policy="versioned"')
   || !commerceSource.includes('export function commerceShippingDecision(')
   || !managedCommerceRuntime.includes('def _validate_shipping_policy_saved(')
   || !managedCommerceRuntime.includes('command evidence must match the saved shipping policy proof.')) fail('commerce_shipping_policy_setup_ui_or_managed_boundary_missing')
+if (!coreSource.includes('data-payment-policy="versioned"')
+  || !coreSource.includes("kind: 'payment_policy'")
+  || !coreSource.includes("'commerce.payment_policy.saved'")
+  || !coreSource.includes('configureCommercePaymentPolicy(current, input, commerceActionProof(action))')
+  || !coreSource.includes('It never charges, transfers money, contacts a customer, or marks payment received.')
+  || !commerceSource.includes('export function configureCommercePaymentPolicy(')
+  || !commerceSource.includes('export function commercePaymentDecision(')
+  || !managedCommerceRuntime.includes('def _validate_payment_policy_saved(')
+  || !managedCommerceRuntime.includes('command evidence must match the saved payment policy proof.')) fail('commerce_payment_policy_setup_ui_or_managed_boundary_missing')
 if (!coreSource.includes("'commerce.order.return_recorded'")
   || !coreSource.includes("kind: 'order_return'")
   || !coreSource.includes('Record return')
@@ -4381,7 +4393,17 @@ async function verifyChannelOrderRuntime() {
     assert(seed.orders.some((order) => order.status === 'completed' && order.paymentStatus === 'reconciled' && order.completion)
       && seed.purchaseOrders?.length === 1
       && seed.purchaseOrders[0].sku === 'SM-1002'
-      && seed.purchaseOrders[0].quantityOrdered === 40, 'shop_seed_missing_completed_sale_or_replenishment_work')
+      && seed.purchaseOrders[0].quantityOrdered === 40
+      && seed.paymentPolicies?.length === 3, 'shop_seed_missing_completed_sale_replenishment_or_payment_work')
+    const staleSeed = { ...seed, promotionPolicies: [], shippingPolicies: [], paymentPolicies: [] }
+    const upgradedSeed = commerce.upgradeCommerceSeedPolicies(staleSeed)
+    const ordinaryWorkspace = commerce.createEmptyCommerce()
+    assert(upgradedSeed.promotionPolicies?.length === 1
+      && upgradedSeed.shippingPolicies?.length === 1
+      && upgradedSeed.paymentPolicies?.length === 3
+      && upgradedSeed.paymentPolicies[0].adapter === 'kbzpay_manual'
+      && commerce.upgradeCommerceSeedPolicies(ordinaryWorkspace) === ordinaryWorkspace,
+    'shop_seed_policy_upgrade_not_scoped_to_sample_evidence')
     const seedBefore = JSON.stringify(seed)
     const incomplete = intake.buildChannelOrderDraft({
       ...fixtures[0],
@@ -8850,6 +8872,31 @@ async function verifyCommerceRuntime() {
     assert(model.commerceShippingDecision(shippingConfigured.shippingPolicies, 'delivery', 'Hlaing', shippingPolicyProof.capturedAt)?.status === 'approved'
       && model.commerceShippingDecision(shippingConfigured.shippingPolicies, 'delivery', 'Outside', shippingPolicyProof.capturedAt)?.status === 'rejected',
     'shipping_policy_eligibility_decision_not_governed')
+    const paymentPolicyProof = proof('ACT-PAYMENT-PICKUP-R1', -1_300)
+    const paymentPolicyInput = {
+      adapter: 'pay_on_pickup',
+      allowedFulfilments: ['pickup'],
+      maximumOrderMmk: 500,
+      instructions: 'Collect at pickup and reconcile the receipt in Shop.',
+      status: 'active',
+      effectiveFrom: paymentPolicyProof.capturedAt,
+      effectiveUntil: '2026-08-23T09:00:00.000Z',
+    }
+    const paymentConfigured = model.configureCommercePaymentPolicy(base, paymentPolicyInput, paymentPolicyProof)
+    assert(paymentConfigured?.paymentPolicies.length === 1
+      && paymentConfigured.paymentPolicies[0].revision === 1
+      && paymentConfigured.paymentPolicies[0].proof.actionId === paymentPolicyProof.actionId,
+    'payment_policy_setup_not_versioned_or_attributed')
+    assert(model.configureCommercePaymentPolicy(paymentConfigured, paymentPolicyInput, paymentPolicyProof) === paymentConfigured,
+      'payment_policy_setup_retry_not_idempotent')
+    assert(model.configureCommercePaymentPolicy(paymentConfigured, { ...paymentPolicyInput, maximumOrderMmk: 499 }, paymentPolicyProof) === null,
+      'payment_policy_setup_conflicting_retry_succeeded')
+    assert(model.configureCommercePaymentPolicy(paymentConfigured, paymentPolicyInput, proof('ACT-PAYMENT-UNCHANGED', -1_300)) === null,
+      'unchanged_payment_policy_advanced_revision')
+    assert(model.commercePaymentDecision(paymentConfigured.paymentPolicies, 'pay_on_pickup', 'pickup', 500, paymentPolicyProof.capturedAt)?.status === 'approved'
+      && model.commercePaymentDecision(paymentConfigured.paymentPolicies, 'pay_on_pickup', 'delivery', 500, paymentPolicyProof.capturedAt)?.reason === 'fulfilment_not_allowed'
+      && model.commercePaymentDecision(paymentConfigured.paymentPolicies, 'pay_on_pickup', 'pickup', 501, paymentPolicyProof.capturedAt)?.reason === 'amount_exceeded',
+    'payment_policy_eligibility_or_limit_not_governed')
     const creditPolicyProof = proof('ACT-CREDIT-CUSTOMER', -2_000)
     const creditBase = model.configureCommerceCustomerCreditPolicy(base, {
       customer: 'Customer',
@@ -10932,6 +10979,7 @@ async function verifyStorefrontRuntime() {
     const seededBuyingCommerce = commerce.createSeedCommerce(Date.parse('2026-07-24T08:00:00.000Z'))
     const promotionPolicies = seededBuyingCommerce.promotionPolicies ?? []
     const shippingPolicies = seededBuyingCommerce.shippingPolicies ?? []
+    const paymentPolicies = seededBuyingCommerce.paymentPolicies ?? []
     const pim = await buyingModel.buildEcommercePimProjection(buyingScope, firstDigest, preview)
     const pimRetry = await buyingModel.buildEcommercePimProjection(buyingScope, firstDigest, reordered)
     buyingAssert(pim.schema === 'supermega.ecommerce.pim_projection.v1'
@@ -11672,6 +11720,7 @@ async function verifyStorefrontRuntime() {
       currentCatalog: catalog,
       currentPromotionPolicies: promotionPolicies,
       currentShippingPolicies: shippingPolicies,
+      currentPaymentPolicies: paymentPolicies,
       confirmedAt: '2026-07-24T09:10:00.000Z',
     })
     buyingAssert(managedBuyingDraft.lines.length === 2
@@ -11717,13 +11766,16 @@ async function verifyStorefrontRuntime() {
       currentCatalog: catalog,
       currentPromotionPolicies: promotionPolicies,
       currentShippingPolicies: shippingPolicies,
+      currentPaymentPolicies: paymentPolicies,
       confirmedAt: '2026-07-24T09:10:00.000Z',
     })
-    buyingAssert(buyingDraft.schema === 'supermega.ecommerce.shop_draft.v5'
+    buyingAssert(buyingDraft.schema === 'supermega.ecommerce.shop_draft.v6'
       && buyingDraft.lines.length === 2
       && buyingDraft.customerProfile?.name === 'Ma Su'
       && buyingDraft.deliveryAddress?.township === 'Hlaing'
-      && buyingDraft.pricing.payment.status === 'not_authorized'
+      && buyingDraft.pricing.payment.status === 'approved'
+      && buyingDraft.pricing.payment.policyRevision === 3
+      && buyingDraft.pricing.payment.authorized === false
       && buyingDraft.pricing.promotion.status === 'approved'
       && buyingDraft.pricing.promotion.code === 'WELCOME'
       && buyingDraft.pricing.promotion.discountMmk === Math.min(Math.floor(buyingDraft.pricing.subtotalMmk / 10), 10_000)
@@ -11745,6 +11797,7 @@ async function verifyStorefrontRuntime() {
       ...managedBuyingState,
       promotionPolicies,
       shippingPolicies,
+      paymentPolicies,
     })
     const promotionOrderProof = {
       actionId: 'ACT-ECOMMERCE-PROMOTION-ORDER-1',
@@ -11780,6 +11833,7 @@ async function verifyStorefrontRuntime() {
       lines: promotedOrderLines,
       promotionDecision: buyingDraft.pricing.promotion,
       shippingDecision: buyingDraft.pricing.shipping,
+      paymentDecision: buyingDraft.pricing.payment,
       total: buyingDraft.totalMmk,
       status: 'confirmed',
     }
@@ -11794,6 +11848,8 @@ async function verifyStorefrontRuntime() {
       && storedPromotedOrder.calculation?.subtotalMmk === buyingDraft.pricing.promotion.netSubtotalMmk + buyingDraft.pricing.shipping.feeMmk
       && storedPromotedOrder.promotionDecision?.policyRevision === 1
       && storedPromotedOrder.shippingDecision?.policyRevision === 1
+      && storedPromotedOrder.paymentDecision?.policyRevision === 3
+      && storedPromotedOrder.paymentDecision?.authorized === false
       && commerce.reserveCommerceOrder(promotedOrderState, promotedOrder, promotionOrderProof) === promotedOrderState,
     'ecommerce_approved_promotion_did_not_price_the_real_shop_order')
     buyingAssert(commerce.reserveCommerceOrder(
@@ -11820,6 +11876,15 @@ async function verifyStorefrontRuntime() {
       promotionOrderProof,
     ) === null,
     'ecommerce_forged_shipping_fee_reached_the_real_shop_order')
+    buyingAssert(commerce.reserveCommerceOrder(
+      promotionBuyingState,
+      {
+        ...promotedOrder,
+        paymentDecision: { ...promotedOrder.paymentDecision, authorized: true },
+      },
+      promotionOrderProof,
+    ) === null,
+    'ecommerce_forged_payment_authorization_reached_the_real_shop_order')
     buyingAssert(commerce.reserveCommerceOrder(
       promotionBuyingState,
       { ...promotedOrder, promisedAt: '2026-07-24T11:09:59.000Z' },
@@ -11849,6 +11914,7 @@ async function verifyStorefrontRuntime() {
         currentCatalog: catalog,
         currentPromotionPolicies: promotionPolicies,
         currentShippingPolicies: shippingPolicies,
+        currentPaymentPolicies: paymentPolicies,
         confirmedAt: '2026-07-24T09:15:01.000Z',
       })
     } catch { expiredBuyingRejected = true }
@@ -11861,6 +11927,7 @@ async function verifyStorefrontRuntime() {
         currentCatalog: catalog.map((item) => item.sku === 'SM-1001' ? { ...item, price: item.price + 1 } : item),
         currentPromotionPolicies: promotionPolicies,
         currentShippingPolicies: shippingPolicies,
+        currentPaymentPolicies: paymentPolicies,
         confirmedAt: '2026-07-24T09:10:00.000Z',
       })
     } catch { repricedBuyingRejected = true }
