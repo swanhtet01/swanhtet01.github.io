@@ -759,6 +759,11 @@ export function WebsiteProduct() {
   }
 
   const failingContentChecks = checks.filter((check) => !check.id.startsWith('evidence-') && !check.passed)
+  const readyBuyerCtaPages = workspace.pages.filter((page) => page.stage === 'ready'
+    && Boolean(page.hero.ctaLabel.trim())
+    && Boolean(page.hero.ctaHref.trim()))
+  const websiteLeads = leadLedger.leads.filter((lead) => lead.siteName === workspace.siteName)
+  const leadCounts = websiteLeadCounts(leadLedger, workspace.siteName)
   const websiteAgentJob = storageIssue || canRepairLocalStorage
     ? 'Recover Website workspace'
     : starterSetupActive
@@ -769,13 +774,15 @@ export function WebsiteProduct() {
           ? 'Review unsaved site edits'
           : failingContentChecks.length
             ? 'Fix content readiness'
-            : !approvalIsCurrent
-              ? 'Record owner approval'
-              : !publishIsCurrent
-                ? 'Record release snapshot'
-                : storageMode === 'managed'
-                  ? 'Prepare rollout plan'
-                  : 'Download site handoff'
+            : leadCounts.new
+              ? 'Review new inquiries'
+              : !approvalIsCurrent
+                ? 'Record owner approval'
+                : !publishIsCurrent
+                  ? 'Record release snapshot'
+                  : storageMode === 'managed'
+                    ? 'Prepare rollout plan'
+                    : 'Download site handoff'
   const websiteAgentReason = storageIssue || canRepairLocalStorage
     ? 'Saving or recovery needs attention before Website work can be trusted.'
     : starterSetupActive
@@ -786,13 +793,15 @@ export function WebsiteProduct() {
           ? 'The preview has edits that must be saved or discarded before approval or release review.'
           : failingContentChecks.length
             ? `${failingContentChecks.length} readiness check${failingContentChecks.length === 1 ? '' : 's'} must pass before owner approval.`
-            : !approvalIsCurrent
-              ? 'The current Website revision needs named owner review before a release snapshot is recorded.'
-              : !publishIsCurrent
-                ? 'The approved revision needs an immutable static site package for handoff.'
-                : storageMode === 'managed'
-                  ? 'The managed release can prepare a rollout plan, but provider deployment still requires owner execution.'
-                  : 'The approved static site package is ready to download; no domain or deployment changes happen here.'
+            : leadCounts.new
+              ? `${leadCounts.new} new inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} a named owner and a local decision before follow-up.`
+              : !approvalIsCurrent
+                ? 'The current Website revision needs named owner review before a release snapshot is recorded.'
+                : !publishIsCurrent
+                  ? 'The approved revision needs an immutable static site package for handoff.'
+                  : storageMode === 'managed'
+                    ? 'The managed release can prepare a rollout plan, but provider deployment still requires owner execution.'
+                    : 'The approved static site package is ready to download; no domain or deployment changes happen here.'
   const websiteOwnerGate = storageIssue || canRepairLocalStorage
     ? 'Owner exports backup or confirms repair before continuing.'
     : starterSetupActive
@@ -803,44 +812,45 @@ export function WebsiteProduct() {
           ? 'Owner saves or discards the preview.'
           : failingContentChecks.length
             ? 'Owner fixes content, navigation, proof, and CTA readiness.'
-            : !approvalIsCurrent
-              ? 'Owner records approval with evidence.'
-              : !publishIsCurrent
-                ? 'Owner records the release snapshot.'
-                : storageMode === 'managed'
-                  ? 'Owner approves release manager and reviewer before deployment planning.'
-                  : 'Owner downloads the package and decides where it goes live.'
+            : leadCounts.new
+              ? 'Owner qualifies or closes each inquiry; no customer message is sent here.'
+              : !approvalIsCurrent
+                ? 'Owner records approval with evidence.'
+                : !publishIsCurrent
+                  ? 'Owner records the release snapshot.'
+                  : storageMode === 'managed'
+                    ? 'Owner approves release manager and reviewer before deployment planning.'
+                    : 'Owner downloads the package and decides where it goes live.'
   const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
     ? 'Open recovery'
     : starterSetupActive || starterAvailable
       ? 'Open brief'
       : hasUnsavedChanges || failingContentChecks.length
         ? 'Open editor'
+        : leadCounts.new
+          ? 'Review inquiries'
         : !approvalIsCurrent || !publishIsCurrent || storageMode === 'managed'
           ? 'Open release'
           : 'Get website'
-  const websiteAutopilotTrack = storageIssue || canRepairLocalStorage
-    ? 'Recovery'
-    : starterSetupActive || starterAvailable
-      ? 'Brief'
-      : hasUnsavedChanges || failingContentChecks.length
-        ? 'Content'
-        : !approvalIsCurrent || !publishIsCurrent
-          ? 'Release'
-          : storageMode === 'managed'
-            ? 'Rollout'
-            : 'Handoff'
-  const websiteAutopilotRows = [
-    ['Track', websiteAutopilotTrack],
+  const websiteTodayState = storageIssue || canRepairLocalStorage
+    ? 'blocked'
+    : starterAvailable || starterSetupActive
+      ? 'setup'
+      : hasUnsavedChanges || failingContentChecks.length || leadCounts.new
+        ? 'attention'
+        : 'ready'
+  const websiteTodayMetrics = [
     ['Pages', `${workspace.pages.filter((page) => page.stage === 'ready').length}/${workspace.pages.length} ready`],
+    ['Readiness', failingContentChecks.length ? `${failingContentChecks.length} to fix` : 'Clear'],
+    ['Inquiries', leadCounts.new ? `${leadCounts.new} new` : websiteLeads.length ? `${websiteLeads.length} total` : 'None yet'],
     ['Approval', approvalIsCurrent ? 'Recorded' : 'Needed'],
-    ['Package', publishIsCurrent ? 'Ready' : 'Needed'],
-  ]
-  const readyBuyerCtaPages = workspace.pages.filter((page) => page.stage === 'ready'
-    && Boolean(page.hero.ctaLabel.trim())
-    && Boolean(page.hero.ctaHref.trim()))
-  const websiteLeads = leadLedger.leads.filter((lead) => lead.siteName === workspace.siteName)
-  const leadCounts = websiteLeadCounts(leadLedger, workspace.siteName)
+    ['Site package', publishIsCurrent ? 'Ready' : 'Needed'],
+  ] as const
+  const websiteTodaySource = storageMode === 'managed'
+    ? `Managed Website · ${managedActorId || 'authenticated workspace'}`
+    : storageMode === 'browser-local'
+      ? 'Saved on this device'
+      : 'Available in this browser session'
   const leadExportHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({
     contract: 'supermega.website.lead-export.v1',
     exportedAt: new Date().toISOString(),
@@ -875,6 +885,16 @@ export function WebsiteProduct() {
     }
     if (hasUnsavedChanges || failingContentChecks.length) {
       openContentSurface('work')
+      return
+    }
+    if (leadCounts.new) {
+      const controls = document.querySelector<HTMLDetailsElement>('.website-business-controls')
+      if (controls) controls.open = true
+      requestAnimationFrame(() => {
+        const inbox = document.getElementById('website-lead-inbox')
+        inbox?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        document.getElementById('website-lead-inbox-title')?.focus({ preventScroll: true })
+      })
       return
     }
     if (!approvalIsCurrent || !publishIsCurrent || storageMode === 'managed') {
@@ -1121,25 +1141,28 @@ export function WebsiteProduct() {
             ) : null}
           </header>
 
-          <details className="website-business-controls">
-            <summary><span><strong>Website operations</strong><small>Next: {websiteAgentJob}</small></span><b>{leadCounts.new} new inquiries</b></summary>
-            <div className="website-business-controls-content">
-              <section aria-label="Website next action" className="website-operations-next">
-                <div>
-                  <span className="website-kicker">Next step</span>
-                  <h2>{websiteAgentJob}</h2>
-                  <p>{websiteAgentReason}</p>
-                  <small>{websiteOwnerGate}</small>
-                </div>
-                <div className="website-operations-metrics">
-                  {websiteAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-                </div>
-                <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">{websiteAgentActionLabel}</button>
-              </section>
+          <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState}>
+            <div className="website-today-priority">
+              <span className="website-kicker">Today</span>
+              <h2 id="website-today-title">{websiteAgentJob}</h2>
+              <p>{websiteAgentReason}</p>
+              <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">{websiteAgentActionLabel}</button>
+            </div>
+            <div aria-label="Website today status" className="website-today-metrics">
+              {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            </div>
+            <div className="website-today-source" role="status">
+              <span>{websiteTodaySource}</span>
+              <small>{websiteOwnerGate}</small>
+            </div>
+          </section>
 
-              <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox">
+          <details className="website-business-controls">
+            <summary><span><strong>Inquiry inbox</strong><small>Local capture, ownership, decisions, and export</small></span><b>{leadCounts.new} new</b></summary>
+            <div className="website-business-controls-content">
+              <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox" id="website-lead-inbox">
                 <header>
-                  <div><span className="website-kicker">Lead inbox</span><h2 id="website-lead-inbox-title">Capture and route inquiries</h2><p>Try the full workflow locally. Contact data stays in this browser; no form, message, CRM, or Shop write is sent.</p></div>
+                  <div><span className="website-kicker">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture and route inquiries</h2><p>Try the full workflow locally. Contact data stays in this browser; no form, message, CRM, or Shop write is sent.</p></div>
                   <div className="website-lead-counts"><span><strong>{leadCounts.new}</strong><small>New</small></span><span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span><span><strong>{leadCounts.closed}</strong><small>Closed</small></span></div>
                 </header>
 
