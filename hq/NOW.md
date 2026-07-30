@@ -42,6 +42,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Ecommerce return intent opens the exact completed Shop order; Shop alone records return and refund evidence.
 - Ecommerce carries versioned contact/address snapshots through recovery and Shop handoff; hosted identity and provider execution remain absent.
 - Shop owns versioned delivery zones, fee, promise, tax schedule, and payment-method eligibility/limits. Ecommerce draft v7 and the Shop order retain the exact tax decision; Shop rechecks authority and tax-inclusive payment limits before reserving stock (`ENG-136`, `ENG-137`, `ENG-138`, `9ff26ba3`).
+- Shop Orders downloads digest-bound acknowledgements from exact evidence; no invoice, receipt, message, or provider action (`ENG-139`, `263434db`).
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Shop remains stock authority for exact returns and substitution. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
 - Plant maintenance binds strategy, due work, structured results, evidence-linked finding problems, and corrective-action closeout with final human disposition. It performs no automatic problem opening, dispatch, control, telemetry, status, or parts action.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
@@ -52,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 ## Verified baseline
 
 - Current local checkpoints: Ecommerce tax authority `b70d3412`, governed v7 Shop handoff `1975c550`, tax-inclusive limits `0eb180f9`, and order proof `9ff26ba3`; all gates pass.
-- Product checks pass: 70 Ecommerce, 305 Commerce, 274 Production, 77 security, 216 onboarding, and 82 managed import.
+- Checks pass: 75 Ecommerce, 305 Commerce, 274 Production, 64 managed Commerce, 77 security, 216 onboarding, and 82 managed import.
 - First-action QA routes Shop, Plant, and Website blockers to the next task.
 - Client preparation passes 186 onboarding, 74 security, six preparation, recovery, release, privacy, database, Vercel, HQ, approval, and tamper-before-write checks.
 - Both domains serve deployed `4c300c001a9e2575cabff620ccffa0d737f4cfe3`; paired brand, context, and catalog identities match. The coordinated release and public live-health workflows passed. The local live-product verifier still reports context drift, so this is not a release-ready candidate.
