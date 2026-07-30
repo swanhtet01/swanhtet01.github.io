@@ -370,6 +370,27 @@ export type ProductionMaintenanceRecord = {
   }
 }
 
+export type ProductionMaintenanceDueItem = {
+  assetId: string
+  assetName: string
+  criticality: ProductionEquipmentCriticality
+  owner: string
+  strategyActionId: string
+  strategyRevision: number
+  procedureReference: string
+  dueAt: string
+  status: 'overdue' | 'due_soon' | 'planned'
+  daysUntilDue: number
+  lastCompletionActionId?: string
+  lastCompletedAt?: string
+}
+
+export type ProductionMaintenanceDueQueue = {
+  contract: 'supermega.production.maintenance-due-queue.v1'
+  asOf: string
+  items: ProductionMaintenanceDueItem[]
+}
+
 const issueKinds: ProductionIssueKind[] = ['quality', 'maintenance', 'materials', 'operations']
 export const productionIssueSeverities: ProductionIssueSeverity[] = ['critical', 'high', 'medium', 'low']
 export const productionJobPriorities: ProductionJobPriority[] = ['urgent', 'normal', 'low']
@@ -1768,6 +1789,48 @@ export function productionDowntimeIntervals(state: ProductionState) {
 export function productionMaintenanceRecords(state: ProductionState) {
   const current = validateProductionState(state)
   return deriveProductionMaintenanceRecords(current.machines, current.events)
+}
+
+export function productionMaintenanceDueQueue(
+  state: ProductionState,
+  asOf: string,
+): ProductionMaintenanceDueQueue {
+  const current = validateProductionState(state)
+  if (!validDowntimeTimestamp(asOf)) throw new Error('Maintenance due queue requires a canonical UTC millisecond as-of time.')
+  const asOfTime = Date.parse(asOf)
+  const criticalityRank: Record<ProductionEquipmentCriticality, number> = { critical: 0, high: 1, medium: 2, low: 3 }
+  const items = (current.equipmentMaster?.assets ?? []).flatMap((asset): ProductionMaintenanceDueItem[] => {
+    const strategy = asset.maintenanceStrategy
+    if (asset.commissioningStatus !== 'commissioned' || !strategy) return []
+    const remainingMs = Date.parse(strategy.nextDueAt) - asOfTime
+    const latestCompletion = current.events.find((event) => event.kind === 'maintenance_completed'
+      && event.subjectId === asset.id
+      && event.maintenanceStrategyActionId === strategy.actionId)
+    return [{
+      assetId: asset.id,
+      assetName: asset.name,
+      criticality: asset.criticality,
+      owner: strategy.maintenanceOwner,
+      strategyActionId: strategy.actionId,
+      strategyRevision: strategy.revision,
+      procedureReference: strategy.procedureReference,
+      dueAt: strategy.nextDueAt,
+      status: remainingMs <= 0 ? 'overdue' : remainingMs <= 7 * 86_400_000 ? 'due_soon' : 'planned',
+      daysUntilDue: Math.ceil(remainingMs / 86_400_000),
+      ...(latestCompletion === undefined ? {} : {
+        lastCompletionActionId: latestCompletion.actionId,
+        lastCompletedAt: latestCompletion.createdAt,
+      }),
+    }]
+  }).sort((left, right) => {
+    const leftOverdueRank = left.status === 'overdue' ? 0 : 1
+    const rightOverdueRank = right.status === 'overdue' ? 0 : 1
+    return leftOverdueRank - rightOverdueRank
+      || Date.parse(left.dueAt) - Date.parse(right.dueAt)
+      || criticalityRank[left.criticality] - criticalityRank[right.criticality]
+      || left.assetId.localeCompare(right.assetId)
+  })
+  return { contract: 'supermega.production.maintenance-due-queue.v1', asOf, items }
 }
 
 export function buildProductionShiftHandoff(state: ProductionState, shiftRef: string): ProductionShiftHandoff | null {

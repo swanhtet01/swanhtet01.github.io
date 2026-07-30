@@ -2476,6 +2476,72 @@ def validate_production_state(value: object) -> dict[str, Any]:
     return deepcopy(state)
 
 
+def project_production_maintenance_due_queue(
+    value: object,
+    as_of: object,
+) -> dict[str, Any]:
+    """Project reviewed preventive-maintenance due work without dispatching it."""
+
+    state = validate_production_state(value)
+    as_of_value = _maintenance_timestamp(as_of, "maintenance due queue asOf")
+    as_of_time = datetime.fromisoformat(as_of_value.replace("Z", "+00:00"))
+    criticality_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    items: list[dict[str, Any]] = []
+    equipment_master = state.get("equipmentMaster")
+    assets = equipment_master["assets"] if equipment_master is not None else []
+    for asset in assets:
+        strategy = asset.get("maintenanceStrategy")
+        if asset["commissioningStatus"] != "commissioned" or strategy is None:
+            continue
+        due_time = datetime.fromisoformat(strategy["nextDueAt"].replace("Z", "+00:00"))
+        remaining_ms = int((due_time - as_of_time).total_seconds() * 1000)
+        latest_completion = next(
+            (
+                event
+                for event in state["events"]
+                if event["kind"] == "maintenance_completed"
+                and event["subjectId"] == asset["id"]
+                and event.get("maintenanceStrategyActionId") == strategy["actionId"]
+            ),
+            None,
+        )
+        item = {
+            "assetId": asset["id"],
+            "assetName": asset["name"],
+            "criticality": asset["criticality"],
+            "owner": strategy["maintenanceOwner"],
+            "strategyActionId": strategy["actionId"],
+            "strategyRevision": strategy["revision"],
+            "procedureReference": strategy["procedureReference"],
+            "dueAt": strategy["nextDueAt"],
+            "status": (
+                "overdue"
+                if remaining_ms <= 0
+                else "due_soon"
+                if remaining_ms <= 7 * 86_400_000
+                else "planned"
+            ),
+            "daysUntilDue": -(-remaining_ms // 86_400_000),
+        }
+        if latest_completion is not None:
+            item["lastCompletionActionId"] = latest_completion["actionId"]
+            item["lastCompletedAt"] = latest_completion["createdAt"]
+        items.append(item)
+    items.sort(
+        key=lambda item: (
+            0 if item["status"] == "overdue" else 1,
+            item["dueAt"],
+            criticality_rank[item["criticality"]],
+            item["assetId"],
+        )
+    )
+    return {
+        "contract": "supermega.production.maintenance-due-queue.v1",
+        "asOf": as_of_value,
+        "items": items,
+    }
+
+
 def _payload(
     payload: Mapping[str, Any],
 ) -> tuple[dict[str, Any], dict[str, str]]:
@@ -3687,6 +3753,7 @@ __all__ = [
     "PRODUCTION_EVENTS",
     "PRODUCTION_HUMAN_EVENTS",
     "PRODUCTION_SCHEMA",
+    "project_production_maintenance_due_queue",
     "reduce_production_state",
     "validate_production_state",
 ]

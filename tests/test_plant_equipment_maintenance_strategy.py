@@ -7,7 +7,11 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from supermega_runtime.plant_equipment_import import validate_plant_equipment_import
-from supermega_runtime.production_runtime import reduce_production_state, validate_production_state
+from supermega_runtime.production_runtime import (
+    project_production_maintenance_due_queue,
+    reduce_production_state,
+    validate_production_state,
+)
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import (
@@ -311,6 +315,88 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
                 started,
                 {"state": forged_completion, "evidence": completion_evidence},
             )
+
+    def test_due_queue_orders_real_strategies_and_retains_completion_basis(self) -> None:
+        first_commissioned = _commissioned_state()
+        second_commissioned = reduce_production_state(
+            "production.equipment.commissioned",
+            first_commissioned,
+            _commission_payload(
+                "EQ-PRESS-02",
+                action_id="ACT-EQUIPMENT-COMMISSION-00000000-0000-4000-8000-000000000402",
+            ),
+        )
+        first_saved = reduce_production_state(
+            "production.equipment_maintenance_strategy.saved",
+            second_commissioned,
+            _strategy_payload(),
+        )
+        second_payload = _strategy_payload(
+            action_id="ACT-EQUIPMENT-MAINTENANCE-STRATEGY-00000000-0000-4000-8000-000000000503",
+            captured_at="2026-07-30T09:30:00.000Z",
+        )
+        second_payload["equipmentId"] = "EQ-PRESS-02"
+        second_payload["nextDueAt"] = "2026-08-10T09:30:00.000Z"
+        second_saved = reduce_production_state(
+            "production.equipment_maintenance_strategy.saved",
+            first_saved,
+            second_payload,
+        )
+        snapshot = deepcopy(second_saved)
+        queue = project_production_maintenance_due_queue(
+            second_saved,
+            "2026-08-11T09:30:00.000Z",
+        )
+        self.assertEqual(queue["contract"], "supermega.production.maintenance-due-queue.v1")
+        self.assertEqual(
+            [(item["assetId"], item["status"], item["daysUntilDue"]) for item in queue["items"]],
+            [
+                ("EQ-PRESS-02", "overdue", -1),
+                ("EQ-MIX-01", "due_soon", 4),
+            ],
+        )
+        self.assertEqual(second_saved, snapshot)
+        with self.assertRaises(TrialValidationError):
+            project_production_maintenance_due_queue(
+                second_saved,
+                "2026-08-11T09:30:00Z",
+            )
+
+        start_evidence = _maintenance_evidence(
+            "ACT-EQUIPMENT-MAINTENANCE-START-503",
+            "2026-08-15T09:00:00.000Z",
+            "Performed reviewed mixer preventive maintenance procedure",
+        )
+        started = reduce_production_state(
+            "production.maintenance.started",
+            second_saved,
+            {"state": _strategy_maintenance_state(second_saved, start_evidence), "evidence": start_evidence},
+        )
+        completion_evidence = _maintenance_evidence(
+            "ACT-EQUIPMENT-MAINTENANCE-COMPLETE-503",
+            "2026-08-16T10:00:00.000Z",
+            "Completed reviewed preventive maintenance",
+        )
+        completed = reduce_production_state(
+            "production.maintenance.completed",
+            started,
+            {
+                "state": _strategy_maintenance_state(
+                    started,
+                    completion_evidence,
+                    start_action_id=start_evidence["actionId"],
+                ),
+                "evidence": completion_evidence,
+            },
+        )
+        completed_queue = project_production_maintenance_due_queue(
+            completed,
+            "2026-08-17T10:00:00.000Z",
+        )
+        mixer = next(item for item in completed_queue["items"] if item["assetId"] == "EQ-MIX-01")
+        self.assertEqual(mixer["lastCompletionActionId"], completion_evidence["actionId"])
+        self.assertEqual(mixer["lastCompletedAt"], completion_evidence["capturedAt"])
+        self.assertEqual(mixer["dueAt"], "2026-09-15T10:00:00.000Z")
 
 
 class PlantEquipmentMaintenanceStrategyRouteTests(unittest.TestCase):

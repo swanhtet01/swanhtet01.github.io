@@ -151,8 +151,8 @@
       "localAutomation": {
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Project every commissioned Plant asset's latest reviewed maintenance strategy and completion evidence into one compact due-work queue ordered by overdue state, due time, and criticality, with one clear path into the existing human review; do not add a page, notification, dispatch, equipment command, or telemetry claim.",
-        "reason": "Plant now binds reviewed maintenance execution to the exact strategy revision and advances due dates only after accountable completion. The next operator gap is seeing which preventive work is due next without searching individual equipment records or inventing automated dispatch."
+        "workOrder": "Give strategy-bound Plant maintenance completion one structured reviewed result with outcome, bounded findings, procedure-completion confirmation, and return-to-service recommendation while retaining the original strategy and evidence; do not auto-change machine state, dispatch work, buy parts, control equipment, or infer telemetry.",
+        "reason": "Plant now presents a deterministic due-work queue and routes its first item into accountable review. The next enterprise gap is replacing a free-text-only completion with a precise result packet that operations and audit can understand without pretending to control the physical asset."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }

@@ -161,6 +161,7 @@ import {
   productionDowntimeIntervals,
   productionIssueSeverities,
   productionJobPriorities,
+  productionMaintenanceDueQueue,
   productionMaintenanceRecords,
   productionMaterialUnits,
   productionMachineStates,
@@ -5792,6 +5793,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const downtimeTriggerRef = useRef<HTMLButtonElement>(null)
   const maintenanceDialogRef = useRef<HTMLDialogElement>(null)
   const maintenanceTriggerRef = useRef<HTMLButtonElement>(null)
+  const maintenanceMachineSelectRef = useRef<HTMLSelectElement>(null)
   const scheduleDialogRef = useRef<HTMLDialogElement>(null)
   const scheduleTriggerRef = useRef<HTMLButtonElement | null>(null)
   const outputJobSelectRef = useRef<HTMLSelectElement>(null)
@@ -5865,6 +5867,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const openMaintenanceRecords = maintenanceRecords.filter((record) => !record.completion)
   const recentMaintenanceRecords = maintenanceRecords.filter((record) => record.completion).slice(0, 3)
   const maintenanceMachineIds = new Set(openMaintenanceRecords.map((record) => record.machineId))
+  const maintenanceDueQueue = productionMaintenanceDueQueue(production, new Date(issueClock).toISOString())
+  const readyMaintenanceDueItems = maintenanceDueQueue.items.filter((item) => !maintenanceMachineIds.has(item.assetId)).slice(0, 6)
+  const overdueMaintenanceCount = readyMaintenanceDueItems.filter((item) => item.status === 'overdue').length
   const availableMaintenanceMachines = production.machines.filter((machine) => !maintenanceMachineIds.has(machine.id))
   const selectedMaintenanceMachineId = availableMaintenanceMachines.some((machine) => machine.id === maintenanceMachineId)
     ? maintenanceMachineId
@@ -7282,13 +7287,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     </dialog>
     <dialog aria-labelledby="maintenance-dialog-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMaintenanceDialog() }} ref={maintenanceDialogRef}>
       <div className="panel-head"><div><span className="core-eyebrow">Owned work</span><h2 id="maintenance-dialog-title">Machine maintenance</h2></div><button aria-label="Close maintenance work" className="text-link" onClick={closeMaintenanceDialog} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
+      {readyMaintenanceDueItems.length ? <><p className="panel-copy"><strong>Preventive work</strong> · {overdueMaintenanceCount ? `${overdueMaintenanceCount} overdue` : `${readyMaintenanceDueItems.length} planned`}</p><div className="action-history-list">{readyMaintenanceDueItems.map((item, index) => <article key={item.assetId}><div><strong>{item.assetName} · {item.status === 'overdue' ? (item.daysUntilDue === 0 ? 'Due now' : `${Math.abs(item.daysUntilDue)}d overdue`) : item.status === 'due_soon' ? `Due in ${item.daysUntilDue}d` : formatIssueDue(item.dueAt)}</strong><small style={wrappedIssueDetail}>{item.criticality} · {item.owner} · Strategy R{item.strategyRevision}</small><small style={wrappedIssueDetail}>{item.procedureReference}</small></div>{index === 0 ? <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => { setMaintenanceMachineId(item.assetId); requestAnimationFrame(() => maintenanceMachineSelectRef.current?.focus()) }} type="button">Review next</button> : null}</article>)}</div></> : null}
       {openMaintenanceRecords.length ? <div className="issue-list">{openMaintenanceRecords.map((record, index) => <article key={record.startActionId}>
         <span aria-hidden="true" className="issue-mark">MX</span>
         <div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started {formatTime(record.startedAt)} by {record.startedBy}</small>{record.strategy ? <small style={wrappedIssueDetail}>Strategy R{record.strategy.revision} · Due {formatIssueDue(record.strategy.plannedDueAt)} · {record.strategy.procedureReference}</small> : null}<small style={wrappedIssueDetail}>Scope: {record.scope}</small><small style={wrappedIssueDetail}>Evidence: {record.startEvidenceReference} · Action: {record.startActionId}</small></div>
         <button className="core-button" data-maintenance-primary={index === 0 ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => reviewMaintenanceCompletion(record)} type="button">Review complete</button>
       </article>)}</div> : <p className="panel-copy">No machine has open maintenance work.</p>}
       {availableMaintenanceMachines.length ? <form autoComplete="off" className="core-form compact-form" onSubmit={reviewMaintenanceStart}>
-        <label>Machine<select data-maintenance-primary={!openMaintenanceRecords.length ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setMaintenanceMachineId(event.target.value)} value={selectedMaintenanceMachineId}>{availableMaintenanceMachines.map((machine) => { const strategy = production.equipmentMaster?.assets.find((asset) => asset.id === machine.id)?.maintenanceStrategy; return <option key={machine.id} value={machine.id}>{machine.name} · {strategy ? `planned R${strategy.revision}` : `recorded ${productionMachineStateLabels[machine.state]}`}</option> })}</select></label>
+        <label>Machine<select data-maintenance-primary={!openMaintenanceRecords.length ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setMaintenanceMachineId(event.target.value)} ref={maintenanceMachineSelectRef} value={selectedMaintenanceMachineId}>{availableMaintenanceMachines.map((machine) => { const strategy = production.equipmentMaster?.assets.find((asset) => asset.id === machine.id)?.maintenanceStrategy; return <option key={machine.id} value={machine.id}>{machine.name} · {strategy ? `planned R${strategy.revision}` : `recorded ${productionMachineStateLabels[machine.state]}`}</option> })}</select></label>
         {selectedMaintenanceStrategy ? <p className="panel-copy"><strong>Strategy R{selectedMaintenanceStrategy.revision}</strong> · Due {formatIssueDue(selectedMaintenanceStrategy.nextDueAt)}<br />Procedure: {selectedMaintenanceStrategy.procedureReference}</p> : null}
         <label>{selectedMaintenanceStrategy ? 'Strategy owner' : 'Owner'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setMaintenanceOwner(event.target.value)} placeholder="Named person or role" readOnly={Boolean(selectedMaintenanceStrategy)} required value={selectedMaintenanceStrategy ? selectedMaintenanceOwner : maintenanceOwner} /></label>
         <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaintenanceMachine || !selectedMaintenanceOwner || selectedMaintenanceOwner.length > 120} type="submit">Review start</button>
