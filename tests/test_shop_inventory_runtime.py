@@ -292,6 +292,59 @@ def production_issued_inventory(
     )
 
 
+def production_return_command_id(production_issue_id: str, action_id: str) -> str:
+    identity = canonical_digest(
+        {
+            "contract": "supermega.shop.production-return-inventory-command.v1",
+            "productionIssueId": production_issue_id,
+            "actionId": action_id,
+        }
+    )
+    return f"PRT-{identity[7:39].upper()}"
+
+
+def production_returned_inventory(
+    state: dict[str, object],
+    proof: dict[str, str],
+    *,
+    production_quantity_milli: int,
+    stock_quantity: int,
+    production_issue_id: str | None = None,
+    stock_unit_id: str | None = None,
+    location_id: str | None = None,
+) -> dict[str, object]:
+    current = deepcopy(state)
+    issue = next(
+        command["payload"]
+        for command in current["commands"]  # type: ignore[union-attr]
+        if command["payload"]["kind"] == "production_issue"
+    )
+    retained_issue_id = production_issue_id or issue["id"]
+    return append_inventory_command(
+        current,
+        {
+            "kind": "production_return",
+            "id": production_return_command_id(
+                retained_issue_id, proof["actionId"]
+            ),
+            "productionIssueId": retained_issue_id,
+            "productionRequestId": issue["productionRequestId"],
+            "productionCommandDigest": issue["productionCommandDigest"],
+            "productionJobId": issue["productionJobId"],
+            "productionMaterialId": issue["productionMaterialId"],
+            "productionInputLotId": issue["productionInputLotId"],
+            "productionQuantityMilli": production_quantity_milli,
+            "productionUnit": issue["productionUnit"],
+            "sku": issue["sku"],
+            "stockQuantity": stock_quantity,
+            "conversionNote": issue["conversionNote"],
+            "stockUnitId": stock_unit_id or issue["allocations"][0]["stockUnitId"],
+            "locationId": location_id or issue["allocations"][0]["locationId"],
+            "proof": proof,
+        },
+    )
+
+
 def production_issue_movement(
     proof: dict[str, str],
     request: dict[str, object],
@@ -1020,6 +1073,115 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
             ShopInventoryValidationError, "cannot allocate|available"
         ):
             validate_shop_inventory_state(over_issued, ["SKU-1"])
+
+    def test_production_return_restores_only_reviewed_issue_lot_and_quantity(self) -> None:
+        request: dict[str, object] = {
+            "requestId": "ISSUE-RETURN-001",
+            "sourceCommandDigest": canonical_digest({"plant": "issue-return-001"}),
+            "jobId": "JOB-RETURN-001",
+            "materialId": "MAT-RETURN-001",
+            "inputLotId": "INPUT-RETURN-001",
+            "quantityMilli": 10_000,
+            "unit": "kg",
+        }
+        issued = production_issued_inventory(
+            opening_inventory(),
+            action_proof("ACT-PRODUCTION-RETURN-ISSUE", "2026-07-27T08:00:00.000Z"),
+            request,
+            stock_quantity=4,
+        )
+        first_proof = action_proof(
+            "ACT-PRODUCTION-RETURN-001", "2026-07-27T08:10:00.000Z", "operator-return"
+        )
+        first = production_returned_inventory(
+            issued,
+            first_proof,
+            production_quantity_milli=2_500,
+            stock_quantity=1,
+        )
+        validated = validate_shop_inventory_state(first, ["SKU-1"])
+        latest = validated["commands"][-1]["payload"]
+        self.assertEqual(latest["kind"], "production_return")
+        self.assertEqual(
+            latest["id"],
+            production_return_command_id(
+                production_inventory_command_id("ISSUE-RETURN-001"),
+                "ACT-PRODUCTION-RETURN-001",
+            ),
+        )
+        self.assertEqual(latest["stockUnitId"], "LOT-SKU1-OPENING-001")
+        self.assertEqual(latest["locationId"], "LOC-MAIN")
+        self.assertEqual(shop_inventory_sku_totals(first, ["SKU-1"]), {"SKU-1": 7})
+
+        second = production_returned_inventory(
+            first,
+            action_proof("ACT-PRODUCTION-RETURN-002", "2026-07-27T08:20:00.000Z"),
+            production_quantity_milli=2_500,
+            stock_quantity=1,
+        )
+        self.assertEqual(shop_inventory_sku_totals(second, ["SKU-1"]), {"SKU-1": 8})
+
+        over_return = production_returned_inventory(
+            second,
+            action_proof("ACT-PRODUCTION-RETURN-OVER", "2026-07-27T08:30:00.000Z"),
+            production_quantity_milli=7_500,
+            stock_quantity=3,
+        )
+        with self.assertRaisesRegex(
+            ShopInventoryValidationError, "exceeds the unconsumed quantity"
+        ):
+            validate_shop_inventory_state(over_return, ["SKU-1"])
+
+        wrong_ratio = production_returned_inventory(
+            issued,
+            action_proof("ACT-PRODUCTION-RETURN-RATIO", "2026-07-27T08:30:00.000Z"),
+            production_quantity_milli=2_000,
+            stock_quantity=1,
+        )
+        with self.assertRaisesRegex(ShopInventoryValidationError, "conversion ratio"):
+            validate_shop_inventory_state(wrong_ratio, ["SKU-1"])
+
+        wrong_location = production_returned_inventory(
+            issued,
+            action_proof("ACT-PRODUCTION-RETURN-LOCATION", "2026-07-27T08:30:00.000Z"),
+            production_quantity_milli=2_500,
+            stock_quantity=1,
+            location_id="LOC-BRANCH",
+        )
+        with self.assertRaisesRegex(ShopInventoryValidationError, "exact lot and location"):
+            validate_shop_inventory_state(wrong_location, ["SKU-1"])
+
+        unknown_issue = production_returned_inventory(
+            issued,
+            action_proof("ACT-PRODUCTION-RETURN-UNKNOWN", "2026-07-27T08:30:00.000Z"),
+            production_quantity_milli=2_500,
+            stock_quantity=1,
+            production_issue_id="PIS-UNKNOWN-001",
+        )
+        with self.assertRaisesRegex(ShopInventoryValidationError, "earlier Plant issue"):
+            validate_shop_inventory_state(unknown_issue, ["SKU-1"])
+
+        tampered_identity = production_returned_inventory(
+            issued,
+            action_proof("ACT-PRODUCTION-RETURN-TAMPER", "2026-07-27T08:30:00.000Z"),
+            production_quantity_milli=2_500,
+            stock_quantity=1,
+        )
+        tampered_identity["commands"][-1]["payload"]["productionJobId"] = "JOB-TAMPERED"  # type: ignore[index]
+        body = {
+            key: tampered_identity["commands"][-1][key]  # type: ignore[index]
+            for key in ("sequence", "previousDigest", "payload")
+        }
+        tampered_identity["commands"][-1]["digest"] = canonical_digest(body)  # type: ignore[index]
+        tampered_identity["headDigest"] = tampered_identity["commands"][-1]["digest"]  # type: ignore[index]
+        with self.assertRaisesRegex(ShopInventoryValidationError, "immutable Plant issue"):
+            validate_shop_inventory_state(tampered_identity, ["SKU-1"])
+
+        duplicate = append_inventory_command(first, deepcopy(latest))
+        with self.assertRaisesRegex(
+            ShopInventoryValidationError, "command or action ID is duplicated"
+        ):
+            validate_shop_inventory_state(duplicate, ["SKU-1"])
 
     def test_managed_plant_batch_receipt_updates_aggregate_and_location_truth(self) -> None:
         current = commerce_state()

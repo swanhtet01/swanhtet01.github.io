@@ -431,6 +431,17 @@ def _production_inventory_command_id(request_id: str) -> str:
     return f"PIS-{identity[7:39].upper()}"
 
 
+def _production_return_command_id(production_issue_id: str, action_id: str) -> str:
+    identity = _canonical_digest(
+        {
+            "contract": "supermega.shop.production-return-inventory-command.v1",
+            "productionIssueId": production_issue_id,
+            "actionId": action_id,
+        }
+    )
+    return f"PRT-{identity[7:39].upper()}"
+
+
 def _production_receipt_command_id(release_id: str) -> str:
     identity = _canonical_digest(
         {
@@ -765,6 +776,91 @@ def _payload(value: object, field: str, catalog_skus: list[str]) -> dict[str, An
             "allocations": allocations,
             "proof": _proof(row["proof"], f"{field}.proof"),
         }
+    if kind == "production_return":
+        row = _exact(
+            row,
+            field,
+            {
+                "kind",
+                "id",
+                "productionIssueId",
+                "productionRequestId",
+                "productionCommandDigest",
+                "productionJobId",
+                "productionMaterialId",
+                "productionInputLotId",
+                "productionQuantityMilli",
+                "productionUnit",
+                "sku",
+                "stockQuantity",
+                "conversionNote",
+                "stockUnitId",
+                "locationId",
+                "proof",
+            },
+        )
+        action_proof = _proof(row["proof"], f"{field}.proof")
+        production_issue_id = _identifier(
+            row["productionIssueId"], f"{field}.productionIssueId", "PIS"
+        )
+        command_id = _identifier(row["id"], f"{field}.id", "PRT")
+        if command_id != _production_return_command_id(
+            production_issue_id, action_proof["actionId"]
+        ):
+            raise ShopInventoryValidationError(
+                f"{field}.id is not deterministic for its Plant return evidence."
+            )
+        sku = _text(row["sku"], f"{field}.sku", 80)
+        if sku not in catalog_skus:
+            raise ShopInventoryValidationError(
+                f"{field}.sku is not in the Shop catalog."
+            )
+        production_unit = _text(
+            row["productionUnit"], f"{field}.productionUnit", 12
+        )
+        if production_unit not in _PRODUCTION_MATERIAL_UNITS:
+            raise ShopInventoryValidationError(
+                f"{field}.productionUnit is unsupported."
+            )
+        return {
+            "kind": "production_return",
+            "id": command_id,
+            "productionIssueId": production_issue_id,
+            "productionRequestId": _text(
+                row["productionRequestId"], f"{field}.productionRequestId", 80
+            ),
+            "productionCommandDigest": _digest(
+                row["productionCommandDigest"],
+                f"{field}.productionCommandDigest",
+            ),
+            "productionJobId": _text(
+                row["productionJobId"], f"{field}.productionJobId", 80
+            ),
+            "productionMaterialId": _text(
+                row["productionMaterialId"], f"{field}.productionMaterialId", 80
+            ),
+            "productionInputLotId": _text(
+                row["productionInputLotId"], f"{field}.productionInputLotId", 80
+            ),
+            "productionQuantityMilli": _integer(
+                row["productionQuantityMilli"],
+                f"{field}.productionQuantityMilli",
+                1,
+            ),
+            "productionUnit": production_unit,
+            "sku": sku,
+            "stockQuantity": _integer(
+                row["stockQuantity"], f"{field}.stockQuantity", 1
+            ),
+            "conversionNote": _text(
+                row["conversionNote"], f"{field}.conversionNote", 240
+            ),
+            "stockUnitId": _text(row["stockUnitId"], f"{field}.stockUnitId", 80),
+            "locationId": _identifier(
+                row["locationId"], f"{field}.locationId", "LOC"
+            ),
+            "proof": action_proof,
+        }
     if kind == "order_reserve":
         row = _exact(
             row,
@@ -966,6 +1062,9 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
     balances: dict[tuple[str, str], dict[str, int]] = {}
     reservations: dict[str, dict[str, Any]] = {}
     returned_by_reservation: dict[str, int] = {}
+    production_issues: dict[str, dict[str, Any]] = {}
+    production_returned_by_issue: dict[str, dict[str, int]] = {}
+    production_returned_by_allocation: dict[tuple[str, str, str], int] = {}
     import_count = 0
 
     def current_balance(stock_unit_id: str, location_id: str) -> dict[str, int]:
@@ -1177,6 +1276,92 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
                     reserved_delta=0,
                     field=field,
                 )
+            production_issues[command["id"]] = command
+            continue
+        if command["kind"] == "production_return":
+            issue = production_issues.get(command["productionIssueId"])
+            if issue is None:
+                raise ShopInventoryValidationError(
+                    "production return does not reference an earlier Plant issue."
+                )
+            identity_fields = (
+                "productionRequestId",
+                "productionCommandDigest",
+                "productionJobId",
+                "productionMaterialId",
+                "productionInputLotId",
+                "productionUnit",
+                "sku",
+                "conversionNote",
+            )
+            if any(command[key] != issue[key] for key in identity_fields):
+                raise ShopInventoryValidationError(
+                    "production return does not match its immutable Plant issue evidence."
+                )
+            source_allocation = next(
+                (
+                    allocation
+                    for allocation in issue["allocations"]
+                    if allocation["stockUnitId"] == command["stockUnitId"]
+                    and allocation["locationId"] == command["locationId"]
+                ),
+                None,
+            )
+            if source_allocation is None:
+                raise ShopInventoryValidationError(
+                    "production return must use an exact lot and location from its Plant issue."
+                )
+            if (
+                command["productionQuantityMilli"] * issue["stockQuantity"]
+                != command["stockQuantity"] * issue["productionQuantityMilli"]
+            ):
+                raise ShopInventoryValidationError(
+                    "production return does not preserve the reviewed Plant-to-Shop conversion ratio."
+                )
+            returned = production_returned_by_issue.get(
+                issue["id"], {"productionQuantityMilli": 0, "stockQuantity": 0}
+            )
+            if (
+                returned["productionQuantityMilli"]
+                + command["productionQuantityMilli"]
+                > issue["productionQuantityMilli"]
+                or returned["stockQuantity"] + command["stockQuantity"]
+                > issue["stockQuantity"]
+            ):
+                raise ShopInventoryValidationError(
+                    "production return exceeds the unconsumed quantity from its Plant issue."
+                )
+            allocation_key = (
+                issue["id"],
+                command["stockUnitId"],
+                command["locationId"],
+            )
+            allocation_returned = production_returned_by_allocation.get(
+                allocation_key, 0
+            )
+            if (
+                allocation_returned + command["stockQuantity"]
+                > source_allocation["quantity"]
+            ):
+                raise ShopInventoryValidationError(
+                    "production return exceeds the quantity issued from its exact lot and location."
+                )
+            apply_delta(
+                command["stockUnitId"],
+                command["locationId"],
+                on_hand_delta=command["stockQuantity"],
+                reserved_delta=0,
+                field=field,
+            )
+            production_returned_by_issue[issue["id"]] = {
+                "productionQuantityMilli": returned["productionQuantityMilli"]
+                + command["productionQuantityMilli"],
+                "stockQuantity": returned["stockQuantity"]
+                + command["stockQuantity"],
+            }
+            production_returned_by_allocation[allocation_key] = (
+                allocation_returned + command["stockQuantity"]
+            )
             continue
         if command["kind"] == "order_reserve":
             if any(
