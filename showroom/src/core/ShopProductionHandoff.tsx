@@ -2,11 +2,12 @@ import { type FormEvent, useEffect, useMemo, useState } from 'react'
 
 import {
   issueCommerceStockToProduction,
+  returnCommerceStockFromProduction,
   type CommerceActionProof,
   type CommerceState,
 } from './commerce-workspace'
 import { planShopInventoryProductionAllocation, projectShopInventory } from './shop-inventory-foundation'
-import { pendingProductionMaterialHandoffs, type ProductionMaterialHandoff } from './production-material-handoff'
+import { productionMaterialHandoffs, type ProductionMaterialHandoff } from './production-material-handoff'
 import {
   PLANT_ORDER_WORKSPACE_UPDATED_EVENT,
   loadPlantOrderWorkspace,
@@ -21,7 +22,7 @@ type ShopProductionHandoffProps = {
   disabled: boolean
   identity: ManagedIdentity | null
   onIssue: (
-    eventType: 'commerce.production_material.issued',
+    eventType: 'commerce.production_material.issued' | 'commerce.production_material.returned',
     commandId: string,
     proof: CommerceActionProof,
     transition: (state: CommerceState) => CommerceState | null,
@@ -59,6 +60,36 @@ function defaultStockQuantity(request: ProductionMaterialHandoff, available: num
   return String(Math.max(1, Math.min(exactWholeUnits, Math.max(available, 1))))
 }
 
+type MaterialReturnOption = {
+  key: string
+  expectedInventoryHeadDigest: string
+  issueProductionQuantityMilli: number
+  issueStockQuantity: number
+  locationId: string
+  locationLabel: string
+  materialName: string
+  maxStockQuantity: number
+  productionUnit: string
+  requestId: string
+  sku: string
+  sourceIssueActionId: string
+  stockUnitId: string
+}
+
+type ReturnReview = {
+  commandId: string
+  input: {
+    sourceIssueActionId: string
+    productionQuantityMilli: number
+    stockQuantity: number
+    stockUnitId: string
+    locationId: string
+    expectedInventoryHeadDigest: string
+  }
+  option: MaterialReturnOption
+  proof: CommerceActionProof
+}
+
 function defaultConversionNote(request: ProductionMaterialHandoff, available: number) {
   const exactWholeUnits = request.quantityMilli % 1_000 === 0 ? request.quantityMilli / 1_000 : 0
   return request.unit === 'pcs' && exactWholeUnits > 0 && exactWholeUnits <= available
@@ -70,6 +101,64 @@ function formatPlantQuantity(request: ProductionMaterialHandoff) {
   return `${(request.quantityMilli / 1_000).toLocaleString(undefined, { maximumFractionDigits: 3 })} ${request.unit}`
 }
 
+function materialReturnOptions(commerce: CommerceState, handoffs: ProductionMaterialHandoff[]) {
+  const foundation = commerce.inventoryFoundation
+  if (!foundation) return []
+  const projection = projectShopInventory(foundation, commerce.items.map((item) => item.sku).sort())
+  return handoffs.flatMap((handoff): MaterialReturnOption[] => {
+    const movement = handoff.fulfilledBy
+    if (!movement) return []
+    const source = foundation.commands.find((command) => command.payload.kind === 'production_issue'
+      && command.payload.proof.actionId === movement.actionId)?.payload
+    if (!source || source.kind !== 'production_issue') return []
+    const returns = foundation.commands.flatMap((command) => command.payload.kind === 'production_return'
+      && command.payload.productionIssueId === source.id ? [command.payload] : [])
+    return source.allocations.flatMap((allocation): MaterialReturnOption[] => {
+      const returned = returns
+        .filter((entry) => entry.stockUnitId === allocation.stockUnitId && entry.locationId === allocation.locationId)
+        .reduce((total, entry) => total + entry.stockQuantity, 0)
+      const maxStockQuantity = allocation.quantity - returned
+      if (maxStockQuantity < 1) return []
+      const location = projection.locations.find((candidate) => candidate.id === allocation.locationId)
+      const unit = projection.stockUnits.find((candidate) => candidate.id === allocation.stockUnitId)
+      return [{
+        key: `${source.id}|${allocation.stockUnitId}|${allocation.locationId}`,
+        expectedInventoryHeadDigest: foundation.headDigest,
+        issueProductionQuantityMilli: source.productionQuantityMilli,
+        issueStockQuantity: source.stockQuantity,
+        locationId: allocation.locationId,
+        locationLabel: `${location?.name ?? allocation.locationId} / ${unit?.trackingCode ?? allocation.stockUnitId}`,
+        materialName: handoff.materialName,
+        maxStockQuantity,
+        productionUnit: source.productionUnit,
+        requestId: source.productionRequestId,
+        sku: source.sku,
+        sourceIssueActionId: movement.actionId,
+        stockUnitId: allocation.stockUnitId,
+      }]
+    })
+  })
+}
+
+function returnProductionQuantity(option: MaterialReturnOption, stockQuantity: number) {
+  if (!Number.isSafeInteger(stockQuantity) || stockQuantity < 1 || stockQuantity > option.maxStockQuantity) return null
+  const numerator = BigInt(stockQuantity) * BigInt(option.issueProductionQuantityMilli)
+  const denominator = BigInt(option.issueStockQuantity)
+  if (numerator % denominator !== 0n) return null
+  const quantity = numerator / denominator
+  return quantity <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(quantity) : null
+}
+
+function returnActionProof(actor: string, option: MaterialReturnOption): CommerceActionProof {
+  return {
+    actionId: `ACT-${uuid().toUpperCase()}`,
+    capturedAt: new Date().toISOString(),
+    actor: actor.trim() || 'Local Shop operator',
+    reason: `Return reviewed unused stock from Plant request ${option.requestId}.`,
+    evidenceReference: `PLANT-MATERIAL-RETURN:${option.requestId}:${option.sourceIssueActionId}`,
+  }
+}
+
 const LOCAL_PLANT_SCOPE = 'plant:local-sample'
 const LEGACY_LOCAL_PLANT_SCOPE = 'plant:'
 
@@ -77,6 +166,106 @@ function loadLocalPlantExecution() {
   const snapshot = loadPlantOrderWorkspace(localStorage, LOCAL_PLANT_SCOPE)
   if (snapshot.source !== 'empty') return snapshot
   return loadPlantOrderWorkspace(localStorage, LEGACY_LOCAL_PLANT_SCOPE)
+}
+
+function ProductionMaterialReturn({
+  actor,
+  commerce,
+  disabled,
+  handoffs,
+  onIssue,
+}: {
+  actor: string
+  commerce: CommerceState
+  disabled: boolean
+  handoffs: ProductionMaterialHandoff[]
+  onIssue: ShopProductionHandoffProps['onIssue']
+}) {
+  const options = useMemo(() => {
+    try {
+      return materialReturnOptions(commerce, handoffs)
+    } catch {
+      return []
+    }
+  }, [commerce, handoffs])
+  const [open, setOpen] = useState(false)
+  const [selectedKey, setSelectedKey] = useState('')
+  const [stockQuantity, setStockQuantity] = useState('1')
+  const [review, setReview] = useState<ReturnReview | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const selected = options.find((option) => option.key === selectedKey) ?? options[0]
+  const parsedStockQuantity = /^\d+$/.test(stockQuantity) ? Number(stockQuantity) : Number.NaN
+  const productionQuantityMilli = selected ? returnProductionQuantity(selected, parsedStockQuantity) : null
+  if (!selected) return null
+
+  function stage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selected || productionQuantityMilli === null) return
+    const proof = returnActionProof(actor, selected)
+    const commandId = uuid()
+    if (!commandId || !proof.actionId.slice(4)) {
+      setError('Secure command identity is unavailable. Nothing was written.')
+      return
+    }
+    setReview({
+      commandId,
+      input: {
+        sourceIssueActionId: selected.sourceIssueActionId,
+        productionQuantityMilli,
+        stockQuantity: parsedStockQuantity,
+        stockUnitId: selected.stockUnitId,
+        locationId: selected.locationId,
+        expectedInventoryHeadDigest: selected.expectedInventoryHeadDigest,
+      },
+      option: selected,
+      proof,
+    })
+    setError('')
+    setNotice('Review the exact unused quantity and destination. Nothing has been written yet.')
+  }
+
+  async function confirm() {
+    if (!review) return
+    setBusy(true)
+    setError('')
+    try {
+      await onIssue(
+        'commerce.production_material.returned',
+        review.commandId,
+        review.proof,
+        (current) => returnCommerceStockFromProduction(current, review.input, review.proof),
+      )
+      setReview(null)
+      setOpen(false)
+      setNotice(`${review.input.stockQuantity} ${review.option.sku} returned to ${review.option.locationLabel}.`)
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'The material return was not confirmed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <section aria-labelledby="production-material-return-title" className="catalog-onboarding-bridge">
+    <span className="core-eyebrow">Unused Plant material</span>
+    <h3 id="production-material-return-title">Return stock to its original location</h3>
+    <p>{selected.materialName} · {selected.maxStockQuantity} {selected.sku} available to return from {selected.requestId}.</p>
+    {!open ? <button className="core-button" disabled={disabled} onClick={() => { setOpen(true); setNotice(''); setError('') }} type="button">Return unused stock</button> : null}
+    {open ? <form className="core-form compact-form" onSubmit={stage}>
+      <label>Original lot and location<select disabled={disabled || busy || Boolean(review)} onChange={(event) => { setSelectedKey(event.target.value); setStockQuantity('1') }} value={selected.key}>{options.map((option) => <option key={option.key} value={option.key}>{option.locationLabel} · {option.maxStockQuantity} available</option>)}</select></label>
+      <label>Whole stock units to return<input disabled={disabled || busy || Boolean(review)} inputMode="numeric" max={selected.maxStockQuantity} min="1" onChange={(event) => setStockQuantity(event.target.value)} required step="1" type="number" value={stockQuantity} /></label>
+      <div className="stock-receipt-preview" role="status"><small>{selected.requestId} → {selected.locationLabel}</small><strong>{productionQuantityMilli === null ? 'Choose a whole quantity that preserves the reviewed conversion' : `${parsedStockQuantity} ${selected.sku} = ${(productionQuantityMilli / 1_000).toLocaleString(undefined, { maximumFractionDigits: 3 })} ${selected.productionUnit}`}</strong></div>
+      {review ? <div className="stock-receipt-preview" role="status"><small>Final review</small><strong>Return {review.input.stockQuantity} {review.option.sku} to {review.option.locationLabel}</strong></div> : null}
+      <div className="form-actions">
+        <button className="core-button" disabled={busy} onClick={() => { setReview(null); setOpen(false); setNotice('') }} type="button">Cancel</button>
+        {review ? <button className="core-button primary" disabled={disabled || busy} onClick={() => void confirm()} type="button">{busy ? 'Returning…' : 'Confirm return'}</button>
+          : <button className="core-button primary" disabled={disabled || productionQuantityMilli === null} type="submit">Review return</button>}
+      </div>
+    </form> : null}
+    {notice ? <p className="form-notice" role="status">{notice}</p> : null}
+    {error ? <p className="form-notice warning-text" role="alert">{error}</p> : null}
+  </section>
 }
 
 export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }: ShopProductionHandoffProps) {
@@ -129,10 +318,11 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
       })
     return () => { active = false }
   }, [identity])
-  const pending = useMemo(
-    () => pendingProductionMaterialHandoffs(execution, commerce),
+  const handoffs = useMemo(
+    () => productionMaterialHandoffs(execution, commerce),
     [commerce, execution],
   )
+  const pending = handoffs.filter((handoff) => !handoff.fulfilledBy)
   const request = pending[0]
   const defaultItem = commerce.items.find((item) => item.onHand > 0) ?? commerce.items[0]
   const [openRequestId, setOpenRequestId] = useState('')
@@ -144,7 +334,7 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   if (loadError) return <p className="form-notice warning-text" role="alert">{loadError}</p>
-  if (!request) return null
+  if (!request) return <ProductionMaterialReturn actor={actor} commerce={commerce} disabled={disabled} handoffs={handoffs} onIssue={onIssue} />
 
   const selectedItem = commerce.items.find((item) => item.sku === sku)
   const parsedQuantity = /^\d+$/.test(stockQuantity) ? Number(stockQuantity) : Number.NaN
@@ -239,7 +429,7 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
     }
   }
 
-  return <section aria-labelledby="production-material-handoff-title" className="catalog-onboarding-bridge">
+  return <><section aria-labelledby="production-material-handoff-title" className="catalog-onboarding-bridge">
     <span className="core-eyebrow">Plant request</span>
     <h3 id="production-material-handoff-title">{pending.length} material {pending.length === 1 ? 'issue' : 'issues'} waiting</h3>
     <p>{request.materialName} · {formatPlantQuantity(request)} · lot {request.inputLotId}. Shop remains the only stock authority.</p>
@@ -258,5 +448,5 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
     </form> : null}
     {notice ? <p className="form-notice" role="status">{notice}</p> : null}
     {error ? <p className="form-notice warning-text" role="alert">{error}</p> : null}
-  </section>
+  </section><ProductionMaterialReturn actor={actor} commerce={commerce} disabled={disabled} handoffs={handoffs} onIssue={onIssue} /></>
 }

@@ -45,6 +45,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.stock.received",
         "commerce.stock.counted",
         "commerce.production_material.issued",
+        "commerce.production_material.returned",
         "commerce.production_batch.received",
         "commerce.inventory.initialized",
         "commerce.inventory.master_created",
@@ -1703,6 +1704,7 @@ def _authoritative_command_payload(
     if event_type in {
         "commerce.stock.counted",
         "commerce.production_material.issued",
+        "commerce.production_material.returned",
         "commerce.production_batch.received",
     }:
         evidence = authoritative.get("evidence")
@@ -1720,6 +1722,7 @@ def _authoritative_command_payload(
         location_command_kind = {
             "commerce.stock.counted": "count",
             "commerce.production_material.issued": "production_issue",
+            "commerce.production_material.returned": "production_return",
             "commerce.production_batch.received": "production_receipt",
         }[event_type]
         location_command_matches = False

@@ -33,6 +33,7 @@ from supermega_runtime.plant_equipment_import import (
     validate_plant_equipment_import,
 )
 from supermega_runtime.production_material_handoff import (
+    production_material_requests,
     require_shop_issue_before_plant_progress,
     require_shop_issue_matches_plant,
 )
@@ -1284,6 +1285,74 @@ def create_trial_router(
 
             related_surfaces = ("production",)
             state_precondition = require_plant_request
+        elif (
+            body.surface == "commerce"
+            and body.event_type == "commerce.production_material.returned"
+        ):
+            submitted_commerce = body.payload.get("state")
+            submitted_movements = (
+                submitted_commerce.get("movements")
+                if isinstance(submitted_commerce, Mapping)
+                else None
+            )
+            return_movement = (
+                submitted_movements[0]
+                if isinstance(submitted_movements, list)
+                and submitted_movements
+                and isinstance(submitted_movements[0], Mapping)
+                else None
+            )
+            if (
+                not isinstance(return_movement, Mapping)
+                or return_movement.get("kind") != "production_return"
+            ):
+                raise _error(422, "production_material_return_state_required")
+
+            def require_current_plant_issue(
+                commerce_state: Mapping[str, Any],
+                related_states: Mapping[str, Mapping[str, Any]],
+            ) -> None:
+                source_issue_action_id = return_movement.get(
+                    "productionIssueActionId"
+                )
+                movements = commerce_state.get("movements")
+                source_issues = [
+                    movement
+                    for movement in movements
+                    if isinstance(movement, Mapping)
+                    and movement.get("kind") == "production_issue"
+                    and movement.get("actionId") == source_issue_action_id
+                ] if isinstance(movements, list) else []
+                if len(source_issues) != 1:
+                    raise TrialValidationError(
+                        "the material return source issue is not retained in Shop."
+                    )
+                source = source_issues[0]
+                requests = production_material_requests(
+                    related_states.get("production", {})
+                )
+                matching = [
+                    request
+                    for request in requests
+                    if request.get("requestId") == source.get("productionRequestId")
+                    and request.get("sourceCommandDigest")
+                    == source.get("productionCommandDigest")
+                    and request.get("jobId") == source.get("productionJobId")
+                    and request.get("materialId")
+                    == source.get("productionMaterialId")
+                    and request.get("inputLotId")
+                    == source.get("productionInputLotId")
+                    and request.get("quantityMilli")
+                    == source.get("productionQuantityMilli")
+                    and request.get("unit") == source.get("productionUnit")
+                ]
+                if len(matching) != 1:
+                    raise TrialValidationError(
+                        "the material return no longer matches the locked Plant issue."
+                    )
+
+            related_surfaces = ("production",)
+            state_precondition = require_current_plant_issue
         elif (
             body.surface == "production"
             and body.event_type == "production.order_execution.recorded"

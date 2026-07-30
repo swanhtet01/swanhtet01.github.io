@@ -30,7 +30,7 @@ type ShopInventoryFoundationProps = {
   identity: ManagedIdentity | null
   production: ProductionState
   onIssue: (
-    eventType: 'commerce.production_material.issued',
+    eventType: 'commerce.production_material.issued' | 'commerce.production_material.returned',
     commandId: string,
     proof: CommerceActionProof,
     transition: (state: CommerceState) => CommerceState | null,
