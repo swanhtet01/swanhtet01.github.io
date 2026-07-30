@@ -212,6 +212,10 @@ class ClientProvisioningRecipeTests(unittest.TestCase):
                 "owner authority missing",
                 lambda value: value["roles"][0]["capabilities"].remove("approvals.decide"),
             ),
+            (
+                "owner baseline authority missing",
+                lambda value: value["roles"][0]["capabilities"].remove("company.baseline.approve"),
+            ),
         )
         for label, mutate in mutations:
             with self.subTest(label=label):

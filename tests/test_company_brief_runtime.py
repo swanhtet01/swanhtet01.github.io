@@ -8,7 +8,12 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
-from supermega_runtime.company_brief import build_managed_company_brief
+from supermega_runtime.company_brief import (
+    build_managed_company_brief,
+    company_brief_receipt,
+    company_state_with_receipt,
+    validate_operating_baseline,
+)
 from supermega_runtime.managed_context import (
     MANAGED_CONTEXT_ALLOWED_USES,
     MANAGED_CONTEXT_FORBIDDEN_ACTIONS,
@@ -16,7 +21,7 @@ from supermega_runtime.managed_context import (
 )
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_runtime import create_trial_router
-from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal, TrialState
+from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal, TrialState, TrialValidationError
 
 
 def commerce_state() -> dict[str, object]:
@@ -315,13 +320,159 @@ class CompanyBriefUnitTests(unittest.TestCase):
         )
         self.assertIsNone(brief["ownerContext"])
 
+    def test_foreign_or_swapped_product_states_fail_closed(self) -> None:
+        cases = [
+            {"commerce": TrialState("workspace-b", "commerce", 1, commerce_state())},
+            {"commerce": TrialState("workspace-a", "production", 1, commerce_state())},
+            {"unexpected": TrialState("workspace-a", "commerce", 1, commerce_state())},
+        ]
+        for states in cases:
+            with self.subTest(states=states):
+                with self.assertRaisesRegex(TrialValidationError, "managed state identity|unexpected managed surface"):
+                    build_managed_company_brief(
+                        workspace_id="workspace-a",
+                        intent="attention",
+                        states=states,
+                        approvals=[],
+                    )
+
+    def test_critical_plant_safety_outranks_unrelated_invalid_shop_source(self) -> None:
+        invalid_commerce = commerce_state()
+        invalid_commerce["items"][0]["onHand"] = -1
+        critical_plant = production_state()
+        critical_plant["machines"][0]["state"] = "stopped"
+        critical_plant["revision"] = 1
+        critical_plant["events"] = [{
+            "id": "EVT-machine-stop-001",
+            "actionId": "machine-stop-001",
+            "createdAt": "2026-07-30T09:30:00.000Z",
+            "actor": "shift-lead",
+            "reason": "Observed the packing line stopped during the shift check.",
+            "evidenceReference": "PLANT-MACHINE-STOP-001",
+            "kind": "machine_state_changed",
+            "subjectId": "MACHINE-001",
+            "summary": "Packing line: running to stopped",
+            "fromState": "running",
+            "toState": "stopped",
+        }]
+        brief = build_managed_company_brief(
+            workspace_id="workspace-a",
+            intent="attention",
+            states={
+                "commerce": TrialState("workspace-a", "commerce", 1, invalid_commerce),
+                "production": TrialState("workspace-a", "production", 1, critical_plant),
+            },
+            approvals=[],
+        )
+        self.assertEqual(brief["nextAction"]["product"], "plant")
+        self.assertIn("production blockers", brief["title"])
+
+    def test_operating_baseline_is_aggregate_only_and_explains_changed_attention(self) -> None:
+        first = build_managed_company_brief(
+            workspace_id="workspace-a",
+            intent="attention",
+            states={"commerce": TrialState("workspace-a", "commerce", 1, commerce_state())},
+            approvals=[],
+        )
+        baseline = validate_operating_baseline(first["operatingBaseline"], workspace_id="workspace-a")
+        self.assertEqual(first["operatingChange"]["status"], "first_checkpoint")
+        self.assertEqual(baseline["coverage"]["readyProducts"], 1)
+        self.assertEqual(baseline["products"]["shop"]["lowStock"], 1)
+        self.assertEqual(baseline["rawRecordsIncluded"], False)
+        self.assertNotIn("Low stock item", str(baseline))
+
+        company = company_state_with_receipt(
+            {"tasks": []},
+            company_brief_receipt(first),
+        )
+        more_attention = commerce_state()
+        more_attention["items"][1]["onHand"] = 0
+        changed = build_managed_company_brief(
+            workspace_id="workspace-a",
+            intent="attention",
+            states={
+                "company": TrialState("workspace-a", "company", 1, company),
+                "commerce": TrialState("workspace-a", "commerce", 2, more_attention),
+            },
+            approvals=[],
+        )
+        self.assertEqual(changed["operatingChange"]["status"], "changed")
+        self.assertEqual(changed["operatingChange"]["changedProducts"], ["shop"])
+        self.assertEqual(changed["operatingChange"]["attentionIncreased"], ["shop"])
+        self.assertEqual(changed["operatingChange"]["attentionDecreased"], [])
+        self.assertEqual(changed["operatingChange"]["rawRecordsIncluded"], False)
+
+        retained_changed = company_state_with_receipt(company, company_brief_receipt(changed))
+        replay = build_managed_company_brief(
+            workspace_id="workspace-a",
+            intent="attention",
+            states={
+                "company": TrialState("workspace-a", "company", 2, retained_changed),
+                "commerce": TrialState("workspace-a", "commerce", 2, more_attention),
+            },
+            approvals=[],
+        )
+        self.assertEqual(replay["briefDigest"], changed["briefDigest"])
+        self.assertEqual(replay["operatingChange"], changed["operatingChange"])
+
+    def test_operating_checkpoint_history_rolls_over_and_discards_malformed_or_foreign_baselines(self) -> None:
+        state: dict[str, object] = {"tasks": []}
+        for version in range(1, 36):
+            brief = build_managed_company_brief(
+                workspace_id="workspace-a",
+                intent="shop_inventory",
+                states={"commerce": TrialState("workspace-a", "commerce", version, commerce_state())},
+                approvals=[],
+            )
+            state = company_state_with_receipt(state, company_brief_receipt(brief))
+        self.assertEqual(len(state["briefReceipts"]), 30)
+
+        malformed = deepcopy(state)
+        malformed["briefReceipts"] = [
+            {"contract": "supermega.managed_company_brief_receipt.v1", "rawRows": [{"secret": "drop"}]},
+            *malformed["briefReceipts"],
+        ]
+        latest = build_managed_company_brief(
+            workspace_id="workspace-a",
+            intent="shop_inventory",
+            states={"commerce": TrialState("workspace-a", "commerce", 40, commerce_state())},
+            approvals=[],
+        )
+        recovered = company_state_with_receipt(malformed, company_brief_receipt(latest))
+        self.assertEqual(len(recovered["briefReceipts"]), 30)
+        self.assertNotIn("rawRows", str(recovered["briefReceipts"]))
+
+        foreign = build_managed_company_brief(
+            workspace_id="workspace-b",
+            intent="shop_inventory",
+            states={"commerce": TrialState("workspace-b", "commerce", 1, commerce_state())},
+            approvals=[],
+        )
+        isolated = build_managed_company_brief(
+            workspace_id="workspace-a",
+            intent="shop_inventory",
+            states={
+                "company": TrialState(
+                    "workspace-a",
+                    "company",
+                    1,
+                    {"tasks": [], "briefReceipts": [company_brief_receipt(foreign)]},
+                ),
+                "commerce": TrialState("workspace-a", "commerce", 1, commerce_state()),
+            },
+            approvals=[],
+        )
+        self.assertEqual(isolated["operatingChange"]["status"], "first_checkpoint")
+
 
 class CompanyBriefRouteTests(unittest.TestCase):
     def setUp(self) -> None:
         self.store = InMemoryTrialStore(reducer=reduce_trial_state)
         self.human = TrialPrincipal("workspace-a", "actor-human", "human")
         self.agent = TrialPrincipal("workspace-a", "actor-agent", "agent")
+        self.writer = TrialPrincipal("workspace-a", "actor-writer", "human")
         capabilities = (
+            "company.baseline.approve",
             "company.write",
             "commerce.read",
             "production.read",
@@ -340,7 +491,13 @@ class CompanyBriefRouteTests(unittest.TestCase):
             actor_kind="agent",
             capabilities=capabilities,
         )
-        sessions = {"human": self.human, "agent": self.agent}
+        self.store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-writer",
+            actor_kind="human",
+            capabilities=tuple(capability for capability in capabilities if capability != "company.baseline.approve"),
+        )
+        sessions = {"human": self.human, "agent": self.agent, "writer": self.writer}
 
         def resolve_principal(request: Request) -> TrialPrincipal | None:
             return sessions.get(request.headers.get("x-test-session", ""))
@@ -360,6 +517,8 @@ class CompanyBriefRouteTests(unittest.TestCase):
         self.assertEqual(brief["sourceCount"], 0)
         self.assertEqual(brief["companyVersion"], 0)
         self.assertEqual(brief["retention"], "reproducible_not_persisted")
+        self.assertEqual(brief["operatingChange"]["status"], "first_checkpoint")
+        self.assertEqual(brief["operatingBaseline"]["rawRecordsIncluded"], False)
 
         command_id = str(uuid4())
         body = {
@@ -375,11 +534,36 @@ class CompanyBriefRouteTests(unittest.TestCase):
         self.assertEqual(payload["retention"]["internalWritePerformed"], True)
         self.assertEqual(payload["retention"]["externalWritesPerformed"], False)
         self.assertEqual(len(payload["result"]["state"]["briefReceipts"]), 1)
+        self.assertEqual(
+            payload["result"]["state"]["briefReceipts"][0]["operatingBaseline"]["baselineDigest"],
+            brief["operatingBaseline"]["baselineDigest"],
+        )
 
         replay = self.client.post("/api/trial/v1/company-brief/receipts", headers=headers, json=body)
         self.assertEqual(replay.status_code, 200)
-        self.assertEqual(replay.json()["result"]["version"], 1)
+        self.assertNotIn("result", replay.json())
+        self.assertEqual(replay.json()["brief"]["companyVersion"], 1)
+        self.assertEqual(replay.json()["retention"]["status"], "already_retained")
+        self.assertEqual(replay.json()["retention"]["internalWritePerformed"], False)
         self.assertEqual(replay.json()["retention"]["idempotentReplay"], True)
+        self.assertEqual(replay.json()["brief"]["operatingChange"], brief["operatingChange"])
+
+        new_command = {**body, "command_id": str(uuid4()), "expected_company_version": 1}
+        domain_replay = self.client.post("/api/trial/v1/company-brief/receipts", headers=headers, json=new_command)
+        self.assertEqual(domain_replay.status_code, 200)
+        self.assertEqual(domain_replay.json()["brief"]["companyVersion"], 1)
+        self.assertEqual(domain_replay.json()["retention"]["status"], "already_retained")
+        self.assertEqual(len(self.store._events), 1)
+
+        refreshed = self.client.post("/api/trial/v1/company-brief", headers=headers, json={"intent": "attention"})
+        self.assertEqual(refreshed.status_code, 200)
+        self.assertEqual(refreshed.json()["brief"]["retention"], "persisted_managed_audit")
+
+        stale_new_command = {**body, "command_id": str(uuid4())}
+        stale = self.client.post("/api/trial/v1/company-brief/receipts", headers=headers, json=stale_new_command)
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.json()["detail"]["code"], "trial_version_conflict")
+        self.assertEqual(len(self.store._events), 1)
 
     def test_changed_brief_digest_and_agent_retention_fail_closed(self) -> None:
         body = {
@@ -398,6 +582,18 @@ class CompanyBriefRouteTests(unittest.TestCase):
         self.assertEqual(denied.status_code, 403)
         self.assertEqual(denied.json()["detail"]["code"], "trial_human_approval_required")
 
+        owner_capability_denied = self.client.post(
+            "/api/trial/v1/company-brief/receipts",
+            headers={"x-test-session": "writer"},
+            json=body,
+        )
+        self.assertEqual(owner_capability_denied.status_code, 403)
+        self.assertEqual(owner_capability_denied.json()["detail"]["code"], "trial_capability_required")
+        self.assertEqual(
+            owner_capability_denied.json()["detail"]["required_capability"],
+            "company.baseline.approve",
+        )
+
     def test_generic_company_snapshot_bypass_is_rejected(self) -> None:
         response = self.client.post(
             "/api/trial/v1/commands",
@@ -412,6 +608,43 @@ class CompanyBriefRouteTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()["detail"]["code"], "company_write_requires_dedicated_workflow")
+
+    def test_brief_retention_rejects_version_only_source_drift(self) -> None:
+        headers = {"x-test-session": "human"}
+        self.store._states[("workspace-a", "commerce")] = TrialState(
+            "workspace-a",
+            "commerce",
+            1,
+            commerce_state(),
+            "actor-human",
+            "2026-07-30T10:00:00Z",
+        )
+        brief = self.client.post(
+            "/api/trial/v1/company-brief",
+            headers=headers,
+            json={"intent": "attention"},
+        ).json()["brief"]
+        self.store._states[("workspace-a", "commerce")] = TrialState(
+            "workspace-a",
+            "commerce",
+            2,
+            commerce_state(),
+            "actor-human",
+            "2026-07-30T10:01:00Z",
+        )
+        response = self.client.post(
+            "/api/trial/v1/company-brief/receipts",
+            headers=headers,
+            json={
+                "command_id": str(uuid4()),
+                "intent": "attention",
+                "brief_digest": brief["briefDigest"],
+                "expected_company_version": 0,
+            },
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["detail"]["code"], "company_brief_changed")
+        self.assertEqual(self.store.get_state(self.human, "company").version, 0)
 
     def test_unknown_intent_is_rejected_before_runtime(self) -> None:
         response = self.client.post(

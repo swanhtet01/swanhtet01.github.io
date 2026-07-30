@@ -915,7 +915,14 @@ def create_trial_router(
             raise _error(403, "trial_human_approval_required")
         readiness = _readiness(store, principal)
         _require_write_ready(readiness, "company.write")
+        if "company.baseline.approve" not in readiness.capabilities:
+            raise _error(
+                403,
+                "trial_capability_required",
+                required_capability="company.baseline.approve",
+            )
         states, approvals, _ = _company_brief_context(store, principal, readiness)
+        company = states["company"]
         brief = _invoke(
             lambda: build_managed_company_brief(
                 workspace_id=principal.workspace_id,
@@ -926,11 +933,35 @@ def create_trial_router(
         )
         if body.brief_digest != brief["briefDigest"]:
             raise _error(409, "company_brief_changed")
-        company = _invoke(lambda: store.get_state(principal, "company"))
         receipt = company_brief_receipt(brief)
         next_company = _invoke(lambda: company_state_with_receipt(company.state, receipt))
         source_versions = brief["sourceVersions"]
         related_surfaces = tuple(str(source["surface"]) for source in source_versions)
+        expected_related_versions = {
+            str(source["surface"]): int(source["version"])
+            for source in source_versions
+        }
+        if next_company == company.state and body.expected_company_version == company.version:
+            return {
+                "brief": {
+                    **brief,
+                    "companyVersion": company.version,
+                    "retention": "persisted_managed_audit",
+                },
+                "retention": {
+                    "contract": "supermega.managed_company_brief_retention.v1",
+                    "status": "already_retained",
+                    "briefDigest": brief["briefDigest"],
+                    "internalWritePerformed": False,
+                    "externalWritesPerformed": False,
+                    "idempotentReplay": True,
+                },
+                "identity": {
+                    "workspace_id": principal.workspace_id,
+                    "actor_id": principal.actor_id,
+                    "actor_kind": principal.actor_kind,
+                },
+            }
 
         def require_same_brief_sources(
             current_company: Mapping[str, Any],
@@ -938,7 +969,11 @@ def create_trial_router(
         ) -> None:
             if current_company != company.state:
                 raise TrialValidationError("Company brief history changed before retention.")
-            assert_brief_sources_unchanged(source_versions, related_states)
+            assert_brief_sources_unchanged(
+                source_versions,
+                related_states,
+                workspace_id=principal.workspace_id,
+            )
 
         result = _invoke(
             lambda: store.apply_command(
@@ -949,9 +984,31 @@ def create_trial_router(
                 expected_version=body.expected_company_version,
                 payload={"state": next_company},
                 related_surfaces=related_surfaces,
+                expected_related_versions=expected_related_versions,
                 state_precondition=require_same_brief_sources,
             )
         )
+        if result.idempotent_replay:
+            return {
+                "brief": {
+                    **brief,
+                    "companyVersion": result.version,
+                    "retention": "persisted_managed_audit",
+                },
+                "retention": {
+                    "contract": "supermega.managed_company_brief_retention.v1",
+                    "status": "already_retained",
+                    "briefDigest": brief["briefDigest"],
+                    "internalWritePerformed": False,
+                    "externalWritesPerformed": False,
+                    "idempotentReplay": True,
+                },
+                "identity": {
+                    "workspace_id": principal.workspace_id,
+                    "actor_id": principal.actor_id,
+                    "actor_kind": principal.actor_kind,
+                },
+            }
         return {
             "brief": {
                 **brief,

@@ -18,6 +18,12 @@ import {
   type ManagedContextRetention,
   type ManagedContextValidation,
 } from './managed-context.ts'
+import {
+  structurallyValidOperatingBaseline,
+  structurallyValidOperatingBaselineChange,
+  type OperatingBaseline,
+  type OperatingBaselineChange,
+} from './operating-baseline.ts'
 
 
 const WORKSPACE_STORAGE_KEY = 'supermega.managed.workspace.v1'
@@ -183,10 +189,12 @@ export type ManagedCompanyBrief = {
     surface: 'commerce' | 'production' | 'website'
     version: number
     updatedAt: string
-    stateDigest: string
+    projectionDigest: string
   }>
   approvalSummary: { pending: number; approved: number; declined: number }
   ownerContext: ManagedContextBriefProjection | null
+  operatingBaseline: OperatingBaseline
+  operatingChange: OperatingBaselineChange
   briefDigest: string
   companyVersion: number
   retention: 'reproducible_not_persisted' | 'persisted_managed_audit'
@@ -195,9 +203,9 @@ export type ManagedCompanyBrief = {
 
 export type ManagedCompanyBriefRetention = {
   contract: 'supermega.managed_company_brief_retention.v1'
-  status: 'retained'
+  status: 'retained' | 'already_retained'
   briefDigest: string
-  internalWritePerformed: true
+  internalWritePerformed: boolean
   externalWritesPerformed: false
   idempotentReplay: boolean
 }
@@ -401,6 +409,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
+function exactRecordKeys(value: Record<string, unknown>, expected: readonly string[]) {
+  const actual = Object.keys(value).sort()
+  const sorted = [...expected].sort()
+  return actual.length === sorted.length && actual.every((key, index) => key === sorted[index])
+}
+
 const MANAGED_COMPANY_BRIEF_INTENTS = new Set<ManagedCompanyBriefIntent>([
   'attention',
   'shop_inventory',
@@ -425,7 +439,11 @@ function managedBriefCount(value: unknown, maximum = Number.MAX_SAFE_INTEGER) {
 }
 
 function assertManagedCompanyBrief(value: unknown, expectedIdentity: ManagedIdentity): ManagedCompanyBrief {
-  if (!isRecord(value) || !isRecord(value.brief) || !isRecord(value.identity)) {
+  if (!isRecord(value)
+    || !exactRecordKeys(value, ['brief', 'identity'])
+    || !isRecord(value.brief)
+    || !isRecord(value.identity)
+    || !exactRecordKeys(value.identity, ['actor_id', 'actor_kind', 'workspace_id'])) {
     throw new ManagedTrialError('Managed Company Brief response is invalid.', { code: 'managed_company_brief_invalid' })
   }
   const brief = value.brief
@@ -436,6 +454,9 @@ function assertManagedCompanyBrief(value: unknown, expectedIdentity: ManagedIden
   const facts = brief.facts
   const validOwnerContext = brief.ownerContext === null
     || structurallyValidManagedContextBriefProjection(brief.ownerContext)
+  const validOperatingBaseline = structurallyValidOperatingBaseline(brief.operatingBaseline, expectedIdentity.workspaceId)
+  const validOperatingChange = validOperatingBaseline
+    && structurallyValidOperatingBaselineChange(brief.operatingChange, brief.operatingBaseline as OperatingBaseline)
   const actionRoutes = isRecord(nextAction) && typeof nextAction.product === 'string'
     ? MANAGED_COMPANY_BRIEF_ROUTES.get(nextAction.product as 'shop' | 'plant' | 'website' | 'ecommerce')
     : undefined
@@ -443,34 +464,57 @@ function assertManagedCompanyBrief(value: unknown, expectedIdentity: ManagedIden
     && sourceVersions.length <= 3
     && new Set(sourceVersions.map((source) => isRecord(source) ? source.surface : '')).size === sourceVersions.length
     && sourceVersions.every((source) => isRecord(source)
+      && exactRecordKeys(source, ['projectionDigest', 'surface', 'updatedAt', 'version'])
       && ['commerce', 'production', 'website'].includes(String(source.surface))
       && managedBriefCount(source.version)
       && typeof source.updatedAt === 'string'
       && source.updatedAt.length <= 64
-      && typeof source.stateDigest === 'string'
-      && SHA256_DIGEST.test(source.stateDigest))
+      && typeof source.projectionDigest === 'string'
+      && SHA256_DIGEST.test(source.projectionDigest))
+  const validBaselineSources = validSources
+    && validOperatingBaseline
+    && sourceVersions.length === (brief.operatingBaseline as OperatingBaseline).sourceVersions.length
+    && sourceVersions.every((source, index) => {
+      if (!isRecord(source)) return false
+      const baselineSource = (brief.operatingBaseline as OperatingBaseline).sourceVersions[index]
+      return source.surface === baselineSource.surface
+        && source.version === baselineSource.version
+        && source.updatedAt === baselineSource.updatedAt
+        && source.projectionDigest === baselineSource.projectionDigest
+    })
   const validFacts = Array.isArray(facts)
     && facts.length === 4
     && facts.every((fact) => isRecord(fact)
+      && exactRecordKeys(fact, ['detail', 'label', 'value'])
       && boundedManagedBriefText(fact.label, 80)
       && boundedManagedBriefText(fact.value, 120)
       && boundedManagedBriefText(fact.detail, 240))
-  if (brief.contract !== 'supermega.managed_company_brief.v1'
+  if (!exactRecordKeys(brief, [
+      'approvalSummary', 'boundary', 'briefDigest', 'companyVersion', 'contract', 'externalWritesPerformed',
+      'facts', 'intent', 'nextAction', 'operatingBaseline', 'operatingChange', 'ownerContext', 'retention',
+      'sourceCount', 'sourceVersions', 'summary', 'title',
+    ])
+    || brief.contract !== 'supermega.managed_company_brief.v1'
     || !MANAGED_COMPANY_BRIEF_INTENTS.has(brief.intent as ManagedCompanyBriefIntent)
     || !managedBriefCount(brief.sourceCount, 4)
     || !boundedManagedBriefText(brief.title, 180)
     || !boundedManagedBriefText(brief.summary, 500)
     || !validFacts
     || !isRecord(nextAction)
+    || !exactRecordKeys(nextAction, ['label', 'path', 'product'])
     || !actionRoutes?.has(String(nextAction.path) as never)
     || !boundedManagedBriefText(nextAction.label, 80)
     || !boundedManagedBriefText(brief.boundary, 600)
     || !validSources
     || !isRecord(approvalSummary)
+    || !exactRecordKeys(approvalSummary, ['approved', 'declined', 'pending'])
     || !managedBriefCount(approvalSummary.pending)
     || !managedBriefCount(approvalSummary.approved)
     || !managedBriefCount(approvalSummary.declined)
     || !validOwnerContext
+    || !validOperatingBaseline
+    || !validOperatingChange
+    || !validBaselineSources
     || typeof brief.briefDigest !== 'string'
     || !SHA256_DIGEST.test(brief.briefDigest)
     || !managedBriefCount(brief.companyVersion)
@@ -587,10 +631,19 @@ function assertManagedCompanyBriefRetention(
   }
   const retention = value.retention
   const brief = assertManagedCompanyBrief({ brief: value.brief, identity: value.identity }, expectedIdentity)
-  if (retention.contract !== 'supermega.managed_company_brief_retention.v1'
-    || retention.status !== 'retained'
+  const retainedWrite = retention.status === 'retained'
+    && retention.internalWritePerformed === true
+    && retention.idempotentReplay === false
+  const alreadyRetained = retention.status === 'already_retained'
+    && retention.internalWritePerformed === false
+    && retention.idempotentReplay === true
+  const validEnvelope = retainedWrite
+    ? exactRecordKeys(value, ['brief', 'identity', 'result', 'retention'])
+    : exactRecordKeys(value, ['brief', 'identity', 'retention'])
+  if (!validEnvelope
+    || retention.contract !== 'supermega.managed_company_brief_retention.v1'
+    || (!retainedWrite && !alreadyRetained)
     || retention.briefDigest !== expectedDigest
-    || retention.internalWritePerformed !== true
     || retention.externalWritesPerformed !== false
     || typeof retention.idempotentReplay !== 'boolean'
     || brief.briefDigest !== expectedDigest

@@ -249,6 +249,35 @@ class TrialStoreTests(unittest.TestCase):
         self.assertEqual(self.reducer.calls, calls_before_rejection)
         self.assertEqual(self.store.get_state(self.operator, "commerce").state["intake"], "retained")
 
+    def test_related_state_version_is_checked_under_the_same_command_lock(self) -> None:
+        self.store.apply_command(
+            self.operator,
+            command_id=str(uuid4()),
+            surface="website",
+            event_type="website.content.saved",
+            expected_version=0,
+            payload={"changes": {"fingerprint": "web-1234abcd"}},
+        )
+        calls_before_rejection = self.reducer.calls
+
+        with self.assertRaises(TrialVersionConflict) as raised:
+            self.store.apply_command(
+                self.operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.website_intake.created",
+                expected_version=0,
+                payload={"changes": {"intake": "not-written"}},
+                related_surfaces=("website",),
+                expected_related_versions={"website": 0},
+                state_precondition=lambda _current, _related: None,
+            )
+
+        self.assertEqual(raised.exception.expected_version, 0)
+        self.assertEqual(raised.exception.current_version, 1)
+        self.assertEqual(self.reducer.calls, calls_before_rejection)
+        self.assertEqual(self.store.get_state(self.operator, "commerce").version, 0)
+
     def test_store_enforces_human_only_consequential_commerce_events(self) -> None:
         self.store.provision_membership(
             workspace_id="workspace-a",

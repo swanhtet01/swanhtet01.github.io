@@ -139,6 +139,9 @@ a { color: inherit; }
 .business-command-answer-head span { color: var(--core-green); font-family: var(--core-mono); font-size: 8px; font-weight: 760; text-transform: uppercase; }
 .business-command-answer-head h3 { margin: 5px 0 4px; color: var(--core-ink); font-size: 19px; line-height: 1.2; }
 .business-command-answer-head p { max-width: 780px; margin: 0; color: var(--core-muted); font-size: 12px; line-height: 1.5; }
+.business-command-learning { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 2px 8px; align-items: baseline; margin-top: 9px; border-top: 1px solid var(--core-line); padding-top: 8px; }
+.business-command-learning strong { min-width: 0; color: var(--core-ink); font-size: 11px; overflow-wrap: anywhere; }
+.business-command-learning small { grid-column: 2; color: var(--core-muted); font-size: 9px; line-height: 1.4; overflow-wrap: anywhere; }
 .business-command-facts { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 8px; background: #fff; }
 .business-command-facts > span { min-width: 0; min-height: 92px; display: grid; align-content: center; gap: 4px; border-right: 1px solid var(--core-line); padding: 10px 12px; }
 .business-command-facts > span:last-child { border-right: 0; }
@@ -833,6 +836,9 @@ textarea { min-height: 72px; resize: vertical; }
 .premium-pilot-rows em, .premium-pilot-next em { color: var(--core-muted); font-size: 10px; font-style: normal; line-height: 1.35; overflow-wrap: anywhere; }
 .premium-pilot-brief { display: grid; grid-template-columns: minmax(0,1.35fr) minmax(220px,.65fr); gap: 16px; align-items: center; border-top: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); padding: 12px 0; }
 .premium-pilot-next { min-width: 0; display: grid; gap: 4px; border-left: 1px solid var(--core-line); padding-left: 16px; }
+.premium-pilot-learning { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 3px 9px; align-items: baseline; margin-top: 10px; border-top: 1px solid var(--core-line); padding-top: 9px; }
+.premium-pilot-learning strong { min-width: 0; color: var(--core-ink); font-size: 11px; overflow-wrap: anywhere; }
+.premium-pilot-learning small { grid-column: 2; color: var(--core-muted); font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
 .premium-pilot-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .premium-pilot-login { display: grid; grid-template-columns: minmax(190px,1.1fr) repeat(3,minmax(140px,1fr)) auto; gap: 9px; align-items: end; }
 .premium-pilot-login > div { min-width: 0; display: grid; gap: 4px; align-self: center; }
@@ -1429,6 +1435,8 @@ textarea { min-height: 72px; resize: vertical; }
   .product-home-readiness-grid span:nth-child(-n+2) { border-bottom: 1px solid var(--core-line); }
   .business-command-answer-head { grid-template-columns: 1fr; align-items: stretch; }
   .business-command-answer-head .core-button { width: 100%; }
+  .business-command-learning { grid-template-columns: 1fr; }
+  .business-command-learning small { grid-column: auto; }
   .business-command-facts { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .business-command-facts > span:nth-child(2n) { border-right: 0; }
   .business-command-facts > span:nth-child(-n+2) { border-bottom: 1px solid var(--core-line); }
@@ -1572,6 +1580,8 @@ textarea { min-height: 72px; resize: vertical; }
   .premium-pilot-rows span { border-right: 0; border-bottom: 1px solid var(--core-line); }
   .premium-pilot-rows span:last-child { border-bottom: 0; }
   .premium-pilot-next { border-top: 1px solid var(--core-line); border-left: 0; padding-top: 12px; padding-left: 0; }
+  .premium-pilot-learning { grid-template-columns: 1fr; }
+  .premium-pilot-learning small { grid-column: auto; }
   .premium-pilot-actions { justify-content: stretch; }
   .premium-pilot-actions .core-button, .premium-pilot-login .core-button { width: 100%; }
   .managed-context-consent > .core-button { width: 100%; justify-self: stretch; }
