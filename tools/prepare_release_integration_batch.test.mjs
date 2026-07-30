@@ -9,16 +9,21 @@ import {
   APP_SHELL_REQUIREMENTS,
   ECOMMERCE_BATCH,
   ECOMMERCE_REQUIREMENTS,
+  RELEASE_SECURITY_HQ_BATCH,
+  RELEASE_SECURITY_HQ_REQUIREMENTS,
   IDENTITY_DATA_REQUIREMENTS,
   RELEASE_INTEGRATION_BATCH_CONTRACT,
   assessAppShellSources,
   assessEcommerceSources,
+  assessReleaseSecurityHqSources,
   assessIdentityDataSources,
   buildAppShellComparison,
   buildEcommerceComparison,
+  buildReleaseSecurityHqComparison,
   buildIdentityDataComparison,
   validateAppShellComparison,
   validateEcommerceComparison,
+  validateReleaseSecurityHqComparison,
   validateIdentityDataComparison,
   writeExclusiveJson,
 } from './prepare_release_integration_batch.mjs'
@@ -27,6 +32,7 @@ const sha = (value) => value.repeat(40)
 const files = [...new Set(IDENTITY_DATA_REQUIREMENTS.map((entry) => entry.file))].sort()
 const appShellFiles = [...new Set(APP_SHELL_REQUIREMENTS.map((entry) => entry.file))].sort()
 const ecommerceFiles = [...new Set(ECOMMERCE_REQUIREMENTS.map((entry) => entry.file))].sort()
+const finalBatchFiles = [...new Set(RELEASE_SECURITY_HQ_REQUIREMENTS.map((entry) => entry.file))].sort()
 
 function sources(authorities = ['upstream', 'candidate']) {
   return Object.fromEntries(files.map((file) => [file, IDENTITY_DATA_REQUIREMENTS
@@ -74,6 +80,16 @@ function ecommerceTree(ref, commit, authorities) {
     sources: ecommerceSources(authorities),
     blobs: Object.fromEntries(ecommerceFiles.map((file, index) => [file, String((index % 8) + 1).repeat(40)])),
   }
+}
+
+function finalBatchSources(authorities = ['upstream', 'candidate']) {
+  return Object.fromEntries(finalBatchFiles.map((file) => [file, RELEASE_SECURITY_HQ_REQUIREMENTS
+    .filter((entry) => entry.file === file && authorities.includes(entry.authority))
+    .flatMap((entry) => entry.tokens).join('\n') || '// retained source']))
+}
+
+function finalBatchTree(ref, commit, authorities) {
+  return { ref, commit, sources: finalBatchSources(authorities), blobs: Object.fromEntries(finalBatchFiles.map((file, index) => [file, String((index % 8) + 1).repeat(40)])) }
 }
 
 test('neither current side can satisfy the required union alone', () => {
@@ -209,4 +225,26 @@ test('Ecommerce comparison is exact, no-write, and batch-specific', () => {
   assert.equal(packet.candidate.authority.candidate.passed, true)
   assert.equal(validateEcommerceComparison(packet).digest, packet.digest)
   assert.throws(() => validateAppShellComparison(packet), /release_integration_batch_packet_invalid/)
+})
+
+test('final batch requires production activation gates and candidate product operations together', () => {
+  const upstream = assessReleaseSecurityHqSources(finalBatchSources(['upstream']))
+  const candidate = assessReleaseSecurityHqSources(finalBatchSources(['candidate']))
+  assert.equal(upstream.authority.upstream.passed, true)
+  assert.equal(upstream.ok, false)
+  assert.equal(candidate.authority.candidate.passed, true)
+  assert.equal(candidate.ok, false)
+  assert.equal(assessReleaseSecurityHqSources(finalBatchSources()).ok, true)
+})
+
+test('final batch comparison is exact and no-write', () => {
+  const packet = buildReleaseSecurityHqComparison({
+    generatedAt: '2026-07-30T16:30:00.000Z',
+    upstream: finalBatchTree('origin/main', sha('1'), ['upstream']),
+    candidate: finalBatchTree('HEAD', sha('2'), ['candidate']),
+  })
+  assert.equal(packet.batch, RELEASE_SECURITY_HQ_BATCH)
+  assert.match(packet.decision.acceptanceCommand, /--batch release-security-hq$/)
+  assert.equal(validateReleaseSecurityHqComparison(packet).digest, packet.digest)
+  assert.throws(() => validateEcommerceComparison(packet), /release_integration_batch_packet_invalid/)
 })

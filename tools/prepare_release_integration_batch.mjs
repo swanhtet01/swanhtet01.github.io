@@ -10,6 +10,7 @@ export const RELEASE_INTEGRATION_BATCH_CONTRACT = 'supermega.release-integration
 export const IDENTITY_DATA_BATCH = 'identity-data-onboarding'
 export const APP_SHELL_BATCH = 'app-shell'
 export const ECOMMERCE_BATCH = 'ecommerce'
+export const RELEASE_SECURITY_HQ_BATCH = 'release-security-hq'
 
 const root = resolve(import.meta.dirname, '..')
 const MAX_SOURCE_BYTES = 2_000_000
@@ -279,6 +280,78 @@ export const ECOMMERCE_REQUIREMENTS = [
   },
 ]
 
+export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
+  {
+    id: 'upstream-managed-activation-runbook', authority: 'upstream', file: 'docs/supermega-enterprise-activation.md', tokens: [
+      'all eight migrations as `postgres`', 'schema version 7', 'Owner approved this exact plan and release.',
+      'Activation compensation after a downstream release gate failure.', '`SUPERMEGA_TRIAL_WRITES_ENABLED=true` is written last',
+    ],
+  },
+  {
+    id: 'upstream-build-ux-and-context-gates', authority: 'upstream', file: 'tools/verify_app_build.mjs', tokens: [
+      'function managedLoginPath(product: string | null)', 'Keep managed context', 'Raw records and browser text stay out.',
+      'Order batch review workspace', 'Enterprise order controls', 'Browser-local sample only.',
+    ],
+  },
+  {
+    id: 'upstream-live-usability-gates', authority: 'upstream', file: 'tools/verify_app_release_live.mjs', tokens: [
+      'Start one product in 2 clicks.', 'Acknowledgement confirms review only.',
+      '.operations-screen:not(.commerce-screen) .workspace-view', 'Browser-local sample only.', 'no real stock is moved',
+    ],
+  },
+  {
+    id: 'upstream-security-and-activation-gates', authority: 'upstream', file: 'tools/verify_app_security_contract.mjs', tokens: [
+      'managed schema contract advances through additive v2 through v7 migrations',
+      'managed recovery is non-enumerating and password setup remains named-user only',
+      'managed activation requires durable named-owner authorization and encrypted admin transport',
+      'managed AI context is owner-consented, summary-only, tenant-bound, and revision-bound',
+      'managed database secret handoff is staged, value-verified, and compensated',
+    ],
+  },
+  {
+    id: 'upstream-product-and-release-history', authority: 'upstream', file: 'hq/WORKBOARD.md', tokens: [
+      '| ENG-097 |', 'Checkpoint `3cd4825`', '| OPS-006 |', 'remains `isolated_demo`',
+    ],
+  },
+  {
+    id: 'candidate-current-release-operations', authority: 'candidate', file: 'package.json', tokens: [
+      'app:verify:live:current', 'database:supabase:compatibility', 'client:prepare:self-test',
+      'company:ally:self-test', 'release:handoff:prepare', 'release:integration:batch:prepare',
+    ],
+  },
+  {
+    id: 'candidate-four-product-build-depth', authority: 'candidate', file: 'tools/verify_app_build.mjs', tokens: [
+      'Run the whole shop', 'Services and resources', 'Ecommerce today status', 'Order lifecycle queue',
+      'Shop controls prices, stock, payment, delivery, and the accountable order record.',
+    ],
+  },
+  {
+    id: 'candidate-demo-and-operating-tracks', authority: 'candidate', file: 'tools/verify_app_release_live.mjs', tokens: [
+      'Business starter tracks', 'AI operating tracks', 'Separate products, one simple operating model.',
+      'Ecommerce order review packet checked locally.', 'No order import, customer message, payment, delivery, stock write, Shop write, or managed activation ran.',
+    ],
+  },
+  {
+    id: 'candidate-product-security-depth', authority: 'candidate', file: 'tools/verify_app_security_contract.mjs', tokens: [
+      'managed Shop appointments are tenant-scoped, human-only, identity-bound, and optimistic',
+      'Plant client packs are package-bound, tenant-retained, fail-closed, and require reviewed costs',
+      'Website and Ecommerce client activation provenance is package-bound and server-stamped',
+      'production Supabase target requires separately committed activation authority',
+    ],
+  },
+  {
+    id: 'candidate-current-hq-governance', authority: 'candidate', file: 'tools/verify_hq_contract.mjs', tokens: [
+      'Updated: 2026-07-30', 'local inference is explicit, loopback-only, budgeted, and scale-to-zero',
+      'hosted runtimes never admit the loopback provider', 'maxConcurrentCompanyCycles',
+    ],
+  },
+  {
+    id: 'candidate-current-hq-workboard', authority: 'candidate', file: 'hq/WORKBOARD.md', tokens: [
+      '| OPS-103 |', '| OPS-104 |', 'release:integration:batch:check -- --tree <ref> --batch ecommerce',
+    ],
+  },
+]
+
 const BATCH_POLICIES = new Map([
   [IDENTITY_DATA_BATCH, {
     batch: IDENTITY_DATA_BATCH,
@@ -294,6 +367,12 @@ const BATCH_POLICIES = new Map([
     batch: ECOMMERCE_BATCH,
     requirements: ECOMMERCE_REQUIREMENTS,
     firstAuthority: 'upstream-private-progressive-and-live-quote-ux',
+  }],
+  [RELEASE_SECURITY_HQ_BATCH, {
+    batch: RELEASE_SECURITY_HQ_BATCH,
+    requirements: RELEASE_SECURITY_HQ_REQUIREMENTS,
+    firstAuthority: 'upstream-managed-activation-security-and-release-evidence',
+    forbiddenIdentityFiles: [],
   }],
 ].map(([batch, policy]) => [batch, {
   ...policy,
@@ -354,7 +433,7 @@ function assessSources(value, policy) {
       passed: missing.length === 0,
     }
   })
-  const executableSourceFiles = policy.files.filter((file) => !file.startsWith('tests/'))
+  const executableSourceFiles = policy.forbiddenIdentityFiles ?? policy.files.filter((file) => !file.startsWith('tests/'))
   const forbidden = executableSourceFiles.flatMap((file) => /\bYTF\b|Yangon Tyre/i.test(sources[file]) ? [file] : [])
   const authority = Object.fromEntries(['upstream', 'candidate'].map((name) => {
     const rows = requirements.filter((entry) => entry.authority === name)
@@ -384,6 +463,10 @@ export function assessAppShellSources(value) {
 
 export function assessEcommerceSources(value) {
   return assessSources(value, exactBatch(ECOMMERCE_BATCH))
+}
+
+export function assessReleaseSecurityHqSources(value) {
+  return assessSources(value, exactBatch(RELEASE_SECURITY_HQ_BATCH))
 }
 
 function exactBlobMap(value, files) {
@@ -468,6 +551,10 @@ export function buildEcommerceComparison(input) {
   return buildComparison(input, exactBatch(ECOMMERCE_BATCH))
 }
 
+export function buildReleaseSecurityHqComparison(input) {
+  return buildComparison(input, exactBatch(RELEASE_SECURITY_HQ_BATCH))
+}
+
 function validateComparison(packet, policy) {
   if (!packet || typeof packet !== 'object' || Array.isArray(packet)) fail('release_integration_batch_packet_invalid')
   const { digest, ...body } = packet
@@ -498,6 +585,10 @@ export function validateAppShellComparison(packet) {
 
 export function validateEcommerceComparison(packet) {
   return validateComparison(packet, exactBatch(ECOMMERCE_BATCH))
+}
+
+export function validateReleaseSecurityHqComparison(packet) {
+  return validateComparison(packet, exactBatch(RELEASE_SECURITY_HQ_BATCH))
 }
 
 function runGit(args) {
