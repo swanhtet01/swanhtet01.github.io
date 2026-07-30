@@ -6,6 +6,7 @@ export const PLANT_ORDER_PROJECTION_CONTRACT = 'supermega.plant.order_projection
 export const PLANT_ORDER_EFFECTIVENESS_CONTRACT = 'supermega.plant.order_effectiveness.v2' as const
 export const PLANT_ORDER_COST_DRIVER_CONTRACT = 'supermega.plant.cost_driver_variance.v1' as const
 export const PLANT_ORDER_FINANCIAL_COST_CONTRACT = 'supermega.plant.financial_job_cost.v1' as const
+export const PLANT_ORDER_COST_REVIEW_PACKET_CONTRACT = 'supermega.plant.cost_review_packet.v1' as const
 export const PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT = 'supermega.plant.material-substitution-approval.v1' as const
 export const EMPTY_PLANT_ORDER_DIGEST = `sha256:${'0'.repeat(64)}`
 export const PLANT_ORDER_STORAGE_PREFIX = 'supermega.plant.order-foundation.v1:'
@@ -280,6 +281,28 @@ export type PlantOrderFinancialCostProjection = {
   actual: { materialMmk: number; conversionMmk: number; totalMmk: number }
   varianceMmk: number | null
   qualityLossMmk: number | null
+}
+
+export type PlantOrderCostReviewPacket = {
+  contract: typeof PLANT_ORDER_COST_REVIEW_PACKET_CONTRACT
+  source: { revision: number; headDigest: string; projectionStatus: PlantOrderProjection['status'] }
+  sourceState: PlantOrderState
+  plan: PlantOrderPlan
+  costDrivers: PlantOrderCostDriverProjection
+  financialCost: PlantOrderFinancialCostProjection
+  effectiveness: PlantOrderEffectivenessProjection
+  inspection: InspectOutputCommand | null
+  releaseEvidence: { orderRelease: ReleaseOrderCommand | null; batchRelease: ReleaseBatchCommand | null }
+  materialGenealogy: PlantOrderProjection['genealogy']
+  authority: {
+    costPosted: false
+    inventoryPosted: false
+    journalPosted: false
+    payrollPosted: false
+    invoiceCreated: false
+    providerCalled: false
+  }
+  digest: string
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
@@ -1271,6 +1294,46 @@ export function projectPlantOrderFinancialCost(projection: PlantOrderProjection)
     varianceMmk: actual.totalMmk - earned.totalMmk,
     qualityLossMmk: rejectedQuantity ? proportionalMmk(planned.totalMmk, rejectedQuantity, projection.metrics.targetQuantity, 'quality loss cost') : 0,
   }
+}
+
+export function buildPlantOrderCostReviewPacket(state: unknown): PlantOrderCostReviewPacket | null {
+  const sourceState = validatePlantOrderState(state)
+  const projection = projectPlantOrder(sourceState)
+  if (!projection.plan) return null
+  const financialCost = projectPlantOrderFinancialCost(projection)
+  if (financialCost.status === 'setup_required') return null
+  const body = {
+    contract: PLANT_ORDER_COST_REVIEW_PACKET_CONTRACT,
+    source: { revision: projection.revision, headDigest: projection.headDigest, projectionStatus: projection.status },
+    sourceState: canonicalCopy(sourceState),
+    plan: canonicalCopy(projection.plan),
+    costDrivers: projectPlantOrderCostDrivers(projection),
+    financialCost,
+    effectiveness: projectPlantOrderEffectiveness(projection),
+    inspection: projection.latestInspection ? canonicalCopy(projection.latestInspection) : null,
+    releaseEvidence: {
+      orderRelease: projection.orderRelease ? canonicalCopy(projection.orderRelease) : null,
+      batchRelease: projection.batchRelease ? canonicalCopy(projection.batchRelease) : null,
+    },
+    materialGenealogy: canonicalCopy(projection.genealogy),
+    authority: {
+      costPosted: false,
+      inventoryPosted: false,
+      journalPosted: false,
+      payrollPosted: false,
+      invoiceCreated: false,
+      providerCalled: false,
+    },
+  }
+  return { ...body, digest: canonicalDigest(body) }
+}
+
+export function validatePlantOrderCostReviewPacket(value: unknown): PlantOrderCostReviewPacket {
+  const packet = exact(value, 'Plant cost review packet', ['contract', 'source', 'sourceState', 'plan', 'costDrivers', 'financialCost', 'effectiveness', 'inspection', 'releaseEvidence', 'materialGenealogy', 'authority', 'digest'])
+  if (packet.contract !== PLANT_ORDER_COST_REVIEW_PACKET_CONTRACT) throw new Error('Plant cost review packet contract is unsupported.')
+  const expected = buildPlantOrderCostReviewPacket(validatePlantOrderState(packet.sourceState))
+  if (!expected || canonicalJson(packet) !== canonicalJson(expected)) throw new Error('Plant cost review packet does not match its validated command chain.')
+  return expected
 }
 
 function appendCommand(state: unknown, payload: unknown, expectedHeadDigest: unknown) {

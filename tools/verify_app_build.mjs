@@ -3270,7 +3270,11 @@ if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.orde
   || !plantOrderSource.includes('export function recordPlantOrderEffectiveness')
   || !plantOrderSource.includes('export function recordPlantOrderOperation')
   || !plantOrderSource.includes("PLANT_ORDER_EFFECTIVENESS_CONTRACT = 'supermega.plant.order_effectiveness.v2'")
+  || !plantOrderSource.includes("PLANT_ORDER_COST_REVIEW_PACKET_CONTRACT = 'supermega.plant.cost_review_packet.v1'")
   || !plantOrderSource.includes('export function projectPlantOrderEffectiveness')
+  || !plantOrderSource.includes('export function buildPlantOrderCostReviewPacket')
+  || !plantOrderSource.includes('export function validatePlantOrderCostReviewPacket')
+  || !plantOrderSource.includes('Plant cost review packet does not match its validated command chain.')
   || !plantOrderSource.includes("missingEvidence.push('Order-bound planned productive time and downtime')")
   || !plantOrderSource.includes("kind: 'record_effectiveness'")
   || !plantOrderSource.includes('export function inspectPlantOrderOutput')
@@ -3309,6 +3313,8 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || !plantOrderUiSource.includes('Review effectiveness evidence')
   || !plantOrderUiSource.includes('Closed downtime intervals (optional)')
   || !plantOrderUiSource.includes('Available capacity is never substituted for actual productive time.')
+  || !plantOrderUiSource.includes('Download cost review packet')
+  || !plantOrderUiSource.includes('Internal evidence for ERP review only. No cost, inventory, journal, payroll, invoice, provider, or production write occurs.')
   || !plantOrderUiSource.includes('aria-label="Plant operating flow"')
   || !plantOrderUiSource.includes('id="plant-operating-flow"')
   || !plantOrderUiSource.includes('Next required step')
@@ -5435,6 +5441,21 @@ async function verifyPlantOrderRuntime() {
       && pricedExecutionPlan.routing.every((operation) => operation.standardCostPerMinuteMmk)
       && model.validatePlantOrderState(model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), pricedExecutionPlan, proof(1, 'reviewed priced execution plan'), model.EMPTY_PLANT_ORDER_DIGEST).state).revision === 1,
     'plant_order_priced_plan_not_immutable_or_valid')
+    const pricedPlanState = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), pricedExecutionPlan, proof(1, 'reviewed priced execution plan'), model.EMPTY_PLANT_ORDER_DIGEST).state
+    const costReviewPacket = model.buildPlantOrderCostReviewPacket(pricedPlanState)
+    assert(costReviewPacket?.contract === 'supermega.plant.cost_review_packet.v1'
+      && costReviewPacket.source.revision === 1
+      && costReviewPacket.source.headDigest === pricedPlanState.headDigest
+      && costReviewPacket.plan.packageDigest === pricedExecutionPlan.packageDigest
+      && costReviewPacket.financialCost.status === 'collecting'
+      && costReviewPacket.financialCost.planned.totalMmk === 63_500
+      && Object.values(costReviewPacket.authority).every((allowed) => allowed === false)
+      && model.validatePlantOrderCostReviewPacket(costReviewPacket).digest === costReviewPacket.digest,
+    'plant_order_cost_review_packet_not_evidence_bound')
+    const tamperedCostReviewPacket = structuredClone(costReviewPacket)
+    tamperedCostReviewPacket.financialCost.planned.totalMmk += 1
+    assertThrows(() => model.validatePlantOrderCostReviewPacket(tamperedCostReviewPacket), 'tampered_plant_order_cost_review_packet_succeeded')
+    assert(model.buildPlantOrderCostReviewPacket(model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), executionPlan, proof(1, 'unpriced execution plan'), model.EMPTY_PLANT_ORDER_DIGEST).state) === null, 'unpriced_plant_order_cost_review_packet_invented_cost')
     assert(plan.sourceDigest === 'sha256:9415e4d6d6dda852c2014d611c1f93e385d31c40df2b4ec30d293b12991ba519'
       && plan.packageDigest === 'sha256:4f34743417e89e3ffcfa6c889fe2b55c14fd48f51926f4f198913cf4ec3d0a5b',
     'plant_order_python_browser_plan_digest_drifted')
