@@ -83,7 +83,7 @@
                 "id": "owner",
                 "label": "Shop owner",
                 "actorKind": "human",
-                "capabilities": ["setup.read", "setup.write", "commerce.read", "commerce.write", "approvals.read", "approvals.request", "approvals.decide"]
+                "capabilities": ["setup.read", "setup.write", "commerce.read", "commerce.write", "company.read", "company.write", "company.baseline.approve", "approvals.read", "approvals.request", "approvals.decide"]
               },
               {
                 "id": "order-operator",

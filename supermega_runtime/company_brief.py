@@ -17,6 +17,8 @@ from supermega_runtime.website_runtime import validate_website_state
 
 COMPANY_BRIEF_CONTRACT = "supermega.managed_company_brief.v1"
 COMPANY_BRIEF_RECEIPT_CONTRACT = "supermega.managed_company_brief_receipt.v1"
+OPERATING_BASELINE_CONTRACT = "supermega.operating_baseline.v1"
+OPERATING_BASELINE_CHANGE_CONTRACT = "supermega.operating_baseline_change.v1"
 COMPANY_BRIEF_INTENTS = frozenset(
     {
         "attention",
@@ -33,11 +35,21 @@ _SAFE_ACTIONS = {
     "website_readiness": ("website", "/website/", "Finish Website review"),
     "ecommerce_readiness": ("ecommerce", "/ecommerce/", "Review Ecommerce setup"),
 }
+_SAFE_RECEIPT_ACTIONS = frozenset({
+    *_SAFE_ACTIONS.values(),
+    ("shop", "/settings/?product=shop", "Prepare Shop"),
+    ("plant", "/settings/?product=plant", "Prepare Plant"),
+    ("website", "/settings/?product=website", "Prepare Website"),
+    ("ecommerce", "/settings/?product=ecommerce", "Prepare Ecommerce"),
+})
 _BOUNDARY = (
     "This managed brief reads tenant-scoped validated snapshots and approval status. "
     "It does not send messages, publish, charge, move stock, write production, or train models. "
-    "Keeping it as evidence is a separate authenticated company write."
+    "Keeping an operating checkpoint is a separate authenticated owner-approved company write."
 )
+_PRODUCTS = ("shop", "plant", "website", "ecommerce")
+_PRODUCT_STATUSES = frozenset({"missing", "invalid", "ready"})
+_MAX_BASELINE_COUNT = 1_000_000
 
 
 def _canonical_json(value: object) -> str:
@@ -48,12 +60,79 @@ def _digest(value: object) -> str:
     return f"sha256:{sha256(_canonical_json(value).encode('utf-8')).hexdigest()}"
 
 
-def _source_reference(record: TrialState) -> dict[str, object]:
+def _bounded_count(value: object, label: str, maximum: int = _MAX_BASELINE_COUNT) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= maximum:
+        raise TrialValidationError(f"{label} is outside the supported range.")
+    return value
+
+
+def _digest_text(value: object, label: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != 71
+        or not value.startswith("sha256:")
+        or any(character not in "0123456789abcdef" for character in value[7:])
+    ):
+        raise TrialValidationError(f"{label} is invalid.")
+    return value
+
+
+def _validate_source_versions(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list) or len(value) > len(_PRODUCT_SURFACES):
+        raise TrialValidationError("Operating baseline source versions are invalid.")
+    retained: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for source in value:
+        if not isinstance(source, Mapping) or set(source) != {"surface", "version", "updatedAt", "projectionDigest"}:
+            raise TrialValidationError("Operating baseline source reference is invalid.")
+        surface = source["surface"]
+        updated_at = source["updatedAt"]
+        if surface not in _PRODUCT_SURFACES or surface in seen:
+            raise TrialValidationError("Operating baseline source surface is invalid.")
+        if not isinstance(updated_at, str) or len(updated_at) > 64:
+            raise TrialValidationError("Operating baseline source timestamp is invalid.")
+        seen.add(str(surface))
+        retained.append({
+            "surface": surface,
+            "version": _bounded_count(source["version"], "Operating baseline source version"),
+            "updatedAt": updated_at,
+            "projectionDigest": _digest_text(source["projectionDigest"], "Operating baseline projection digest"),
+        })
+    return retained
+
+
+def _projection_digest(
+    *,
+    workspace_id: str,
+    surface: str,
+    version: int,
+    projection: Mapping[str, object],
+) -> str:
+    return _digest({
+        "contract": "supermega.operating_projection_source.v1",
+        "workspaceId": workspace_id,
+        "surface": surface,
+        "version": version,
+        "projection": projection,
+    })
+
+
+def _source_reference(
+    record: TrialState,
+    *,
+    workspace_id: str,
+    projection: Mapping[str, object],
+) -> dict[str, object]:
     return {
         "surface": record.surface,
         "version": record.version,
         "updatedAt": record.updated_at,
-        "stateDigest": _digest(record.state),
+        "projectionDigest": _projection_digest(
+            workspace_id=workspace_id,
+            surface=record.surface,
+            version=record.version,
+            projection=projection,
+        ),
     }
 
 
@@ -350,6 +429,293 @@ def _attention_rank(projections: Mapping[str, Mapping[str, object]]) -> list[tup
     ]
 
 
+def _baseline_attention(
+    projections: Mapping[str, Mapping[str, object]],
+) -> dict[str, tuple[int, int]]:
+    ranked = {intent: (level, load) for level, load, intent in _attention_rank(projections)}
+    return {
+        "shop": ranked["shop_inventory"],
+        "plant": ranked["plant_control"],
+        "website": ranked["website_readiness"],
+        "ecommerce": ranked["ecommerce_readiness"],
+    }
+
+
+def _baseline_product(
+    product: str,
+    projection: Mapping[str, object],
+    attention: tuple[int, int],
+) -> dict[str, object]:
+    status = str(projection["status"])
+    attention_level = 5 if status == "invalid" else attention[0] if status == "ready" else 0
+    review_load = max(0, attention[1]) if status == "ready" else 0
+    common = {
+        "status": status,
+        "attentionLevel": attention_level,
+        "reviewLoad": review_load,
+    }
+    if product == "shop":
+        return {
+            **common,
+            "itemCount": int(projection["itemCount"]),
+            "lowStock": int(projection["lowStock"]),
+            "activeOrders": int(projection["activeOrders"]),
+            "moneyExceptions": int(projection["moneyExceptions"]),
+            "incomingRequests": int(projection["incomingRequests"]),
+        }
+    if product == "plant":
+        return {
+            **common,
+            "jobCount": int(projection["jobCount"]),
+            "unfinishedJobs": int(projection["unfinishedJobs"]),
+            "heldJobs": int(projection["heldJobs"]),
+            "criticalIssues": int(projection["criticalIssues"]),
+            "highIssues": int(projection["highIssues"]),
+            "openIssues": int(projection["openIssues"]),
+            "stoppedMachines": int(projection["stoppedMachines"]),
+        }
+    if product == "website":
+        return {
+            **common,
+            "pageCount": int(projection["pageCount"]),
+            "readyPages": int(projection["readyPages"]),
+            "approved": bool(projection["approved"]),
+            "released": bool(projection["released"]),
+        }
+    return {
+        **common,
+        "selectedSkus": int(projection["selectedSkus"]),
+        "incomingRequests": int(projection["incomingRequests"]),
+        "shopSourceReady": bool(projection["shopSourceReady"]),
+    }
+
+
+def _validate_baseline_product(product: str, value: object) -> dict[str, object]:
+    count_fields = {
+        "shop": ("itemCount", "lowStock", "activeOrders", "moneyExceptions", "incomingRequests"),
+        "plant": ("jobCount", "unfinishedJobs", "heldJobs", "criticalIssues", "highIssues", "openIssues", "stoppedMachines"),
+        "website": ("pageCount", "readyPages"),
+        "ecommerce": ("selectedSkus", "incomingRequests"),
+    }[product]
+    boolean_fields = {
+        "shop": (),
+        "plant": (),
+        "website": ("approved", "released"),
+        "ecommerce": ("shopSourceReady",),
+    }[product]
+    expected = {"status", "attentionLevel", "reviewLoad", *count_fields, *boolean_fields}
+    if not isinstance(value, Mapping) or set(value) != expected:
+        raise TrialValidationError(f"{product.title()} operating baseline has an invalid shape.")
+    status = value["status"]
+    if status not in _PRODUCT_STATUSES:
+        raise TrialValidationError(f"{product.title()} operating baseline status is invalid.")
+    normalized = {
+        "status": status,
+        "attentionLevel": _bounded_count(value["attentionLevel"], f"{product.title()} attention level", 5),
+        "reviewLoad": _bounded_count(value["reviewLoad"], f"{product.title()} review load"),
+    }
+    normalized.update({
+        field: _bounded_count(value[field], f"{product.title()} {field}")
+        for field in count_fields
+    })
+    for field in boolean_fields:
+        if not isinstance(value[field], bool):
+            raise TrialValidationError(f"{product.title()} {field} must be a boolean.")
+        normalized[field] = value[field]
+    if status != "ready":
+        expected_attention = 5 if status == "invalid" else 0
+        if (
+            normalized["attentionLevel"] != expected_attention
+            or normalized["reviewLoad"] != 0
+            or any(normalized[field] != 0 for field in count_fields)
+            or any(normalized[field] is not False for field in boolean_fields)
+        ):
+            raise TrialValidationError(f"{product.title()} unavailable baseline contains operating facts.")
+    elif (
+        (product == "shop" and normalized["lowStock"] > normalized["itemCount"])
+        or (
+            product == "plant"
+            and (
+                normalized["unfinishedJobs"] > normalized["jobCount"]
+                or normalized["heldJobs"] > normalized["jobCount"]
+                or normalized["criticalIssues"] + normalized["highIssues"] > normalized["openIssues"]
+            )
+        )
+        or (product == "website" and normalized["readyPages"] > normalized["pageCount"])
+    ):
+        raise TrialValidationError(f"{product.title()} operating baseline counters are inconsistent.")
+    return normalized
+
+
+def validate_operating_baseline(
+    value: object,
+    *,
+    workspace_id: str | None = None,
+) -> dict[str, object]:
+    expected = {
+        "contract",
+        "version",
+        "workspaceId",
+        "sourceVersions",
+        "coverage",
+        "products",
+        "rawRecordsIncluded",
+        "baselineDigest",
+    }
+    if not isinstance(value, Mapping) or set(value) != expected:
+        raise TrialValidationError("Operating baseline has an invalid shape.")
+    retained_workspace = value["workspaceId"]
+    if (
+        not isinstance(retained_workspace, str)
+        or retained_workspace != retained_workspace.strip()
+        or not retained_workspace
+        or len(retained_workspace) > 128
+        or (workspace_id is not None and retained_workspace != workspace_id)
+    ):
+        raise TrialValidationError("Operating baseline workspace is invalid.")
+    if value["contract"] != OPERATING_BASELINE_CONTRACT or value["version"] != 1:
+        raise TrialValidationError("Operating baseline contract is invalid.")
+    if value["rawRecordsIncluded"] is not False:
+        raise TrialValidationError("Operating baseline must remain aggregate-only.")
+    source_versions = _validate_source_versions(value["sourceVersions"])
+    products = value["products"]
+    if not isinstance(products, Mapping) or set(products) != set(_PRODUCTS):
+        raise TrialValidationError("Operating baseline products are invalid.")
+    normalized_products = {
+        product: _validate_baseline_product(product, products[product])
+        for product in _PRODUCTS
+    }
+    coverage = value["coverage"]
+    if not isinstance(coverage, Mapping) or set(coverage) != {"readyProducts", "missingProducts", "invalidProducts"}:
+        raise TrialValidationError("Operating baseline coverage is invalid.")
+    normalized_coverage = {
+        "readyProducts": _bounded_count(coverage["readyProducts"], "Ready product count", len(_PRODUCTS)),
+        "missingProducts": _bounded_count(coverage["missingProducts"], "Missing product count", len(_PRODUCTS)),
+        "invalidProducts": _bounded_count(coverage["invalidProducts"], "Invalid product count", len(_PRODUCTS)),
+    }
+    expected_coverage = {
+        "readyProducts": sum(1 for product in normalized_products.values() if product["status"] == "ready"),
+        "missingProducts": sum(1 for product in normalized_products.values() if product["status"] == "missing"),
+        "invalidProducts": sum(1 for product in normalized_products.values() if product["status"] == "invalid"),
+    }
+    if normalized_coverage != expected_coverage:
+        raise TrialValidationError("Operating baseline coverage does not match its products.")
+    basis = {
+        "contract": OPERATING_BASELINE_CONTRACT,
+        "version": 1,
+        "workspaceId": retained_workspace,
+        "sourceVersions": source_versions,
+        "coverage": normalized_coverage,
+        "products": normalized_products,
+        "rawRecordsIncluded": False,
+    }
+    baseline_digest = _digest_text(value["baselineDigest"], "Operating baseline digest")
+    if baseline_digest != _digest(basis):
+        raise TrialValidationError("Operating baseline digest does not match its summary.")
+    return {**basis, "baselineDigest": baseline_digest}
+
+
+def _operating_baseline(
+    *,
+    workspace_id: str,
+    projections: Mapping[str, Mapping[str, object]],
+    source_versions: list[dict[str, object]],
+) -> dict[str, object]:
+    attention = _baseline_attention(projections)
+    products = {
+        product: _baseline_product(product, projections[product], attention[product])
+        for product in _PRODUCTS
+    }
+    basis = {
+        "contract": OPERATING_BASELINE_CONTRACT,
+        "version": 1,
+        "workspaceId": workspace_id,
+        "sourceVersions": deepcopy(source_versions),
+        "coverage": {
+            "readyProducts": sum(1 for product in products.values() if product["status"] == "ready"),
+            "missingProducts": sum(1 for product in products.values() if product["status"] == "missing"),
+            "invalidProducts": sum(1 for product in products.values() if product["status"] == "invalid"),
+        },
+        "products": products,
+        "rawRecordsIncluded": False,
+    }
+    return validate_operating_baseline({**basis, "baselineDigest": _digest(basis)}, workspace_id=workspace_id)
+
+
+def _previous_operating_baseline(
+    company_state: Mapping[str, Any] | None,
+    *,
+    workspace_id: str,
+    current_digest: str,
+) -> dict[str, object] | None:
+    if not isinstance(company_state, Mapping) or not isinstance(company_state.get("briefReceipts"), list):
+        return None
+    for receipt in company_state["briefReceipts"]:
+        if not isinstance(receipt, Mapping) or receipt.get("contract") != COMPANY_BRIEF_RECEIPT_CONTRACT:
+            continue
+        try:
+            baseline = validate_operating_baseline(receipt.get("operatingBaseline"), workspace_id=workspace_id)
+        except TrialValidationError:
+            continue
+        if baseline["baselineDigest"] != current_digest:
+            return baseline
+    return None
+
+
+def _operating_change(
+    current: Mapping[str, object],
+    previous: Mapping[str, object] | None,
+) -> dict[str, object]:
+    current_baseline = validate_operating_baseline(current)
+    previous_baseline = validate_operating_baseline(
+        previous,
+        workspace_id=str(current_baseline["workspaceId"]),
+    ) if previous is not None else None
+    changed_products: list[str] = []
+    attention_increased: list[str] = []
+    attention_decreased: list[str] = []
+    coverage_changed = False
+    if previous_baseline is not None:
+        current_products = current_baseline["products"]
+        previous_products = previous_baseline["products"]
+        assert isinstance(current_products, Mapping)
+        assert isinstance(previous_products, Mapping)
+        for product in _PRODUCTS:
+            current_product = current_products[product]
+            previous_product = previous_products[product]
+            assert isinstance(current_product, Mapping)
+            assert isinstance(previous_product, Mapping)
+            if current_product != previous_product:
+                changed_products.append(product)
+            if current_product["status"] == "ready" and previous_product["status"] == "ready":
+                current_attention = (int(current_product["attentionLevel"]), int(current_product["reviewLoad"]))
+                previous_attention = (int(previous_product["attentionLevel"]), int(previous_product["reviewLoad"]))
+                if current_attention > previous_attention:
+                    attention_increased.append(product)
+                elif current_attention < previous_attention:
+                    attention_decreased.append(product)
+        coverage_changed = current_baseline["coverage"] != previous_baseline["coverage"]
+    basis = {
+        "contract": OPERATING_BASELINE_CHANGE_CONTRACT,
+        "version": 1,
+        "status": (
+            "first_checkpoint"
+            if previous_baseline is None
+            else "changed"
+            if changed_products or coverage_changed
+            else "unchanged"
+        ),
+        "currentBaselineDigest": current_baseline["baselineDigest"],
+        "previousBaselineDigest": previous_baseline["baselineDigest"] if previous_baseline else None,
+        "changedProducts": changed_products,
+        "attentionIncreased": attention_increased,
+        "attentionDecreased": attention_decreased,
+        "coverageChanged": coverage_changed,
+        "rawRecordsIncluded": False,
+    }
+    return {**basis, "changeDigest": _digest(basis)}
+
+
 def _answer(
     projections: Mapping[str, Mapping[str, object]],
     intent: str,
@@ -363,6 +729,11 @@ def _answer(
     }
     if intent != "attention":
         return builders[intent]()
+    ranked = _attention_rank(projections)
+    critical = max(ranked, key=lambda item: item[0])
+    if critical[0] >= 4:
+        selected = builders[critical[2]]()
+        return {**selected, "intent": "attention", "title": f"Start here: {selected['title']}"}
     for product, product_intent in (
         ("shop", "shop_inventory"),
         ("plant", "plant_control"),
@@ -377,7 +748,6 @@ def _answer(
             **_unavailable_answer("attention", "shop", "missing"),
             "title": "Start with one managed business source",
         }
-    ranked = _attention_rank(projections)
     preferred_intent = None
     if owner_context:
         preferred_intent = {
@@ -410,6 +780,11 @@ def build_managed_company_brief(
         raise TrialValidationError("Company brief intent is unsupported.")
     if not workspace_id or len(workspace_id) > 128:
         raise TrialValidationError("Company brief workspace is invalid.")
+    if set(states) - {*_PRODUCT_SURFACES, "company"}:
+        raise TrialValidationError("Company brief contains an unexpected managed surface.")
+    for surface, record in states.items():
+        if record.workspace_id != workspace_id or record.surface != surface:
+            raise TrialValidationError("Company brief managed state identity is invalid.")
     product_states = {surface: states[surface] for surface in _PRODUCT_SURFACES if surface in states}
     company_state = states.get("company")
     owner_profile = managed_context_from_company_state(
@@ -424,8 +799,32 @@ def build_managed_company_brief(
         "website": _project_website(product_states.get("website")),
         "ecommerce": ecommerce,
     }
+    source_projections = {
+        "commerce": {"shop": shop, "ecommerce": ecommerce},
+        "production": projections["plant"],
+        "website": projections["website"],
+    }
+    source_versions = [
+        _source_reference(
+            product_states[surface],
+            workspace_id=workspace_id,
+            projection=source_projections[surface],
+        )
+        for surface in _PRODUCT_SURFACES
+        if surface in product_states
+    ]
+    operating_baseline = _operating_baseline(
+        workspace_id=workspace_id,
+        projections=projections,
+        source_versions=source_versions,
+    )
+    previous_baseline = _previous_operating_baseline(
+        company_state.state if company_state else None,
+        workspace_id=workspace_id,
+        current_digest=str(operating_baseline["baselineDigest"]),
+    )
+    operating_change = _operating_change(operating_baseline, previous_baseline)
     answer = _answer(projections, intent, owner_context)
-    source_versions = [_source_reference(product_states[surface]) for surface in _PRODUCT_SURFACES if surface in product_states]
     approval_summary = _approval_summary(approvals)
     brief_basis = {
         "contract": COMPANY_BRIEF_CONTRACT,
@@ -434,8 +833,21 @@ def build_managed_company_brief(
         "sourceVersions": source_versions,
         "approvalSummary": approval_summary,
         "ownerContext": owner_context,
+        "operatingBaseline": operating_baseline,
+        "operatingChange": operating_change,
         "answer": answer,
     }
+    brief_digest = _digest(brief_basis)
+    retention = "reproducible_not_persisted"
+    if company_state and isinstance(company_state.state.get("briefReceipts"), list):
+        for candidate in company_state.state["briefReceipts"]:
+            try:
+                retained = _validate_retained_brief_receipt(candidate, workspace_id=workspace_id)
+            except TrialValidationError:
+                continue
+            if retained["briefDigest"] == brief_digest:
+                retention = "persisted_managed_audit"
+                break
     return {
         "contract": COMPANY_BRIEF_CONTRACT,
         "intent": intent,
@@ -448,8 +860,10 @@ def build_managed_company_brief(
         "sourceVersions": source_versions,
         "approvalSummary": approval_summary,
         "ownerContext": deepcopy(owner_context),
-        "briefDigest": _digest(brief_basis),
-        "retention": "reproducible_not_persisted",
+        "operatingBaseline": operating_baseline,
+        "operatingChange": operating_change,
+        "briefDigest": brief_digest,
+        "retention": retention,
         "externalWritesPerformed": False,
     }
 
@@ -459,6 +873,9 @@ def company_brief_receipt(brief: Mapping[str, object]) -> dict[str, object]:
 
     if brief.get("contract") != COMPANY_BRIEF_CONTRACT:
         raise TrialValidationError("Company brief contract is invalid.")
+    operating_baseline = validate_operating_baseline(brief.get("operatingBaseline"))
+    if operating_baseline["sourceVersions"] != brief.get("sourceVersions"):
+        raise TrialValidationError("Company brief baseline sources do not match the brief.")
     owner_context = brief.get("ownerContext")
     owner_context_digest = None
     if owner_context is not None:
@@ -482,57 +899,140 @@ def company_brief_receipt(brief: Mapping[str, object]) -> dict[str, object]:
         "approvalSummary": deepcopy(brief["approvalSummary"]),
         "nextAction": deepcopy(brief["nextAction"]),
         "ownerContextDigest": owner_context_digest,
+        "operatingBaseline": operating_baseline,
     }
 
 
+def _validate_retained_brief_receipt(
+    value: object,
+    *,
+    workspace_id: str,
+) -> dict[str, object]:
+    required = {
+        "contract",
+        "briefDigest",
+        "intent",
+        "sourceCount",
+        "sourceVersions",
+        "approvalSummary",
+        "nextAction",
+    }
+    optional = {"ownerContextDigest", "operatingBaseline"}
+    if not isinstance(value, Mapping) or not required.issubset(value) or not set(value).issubset(required | optional):
+        raise TrialValidationError("Retained company brief receipt has an invalid shape.")
+    if value["contract"] != COMPANY_BRIEF_RECEIPT_CONTRACT or value["intent"] not in COMPANY_BRIEF_INTENTS:
+        raise TrialValidationError("Retained company brief receipt contract is invalid.")
+    source_versions = _validate_source_versions(value["sourceVersions"])
+    source_count = _bounded_count(value["sourceCount"], "Retained company brief source count", len(_PRODUCTS))
+    approvals = value["approvalSummary"]
+    if not isinstance(approvals, Mapping) or set(approvals) != {"pending", "approved", "declined"}:
+        raise TrialValidationError("Retained company brief approval summary is invalid.")
+    approval_summary = {
+        status: _bounded_count(approvals[status], f"Retained {status} approval count")
+        for status in ("pending", "approved", "declined")
+    }
+    next_action = value["nextAction"]
+    if not isinstance(next_action, Mapping) or set(next_action) != {"product", "path", "label"}:
+        raise TrialValidationError("Retained company brief next action is invalid.")
+    action = (next_action["product"], next_action["path"], next_action["label"])
+    if action not in _SAFE_RECEIPT_ACTIONS:
+        raise TrialValidationError("Retained company brief action is not allowlisted.")
+    expected_product, expected_path, expected_label = action
+    owner_context_digest = value.get("ownerContextDigest")
+    if owner_context_digest is not None:
+        owner_context_digest = _digest_text(owner_context_digest, "Retained owner context digest")
+    normalized = {
+        "contract": COMPANY_BRIEF_RECEIPT_CONTRACT,
+        "briefDigest": _digest_text(value["briefDigest"], "Retained company brief digest"),
+        "intent": value["intent"],
+        "sourceCount": source_count,
+        "sourceVersions": source_versions,
+        "approvalSummary": approval_summary,
+        "nextAction": {
+            "product": expected_product,
+            "path": expected_path,
+            "label": expected_label,
+        },
+        "ownerContextDigest": owner_context_digest,
+    }
+    if "operatingBaseline" in value:
+        baseline = validate_operating_baseline(value["operatingBaseline"], workspace_id=workspace_id)
+        if baseline["sourceVersions"] != source_versions:
+            raise TrialValidationError("Retained operating baseline sources do not match its receipt.")
+        normalized["operatingBaseline"] = baseline
+    return normalized
+
+
 def company_state_with_receipt(current: Mapping[str, Any], receipt: Mapping[str, object]) -> dict[str, object]:
-    """Append one bounded receipt while preserving all earlier receipts."""
+    """Keep the latest bounded checkpoints while preserving unrelated company state."""
 
     tasks = current.get("tasks", [])
     receipts = current.get("briefReceipts", [])
-    if not isinstance(tasks, list) or not isinstance(receipts, list) or len(receipts) > 30:
+    if not isinstance(tasks, list) or not isinstance(receipts, list) or len(receipts) > 1_000:
         raise TrialValidationError("Company state cannot retain a brief safely.")
-    validated = company_brief_receipt({
-        "contract": COMPANY_BRIEF_CONTRACT,
-        "briefDigest": receipt.get("briefDigest"),
-        "intent": receipt.get("intent"),
-        "sourceCount": receipt.get("sourceCount"),
-        "sourceVersions": receipt.get("sourceVersions"),
-        "approvalSummary": receipt.get("approvalSummary"),
-        "nextAction": receipt.get("nextAction"),
-        "ownerContext": (
-            {"profileDigest": receipt.get("ownerContextDigest")}
-            if receipt.get("ownerContextDigest") is not None
-            else None
-        ),
-    })
-    if receipt.get("contract") != COMPANY_BRIEF_RECEIPT_CONTRACT:
-        raise TrialValidationError("Company brief receipt contract is invalid.")
-    if any(candidate == validated for candidate in receipts):
-        return deepcopy(dict(current))
-    if len(receipts) >= 30:
-        raise TrialValidationError("Company brief receipt history reached its 30-record limit.")
-    return {**deepcopy(dict(current)), "tasks": deepcopy(tasks), "briefReceipts": [validated, *deepcopy(receipts)]}
+    baseline = validate_operating_baseline(receipt.get("operatingBaseline"))
+    workspace_id = str(baseline["workspaceId"])
+    validated = _validate_retained_brief_receipt(receipt, workspace_id=workspace_id)
+    retained: list[dict[str, object]] = []
+    for candidate in receipts:
+        try:
+            normalized = _validate_retained_brief_receipt(candidate, workspace_id=workspace_id)
+        except TrialValidationError:
+            continue
+        if normalized not in retained:
+            retained.append(normalized)
+        if len(retained) == 30:
+            break
+    if validated not in retained:
+        retained = [validated, *retained][:30]
+    return {
+        **deepcopy(dict(current)),
+        "tasks": deepcopy(tasks),
+        "briefReceipts": retained,
+    }
 
 
 def assert_brief_sources_unchanged(
     source_versions: Sequence[Mapping[str, object]],
     related_states: Mapping[str, Mapping[str, Any]],
+    *,
+    workspace_id: str,
 ) -> None:
-    expected = {str(source["surface"]): str(source["stateDigest"]) for source in source_versions}
+    expected_sources = _validate_source_versions(list(source_versions))
+    expected = {str(source["surface"]): source for source in expected_sources}
     if set(expected) != set(related_states):
         raise TrialValidationError("Company brief source set changed before retention.")
     for surface, state in related_states.items():
-        if _digest(state) != expected[surface]:
-            raise TrialValidationError("Company brief source changed before retention.")
+        version = int(expected[surface]["version"])
+        record = TrialState(workspace_id, surface, version, state)
+        if surface == "commerce":
+            shop, ecommerce = _project_commerce(record)
+            projection: Mapping[str, object] = {"shop": shop, "ecommerce": ecommerce}
+        elif surface == "production":
+            projection = _project_plant(record)
+        elif surface == "website":
+            projection = _project_website(record)
+        else:
+            raise TrialValidationError("Company brief source surface changed before retention.")
+        current_digest = _projection_digest(
+            workspace_id=workspace_id,
+            surface=surface,
+            version=version,
+            projection=projection,
+        )
+        if current_digest != expected[surface]["projectionDigest"]:
+            raise TrialValidationError("Company brief projection changed before retention.")
 
 
 __all__ = [
     "COMPANY_BRIEF_CONTRACT",
     "COMPANY_BRIEF_INTENTS",
     "COMPANY_BRIEF_RECEIPT_CONTRACT",
+    "OPERATING_BASELINE_CHANGE_CONTRACT",
+    "OPERATING_BASELINE_CONTRACT",
     "assert_brief_sources_unchanged",
     "build_managed_company_brief",
     "company_brief_receipt",
     "company_state_with_receipt",
+    "validate_operating_baseline",
 ]

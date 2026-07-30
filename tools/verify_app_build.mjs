@@ -28,6 +28,7 @@ let catalogImportRuntimeChecks = 0
 let clientOnboardingRuntimeChecks = 0
 let managedClientImportRuntimeChecks = 0
 let managedContextRuntimeChecks = 0
+let operatingBaselineRuntimeChecks = 0
 let shopInventoryRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
 let websiteReleaseRuntimeChecks = 0
@@ -116,6 +117,7 @@ const ecommerceBuyingLifecycleSource = await readFile(resolve(root, 'showroom', 
 const managedContextSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'managed-context.ts'), 'utf8')
 const managedContextUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedContextConsent.tsx'), 'utf8')
 const managedContextPythonSource = await readFile(resolve(root, 'supermega_runtime', 'managed_context.py'), 'utf8')
+const operatingBaselineSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'operating-baseline.ts'), 'utf8')
 
 if (!managedContextSource.includes("supermega.managed_context_profile_request.v1")
   || !managedContextSource.includes('buildManagedContextProfileRequest')
@@ -137,6 +139,19 @@ if (!managedContextSource.includes("supermega.managed_context_profile_request.v1
   || !managedContextPythonSource.includes('managed_context_brief_projection')
   || !companyBriefRuntimeSource.includes('_attention_rank')
   || !companyBriefRuntimeSource.includes('criticalIssues')) fail('managed_context_consent_contract_missing')
+if (!operatingBaselineSource.includes("supermega.operating_baseline.v1")
+  || !operatingBaselineSource.includes("supermega.operating_baseline_change.v1")
+  || !operatingBaselineSource.includes('structurallyValidOperatingBaseline')
+  || !operatingBaselineSource.includes('structurallyValidOperatingBaselineChange')
+  || !operatingBaselineSource.includes('unavailableProductIsEmpty')
+  || !operatingBaselineSource.includes('rawRecordsIncluded: false')
+  || !managedTrialSource.includes('validBaselineSources')
+  || !companyBriefRuntimeSource.includes('validate_operating_baseline')
+  || !companyBriefRuntimeSource.includes('_previous_operating_baseline')
+  || !companyBriefRuntimeSource.includes('retained = [validated, *retained][:30]')
+  || !settingsPageSource.includes('AI learned')
+  || !settingsPageSource.includes('operatingChangeCopy(managedPilotBrief.operatingChange)')
+  || !coreCssSource.includes('.premium-pilot-learning')) fail('operating_baseline_learning_contract_missing')
 
 if (!websiteReleaseSource.includes("supermega.website.release_foundation.v1")
   || !websiteReleaseSource.includes('buildWebsiteReleasePackage')
@@ -746,8 +761,9 @@ if (!productHomeReadinessSource.includes('const [behaviorTrail] = useState<Behav
   || !productHomeReadinessSource.includes('readLocalBusinessSnapshot(window.localStorage)')
   || !productHomeReadinessSource.includes('loadManagedCompanyBrief(intent, identity)')
   || !productHomeReadinessSource.includes('retainManagedCompanyBrief')
-  || !productHomeReadinessSource.includes('Keep as evidence')
-  || !productHomeReadinessSource.includes('Evidence retained')
+  || !productHomeReadinessSource.includes('Keep learning checkpoint')
+  || !productHomeReadinessSource.includes('Checkpoint retained')
+  || !productHomeReadinessSource.includes('AI learned')
   || !productHomeReadinessSource.includes('Managed context is unavailable. The validated local answer remains on screen.')
   || !productHomeReadinessSource.includes('detail: `Ask SuperMega: ${intent}`')
   || !productHomeReadinessSource.includes('detail: `Follow SuperMega answer: ${answer.intent}`')
@@ -783,7 +799,7 @@ if (!companyBriefRuntimeSource.includes('supermega.managed_company_brief.v1')
   || !companyBriefRuntimeSource.includes('validate_production_state')
   || !companyBriefRuntimeSource.includes('validate_website_state')
   || !companyBriefRuntimeSource.includes('reproducible_not_persisted')
-  || !companyBriefRuntimeSource.includes('Keeping it as evidence is a separate authenticated company write.')
+  || !companyBriefRuntimeSource.includes('Keeping an operating checkpoint is a separate authenticated owner-approved company write.')
   || !managedTrialRuntimeSource.includes('@router.post("/company-brief")')
   || !managedTrialRuntimeSource.includes('@router.post("/company-brief/receipts")')
   || !managedTrialRuntimeSource.includes('company_write_requires_dedicated_workflow')
@@ -1226,8 +1242,8 @@ if (!settingsPageSource.includes('aria-label="Premium pilot"')
   || !settingsPageSource.includes('Counts only; raw source records are not shown here.')
   || !settingsPageSource.includes('Verify this company, not a generic demo.')
   || !settingsPageSource.includes('Connect and verify')
-  || !settingsPageSource.includes('Keep pilot proof')
-  || !settingsPageSource.includes('Pilot proof kept in the managed audit. No external action ran.')
+  || !settingsPageSource.includes('Keep learning checkpoint')
+  || !settingsPageSource.includes('Learning checkpoint kept in the managed audit. No external action ran.')
   || !settingsPageSource.includes('Review only. No customer send, payment, stock move, production write, domain publish, or model training runs from this pilot.')
   || !settingsPageSource.includes('managedTrialAuthConfigured() && !setup.savedAt')
   || !settingsPageSource.includes('Managed access recovery')
@@ -5212,6 +5228,69 @@ async function verifyManagedContextRuntime() {
     }), 'managed_context_brief_projection_rejected')
   } catch (error) {
     fail(`managed_context_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyOperatingBaselineRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    operatingBaselineRuntimeChecks += 1
+  }
+  try {
+    const nonce = Date.now()
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'operating-baseline.ts')).href}?operating-baseline=${nonce}`)
+    const digest = `sha256:${'a'.repeat(64)}`
+    const common = { status: 'missing', attentionLevel: 0, reviewLoad: 0 }
+    const baseline = {
+      contract: 'supermega.operating_baseline.v1',
+      version: 1,
+      workspaceId: 'workspace-baseline',
+      sourceVersions: [],
+      coverage: { readyProducts: 0, missingProducts: 4, invalidProducts: 0 },
+      products: {
+        shop: { ...common, itemCount: 0, lowStock: 0, activeOrders: 0, moneyExceptions: 0, incomingRequests: 0 },
+        plant: { ...common, jobCount: 0, unfinishedJobs: 0, heldJobs: 0, criticalIssues: 0, highIssues: 0, openIssues: 0, stoppedMachines: 0 },
+        website: { ...common, pageCount: 0, readyPages: 0, approved: false, released: false },
+        ecommerce: { ...common, selectedSkus: 0, incomingRequests: 0, shopSourceReady: false },
+      },
+      rawRecordsIncluded: false,
+      baselineDigest: digest,
+    }
+    assert(model.structurallyValidOperatingBaseline(baseline, 'workspace-baseline'), 'operating_baseline_shape_rejected')
+    assert(!model.structurallyValidOperatingBaseline({ ...baseline, workspaceId: 'workspace-other' }, 'workspace-baseline'), 'operating_baseline_cross_tenant_accepted')
+    assert(!model.structurallyValidOperatingBaseline({ ...baseline, rawRecordsIncluded: true }, 'workspace-baseline'), 'operating_baseline_raw_records_accepted')
+    assert(!model.structurallyValidOperatingBaseline({ ...baseline, coverage: { ...baseline.coverage, readyProducts: 1 } }, 'workspace-baseline'), 'operating_baseline_false_coverage_accepted')
+    assert(!model.structurallyValidOperatingBaseline({
+      ...baseline,
+      products: { ...baseline.products, shop: { ...baseline.products.shop, lowStock: 1 } },
+    }, 'workspace-baseline'), 'operating_baseline_unavailable_facts_accepted')
+    const first = {
+      contract: 'supermega.operating_baseline_change.v1',
+      version: 1,
+      status: 'first_checkpoint',
+      currentBaselineDigest: digest,
+      previousBaselineDigest: null,
+      changedProducts: [],
+      attentionIncreased: [],
+      attentionDecreased: [],
+      coverageChanged: false,
+      rawRecordsIncluded: false,
+      changeDigest: `sha256:${'b'.repeat(64)}`,
+    }
+    assert(model.structurallyValidOperatingBaselineChange(first, baseline), 'operating_first_checkpoint_rejected')
+    assert(model.operatingChangeCopy(first).label === 'First operating baseline', 'operating_first_checkpoint_copy_drifted')
+    const changed = {
+      ...first,
+      status: 'changed',
+      previousBaselineDigest: `sha256:${'c'.repeat(64)}`,
+      changedProducts: ['shop'],
+      attentionIncreased: ['shop'],
+    }
+    assert(model.structurallyValidOperatingBaselineChange(changed, baseline)
+      && model.operatingChangeCopy(changed).detail.includes('more review pressure: Shop'), 'operating_change_explanation_rejected')
+    assert(!model.structurallyValidOperatingBaselineChange({ ...changed, attentionIncreased: ['plant'] }, baseline), 'operating_change_unbound_attention_accepted')
+  } catch (error) {
+    fail(`operating_baseline_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
@@ -10604,6 +10683,7 @@ await verifyWebsiteReleaseRuntime()
 await verifyCatalogImportRuntime()
 await verifyClientOnboardingRuntime()
 await verifyManagedContextRuntime()
+await verifyOperatingBaselineRuntime()
 await verifyManagedClientImportRuntime()
 await verifyWebsiteRuntime()
 await verifyWebsiteOrderCompletionRuntime()
@@ -10630,4 +10710,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, managedContextRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

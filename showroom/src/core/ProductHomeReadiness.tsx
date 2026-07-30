@@ -17,6 +17,7 @@ import {
   type ManagedCompanyBrief,
   type ManagedIdentity,
 } from './managed-trial'
+import { operatingChangeCopy } from './operating-baseline'
 
 type ProductHomeReadinessProps = {
   activationCoverage: number
@@ -46,6 +47,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
   const behaviorPreference = useMemo(() => summarizeBehaviorPreferences(behaviorTrail), [behaviorTrail])
   const preferredContinuation = behaviorPreference.preferred ? productContinuations[behaviorPreference.preferred.product] : null
   const managedBriefRetained = managedContext?.brief.retention === 'persisted_managed_audit'
+  const managedLearning = managedContext ? operatingChangeCopy(managedContext.brief.operatingChange) : null
   const commandPath = ready && preferredContinuation ? preferredContinuation.path : ready ? '/settings/#controls' : '/settings/'
   const commandLabel = ready && preferredContinuation ? `Continue ${preferredContinuation.label}` : ready ? 'Export evidence' : 'Finish setup'
   const trackActionRows = [
@@ -153,7 +155,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
     if (!managedContext || managedPending) return
     const requestId = managedRequestRef.current
     setManagedPending(true)
-    setManagedNotice('Keeping this managed brief as evidence...')
+    setManagedNotice('Keeping this aggregate learning checkpoint...')
     try {
       const retained = await retainManagedCompanyBrief({
         brief: managedContext.brief,
@@ -163,7 +165,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
       if (requestId !== managedRequestRef.current) return
       setAnswer(retained.brief)
       setManagedContext({ ...managedContext, brief: retained.brief })
-      setManagedNotice(retained.retention.idempotentReplay ? 'This exact brief was already retained.' : 'Brief retained in the managed audit history.')
+      setManagedNotice(retained.retention.idempotentReplay ? 'This learning checkpoint was already retained.' : 'Learning checkpoint retained in the managed audit history.')
     } catch {
       if (requestId !== managedRequestRef.current) return
       setManagedNotice('The brief was not retained. Managed write readiness or company permission is required.')
@@ -229,9 +231,10 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
               <span>{answer.sourceCount}/4 validated {managedContext ? 'managed' : 'local'} product sources</span>
               <h3>{answer.title}</h3>
               <p>{answer.summary}</p>
+              {managedLearning ? <div className="business-command-learning"><span>AI learned</span><strong>{managedLearning.label}</strong><small>{managedLearning.detail}</small></div> : null}
             </div>
             <div className="form-actions">
-              {managedContext ? <button className="core-button" disabled={managedPending || managedBriefRetained} onClick={() => void retainBrief()} type="button">{managedBriefRetained ? 'Evidence retained' : 'Keep as evidence'}</button> : null}
+              {managedContext ? <button className="core-button" disabled={managedPending || managedBriefRetained} onClick={() => void retainBrief()} type="button">{managedBriefRetained ? 'Checkpoint retained' : 'Keep learning checkpoint'}</button> : null}
               <Link className="core-button primary" onClick={recordAnswerFollow} to={answer.nextAction.path}>{answer.nextAction.label}</Link>
             </div>
           </div>

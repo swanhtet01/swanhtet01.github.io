@@ -401,6 +401,7 @@ class TrialStore(Protocol):
         expected_version: int,
         payload: Mapping[str, Any],
         related_surfaces: Sequence[str] = (),
+        expected_related_versions: Mapping[str, int] | None = None,
         state_precondition: StatePrecondition | None = None,
     ) -> CommandResult: ...
 
@@ -1620,6 +1621,22 @@ def _normalize_related_surfaces(surface: str, related_surfaces: Sequence[str]) -
     return tuple(sorted(normalized))
 
 
+def _normalize_expected_related_versions(
+    related_surfaces: Sequence[str],
+    expected_versions: Mapping[str, int] | None,
+) -> dict[str, int]:
+    if expected_versions is None:
+        return {}
+    if not isinstance(expected_versions, Mapping) or set(expected_versions) != set(related_surfaces):
+        raise TrialValidationError("expected related versions must match related surfaces exactly.")
+    normalized: dict[str, int] = {}
+    for surface, version in expected_versions.items():
+        if not isinstance(version, int) or isinstance(version, bool) or version < 0:
+            raise TrialValidationError("expected related versions must be non-negative integers.")
+        normalized[str(surface)] = version
+    return normalized
+
+
 def _json_object(value: Mapping[str, Any], *, field_name: str) -> JsonObject:
     if not isinstance(value, Mapping):
         raise TrialValidationError(f"{field_name} must be a JSON object.")
@@ -2370,12 +2387,17 @@ class PostgresTrialStore:
         expected_version: int,
         payload: Mapping[str, Any],
         related_surfaces: Sequence[str] = (),
+        expected_related_versions: Mapping[str, int] | None = None,
         state_precondition: StatePrecondition | None = None,
     ) -> CommandResult:
         command_id_value = _normalize_uuid(command_id, field_name="command_id")
         surface_value = _normalize_surface(surface)
         event_type_value = _normalize_event_type(event_type)
         related_surface_values = _normalize_related_surfaces(surface_value, related_surfaces)
+        related_version_values = _normalize_expected_related_versions(
+            related_surface_values,
+            expected_related_versions,
+        )
         if int(expected_version) < 0:
             raise TrialValidationError("expected_version must be non-negative.")
         if related_surface_values and state_precondition is None:
@@ -2389,6 +2411,8 @@ class PostgresTrialStore:
         }
         if related_surface_values:
             command_contract["related_surfaces"] = list(related_surface_values)
+        if related_version_values:
+            command_contract["expected_related_versions"] = related_version_values
         commerce_action_id = _commerce_command_action_id(
             surface_value,
             payload_value,
@@ -2461,6 +2485,14 @@ class PostgresTrialStore:
                     expected_version=int(expected_version),
                     current_version=current_version,
                 )
+            for related_surface, expected_related_version in related_version_values.items():
+                related_row = rows[related_surface]
+                related_version = int(related_row["version"]) if related_row else 0
+                if related_version != expected_related_version:
+                    raise TrialVersionConflict(
+                        expected_version=expected_related_version,
+                        current_version=related_version,
+                    )
             if commerce_action_id is not None:
                 self._lock(
                     cursor,
@@ -2949,12 +2981,17 @@ class InMemoryTrialStore:
         expected_version: int,
         payload: Mapping[str, Any],
         related_surfaces: Sequence[str] = (),
+        expected_related_versions: Mapping[str, int] | None = None,
         state_precondition: StatePrecondition | None = None,
     ) -> CommandResult:
         command_id_value = _normalize_uuid(command_id, field_name="command_id")
         surface_value = _normalize_surface(surface)
         event_type_value = _normalize_event_type(event_type)
         related_surface_values = _normalize_related_surfaces(surface_value, related_surfaces)
+        related_version_values = _normalize_expected_related_versions(
+            related_surface_values,
+            expected_related_versions,
+        )
         if int(expected_version) < 0:
             raise TrialValidationError("expected_version must be non-negative.")
         if related_surface_values and state_precondition is None:
@@ -2968,6 +3005,8 @@ class InMemoryTrialStore:
         }
         if related_surface_values:
             command_contract["related_surfaces"] = list(related_surface_values)
+        if related_version_values:
+            command_contract["expected_related_versions"] = related_version_values
         commerce_action_id = _commerce_command_action_id(
             surface_value,
             payload_value,
@@ -3017,6 +3056,16 @@ class InMemoryTrialStore:
                     expected_version=int(expected_version),
                     current_version=current.version,
                 )
+            for related_surface, expected_related_version in related_version_values.items():
+                related_record = self._states.get(
+                    (normalized.workspace_id, related_surface),
+                    TrialState(normalized.workspace_id, related_surface, 0, {}),
+                )
+                if related_record.version != expected_related_version:
+                    raise TrialVersionConflict(
+                        expected_version=expected_related_version,
+                        current_version=related_record.version,
+                    )
             if (
                 commerce_action_id is not None
                 and (

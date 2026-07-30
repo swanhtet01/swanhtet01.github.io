@@ -10,6 +10,7 @@ import { COMMERCE_KEY, LEGACY_COMMERCE_KEYS } from './commerce-workspace'
 import { BEHAVIOR_TRAIL_KEY, readBehaviorTrail, recordBehaviorSignal, summarizeBehaviorPreferences } from './behavior-trail'
 import { ManagedContextConsent } from './ManagedContextConsent'
 import { buildManagedContextProfileRequest, managedContextProductLabel } from './managed-context'
+import { operatingChangeCopy } from './operating-baseline'
 import {
   ACTION_KEY,
   APPROVAL_KEY,
@@ -272,34 +273,41 @@ export function SettingsPage() {
       return undefined
     }
 
-    const requestId = managedPilotRequestRef.current + 1
-    managedPilotRequestRef.current = requestId
-    Promise.resolve().then(() => {
-      if (managedPilotRequestRef.current !== requestId) return
-      setManagedPilotBusy(true)
-      setManagedPilotNotice('Verifying approved company context...')
-    })
-    loadManagedCompanyBrief('attention', managedIdentity)
-      .then((brief) => {
+    const refresh = () => {
+      const requestId = managedPilotRequestRef.current + 1
+      managedPilotRequestRef.current = requestId
+      Promise.resolve().then(() => {
         if (managedPilotRequestRef.current !== requestId) return
-        setManagedPilotBrief(brief)
-        setManagedPilotCommandId(settingsCommandUuid())
-        setManagedPilotRetained(brief.retention === 'persisted_managed_audit')
-        setManagedPilotNotice(`${brief.sourceCount} managed source${brief.sourceCount === 1 ? '' : 's'} verified for ${managedIdentity.workspaceId}.`)
+        setManagedPilotBusy(true)
+        setManagedPilotNotice('Verifying approved company context...')
       })
-      .catch((error) => {
-        if (managedPilotRequestRef.current !== requestId) return
-        setManagedPilotBrief(null)
-        setManagedPilotCommandId('')
-        setManagedPilotRetained(false)
-        setManagedPilotNotice(error instanceof Error ? error.message : 'Managed company context is not ready.')
-      })
-      .finally(() => {
-        if (managedPilotRequestRef.current === requestId) setManagedPilotBusy(false)
-      })
+      loadManagedCompanyBrief('attention', managedIdentity)
+        .then((brief) => {
+          if (managedPilotRequestRef.current !== requestId) return
+          setManagedPilotBrief(brief)
+          setManagedPilotCommandId(settingsCommandUuid())
+          setManagedPilotRetained(brief.retention === 'persisted_managed_audit')
+          setManagedPilotNotice(`${brief.sourceCount} managed source${brief.sourceCount === 1 ? '' : 's'} verified for ${managedIdentity.workspaceId}.`)
+        })
+        .catch((error) => {
+          if (managedPilotRequestRef.current !== requestId) return
+          setManagedPilotBrief(null)
+          setManagedPilotCommandId('')
+          setManagedPilotRetained(false)
+          setManagedPilotNotice(error instanceof Error ? error.message : 'Managed company context is not ready.')
+        })
+        .finally(() => {
+          if (managedPilotRequestRef.current === requestId) setManagedPilotBusy(false)
+        })
+    }
+    refresh()
+    const interval = window.setInterval(refresh, 60_000)
+    window.addEventListener('focus', refresh)
 
     return () => {
-      if (managedPilotRequestRef.current === requestId) managedPilotRequestRef.current += 1
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refresh)
+      managedPilotRequestRef.current += 1
     }
   }, [managedIdentity, setup.savedAt])
   const completion = pilotProgress(setup)
@@ -773,11 +781,12 @@ export function SettingsPage() {
   }
   const premiumPilotProofKept = managedPilotRetained || managedPilotBrief?.retention === 'persisted_managed_audit'
   const retainedOwnerProduct = managedPilotBrief?.ownerContext?.preferredProduct
+  const operatingLearning = managedPilotBrief ? operatingChangeCopy(managedPilotBrief.operatingChange) : null
   const premiumPilotRows = [
     ['Owner pattern', retainedOwnerProduct ? `${managedContextProductLabel(retainedOwnerProduct)} retained` : topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.detail}` : 'Not learned yet', retainedOwnerProduct ? 'Managed briefs may use this preference only after risk and evidence checks.' : topAgentJob ? `${topAgentJob.chosenCount} local choice${topAgentJob.chosenCount === 1 ? '' : 's'}.` : 'Choose a recommended product action to teach the next handoff.'],
     ['Managed account', managedIdentity?.email ?? 'Not connected', managedIdentity ? managedIdentity.workspaceId : 'Your local trial remains usable without an account.'],
     ['Approved sources', managedPilotBrief ? `${managedPilotBrief.sourceCount} managed` : preparedRecordCount ? `${preparedRecordCount} local prepared` : 'No source proof yet', managedPilotBrief ? 'Counts only; raw source records are not shown here.' : 'Connect a managed workspace to verify tenant-scoped sources.'],
-    ['Pilot proof', premiumPilotProofKept ? 'Kept in audit' : managedPilotBrief ? 'Ready to keep' : 'Local preview only', premiumPilotProofKept ? 'The reviewed brief has a managed evidence receipt.' : 'No external action runs from this panel.'],
+    ['Learning checkpoint', premiumPilotProofKept ? 'Kept in audit' : managedPilotBrief ? 'Ready to keep' : 'Local preview only', premiumPilotProofKept ? 'The aggregate operating baseline has a managed audit receipt.' : 'No external action runs from this panel.'],
   ] as const
   const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 23, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, behaviorPreference, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
@@ -1385,7 +1394,7 @@ export function SettingsPage() {
     const requestId = managedPilotRequestRef.current + 1
     managedPilotRequestRef.current = requestId
     setManagedPilotBusy(true)
-    setManagedPilotNotice('Keeping the reviewed pilot proof...')
+    setManagedPilotNotice('Keeping the aggregate learning checkpoint...')
     try {
       const receipt = await retainManagedCompanyBrief({
         brief,
@@ -1395,10 +1404,10 @@ export function SettingsPage() {
       if (managedPilotRequestRef.current !== requestId) return
       setManagedPilotBrief(receipt.brief)
       setManagedPilotRetained(true)
-      setManagedPilotNotice(receipt.retention.idempotentReplay ? 'Pilot proof was already kept in the managed audit.' : 'Pilot proof kept in the managed audit. No external action ran.')
+      setManagedPilotNotice(receipt.retention.idempotentReplay ? 'This learning checkpoint was already kept.' : 'Learning checkpoint kept in the managed audit. No external action ran.')
     } catch (error) {
       if (managedPilotRequestRef.current !== requestId) return
-      setManagedPilotNotice(error instanceof Error ? error.message : 'The pilot proof could not be kept.')
+      setManagedPilotNotice(error instanceof Error ? error.message : 'The learning checkpoint could not be kept.')
     } finally {
       if (managedPilotRequestRef.current === requestId) setManagedPilotBusy(false)
     }
@@ -1478,11 +1487,11 @@ export function SettingsPage() {
         </form>
       </div>
       {setup.savedAt ? <section aria-label="Premium pilot" className="premium-pilot">
-        <div className="premium-pilot-head"><div><span className="core-eyebrow">Premium pilot</span><h2>Your business context, remembered.</h2><p>SuperMega combines approved product data and owner patterns, then prepares one next move for review.</p></div><span className={`status-pill ${premiumPilotProofKept ? 'approved' : managedPilotBrief ? 'bounded' : ''}`}>{premiumPilotProofKept ? 'proof kept' : managedPilotBrief ? 'verified' : 'local'}</span></div>
+        <div className="premium-pilot-head"><div><span className="core-eyebrow">Premium pilot</span><h2>Your business context, remembered.</h2><p>SuperMega combines approved product data and owner patterns, then prepares one next move for review.</p></div><span className={`status-pill ${premiumPilotProofKept ? 'approved' : managedPilotBrief ? 'bounded' : ''}`}>{premiumPilotProofKept ? 'checkpoint kept' : managedPilotBrief ? 'verified' : 'local'}</span></div>
         <div className="premium-pilot-rows">{premiumPilotRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
-        {managedPilotBrief ? <div className="premium-pilot-brief"><div><span className="core-eyebrow">Managed company brief</span><h3>{managedPilotBrief.title}</h3><p>{managedPilotBrief.summary}</p></div><div className="premium-pilot-next"><small>Reviewed next move</small><strong>{managedPilotBrief.nextAction.label}</strong><em>{managedPilotBrief.boundary}</em></div></div> : null}
+        {managedPilotBrief ? <div className="premium-pilot-brief"><div><span className="core-eyebrow">Managed company brief</span><h3>{managedPilotBrief.title}</h3><p>{managedPilotBrief.summary}</p>{operatingLearning ? <div className="premium-pilot-learning"><span className="core-eyebrow">AI learned</span><strong>{operatingLearning.label}</strong><small>{operatingLearning.detail}</small></div> : null}</div><div className="premium-pilot-next"><small>Reviewed next move</small><strong>{managedPilotBrief.nextAction.label}</strong><em>{managedPilotBrief.boundary}</em></div></div> : null}
         <ManagedContextConsent contextPackage={managedContextPackage} identity={managedIdentity} onRetained={() => void verifyManagedPilot()} />
-        {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="premium-pilot-actions"><button className="core-button" disabled={managedPilotBusy} onClick={() => void verifyManagedPilot()} type="button">{managedPilotBusy && !managedPilotBrief ? 'Verifying...' : 'Verify context'}</button>{managedPilotBrief ? <><Link className="core-button" to={managedPilotBrief.nextAction.path}>{managedPilotBrief.nextAction.label}</Link><button className="core-button primary" disabled={managedPilotBusy || premiumPilotProofKept} onClick={() => void keepManagedPilotProof()} type="button">{premiumPilotProofKept ? 'Proof kept' : managedPilotBusy ? 'Keeping...' : 'Keep pilot proof'}</button></> : null}</div> : <form className="premium-pilot-login" onSubmit={(event) => void connectManagedWorkspace(event)}><div><span className="core-eyebrow">Connect managed workspace</span><strong>Verify this company, not a generic demo.</strong></div><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label><label>Workspace ID<input maxLength={128} onChange={(event) => setManagedWorkspace(event.target.value)} placeholder="Provisioned workspace" required value={managedWorkspace} /></label><button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking...' : 'Connect and verify'}</button></form> : <div className="premium-pilot-actions"><a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed pilot</a></div>}
+        {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="premium-pilot-actions"><button className="core-button" disabled={managedPilotBusy} onClick={() => void verifyManagedPilot()} type="button">{managedPilotBusy && !managedPilotBrief ? 'Verifying...' : 'Verify context'}</button>{managedPilotBrief ? <><Link className="core-button" to={managedPilotBrief.nextAction.path}>{managedPilotBrief.nextAction.label}</Link><button className="core-button primary" disabled={managedPilotBusy || premiumPilotProofKept} onClick={() => void keepManagedPilotProof()} type="button">{premiumPilotProofKept ? 'Checkpoint kept' : managedPilotBusy ? 'Keeping...' : 'Keep learning checkpoint'}</button></> : null}</div> : <form className="premium-pilot-login" onSubmit={(event) => void connectManagedWorkspace(event)}><div><span className="core-eyebrow">Connect managed workspace</span><strong>Verify this company, not a generic demo.</strong></div><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label><label>Workspace ID<input maxLength={128} onChange={(event) => setManagedWorkspace(event.target.value)} placeholder="Provisioned workspace" required value={managedWorkspace} /></label><button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking...' : 'Connect and verify'}</button></form> : <div className="premium-pilot-actions"><a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed pilot</a></div>}
         {managedNotice || managedPilotNotice ? <p className="form-notice" role="status">{managedPilotNotice || managedNotice}</p> : null}
         <p className="premium-pilot-boundary">Review only. No customer send, payment, stock move, production write, domain publish, or model training runs from this pilot.</p>
       </section> : null}

@@ -28,6 +28,9 @@ _KNOWN_CAPABILITIES = frozenset(
         "setup.write",
         "commerce.read",
         "commerce.write",
+        "company.read",
+        "company.write",
+        "company.baseline.approve",
         "approvals.read",
         "approvals.request",
         "approvals.decide",
@@ -231,6 +234,8 @@ def validate_client_provisioning_recipe(recipe: object) -> dict[str, Any]:
     if owner_capabilities is None or not {
         "setup.write",
         "commerce.write",
+        "company.write",
+        "company.baseline.approve",
         "approvals.decide",
     }.issubset(owner_capabilities):
         raise _fail("The owner role lacks required accountable capabilities.")
