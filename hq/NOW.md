@@ -43,7 +43,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Ecommerce carries versioned contact/address snapshots through recovery and Shop handoff; hosted identity and provider execution remain absent.
 - Shop owns versioned delivery zones, fee, promise, tax schedule, and payment-method eligibility/limits. Ecommerce draft v7 and the Shop order retain the exact tax decision; Shop rechecks authority and tax-inclusive payment limits before reserving stock (`ENG-136`, `ENG-137`, `ENG-138`, `9ff26ba3`).
 - Shop Orders downloads digest-bound acknowledgements from exact evidence; no invoice, receipt, message, or provider action (`ENG-139`, `263434db`).
-- Ecommerce cancellation, amendment, and promise changes bind Shop evidence, recheck current policy, and retain accountable outcomes (`ENG-140`-`ENG-142`).
+- Ecommerce post-order requests bind Shop evidence and retain accountable outcomes, including exact return disposition (`ENG-140`-`ENG-143`).
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Shop remains stock authority for exact returns and substitution. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
 - Plant maintenance binds strategy, due work, structured results, evidence-linked finding problems, and corrective-action closeout with final human disposition. It performs no automatic problem opening, dispatch, control, telemetry, status, or parts action.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
@@ -54,13 +54,13 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 ## Verified baseline
 
 - Current local checkpoints: Ecommerce tax authority `b70d3412`, governed v7 Shop handoff `1975c550`, tax-inclusive limits `0eb180f9`, and order proof `9ff26ba3`; all gates pass.
-- Promise-reschedule `065597cc` passes 92 Ecommerce checks, 20 Python tests, lint, and build. Fresh rendered QA remains outstanding.
-- Checks pass: 92 Ecommerce, 305 Commerce, 274 Production, 64 managed Commerce, 77 security, 216 onboarding, and 82 managed import.
+- Return-outcome `6a5ecdaa` passes 96 Ecommerce checks, 21 Python tests, lint, and build. Fresh rendered QA remains outstanding.
+- Checks pass: 96 Ecommerce, 305 Commerce, 274 Production, 64 managed Commerce, 77 security, 216 onboarding, and 82 managed import.
 - First-action QA routes Shop, Plant, and Website blockers to the next task.
 - Client preparation passes 186 onboarding, 74 security, six preparation, recovery, release, privacy, database, Vercel, HQ, approval, and tamper-before-write checks.
 - Both domains serve deployed `d268bd6366848e76e64ea2991048589f608984e3`; paired brand, context, and catalog identities match, but local context drift blocks release readiness.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
-- `supermega.ally-working-set-trim.v1` released 2,949.3 MB without Codex process stops; audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Stable IDs block ENG-130/134/135/136/137/138/139/140/141/142. Four CEO outcomes are accepted; Finance/Risk remains quarantined.
+- `supermega.ally-working-set-trim.v1` previously released 2,949.3 MB without Codex process stops; the latest trim released 2,287.3 MB. Audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Stable IDs block ENG-130/134/135/136/137/138/139/140/141/142/143. Four CEO outcomes are accepted; Finance/Risk remains quarantined.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
 ## Owner-gated actions
