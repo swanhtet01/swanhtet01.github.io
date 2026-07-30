@@ -109,12 +109,14 @@ AI and delegated agents may not independently send customer messages, charge or 
 - Customer-facing Vercel project: `supermega-public` for both production domains
 - Internal hosted runtime project: `megaos`; it is not public domain authority
 - Coordinated workflow: `.github/workflows/supermega-public-release.yml`
+- PR #258 is merged and is historical release evidence, not an active handoff target.
+- Current production and `origin/main` resolve to `bb9f2eeb589b1809ea55e4dc8a734cca96bf1161`; this candidate diverges from common base `5d1c5d7c903e9154cfa0af0f12991fea1071b51b` and must not be fast-forwarded.
 - Both production domains must expose matching `__release.json` metadata for the reviewed commit and context versions.
 - Direct local production deployment is blocked. The coordinated GitHub workflow is the only production release path.
 
 ## Current execution order
 
-1. Fast-forward the exact clean candidate to draft PR #258 only after owner authorization, run fresh checks, and review a protected `supermega-public` preview without changing production aliases.
+1. Start a fresh isolated integration branch from current `origin/main`, port only reviewed candidate checkpoints in bounded batches after owner authorization, run fresh checks, and review a protected `supermega-public` preview without changing production aliases. Never reuse merged PR #258 or fast-forward this divergent branch.
 2. Prove the four products on a genuinely isolated managed tenant with RLS, recovery, server-only credentials, and no cross-tenant access.
 3. Run one named Shop design-partner pilot, then validate Website and Ecommerce with the same accountable onboarding and evidence rules.
 4. Add provider-backed AI, payment, shipping, tax, publishing, and broader marketing only after their product gate has measured pilot evidence.
