@@ -31,6 +31,18 @@ type GuidedShopSaleAction = {
   evidenceReference: string
 }
 
+type GuidedPlantOutputAction = {
+  capturedAt: string
+  domain: string
+  kind: string
+  subjectId: string
+  summary: string
+  actorKind: string
+  actor: string
+  reason: string
+  evidenceReference: string
+}
+
 type PilotOutcomeCheckpoint = {
   contract: 'supermega.local_pilot_outcome_checkpoint.v1'
   checkpointDigest: string
@@ -87,6 +99,7 @@ type StoredPilotOutcomes = {
 
 const PRODUCT_IDS = new Set<PilotOutcomeProduct>(['commerce', 'production', 'website', 'ecommerce'])
 const SHA256_DIGEST = /^sha256:[0-9a-f]{64}$/
+const PLANT_GUIDED_OUTPUT_SUMMARY = /^Record ([1-9][0-9]*) good units for (.+?) · (.+)$/
 
 function digest(value: unknown) {
   return `sha256:${sha256Hex(JSON.stringify(value))}`
@@ -270,6 +283,47 @@ export function buildShopGuidedSaleOutcomeMetric(
       ? `${completedSaleCount} owner-confirmed guided counter sale${completedSaleCount === 1 ? '' : 's'} completed after the trial started.`
       : 'No owner-confirmed guided counter sale completed after the trial started.',
     sourceDigest: digest(['supermega.shop_guided_sale_outcome_source.v1', trialStartedAt, completedSaleCount]),
+  }
+}
+
+export function buildPlantGuidedOutputOutcomeMetric(
+  actions: readonly GuidedPlantOutputAction[],
+  trialStartedAt: string,
+): PilotOutcomeMetric | null {
+  const startedAt = Date.parse(trialStartedAt)
+  if (!Number.isFinite(startedAt)) return null
+  const completedOutputCount = actions.filter((action) => {
+    const subjectId = visibleText(action.subjectId, 120)
+    const summaryMatch = PLANT_GUIDED_OUTPUT_SUMMARY.exec(action.summary)
+    const quantity = Number(summaryMatch?.[1])
+    const summarySubjectId = visibleText(summaryMatch?.[2], 120)
+    const shiftReference = visibleText(summaryMatch?.[3], 80)
+    return action.domain === 'production'
+      && action.kind === 'production_output'
+      && action.actorKind === 'human'
+      && Boolean(subjectId)
+      && Boolean(visibleText(action.actor, 80))
+      && Boolean(visibleText(action.reason, 240))
+      && Boolean(visibleText(action.evidenceReference, 180))
+      && visibleText(action.summary, 240) === action.summary
+      && Number.isSafeInteger(quantity)
+      && quantity > 0
+      && summarySubjectId === subjectId
+      && Boolean(shiftReference)
+      && !shiftReference.includes(' · ')
+      && Number.isFinite(Date.parse(action.capturedAt))
+      && Date.parse(action.capturedAt) >= startedAt
+  }).length
+  return {
+    metricId: 'plant-guided-output-gap',
+    label: 'Guided Plant output gap',
+    value: completedOutputCount > 0 ? 0 : 1,
+    unit: 'gaps',
+    better: 'lower',
+    detail: completedOutputCount > 0
+      ? `${completedOutputCount} named-owner good-output record${completedOutputCount === 1 ? '' : 's'} completed after the trial started.`
+      : 'No named-owner good-output record completed after the trial started.',
+    sourceDigest: digest(['supermega.plant_guided_output_outcome_source.v1', trialStartedAt, completedOutputCount]),
   }
 }
 

@@ -73,6 +73,7 @@ import { buildManagedTrialProof } from './managed-trial-proof'
 import { PilotOutcomePanel } from './PilotOutcomePanel'
 import { buildPilotOutcomeDecisionApproval } from './pilot-outcome-decision'
 import {
+  buildPlantGuidedOutputOutcomeMetric,
   buildShopGuidedSaleOutcomeMetric,
   startPilotOutcome,
   type PilotOutcomeReport,
@@ -100,11 +101,11 @@ const recommendedSetupDrafts: Record<SetupProductId, RecommendedSetupDraft> = {
   production: {
     workspace: 'Plant starter workspace',
     owner: 'Production owner',
-    currentRecord: 'One sample production job and shift handoff',
+    currentRecord: 'One sample production job and confirmed output',
     baseline: 'Jobs, output, quality, and downtime are reviewed manually.',
-    targetOutcome: 'Prepare one reviewed shift handoff packet.',
+    targetOutcome: 'Confirm one good-output result with named-owner shift evidence.',
     authorityBoundary: 'Owner approves production, material, quality, and maintenance changes.',
-    acceptanceEvidence: 'A reviewed Plant packet with no production write.',
+    acceptanceEvidence: 'A reviewed Plant output proof with no production write.',
   },
   website: {
     workspace: 'Website starter workspace',
@@ -237,10 +238,14 @@ export function SettingsPage() {
     templateId: setup.templateId,
   }
   const [actions] = useAccountableActions()
-  const guidedShopOutcomeMetric = setup.product === 'commerce' && setup.startedAt
-    ? buildShopGuidedSaleOutcomeMetric(actions, setup.startedAt) ?? undefined
+  const guidedOutcomeMetric = setup.startedAt
+    ? setup.product === 'commerce'
+      ? buildShopGuidedSaleOutcomeMetric(actions, setup.startedAt) ?? undefined
+      : setup.product === 'production'
+        ? buildPlantGuidedOutputOutcomeMetric(actions, setup.startedAt) ?? undefined
+        : undefined
     : undefined
-  const { metric: pilotOutcomeMetric, report: pilotOutcomeReport, refresh: refreshPilotOutcome } = useLocalPilotOutcome(pilotOutcomeSetup, guidedShopOutcomeMetric)
+  const { metric: pilotOutcomeMetric, report: pilotOutcomeReport, refresh: refreshPilotOutcome } = useLocalPilotOutcome(pilotOutcomeSetup, guidedOutcomeMetric)
   const [commerce] = useCommerceWorkspace()
   const [production] = useProductionWorkspace()
   const [approvals, setApprovals] = useApprovalWorkspace()
@@ -355,7 +360,7 @@ export function SettingsPage() {
       ? [
         ['Bring', 'Job CSV, material list, quality holds', 'Start from planned work, BOM/material needs, WCM/maintenance issues, and ISO evidence.'],
         ['AI prepares', 'MES queue, MRP check, ISO handoff', 'The workspace ranks jobs, blockers, material proof, quality release, and cost-readiness.'],
-        ['First proof', 'One shift handoff packet', 'Show production, quality, maintenance, trace, and cost evidence before any plant write.'],
+        ['First proof', 'One confirmed shift output', 'Show named-owner good output with shift evidence before any plant write.'],
         ['Gate', 'Owner approves production', 'No equipment command, material issue, quality release, costing, or production write runs from setup.'],
       ]
       : setup.product === 'website'
@@ -1003,15 +1008,17 @@ export function SettingsPage() {
     }
     const startedAt = new Date().toISOString()
     setSetup((current) => ({ ...current, startedAt }))
-    if (setup.product === 'commerce') {
-      const metric = buildShopGuidedSaleOutcomeMetric(actions, startedAt)
+    if (setup.product === 'commerce' || setup.product === 'production') {
+      const metric = setup.product === 'commerce'
+        ? buildShopGuidedSaleOutcomeMetric(actions, startedAt)
+        : buildPlantGuidedOutputOutcomeMetric(actions, startedAt)
       if (metric) {
         startPilotOutcome(window.localStorage, pilotOutcomeSetup, metric, new Date(startedAt))
         recordBehaviorSignal(window.localStorage, {
           event: 'agent_job_chosen',
           product: setup.product,
           route: clientSetupPath(setup.product),
-          detail: 'Start Shop outcome proof',
+          detail: setup.product === 'commerce' ? 'Start Shop outcome proof' : 'Start Plant outcome proof',
         })
       }
     }
