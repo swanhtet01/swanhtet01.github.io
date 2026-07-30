@@ -2435,10 +2435,23 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
       || consumedEcommerceReturnIntentId.current === ecommerceReturnNavigationIntent.id) return
     let current = true
     void import('../products/ecommerce/ecommerce-buying-lifecycle')
-      .then(({ validateEcommerceReturnIntent }) => {
+      .then(({ projectEcommerceReturnOutcome, validateEcommerceReturnIntent }) => {
         if (!current) return
         const intent = validateEcommerceReturnIntent(ecommerceReturnNavigationIntent)
         const order = commerce.orders.find((candidate) => candidate.id === intent.orderId)
+        const outcome = order ? projectEcommerceReturnOutcome(intent, order) : null
+        if (outcome) {
+          consumedEcommerceReturnIntentId.current = intent.id
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+          setNotice(`${intent.id} was already accepted by ${outcome.reviewedBy}. Ecommerce can recover the recorded outcome; no second return was prepared.`)
+          return
+        }
+        if (order?.returns?.some((record) => record.evidenceReference === intent.evidenceReference)) {
+          consumedEcommerceReturnIntentId.current = intent.id
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+          setNotice('The return evidence conflicts with the exact Ecommerce request. No second return was prepared.')
+          return
+        }
         const expected = commerceOrderReturnExpectation(commerce, intent.orderId, intent.sku, intent.disposition, intent.quantity)
         if (!order
           || order.status !== 'completed'
@@ -4119,6 +4132,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
       setNotice('Choose an order item and a whole return quantity within the remaining sold quantity.')
       return
     }
+    if (returnDraft.sourceIntent && returnDraftOrder.returns?.some((record) => record.evidenceReference === returnDraft.sourceIntent?.evidenceReference)) {
+      setReturnDraft(null)
+      setNotice('This Ecommerce return request already has Shop evidence. No second return was queued.')
+      return
+    }
     const expected = returnReviewExpectation
     if (!expected || returnQuantityResult > expected.soldQuantity - expected.returnedQuantity) {
       setNotice('The order or its remaining return quantity changed. Review the latest order record.')
@@ -4156,7 +4174,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
           'commerce.order.return_recorded',
           action.commandId,
           proof,
-          (current) => recordCommerceOrderReturn(current, input, proof, expected),
+          (current) => {
+            const latestOrder = current.orders.find((candidate) => candidate.id === input.orderId)
+            if (returnDraft.sourceIntent && latestOrder?.returns?.some((record) => record.evidenceReference === returnDraft.sourceIntent?.evidenceReference)) return null
+            return recordCommerceOrderReturn(current, input, proof, expected)
+          },
         )
         setReturnDraft(null)
       },

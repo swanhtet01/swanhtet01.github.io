@@ -36,6 +36,7 @@ export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V4 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V7
 export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V3 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V7
 export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V2 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V7
 export const ECOMMERCE_RETURN_INTENT_SCHEMA = 'supermega.ecommerce.return_intent.v1' as const
+export const ECOMMERCE_RETURN_OUTCOME_SCHEMA = 'supermega.ecommerce.return_outcome.v1' as const
 export const ECOMMERCE_SUPPORT_INTENT_SCHEMA = 'supermega.ecommerce.support_intent.v1' as const
 export const ECOMMERCE_CANCELLATION_INTENT_SCHEMA = 'supermega.ecommerce.cancellation_intent.v1' as const
 export const ECOMMERCE_CANCELLATION_DECISION_SCHEMA = 'supermega.ecommerce.cancellation_decision.v1' as const
@@ -438,6 +439,30 @@ export type EcommerceReturnIntent = {
   reason: string
   refundStatus: 'not_started'
   evidenceReference: string
+}
+
+export type EcommerceReturnOutcome = {
+  schema: typeof ECOMMERCE_RETURN_OUTCOME_SCHEMA
+  state: 'accepted'
+  scope: string
+  intentId: string
+  orderId: string
+  sourceRequestId: string
+  sku: string
+  quantity: number
+  disposition: EcommerceReturnDisposition
+  stockOutcome: 'restocked' | 'not_restocked'
+  reviewedAt: string
+  reviewedBy: string
+  returnActionId: string
+  returnEvidenceReference: string
+  refundStatus: 'none' | 'due' | 'settled'
+  refundSettledAt: string | null
+  refundSettledBy: string | null
+  refundEvidenceReference: string | null
+  automaticRefundPerformed: false
+  customerMessageSent: false
+  providerCalled: false
 }
 
 export type EcommerceSupportIntent = {
@@ -1598,6 +1623,79 @@ export function validateEcommerceReturnIntent(value: unknown): EcommerceReturnIn
     reason: canonicalText(source.reason, 'return intent.reason', 300),
     refundStatus: 'not_started',
     evidenceReference,
+  }
+}
+
+export function projectEcommerceReturnOutcome(
+  intentValue: EcommerceReturnIntent,
+  orderValue: CommerceOrder,
+): EcommerceReturnOutcome | null {
+  let intent: EcommerceReturnIntent
+  try {
+    intent = validateEcommerceReturnIntent(intentValue)
+  } catch {
+    return null
+  }
+  if (!isRecord(orderValue)
+    || orderValue.id !== intent.orderId
+    || orderValue.status !== 'completed'
+    || !isRecord(orderValue.completion)
+    || orderValue.sourceRecordId !== intent.sourceRequestId
+    || !['none', 'due', 'settled'].includes(String(orderValue.refundStatus))
+    || !Array.isArray(orderValue.returns)) return null
+  const matchingEvidence = orderValue.returns.filter((record) => record?.evidenceReference === intent.evidenceReference)
+  if (matchingEvidence.length !== 1) return null
+  const record = matchingEvidence[0]
+  if (record.sku !== intent.sku
+    || record.quantity !== intent.quantity
+    || record.disposition !== intent.disposition) return null
+  let reviewedAt: string
+  let reviewedBy: string
+  let returnActionId: string
+  try {
+    reviewedAt = canonicalTimestamp(record.createdAt, 'return outcome.reviewedAt')
+    reviewedBy = canonicalText(record.actor, 'return outcome.reviewedBy', 180)
+    returnActionId = canonicalToken(record.actionId, 'return outcome.returnActionId')
+    if (taxTimestampMicros(reviewedAt, 'return outcome.reviewedAt') < taxTimestampMicros(intent.createdAt, 'return intent.createdAt')) return null
+  } catch {
+    return null
+  }
+  const refundStatus = orderValue.refundStatus
+  let refundSettledAt: string | null = null
+  let refundSettledBy: string | null = null
+  let refundEvidenceReference: string | null = null
+  if (refundStatus === 'settled') {
+    try {
+      refundSettledAt = canonicalTimestamp(orderValue.refundSettledAt, 'return outcome.refundSettledAt')
+      refundSettledBy = canonicalText(orderValue.refundSettledBy, 'return outcome.refundSettledBy', 180)
+      refundEvidenceReference = canonicalText(orderValue.refundEvidenceReference, 'return outcome.refundEvidenceReference', 180)
+      if (taxTimestampMicros(refundSettledAt, 'return outcome.refundSettledAt') < taxTimestampMicros(reviewedAt, 'return outcome.reviewedAt')) return null
+    } catch {
+      return null
+    }
+  }
+  return {
+    schema: ECOMMERCE_RETURN_OUTCOME_SCHEMA,
+    state: 'accepted',
+    scope: intent.scope,
+    intentId: intent.id,
+    orderId: intent.orderId,
+    sourceRequestId: intent.sourceRequestId,
+    sku: intent.sku,
+    quantity: intent.quantity,
+    disposition: intent.disposition,
+    stockOutcome: intent.disposition === 'restock' ? 'restocked' : 'not_restocked',
+    reviewedAt,
+    reviewedBy,
+    returnActionId,
+    returnEvidenceReference: intent.evidenceReference,
+    refundStatus,
+    refundSettledAt,
+    refundSettledBy,
+    refundEvidenceReference,
+    automaticRefundPerformed: false,
+    customerMessageSent: false,
+    providerCalled: false,
   }
 }
 

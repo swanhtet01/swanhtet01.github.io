@@ -2186,6 +2186,7 @@ if (addToCartStart < 0
   || !ecommerceBuyingLifecycleSource.includes('export function ecommercePaymentMatchesFulfilment(')
   || !ecommerceBuyingLifecycleSource.includes('Checkout payment does not match how the customer receives the order.')
   || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceReturnIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export function projectEcommerceReturnOutcome(')
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceReturnIntent(')
   || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceSupportIntent(')
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceSupportIntent(')
@@ -2216,6 +2217,9 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('Change time')
   || !ecommerceBuyingUiSource.includes('Send time to Shop')
   || !ecommerceBuyingUiSource.includes('No order, stock, payment, refund, rider, message, or provider changed.')
+  || !ecommerceBuyingUiSource.includes('Return accepted')
+  || !ecommerceBuyingUiSource.includes('No refund recorded')
+  || !coreSource.includes('The return evidence conflicts with the exact Ecommerce request.')
   || !coreSource.includes('validateEcommerceOrderAmendmentIntent(ecommerceOrderAmendmentNavigationIntent)')
   || !coreSource.includes('async function prepareOrderAmendmentReplacement()')
   || !coreSource.includes("kind: 'order_cancel'")
@@ -2228,6 +2232,7 @@ if (addToCartStart < 0
   || !managedEcommerceBuyingLifecycleSource.includes('def record_ecommerce_order_amendment(')
   || !managedEcommerceBuyingLifecycleSource.includes('def build_ecommerce_order_reschedule_intent(')
   || !managedEcommerceBuyingLifecycleSource.includes('def record_ecommerce_order_reschedule(')
+  || !managedEcommerceBuyingLifecycleSource.includes('def project_ecommerce_return_outcome(')
   || !coreSource.includes('ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent}')
   || !coreSource.includes('validateEcommerceCancellationIntent(ecommerceCancellationNavigationIntent)')
   || !coreSource.includes('function ecommerceCancellationMatchesCurrentShop(')
@@ -11302,6 +11307,35 @@ async function verifyStorefrontRuntime() {
     buyingAssert(returnedTimeline[0]?.returnedQuantity === 1
       && returnedTimeline[0].order?.returns?.[0]?.evidenceReference === returnIntent.evidenceReference,
     'ecommerce_return_intent_did_not_reconcile_to_shop_return')
+    const returnedOrder = returnedShopState?.orders.find((order) => order.id === completedOrder.id)
+    const returnOutcome = returnedOrder && buyingModel.projectEcommerceReturnOutcome(returnIntent, returnedOrder)
+    buyingAssert(returnOutcome?.schema === 'supermega.ecommerce.return_outcome.v1'
+      && returnOutcome.state === 'accepted'
+      && returnOutcome.intentId === returnIntent.id
+      && returnOutcome.stockOutcome === 'not_restocked'
+      && returnOutcome.refundStatus === 'none'
+      && returnOutcome.automaticRefundPerformed === false
+      && returnOutcome.customerMessageSent === false
+      && returnOutcome.providerCalled === false,
+    'ecommerce_return_outcome_not_exact_or_side_effect_free')
+    const forgedReturnOrder = returnedOrder && structuredClone(returnedOrder)
+    if (forgedReturnOrder?.returns?.[0]) forgedReturnOrder.returns[0].quantity += 1
+    buyingAssert(Boolean(forgedReturnOrder) && buyingModel.projectEcommerceReturnOutcome(returnIntent, forgedReturnOrder) === null,
+      'ecommerce_forged_return_outcome_was_accepted')
+    const duplicateReturnOrder = returnedOrder && { ...structuredClone(returnedOrder), returns: [...(returnedOrder.returns ?? []), ...(returnedOrder.returns?.[0] ? [structuredClone(returnedOrder.returns[0])] : [])] }
+    buyingAssert(Boolean(duplicateReturnOrder) && buyingModel.projectEcommerceReturnOutcome(returnIntent, duplicateReturnOrder) === null,
+      'ecommerce_duplicate_return_outcome_was_accepted')
+    const settledReturnOrder = returnedOrder && {
+      ...structuredClone(returnedOrder),
+      refundStatus: 'settled',
+      refundSettledAt: '2026-07-24T10:00:00.000Z',
+      refundSettledBy: 'FINANCE-OWNER',
+      refundEvidenceReference: 'REFUND-EXTERNAL-RETURN-1',
+    }
+    const settledReturnOutcome = settledReturnOrder && buyingModel.projectEcommerceReturnOutcome(returnIntent, settledReturnOrder)
+    buyingAssert(settledReturnOutcome?.refundStatus === 'settled'
+      && settledReturnOutcome.refundEvidenceReference === 'REFUND-EXTERNAL-RETURN-1',
+    'ecommerce_settled_refund_evidence_not_projected')
     const supportIntent = buyingModel.buildEcommerceSupportIntent({
       scope: buyingScope,
       orderSnapshot: completedOrder,

@@ -13,6 +13,7 @@ import {
   ecommerceBuyingStateStorageKey,
   ecommercePaymentMatchesFulfilment,
   prepareEcommerceShopDraftV2,
+  projectEcommerceReturnOutcome,
   readEcommerceBuyingState,
   saveEcommerceOrderRequestV2,
   saveEcommerceCancellationIntent,
@@ -318,14 +319,16 @@ export function EcommerceBuyingWorkspace({
       .reduce((total, record) => total + record.quantity, 0)
     return { ...line, remaining: line.quantity - returned }
   }).filter((line) => line.remaining > 0) ?? []
-  const pendingReturnIntents = activeBuyingState.returnIntents.filter((intent) => {
+  const returnOutcomes = activeBuyingState.returnIntents.flatMap((intent) => {
     const order = completedCustomerOrders.find((entry) => entry.order?.id === intent.orderId)?.order
-    return Boolean(order && !(order.returns ?? []).some((record) => (
-      record.evidenceReference === intent.evidenceReference
-        && record.sku === intent.sku
-        && record.quantity === intent.quantity
-    )))
+    const outcome = order ? projectEcommerceReturnOutcome(intent, order) : null
+    return outcome ? [outcome] : []
   })
+  const returnOutcomeIntentIds = new Set(returnOutcomes.map((outcome) => outcome.intentId))
+  const pendingReturnIntents = activeBuyingState.returnIntents.filter((intent) => (
+    !returnOutcomeIntentIds.has(intent.id)
+      && completedCustomerOrders.some((entry) => entry.order?.id === intent.orderId)
+  ))
   const pendingSupportIntents = activeBuyingState.supportIntents.filter((intent) => {
     const order = completedCustomerOrders.find((entry) => entry.order?.id === intent.orderId)?.order
     return Boolean(order && !(order.supportCases ?? []).some((supportCase) => supportCase.sourceIntentId === intent.id))
@@ -1198,6 +1201,10 @@ export function EcommerceBuyingWorkspace({
           {pendingReturnIntents.map((intent) => <article className="ecommerce-return-status" key={intent.id}>
             <span><strong>Waiting for Shop review</strong><small>{intent.quantity} {intent.sku} / {intent.orderId}</small></span>
             <button className="core-button secondary" disabled={disabled} onClick={() => onOpenReturns(intent)} type="button">Continue in Shop</button>
+          </article>)}
+          {returnOutcomes.slice(0, 3).map((outcome) => <article className="ecommerce-return-status" key={`return-outcome:${outcome.intentId}`}>
+            <span><strong>Return accepted</strong><small>{outcome.quantity} {outcome.sku} / {outcome.stockOutcome.replaceAll('_', ' ')} / reviewed by {outcome.reviewedBy} {new Date(outcome.reviewedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small></span>
+            <b>{outcome.refundStatus === 'settled' ? 'Refund settled' : outcome.refundStatus === 'due' ? 'Refund due' : 'No refund recorded'}</b>
           </article>)}
           {pendingSupportIntents.map((intent) => <article className="ecommerce-return-status" key={intent.id}>
             <span><strong>Help waiting</strong><small>{intent.category.replaceAll('_', ' ')} / {intent.orderId}</small></span>

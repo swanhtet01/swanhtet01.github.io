@@ -8,6 +8,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     ECOMMERCE_QUOTE_SCHEMA,
     ECOMMERCE_REQUEST_SCHEMA,
     ECOMMERCE_RETURN_INTENT_SCHEMA,
+    ECOMMERCE_RETURN_OUTCOME_SCHEMA,
     ECOMMERCE_SUPPORT_INTENT_SCHEMA,
     ECOMMERCE_CANCELLATION_INTENT_SCHEMA,
     ECOMMERCE_CANCELLATION_DECISION_SCHEMA,
@@ -28,6 +29,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     create_empty_ecommerce_lifecycle_state,
     ecommerce_payment_matches_fulfilment,
     prepare_ecommerce_shop_handoff,
+    project_ecommerce_return_outcome,
     review_ecommerce_tax,
     record_ecommerce_order_request,
     record_ecommerce_return_intent,
@@ -792,6 +794,63 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         self.assertEqual(intent["refundStatus"], "not_started")
         self.assertNotIn("refundAmount", str(intent))
         self.assertNotIn("provider", str(intent).lower())
+
+    def test_return_outcome_requires_one_exact_shop_record_and_keeps_refund_separate(self) -> None:
+        order = completed_order()
+        intent = build_ecommerce_return_intent(
+            scope=SCOPE,
+            order_snapshot=order,
+            sku="SKU-CARE-01",
+            quantity=1,
+            disposition="not_restocked",
+            reason="Opened item requires Shop disposition review.",
+            idempotency_key=RETURN_KEY,
+            created_at="2026-07-26T11:05:00+06:30",
+        )
+        order["refundStatus"] = "none"
+        order["returns"] = [{
+            "actionId": "ACT-RETURN-CARE-01",
+            "createdAt": "2026-07-26T12:00:00+06:30",
+            "actor": "Shop owner",
+            "reason": "Accepted the inspected return.",
+            "evidenceReference": intent["evidenceReference"],
+            "sku": intent["sku"],
+            "quantity": intent["quantity"],
+            "disposition": intent["disposition"],
+        }]
+        outcome = project_ecommerce_return_outcome(intent, order)
+        self.assertIsNotNone(outcome)
+        self.assertEqual(outcome["schema"], ECOMMERCE_RETURN_OUTCOME_SCHEMA)  # type: ignore[index]
+        self.assertEqual(outcome["stockOutcome"], "not_restocked")  # type: ignore[index]
+        self.assertEqual(outcome["refundStatus"], "none")  # type: ignore[index]
+        for field in ("automaticRefundPerformed", "customerMessageSent", "providerCalled"):
+            self.assertFalse(outcome[field])  # type: ignore[index]
+
+        forged = deepcopy(order)
+        forged["returns"][0]["quantity"] = 2  # type: ignore[index]
+        self.assertIsNone(project_ecommerce_return_outcome(intent, forged))
+        duplicate = deepcopy(order)
+        duplicate["returns"].append(deepcopy(duplicate["returns"][0]))  # type: ignore[union-attr]
+        self.assertIsNone(project_ecommerce_return_outcome(intent, duplicate))
+        backdated = deepcopy(order)
+        backdated["returns"][0]["createdAt"] = "2026-07-26T11:00:00+06:30"  # type: ignore[index]
+        self.assertIsNone(project_ecommerce_return_outcome(intent, backdated))
+
+        settled = deepcopy(order)
+        settled.update({
+            "refundStatus": "settled",
+            "refundSettledAt": "2026-07-26T13:00:00+06:30",
+            "refundSettledBy": "Finance owner",
+            "refundEvidenceReference": "REFUND-EXTERNAL-CARE-01",
+        })
+        settled_outcome = project_ecommerce_return_outcome(intent, settled)
+        self.assertEqual(settled_outcome["refundStatus"], "settled")  # type: ignore[index]
+        self.assertEqual(
+            settled_outcome["refundEvidenceReference"],  # type: ignore[index]
+            "REFUND-EXTERNAL-CARE-01",
+        )
+        settled.pop("refundEvidenceReference")
+        self.assertIsNone(project_ecommerce_return_outcome(intent, settled))
 
     def test_support_intent_is_recoverable_attributable_and_side_effect_free(self) -> None:
         state = create_empty_ecommerce_lifecycle_state(SCOPE)

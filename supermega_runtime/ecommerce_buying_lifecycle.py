@@ -25,6 +25,7 @@ ECOMMERCE_DELIVERY_ADDRESS_SCHEMA = "supermega.ecommerce.delivery_address_snapsh
 ECOMMERCE_REQUEST_SCHEMA = "supermega.ecommerce.order_request.v2"
 ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v7"
 ECOMMERCE_RETURN_INTENT_SCHEMA = "supermega.ecommerce.return_intent.v1"
+ECOMMERCE_RETURN_OUTCOME_SCHEMA = "supermega.ecommerce.return_outcome.v1"
 ECOMMERCE_SUPPORT_INTENT_SCHEMA = "supermega.ecommerce.support_intent.v1"
 ECOMMERCE_CANCELLATION_INTENT_SCHEMA = "supermega.ecommerce.cancellation_intent.v1"
 ECOMMERCE_CANCELLATION_DECISION_SCHEMA = "supermega.ecommerce.cancellation_decision.v1"
@@ -1625,6 +1626,97 @@ def validate_ecommerce_return_intent(value: object) -> dict[str, Any]:
         "refundStatus": "not_started",
         "evidenceReference": expected_reference,
     }
+
+
+def project_ecommerce_return_outcome(
+    intent_value: Mapping[str, object],
+    order_value: Mapping[str, object],
+) -> dict[str, Any] | None:
+    """Project one exact Shop return record without creating refund authority."""
+
+    try:
+        intent = validate_ecommerce_return_intent(intent_value)
+        if (
+            not isinstance(order_value, Mapping)
+            or order_value.get("id") != intent["orderId"]
+            or order_value.get("status") != "completed"
+            or not isinstance(order_value.get("completion"), Mapping)
+            or order_value.get("sourceRecordId") != intent["sourceRequestId"]
+            or order_value.get("refundStatus") not in {"none", "due", "settled"}
+            or not isinstance(order_value.get("returns"), list)
+        ):
+            return None
+        matching_evidence = [
+            record
+            for record in order_value["returns"]
+            if isinstance(record, Mapping)
+            and record.get("evidenceReference") == intent["evidenceReference"]
+        ]
+        if len(matching_evidence) != 1:
+            return None
+        record = matching_evidence[0]
+        if (
+            record.get("sku") != intent["sku"]
+            or record.get("quantity") != intent["quantity"]
+            or record.get("disposition") != intent["disposition"]
+        ):
+            return None
+        reviewed_at = _timestamp(record.get("createdAt"), "return outcome.reviewedAt")
+        reviewed_by = _text(record.get("actor"), "return outcome.reviewedBy", maximum=180)
+        return_action_id = _token(record.get("actionId"), "return outcome.returnActionId")
+        if datetime.fromisoformat(reviewed_at.replace("Z", "+00:00")) < datetime.fromisoformat(
+            intent["createdAt"].replace("Z", "+00:00")
+        ):
+            return None
+        refund_status = order_value["refundStatus"]
+        refund_settled_at = None
+        refund_settled_by = None
+        refund_evidence_reference = None
+        if refund_status == "settled":
+            refund_settled_at = _timestamp(
+                order_value.get("refundSettledAt"), "return outcome.refundSettledAt"
+            )
+            refund_settled_by = _text(
+                order_value.get("refundSettledBy"),
+                "return outcome.refundSettledBy",
+                maximum=180,
+            )
+            refund_evidence_reference = _text(
+                order_value.get("refundEvidenceReference"),
+                "return outcome.refundEvidenceReference",
+                maximum=180,
+            )
+            if datetime.fromisoformat(
+                refund_settled_at.replace("Z", "+00:00")
+            ) < datetime.fromisoformat(reviewed_at.replace("Z", "+00:00")):
+                return None
+        return {
+            "schema": ECOMMERCE_RETURN_OUTCOME_SCHEMA,
+            "state": "accepted",
+            "scope": intent["scope"],
+            "intentId": intent["id"],
+            "orderId": intent["orderId"],
+            "sourceRequestId": intent["sourceRequestId"],
+            "sku": intent["sku"],
+            "quantity": intent["quantity"],
+            "disposition": intent["disposition"],
+            "stockOutcome": (
+                "restocked" if intent["disposition"] == "restock" else "not_restocked"
+            ),
+            "reviewedAt": reviewed_at,
+            "reviewedBy": reviewed_by,
+            "returnActionId": return_action_id,
+            "returnEvidenceReference": intent["evidenceReference"],
+            "refundStatus": refund_status,
+            "refundSettledAt": refund_settled_at,
+            "refundSettledBy": refund_settled_by,
+            "refundEvidenceReference": refund_evidence_reference,
+            "automaticRefundPerformed": False,
+            "customerMessageSent": False,
+            "providerCalled": False,
+        }
+    except (EcommerceLifecycleValidationError, TypeError, ValueError):
+        return None
 
 
 def build_ecommerce_support_intent(
