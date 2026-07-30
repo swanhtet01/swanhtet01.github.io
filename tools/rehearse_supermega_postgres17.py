@@ -834,11 +834,15 @@ def _exercise_managed_context_postgres_route(
 ) -> dict[str, bool]:
     """Prove authenticated context retention through the production API and store."""
 
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
+    from fastapi import HTTPException, Request
     from supermega_runtime.managed_context import managed_context_from_company_state
     from supermega_runtime.runtime import reduce_trial_state, resolve_trial_principal
-    from supermega_runtime.trial_runtime import create_trial_router
+    from supermega_runtime.trial_runtime import (
+        TrialCompanyBriefRequest,
+        TrialManagedContextRetainRequest,
+        TrialManagedContextValidateRequest,
+        create_trial_router,
+    )
     from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal
 
     store = PostgresTrialStore(
@@ -879,151 +883,153 @@ def _exercise_managed_context_postgres_route(
             ).fetchone()
         return int(row[0]), int(row[1])
 
-    app = FastAPI()
-    app.include_router(create_trial_router(store=store, resolve_principal=resolve_trial_principal))
+    router = create_trial_router(store=store, resolve_principal=resolve_trial_principal)
+
+    def route_endpoint(path: str) -> Callable[..., dict[str, Any]]:
+        for route in router.routes:
+            if getattr(route, "path", "") == path and "POST" in getattr(route, "methods", set()):
+                return route.endpoint
+        raise RehearsalFailure("managed_context_route_missing")
+
+    validate_endpoint = route_endpoint("/api/trial/v1/managed-context/validate")
+    retain_endpoint = route_endpoint("/api/trial/v1/managed-context/retain")
+    brief_endpoint = route_endpoint("/api/trial/v1/company-brief")
+
+    def route_request(headers: dict[str, str]) -> Request:
+        return Request(
+            {
+                "type": "http",
+                "http_version": "1.1",
+                "method": "POST",
+                "scheme": "https",
+                "path": "/api/trial/v1/rehearsal",
+                "raw_path": b"/api/trial/v1/rehearsal",
+                "query_string": b"",
+                "headers": [
+                    (key.lower().encode("latin-1"), value.encode("latin-1"))
+                    for key, value in headers.items()
+                ],
+                "client": ("127.0.0.1", 1),
+                "server": ("127.0.0.1", 443),
+            }
+        )
+
+    def denied_call(
+        endpoint: Callable[..., dict[str, Any]],
+        headers: dict[str, str],
+        body: object,
+    ) -> tuple[int, dict[str, Any]]:
+        try:
+            endpoint(route_request(headers), body)
+        except HTTPException as exc:
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            return int(exc.status_code), dict(detail)
+        raise RehearsalFailure("managed_context_expected_denial_missing")
+
     before = context_counts()
     if before != (0, 0):
         raise RehearsalFailure("managed_context_initial_state_unexpected")
     try:
-        with TestClient(app) as client:
-            unauthenticated = client.post(
-                "/api/trial/v1/managed-context/validate",
-                json={"package": approved_context},
-            )
-            forged = client.post(
-                "/api/trial/v1/managed-context/validate",
-                headers=identity_headers(MANAGED_OWNER_ACTOR, valid_signature=False),
-                json={"package": approved_context},
-            )
-            if unauthenticated.status_code != 401 or forged.status_code != 401:
-                raise RehearsalFailure("managed_context_identity_bypass")
-            if context_counts() != before:
-                raise RehearsalFailure("managed_context_identity_denial_wrote")
+        validation_body = TrialManagedContextValidateRequest(package=approved_context)
+        unauthenticated_status, _ = denied_call(validate_endpoint, {}, validation_body)
+        forged_status, _ = denied_call(
+            validate_endpoint,
+            identity_headers(MANAGED_OWNER_ACTOR, valid_signature=False),
+            validation_body,
+        )
+        if unauthenticated_status != 401 or forged_status != 401:
+            raise RehearsalFailure("managed_context_identity_bypass")
+        if context_counts() != before:
+            raise RehearsalFailure("managed_context_identity_denial_wrote")
 
-            owner_headers = identity_headers(MANAGED_OWNER_ACTOR)
-            validation_response = client.post(
-                "/api/trial/v1/managed-context/validate",
-                headers=owner_headers,
-                json={"package": approved_context},
-            )
-            if validation_response.status_code != 200:
-                raise RehearsalFailure("managed_context_validation_failed")
-            validation_payload = validation_response.json()
-            validation = validation_payload.get("validation", {})
-            profile = validation_payload.get("profile", {})
-            if (
-                validation.get("contract") != "supermega.managed_context_profile_validation.v2"
-                or validation.get("companyVersion") != 0
-                or validation.get("internalWritePerformed") is not False
-                or validation.get("externalWritesPerformed") is not False
-                or profile.get("contract") != "supermega.managed_context_profile.v2"
-                or profile.get("approvedContextDigest") != approved_context.get("contextDigest")
-            ):
-                raise RehearsalFailure("managed_context_validation_projection_failed")
-            if context_counts() != before:
-                raise RehearsalFailure("managed_context_validation_wrote")
+        owner_headers = identity_headers(MANAGED_OWNER_ACTOR)
+        validation_payload = validate_endpoint(route_request(owner_headers), validation_body)
+        validation = validation_payload.get("validation", {})
+        profile = validation_payload.get("profile", {})
+        if (
+            validation.get("contract") != "supermega.managed_context_profile_validation.v2"
+            or validation.get("companyVersion") != 0
+            or validation.get("internalWritePerformed") is not False
+            or validation.get("externalWritesPerformed") is not False
+            or profile.get("contract") != "supermega.managed_context_profile.v2"
+            or profile.get("approvedContextDigest") != approved_context.get("contextDigest")
+        ):
+            raise RehearsalFailure("managed_context_validation_projection_failed")
+        if context_counts() != before:
+            raise RehearsalFailure("managed_context_validation_wrote")
 
-            command_id = "d3454044-5a2f-44b4-aa26-9a1e99f0b0ef"
-            retention_body = {
-                "command_id": command_id,
-                "expected_company_version": 0,
-                "profile_digest": profile["profileDigest"],
-                "validation_digest": validation["validationDigest"],
-                "package": approved_context,
-            }
-            retained_response = client.post(
-                "/api/trial/v1/managed-context/retain",
-                headers=owner_headers,
-                json=retention_body,
-            )
-            if retained_response.status_code != 200:
-                raise RehearsalFailure("managed_context_retention_failed")
-            retained = retained_response.json()
-            result = retained.get("result", {})
-            retention = retained.get("retention", {})
-            if (
-                retention.get("contract") != "supermega.managed_context_profile_retention.v2"
-                or retention.get("companyVersion") != 1
-                or retention.get("internalWritePerformed") is not True
-                or retention.get("externalWritesPerformed") is not False
-                or retention.get("idempotentReplay") is not False
-                or result.get("version") != 1
-            ):
-                raise RehearsalFailure("managed_context_retention_projection_failed")
-            if context_counts() != (1, 1):
-                raise RehearsalFailure("managed_context_retention_not_atomic")
+        retention_body = TrialManagedContextRetainRequest(
+            command_id="d3454044-5a2f-44b4-aa26-9a1e99f0b0ef",
+            expected_company_version=0,
+            profile_digest=profile["profileDigest"],
+            validation_digest=validation["validationDigest"],
+            package=approved_context,
+        )
+        retained = retain_endpoint(route_request(owner_headers), retention_body)
+        result = retained.get("result", {})
+        retention = retained.get("retention", {})
+        if (
+            retention.get("contract") != "supermega.managed_context_profile_retention.v2"
+            or retention.get("companyVersion") != 1
+            or retention.get("internalWritePerformed") is not True
+            or retention.get("externalWritesPerformed") is not False
+            or retention.get("idempotentReplay") is not False
+            or result.get("version") != 1
+        ):
+            raise RehearsalFailure("managed_context_retention_projection_failed")
+        if context_counts() != (1, 1):
+            raise RehearsalFailure("managed_context_retention_not_atomic")
 
-            replay_response = client.post(
-                "/api/trial/v1/managed-context/retain",
-                headers=owner_headers,
-                json=retention_body,
-            )
-            if replay_response.status_code != 200:
-                raise RehearsalFailure("managed_context_replay_failed")
-            replay_payload = replay_response.json()
-            if (
-                replay_payload.get("result", {}).get("version") != 1
-                or replay_payload.get("retention", {}).get("idempotentReplay") is not True
-                or context_counts() != (1, 1)
-            ):
-                raise RehearsalFailure("managed_context_replay_wrote")
+        replay_payload = retain_endpoint(route_request(owner_headers), retention_body)
+        if (
+            replay_payload.get("result", {}).get("version") != 1
+            or replay_payload.get("retention", {}).get("idempotentReplay") is not True
+            or context_counts() != (1, 1)
+        ):
+            raise RehearsalFailure("managed_context_replay_wrote")
 
-            writer_headers = identity_headers(MANAGED_SECOND_ACTOR)
-            writer_validation_response = client.post(
-                "/api/trial/v1/managed-context/validate",
-                headers=writer_headers,
-                json={"package": approved_context},
-            )
-            if writer_validation_response.status_code != 200:
-                raise RehearsalFailure("managed_context_writer_validation_failed")
-            writer_validation_payload = writer_validation_response.json()
-            writer_retention_response = client.post(
-                "/api/trial/v1/managed-context/retain",
-                headers=writer_headers,
-                json={
-                    "command_id": "e544a089-269a-4dbb-aeb6-9e6b28429bb0",
-                    "expected_company_version": 1,
-                    "profile_digest": writer_validation_payload["profile"]["profileDigest"],
-                    "validation_digest": writer_validation_payload["validation"]["validationDigest"],
-                    "package": approved_context,
-                },
-            )
-            writer_error = writer_retention_response.json().get("detail", {})
-            if (
-                writer_retention_response.status_code != 403
-                or writer_error.get("code") != "trial_capability_required"
-                or writer_error.get("required_capability") != "company.control.approve"
-                or context_counts() != (1, 1)
-            ):
-                raise RehearsalFailure("managed_context_owner_capability_bypass")
+        writer_headers = identity_headers(MANAGED_SECOND_ACTOR)
+        writer_validation_payload = validate_endpoint(route_request(writer_headers), validation_body)
+        writer_retention_body = TrialManagedContextRetainRequest(
+            command_id="e544a089-269a-4dbb-aeb6-9e6b28429bb0",
+            expected_company_version=1,
+            profile_digest=writer_validation_payload["profile"]["profileDigest"],
+            validation_digest=writer_validation_payload["validation"]["validationDigest"],
+            package=approved_context,
+        )
+        writer_status, writer_error = denied_call(
+            retain_endpoint,
+            writer_headers,
+            writer_retention_body,
+        )
+        if (
+            writer_status != 403
+            or writer_error.get("code") != "trial_capability_required"
+            or writer_error.get("required_capability") != "company.control.approve"
+            or context_counts() != (1, 1)
+        ):
+            raise RehearsalFailure("managed_context_owner_capability_bypass")
 
-            brief_response = client.post(
-                "/api/trial/v1/company-brief",
-                headers=owner_headers,
-                json={"intent": "attention"},
-            )
-            if brief_response.status_code != 200:
-                brief_error = brief_response.json().get("detail", {})
-                brief_error_code = str(brief_error.get("code", "unknown"))
-                raise RehearsalFailure(
-                    f"managed_context_summary_readback_{brief_response.status_code}_{brief_error_code}"
-                )
-            owner_context = brief_response.json().get("brief", {}).get("ownerContext", {})
-            expected_brief_keys = {
-                "contract",
-                "version",
-                "profileDigest",
-                "approvedContextDigest",
-                "acceptedOutcomeDigest",
-                "preferredProduct",
-            }
-            if (
-                set(owner_context) != expected_brief_keys
-                or owner_context.get("profileDigest") != profile.get("profileDigest")
-                or owner_context.get("approvedContextDigest") != approved_context.get("contextDigest")
-                or context_counts() != (1, 1)
-            ):
-                raise RehearsalFailure("managed_context_summary_projection_failed")
+        brief_payload = brief_endpoint(
+            route_request(owner_headers),
+            TrialCompanyBriefRequest(intent="attention"),
+        )
+        owner_context = brief_payload.get("brief", {}).get("ownerContext", {})
+        expected_brief_keys = {
+            "contract",
+            "version",
+            "profileDigest",
+            "approvedContextDigest",
+            "acceptedOutcomeDigest",
+            "preferredProduct",
+        }
+        if (
+            set(owner_context) != expected_brief_keys
+            or owner_context.get("profileDigest") != profile.get("profileDigest")
+            or owner_context.get("approvedContextDigest") != approved_context.get("contextDigest")
+            or context_counts() != (1, 1)
+        ):
+            raise RehearsalFailure("managed_context_summary_projection_failed")
     finally:
         if prior_identity_secret is None:
             os.environ.pop("SUPERMEGA_TRIAL_IDENTITY_SECRET", None)
