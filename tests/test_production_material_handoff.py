@@ -37,6 +37,7 @@ from tests.test_shop_inventory_runtime import (
     opening_inventory,
     production_issue_movement,
     production_issued_inventory,
+    production_returned_inventory,
 )
 
 
@@ -117,6 +118,69 @@ def issued_commerce(request: dict[str, object]) -> dict[str, object]:
     return commerce
 
 
+def located_issued_commerce(request: dict[str, object]) -> dict[str, object]:
+    current = catalog_state()
+    current["inventoryFoundation"] = opening_inventory(
+        action_evidence(
+            "ACT-WAREHOUSE-OPENING-LOCATED-001",
+            captured_at="2026-07-24T09:50:00.000Z",
+        )
+    )
+    proof = action_evidence(
+        "ACT-WAREHOUSE-ISSUE-LOCATED-001",
+        captured_at="2026-07-24T10:00:00.000Z",
+    )
+    candidate = deepcopy(current)
+    candidate["items"][0]["onHand"] = 8  # type: ignore[index]
+    candidate["movements"] = [production_issue_movement(proof, request)]
+    candidate["inventoryFoundation"] = production_issued_inventory(
+        current["inventoryFoundation"], proof, request
+    )
+    return reduce_trial_state(
+        "commerce",
+        "commerce.production_material.issued",
+        current,
+        {"state": candidate, "evidence": proof},
+    )
+
+
+def production_return_movement(
+    issue: dict[str, object],
+    proof: dict[str, str],
+    *,
+    production_quantity_milli: int = 5_000,
+    stock_quantity: int = 1,
+    stock_unit_id: str = "LOT-SKU1-OPENING-001",
+    location_id: str = "LOC-MAIN",
+) -> dict[str, object]:
+    record = movement(
+        "production_return",
+        proof["actionId"],
+        stock_quantity,
+        created_at=proof["capturedAt"],
+    )
+    record.update(
+        {
+            "actor": proof["actor"],
+            "reason": proof["reason"],
+            "evidenceReference": proof["evidenceReference"],
+            "productionRequestId": issue["productionRequestId"],
+            "productionCommandDigest": issue["productionCommandDigest"],
+            "productionJobId": issue["productionJobId"],
+            "productionMaterialId": issue["productionMaterialId"],
+            "productionInputLotId": issue["productionInputLotId"],
+            "productionQuantityMilli": issue["productionQuantityMilli"],
+            "productionUnit": issue["productionUnit"],
+            "conversionNote": issue["conversionNote"],
+            "productionIssueActionId": issue["actionId"],
+            "productionReturnedQuantityMilli": production_quantity_milli,
+            "productionReturnStockUnitId": stock_unit_id,
+            "productionReturnLocationId": location_id,
+        }
+    )
+    return record
+
+
 class ProductionMaterialHandoffTests(unittest.TestCase):
     def test_shop_issue_must_match_exact_plant_command_digest(self) -> None:
         production = issued_production()
@@ -157,6 +221,71 @@ class ProductionMaterialHandoffTests(unittest.TestCase):
             operated,
             issued_commerce(request),
         )
+
+    def test_reviewed_material_return_restores_exact_shop_lot(self) -> None:
+        production = issued_production()
+        request = production_material_requests(production)[0]
+        issued = located_issued_commerce(request)
+        issue = issued["movements"][0]
+        proof = action_evidence(
+            "ACT-WAREHOUSE-RETURN-001",
+            captured_at="2026-07-24T10:15:00.000Z",
+            actor="warehouse-return-operator",
+        )
+        candidate = deepcopy(issued)
+        candidate["items"][0]["onHand"] = 9  # type: ignore[index]
+        candidate["movements"] = [
+            production_return_movement(issue, proof),
+            *issued["movements"],
+        ]
+        candidate["inventoryFoundation"] = production_returned_inventory(
+            issued["inventoryFoundation"],
+            proof,
+            production_quantity_milli=5_000,
+            stock_quantity=1,
+        )
+        accepted = reduce_trial_state(
+            "commerce",
+            "commerce.production_material.returned",
+            issued,
+            {"state": candidate, "evidence": proof},
+        )
+        self.assertEqual(accepted["items"][0]["onHand"], 9)  # type: ignore[index]
+        self.assertEqual(accepted["movements"][0]["kind"], "production_return")  # type: ignore[index]
+        self.assertEqual(
+            accepted["inventoryFoundation"]["commands"][-1]["payload"]["kind"],  # type: ignore[index]
+            "production_return",
+        )
+
+        aggregate_only = deepcopy(candidate)
+        aggregate_only["inventoryFoundation"] = issued["inventoryFoundation"]
+        with self.assertRaisesRegex(TrialValidationError, "location command"):
+            reduce_trial_state(
+                "commerce",
+                "commerce.production_material.returned",
+                issued,
+                {"state": aggregate_only, "evidence": proof},
+            )
+
+        wrong_ratio = deepcopy(candidate)
+        wrong_ratio["movements"][0]["productionReturnedQuantityMilli"] = 4_000  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "conversion ratio"):
+            reduce_trial_state(
+                "commerce",
+                "commerce.production_material.returned",
+                issued,
+                {"state": wrong_ratio, "evidence": proof},
+            )
+
+        wrong_source = deepcopy(candidate)
+        wrong_source["movements"][0]["productionIssueActionId"] = "ACT-UNKNOWN-ISSUE"  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "retained Plant issue"):
+            reduce_trial_state(
+                "commerce",
+                "commerce.production_material.returned",
+                issued,
+                {"state": wrong_source, "evidence": proof},
+            )
 
     def test_managed_api_checks_related_states_atomically(self) -> None:
         principal = TrialPrincipal("workspace-handoff", "actor-operator", "human")

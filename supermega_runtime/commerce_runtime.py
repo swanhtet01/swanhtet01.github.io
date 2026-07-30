@@ -58,6 +58,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.stock.received",
         "commerce.stock.counted",
         "commerce.production_material.issued",
+        "commerce.production_material.returned",
         "commerce.production_batch.received",
         "commerce.inventory.initialized",
         "commerce.inventory.master_created",
@@ -98,6 +99,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.stock.received",
         "commerce.stock.counted",
         "commerce.production_material.issued",
+        "commerce.production_material.returned",
         "commerce.production_batch.received",
         "commerce.inventory.initialized",
         "commerce.inventory.master_created",
@@ -125,6 +127,7 @@ _MOVEMENT_KINDS = (
     "count",
     "return",
     "production_issue",
+    "production_return",
     "production_receipt",
 )
 _PRODUCTION_MATERIAL_UNITS = frozenset(
@@ -436,6 +439,10 @@ _MOVEMENT_FIELDS = frozenset(
         "productionQuantityMilli",
         "productionUnit",
         "conversionNote",
+        "productionIssueActionId",
+        "productionReturnedQuantityMilli",
+        "productionReturnStockUnitId",
+        "productionReturnLocationId",
         "productionReleaseId",
         "productionOutputBatchId",
         "productionReleasedAt",
@@ -533,6 +540,14 @@ _STOREFRONT_CONFIGURATION_FIELDS = frozenset(
 _STOREFRONT_CONFIGURATION_OPTIONAL_FIELDS = frozenset({"activation", "merchandising"})
 _STOREFRONT_MERCHANDISING_FIELDS = frozenset(
     {"sku", "featured", "collection", "displayName", "note"}
+)
+_PRODUCTION_RETURN_EXCLUSIVE_FIELDS = frozenset(
+    {
+        "productionIssueActionId",
+        "productionReturnedQuantityMilli",
+        "productionReturnStockUnitId",
+        "productionReturnLocationId",
+    }
 )
 _CLOSE_OPTIONAL_FIELDS = _CLOSE_SNAPSHOT_FIELDS | {"settlement"}
 _CLOSE_SETTLEMENT_FIELDS = frozenset(
@@ -2473,6 +2488,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 }
                 | _PURCHASE_DISCREPANCY_FIELDS
                 | _PRODUCTION_ISSUE_FIELDS
+                | _PRODUCTION_RETURN_EXCLUSIVE_FIELDS
                 | _PRODUCTION_RECEIPT_EXCLUSIVE_FIELDS
             ),
             optional=frozenset(
@@ -2485,6 +2501,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             )
             | _PURCHASE_DISCREPANCY_FIELDS
             | _PRODUCTION_ISSUE_FIELDS
+            | _PRODUCTION_RETURN_EXCLUSIVE_FIELDS
             | _PRODUCTION_RECEIPT_EXCLUSIVE_FIELDS,
         )
         movement_id = _text(
@@ -2503,11 +2520,13 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         if kind not in _MOVEMENT_KINDS:
             raise TrialValidationError(f"movements[{index}].kind is invalid.")
         retained_production_fields = _PRODUCTION_ISSUE_FIELDS.intersection(movement)
+        retained_production_return_fields = _PRODUCTION_RETURN_EXCLUSIVE_FIELDS.intersection(movement)
         retained_production_receipt_fields = _PRODUCTION_RECEIPT_FIELDS.intersection(movement)
         retained_purchase_discrepancy_fields = _PURCHASE_DISCREPANCY_FIELDS.intersection(movement)
         if kind == "production_issue":
             if (
                 retained_production_fields != _PRODUCTION_ISSUE_FIELDS
+                or retained_production_return_fields
                 or _PRODUCTION_RECEIPT_EXCLUSIVE_FIELDS.intersection(movement)
                 or "orderId" in movement
                 or "purchaseOrderId" in movement
@@ -2553,10 +2572,79 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 f"movements[{index}].conversionNote",
                 maximum=240,
             )
+        elif kind == "production_return":
+            if (
+                retained_production_fields != _PRODUCTION_ISSUE_FIELDS
+                or retained_production_return_fields
+                != _PRODUCTION_RETURN_EXCLUSIVE_FIELDS
+                or _PRODUCTION_RECEIPT_EXCLUSIVE_FIELDS.intersection(movement)
+                or "orderId" in movement
+                or "purchaseOrderId" in movement
+                or "expectedQuantity" in movement
+                or "countedQuantity" in movement
+            ):
+                raise TrialValidationError(
+                    f"movements[{index}] production return fields are incomplete."
+                )
+            _text(
+                movement["productionRequestId"],
+                f"movements[{index}].productionRequestId",
+                maximum=80,
+            )
+            production_command_digest = _text(
+                movement["productionCommandDigest"],
+                f"movements[{index}].productionCommandDigest",
+                maximum=71,
+            )
+            if _SHA256_DIGEST_PATTERN.fullmatch(production_command_digest) is None:
+                raise TrialValidationError(
+                    f"movements[{index}].productionCommandDigest is invalid."
+                )
+            for field in (
+                "productionJobId",
+                "productionMaterialId",
+                "productionInputLotId",
+            ):
+                _text(movement[field], f"movements[{index}].{field}", maximum=80)
+            _integer(
+                movement["productionQuantityMilli"],
+                f"movements[{index}].productionQuantityMilli",
+                minimum=1,
+            )
+            if movement["productionUnit"] not in _PRODUCTION_MATERIAL_UNITS:
+                raise TrialValidationError(
+                    f"movements[{index}].productionUnit is invalid."
+                )
+            _text(
+                movement["conversionNote"],
+                f"movements[{index}].conversionNote",
+                maximum=240,
+            )
+            _text(
+                movement["productionIssueActionId"],
+                f"movements[{index}].productionIssueActionId",
+                maximum=160,
+            )
+            _integer(
+                movement["productionReturnedQuantityMilli"],
+                f"movements[{index}].productionReturnedQuantityMilli",
+                minimum=1,
+            )
+            _text(
+                movement["productionReturnStockUnitId"],
+                f"movements[{index}].productionReturnStockUnitId",
+                maximum=80,
+            )
+            _text(
+                movement["productionReturnLocationId"],
+                f"movements[{index}].productionReturnLocationId",
+                maximum=80,
+            )
         elif kind == "production_receipt":
             if (
                 retained_production_receipt_fields != _PRODUCTION_RECEIPT_FIELDS
                 or _PRODUCTION_ISSUE_EXCLUSIVE_FIELDS.intersection(movement)
+                or retained_production_return_fields
                 or "orderId" in movement
                 or "purchaseOrderId" in movement
                 or "expectedQuantity" in movement
@@ -2618,7 +2706,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 raise TrialValidationError(
                     f"movements[{index}] predates its Plant release."
                 )
-        elif retained_production_fields or retained_production_receipt_fields:
+        elif (
+            retained_production_fields
+            or retained_production_return_fields
+            or retained_production_receipt_fields
+        ):
             raise TrialValidationError(
                 f"movements[{index}] production fields are unsupported for {kind}."
             )
@@ -2668,7 +2760,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 raise TrialValidationError(
                     f"movements[{index}] release, receipt, or return must be positive."
                 )
-        if kind in {"production_issue", "production_receipt"}:
+        if kind in {"production_issue", "production_return", "production_receipt"}:
             movement_ids.append(movement_id)
             movement_action_ids.append(action_id)
             continue
@@ -2816,6 +2908,73 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     _unique(movement_ids, "Stock movement ID")
     _unique(production_request_ids, "Production material request ID")
     _unique(production_release_ids, "Production batch release ID")
+    production_issues_by_action = {
+        str(movement["actionId"]): movement
+        for movement in movements
+        if movement.get("kind") == "production_issue"
+    }
+    production_returned_by_issue: dict[str, dict[str, int]] = {}
+    for movement in movements:
+        if movement.get("kind") != "production_return":
+            continue
+        source_issue_action_id = str(movement["productionIssueActionId"])
+        issue = production_issues_by_action.get(source_issue_action_id)
+        if issue is None:
+            raise TrialValidationError(
+                f"Production return {movement['actionId']} does not reference one retained Plant issue."
+            )
+        identity_fields = (
+            "sku",
+            "productionRequestId",
+            "productionCommandDigest",
+            "productionJobId",
+            "productionMaterialId",
+            "productionInputLotId",
+            "productionQuantityMilli",
+            "productionUnit",
+            "conversionNote",
+        )
+        if any(movement[field] != issue[field] for field in identity_fields):
+            raise TrialValidationError(
+                f"Production return {movement['actionId']} does not match its immutable Plant issue."
+            )
+        if datetime.fromisoformat(
+            str(movement["createdAt"]).replace("Z", "+00:00")
+        ) < datetime.fromisoformat(str(issue["createdAt"]).replace("Z", "+00:00")):
+            raise TrialValidationError(
+                f"Production return {movement['actionId']} predates its Plant issue."
+            )
+        returned_production_quantity_milli = int(
+            movement["productionReturnedQuantityMilli"]
+        )
+        returned_stock_quantity = int(movement["quantityDelta"])
+        if (
+            returned_production_quantity_milli * -int(issue["quantityDelta"])
+            != returned_stock_quantity * int(issue["productionQuantityMilli"])
+        ):
+            raise TrialValidationError(
+                f"Production return {movement['actionId']} does not preserve its reviewed conversion ratio."
+            )
+        returned = production_returned_by_issue.get(
+            source_issue_action_id,
+            {"productionQuantityMilli": 0, "stockQuantity": 0},
+        )
+        next_production_quantity_milli = (
+            returned["productionQuantityMilli"]
+            + returned_production_quantity_milli
+        )
+        next_stock_quantity = returned["stockQuantity"] + returned_stock_quantity
+        if (
+            next_production_quantity_milli > int(issue["productionQuantityMilli"])
+            or next_stock_quantity > -int(issue["quantityDelta"])
+        ):
+            raise TrialValidationError(
+                f"Production return {movement['actionId']} exceeds its Plant issue."
+            )
+        production_returned_by_issue[source_issue_action_id] = {
+            "productionQuantityMilli": next_production_quantity_milli,
+            "stockQuantity": next_stock_quantity,
+        }
     for order_id, return_record in order_returns:
         order = order_by_id.get(order_id)
         lines = _reservation_lines(order) if order else []
@@ -3900,6 +4059,7 @@ def _validate_event_evidence(
         "commerce.stock.received": "receipt",
         "commerce.stock.counted": "count",
         "commerce.production_material.issued": "production_issue",
+        "commerce.production_material.returned": "production_return",
         "commerce.production_batch.received": "production_receipt",
         "commerce.purchase_order.received": "receipt",
         "commerce.website_intake.converted": "reserve",
@@ -5049,6 +5209,19 @@ def _production_inventory_command_id(request_id: str) -> str:
         }
     )
     return f"PIS-{identity[7:39].upper()}"
+
+
+def _production_return_command_id(
+    production_issue_id: str, action_id: str
+) -> str:
+    identity = _order_inventory_digest(
+        {
+            "contract": "supermega.shop.production-return-inventory-command.v1",
+            "productionIssueId": production_issue_id,
+            "actionId": action_id,
+        }
+    )
+    return f"PRT-{identity[7:39].upper()}"
 
 
 def _production_receipt_command_id(release_id: str) -> str:
@@ -6607,6 +6780,148 @@ def _validate_production_material_issued(
         )
 
 
+def _validate_production_return_inventory_transition(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    movement: Mapping[str, Any],
+) -> None:
+    current_foundation = _inventory_foundation(current)
+    next_foundation = _inventory_foundation(next_state)
+    if current_foundation is None or next_foundation is None:
+        raise TrialValidationError(
+            "a Plant material return requires retained exact location inventory."
+        )
+    catalog_skus = [str(item["sku"]) for item in current["items"]]
+    try:
+        before = validate_shop_inventory_state(current_foundation, catalog_skus)
+        after = validate_shop_inventory_state(next_foundation, catalog_skus)
+        before_physical = shop_inventory_sku_totals(before, catalog_skus)
+        after_physical = shop_inventory_sku_totals(after, catalog_skus)
+        before_available = shop_inventory_sku_available_to_promise(
+            before, catalog_skus
+        )
+        after_available = shop_inventory_sku_available_to_promise(
+            after, catalog_skus
+        )
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+    if (
+        len(after["commands"]) != len(before["commands"]) + 1
+        or after["commands"][:-1] != before["commands"]
+        or after["commands"][-1]["payload"].get("kind") != "production_return"
+    ):
+        raise TrialValidationError(
+            "the Plant material return must append exactly one production return location command."
+        )
+    source_commands = [
+        envelope["payload"]
+        for envelope in before["commands"]
+        if envelope["payload"].get("kind") == "production_issue"
+        and envelope["payload"].get("proof", {}).get("actionId")
+        == movement["productionIssueActionId"]
+    ]
+    if len(source_commands) != 1:
+        raise TrialValidationError(
+            "the Plant material return source issue is not retained in location inventory."
+        )
+    source = source_commands[0]
+    command = after["commands"][-1]["payload"]
+    if (
+        command.get("id")
+        != _production_return_command_id(
+            str(source["id"]), str(movement["actionId"])
+        )
+        or command.get("productionIssueId") != source["id"]
+        or command.get("productionRequestId") != movement["productionRequestId"]
+        or command.get("productionCommandDigest")
+        != movement["productionCommandDigest"]
+        or command.get("productionJobId") != movement["productionJobId"]
+        or command.get("productionMaterialId") != movement["productionMaterialId"]
+        or command.get("productionInputLotId")
+        != movement["productionInputLotId"]
+        or command.get("productionQuantityMilli")
+        != movement["productionReturnedQuantityMilli"]
+        or command.get("productionUnit") != movement["productionUnit"]
+        or command.get("sku") != movement["sku"]
+        or command.get("stockQuantity") != movement["quantityDelta"]
+        or command.get("conversionNote") != movement["conversionNote"]
+        or command.get("stockUnitId")
+        != movement["productionReturnStockUnitId"]
+        or command.get("locationId")
+        != movement["productionReturnLocationId"]
+        or any(
+            command["proof"].get(proof_field) != movement[movement_field]
+            for proof_field, movement_field in (
+                ("actionId", "actionId"),
+                ("capturedAt", "createdAt"),
+                ("actor", "actor"),
+                ("reason", "reason"),
+                ("evidenceReference", "evidenceReference"),
+            )
+        )
+    ):
+        raise TrialValidationError(
+            "the production return location command must match the exact Shop and Plant evidence."
+        )
+
+    def increased(source_totals: Mapping[str, int]) -> dict[str, int]:
+        retained = dict(source_totals)
+        sku = str(movement["sku"])
+        retained[sku] = retained.get(sku, 0) + int(movement["quantityDelta"])
+        return retained
+
+    if after_physical != increased(before_physical):
+        raise TrialValidationError(
+            "the Plant material return must restore exact physical location stock."
+        )
+    if after_available != increased(before_available):
+        raise TrialValidationError(
+            "the Plant material return must restore exact location available-to-promise."
+        )
+
+
+def _validate_production_material_returned(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "orders", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    if (
+        len(next_state["movements"]) != len(current["movements"]) + 1
+        or next_state["movements"][1:] != current["movements"]
+    ):
+        raise TrialValidationError(
+            "commerce.production_material.returned must prepend exactly one stock return."
+        )
+    movement = next_state["movements"][0]
+    if (
+        movement.get("kind") != "production_return"
+        or movement.get("quantityDelta", 0) <= 0
+        or movement.get("id") != _movement_id(str(movement.get("actionId")))
+    ):
+        raise TrialValidationError(
+            "production material return requires one attributable positive stock movement."
+        )
+    _validate_production_return_inventory_transition(current, next_state, movement)
+    before_item, after_item = _one_changed(
+        current["items"], next_state["items"], "items"
+    )
+    if (
+        before_item["sku"] != movement["sku"]
+        or after_item
+        != {
+            **before_item,
+            "onHand": before_item["onHand"] + movement["quantityDelta"],
+        }
+    ):
+        raise TrialValidationError(
+            "production material return must increase only its matching Shop item."
+        )
+
+
 def _validate_production_receipt_inventory_transition(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -7491,6 +7806,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.stock.received": _validate_received,
     "commerce.stock.counted": _validate_counted,
     "commerce.production_material.issued": _validate_production_material_issued,
+    "commerce.production_material.returned": _validate_production_material_returned,
     "commerce.production_batch.received": _validate_production_batch_received,
     "commerce.inventory.initialized": _validate_inventory_initialized,
     "commerce.inventory.master_created": _validate_inventory_master_created,
@@ -7574,6 +7890,7 @@ def reduce_commerce_state(
         "commerce.inventory.transferred",
         "commerce.stock.counted",
         "commerce.production_material.issued",
+        "commerce.production_material.returned",
         "commerce.production_batch.received",
         "commerce.purchase_order.received",
         "commerce.order.created",

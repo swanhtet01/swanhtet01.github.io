@@ -2423,6 +2423,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.stock.received",
                     "commerce.stock.counted",
                     "commerce.production_material.issued",
+                    "commerce.production_material.returned",
                     "commerce.production_batch.received",
                     "commerce.inventory.initialized",
                     "commerce.inventory.master_created",
