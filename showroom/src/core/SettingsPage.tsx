@@ -8,7 +8,7 @@ import {
 } from '../products/product-handoff'
 import { readBehaviorTrail, recordBehaviorSignal, summarizeBehaviorPreferences } from './behavior-trail'
 import { ManagedContextConsent } from './ManagedContextConsent'
-import { buildManagedContextProfileRequest, managedContextProductLabel } from './managed-context'
+import { buildManagedAiContextExport, buildManagedContextProfileRequest, managedContextProductLabel } from './managed-context'
 import { operatingChangeCopy } from './operating-baseline'
 import {
   collectLocalProductRecords,
@@ -268,6 +268,7 @@ export function SettingsPage() {
   const [managedPilotRetained, setManagedPilotRetained] = useState(false)
   const [managedPilotNotice, setManagedPilotNotice] = useState('')
   const [managedPilotBusy, setManagedPilotBusy] = useState(false)
+  const [aiContextExportApproval, setAiContextExportApproval] = useState<{ key: string; reviewedAt: string } | null>(null)
   const managedPilotRequestRef = useRef(0)
   const [ecommerceActivationPacketText, setEcommerceActivationPacketText] = useState('')
   const [ecommerceActivationPacketReview, setEcommerceActivationPacketReview] = useState<Array<readonly [string, string]>>([
@@ -524,6 +525,46 @@ export function SettingsPage() {
         behaviorPreference,
       })
     : null
+  const acceptedAiContextOutcome = pilotOutcomeReport?.review
+    && pilotOutcomeReport.review.reviewedBy === setup.owner
+    && (pilotOutcomeReport.outcomeStatus === 'target_met' || pilotOutcomeReport.outcomeStatus === 'improved')
+    ? {
+        status: pilotOutcomeReport.outcomeStatus,
+        digest: pilotOutcomeReport.reportDigest,
+      }
+    : null
+  const aiContextExportApprovalKey = managedContextPackage && acceptedAiContextOutcome
+    ? JSON.stringify([
+        managedContextPackage.product,
+        managedContextPackage.templateId,
+        managedContextPackage.sourceCounts,
+        managedContextPackage.behaviorPreference,
+        acceptedAiContextOutcome,
+        setup.owner,
+      ])
+    : ''
+  const aiContextExportApproved = Boolean(
+    aiContextExportApprovalKey
+    && aiContextExportApproval?.key === aiContextExportApprovalKey,
+  )
+  const approvedAiContextExport = aiContextExportApproved && aiContextExportApproval && acceptedAiContextOutcome
+    ? buildManagedAiContextExport({
+        product: managedContextProduct,
+        templateId: selectedTemplate.id,
+        selectedProductRecords: preparedRecordCount,
+        behaviorSignals: agentBehaviorSignals.length,
+        reviewedDecisions: reviewedDecisionCount,
+        behaviorPreference,
+        outcomeStatus: acceptedAiContextOutcome.status,
+        outcomeDigest: acceptedAiContextOutcome.digest,
+        reviewedBy: setup.owner,
+        reviewedAt: aiContextExportApproval.reviewedAt,
+      })
+    : null
+  const approvedAiContextExportFilename = `supermega-approved-ai-context-${evidenceDate}.json`
+  const approvedAiContextExportHref = approvedAiContextExport
+    ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(approvedAiContextExport, null, 2))}`
+    : ''
   const contextHandoffManifest = {
     contract: 'supermega.ai_context_handoff.v1',
     version: 1,
@@ -1557,6 +1598,22 @@ export function SettingsPage() {
       {setup.savedAt ? <section aria-label="Premium pilot" className="premium-pilot">
         <div className="premium-pilot-head"><div><span className="core-eyebrow">Premium pilot</span><h2>Your business context, remembered.</h2><p>SuperMega combines approved product data and owner patterns, then prepares one next move for review.</p></div><span className={`status-pill ${premiumPilotProofKept ? 'approved' : managedPilotBrief ? 'bounded' : ''}`}>{premiumPilotProofKept ? 'checkpoint kept' : managedPilotBrief ? 'verified' : 'local'}</span></div>
         <div className="premium-pilot-rows">{premiumPilotRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+        <div aria-label="Approved AI context export" className="managed-context-consent">
+          <div><span className="core-eyebrow">Local context handoff</span><h3>Review the summary AI can receive.</h3><p>Contains counts and a preferred product only. Raw product records, behavior entries, decision records, notes, and browser text are excluded.</p></div>
+          <div className="premium-pilot-rows">
+            <span><small>Prepared sources</small><strong>{preparedRecordCount}</strong><em>Count only</em></span>
+            <span><small>Behavior signals</small><strong>{agentBehaviorSignals.length}</strong><em>{topAgentJob ? `${agentProductName(topAgentJob.product)} preferred` : 'Choose one action first'}</em></span>
+            <span><small>Human decisions</small><strong>{reviewedDecisionCount}</strong><em>Count only; no notes</em></span>
+            <span><small>Measured outcome</small><strong>{acceptedAiContextOutcome?.status ?? 'Proof required'}</strong><em>{acceptedAiContextOutcome ? 'Accepted result digest included' : 'Accept a clear or improved result first'}</em></span>
+            <span><small>Boundary</small><strong>Draft and rank only</strong><em>No send, write, publish, payment, stock, production, CRM, or training</em></span>
+          </div>
+          <label className="managed-context-approval">
+            <input checked={aiContextExportApproved} disabled={!managedContextPackage || !acceptedAiContextOutcome} onChange={(event) => setAiContextExportApproval(event.target.checked && aiContextExportApprovalKey ? { key: aiContextExportApprovalKey, reviewedAt: new Date().toISOString() } : null)} type="checkbox" />
+            <span>I approve this summary-only context package for managed AI review.</span>
+          </label>
+          {approvedAiContextExport ? <a className="core-button primary" download={approvedAiContextExportFilename} href={approvedAiContextExportHref}>Download approved context</a> : <button className="core-button primary" disabled type="button">{managedContextPackage && acceptedAiContextOutcome ? 'Approve to download' : 'Complete proof first'}</button>}
+          <p className="premium-pilot-boundary">The download performs no upload, managed write, model training, customer action, or external send.</p>
+        </div>
         {managedPilotBrief ? <div className="premium-pilot-brief"><div><span className="core-eyebrow">Managed company brief</span><h3>{managedPilotBrief.title}</h3><p>{managedPilotBrief.summary}</p>{operatingLearning ? <div className="premium-pilot-learning"><span className="core-eyebrow">AI learned</span><strong>{operatingLearning.label}</strong><small>{operatingLearning.detail}</small></div> : null}</div><div className="premium-pilot-next"><small>Reviewed next move</small><strong>{managedPilotBrief.nextAction.label}</strong><em>{managedPilotBrief.boundary}</em></div></div> : null}
         <ManagedContextConsent contextPackage={managedContextPackage} identity={managedIdentity} onRetained={() => void verifyManagedPilot()} />
         {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="premium-pilot-actions"><button className="core-button" disabled={managedPilotBusy} onClick={() => void verifyManagedPilot()} type="button">{managedPilotBusy && !managedPilotBrief ? 'Verifying...' : 'Verify context'}</button>{managedPilotBrief ? <><Link className="core-button" to={managedPilotBrief.nextAction.path}>{managedPilotBrief.nextAction.label}</Link><button className="core-button primary" disabled={managedPilotBusy || premiumPilotProofKept} onClick={() => void keepManagedPilotProof()} type="button">{premiumPilotProofKept ? 'Checkpoint kept' : managedPilotBusy ? 'Keeping...' : 'Keep learning checkpoint'}</button></> : null}</div> : <form className="premium-pilot-login" onSubmit={(event) => void connectManagedWorkspace(event)}><div><span className="core-eyebrow">Connect managed workspace</span><strong>Verify this company, not a generic demo.</strong></div>{managedWorkspaceSignIn ? <label>Company<select onChange={(event) => setManagedWorkspace(event.target.value)} required value={managedWorkspace}>{managedWorkspaceSignIn.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label> : <><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></>}<button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking...' : managedWorkspaceSignIn ? 'Open company' : 'Find my company'}</button></form> : <div className="premium-pilot-actions">{managedTrialProofReady ? <a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed pilot</a> : <a className="core-button primary" href={managedTrialProofActionPath}>{managedTrialProofActionLabel}</a>}</div>}
@@ -1636,7 +1693,7 @@ export function SettingsPage() {
                 <div><span className="core-eyebrow">Managed trial request</span><h3>What support needs</h3><p>This packet is local. It packages the workspace, product, evidence file, blocked gates, and safe automation boundary for handoff.</p></div>
                 <div className="managed-request-rows">{managedTrialRequestRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
               </div>
-              <div className="learning-plan-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export AI context package</a>{setup.savedAt ? <><a className="core-button" download={managedTrialRequestFilename} href={managedTrialRequestHref}>Download request packet</a>{managedTrialProofReady ? <a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed trial</a> : <a className="core-button primary" href={managedTrialProofActionPath}>{managedTrialProofActionLabel}</a>}</> : <button className="core-button primary" disabled type="button">Save trial first</button>}</div>
+              <div className="learning-plan-actions">{approvedAiContextExport ? <a className="core-button" download={approvedAiContextExportFilename} href={approvedAiContextExportHref}>Download approved context</a> : <button className="core-button" disabled type="button">Review context above</button>}{setup.savedAt ? <><a className="core-button" download={managedTrialRequestFilename} href={managedTrialRequestHref}>Download request packet</a>{managedTrialProofReady ? <a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed trial</a> : <a className="core-button primary" href={managedTrialProofActionPath}>{managedTrialProofActionLabel}</a>}</> : <button className="core-button primary" disabled type="button">Save trial first</button>}</div>
             </div>
             <Suspense fallback={<p className="form-notice" role="status">Loading managed activation plan...</p>}><ManagedActivationRunbook runtime={runtime} /></Suspense>
             {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
@@ -1644,7 +1701,7 @@ export function SettingsPage() {
           </section>
           <div className="settings-control-stack">
             <Suspense fallback={<section className="core-panel company-backup-panel"><p className="form-notice" role="status">Loading encrypted company backup...</p></section>}><CompanyBackupPanel /></Suspense>
-            <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset.</h2><p>Reset clears every current Shop, Plant, Website, Ecommerce, owner-control, outcome, setup, unfinished order drafts, and local AI-memory record.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting...' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section>
+            <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset.</h2><p>The full evidence export includes local product records for private backup or support review. Reset clears every current Shop, Plant, Website, Ecommerce, owner-control, outcome, setup, unfinished order drafts, and local AI-memory record.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export full evidence</a>{resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting...' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section>
           </div>
         </div>
       </details>

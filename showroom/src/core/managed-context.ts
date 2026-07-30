@@ -1,5 +1,6 @@
 import type { BehaviorPreferenceSnapshot } from './behavior-trail'
 import type { ManagedIdentity } from './managed-trial'
+import { sha256Hex } from './managed-trial-proof.ts'
 
 
 export const MANAGED_CONTEXT_ALLOWED_USES = [
@@ -64,6 +65,40 @@ export type ManagedContextBriefProjection = {
   preferredProduct: ManagedBehaviorProduct
 }
 
+export type ManagedAiContextExport = {
+  contract: 'supermega.ai_context_export.v1'
+  version: 1
+  product: ManagedContextProduct
+  templateId: string
+  sourceCounts: ManagedContextProfileRequest['sourceCounts']
+  behaviorPreference: ManagedContextProfileRequest['behaviorPreference']
+  outcome: {
+    status: 'target_met' | 'improved'
+    digest: string
+    accepted: true
+  }
+  allowedUses: [...typeof MANAGED_CONTEXT_ALLOWED_USES]
+  forbiddenActions: [...typeof MANAGED_CONTEXT_FORBIDDEN_ACTIONS]
+  handoff: {
+    route: 'managed_activation_review'
+    activationRequired: true
+  }
+  ownerReview: {
+    status: 'approved_for_managed_review'
+    reviewedBy: string
+    reviewedAt: string
+  }
+  privacyBoundary: {
+    rawProductRecordsIncluded: false
+    rawBehaviorEntriesIncluded: false
+    rawDecisionRecordsIncluded: false
+    externalSendPerformed: false
+    managedWritePerformed: false
+    modelTrainingAllowed: false
+  }
+  contextDigest: string
+}
+
 export type ManagedContextValidation = {
   contract: 'supermega.managed_context_profile_validation.v1'
   status: 'ready_for_owner_confirmation'
@@ -115,6 +150,156 @@ export function managedContextProductLabel(product: ManagedBehaviorProduct) {
   if (product === 'production') return 'Plant'
   if (product === 'website') return 'Website'
   return 'Ecommerce'
+}
+
+export function managedAiContextExportProjection(value: Omit<ManagedAiContextExport, 'contextDigest'>) {
+  return [
+    value.contract,
+    value.version,
+    value.product,
+    value.templateId,
+    value.sourceCounts.selectedProductRecords,
+    value.sourceCounts.behaviorSignals,
+    value.sourceCounts.reviewedDecisions,
+    value.behaviorPreference.product,
+    value.behaviorPreference.chosenCount,
+    value.outcome.status,
+    value.outcome.digest,
+    value.outcome.accepted,
+    ...value.allowedUses,
+    '|',
+    ...value.forbiddenActions,
+    value.ownerReview.status,
+    value.ownerReview.reviewedBy,
+    value.ownerReview.reviewedAt,
+    value.handoff.route,
+    value.handoff.activationRequired,
+    value.privacyBoundary.rawProductRecordsIncluded,
+    value.privacyBoundary.rawBehaviorEntriesIncluded,
+    value.privacyBoundary.rawDecisionRecordsIncluded,
+    value.privacyBoundary.externalSendPerformed,
+    value.privacyBoundary.managedWritePerformed,
+    value.privacyBoundary.modelTrainingAllowed,
+  ]
+}
+
+function validOwnerReview(reviewedBy: unknown, reviewedAt: unknown) {
+  if (typeof reviewedBy !== 'string' || reviewedBy !== reviewedBy.trim() || reviewedBy.length < 1 || reviewedBy.length > 120) return false
+  if (typeof reviewedAt !== 'string') return false
+  const parsed = new Date(reviewedAt)
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === reviewedAt
+}
+
+function validAcceptedOutcome(status: unknown, digest: unknown) {
+  return (status === 'target_met' || status === 'improved')
+    && typeof digest === 'string'
+    && /^sha256:[0-9a-f]{64}$/.test(digest)
+}
+
+export function buildManagedAiContextExport(input: {
+  product: ManagedContextProduct
+  templateId: string
+  selectedProductRecords: number
+  behaviorSignals: number
+  reviewedDecisions: number
+  behaviorPreference: BehaviorPreferenceSnapshot
+  outcomeStatus: 'target_met' | 'improved'
+  outcomeDigest: string
+  reviewedBy: string
+  reviewedAt: string
+}): ManagedAiContextExport | null {
+  const request = buildManagedContextProfileRequest(input)
+  const reviewedBy = input.reviewedBy.trim()
+  if (!request
+    || !validAcceptedOutcome(input.outcomeStatus, input.outcomeDigest)
+    || !validOwnerReview(reviewedBy, input.reviewedAt)) return null
+  const body: Omit<ManagedAiContextExport, 'contextDigest'> = {
+    contract: 'supermega.ai_context_export.v1',
+    version: 1,
+    product: request.product,
+    templateId: request.templateId,
+    sourceCounts: { ...request.sourceCounts },
+    behaviorPreference: { ...request.behaviorPreference },
+    outcome: {
+      status: input.outcomeStatus,
+      digest: input.outcomeDigest,
+      accepted: true,
+    },
+    allowedUses: [...MANAGED_CONTEXT_ALLOWED_USES],
+    forbiddenActions: [...MANAGED_CONTEXT_FORBIDDEN_ACTIONS],
+    handoff: {
+      route: 'managed_activation_review',
+      activationRequired: true,
+    },
+    ownerReview: {
+      status: 'approved_for_managed_review',
+      reviewedBy,
+      reviewedAt: input.reviewedAt,
+    },
+    privacyBoundary: {
+      rawProductRecordsIncluded: false,
+      rawBehaviorEntriesIncluded: false,
+      rawDecisionRecordsIncluded: false,
+      externalSendPerformed: false,
+      managedWritePerformed: false,
+      modelTrainingAllowed: false,
+    },
+  }
+  return {
+    ...body,
+    contextDigest: `sha256:${sha256Hex(JSON.stringify(managedAiContextExportProjection(body)))}`,
+  }
+}
+
+export function structurallyValidManagedAiContextExport(value: unknown): value is ManagedAiContextExport {
+  if (!isRecord(value)
+    || !exactKeys(value, [
+      'allowedUses', 'behaviorPreference', 'contextDigest', 'contract', 'forbiddenActions', 'handoff',
+      'outcome', 'ownerReview', 'privacyBoundary', 'product', 'sourceCounts', 'templateId', 'version',
+    ])
+    || !isManagedContextProduct(value.product)
+    || typeof value.templateId !== 'string'
+    || !PRODUCT_TEMPLATES[value.product].some((template) => template === value.templateId)
+    || !isRecord(value.sourceCounts)
+    || !exactKeys(value.sourceCounts, ['behaviorSignals', 'reviewedDecisions', 'selectedProductRecords'])
+    || !validCount(value.sourceCounts.selectedProductRecords as number, 1, 100_000)
+    || !validCount(value.sourceCounts.behaviorSignals as number, 1, 80)
+    || !validCount(value.sourceCounts.reviewedDecisions as number, 1, 10_000)
+    || !isRecord(value.behaviorPreference)
+    || !exactKeys(value.behaviorPreference, ['chosenCount', 'product'])
+    || !isManagedBehaviorProduct(value.behaviorPreference.product)
+    || !validCount(value.behaviorPreference.chosenCount as number, 1, value.sourceCounts.behaviorSignals as number)
+    || !isRecord(value.outcome)
+    || !exactKeys(value.outcome, ['accepted', 'digest', 'status'])
+    || !validAcceptedOutcome(value.outcome.status, value.outcome.digest)
+    || value.outcome.accepted !== true
+    || !Array.isArray(value.allowedUses)
+    || !sameStrings(value.allowedUses as string[], MANAGED_CONTEXT_ALLOWED_USES)
+    || !Array.isArray(value.forbiddenActions)
+    || !sameStrings(value.forbiddenActions as string[], MANAGED_CONTEXT_FORBIDDEN_ACTIONS)
+    || !isRecord(value.handoff)
+    || !exactKeys(value.handoff, ['activationRequired', 'route'])
+    || value.handoff.route !== 'managed_activation_review'
+    || value.handoff.activationRequired !== true
+    || !isRecord(value.ownerReview)
+    || !exactKeys(value.ownerReview, ['reviewedAt', 'reviewedBy', 'status'])
+    || value.ownerReview.status !== 'approved_for_managed_review'
+    || !validOwnerReview(value.ownerReview.reviewedBy, value.ownerReview.reviewedAt)
+    || !isRecord(value.privacyBoundary)
+    || !exactKeys(value.privacyBoundary, [
+      'externalSendPerformed', 'managedWritePerformed', 'modelTrainingAllowed', 'rawBehaviorEntriesIncluded',
+      'rawDecisionRecordsIncluded', 'rawProductRecordsIncluded',
+    ])
+    || value.privacyBoundary.rawProductRecordsIncluded !== false
+    || value.privacyBoundary.rawBehaviorEntriesIncluded !== false
+    || value.privacyBoundary.rawDecisionRecordsIncluded !== false
+    || value.privacyBoundary.externalSendPerformed !== false
+    || value.privacyBoundary.managedWritePerformed !== false
+    || value.privacyBoundary.modelTrainingAllowed !== false
+    || typeof value.contextDigest !== 'string'
+    || !/^sha256:[0-9a-f]{64}$/.test(value.contextDigest)) return false
+  const { contextDigest, ...body } = value as ManagedAiContextExport
+  return contextDigest === `sha256:${sha256Hex(JSON.stringify(managedAiContextExportProjection(body)))}`
 }
 
 export function buildManagedContextProfileRequest(input: {
