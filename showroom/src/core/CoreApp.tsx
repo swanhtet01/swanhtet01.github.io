@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ChangeEvent, type FormEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
 import './core-app.css'
@@ -1562,6 +1562,16 @@ function ShopCounter({ disabled, items, lowStockCount, onReview, openOrderCount 
     setCart((current) => ({ ...current, [item.sku]: Math.min((current[item.sku] ?? 0) + 1, item.onHand) }))
   }
 
+  function addSearchMatch(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== 'Enter' || !normalizedQuery) return
+    const exactSku = visibleItems.find((item) => item.sku.toLocaleLowerCase() === normalizedQuery)
+    const match = exactSku ?? (visibleItems.length === 1 ? visibleItems[0] : null)
+    if (!match || match.onHand < 1) return
+    event.preventDefault()
+    addItem(match)
+    setQuery('')
+  }
+
   function clearSale() {
     setCart({})
     setCustomer('')
@@ -1586,7 +1596,7 @@ function ShopCounter({ disabled, items, lowStockCount, onReview, openOrderCount 
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
           <div><span className="core-eyebrow">Counter open</span><h2>Tap an item to add it</h2><nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
-          <label className="shop-item-search"><span className="sr-only">Find an item</span><input autoComplete="off" onChange={(event) => setQuery(event.target.value)} placeholder="Find an item" type="search" value={query} /></label>
+          <label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label>
         </header>
         {visibleItems.length ? <div className="shop-item-grid">
           {visibleItems.map((item) => {
