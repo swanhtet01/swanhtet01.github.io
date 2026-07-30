@@ -57,7 +57,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
 - Both domains serve deployed `df4d26ca3eb427578607c6a5016848d046bdb34f`; paired brand, context, and catalog identities match.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-- Ally hash-binds one specialist to zero external/Vercel/scheduler actions, at most three 4,096/768-token calls, and `keep-alive 0s`. `supermega.ally-working-set-trim.v1` released 2,949.3 MB without Codex process stops. An older six-role queue retried once; its second attempt spent three calls before failing with no report. Audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Four CEO outcomes are accepted; Finance/Risk remains quarantined.
+- Ally hash-binds one specialist and zero external/Vercel/scheduler actions at 4,096/768/0s. Shared work is one project, four-default/six-max serial roles, under the same envelope. `supermega.ally-working-set-trim.v1` released 2,949.3 MB without Codex process stops. The old Vision retry failed with no report. Audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Four CEO outcomes are accepted; Finance/Risk remains quarantined.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
 ## Owner-gated actions
