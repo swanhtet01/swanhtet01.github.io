@@ -3,6 +3,13 @@
   "updatedAt": "2026-07-30",
   "northStar": "One real workflow reaches a measurable outcome through an accountable operating record.",
   "productLifecycle": ["discover", "define", "build", "release", "learn"],
+  "completedLocalAutomations": [
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-today-surface",
+      "checkpoint": "ENG-130"
+    }
+  ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",
     "manager": "CEO / Codex integrator",
@@ -39,7 +46,7 @@
     "fullPlatformStatusTeams": ["engineering", "finance-risk"],
     "connectorFleetDeferredForDailyProductGrowth": true,
     "maxOutcomesPerCeoCycle": 1,
-    "productControlFocusContract": "supermega.ally-ceo-product-focus.v2",
+    "productControlFocusContract": "supermega.ally-ceo-product-focus.v3",
     "productControlStrategy": "portfolio_priority_ready",
     "productControlSpecialist": "delivery-planner",
     "productControlAcceptanceDimensions": ["user_job", "state_transition", "data_contract", "failure_recovery", "mobile_acceptance", "import_reconciliation", "security_boundary", "automated_test"],
@@ -96,8 +103,9 @@
       "surfaces": ["Sell", "Orders", "Stock"],
       "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
       "localAutomation": {
-        "contract": "supermega.product-work-authority.v1",
+        "contract": "supermega.product-work-authority.v2",
         "productId": "shop",
+        "workOrderId": "shop-managed-order-close-pilot",
         "priority": 80,
         "status": "owner-gated",
         "workOrder": "Shop: rehearse one authenticated order-to-close and return exception with a named operator on an isolated managed tenant.",
@@ -117,8 +125,9 @@
       "surfaces": ["Jobs", "Problems"],
       "templateContract": { "file": "../site-manifest.json", "productId": "production" },
       "localAutomation": {
-        "contract": "supermega.product-work-authority.v1",
+        "contract": "supermega.product-work-authority.v2",
         "productId": "plant",
+        "workOrderId": "plant-managed-oee-pilot",
         "priority": 70,
         "status": "owner-gated",
         "workOrder": "Plant: validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant.",
@@ -136,8 +145,9 @@
       "surfaces": ["Preview", "Edit", "Download"],
       "templateContract": { "file": "../site-manifest.json", "productId": "website" },
       "localAutomation": {
-        "contract": "supermega.product-work-authority.v1",
+        "contract": "supermega.product-work-authority.v2",
         "productId": "website",
+        "workOrderId": "website-managed-brief-acceptance",
         "priority": 60,
         "status": "owner-gated",
         "workOrder": "Website: run one named business brief through responsive review and retain the accepted managed artifact.",
@@ -155,12 +165,13 @@
       "surfaces": ["Store", "Edit store", "Cart", "Quote", "Shop review"],
       "templateContract": { "file": "../site-manifest.json", "productId": "ecommerce" },
       "localAutomation": {
-        "contract": "supermega.product-work-authority.v1",
+        "contract": "supermega.product-work-authority.v2",
         "productId": "ecommerce",
+        "workOrderId": "ecommerce-promotion-review",
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Ecommerce: add one simple Today command surface for storefront readiness, pending Shop requests, cart and checkout recovery, customer and return status, and the next safe action without adding navigation or a second order ledger.",
-        "reason": "Shop now exposes its real depth through a simple Today surface. Ecommerce has a verified local buying lifecycle but still needs the same clear starting point before another hosted or consequential adapter is considered."
+        "workOrder": "Ecommerce: add one governed promotion-review lifecycle that accepts an optional customer code, resolves it only against a Shop-owned price policy, preserves quote digest and replay safety, and shows approval or rejection without creating a second price authority.",
+        "reason": "ENG-130 completed the Ecommerce Today surface. The current quote contract retains a promotion code as pending Shop review with zero amount, while the enterprise capability plan still labels governed promotions and B2B pricing as configure-level work."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }

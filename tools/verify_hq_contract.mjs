@@ -175,14 +175,16 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.fullPlatformStatusTeams?.join(',') === 'engineering,finance-risk'
   && portfolio.agentOperatingModel?.connectorFleetDeferredForDailyProductGrowth === true
   && portfolio.agentOperatingModel?.maxOutcomesPerCeoCycle === 1
-  && portfolio.agentOperatingModel?.productControlFocusContract === 'supermega.ally-ceo-product-focus.v2'
+  && portfolio.agentOperatingModel?.productControlFocusContract === 'supermega.ally-ceo-product-focus.v3'
   && portfolio.agentOperatingModel?.productControlStrategy === 'portfolio_priority_ready'
   && portfolio.agentOperatingModel?.productControlSpecialist === 'delivery-planner'
   && portfolio.agentOperatingModel?.productControlAcceptanceDimensions?.join(',') === 'user_job,state_transition,data_contract,failure_recovery,mobile_acceptance,import_reconciliation,security_boundary,automated_test'
   && portfolio.products?.every((product) =>
-    Object.keys(product.localAutomation || {}).sort().join(',') === 'contract,priority,productId,reason,status,workOrder'
-    && product.localAutomation.contract === 'supermega.product-work-authority.v1'
+    Object.keys(product.localAutomation || {}).sort().join(',') === 'contract,priority,productId,reason,status,workOrder,workOrderId'
+    && product.localAutomation.contract === 'supermega.product-work-authority.v2'
     && product.localAutomation.productId === product.id
+    && /^[a-z0-9][a-z0-9-]{2,79}$/.test(product.localAutomation.workOrderId)
+    && product.localAutomation.workOrderId.startsWith(`${product.id}-`)
     && product.localAutomation.workOrder.startsWith(`${product.name}: `)
     && Number.isInteger(product.localAutomation.priority)
     && product.localAutomation.priority >= 1
@@ -190,6 +192,17 @@ requireContract('one bounded agent operating model is authoritative',
     && ['ready-local', 'owner-gated', 'external-blocked'].includes(product.localAutomation.status)
     && product.localAutomation.workOrder?.trim()
     && product.localAutomation.reason?.trim())
+  && Array.isArray(portfolio.completedLocalAutomations)
+  && portfolio.completedLocalAutomations.length === 1
+  && portfolio.completedLocalAutomations.every((entry) =>
+    Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
+    && portfolio.products.some((product) => product.id === entry.productId)
+    && /^[a-z0-9][a-z0-9-]{2,79}$/.test(entry.workOrderId)
+    && /^(?:CEO|ENG|OPS|QA|UX)-\d{3}$/.test(entry.checkpoint)
+    && !portfolio.products.some((product) => product.id === entry.productId && product.localAutomation.workOrderId === entry.workOrderId))
+  && portfolio.completedLocalAutomations[0]?.productId === 'ecommerce'
+  && portfolio.completedLocalAutomations[0]?.workOrderId === 'ecommerce-today-surface'
+  && portfolio.completedLocalAutomations[0]?.checkpoint === 'ENG-130'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').map((product) => product.id).join(',') === 'ecommerce'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
@@ -1004,7 +1017,10 @@ requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
   && allyCeoPlannerText.includes("'daily-company-control': Object.freeze(['operations-analyst'])")
   && allyCeoPlannerText.includes("'product-portfolio-control': Object.freeze(['delivery-planner'])")
-  && allyCeoPlannerText.includes("ALLY_CEO_PRODUCT_FOCUS_CONTRACT = 'supermega.ally-ceo-product-focus.v2'")
+  && allyCeoPlannerText.includes("ALLY_CEO_PRODUCT_FOCUS_CONTRACT = 'supermega.ally-ceo-product-focus.v3'")
+  && allyCeoPlannerText.includes("PRODUCT_WORK_AUTHORITY_CONTRACT = 'supermega.product-work-authority.v2'")
+  && allyCeoPlannerText.includes('completedLocalAutomations')
+  && allyCeoPlannerText.includes('ally_ceo_company_plan_product_work_already_completed')
   && allyCeoPlannerText.includes("selection: 'portfolio_priority_ready'")
   && allyCeoPlannerText.includes("'failure_recovery'")
   && allyCeoPlannerText.includes("registeredRoleLimit !== 12")
@@ -1064,6 +1080,8 @@ requireContract('Ally CEO execution uses one exact local-company run and no exte
   && allyCeoLocalCycleText.includes('ALLY_CEO_RESOURCE_ENVELOPE_CONTRACT')
   && allyCeoLocalCycleText.includes('ally_ceo_local_cycle_resource_envelope_invalid')
   && allyCeoLocalCycleText.includes('productFocus.workOrder.startsWith')
+  && allyCeoLocalCycleText.includes('productFocus.workOrderId')
+  && allyCeoLocalCycleText.includes('workOrderId.startsWith(`${productFocus.productId}-`)')
   && allyCeoLocalCycleText.includes('vercelActions: 0')
   && allyCeoLocalCycleText.includes('hostedSchedulerActions: 0')
   && allyCeoLocalCycleText.includes('dynamicDelegation: false')

@@ -65,6 +65,7 @@ function summary(result, output, mode, replayed = false) {
     mode,
     output,
     outcomeId: result.outcomeId,
+    productWorkOrderId: result.productFocus?.workOrderId ?? null,
     agentCount: result.manifest?.agents.length ?? 0,
     roleBudget: result.manifest?.roleBudget ?? 0,
     expectedWorkOrderId: result.preflight?.expectedWorkOrderId ?? null,

@@ -187,7 +187,7 @@ function planSpec(plan) {
   const productFocusRequired = outcomeId === 'product-portfolio-control'
   const manifestProductFocus = plan.manifest?.evidence?.['delivery-planner']?.productFocus
   const productFocusValid = productFocusRequired
-    && productFocus?.contract === 'supermega.ally-ceo-product-focus.v2'
+    && productFocus?.contract === 'supermega.ally-ceo-product-focus.v3'
     && productFocus?.selection === 'portfolio_priority_ready'
     && PRODUCT_IDS.includes(productFocus?.productId)
     && /^[a-z0-9-]{1,80}$/.test(productFocus?.status || '')
@@ -197,6 +197,8 @@ function planSpec(plan) {
     && Number.isInteger(productFocus?.localPriority)
     && productFocus.localPriority >= 1
     && productFocus.localPriority <= 100
+    && /^[a-z0-9][a-z0-9-]{2,79}$/.test(productFocus?.workOrderId || '')
+    && productFocus.workOrderId.startsWith(`${productFocus.productId}-`)
     && typeof productFocus?.workOrder === 'string'
     && productFocus.workOrder.length > 0
     && productFocus.workOrder.length <= 1_200
@@ -249,7 +251,7 @@ function planSpec(plan) {
   ]
   if (productFocusValid) {
     objectiveBody.splice(3, 0,
-      `Focus only on ${productFocus.productId}; execute this portfolio-prioritized local work order: ${productFocus.workOrder}`,
+      `Focus only on ${productFocus.productId}; execute portfolio work order ${productFocus.workOrderId}: ${productFocus.workOrder}`,
       `Selection reason: ${productFocus.selectionReason} The external next gate remains: ${productFocus.nextGate}`,
       'The Task templates item must be one build-ready delivery work order covering exactly these acceptance dimensions: user job, state transition, data contract, failure recovery, mobile acceptance, import reconciliation, security boundary, and automated test.',
       'Do not propose another page, product, agent, dashboard, or integration unless that work order requires it to complete the named state transition.',

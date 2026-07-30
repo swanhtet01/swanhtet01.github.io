@@ -6,7 +6,7 @@ import { selectCeoOutcome } from './supermega-hq-authority.mjs'
 
 export const ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'
 export const ALLY_CEO_CYCLE_EXPERIMENT_CONTRACT = 'supermega.ally-ceo-cycle-experiment.v1'
-export const ALLY_CEO_PRODUCT_FOCUS_CONTRACT = 'supermega.ally-ceo-product-focus.v2'
+export const ALLY_CEO_PRODUCT_FOCUS_CONTRACT = 'supermega.ally-ceo-product-focus.v3'
 export const ALLY_CEO_RESOURCE_ENVELOPE_CONTRACT = 'supermega.ally-ceo-resource-envelope.v1'
 
 const MAX_SOURCE_BYTES = 256 * 1024
@@ -35,8 +35,10 @@ const PRODUCT_ACCEPTANCE_DIMENSIONS = Object.freeze([
   'automated_test',
 ])
 const PRODUCT_AUTOMATION_STATUSES = Object.freeze(new Set(['ready-local', 'owner-gated', 'external-blocked']))
-const PRODUCT_WORK_AUTHORITY_CONTRACT = 'supermega.product-work-authority.v1'
-const PRODUCT_AUTOMATION_KEYS = Object.freeze(['contract', 'priority', 'productId', 'reason', 'status', 'workOrder'])
+const PRODUCT_WORK_AUTHORITY_CONTRACT = 'supermega.product-work-authority.v2'
+const PRODUCT_AUTOMATION_KEYS = Object.freeze(['contract', 'priority', 'productId', 'reason', 'status', 'workOrder', 'workOrderId'])
+const COMPLETED_AUTOMATION_KEYS = Object.freeze(['checkpoint', 'productId', 'workOrderId'])
+const WORK_ORDER_ID_RE = /^[a-z0-9][a-z0-9-]{2,79}$/
 const PRODUCT_NAMES = Object.freeze({ shop: 'Shop', plant: 'Plant', website: 'Website', ecommerce: 'Ecommerce' })
 
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value)
@@ -80,6 +82,23 @@ function portfolioView(value) {
     || !Array.isArray(value.products)
     || !isRecord(value.agentOperatingModel)) fail('ally_ceo_company_plan_portfolio_invalid')
 
+  if (!Array.isArray(value.completedLocalAutomations)) fail('ally_ceo_company_plan_completed_automation_invalid')
+  const completedLocalAutomations = value.completedLocalAutomations.map((entry) => {
+    const productId = String(entry?.productId || '')
+    const workOrderId = String(entry?.workOrderId || '')
+    const checkpoint = String(entry?.checkpoint || '')
+    if (!isRecord(entry)
+      || Object.keys(entry).sort().join(',') !== COMPLETED_AUTOMATION_KEYS.join(',')
+      || !PRODUCT_NAMES[productId]
+      || !WORK_ORDER_ID_RE.test(workOrderId)
+      || !/^(?:CEO|ENG|OPS|QA|UX)-\d{3}$/.test(checkpoint)) {
+      fail('ally_ceo_company_plan_completed_automation_invalid')
+    }
+    return { productId, workOrderId, checkpoint }
+  })
+  const completedAutomationKeys = new Set(completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`))
+  if (completedAutomationKeys.size !== completedLocalAutomations.length) fail('ally_ceo_company_plan_completed_automation_duplicate')
+
   const products = value.products.map((product) => {
     const productId = String(product?.id || '')
     const localAutomation = product?.localAutomation
@@ -87,6 +106,7 @@ function portfolioView(value) {
     const priority = localAutomation?.priority
     const automationStatus = String(localAutomation?.status || '')
     const workOrder = String(localAutomation?.workOrder || '').trim()
+    const workOrderId = String(localAutomation?.workOrderId || '')
     const reason = String(localAutomation?.reason || '').trim()
     if (automationKeys.join(',') !== PRODUCT_AUTOMATION_KEYS.join(',')
       || !Number.isInteger(priority)
@@ -95,6 +115,7 @@ function portfolioView(value) {
       || !PRODUCT_AUTOMATION_STATUSES.has(automationStatus)
       || !workOrder
       || workOrder.length > 1_200
+      || !WORK_ORDER_ID_RE.test(workOrderId)
       || !reason
       || reason.length > 600
       || /\u0000/.test(`${workOrder}${reason}`)) {
@@ -103,9 +124,11 @@ function portfolioView(value) {
     if (localAutomation.contract !== PRODUCT_WORK_AUTHORITY_CONTRACT
       || localAutomation.productId !== productId
       || !PRODUCT_NAMES[productId]
+      || !workOrderId.startsWith(`${productId}-`)
       || !workOrder.startsWith(`${PRODUCT_NAMES[productId]}: `)) {
       fail('ally_ceo_company_plan_product_routing_invalid')
     }
+    if (completedAutomationKeys.has(`${productId}:${workOrderId}`)) fail('ally_ceo_company_plan_product_work_already_completed')
     return {
       id: productId,
       status: String(product?.status || ''),
@@ -116,6 +139,7 @@ function portfolioView(value) {
         priority,
         status: automationStatus,
         workOrder,
+        workOrderId,
         reason,
       },
     }
@@ -142,6 +166,7 @@ function portfolioView(value) {
   return {
     northStar: value.northStar.trim(),
     products,
+    completedLocalAutomations,
     limits: {
       registeredRoles: 12,
       activeAssignments: 2,
@@ -174,6 +199,7 @@ function productFocusFor(portfolio, outcomeId) {
     status: product.status,
     nextGate: product.nextGate,
     localPriority: product.localAutomation.priority,
+    workOrderId: product.localAutomation.workOrderId,
     workOrder: product.localAutomation.workOrder,
     selectionReason: product.localAutomation.reason,
     readyCandidateCount: candidates.length,
@@ -327,6 +353,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
     northStar: portfolio.northStar,
     products: portfolio.products.map(({ id, status, nextGate }) => ({ id, status, nextGate })),
     limits: portfolio.limits,
+    completedLocalAutomations: portfolio.completedLocalAutomations,
   }
   const resourceEnvelope = buildResourceEnvelope()
   const evidence = {
