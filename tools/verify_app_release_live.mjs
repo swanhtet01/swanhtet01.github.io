@@ -163,6 +163,9 @@ const settingsChunk = (await get(`/${settingsChunkPath}`)).body
 const managedLoginChunkPath = /assets\/ManagedLoginPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!managedLoginChunkPath) throw new Error('managed_login_chunk_missing')
 const managedLoginChunk = (await get(`/${managedLoginChunkPath}`)).body
+const managedAccountChunkPath = /assets\/ManagedAccountPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
+if (!managedAccountChunkPath) throw new Error('managed_account_chunk_missing')
+const managedAccountChunk = (await get(`/${managedAccountChunkPath}`)).body
 const companyBackupChunkPath = /assets\/CompanyBackupPanel-[A-Za-z0-9_-]+\.js/.exec(settingsChunk)?.[0]
 if (!companyBackupChunkPath) throw new Error('company_backup_chunk_missing')
 const companyBackupChunk = (await get(`/${companyBackupChunkPath}`)).body
@@ -243,6 +246,9 @@ for (const required of ['Premium pilot', 'Your business context, remembered.', '
 }
 for (const required of ['Open your company.', 'Sign in once. SuperMega finds the companies assigned to you.', 'Use your work account.', 'No workspace code or technical setup is required.', 'Only active companies assigned to this account are shown.', 'Find my company', 'Open company', 'Open free workspace', 'Request managed activation']) {
   if (!managedLoginChunk.includes(required)) throw new Error(`missing_live_managed_login_context:${required}`)
+}
+for (const required of ['Recover your account.', 'Send a secure link.', 'For privacy, the result is the same whether or not the address has an account.', 'If this email belongs to a managed account, a recovery link is on its way.', 'Secure your account.', 'Secure link confirmed', 'Set your password.', 'Save password and continue', 'Request a new link', 'Only active companies assigned to this named account are shown.']) {
+  if (!managedAccountChunk.includes(required)) throw new Error(`missing_live_managed_account_context:${required}`)
 }
 for (const required of ['supermega.company_backup.v1', 'supermega.local_company_snapshot.v1', 'AES-GCM', 'PBKDF2', 'Company backup', 'Move or recover this company.', 'Customer-owned and encrypted', 'Download encrypted backup', 'Inspect backup', 'Confirm restore', 'Auth sessions, managed workspace IDs, and credentials are excluded.', 'Nothing is uploaded, sent, or written to a managed workspace.', 'Backup integrity passed.', 'previous company state was restored']) {
   if (!companyBackupCorpus.includes(required)) throw new Error(`missing_live_company_backup_context:${required}`)
