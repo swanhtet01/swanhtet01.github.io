@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react'
-import { Link, useNavigate, useOutletContext } from 'react-router'
+import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
-import { managedTrialRequestUrl, PageHeading, type RuntimeHealth } from './CoreApp'
+import { managedAccountPath, managedAccountRequestUrl, PageHeading, type RuntimeHealth } from './CoreApp'
 import {
   completeManagedWorkspaceSignIn,
   currentManagedIdentity,
@@ -14,7 +14,9 @@ import {
 
 export function ManagedLoginPage() {
   const runtime = useOutletContext<RuntimeHealth>()
+  const location = useLocation()
   const navigate = useNavigate()
+  const productIntent = new URLSearchParams(location.search).get('product')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [workspaceId, setWorkspaceId] = useState('')
@@ -73,13 +75,13 @@ export function ManagedLoginPage() {
         {directory ? <label>Company<select onChange={(event) => setWorkspaceId(event.target.value)} required value={workspaceId}>{directory.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label> : <>
           <label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
           <label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
-          <Link className="account-inline-link" to="/account/recovery">Forgot password?</Link>
+          <Link className="account-inline-link" to={managedAccountPath('/account/recovery', productIntent)}>Forgot password?</Link>
         </>}
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : directory ? 'Open company' : 'Find my company'}</button>
         {notice ? <p className="form-notice" role="status">{notice}</p> : null}
       </form> : <section className="managed-login-panel" aria-label="Managed activation unavailable">
         <div><span className="core-eyebrow">Premium activation</span><h2>Managed access is not active in this release.</h2><p>Use the complete local workspace now, or request a managed company account.</p></div>
-        <div className="managed-login-actions"><Link className="core-button primary" to="/">Open free workspace</Link><a className="core-button" href={managedTrialRequestUrl('commerce', 'managed-account')}>Request managed activation</a></div>
+        <div className="managed-login-actions"><Link className="core-button primary" to="/">Open free workspace</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request managed activation</a></div>
       </section>}
     </div>
   )
