@@ -25,6 +25,7 @@ from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import (
     InMemoryTrialStore,
     TrialPrincipal,
+    TrialState,
     TrialValidationError,
 )
 from tests.test_commerce_runtime import catalog_state, movement
@@ -469,6 +470,121 @@ class ProductionMaterialHandoffTests(unittest.TestCase):
             replay = client.post("/api/trial/v1/commands", json=issue_body)
             self.assertEqual(replay.status_code, 200)
             self.assertTrue(replay.json()["result"]["idempotent_replay"])
+
+            return_proof = action_evidence(
+                "ACT-WAREHOUSE-RETURN-API-001",
+                captured_at="2099-01-01T00:00:00.000Z",
+                actor="fabricated-return-operator",
+            )
+            returned_commerce = deepcopy(retained)
+            returned_commerce["items"][0]["onHand"] = 9
+            returned_commerce["movements"] = [
+                production_return_movement(
+                    retained["movements"][0],
+                    return_proof,
+                ),
+                *retained["movements"],
+            ]
+            returned_commerce["inventoryFoundation"] = production_returned_inventory(
+                retained["inventoryFoundation"],
+                return_proof,
+                production_quantity_milli=5_000,
+                stock_quantity=1,
+            )
+            return_evidence = {
+                "actionId": return_proof["actionId"],
+                "capturedAt": return_proof["capturedAt"],
+                "actor": principal.actor_id,
+                "reason": return_proof["reason"],
+                "evidenceReference": return_proof["evidenceReference"],
+            }
+            return_command_id = str(uuid4())
+            return_body = {
+                "command_id": return_command_id,
+                "surface": "commerce",
+                "event_type": "commerce.production_material.returned",
+                "expected_version": 3,
+                "payload": {
+                    "state": returned_commerce,
+                    "evidence": return_evidence,
+                },
+            }
+            with patch(
+                "supermega_runtime.trial_store._utc_now",
+                return_value="2026-07-24T10:05:00+00:00",
+            ):
+                returned = client.post("/api/trial/v1/commands", json=return_body)
+            self.assertEqual(returned.status_code, 200)
+            self.assertEqual(returned.json()["result"]["version"], 4)
+            retained_return = returned.json()["result"]["state"]
+            self.assertEqual(
+                retained_return["movements"][0]["actor"], principal.actor_id
+            )
+            self.assertEqual(
+                retained_return["movements"][0]["createdAt"],
+                "2026-07-24T10:05:00+00:00",
+            )
+            self.assertEqual(
+                retained_return["inventoryFoundation"]["commands"][-1]["payload"]["kind"],
+                "production_return",
+            )
+            self.assertEqual(
+                retained_return["inventoryFoundation"]["commands"][-1]["payload"]["proof"]["actor"],
+                principal.actor_id,
+            )
+            replayed_return = client.post(
+                "/api/trial/v1/commands", json=return_body
+            )
+            self.assertEqual(replayed_return.status_code, 200)
+            self.assertTrue(
+                replayed_return.json()["result"]["idempotent_replay"]
+            )
+
+            stale_proof = action_evidence(
+                "ACT-WAREHOUSE-RETURN-STALE-001",
+                captured_at="2026-07-24T10:10:00.000Z",
+                actor=principal.actor_id,
+            )
+            stale_candidate = deepcopy(retained_return)
+            stale_candidate["items"][0]["onHand"] = 10
+            stale_candidate["movements"] = [
+                production_return_movement(
+                    retained["movements"][0], stale_proof
+                ),
+                *retained_return["movements"],
+            ]
+            stale_candidate["inventoryFoundation"] = production_returned_inventory(
+                retained_return["inventoryFoundation"],
+                stale_proof,
+                production_quantity_milli=5_000,
+                stock_quantity=1,
+            )
+            production_key = (principal.workspace_id, "production")
+            retained_production_state = store._states[production_key]
+            store._states[production_key] = TrialState(
+                workspace_id=principal.workspace_id,
+                surface="production",
+                version=retained_production_state.version,
+                state=starting_workspace(target=10),
+                updated_by=retained_production_state.updated_by,
+                updated_at=retained_production_state.updated_at,
+            )
+            stale_body = {
+                "command_id": str(uuid4()),
+                "surface": "commerce",
+                "event_type": "commerce.production_material.returned",
+                "expected_version": 4,
+                "payload": {
+                    "state": stale_candidate,
+                    "evidence": stale_proof,
+                },
+            }
+            stale = client.post("/api/trial/v1/commands", json=stale_body)
+            self.assertEqual(stale.status_code, 422)
+            self.assertEqual(
+                stale.json()["detail"]["code"], "trial_validation_error"
+            )
+            store._states[production_key] = retained_production_state
 
             accepted = client.post("/api/trial/v1/commands", json=operation_body)
             self.assertEqual(accepted.status_code, 200)
