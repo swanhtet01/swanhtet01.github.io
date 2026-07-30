@@ -2413,6 +2413,46 @@ export async function saveManagedCommerceCommand(request: {
   return response.result
 }
 
+function managedProductionJobIntent(state: Record<string, unknown>, evidence: ManagedCommandEvidence) {
+  const events = Array.isArray(state.events) ? state.events : []
+  const jobs = Array.isArray(state.jobs) ? state.jobs : []
+  const event = events.find((candidate) => isRecord(candidate)
+    && candidate.kind === 'job_created'
+    && candidate.actionId === evidence.actionId
+    && typeof candidate.subjectId === 'string')
+  const job = isRecord(event)
+    ? jobs.find((candidate) => isRecord(candidate) && candidate.id === event.subjectId)
+    : null
+  if (!isRecord(job)) {
+    throw new ManagedTrialError('The managed Plant job intent could not be isolated from the reviewed action.', {
+      code: 'managed_production_job_intent_invalid',
+    })
+  }
+  if (job.shopDemandSource !== undefined) return null
+  if (typeof job.id !== 'string'
+    || typeof job.line !== 'string'
+    || typeof job.product !== 'string'
+    || typeof job.target !== 'number'
+    || !Number.isSafeInteger(job.target)
+    || job.target < 1
+    || typeof job.owner !== 'string'
+    || (job.priority !== 'urgent' && job.priority !== 'normal' && job.priority !== 'low')
+    || typeof job.dueAt !== 'string') {
+    throw new ManagedTrialError('The managed Plant job is missing required server-intent fields.', {
+      code: 'managed_production_job_intent_invalid',
+    })
+  }
+  return {
+    jobId: job.id,
+    line: job.line,
+    product: job.product,
+    target: job.target,
+    owner: job.owner,
+    priority: job.priority,
+    dueAt: job.dueAt,
+  }
+}
+
 export async function saveManagedProductionCommand(request: {
   commandId: string
   evidence: ManagedCommandEvidence
@@ -2421,6 +2461,9 @@ export async function saveManagedProductionCommand(request: {
   identity?: ManagedIdentity
   state: Record<string, unknown>
 }) {
+  const productionJobIntent = request.eventType === 'production.job.created'
+    ? managedProductionJobIntent(request.state, request.evidence)
+    : null
   const response = await authorizedRequest<{ result: ManagedProductionCommandResult }>(
     '/api/trial/v1/commands',
     {
@@ -2430,7 +2473,9 @@ export async function saveManagedProductionCommand(request: {
         surface: 'production',
         event_type: request.eventType,
         expected_version: request.expectedVersion,
-        payload: { state: request.state, evidence: request.evidence },
+        payload: productionJobIntent
+          ? { intent: productionJobIntent, evidence: request.evidence }
+          : { state: request.state, evidence: request.evidence },
       }),
     },
     true,

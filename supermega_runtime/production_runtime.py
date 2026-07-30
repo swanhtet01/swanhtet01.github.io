@@ -3909,6 +3909,73 @@ _TRANSITION_VALIDATORS: dict[
 }
 
 
+def create_production_job_from_intent(
+    current_value: Mapping[str, Any],
+    intent_value: Mapping[str, Any],
+    evidence_value: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Create one scheduled Plant job from a narrow server-owned intent."""
+
+    current = validate_production_state(current_value)
+    intent = _object(intent_value, "production job intent")
+    _exact_fields(
+        intent,
+        "production job intent",
+        required=frozenset(
+            {"jobId", "line", "product", "target", "owner", "priority", "dueAt"}
+        ),
+    )
+    evidence = _evidence(evidence_value)
+    job_id = _text(intent["jobId"], "production job intent.jobId", maximum=80)
+    line = _text(intent["line"], "production job intent.line", maximum=120)
+    product = _text(intent["product"], "production job intent.product")
+    target = _integer(intent["target"], "production job intent.target", minimum=1)
+    owner = _text(intent["owner"], "production job intent.owner", maximum=120)
+    priority = intent["priority"]
+    if not isinstance(priority, str) or priority not in _JOB_PRIORITIES:
+        raise TrialValidationError("production job intent.priority is unsupported.")
+    due_at = _timestamp(intent["dueAt"], "production job intent.dueAt")
+    if _parsed_timestamp(due_at, "production job intent.dueAt")[1] <= _parsed_timestamp(
+        evidence["capturedAt"],
+        "evidence.capturedAt",
+    )[1]:
+        raise TrialValidationError("production job intent.dueAt must remain in the future.")
+    if any(job["id"] == job_id for job in current["jobs"]):
+        raise TrialValidationError("production job intent.jobId is already in use.")
+    job = {
+        "id": job_id,
+        "line": line,
+        "product": product,
+        "target": target,
+        "output": 0,
+        "owner": owner,
+        "priority": priority,
+        "dueAt": due_at,
+    }
+    event = {
+        "id": f"EVT-{evidence['actionId']}",
+        "actionId": evidence["actionId"],
+        "createdAt": evidence["capturedAt"],
+        "actor": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "kind": "job_created",
+        "subjectId": job_id,
+        "summary": f"Created {product} job for {line}",
+        "jobPriority": priority,
+        "jobDueAt": due_at,
+        "jobOwner": owner,
+    }
+    return validate_production_state(
+        {
+            **current,
+            "revision": current["revision"] + 1,
+            "jobs": [job, *current["jobs"]],
+            "events": [event, *current["events"]],
+        }
+    )
+
+
 def reduce_production_state(
     event_type: str,
     current: Mapping[str, Any],
@@ -3926,6 +3993,15 @@ def reduce_production_state(
         return _reduce_equipment_commission(current, payload)
     if event_type == "production.equipment_maintenance_strategy.saved":
         return _reduce_equipment_maintenance_strategy(current, payload)
+    if event_type == "production.job.created" and isinstance(payload.get("intent"), Mapping):
+        payload = {
+            "state": create_production_job_from_intent(
+                current,
+                payload["intent"],
+                payload.get("evidence", {}),
+            ),
+            "evidence": payload.get("evidence"),
+        }
     next_state, evidence = _payload(payload)
     if event_type == "production.workspace.initialized":
         if dict(current):
@@ -4015,6 +4091,7 @@ __all__ = [
     "PRODUCTION_EVENTS",
     "PRODUCTION_HUMAN_EVENTS",
     "PRODUCTION_SCHEMA",
+    "create_production_job_from_intent",
     "project_production_maintenance_due_queue",
     "reduce_production_state",
     "validate_production_state",

@@ -829,6 +829,128 @@ class TrialRuntimeTests(unittest.TestCase):
         finally:
             client.close()
 
+    def test_managed_plant_job_intent_is_server_owned_scoped_and_replay_safe(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        self._provision(store)
+        store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-operator",
+            actor_kind="human",
+            capabilities=("commerce.write", "production.write", "website.write", "approvals.request"),
+        )
+        store.provision_membership(
+            workspace_id="workspace-b",
+            actor_id="actor-other",
+            actor_kind="human",
+            capabilities=("commerce.write", "production.write", "approvals.request"),
+        )
+        client = self._client(store)
+        try:
+            initialized = store.apply_command(
+                self.operator,
+                command_id=str(uuid4()),
+                surface="production",
+                event_type="production.workspace.initialized",
+                expected_version=0,
+                payload={
+                    "state": {
+                        "schema": "supermega.production.workspace.v2",
+                        "revision": 0,
+                        "jobs": [
+                            {
+                                "id": "JOB-OPENING-001",
+                                "line": "Line 01",
+                                "product": "Opening batch",
+                                "target": 100,
+                                "output": 0,
+                                "owner": "Opening owner",
+                                "priority": "normal",
+                                "dueAt": "2098-01-01T00:00:00.000Z",
+                            }
+                        ],
+                        "issues": [],
+                        "machines": [
+                            {"id": "MC-01", "name": "Mixer 01", "state": "running"}
+                        ],
+                        "events": [],
+                    },
+                    "evidence": {
+                        "actionId": "ACT-PLANT-INIT-001",
+                        "capturedAt": "2026-01-01T00:00:00.000Z",
+                        "actor": self.operator.actor_id,
+                        "reason": "Initialize the reviewed Plant workspace.",
+                        "evidenceReference": "PLANT-INIT-001",
+                    },
+                },
+            )
+            command_id = str(uuid4())
+            body = {
+                "command_id": command_id,
+                "surface": "production",
+                "event_type": "production.job.created",
+                "expected_version": initialized.version,
+                "payload": {
+                    "intent": {
+                        "jobId": "JOB-MANAGED-001",
+                        "line": "Line 02",
+                        "product": "Premium batch",
+                        "target": 750,
+                        "owner": "Production lead",
+                        "priority": "urgent",
+                        "dueAt": "2099-01-01T00:00:00.000Z",
+                    },
+                    "evidence": {
+                        "actionId": "ACT-PLANT-JOB-001",
+                        "capturedAt": "1970-01-01T00:00:00.000Z",
+                        "actor": self.operator.actor_id,
+                        "reason": "Production plan reviewed by the operator.",
+                        "evidenceReference": "PLANT-JOB-MANAGED-001",
+                    },
+                },
+            }
+            created = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=body,
+            )
+            self.assertEqual(created.status_code, 200, created.text)
+            result = created.json()["result"]
+            job = result["state"]["jobs"][0]
+            event = result["state"]["events"][0]
+            self.assertEqual(job["id"], "JOB-MANAGED-001")
+            self.assertEqual(job["output"], 0)
+            self.assertEqual(job["target"], 750)
+            self.assertEqual(event["actor"], self.operator.actor_id)
+            self.assertEqual(event["jobOwner"], "Production lead")
+            self.assertNotEqual(event["createdAt"], "1970-01-01T00:00:00.000Z")
+
+            replay = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=body,
+            )
+            self.assertEqual(replay.status_code, 200, replay.text)
+            self.assertTrue(replay.json()["result"]["idempotent_replay"])
+
+            changed = deepcopy(body)
+            changed["payload"]["intent"]["target"] = 751
+            conflict = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=changed,
+            )
+            self.assertEqual(conflict.status_code, 409)
+            self.assertEqual(conflict.json()["detail"]["code"], "trial_idempotency_conflict")
+
+            other = client.get(
+                "/api/trial/v1/bootstrap",
+                headers=self._headers("other-operator-session"),
+            )
+            self.assertEqual(other.status_code, 200)
+            self.assertEqual(other.json()["states"]["production"]["state"], {})
+        finally:
+            client.close()
+
     def test_retained_website_source_preserves_exact_command_replay_only(self) -> None:
         source = {
             "fingerprint": "web-1234abcd",
