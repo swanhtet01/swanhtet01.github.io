@@ -840,20 +840,26 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         <div className="catalog-import-intro">
           <div>
             <span className="core-eyebrow">Smart import</span>
-            <h3>Upload a CSV</h3>
-            <p>{object.description} SuperMega matches clear columns and asks before using anything uncertain.</p>
+            <h3>Import existing {object.label.toLowerCase()}</h3>
+            <p>Choose a CSV or try the sample. SuperMega matches columns, shows only the fixes, and asks once before writing.</p>
           </div>
           <div className="catalog-import-file-actions">
             <label htmlFor={`client-import-${product}`}>Choose your CSV<input accept=".csv,text/csv" disabled={state.busy} id={`client-import-${product}`} onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void chooseFile(file) }} type="file" /></label>
-            <div className="catalog-import-template-actions"><button className="core-button" disabled={state.busy} onClick={previewSample} type="button">Try sample</button><button className="core-button" disabled={state.busy} onClick={downloadTemplate} type="button">Download template</button><button className="core-button" disabled={state.busy} onClick={downloadChecklist} type="button">Data checklist</button></div>
+            <button className="core-button" disabled={state.busy} onClick={previewSample} type="button">Try sample</button>
           </div>
         </div>
-        <div aria-label={`${productName} data checklist`} className="catalog-import-checklist">
-          <div><span className="core-eyebrow">What to prepare</span><strong>{object.label}</strong><small>{object.maximumRows} rows per reviewed import. {object.activationBoundary}</small></div>
-          <div className="catalog-import-checklist-grid">
-            {checklist.map((row) => <span data-required={row.required ? 'true' : 'false'} key={row.field}><small>{row.required ? 'Required' : 'Optional'} / {row.kind}</small><b>{row.field}</b><em>{row.acceptedHeaders.join(', ')}</em><code>{row.example || '-'}</code></span>)}
+        <details className="catalog-import-help">
+          <summary><span>Need a template?</span><small>Download the CSV and field guide</small></summary>
+          <div className="catalog-import-help-body">
+            <div className="catalog-import-template-actions"><button className="core-button" disabled={state.busy} onClick={downloadTemplate} type="button">Download CSV template</button><button className="core-button" disabled={state.busy} onClick={downloadChecklist} type="button">Download field guide</button></div>
+            <div aria-label={`${productName} data checklist`} className="catalog-import-checklist">
+              <div><strong>{object.label}</strong><small>Up to {object.maximumRows} rows per reviewed import. {object.activationBoundary}</small></div>
+              <div className="catalog-import-checklist-grid">
+                {checklist.map((row) => <span data-required={row.required ? 'true' : 'false'} key={row.field}><small>{row.required ? 'Required' : 'Optional'} / {row.kind}</small><b>{row.field}</b><em>{row.acceptedHeaders.join(', ')}</em><code>{row.example || '-'}</code></span>)}
+              </div>
+            </div>
           </div>
-        </div>
+        </details>
         <p className="catalog-import-boundary">{localAppliedIsCurrent && state.localApplied
           ? `${state.localApplied.created} ${localRecordLabel} were added and ${state.localApplied.alreadyPresent} were already current. Your source CSV was not retained or sent to AI.`
           : appliedIsCurrent && state.applied
@@ -861,30 +867,35 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           : managedIdentity
           ? `Your CSV stays in this tab. Only prepared rows are checked with ${managedIdentity.workspaceId}; nothing is written until you confirm the import.`
           : `Your CSV stays in this browser. Nothing is sent to AI or added to ${productName} while you review it.`}</p>
-        <div aria-label={`${productName} import autopilot`} className="catalog-import-autopilot">
-          <div><strong>Import autopilot</strong><small>{importStageMessage}</small></div>
+        <div aria-label={`${productName} import next step`} className="catalog-import-next-step">
+          <div><span className="core-eyebrow">Next</span><strong>{importCoachAction}</strong><small>{importStageMessage}</small></div>
           <div className="catalog-import-stage-list">
             {importStageRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
           </div>
         </div>
-        <div aria-label={`${productName} import coach`} className="catalog-import-coach">
-          <div><span className="core-eyebrow">Import coach</span><strong>{importCoachAction}</strong><small>{importCoachReason}</small></div>
-          <div className="catalog-import-coach-list">
-            {importCoachRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
+        {state.preview ? <details className="catalog-import-advanced">
+          <summary><span>Import details</span><small>Controls, ownership, and handoff</small></summary>
+          <div className="catalog-import-advanced-body">
+            <div aria-label={`${productName} import coach`} className="catalog-import-coach">
+              <div><strong>{importCoachAction}</strong><small>{importCoachReason}</small></div>
+              <div className="catalog-import-coach-list">
+                {importCoachRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
+              </div>
+            </div>
+            <div aria-label={`${productName} activation handoff`} className="catalog-import-handoff">
+              <div><strong>{activationHandoffAction}</strong><small>{activationHandoffReason}</small></div>
+              <div className="catalog-import-handoff-list">
+                {activationHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
+              </div>
+            </div>
+            {provisioningPlan ? <div aria-label={`${productName} managed provisioning plan`} className="catalog-import-handoff">
+              <div><strong>{provisioningPlan.next_step}</strong><small>No customer message, payment, domain publish, or scheduler action is allowed from this validation.</small></div>
+              <div className="catalog-import-handoff-list">
+                {provisioningPlanRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
+              </div>
+            </div> : null}
           </div>
-        </div>
-        <div aria-label={`${productName} activation handoff`} className="catalog-import-handoff">
-          <div><span className="core-eyebrow">Activation handoff</span><strong>{activationHandoffAction}</strong><small>{activationHandoffReason}</small></div>
-          <div className="catalog-import-handoff-list">
-            {activationHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
-          </div>
-        </div>
-        {provisioningPlan ? <div aria-label={`${productName} managed provisioning plan`} className="catalog-import-handoff">
-          <div><span className="core-eyebrow">Provisioning plan</span><strong>{provisioningPlan.next_step}</strong><small>No browser storage, customer message, payment, domain publish, or scheduler autopilot is allowed from this validation.</small></div>
-          <div className="catalog-import-handoff-list">
-            {provisioningPlanRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
-          </div>
-        </div> : null}
+        </details> : null}
         {state.busy ? <p className="form-notice" role="status">Matching columns and checking every row...</p> : null}
         {state.validating ? <p className="form-notice" role="status">Checking the prepared import with your workspace...</p> : null}
         {state.applying ? <p className="form-notice" role="status">{managedActivation?.progressLabel ?? 'Confirming the import...'}</p> : null}
@@ -894,12 +905,12 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             <div><strong>{state.preview.sourceName}</strong><small>{state.preview.totals.rows} rows found, {matchedFieldCount} of {state.preview.fields.length} columns matched</small></div>
             <span className={`status-pill ${appliedIsCurrent || localAppliedIsCurrent || validationIsCurrent || state.preview.readyForStaging ? 'approved' : 'pending'}`}>{appliedIsCurrent || localAppliedIsCurrent ? 'Applied' : validationIsCurrent ? 'Server checked' : state.preview.readyForStaging ? 'Ready to prepare' : 'Review needed'}</span>
           </div>
-          <div aria-label={`${productName} import repair queue`} className="catalog-import-repair">
+          {!state.preview.readyForStaging ? <div aria-label={`${productName} import repair queue`} className="catalog-import-repair">
             <div><span className="core-eyebrow">Repair queue</span><strong>{state.preview.readyForStaging ? 'No blocking fixes' : 'Clean this file'}</strong><small>{importRepairMessage}</small></div>
             <div className="catalog-import-repair-list">
               {importRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
             </div>
-          </div>
+          </div> : null}
           <details className="catalog-import-mapping-review" open={mappingNeedsReview || undefined}>
             <summary><span>Column matching</span><small>{mappingNeedsReview ? 'Needs your review' : `${matchedFieldCount} of ${state.preview.fields.length} matched`}</small></summary>
             <fieldset className="catalog-import-mapping" disabled={state.busy}>
@@ -912,12 +923,12 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
               })}
             </fieldset>
           </details>
-          <div className="catalog-import-totals">
+          {!state.preview.readyForStaging ? <div className="catalog-import-totals">
             <span><strong>{state.preview.totals.rows}</strong><small>Rows</small></span>
             <span data-result="ready"><strong>{state.preview.totals.ready}</strong><small>Ready</small></span>
             <span data-result="issue"><strong>{state.preview.totals.issueRows}</strong><small>Fix first</small></span>
             <span><strong>{state.preview.totals.duplicates}</strong><small>Duplicates</small></span>
-          </div>
+          </div> : null}
           {state.preview.fileIssues.length ? <ul className="catalog-import-file-issues">{state.preview.fileIssues.map((issue) => <li key={`${issue.code}-${issue.field}`}>{issue.message}</li>)}</ul> : null}
           <details className="catalog-import-row-review" open={state.preview.totals.issueRows > 0 || undefined}>
             <summary><span>Review rows</span><small>{state.preview.totals.issueRows ? `${state.preview.totals.issueRows} need attention` : 'All rows passed'}</small></summary>
@@ -931,7 +942,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.validation.stagingPackage.rows.length} {managedActivation.reviewLabel} and approve this import.</span></label>
             <div className="form-actions"><button className="core-button primary" disabled={!canApplyManagedImport} onClick={() => void activateManagedImport()} type="button">{state.applying ? managedActivation.busyLabel : `Import ${state.validation.stagingPackage.rows.length} ${managedActivation.reviewLabel}`}</button></div>
           </> : null}
-          {localActivationAvailable && state.preview.readyForStaging && !localAppliedIsCurrent ? <>
+          {localActivationAvailable && importContextReady && state.preview.readyForStaging && !localAppliedIsCurrent ? <>
             <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.preview.totals.ready} {localRecordLabel} and approve adding them to this browser's {productName} demo.</span></label>
             <div className="form-actions"><button className="core-button primary" disabled={!canApplyLocalImport} onClick={() => void activateLocalImport()} type="button">{state.applying ? `Adding ${productName.toLowerCase()} records...` : `Add ${state.preview.totals.ready} ${localActionLabel}`}</button></div>
           </> : null}
@@ -949,7 +960,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
                 : 'Ready to prepare an accountable import file.'}</small>
               {appliedIsCurrent && state.applied ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.applied.receipt.activation.package_digest.slice(7, 19).toUpperCase()} / revision {state.applied.receipt.result.version} / idempotent command confirmed</p></details> : validationIsCurrent && state.validation ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.validation.receipt.package_digest.slice(7, 19).toUpperCase()} / zero records written / {object.activationBoundary}</p></details> : null}
             </div>
-            <div className="form-actions"><button className="core-button" disabled={state.applying} onClick={clearPreview} type="button">Clear</button>{localAppliedIsCurrent ? <Link className="core-button primary" to={localOpenPath}>Open {productName}</Link> : !appliedIsCurrent && !(validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation) ? <button className="core-button" disabled={!canPrepareImport} onClick={() => void validateOrDownloadStagingPackage()} type="button">{state.validating ? 'Checking...' : !importContextReady ? 'Add workspace and owner' : validationIsCurrent ? 'Download checked file' : managedIdentity ? 'Check with workspace' : 'Download prepared file'}</button> : null}</div>
+            <div className="form-actions"><button className="core-button" disabled={state.applying} onClick={clearPreview} type="button">Clear</button>{localAppliedIsCurrent ? <Link className="core-button primary" to={localOpenPath}>Open {productName}</Link> : !localActivationAvailable && !appliedIsCurrent && !(validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation) ? <button className="core-button" disabled={!canPrepareImport} onClick={() => void validateOrDownloadStagingPackage()} type="button">{state.validating ? 'Checking...' : !importContextReady ? 'Add workspace and owner' : validationIsCurrent ? 'Download checked file' : managedIdentity ? 'Check with workspace' : 'Download prepared file'}</button> : null}</div>
           </div>
         </div> : null}
       </div>

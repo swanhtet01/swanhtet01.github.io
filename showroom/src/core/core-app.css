@@ -1107,6 +1107,14 @@ textarea { min-height: 72px; resize: vertical; }
 .catalog-import-file-actions label { display: grid; gap: 4px; color: var(--core-muted); font-size: 11px; font-weight: 700; }
 .catalog-import-file-actions input { width: min(270px,100%); min-height: 44px; border: 1px solid var(--core-line-strong); border-radius: 5px; padding: 6px; background: #fff; color: var(--core-muted); font-size: 11px; }
 .catalog-import-file-actions input::file-selector-button { min-height: 30px; margin-right: 8px; border: 0; border-radius: 4px; padding: 0 10px; background: var(--core-green-soft); color: var(--core-ink); font: inherit; font-weight: 760; cursor: pointer; }
+.catalog-import-help, .catalog-import-advanced { border: 1px solid var(--core-line); border-radius: 8px; background: #fff; }
+.catalog-import-help > summary, .catalog-import-advanced > summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 11px; cursor: pointer; color: var(--core-ink); font-size: 11px; font-weight: 760; }
+.catalog-import-help > summary small, .catalog-import-advanced > summary small { color: var(--core-muted); font-size: 9px; font-weight: 600; }
+.catalog-import-help-body, .catalog-import-advanced-body { display: grid; gap: 9px; border-top: 1px solid var(--core-line); padding: 10px; }
+.catalog-import-next-step { display: grid; grid-template-columns: minmax(0,1fr) minmax(320px,.9fr); gap: 12px; align-items: center; border: 1px solid rgba(44,103,91,.28); border-radius: 8px; padding: 10px; background: var(--core-green-soft); }
+.catalog-import-next-step > div:first-child { min-width: 0; display: grid; gap: 3px; }
+.catalog-import-next-step strong { color: var(--core-ink); font-size: 12px; }
+.catalog-import-next-step small { color: var(--core-muted); font-size: 10px; line-height: 1.45; }
 .catalog-import-checklist { display: grid; gap: 9px; border: 1px solid var(--core-line); border-radius: 8px; padding: 10px; background: #fff; }
 .catalog-import-checklist > div:first-child { min-width: 0; display: grid; gap: 3px; }
 .catalog-import-checklist strong { color: var(--core-ink); font-size: 12px; }
@@ -1649,7 +1657,7 @@ textarea { min-height: 72px; resize: vertical; }
   .stock-receipt-editor .core-button { width: 100%; }
   .purchase-order-list article { grid-template-columns: minmax(0,1fr) auto; gap: 8px 12px; padding: 10px 0; }
   .purchase-order-list article > button, .purchase-order-list article > .purchase-order-closed { grid-column: 1 / -1; justify-self: start; }
-  .catalog-import-intro, .catalog-import-footer, .catalog-import-autopilot, .catalog-import-coach, .catalog-import-handoff, .catalog-import-repair { grid-template-columns: 1fr; }
+  .catalog-import-intro, .catalog-import-footer, .catalog-import-autopilot, .catalog-import-next-step, .catalog-import-coach, .catalog-import-handoff, .catalog-import-repair { grid-template-columns: 1fr; }
   .setup-launch-pack-rows { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .setup-launch-pack-rows span:nth-child(2n) { border-right: 0; }
   .setup-launch-pack-rows span:nth-child(-n+2) { border-bottom: 1px solid var(--core-line); }

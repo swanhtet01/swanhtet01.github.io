@@ -551,7 +551,7 @@ export function EcommerceBuyingWorkspace({
   }
 
   function quoteExpiredWithoutOrder(entry: CommerceStorefrontOrderTimelineEntry) {
-    return !entry.order && Date.parse(entry.request.quote.expiresAt) <= quoteClock
+    return !entry.order && 'quote' in entry.request && Date.parse(entry.request.quote.expiresAt) <= quoteClock
   }
 
   function openReturnRequest(entry: CommerceStorefrontOrderTimelineEntry) {
