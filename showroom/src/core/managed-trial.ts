@@ -2167,9 +2167,7 @@ async function initializeManagedAccountSetup(): Promise<ManagedAccountSetup> {
     if (error || !validNamedUserSession(data.session)) throw accountLinkError()
     session = data.session
   } else {
-    const { data, error } = await supabase.auth.getSession()
-    if (error || !validNamedUserSession(data.session)) throw accountLinkError()
-    session = data.session
+    throw accountLinkError()
   }
 
   forgetWorkspace()

@@ -1987,6 +1987,12 @@ if (!appSource.includes("lazy(() => import('./core/ManagedAccountPage')")
   || !managedTrialSource.includes('pendingManagedAccountSetup')
   || !managedTrialSource.includes('rawFragment.length > 40000')
   || !managedTrialSource.includes('supabase.auth.updateUser({ password })')) fail('managed_account_lifecycle_missing')
+const managedAccountInitialization = managedTrialSource.slice(
+  managedTrialSource.indexOf('async function initializeManagedAccountSetup()'),
+  managedTrialSource.indexOf('export function beginManagedAccountSetup()'),
+)
+if (!managedAccountInitialization.includes('} else {\n    throw accountLinkError()')
+  || managedAccountInitialization.includes('supabase.auth.getSession()')) fail('managed_account_setup_accepts_existing_session_without_callback')
 if (!coreShellSource.includes("const sensitiveAccountRoute = location.pathname.startsWith('/account/')")
   || !coreShellSource.includes('const route = sensitiveAccountRoute ? location.pathname')
   || !coreShellSource.includes("detail: sensitiveAccountRoute ? 'Managed account access viewed.'")) fail('managed_account_callback_can_enter_behavior_memory')
