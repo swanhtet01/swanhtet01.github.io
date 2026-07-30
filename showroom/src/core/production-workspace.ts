@@ -1704,17 +1704,19 @@ function shiftCloseSummary(
 export function currentProductionShiftClose(state: ProductionState, shiftRef?: string) {
   const current = validateProductionState(state)
   const event = current.events[0]
+  const closeShiftRef = event?.shiftRef
   if (!event
     || event.kind !== 'shift_closed'
+    || typeof closeShiftRef !== 'string'
     || event.sourceRevision !== current.revision - 1
-    || (shiftRef !== undefined && event.shiftRef !== shiftRef)) return null
+    || (shiftRef !== undefined && closeShiftRef !== shiftRef)) return null
   const sourceState = validateProductionState({
     ...current,
     revision: current.revision - 1,
     events: current.events.slice(1),
   })
   if (`sha256:${sha256Hex(productionCanonical(sourceState))}` !== event.sourceDigest) return null
-  const handoff = buildProductionShiftHandoff(sourceState, event.shiftRef)
+  const handoff = buildProductionShiftHandoff(sourceState, closeShiftRef)
   if (!handoff
     || handoff.sourceRevision !== event.sourceRevision
     || handoff.shiftOutput.goodUnits !== event.goodUnits
