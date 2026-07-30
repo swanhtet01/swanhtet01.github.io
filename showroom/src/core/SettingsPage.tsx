@@ -8,6 +8,8 @@ import {
 } from '../products/product-handoff'
 import { COMMERCE_KEY, LEGACY_COMMERCE_KEYS } from './commerce-workspace'
 import { BEHAVIOR_TRAIL_KEY, readBehaviorTrail, recordBehaviorSignal, summarizeBehaviorPreferences } from './behavior-trail'
+import { ManagedContextConsent } from './ManagedContextConsent'
+import { buildManagedContextProfileRequest, managedContextProductLabel } from './managed-context'
 import {
   ACTION_KEY,
   APPROVAL_KEY,
@@ -367,6 +369,12 @@ export function SettingsPage() {
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
   const managedTrialRequestFilename = `supermega-managed-trial-request-${evidenceDate}.json`
   const managedApprovalRequests = approvals.map(toManagedApprovalRequest).filter((request): request is NonNullable<typeof request> => Boolean(request))
+  const reviewedDecisionCount = approvals.filter((approval) => (
+    (approval.status === 'approved' || approval.status === 'declined')
+    && approval.decidedActorKind === 'human'
+    && Boolean(approval.decidedBy?.trim())
+    && Boolean(approval.decisionNote?.trim())
+  )).length
   const localProductRecords = collectLocalProductRecords(window.localStorage)
   const localRecordCount = Object.keys(localProductRecords).length
   const localProductRecordKeys = Object.keys(localProductRecords)
@@ -402,13 +410,13 @@ export function SettingsPage() {
   const learningRows = [
     ['Data', preparedRecordCount ? `${preparedRecordCount} records` : 'Import'],
     ['Trust', `${runtime.coverageScore}%`],
-    ['Review', `${managedApprovalRequests.length || approvals.length} packets`],
+    ['Review', `${approvals.length} packets`],
     ['Behavior', behaviorSignalCount ? `${behaviorSignalCount} signals` : 'Local only'],
   ] as const
   const learningPlanRows = [
     ['Source graph', preparedRecordCount ? `${preparedRecordCount} local records prepared` : 'No local records yet', preparedRecordCount ? 'Exported evidence keeps the browser-local source package for managed validation.' : 'Use Shop, Plant, Website, Ecommerce, or import setup to create the first record.'],
     ['Behavior trail', behaviorSignalCount ? `${behaviorSignalCount} local signals` : 'No local signals yet', behaviorSignalCount ? 'Premium can rank next actions from reviewed workspace behavior after import.' : 'Open Shop, Plant, Website, Ecommerce, or setup so the system can capture local activity history.'],
-    ['Decision memory', managedApprovalRequests.length || approvals.length ? `${managedApprovalRequests.length || approvals.length} review packets` : 'No review packets yet', managedApprovalRequests.length || approvals.length ? 'Human approvals become reusable context after managed activation.' : 'Approve or decline at least one prepared decision before relying on AI context.'],
+    ['Decision memory', reviewedDecisionCount ? `${reviewedDecisionCount} reviewed decisions` : 'No reviewed decisions yet', reviewedDecisionCount ? 'Named human decisions can become reusable context after managed activation.' : 'Approve or decline at least one prepared decision before relying on AI context.'],
     ['Owner gate', isPilotReady ? 'Ready for managed review' : `${completion}% trial evidence`, isPilotReady ? 'Export evidence, then request managed trial; writes stay locked until server controls pass.' : 'Complete baseline, target, authority boundary, and acceptance evidence first.'],
   ] as const
   const agentPlanRows = [
@@ -421,9 +429,9 @@ export function SettingsPage() {
   const aiContextQualityRows = [
     ['Source data', preparedRecordCount ? `${preparedRecordCount} prepared` : 'Need records', preparedRecordCount ? 'Local product records are ready for managed validation.' : 'Import or use a product workspace before premium learning.'],
     ['Behavior', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} signals` : 'Need usage', agentBehaviorSignals.length ? 'Agent queue views and choices can teach ranking after approval.' : 'Open and choose product agent jobs to create behavior memory.'],
-    ['Decisions', managedApprovalRequests.length || approvals.length ? `${managedApprovalRequests.length || approvals.length} reviewed` : 'Need review', managedApprovalRequests.length || approvals.length ? 'Human decisions can become reusable context.' : 'Record at least one approval or decline before learning from decisions.'],
+    ['Decisions', reviewedDecisionCount ? `${reviewedDecisionCount} reviewed` : 'Need review', reviewedDecisionCount ? 'Named human decisions can become reusable context.' : 'Record at least one approval or decline before learning from decisions.'],
     ['Controls', runtime.writesReady && evidencePlanReady ? 'Ready' : 'Locked', runtime.writesReady && evidencePlanReady ? 'Managed writes and evidence gates are ready.' : 'Managed activation gates must pass before AI can learn from customer data.'],
-    ['Next handoff', preparedRecordCount && agentBehaviorSignals.length && (managedApprovalRequests.length || approvals.length) ? 'Export context' : 'Collect proof', 'Export stays browser-local until the owner requests managed activation.'],
+    ['Next handoff', preparedRecordCount && agentBehaviorSignals.length && reviewedDecisionCount ? 'Export context' : 'Collect proof', 'Export stays browser-local until the owner requests managed activation.'],
   ] as const
   const aiProductSourceRows = [
     ['Shop', commerce.items.length || commerce.orders.length ? `${commerce.items.length} SKU / ${commerce.orders.length} orders` : 'Need Shop use', 'Premium can learn stock, order, payment, purchase, and counter patterns after managed import.'],
@@ -468,13 +476,24 @@ export function SettingsPage() {
       },
     ],
     behaviorSignals: agentBehaviorSignals.length,
-    decisionPackets: managedApprovalRequests.length || approvals.length,
+    decisionPackets: reviewedDecisionCount,
     allowedUses: ['summarize_product_sources', 'rank_product_next_actions', 'prepare_import_mapping', 'draft_operator_recommendations'],
     forbiddenActions: ['customer_message_send', 'payment_capture', 'stock_move', 'production_write', 'domain_publish', 'crm_write', 'model_training_without_owner_approval'],
     activationRequired: true,
   }
   const selectedProductSource = aiProductSourceMap.products.find((product) => product.product === selectedProduct.name)
-  const contextHandoffReady = preparedRecordCount > 0 && agentBehaviorSignals.length > 0 && (managedApprovalRequests.length > 0 || approvals.length > 0)
+  const contextHandoffReady = preparedRecordCount > 0 && agentBehaviorSignals.length > 0 && reviewedDecisionCount > 0
+  const managedContextProduct = setup.product === 'commerce' ? 'shop' : setup.product === 'production' ? 'plant' : setup.product
+  const managedContextPackage = contextHandoffReady
+    ? buildManagedContextProfileRequest({
+        product: managedContextProduct,
+        templateId: selectedTemplate.id,
+        selectedProductRecords: preparedRecordCount,
+        behaviorSignals: agentBehaviorSignals.length,
+        reviewedDecisions: reviewedDecisionCount,
+        behaviorPreference,
+      })
+    : null
   const contextHandoffManifest = {
     contract: 'supermega.ai_context_handoff.v1',
     version: 1,
@@ -491,7 +510,7 @@ export function SettingsPage() {
       storagePackages: localRecordCount,
       selectedProductRecords: selectedProductRecordCount,
       behaviorSignals: agentBehaviorSignals.length,
-      approvalPackets: managedApprovalRequests.length || approvals.length,
+      approvalPackets: reviewedDecisionCount,
       accountableActions: actions.length,
     },
     productSourceMap: aiProductSourceMap,
@@ -511,7 +530,7 @@ export function SettingsPage() {
   const aiContextReadinessGates = [
     ['Records', preparedRecordCount > 0, preparedRecordCount ? `${preparedRecordCount} local records prepared.` : 'Use or import one product workspace first.'],
     ['Behavior', agentBehaviorSignals.length > 0, agentBehaviorSignals.length ? `${agentBehaviorSignals.length} agent queue signals captured.` : 'Open product queues and choose a recommended action.'],
-    ['Decisions', managedApprovalRequests.length + approvals.length > 0, managedApprovalRequests.length || approvals.length ? `${managedApprovalRequests.length || approvals.length} human review packets ready.` : 'Record one approval or decline before premium learns from decisions.'],
+    ['Decisions', reviewedDecisionCount > 0, reviewedDecisionCount ? `${reviewedDecisionCount} named human decision${reviewedDecisionCount === 1 ? '' : 's'} ready.` : 'Record one approval or decline before premium learns from decisions.'],
     ['Controls', runtime.writesReady && evidencePlanReady, runtime.writesReady && evidencePlanReady ? 'Managed evidence gates are ready.' : 'Managed Postgres, identity, audit, and write gates remain locked.'],
     ['Products', aiProductSourceMap.products.some((product) => product.prepared), aiProductSourceMap.products.some((product) => product.prepared) ? 'At least one product has a usable source package.' : 'Create Shop, Plant, Website, or Ecommerce evidence.'],
     ['Owner setup', Boolean(setup.savedAt), setup.savedAt ? 'Trial plan is saved for handoff.' : 'Save the trial plan before requesting managed activation.'],
@@ -522,7 +541,7 @@ export function SettingsPage() {
     ? 'Create or import product records'
     : !agentBehaviorSignals.length
       ? 'Use agent queues'
-      : !(managedApprovalRequests.length || approvals.length)
+      : !reviewedDecisionCount
         ? 'Record owner decision'
         : !setup.savedAt
           ? 'Save trial plan'
@@ -536,7 +555,7 @@ export function SettingsPage() {
     ['Behavior', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} signals` : 'Need usage', aiContextReadinessGates[1][2]],
     ['Controls', runtime.writesReady && evidencePlanReady ? 'Ready' : 'Locked', aiContextReadinessGates[3][2]],
   ] as const
-  const provisioningReady = isPilotReady && preparedRecordCount > 0 && managedApprovalRequests.length + approvals.length > 0
+  const provisioningReady = isPilotReady && preparedRecordCount > 0 && reviewedDecisionCount > 0
   const managedWorkspaceProvisioningPacket = {
     contract: 'supermega.managed_workspace_provisioning.v1',
     version: 1,
@@ -553,7 +572,7 @@ export function SettingsPage() {
       storagePackages: localRecordCount,
       selectedProductRecords: selectedProductRecordCount,
       productSources: Object.keys(localProductRecords),
-      approvalPackets: managedApprovalRequests.length || approvals.length,
+      approvalPackets: reviewedDecisionCount,
       behaviorSignals: behaviorSignalCount,
     },
     requiredControls: ['dedicated_postgres_rls', 'trusted_identity_gateway', 'private_storage', 'audit_trail', 'owner_write_approvals', 'scheduler_budget_limits'],
@@ -566,7 +585,7 @@ export function SettingsPage() {
       ['Managed identity', runtime.authReady ? 'Ready' : 'Blocked', 'Verify trusted gateway or Supabase named-user identity before import approval.'] as const,
       ['Private workspace schema', runtime.enterpriseDbReady ? 'Ready' : 'Blocked', 'Apply the private trial schema with a non-BYPASSRLS runtime role.'] as const,
       ['Zero-write validation', runtime.auditReady ? 'Ready' : 'Blocked', 'Run the managed import validation endpoint and prove external_writes_performed is false.'] as const,
-      ['Owner approval', managedApprovalRequests.length || approvals.length ? 'Ready' : 'Blocked', 'Capture a named owner approval before any import apply request.'] as const,
+      ['Owner approval', reviewedDecisionCount ? 'Ready' : 'Blocked', 'Capture a named owner approval before any import apply request.'] as const,
       ['Atomic adapter', runtime.writesReady ? 'Ready' : 'Blocked', 'Confirm the product adapter can create one idempotent managed revision.'] as const,
       ['Durable revision', runtime.writesReady ? 'Ready' : 'Blocked', 'Read back workspace state after apply and compare the revision digest.'] as const,
     ]
@@ -583,7 +602,7 @@ export function SettingsPage() {
   const provisioningRows = [
     ['Tenant', managedWorkspaceProvisioningPacket.tenantMode === 'managed_ready' ? 'Ready' : 'Required', runtime.requirements[0] ?? 'Managed controls must be verified before customer data import.'],
     ['Data package', `${preparedRecordCount} records`, preparedRecordCount ? 'Exported evidence can seed a reviewed managed workspace.' : 'Import or use a product workspace before provisioning.'],
-    ['Roles', managedApprovalRequests.length + approvals.length ? `${managedApprovalRequests.length + approvals.length} reviewed` : 'Need owner review', 'Owner decisions define who can approve writes after activation.'],
+    ['Roles', reviewedDecisionCount ? `${reviewedDecisionCount} reviewed` : 'Need owner review', 'Named owner decisions define who can approve writes after activation.'],
     ['Controls', runtime.writesReady && evidencePlanReady ? 'Ready' : 'Locked', 'RLS, identity, storage privacy, audit, write approvals, and scheduler budgets are required.'],
     ['First safe step', provisioningReady ? 'Create tenant' : 'Finish proof', managedWorkspaceProvisioningPacket.firstSafeActivation],
   ] as const
@@ -620,7 +639,7 @@ export function SettingsPage() {
     localRecords: preparedRecordCount,
     storagePackages: localRecordCount,
     selectedProductRecords: selectedProductRecordCount,
-    approvalPackets: managedApprovalRequests.length || approvals.length,
+    approvalPackets: reviewedDecisionCount,
     behaviorSignals: behaviorSignalCount,
     behaviorPreference,
     launchPackManifest,
@@ -672,7 +691,7 @@ export function SettingsPage() {
     ? 'Create or import product records'
     : !agentBehaviorSignals.length
       ? 'Use agent queues'
-      : !(managedApprovalRequests.length || approvals.length)
+      : !reviewedDecisionCount
         ? 'Record owner decision'
         : !setup.savedAt
           ? 'Save trial plan'
@@ -704,7 +723,7 @@ export function SettingsPage() {
       selectedProductRecordCounts: selectedProductSource?.records ?? {},
       accountableActions: actions.length,
       behaviorSignals: agentBehaviorSignals.length,
-      decisionPackets: managedApprovalRequests.length || approvals.length,
+      decisionPackets: reviewedDecisionCount,
     },
     ownerBehavior: {
       contract: behaviorPreference.contract,
@@ -733,7 +752,7 @@ export function SettingsPage() {
   const aiMemoryRows = [
     ['Sources', aiMemorySourceRecordCount ? `${aiMemorySourceRecordCount} prepared` : 'Start using a product', aiMemorySourceRecordCount ? `${selectedProduct.name} and shared local evidence are summarized without raw records.` : 'Create or import product evidence to teach the operator.'],
     ['Behavior', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} signals` : 'No pattern yet', topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.detail}` : 'Choose a recommended product action to start owner preference memory.'],
-    ['Decisions', managedApprovalRequests.length || approvals.length ? `${managedApprovalRequests.length || approvals.length} reviewed` : 'Needs one review', 'Only accountable owner decisions can become reusable premium context.'],
+    ['Decisions', reviewedDecisionCount ? `${reviewedDecisionCount} reviewed` : 'Needs one review', 'Only named human approvals or declines can become reusable premium context.'],
     ['Readiness', `${aiMemoryReadinessScore}%`, aiMemoryNextMove],
   ] as const
   const aiMemoryHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(aiMemoryPreview, null, 2))}`
@@ -749,12 +768,13 @@ export function SettingsPage() {
       readinessScore: aiMemoryReadinessScore,
       sourceRecordCount: aiMemorySourceRecordCount,
       behaviorSignalCount: agentBehaviorSignals.length,
-      reviewedDecisionCount: managedApprovalRequests.length || approvals.length,
+      reviewedDecisionCount,
     }),
   }
   const premiumPilotProofKept = managedPilotRetained || managedPilotBrief?.retention === 'persisted_managed_audit'
+  const retainedOwnerProduct = managedPilotBrief?.ownerContext?.preferredProduct
   const premiumPilotRows = [
-    ['Owner pattern', topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.detail}` : 'Not learned yet', topAgentJob ? `${topAgentJob.chosenCount} reviewed choice${topAgentJob.chosenCount === 1 ? '' : 's'}.` : 'Choose a recommended product action to teach the next handoff.'],
+    ['Owner pattern', retainedOwnerProduct ? `${managedContextProductLabel(retainedOwnerProduct)} retained` : topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.detail}` : 'Not learned yet', retainedOwnerProduct ? 'Managed briefs may use this preference only after risk and evidence checks.' : topAgentJob ? `${topAgentJob.chosenCount} local choice${topAgentJob.chosenCount === 1 ? '' : 's'}.` : 'Choose a recommended product action to teach the next handoff.'],
     ['Managed account', managedIdentity?.email ?? 'Not connected', managedIdentity ? managedIdentity.workspaceId : 'Your local trial remains usable without an account.'],
     ['Approved sources', managedPilotBrief ? `${managedPilotBrief.sourceCount} managed` : preparedRecordCount ? `${preparedRecordCount} local prepared` : 'No source proof yet', managedPilotBrief ? 'Counts only; raw source records are not shown here.' : 'Connect a managed workspace to verify tenant-scoped sources.'],
     ['Pilot proof', premiumPilotProofKept ? 'Kept in audit' : managedPilotBrief ? 'Ready to keep' : 'Local preview only', premiumPilotProofKept ? 'The reviewed brief has a managed evidence receipt.' : 'No external action runs from this panel.'],
@@ -1461,6 +1481,7 @@ export function SettingsPage() {
         <div className="premium-pilot-head"><div><span className="core-eyebrow">Premium pilot</span><h2>Your business context, remembered.</h2><p>SuperMega combines approved product data and owner patterns, then prepares one next move for review.</p></div><span className={`status-pill ${premiumPilotProofKept ? 'approved' : managedPilotBrief ? 'bounded' : ''}`}>{premiumPilotProofKept ? 'proof kept' : managedPilotBrief ? 'verified' : 'local'}</span></div>
         <div className="premium-pilot-rows">{premiumPilotRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
         {managedPilotBrief ? <div className="premium-pilot-brief"><div><span className="core-eyebrow">Managed company brief</span><h3>{managedPilotBrief.title}</h3><p>{managedPilotBrief.summary}</p></div><div className="premium-pilot-next"><small>Reviewed next move</small><strong>{managedPilotBrief.nextAction.label}</strong><em>{managedPilotBrief.boundary}</em></div></div> : null}
+        <ManagedContextConsent contextPackage={managedContextPackage} identity={managedIdentity} onRetained={() => void verifyManagedPilot()} />
         {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="premium-pilot-actions"><button className="core-button" disabled={managedPilotBusy} onClick={() => void verifyManagedPilot()} type="button">{managedPilotBusy && !managedPilotBrief ? 'Verifying...' : 'Verify context'}</button>{managedPilotBrief ? <><Link className="core-button" to={managedPilotBrief.nextAction.path}>{managedPilotBrief.nextAction.label}</Link><button className="core-button primary" disabled={managedPilotBusy || premiumPilotProofKept} onClick={() => void keepManagedPilotProof()} type="button">{premiumPilotProofKept ? 'Proof kept' : managedPilotBusy ? 'Keeping...' : 'Keep pilot proof'}</button></> : null}</div> : <form className="premium-pilot-login" onSubmit={(event) => void connectManagedWorkspace(event)}><div><span className="core-eyebrow">Connect managed workspace</span><strong>Verify this company, not a generic demo.</strong></div><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label><label>Workspace ID<input maxLength={128} onChange={(event) => setManagedWorkspace(event.target.value)} placeholder="Provisioned workspace" required value={managedWorkspace} /></label><button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking...' : 'Connect and verify'}</button></form> : <div className="premium-pilot-actions"><a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed pilot</a></div>}
         {managedNotice || managedPilotNotice ? <p className="form-notice" role="status">{managedPilotNotice || managedNotice}</p> : null}
         <p className="premium-pilot-boundary">Review only. No customer send, payment, stock move, production write, domain publish, or model training runs from this pilot.</p>

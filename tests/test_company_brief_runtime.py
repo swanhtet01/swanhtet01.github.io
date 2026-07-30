@@ -9,6 +9,11 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from supermega_runtime.company_brief import build_managed_company_brief
+from supermega_runtime.managed_context import (
+    MANAGED_CONTEXT_ALLOWED_USES,
+    MANAGED_CONTEXT_FORBIDDEN_ACTIONS,
+    build_managed_context_profile,
+)
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal, TrialState
@@ -90,6 +95,45 @@ def website_state() -> dict[str, object]:
     }
 
 
+def managed_context_profile(preferred_product: str) -> dict[str, object]:
+    product = {
+        "commerce": "shop",
+        "production": "plant",
+        "website": "website",
+        "ecommerce": "ecommerce",
+    }[preferred_product]
+    template = {
+        "commerce": "social-commerce",
+        "production": "production-control",
+        "website": "business-presence",
+        "ecommerce": "social-storefront",
+    }[preferred_product]
+    return build_managed_context_profile(
+        {
+            "contract": "supermega.managed_context_profile_request.v1",
+            "version": 1,
+            "product": product,
+            "templateId": template,
+            "sourceCounts": {
+                "selectedProductRecords": 2,
+                "behaviorSignals": 2,
+                "reviewedDecisions": 1,
+            },
+            "behaviorPreference": {
+                "product": preferred_product,
+                "chosenCount": 2,
+            },
+            "allowedUses": list(MANAGED_CONTEXT_ALLOWED_USES),
+            "forbiddenActions": list(MANAGED_CONTEXT_FORBIDDEN_ACTIONS),
+            "ownerApproved": True,
+            "rawProductRecordsIncluded": False,
+            "modelTrainingAllowed": False,
+        },
+        workspace_id="workspace-a",
+        actor_id="owner-a",
+    )
+
+
 class CompanyBriefUnitTests(unittest.TestCase):
     def test_attention_ranks_validated_cross_product_state_and_exposes_no_raw_rows(self) -> None:
         brief = build_managed_company_brief(
@@ -164,6 +208,112 @@ class CompanyBriefUnitTests(unittest.TestCase):
         self.assertEqual(facts["Approval"], "Missing")
         self.assertEqual(facts["Snapshot evidence"], "Missing")
         self.assertEqual(facts["Publish gate"], "Blocked")
+
+    def test_retained_owner_context_breaks_equal_attention_ties_without_exposing_raw_rows(self) -> None:
+        profile = managed_context_profile("website")
+        tie_website = website_state()
+        tie_website["approvals"] = [{
+            "id": "approval-current",
+            "migratedFromV1": False,
+            "source": {"contentRevision": 0},
+        }]
+        with patch("supermega_runtime.company_brief.validate_website_state", return_value=tie_website):
+            brief = build_managed_company_brief(
+                workspace_id="workspace-a",
+                intent="attention",
+                states={
+                    "company": TrialState(
+                        "workspace-a",
+                        "company",
+                        1,
+                        {"tasks": [], "managedContextProfile": profile},
+                    ),
+                    "commerce": TrialState("workspace-a", "commerce", 1, commerce_state()),
+                    "website": TrialState("workspace-a", "website", 1, {"validated": "by patch"}),
+                },
+                approvals=[],
+            )
+
+        self.assertEqual(brief["nextAction"]["product"], "website")
+        self.assertEqual(brief["ownerContext"]["profileDigest"], profile["profileDigest"])
+        self.assertEqual(set(brief["ownerContext"]), {"contract", "version", "profileDigest", "preferredProduct"})
+        self.assertNotIn("Low stock item", str(brief))
+
+    def test_operational_severity_still_wins_over_retained_owner_preference(self) -> None:
+        severe_commerce = commerce_state()
+        severe_commerce["items"][0]["onHand"] = 0
+        severe_commerce["items"][1]["onHand"] = 0
+        brief = build_managed_company_brief(
+            workspace_id="workspace-a",
+            intent="attention",
+            states={
+                "company": TrialState(
+                    "workspace-a",
+                    "company",
+                    1,
+                    {"tasks": [], "managedContextProfile": managed_context_profile("production")},
+                ),
+                "commerce": TrialState("workspace-a", "commerce", 1, severe_commerce),
+                "production": TrialState("workspace-a", "production", 1, production_state()),
+            },
+            approvals=[],
+        )
+
+        self.assertEqual(brief["nextAction"]["product"], "shop")
+
+    def test_critical_plant_event_outranks_large_routine_shop_queue(self) -> None:
+        routine_shop = {
+            "items": [],
+            "orders": [
+                {"status": "confirmed", "paymentStatus": "paid", "refundStatus": "none"}
+                for _ in range(100)
+            ],
+            "storefrontRequests": [],
+        }
+        critical_plant = production_state()
+        critical_plant["machines"][0]["state"] = "stopped"
+        with patch("supermega_runtime.company_brief.validate_commerce_state", return_value=routine_shop):
+            brief = build_managed_company_brief(
+                workspace_id="workspace-a",
+                intent="attention",
+                states={
+                    "commerce": TrialState("workspace-a", "commerce", 1, {"validated": "by patch"}),
+                    "production": TrialState("workspace-a", "production", 1, critical_plant),
+                },
+                approvals=[],
+            )
+        self.assertEqual(brief["nextAction"]["product"], "plant")
+
+    def test_cross_tenant_owner_context_is_not_exposed_or_used(self) -> None:
+        foreign_profile = build_managed_context_profile(
+            {
+                **{
+                    "contract": "supermega.managed_context_profile_request.v1",
+                    "version": 1,
+                    "product": "website",
+                    "templateId": "business-presence",
+                    "sourceCounts": {"selectedProductRecords": 1, "behaviorSignals": 1, "reviewedDecisions": 1},
+                    "behaviorPreference": {"product": "website", "chosenCount": 1},
+                    "allowedUses": list(MANAGED_CONTEXT_ALLOWED_USES),
+                    "forbiddenActions": list(MANAGED_CONTEXT_FORBIDDEN_ACTIONS),
+                    "ownerApproved": True,
+                    "rawProductRecordsIncluded": False,
+                    "modelTrainingAllowed": False,
+                }
+            },
+            workspace_id="workspace-b",
+            actor_id="owner-b",
+        )
+        brief = build_managed_company_brief(
+            workspace_id="workspace-a",
+            intent="attention",
+            states={
+                "company": TrialState("workspace-a", "company", 1, {"tasks": [], "managedContextProfile": foreign_profile}),
+                "commerce": TrialState("workspace-a", "commerce", 1, commerce_state()),
+            },
+            approvals=[],
+        )
+        self.assertIsNone(brief["ownerContext"])
 
 
 class CompanyBriefRouteTests(unittest.TestCase):

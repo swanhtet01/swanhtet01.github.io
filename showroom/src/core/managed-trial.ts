@@ -7,6 +7,17 @@ import {
   type CommerceState,
 } from './commerce-workspace.ts'
 import type { EcommerceOrderQueueReadinessPacket } from '../products/ecommerce/ecommerce-order-review-packet'
+import {
+  managedContextProfileProjection,
+  managedContextValidationProjection,
+  structurallyValidManagedContextBriefProjection,
+  structurallyValidManagedContextProfile,
+  type ManagedContextBriefProjection,
+  type ManagedContextProfile,
+  type ManagedContextProfileRequest,
+  type ManagedContextRetention,
+  type ManagedContextValidation,
+} from './managed-context.ts'
 
 
 const WORKSPACE_STORAGE_KEY = 'supermega.managed.workspace.v1'
@@ -175,6 +186,7 @@ export type ManagedCompanyBrief = {
     stateDigest: string
   }>
   approvalSummary: { pending: number; approved: number; declined: number }
+  ownerContext: ManagedContextBriefProjection | null
   briefDigest: string
   companyVersion: number
   retention: 'reproducible_not_persisted' | 'persisted_managed_audit'
@@ -422,6 +434,8 @@ function assertManagedCompanyBrief(value: unknown, expectedIdentity: ManagedIden
   const approvalSummary = brief.approvalSummary
   const sourceVersions = brief.sourceVersions
   const facts = brief.facts
+  const validOwnerContext = brief.ownerContext === null
+    || structurallyValidManagedContextBriefProjection(brief.ownerContext)
   const actionRoutes = isRecord(nextAction) && typeof nextAction.product === 'string'
     ? MANAGED_COMPANY_BRIEF_ROUTES.get(nextAction.product as 'shop' | 'plant' | 'website' | 'ecommerce')
     : undefined
@@ -456,6 +470,7 @@ function assertManagedCompanyBrief(value: unknown, expectedIdentity: ManagedIden
     || !managedBriefCount(approvalSummary.pending)
     || !managedBriefCount(approvalSummary.approved)
     || !managedBriefCount(approvalSummary.declined)
+    || !validOwnerContext
     || typeof brief.briefDigest !== 'string'
     || !SHA256_DIGEST.test(brief.briefDigest)
     || !managedBriefCount(brief.companyVersion)
@@ -467,6 +482,99 @@ function assertManagedCompanyBrief(value: unknown, expectedIdentity: ManagedIden
     throw new ManagedTrialError('Managed Company Brief failed its tenant and evidence checks.', { code: 'managed_company_brief_invalid' })
   }
   return brief as unknown as ManagedCompanyBrief
+}
+
+export async function assertManagedContextValidation(
+  value: unknown,
+  request: ManagedContextProfileRequest,
+  expectedIdentity: ManagedIdentity,
+) {
+  if (!isRecord(value)
+    || !isRecord(value.identity)
+    || !isRecord(value.validation)
+    || !structurallyValidManagedContextProfile(value.profile, request, expectedIdentity)) {
+    throw new ManagedTrialError('The managed context validation response is invalid.', {
+      code: 'managed_context_validation_invalid',
+    })
+  }
+  const validation = value.validation
+  const profile = value.profile
+  const identity = value.identity
+  const expectedProfileDigest = await sha256Text(JSON.stringify(managedContextProfileProjection(request, expectedIdentity)))
+  if (profile.profileDigest !== expectedProfileDigest
+    || validation.contract !== 'supermega.managed_context_profile_validation.v1'
+    || validation.status !== 'ready_for_owner_confirmation'
+    || validation.profileDigest !== expectedProfileDigest
+    || !managedBriefCount(validation.companyVersion)
+    || typeof validation.validationDigest !== 'string'
+    || !SHA256_DIGEST.test(validation.validationDigest)
+    || validation.internalWritePerformed !== false
+    || validation.externalWritesPerformed !== false
+    || identity.workspace_id !== expectedIdentity.workspaceId
+    || identity.actor_id !== expectedIdentity.userId
+    || identity.actor_kind !== 'human'
+    || value.secretValuesExposed !== false) {
+    throw new ManagedTrialError('Managed context validation failed its tenant and evidence checks.', {
+      code: 'managed_context_validation_invalid',
+    })
+  }
+  const expectedValidationDigest = await sha256Text(JSON.stringify(managedContextValidationProjection(
+    expectedProfileDigest,
+    Number(validation.companyVersion),
+    expectedIdentity,
+  )))
+  if (validation.validationDigest !== expectedValidationDigest) {
+    throw new ManagedTrialError('Managed context validation no longer matches the company revision.', {
+      code: 'managed_context_validation_changed',
+    })
+  }
+  return {
+    profile: profile as ManagedContextProfile,
+    validation: validation as unknown as ManagedContextValidation,
+  }
+}
+
+export async function assertManagedContextRetention(
+  value: unknown,
+  request: ManagedContextProfileRequest,
+  validation: ManagedContextValidation,
+  expectedIdentity: ManagedIdentity,
+) {
+  if (!isRecord(value)
+    || !isRecord(value.identity)
+    || !isRecord(value.retention)
+    || !isRecord(value.result)
+    || !structurallyValidManagedContextProfile(value.profile, request, expectedIdentity)) {
+    throw new ManagedTrialError('The managed context retention response is invalid.', {
+      code: 'managed_context_retention_invalid',
+    })
+  }
+  const profile = value.profile
+  const retention = value.retention
+  const identity = value.identity
+  const expectedProfileDigest = await sha256Text(JSON.stringify(managedContextProfileProjection(request, expectedIdentity)))
+  if (profile.profileDigest !== expectedProfileDigest
+    || validation.profileDigest !== expectedProfileDigest
+    || retention.contract !== 'supermega.managed_context_profile_retention.v1'
+    || retention.status !== 'retained'
+    || retention.profileDigest !== expectedProfileDigest
+    || !managedBriefCount(retention.companyVersion, Number.MAX_SAFE_INTEGER)
+    || retention.companyVersion !== Number(value.result.version)
+    || retention.internalWritePerformed !== true
+    || retention.externalWritesPerformed !== false
+    || typeof retention.idempotentReplay !== 'boolean'
+    || identity.workspace_id !== expectedIdentity.workspaceId
+    || identity.actor_id !== expectedIdentity.userId
+    || identity.actor_kind !== 'human'
+    || value.secretValuesExposed !== false) {
+    throw new ManagedTrialError('Managed context retention failed its tenant and evidence checks.', {
+      code: 'managed_context_retention_invalid',
+    })
+  }
+  return {
+    profile: profile as ManagedContextProfile,
+    retention: retention as unknown as ManagedContextRetention,
+  }
 }
 
 function assertManagedCompanyBriefRetention(
@@ -1897,6 +2005,51 @@ export async function retainManagedCompanyBrief(request: {
     request.identity,
   )
   return assertManagedCompanyBriefRetention(response, request.identity, request.brief.briefDigest)
+}
+
+export async function validateManagedContextProfile(
+  contextPackage: ManagedContextProfileRequest,
+  identity: ManagedIdentity,
+) {
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/managed-context/validate',
+    { method: 'POST', body: JSON.stringify({ package: contextPackage }) },
+    true,
+    identity,
+  )
+  return assertManagedContextValidation(response, contextPackage, identity)
+}
+
+export async function retainManagedContextProfile(request: {
+  commandId: string
+  contextPackage: ManagedContextProfileRequest
+  identity: ManagedIdentity
+  validation: ManagedContextValidation
+}) {
+  if (!CLIENT_IMPORT_COMMAND_ID.test(request.commandId)) {
+    throw new ManagedTrialError('Managed context command ID is invalid.', { code: 'managed_context_command_invalid' })
+  }
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/managed-context/retain',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        command_id: request.commandId,
+        expected_company_version: request.validation.companyVersion,
+        profile_digest: request.validation.profileDigest,
+        validation_digest: request.validation.validationDigest,
+        package: request.contextPackage,
+      }),
+    },
+    true,
+    request.identity,
+  )
+  return assertManagedContextRetention(
+    response,
+    request.contextPackage,
+    request.validation,
+    request.identity,
+  )
 }
 
 export async function prepareManagedOrderIntakeDraft(request: {

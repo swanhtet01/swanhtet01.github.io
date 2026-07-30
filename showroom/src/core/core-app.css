@@ -839,6 +839,13 @@ textarea { min-height: 72px; resize: vertical; }
 .premium-pilot-login > div strong { color: var(--core-ink); font-size: 11px; }
 .premium-pilot-login label { min-width: 0; display: grid; gap: 5px; color: var(--core-muted); font-size: 9px; font-weight: 760; }
 .premium-pilot-login input { width: 100%; min-width: 0; height: 36px; border: 1px solid var(--core-line); border-radius: 6px; padding: 0 9px; background: var(--core-panel-raised); color: var(--core-ink); font-size: 11px; }
+.managed-context-consent { display: grid; gap: 11px; border-top: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); padding: 13px 0; }
+.managed-context-consent > div:first-child { display: grid; gap: 3px; }
+.managed-context-consent > .core-button { justify-self: end; }
+.managed-context-approval { display: grid; grid-template-columns: 18px minmax(0,1fr); gap: 9px; align-items: start; color: var(--core-muted); font-size: 10px; line-height: 1.45; }
+.managed-context-approval input { width: 15px; height: 15px; margin: 1px 0 0; accent-color: var(--core-accent); }
+.managed-context-kept { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 7px 14px; color: var(--core-muted); font-size: 10px; }
+.managed-context-kept strong { color: var(--core-ink); font-size: 11px; }
 .managed-recovery-login { grid-template-columns: 1fr; align-items: stretch; }
 .premium-pilot-boundary { padding-top: 10px; border-top: 1px solid var(--core-line); }
 .settings-advanced { flex: 0 0 auto; margin-top: 2px; border: 1px solid var(--core-line); border-radius: 10px; background: var(--core-panel-raised); }
@@ -1567,6 +1574,7 @@ textarea { min-height: 72px; resize: vertical; }
   .premium-pilot-next { border-top: 1px solid var(--core-line); border-left: 0; padding-top: 12px; padding-left: 0; }
   .premium-pilot-actions { justify-content: stretch; }
   .premium-pilot-actions .core-button, .premium-pilot-login .core-button { width: 100%; }
+  .managed-context-consent > .core-button { width: 100%; justify-self: stretch; }
   .activation-runbook-head { align-items: stretch; flex-direction: column; }
   .activation-runbook-steps { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .activation-runbook-steps span:nth-child(n) { border-right: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); }

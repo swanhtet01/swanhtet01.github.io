@@ -22,6 +22,13 @@ from supermega_runtime.company_brief import (
     company_brief_receipt,
     company_state_with_receipt,
 )
+from supermega_runtime.managed_context import (
+    MANAGED_CONTEXT_RETENTION_CONTRACT,
+    MANAGED_CONTEXT_VALIDATION_CONTRACT,
+    build_managed_context_profile,
+    company_state_with_context_profile,
+    managed_context_validation_digest,
+)
 from supermega_runtime.production_runtime import PRODUCTION_HUMAN_EVENTS
 from supermega_runtime.order_intake import (
     MAX_ORDER_MESSAGE_LENGTH,
@@ -160,6 +167,17 @@ class TrialCompanyBriefReceiptRequest(TrialCompanyBriefRequest):
     command_id: UUID
     brief_digest: str = Field(min_length=71, max_length=71, pattern=r"^sha256:[0-9a-f]{64}$")
     expected_company_version: int = Field(ge=0)
+
+
+class TrialManagedContextValidateRequest(_StrictRequest):
+    package: dict[str, Any]
+
+
+class TrialManagedContextRetainRequest(TrialManagedContextValidateRequest):
+    command_id: UUID
+    expected_company_version: int = Field(ge=0)
+    profile_digest: str = Field(min_length=71, max_length=71, pattern=r"^sha256:[0-9a-f]{64}$")
+    validation_digest: str = Field(min_length=71, max_length=71, pattern=r"^sha256:[0-9a-f]{64}$")
 
 
 class TrialDecisionSubject(_StrictRequest):
@@ -418,7 +436,9 @@ def _company_brief_context(
     )
     company_version = 0
     if has_surface_read_capability(readiness.capabilities, "company"):
-        company_version = _invoke(lambda: store.get_state(principal, "company")).version
+        company = _invoke(lambda: store.get_state(principal, "company"))
+        company_version = company.version
+        states["company"] = company
     return states, approvals, company_version
 
 
@@ -951,6 +971,114 @@ def create_trial_router(
                 "actor_id": principal.actor_id,
                 "actor_kind": principal.actor_kind,
             },
+            **_command_response(result),
+        }
+
+    @router.post("/managed-context/validate")
+    def trial_managed_context_validate(
+        request: Request,
+        body: TrialManagedContextValidateRequest,
+    ) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        readiness = _readiness(store, principal)
+        _require_read_ready(readiness)
+        if "company.write" not in readiness.capabilities:
+            raise _error(403, "trial_capability_required", required_capability="company.write")
+        profile = _invoke(
+            lambda: build_managed_context_profile(
+                body.package,
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+            )
+        )
+        company = _invoke(lambda: store.get_state(principal, "company"))
+        validation_digest = _invoke(
+            lambda: managed_context_validation_digest(
+                str(profile["profileDigest"]),
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                company_version=company.version,
+            )
+        )
+        return {
+            "profile": profile,
+            "validation": {
+                "contract": MANAGED_CONTEXT_VALIDATION_CONTRACT,
+                "status": "ready_for_owner_confirmation",
+                "profileDigest": profile["profileDigest"],
+                "companyVersion": company.version,
+                "validationDigest": validation_digest,
+                "internalWritePerformed": False,
+                "externalWritesPerformed": False,
+            },
+            "identity": {
+                "workspace_id": principal.workspace_id,
+                "actor_id": principal.actor_id,
+                "actor_kind": principal.actor_kind,
+            },
+            "secretValuesExposed": False,
+        }
+
+    @router.post("/managed-context/retain")
+    def trial_managed_context_retain(
+        request: Request,
+        body: TrialManagedContextRetainRequest,
+    ) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        readiness = _readiness(store, principal)
+        _require_write_ready(readiness, "company.write")
+        profile = _invoke(
+            lambda: build_managed_context_profile(
+                body.package,
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+            )
+        )
+        if body.profile_digest != profile["profileDigest"]:
+            raise _error(409, "managed_context_profile_changed")
+        company = _invoke(lambda: store.get_state(principal, "company"))
+        expected_validation_digest = _invoke(
+            lambda: managed_context_validation_digest(
+                str(profile["profileDigest"]),
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                company_version=body.expected_company_version,
+            )
+        )
+        if body.validation_digest != expected_validation_digest:
+            raise _error(409, "managed_context_validation_changed")
+        next_company = _invoke(lambda: company_state_with_context_profile(company.state, profile))
+        result = _invoke(
+            lambda: store.apply_command(
+                principal,
+                command_id=body.command_id,
+                surface="company",
+                event_type="company.snapshot.saved",
+                expected_version=body.expected_company_version,
+                payload={"state": next_company},
+            )
+        )
+        return {
+            "profile": profile,
+            "retention": {
+                "contract": MANAGED_CONTEXT_RETENTION_CONTRACT,
+                "status": "retained",
+                "profileDigest": profile["profileDigest"],
+                "companyVersion": result.version,
+                "internalWritePerformed": True,
+                "externalWritesPerformed": False,
+                "idempotentReplay": result.idempotent_replay,
+            },
+            "identity": {
+                "workspace_id": principal.workspace_id,
+                "actor_id": principal.actor_id,
+                "actor_kind": principal.actor_kind,
+            },
+            "secretValuesExposed": False,
             **_command_response(result),
         }
 
