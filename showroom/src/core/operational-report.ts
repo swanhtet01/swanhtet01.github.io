@@ -23,6 +23,7 @@ import {
 
 export const OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v2' as const
 export const OPERATIONAL_REPORT_EXPORT_CONTRACT = 'supermega.operational_report_export.v2' as const
+export const SHARED_MASTER_DATA_REVIEW_PACKET_CONTRACT = 'supermega.shared_master_data_review_packet.v1' as const
 export const OPERATIONAL_REPORT_VIEW_KEY = 'supermega.operational-report-view.v1'
 
 export const operationalProducts = ['commerce', 'production', 'website', 'ecommerce'] as const
@@ -64,6 +65,7 @@ export type OperationalMasterDataDimension = {
 export type OperationalMasterData = {
   registryContract: typeof SHARED_MASTER_DATA_CONTRACT
   duplicateCandidates: number
+  duplicateReview: SharedMasterDataRegistry['duplicateReview']
   dimensions: OperationalMasterDataDimension[]
   totalRecords: number
   attentionDimensions: number
@@ -258,6 +260,7 @@ function buildOperationalMasterData(registry: SharedMasterDataRegistry, sources:
   return {
     registryContract: SHARED_MASTER_DATA_CONTRACT,
     duplicateCandidates: registry.duplicateReview.candidates.length,
+    duplicateReview: structuredClone(registry.duplicateReview),
     dimensions,
     totalRecords: dimensions.reduce((total, dimension) => total + dimension.recordCount, 0),
     attentionDimensions: dimensions.filter((dimension) => dimension.status !== 'ready').length,
@@ -416,14 +419,45 @@ function exactKeys(value: unknown, keys: readonly string[]) {
     && JSON.stringify(Object.keys(value as Record<string, unknown>).sort()) === JSON.stringify([...keys].sort()))
 }
 
+const reviewAuthorityOrder = ['shop_inventory_command_chain', 'commerce_workspace', 'plant_workspace', 'website_workspace'] as const
+
+function validateProjectedDuplicateReview(value: unknown, allowedProducts: readonly OperationalProduct[]) {
+  if (!exactKeys(value, ['candidates', 'automaticMergeAllowed', 'mergePerformed', 'externalWritesPerformed'])) throw new Error('Operational report duplicate review is invalid.')
+  const review = value as SharedMasterDataRegistry['duplicateReview']
+  if (!Array.isArray(review.candidates) || review.candidates.length > 2_000
+    || review.automaticMergeAllowed !== false || review.mergePerformed !== false || review.externalWritesPerformed !== false) {
+    throw new Error('Operational report duplicate review is invalid.')
+  }
+  const usedRecordIds = new Set<string>()
+  for (const [index, candidate] of review.candidates.entries()) {
+    const recordOwners = candidate.recordIds?.map((id) => id.split(':')[0]) ?? []
+    if (!exactKeys(candidate, ['id', 'kind', 'recordIds', 'ownerProducts', 'sourceAuthorities', 'reason', 'reviewRequired'])
+      || candidate.id !== `DUP-${String(index + 1).padStart(3, '0')}` || !/^DUP-[0-9]{3,6}$/.test(candidate.id)
+      || !['business_partner', 'location'].includes(candidate.kind) || candidate.reason !== 'normalized_identity_collision' || candidate.reviewRequired !== true
+      || !Array.isArray(candidate.recordIds) || candidate.recordIds.length < 2 || candidate.recordIds.length > 400
+      || JSON.stringify(candidate.recordIds) !== JSON.stringify([...candidate.recordIds].sort()) || new Set(candidate.recordIds).size !== candidate.recordIds.length
+      || candidate.recordIds.some((id) => !/^(commerce|production|website|ecommerce):(customer|supplier|location):[A-Za-z0-9._~%+-]{1,240}$/.test(id) || usedRecordIds.has(id))
+      || candidate.recordIds.some((id) => candidate.kind === 'business_partner' ? !/^commerce:(customer|supplier):/.test(id) : !/^commerce:location:/.test(id))
+      || JSON.stringify(candidate.ownerProducts) !== JSON.stringify(operationalProducts.filter((product) => allowedProducts.includes(product) && recordOwners.includes(product)))
+      || !Array.isArray(candidate.sourceAuthorities) || JSON.stringify(candidate.sourceAuthorities) !== JSON.stringify(reviewAuthorityOrder.filter((authority) => candidate.sourceAuthorities.includes(authority)))
+      || candidate.sourceAuthorities.some((authority) => !reviewAuthorityOrder.includes(authority))) {
+      throw new Error('Operational report duplicate candidate is invalid.')
+    }
+    candidate.recordIds.forEach((id) => usedRecordIds.add(id))
+  }
+  return review
+}
+
 function validateExportMasterData(value: unknown, allowedProducts: readonly OperationalProduct[], sources: readonly OperationalSource[]) {
-  if (!exactKeys(value, ['registryContract', 'duplicateCandidates', 'dimensions', 'totalRecords', 'attentionDimensions', 'controls'])) throw new Error('Operational report export master data is invalid.')
+  if (!exactKeys(value, ['registryContract', 'duplicateCandidates', 'duplicateReview', 'dimensions', 'totalRecords', 'attentionDimensions', 'controls'])) throw new Error('Operational report export master data is invalid.')
   const masterData = value as OperationalMasterData
   if (masterData.registryContract !== SHARED_MASTER_DATA_CONTRACT || !Number.isSafeInteger(masterData.duplicateCandidates) || masterData.duplicateCandidates < 0 || !Array.isArray(masterData.dimensions)
     || !exactKeys(masterData.controls, ['countsOnly', 'customerValuesExcluded', 'permissionFiltered'])
     || masterData.controls.countsOnly !== true || masterData.controls.customerValuesExcluded !== true || masterData.controls.permissionFiltered !== true) {
     throw new Error('Operational report export master data is invalid.')
   }
+  const duplicateReview = validateProjectedDuplicateReview(masterData.duplicateReview, allowedProducts)
+  if (masterData.duplicateCandidates !== duplicateReview.candidates.length) throw new Error('Operational report duplicate-review total is invalid.')
   const expectedIds = allowedProducts.flatMap((product) => masterDimensionIds[product])
   const bySurface = new Map(sources.map((source) => [source.surface, source]))
   for (const [index, dimension] of masterData.dimensions.entries()) {
@@ -452,6 +486,64 @@ function validateExportMasterData(value: unknown, allowedProducts: readonly Oper
 
 async function digestPayload(value: unknown) {
   return `sha256:${hex(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value))))}`
+}
+
+export async function exportSharedMasterDataReviewPacket(report: OperationalReport) {
+  const review = validateProjectedDuplicateReview(report.masterData.duplicateReview, report.allowedProducts)
+  if (!review.candidates.length) throw new Error('No duplicate master-data review is required.')
+  const payload = {
+    contract: SHARED_MASTER_DATA_REVIEW_PACKET_CONTRACT,
+    reportContract: report.contract,
+    observedAt: report.observedAt,
+    mode: report.mode,
+    allowedProducts: report.allowedProducts,
+    registryContract: report.masterData.registryContract,
+    candidates: review.candidates.map((candidate) => ({
+      ...structuredClone(candidate),
+      allowedResolutions: candidate.kind === 'business_partner'
+        ? ['retain_separate_roles', 'link_shared_party'] as const
+        : ['retain_separate_locations', 'merge_in_owner'] as const,
+    })),
+    controls: {
+      reviewOnly: true as const,
+      humanDecisionRequired: true as const,
+      automaticMergeAllowed: false as const,
+      mergePerformed: false as const,
+      sourceMutationPerformed: false as const,
+      externalWritesPerformed: false as const,
+    },
+  }
+  return { ...payload, digest: await digestPayload(payload) }
+}
+
+export async function validateSharedMasterDataReviewPacket(value: unknown) {
+  if (!exactKeys(value, ['contract', 'reportContract', 'observedAt', 'mode', 'allowedProducts', 'registryContract', 'candidates', 'controls', 'digest'])) throw new Error('Shared master-data review packet is invalid.')
+  const packet = value as Awaited<ReturnType<typeof exportSharedMasterDataReviewPacket>>
+  if (packet.contract !== SHARED_MASTER_DATA_REVIEW_PACKET_CONTRACT || packet.reportContract !== OPERATIONAL_REPORT_CONTRACT
+    || !exactIso(packet.observedAt) || !['local', 'managed'].includes(packet.mode)
+    || !Array.isArray(packet.allowedProducts) || !packet.allowedProducts.length
+    || JSON.stringify(packet.allowedProducts) !== JSON.stringify(canonicalProducts(packet.allowedProducts)) || new Set(packet.allowedProducts).size !== packet.allowedProducts.length
+    || packet.registryContract !== SHARED_MASTER_DATA_CONTRACT || !Array.isArray(packet.candidates) || !packet.candidates.length
+    || !exactKeys(packet.controls, ['reviewOnly', 'humanDecisionRequired', 'automaticMergeAllowed', 'mergePerformed', 'sourceMutationPerformed', 'externalWritesPerformed'])
+    || packet.controls.reviewOnly !== true || packet.controls.humanDecisionRequired !== true || packet.controls.automaticMergeAllowed !== false
+    || packet.controls.mergePerformed !== false || packet.controls.sourceMutationPerformed !== false || packet.controls.externalWritesPerformed !== false) {
+    throw new Error('Shared master-data review packet contract is invalid.')
+  }
+  const projectedReview = {
+    candidates: packet.candidates.map(({ allowedResolutions: _allowedResolutions, ...candidate }) => candidate),
+    automaticMergeAllowed: false as const,
+    mergePerformed: false as const,
+    externalWritesPerformed: false as const,
+  }
+  validateProjectedDuplicateReview(projectedReview, packet.allowedProducts)
+  for (const candidate of packet.candidates) {
+    const expected = candidate.kind === 'business_partner' ? ['retain_separate_roles', 'link_shared_party'] : ['retain_separate_locations', 'merge_in_owner']
+    if (!exactKeys(candidate, ['id', 'kind', 'recordIds', 'ownerProducts', 'sourceAuthorities', 'reason', 'reviewRequired', 'allowedResolutions'])
+      || JSON.stringify(candidate.allowedResolutions) !== JSON.stringify(expected)) throw new Error('Shared master-data review resolution is invalid.')
+  }
+  const { digest, ...payload } = packet
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) throw new Error('Shared master-data review packet digest is invalid.')
+  return structuredClone(packet)
 }
 
 export async function exportOperationalReport(report: OperationalReport, view: OperationalReportView) {

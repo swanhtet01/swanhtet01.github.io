@@ -15,6 +15,7 @@ import {
 import {
   buildOperationalReport,
   exportOperationalReport,
+  exportSharedMasterDataReviewPacket,
   filterOperationalReport,
   operationalProducts,
   OPERATIONAL_REPORT_VIEW_KEY,
@@ -135,12 +136,12 @@ function initialView() {
   try { return restoreOperationalReportView(JSON.parse(window.localStorage.getItem(OPERATIONAL_REPORT_VIEW_KEY) ?? 'null'), operationalProducts) } catch { return restoreOperationalReportView(null, operationalProducts) }
 }
 
-function saveReportFile(value: unknown, observedAt: string) {
+function saveJsonFile(value: unknown, filename: string) {
   const blob = new Blob([`${JSON.stringify(value, null, 2)}\n`], { type: 'application/json;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `supermega-operational-report-${observedAt.slice(0, 10)}.json`
+  anchor.download = filename
   anchor.click()
   URL.revokeObjectURL(url)
 }
@@ -207,10 +208,22 @@ export function ProductHomeToday({ runtimeStatus = 'demo' }: { runtimeStatus?: R
     setNotice('Sealing the filtered report...')
     try {
       const artifact = await exportOperationalReport(report, view)
-      saveReportFile(artifact, report.observedAt)
+      saveJsonFile(artifact, `supermega-operational-report-${report.observedAt.slice(0, 10)}.json`)
       setNotice(`Downloaded ${artifact.entries.length} permission-filtered entries. No customer values or external writes were included.`)
     } catch {
       setNotice('The report could not be sealed. Nothing was downloaded.')
+    }
+  }
+
+  async function downloadDuplicateReview() {
+    if (!report || !report.masterData.duplicateCandidates) return
+    setNotice('Sealing the ID-only duplicate review...')
+    try {
+      const artifact = await exportSharedMasterDataReviewPacket(report)
+      saveJsonFile(artifact, `supermega-master-duplicate-review-${report.observedAt.slice(0, 10)}.json`)
+      setNotice(`Downloaded ${artifact.candidates.length} duplicate review candidate${artifact.candidates.length === 1 ? '' : 's'}. No names, merge, source mutation, or external write was included.`)
+    } catch {
+      setNotice('The duplicate review could not be sealed. Nothing was downloaded or changed.')
     }
   }
 
@@ -240,6 +253,7 @@ export function ProductHomeToday({ runtimeStatus = 'demo' }: { runtimeStatus?: R
             <label>Product<select value={view.product} onChange={(event) => setView((current) => ({ ...current, product: event.target.value as OperationalReportView['product'] }))}><option value="all">All authorized</option>{report.allowedProducts.map((product) => <option key={product} value={product}>{productLabel[product]}</option>)}</select></label>
             <label>View<select value={view.urgency} onChange={(event) => setView((current) => ({ ...current, urgency: event.target.value as OperationalReportView['urgency'] }))}><option value="attention">Needs attention</option><option value="critical">Critical only</option><option value="all">All including ready</option></select></label>
             <button className="core-button compact" onClick={() => void downloadReport()} type="button">Download report</button>
+            {report.masterData.duplicateCandidates ? <button className="core-button compact" onClick={() => void downloadDuplicateReview()} type="button">Download duplicate review</button> : null}
           </div>
           <div className="product-home-report-list">
             {visibleEntries.length ? visibleEntries.map((entry) => <Link data-severity={entry.severity} key={entry.id} to={entry.route}><span><small>{productLabel[entry.product]} · {entry.id}</small><strong>{entry.label}</strong><em>{entry.detail}</em></span><b>{entry.count || 'Ready'}</b></Link>) : <p>No authorized entries match this saved view.</p>}

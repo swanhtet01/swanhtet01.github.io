@@ -782,6 +782,7 @@ if (!productHomeTodaySource.includes('buildOperationalReport')
   || !productHomeTodaySource.includes('loadManagedBootstrap')
   || !productHomeTodaySource.includes('filterOperationalReport')
   || !productHomeTodaySource.includes('exportOperationalReport')
+  || !productHomeTodaySource.includes('exportSharedMasterDataReviewPacket')
   || !productHomeTodaySource.includes('validateProductionState')
   || !operationalReportSource.includes('The source failed validation; no sample values were substituted.')
   || !productHomeTodaySource.includes('permissions always come from the managed bootstrap')
@@ -789,6 +790,8 @@ if (!productHomeTodaySource.includes('buildOperationalReport')
   || !productHomeTodaySource.includes('Authorized master data coverage')
   || !productHomeTodaySource.includes('Customer and record values are excluded')
   || !productHomeTodaySource.includes('no merge is automatic')
+  || !productHomeTodaySource.includes('Download duplicate review')
+  || !productHomeTodaySource.includes('No names, merge, source mutation, or external write was included.')
   || !productHomeTodaySource.includes('This queue and report are read-only')
   || !productHomeTodaySource.includes("window.addEventListener('storage', refresh)")
   || !productHomeTodaySource.includes('window.localStorage.setItem(OPERATIONAL_REPORT_VIEW_KEY, JSON.stringify(view))')
@@ -798,7 +801,10 @@ if (!productHomeTodaySource.includes('buildOperationalReport')
   || productHomeTodaySource.includes('removeItem(')
   || !operationalReportSource.includes("OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v2'")
   || !operationalReportSource.includes("OPERATIONAL_REPORT_EXPORT_CONTRACT = 'supermega.operational_report_export.v2'")
+  || !operationalReportSource.includes("SHARED_MASTER_DATA_REVIEW_PACKET_CONTRACT = 'supermega.shared_master_data_review_packet.v1'")
   || !operationalReportSource.includes('export async function validateOperationalReportExport')
+  || !operationalReportSource.includes('export async function exportSharedMasterDataReviewPacket')
+  || !operationalReportSource.includes('export async function validateSharedMasterDataReviewPacket')
   || !operationalReportSource.includes('buildSharedMasterDataRegistry')
   || !sharedMasterDataSource.includes("SHARED_MASTER_DATA_CONTRACT = 'supermega.shared_master_data_registry.v1'")
   || !sharedMasterDataSource.includes('export function buildSharedMasterDataRegistry')
@@ -14375,7 +14381,8 @@ async function verifyOperationalReportRuntime() {
     const duplicateInventory = inventory.applyShopInventoryImport(inventory.createEmptyShopInventoryState(), duplicatePackage, {
       actionId: 'ACT-DUPLICATE-IMPORT-001', capturedAt: '2026-07-29T11:30:00+06:30', actor: 'Master data owner', reason: 'Review duplicate detection without merging records.', evidenceReference: 'EVIDENCE-DUPLICATE-001',
     }, duplicateCatalog, inventory.EMPTY_SHOP_INVENTORY_DIGEST).state
-    const duplicateRegistry = masterData.buildSharedMasterDataRegistry({ allowedProducts: masterData.sharedMasterDataProducts, commerce: { ...commerceState, inventoryFoundation: duplicateInventory }, production: productionState, website: websiteState })
+    const duplicateCommerceState = { ...commerceState, inventoryFoundation: duplicateInventory }
+    const duplicateRegistry = masterData.buildSharedMasterDataRegistry({ allowedProducts: masterData.sharedMasterDataProducts, commerce: duplicateCommerceState, production: productionState, website: websiteState })
     assert(duplicateRegistry.duplicateReview.candidates.length === 1 && duplicateRegistry.duplicateReview.candidates[0].kind === 'business_partner' && duplicateRegistry.duplicateReview.mergePerformed === false, 'shared_master_data_duplicate_candidate_missing')
     assert(!JSON.stringify(duplicateRegistry).includes('Acme Company') && !JSON.stringify(duplicateRegistry).includes('acme company'), 'shared_master_data_duplicate_candidate_exposed_values')
     const mergeTamper = structuredClone(duplicateRegistry)
@@ -14383,6 +14390,24 @@ async function verifyOperationalReportRuntime() {
     let mergeTamperRejected = false
     try { masterData.validateSharedMasterDataRegistry(mergeTamper) } catch { mergeTamperRejected = true }
     assert(mergeTamperRejected, 'shared_master_data_automatic_merge_authority_accepted')
+    const duplicateReport = model.buildOperationalReport({
+      mode: 'local', allowedProducts: model.operationalProducts,
+      sources: [
+        { surface: 'commerce', mode: 'record', revision: null, updatedAt: null },
+        { surface: 'production', mode: 'sample', revision: productionState.revision, updatedAt: null },
+        { surface: 'website', mode: 'sample', revision: websiteState.revision, updatedAt: null },
+      ],
+      commerce: duplicateCommerceState, production: productionState, website: websiteState, now,
+    })
+    assert(duplicateReport.masterData.duplicateCandidates === 1 && duplicateReport.masterData.duplicateReview.candidates.length === 1, 'operational_report_duplicate_review_not_projected')
+    const reviewPacket = await model.exportSharedMasterDataReviewPacket(duplicateReport)
+    assert(reviewPacket.contract === model.SHARED_MASTER_DATA_REVIEW_PACKET_CONTRACT && reviewPacket.controls.mergePerformed === false && (await model.validateSharedMasterDataReviewPacket(reviewPacket)).digest === reviewPacket.digest, 'shared_master_data_review_packet_invalid')
+    assert(!JSON.stringify(reviewPacket).includes('Acme Company') && !JSON.stringify(reviewPacket).includes('acme company'), 'shared_master_data_review_packet_exposed_values')
+    const resolutionTamper = structuredClone(reviewPacket)
+    resolutionTamper.candidates[0].allowedResolutions.reverse()
+    let resolutionTamperRejected = false
+    try { await model.validateSharedMasterDataReviewPacket(resolutionTamper) } catch { resolutionTamperRejected = true }
+    assert(resolutionTamperRejected, 'shared_master_data_review_resolution_tamper_accepted')
     assert(!JSON.stringify(report).includes('May') && !JSON.stringify(report).includes('Ko Aung'), 'operational_report_exposed_customer_value')
     assert(report.entries.every((entry, index, entries) => !index || ({ critical: 4, warning: 3, action: 2, ready: 1 })[entries[index - 1].severity] >= ({ critical: 4, warning: 3, action: 2, ready: 1 })[entry.severity]), 'operational_report_priority_order_invalid')
 
