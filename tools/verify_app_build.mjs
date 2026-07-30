@@ -127,6 +127,7 @@ const ownerControlSource = await readFile(resolve(root, 'showroom', 'src', 'core
 const ownerControlPythonSource = await readFile(resolve(root, 'supermega_runtime', 'owner_control.py'), 'utf8')
 const managedActivationSource = await readFile(resolve(root, 'supermega_runtime', 'managed_activation.py'), 'utf8')
 const pilotOutcomeSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'pilot-outcome.ts'), 'utf8')
+const pilotOutcomeDecisionSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'pilot-outcome-decision.ts'), 'utf8')
 const pilotOutcomeUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PilotOutcomePanel.tsx'), 'utf8')
 const pilotOutcomeHookSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'useLocalPilotOutcome.ts'), 'utf8')
 const companyBackupSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'company-backup.ts'), 'utf8')
@@ -11042,13 +11043,19 @@ if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !pilotOutcomeSource.includes("if (source.status === 'invalid') return null")
   || !pilotOutcomeSource.includes('Storefront not saved,')
   || !pilotOutcomeSource.includes("Only the named owner can accept a clear or improved pilot result.")
+  || !pilotOutcomeDecisionSource.includes("subject: { kind: 'pilot_outcome' as const")
+  || !pilotOutcomeDecisionSource.includes("decidedActorKind: 'human'")
+  || !pilotOutcomeDecisionSource.includes('no raw records or external writes were included.')
   || !pilotOutcomeUiSource.includes('Free outcome proof')
   || !pilotOutcomeUiSource.includes('Accept measured result')
   || !pilotOutcomeUiSource.includes('Download accepted proof')
+  || !pilotOutcomeUiSource.includes('onAccepted?.(report, review)')
   || !pilotOutcomeUiSource.includes("unit === 'exceptions'")
   || !pilotOutcomeUiSource.includes('Aggregate counts only. No raw records')
   || !pilotOutcomeHookSource.includes("window.addEventListener('storage', onStorage)")
   || !settingsPageSource.includes('pilotOutcomeReport')
+  || !settingsPageSource.includes('buildPilotOutcomeDecisionApproval')
+  || !settingsPageSource.includes('onAccepted={recordAcceptedPilotOutcomeDecision}')
   || !settingsPageSource.includes('pilotOutcomeDigest')
   || !settingsPageSource.includes('pilotReady: isPilotReady && Boolean(pilotOutcomeReport?.review)')
   || !settingsPageSource.includes('version: 24')
@@ -11063,6 +11070,7 @@ if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !managedActivationSource.includes('Pilot outcome lacks exact named-owner acceptance.')) fail('pilot_outcome_contract_missing')
 try {
   const outcome = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'pilot-outcome.ts')).href}?pilot-outcome=${Date.now()}`)
+  const outcomeDecision = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'pilot-outcome-decision.ts')).href}?pilot-outcome-decision=${Date.now()}`)
   const values = new Map()
   const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) }
   const setup = { product: 'commerce', workspace: 'Mingalar Fresh Mart', owner: 'Swan Htet', templateId: 'retail-wholesale' }
@@ -11090,6 +11098,25 @@ try {
   const review = outcome.acceptPilotOutcome(storage, improved, setup.owner, new Date('2026-07-30T10:06:00.000Z'))
   const accepted = outcome.buildPilotOutcomeReport(storage, setup, improvedMetric, new Date('2026-07-30T10:10:00.000Z'))
   if (accepted?.review?.reportDigest !== accepted?.reportDigest || accepted?.measuredAt !== review.reviewedAt) fail('pilot_outcome_acceptance_invalid')
+  pilotOutcomeRuntimeChecks += 1
+  const approval = outcomeDecision.buildPilotOutcomeDecisionApproval(improved, review, 'Owner accepts the measured Shop result.')
+  if (approval.status !== 'approved'
+    || approval.decidedActorKind !== 'human'
+    || approval.decidedBy !== setup.owner
+    || approval.packet.subject.kind !== 'pilot_outcome'
+    || approval.packet.subject.id !== improved.reportDigest
+    || approval.packet.claims.length !== 3
+    || approval.packet.claims.some((claim) => claim.status !== 'verified' || !claim.digest?.startsWith('sha256:'))
+    || !approval.packet.artifactReference.endsWith(improved.reportDigest)
+    || !approval.packetFingerprint.startsWith('sha256:')
+    || approval.managed !== false) fail('pilot_outcome_decision_invalid')
+  pilotOutcomeRuntimeChecks += 1
+  const replayedApproval = outcomeDecision.buildPilotOutcomeDecisionApproval(improved, review, 'Owner accepts the measured Shop result.')
+  if (replayedApproval.id !== approval.id || replayedApproval.packetFingerprint !== approval.packetFingerprint) fail('pilot_outcome_decision_not_idempotent')
+  pilotOutcomeRuntimeChecks += 1
+  let mismatchedReviewRejected = false
+  try { outcomeDecision.buildPilotOutcomeDecisionApproval(improved, { ...review, reportDigest: `sha256:${'0'.repeat(64)}` }, 'Owner accepts.') } catch { mismatchedReviewRejected = true }
+  if (!mismatchedReviewRejected) fail('pilot_outcome_mismatched_decision_allowed')
   pilotOutcomeRuntimeChecks += 1
   const changedAgain = { ...improvedSnapshot, shop: { ...improvedSnapshot.shop, activeOrders: 2 } }
   const changedMetric = outcome.buildPilotOutcomeMetric(changedAgain, setup.product)
