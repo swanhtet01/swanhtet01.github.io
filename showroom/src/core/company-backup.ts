@@ -1,0 +1,452 @@
+export const COMPANY_BACKUP_CONTRACT = 'supermega.company_backup.v1'
+export const COMPANY_SNAPSHOT_CONTRACT = 'supermega.local_company_snapshot.v1'
+export const COMPANY_BACKUP_KDF_ITERATIONS = 600_000
+
+export const COMPANY_BACKUP_MAX_FILE_BYTES = 17 * 1024 * 1024
+const MAX_BACKUP_BYTES = COMPANY_BACKUP_MAX_FILE_BYTES
+const MAX_SNAPSHOT_BYTES = 12 * 1024 * 1024
+const MAX_CIPHERTEXT_BYTES = MAX_SNAPSHOT_BYTES + 16
+const MAX_RECORD_BYTES = 4 * 1024 * 1024
+const MAX_RECORDS = 512
+const MAX_STORAGE_KEYS = 4096
+const MIN_PASSPHRASE_LENGTH = 12
+const MAX_PASSPHRASE_LENGTH = 256
+
+const portableExactKeys = new Set([
+  'supermega.commerce.workspace.v2',
+  'supermega.production.workspace.v2',
+  'supermega.website.workspace.v2',
+  'supermega.website-ecommerce-handoff.v1',
+  'supermega.setup.v3',
+  'supermega.approvals.v3',
+  'supermega.accountable.actions.v1',
+  'supermega.behavior-trail.v1',
+  'supermega.team.workspace.v4',
+  'supermega.pilot-outcome.v1',
+  'supermega.owner-control-acknowledgements.v1',
+])
+
+const portablePrefixes = [
+  'supermega.shop.order_draft.v1.',
+  'supermega.plant.order-foundation.v1:',
+  'supermega.website.release-foundation.v1:',
+  'supermega.ecommerce.storefront_draft.v2.',
+  'supermega.ecommerce.buying_lifecycle.v1.',
+]
+
+const resetOnlyExactKeys = new Set([
+  'supermega.shop.order_draft_reset.v1',
+  'supermega.ecommerce.storefront_draft_reset.v1',
+])
+
+const resetOnlyPrefixes = [
+  'supermega.website.workspace.recovery.v1.',
+  'supermega.ecommerce.storefront_draft.v1.',
+]
+
+const categoryMatchers: Array<[string, (key: string) => boolean]> = [
+  ['Shop', (key) => key === 'supermega.commerce.workspace.v2' || key.startsWith('supermega.shop.order_draft.v1.')],
+  ['Plant', (key) => key === 'supermega.production.workspace.v2' || key.startsWith('supermega.plant.order-foundation.v1:')],
+  ['Website', (key) => key === 'supermega.website.workspace.v2' || key.startsWith('supermega.website.release-foundation.v1:')],
+  ['Ecommerce', (key) => key === 'supermega.website-ecommerce-handoff.v1' || key.startsWith('supermega.ecommerce.')],
+  ['Controls', () => true],
+]
+
+export type CompanyStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem' | 'key' | 'length'>
+
+export type CompanyBackupRecord = {
+  key: string
+  value: string
+}
+
+export type CompanySnapshot = {
+  contract: typeof COMPANY_SNAPSHOT_CONTRACT
+  version: 1
+  exportedAt: string
+  records: CompanyBackupRecord[]
+  authRecordsIncluded: false
+  managedWorkspaceRecordsIncluded: false
+  externalWritesPerformed: false
+}
+
+export type EncryptedCompanyBackup = {
+  contract: typeof COMPANY_BACKUP_CONTRACT
+  version: 1
+  algorithm: 'AES-GCM-256'
+  kdf: 'PBKDF2-SHA-256'
+  iterations: typeof COMPANY_BACKUP_KDF_ITERATIONS
+  createdAt: string
+  recordCount: number
+  salt: string
+  iv: string
+  snapshotDigest: string
+  ciphertext: string
+}
+
+export type CompanyBackupInspection = {
+  contract: typeof COMPANY_SNAPSHOT_CONTRACT
+  exportedAt: string
+  recordCount: number
+  snapshotDigest: string
+  categories: Array<{ label: string; count: number }>
+  authRecordsIncluded: false
+  managedWorkspaceRecordsIncluded: false
+  externalWritesPerformed: false
+  snapshot: CompanySnapshot
+}
+
+export type CompanyRestoreResult = {
+  restoredCount: number
+  removedCount: number
+  snapshotDigest: string
+  authRecordsRestored: false
+  managedWorkspaceRecordsRestored: false
+  externalWritesPerformed: false
+}
+
+const encoder = new TextEncoder()
+const decoder = new TextDecoder('utf-8', { fatal: true })
+
+function backupError(message: string): Error {
+  return new Error(message)
+}
+
+function cryptoProvider(): Crypto {
+  if (!globalThis.crypto?.subtle || !globalThis.crypto.getRandomValues) {
+    throw backupError('Encrypted backup is unavailable in this browser.')
+  }
+  return globalThis.crypto
+}
+
+function requirePassphrase(passphrase: string): string {
+  if (typeof passphrase !== 'string' || passphrase.length < MIN_PASSPHRASE_LENGTH || passphrase.length > MAX_PASSPHRASE_LENGTH) {
+    throw backupError(`Use a backup password between ${MIN_PASSPHRASE_LENGTH} and ${MAX_PASSPHRASE_LENGTH} characters.`)
+  }
+  return passphrase
+}
+
+function exactObjectKeys(value: Record<string, unknown>, expected: string[]): boolean {
+  const actual = Object.keys(value).sort()
+  const sortedExpected = [...expected].sort()
+  return actual.length === sortedExpected.length && actual.every((key, index) => key === sortedExpected[index])
+}
+
+function canonicalDate(value: unknown, label: string): string {
+  if (typeof value !== 'string' || value.length > 40 || Number.isNaN(Date.parse(value)) || new Date(value).toISOString() !== value) {
+    throw backupError(`${label} is invalid.`)
+  }
+  return value
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const chunk = 0x8000
+  for (let index = 0; index < bytes.length; index += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunk))
+  }
+  return btoa(binary)
+}
+
+function arrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength)
+  copy.set(bytes)
+  return copy.buffer
+}
+
+function base64ToBytes(value: unknown, label: string, maxBytes: number): Uint8Array {
+  if (typeof value !== 'string' || value.length === 0 || value.length > Math.ceil(maxBytes / 3) * 4 + 4 || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) {
+    throw backupError(`${label} is invalid.`)
+  }
+  let binary: string
+  try {
+    binary = atob(value)
+  } catch {
+    throw backupError(`${label} is invalid.`)
+  }
+  if (binary.length > maxBytes) throw backupError(`${label} is too large.`)
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+  if (bytesToBase64(bytes) !== value) throw backupError(`${label} is not canonical.`)
+  return bytes
+}
+
+async function sha256(value: string): Promise<string> {
+  const digest = await cryptoProvider().subtle.digest('SHA-256', encoder.encode(value))
+  return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
+}
+
+function listStorageKeys(storage: CompanyStorage): string[] {
+  if (!Number.isInteger(storage.length) || storage.length < 0 || storage.length > MAX_STORAGE_KEYS) {
+    throw backupError('Browser storage has too many records to inspect safely.')
+  }
+  const keys = new Set<string>()
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index)
+    if (typeof key === 'string') keys.add(key)
+  }
+  return [...keys].sort()
+}
+
+export function isPortableCompanyStorageKey(key: string): boolean {
+  return portableExactKeys.has(key) || portablePrefixes.some((prefix) => key.startsWith(prefix))
+}
+
+export function isResettableCompanyStorageKey(key: string): boolean {
+  return isPortableCompanyStorageKey(key)
+    || resetOnlyExactKeys.has(key)
+    || resetOnlyPrefixes.some((prefix) => key.startsWith(prefix))
+}
+
+export function listPortableCompanyStorageKeys(storage: CompanyStorage): string[] {
+  return listStorageKeys(storage).filter(isPortableCompanyStorageKey)
+}
+
+export function listResettableCompanyStorageKeys(storage: CompanyStorage): string[] {
+  return listStorageKeys(storage).filter(isResettableCompanyStorageKey)
+}
+
+function parseRecord(value: unknown, index: number): CompanyBackupRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !exactObjectKeys(value as Record<string, unknown>, ['key', 'value'])) {
+    throw backupError(`Backup record ${index + 1} is invalid.`)
+  }
+  const { key, value: raw } = value as Record<string, unknown>
+  if (typeof key !== 'string' || key.length === 0 || key.length > 180 || !isPortableCompanyStorageKey(key)) {
+    throw backupError(`Backup record ${index + 1} is not an allowed company record.`)
+  }
+  if (typeof raw !== 'string' || encoder.encode(raw).byteLength > MAX_RECORD_BYTES) {
+    throw backupError(`Backup record ${index + 1} is too large.`)
+  }
+  try {
+    JSON.parse(raw)
+  } catch {
+    throw backupError(`Backup record ${index + 1} is not valid company JSON.`)
+  }
+  return { key, value: raw }
+}
+
+export function validateCompanySnapshot(value: unknown): CompanySnapshot {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw backupError('The decrypted company snapshot is invalid.')
+  const source = value as Record<string, unknown>
+  if (!exactObjectKeys(source, ['authRecordsIncluded', 'contract', 'exportedAt', 'externalWritesPerformed', 'managedWorkspaceRecordsIncluded', 'records', 'version'])
+    || source.contract !== COMPANY_SNAPSHOT_CONTRACT
+    || source.version !== 1
+    || source.authRecordsIncluded !== false
+    || source.managedWorkspaceRecordsIncluded !== false
+    || source.externalWritesPerformed !== false
+    || !Array.isArray(source.records)
+    || source.records.length > MAX_RECORDS) {
+    throw backupError('The decrypted company snapshot failed its safety contract.')
+  }
+  const records = source.records.map(parseRecord).sort((left, right) => left.key.localeCompare(right.key))
+  if (new Set(records.map((record) => record.key)).size !== records.length) throw backupError('The company snapshot contains duplicate records.')
+  const snapshot: CompanySnapshot = {
+    contract: COMPANY_SNAPSHOT_CONTRACT,
+    version: 1,
+    exportedAt: canonicalDate(source.exportedAt, 'Snapshot date'),
+    records,
+    authRecordsIncluded: false,
+    managedWorkspaceRecordsIncluded: false,
+    externalWritesPerformed: false,
+  }
+  if (encoder.encode(JSON.stringify(snapshot)).byteLength > MAX_SNAPSHOT_BYTES) throw backupError('The company snapshot is too large.')
+  return snapshot
+}
+
+function parseEnvelope(value: unknown): EncryptedCompanyBackup {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw backupError('This is not a SuperMega encrypted company backup.')
+  const source = value as Record<string, unknown>
+  if (!exactObjectKeys(source, ['algorithm', 'ciphertext', 'contract', 'createdAt', 'iterations', 'iv', 'kdf', 'recordCount', 'salt', 'snapshotDigest', 'version'])
+    || source.contract !== COMPANY_BACKUP_CONTRACT
+    || source.version !== 1
+    || source.algorithm !== 'AES-GCM-256'
+    || source.kdf !== 'PBKDF2-SHA-256'
+    || source.iterations !== COMPANY_BACKUP_KDF_ITERATIONS
+    || !Number.isInteger(source.recordCount)
+    || (source.recordCount as number) < 1
+    || (source.recordCount as number) > MAX_RECORDS
+    || typeof source.snapshotDigest !== 'string'
+    || !/^sha256:[a-f0-9]{64}$/.test(source.snapshotDigest)) {
+    throw backupError('The encrypted backup failed its safety contract.')
+  }
+  canonicalDate(source.createdAt, 'Backup date')
+  base64ToBytes(source.salt, 'Backup salt', 16)
+  base64ToBytes(source.iv, 'Backup IV', 12)
+  base64ToBytes(source.ciphertext, 'Encrypted company data', MAX_CIPHERTEXT_BYTES)
+  return source as EncryptedCompanyBackup
+}
+
+function authenticatedHeader(envelope: Omit<EncryptedCompanyBackup, 'ciphertext'>): Uint8Array {
+  return encoder.encode(JSON.stringify([
+    envelope.contract,
+    envelope.version,
+    envelope.algorithm,
+    envelope.kdf,
+    envelope.iterations,
+    envelope.createdAt,
+    envelope.recordCount,
+    envelope.salt,
+    envelope.iv,
+    envelope.snapshotDigest,
+  ]))
+}
+
+async function encryptionKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
+  const subtle = cryptoProvider().subtle
+  const material = await subtle.importKey('raw', encoder.encode(requirePassphrase(passphrase)), 'PBKDF2', false, ['deriveKey'])
+  return subtle.deriveKey(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: arrayBuffer(salt), iterations: COMPANY_BACKUP_KDF_ITERATIONS },
+    material,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  )
+}
+
+function collectSnapshot(storage: CompanyStorage, exportedAt: string): CompanySnapshot {
+  const keys = listPortableCompanyStorageKeys(storage)
+  if (keys.length === 0) throw backupError('No local company data is available to back up yet.')
+  if (keys.length > MAX_RECORDS) throw backupError('There are too many company records for one backup.')
+  return validateCompanySnapshot({
+    contract: COMPANY_SNAPSHOT_CONTRACT,
+    version: 1,
+    exportedAt,
+    records: keys.map((key) => ({ key, value: storage.getItem(key) })),
+    authRecordsIncluded: false,
+    managedWorkspaceRecordsIncluded: false,
+    externalWritesPerformed: false,
+  })
+}
+
+export async function createEncryptedCompanyBackup(storage: CompanyStorage, passphrase: string, now = new Date()): Promise<{ envelope: EncryptedCompanyBackup; filename: string; json: string }> {
+  const createdAt = canonicalDate(now.toISOString(), 'Backup date')
+  const snapshot = collectSnapshot(storage, createdAt)
+  const plaintext = JSON.stringify(snapshot)
+  const snapshotDigest = await sha256(plaintext)
+  const salt = cryptoProvider().getRandomValues(new Uint8Array(16))
+  const iv = cryptoProvider().getRandomValues(new Uint8Array(12))
+  const metadata: Omit<EncryptedCompanyBackup, 'ciphertext'> = {
+    contract: COMPANY_BACKUP_CONTRACT,
+    version: 1,
+    algorithm: 'AES-GCM-256',
+    kdf: 'PBKDF2-SHA-256',
+    iterations: COMPANY_BACKUP_KDF_ITERATIONS,
+    createdAt,
+    recordCount: snapshot.records.length,
+    salt: bytesToBase64(salt),
+    iv: bytesToBase64(iv),
+    snapshotDigest,
+  }
+  const ciphertext = await cryptoProvider().subtle.encrypt(
+    { name: 'AES-GCM', iv: arrayBuffer(iv), additionalData: arrayBuffer(authenticatedHeader(metadata)), tagLength: 128 },
+    await encryptionKey(passphrase, salt),
+    encoder.encode(plaintext),
+  )
+  const envelope: EncryptedCompanyBackup = { ...metadata, ciphertext: bytesToBase64(new Uint8Array(ciphertext)) }
+  const json = `${JSON.stringify(envelope, null, 2)}\n`
+  if (encoder.encode(json).byteLength > MAX_BACKUP_BYTES) throw backupError('The encrypted company backup is too large.')
+  return { envelope, filename: `supermega-company-backup-${createdAt.slice(0, 10)}.json`, json }
+}
+
+function categorySummary(records: CompanyBackupRecord[]): Array<{ label: string; count: number }> {
+  const counts = new Map<string, number>()
+  for (const record of records) {
+    const label = categoryMatchers.find(([, matcher]) => matcher(record.key))?.[0] ?? 'Controls'
+    counts.set(label, (counts.get(label) ?? 0) + 1)
+  }
+  return categoryMatchers.map(([label]) => ({ label, count: counts.get(label) ?? 0 })).filter((item) => item.count > 0)
+}
+
+export async function inspectEncryptedCompanyBackup(input: string, passphrase: string): Promise<CompanyBackupInspection> {
+  if (typeof input !== 'string' || encoder.encode(input).byteLength > MAX_BACKUP_BYTES) throw backupError('The encrypted backup file is too large.')
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(input)
+  } catch {
+    throw backupError('This file is not valid backup JSON.')
+  }
+  const envelope = parseEnvelope(parsed)
+  const salt = base64ToBytes(envelope.salt, 'Backup salt', 16)
+  const iv = base64ToBytes(envelope.iv, 'Backup IV', 12)
+  const ciphertext = base64ToBytes(envelope.ciphertext, 'Encrypted company data', MAX_CIPHERTEXT_BYTES)
+  const { ciphertext: _ciphertext, ...metadata } = envelope
+  void _ciphertext
+  let plaintext: string
+  try {
+    const decrypted = await cryptoProvider().subtle.decrypt(
+      { name: 'AES-GCM', iv: arrayBuffer(iv), additionalData: arrayBuffer(authenticatedHeader(metadata)), tagLength: 128 },
+      await encryptionKey(passphrase, salt),
+      arrayBuffer(ciphertext),
+    )
+    plaintext = decoder.decode(decrypted)
+  } catch {
+    throw backupError('The backup password is wrong or the file was changed. Nothing was restored.')
+  }
+  let snapshotValue: unknown
+  try {
+    snapshotValue = JSON.parse(plaintext)
+  } catch {
+    throw backupError('The decrypted company snapshot is invalid. Nothing was restored.')
+  }
+  const snapshot = validateCompanySnapshot(snapshotValue)
+  const digest = await sha256(JSON.stringify(snapshot))
+  if (digest !== envelope.snapshotDigest || snapshot.records.length !== envelope.recordCount || snapshot.exportedAt !== envelope.createdAt) {
+    throw backupError('The encrypted backup integrity check failed. Nothing was restored.')
+  }
+  return {
+    contract: COMPANY_SNAPSHOT_CONTRACT,
+    exportedAt: snapshot.exportedAt,
+    recordCount: snapshot.records.length,
+    snapshotDigest: digest,
+    categories: categorySummary(snapshot.records),
+    authRecordsIncluded: false,
+    managedWorkspaceRecordsIncluded: false,
+    externalWritesPerformed: false,
+    snapshot,
+  }
+}
+
+function restoreValues(storage: CompanyStorage, values: Map<string, string | null>): void {
+  for (const [key, value] of values) {
+    if (value === null) storage.removeItem(key)
+    else storage.setItem(key, value)
+  }
+}
+
+function valuesMatch(storage: CompanyStorage, values: Map<string, string | null>): boolean {
+  return [...values].every(([key, value]) => storage.getItem(key) === value)
+}
+
+export async function restoreCompanyBackup(storage: CompanyStorage, inspection: CompanyBackupInspection): Promise<CompanyRestoreResult> {
+  if (!inspection || inspection.contract !== COMPANY_SNAPSHOT_CONTRACT || inspection.authRecordsIncluded !== false || inspection.managedWorkspaceRecordsIncluded !== false) {
+    throw backupError('Inspect this encrypted backup before restoring it.')
+  }
+  const snapshot = validateCompanySnapshot(inspection.snapshot)
+  const snapshotDigest = await sha256(JSON.stringify(snapshot))
+  if (snapshotDigest !== inspection.snapshotDigest || snapshot.records.length !== inspection.recordCount) {
+    throw backupError('The inspected backup changed before restore. Inspect it again.')
+  }
+  const currentKeys = listPortableCompanyStorageKeys(storage)
+  const incoming = new Map(snapshot.records.map((record) => [record.key, record.value]))
+  const affectedKeys = [...new Set([...currentKeys, ...incoming.keys()])].sort()
+  const previous = new Map(affectedKeys.map((key) => [key, storage.getItem(key)]))
+  const target = new Map(affectedKeys.map((key) => [key, incoming.get(key) ?? null]))
+  try {
+    restoreValues(storage, target)
+    if (!valuesMatch(storage, target)) throw backupError('The browser did not confirm every restored record.')
+  } catch (error) {
+    try {
+      restoreValues(storage, previous)
+      if (!valuesMatch(storage, previous)) throw backupError('Rollback verification failed.')
+    } catch {
+      throw backupError('Restore failed and the previous local state could not be verified. Stop using this browser and keep the backup file.')
+    }
+    throw backupError(`Restore failed; the previous company state was restored. ${error instanceof Error ? error.message : ''}`.trim())
+  }
+  return {
+    restoredCount: incoming.size,
+    removedCount: currentKeys.filter((key) => !incoming.has(key)).length,
+    snapshotDigest,
+    authRecordsRestored: false,
+    managedWorkspaceRecordsRestored: false,
+    externalWritesPerformed: false,
+  }
+}

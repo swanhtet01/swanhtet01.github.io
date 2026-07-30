@@ -903,6 +903,31 @@ textarea { min-height: 72px; resize: vertical; }
 .settings-advanced > summary small { margin-left: auto; color: var(--core-quiet); font-size: 10px; font-weight: 600; }
 .settings-advanced[open] > summary { border-bottom: 1px solid var(--core-line); }
 .settings-advanced-content { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(280px,.8fr); gap: 10px; padding: 10px; }
+.settings-control-stack { min-width: 0; display: grid; align-content: start; gap: 10px; }
+.company-backup-panel { min-width: 0; display: grid; align-content: start; gap: 12px; }
+.company-backup-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.company-backup-head > div { min-width: 0; }
+.company-backup-head h2 { margin: 3px 0 4px; color: var(--core-ink); font-size: 16px; line-height: 1.25; }
+.company-backup-head p { margin: 0; color: var(--core-muted); font-size: 10px; line-height: 1.45; }
+.company-backup-boundary { display: grid; gap: 3px; border-left: 3px solid var(--core-green); padding: 8px 0 8px 10px; background: rgba(11,116,94,.045); }
+.company-backup-boundary strong { color: var(--core-ink); font-size: 10px; }
+.company-backup-boundary span { color: var(--core-muted); font-size: 9px; line-height: 1.45; }
+.company-backup-fields { display: grid; gap: 8px; }
+.company-backup-fields label { min-width: 0; display: grid; gap: 5px; color: var(--core-muted); font-size: 9px; font-weight: 760; }
+.company-backup-fields input { width: 100%; min-width: 0; min-height: 38px; border: 1px solid var(--core-line); border-radius: 6px; padding: 7px 9px; background: var(--core-panel-raised); color: var(--core-ink); font-size: 11px; }
+.company-backup-fields input[type="file"] { height: auto; padding: 6px; font-size: 9px; }
+.company-backup-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.company-backup-inspection { display: grid; gap: 10px; border-top: 1px solid var(--core-line); padding-top: 11px; }
+.company-backup-inspection > div:first-child { min-width: 0; display: grid; gap: 4px; }
+.company-backup-inspection > div:first-child strong { color: var(--core-ink); font-size: 11px; line-height: 1.35; }
+.company-backup-inspection > div:first-child small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.company-backup-inspection > p { margin: 0; color: var(--core-muted); font-size: 9px; line-height: 1.45; }
+.company-backup-categories { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 7px; background: var(--core-panel); }
+.company-backup-categories span { min-width: 0; min-height: 46px; display: grid; align-content: center; gap: 2px; border-right: 1px solid var(--core-line); padding: 6px 7px; }
+.company-backup-categories span:nth-child(3n) { border-right: 0; }
+.company-backup-categories small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 7px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.company-backup-categories strong { color: var(--core-ink); font-size: 12px; }
+.company-backup-notice { min-height: 32px; margin: 0; }
 .learning-plan { display: grid; gap: 12px; margin-top: 12px; border: 1px solid rgba(11,116,94,.22); border-radius: 10px; padding: 13px; background: var(--core-panel-raised); }
 .learning-plan h3 { margin: 3px 0 4px; color: var(--core-ink); font-size: 15px; line-height: 1.2; }
 .learning-plan p { margin: 0; color: var(--core-muted); font-size: 11px; line-height: 1.45; }
@@ -1434,6 +1459,11 @@ textarea { min-height: 72px; resize: vertical; }
   .ai-setup-guide { grid-template-columns: minmax(0,1fr) auto; }
   .ai-setup-guide-rows { grid-column: 1/-1; grid-row: 2; }
   .settings-advanced-content { grid-template-columns: 1fr; }
+  .company-backup-head { display: grid; }
+  .company-backup-head .status-pill { justify-self: start; }
+  .company-backup-fields input { min-height: 44px; }
+  .company-backup-actions { justify-content: flex-start; }
+  .company-backup-actions .core-button { width: 100%; }
   .learning-plan-rows { grid-template-columns: 1fr; }
   .learning-plan-rows span { border-right: 0; }
   .learning-plan-rows span:nth-last-child(-n+2) { border-bottom: 1px solid var(--core-line); }

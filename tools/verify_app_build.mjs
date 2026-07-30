@@ -37,6 +37,7 @@ let productionRuntimeChecks = 0
 let businessCommandRuntimeChecks = 0
 let ownerControlRuntimeChecks = 0
 let pilotOutcomeRuntimeChecks = 0
+let companyBackupRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
 const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productHomeReadinessSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
@@ -126,6 +127,8 @@ const managedActivationSource = await readFile(resolve(root, 'supermega_runtime'
 const pilotOutcomeSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'pilot-outcome.ts'), 'utf8')
 const pilotOutcomeUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PilotOutcomePanel.tsx'), 'utf8')
 const pilotOutcomeHookSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'useLocalPilotOutcome.ts'), 'utf8')
+const companyBackupSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'company-backup.ts'), 'utf8')
+const companyBackupUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'CompanyBackupPanel.tsx'), 'utf8')
 
 if (!managedContextSource.includes("supermega.managed_context_profile_request.v1")
   || !managedContextSource.includes('buildManagedContextProfileRequest')
@@ -942,7 +945,7 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !websiteSource.includes("event: 'agent_job_chosen'")
   || !ecommerceSource.includes("event: 'agent_job_seen'")
   || !ecommerceSource.includes("event: 'agent_job_chosen'")
-  || !settingsPageSource.includes('BEHAVIOR_TRAIL_KEY')
+  || !companyBackupSource.includes("'supermega.behavior-trail.v1'")
   || !settingsPageSource.includes('const behaviorTrail = readBehaviorTrail(window.localStorage)')
   || !settingsPageSource.includes('const behaviorSignalCount = behaviorTrail.length')
   || !settingsPageSource.includes('const behaviorPreference = summarizeBehaviorPreferences(behaviorTrail)')
@@ -1996,14 +1999,15 @@ if (!storefrontDraftStoragePrefix
   || !localProductExportBlock.includes('key.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)')
   || !localProductExportBlock.includes('key.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)')
   || !localProductExportBlock.includes('key.startsWith(SHOP_ORDER_DRAFT_RESET_PREFIX)')
-  || !localProductResetBlock.includes('key?.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)')
-  || !localProductResetBlock.includes('key?.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)')
   || !localProductResetBlock.includes("const { resetCommerceOrderDraftRecovery } = await import('./commerce-order-draft')")
   || !localProductResetBlock.includes('await resetCommerceOrderDraftRecovery()')
-  || !localProductResetBlock.includes('key?.startsWith(SHOP_ORDER_DRAFT_RESET_PREFIX)')
-  || !localProductResetBlock.includes('SHOP_ORDER_DRAFT_RESET_EPOCH_KEY')
-  || !localProductResetBlock.includes('WEBSITE_ECOMMERCE_HANDOFF_KEY,\n        LEGACY_STOREFRONT_DRAFT_RESET_KEY,\n        ...retainedKeys,')
-  || !settingsPageSource.includes('Website, Ecommerce setup, and handoff records')
+  || !localProductResetBlock.includes('listResettableCompanyStorageKeys(window.localStorage)')
+  || !localProductResetBlock.includes('...resettableKeys')
+  || !companyBackupSource.includes("'supermega.shop.order_draft.v1.'")
+  || !companyBackupSource.includes("'supermega.ecommerce.storefront_draft.v2.'")
+  || !companyBackupSource.includes("'supermega.ecommerce.storefront_draft.v1.'")
+  || !companyBackupSource.includes("'supermega.shop.order_draft_reset.v1'")
+  || !settingsPageSource.includes('owner-control, outcome, setup, unfinished order drafts, and local AI-memory record')
   || coreSource.includes("from '../products/ecommerce/storefront-draft'")) fail('ecommerce_storefront_draft_not_in_deliberate_reset_or_broke_lazy_boundary')
 if (!commerceOrderDraftSource.includes("COMMERCE_ORDER_DRAFT_SCHEMA = 'supermega.shop.order_draft.v1'")
   || !commerceOrderDraftSource.includes("['sku', 'quantity', 'unitPriceMmk', 'availableAtSave']")
@@ -10911,10 +10915,6 @@ if (!javascriptFiles.some((path) => /[\\/]router-[^\\/]+\.js$/.test(path))) fail
 if (!javascriptFiles.some((path) => /[\\/]ClientDataOnboarding-[^\\/]+\.js$/.test(path))) fail('client_onboarding_chunk_artifact_missing')
 if (largestJavascriptBytes > 480_000) fail(`javascript_headroom_budget:${largestJavascriptBytes}`)
 
-if (failures.length) {
-  console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
-  process.exit(1)
-}
 if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !pilotOutcomeSource.includes("supermega.local_pilot_outcome_checkpoint.v1")
   || !pilotOutcomeSource.includes("supermega.local_pilot_outcome_review.v1")
@@ -10989,4 +10989,122 @@ try {
   fail(`pilot_outcome_runtime_failed:${error instanceof Error ? error.message : String(error)}`)
 }
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+if (!companyBackupSource.includes("COMPANY_BACKUP_CONTRACT = 'supermega.company_backup.v1'")
+  || !companyBackupSource.includes("COMPANY_SNAPSHOT_CONTRACT = 'supermega.local_company_snapshot.v1'")
+  || !companyBackupSource.includes('COMPANY_BACKUP_KDF_ITERATIONS = 600_000')
+  || !companyBackupSource.includes("algorithm: 'AES-GCM-256'")
+  || !companyBackupSource.includes("kdf: 'PBKDF2-SHA-256'")
+  || !companyBackupSource.includes('tagLength: 128')
+  || !companyBackupSource.includes("'supermega.pilot-outcome.v1'")
+  || !companyBackupSource.includes("'supermega.owner-control-acknowledgements.v1'")
+  || !companyBackupSource.includes("'supermega.website.release-foundation.v1:'")
+  || !companyBackupSource.includes("'supermega.ecommerce.buying_lifecycle.v1.'")
+  || !companyBackupSource.includes('authRecordsIncluded: false')
+  || !companyBackupSource.includes('managedWorkspaceRecordsIncluded: false')
+  || !companyBackupSource.includes('the previous company state was restored')
+  || !companyBackupUiSource.includes('Download encrypted backup')
+  || !companyBackupUiSource.includes('Inspect backup')
+  || !companyBackupUiSource.includes('Confirm restore')
+  || !companyBackupUiSource.includes('Auth sessions, managed workspace IDs, and credentials are excluded.')
+  || !appLiveVerifierSource.includes('supermega.company_backup.v1')
+  || !appLiveVerifierSource.includes('company_backup_chunk_missing')
+  || !settingsPageSource.includes("import('./CompanyBackupPanel')")
+  || !settingsPageSource.includes('listResettableCompanyStorageKeys(window.localStorage)')
+  || !settingsPageSource.includes('every current Shop, Plant, Website, Ecommerce, owner-control, outcome, setup, unfinished order drafts, and local AI-memory record')
+  || !coreCssSource.includes('.company-backup-panel')
+  || !coreCssSource.includes('.company-backup-fields input { min-height: 44px; }')
+  || !coreCssSource.includes('.company-backup-actions .core-button { width: 100%; }')) fail('company_backup_contract_missing')
+
+try {
+  const backup = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'company-backup.ts')).href}?company-backup=${Date.now()}`)
+  class MemoryStorage {
+    constructor(entries = []) { this.values = new Map(entries) }
+    get length() { return this.values.size }
+    key(index) { return [...this.values.keys()][index] ?? null }
+    getItem(key) { return this.values.get(key) ?? null }
+    setItem(key, value) { this.values.set(key, String(value)) }
+    removeItem(key) { this.values.delete(key) }
+  }
+  const passphrase = 'customer-owned-2026'
+  const source = new MemoryStorage([
+    ['supermega.commerce.workspace.v2', JSON.stringify({ schema: 'commerce', customer: 'Mingalar Private Buyer' })],
+    ['supermega.production.workspace.v2', JSON.stringify({ schema: 'production', jobs: 2 })],
+    ['supermega.website.release-foundation.v1:main', JSON.stringify({ schema: 'website-release', ready: true })],
+    ['supermega.ecommerce.buying_lifecycle.v1.main', JSON.stringify({ schema: 'buying', orders: 1 })],
+    ['supermega.owner-control-acknowledgements.v1', JSON.stringify([{ itemId: 'shop-1' }])],
+    ['supermega.auth.session.v1', JSON.stringify({ accessToken: 'must-never-export' })],
+    ['supermega.managed.workspace.v1', 'managed-secret-workspace'],
+    ['unrelated.browser.state', JSON.stringify({ keep: true })],
+  ])
+  const created = await backup.createEncryptedCompanyBackup(source, passphrase, new Date('2026-07-30T12:00:00.000Z'))
+  if (created.envelope.recordCount !== 5 || created.envelope.algorithm !== 'AES-GCM-256' || created.envelope.iterations !== 600_000) fail('company_backup_envelope_invalid')
+  if (created.json.includes('Mingalar Private Buyer') || created.json.includes('must-never-export') || created.json.includes('managed-secret-workspace')) fail('company_backup_plaintext_leaked')
+  companyBackupRuntimeChecks += 1
+  const inspection = await backup.inspectEncryptedCompanyBackup(created.json, passphrase)
+  if (inspection.recordCount !== 5 || inspection.authRecordsIncluded !== false || inspection.managedWorkspaceRecordsIncluded !== false || inspection.categories.length < 4) fail('company_backup_inspection_invalid')
+  companyBackupRuntimeChecks += 1
+  let wrongPasswordRejected = false
+  try { await backup.inspectEncryptedCompanyBackup(created.json, 'wrong-password-2026') } catch { wrongPasswordRejected = true }
+  if (!wrongPasswordRejected) fail('company_backup_wrong_password_accepted')
+  companyBackupRuntimeChecks += 1
+  const tamperedEnvelope = JSON.parse(created.json)
+  tamperedEnvelope.ciphertext = `${tamperedEnvelope.ciphertext[0] === 'A' ? 'B' : 'A'}${tamperedEnvelope.ciphertext.slice(1)}`
+  let tamperRejected = false
+  try { await backup.inspectEncryptedCompanyBackup(JSON.stringify(tamperedEnvelope), passphrase) } catch { tamperRejected = true }
+  if (!tamperRejected) fail('company_backup_ciphertext_tamper_accepted')
+  companyBackupRuntimeChecks += 1
+  const target = new MemoryStorage([
+    ['supermega.commerce.workspace.v2', JSON.stringify({ stale: true })],
+    ['supermega.website.workspace.v2', JSON.stringify({ remove: true })],
+    ['supermega.auth.session.v1', JSON.stringify({ accessToken: 'current-auth-kept' })],
+    ['supermega.managed.workspace.v1', 'current-managed-kept'],
+    ['unrelated.browser.state', JSON.stringify({ keep: 'unchanged' })],
+  ])
+  const restored = await backup.restoreCompanyBackup(target, inspection)
+  if (restored.restoredCount !== 5 || restored.removedCount !== 1 || target.getItem('supermega.website.workspace.v2') !== null) fail('company_backup_restore_set_invalid')
+  if (!target.getItem('supermega.commerce.workspace.v2').includes('Mingalar Private Buyer')) fail('company_backup_restore_record_missing')
+  if (!target.getItem('supermega.auth.session.v1').includes('current-auth-kept') || target.getItem('supermega.managed.workspace.v1') !== 'current-managed-kept' || !target.getItem('unrelated.browser.state').includes('unchanged')) fail('company_backup_restore_boundary_broken')
+  companyBackupRuntimeChecks += 1
+  const rollbackTarget = new MemoryStorage([
+    ['supermega.commerce.workspace.v2', JSON.stringify({ original: 'commerce' })],
+    ['supermega.behavior-trail.v1', JSON.stringify({ original: 'behavior' })],
+  ])
+  const rollbackBefore = JSON.stringify([...rollbackTarget.values])
+  const originalSetItem = rollbackTarget.setItem.bind(rollbackTarget)
+  let injected = false
+  rollbackTarget.setItem = (key, value) => {
+    if (!injected && key === 'supermega.commerce.workspace.v2') { injected = true; throw new Error('injected write failure') }
+    originalSetItem(key, value)
+  }
+  let rollbackRejected = false
+  try { await backup.restoreCompanyBackup(rollbackTarget, inspection) } catch (error) { rollbackRejected = String(error).includes('previous company state was restored') }
+  if (!rollbackRejected || JSON.stringify([...rollbackTarget.values]) !== rollbackBefore) fail('company_backup_restore_rollback_invalid')
+  companyBackupRuntimeChecks += 1
+  let unknownRejected = false
+  try {
+    backup.validateCompanySnapshot({ ...inspection.snapshot, records: [{ key: 'supermega.auth.session.v1', value: '{}' }] })
+  } catch { unknownRejected = true }
+  if (!unknownRejected) fail('company_backup_auth_record_accepted')
+  companyBackupRuntimeChecks += 1
+  let duplicateRejected = false
+  try {
+    backup.validateCompanySnapshot({ ...inspection.snapshot, records: [inspection.snapshot.records[0], inspection.snapshot.records[0]] })
+  } catch { duplicateRejected = true }
+  if (!duplicateRejected) fail('company_backup_duplicate_record_accepted')
+  companyBackupRuntimeChecks += 1
+  if (!backup.isResettableCompanyStorageKey('supermega.pilot-outcome.v1')
+    || !backup.isResettableCompanyStorageKey('supermega.owner-control-acknowledgements.v1')
+    || !backup.isResettableCompanyStorageKey('supermega.website.workspace.recovery.v1.index')
+    || backup.isResettableCompanyStorageKey('supermega.auth.session.v1')
+    || backup.isResettableCompanyStorageKey('supermega.managed.workspace.v1')) fail('company_backup_reset_classifier_invalid')
+  companyBackupRuntimeChecks += 1
+} catch (error) {
+  fail(`company_backup_runtime_failed:${error instanceof Error ? error.message : String(error)}`)
+}
+
+if (failures.length) {
+  console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
+  process.exit(1)
+}
+
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
