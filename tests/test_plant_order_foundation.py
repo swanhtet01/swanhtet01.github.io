@@ -19,6 +19,7 @@ from supermega_runtime.plant_order_foundation import (
     create_empty_plant_order_state,
     inspect_plant_order_output,
     issue_plant_order_material,
+    issue_plant_order_substitute_material,
     plant_order_evidence_digest,
     project_plant_order,
     record_plant_order_effectiveness,
@@ -979,6 +980,140 @@ class PlantOrderFoundationTests(unittest.TestCase):
         )["state"]
         with self.assertRaisesRegex(PlantOrderValidationError, "must precede material issue"):
             approve(issued, proof=proof(5, "late substitute approval"))
+
+    def test_approved_substitute_issue_credits_exact_bom_and_preserves_genealogy(self) -> None:
+        state = released_state()
+        state = approve_plant_order_material_substitution(
+            state,
+            substitution_id="SUB-20260726-001",
+            material_id="MAT-FILTER-001",
+            substitute_material_id="MAT-FILTER-ALT-001",
+            substitute_name="Approved alternate filter media",
+            substitute_unit="kg",
+            original_quantity_per_unit_milli=1_500,
+            substitute_quantity_per_unit_milli=1_800,
+            approval_source_digest=plant_order_evidence_digest({"certificate": "CERT-ALT-001"}),
+            technical_basis="Reviewed 1.8 kg alternate for each 1.5 kg original BOM requirement.",
+            proof=proof(4, "approved exact alternate material basis"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        issued = issue_plant_order_substitute_material(
+            state,
+            issue_id="ISSUE-SUBSTITUTE-001",
+            substitution_id="SUB-20260726-001",
+            material_id="MAT-FILTER-001",
+            substitute_material_id="MAT-FILTER-ALT-001",
+            input_lot_id="LOT-FILTER-ALT-2407",
+            substitute_quantity_milli=18_000,
+            proof=proof(5, "requested exact approved substitute lot from Shop"),
+            expected_head_digest=state["headDigest"],
+        )
+
+        projection = project_plant_order(issued["state"])
+        filter_material = next(
+            row for row in projection["materials"] if row["materialId"] == "MAT-FILTER-001"
+        )
+        self.assertEqual(filter_material["issuedQuantityMilli"], 15_000)
+        self.assertEqual(filter_material["remainingToIssueMilli"], 0)
+        self.assertEqual(
+            [row["materialId"] for row in projection["plan"]["materials"]],
+            ["MAT-FILTER-001", "MAT-SHELL-001"],
+        )
+        self.assertEqual(
+            projection["genealogy"],
+            [
+                {
+                    "materialId": "MAT-FILTER-001",
+                    "inputLotId": "LOT-FILTER-ALT-2407",
+                    "outputBatchId": "BATCH-20260726-401",
+                    "issuedQuantityMilli": 15_000,
+                    "unit": "kg",
+                    "substitutionId": "SUB-20260726-001",
+                    "substituteMaterialId": "MAT-FILTER-ALT-001",
+                    "substituteQuantityMilli": 18_000,
+                    "substituteUnit": "kg",
+                }
+            ],
+        )
+        self.assertEqual(projection["materialIssues"][0]["kind"], "issue_substitute_material")
+
+        replay = issue_plant_order_substitute_material(
+            issued["state"],
+            issue_id="ISSUE-SUBSTITUTE-001",
+            substitution_id="SUB-20260726-001",
+            material_id="MAT-FILTER-001",
+            substitute_material_id="MAT-FILTER-ALT-001",
+            input_lot_id="LOT-FILTER-ALT-2407",
+            substitute_quantity_milli=18_000,
+            proof=proof(5, "requested exact approved substitute lot from Shop"),
+            expected_head_digest=state["headDigest"],
+        )
+        self.assertTrue(replay["replayed"])
+        self.assertEqual(replay["state"], issued["state"])
+
+        completed = issue_plant_order_material(
+            issued["state"],
+            issue_id="ISSUE-SHELL-001",
+            material_id="MAT-SHELL-001",
+            input_lot_id="LOT-SHELL-2407",
+            quantity_milli=20_000,
+            proof=proof(6, "issued retained shell BOM lot"),
+            expected_head_digest=issued["state"]["headDigest"],
+        )["state"]
+        output = record_plant_order_output(
+            completed,
+            output_id="OUT-SUBSTITUTE-001",
+            output_batch_id="BATCH-20260726-401",
+            quantity=10,
+            proof=proof(7, "recorded output with exact substitute genealogy"),
+            expected_head_digest=completed["headDigest"],
+        )["state"]
+        self.assertEqual(project_plant_order(output)["totalOutput"], 10)
+
+    def test_substitute_issue_rejects_unapproved_mismatched_inexact_and_excess(self) -> None:
+        released = released_state()
+
+        def issue(current: dict[str, object], **overrides: object) -> dict[str, object]:
+            values: dict[str, object] = {
+                "issue_id": "ISSUE-SUBSTITUTE-001",
+                "substitution_id": "SUB-20260726-001",
+                "material_id": "MAT-FILTER-001",
+                "substitute_material_id": "MAT-FILTER-ALT-001",
+                "input_lot_id": "LOT-FILTER-ALT-2407",
+                "substitute_quantity_milli": 18_000,
+                "proof": proof(5, "requested reviewed alternate lot"),
+                "expected_head_digest": current["headDigest"],
+            }
+            values.update(overrides)
+            return issue_plant_order_substitute_material(current, **values)
+
+        with self.assertRaisesRegex(PlantOrderValidationError, "does not reference the approved"):
+            issue(released, proof=proof(4, "unapproved substitute attempt"))
+
+        approved = approve_plant_order_material_substitution(
+            released,
+            substitution_id="SUB-20260726-001",
+            material_id="MAT-FILTER-001",
+            substitute_material_id="MAT-FILTER-ALT-001",
+            substitute_name="Approved alternate filter media",
+            substitute_unit="kg",
+            original_quantity_per_unit_milli=1_500,
+            substitute_quantity_per_unit_milli=1_800,
+            approval_source_digest=plant_order_evidence_digest({"certificate": "CERT-ALT-001"}),
+            technical_basis="Reviewed exact alternate conversion.",
+            proof=proof(4, "approved alternate before issue"),
+            expected_head_digest=released["headDigest"],
+        )["state"]
+        invalid_cases = (
+            ({"substitution_id": "SUB-UNKNOWN-001"}, "does not reference the approved"),
+            ({"substitute_material_id": "MAT-FILTER-ALT-002"}, "differs from the approved"),
+            ({"substitute_quantity_milli": 1}, "exact approved BOM conversion"),
+            ({"substitute_quantity_milli": 19_800}, "exceeds the reviewed BOM requirement"),
+        )
+        for overrides, message in invalid_cases:
+            with self.subTest(overrides=overrides):
+                with self.assertRaisesRegex(PlantOrderValidationError, message):
+                    issue(approved, **overrides)
 
     def test_output_requires_proportional_bom_issue(self) -> None:
         state = released_state()

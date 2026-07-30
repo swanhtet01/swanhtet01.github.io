@@ -45,6 +45,7 @@ _COMMAND_KINDS = frozenset(
         "record_quality_rework",
         "approve_material_substitution",
         "issue_material",
+        "issue_substitute_material",
         "record_effectiveness",
         "record_operation",
         "record_output",
@@ -827,6 +828,46 @@ def _command_payload(value: object, field: str) -> dict[str, Any]:
             "proof": _proof(source["proof"], f"{field}.proof"),
         }
 
+    if kind == "issue_substitute_material":
+        source = _object(
+            value,
+            field,
+            (
+                "kind",
+                "id",
+                "substitutionId",
+                "materialId",
+                "substituteMaterialId",
+                "inputLotId",
+                "substituteQuantityMilli",
+                "proof",
+            ),
+        )
+        return {
+            "kind": kind,
+            "id": _identifier(source["id"], f"{field}.id", "ISSUE"),
+            "substitutionId": _identifier(
+                source["substitutionId"], f"{field}.substitutionId", "SUB"
+            ),
+            "materialId": _identifier(
+                source["materialId"], f"{field}.materialId", "MAT"
+            ),
+            "substituteMaterialId": _identifier(
+                source["substituteMaterialId"],
+                f"{field}.substituteMaterialId",
+                "MAT",
+            ),
+            "inputLotId": _identifier(
+                source["inputLotId"], f"{field}.inputLotId", "LOT"
+            ),
+            "substituteQuantityMilli": _integer(
+                source["substituteQuantityMilli"],
+                f"{field}.substituteQuantityMilli",
+                minimum=1,
+            ),
+            "proof": _proof(source["proof"], f"{field}.proof"),
+        }
+
     if kind == "record_calibration":
         source = _object(
             value,
@@ -1096,6 +1137,7 @@ def _empty_projection() -> dict[str, Any]:
         "calibrations": [],
         "qualityReworks": [],
         "materialSubstitutions": [],
+        "materialIssues": [],
         "effectivenessWindow": None,
         "materials": [],
         "routing": [],
@@ -1324,6 +1366,58 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             material_issue_commands.append(command)
             continue
 
+        if kind == "issue_substitute_material":
+            if current_hold:
+                raise _fail(f"{field} is blocked by the failed current inspection.")
+            material = next(
+                (
+                    row
+                    for row in plan["materials"]
+                    if row["materialId"] == command["materialId"]
+                ),
+                None,
+            )
+            if material is None:
+                raise _fail(f"{field}.materialId is not in the reviewed BOM.")
+            approval = material_substitutions.get(command["materialId"])
+            if approval is None or approval["id"] != command["substitutionId"]:
+                raise _fail(
+                    f"{field}.substitutionId does not reference the approved substitute "
+                    "for this BOM material."
+                )
+            if approval["substituteMaterialId"] != command["substituteMaterialId"]:
+                raise _fail(
+                    f"{field}.substituteMaterialId differs from the approved substitute."
+                )
+            credit_numerator = (
+                command["substituteQuantityMilli"]
+                * approval["originalQuantityPerUnitMilli"]
+            )
+            credit_denominator = approval["substituteQuantityPerUnitMilli"]
+            if credit_numerator % credit_denominator:
+                raise _fail(
+                    f"{field}.substituteQuantityMilli does not produce an exact approved "
+                    "BOM conversion."
+                )
+            credited_quantity = credit_numerator // credit_denominator
+            if credited_quantity < 1 or credited_quantity > _MAX_SAFE_INTEGER:
+                raise _fail(
+                    f"{field}.substituteQuantityMilli exceeds the supported conversion range."
+                )
+            next_issued = issued[command["materialId"]] + credited_quantity
+            required_quantity = _safe_product(
+                plan["job"]["targetQuantity"],
+                material["quantityPerUnitMilli"],
+                f"material requirement for {material['materialId']}",
+            )
+            if next_issued > required_quantity:
+                raise _fail(
+                    f"{field} exceeds the reviewed BOM requirement after approved conversion."
+                )
+            issued[command["materialId"]] = next_issued
+            material_issue_commands.append(command)
+            continue
+
         if kind == "record_operation":
             if current_hold:
                 raise _fail(f"{field} is blocked by the failed current inspection.")
@@ -1453,7 +1547,6 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
         for row in (latest_availability["materials"] if latest_availability else [])
     }
     material_rows = []
-    genealogy = []
     for material_id in sorted(material_plan):
         row = material_plan[material_id]
         required = _safe_product(
@@ -1474,16 +1567,34 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
                 ),
             }
         )
-        if issued[material_id] and availability:
-            genealogy.append(
+
+    genealogy = []
+    for command in material_issue_commands:
+        material = material_plan[command["materialId"]]
+        row = {
+            "materialId": command["materialId"],
+            "inputLotId": command["inputLotId"],
+            "outputBatchId": plan["job"]["outputBatchId"],
+            "unit": material["unit"],
+        }
+        if command["kind"] == "issue_material":
+            row["issuedQuantityMilli"] = command["quantityMilli"]
+        else:
+            approval = material_substitutions[command["materialId"]]
+            row.update(
                 {
-                    "materialId": material_id,
-                    "inputLotId": availability["inputLotId"],
-                    "outputBatchId": plan["job"]["outputBatchId"],
-                    "issuedQuantityMilli": issued[material_id],
-                    "unit": row["unit"],
+                    "issuedQuantityMilli": (
+                        command["substituteQuantityMilli"]
+                        * approval["originalQuantityPerUnitMilli"]
+                        // approval["substituteQuantityPerUnitMilli"]
+                    ),
+                    "substitutionId": command["substitutionId"],
+                    "substituteMaterialId": command["substituteMaterialId"],
+                    "substituteQuantityMilli": command["substituteQuantityMilli"],
+                    "substituteUnit": approval["substituteUnit"],
                 }
             )
+        genealogy.append(row)
 
     operations = []
     for index, row in enumerate(plan["routing"]):
@@ -1564,6 +1675,7 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
         "materialSubstitutions": [
             material_substitutions[key] for key in sorted(material_substitutions)
         ],
+        "materialIssues": material_issue_commands,
         "effectivenessWindow": effectiveness_window,
         "materials": material_rows,
         "routing": plan["routing"],
@@ -1841,6 +1953,34 @@ def approve_plant_order_material_substitution(
     )
 
 
+def issue_plant_order_substitute_material(
+    state: object,
+    *,
+    issue_id: object,
+    substitution_id: object,
+    material_id: object,
+    substitute_material_id: object,
+    input_lot_id: object,
+    substitute_quantity_milli: object,
+    proof: object,
+    expected_head_digest: object,
+) -> dict[str, Any]:
+    return _append_command(
+        state,
+        {
+            "kind": "issue_substitute_material",
+            "id": issue_id,
+            "substitutionId": substitution_id,
+            "materialId": material_id,
+            "substituteMaterialId": substitute_material_id,
+            "inputLotId": input_lot_id,
+            "substituteQuantityMilli": substitute_quantity_milli,
+            "proof": _proof(proof, "proof"),
+        },
+        expected_head_digest=expected_head_digest,
+    )
+
+
 def record_plant_order_calibration(
     state: object,
     *,
@@ -2047,6 +2187,7 @@ __all__ = (
     "create_empty_plant_order_state",
     "inspect_plant_order_output",
     "issue_plant_order_material",
+    "issue_plant_order_substitute_material",
     "plant_order_evidence_digest",
     "project_plant_order",
     "record_plant_order_effectiveness",
