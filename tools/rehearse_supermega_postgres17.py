@@ -869,19 +869,18 @@ def _exercise_managed_context_postgres_route(
             "x-supermega-identity-signature": signature,
         }
 
-    def context_counts() -> tuple[int, int]:
+    def workspace_counts() -> tuple[int, int, int]:
         with _connect(admin_database_url, autocommit=True) as administrator:
             row = administrator.execute(
                 """
                 select
-                  (select count(*) from app_private.workspace_state
-                   where workspace_id = %s and surface = 'company'),
-                  (select count(*) from app_private.workspace_events
-                   where workspace_id = %s and event_type = 'company.snapshot.saved')
+                  (select count(*) from app_private.workspace_state where workspace_id = %s),
+                  (select count(*) from app_private.workspace_events where workspace_id = %s),
+                  (select count(*) from app_private.approval_requests where workspace_id = %s)
                 """,
-                (MANAGED_WORKSPACE, MANAGED_WORKSPACE),
+                (MANAGED_WORKSPACE, MANAGED_WORKSPACE, MANAGED_WORKSPACE),
             ).fetchone()
-        return int(row[0]), int(row[1])
+        return int(row[0]), int(row[1]), int(row[2])
 
     router = create_trial_router(store=store, resolve_principal=resolve_trial_principal)
 
@@ -926,8 +925,8 @@ def _exercise_managed_context_postgres_route(
             return int(exc.status_code), dict(detail)
         raise RehearsalFailure("managed_context_expected_denial_missing")
 
-    before = context_counts()
-    if before != (0, 0):
+    before = workspace_counts()
+    if before != (0, 1, 1):
         raise RehearsalFailure("managed_context_initial_state_unexpected")
     try:
         validation_body = TrialManagedContextValidateRequest(package=approved_context)
@@ -939,7 +938,7 @@ def _exercise_managed_context_postgres_route(
         )
         if unauthenticated_status != 401 or forged_status != 401:
             raise RehearsalFailure("managed_context_identity_bypass")
-        if context_counts() != before:
+        if workspace_counts() != before:
             raise RehearsalFailure("managed_context_identity_denial_wrote")
 
         owner_headers = identity_headers(MANAGED_OWNER_ACTOR)
@@ -955,7 +954,7 @@ def _exercise_managed_context_postgres_route(
             or profile.get("approvedContextDigest") != approved_context.get("contextDigest")
         ):
             raise RehearsalFailure("managed_context_validation_projection_failed")
-        if context_counts() != before:
+        if workspace_counts() != before:
             raise RehearsalFailure("managed_context_validation_wrote")
 
         retention_body = TrialManagedContextRetainRequest(
@@ -977,14 +976,14 @@ def _exercise_managed_context_postgres_route(
             or result.get("version") != 1
         ):
             raise RehearsalFailure("managed_context_retention_projection_failed")
-        if context_counts() != (1, 1):
+        if workspace_counts() != (1, 2, 1):
             raise RehearsalFailure("managed_context_retention_not_atomic")
 
         replay_payload = retain_endpoint(route_request(owner_headers), retention_body)
         if (
             replay_payload.get("result", {}).get("version") != 1
             or replay_payload.get("retention", {}).get("idempotentReplay") is not True
-            or context_counts() != (1, 1)
+            or workspace_counts() != (1, 2, 1)
         ):
             raise RehearsalFailure("managed_context_replay_wrote")
 
@@ -1006,7 +1005,7 @@ def _exercise_managed_context_postgres_route(
             writer_status != 403
             or writer_error.get("code") != "trial_capability_required"
             or writer_error.get("required_capability") != "company.control.approve"
-            or context_counts() != (1, 1)
+            or workspace_counts() != (1, 2, 1)
         ):
             raise RehearsalFailure("managed_context_owner_capability_bypass")
 
@@ -1027,7 +1026,7 @@ def _exercise_managed_context_postgres_route(
             set(owner_context) != expected_brief_keys
             or owner_context.get("profileDigest") != profile.get("profileDigest")
             or owner_context.get("approvedContextDigest") != approved_context.get("contextDigest")
-            or context_counts() != (1, 1)
+            or workspace_counts() != (1, 2, 1)
         ):
             raise RehearsalFailure("managed_context_summary_projection_failed")
     finally:
