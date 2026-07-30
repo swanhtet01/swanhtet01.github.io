@@ -481,6 +481,30 @@ function validateFinalAudit(audit) {
   }
 }
 
+function validateReadOnlyReplayHost(audit, memoryRecovery) {
+  const finalHost = validateFinalAudit(audit)
+  const blockers = audit.hostAdmission?.blockers
+  const memoryUsedPercent = Number(audit.memory?.usedPercent)
+  if (!Array.isArray(blockers)
+    || blockers.length > 8
+    || new Set(blockers).size !== blockers.length
+    || blockers.some((blocker) => !/^[a-z0-9_]{1,80}$/.test(String(blocker)))
+    || !Number.isFinite(memoryUsedPercent)
+    || memoryUsedPercent < 0
+    || memoryUsedPercent > 100) {
+    fail('ally_ceo_local_cycle_replay_audit_invalid')
+  }
+  return {
+    generatedAt: String(audit.generatedAt || ''),
+    memoryUsedPercent,
+    maxConcurrentLocalRuns: finalHost.eligible ? 1 : 0,
+    loadedModels: 0,
+    admissionEligible: finalHost.eligible,
+    admissionBlockers: [...blockers],
+    memoryRecovery,
+  }
+}
+
 function validateHealth(health, provider, model) {
   const exactZero = ['active_jobs', 'queued_missions', 'running_missions', 'pending_approvals', 'pending_report_finalizations', 'pending_evaluations']
     .every((key) => health?.[key] === 0)
@@ -1078,18 +1102,8 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     releasedWorkingSetMb: 0,
     processTerminations: 0,
   }
-  if (execute && recoverMemory && canAttemptMemoryRecovery(audit)) {
-    const receipt = parseJson(
-      await runCommand({ kind: 'trim', args: [], timeoutMs: 30_000 }),
-      'ally_ceo_local_cycle_memory_recovery_json_invalid',
-    )
-    memoryRecovery = validateMemoryRecovery(receipt, audit)
-    await waitForMemorySettlement(memoryRecovery.stabilizationDelayMs)
-    audit = parseJson(await runCommand({ kind: 'audit', args: [], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_recovery_audit_json_invalid')
-  }
-  const host = { ...validateAudit(audit), memoryRecovery }
   const health = parseJson(await runCommand({ kind: 'local', args: ['health'], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_health_invalid')
-  validateHealth(health, provider, model)
+  validateHealth(health)
   const queueText = await runCommand({ kind: 'local', args: ['queue', 'list'], timeoutMs: 30_000 })
   const rotation = dependencies.plan
     ? (() => {
@@ -1118,7 +1132,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
         rejectedOutcomes: rotation.rejectedOutcomes,
         skippedOutcomes: rotation.skippedOutcomes,
       } : {}),
-      host,
+      host: validateReadOnlyReplayHost(audit, memoryRecovery),
       liveHq: { performed: false, skipped: 'period_closed' },
       sourceCount: null,
       knowledgeRefresh: {
@@ -1132,6 +1146,17 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
       controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
     }
   }
+  if (execute && recoverMemory && canAttemptMemoryRecovery(audit)) {
+    const receipt = parseJson(
+      await runCommand({ kind: 'trim', args: [], timeoutMs: 30_000 }),
+      'ally_ceo_local_cycle_memory_recovery_json_invalid',
+    )
+    memoryRecovery = validateMemoryRecovery(receipt, audit)
+    await waitForMemorySettlement(memoryRecovery.stabilizationDelayMs)
+    audit = parseJson(await runCommand({ kind: 'audit', args: [], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_recovery_audit_json_invalid')
+  }
+  const host = { ...validateAudit(audit), memoryRecovery }
+  validateHealth(health, provider, model)
   const capacityAdmission = validateCapacityAdmission(parseJson(
     await runCommand({ kind: 'local', args: ['capacity', '--project', 'SuperMega'], timeoutMs: 30_000 }),
     'ally_ceo_local_cycle_capacity_invalid',

@@ -708,6 +708,36 @@ test('five accepted outcomes close the UTC period with zero queue or model work'
   assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)
 })
 
+test('closed period reports safely under memory pressure without trim or model admission', async () => {
+  const queueList = outcomeSequence.map((outcomeId, index) => completedOutcomeLine(outcomeId, index)).join('')
+  const state = harness({ audit: audit(false), queueList })
+  const result = await runAllyCeoLocalCycle(
+    { execute: true, refreshKnowledge: true },
+    {
+      buildPlan: async (completedOutcomeIds) => rotatingPlan(completedOutcomeIds),
+      runCommand: state.runCommand,
+      inspectReport: async () => ({
+        path: 'C:\\state\\outputs\\accepted.md',
+        bytes: Buffer.byteLength(acceptedStructuredReport),
+        digest: 'sha256:' + '8'.repeat(64),
+        text: acceptedStructuredReport,
+      }),
+    },
+  )
+  assert.equal(result.status, 'period_complete')
+  assert.equal(result.host.admissionEligible, false)
+  assert.equal(result.host.maxConcurrentLocalRuns, 0)
+  assert.deepEqual(result.host.admissionBlockers, ['memory_pressure_critical'])
+  assert.equal(result.modelCalls, 0)
+  assert.equal(result.queueWrites, 0)
+  assert.equal(state.calls.filter((call) => call.kind === 'audit').length, 1)
+  assert.equal(state.calls.some((call) => call.kind === 'trim'), false)
+  assert.equal(state.calls.some((call) => call.kind === 'hq_live'), false)
+  assert.equal(state.calls.some((call) => call.args?.[0] === 'capacity'), false)
+  assert.equal(state.calls.some((call) => call.args?.[0] === 'knowledge'), false)
+  assert.equal(state.calls.some((call) => call.args?.[1] === 'run-next'), false)
+})
+
 test('failed period outcomes are quarantined while rotation advances without replacement work', async () => {
   const failed = harness({ queueList: completedOutcomeLine('daily-company-control', 0, 'quality_failed') })
   const failedResult = await runAllyCeoLocalCycle(
@@ -1503,7 +1533,7 @@ test('memory recovery is execution-only, opt-out capable, and never handles anot
   assert.equal(unsafe.calls.some((call) => call.kind === 'trim'), false)
 })
 
-test('malformed memory recovery evidence fails before queue, model, or retry', async () => {
+test('malformed memory recovery evidence fails after ledger read and before queue mutation, model, or retry', async () => {
   const invalid = harness({
     audit: audit(false),
     trimReceipt: JSON.stringify({ ...JSON.parse(trimReceipt), controls: { processTerminationCalls: 1 } }),
@@ -1514,5 +1544,6 @@ test('malformed memory recovery evidence fails before queue, model, or retry', a
   )
   assert.equal(invalid.calls.filter((call) => call.kind === 'trim').length, 1)
   assert.equal(invalid.calls.filter((call) => call.kind === 'audit').length, 1)
-  assert.equal(invalid.calls.some((call) => call.args?.includes('queue')), false)
+  assert.equal(invalid.calls.filter((call) => call.args?.[0] === 'queue' && call.args?.[1] === 'list').length, 1)
+  assert.equal(invalid.calls.some((call) => ['add', 'preflight', 'run-next'].includes(call.args?.[1])), false)
 })
