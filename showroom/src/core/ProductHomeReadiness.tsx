@@ -307,25 +307,6 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
 
   return (
     <>
-      <section className="product-home-readiness product-home-business-tracks" aria-label="Product starter paths">
-        <div className="product-home-readiness-head">
-          <div>
-            <span className="core-eyebrow">Starter paths</span>
-            <h2>Start one product in 2 clicks.</h2>
-            <p>Choose a local template, then open the working app. AI prepares the setup and keeps business changes behind owner approval.</p>
-          </div>
-          <Link className="core-button" to="/settings/">Open setup hub</Link>
-        </div>
-        <div className="product-home-track-actions" aria-label="Product starter actions">
-          {trackActionRows.map(([label, product, setupPath, workPath, setupAction, openAction]) => (
-            <span key={label}>
-              <strong>{label}</strong>
-              <Link onClick={() => recordLaunchPackChoice(product, label, 'prepare data')} to={setupPath}>{setupAction}</Link>
-              <Link onClick={() => recordLaunchPackChoice(product, label, 'open workspace')} to={workPath}>{openAction}</Link>
-            </span>
-          ))}
-        </div>
-      </section>
       <section className="product-home-readiness product-home-command-queue" id="command-center" aria-label="Ask SuperMega business command center">
         <div className="product-home-readiness-head">
           <div>
@@ -350,7 +331,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
               <small>{ownerControlPrimary.summary}</small>
             </div>
             <div className="form-actions">
-              <button className="core-button" disabled={ownerControlPending} onClick={() => void acknowledgeOwnerControl()} type="button">Acknowledge review</button>
+              {ownerControl.sourceCount > 0 ? <button className="core-button" disabled={ownerControlPending} onClick={() => void acknowledgeOwnerControl()} type="button">Acknowledge review</button> : null}
               <Link className="core-button primary" onClick={() => recordOwnerControlFollow(ownerControlPrimary)} to={ownerControlPrimary.nextAction.path}>{ownerControlPrimary.nextAction.label}</Link>
             </div>
           </div> : <p className="owner-control-clear">No repeated check is required for unchanged evidence. A new validated source revision opens the next run automatically.</p>}
@@ -358,7 +339,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
             <summary>Review queue <span>{ownerControl.items.length}</span></summary>
             <div>{ownerControl.items.map((item) => <span key={item.itemId}><strong>{item.product}</strong><small>{item.status} · {item.title}</small></span>)}</div>
           </details> : null}
-          <p className="business-command-boundary">Acknowledgement confirms review only. It does not claim resolution or run any product or external action.</p>
+          <p className="business-command-boundary">{ownerControl.sourceCount > 0 ? 'Acknowledgement confirms review only. It does not claim resolution or run any product or external action.' : 'Missing evidence cannot be acknowledged. Open a working sample or import records first.'}</p>
           {ownerControlNotice ? <p className="form-notice" role="status">{ownerControlNotice}</p> : null}
         </div>
         <form className="business-command-form" onSubmit={submitBusinessQuestion}>
@@ -421,6 +402,25 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
           </div>
           <Link className="text-link" to={commandPath}>{commandLabel}</Link>
         </details>
+      </section>
+      <section className="product-home-readiness product-home-business-tracks" aria-label="Product starter paths">
+        <div className="product-home-readiness-head">
+          <div>
+            <span className="core-eyebrow">Starter paths</span>
+            <h2>Start one product in 2 clicks.</h2>
+            <p>Choose a local template, then open the working app. AI prepares the setup and keeps business changes behind owner approval.</p>
+          </div>
+          <Link className="core-button" to="/settings/">Open setup hub</Link>
+        </div>
+        <div className="product-home-track-actions" aria-label="Product starter actions">
+          {trackActionRows.map(([label, product, setupPath, workPath, setupAction, openAction]) => (
+            <span key={label}>
+              <strong>{label}</strong>
+              <Link onClick={() => recordLaunchPackChoice(product, label, 'prepare data')} to={setupPath}>{setupAction}</Link>
+              <Link onClick={() => recordLaunchPackChoice(product, label, 'open workspace')} to={workPath}>{openAction}</Link>
+            </span>
+          ))}
+        </div>
       </section>
     </>
   )

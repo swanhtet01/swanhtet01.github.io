@@ -389,7 +389,10 @@ export function ProductHomePage() {
 
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Use a local workspace first. Activate managed data and AI when ready." eyebrow="Products" title="Choose a product. Run work." />
+      <PageHeading copy="Start from grounded local records. Managed data and AI activate only after approval." title="Company control" />
+      <Suspense fallback={<p className="form-notice" role="status">Loading company control...</p>}>
+        <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={setup.progress} ready={setup.ready} />
+      </Suspense>
       <section className="product-home-operating-model" aria-label="SuperMega operating model">
         <div>
           <span className="core-eyebrow">Free workspace</span>
@@ -414,9 +417,6 @@ export function ProductHomePage() {
           {autopilotRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}
         </div>
       </section>
-      <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
-        <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={setup.progress} ready={setup.ready} />
-      </Suspense>
       <nav aria-label="Business tracks" className="product-track-grid">
         {customerTracks.map(([name, fit, outcome, path, setupPath]) => (
           <article className="product-track-card" key={name}>

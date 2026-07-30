@@ -731,7 +731,7 @@ if (!coreShellSource.includes('function managedLoginPath(product: string | null)
   || !coreCssSource.includes('.sidebar-foot .account-shell-link { min-height: 44px;')
   || !coreCssSource.includes('.topbar-meta > a { min-width: 58px; min-height: 44px;')) fail('managed_account_entry_not_discoverable')
 const productHomePageContract = coreShellSource.slice(coreShellSource.indexOf('const customerTracks'))
-if (!productHomePageContract.includes('title="Choose a product. Run work."')
+if (!productHomePageContract.includes('title="Company control"')
   || !productHomePageContract.includes('const customerTracks =')
   || !productHomePageContract.includes("'Shop'")
   || !productHomePageContract.includes("'Plant'")
@@ -757,6 +757,7 @@ if (!productHomePageContract.includes('title="Choose a product. Run work."')
   || !productHomePageContract.includes("setup.ready ? 'Ready for managed import' : 'Locked until approval'")
   || !productHomePageContract.includes("to={setup.ready ? '/settings/#controls' : '/settings/'}")
   || !productHomePageContract.includes('runtime.activationManifest?.next_action')
+  || productHomePageContract.indexOf('<ProductHomeReadiness') > productHomePageContract.indexOf('aria-label="SuperMega operating model"')
   || !productHomePageContract.includes("'/shop/?tab=counter'")
   || !productHomePageContract.includes("'/plant/?tab=production'")
   || !productHomePageContract.includes("'/ecommerce/'")
@@ -873,13 +874,19 @@ if (!ownerControlSource.includes('supermega.local_owner_control_run.v1')
   || !managedTrialSource.includes('export async function assertManagedOwnerControlIntegrity')
   || !productHomeReadinessSource.includes('aria-label="Owner Control run"')
   || !productHomeReadinessSource.includes('Acknowledge review')
+  || !productHomeReadinessSource.includes('ownerControl.sourceCount > 0')
+  || !productHomeReadinessSource.includes('Missing evidence cannot be acknowledged. Open a working sample or import records first.')
   || !productHomeReadinessSource.includes('Acknowledgement confirms review only.')
   || !productHomeReadinessSource.includes('Changed records will reopen the run.')
   || !productHomeReadinessSource.includes('currentRun.sourceFingerprint !== localOwnerControl.sourceFingerprint')
   || !productHomeReadinessSource.includes("window.addEventListener('focus', refreshOnFocus)")
   || !productHomeReadinessSource.includes("window.addEventListener('storage', refreshOnStorage)")
   || !productHomeReadinessSource.includes('Follow Owner Control:')
-  || !businessCommandSource.includes('export function rankBusinessAttention')) fail('owner_control_contract_missing')
+  || !ownerControlSource.includes('Owner control needs validated source evidence before acknowledgement.')
+  || !businessCommandSource.includes('export function rankBusinessAttention')
+  || !businessCommandSource.includes("{ label: 'Open Shop sample', path: '/shop/?tab=counter', product: 'shop' }")
+  || !businessCommandSource.includes('Open its working sample or import real records to get a grounded answer.')) fail('owner_control_contract_missing')
+if (productHomeReadinessSource.indexOf('id="command-center"') > productHomeReadinessSource.indexOf('aria-label="Product starter paths"')) fail('company_control_not_first_on_home')
 if (!coreCssSource.includes('.product-home-command-queue')
   || !coreCssSource.includes('.owner-control-run')
   || !coreCssSource.includes('.owner-control-primary')
@@ -11025,7 +11032,19 @@ async function verifyBusinessCommandRuntime() {
     assert(empty.contract === 'supermega.local_business_snapshot.v1', 'business_command_snapshot_contract_wrong')
     assert([empty.shop, empty.plant, empty.website, empty.ecommerce].every((source) => source.status === 'missing'), 'business_command_empty_sources_not_missing')
     const emptyAnswer = command.buildBusinessCommandAnswer(empty, 'attention')
-    assert(emptyAnswer.contract === 'supermega.local_business_answer.v1' && emptyAnswer.sourceCount === 0 && emptyAnswer.nextAction.path === '/settings/?product=shop', 'business_command_empty_answer_not_actionable')
+    assert(emptyAnswer.contract === 'supermega.local_business_answer.v1'
+      && emptyAnswer.sourceCount === 0
+      && emptyAnswer.nextAction.label === 'Open Shop sample'
+      && emptyAnswer.nextAction.path === '/shop/?tab=counter', 'business_command_empty_answer_not_actionable')
+    for (const [intent, label, path] of [
+      ['shop_inventory', 'Open Shop sample', '/shop/?tab=counter'],
+      ['plant_control', 'Open Plant sample', '/plant/?tab=production'],
+      ['website_readiness', 'Open Website sample', '/website/'],
+      ['ecommerce_readiness', 'Open Ecommerce sample', '/ecommerce/'],
+    ]) {
+      const answer = command.buildBusinessCommandAnswer(empty, intent)
+      assert(answer.nextAction.label === label && answer.nextAction.path === path, `business_command_missing_source_sample_route_wrong:${intent}`)
+    }
 
     const commerceState = commerce.createSeedCommerce()
     const productionState = production.createSeedProduction()
@@ -11102,12 +11121,14 @@ async function verifyOwnerControlRuntime() {
     const emptyRun = control.buildLocalOwnerControlRun(emptySnapshot, [])
     assert(emptyRun.contract === 'supermega.local_owner_control_run.v1' && emptyRun.sourceCount === 0, 'owner_control_empty_contract_wrong')
     assert(emptyRun.primary?.product === 'shop' && emptyRun.pendingCount === 1, 'owner_control_empty_start_not_actionable')
-    const acknowledgements = control.acknowledgeLocalOwnerControlItem(storage, emptyRun, emptyRun.primary)
-    const acknowledgedRun = control.buildLocalOwnerControlRun(emptySnapshot, acknowledgements)
-    assert(acknowledgedRun.pendingCount === 0 && acknowledgedRun.acknowledgedCount === 1, 'owner_control_acknowledgement_not_applied')
-    assert(!JSON.stringify(acknowledgements).includes('completed') && !JSON.stringify(acknowledgements).includes('not_relevant'), 'owner_control_claimed_unverified_outcome')
-    const replay = control.acknowledgeLocalOwnerControlItem(storage, emptyRun, emptyRun.primary)
-    assert(replay.length === 1, 'owner_control_acknowledgement_not_idempotent')
+    let emptyAcknowledgementRejected = false
+    try {
+      control.acknowledgeLocalOwnerControlItem(storage, emptyRun, emptyRun.primary)
+    } catch (error) {
+      emptyAcknowledgementRejected = error instanceof Error && error.message.includes('validated source evidence')
+    }
+    assert(emptyAcknowledgementRejected, 'owner_control_missing_source_acknowledgement_succeeded')
+    assert(control.readLocalOwnerControlAcknowledgements(storage).length === 0, 'owner_control_missing_source_acknowledgement_wrote_state')
 
     const productionState = production.createSeedProduction()
     productionState.machines[0] = { ...productionState.machines[0], state: 'stopped' }
@@ -11118,6 +11139,13 @@ async function verifyOwnerControlRuntime() {
     assert(safetyRun.primary?.product === 'plant' && safetyRun.primary?.priority === 'critical', 'owner_control_plant_safety_not_first')
     assert(safetyRun.items.some((item) => item.product === 'shop' && item.priority === 'high'), 'owner_control_invalid_shop_repair_missing')
     assert(safetyRun.runKey !== emptyRun.runKey && safetyRun.primary?.status === 'pending', 'owner_control_changed_source_did_not_reopen')
+    const acknowledgements = control.acknowledgeLocalOwnerControlItem(storage, safetyRun, safetyRun.primary)
+    const acknowledgedRun = control.buildLocalOwnerControlRun(safetySnapshot, acknowledgements)
+    assert(acknowledgedRun.items.find((item) => item.itemId === safetyRun.primary.itemId)?.status === 'acknowledged'
+      && acknowledgedRun.acknowledgedCount === 1, 'owner_control_evidence_acknowledgement_not_applied')
+    assert(!JSON.stringify(acknowledgements).includes('completed') && !JSON.stringify(acknowledgements).includes('not_relevant'), 'owner_control_claimed_unverified_outcome')
+    const replay = control.acknowledgeLocalOwnerControlItem(storage, safetyRun, safetyRun.primary)
+    assert(replay.length === acknowledgements.length, 'owner_control_acknowledgement_not_idempotent')
     const collisionAcknowledgement = {
       ...acknowledgements[0],
       runKey: safetyRun.runKey,

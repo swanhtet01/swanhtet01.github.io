@@ -180,6 +180,9 @@ export function acknowledgeLocalOwnerControlItem(
   run: LocalOwnerControlRun,
   item: OwnerControlItem,
 ) {
+  if (run.sourceCount === 0) {
+    throw new Error('Owner control needs validated source evidence before acknowledgement.')
+  }
   if (!run.items.some((candidate) => candidate.itemId === item.itemId && candidate.product === item.product)) {
     throw new Error('Owner control item does not belong to this run.')
   }
