@@ -30,10 +30,10 @@ const workboard = `# Workboard
 
 function portfolio(overrides = {}, automationOverrides = {}) {
   const automation = {
-    shop: { priority: 80, status: 'owner-gated', workOrder: 'Run the named Shop pilot.', reason: 'A named operator is required.' },
-    plant: { priority: 70, status: 'owner-gated', workOrder: 'Run the named Plant pilot.', reason: 'Operator timing evidence is required.' },
-    website: { priority: 60, status: 'owner-gated', workOrder: 'Run the named Website brief.', reason: 'An accepted business brief is required.' },
-    ecommerce: { priority: 100, status: 'ready-local', workOrder: 'Add one order-bound support case.', reason: 'Identity handoff is implemented and support remains local-ready.' },
+    shop: { priority: 80, status: 'owner-gated', workOrder: 'Shop: run the named pilot.', reason: 'A named operator is required.' },
+    plant: { priority: 70, status: 'owner-gated', workOrder: 'Plant: run the named pilot.', reason: 'Operator timing evidence is required.' },
+    website: { priority: 60, status: 'owner-gated', workOrder: 'Website: run the named business brief.', reason: 'An accepted business brief is required.' },
+    ecommerce: { priority: 100, status: 'ready-local', workOrder: 'Ecommerce: add one order-bound support case.', reason: 'Identity handoff is implemented and support remains local-ready.' },
   }
   return JSON.stringify({
     schemaVersion: 'supermega.hq.portfolio.v3',
@@ -55,7 +55,7 @@ function portfolio(overrides = {}, automationOverrides = {}) {
       id,
       status: 'release-candidate-local',
       nextGate: `Prove ${id} with one named operator.`,
-      localAutomation: { ...automation[id], ...automationOverrides[id] },
+      localAutomation: { contract: 'supermega.product-work-authority.v1', productId: id, ...automation[id], ...automationOverrides[id] },
     })),
   })
 }
@@ -208,7 +208,7 @@ test('product control selects the highest-priority ready local work order withou
     assert.equal(result.productFocus.selection, 'portfolio_priority_ready')
     assert.equal(result.productFocus.productId, 'ecommerce')
     assert.equal(result.productFocus.localPriority, 100)
-    assert.equal(result.productFocus.workOrder, 'Add one order-bound support case.')
+    assert.equal(result.productFocus.workOrder, 'Ecommerce: add one order-bound support case.')
     assert.equal(result.productFocus.readyCandidateCount, 1)
     assert.equal(result.productFocus.acceptanceDimensions.length, 8)
     assert.deepEqual(result.manifest.evidence['delivery-planner'].productFocus, result.productFocus)
@@ -251,6 +251,26 @@ test('product control skips gated priorities and rejects malformed or fully gate
       completedOutcomeIds: ['daily-company-control', 'engineering-release-control'],
     }),
     /ally_ceo_company_plan_no_executable_product_focus/,
+  )
+  await assert.rejects(
+    buildAllyCeoCompanyPlan({
+      now: '2026-07-29T12:00:00.000Z',
+      hqNow: now,
+      workboard,
+      portfolioText: portfolio({}, { ecommerce: { productId: 'plant' } }),
+      completedOutcomeIds: ['daily-company-control', 'engineering-release-control'],
+    }),
+    /ally_ceo_company_plan_product_routing_invalid/,
+  )
+  await assert.rejects(
+    buildAllyCeoCompanyPlan({
+      now: '2026-07-29T12:00:00.000Z',
+      hqNow: now,
+      workboard,
+      portfolioText: portfolio({}, { ecommerce: { workOrder: 'Plant: revoke a material substitute.' } }),
+      completedOutcomeIds: ['daily-company-control', 'engineering-release-control'],
+    }),
+    /ally_ceo_company_plan_product_routing_invalid/,
   )
 })
 

@@ -50,6 +50,7 @@ const SAFE_HQ_LIVE_FAILURES = Object.freeze(new Set([
   'snapshot_stale',
 ]))
 const PRODUCT_IDS = Object.freeze(['shop', 'plant', 'website', 'ecommerce'])
+const PRODUCT_NAMES = Object.freeze({ shop: 'Shop', plant: 'Plant', website: 'Website', ecommerce: 'Ecommerce' })
 const PRODUCT_FOCUS_UNSAFE_RE = /[\u0000-\u001f]|\[(?:ALLY_CEO_[A-Z_]+|EVIDENCE):|(?:instagram\.com|linkedin\.com|lnkd\.in)|-----BEGIN [A-Z ]+PRIVATE KEY-----|\b(?:sk-proj|ghp|gho|glpat|xoxb|xoxp|xoxa|xoxr)-[A-Za-z0-9_-]{16,}/i
 const EXPECTED_RESOURCE_ENVELOPE = Object.freeze({
   contract: ALLY_CEO_RESOURCE_ENVELOPE_CONTRACT,
@@ -199,6 +200,7 @@ function planSpec(plan) {
     && typeof productFocus?.workOrder === 'string'
     && productFocus.workOrder.length > 0
     && productFocus.workOrder.length <= 1_200
+    && productFocus.workOrder.startsWith(`${PRODUCT_NAMES[productFocus.productId]}: `)
     && typeof productFocus?.selectionReason === 'string'
     && productFocus.selectionReason.length > 0
     && productFocus.selectionReason.length <= 600

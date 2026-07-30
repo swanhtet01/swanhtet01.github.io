@@ -35,7 +35,9 @@ const PRODUCT_ACCEPTANCE_DIMENSIONS = Object.freeze([
   'automated_test',
 ])
 const PRODUCT_AUTOMATION_STATUSES = Object.freeze(new Set(['ready-local', 'owner-gated', 'external-blocked']))
-const PRODUCT_AUTOMATION_KEYS = Object.freeze(['priority', 'reason', 'status', 'workOrder'])
+const PRODUCT_WORK_AUTHORITY_CONTRACT = 'supermega.product-work-authority.v1'
+const PRODUCT_AUTOMATION_KEYS = Object.freeze(['contract', 'priority', 'productId', 'reason', 'status', 'workOrder'])
+const PRODUCT_NAMES = Object.freeze({ shop: 'Shop', plant: 'Plant', website: 'Website', ecommerce: 'Ecommerce' })
 
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value)
 
@@ -79,6 +81,7 @@ function portfolioView(value) {
     || !isRecord(value.agentOperatingModel)) fail('ally_ceo_company_plan_portfolio_invalid')
 
   const products = value.products.map((product) => {
+    const productId = String(product?.id || '')
     const localAutomation = product?.localAutomation
     const automationKeys = isRecord(localAutomation) ? Object.keys(localAutomation).sort() : []
     const priority = localAutomation?.priority
@@ -97,11 +100,19 @@ function portfolioView(value) {
       || /\u0000/.test(`${workOrder}${reason}`)) {
       fail('ally_ceo_company_plan_product_automation_invalid')
     }
+    if (localAutomation.contract !== PRODUCT_WORK_AUTHORITY_CONTRACT
+      || localAutomation.productId !== productId
+      || !PRODUCT_NAMES[productId]
+      || !workOrder.startsWith(`${PRODUCT_NAMES[productId]}: `)) {
+      fail('ally_ceo_company_plan_product_routing_invalid')
+    }
     return {
-      id: String(product?.id || ''),
+      id: productId,
       status: String(product?.status || ''),
       nextGate: String(product?.nextGate || ''),
       localAutomation: {
+        contract: PRODUCT_WORK_AUTHORITY_CONTRACT,
+        productId,
         priority,
         status: automationStatus,
         workOrder,

@@ -180,7 +180,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.productControlSpecialist === 'delivery-planner'
   && portfolio.agentOperatingModel?.productControlAcceptanceDimensions?.join(',') === 'user_job,state_transition,data_contract,failure_recovery,mobile_acceptance,import_reconciliation,security_boundary,automated_test'
   && portfolio.products?.every((product) =>
-    Object.keys(product.localAutomation || {}).sort().join(',') === 'priority,reason,status,workOrder'
+    Object.keys(product.localAutomation || {}).sort().join(',') === 'contract,priority,productId,reason,status,workOrder'
+    && product.localAutomation.contract === 'supermega.product-work-authority.v1'
+    && product.localAutomation.productId === product.id
+    && product.localAutomation.workOrder.startsWith(`${product.name}: `)
     && Number.isInteger(product.localAutomation.priority)
     && product.localAutomation.priority >= 1
     && product.localAutomation.priority <= 100
@@ -1019,6 +1022,7 @@ requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect
   && allyCeoPlannerText.includes("planningExternalWrites: false")
   && allyCeoPlannerText.includes("ally_ceo_company_plan_non_authoritative_source")
   && allyCeoPlannerText.includes("ally_ceo_company_plan_sensitive_evidence")
+  && allyCeoPlannerText.includes("ally_ceo_company_plan_product_routing_invalid")
   && allyCeoPlannerText.includes("hq/WORKBOARD.md#execution-order")
   && allyCeoPlannerCliText.includes('supermega-ally-ceo-company-plan-${planHash.slice(0, 12)}.json')
   && allyCeoPlannerCliText.includes("flag: 'wx'")
@@ -1059,6 +1063,7 @@ requireContract('Ally CEO execution uses one exact local-company run and no exte
   && allyCeoLocalCycleText.includes("LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.22', '2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])")
   && allyCeoLocalCycleText.includes('ALLY_CEO_RESOURCE_ENVELOPE_CONTRACT')
   && allyCeoLocalCycleText.includes('ally_ceo_local_cycle_resource_envelope_invalid')
+  && allyCeoLocalCycleText.includes('productFocus.workOrder.startsWith')
   && allyCeoLocalCycleText.includes('vercelActions: 0')
   && allyCeoLocalCycleText.includes('hostedSchedulerActions: 0')
   && allyCeoLocalCycleText.includes('dynamicDelegation: false')
