@@ -683,7 +683,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && now.includes('Current local checkpoints: Ecommerce tax authority `b70d3412`, governed v7 Shop handoff `1975c550`, tax-inclusive limits `0eb180f9`, and order proof `9ff26ba3`')
   && now.includes('First-action QA routes Shop, Plant, and Website blockers to the next task')
   && now.includes('The active delivery focus is:')
-  && now.includes('Production `4c300c00` and the local candidate diverge from common base `5d1c5d7c`')
+  && now.includes('Production `d268bd63` and the local candidate diverge from common base `5d1c5d7c`')
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
   && now.includes('operation/output requires exact authenticated Shop issue evidence')
   && now.includes('Controlled batches bind reviewed productive time and closed downtime')
