@@ -11055,6 +11055,17 @@ if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !pilotOutcomeSource.includes("metricId: 'shop-guided-sale-gap'")
   || !pilotOutcomeSource.includes("supermega.shop_guided_sale_outcome_source.v1")
   || !pilotOutcomeSource.includes("action.evidenceReference.endsWith(' counter receipt')")
+  || !pilotOutcomeSource.includes("metricId: 'plant-guided-output-gap'")
+  || !pilotOutcomeSource.includes("supermega.plant_guided_output_outcome_source.v1")
+  || !pilotOutcomeSource.includes('PLANT_GUIDED_OUTPUT_SUMMARY')
+  || !pilotOutcomeSource.includes("action.kind === 'production_output'")
+  || !pilotOutcomeSource.includes("action.actorKind === 'human'")
+  || !pilotOutcomeSource.includes('Boolean(visibleText(action.actor, 80))')
+  || !pilotOutcomeSource.includes('Boolean(visibleText(action.reason, 240))')
+  || !pilotOutcomeSource.includes('Boolean(visibleText(action.evidenceReference, 180))')
+  || !pilotOutcomeSource.includes('Number.isSafeInteger(quantity)')
+  || !pilotOutcomeSource.includes('summarySubjectId === subjectId')
+  || !pilotOutcomeSource.includes("!shiftReference.includes(' · ')")
   || !pilotOutcomeSource.includes('Date.parse(action.capturedAt) >= startedAt')
   || !pilotOutcomeSource.includes("Only the named owner can accept a clear or improved pilot result.")
   || !pilotOutcomeDecisionSource.includes("subject: { kind: 'pilot_outcome' as const")
@@ -11069,7 +11080,11 @@ if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !pilotOutcomeHookSource.includes("window.addEventListener('storage', onStorage)")
   || !pilotOutcomeHookSource.includes('metricOverride ?? buildPilotOutcomeMetric')
   || !settingsPageSource.includes('pilotOutcomeReport')
-  || !settingsPageSource.includes("detail: 'Start Shop outcome proof'")
+  || !settingsPageSource.includes("'Start Shop outcome proof'")
+  || !settingsPageSource.includes("'Start Plant outcome proof'")
+  || !settingsPageSource.includes('buildPlantGuidedOutputOutcomeMetric(actions, setup.startedAt)')
+  || !settingsPageSource.includes('Confirm one good-output result with named-owner shift evidence.')
+  || !settingsPageSource.includes("['First proof', 'One confirmed shift output'")
   || !settingsPageSource.includes('startPilotOutcome(window.localStorage, pilotOutcomeSetup, metric, new Date(startedAt))')
   || !settingsPageSource.includes('buildPilotOutcomeDecisionApproval')
   || !settingsPageSource.includes('onAccepted={recordAcceptedPilotOutcomeDecision}')
@@ -11119,6 +11134,44 @@ try {
   const guidedReport = outcome.buildPilotOutcomeReport(guidedStorage, setup, guidedCurrent, new Date('2026-07-30T09:03:00.000Z'))
   if (guidedReport?.outcomeStatus !== 'target_met' || guidedReport.change !== -1 || guidedReport.rawRecordsIncluded !== false || guidedReport.externalWritesPerformed !== false) fail('shop_guided_sale_report_invalid')
   pilotOutcomeRuntimeChecks += 4
+  const plantSetup = { product: 'production', workspace: 'Plant starter workspace', owner: 'Production owner', templateId: 'production-control' }
+  const plantStartedAt = '2026-07-30T09:00:00.000Z'
+  const plantBaseline = outcome.buildPlantGuidedOutputOutcomeMetric([], plantStartedAt)
+  if (plantBaseline?.value !== 1 || plantBaseline.unit !== 'gaps' || !plantBaseline.detail.includes('No named-owner good-output record')) fail('plant_guided_output_baseline_invalid')
+  const plantActionBase = { domain: 'production', subjectId: 'JOB-AI-101', summary: 'Record 1 good units for JOB-AI-101 · 2026-07-30 Day', actorKind: 'human', actor: 'Production owner', reason: 'Shift count confirmed by line lead', evidenceReference: 'SHIFT-2026-07-30-DAY' }
+  const oldPlantOutput = { ...plantActionBase, capturedAt: '2026-07-30T08:59:59.000Z', kind: 'production_output' }
+  const plantScrap = { ...plantActionBase, capturedAt: '2026-07-30T09:01:00.000Z', kind: 'production_scrap', summary: 'Record 1 scrap units for JOB-AI-101 · 2026-07-30 Day' }
+  const plantMissingActor = { ...plantActionBase, capturedAt: '2026-07-30T09:01:00.000Z', kind: 'production_output', actor: '' }
+  const plantMissingReason = { ...plantActionBase, capturedAt: '2026-07-30T09:01:00.000Z', kind: 'production_output', reason: '' }
+  const plantMissingEvidence = { ...plantActionBase, capturedAt: '2026-07-30T09:01:00.000Z', kind: 'production_output', evidenceReference: '' }
+  const malformedPlantOutputs = [
+    'Record 0 good units for JOB-AI-101 · 2026-07-30 Day',
+    'Record -1 good units for JOB-AI-101 · 2026-07-30 Day',
+    'Record 1.5 good units for JOB-AI-101 · 2026-07-30 Day',
+    'Record one good units for JOB-AI-101 · 2026-07-30 Day',
+    'Record 1 good units for JOB-AI-101 · ',
+    'Record 1 good units for JOB-OTHER · 2026-07-30 Day',
+    'Unexpected Record 1 good units for JOB-AI-101 · 2026-07-30 Day',
+    'Record 1 good units for JOB-AI-101 · 2026-07-30 Day · unexpected',
+  ].map((summary, index) => ({ ...plantActionBase, capturedAt: `2026-07-30T09:01:0${index}.000Z`, kind: 'production_output', summary }))
+  const plantBefore = outcome.buildPlantGuidedOutputOutcomeMetric([oldPlantOutput, plantScrap, plantMissingActor, plantMissingReason, plantMissingEvidence, ...malformedPlantOutputs], plantStartedAt)
+  if (plantBefore?.value !== 1 || plantBefore.sourceDigest !== plantBaseline.sourceDigest) fail('plant_guided_output_unrelated_action_changed_metric')
+  const firstPlantOutput = { ...plantActionBase, capturedAt: '2026-07-30T09:02:00.000Z', kind: 'production_output' }
+  const plantCurrent = outcome.buildPlantGuidedOutputOutcomeMetric([oldPlantOutput, plantScrap, firstPlantOutput], plantStartedAt)
+  if (plantCurrent?.value !== 0 || plantCurrent.sourceDigest === plantBaseline.sourceDigest || !plantCurrent.detail.includes('1 named-owner good-output record')) fail('plant_guided_output_completion_invalid')
+  const plantStorageValues = new Map()
+  const plantStorage = { getItem: (key) => plantStorageValues.get(key) ?? null, setItem: (key, value) => plantStorageValues.set(key, value) }
+  outcome.startPilotOutcome(plantStorage, plantSetup, plantBaseline, new Date(plantStartedAt))
+  const plantReport = outcome.buildPilotOutcomeReport(plantStorage, plantSetup, plantCurrent, new Date('2026-07-30T09:03:00.000Z'))
+  if (plantReport?.outcomeStatus !== 'target_met' || plantReport.change !== -1 || plantReport.rawRecordsIncluded !== false || plantReport.externalWritesPerformed !== false) fail('plant_guided_output_report_invalid')
+  const plantReview = outcome.acceptPilotOutcome(plantStorage, plantReport, plantSetup.owner, new Date('2026-07-30T09:04:00.000Z'))
+  const plantAccepted = outcome.buildPilotOutcomeReport(plantStorage, plantSetup, plantCurrent, new Date('2026-07-30T09:05:00.000Z'))
+  if (plantAccepted?.review?.reportDigest !== plantReview.reportDigest) fail('plant_guided_output_acceptance_invalid')
+  const secondPlantOutput = { ...plantActionBase, capturedAt: '2026-07-30T09:06:00.000Z', kind: 'production_output', summary: 'Record 2 good units for JOB-AI-101 · 2026-07-30 Day' }
+  const plantChanged = outcome.buildPlantGuidedOutputOutcomeMetric([firstPlantOutput, secondPlantOutput], plantStartedAt)
+  const plantReopened = outcome.buildPilotOutcomeReport(plantStorage, plantSetup, plantChanged, new Date('2026-07-30T09:07:00.000Z'))
+  if (plantReopened?.review !== null || plantReopened?.outcomeStatus !== 'target_met' || plantReopened.current.sourceDigest === plantAccepted?.current.sourceDigest) fail('plant_guided_output_source_reopen_invalid')
+  pilotOutcomeRuntimeChecks += 7
   let collectingRejected = false
   try { outcome.acceptPilotOutcome(storage, collecting, setup.owner) } catch { collectingRejected = true }
   if (!collectingRejected) fail('pilot_outcome_collecting_acceptance_allowed')
