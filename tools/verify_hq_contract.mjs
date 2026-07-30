@@ -48,7 +48,10 @@ const workforce = JSON.parse(workforceText)
 const agentWorkspace = JSON.parse(agentWorkspaceText)
 const databaseRehearsal = JSON.parse(databaseRehearsalText)
 const databaseImplementationPaths = [
+  'supermega_runtime/managed_context.py',
   'supermega_runtime/managed_activation.py',
+  'supermega_runtime/runtime.py',
+  'supermega_runtime/trial_runtime.py',
   'supermega_runtime/trial_store.py',
   'supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql',
   'supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql',
@@ -567,7 +570,7 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.migration?.count === 8
   && databaseRehearsal.migration?.schemaVersion === 7
   && databaseRehearsal.migration?.productionValidatorReady === true
-  && Object.keys(databaseRehearsal.checks || {}).length === 45
+  && Object.keys(databaseRehearsal.checks || {}).length === 52
   && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
   && databaseRehearsal.checks?.capabilityScopedReads === true
   && databaseRehearsal.checks?.capabilityScopedEventReads === true
@@ -577,6 +580,13 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.checks?.managedOwnerAuthorizationDurable === true
   && databaseRehearsal.checks?.managedActivationAtomicRollback === true
   && databaseRehearsal.checks?.managedActivationIdempotentReplay === true
+  && databaseRehearsal.checks?.managedContextActivationEvidenceBound === true
+  && databaseRehearsal.checks?.managedContextAuthenticatedIdentityEnforced === true
+  && databaseRehearsal.checks?.managedContextValidationZeroWrite === true
+  && databaseRehearsal.checks?.managedContextRetentionRlsAudited === true
+  && databaseRehearsal.checks?.managedContextRetentionIdempotentReplay === true
+  && databaseRehearsal.checks?.managedContextOwnerCapabilityEnforced === true
+  && databaseRehearsal.checks?.managedContextSummaryReadback === true
   && databaseRehearsal.checks?.managedSuspensionDatabaseEnforced === true
   && databaseRehearsal.checks?.managedSuspensionBlocksAdditionalMember === true
   && databaseRehearsal.checks?.managedSuspensionWriteDenied === true

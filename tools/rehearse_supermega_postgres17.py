@@ -13,6 +13,7 @@ import argparse
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
+import hmac
 import json
 import os
 import re
@@ -46,7 +47,10 @@ DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
 EXPECTED_POSTGRES_MAJOR = 17
 IMPLEMENTATION_PATHS = (
+    "supermega_runtime/managed_context.py",
     "supermega_runtime/managed_activation.py",
+    "supermega_runtime/runtime.py",
+    "supermega_runtime/trial_runtime.py",
     "supermega_runtime/trial_store.py",
     "supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql",
     "supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql",
@@ -822,6 +826,285 @@ def _managed_activation_request() -> dict[str, Any]:
     }
 
 
+def _exercise_managed_context_postgres_route(
+    runtime_database_url: str,
+    admin_database_url: str,
+    *,
+    approved_context: dict[str, Any],
+) -> dict[str, bool]:
+    """Prove authenticated context retention through the production API and store."""
+
+    from fastapi import HTTPException, Request
+    from supermega_runtime.managed_context import managed_context_from_company_state
+    from supermega_runtime.runtime import reduce_trial_state, resolve_trial_principal
+    from supermega_runtime.trial_runtime import (
+        TrialCompanyBriefRequest,
+        TrialManagedContextRetainRequest,
+        TrialManagedContextValidateRequest,
+        create_trial_router,
+    )
+    from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal
+
+    store = PostgresTrialStore(
+        runtime_database_url,
+        reducer=reduce_trial_state,
+        write_enabled=True,
+    )
+    owner = TrialPrincipal(MANAGED_WORKSPACE, MANAGED_OWNER_ACTOR, "human")
+    identity_secret = "SuperMega-Rehearsal-Identity-7pK4-vN2-xQ9"
+    prior_identity_secret = os.environ.get("SUPERMEGA_TRIAL_IDENTITY_SECRET")
+    os.environ["SUPERMEGA_TRIAL_IDENTITY_SECRET"] = identity_secret
+
+    def identity_headers(actor_id: str, *, valid_signature: bool = True) -> dict[str, str]:
+        timestamp = str(int(datetime.now(timezone.utc).timestamp()))
+        message = f"v2\n{timestamp}\n{MANAGED_WORKSPACE}\n{actor_id}\nhuman".encode("utf-8")
+        signature = hmac.new(identity_secret.encode("utf-8"), message, sha256).hexdigest()
+        if not valid_signature:
+            signature = "0" * 64
+        return {
+            "x-supermega-workspace-id": MANAGED_WORKSPACE,
+            "x-supermega-actor-id": actor_id,
+            "x-supermega-actor-kind": "human",
+            "x-supermega-identity-timestamp": timestamp,
+            "x-supermega-identity-signature": signature,
+        }
+
+    def workspace_counts() -> tuple[int, int, int]:
+        with _connect(admin_database_url, autocommit=True) as administrator:
+            row = administrator.execute(
+                """
+                select
+                  (select count(*) from app_private.workspace_state where workspace_id = %s),
+                  (select count(*) from app_private.workspace_events where workspace_id = %s),
+                  (select count(*) from app_private.approval_requests where workspace_id = %s)
+                """,
+                (MANAGED_WORKSPACE, MANAGED_WORKSPACE, MANAGED_WORKSPACE),
+            ).fetchone()
+        return int(row[0]), int(row[1]), int(row[2])
+
+    router = create_trial_router(store=store, resolve_principal=resolve_trial_principal)
+
+    def route_endpoint(path: str) -> Callable[..., dict[str, Any]]:
+        for route in router.routes:
+            if getattr(route, "path", "") == path and "POST" in getattr(route, "methods", set()):
+                return route.endpoint
+        raise RehearsalFailure("managed_context_route_missing")
+
+    validate_endpoint = route_endpoint("/api/trial/v1/managed-context/validate")
+    retain_endpoint = route_endpoint("/api/trial/v1/managed-context/retain")
+    brief_endpoint = route_endpoint("/api/trial/v1/company-brief")
+
+    def route_request(headers: dict[str, str]) -> Request:
+        return Request(
+            {
+                "type": "http",
+                "http_version": "1.1",
+                "method": "POST",
+                "scheme": "https",
+                "path": "/api/trial/v1/rehearsal",
+                "raw_path": b"/api/trial/v1/rehearsal",
+                "query_string": b"",
+                "headers": [
+                    (key.lower().encode("latin-1"), value.encode("latin-1"))
+                    for key, value in headers.items()
+                ],
+                "client": ("127.0.0.1", 1),
+                "server": ("127.0.0.1", 443),
+            }
+        )
+
+    def denied_call(
+        endpoint: Callable[..., dict[str, Any]],
+        headers: dict[str, str],
+        body: object,
+    ) -> tuple[int, dict[str, Any]]:
+        try:
+            endpoint(route_request(headers), body)
+        except HTTPException as exc:
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            return int(exc.status_code), dict(detail)
+        raise RehearsalFailure("managed_context_expected_denial_missing")
+
+    before = workspace_counts()
+    if before != (0, 1, 1):
+        raise RehearsalFailure("managed_context_initial_state_unexpected")
+    try:
+        validation_body = TrialManagedContextValidateRequest(package=approved_context)
+        unauthenticated_status, _ = denied_call(validate_endpoint, {}, validation_body)
+        forged_status, _ = denied_call(
+            validate_endpoint,
+            identity_headers(MANAGED_OWNER_ACTOR, valid_signature=False),
+            validation_body,
+        )
+        if unauthenticated_status != 401 or forged_status != 401:
+            raise RehearsalFailure("managed_context_identity_bypass")
+        if workspace_counts() != before:
+            raise RehearsalFailure("managed_context_identity_denial_wrote")
+
+        owner_headers = identity_headers(MANAGED_OWNER_ACTOR)
+        validation_payload = validate_endpoint(route_request(owner_headers), validation_body)
+        validation = validation_payload.get("validation", {})
+        profile = validation_payload.get("profile", {})
+        if (
+            validation.get("contract") != "supermega.managed_context_profile_validation.v2"
+            or validation.get("companyVersion") != 0
+            or validation.get("internalWritePerformed") is not False
+            or validation.get("externalWritesPerformed") is not False
+            or profile.get("contract") != "supermega.managed_context_profile.v2"
+            or profile.get("approvedContextDigest") != approved_context.get("contextDigest")
+        ):
+            raise RehearsalFailure("managed_context_validation_projection_failed")
+        if workspace_counts() != before:
+            raise RehearsalFailure("managed_context_validation_wrote")
+
+        retention_body = TrialManagedContextRetainRequest(
+            command_id="d3454044-5a2f-44b4-aa26-9a1e99f0b0ef",
+            expected_company_version=0,
+            profile_digest=profile["profileDigest"],
+            validation_digest=validation["validationDigest"],
+            package=approved_context,
+        )
+        retained = retain_endpoint(route_request(owner_headers), retention_body)
+        result = retained.get("result", {})
+        retention = retained.get("retention", {})
+        if (
+            retention.get("contract") != "supermega.managed_context_profile_retention.v2"
+            or retention.get("companyVersion") != 1
+            or retention.get("internalWritePerformed") is not True
+            or retention.get("externalWritesPerformed") is not False
+            or retention.get("idempotentReplay") is not False
+            or result.get("version") != 1
+        ):
+            raise RehearsalFailure("managed_context_retention_projection_failed")
+        if workspace_counts() != (1, 2, 1):
+            raise RehearsalFailure("managed_context_retention_not_atomic")
+
+        replay_payload = retain_endpoint(route_request(owner_headers), retention_body)
+        if (
+            replay_payload.get("result", {}).get("version") != 1
+            or replay_payload.get("retention", {}).get("idempotentReplay") is not True
+            or workspace_counts() != (1, 2, 1)
+        ):
+            raise RehearsalFailure("managed_context_replay_wrote")
+
+        writer_headers = identity_headers(MANAGED_SECOND_ACTOR)
+        writer_validation_payload = validate_endpoint(route_request(writer_headers), validation_body)
+        writer_retention_body = TrialManagedContextRetainRequest(
+            command_id="e544a089-269a-4dbb-aeb6-9e6b28429bb0",
+            expected_company_version=1,
+            profile_digest=writer_validation_payload["profile"]["profileDigest"],
+            validation_digest=writer_validation_payload["validation"]["validationDigest"],
+            package=approved_context,
+        )
+        writer_status, writer_error = denied_call(
+            retain_endpoint,
+            writer_headers,
+            writer_retention_body,
+        )
+        if (
+            writer_status != 403
+            or writer_error.get("code") != "trial_capability_required"
+            or writer_error.get("required_capability") != "company.control.approve"
+            or workspace_counts() != (1, 2, 1)
+        ):
+            raise RehearsalFailure("managed_context_owner_capability_bypass")
+
+        brief_payload = brief_endpoint(
+            route_request(owner_headers),
+            TrialCompanyBriefRequest(intent="attention"),
+        )
+        owner_context = brief_payload.get("brief", {}).get("ownerContext", {})
+        expected_brief_keys = {
+            "contract",
+            "version",
+            "profileDigest",
+            "approvedContextDigest",
+            "acceptedOutcomeDigest",
+            "preferredProduct",
+        }
+        if (
+            set(owner_context) != expected_brief_keys
+            or owner_context.get("profileDigest") != profile.get("profileDigest")
+            or owner_context.get("approvedContextDigest") != approved_context.get("contextDigest")
+            or workspace_counts() != (1, 2, 1)
+        ):
+            raise RehearsalFailure("managed_context_summary_projection_failed")
+    finally:
+        if prior_identity_secret is None:
+            os.environ.pop("SUPERMEGA_TRIAL_IDENTITY_SECRET", None)
+        else:
+            os.environ["SUPERMEGA_TRIAL_IDENTITY_SECRET"] = prior_identity_secret
+
+    state = store.get_state(owner, "company")
+    persisted_profile = managed_context_from_company_state(
+        state.state,
+        workspace_id=MANAGED_WORKSPACE,
+    )
+    receipts = state.state.get("managedContextReceipts", [])
+    if (
+        state.version != 1
+        or state.updated_by != MANAGED_OWNER_ACTOR
+        or persisted_profile is None
+        or persisted_profile.get("profileDigest") != profile.get("profileDigest")
+        or not isinstance(receipts, list)
+        or len(receipts) != 1
+    ):
+        raise RehearsalFailure("managed_context_postgres_readback_failed")
+    receipt = receipts[0]
+    if (
+        not isinstance(receipt, dict)
+        or receipt.get("approvedContextDigest") != approved_context.get("contextDigest")
+        or receipt.get("acceptedOutcomeDigest") != approved_context.get("outcome", {}).get("digest")
+        or receipt.get("rawProductRecordsIncluded") is not False
+        or receipt.get("rawBehaviorEntriesIncluded") is not False
+        or receipt.get("rawDecisionRecordsIncluded") is not False
+        or receipt.get("modelTrainingAllowed") is not False
+    ):
+        raise RehearsalFailure("managed_context_summary_boundary_failed")
+    persisted_text = json.dumps(state.state, ensure_ascii=False, separators=(",", ":"))
+    if any(
+        forbidden in persisted_text
+        for forbidden in ('"customerRows"', '"productRecords"', '"behaviorEntries"', '"decisionRecords"')
+    ):
+        raise RehearsalFailure("managed_context_raw_records_persisted")
+
+    with _connect(admin_database_url, autocommit=True) as administrator:
+        event_rows = administrator.execute(
+            """
+            select actor_id, actor_kind, expected_version, resulting_version,
+                   payload_json, result_json
+            from app_private.workspace_events
+            where workspace_id = %s and event_type = 'company.snapshot.saved'
+            """,
+            (MANAGED_WORKSPACE,),
+        ).fetchall()
+    if len(event_rows) != 1:
+        raise RehearsalFailure("managed_context_audit_count_failed")
+    event = event_rows[0]
+    event_payload = event[4] if isinstance(event[4], dict) else json.loads(event[4])
+    event_result = event[5] if isinstance(event[5], dict) else json.loads(event[5])
+    if (
+        str(event[0]) != MANAGED_OWNER_ACTOR
+        or str(event[1]) != "human"
+        or int(event[2]) != 0
+        or int(event[3]) != 1
+        or event_payload.get("state", {}).get("managedContextProfile", {}).get("profileDigest")
+        != profile.get("profileDigest")
+        or event_result.get("state", {}).get("managedContextProfile", {}).get("profileDigest")
+        != profile.get("profileDigest")
+    ):
+        raise RehearsalFailure("managed_context_audit_binding_failed")
+
+    return {
+        "managed_context_authenticated_identity_enforced": True,
+        "managed_context_validation_zero_write": True,
+        "managed_context_retention_rls_audited": True,
+        "managed_context_retention_idempotent_replay": True,
+        "managed_context_owner_capability_enforced": True,
+        "managed_context_summary_readback": True,
+    }
+
+
 def _exercise_managed_activation_control(
     runtime_database_url: str,
     admin_database_url: str,
@@ -837,8 +1120,10 @@ def _exercise_managed_activation_control(
     from supermega_runtime.trial_store import PostgresTrialStore
 
     now = datetime.now(timezone.utc)
+    activation_request = _managed_activation_request()
+    approved_context = deepcopy(activation_request["approvedAiContext"])
     plan = compile_activation_plan(
-        _managed_activation_request(),
+        activation_request,
         workspace_id=MANAGED_WORKSPACE,
         owner_actor_id=MANAGED_OWNER_ACTOR,
         approval_id=MANAGED_APPROVAL_ID,
@@ -849,6 +1134,15 @@ def _exercise_managed_activation_control(
         admin_ca_sha256="sha256:" + "1" * 64,
         now=now,
     )
+    if (
+        plan.get("evidence", {}).get("approvedContextContract")
+        != approved_context.get("contract")
+        or plan.get("evidence", {}).get("approvedContextDigest")
+        != approved_context.get("contextDigest")
+        or plan.get("evidence", {}).get("approvedContextOutcomeDigest")
+        != approved_context.get("outcome", {}).get("digest")
+    ):
+        raise RehearsalFailure("managed_context_activation_evidence_unbound")
     provisioner = ManagedWorkspaceProvisioner(admin_database_url)
     authorization = provisioner.authorize(
         plan,
@@ -940,14 +1234,12 @@ def _exercise_managed_activation_control(
             """,
             (MANAGED_WORKSPACE, MANAGED_SECOND_ACTOR),
         )
-        administrator.execute(
-            """
-            insert into app_private.workspace_state
-              (workspace_id, surface, version, state_json, updated_by)
-            values (%s, 'company', 1, '{"managed": true}'::jsonb, %s)
-            """,
-            (MANAGED_WORKSPACE, MANAGED_OWNER_ACTOR),
-        )
+
+    managed_context = _exercise_managed_context_postgres_route(
+        runtime_database_url,
+        admin_database_url,
+        approved_context=approved_context,
+    )
 
     directory_store = PostgresTrialStore(
         runtime_database_url,
@@ -1018,7 +1310,7 @@ def _exercise_managed_activation_control(
         "7846eac4-9f91-4a0a-af04-9fd4c7074188",
         "203c1184-3007-4be7-b0cb-22bc0414c91d",
     )
-    if visible_counts() != (1, 1, 1, 2, 1):
+    if visible_counts() != (1, 1, 1, 3, 1):
         raise RehearsalFailure("managed_active_workspace_visibility_failed")
     suspension = provisioner.suspend(
         plan,
@@ -1061,6 +1353,8 @@ def _exercise_managed_activation_control(
         "managed_owner_authorization_durable": True,
         "managed_activation_atomic_rollback": True,
         "managed_activation_idempotent_replay": True,
+        "managed_context_activation_evidence_bound": True,
+        **managed_context,
         "managed_suspension_database_enforced": True,
         "managed_suspension_blocks_additional_member": True,
         "managed_suspension_write_denied": True,
@@ -2743,6 +3037,14 @@ def _verify_restored_data(
     *,
     expected_approval_authority_snapshot: dict[str, Any],
 ) -> None:
+    from supermega_runtime.managed_context import build_managed_context_profile
+
+    approved_context = _managed_activation_request()["approvedAiContext"]
+    expected_profile = build_managed_context_profile(
+        approved_context,
+        workspace_id=MANAGED_WORKSPACE,
+        actor_id=MANAGED_OWNER_ACTOR,
+    )
     with _connect(admin_database_url, autocommit=True) as administrator:
         row = administrator.execute(
             """
@@ -2753,10 +3055,29 @@ def _verify_restored_data(
               (select count(*) from app_private.workspace_memberships),
               (select count(*) from app_private.workspace_state),
               (select count(*) from app_private.workspace_events),
-              (select count(*) from app_private.approval_requests)
+              (select count(*) from app_private.approval_requests),
+              (select state_json #>> '{managedContextProfile,approvedContextDigest}'
+               from app_private.workspace_state
+               where workspace_id = 'rehearsal-managed' and surface = 'company'),
+              (select state_json #>> '{managedContextProfile,profileDigest}'
+               from app_private.workspace_state
+               where workspace_id = 'rehearsal-managed' and surface = 'company'),
+              (select result_json #>> '{state,managedContextProfile,profileDigest}'
+               from app_private.workspace_events
+               where workspace_id = 'rehearsal-managed'
+                 and event_type = 'company.snapshot.saved')
             """
         ).fetchone()
-    if row != (7, 11, 7, 19, 3):
+    if row != (
+        7,
+        11,
+        7,
+        20,
+        3,
+        approved_context["contextDigest"],
+        expected_profile["profileDigest"],
+        expected_profile["profileDigest"],
+    ):
         raise RehearsalFailure("restored_data_mismatch")
     restored_approval_authority_snapshot = _approval_authority_snapshot(
         admin_database_url
