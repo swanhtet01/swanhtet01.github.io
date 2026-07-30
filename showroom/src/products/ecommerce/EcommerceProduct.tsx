@@ -1515,12 +1515,6 @@ export function EcommerceProduct() {
     })
     setDraftNotice('Ecommerce activation packet downloaded. No product, customer, payment, delivery, stock, Shop, or managed workspace state changed.')
   }
-  const setupRows = [
-    ['Catalog', sourceLabel],
-    ['Products', `${selectedSkus.length}/${Math.min(catalog.items.length, 8)} selected`],
-    ['Store', savedDraftIsCurrent ? 'Saved' : hasUnsavedStorefront ? 'Save needed' : 'Draft'],
-    ['Orders', buyingReady ? 'Ready' : catalogHydrating ? 'Checking' : 'Save store'],
-  ] as const
   const aiDeskRows = [
     ['Import', importNeeded ? 'Needed' : `${catalog.items.length} items`],
     ['Merchandise', selectedSkus.length ? `${selectedSkus.length} live` : 'Pick products'],
@@ -1599,6 +1593,61 @@ export function EcommerceProduct() {
     ['Learning', 'Records behavior only'],
     ['Boundary', 'No auto write'],
   ] as const
+  const ecommerceTodayCustomerCount = new Set(
+    managedOrderTimeline
+      .map((entry) => entry.request.customerReference.trim())
+      .filter(Boolean),
+  ).size
+  const ecommerceTodayCartUnits = buyingCart.reduce((total, line) => total + line.quantity, 0)
+  const ecommerceTodayState = importNeeded || !savedDraftIsCurrent
+    ? 'setup'
+    : lifecycleRefundAttention.length || lifecyclePaymentAttention.length || orderOpsStockRiskCount || pendingManagedRequests.length
+      ? 'attention'
+      : 'ready'
+  const ecommerceTodayHeadline = importNeeded
+    ? 'Connect your products to start selling'
+    : !savedDraftIsCurrent
+      ? 'Finish the storefront customers will see'
+      : lifecycleRefundAttention.length
+        ? `${lifecycleRefundAttention.length} refund${lifecycleRefundAttention.length === 1 ? '' : 's'} need evidence`
+        : lifecyclePaymentAttention.length
+          ? `${lifecyclePaymentAttention.length} payment${lifecyclePaymentAttention.length === 1 ? '' : 's'} need confirmation`
+          : pendingManagedRequests.length
+            ? `${pendingManagedRequests.length} order request${pendingManagedRequests.length === 1 ? '' : 's'} need review`
+            : activeManagedOrders.length
+              ? `${activeManagedOrders.length} order${activeManagedOrders.length === 1 ? '' : 's'} in progress`
+              : ecommerceTodayCartUnits
+                ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'} ready for checkout`
+                : 'Your store is ready for the next order'
+  const ecommerceTodaySummary = importNeeded
+    ? 'Import one Shop catalog. Products, stock, prices, checkout, and order review will use that source.'
+    : !savedDraftIsCurrent
+      ? 'Review the customer view once, then save its exact catalog and storefront fingerprint.'
+      : pendingManagedRequests.length
+        ? 'Shop keeps the accountable order record. Review stock, payment, and delivery before customer contact.'
+        : activeManagedOrders.length
+          ? 'Continue fulfilment from the Shop-owned order record; no duplicate order ledger is created here.'
+          : 'Customers can browse and build a cart. Shop remains in control of payment, stock, delivery, and returns.'
+  const ecommerceTodayAction = importNeeded
+    ? 'Connect products'
+    : !savedDraftIsCurrent
+      ? 'Finish storefront'
+      : orderImportReview?.status === 'ready'
+        ? 'Download order packet'
+        : orderImportReview?.status === 'blocked'
+          ? 'Fix order import'
+          : pendingManagedRequests.length
+            ? 'Review orders in Shop'
+            : ecommerceTodayCartUnits
+              ? 'Review checkout'
+              : 'Prepare next order'
+  const ecommerceTodayMetrics = [
+    ['Storefront', savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : 'Needs setup'],
+    ['Shop requests', pendingManagedRequests.length ? `${pendingManagedRequests.length} to review` : 'Clear'],
+    ['Cart & checkout', ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
+    ['Customers', ecommerceTodayCustomerCount ? `${ecommerceTodayCustomerCount} known` : 'No orders yet'],
+    ['Returns', managedReturnedUnits ? `${managedReturnedUnits} unit${managedReturnedUnits === 1 ? '' : 's'}` : 'Clear'],
+  ] as const
 
   function runOrderAutopilot() {
     recordBehaviorSignal(window.localStorage, {
@@ -1639,27 +1688,30 @@ export function EcommerceProduct() {
     <div className="workspace-screen ecommerce-product">
       <header className="ecommerce-heading">
         <div>
-          <span className="core-eyebrow">{managedIdentity ? 'Managed storefront' : 'Local preview'}</span>
+          <span className="core-eyebrow">{managedIdentity ? 'Managed commerce' : 'Local commerce workspace'}</span>
           <h1>Ecommerce</h1>
-          <p>Browse the working storefront, add products, and hand one reviewed order to Shop.</p>
-        </div>
-        <div className="ecommerce-heading-actions">
-          <Link className="text-link" to="/settings/?product=ecommerce">Import catalog</Link>
-          <Link className="text-link" to="/shop/?tab=inventory">Open Shop stock</Link>
+          <p>Run your online store from catalog to cart, order, delivery, and return.</p>
         </div>
       </header>
 
-      <div className="ecommerce-boundary" role="status">
-        <span>{sourceLabel}</span>
-        <p>Prices and stock stay controlled by Shop. This preview sends no payment or customer message.</p>
-      </div>
-
-      <div aria-label="Ecommerce setup status" className="ecommerce-command-strip">
-        {setupRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-      </div>
+      <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-state={ecommerceTodayState}>
+        <div className="ecommerce-today-priority">
+          <span className="core-eyebrow">Today</span>
+          <h2 id="ecommerce-today-title">{ecommerceTodayHeadline}</h2>
+          <p>{ecommerceTodaySummary}</p>
+          <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>
+        </div>
+        <div aria-label="Ecommerce today status" className="ecommerce-today-metrics">
+          {ecommerceTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+        <div className="ecommerce-today-source" role="status">
+          <span>{sourceLabel}</span>
+          <small>Shop controls prices, stock, payment, delivery, and the accountable order record.</small>
+        </div>
+      </section>
 
       <details className="ecommerce-business-controls">
-        <summary><span><strong>Order operations</strong><small>Next: {aiAgentJob}</small></span><b>Inbox, payments, delivery, recovery, and activation</b></summary>
+        <summary><span><strong>Advanced order controls</strong><small>Inbox, imports, payments, delivery, recovery, and activation</small></span><b>Next: {aiAgentJob}</b></summary>
         <div className="ecommerce-business-controls-content">
       <section aria-label="AI order desk" className="ecommerce-ai-desk">
         <div>
