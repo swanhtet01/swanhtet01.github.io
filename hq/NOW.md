@@ -1,11 +1,11 @@
 # HQ now
 
-Updated: 2026-07-27
+Updated: 2026-07-30
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `39642eb7a881a09899a030bbdfb68a5687f12fc6`
-Live state observed: `2026-07-27T22:06:58Z`
+Live release commit: `a3886039f08b834ea55dd5b443ea7b9962157ff5`
+Live state observed: `2026-07-30T17:40:30Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -41,7 +41,7 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 - Each CEO cycle selects at most one HQ-authorized outcome; blocked, duplicate, or invalid work stops before model or send (`cdd925a`).
 - Model calls reserve before provider I/O. All tenants and retries share one atomic UTC-day ceiling; failures stay charged, cache hits reserve nothing, hosted memory state fails closed, and the hard maximum is 2,000,000 units (`a2e1b89`).
 - Shop opens at `/shop/` with visual selling; orders and stock are one tap away. All products share light/dark mobile-first controls (`2b25e747`).
-- Plant is task-first at `/plant/`; mobile output is a focused bottom sheet with focus return, while desktop keeps the split workspace. It controls no equipment (`39642eb`).
+- Plant is task-first at `/plant/`; shift close requires good output, same-shift material trace, and no quality, downtime, maintenance, or critical/high problem blocker. It binds the pre-close revision/digest, goes stale after later Plant activity, and controls no equipment (`a388603`).
 - Website turns a five-field brief into a responsive, ready-page preview and standalone HTML download. Browser-local users skip managed release paperwork; connected workspaces retain evidence and approval controls. Download never deploys or changes a domain (`dfbe00b3`).
 - Ecommerce uses versioned Shop data for a recoverable multi-line cart and deterministic quote. Managed workspaces retain exact requests in the Shop inbox; V1 requests stay readable, and only Shop confirmation creates an order (`aed737a`).
 - AI remains gated; Order Intake passed 20 local cases, but provider execution still needs credentials.
@@ -53,12 +53,12 @@ HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal,
 
 ## Verified baseline
 
-- Current checkpoints: product `17b458f`, release `39642eb`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
-- App/local gates pass: 329 Python tests, lint/build, 54 Shop inventory/221 Commerce/258 Production checks, 69 security checks, and the complete release/database/Vercel/HQ suite.
-- PostgreSQL 17.10 rehearsal passes twice: migrations, isolation, four-product journeys, human approvals, TLS, backup/restore, and cleanup. Hosted Storage privacy remains unproven (`2930ecf`).
-- At 390 px, Shop exact-lot flow and Plant output open/close pass without overflow; Plant passes both themes with focus return. Managed count/allocation remain model verified.
+- Current checkpoints: Plant implementation `33508cc`, release `a388603`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
+- App/local gates pass: 45 focused Python tests, lint/build, 290 Production, 26 pilot-outcome, 71 workflow, 83 security, and 11 privacy checks plus the full release/database/Vercel/HQ suite.
+- PostgreSQL 17 rehearsal passes 45 loopback checks: migrations, isolation, four-product journeys, human approvals, TLS, backup/restore, and cleanup. Hosted Storage privacy remains unproven (`33508cc`).
+- Plant shift review and close preparation pass at 390 and 1365 px without overflow or console errors. Managed close parity remains model/runtime verified.
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
-- Both `supermega.dev` and `app.supermega.dev` serve exact commit `39642eb7a881a09899a030bbdfb68a5687f12fc6`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Protected promotion and exact release identity pass at catalog `2026-07-28.1`.
+- Both `supermega.dev` and `app.supermega.dev` serve exact commit `a3886039f08b834ea55dd5b443ea7b9962157ff5`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Protected promotion, exact paired release identity, and live verifiers pass at catalog `2026-07-30.2`.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
 
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
