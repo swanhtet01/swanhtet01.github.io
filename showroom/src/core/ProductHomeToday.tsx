@@ -15,6 +15,7 @@ import {
 import {
   buildOperationalReport,
   buildSharedMasterDataDryRunPlan,
+  buildSharedMasterDataRehearsalPlan,
   exportOperationalReport,
   exportSharedMasterDataReviewPacket,
   filterOperationalReport,
@@ -233,19 +234,7 @@ export function ProductHomeToday({ runtimeStatus = 'demo' }: { runtimeStatus?: R
     }
   }
 
-  async function downloadDuplicateReview() {
-    if (!report || !report.masterData.duplicateCandidates) return
-    setNotice('Sealing the ID-only duplicate review...')
-    try {
-      const artifact = await exportSharedMasterDataReviewPacket(report)
-      saveJsonFile(artifact, `supermega-master-duplicate-review-${report.observedAt.slice(0, 10)}.json`)
-      setNotice(`Downloaded ${artifact.candidates.length} duplicate review candidate${artifact.candidates.length === 1 ? '' : 's'}. No names, merge, source mutation, or external write was included.`)
-    } catch {
-      setNotice('The duplicate review could not be sealed. Nothing was downloaded or changed.')
-    }
-  }
-
-  async function downloadDuplicateDryRun() {
+  async function downloadDuplicateRehearsal() {
     if (!report || !report.masterData.duplicateCandidates) return
     setNotice('Validating the human decisions and owner routes...')
     try {
@@ -255,8 +244,9 @@ export function ProductHomeToday({ runtimeStatus = 'demo' }: { runtimeStatus?: R
         evidenceReference: activeDuplicateDecision.evidence,
         decisions: reviewPacket.candidates.map((candidate) => ({ candidateId: candidate.id, resolution: activeDuplicateDecision.resolutions[candidate.id] as SharedMasterDataResolution })),
       })
-      saveJsonFile(plan, `supermega-master-data-dry-run-${report.observedAt.slice(0, 10)}.json`)
-      setNotice(`Downloaded ${plan.routes.length} owner-routed dry-run action${plan.routes.length === 1 ? '' : 's'}. No source record was changed.`)
+      const rehearsal = await buildSharedMasterDataRehearsalPlan(plan)
+      saveJsonFile(rehearsal, `supermega-master-data-rehearsal-${report.observedAt.slice(0, 10)}.json`)
+      setNotice(`Downloaded ${rehearsal.workOrders.length} owner-routed rehearsal checklist${rehearsal.workOrders.length === 1 ? '' : 's'}. Every approval is pending; no source record was changed.`)
     } catch {
       setNotice('Complete every decision, owner, and evidence field. Nothing was downloaded or changed.')
     }
@@ -288,7 +278,6 @@ export function ProductHomeToday({ runtimeStatus = 'demo' }: { runtimeStatus?: R
             <label>Product<select value={view.product} onChange={(event) => setView((current) => ({ ...current, product: event.target.value as OperationalReportView['product'] }))}><option value="all">All authorized</option>{report.allowedProducts.map((product) => <option key={product} value={product}>{productLabel[product]}</option>)}</select></label>
             <label>View<select value={view.urgency} onChange={(event) => setView((current) => ({ ...current, urgency: event.target.value as OperationalReportView['urgency'] }))}><option value="attention">Needs attention</option><option value="critical">Critical only</option><option value="all">All including ready</option></select></label>
             <button className="core-button compact" onClick={() => void downloadReport()} type="button">Download report</button>
-            {report.masterData.duplicateCandidates ? <button className="core-button compact" onClick={() => void downloadDuplicateReview()} type="button">Download duplicate review</button> : null}
           </div>
           <div className="product-home-report-list">
             {visibleEntries.length ? visibleEntries.map((entry) => <Link data-severity={entry.severity} key={entry.id} to={entry.route}><span><small>{productLabel[entry.product]} · {entry.id}</small><strong>{entry.label}</strong><em>{entry.detail}</em></span><b>{entry.count || 'Ready'}</b></Link>) : <p>No authorized entries match this saved view.</p>}
@@ -299,7 +288,7 @@ export function ProductHomeToday({ runtimeStatus = 'demo' }: { runtimeStatus?: R
             <div><strong>Review duplicate records</strong><small>Choose the intended relationship. SuperMega will download a dry-run plan for the owning product; it will not change either record.</small></div>
             {report.masterData.duplicateReview.candidates.map((candidate) => <label key={candidate.id}><span>{candidate.id} · {candidate.recordIds.join(' + ')}</span><select aria-label={`${candidate.id} resolution`} value={activeDuplicateDecision.resolutions[candidate.id] ?? ''} onChange={(event) => updateDuplicateDecision((current) => ({ ...current, resolutions: { ...current.resolutions, [candidate.id]: event.target.value as SharedMasterDataResolution | '' } }))}><option value="">Choose resolution</option>{candidate.kind === 'business_partner' ? <><option value="retain_separate_roles">Keep separate roles</option><option value="link_shared_party">Link one shared party</option></> : <><option value="retain_separate_locations">Keep separate locations</option><option value="merge_in_owner">Merge in owning product</option></>}</select></label>)}
             <div className="form-row"><label><span>Decision owner</span><input autoComplete="name" maxLength={120} onChange={(event) => updateDuplicateDecision((current) => ({ ...current, owner: event.target.value }))} placeholder="Named reviewer" value={activeDuplicateDecision.owner} /></label><label><span>Evidence reference</span><input maxLength={240} onChange={(event) => updateDuplicateDecision((current) => ({ ...current, evidence: event.target.value }))} placeholder="Ticket, file, or meeting note" value={activeDuplicateDecision.evidence} /></label></div>
-            <button className="core-button compact" disabled={!activeDuplicateDecision.owner.trim() || !activeDuplicateDecision.evidence.trim() || report.masterData.duplicateReview.candidates.some((candidate) => !activeDuplicateDecision.resolutions[candidate.id])} onClick={() => void downloadDuplicateDryRun()} type="button">Download owner-routed dry run</button>
+            <button className="core-button compact" disabled={!activeDuplicateDecision.owner.trim() || !activeDuplicateDecision.evidence.trim() || report.masterData.duplicateReview.candidates.some((candidate) => !activeDuplicateDecision.resolutions[candidate.id])} onClick={() => void downloadDuplicateRehearsal()} type="button">Download rehearsal plan</button>
           </div> : null}
           <p className="product-home-report-source">Sources: {report.sources.map((source) => `${source.surface} ${source.mode}${source.revision === null ? '' : ` r${source.revision}`}`).join(' · ')}. View filters are saved on this device; permissions always come from the managed bootstrap.</p>
           {notice ? <p className="form-notice" role="status">{notice}</p> : null}
