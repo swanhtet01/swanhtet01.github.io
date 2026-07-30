@@ -27,6 +27,7 @@ let ecommerceBuyingRuntimeChecks = 0
 let catalogImportRuntimeChecks = 0
 let clientOnboardingRuntimeChecks = 0
 let managedClientImportRuntimeChecks = 0
+let managedContextRuntimeChecks = 0
 let shopInventoryRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
 let websiteReleaseRuntimeChecks = 0
@@ -112,6 +113,30 @@ const websiteReleaseUiSource = await readFile(resolve(root, 'showroom', 'src', '
 const managedWebsitePythonRuntime = await readFile(resolve(root, 'supermega_runtime', 'website_runtime.py'), 'utf8')
 const ecommerceBuyingUiSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceBuyingWorkspace.tsx'), 'utf8')
 const ecommerceBuyingLifecycleSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-buying-lifecycle.ts'), 'utf8')
+const managedContextSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'managed-context.ts'), 'utf8')
+const managedContextUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedContextConsent.tsx'), 'utf8')
+const managedContextPythonSource = await readFile(resolve(root, 'supermega_runtime', 'managed_context.py'), 'utf8')
+
+if (!managedContextSource.includes("supermega.managed_context_profile_request.v1")
+  || !managedContextSource.includes('buildManagedContextProfileRequest')
+  || !managedContextSource.includes('managedContextValidationProjection')
+  || !managedContextSource.includes('rawProductRecordsIncluded: false')
+  || !managedContextSource.includes('modelTrainingAllowed: false')
+  || managedContextSource.includes('preference.detail')
+  || !managedContextUiSource.includes('Keep managed context')
+  || !managedContextUiSource.includes('I approve these summarized source counts, owner behavior pattern, and reviewed decision counts for managed AI recommendations.')
+  || !managedContextUiSource.includes('Raw records and browser text stay out.')
+  || !settingsPageSource.includes("approval.status === 'approved' || approval.status === 'declined'")
+  || !settingsPageSource.includes("approval.decidedActorKind === 'human'")
+  || !settingsPageSource.includes('<ManagedContextConsent')
+  || !managedTrialSource.includes('/api/trial/v1/managed-context/validate')
+  || !managedTrialSource.includes('/api/trial/v1/managed-context/retain')
+  || !managedTrialRuntimeSource.includes('@router.post("/managed-context/validate")')
+  || !managedTrialRuntimeSource.includes('@router.post("/managed-context/retain")')
+  || !managedContextPythonSource.includes('managed_context_validation_digest')
+  || !managedContextPythonSource.includes('managed_context_brief_projection')
+  || !companyBriefRuntimeSource.includes('_attention_rank')
+  || !companyBriefRuntimeSource.includes('criticalIssues')) fail('managed_context_consent_contract_missing')
 
 if (!websiteReleaseSource.includes("supermega.website.release_foundation.v1")
   || !websiteReleaseSource.includes('buildWebsiteReleasePackage')
@@ -1156,7 +1181,7 @@ if (!settingsPageSource.includes("contract: 'supermega.ai_memory_preview.v1'")
   || !settingsPageSource.includes('readinessScore: aiMemoryReadinessScore')
   || !settingsPageSource.includes('sourceRecordCount: aiMemorySourceRecordCount')
   || !settingsPageSource.includes('behaviorSignalCount: agentBehaviorSignals.length')
-  || !settingsPageSource.includes('reviewedDecisionCount: managedApprovalRequests.length || approvals.length')
+  || !settingsPageSource.includes('reviewedDecisionCount,')
   || !settingsPageSource.includes('managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)')
   || !settingsPageSource.includes('Raw product records stay out of this preview.')
   || !settingsPageSource.includes('No customer message, payment, stock move, production write, domain publish, managed write, or model training runs from this preview.')
@@ -5056,6 +5081,137 @@ async function verifyClientOnboardingRuntime() {
     await rejects(() => model.createClientImportPreview(tooManyRows, 'commerce'), 'client_import_row_limit_not_enforced')
   } catch (error) {
     fail(`client_onboarding_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyManagedContextRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    managedContextRuntimeChecks += 1
+  }
+  const rejectsAsync = async (action, reason) => {
+    try { await action() } catch { managedContextRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  try {
+    const nonce = Date.now()
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'managed-context.ts')).href}?managed-context=${nonce}`)
+    const managedTrial = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'managed-trial.ts')).href}?managed-context-trial=${nonce}`)
+    const identity = { userId: 'OWNER-CONTEXT', email: 'owner@example.test', workspaceId: 'workspace-context' }
+    const behaviorPreference = {
+      contract: 'supermega.behavior_preference.v1',
+      version: 1,
+      chosenSignals: 3,
+      productCount: 1,
+      preferred: {
+        product: 'commerce',
+        detail: 'Browser-local customer wording must not cross the boundary',
+        chosenCount: 2,
+        lastChosenAt: '2026-07-30T00:00:00.000Z',
+      },
+      latest: null,
+    }
+    const request = model.buildManagedContextProfileRequest({
+      product: 'shop',
+      templateId: 'social-commerce',
+      selectedProductRecords: 7,
+      behaviorSignals: 3,
+      reviewedDecisions: 1,
+      behaviorPreference,
+    })
+    assert(request?.behaviorPreference.product === 'commerce'
+      && request.behaviorPreference.chosenCount === 2
+      && !Object.hasOwn(request.behaviorPreference, 'detail')
+      && request.rawProductRecordsIncluded === false
+      && request.modelTrainingAllowed === false, 'managed_context_builder_not_summary_only')
+    assert(model.buildManagedContextProfileRequest({
+      product: 'shop', templateId: 'social-commerce', selectedProductRecords: 7, behaviorSignals: 3,
+      reviewedDecisions: 0, behaviorPreference,
+    }) === null, 'managed_context_zero_reviewed_decisions_accepted')
+    assert(model.buildManagedContextProfileRequest({
+      product: 'shop', templateId: 'private-template', selectedProductRecords: 7, behaviorSignals: 3,
+      reviewedDecisions: 1, behaviorPreference,
+    }) === null, 'managed_context_arbitrary_template_accepted')
+    assert(model.buildManagedContextProfileRequest({
+      product: 'shop', templateId: 'social-commerce', selectedProductRecords: 7, behaviorSignals: 3,
+      reviewedDecisions: 1, behaviorPreference: { ...behaviorPreference, preferred: null },
+    }) === null, 'managed_context_missing_owner_pattern_accepted')
+    const profileDigest = `sha256:${createHash('sha256').update(JSON.stringify(model.managedContextProfileProjection(request, identity))).digest('hex')}`
+    const profile = {
+      contract: 'supermega.managed_context_profile.v1',
+      version: 1,
+      workspaceId: identity.workspaceId,
+      retainedBy: identity.userId,
+      product: request.product,
+      templateId: request.templateId,
+      sourceCounts: request.sourceCounts,
+      behaviorPreference: request.behaviorPreference,
+      allowedUses: request.allowedUses,
+      forbiddenActions: request.forbiddenActions,
+      profileDigest,
+      rawProductRecordsIncluded: false,
+      modelTrainingAllowed: false,
+    }
+    assert(model.structurallyValidManagedContextProfile(profile, request, identity), 'managed_context_profile_shape_rejected')
+    assert(!model.structurallyValidManagedContextProfile({ ...profile, retainedBy: 'OTHER-ACTOR' }, request, identity), 'managed_context_actor_tamper_accepted')
+    const companyVersion = 4
+    const validationDigest = `sha256:${createHash('sha256').update(JSON.stringify(model.managedContextValidationProjection(profileDigest, companyVersion, identity))).digest('hex')}`
+    const validation = {
+      contract: 'supermega.managed_context_profile_validation.v1',
+      status: 'ready_for_owner_confirmation',
+      profileDigest,
+      validationDigest,
+      companyVersion,
+      internalWritePerformed: false,
+      externalWritesPerformed: false,
+    }
+    const validationResponse = {
+      profile,
+      validation,
+      identity: { workspace_id: identity.workspaceId, actor_id: identity.userId, actor_kind: 'human' },
+      secretValuesExposed: false,
+    }
+    const checked = await managedTrial.assertManagedContextValidation(validationResponse, request, identity)
+    assert(checked.validation.validationDigest === validationDigest, 'managed_context_revision_validation_rejected')
+    await rejectsAsync(
+      () => managedTrial.assertManagedContextValidation({
+        ...validationResponse,
+        validation: { ...validation, companyVersion: companyVersion + 1 },
+      }, request, identity),
+      'managed_context_stale_validation_digest_accepted',
+    )
+    const retentionResponse = {
+      profile,
+      retention: {
+        contract: 'supermega.managed_context_profile_retention.v1',
+        status: 'retained',
+        profileDigest,
+        companyVersion: companyVersion + 1,
+        internalWritePerformed: true,
+        externalWritesPerformed: false,
+        idempotentReplay: false,
+      },
+      result: { version: companyVersion + 1 },
+      identity: validationResponse.identity,
+      secretValuesExposed: false,
+    }
+    const retained = await managedTrial.assertManagedContextRetention(retentionResponse, request, validation, identity)
+    assert(retained.profile.profileDigest === profileDigest, 'managed_context_retention_rejected')
+    await rejectsAsync(
+      () => managedTrial.assertManagedContextRetention({
+        ...retentionResponse,
+        retention: { ...retentionResponse.retention, externalWritesPerformed: true },
+      }, request, validation, identity),
+      'managed_context_external_write_tamper_accepted',
+    )
+    assert(model.structurallyValidManagedContextBriefProjection({
+      contract: 'supermega.managed_context_brief_projection.v1',
+      version: 1,
+      profileDigest,
+      preferredProduct: 'commerce',
+    }), 'managed_context_brief_projection_rejected')
+  } catch (error) {
+    fail(`managed_context_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
@@ -10447,6 +10603,7 @@ await verifyPlantOrderRuntime()
 await verifyWebsiteReleaseRuntime()
 await verifyCatalogImportRuntime()
 await verifyClientOnboardingRuntime()
+await verifyManagedContextRuntime()
 await verifyManagedClientImportRuntime()
 await verifyWebsiteRuntime()
 await verifyWebsiteOrderCompletionRuntime()
@@ -10473,4 +10630,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, managedContextRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

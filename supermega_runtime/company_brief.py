@@ -9,6 +9,7 @@ import json
 from typing import Any
 
 from supermega_runtime.commerce_runtime import validate_commerce_state
+from supermega_runtime.managed_context import managed_context_brief_projection, managed_context_from_company_state
 from supermega_runtime.production_runtime import validate_production_state
 from supermega_runtime.trial_store import ApprovalRecord, TrialState, TrialValidationError
 from supermega_runtime.website_runtime import validate_website_state
@@ -73,6 +74,8 @@ def _empty_plant(status: str = "missing") -> dict[str, object]:
         "jobCount": 0,
         "unfinishedJobs": 0,
         "heldJobs": 0,
+        "criticalIssues": 0,
+        "highIssues": 0,
         "priorityIssues": 0,
         "openIssues": 0,
         "stoppedMachines": 0,
@@ -148,6 +151,8 @@ def _project_plant(record: TrialState | None) -> dict[str, object]:
         "jobCount": len(jobs),
         "unfinishedJobs": sum(1 for job in jobs if not job.get("closure") and job["output"] < job["target"]),
         "heldJobs": sum(1 for job in jobs if bool(job.get("qualityHold")) and not job.get("closure")),
+        "criticalIssues": sum(1 for issue in open_issues if issue["severity"] == "critical"),
+        "highIssues": sum(1 for issue in open_issues if issue["severity"] == "high"),
         "priorityIssues": sum(1 for issue in open_issues if issue["severity"] in {"critical", "high"}),
         "openIssues": len(open_issues),
         "stoppedMachines": sum(1 for machine in machines if machine["state"] == "stopped"),
@@ -316,7 +321,40 @@ def _source_count(projections: Mapping[str, Mapping[str, object]]) -> int:
     return sum(1 for projection in projections.values() if projection["status"] == "ready")
 
 
-def _answer(projections: Mapping[str, Mapping[str, object]], intent: str) -> dict[str, object]:
+def _attention_rank(projections: Mapping[str, Mapping[str, object]]) -> list[tuple[int, int, str]]:
+    shop = projections["shop"]
+    plant = projections["plant"]
+    website = projections["website"]
+    ecommerce = projections["ecommerce"]
+    return [
+        (
+            3 if int(shop["moneyExceptions"]) else 2 if int(shop["lowStock"]) else 1 if int(shop["activeOrders"]) else 0,
+            int(shop["moneyExceptions"]) * 3 + int(shop["lowStock"]) * 2 + int(shop["activeOrders"]),
+            "shop_inventory",
+        ) if shop["status"] == "ready" else (-1, -1, "shop_inventory"),
+        (
+            4 if int(plant["criticalIssues"]) or int(plant["stoppedMachines"]) else 3 if int(plant["highIssues"]) or int(plant["heldJobs"]) else 1 if int(plant["unfinishedJobs"]) else 0,
+            int(plant["criticalIssues"]) * 8 + int(plant["stoppedMachines"]) * 6 + int(plant["highIssues"]) * 4 + int(plant["heldJobs"]) * 3 + int(plant["unfinishedJobs"]),
+            "plant_control",
+        ) if plant["status"] == "ready" else (-1, -1, "plant_control"),
+        (
+            2 if not website["approved"] or not website["released"] else 1 if int(website["readyPages"]) < int(website["pageCount"]) else 0,
+            (0 if website["approved"] else 2) + (0 if website["released"] else 2) + int(website["pageCount"]) - int(website["readyPages"]),
+            "website_readiness",
+        ) if website["status"] == "ready" else (-1, -1, "website_readiness"),
+        (
+            2 if not ecommerce["shopSourceReady"] else 1 if int(ecommerce["incomingRequests"]) else 0,
+            int(ecommerce["incomingRequests"]) + (0 if ecommerce["shopSourceReady"] else 3),
+            "ecommerce_readiness",
+        ) if ecommerce["status"] == "ready" else (-1, -1, "ecommerce_readiness"),
+    ]
+
+
+def _answer(
+    projections: Mapping[str, Mapping[str, object]],
+    intent: str,
+    owner_context: Mapping[str, object] | None = None,
+) -> dict[str, object]:
     builders = {
         "shop_inventory": lambda: _shop_answer(projections["shop"]),
         "plant_control": lambda: _plant_answer(projections["plant"]),
@@ -339,17 +377,16 @@ def _answer(projections: Mapping[str, Mapping[str, object]], intent: str) -> dic
             **_unavailable_answer("attention", "shop", "missing"),
             "title": "Start with one managed business source",
         }
-    ranked = [
-        (int(projections["shop"]["lowStock"]) * 3 + int(projections["shop"]["moneyExceptions"]) * 3 + int(projections["shop"]["activeOrders"]), "shop_inventory")
-        if projections["shop"]["status"] == "ready" else (-1, "shop_inventory"),
-        (int(projections["plant"]["priorityIssues"]) * 4 + int(projections["plant"]["heldJobs"]) * 4 + int(projections["plant"]["stoppedMachines"]) * 4 + int(projections["plant"]["unfinishedJobs"]), "plant_control")
-        if projections["plant"]["status"] == "ready" else (-1, "plant_control"),
-        ((0 if projections["website"]["approved"] else 2) + (0 if projections["website"]["released"] else 2) + int(projections["website"]["pageCount"]) - int(projections["website"]["readyPages"]), "website_readiness")
-        if projections["website"]["status"] == "ready" else (-1, "website_readiness"),
-        (int(projections["ecommerce"]["incomingRequests"]) * 2 + (0 if projections["ecommerce"]["shopSourceReady"] else 3), "ecommerce_readiness")
-        if projections["ecommerce"]["status"] == "ready" else (-1, "ecommerce_readiness"),
-    ]
-    selected = builders[max(ranked, key=lambda item: item[0])[1]]()
+    ranked = _attention_rank(projections)
+    preferred_intent = None
+    if owner_context:
+        preferred_intent = {
+            "commerce": "shop_inventory",
+            "production": "plant_control",
+            "website": "website_readiness",
+            "ecommerce": "ecommerce_readiness",
+        }.get(str(owner_context.get("preferredProduct")))
+    selected = builders[max(ranked, key=lambda item: (item[0], item[1], item[2] == preferred_intent))[2]]()
     return {**selected, "intent": "attention", "title": f"Start here: {selected['title']}"}
 
 
@@ -374,6 +411,12 @@ def build_managed_company_brief(
     if not workspace_id or len(workspace_id) > 128:
         raise TrialValidationError("Company brief workspace is invalid.")
     product_states = {surface: states[surface] for surface in _PRODUCT_SURFACES if surface in states}
+    company_state = states.get("company")
+    owner_profile = managed_context_from_company_state(
+        company_state.state if company_state else None,
+        workspace_id=workspace_id,
+    )
+    owner_context = managed_context_brief_projection(owner_profile)
     shop, ecommerce = _project_commerce(product_states.get("commerce"))
     projections = {
         "shop": shop,
@@ -381,7 +424,7 @@ def build_managed_company_brief(
         "website": _project_website(product_states.get("website")),
         "ecommerce": ecommerce,
     }
-    answer = _answer(projections, intent)
+    answer = _answer(projections, intent, owner_context)
     source_versions = [_source_reference(product_states[surface]) for surface in _PRODUCT_SURFACES if surface in product_states]
     approval_summary = _approval_summary(approvals)
     brief_basis = {
@@ -390,6 +433,7 @@ def build_managed_company_brief(
         "intent": intent,
         "sourceVersions": source_versions,
         "approvalSummary": approval_summary,
+        "ownerContext": owner_context,
         "answer": answer,
     }
     return {
@@ -403,6 +447,7 @@ def build_managed_company_brief(
         "boundary": _BOUNDARY,
         "sourceVersions": source_versions,
         "approvalSummary": approval_summary,
+        "ownerContext": deepcopy(owner_context),
         "briefDigest": _digest(brief_basis),
         "retention": "reproducible_not_persisted",
         "externalWritesPerformed": False,
@@ -414,6 +459,20 @@ def company_brief_receipt(brief: Mapping[str, object]) -> dict[str, object]:
 
     if brief.get("contract") != COMPANY_BRIEF_CONTRACT:
         raise TrialValidationError("Company brief contract is invalid.")
+    owner_context = brief.get("ownerContext")
+    owner_context_digest = None
+    if owner_context is not None:
+        if not isinstance(owner_context, Mapping):
+            raise TrialValidationError("Company brief owner context is invalid.")
+        candidate_digest = owner_context.get("profileDigest")
+        if (
+            not isinstance(candidate_digest, str)
+            or len(candidate_digest) != 71
+            or not candidate_digest.startswith("sha256:")
+            or any(character not in "0123456789abcdef" for character in candidate_digest[7:])
+        ):
+            raise TrialValidationError("Company brief owner context digest is invalid.")
+        owner_context_digest = candidate_digest
     return {
         "contract": COMPANY_BRIEF_RECEIPT_CONTRACT,
         "briefDigest": brief["briefDigest"],
@@ -422,6 +481,7 @@ def company_brief_receipt(brief: Mapping[str, object]) -> dict[str, object]:
         "sourceVersions": deepcopy(brief["sourceVersions"]),
         "approvalSummary": deepcopy(brief["approvalSummary"]),
         "nextAction": deepcopy(brief["nextAction"]),
+        "ownerContextDigest": owner_context_digest,
     }
 
 
@@ -440,6 +500,11 @@ def company_state_with_receipt(current: Mapping[str, Any], receipt: Mapping[str,
         "sourceVersions": receipt.get("sourceVersions"),
         "approvalSummary": receipt.get("approvalSummary"),
         "nextAction": receipt.get("nextAction"),
+        "ownerContext": (
+            {"profileDigest": receipt.get("ownerContextDigest")}
+            if receipt.get("ownerContextDigest") is not None
+            else None
+        ),
     })
     if receipt.get("contract") != COMPANY_BRIEF_RECEIPT_CONTRACT:
         raise TrialValidationError("Company brief receipt contract is invalid.")
