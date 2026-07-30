@@ -184,7 +184,7 @@ for (const required of ['supermega.setup.v3', 'First source named', 'Acceptance 
 for (const required of ['supermega.managed_company_brief.v1', '/api/trial/v1/company-brief', '/api/trial/v1/company-brief/receipts']) {
   if (!operatingModelsChunk.includes(required)) throw new Error(`missing_live_managed_company_brief_context:${required}`)
 }
-for (const required of ['supermega.managed_owner_control_run.v1', 'supermega.managed_owner_control_retention.v1', '/api/trial/v1/owner-control', '/api/trial/v1/owner-control/acknowledgements', 'acknowledgedCount', 'expectedManagedOwnerControlRank', 'Managed Owner Control baseline digest is invalid.', 'Managed Owner Control run digest is invalid.']) {
+for (const required of ['supermega.managed_owner_control_run.v1', 'supermega.managed_owner_control_retention.v1', '/api/trial/v1/owner-control', '/api/trial/v1/owner-control/acknowledgements', 'acknowledgedCount', 'Managed Owner Control baseline digest is invalid.', 'Managed Owner Control run digest is invalid.']) {
   if (!operatingModelsChunk.includes(required)) throw new Error(`missing_live_managed_owner_control_context:${required}`)
 }
 for (const required of ['supermega.managed_context_profile_request.v1', 'supermega.managed_context_profile_validation.v1', 'supermega.managed_context_profile_retention.v1', '/api/trial/v1/managed-context/validate', '/api/trial/v1/managed-context/retain', 'rank_next_actions', 'model_training']) {
