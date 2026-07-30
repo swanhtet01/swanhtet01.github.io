@@ -70,6 +70,7 @@ export type ManagedCommerceEvent =
   | 'commerce.account_mapping.saved'
   | 'commerce.customer_credit_policy.saved'
   | 'commerce.promotion_policy.saved'
+  | 'commerce.shipping_policy.saved'
   | 'commerce.service_schedule.initialized'
   | 'commerce.service_schedule.saved'
   | 'commerce.storefront.merchandising.imported'

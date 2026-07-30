@@ -875,6 +875,8 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         return dict(next_state["customerCreditPolicies"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.promotion_policy.saved":
         return dict(next_state["promotionPolicies"][0]["proof"])  # type: ignore[index,arg-type]
+    if event_type == "commerce.shipping_policy.saved":
+        return dict(next_state["shippingPolicies"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.order.advanced":
         completed_orders = [
             order
@@ -1079,6 +1081,70 @@ def apply_event(
 
 
 class CommerceRuntimeTests(unittest.TestCase):
+    def test_ecommerce_shipping_is_policy_bound_and_prices_the_shop_order(self) -> None:
+        current = created_state("ORD-SHIPPING-1")
+        configured = deepcopy(current)
+        configured["shippingPolicies"] = [{
+            "revision": 1,
+            "zoneCode": "YGN-WEST",
+            "townships": ["Hlaing", "Kamayut"],
+            "feeMmk": 3_000,
+            "promiseMinutes": 120,
+            "status": "active",
+            "effectiveFrom": "2026-07-23T08:00:00.000Z",
+            "effectiveUntil": None,
+            "proof": action_evidence(
+                "ACT-SHIPPING-YGN-WEST-R1",
+                captured_at="2026-07-23T08:00:00.000Z",
+                reason="Approved the Yangon west shipping policy.",
+            ),
+        }]
+        state = apply_event(current, "commerce.shipping_policy.saved", configured)
+        self.assertEqual(apply_event(current, "commerce.shipping_policy.saved", configured), state)
+        with self.assertRaisesRegex(TrialValidationError, "shipping policy proof"):
+            apply_event(
+                current,
+                "commerce.shipping_policy.saved",
+                configured,
+                action_evidence("ACT-SHIPPING-WRONG-EVIDENCE"),
+            )
+
+        order = state["orders"][0]  # type: ignore[index]
+        order.update({
+            "sourceRecordId": "ECR-00000000-0000-4000-8000-000000000098",
+            "lines": [{"sku": "SKU-1", "name": "Test item", "quantity": 2, "unitPriceMmk": 100}],
+            "fulfilment": "delivery",
+            "shippingDecision": {
+                "schema": "supermega.commerce.shipping-decision.v1",
+                "status": "approved",
+                "reason": "approved",
+                "township": "Hlaing",
+                "zoneCode": "YGN-WEST",
+                "policyRevision": 1,
+                "policyActionId": "ACT-SHIPPING-YGN-WEST-R1",
+                "feeMmk": 3_000,
+                "promiseMinutes": 120,
+                "reviewedAt": NOW,
+            },
+            "total": 3_200,
+        })
+        accepted = validate_commerce_state(state)
+        self.assertEqual(accepted["orders"][0]["total"], 3_200)  # type: ignore[index]
+
+        for field, value in (("feeMmk", 2_999), ("policyRevision", 2), ("promiseMinutes", 90)):
+            tampered = deepcopy(state)
+            tampered["orders"][0]["shippingDecision"][field] = value  # type: ignore[index]
+            with self.assertRaisesRegex(TrialValidationError, "versioned Shop policy"):
+                validate_commerce_state(tampered)
+        early = deepcopy(state)
+        early["orders"][0]["promisedAt"] = "2026-07-23T10:59:59.000Z"  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "promise is earlier"):
+            validate_commerce_state(early)
+        ungoverned = deepcopy(state)
+        ungoverned["shippingPolicies"] = []
+        with self.assertRaisesRegex(TrialValidationError, "versioned Shop policy"):
+            validate_commerce_state(ungoverned)
+
     def test_ecommerce_promotion_is_policy_bound_and_prices_the_shop_order(self) -> None:
         current = created_state("ORD-PROMO-1")
         configured_state = deepcopy(current)
@@ -2581,6 +2647,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.account_mapping.saved",
                     "commerce.customer_credit_policy.saved",
                     "commerce.promotion_policy.saved",
+                    "commerce.shipping_policy.saved",
                     "commerce.service_schedule.initialized",
                     "commerce.service_schedule.saved",
                 }
@@ -2592,6 +2659,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIn("commerce.account_mapping.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.customer_credit_policy.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.promotion_policy.saved", COMMERCE_EVENTS)
+        self.assertIn("commerce.shipping_policy.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.service_schedule.initialized", COMMERCE_EVENTS)
         self.assertIn("commerce.service_schedule.saved", COMMERCE_EVENTS)
 

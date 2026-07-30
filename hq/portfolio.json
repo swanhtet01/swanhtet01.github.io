@@ -18,6 +18,11 @@
       "productId": "ecommerce",
       "workOrderId": "ecommerce-promotion-policy-setup",
       "checkpoint": "ENG-135"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-shipping-policy-review",
+      "checkpoint": "ENG-136"
     }
   ],
   "agentOperatingModel": {
@@ -171,17 +176,17 @@
       "kind": "maker-product",
       "status": "release-candidate-local",
       "path": "/ecommerce/",
-      "job": "Create a simple customer storefront from a read-only Shop catalogue, quote a recoverable cart, and send structured order intent into Shop without duplicating back-office records.",
+      "job": "Create a simple customer storefront from a read-only Shop catalogue, quote a recoverable cart, and send structured order intent into Shop where versioned pricing, delivery eligibility, fee, promise, stock, payment, and the accountable order remain authoritative.",
       "surfaces": ["Store", "Edit store", "Cart", "Quote", "Shop review"],
       "templateContract": { "file": "../site-manifest.json", "productId": "ecommerce" },
       "localAutomation": {
         "contract": "supermega.product-work-authority.v2",
         "productId": "ecommerce",
-        "workOrderId": "ecommerce-shipping-policy-review",
+        "workOrderId": "ecommerce-payment-method-policy-review",
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Ecommerce: add one governed shipping-policy review that resolves delivery township or zone against Shop-owned versioned fees, service eligibility, and promise windows while preserving the original cart and requiring Shop confirmation.",
-        "reason": "ENG-135 completed founder-friendly promotion policy setup with local and managed event parity. Shipping remains pending Shop review with zero amount, so the next local value is one deterministic Shop authority before any provider or delivery booking is connected."
+        "workOrder": "Ecommerce: add one governed payment-method review that resolves pickup, cash-on-delivery, and manual-QR eligibility against Shop-owned versioned limits and instructions while preserving the cart and requiring Shop confirmation.",
+        "reason": "ENG-136 completed deterministic delivery eligibility, fee, and promise review with local and managed parity. Payment remains an ungoverned customer-selected adapter, so the next local value is one Shop-owned eligibility boundary before any payment provider is connected."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }

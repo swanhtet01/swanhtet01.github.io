@@ -193,7 +193,7 @@ requireContract('one bounded agent operating model is authoritative',
     && product.localAutomation.workOrder?.trim()
     && product.localAutomation.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 3
+  && portfolio.completedLocalAutomations.length === 4
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
@@ -209,6 +209,9 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[2]?.productId === 'ecommerce'
   && portfolio.completedLocalAutomations[2]?.workOrderId === 'ecommerce-promotion-policy-setup'
   && portfolio.completedLocalAutomations[2]?.checkpoint === 'ENG-135'
+  && portfolio.completedLocalAutomations[3]?.productId === 'ecommerce'
+  && portfolio.completedLocalAutomations[3]?.workOrderId === 'ecommerce-shipping-policy-review'
+  && portfolio.completedLocalAutomations[3]?.checkpoint === 'ENG-136'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').map((product) => product.id).join(',') === 'ecommerce'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false

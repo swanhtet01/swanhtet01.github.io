@@ -41,6 +41,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Shop keeps a balanced accounting-review CSV grouped by payment method and a human-approved versioned tax code, rate, and inclusive/exclusive treatment. Receiving separates accepted stock from rejected supplier units and measures defects; no posting occurs (`d47f5d9`, `39b7fc2`, `a37c933c`, `552ed20a`).
 - Ecommerce return intent opens the exact completed Shop order; Shop alone records return and refund evidence.
 - Ecommerce carries versioned contact/address snapshots through recovery and Shop handoff; hosted identity and provider execution remain absent.
+- Shop now owns versioned delivery zones, exact township eligibility, MMK fee, and promise minutes. Ecommerce quotes remain non-consequential; Shop re-resolves the policy at handoff and order reservation rejects forged fees, missing policies, ineligible townships, stale proof, and promises before the approved window (`ENG-136`).
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Shop remains stock authority for exact returns and substitution. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
 - Plant maintenance binds strategy, due work, structured results, evidence-linked finding problems, and corrective-action closeout with final human disposition. It performs no automatic problem opening, dispatch, control, telemetry, status, or parts action.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
@@ -51,13 +52,12 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 ## Verified baseline
 
 - Current local checkpoints: workspace recovery `81c1db0`, database contracts `dd0d84a`, and Shop receivables `8402162`; the full app gate and all 359 Python tests pass.
-- Current candidate: 387 Python, 290 Commerce, 274 Production, 77 security, lint, build, and full app gate pass. Shop opens on Today with one next action, four metrics, and six connected workspaces; 1280/390 px have no overflow or browser errors. Plant substitution remains `73134144`, `f97c50f2`, and `ba9a9ef9`.
+- ENG-136 passes 77 focused Python tests, 65 Ecommerce, 300 Commerce, 274 Production, 77 security, and the complete local gate. Desktop/390 px have no overflow or browser errors; delivery and Ecommerce filters meet the 44 px mobile target. Plant substitution remains `73134144`, `f97c50f2`, and `ba9a9ef9`.
+- First-action QA routes Shop, Plant, and Website blockers to the next task.
 - Client preparation passes 186 onboarding, 74 security, six preparation, recovery, release, privacy, database, Vercel, HQ, approval, and tamper-before-write checks.
-- Browser proof: one Manufacturing kit installed all four products, persisted prepared records, completed a Shop sale (OIL-1L 48 to 47; orders four to five), reset cleanly, and reprovisioned. Desktop/mobile had no overflow or browser warnings.
-- First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
 - Both domains serve deployed `df4d26ca3eb427578607c6a5016848d046bdb34f`; paired brand, context, and catalog identities match.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-- Ally runs one serial specialist with zero external/Vercel/scheduler actions and 4,096/768/0s. Stable IDs block ENG-130/ENG-134/ENG-135 replay; shipping policy is next. `supermega.ally-working-set-trim.v1` released 2,949.3 MB without Codex process stops. Audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Four CEO outcomes are accepted; Finance/Risk remains quarantined.
+- Ally runs one serial specialist with zero external/Vercel/scheduler actions and 4,096/768/0s. Stable IDs block ENG-130/ENG-134/ENG-135/ENG-136 replay; Shop-owned payment-method policy is next. `supermega.ally-working-set-trim.v1` released 2,949.3 MB without Codex process stops. Audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Four CEO outcomes are accepted; Finance/Risk remains quarantined.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
 ## Owner-gated actions

@@ -61,6 +61,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.account_mapping.saved",
         "commerce.customer_credit_policy.saved",
         "commerce.promotion_policy.saved",
+        "commerce.shipping_policy.saved",
         "commerce.service_schedule.initialized",
         "commerce.service_schedule.saved",
         "production.workspace.initialized",
@@ -1942,6 +1943,7 @@ def _authoritative_command_payload(
     if event_type in {
         "commerce.customer_credit_policy.saved",
         "commerce.promotion_policy.saved",
+        "commerce.shipping_policy.saved",
     }:
         evidence = authoritative.get("evidence")
         state = authoritative.get("state")
@@ -1949,6 +1951,8 @@ def _authoritative_command_payload(
             "customerCreditPolicies"
             if event_type == "commerce.customer_credit_policy.saved"
             else "promotionPolicies"
+            if event_type == "commerce.promotion_policy.saved"
+            else "shippingPolicies"
         )
         policies = state.get(policy_collection) if isinstance(state, Mapping) else None
         policy = policies[0] if isinstance(policies, list) and policies else None

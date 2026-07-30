@@ -90,7 +90,7 @@ def quote(**overrides: object) -> dict[str, object]:
 
 def request(scope: str = SCOPE) -> dict[str, object]:
     return build_ecommerce_order_request(
-        quote(pim=projection(scope)),
+        quote(pim=projection(scope), fulfilment="pickup"),
         source_storefront_revision=4,
         source_storefront_action_id="ACT-STOREFRONT-R4",
     )
@@ -125,6 +125,26 @@ def promotion_policies() -> list[dict[str, object]]:
             "actor": "Pricing manager",
             "reason": "Approve the welcome policy for reviewed Shop orders.",
             "evidenceReference": "PRICING-WELCOME-R1",
+        },
+    }]
+
+
+def shipping_policies() -> list[dict[str, object]]:
+    return [{
+        "revision": 1,
+        "zoneCode": "YGN-WEST",
+        "townships": ["Hlaing", "Kamayut"],
+        "feeMmk": 3_000,
+        "promiseMinutes": 120,
+        "status": "active",
+        "effectiveFrom": "2026-07-26T09:00:00+06:30",
+        "effectiveUntil": None,
+        "proof": {
+            "actionId": "ACT-SHIPPING-YGN-WEST-R1",
+            "capturedAt": "2026-07-26T09:00:00+06:30",
+            "actor": "Delivery manager",
+            "reason": "Approve the Yangon west delivery boundary.",
+            "evidenceReference": "SHIPPING-YGN-WEST-R1",
         },
     }]
 
@@ -197,6 +217,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
             "previous": None,
         }
         first = quote(
+            fulfilment="delivery",
             customer_profile_input=profile_input,
             delivery_address_input=address_input,
         )
@@ -216,10 +237,13 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
             customer_request,
             current_catalog=current_catalog(),
             current_promotion_policies=promotion_policies(),
+            current_shipping_policies=shipping_policies(),
             confirmed_at="2026-07-26T10:10:00+06:30",
         )
         self.assertEqual(draft["customerProfile"], first["customerProfile"])
         self.assertEqual(draft["deliveryAddress"], first["deliveryAddress"])
+        self.assertEqual(draft["pricing"]["shipping"]["zoneCode"], "YGN-WEST")
+        self.assertEqual(draft["pricing"]["shipping"]["feeMmk"], 3_000)
         self.assertEqual(state["requests"][0]["deliveryAddress"], first["deliveryAddress"])
 
         next_key = "ECI-12345678-1234-4ABC-8ABC-1234567890AC"
@@ -330,6 +354,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
             candidate,
             current_catalog=current_catalog(),
             current_promotion_policies=promotion_policies(),
+            current_shipping_policies=shipping_policies(),
             confirmed_at="2026-07-26T10:10:00+06:30",
         )
         self.assertEqual(draft["schema"], ECOMMERCE_SHOP_DRAFT_SCHEMA)
@@ -345,6 +370,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
                 candidate,
                 current_catalog=current_catalog(),
                 current_promotion_policies=promotion_policies(),
+                current_shipping_policies=shipping_policies(),
                 confirmed_at="2026-07-26T10:15:01+06:30",
             )
 
@@ -364,6 +390,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
                         candidate,
                         current_catalog=catalog,
                         current_promotion_policies=promotion_policies(),
+                        current_shipping_policies=shipping_policies(),
                         confirmed_at="2026-07-26T10:10:00+06:30",
                     )
                 self.assertEqual(catalog, before)

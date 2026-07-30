@@ -22,7 +22,7 @@ ECOMMERCE_QUOTE_SCHEMA = "supermega.ecommerce.checkout_quote.v1"
 ECOMMERCE_CUSTOMER_PROFILE_SCHEMA = "supermega.ecommerce.customer_profile_snapshot.v1"
 ECOMMERCE_DELIVERY_ADDRESS_SCHEMA = "supermega.ecommerce.delivery_address_snapshot.v1"
 ECOMMERCE_REQUEST_SCHEMA = "supermega.ecommerce.order_request.v2"
-ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v4"
+ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v5"
 ECOMMERCE_RETURN_INTENT_SCHEMA = "supermega.ecommerce.return_intent.v1"
 ECOMMERCE_SUPPORT_INTENT_SCHEMA = "supermega.ecommerce.support_intent.v1"
 ECOMMERCE_LIFECYCLE_STATE_SCHEMA = "supermega.ecommerce.buying_lifecycle.v1"
@@ -956,6 +956,77 @@ def validate_ecommerce_promotion_policy(value: object, field: str = "promotionPo
     return _promotion_policy(value, field)
 
 
+def _shipping_policy(value: object, field: str) -> dict[str, Any]:
+    source = _object(value, field, (
+        "revision", "zoneCode", "townships", "feeMmk", "promiseMinutes",
+        "status", "effectiveFrom", "effectiveUntil", "proof",
+    ))
+    zone_code = _text(source["zoneCode"], f"{field}.zoneCode", maximum=40)
+    if re.fullmatch(r"[A-Z0-9][A-Z0-9-]{2,39}", zone_code) is None:
+        raise _fail(f"{field}.zoneCode is invalid.")
+    townships = [
+        _text(value, f"{field}.townships[{index}]", maximum=80)
+        for index, value in enumerate(_array(source["townships"], f"{field}.townships", minimum=1, maximum=50))
+    ]
+    if len({township.casefold() for township in townships}) != len(townships) or townships != sorted(townships, key=str.casefold):
+        raise _fail(f"{field}.townships must use unique canonical order.")
+    proof = _object(source["proof"], f"{field}.proof", ("actionId", "capturedAt", "actor", "reason", "evidenceReference"))
+    effective_from = _timestamp(source["effectiveFrom"], f"{field}.effectiveFrom")
+    effective_until = None if source["effectiveUntil"] is None else _timestamp(source["effectiveUntil"], f"{field}.effectiveUntil")
+    if effective_until is not None and _instant(effective_until) <= _instant(effective_from):
+        raise _fail(f"{field} effective window is invalid.")
+    captured_at = _timestamp(proof["capturedAt"], f"{field}.proof.capturedAt")
+    if _instant(captured_at) > _instant(effective_from):
+        raise _fail(f"{field}.proof is later than its effective start.")
+    if source["status"] not in {"active", "inactive"}:
+        raise _fail(f"{field}.status is invalid.")
+    return {
+        "revision": _integer(source["revision"], f"{field}.revision", minimum=1),
+        "zoneCode": zone_code,
+        "townships": townships,
+        "feeMmk": _integer(source["feeMmk"], f"{field}.feeMmk"),
+        "promiseMinutes": _integer(source["promiseMinutes"], f"{field}.promiseMinutes", minimum=15, maximum=10_080),
+        "status": source["status"],
+        "effectiveFrom": effective_from,
+        "effectiveUntil": effective_until,
+        "proof": {
+            "actionId": _text(proof["actionId"], f"{field}.proof.actionId", maximum=160),
+            "capturedAt": captured_at,
+            "actor": _text(proof["actor"], f"{field}.proof.actor", maximum=180),
+            "reason": _text(proof["reason"], f"{field}.proof.reason", maximum=180),
+            "evidenceReference": _text(proof["evidenceReference"], f"{field}.proof.evidenceReference", maximum=180),
+        },
+    }
+
+
+def validate_ecommerce_shipping_policy(value: object, field: str = "shippingPolicy") -> dict[str, Any]:
+    return _shipping_policy(value, field)
+
+
+def review_ecommerce_shipping(
+    policies: Sequence[Mapping[str, object]],
+    fulfilment: str,
+    township_value: object,
+    reviewed_at: str,
+) -> dict[str, Any]:
+    reviewed = _timestamp(reviewed_at, "reviewedAt")
+    if fulfilment == "pickup":
+        return {"schema": "supermega.commerce.shipping-decision.v1", "status": "pickup", "reason": "pickup", "township": None, "zoneCode": None, "policyRevision": None, "policyActionId": None, "feeMmk": 0, "promiseMinutes": None, "reviewedAt": reviewed}
+    if fulfilment != "delivery":
+        raise _fail("fulfilment is invalid.")
+    township = _text(township_value, "township", maximum=80)
+    rows = [_shipping_policy(value, f"shippingPolicies[{index}]") for index, value in enumerate(policies)]
+    policy = next((row for row in rows if any(entry.casefold() == township.casefold() for entry in row["townships"]) and _instant(row["proof"]["capturedAt"]) <= _instant(reviewed)), None)
+    base = {"schema": "supermega.commerce.shipping-decision.v1", "township": township, "zoneCode": policy["zoneCode"] if policy else None, "policyRevision": policy["revision"] if policy else None, "policyActionId": policy["proof"]["actionId"] if policy else None, "reviewedAt": reviewed}
+    if policy is None:
+        return {**base, "status": "rejected", "reason": "not_found", "feeMmk": 0, "promiseMinutes": None}
+    if policy["status"] != "active":
+        return {**base, "status": "rejected", "reason": "inactive", "feeMmk": 0, "promiseMinutes": None}
+    if _instant(policy["effectiveFrom"]) > _instant(reviewed) or policy["effectiveUntil"] is not None and _instant(reviewed) >= _instant(policy["effectiveUntil"]):
+        return {**base, "status": "rejected", "reason": "not_effective", "feeMmk": 0, "promiseMinutes": None}
+    return {**base, "status": "approved", "reason": "approved", "feeMmk": policy["feeMmk"], "promiseMinutes": policy["promiseMinutes"]}
+
+
 def review_ecommerce_promotion(
     policies: Sequence[Mapping[str, object]],
     code: object,
@@ -970,6 +1041,7 @@ def prepare_ecommerce_shop_handoff(
     *,
     current_catalog: Sequence[Mapping[str, object]],
     current_promotion_policies: Sequence[Mapping[str, object]],
+    current_shipping_policies: Sequence[Mapping[str, object]],
     confirmed_at: str,
 ) -> dict[str, Any]:
     """Revalidate quote intent and prepare one review-only Shop draft."""
@@ -1006,6 +1078,15 @@ def prepare_ecommerce_shop_handoff(
         quote["subtotalMmk"],
         confirmed,
     )
+    shipping = review_ecommerce_shipping(
+        current_shipping_policies,
+        request["fulfilment"],
+        request.get("deliveryAddress", {}).get("township") if isinstance(request.get("deliveryAddress"), Mapping) else None,
+        confirmed,
+    )
+    if shipping["status"] == "rejected":
+        raise _fail(f"Shop delivery is unavailable for {shipping['township']} ({shipping['reason']}).")
+    total_mmk = promotion["netSubtotalMmk"] + shipping["feeMmk"]
     draft = {
         "schema": ECOMMERCE_SHOP_DRAFT_SCHEMA,
         "mode": "browser-memory-shop-draft",
@@ -1037,17 +1118,19 @@ def prepare_ecommerce_shop_handoff(
             "subtotalMmk": quote["subtotalMmk"],
             "promotion": promotion,
             "tax": _canonical_copy(quote["tax"]),
-            "shipping": _canonical_copy(quote["shipping"]),
+            "shipping": shipping,
             "payment": _canonical_copy(quote["payment"]),
-            "totalMmk": promotion["netSubtotalMmk"],
+            "totalMmk": total_mmk,
         },
-        "totalMmk": promotion["netSubtotalMmk"],
+        "totalMmk": total_mmk,
         "evidenceReference": (
             f"ECOMMERCE:{request['id']}:{request['sourcePreviewDigest']}:"
             f"{quote['quoteDigest']}:{request['scope']}:LOC-MAIN:"
             f"ecommerce>commerce:human_review_required:{promotion['status']}:"
             f"{promotion['policyRevision'] if promotion['policyRevision'] is not None else 'none'}:"
-            f"{promotion['discountMmk']}"
+            f"{promotion['discountMmk']}:shipping:{shipping['status']}:"
+            f"{shipping['policyRevision'] if shipping['policyRevision'] is not None else 'none'}:"
+            f"{shipping['feeMmk']}"
         ),
     }
     return _canonical_copy(draft)

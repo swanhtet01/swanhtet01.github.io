@@ -578,6 +578,7 @@ export function EcommerceBuyingWorkspace({
         state: activeBuyingState,
         currentCatalog,
         currentPromotionPolicies: commerceState.promotionPolicies ?? [],
+        currentShippingPolicies: commerceState.shippingPolicies ?? [],
         confirmedAt: new Date().toISOString(),
       })
       if (onOpenManagedRequest) {
