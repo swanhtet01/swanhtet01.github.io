@@ -274,6 +274,7 @@ const hqLive = JSON.stringify({
   ok: true,
   contract: 'supermega.hq-live-state.v1',
   failures: [],
+  advisories: [],
   snapshotAgeHours: 1.5,
   observedAt: '2026-07-29T00:30:00.000Z',
   appProductContract: { ok: true, contract: 'supermega_app_live', status: 'current', reason: null },
@@ -530,6 +531,7 @@ test('read-only CEO work can report bounded live product drift without weakening
     status: 'drifted',
     reason: 'missing_live_launch_readiness_context',
   }
+  drifted.advisories = ['app_product_contract_drift']
   const state = harness({ hqLive: JSON.stringify(drifted) })
   const result = await runAllyCeoLocalCycle({ execute: false }, { plan: plan(), runCommand: state.runCommand })
   assert.equal(result.status, 'ready')
@@ -1282,7 +1284,7 @@ test('a cancelled attempt does not block a clean exact retry', async () => {
 test('host pressure and a rejected exact preflight fail closed', async () => {
   const blocked = harness({ audit: audit(false) })
   await assert.rejects(
-    runAllyCeoLocalCycle({ execute: true }, { plan: plan(), runCommand: blocked.runCommand }),
+    runAllyCeoLocalCycle({ execute: true }, { plan: plan(), runCommand: blocked.runCommand, waitForMemorySettlement: async () => {} }),
     /ally_ceo_local_cycle_host_blocked:memory_pressure_critical/,
   )
   const rejected = harness({
@@ -1297,11 +1299,21 @@ test('host pressure and a rejected exact preflight fail closed', async () => {
 
 test('one idle memory-only blocker receives a bounded trim and fresh admission audit', async () => {
   const recovered = harness({ auditSequence: [audit(false), audit(true), audit(true)] })
+  let auditCalls = 0
+  let memorySettled = false
+  const runCommand = async (request) => {
+    if (request.kind === 'audit') {
+      auditCalls += 1
+      if (auditCalls === 2) assert.equal(memorySettled, true)
+    }
+    return recovered.runCommand(request)
+  }
   const result = await runAllyCeoLocalCycle(
     { execute: true },
     {
       plan: plan(),
-      runCommand: recovered.runCommand,
+      runCommand,
+      waitForMemorySettlement: async () => { memorySettled = true },
       inspectReport: async () => ({
         path: 'C:\\state\\outputs\\recovered.md',
         bytes: Buffer.byteLength(acceptedStructuredReport),
@@ -1314,6 +1326,7 @@ test('one idle memory-only blocker receives a bounded trim and fresh admission a
   assert.deepEqual(result.host.memoryRecovery, {
     attempted: true,
     initialMemoryUsedPercent: 90,
+    stabilizationDelayMs: 3000,
     targetCount: 35,
     beforeWorkingSetMb: 2806,
     afterWorkingSetMb: 268.3,

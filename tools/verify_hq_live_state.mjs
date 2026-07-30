@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const CONTRACT = 'supermega.hq-live-state.v1'
+const CEO_ADVISORY_FAILURES = new Set(['app_product_contract_drift', 'hq_release_commit_stale'])
 const APP_ORIGIN = 'https://app.supermega.dev'
 const PUBLIC_ORIGIN = 'https://supermega.dev'
 const MAX_RESPONSE_BYTES = 65_536
@@ -399,7 +400,9 @@ Live security ready: \`false\``)
 
 async function main() {
   const args = process.argv.slice(2)
-  if (args.some((arg) => arg !== '--self-test')) throw new Error('argument_invalid')
+  if (args.some((arg) => !['--self-test', '--ceo-advisory'].includes(arg))
+    || (args.includes('--self-test') && args.includes('--ceo-advisory'))
+    || new Set(args).size !== args.length) throw new Error('argument_invalid')
   if (args.includes('--self-test')) return runSelfTest()
 
   const root = resolve(import.meta.dirname, '..')
@@ -416,8 +419,15 @@ async function main() {
   const health = healthProbe.value
   const cloud = cloudProbe.value
   const result = assessHqLiveState({ hq, appProductContract, appRelease, publicRelease, health, cloud })
+  const advisories = args.includes('--ceo-advisory')
+    ? result.failures.filter((failure) => CEO_ADVISORY_FAILURES.has(failure))
+    : []
+  const failures = result.failures.filter((failure) => !advisories.includes(failure))
   return {
     ...result,
+    ok: failures.length === 0,
+    failures,
+    advisories,
     observedAt: new Date().toISOString(),
     hqObservedAt: hq.observedAt,
     appProductContract,

@@ -19,9 +19,11 @@ const defaultLocalCompanyHome = resolve(root, '..', 'supermega-local-company-sta
 const powershell = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const MAX_COMMAND_BYTES = 512 * 1024
 const MAX_REPORT_BYTES = 256 * 1024
+const MEMORY_SETTLEMENT_DELAY_MS = 3_000
 const EXECUTION_SPEC_VERSION = '2026-07-29.23'
 const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.22', '2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
 const MEMORY_RECOVERY_BLOCKERS = Object.freeze(new Set(['memory_pressure_critical', 'codex_working_set_high']))
+const CEO_LIVE_ADVISORIES = Object.freeze(new Set(['app_product_contract_drift', 'hq_release_commit_stale']))
 const SAFE_HQ_LIVE_FAILURES = Object.freeze(new Set([
   'app_product_contract_drift',
   'app_release_contract_invalid',
@@ -328,6 +330,7 @@ function validateHqLiveReceipt(receipt) {
     probes?.cloudAutonomyAttempts,
   ]
   const productContract = receipt?.appProductContract
+  const advisories = receipt?.advisories
   const productContractCurrent = productContract?.contract === 'supermega_app_live'
     && productContract.ok === true
     && productContract.status === 'current'
@@ -340,7 +343,12 @@ function validateHqLiveReceipt(receipt) {
     || receipt.ok !== true
     || !Array.isArray(receipt.failures)
     || receipt.failures.length !== 0
+    || !Array.isArray(advisories)
+    || advisories.some((advisory) => !CEO_LIVE_ADVISORIES.has(advisory))
+    || new Set(advisories).size !== advisories.length
     || (!productContractCurrent && !productContractDrifted)
+    || (productContractDrifted && !advisories.includes('app_product_contract_drift'))
+    || (productContractCurrent && advisories.includes('app_product_contract_drift'))
     || !/^[a-f0-9]{40}$/.test(commit)
     || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(observedAt)
     || !Number.isFinite(snapshotAgeHours)
@@ -369,6 +377,7 @@ function validateHqLiveReceipt(receipt) {
     launchReadinessCurrent: productContractCurrent,
     productContractStatus: productContract.status,
     productContractReason: productContract.reason,
+    advisories: [...advisories],
   }
 }
 
@@ -422,6 +431,7 @@ function validateMemoryRecovery(receipt, beforeAudit) {
   return {
     attempted: true,
     initialMemoryUsedPercent: Number(beforeAudit.memory?.usedPercent),
+    stabilizationDelayMs: MEMORY_SETTLEMENT_DELAY_MS,
     targetCount: receipt.targetCount,
     beforeWorkingSetMb,
     afterWorkingSetMb,
@@ -733,7 +743,7 @@ async function defaultCommandRunner({ kind, args, timeoutMs, localCompanyRoot, l
     env = limitedEnvironment(localCompanyRoot)
   } else if (kind === 'hq_live') {
     file = process.execPath
-    commandArgs = [resolve(root, 'tools', 'verify_hq_live_state.mjs')]
+    commandArgs = [resolve(root, 'tools', 'verify_hq_live_state.mjs'), '--ceo-advisory']
     cwd = root
     env = limitedEnvironment(localCompanyRoot)
   } else if (kind === 'local') {
@@ -992,11 +1002,14 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   const inspectReport = dependencies.inspectReport || ((path) => defaultReportInspector(path, localCompanyHome))
   const cycleNow = input.now ?? new Date()
   const buildPlan = dependencies.buildPlan || ((completedOutcomeIds) => currentPlan(cycleNow, completedOutcomeIds))
+  const waitForMemorySettlement = dependencies.waitForMemorySettlement
+    || (() => new Promise((resolveDelay) => setTimeout(resolveDelay, MEMORY_SETTLEMENT_DELAY_MS)))
 
   let audit = parseJson(await runCommand({ kind: 'audit', args: [], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_audit_json_invalid')
   let memoryRecovery = {
     attempted: false,
     initialMemoryUsedPercent: Number(audit.memory?.usedPercent),
+    stabilizationDelayMs: 0,
     targetCount: 0,
     beforeWorkingSetMb: 0,
     afterWorkingSetMb: 0,
@@ -1009,6 +1022,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
       'ally_ceo_local_cycle_memory_recovery_json_invalid',
     )
     memoryRecovery = validateMemoryRecovery(receipt, audit)
+    await waitForMemorySettlement()
     audit = parseJson(await runCommand({ kind: 'audit', args: [], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_recovery_audit_json_invalid')
   }
   const host = { ...validateAudit(audit), memoryRecovery }
