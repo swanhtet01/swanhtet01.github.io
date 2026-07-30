@@ -5,16 +5,22 @@ import { tmpdir } from 'node:os'
 import test from 'node:test'
 
 import {
+  APP_SHELL_BATCH,
+  APP_SHELL_REQUIREMENTS,
   IDENTITY_DATA_REQUIREMENTS,
   RELEASE_INTEGRATION_BATCH_CONTRACT,
+  assessAppShellSources,
   assessIdentityDataSources,
+  buildAppShellComparison,
   buildIdentityDataComparison,
+  validateAppShellComparison,
   validateIdentityDataComparison,
   writeExclusiveJson,
 } from './prepare_release_integration_batch.mjs'
 
 const sha = (value) => value.repeat(40)
 const files = [...new Set(IDENTITY_DATA_REQUIREMENTS.map((entry) => entry.file))].sort()
+const appShellFiles = [...new Set(APP_SHELL_REQUIREMENTS.map((entry) => entry.file))].sort()
 
 function sources(authorities = ['upstream', 'candidate']) {
   return Object.fromEntries(files.map((file) => [file, IDENTITY_DATA_REQUIREMENTS
@@ -32,6 +38,21 @@ function comparison() {
     upstream: tree('origin/main', sha('a'), ['upstream']),
     candidate: tree('HEAD', sha('b'), ['candidate']),
   })
+}
+
+function appShellSources(authorities = ['upstream', 'candidate']) {
+  return Object.fromEntries(appShellFiles.map((file) => [file, APP_SHELL_REQUIREMENTS
+    .filter((entry) => entry.file === file && authorities.includes(entry.authority))
+    .flatMap((entry) => entry.tokens).join('\n') || '// retained source']))
+}
+
+function appShellTree(ref, commit, authorities) {
+  return {
+    ref,
+    commit,
+    sources: appShellSources(authorities),
+    blobs: Object.fromEntries(appShellFiles.map((file, index) => [file, String((index % 8) + 1).repeat(40)])),
+  }
 }
 
 test('neither current side can satisfy the required union alone', () => {
@@ -99,4 +120,38 @@ test('comparison output is exclusive and non-overwriting', async () => {
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
+})
+
+test('app shell requires production safeguards and candidate task-first UX together', () => {
+  const upstream = assessAppShellSources(appShellSources(['upstream']))
+  const candidate = assessAppShellSources(appShellSources(['candidate']))
+  const integrated = assessAppShellSources(appShellSources())
+  assert.equal(upstream.ok, false)
+  assert.equal(upstream.authority.upstream.passed, true)
+  assert.equal(candidate.ok, false)
+  assert.equal(candidate.authority.candidate.passed, true)
+  assert.equal(integrated.ok, true)
+
+  const withoutSignIn = appShellSources()
+  withoutSignIn['showroom/src/core/CoreShell.tsx'] = withoutSignIn['showroom/src/core/CoreShell.tsx'].replaceAll('Company sign in', '')
+  assert.equal(assessAppShellSources(withoutSignIn).ok, false)
+
+  const withoutBoundary = appShellSources()
+  withoutBoundary['showroom/src/core/CoreApp.tsx'] = withoutBoundary['showroom/src/core/CoreApp.tsx'].replace('counter-local-boundary', '')
+  assert.equal(assessAppShellSources(withoutBoundary).ok, false)
+})
+
+test('app shell comparison is exact, no-write, and batch-specific', () => {
+  const packet = buildAppShellComparison({
+    generatedAt: '2026-07-30T15:30:00.000Z',
+    upstream: appShellTree('origin/main', sha('c'), ['upstream']),
+    candidate: appShellTree('HEAD', sha('d'), ['candidate']),
+  })
+  assert.equal(packet.batch, APP_SHELL_BATCH)
+  assert.equal(packet.decision.status, 'manual_union_required')
+  assert.match(packet.decision.acceptanceCommand, /--batch app-shell$/)
+  assert.equal(packet.upstream.authority.upstream.passed, true)
+  assert.equal(packet.candidate.authority.candidate.passed, true)
+  assert.equal(validateAppShellComparison(packet).digest, packet.digest)
+  assert.throws(() => validateIdentityDataComparison(packet), /release_integration_batch_packet_invalid/)
 })
