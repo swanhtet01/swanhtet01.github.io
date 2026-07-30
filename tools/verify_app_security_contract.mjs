@@ -310,6 +310,7 @@ const expectedHumanProductionEvents = [
   'production.output.recorded',
   'production.quality_hold.placed',
   'production.quality_hold.released',
+  'production.shift.closed',
   'production.workspace.initialized',
 ]
 const expectedHumanWebsiteEvents = [

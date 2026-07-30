@@ -1542,8 +1542,8 @@ if (!coreSource.includes('const plantRows = [')
   || !coreSource.includes("'Cost package ready for review'")
   || !coreSource.includes("['Good', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} units` : 'No output']")
   || !coreSource.includes("['Scrap', productionScrapUnits ? `${productionScrapUnits.toLocaleString()} units` : 'None']")
-  || !coreSource.includes("['Cost gate', shiftHandoffIsCurrent && materialEntries.length && !heldJobs.length && !openQualityIssues.length && !openWcmCount ? 'Review only' : 'Blocked']")
-  || !coreSource.includes('const plantCostPacketReady = Boolean(completedJobs.length && productionGoodUnits && materialEntries.length && shiftHandoffIsCurrent && !heldJobs.length && !openQualityIssues.length && !openWcmCount)')
+  || !coreSource.includes("['Cost gate', plantHandoffReady && materialEntries.length && !heldJobs.length && !openQualityIssues.length && !openWcmCount ? 'Review only' : 'Blocked']")
+  || !coreSource.includes('const plantCostPacketReady = Boolean(completedJobs.length && productionGoodUnits && materialEntries.length && plantHandoffReady && !heldJobs.length && !openQualityIssues.length && !openWcmCount)')
   || !coreSource.includes('const plantCostPacketRows = [')
   || !coreSource.includes('aria-label="Plant ERP cost package packet"')
   || !coreSource.includes('Cost package packet')
@@ -1553,7 +1553,7 @@ if (!coreSource.includes('const plantRows = [')
   || !coreSource.includes("['Batch', completedJobs.length ? `${completedJobs.length} finished` : activeJobs.length ? 'Still running' : 'No job']")
   || !coreSource.includes("['Output', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} good` : 'No output']")
   || !coreSource.includes("['Materials', materialEntries.length ? `${materialEntries.length} trace rows` : 'Need trace']")
-  || !coreSource.includes("['Release', heldJobs.length || openQualityIssues.length ? 'Quality blocked' : shiftHandoffIsCurrent ? 'Evidence ready' : 'Need handoff']")
+  || !coreSource.includes("['Release', heldJobs.length || openQualityIssues.length ? 'Quality blocked' : plantHandoffReady ? 'Evidence ready' : 'Need handoff']")
   || !coreSource.includes("['ERP handoff', plantCostPacketReady ? 'Review package' : 'Blocked']")
   || (coreSource.match(/\{plantCostPacket\}/g) || []).length !== 2
   || !coreSource.includes('const plantQualityReleaseNext =')
@@ -3796,29 +3796,46 @@ if (!productionSource.includes('placeProductionQualityHold')
 if (!productionSource.includes('buildProductionShiftHandoff')
   || !productionSource.includes('formatProductionShiftHandoff')
   || !productionSource.includes('productionStateCanonical')
+  || !productionSource.includes('productionShiftCloseSourceDigest')
+  || !productionSource.includes('currentProductionShiftClose')
+  || !productionSource.includes('recordProductionShiftClose')
   || !productionSource.includes('shiftEntries')
   || !productionSource.includes('activeHolds')
+  || !productionSource.includes('openQualityIssues')
   || !productionSource.includes('materialEntries')
   || !productionSource.includes('shortCloses')
+  || !productionSource.includes('activeDowntime')
   || !productionSource.includes('activeMaintenance')
+  || !productionSource.includes("kind: 'shift_closed'")
+  || !productionSource.includes("const shiftClosedEventFields = [...baseEventFields, 'shiftRef', 'sourceRevision', 'sourceDigest', 'goodUnits', 'scrapUnits', 'outputEntryCount', 'materialEntryCount']")
+  || !productionSource.includes('shift close source revision does not match its append position')
+  || !productionSource.includes("`sha256:${sha256Hex(productionCanonical(sourceState))}` !== event.sourceDigest")
+  || !productionSource.includes('handoff.shiftOutput.goodUnits !== event.goodUnits')
+  || !productionSource.includes('handoff.openQualityIssues.length > 0')
+  || !productionSource.includes('handoff.activeMaintenance.length > 0')
   || !productionSource.includes('Priority problem ${issue.id} has no immutable opening evidence.')
   || !productionSource.includes('no attributed observation recorded')
   || productionSource.includes("'completed output'")
   || productionSource.includes('left.id.localeCompare(right.id)')
-  || !coreSource.includes('Shift handoff')
-  || !coreSource.includes('Build handoff')
+  || !coreSource.includes('Shift close')
+  || !coreSource.includes('Prepare shift packet')
+  || !coreSource.includes('AI shift close checklist')
+  || !coreSource.includes('Review shift close')
+  || !coreSource.includes('Shift closed by')
   || !coreSource.includes('Copy handoff')
   || !coreSource.includes('shiftHandoff.sourceCanonical === currentProductionCanonical')
   || !coreSource.includes('shiftHandoff.shiftRef === handoffShiftRef.trim()')
   || !coreSource.includes('Active quality holds')
+  || !coreSource.includes('Open quality problems')
+  || !coreSource.includes('Active downtime')
   || !coreSource.includes('Active maintenance')
   || !coreSource.includes('material entries')
   || !coreSource.includes('Shift entries')
   || !coreSource.includes('No job was closed short in this shift.')
   || !coreSource.includes('Reason: {machine.observation.reason}')
   || coreSource.includes("'Completed output'")
-  || !coreSource.includes('It creates no event, message, or saved copy.')
-  || !coreSource.includes('Plant records or the shift reference changed after this handoff was built.')
+  || !coreSource.includes('Append one owner-attributed shift-close event bound to this exact Plant revision and evidence packet')
+  || !coreSource.includes('Plant records or the shift reference changed after this packet was prepared.')
   || !coreSource.includes('No Plant record changed.')) fail('production_shift_handoff_contract_missing')
 if (!productionSource.includes('registerProductionJob') || !coreSource.includes('production.job.created') || !coreSource.includes('<summary>Add job</summary>') || !coreSource.includes('Review job')) fail('production_recurring_job_workflow_missing')
 if (!productionSource.includes('updateProductionJobPlan')
@@ -3899,7 +3916,7 @@ if (!managedProductionCommandContract.includes("surface: 'production'")
   || !managedProductionCommandContract.includes('request.identity')
   || !coreSource.includes('identity: managedIdentity')) fail('managed_production_command_client_missing')
 const managedProductionClientSources = `${coreSource}\n${plantOrderUiSource}`
-for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.job.schedule_updated', 'production.job.closed', 'production.output.recorded', 'production.material.consumed', 'production.issue.opened', 'production.issue.resolved', 'production.quality_hold.placed', 'production.quality_hold.released', 'production.machine_state.changed', 'production.order_execution.recorded', 'production.downtime.started', 'production.downtime.ended', 'production.maintenance.started', 'production.maintenance.completed']) {
+for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.job.schedule_updated', 'production.job.closed', 'production.output.recorded', 'production.material.consumed', 'production.issue.opened', 'production.issue.resolved', 'production.quality_hold.placed', 'production.quality_hold.released', 'production.machine_state.changed', 'production.order_execution.recorded', 'production.downtime.started', 'production.downtime.ended', 'production.maintenance.started', 'production.maintenance.completed', 'production.shift.closed']) {
   if (!managedProductionClientSources.includes(eventType) || !managedProductionRuntime.includes(eventType)) fail(`managed_production_event_missing:${eventType}`)
 }
 if (managedProductionRuntime.includes('production.snapshot.saved')
@@ -3917,6 +3934,8 @@ if (managedProductionRuntime.includes('production.snapshot.saved')
   || !managedProductionRuntime.includes('_validate_downtime_ended')
   || !managedProductionRuntime.includes('_validate_maintenance_started')
   || !managedProductionRuntime.includes('_validate_maintenance_completed')
+  || !managedProductionRuntime.includes('_validate_shift_closed')
+  || !managedProductionRuntime.includes('shift close counts, revision, or source digest do not match current Plant evidence.')
   || !managedProductionRuntime.includes('Production event must prepend exactly one record and preserve history.')) fail('managed_production_server_transition_contract_missing')
 if (!coreSource.includes("mode: 'managed-unprovisioned'")
   || !coreSource.includes('No browser demo jobs, issues, equipment, or output are copied')
@@ -10411,6 +10430,10 @@ async function verifyProductionRuntime() {
       && handoff.priorityProblems[0].openedBy === handoffCriticalProof.actor
       && handoff.priorityProblems[0].evidenceReference === handoffCriticalProof.evidenceReference,
     'production_shift_handoff_priority_problem_wrong')
+    assert(handoff.openQualityIssues.length === 4
+      && ['ISS-CRITICAL', 'ISS-Z', 'ISS-Á', 'ISS-MEDIUM'].every((id) => handoff.openQualityIssues.some((entry) => entry.id === id)),
+    'production_shift_handoff_open_quality_problem_wrong')
+    assert(handoff.activeDowntime.length === 0, 'production_shift_handoff_invented_active_downtime')
     assert(handoff.activeMaintenance.length === 1
       && handoff.activeMaintenance[0].machineId === 'MC-1'
       && handoff.activeMaintenance[0].owner === 'Maintenance lead'
@@ -10448,20 +10471,83 @@ async function verifyProductionRuntime() {
       && handoffText.includes(completedHoldProof.evidenceReference)
       && handoffText.includes(handoffCriticalProof.capturedAt)
       && handoffText.includes(handoffCriticalProof.actor)
+      && handoffText.includes(handoffMediumProblem.summary)
+      && handoffText.includes('Open quality problems (4)')
+      && handoffText.includes('Active downtime (0)')
       && handoffText.includes('Active maintenance (1)')
       && handoffText.includes(handoffMaintenanceProof.evidenceReference)
       && handoffText.includes(handoffMachineLatestProof.evidenceReference)
       && handoffText.includes(handoffMachineLatestProof.reason)
       && handoffText.includes('target 10 · 10 good · 0 scrap · 0 remaining')
       && !handoffText.includes('completed output')
-      && !handoffText.includes(handoffMachineFirstProof.evidenceReference)
-      && !handoffText.includes(handoffMediumProblem.summary),
+      && !handoffText.includes(handoffMachineFirstProof.evidenceReference),
     'production_shift_handoff_text_lost_or_invented_evidence')
     const noObservationHandoff = model.buildProductionShiftHandoff(base, shiftRef)
     assert(noObservationHandoff?.machineObservations[0].observation === null
       && model.formatProductionShiftHandoff(noObservationHandoff).includes('no attributed observation recorded'),
     'production_shift_handoff_missing_no_observation_marker')
     assert(['', ' Day', 'Day ', 'X'.repeat(81)].every((candidate) => model.buildProductionShiftHandoff(base, candidate) === null), 'production_shift_handoff_invalid_shift_accepted')
+
+    const shiftCloseOutputProof = proof('ACT-SHIFT-CLOSE-OUTPUT', 3_300)
+    const shiftCloseOutput = model.recordProductionOutput(base, 'JOB-1', 1, shiftRef, shiftCloseOutputProof)
+    const outputOnlyHandoff = model.buildProductionShiftHandoff(shiftCloseOutput, shiftRef)
+    const prematureCloseProof = proof('ACT-SHIFT-CLOSE-PREMATURE', 3_310)
+    assert(model.recordProductionShiftClose(shiftCloseOutput, outputOnlyHandoff, prematureCloseProof) === null, 'production_shift_close_without_material_succeeded')
+    const shiftCloseMaterialProof = proof('ACT-SHIFT-CLOSE-MATERIAL', 3_320)
+    const shiftCloseMaterial = model.recordProductionMaterialConsumption(shiftCloseOutput, 'JOB-1', 'RM-CLOSE-01', 'LOT-CLOSE-01', 1, 'kg', shiftRef, shiftCloseMaterialProof)
+    const closeHandoff = model.buildProductionShiftHandoff(shiftCloseMaterial, shiftRef)
+    const shiftCloseProof = proof('ACT-SHIFT-CLOSE', 3_330)
+    const closedShift = model.recordProductionShiftClose(shiftCloseMaterial, closeHandoff, shiftCloseProof)
+    assert(closedShift?.events[0].kind === 'shift_closed'
+      && closedShift.events[0].sourceRevision === shiftCloseMaterial.revision
+      && closedShift.events[0].sourceDigest === model.productionShiftCloseSourceDigest(closeHandoff)
+      && closedShift.events[0].goodUnits === closeHandoff.shiftOutput.goodUnits
+      && closedShift.events[0].scrapUnits === closeHandoff.shiftOutput.scrapUnits
+      && closedShift.events[0].outputEntryCount === closeHandoff.shiftOutput.entryCount
+      && closedShift.events[0].materialEntryCount === closeHandoff.materialEntries.length
+      && closedShift.revision === shiftCloseMaterial.revision + 1
+      && model.currentProductionShiftClose(closedShift, shiftRef)?.actionId === shiftCloseProof.actionId,
+    'production_shift_close_exact_evidence_not_appended')
+    assert(JSON.stringify({ jobs: closedShift.jobs, issues: closedShift.issues, machines: closedShift.machines }) === JSON.stringify({ jobs: shiftCloseMaterial.jobs, issues: shiftCloseMaterial.issues, machines: shiftCloseMaterial.machines }), 'production_shift_close_changed_operating_collections')
+    assert(model.recordProductionShiftClose(closedShift, closeHandoff, shiftCloseProof) === closedShift, 'production_shift_close_retry_not_idempotent')
+    const tamperedCloseEvent = {
+      ...closedShift.events[0],
+      goodUnits: closedShift.events[0].goodUnits + 1,
+      summary: `Closed shift ${shiftRef} with ${closedShift.events[0].goodUnits + 1} good, ${closedShift.events[0].scrapUnits} scrap, ${closedShift.events[0].outputEntryCount} output entries, ${closedShift.events[0].materialEntryCount} material entries`,
+    }
+    const tamperedClose = model.validateProductionState({ ...closedShift, events: [tamperedCloseEvent, ...closedShift.events.slice(1)] })
+    assert(model.currentProductionShiftClose(tamperedClose, shiftRef) === null, 'production_shift_close_tampered_aggregate_remained_current')
+    const closedShiftWithChangedOrderExecution = model.validateProductionState({ ...closedShift, orderExecution })
+    assert(model.currentProductionShiftClose(closedShiftWithChangedOrderExecution, shiftRef) === null, 'production_shift_close_survived_non_event_source_change')
+    const laterOutput = model.recordProductionOutput(closedShift, 'JOB-1', 1, shiftRef, proof('ACT-SHIFT-CLOSE-LATER-OUTPUT', 3_340))
+    assert(laterOutput && model.currentProductionShiftClose(laterOutput, shiftRef) === null, 'production_shift_close_survived_later_operating_event')
+    assert(model.recordProductionShiftClose(shiftCloseMaterial, { ...closeHandoff, sourceRevision: closeHandoff.sourceRevision - 1 }, shiftCloseProof) === null, 'production_shift_close_tampered_source_succeeded')
+    assert(model.recordProductionShiftClose(closedShift, model.buildProductionShiftHandoff(closedShift, shiftRef), proof('ACT-SHIFT-CLOSE-AGAIN', 3_340)) === null, 'production_consecutive_shift_close_succeeded')
+    const shiftCloseHeld = model.placeProductionQualityHold(shiftCloseMaterial, 'JOB-1', proof('ACT-SHIFT-CLOSE-HOLD', 3_350))
+    assert(model.recordProductionShiftClose(shiftCloseHeld, model.buildProductionShiftHandoff(shiftCloseHeld, shiftRef), proof('ACT-SHIFT-CLOSE-HELD', 3_360)) === null, 'production_shift_close_with_quality_hold_succeeded')
+    const heldHandoff = model.buildProductionShiftHandoff(shiftCloseHeld, shiftRef)
+    const forgedHeldProof = proof('ACT-SHIFT-CLOSE-FORGED-HOLD', 3_360)
+    const forgedHeldEvent = {
+      ...closedShift.events[0],
+      id: `EVT-${forgedHeldProof.actionId}`,
+      actionId: forgedHeldProof.actionId,
+      createdAt: forgedHeldProof.capturedAt,
+      actor: forgedHeldProof.actor,
+      reason: forgedHeldProof.reason,
+      evidenceReference: forgedHeldProof.evidenceReference,
+      sourceRevision: shiftCloseHeld.revision,
+      sourceDigest: model.productionShiftCloseSourceDigest(heldHandoff),
+      goodUnits: heldHandoff.shiftOutput.goodUnits,
+      scrapUnits: heldHandoff.shiftOutput.scrapUnits,
+      outputEntryCount: heldHandoff.shiftOutput.entryCount,
+      materialEntryCount: heldHandoff.materialEntries.length,
+      summary: `Closed shift ${shiftRef} with ${heldHandoff.shiftOutput.goodUnits} good, ${heldHandoff.shiftOutput.scrapUnits} scrap, ${heldHandoff.shiftOutput.entryCount} output entries, ${heldHandoff.materialEntries.length} material entries`,
+    }
+    const forgedHeldClose = model.validateProductionState({ ...shiftCloseHeld, revision: shiftCloseHeld.revision + 1, events: [forgedHeldEvent, ...shiftCloseHeld.events] })
+    assert(model.currentProductionShiftClose(forgedHeldClose, shiftRef) === null, 'production_shift_close_forged_blocked_source_remained_current')
+    const shiftCloseDowntime = model.startProductionDowntime(shiftCloseMaterial, 'MC-1', proof('ACT-SHIFT-CLOSE-DOWNTIME', 3_350))
+    assert(model.recordProductionShiftClose(shiftCloseDowntime, model.buildProductionShiftHandoff(shiftCloseDowntime, shiftRef), proof('ACT-SHIFT-CLOSE-WCM', 3_360)) === null, 'production_shift_close_with_open_wcm_succeeded')
+    productionRuntimeChecks += 18
 
     let machineState = resolved
     const observedStates = ['attention', 'stopped', 'attention', 'running', 'stopped', 'running']
@@ -11055,18 +11141,19 @@ if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !pilotOutcomeSource.includes("metricId: 'shop-guided-sale-gap'")
   || !pilotOutcomeSource.includes("supermega.shop_guided_sale_outcome_source.v1")
   || !pilotOutcomeSource.includes("action.evidenceReference.endsWith(' counter receipt')")
-  || !pilotOutcomeSource.includes("metricId: 'plant-guided-output-gap'")
-  || !pilotOutcomeSource.includes("supermega.plant_guided_output_outcome_source.v1")
-  || !pilotOutcomeSource.includes('PLANT_GUIDED_OUTPUT_SUMMARY')
-  || !pilotOutcomeSource.includes("action.kind === 'production_output'")
-  || !pilotOutcomeSource.includes("action.actorKind === 'human'")
-  || !pilotOutcomeSource.includes('Boolean(visibleText(action.actor, 80))')
-  || !pilotOutcomeSource.includes('Boolean(visibleText(action.reason, 240))')
-  || !pilotOutcomeSource.includes('Boolean(visibleText(action.evidenceReference, 180))')
-  || !pilotOutcomeSource.includes('Number.isSafeInteger(quantity)')
-  || !pilotOutcomeSource.includes('summarySubjectId === subjectId')
-  || !pilotOutcomeSource.includes("!shiftReference.includes(' · ')")
-  || !pilotOutcomeSource.includes('Date.parse(action.capturedAt) >= startedAt')
+  || !pilotOutcomeSource.includes("metricId: 'plant-guided-shift-close-gap'")
+  || !pilotOutcomeSource.includes("supermega.plant_guided_shift_close_outcome_source.v1")
+  || !pilotOutcomeSource.includes("event.kind === 'shift_closed'")
+  || !pilotOutcomeSource.includes('visibleText(event.subjectId, 80) === shiftReference')
+  || !pilotOutcomeSource.includes('Boolean(visibleText(event.actor, 80))')
+  || !pilotOutcomeSource.includes('Boolean(visibleText(event.reason, 240))')
+  || !pilotOutcomeSource.includes('Boolean(visibleText(event.evidenceReference, 180))')
+  || !pilotOutcomeSource.includes('SHA256_DIGEST.test(event.sourceDigest)')
+  || !pilotOutcomeSource.includes('Number.isSafeInteger(goodUnits)')
+  || !pilotOutcomeSource.includes('Number.isSafeInteger(outputEntryCount)')
+  || !pilotOutcomeSource.includes('Number.isSafeInteger(materialEntryCount)')
+  || !pilotOutcomeSource.includes('event.summary === expectedSummary')
+  || !pilotOutcomeSource.includes('Date.parse(event.createdAt) >= startedAt')
   || !pilotOutcomeSource.includes("Only the named owner can accept a clear or improved pilot result.")
   || !pilotOutcomeDecisionSource.includes("subject: { kind: 'pilot_outcome' as const")
   || !pilotOutcomeDecisionSource.includes("decidedActorKind: 'human'")
@@ -11081,10 +11168,11 @@ if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !pilotOutcomeHookSource.includes('metricOverride ?? buildPilotOutcomeMetric')
   || !settingsPageSource.includes('pilotOutcomeReport')
   || !settingsPageSource.includes("'Start Shop outcome proof'")
-  || !settingsPageSource.includes("'Start Plant outcome proof'")
-  || !settingsPageSource.includes('buildPlantGuidedOutputOutcomeMetric(actions, setup.startedAt)')
-  || !settingsPageSource.includes('Confirm one good-output result with named-owner shift evidence.')
-  || !settingsPageSource.includes("['First proof', 'One confirmed shift output'")
+  || !settingsPageSource.includes("'Start Plant shift-close proof'")
+  || !settingsPageSource.includes('const currentPlantShiftClose = currentProductionShiftClose(production)')
+  || !settingsPageSource.includes('buildPlantGuidedShiftCloseOutcomeMetric(currentPlantShiftClose ? [currentPlantShiftClose] : [], setup.startedAt)')
+  || !settingsPageSource.includes('Close one shift packet with output, trace, quality, and WCM evidence.')
+  || !settingsPageSource.includes("['First proof', 'One accountable shift close'")
   || !settingsPageSource.includes('startPilotOutcome(window.localStorage, pilotOutcomeSetup, metric, new Date(startedAt))')
   || !settingsPageSource.includes('buildPilotOutcomeDecisionApproval')
   || !settingsPageSource.includes('onAccepted={recordAcceptedPilotOutcomeDecision}')
@@ -11136,42 +11224,67 @@ try {
   pilotOutcomeRuntimeChecks += 4
   const plantSetup = { product: 'production', workspace: 'Plant starter workspace', owner: 'Production owner', templateId: 'production-control' }
   const plantStartedAt = '2026-07-30T09:00:00.000Z'
-  const plantBaseline = outcome.buildPlantGuidedOutputOutcomeMetric([], plantStartedAt)
-  if (plantBaseline?.value !== 1 || plantBaseline.unit !== 'gaps' || !plantBaseline.detail.includes('No named-owner good-output record')) fail('plant_guided_output_baseline_invalid')
-  const plantActionBase = { domain: 'production', subjectId: 'JOB-AI-101', summary: 'Record 1 good units for JOB-AI-101 · 2026-07-30 Day', actorKind: 'human', actor: 'Production owner', reason: 'Shift count confirmed by line lead', evidenceReference: 'SHIFT-2026-07-30-DAY' }
-  const oldPlantOutput = { ...plantActionBase, capturedAt: '2026-07-30T08:59:59.000Z', kind: 'production_output' }
-  const plantScrap = { ...plantActionBase, capturedAt: '2026-07-30T09:01:00.000Z', kind: 'production_scrap', summary: 'Record 1 scrap units for JOB-AI-101 · 2026-07-30 Day' }
-  const plantMissingActor = { ...plantActionBase, capturedAt: '2026-07-30T09:01:00.000Z', kind: 'production_output', actor: '' }
-  const plantMissingReason = { ...plantActionBase, capturedAt: '2026-07-30T09:01:00.000Z', kind: 'production_output', reason: '' }
-  const plantMissingEvidence = { ...plantActionBase, capturedAt: '2026-07-30T09:01:00.000Z', kind: 'production_output', evidenceReference: '' }
-  const malformedPlantOutputs = [
-    'Record 0 good units for JOB-AI-101 · 2026-07-30 Day',
-    'Record -1 good units for JOB-AI-101 · 2026-07-30 Day',
-    'Record 1.5 good units for JOB-AI-101 · 2026-07-30 Day',
-    'Record one good units for JOB-AI-101 · 2026-07-30 Day',
-    'Record 1 good units for JOB-AI-101 · ',
-    'Record 1 good units for JOB-OTHER · 2026-07-30 Day',
-    'Unexpected Record 1 good units for JOB-AI-101 · 2026-07-30 Day',
-    'Record 1 good units for JOB-AI-101 · 2026-07-30 Day · unexpected',
-  ].map((summary, index) => ({ ...plantActionBase, capturedAt: `2026-07-30T09:01:0${index}.000Z`, kind: 'production_output', summary }))
-  const plantBefore = outcome.buildPlantGuidedOutputOutcomeMetric([oldPlantOutput, plantScrap, plantMissingActor, plantMissingReason, plantMissingEvidence, ...malformedPlantOutputs], plantStartedAt)
-  if (plantBefore?.value !== 1 || plantBefore.sourceDigest !== plantBaseline.sourceDigest) fail('plant_guided_output_unrelated_action_changed_metric')
-  const firstPlantOutput = { ...plantActionBase, capturedAt: '2026-07-30T09:02:00.000Z', kind: 'production_output' }
-  const plantCurrent = outcome.buildPlantGuidedOutputOutcomeMetric([oldPlantOutput, plantScrap, firstPlantOutput], plantStartedAt)
-  if (plantCurrent?.value !== 0 || plantCurrent.sourceDigest === plantBaseline.sourceDigest || !plantCurrent.detail.includes('1 named-owner good-output record')) fail('plant_guided_output_completion_invalid')
+  const plantBaseline = outcome.buildPlantGuidedShiftCloseOutcomeMetric([], plantStartedAt)
+  if (plantBaseline?.value !== 1 || plantBaseline.unit !== 'gaps' || !plantBaseline.detail.includes('No named-owner Plant shift-close record')) fail('plant_guided_shift_close_baseline_invalid')
+  const plantEventBase = {
+    createdAt: '2026-07-30T09:02:00.000Z',
+    kind: 'shift_closed',
+    subjectId: '2026-07-30 Day',
+    shiftRef: '2026-07-30 Day',
+    summary: 'Closed shift 2026-07-30 Day with 1 good, 0 scrap, 1 output entries, 1 material entries',
+    actor: 'Production owner',
+    reason: 'Shift packet reviewed',
+    evidenceReference: 'SHIFT-CLOSE-001',
+    sourceRevision: 2,
+    sourceDigest: `sha256:${'a'.repeat(64)}`,
+    goodUnits: 1,
+    scrapUnits: 0,
+    outputEntryCount: 1,
+    materialEntryCount: 1,
+  }
+  const malformedPlantCloses = [
+    { ...plantEventBase, createdAt: '2026-07-30T08:59:59.000Z' },
+    { ...plantEventBase, kind: 'output_recorded' },
+    { ...plantEventBase, subjectId: 'Other shift' },
+    { ...plantEventBase, actor: '' },
+    { ...plantEventBase, reason: '' },
+    { ...plantEventBase, evidenceReference: '' },
+    { ...plantEventBase, sourceDigest: 'sha256:not-a-digest' },
+    { ...plantEventBase, goodUnits: 0 },
+    { ...plantEventBase, scrapUnits: -1 },
+    { ...plantEventBase, outputEntryCount: 0 },
+    { ...plantEventBase, materialEntryCount: 0 },
+    { ...plantEventBase, goodUnits: 1.5 },
+    { ...plantEventBase, summary: 'Closed shift without exact aggregate evidence' },
+  ]
+  const plantBefore = outcome.buildPlantGuidedShiftCloseOutcomeMetric(malformedPlantCloses, plantStartedAt)
+  if (plantBefore?.value !== 1 || plantBefore.sourceDigest !== plantBaseline.sourceDigest) fail('plant_guided_shift_close_invalid_event_changed_metric')
+  const plantCurrent = outcome.buildPlantGuidedShiftCloseOutcomeMetric([plantEventBase], plantStartedAt)
+  if (plantCurrent?.value !== 0 || plantCurrent.sourceDigest === plantBaseline.sourceDigest || !plantCurrent.detail.includes('1 named-owner Plant shift-close record')) fail('plant_guided_shift_close_completion_invalid')
   const plantStorageValues = new Map()
   const plantStorage = { getItem: (key) => plantStorageValues.get(key) ?? null, setItem: (key, value) => plantStorageValues.set(key, value) }
   outcome.startPilotOutcome(plantStorage, plantSetup, plantBaseline, new Date(plantStartedAt))
   const plantReport = outcome.buildPilotOutcomeReport(plantStorage, plantSetup, plantCurrent, new Date('2026-07-30T09:03:00.000Z'))
-  if (plantReport?.outcomeStatus !== 'target_met' || plantReport.change !== -1 || plantReport.rawRecordsIncluded !== false || plantReport.externalWritesPerformed !== false) fail('plant_guided_output_report_invalid')
+  if (plantReport?.outcomeStatus !== 'target_met' || plantReport.change !== -1 || plantReport.rawRecordsIncluded !== false || plantReport.externalWritesPerformed !== false) fail('plant_guided_shift_close_report_invalid')
   const plantReview = outcome.acceptPilotOutcome(plantStorage, plantReport, plantSetup.owner, new Date('2026-07-30T09:04:00.000Z'))
   const plantAccepted = outcome.buildPilotOutcomeReport(plantStorage, plantSetup, plantCurrent, new Date('2026-07-30T09:05:00.000Z'))
-  if (plantAccepted?.review?.reportDigest !== plantReview.reportDigest) fail('plant_guided_output_acceptance_invalid')
-  const secondPlantOutput = { ...plantActionBase, capturedAt: '2026-07-30T09:06:00.000Z', kind: 'production_output', summary: 'Record 2 good units for JOB-AI-101 · 2026-07-30 Day' }
-  const plantChanged = outcome.buildPlantGuidedOutputOutcomeMetric([firstPlantOutput, secondPlantOutput], plantStartedAt)
+  if (plantAccepted?.review?.reportDigest !== plantReview.reportDigest) fail('plant_guided_shift_close_acceptance_invalid')
+  const secondPlantClose = {
+    ...plantEventBase,
+    createdAt: '2026-07-30T09:06:00.000Z',
+    shiftRef: '2026-07-30 Night',
+    subjectId: '2026-07-30 Night',
+    summary: 'Closed shift 2026-07-30 Night with 2 good, 0 scrap, 1 output entries, 1 material entries',
+    sourceRevision: 5,
+    sourceDigest: `sha256:${'b'.repeat(64)}`,
+    goodUnits: 2,
+  }
+  const plantChanged = outcome.buildPlantGuidedShiftCloseOutcomeMetric([secondPlantClose], plantStartedAt)
   const plantReopened = outcome.buildPilotOutcomeReport(plantStorage, plantSetup, plantChanged, new Date('2026-07-30T09:07:00.000Z'))
-  if (plantReopened?.review !== null || plantReopened?.outcomeStatus !== 'target_met' || plantReopened.current.sourceDigest === plantAccepted?.current.sourceDigest) fail('plant_guided_output_source_reopen_invalid')
-  pilotOutcomeRuntimeChecks += 7
+  if (plantReopened?.review !== null || plantReopened?.outcomeStatus !== 'target_met' || plantReopened.current.sourceDigest === plantAccepted?.current.sourceDigest) fail('plant_guided_shift_close_source_reopen_invalid')
+  const plantInvalidated = outcome.buildPilotOutcomeReport(plantStorage, plantSetup, plantBaseline, new Date('2026-07-30T09:08:00.000Z'))
+  if (plantInvalidated?.review !== null || plantInvalidated?.outcomeStatus !== 'collecting' || plantInvalidated.current.sourceDigest !== plantBaseline.sourceDigest) fail('plant_guided_shift_close_stale_success_survived')
+  pilotOutcomeRuntimeChecks += 8
   let collectingRejected = false
   try { outcome.acceptPilotOutcome(storage, collecting, setup.owner) } catch { collectingRejected = true }
   if (!collectingRejected) fail('pilot_outcome_collecting_acceptance_allowed')

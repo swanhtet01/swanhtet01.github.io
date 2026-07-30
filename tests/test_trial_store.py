@@ -337,6 +337,7 @@ class TrialStoreTests(unittest.TestCase):
             "production.downtime.ended",
             "production.maintenance.started",
             "production.maintenance.completed",
+            "production.shift.closed",
         )
         for event_type in human_only_events:
             with self.subTest(event_type=event_type), self.assertRaises(TrialHumanApprovalRequired):
