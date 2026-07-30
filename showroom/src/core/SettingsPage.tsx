@@ -110,12 +110,22 @@ import {
   type ShopIndustryPackId,
 } from './shop-service-scheduling'
 import {
+  PLANT_INDUSTRY_PACK_STORAGE_KEY,
   plantIndustryPack,
   plantIndustryPacks,
   readPlantIndustryPackId,
   savePlantIndustryPackId,
   type PlantIndustryPackId,
 } from './plant-industry-packs'
+import {
+  LOCAL_WORKSPACE_BACKUP_MAX_BYTES,
+  LOCAL_WORKSPACE_RESTORE_POINT_KEY,
+  applyLocalWorkspaceBackup,
+  collectLocalWorkspaceBackup,
+  restoreLocalWorkspaceBackup,
+  restoreLocalWorkspaceBackupFromEvidence,
+  type LocalWorkspaceBackup,
+} from './local-workspace-backup'
 
 const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding').then((module) => ({ default: module.ClientDataOnboarding })))
 const ManagedActivationRunbook = lazy(() => import('./ManagedActivationRunbook').then((module) => ({ default: module.ManagedActivationRunbook })))
@@ -123,6 +133,11 @@ const ManagedActivationRunbook = lazy(() => import('./ManagedActivationRunbook')
 function loadClientDemoWorkspace() {
   if (typeof window === 'undefined') return null
   try { return restoreClientDemoWorkspace(JSON.parse(window.localStorage.getItem(CLIENT_DEMO_WORKSPACE_STORAGE_KEY) || 'null')) } catch { return null }
+}
+
+function loadLocalWorkspaceRestorePoint() {
+  if (typeof window === 'undefined') return null
+  try { return restoreLocalWorkspaceBackup(JSON.parse(window.sessionStorage.getItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY) || 'null')) } catch { return null }
 }
 
 function provisionLocalShopIndustryPack(industryPackId: ShopIndustryPackId) {
@@ -261,6 +276,10 @@ export function SettingsPage() {
   const [notice, setNotice] = useState('')
   const [resetArmed, setResetArmed] = useState(false)
   const [resetBusy, setResetBusy] = useState(false)
+  const [restorePoint, setRestorePoint] = useState<LocalWorkspaceBackup | null>(loadLocalWorkspaceRestorePoint)
+  const [restorePointLabel, setRestorePointLabel] = useState(() => loadLocalWorkspaceRestorePoint() ? 'Saved on this device' : '')
+  const [restoreBusy, setRestoreBusy] = useState(false)
+  const [restoreNotice, setRestoreNotice] = useState('')
   const [settingsStep, setSettingsStep] = useState<'workflow' | 'success'>('workflow')
   const [managedIdentity, setManagedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const [managedEmail, setManagedEmail] = useState('')
@@ -402,6 +421,7 @@ export function SettingsPage() {
   const managedTrialRequestFilename = `supermega-managed-trial-request-${evidenceDate}.json`
   const managedApprovalRequests = approvals.map(toManagedApprovalRequest).filter((request): request is NonNullable<typeof request> => Boolean(request))
   const localProductRecords = collectLocalProductRecords(window.localStorage)
+  const localWorkspaceBackup = collectLocalWorkspaceBackup(window.localStorage)
   const localRecordCount = Object.keys(localProductRecords).length
   const localProductRecordKeys = Object.keys(localProductRecords)
   const websiteLocalRecordCount = localProductRecordKeys.filter((key) => key === WEBSITE_STORAGE_KEY || key === LEGACY_WEBSITE_STORAGE_KEY || key.startsWith('supermega.website.workspace.recovery.v1.')).length
@@ -476,7 +496,7 @@ export function SettingsPage() {
     contract: 'supermega.ai_product_source_map.v1',
     version: 1,
     createdAt: new Date().toISOString(),
-    evidenceVersion: 23,
+    evidenceVersion: 24,
     products: [
       {
         product: 'Shop',
@@ -518,7 +538,7 @@ export function SettingsPage() {
     contract: 'supermega.ai_context_handoff.v1',
     version: 1,
     createdAt: new Date().toISOString(),
-    evidenceVersion: 23,
+    evidenceVersion: 24,
     product: selectedProduct.name,
     productSlug: selectedProduct.slug,
     templateId: selectedTemplate.id,
@@ -577,7 +597,7 @@ export function SettingsPage() {
     contract: 'supermega.managed_workspace_provisioning.v1',
     version: 1,
     createdAt: new Date().toISOString(),
-    evidenceVersion: 23,
+    evidenceVersion: 24,
     workspace: setup.workspace || 'Workspace not named',
     owner: setup.owner || 'Owner not assigned',
     product: selectedProduct.name,
@@ -606,7 +626,7 @@ export function SettingsPage() {
     ]
   const importProvisioningPacket = {
     contract: runtime.importProvisioning?.contract ?? 'supermega.import_provisioning_readiness.v1',
-    evidenceVersion: 23,
+    evidenceVersion: 24,
     status: runtime.importProvisioning?.status ?? 'blocked',
     ready: runtime.importProvisioning?.ready === true,
     checks: runtime.importProvisioning?.checks ?? [],
@@ -649,7 +669,7 @@ export function SettingsPage() {
     targetOutcome: setup.targetOutcome,
     acceptanceEvidence: setup.acceptanceEvidence,
     evidenceFilename,
-    evidenceVersion: 23,
+    evidenceVersion: 24,
     pilotReady: isPilotReady,
     localRecords: localRecordCount,
     approvalPackets: managedApprovalRequests.length || approvals.length,
@@ -691,7 +711,7 @@ export function SettingsPage() {
       ]),
     ['Coverage', `${runtime.coverageScore}%`],
   ]
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 23, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 24, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, localWorkspaceBackup, behaviorTrail, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
   const ecommerceOrderQueueReadinessFilename = ecommerceOrderQueueReadinessPacket
     ? `supermega-ecommerce-order-queue-${safePacketFilename(ecommerceOrderQueueReadinessPacket.storeName)}.json`
@@ -1425,9 +1445,58 @@ export function SettingsPage() {
     }
   }
 
+  function saveLocalRestorePoint() {
+    const backup = collectLocalWorkspaceBackup(window.localStorage)
+    if (!backup) {
+      setRestoreNotice('This local workspace is too large to save safely. Export evidence before resetting.')
+      return
+    }
+    try {
+      window.sessionStorage.setItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY, JSON.stringify(backup))
+      setRestorePoint(backup)
+      setRestorePointLabel('Saved on this device')
+      setRestoreNotice(`${Object.keys(backup.records).length} local records saved as the reset baseline.`)
+    } catch {
+      setRestoreNotice('The browser could not save a restore point. Export evidence before resetting.')
+    }
+  }
+
+  async function loadEvidenceRestorePoint(file: File | null) {
+    if (!file) return
+    try {
+      if (file.size < 1 || file.size > LOCAL_WORKSPACE_BACKUP_MAX_BYTES) throw new Error('Choose a SuperMega evidence file smaller than 5 MB.')
+      const backup = restoreLocalWorkspaceBackupFromEvidence(JSON.parse(await file.text()))
+      if (!backup) throw new Error('This evidence file cannot restore a local workspace. Export a current version 24 evidence file first.')
+      window.sessionStorage.setItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY, JSON.stringify(backup))
+      setRestorePoint(backup)
+      setRestorePointLabel(file.name)
+      setRestoreNotice(`${Object.keys(backup.records).length} local records verified. Restore only when you are ready to replace this browser workspace.`)
+    } catch (error) {
+      setRestoreNotice(error instanceof Error ? error.message : 'The evidence backup could not be loaded.')
+    }
+  }
+
+  function restoreSavedLocalWorkspace() {
+    if (!restorePoint || restoreBusy) return
+    setRestoreBusy(true)
+    try {
+      applyLocalWorkspaceBackup(window.localStorage, restorePoint)
+      window.sessionStorage.removeItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY)
+      window.location.assign('/settings/')
+    } catch (error) {
+      setRestoreNotice(error instanceof Error ? error.message : 'The previous local workspace could not be restored safely.')
+      setRestoreBusy(false)
+    }
+  }
+
   async function resetDemoWorkspace() {
     setResetBusy(true)
     try {
+      if (!loadLocalWorkspaceRestorePoint()) {
+        const backup = collectLocalWorkspaceBackup(window.localStorage)
+        if (!backup) throw new Error('Save or export a restore point before resetting this local workspace.')
+        window.sessionStorage.setItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY, JSON.stringify(backup))
+      }
       const { resetCommerceOrderDraftRecovery } = await import('./commerce-order-draft')
       await resetCommerceOrderDraftRecovery()
       const retainedKeys = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index))
@@ -1449,6 +1518,8 @@ export function SettingsPage() {
         WEBSITE_ECOMMERCE_HANDOFF_KEY,
         CLIENT_DEMO_WORKSPACE_STORAGE_KEY,
         LEGACY_STOREFRONT_DRAFT_RESET_KEY,
+        SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
+        PLANT_INDUSTRY_PACK_STORAGE_KEY,
         ...retainedKeys,
         ...LEGACY_TEAM_WORK_KEYS,
         ...LEGACY_COMMERCE_KEYS,
@@ -1506,6 +1577,8 @@ export function SettingsPage() {
   return (
     <div className="workspace-screen settings-screen">
       <PageHeading eyebrow={requestedProduct ? 'Guided trial' : 'Client setup'} title={requestedProduct ? `Set up ${selectedProduct.name}` : 'Set up a client demo'} copy={requestedProduct ? requestedProduct === 'commerce' ? 'Name the client, choose the business pack, and prepare their data.' : 'Name the client, choose one workflow, and prepare their data.' : 'Name the client, choose the business, create the demo, then follow one product mission at a time.'} />
+      {restorePoint ? <section aria-label="Local workspace restore point" className="setup-complete"><div><strong>Restore point ready.</strong><small>{restorePointLabel} · {Object.keys(restorePoint.records).length} local records</small></div><button className="core-button" disabled={restoreBusy} onClick={restoreSavedLocalWorkspace} type="button">{restoreBusy ? 'Restoring...' : 'Restore previous workspace'}</button></section> : null}
+      {restoreNotice ? <p className="form-notice" role="status">{restoreNotice}</p> : null}
       {!preparedArtifact && preparedNotice ? <p className="form-notice" role="status">{preparedNotice}</p> : null}
       {requestedProduct ? <nav aria-label="Setup steps" className="settings-step-nav">
         <button aria-current={settingsStep === 'workflow' ? 'step' : undefined} onClick={() => chooseSettingsStep('workflow')} type="button"><span>1</span>{requestedProduct ? 'Template' : 'Demo kit'}</button>
@@ -1548,7 +1621,7 @@ export function SettingsPage() {
             {demoRecoveryNeeded ? <section aria-label="Client demo recovery" className="demo-kit-result"><div className="panel-head"><div><span className="core-eyebrow">Recovery needed</span><h3>Rebuild the saved client demo</h3><p>{demoKitReadiness?.reason ?? 'The saved workspace no longer matches the current setup contract.'}</p></div><button className="core-button primary" disabled={!demoInputReady} onClick={createDemoKit} type="button">Rebuild demo</button></div></section> : null}
             {demoBlueprint ? <section aria-label="Client demo kit" className="demo-kit-result">
               <div className="panel-head"><div><span className="core-eyebrow">Client workspace</span><h3>{demoBlueprint.client.workspace}</h3><p>{demoRunbook?.provenCount ?? 0} proven · {demoReadyCount} data-ready · owner {demoBlueprint.client.owner}</p></div><a className="core-button" download={demoBlueprintFilename} href={demoBlueprintHref}>Download setup kit</a></div>
-              {nextDemoMission ? <div className="demo-next-mission"><div><span className="core-eyebrow">Do this next</span><strong>{nextDemoMission.label}: {nextDemoMission.scenario}</strong><small>{nextDemoMission.status === 'ready_to_run' ? nextDemoMission.evidenceRequirement : 'Prepare clean client data, then run the real workflow.'}</small></div>{nextDemoMission.status === 'prepare_data' || nextDemoMission.status === 'needs_fix' ? <button className="core-button primary" onClick={() => prepareDemoProduct(nextDemoMission.product, demoBlueprint.products.find((product) => product.product === nextDemoMission.product)?.templateId ?? '')} type="button">{nextDemoMission.actionLabel}</button> : <Link className="core-button primary" to={nextDemoMission.actionPath}>{nextDemoMission.actionLabel}</Link>}</div> : <div className="demo-next-mission complete"><div><span className="core-eyebrow">Demo evidence complete</span><strong>All selected product missions are proven.</strong><small>Export the setup kit and use the recorded product evidence for the client review.</small></div></div>}
+              {nextDemoMission ? <div className="demo-next-mission"><div><span className="core-eyebrow">Do this next</span><strong>{nextDemoMission.label}: {nextDemoMission.scenario}</strong><small>{nextDemoMission.status === 'ready_to_run' ? nextDemoMission.evidenceRequirement : 'Prepare clean client data, then run the real workflow.'}</small></div>{nextDemoMission.status === 'prepare_data' || nextDemoMission.status === 'needs_fix' ? <button className="core-button primary" onClick={() => prepareDemoProduct(nextDemoMission.product, demoBlueprint.products.find((product) => product.product === nextDemoMission.product)?.templateId ?? '')} type="button">{nextDemoMission.actionLabel}</button> : <div className="setup-action-group"><button className="core-button" onClick={() => prepareDemoProduct(nextDemoMission.product, demoBlueprint.products.find((product) => product.product === nextDemoMission.product)?.templateId ?? '')} type="button">Review {nextDemoMission.label} data</button><Link className="core-button primary" to={nextDemoMission.actionPath}>{nextDemoMission.actionLabel}</Link></div>}</div> : <div className="demo-next-mission complete"><div><span className="core-eyebrow">Demo evidence complete</span><strong>All selected product missions are proven.</strong><small>Export the setup kit and use the recorded product evidence for the client review.</small></div></div>}
               <details className="compact-disclosure client-system-details">
                 <summary><span>Client system details</span><small>{demoBlueprint.products.length} products · {demoBlueprint.integrations.length} connections</small></summary>
               <div aria-label="Shared operating foundation" className="readiness-list client-foundation-summary"><span><small>Operating unit</small><strong>{demoBlueprint.foundation.operatingUnit.name}</strong><em>{demoBlueprint.foundation.operatingUnit.code} · {demoBlueprint.foundation.operatingUnit.kind}</em></span><span><small>Market</small><strong>{demoBlueprint.foundation.localization.countryCode} · {demoBlueprint.foundation.localization.currency}</strong><em>{demoBlueprint.foundation.localization.locale}</em></span><span><small>Topology</small><strong>{demoBlueprint.topology.locations.length} location · {demoBlueprint.topology.channels.length} channels</strong><em>{demoBlueprint.topology.recordAuthorities.length} product authorities</em></span><span><small>Timezone</small><strong>{demoBlueprint.foundation.localization.timeZone}</strong><em>Shared by all selected products</em></span><span><small>Authority</small><strong>Client review required</strong><em>Managed identity required before activation</em></span></div>
@@ -1693,7 +1766,16 @@ export function SettingsPage() {
             {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
             <p className="authority-note">AI learns from imported records; owners approve consequential actions.</p>
           </section>
-          <section className="core-panel trial-control-panel"><div><span className="core-eyebrow">Local evidence</span><h2>Export or reset.</h2><p>Reset clears Shop, unfinished order drafts, Plant, Website, Ecommerce setup, and handoff records.</p></div><div className="trial-actions"><a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>{resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting...' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}</div></section>
+          <section className="core-panel trial-control-panel">
+            <div><span className="core-eyebrow">Safety and recovery</span><h2>Save, export, restore, or reset.</h2><p>Save a restore point before a demo. Export evidence for durable recovery. Reset clears Shop, unfinished order drafts, Plant, Website, Ecommerce setup, and handoff records.</p></div>
+            <div className="trial-actions">
+              <button className="core-button" onClick={saveLocalRestorePoint} type="button">Save restore point</button>
+              <a className="core-button" download={evidenceFilename} href={evidenceHref}>Export evidence</a>
+              <label className="core-button">Load evidence backup<input accept=".json,application/json" className="sr-only" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void loadEvidenceRestorePoint(file) }} type="file" /></label>
+              {restorePoint ? <button className="core-button" disabled={restoreBusy} onClick={restoreSavedLocalWorkspace} type="button">{restoreBusy ? 'Restoring...' : 'Restore previous workspace'}</button> : null}
+              {resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting...' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}
+            </div>
+          </section>
         </div>
       </details>
     </div>
