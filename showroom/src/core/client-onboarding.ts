@@ -280,7 +280,7 @@ export type ClientImportPreview = {
   }
 }
 
-type ParsedCsvRow = {
+export type ParsedCsvRow = {
   rowNumber: number
   cells: string[]
 }
@@ -657,6 +657,12 @@ function parseCsv(input: string) {
   if (!rows.length) throw new Error('The CSV has no header row.')
   if (rows.length - 1 > CLIENT_IMPORT_MAX_ROWS) throw new Error(`Preview at most ${CLIENT_IMPORT_MAX_ROWS} rows at a time.`)
   return { source, rows }
+}
+
+export {
+  normalizeHeader as normalizeClientImportHeader,
+  parseCsv as parseClientCsv,
+  sha256 as clientImportSha256,
 }
 
 function inspectHeaders(headers: string[]) {

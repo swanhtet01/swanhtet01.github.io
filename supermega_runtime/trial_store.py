@@ -72,6 +72,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "production.quality_hold.placed",
         "production.quality_hold.released",
         "production.machine_state.changed",
+        "production.equipment_master.imported",
         "production.order_execution.recorded",
         "production.downtime.started",
         "production.downtime.ended",
@@ -633,6 +634,16 @@ def _authoritative_command_payload(
             **dict(evidence),
             "actor": principal.actor_id,
             "capturedAt": production_captured_at,
+        }
+        return authoritative
+    if surface == "production" and event_type == "production.equipment_master.imported":
+        evidence = authoritative.get("evidence")
+        if not isinstance(evidence, Mapping):
+            return authoritative
+        authoritative["evidence"] = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": _canonical_millisecond_utc(captured_at),
         }
         return authoritative
     if surface != "commerce":

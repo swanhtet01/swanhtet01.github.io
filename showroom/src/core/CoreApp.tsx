@@ -5646,6 +5646,7 @@ const productionEventLabels: Record<ProductionEvent['kind'], string> = {
   quality_hold_placed: 'Quality hold placed',
   quality_hold_released: 'Quality hold released',
   machine_state_changed: 'Machine state changed',
+  equipment_master_imported: 'Equipment master imported',
   downtime_started: 'Downtime started',
   downtime_ended: 'Downtime ended',
   maintenance_started: 'Maintenance started',

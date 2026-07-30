@@ -1,6 +1,6 @@
 {
   "schemaVersion": "supermega.hq.portfolio.v3",
-  "updatedAt": "2026-07-29",
+  "updatedAt": "2026-07-30",
   "northStar": "One real workflow reaches a measurable outcome through an accountable operating record.",
   "productLifecycle": ["discover", "define", "build", "release", "learn"],
   "agentOperatingModel": {
@@ -151,8 +151,8 @@
       "localAutomation": {
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Add one separate versioned Plant equipment-master setup package inside the existing Data setup surface, using stable equipment IDs, work-centre assignment, criticality, and accountable ownership; never infer equipment from job lines or claim a running state before explicit operator commissioning.",
-        "reason": "Plant job samples now roll forward from the Yangon planning date, and stale schedules fail both browser review and trusted apply before a tenant write. The next enterprise setup gap is importing real equipment identity deliberately as master data instead of inventing machines from production-line text or mixing commissioning with job initialization."
+        "workOrder": "Add one human-confirmed Plant equipment commissioning transition inside the existing setup and Problems flow that converts exactly one reviewed equipment-master record into one runtime machine only after installed-at, accountable operator, safety-baseline evidence, and an explicit initial observed state; never bulk auto-commission or issue an equipment command.",
+        "reason": "Plant now imports stable equipment identity as versioned master data while preserving zero commissioning and zero runtime machines. The next lifecycle gap is an explicit, evidence-bound handoff from one reviewed master record to one operator-observed runtime asset without weakening history, safety, or human authority."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }

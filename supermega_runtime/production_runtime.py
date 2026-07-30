@@ -33,6 +33,7 @@ PRODUCTION_EVENTS = frozenset(
         "production.quality_hold.placed",
         "production.quality_hold.released",
         "production.machine_state.changed",
+        "production.equipment_master.imported",
         "production.order_execution.recorded",
         "production.downtime.started",
         "production.downtime.ended",
@@ -61,6 +62,7 @@ _EVENT_KIND_BY_TYPE = {
     "production.quality_hold.placed": "quality_hold_placed",
     "production.quality_hold.released": "quality_hold_released",
     "production.machine_state.changed": "machine_state_changed",
+    "production.equipment_master.imported": "equipment_master_imported",
     "production.downtime.started": "downtime_started",
     "production.downtime.ended": "downtime_ended",
     "production.maintenance.started": "maintenance_started",
@@ -70,9 +72,10 @@ _MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _MAX_JOBS = 100
 _MAX_ISSUES = 500
 _MAX_MACHINES = 100
+_MAX_EQUIPMENT = 100
 
 _STATE_FIELDS = frozenset({"schema", "revision", "jobs", "issues", "machines", "events"})
-_STATE_OPTIONAL_FIELDS = frozenset({"openingPlan", "orderExecution"})
+_STATE_OPTIONAL_FIELDS = frozenset({"openingPlan", "orderExecution", "equipmentMaster"})
 _OPENING_PLAN_FIELDS = frozenset(
     {"contract", "packageDigest", "confirmedAt", "jobIds", "machineIds"}
 )
@@ -129,6 +132,26 @@ _ISSUE_REQUIRED_FIELDS = frozenset({"id", "createdAt", "area", "kind", "summary"
 _ISSUE_ACTION_FIELDS = frozenset({"severity", "owner", "dueAt", "containment"})
 _ISSUE_OPTIONAL_FIELDS = _ISSUE_ACTION_FIELDS | {"resolution"}
 _MACHINE_FIELDS = frozenset({"id", "name", "state"})
+_EQUIPMENT_MASTER_CONTRACT = "supermega.production.equipment-master.v1"
+_EQUIPMENT_MASTER_FIELDS = frozenset({"contract", "assets"})
+_EQUIPMENT_ASSET_FIELDS = frozenset(
+    {
+        "id",
+        "name",
+        "workCentreId",
+        "criticality",
+        "owner",
+        "commissioningStatus",
+        "sourceActionId",
+        "sourcePackageDigest",
+        "importedAt",
+    }
+)
+_EQUIPMENT_IMPORT_FIELDS = frozenset(
+    {"id", "name", "workCentreId", "criticality", "owner"}
+)
+_EQUIPMENT_CRITICALITIES = frozenset({"critical", "high", "medium", "low"})
+_EQUIPMENT_ID_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9._/-]{0,79}$")
 _EVIDENCE_FIELDS = frozenset({"actionId", "capturedAt", "actor", "reason", "evidenceReference"})
 _RESOLUTION_FIELDS = frozenset({"actionId", "resolvedAt", "resolvedBy", "reason", "evidenceReference"})
 _EVENT_FIELDS = frozenset(
@@ -548,6 +571,69 @@ def _validate_machine(candidate: object, index: int) -> dict[str, Any]:
     return machine
 
 
+def _validate_equipment_asset(candidate: object, index: int) -> dict[str, Any]:
+    field = f"production state.equipmentMaster.assets[{index}]"
+    asset = _object(candidate, field)
+    _exact_fields(asset, field, required=_EQUIPMENT_ASSET_FIELDS)
+    equipment_id = _text(asset["id"], f"{field}.id", maximum=80)
+    work_centre_id = _text(
+        asset["workCentreId"], f"{field}.workCentreId", maximum=80
+    )
+    if (
+        _EQUIPMENT_ID_PATTERN.fullmatch(equipment_id) is None
+        or _EQUIPMENT_ID_PATTERN.fullmatch(work_centre_id) is None
+    ):
+        raise TrialValidationError(
+            f"{field} IDs must use canonical uppercase equipment identifiers."
+        )
+    _text(asset["name"], f"{field}.name", maximum=180)
+    _text(asset["owner"], f"{field}.owner", maximum=120)
+    if asset["criticality"] not in _EQUIPMENT_CRITICALITIES:
+        raise TrialValidationError(f"{field}.criticality is unsupported.")
+    if asset["commissioningStatus"] != "not_commissioned":
+        raise TrialValidationError(
+            f"{field} cannot claim commissioning from a master-data import."
+        )
+    _text(asset["sourceActionId"], f"{field}.sourceActionId", maximum=160)
+    package_digest = _text(
+        asset["sourcePackageDigest"],
+        f"{field}.sourcePackageDigest",
+        maximum=71,
+    )
+    if _DIGEST_PATTERN.fullmatch(package_digest) is None:
+        raise TrialValidationError(f"{field}.sourcePackageDigest must use SHA-256.")
+    _lifecycle_timestamp(asset["importedAt"], f"{field}.importedAt", "equipment import")
+    return asset
+
+
+def _validate_equipment_master(candidate: object) -> dict[str, Any]:
+    master = _object(candidate, "production state.equipmentMaster")
+    _exact_fields(
+        master,
+        "production state.equipmentMaster",
+        required=_EQUIPMENT_MASTER_FIELDS,
+    )
+    if master["contract"] != _EQUIPMENT_MASTER_CONTRACT:
+        raise TrialValidationError(
+            f"production state.equipmentMaster.contract must be {_EQUIPMENT_MASTER_CONTRACT}."
+        )
+    assets_raw = _list(
+        master["assets"],
+        "production state.equipmentMaster.assets",
+        maximum=_MAX_EQUIPMENT,
+    )
+    if not assets_raw:
+        raise TrialValidationError(
+            "production state.equipmentMaster must retain at least one reviewed asset."
+        )
+    assets = [
+        _validate_equipment_asset(candidate, index)
+        for index, candidate in enumerate(assets_raw)
+    ]
+    _unique([asset["id"] for asset in assets], "Production equipment ID")
+    return master
+
+
 def _validate_opening_plan(
     candidate: object,
     *,
@@ -639,6 +725,7 @@ def _validate_event(
     job_ids: frozenset[str],
     issue_ids: frozenset[str],
     machine_ids: frozenset[str],
+    equipment_ids: frozenset[str],
 ) -> dict[str, Any]:
     field = f"events[{index}]"
     event = _object(candidate, field)
@@ -661,6 +748,8 @@ def _validate_event(
         required = _EVENT_FIELDS | {"maintenanceOwner"}
     elif kind == "maintenance_completed":
         required = _EVENT_FIELDS | {"maintenanceStartActionId"}
+    elif kind == "equipment_master_imported":
+        required = _EVENT_FIELDS | {"equipmentIds"}
     elif kind in {
         "job_created",
         "issue_opened",
@@ -705,7 +794,34 @@ def _validate_event(
     _text(event["summary"], f"{field}.summary", maximum=360)
     subject_id = _text(event["subjectId"], f"{field}.subjectId", maximum=80)
 
-    if kind == "output_recorded":
+    if kind == "equipment_master_imported":
+        if subject_id != "equipment-master":
+            raise TrialValidationError(
+                f"{field} must reference the equipment master authority."
+            )
+        equipment_ids_raw = _list(
+            event["equipmentIds"],
+            f"{field}.equipmentIds",
+            maximum=_MAX_EQUIPMENT,
+        )
+        if not equipment_ids_raw:
+            raise TrialValidationError(f"{field}.equipmentIds cannot be empty.")
+        imported_ids = [
+            _text(value, f"{field}.equipmentIds[{position}]", maximum=80)
+            for position, value in enumerate(equipment_ids_raw)
+        ]
+        _unique(imported_ids, "Production equipment import ID")
+        if any(equipment_id not in equipment_ids for equipment_id in imported_ids):
+            raise TrialValidationError(
+                f"{field} references an unknown equipment master record."
+            )
+        if event["summary"] != f"Imported {len(imported_ids)} equipment master records":
+            raise TrialValidationError(f"{field}.summary is not canonical.")
+        if _DIGEST_PATTERN.fullmatch(event["evidenceReference"]) is None:
+            raise TrialValidationError(
+                f"{field}.evidenceReference must bind the reviewed package digest."
+            )
+    elif kind == "output_recorded":
         if subject_id not in job_ids:
             raise TrialValidationError(f"{field} references an unknown job.")
         _integer(event["quantity"], f"{field}.quantity", minimum=1)
@@ -1633,6 +1749,59 @@ def _validate_maintenance_history(
             active_start = None
 
 
+def _validate_equipment_import_history(
+    equipment_master: Mapping[str, Any] | None,
+    machines: Sequence[dict[str, Any]],
+    events: Sequence[dict[str, Any]],
+) -> None:
+    import_events = [
+        event for event in events if event["kind"] == "equipment_master_imported"
+    ]
+    assets = equipment_master["assets"] if equipment_master is not None else []
+    if not assets:
+        if import_events:
+            raise TrialValidationError(
+                "Equipment import history requires retained equipment master records."
+            )
+        return
+    machine_ids = {machine["id"] for machine in machines}
+    if any(asset["id"] in machine_ids for asset in assets):
+        raise TrialValidationError(
+            "Uncommissioned equipment master records cannot appear as runtime machines."
+        )
+    if len(import_events) > len(assets):
+        raise TrialValidationError(
+            "Equipment import history contains more events than retained assets."
+        )
+    seen_asset_ids: set[str] = set()
+    for event in import_events:
+        matching_assets = [
+            asset for asset in assets if asset["sourceActionId"] == event["actionId"]
+        ]
+        matching_ids = [asset["id"] for asset in matching_assets]
+        if not matching_assets or matching_ids != event["equipmentIds"]:
+            raise TrialValidationError(
+                "Equipment master records must match one immutable import event."
+            )
+        for asset in matching_assets:
+            if (
+                asset["sourcePackageDigest"] != event["evidenceReference"]
+                or asset["importedAt"] != event["createdAt"]
+            ):
+                raise TrialValidationError(
+                    "Equipment master source evidence does not match its import event."
+                )
+            if asset["id"] in seen_asset_ids:
+                raise TrialValidationError(
+                    "Equipment master records cannot reuse import evidence."
+                )
+            seen_asset_ids.add(asset["id"])
+    if len(seen_asset_ids) != len(assets):
+        raise TrialValidationError(
+            "Every equipment master record requires one immutable import event."
+        )
+
+
 def validate_production_state(value: object) -> dict[str, Any]:
     """Validate a complete managed Production workspace without repairing it."""
 
@@ -1673,9 +1842,17 @@ def validate_production_state(value: object) -> dict[str, Any]:
         _validate_machine(candidate, index)
         for index, candidate in enumerate(machines_raw)
     ]
+    equipment_master = (
+        _validate_equipment_master(state["equipmentMaster"])
+        if "equipmentMaster" in state
+        else None
+    )
     job_ids = [job["id"] for job in jobs]
     issue_ids = [issue["id"] for issue in issues]
     machine_ids = [machine["id"] for machine in machines]
+    equipment_ids = [
+        asset["id"] for asset in equipment_master["assets"]
+    ] if equipment_master is not None else []
     _unique(job_ids, "Production job ID")
     _unique(issue_ids, "Production issue ID")
     _unique(machine_ids, "Production machine ID")
@@ -1701,6 +1878,7 @@ def validate_production_state(value: object) -> dict[str, Any]:
             job_ids=frozenset(job_ids),
             issue_ids=frozenset(issue_ids),
             machine_ids=frozenset(machine_ids),
+            equipment_ids=frozenset(equipment_ids),
         )
         for index, candidate in enumerate(events_raw)
     ]
@@ -1733,6 +1911,7 @@ def validate_production_state(value: object) -> dict[str, Any]:
     _validate_machine_history(machines, events)
     _validate_downtime_history(machines, events)
     _validate_maintenance_history(machines, events)
+    _validate_equipment_import_history(equipment_master, machines, events)
     return deepcopy(state)
 
 
@@ -2361,6 +2540,98 @@ def _validate_maintenance_completed(
         raise TrialValidationError("maintenance completion summary is not canonical.")
 
 
+def _reduce_equipment_master_import(
+    current: Mapping[str, Any],
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    if set(payload) != {"equipment", "evidence"}:
+        raise TrialValidationError(
+            "Equipment master import must contain exactly equipment and evidence."
+        )
+    current_state = validate_production_state(current)
+    evidence = _evidence(payload.get("evidence"))
+    if evidence["reason"] != "Imported reviewed Plant equipment master":
+        raise TrialValidationError("Equipment master import reason is not canonical.")
+    if _DIGEST_PATTERN.fullmatch(evidence["evidenceReference"]) is None:
+        raise TrialValidationError(
+            "Equipment master import must reference the reviewed package digest."
+        )
+    equipment_raw = _list(
+        payload.get("equipment"),
+        "equipment",
+        maximum=_MAX_EQUIPMENT,
+    )
+    if not equipment_raw:
+        raise TrialValidationError("Equipment master import cannot be empty.")
+    existing_assets = (
+        current_state.get("equipmentMaster", {}).get("assets", [])
+    )
+    if len(existing_assets) + len(equipment_raw) > _MAX_EQUIPMENT:
+        raise TrialValidationError("Equipment master exceeds its record limit.")
+    existing_ids = {asset["id"] for asset in existing_assets}
+    existing_ids.update(machine["id"] for machine in current_state["machines"])
+    imported_ids: list[str] = []
+    imported_assets: list[dict[str, Any]] = []
+    for index, candidate in enumerate(equipment_raw):
+        field = f"equipment[{index}]"
+        equipment = _object(candidate, field)
+        _exact_fields(equipment, field, required=_EQUIPMENT_IMPORT_FIELDS)
+        equipment_id = _text(equipment["id"], f"{field}.id", maximum=80)
+        work_centre_id = _text(
+            equipment["workCentreId"], f"{field}.workCentreId", maximum=80
+        )
+        if (
+            _EQUIPMENT_ID_PATTERN.fullmatch(equipment_id) is None
+            or _EQUIPMENT_ID_PATTERN.fullmatch(work_centre_id) is None
+        ):
+            raise TrialValidationError(
+                f"{field} IDs must use canonical uppercase equipment identifiers."
+            )
+        if equipment_id in existing_ids or equipment_id in imported_ids:
+            raise TrialValidationError(
+                "Equipment master import cannot replace or duplicate an equipment ID."
+            )
+        name = _text(equipment["name"], f"{field}.name", maximum=180)
+        owner = _text(equipment["owner"], f"{field}.owner", maximum=120)
+        criticality = equipment["criticality"]
+        if criticality not in _EQUIPMENT_CRITICALITIES:
+            raise TrialValidationError(f"{field}.criticality is unsupported.")
+        imported_ids.append(equipment_id)
+        imported_assets.append(
+            {
+                "id": equipment_id,
+                "name": name,
+                "workCentreId": work_centre_id,
+                "criticality": criticality,
+                "owner": owner,
+                "commissioningStatus": "not_commissioned",
+                "sourceActionId": evidence["actionId"],
+                "sourcePackageDigest": evidence["evidenceReference"],
+                "importedAt": evidence["capturedAt"],
+            }
+        )
+    event = {
+        "id": f"EVT-{evidence['actionId']}",
+        "actionId": evidence["actionId"],
+        "createdAt": evidence["capturedAt"],
+        "actor": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "kind": "equipment_master_imported",
+        "subjectId": "equipment-master",
+        "summary": f"Imported {len(imported_ids)} equipment master records",
+        "equipmentIds": imported_ids,
+    }
+    next_state = deepcopy(current_state)
+    next_state["revision"] += 1
+    next_state["events"] = [event, *current_state["events"]]
+    next_state["equipmentMaster"] = {
+        "contract": _EQUIPMENT_MASTER_CONTRACT,
+        "assets": [*existing_assets, *imported_assets],
+    }
+    return validate_production_state(next_state)
+
+
 def _validate_order_execution_recorded(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -2451,6 +2722,8 @@ def reduce_production_state(
         raise TrialValidationError(
             "event_type must be a supported Production lifecycle event."
         )
+    if event_type == "production.equipment_master.imported":
+        return _reduce_equipment_master_import(current, payload)
     next_state, evidence = _payload(payload)
     if event_type == "production.workspace.initialized":
         if dict(current):

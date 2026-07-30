@@ -35,6 +35,7 @@ import {
 } from './managed-trial'
 import { createShopServiceSchedule, type ShopIndustryPackId } from './shop-service-scheduling'
 import type { PlantIndustryPackId } from './plant-industry-packs'
+import { PlantEquipmentOnboarding } from './PlantEquipmentOnboarding'
 
 type ClientDataOnboardingProps = {
   product: ClientSolutionId
@@ -832,6 +833,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   }
 
   return (
+    <>
     <details className="compact-disclosure catalog-import-disclosure" open={initiallyOpen || undefined}>
       <summary><span>Bring existing data</span><small>Optional for {productName}</small></summary>
       <div className="catalog-import-workspace">
@@ -952,5 +954,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         </div> : null}
       </div>
     </details>
+    {product === 'production' ? <PlantEquipmentOnboarding managedIdentity={managedIdentity} owner={owner} workspace={workspace} /> : null}
+    </>
   )
 }

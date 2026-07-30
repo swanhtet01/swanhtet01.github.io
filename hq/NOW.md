@@ -1,6 +1,6 @@
 # HQ now
 
-Updated: 2026-07-29
+Updated: 2026-07-30
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`

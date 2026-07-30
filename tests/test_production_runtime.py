@@ -648,6 +648,7 @@ class ProductionRuntimeTests(unittest.TestCase):
             "production.quality_hold.placed",
             "production.quality_hold.released",
             "production.machine_state.changed",
+            "production.equipment_master.imported",
             "production.order_execution.recorded",
             "production.downtime.started",
             "production.downtime.ended",

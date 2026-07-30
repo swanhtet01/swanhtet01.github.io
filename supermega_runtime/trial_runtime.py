@@ -27,6 +27,11 @@ from supermega_runtime.order_intake_provider import (
     OrderIntakeDraftProvider,
     OrderIntakeProviderError,
 )
+from supermega_runtime.plant_equipment_import import (
+    PLANT_EQUIPMENT_MAX_PACKAGE_BYTES,
+    PlantEquipmentImportError,
+    validate_plant_equipment_import,
+)
 from supermega_runtime.production_material_handoff import (
     require_shop_issue_before_plant_progress,
     require_shop_issue_matches_plant,
@@ -877,6 +882,104 @@ def create_trial_router(
                 **validation.to_dict(),
                 "workspace_id": principal.workspace_id,
             }
+        }
+
+    @router.post("/imports/plant-equipment/validate")
+    async def trial_plant_equipment_validation(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_read_ready(readiness)
+        if not has_surface_read_capability(readiness.capabilities, "setup"):
+            raise _error(
+                403,
+                "trial_capability_required",
+                required_capability="setup.read",
+            )
+        package = await _bounded_json_body(
+            request,
+            maximum_bytes=PLANT_EQUIPMENT_MAX_PACKAGE_BYTES,
+        )
+        try:
+            validation, _ = validate_plant_equipment_import(package)
+        except PlantEquipmentImportError as exc:
+            raise _error(
+                422,
+                "plant_equipment_import_validation_error",
+                message=str(exc),
+            ) from exc
+        return {
+            "validation": {
+                **validation.to_dict(),
+                "workspace_id": principal.workspace_id,
+            }
+        }
+
+    @router.post("/imports/plant-equipment/apply")
+    async def trial_plant_equipment_apply(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_write_ready(readiness, "setup.write")
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        raw_body = await _bounded_json_body(
+            request,
+            maximum_bytes=PLANT_EQUIPMENT_MAX_PACKAGE_BYTES + 2048,
+        )
+        try:
+            body = TrialClientImportApplyRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "plant_equipment_import_apply_invalid") from exc
+        try:
+            validation, package = validate_plant_equipment_import(body.package)
+        except PlantEquipmentImportError as exc:
+            raise _error(
+                422,
+                "plant_equipment_import_validation_error",
+                message=str(exc),
+            ) from exc
+        _require_write_ready(readiness, "production.write")
+        if body.confirmation != f"APPLY {validation.package_digest}":
+            raise _error(409, "plant_equipment_import_confirmation_mismatch")
+        command_id = str(body.command_id)
+        result = _invoke(
+            lambda: store.apply_command(
+                principal,
+                command_id=command_id,
+                surface="production",
+                event_type="production.equipment_master.imported",
+                expected_version=body.expected_version,
+                payload={
+                    "equipment": [
+                        {
+                            "id": row["values"]["equipmentId"],
+                            "name": row["values"]["name"],
+                            "workCentreId": row["values"]["workCentreId"],
+                            "criticality": row["values"]["criticality"],
+                            "owner": package["owner"],
+                        }
+                        for row in package["rows"]
+                    ],
+                    "evidence": {
+                        "actionId": f"ACT-EQUIPMENT-IMPORT-{command_id}",
+                        "capturedAt": "server-assigned",
+                        "actor": principal.actor_id,
+                        "reason": "Imported reviewed Plant equipment master",
+                        "evidenceReference": validation.package_digest,
+                    },
+                },
+            )
+        )
+        return {
+            "activation": {
+                "contract": "supermega.production.equipment-import-activation.v1",
+                "status": "applied",
+                "package_digest": validation.package_digest,
+                "row_count": validation.row_count,
+                "workspace_id": principal.workspace_id,
+                "external_writes_performed": True,
+                "commissioning_performed": False,
+            },
+            **_command_response(result),
         }
 
     @router.post("/imports/apply")

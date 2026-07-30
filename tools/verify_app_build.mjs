@@ -28,6 +28,7 @@ let ecommerceBuyingRuntimeChecks = 0
 let catalogImportRuntimeChecks = 0
 let clientOnboardingRuntimeChecks = 0
 let managedClientImportRuntimeChecks = 0
+let plantEquipmentImportRuntimeChecks = 0
 let shopInventoryRuntimeChecks = 0
 let shopServiceScheduleRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
@@ -102,6 +103,8 @@ const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'c
 const shopInventoryPythonSource = await readFile(resolve(root, 'supermega_runtime', 'shop_inventory_runtime.py'), 'utf8')
 const managedActivationRunbookSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedActivationRunbook.tsx'), 'utf8')
 const localClientImportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'local-client-import.ts'), 'utf8')
+const plantEquipmentImportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-equipment-import.ts'), 'utf8')
+const plantEquipmentOnboardingSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantEquipmentOnboarding.tsx'), 'utf8')
 const settingsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'SettingsPage.tsx'), 'utf8')
 const productSetupSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'product-setup.ts'), 'utf8')
 const workspaceRuntimeSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'workspace-runtime.ts'), 'utf8')
@@ -3338,6 +3341,15 @@ if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_i
   || !clientOnboardingSource.includes("activationStatus: 'staged_not_applied'")
   || !clientOnboardingSource.includes('humanReviewRequired: true')
   || !clientOnboardingSource.includes('externalWritesPerformed: false')) fail('four_product_client_import_contract_missing')
+if (!plantEquipmentImportSource.includes("PLANT_EQUIPMENT_IMPORT_SCHEMA = 'supermega.production.equipment-import.v1'")
+  || !plantEquipmentImportSource.includes('PLANT_EQUIPMENT_MAX_ROWS = 100')
+  || !plantEquipmentImportSource.includes('commissioningPerformed: false')
+  || !plantEquipmentImportSource.includes('externalWritesPerformed: false')
+  || !plantEquipmentImportSource.includes('parseClientCsv')
+  || !plantEquipmentOnboardingSource.includes('Add known equipment')
+  || !plantEquipmentOnboardingSource.includes('This does not start or commission a machine.')
+  || !clientOnboardingUiSource.includes("product === 'production' ? <PlantEquipmentOnboarding")) fail('plant_equipment_onboarding_contract_missing')
+if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => plantEquipmentImportSource.toLowerCase().includes(marker.toLowerCase()))) fail('plant_equipment_import_external_or_persistent_side_effect_added')
 const manifestPlantPackIds = manifest.customerProducts.find((product) => product.id === 'plant')?.internalTemplatePacks?.map((pack) => pack.id) ?? []
 if (manifestPlantPackIds.join(',') !== 'general-manufacturing,batch-process,food-beverage,apparel,assembly'
   || !manifestPlantPackIds.every((id) => plantIndustryPacksSource.includes(`id: '${id}'`))
@@ -6971,6 +6983,105 @@ async function verifyManagedClientImportRuntime() {
     )
   } catch (error) {
     fail(`managed_client_import_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyPlantEquipmentImportRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    plantEquipmentImportRuntimeChecks += 1
+  }
+  const rejectsAsync = async (action, reason) => {
+    try { await action() } catch { plantEquipmentImportRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  const rejects = (action, reason) => {
+    try { action() } catch { plantEquipmentImportRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  try {
+    const nonce = Date.now()
+    const [equipmentModel, managedTrial, production] = await Promise.all([
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-equipment-import.ts')).href}?plant-equipment-import=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'managed-trial.ts')).href}?plant-equipment-managed=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts')).href}?plant-equipment-production=${nonce}`),
+    ])
+    const identity = { userId: 'plant-owner', email: 'plant@example.test', workspaceId: 'workspace-plant' }
+    const preview = await equipmentModel.createPlantEquipmentImportPreview({
+      sourceName: 'equipment.csv',
+      sourceText: equipmentModel.plantEquipmentSampleCsv(),
+      workspace: 'Golden Manufacturing',
+      owner: 'Plant engineering owner',
+    })
+    assert(preview.package.rows.length === 2
+      && preview.package.controls.commissioningPerformed === false
+      && preview.package.controls.externalWritesPerformed === false
+      && preview.package.rows[0].values.equipmentId === 'MIX-01'
+      && /^sha256:[0-9a-f]{64}$/.test(preview.packageDigest), 'plant_equipment_preview_invalid')
+    const aliasPreview = await equipmentModel.createPlantEquipmentImportPreview({
+      sourceName: 'assets.csv',
+      sourceText: 'asset_id,asset_name,line_id,priority\nEQ-01,Primary mixer,WC-MIX,critical\n',
+      workspace: 'Golden Manufacturing',
+      owner: 'Plant engineering owner',
+    })
+    assert(aliasPreview.package.rows[0].values.workCentreId === 'WC-MIX', 'plant_equipment_alias_mapping_failed')
+    await rejectsAsync(() => equipmentModel.createPlantEquipmentImportPreview({ sourceName: 'duplicate.csv', sourceText: 'equipment_id,name,work_centre_id,criticality\nEQ-01,One,WC-1,high\nEQ-01,Two,WC-2,low\n', workspace: 'Plant', owner: 'Owner' }), 'plant_equipment_duplicate_id_accepted')
+    await rejectsAsync(() => equipmentModel.createPlantEquipmentImportPreview({ sourceName: 'formula.csv', sourceText: 'equipment_id,name,work_centre_id,criticality\nEQ-01,=CMD,WC-1,high\n', workspace: 'Plant', owner: 'Owner' }), 'plant_equipment_formula_accepted')
+    await rejectsAsync(() => equipmentModel.createPlantEquipmentImportPreview({ sourceName: 'ambiguous.csv', sourceText: 'equipment_id,asset_id,name,work_centre_id,criticality\nEQ-01,EQ-02,One,WC-1,high\n', workspace: 'Plant', owner: 'Owner' }), 'plant_equipment_ambiguous_header_accepted')
+    await rejectsAsync(() => equipmentModel.createPlantEquipmentImportPreview({ sourceName: 'lower.csv', sourceText: 'equipment_id,name,work_centre_id,criticality\neq-01,One,WC-1,high\n', workspace: 'Plant', owner: 'Owner' }), 'plant_equipment_lowercase_id_accepted')
+
+    const packageDigest = await managedTrial.managedPlantEquipmentPackageDigest(preview.package)
+    assert(packageDigest === preview.packageDigest, 'plant_equipment_package_digest_drifted')
+    const receipt = {
+      contract: 'supermega.production.equipment-import-validation.v1',
+      status: 'valid',
+      package_digest: packageDigest,
+      row_count: preview.package.rows.length,
+      checks: ['contract', 'source_digest', 'row_schema', 'field_values', 'unique_equipment_ids', 'source_rows', 'package_digest', 'zero_commissioning'],
+      workspace_id: identity.workspaceId,
+      activation: {
+        status: 'not_applied', target_surface: 'production', required_capability: 'production.write',
+        human_approval_required: true, atomic_adapter_ready: true, external_writes_performed: false, commissioning_performed: false,
+      },
+    }
+    assert(managedTrial.assertManagedPlantEquipmentValidation({ validation: receipt }, preview.package, identity, packageDigest) === receipt, 'plant_equipment_valid_receipt_rejected')
+    rejects(() => managedTrial.assertManagedPlantEquipmentValidation({ validation: { ...receipt, activation: { ...receipt.activation, commissioning_performed: true } } }, preview.package, identity, packageDigest), 'plant_equipment_commissioning_receipt_accepted')
+    rejects(() => managedTrial.assertManagedPlantEquipmentValidation({ validation: { ...receipt, workspace_id: 'workspace-other' } }, preview.package, identity, packageDigest), 'plant_equipment_workspace_tamper_accepted')
+
+    const priorState = production.validateProductionState({
+      schema: production.PRODUCTION_WORKSPACE_SCHEMA,
+      revision: 0,
+      jobs: [{ id: 'JOB-OPEN-1', line: 'Line A', product: 'Opening batch', target: 100, output: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2099-08-15T17:29:59.999Z' }],
+      issues: [], machines: [], events: [],
+      openingPlan: { contract: 'supermega.production.opening-plan.v1', packageDigest: `sha256:${'a'.repeat(64)}`, confirmedAt: '2026-07-30T06:00:00.000Z', industryPackId: 'general-manufacturing', jobIds: ['JOB-OPEN-1'], machineIds: [] },
+    })
+    const commandId = '00000000-0000-4000-8000-000000000301'
+    const actionId = `ACT-EQUIPMENT-IMPORT-${commandId}`
+    const importedAt = '2026-07-30T07:00:00.000Z'
+    const equipmentIds = preview.package.rows.map((row) => row.values.equipmentId)
+    const event = { id: `EVT-${actionId}`, actionId, createdAt: importedAt, actor: identity.userId, reason: 'Imported reviewed Plant equipment master', evidenceReference: packageDigest, kind: 'equipment_master_imported', subjectId: 'equipment-master', summary: `Imported ${equipmentIds.length} equipment master records`, equipmentIds }
+    const importedState = production.validateProductionState({
+      ...priorState,
+      revision: 1,
+      events: [event],
+      equipmentMaster: {
+        contract: 'supermega.production.equipment-master.v1',
+        assets: preview.package.rows.map((row) => ({ id: row.values.equipmentId, name: row.values.name, workCentreId: row.values.workCentreId, criticality: row.values.criticality, owner: preview.package.owner, commissioningStatus: 'not_commissioned', sourceActionId: actionId, sourcePackageDigest: packageDigest, importedAt })),
+      },
+    })
+    const activationResponse = {
+      activation: { contract: 'supermega.production.equipment-import-activation.v1', status: 'applied', package_digest: packageDigest, row_count: preview.package.rows.length, workspace_id: identity.workspaceId, external_writes_performed: true, commissioning_performed: false },
+      result: { command_id: commandId, surface: 'production', event_type: 'production.equipment_master.imported', version: 2, state: importedState, idempotent_replay: false },
+    }
+    assert(managedTrial.assertManagedPlantEquipmentActivation(activationResponse, preview.package, receipt, identity, commandId, 1, priorState) === activationResponse, 'plant_equipment_valid_activation_rejected')
+    for (const [label, response] of [
+      ['machine', { ...activationResponse, result: { ...activationResponse.result, state: { ...importedState, machines: [{ id: 'MIX-01', name: 'Invented runtime', state: 'running' }] } } }],
+      ['job', { ...activationResponse, result: { ...activationResponse.result, state: { ...importedState, jobs: [{ ...importedState.jobs[0], target: 101 }] } } }],
+      ['commissioning', { ...activationResponse, activation: { ...activationResponse.activation, commissioning_performed: true } }],
+      ['evidence', { ...activationResponse, result: { ...activationResponse.result, state: { ...importedState, equipmentMaster: { ...importedState.equipmentMaster, assets: importedState.equipmentMaster.assets.map((asset, index) => index ? asset : { ...asset, sourcePackageDigest: `sha256:${'0'.repeat(64)}` }) } } } }],
+    ]) rejects(() => managedTrial.assertManagedPlantEquipmentActivation(response, preview.package, receipt, identity, commandId, 1, priorState), `plant_equipment_${label}_tamper_accepted`)
+  } catch (error) {
+    fail(`plant_equipment_import_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
@@ -13058,6 +13169,7 @@ await verifyWebsiteReleaseRuntime()
 await verifyCatalogImportRuntime()
 await verifyClientOnboardingRuntime()
 await verifyManagedClientImportRuntime()
+await verifyPlantEquipmentImportRuntime()
 await verifyWebsiteRuntime()
 await verifyWebsiteOrderCompletionRuntime()
 await verifyCommerceOrderDraftRuntime()
@@ -13084,4 +13196,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

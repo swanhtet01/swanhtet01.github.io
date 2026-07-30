@@ -1,5 +1,10 @@
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import type { buildClientImportStagingPackage } from './client-onboarding'
+import type { PlantEquipmentImportPackage } from './plant-equipment-import.ts'
+import {
+  validateProductionState,
+  type ProductionState,
+} from './production-workspace.ts'
 import {
   commerceCatalogDigest,
   commerceStorefrontConfigurationActionId,
@@ -113,6 +118,7 @@ export type ManagedProductionEvent =
   | 'production.quality_hold.placed'
   | 'production.quality_hold.released'
   | 'production.machine_state.changed'
+  | 'production.equipment_master.imported'
   | 'production.order_execution.recorded'
   | 'production.downtime.started'
   | 'production.downtime.ended'
@@ -701,6 +707,22 @@ export async function managedClientImportPackageDigest(stagingPackage: ManagedCl
   return sha256Text(serializeManagedClientImportPackage(stagingPackage))
 }
 
+function serializePlantEquipmentImportPackage(equipmentPackage: PlantEquipmentImportPackage) {
+  try {
+    const body = JSON.stringify(equipmentPackage)
+    if (typeof body === 'string') return body
+  } catch {
+    // The caller receives the same bounded contract error for every serialization failure.
+  }
+  throw new ManagedTrialError('The equipment import package could not be serialized safely.', {
+    code: 'managed_plant_equipment_package_invalid',
+  })
+}
+
+export async function managedPlantEquipmentPackageDigest(equipmentPackage: PlantEquipmentImportPackage) {
+  return sha256Text(serializePlantEquipmentImportPackage(equipmentPackage))
+}
+
 export function assertManagedClientImportValidation(
   response: unknown,
   stagingPackage: ManagedClientImportPackage,
@@ -903,6 +925,182 @@ export function assertManagedPlantImportState(
     })
   }
   return state
+}
+
+const PLANT_EQUIPMENT_VALIDATION_CHECKS = [
+  'contract',
+  'source_digest',
+  'row_schema',
+  'field_values',
+  'unique_equipment_ids',
+  'source_rows',
+  'package_digest',
+  'zero_commissioning',
+] as const
+
+export function assertManagedPlantEquipmentValidation(
+  response: unknown,
+  equipmentPackage: PlantEquipmentImportPackage,
+  expectedIdentity: ManagedIdentity,
+  expectedPackageDigest: string,
+): ManagedPlantEquipmentValidation {
+  if (!isRecord(response) || !isRecord(response.validation) || !isRecord(response.validation.activation)) {
+    throw new ManagedTrialError('The managed workspace returned an invalid equipment validation.', {
+      code: 'managed_plant_equipment_validation_invalid',
+    })
+  }
+  const validation = response.validation
+  const activation = validation.activation as Record<string, unknown>
+  const checks = validation.checks
+  if (!hasExactKeys(validation, ['activation', 'checks', 'contract', 'package_digest', 'row_count', 'status', 'workspace_id'])
+    || !hasExactKeys(activation, ['atomic_adapter_ready', 'commissioning_performed', 'external_writes_performed', 'human_approval_required', 'required_capability', 'status', 'target_surface'])
+    || validation.contract !== 'supermega.production.equipment-import-validation.v1'
+    || validation.status !== 'valid'
+    || validation.package_digest !== expectedPackageDigest
+    || validation.row_count !== equipmentPackage.rows.length
+    || validation.workspace_id !== expectedIdentity.workspaceId
+    || !Array.isArray(checks)
+    || checks.length !== PLANT_EQUIPMENT_VALIDATION_CHECKS.length
+    || PLANT_EQUIPMENT_VALIDATION_CHECKS.some((check, index) => checks[index] !== check)
+    || activation.status !== 'not_applied'
+    || activation.target_surface !== 'production'
+    || activation.required_capability !== 'production.write'
+    || activation.human_approval_required !== true
+    || activation.atomic_adapter_ready !== true
+    || activation.external_writes_performed !== false
+    || activation.commissioning_performed !== false) {
+    throw new ManagedTrialError('The managed equipment validation does not match the reviewed package.', {
+      code: 'managed_plant_equipment_validation_invalid',
+    })
+  }
+  return validation as unknown as ManagedPlantEquipmentValidation
+}
+
+export function assertManagedPlantEquipmentActivation(
+  response: unknown,
+  equipmentPackage: PlantEquipmentImportPackage,
+  validation: ManagedPlantEquipmentValidation,
+  expectedIdentity: ManagedIdentity,
+  commandId: string,
+  expectedVersion: number,
+  priorState: ProductionState,
+): ManagedPlantEquipmentActivationResult {
+  if (!CLIENT_IMPORT_COMMAND_ID.test(commandId)
+    || !Number.isSafeInteger(expectedVersion)
+    || expectedVersion < 1
+    || !isRecord(response)
+    || !isRecord(response.activation)
+    || !isRecord(response.result)) {
+    throw new ManagedTrialError('The managed equipment activation is invalid.', {
+      code: 'managed_plant_equipment_activation_invalid',
+    })
+  }
+  const activation = response.activation
+  const result = response.result
+  if (!hasExactKeys(activation, ['commissioning_performed', 'contract', 'external_writes_performed', 'package_digest', 'row_count', 'status', 'workspace_id'])
+    || activation.contract !== 'supermega.production.equipment-import-activation.v1'
+    || activation.status !== 'applied'
+    || activation.package_digest !== validation.package_digest
+    || activation.row_count !== equipmentPackage.rows.length
+    || activation.workspace_id !== expectedIdentity.workspaceId
+    || activation.external_writes_performed !== true
+    || activation.commissioning_performed !== false
+    || !hasExactKeys(result, ['command_id', 'event_type', 'idempotent_replay', 'state', 'surface', 'version'])
+    || result.command_id !== commandId
+    || result.surface !== 'production'
+    || result.event_type !== 'production.equipment_master.imported'
+    || result.version !== expectedVersion + 1
+    || typeof result.idempotent_replay !== 'boolean') {
+    throw new ManagedTrialError('The managed equipment response does not match the reviewed package.', {
+      code: 'managed_plant_equipment_activation_invalid',
+    })
+  }
+  let accepted: ProductionState
+  let previous: ProductionState
+  try {
+    accepted = validateProductionState(result.state)
+    previous = validateProductionState(priorState)
+  } catch {
+    throw new ManagedTrialError('The managed workspace returned invalid Production equipment state.', {
+      code: 'managed_plant_equipment_activation_invalid',
+    })
+  }
+  const unchangedFields = ['schema', 'jobs', 'issues', 'machines', 'openingPlan', 'orderExecution'] as const
+  const acceptedRecord = accepted as unknown as Record<string, unknown>
+  const previousRecord = previous as unknown as Record<string, unknown>
+  const previousAssets = previous.equipmentMaster?.assets ?? []
+  const acceptedAssets = accepted.equipmentMaster?.assets ?? []
+  const event = accepted.events[0]
+  const importedAssets = acceptedAssets.slice(previousAssets.length)
+  const expectedActionId = `ACT-EQUIPMENT-IMPORT-${commandId}`
+  if (accepted.revision !== previous.revision + 1
+    || unchangedFields.some((field) => !sameManagedClientImportState(acceptedRecord[field], previousRecord[field]))
+    || !sameManagedClientImportState(accepted.events.slice(1), previous.events)
+    || !sameManagedClientImportState(acceptedAssets.slice(0, previousAssets.length), previousAssets)
+    || importedAssets.length !== equipmentPackage.rows.length
+    || !event
+    || event.kind !== 'equipment_master_imported'
+    || event.id !== `EVT-${expectedActionId}`
+    || event.actionId !== expectedActionId
+    || event.actor !== expectedIdentity.userId
+    || event.reason !== 'Imported reviewed Plant equipment master'
+    || event.evidenceReference !== validation.package_digest
+    || event.subjectId !== 'equipment-master'
+    || event.summary !== `Imported ${equipmentPackage.rows.length} equipment master records`
+    || !sameManagedClientImportState(event.equipmentIds, equipmentPackage.rows.map((row) => row.values.equipmentId))) {
+    throw new ManagedTrialError('The managed equipment import changed unrelated Production records.', {
+      code: 'managed_plant_equipment_activation_invalid',
+    })
+  }
+  for (const [index, row] of equipmentPackage.rows.entries()) {
+    const asset = importedAssets[index]
+    if (!asset
+      || asset.id !== row.values.equipmentId
+      || asset.name !== row.values.name
+      || asset.workCentreId !== row.values.workCentreId
+      || asset.criticality !== row.values.criticality
+      || asset.owner !== equipmentPackage.owner
+      || asset.commissioningStatus !== 'not_commissioned'
+      || asset.sourceActionId !== expectedActionId
+      || asset.sourcePackageDigest !== validation.package_digest
+      || asset.importedAt !== event.createdAt) {
+      throw new ManagedTrialError('The managed equipment records do not match the reviewed rows.', {
+        code: 'managed_plant_equipment_activation_invalid',
+      })
+    }
+  }
+  return response as unknown as ManagedPlantEquipmentActivationResult
+}
+
+export type ManagedPlantEquipmentValidation = {
+  contract: 'supermega.production.equipment-import-validation.v1'
+  status: 'valid'
+  package_digest: string
+  row_count: number
+  checks: string[]
+  workspace_id: string
+  activation: {
+    status: 'not_applied'
+    target_surface: 'production'
+    required_capability: 'production.write'
+    human_approval_required: true
+    atomic_adapter_ready: true
+    external_writes_performed: false
+    commissioning_performed: false
+  }
+}
+
+export type ManagedPlantEquipmentActivationResult = {
+  activation: {
+    contract: 'supermega.production.equipment-import-activation.v1'
+    status: 'applied'
+    package_digest: string
+    row_count: number
+    workspace_id: string
+    external_writes_performed: true
+    commissioning_performed: false
+  }
+  result: ManagedProductionCommandResult
 }
 
 export function assertManagedWebsiteImportState(
@@ -1417,6 +1615,27 @@ export async function validateManagedClientImport(
   )
 }
 
+export async function validateManagedPlantEquipmentImport(
+  equipmentPackage: PlantEquipmentImportPackage,
+  expectedIdentity: ManagedIdentity,
+) {
+  const body = serializePlantEquipmentImportPackage(equipmentPackage)
+  const submittedPackage = JSON.parse(body) as PlantEquipmentImportPackage
+  const expectedPackageDigest = await sha256Text(body)
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/imports/plant-equipment/validate',
+    { method: 'POST', body },
+    true,
+    expectedIdentity,
+  )
+  return assertManagedPlantEquipmentValidation(
+    response,
+    submittedPackage,
+    expectedIdentity,
+    expectedPackageDigest,
+  )
+}
+
 export async function validateManagedEcommerceOrderQueue(
   packet: EcommerceOrderQueueReadinessPacket,
   expectedIdentity: ManagedIdentity,
@@ -1551,6 +1770,61 @@ export async function applyManagedClientImport(request: {
     request.commandId,
     request.expectedVersion,
     submittedPriorState,
+  )
+}
+
+export async function applyManagedPlantEquipmentImport(request: {
+  commandId: string
+  expectedVersion: number
+  identity: ManagedIdentity
+  priorState: ProductionState
+  equipmentPackage: PlantEquipmentImportPackage
+  validation: ManagedPlantEquipmentValidation
+}) {
+  const body = serializePlantEquipmentImportPackage(request.equipmentPackage)
+  const submittedPackage = JSON.parse(body) as PlantEquipmentImportPackage
+  const currentDigest = await sha256Text(body)
+  let priorState: ProductionState
+  try {
+    priorState = validateProductionState(structuredClone(request.priorState))
+  } catch {
+    throw new ManagedTrialError('The Production workspace changed before equipment activation.', {
+      code: 'managed_plant_equipment_activation_invalid',
+    })
+  }
+  if (!CLIENT_IMPORT_COMMAND_ID.test(request.commandId)
+    || !Number.isSafeInteger(request.expectedVersion)
+    || request.expectedVersion < 1
+    || request.validation.workspace_id !== request.identity.workspaceId
+    || request.validation.package_digest !== currentDigest
+    || request.validation.activation.atomic_adapter_ready !== true
+    || request.validation.activation.commissioning_performed !== false) {
+    throw new ManagedTrialError('The validated equipment import changed before activation.', {
+      code: 'managed_plant_equipment_package_changed',
+    })
+  }
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/imports/plant-equipment/apply',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        command_id: request.commandId,
+        expected_version: request.expectedVersion,
+        confirmation: `APPLY ${request.validation.package_digest}`,
+        package: submittedPackage,
+      }),
+    },
+    true,
+    request.identity,
+  )
+  return assertManagedPlantEquipmentActivation(
+    response,
+    submittedPackage,
+    request.validation,
+    request.identity,
+    request.commandId,
+    request.expectedVersion,
+    priorState,
   )
 }
 
