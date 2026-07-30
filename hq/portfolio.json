@@ -68,6 +68,11 @@
       "productId": "ecommerce",
       "workOrderId": "ecommerce-correction-request",
       "checkpoint": "ENG-145"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-contact-correction-request",
+      "checkpoint": "ENG-146"
     }
   ],
   "agentOperatingModel": {
@@ -227,11 +232,11 @@
       "localAutomation": {
         "contract": "supermega.product-work-authority.v2",
         "productId": "ecommerce",
-        "workOrderId": "ecommerce-contact-correction-request",
+        "workOrderId": "ecommerce-managed-order-exception-pilot",
         "priority": 95,
-        "status": "ready-local",
-        "workOrder": "Ecommerce: let a customer request a bounded contact or delivery-address correction before preparation; Shop must revalidate the exact source request, acknowledgement, identity snapshots, fulfilment policy, payment and reservation state, then use the existing replacement workflow without silent in-place order edits, messages, provider calls, or automatic consequential action.",
-        "reason": "ENG-145 completed finance-safe completed-order correction requests and outcomes. The next missing customer exception is correcting identity or delivery details without bypassing Shop authority or rewriting an accepted order."
+        "status": "owner-gated",
+        "workOrder": "Ecommerce: prove checkout, acknowledgement, contact or delivery correction, and Shop replacement review with a named operator on one isolated managed tenant.",
+        "reason": "ENG-146 completed the local correction boundary. The next proof needs a founder-selected operator and approved isolated managed tenant; automation cannot manufacture those inputs or claim hosted persistence."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff and customer-safe acknowledgement on a protected preview and isolated managed tenant, then add tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }
