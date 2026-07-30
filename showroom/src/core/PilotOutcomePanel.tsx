@@ -7,6 +7,7 @@ import {
   startPilotOutcome,
   type PilotOutcomeMetric,
   type PilotOutcomeReport,
+  type PilotOutcomeReview,
   type PilotOutcomeSetup,
 } from './pilot-outcome'
 
@@ -56,11 +57,13 @@ export function PilotOutcomePanel({
   metric,
   report,
   onChanged,
+  onAccepted,
 }: {
   setup: PilotOutcomeSetup
   metric: PilotOutcomeMetric | null
   report: PilotOutcomeReport | null
   onChanged: () => void
+  onAccepted?: (report: PilotOutcomeReport, review: PilotOutcomeReview) => void
 }) {
   const [notice, setNotice] = useState('')
   const label = productLabels[setup.product]
@@ -92,9 +95,10 @@ export function PilotOutcomePanel({
   function accept() {
     if (!report) return
     try {
-      acceptPilotOutcome(window.localStorage, report, setup.owner)
+      const review = acceptPilotOutcome(window.localStorage, report, setup.owner)
+      onAccepted?.(report, review)
       recordChoice(`Accept ${label} pilot outcome`)
-      setNotice('Named-owner acceptance saved for this exact result. New product evidence will reopen the proof.')
+      setNotice('Named-owner acceptance and its exact decision proof were saved. New product evidence will reopen the proof.')
       onChanged()
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The pilot outcome could not be accepted.')

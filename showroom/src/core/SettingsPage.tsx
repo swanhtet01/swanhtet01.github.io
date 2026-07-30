@@ -71,6 +71,8 @@ import {
 import { formatTime, useTeamWorkspace } from './team-work'
 import { buildManagedTrialProof } from './managed-trial-proof'
 import { PilotOutcomePanel } from './PilotOutcomePanel'
+import { buildPilotOutcomeDecisionApproval } from './pilot-outcome-decision'
+import { type PilotOutcomeReport, type PilotOutcomeReview } from './pilot-outcome'
 import { useLocalPilotOutcome } from './useLocalPilotOutcome'
 import { listResettableCompanyStorageKeys } from './company-backup'
 
@@ -1008,6 +1010,14 @@ export function SettingsPage() {
     setNotice('Trial plan saved locally. No external action was connected.')
   }
 
+  function recordAcceptedPilotOutcomeDecision(report: PilotOutcomeReport, review: PilotOutcomeReview) {
+    const approval = buildPilotOutcomeDecisionApproval(report, review, setup.acceptanceEvidence)
+    setApprovals((current) => [
+      approval,
+      ...current.filter((candidate) => candidate.id !== approval.id && candidate.packetFingerprint !== approval.packetFingerprint),
+    ])
+  }
+
   function reviewEcommerceActivationPacket() {
     try {
       const packet = validateEcommerceManagedStoreActivationPacket(JSON.parse(ecommerceActivationPacketText))
@@ -1514,7 +1524,7 @@ export function SettingsPage() {
           <p className="form-notice" aria-live="polite">{notice || (setup.savedAt ? `Last saved ${formatTime(setup.savedAt)}` : setup.startedAt ? `Guided ${selectedTemplate.name} sample started.` : 'Draft stays local.')}</p>
         </form>
       </div>
-      {setup.savedAt ? <PilotOutcomePanel metric={pilotOutcomeMetric} onChanged={refreshPilotOutcome} report={pilotOutcomeReport} setup={pilotOutcomeSetup} /> : null}
+      {setup.savedAt ? <PilotOutcomePanel metric={pilotOutcomeMetric} onAccepted={recordAcceptedPilotOutcomeDecision} onChanged={refreshPilotOutcome} report={pilotOutcomeReport} setup={pilotOutcomeSetup} /> : null}
       {setup.savedAt ? <section aria-label="Premium pilot" className="premium-pilot">
         <div className="premium-pilot-head"><div><span className="core-eyebrow">Premium pilot</span><h2>Your business context, remembered.</h2><p>SuperMega combines approved product data and owner patterns, then prepares one next move for review.</p></div><span className={`status-pill ${premiumPilotProofKept ? 'approved' : managedPilotBrief ? 'bounded' : ''}`}>{premiumPilotProofKept ? 'checkpoint kept' : managedPilotBrief ? 'verified' : 'local'}</span></div>
         <div className="premium-pilot-rows">{premiumPilotRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
