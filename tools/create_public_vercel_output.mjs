@@ -356,14 +356,15 @@ const homeHtml = documentHtml({
 const contactScript = `<script>(function(){
   var form=document.querySelector('[data-contact-form]');if(!form)return;
   var query=new URLSearchParams(location.search),handoff=new URLSearchParams(location.hash.slice(1)),status=form.querySelector('[data-form-status]'),submit=form.querySelector('button[type="submit"]'),product=form.querySelector('[name="product"]'),template=form.querySelector('[name="template"]'),company=form.querySelector('[name="company"]'),goal=form.querySelector('[name="goal"]'),heading=document.querySelector('[data-contact-heading]'),lede=document.querySelector('[data-contact-lede]'),copyHeading=document.querySelector('[data-contact-copy-heading]'),copy=document.querySelector('[data-contact-copy]'),requestKey=form.querySelector('[name="idempotency_key"]'),source=form.querySelector('[name="source_url"]'),referrer=form.querySelector('[name="referrer"]'),proofSummary=document.querySelector('[data-trial-proof]');
-  var proofNames=['proof_contract','proof_version','proof_digest','proof_product','proof_template','proof_readiness','proof_sources','proof_behavior','proof_decisions','proof_raw_records'];
+  var proofNames=['proof_contract','proof_version','proof_digest','proof_product','proof_template','proof_readiness','proof_sources','proof_behavior','proof_decisions','proof_outcome','proof_outcome_digest','proof_outcome_accepted','proof_raw_records'];
   function newKey(){if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();var bytes=new Uint8Array(24);crypto.getRandomValues(bytes);return Array.from(bytes,function(value){return value.toString(16).padStart(2,'0')}).join('')}
   function boundedInteger(value,max){return /^(?:0|[1-9][0-9]{0,6})$/.test(value)&&Number(value)<=max}
   function readProof(){
     var values=Object.fromEntries(proofNames.map(function(name){return [name,handoff.get(name)||'']}));
     var attempted=proofNames.some(function(name){return values[name]});
     if(!attempted)return {attempted:false,proof:null};
-    var valid=values.proof_contract==='supermega.managed_trial_proof.v1'&&values.proof_version==='1'&&/^sha256:[0-9a-f]{64}$/.test(values.proof_digest)&&/^(shop|plant|website|ecommerce)$/.test(values.proof_product)&&/^[a-z0-9][a-z0-9._-]{0,119}$/.test(values.proof_template)&&boundedInteger(values.proof_readiness,100)&&boundedInteger(values.proof_sources,1000000)&&boundedInteger(values.proof_behavior,1000000)&&boundedInteger(values.proof_decisions,1000000)&&values.proof_raw_records==='false'&&values.proof_product===(query.get('product')||'')&&values.proof_template===(query.get('template')||'');
+    var outcomeStarted=values.proof_outcome!=='not_started',outcomeDigestValid=outcomeStarted?/^sha256:[0-9a-f]{64}$/.test(values.proof_outcome_digest):values.proof_outcome_digest==='',outcomeAccepted=values.proof_outcome_accepted==='true';
+    var valid=values.proof_contract==='supermega.managed_trial_proof.v2'&&values.proof_version==='2'&&/^sha256:[0-9a-f]{64}$/.test(values.proof_digest)&&/^(shop|plant|website|ecommerce)$/.test(values.proof_product)&&/^[a-z0-9][a-z0-9._-]{0,119}$/.test(values.proof_template)&&boundedInteger(values.proof_readiness,100)&&boundedInteger(values.proof_sources,1000000)&&boundedInteger(values.proof_behavior,1000000)&&boundedInteger(values.proof_decisions,1000000)&&/^(not_started|collecting|target_met|improved|unchanged|regressed)$/.test(values.proof_outcome)&&outcomeDigestValid&&/^(true|false)$/.test(values.proof_outcome_accepted)&&(!outcomeAccepted||/^(target_met|improved)$/.test(values.proof_outcome))&&values.proof_raw_records==='false'&&values.proof_product===(query.get('product')||'')&&values.proof_template===(query.get('template')||'');
     return {attempted:true,proof:valid?values:null};
   }
   if(query.get('product')&&product)product.value=query.get('product');
@@ -372,8 +373,8 @@ const contactScript = `<script>(function(){
   if(handoff.get('goal')&&goal)goal.value=handoff.get('goal').slice(0,4000);
   var proofResult=readProof(),proof=proofResult.proof;
   if(proof){
-    proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=proof[name]});
-    if(proofSummary){proofSummary.hidden=false;proofSummary.querySelector('[data-proof-readiness]').textContent=proof.proof_readiness+'%';proofSummary.querySelector('[data-proof-sources]').textContent=proof.proof_sources;proofSummary.querySelector('[data-proof-behavior]').textContent=proof.proof_behavior;proofSummary.querySelector('[data-proof-decisions]').textContent=proof.proof_decisions;}
+    proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(!input){input=document.createElement('input');input.type='hidden';input.name=name;form.appendChild(input)}input.value=proof[name]});
+    if(proofSummary){proofSummary.hidden=false;proofSummary.querySelector('[data-proof-readiness]').textContent=proof.proof_readiness+'%';proofSummary.querySelector('[data-proof-sources]').textContent=proof.proof_sources;proofSummary.querySelector('[data-proof-behavior]').textContent=proof.proof_behavior;proofSummary.querySelector('[data-proof-decisions]').textContent=proof.proof_decisions;var metrics=proofSummary.querySelector('.trial-proof-metrics'),outcome=document.createElement('div'),term=document.createElement('dt'),description=document.createElement('dd');term.textContent='Outcome';description.textContent=proof.proof_outcome_accepted==='true'?proof.proof_outcome.replace('_',' ')+' / accepted':proof.proof_outcome.replace('_',' ');outcome.append(term,description);metrics.appendChild(outcome);var note=proofSummary.querySelector('p');if(note)note.textContent='Attached from this browser. The outcome is a client-provided, digest-bound aggregate summary; it does not verify a managed account.';}
   }
   function detachProofIfChanged(){
     if(!proof)return;
@@ -388,7 +389,7 @@ const contactScript = `<script>(function(){
     if(heading)heading.textContent='Finish your '+productName+' request.';
     if(lede)lede.textContent='Your company and goal are already filled. Add your name and reply email, review the request, then send it.';
     if(copyHeading)copyHeading.textContent=proof?'Your trial proof is attached.':'Your setup is ready.';
-    if(copy)copy.textContent=proof?'Readiness, source count, behavior count, and reviewed decisions move forward. Raw records, questions, approval contents, and account details stay out.':'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.';
+    if(copy)copy.textContent=proof?'Readiness, source count, behavior count, reviewed decisions, and the digest-bound outcome summary move forward. Raw records, questions, approval contents, and account details stay out.':'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.';
     status.textContent=proof?'Trial summary attached for review. Nothing has been sent.':proofResult.attempted?'Company and goal are ready. Trial proof was not attached because it did not match this request.':'Company and goal are ready for review from your AI memory.';
     history.replaceState(null,'',location.pathname+location.search);
   }
@@ -425,7 +426,7 @@ const privacyHtml = documentHtml({
   route: '/privacy/',
   title: 'Privacy | SuperMega',
   description: 'How SuperMega handles public contact requests and product implementation data.',
-  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional trial proof summary and digest. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>Trial proof includes bounded readiness, source, behavior, and reviewed-decision counts, but no raw product records, questions, approval contents, or account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
+  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional trial proof summary, outcome status, and digest. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>Trial proof includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
 })
 
 const notFoundHtml = documentHtml({
@@ -465,9 +466,9 @@ const CACHE_LIMIT = 2000
 const CONTACT_FINGERPRINT_CURRENT_VERSION = 2
 const CONTACT_FINGERPRINT_LEGACY_VERSION = 1
 const CONTACT_FINGERPRINT_ALGORITHM = 'sha256'
-const TRIAL_PROOF_CONTRACT = 'supermega.managed_trial_proof.v1'
-const TRIAL_PROOF_VERSION = 1
-const TRIAL_PROOF_FIELDS = ['proof_contract', 'proof_version', 'proof_digest', 'proof_product', 'proof_template', 'proof_readiness', 'proof_sources', 'proof_behavior', 'proof_decisions', 'proof_raw_records']
+const TRIAL_PROOF_CONTRACT = 'supermega.managed_trial_proof.v2'
+const TRIAL_PROOF_VERSION = 2
+const TRIAL_PROOF_FIELDS = ['proof_contract', 'proof_version', 'proof_digest', 'proof_product', 'proof_template', 'proof_readiness', 'proof_sources', 'proof_behavior', 'proof_decisions', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'proof_raw_records']
 const replayCache = new Map()
 const rateBuckets = new Map()
 
@@ -531,16 +532,16 @@ function publicProduct(product) {
 }
 
 function trialProofProjection(proof) {
-  return [proof.contract, proof.version, proof.product, proof.template, proof.readiness_score, proof.source_record_count, proof.behavior_signal_count, proof.reviewed_decision_count, false]
+  return [proof.contract, proof.version, proof.product, proof.template, proof.readiness_score, proof.source_record_count, proof.behavior_signal_count, proof.reviewed_decision_count, proof.outcome_status, proof.outcome_digest, proof.outcome_accepted, false]
 }
 
 function normalizeTrialProof(payload, product, template) {
   const attempted = TRIAL_PROOF_FIELDS.some((field) => text(payload[field], 160))
   if (!attempted) return null
-  if (!TRIAL_PROOF_FIELDS.every((field) => text(payload[field], 160))) throw new Error('trial_proof_invalid')
+  if (!TRIAL_PROOF_FIELDS.filter((field) => field !== 'proof_outcome_digest').every((field) => text(payload[field], 160))) throw new Error('trial_proof_invalid')
   const proof = {
     contract: text(payload.proof_contract, 80),
-    version: canonicalInteger(payload.proof_version, 1),
+    version: canonicalInteger(payload.proof_version, 2),
     summary_digest: text(payload.proof_digest, 80),
     product: text(payload.proof_product, 40).toLowerCase(),
     template: text(payload.proof_template, 120).toLowerCase(),
@@ -548,6 +549,9 @@ function normalizeTrialProof(payload, product, template) {
     source_record_count: canonicalInteger(payload.proof_sources, 1000000),
     behavior_signal_count: canonicalInteger(payload.proof_behavior, 1000000),
     reviewed_decision_count: canonicalInteger(payload.proof_decisions, 1000000),
+    outcome_status: text(payload.proof_outcome, 40),
+    outcome_digest: text(payload.proof_outcome_digest, 80) || null,
+    outcome_accepted: text(payload.proof_outcome_accepted, 10) === 'true',
     raw_records_included: false,
     verification: 'client_provided_summary',
   }
@@ -560,6 +564,10 @@ function normalizeTrialProof(payload, product, template) {
     || proof.source_record_count === null
     || proof.behavior_signal_count === null
     || proof.reviewed_decision_count === null
+    || !/^(not_started|collecting|target_met|improved|unchanged|regressed)$/.test(proof.outcome_status)
+    || (proof.outcome_status === 'not_started' ? proof.outcome_digest !== null : !/^sha256:[0-9a-f]{64}$/.test(proof.outcome_digest || ''))
+    || !/^(true|false)$/.test(text(payload.proof_outcome_accepted, 10))
+    || (proof.outcome_accepted && !/^(target_met|improved)$/.test(proof.outcome_status))
     || text(payload.proof_raw_records, 20) !== 'false'
     || proof.product !== publicProduct(product)
     || proof.template !== template.toLowerCase()) throw new Error('trial_proof_invalid')

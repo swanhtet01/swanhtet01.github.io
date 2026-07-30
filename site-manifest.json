@@ -1,7 +1,7 @@
 {
   "schemaVersion": "supermega.site-context.v2",
-  "contextVersion": "2026-07-28.1",
-  "catalogVersion": "2026-07-28.1",
+  "contextVersion": "2026-07-30.1",
+  "catalogVersion": "2026-07-30.1",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
@@ -26,7 +26,7 @@
     "sharedCoreNoClientForks": true,
     "plannedModulesMayNotBeSoldAsAvailable": true,
     "maxEnabledModulesAtLaunch": 6,
-    "lifecycle": ["choose-pack", "map-import", "preview-sample", "named-operator-pilot", "managed-activation", "measure-and-iterate"],
+    "lifecycle": ["choose-pack", "map-import", "preview-sample", "named-operator-pilot", "prove-outcome", "managed-activation", "measure-and-iterate"],
     "importWorkflow": ["upload", "map", "validate", "preview", "named-human-confirm", "activate"]
   },
   "customerProducts": [

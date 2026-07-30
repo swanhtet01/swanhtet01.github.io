@@ -482,7 +482,7 @@ requireContract('internal template packs are bounded configuration, not code for
   && manifest.templatePackPolicy?.sharedCoreNoClientForks === true
   && manifest.templatePackPolicy?.plannedModulesMayNotBeSoldAsAvailable === true
   && manifest.templatePackPolicy?.maxEnabledModulesAtLaunch === 6
-  && manifest.templatePackPolicy?.lifecycle?.join(',') === 'choose-pack,map-import,preview-sample,named-operator-pilot,managed-activation,measure-and-iterate'
+  && manifest.templatePackPolicy?.lifecycle?.join(',') === 'choose-pack,map-import,preview-sample,named-operator-pilot,prove-outcome,managed-activation,measure-and-iterate'
   && manifest.templatePackPolicy?.importWorkflow?.join(',') === 'upload,map,validate,preview,named-human-confirm,activate')
 for (const [productId, expectedIds] of Object.entries(expectedInternalPackIds)) {
   const packs = manifest.customerProducts?.find((entry) => entry.id === productId)?.internalTemplatePacks

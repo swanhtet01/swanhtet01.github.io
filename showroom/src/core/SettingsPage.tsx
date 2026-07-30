@@ -78,6 +78,8 @@ import {
 import { LEGACY_PRODUCTION_KEYS, PRODUCTION_KEY } from './production-workspace'
 import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } from './team-work'
 import { buildManagedTrialProof } from './managed-trial-proof'
+import { PilotOutcomePanel } from './PilotOutcomePanel'
+import { useLocalPilotOutcome } from './useLocalPilotOutcome'
 
 const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding').then((module) => ({ default: module.ClientDataOnboarding })))
 const ManagedActivationRunbook = lazy(() => import('./ManagedActivationRunbook').then((module) => ({ default: module.ManagedActivationRunbook })))
@@ -227,6 +229,13 @@ export function SettingsPage() {
   const navigate = useNavigate()
   const [setupSearchParams] = useSearchParams()
   const [setup, setSetup] = useSetupWorkspace()
+  const pilotOutcomeSetup = {
+    product: setup.product,
+    workspace: setup.workspace,
+    owner: setup.owner,
+    templateId: setup.templateId,
+  }
+  const { metric: pilotOutcomeMetric, report: pilotOutcomeReport, refresh: refreshPilotOutcome } = useLocalPilotOutcome(pilotOutcomeSetup)
   const [commerce] = useCommerceWorkspace()
   const [production] = useProductionWorkspace()
   const [approvals, setApprovals] = useApprovalWorkspace()
@@ -425,6 +434,7 @@ export function SettingsPage() {
     ['Source graph', preparedRecordCount ? `${preparedRecordCount} local records prepared` : 'No local records yet', preparedRecordCount ? 'Exported evidence keeps the browser-local source package for managed validation.' : 'Use Shop, Plant, Website, Ecommerce, or import setup to create the first record.'],
     ['Behavior trail', behaviorSignalCount ? `${behaviorSignalCount} local signals` : 'No local signals yet', behaviorSignalCount ? 'Premium can rank next actions from reviewed workspace behavior after import.' : 'Open Shop, Plant, Website, Ecommerce, or setup so the system can capture local activity history.'],
     ['Decision memory', reviewedDecisionCount ? `${reviewedDecisionCount} reviewed decisions` : 'No reviewed decisions yet', reviewedDecisionCount ? 'Named human decisions can become reusable context after managed activation.' : 'Approve or decline at least one prepared decision before relying on AI context.'],
+    ['Pilot outcome', pilotOutcomeReport?.review ? `${pilotOutcomeReport.outcomeStatus} / owner accepted` : 'No accepted outcome yet', pilotOutcomeReport?.review ? 'The measured aggregate result is bound to a named-owner acceptance.' : 'Start from validated product data, run one workflow, and accept a clear or improved result.'],
     ['Owner gate', isPilotReady ? 'Ready for managed review' : `${completion}% trial evidence`, isPilotReady ? 'Export evidence, then request managed trial; writes stay locked until server controls pass.' : 'Complete baseline, target, authority boundary, and acceptance evidence first.'],
   ] as const
   const agentPlanRows = [
@@ -452,7 +462,7 @@ export function SettingsPage() {
     contract: 'supermega.ai_product_source_map.v1',
     version: 1,
     createdAt: new Date().toISOString(),
-    evidenceVersion: 23,
+    evidenceVersion: 24,
     products: [
       {
         product: 'Shop',
@@ -506,7 +516,7 @@ export function SettingsPage() {
     contract: 'supermega.ai_context_handoff.v1',
     version: 1,
     createdAt: new Date().toISOString(),
-    evidenceVersion: 23,
+    evidenceVersion: 24,
     product: selectedProduct.name,
     productSlug: selectedProduct.slug,
     templateId: selectedTemplate.id,
@@ -542,6 +552,7 @@ export function SettingsPage() {
     ['Controls', runtime.writesReady && evidencePlanReady, runtime.writesReady && evidencePlanReady ? 'Managed evidence gates are ready.' : 'Managed Postgres, identity, audit, and write gates remain locked.'],
     ['Products', aiProductSourceMap.products.some((product) => product.prepared), aiProductSourceMap.products.some((product) => product.prepared) ? 'At least one product has a usable source package.' : 'Create Shop, Plant, Website, or Ecommerce evidence.'],
     ['Owner setup', Boolean(setup.savedAt), setup.savedAt ? 'Trial plan is saved for handoff.' : 'Save the trial plan before requesting managed activation.'],
+    ['Outcome', Boolean(pilotOutcomeReport?.review), pilotOutcomeReport?.review ? `${pilotOutcomeReport.outcomeStatus} result accepted by ${pilotOutcomeReport.review.reviewedBy}.` : 'Accept one measured product outcome before managed activation.'],
   ] as const
   const aiContextReadyGateCount = aiContextReadinessGates.filter(([, ready]) => ready).length
   const aiContextReadinessScore = Math.round((aiContextReadyGateCount / aiContextReadinessGates.length) * 100)
@@ -551,8 +562,10 @@ export function SettingsPage() {
       ? 'Use agent queues'
       : !reviewedDecisionCount
         ? 'Record owner decision'
-        : !setup.savedAt
+      : !setup.savedAt
           ? 'Save trial plan'
+          : !pilotOutcomeReport?.review
+            ? 'Prove one product outcome'
           : !runtime.writesReady || !evidencePlanReady
             ? 'Request managed activation'
             : 'Export context for review'
@@ -563,12 +576,12 @@ export function SettingsPage() {
     ['Behavior', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} signals` : 'Need usage', aiContextReadinessGates[1][2]],
     ['Controls', runtime.writesReady && evidencePlanReady ? 'Ready' : 'Locked', aiContextReadinessGates[3][2]],
   ] as const
-  const provisioningReady = isPilotReady && preparedRecordCount > 0 && reviewedDecisionCount > 0
+  const provisioningReady = isPilotReady && preparedRecordCount > 0 && reviewedDecisionCount > 0 && Boolean(pilotOutcomeReport?.review)
   const managedWorkspaceProvisioningPacket = {
     contract: 'supermega.managed_workspace_provisioning.v1',
     version: 1,
     createdAt: new Date().toISOString(),
-    evidenceVersion: 23,
+    evidenceVersion: 24,
     workspace: setup.workspace || 'Workspace not named',
     owner: setup.owner || 'Owner not assigned',
     product: selectedProduct.name,
@@ -582,9 +595,10 @@ export function SettingsPage() {
       productSources: Object.keys(localProductRecords),
       approvalPackets: reviewedDecisionCount,
       behaviorSignals: behaviorSignalCount,
+      pilotOutcomeDigest: pilotOutcomeReport?.review ? pilotOutcomeReport.reportDigest : null,
     },
     requiredControls: ['dedicated_postgres_rls', 'trusted_identity_gateway', 'private_storage', 'audit_trail', 'owner_write_approvals', 'scheduler_budget_limits'],
-    firstSafeActivation: provisioningReady ? 'Create managed tenant from exported evidence after activation gates pass.' : 'Finish trial evidence, local records, and owner-reviewed decisions before provisioning.',
+    firstSafeActivation: provisioningReady ? 'Create managed tenant from exported evidence after activation gates pass.' : 'Finish trial evidence, local records, owner-reviewed decisions, and one accepted product outcome before provisioning.',
     forbiddenUntilProvisioned: ['copy_browser_storage_to_production', 'enable_hosted_scheduler', 'send_customer_messages', 'capture_payments', 'publish_domains'],
   }
   const importProvisioningRows = runtime.importProvisioning?.checks.length
@@ -599,7 +613,7 @@ export function SettingsPage() {
     ]
   const importProvisioningPacket = {
     contract: runtime.importProvisioning?.contract ?? 'supermega.import_provisioning_readiness.v1',
-    evidenceVersion: 23,
+    evidenceVersion: 24,
     status: runtime.importProvisioning?.status ?? 'blocked',
     ready: runtime.importProvisioning?.ready === true,
     checks: runtime.importProvisioning?.checks ?? [],
@@ -642,8 +656,8 @@ export function SettingsPage() {
     targetOutcome: setup.targetOutcome,
     acceptanceEvidence: setup.acceptanceEvidence,
     evidenceFilename,
-    evidenceVersion: 23,
-    pilotReady: isPilotReady,
+    evidenceVersion: 24,
+    pilotReady: isPilotReady && Boolean(pilotOutcomeReport?.review),
     localRecords: preparedRecordCount,
     storagePackages: localRecordCount,
     selectedProductRecords: selectedProductRecordCount,
@@ -658,6 +672,7 @@ export function SettingsPage() {
     activationManifest: runtime.activationManifest,
     importProvisioning: runtime.importProvisioning,
     schedulerActivation,
+    pilotOutcomeReport,
     blockedGateIds: runtime.activationManifest?.blocked_gate_ids ?? [],
     safeEnable: runtime.activationManifest?.safe_enable ?? ['browser_local_trial', 'evidence_export'],
     nextHostedBlocker: runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Configure managed activation.',
@@ -668,6 +683,7 @@ export function SettingsPage() {
     ['Workspace', managedTrialRequest.workspace],
     ['Product', `${managedTrialRequest.product} / ${managedTrialRequest.templateName}`],
     ['Evidence', `${managedTrialRequest.evidenceFilename} v${managedTrialRequest.evidenceVersion}`],
+    ['Pilot outcome', pilotOutcomeReport?.review ? `${pilotOutcomeReport.outcomeStatus} / owner accepted` : pilotOutcomeReport ? `${pilotOutcomeReport.outcomeStatus} / review needed` : 'Start outcome proof'],
     ['Scheduler', schedulerActivation?.configured ? 'Ready for bounded autopilot' : schedulerActivation?.nextAction ?? 'Scheduler proof required'],
     ['Hosted blocker', managedTrialRequest.nextHostedBlocker],
     ['Safe enables', managedTrialRequest.safeEnable.join(', ')],
@@ -732,6 +748,7 @@ export function SettingsPage() {
       accountableActions: actions.length,
       behaviorSignals: agentBehaviorSignals.length,
       decisionPackets: reviewedDecisionCount,
+      acceptedPilotOutcome: pilotOutcomeReport?.review ? pilotOutcomeReport.reportDigest : null,
     },
     ownerBehavior: {
       contract: behaviorPreference.contract,
@@ -777,6 +794,9 @@ export function SettingsPage() {
       sourceRecordCount: aiMemorySourceRecordCount,
       behaviorSignalCount: agentBehaviorSignals.length,
       reviewedDecisionCount,
+      outcomeStatus: pilotOutcomeReport?.outcomeStatus ?? 'not_started',
+      outcomeDigest: pilotOutcomeReport?.reportDigest ?? null,
+      outcomeAccepted: Boolean(pilotOutcomeReport?.review),
     }),
   }
   const premiumPilotProofKept = managedPilotRetained || managedPilotBrief?.retention === 'persisted_managed_audit'
@@ -788,7 +808,7 @@ export function SettingsPage() {
     ['Approved sources', managedPilotBrief ? `${managedPilotBrief.sourceCount} managed` : preparedRecordCount ? `${preparedRecordCount} local prepared` : 'No source proof yet', managedPilotBrief ? 'Counts only; raw source records are not shown here.' : 'Connect a managed workspace to verify tenant-scoped sources.'],
     ['Learning checkpoint', premiumPilotProofKept ? 'Kept in audit' : managedPilotBrief ? 'Ready to keep' : 'Local preview only', premiumPilotProofKept ? 'The aggregate operating baseline has a managed audit receipt.' : 'No external action runs from this panel.'],
   ] as const
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 23, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady, setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, behaviorPreference, agentBehaviorRows, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 24, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady && Boolean(pilotOutcomeReport?.review), setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, behaviorTrail, behaviorPreference, agentBehaviorRows, pilotOutcomeReport, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
   const ecommerceOrderQueueReadinessFilename = ecommerceOrderQueueReadinessPacket
     ? `supermega-ecommerce-order-queue-${safePacketFilename(ecommerceOrderQueueReadinessPacket.storeName)}.json`
@@ -1486,6 +1506,7 @@ export function SettingsPage() {
           <p className="form-notice" aria-live="polite">{notice || (setup.savedAt ? `Last saved ${formatTime(setup.savedAt)}` : setup.startedAt ? `Guided ${selectedTemplate.name} sample started.` : 'Draft stays local.')}</p>
         </form>
       </div>
+      {setup.savedAt ? <PilotOutcomePanel metric={pilotOutcomeMetric} onChanged={refreshPilotOutcome} report={pilotOutcomeReport} setup={pilotOutcomeSetup} /> : null}
       {setup.savedAt ? <section aria-label="Premium pilot" className="premium-pilot">
         <div className="premium-pilot-head"><div><span className="core-eyebrow">Premium pilot</span><h2>Your business context, remembered.</h2><p>SuperMega combines approved product data and owner patterns, then prepares one next move for review.</p></div><span className={`status-pill ${premiumPilotProofKept ? 'approved' : managedPilotBrief ? 'bounded' : ''}`}>{premiumPilotProofKept ? 'checkpoint kept' : managedPilotBrief ? 'verified' : 'local'}</span></div>
         <div className="premium-pilot-rows">{premiumPilotRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>

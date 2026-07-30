@@ -83,6 +83,7 @@ _REQUIRED_FORBIDDEN_ACTIONS = frozenset(
     }
 )
 _SECRET_FIELD = re.compile(r"password|secret|token|database.?url|service.?role.?key", re.IGNORECASE)
+_PILOT_OUTCOME_STATUSES = frozenset({"collecting", "target_met", "improved", "unchanged", "regressed"})
 
 
 class ManagedActivationError(ValueError):
@@ -181,6 +182,156 @@ def _reject_embedded_secrets(value: object, path: str = "request") -> None:
         raise ManagedActivationError(f"{path} must not contain a database URL.")
 
 
+def _pilot_outcome_metric(value: object, label: str) -> dict[str, object]:
+    metric = _exact(
+        value,
+        ("metricId", "label", "value", "unit", "better", "detail", "sourceDigest"),
+        label,
+    )
+    normalized = {
+        "metricId": _identifier(metric["metricId"], f"{label} ID", 80),
+        "label": _visible_text(metric["label"], f"{label} label", 120),
+        "value": _count(metric["value"], f"{label} value"),
+        "unit": _visible_text(metric["unit"], f"{label} unit", 40),
+        "better": metric["better"],
+        "detail": _visible_text(metric["detail"], f"{label} detail", 300),
+        "sourceDigest": _visible_text(metric["sourceDigest"], f"{label} source digest", 71),
+    }
+    if normalized["better"] != "lower" or not _SHA256.fullmatch(str(normalized["sourceDigest"])):
+        raise ManagedActivationError(f"{label} direction or source digest is invalid.")
+    return normalized
+
+
+def _pilot_outcome_report(
+    value: object,
+    *,
+    product: str,
+    workspace: str,
+    owner: str,
+    template_id: str,
+) -> dict[str, object]:
+    report = _exact(
+        value,
+        (
+            "contract",
+            "version",
+            "product",
+            "workspace",
+            "owner",
+            "templateId",
+            "checkpointDigest",
+            "startedAt",
+            "measuredAt",
+            "baseline",
+            "current",
+            "outcomeStatus",
+            "change",
+            "recommendation",
+            "review",
+            "rawRecordsIncluded",
+            "externalWritesPerformed",
+            "reportDigest",
+        ),
+        "Pilot outcome report",
+    )
+    if report["contract"] != "supermega.pilot_outcome_report.v1" or report["version"] != 1:
+        raise ManagedActivationError("Pilot outcome report contract is invalid.")
+    report_product = _identifier(report["product"], "Pilot outcome product", 40)
+    if _PRODUCT_ALIASES.get(report_product) != product:
+        raise ManagedActivationError("Pilot outcome product changed.")
+    report_workspace = _visible_text(report["workspace"], "Pilot outcome workspace", 80)
+    report_owner = _visible_text(report["owner"], "Pilot outcome owner", 80)
+    report_template = _identifier(report["templateId"], "Pilot outcome template", 120)
+    if report_workspace != workspace or report_owner != owner or report_template != template_id:
+        raise ManagedActivationError("Pilot outcome identity changed.")
+    checkpoint_digest = _visible_text(report["checkpointDigest"], "Pilot outcome checkpoint digest", 71)
+    report_digest = _visible_text(report["reportDigest"], "Pilot outcome report digest", 71)
+    if not _SHA256.fullmatch(checkpoint_digest) or not _SHA256.fullmatch(report_digest):
+        raise ManagedActivationError("Pilot outcome digest is invalid.")
+    started = _timestamp(report["startedAt"], "Pilot outcome start timestamp")
+    measured = _timestamp(report["measuredAt"], "Pilot outcome measurement timestamp")
+    if measured < started:
+        raise ManagedActivationError("Pilot outcome measurement predates its checkpoint.")
+    baseline = _pilot_outcome_metric(report["baseline"], "Pilot outcome baseline")
+    current = _pilot_outcome_metric(report["current"], "Pilot outcome current")
+    if (
+        baseline["metricId"] != current["metricId"]
+        or baseline["label"] != current["label"]
+        or baseline["unit"] != current["unit"]
+        or baseline["better"] != current["better"]
+    ):
+        raise ManagedActivationError("Pilot outcome metric changed during the run.")
+    status = _visible_text(report["outcomeStatus"], "Pilot outcome status", 24)
+    if status not in _PILOT_OUTCOME_STATUSES:
+        raise ManagedActivationError("Pilot outcome status is invalid.")
+    changed_source = baseline["sourceDigest"] != current["sourceDigest"]
+    expected_status = (
+        "collecting"
+        if not changed_source
+        else "target_met"
+        if current["value"] == 0
+        else "improved"
+        if current["value"] < baseline["value"]
+        else "regressed"
+        if current["value"] > baseline["value"]
+        else "unchanged"
+    )
+    expected_recommendations = {
+        "target_met": "Accept this clear result or continue the workflow to collect more evidence.",
+        "improved": "Accept the measured improvement or continue until the product is clear.",
+        "regressed": "Open the product and clear the new exceptions before accepting the pilot.",
+        "unchanged": "Complete one consequential product step, then return for a fresh comparison.",
+        "collecting": "Run one real product workflow. SuperMega will compare the next aggregate source revision automatically.",
+    }
+    recommendation = _visible_text(report["recommendation"], "Pilot outcome recommendation", 200)
+    change = report["change"]
+    if (
+        isinstance(change, bool)
+        or not isinstance(change, int)
+        or change != current["value"] - baseline["value"]
+        or status != expected_status
+        or recommendation != expected_recommendations[status]
+    ):
+        raise ManagedActivationError("Pilot outcome result does not match its metrics.")
+    review = _exact(
+        report["review"],
+        ("contract", "reportDigest", "reviewedBy", "reviewedAt", "decision"),
+        "Pilot outcome review",
+    )
+    reviewed_at = _timestamp(review["reviewedAt"], "Pilot outcome review timestamp")
+    if (
+        review["contract"] != "supermega.local_pilot_outcome_review.v1"
+        or review["reportDigest"] != report_digest
+        or review["reviewedBy"] != owner
+        or review["decision"] != "accepted"
+        or measured != reviewed_at
+        or status not in {"target_met", "improved"}
+    ):
+        raise ManagedActivationError("Pilot outcome lacks exact named-owner acceptance.")
+    if report["rawRecordsIncluded"] is not False or report["externalWritesPerformed"] is not False:
+        raise ManagedActivationError("Pilot outcome crossed its privacy or write boundary.")
+    projection = [
+        report["contract"],
+        report["version"],
+        report_product,
+        report_workspace,
+        report_owner,
+        report_template,
+        checkpoint_digest,
+        report["startedAt"],
+        list(baseline.values()),
+        list(current.values()),
+        status,
+        change,
+        recommendation,
+        False,
+        False,
+    ]
+    if _digest(projection) != report_digest:
+        raise ManagedActivationError("Pilot outcome report digest does not match its evidence.")
+    return deepcopy(dict(report))
+
+
 def _source_request(value: object) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         raise ManagedActivationError("Managed trial request must be an object.")
@@ -201,11 +352,19 @@ def _source_request(value: object) -> dict[str, Any]:
         raise ManagedActivationError("Managed trial product is unsupported.")
     workspace_label = _visible_text(value.get("workspace"), "Workspace label", 180)
     owner_label = _visible_text(value.get("owner"), "Owner label", 180)
+    template_id = _identifier(value.get("templateId"), "Managed trial template", 120)
     if workspace_label.casefold() == "workspace not named" or owner_label.casefold() == "owner not assigned":
         raise ManagedActivationError("Managed trial request requires a named workspace and owner.")
     local_records = _count(value.get("localRecords"), "Local records", minimum=1)
     approval_packets = _count(value.get("approvalPackets"), "Approval packets", minimum=1)
     behavior_signals = _count(value.get("behaviorSignals"), "Behavior signals", minimum=1)
+    pilot_outcome = _pilot_outcome_report(
+        value.get("pilotOutcomeReport"),
+        product=product,
+        workspace=workspace_label,
+        owner=owner_label,
+        template_id=template_id,
+    )
     provisioning = _exact(
         value.get("managedWorkspaceProvisioningPacket"),
         (
@@ -244,6 +403,7 @@ def _source_request(value: object) -> dict[str, Any]:
         data_package.get("localRecords") != local_records
         or data_package.get("approvalPackets") != approval_packets
         or data_package.get("behaviorSignals") != behavior_signals
+        or data_package.get("pilotOutcomeDigest") != pilot_outcome["reportDigest"]
     ):
         raise ManagedActivationError("Managed workspace evidence counts changed.")
     import_packet = value.get("importProvisioningPacket")
@@ -259,6 +419,8 @@ def _source_request(value: object) -> dict[str, Any]:
             "approvalPackets": approval_packets,
             "behaviorSignals": behavior_signals,
             "evidenceVersion": _count(value.get("evidenceVersion"), "Evidence version", minimum=1, maximum=10_000),
+            "pilotOutcomeDigest": pilot_outcome["reportDigest"],
+            "pilotOutcomeStatus": pilot_outcome["outcomeStatus"],
         },
     }
 
@@ -430,13 +592,17 @@ def validate_activation_plan(
         raise ManagedActivationError("Activation target schema version is invalid.")
     evidence = _exact(
         plan["evidence"],
-        ("localRecords", "approvalPackets", "behaviorSignals", "evidenceVersion"),
+        ("localRecords", "approvalPackets", "behaviorSignals", "evidenceVersion", "pilotOutcomeDigest", "pilotOutcomeStatus"),
         "Activation evidence",
     )
     _count(evidence["localRecords"], "Activation local records", minimum=1)
     _count(evidence["approvalPackets"], "Activation approval packets", minimum=1)
     _count(evidence["behaviorSignals"], "Activation behavior signals", minimum=1)
     _count(evidence["evidenceVersion"], "Activation evidence version", minimum=1, maximum=10_000)
+    if not isinstance(evidence["pilotOutcomeDigest"], str) or not _SHA256.fullmatch(evidence["pilotOutcomeDigest"]):
+        raise ManagedActivationError("Activation pilot outcome digest is invalid.")
+    if evidence["pilotOutcomeStatus"] not in {"target_met", "improved"}:
+        raise ManagedActivationError("Activation pilot outcome status is invalid.")
     if plan["operations"] != [
         "verify_postgres17_schema_v6",
         "lock_workspace_identity",

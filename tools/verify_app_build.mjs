@@ -36,6 +36,7 @@ let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 let businessCommandRuntimeChecks = 0
 let ownerControlRuntimeChecks = 0
+let pilotOutcomeRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
 const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productHomeReadinessSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
@@ -121,6 +122,10 @@ const managedContextPythonSource = await readFile(resolve(root, 'supermega_runti
 const operatingBaselineSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'operating-baseline.ts'), 'utf8')
 const ownerControlSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'owner-control.ts'), 'utf8')
 const ownerControlPythonSource = await readFile(resolve(root, 'supermega_runtime', 'owner_control.py'), 'utf8')
+const managedActivationSource = await readFile(resolve(root, 'supermega_runtime', 'managed_activation.py'), 'utf8')
+const pilotOutcomeSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'pilot-outcome.ts'), 'utf8')
+const pilotOutcomeUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PilotOutcomePanel.tsx'), 'utf8')
+const pilotOutcomeHookSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'useLocalPilotOutcome.ts'), 'utf8')
 
 if (!managedContextSource.includes("supermega.managed_context_profile_request.v1")
   || !managedContextSource.includes('buildManagedContextProfileRequest')
@@ -994,7 +999,7 @@ if (!settingsPageSource.includes('const learningRows = [')
   || settingsPageSource.includes('const provisioningReady = isPilotReady && localRecordCount > 0')
   || !settingsPageSource.includes('const contextHandoffManifest = {')
   || !settingsPageSource.includes("contract: 'supermega.ai_context_handoff.v1'")
-  || !settingsPageSource.includes('evidenceVersion: 23')
+  || !settingsPageSource.includes('evidenceVersion: 24')
   || !settingsPageSource.includes('allowedUses')
   || !settingsPageSource.includes('forbiddenActions')
   || !settingsPageSource.includes('contextHandoffRows')
@@ -1171,7 +1176,7 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !settingsPageSource.includes('aria-label="AI learning readiness"')
   || !settingsPageSource.includes('aria-label="Premium AI context plan"')
   || !settingsPageSource.includes('aria-label="Premium agent operating plan"')
-  || !settingsPageSource.includes('version: 23')
+  || !settingsPageSource.includes('version: 24')
   || !settingsPageSource.includes('behaviorTrail')
   || !settingsPageSource.includes('agentBehaviorRows')
   || !settingsPageSource.includes('activationManifest: runtime.activationManifest')
@@ -1243,30 +1248,38 @@ if (!settingsPageSource.includes("contract: 'supermega.ai_memory_preview.v1'")
   || !coreCssSource.includes('.ai-memory-preview')
   || !coreCssSource.includes('.ai-memory-preview-rows')
   || !coreCssSource.includes('.ai-memory-next')) fail('ai_memory_preview_missing')
-if (!managedTrialProofSource.includes("MANAGED_TRIAL_PROOF_CONTRACT = 'supermega.managed_trial_proof.v1'")
+if (!managedTrialProofSource.includes("MANAGED_TRIAL_PROOF_CONTRACT = 'supermega.managed_trial_proof.v2'")
   || !managedTrialProofSource.includes("const PRODUCT_PATTERN = /^(shop|plant|website|ecommerce)$/")
   || !managedTrialProofSource.includes('rawRecordsIncluded: false')
   || !managedTrialProofSource.includes('managedTrialProofProjection')
   || !managedTrialProofSource.includes('sha256Hex(JSON.stringify(projection))')
   || !managedTrialProofSource.includes("['proof_digest', proof.summaryDigest]")
+  || !managedTrialProofSource.includes("['proof_outcome', proof.outcomeStatus]")
+  || !managedTrialProofSource.includes("['proof_outcome_digest', proof.outcomeDigest ?? '']")
+  || !managedTrialProofSource.includes("['proof_outcome_accepted', String(proof.outcomeAccepted)]")
   || !managedTrialProofSource.includes("['proof_raw_records', 'false']")) fail('managed_trial_proof_contract_missing')
 if (!appLiveVerifierSource.includes('if (!operationsChunk.includes(required)) throw new Error(`missing_live_managed_trial_proof_contract:${required}`)')
   || appLiveVerifierSource.includes('if (!assetCorpus.includes(required)) throw new Error(`missing_live_managed_trial_proof_contract:${required}`)')) fail('managed_trial_proof_live_chunk_contract_missing')
 try {
   const proofModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'managed-trial-proof.ts')).href}?verify=${Date.now()}`)
-  const input = { product: 'plant', templateId: 'production-control', readinessScore: 67, sourceRecordCount: 12, behaviorSignalCount: 4, reviewedDecisionCount: 2 }
-  const projection = ['supermega.managed_trial_proof.v1', 1, 'plant', 'production-control', 67, 12, 4, 2, false]
+  const outcomeDigest = `sha256:${'b'.repeat(64)}`
+  const input = { product: 'plant', templateId: 'production-control', readinessScore: 67, sourceRecordCount: 12, behaviorSignalCount: 4, reviewedDecisionCount: 2, outcomeStatus: 'improved', outcomeDigest, outcomeAccepted: true }
+  const projection = ['supermega.managed_trial_proof.v2', 2, 'plant', 'production-control', 67, 12, 4, 2, 'improved', outcomeDigest, true, false]
   const expectedDigest = `sha256:${createHash('sha256').update(JSON.stringify(projection)).digest('hex')}`
   const proof = proofModel.buildManagedTrialProof(input)
   const fields = proofModel.managedTrialProofFragmentFields(proof, 'plant', 'production-control')
   if (proof.summaryDigest !== expectedDigest
     || proof.rawRecordsIncluded !== false
-    || fields.length !== 10
+    || fields.length !== 13
     || !fields.some(([name, value]) => name === 'proof_digest' && value === expectedDigest)
+    || !fields.some(([name, value]) => name === 'proof_outcome_accepted' && value === 'true')
     || proofModel.managedTrialProofFragmentFields({ ...proof, sourceRecordCount: 13 }, 'plant', 'production-control').length !== 0) fail('managed_trial_proof_runtime_invalid')
   let invalidCountRejected = false
   try { proofModel.buildManagedTrialProof({ ...input, sourceRecordCount: 1_000_001 }) } catch { invalidCountRejected = true }
   if (!invalidCountRejected) fail('managed_trial_proof_count_boundary_missing')
+  let invalidOutcomeRejected = false
+  try { proofModel.buildManagedTrialProof({ ...input, outcomeStatus: 'regressed', outcomeAccepted: true }) } catch { invalidOutcomeRejected = true }
+  if (!invalidOutcomeRejected) fail('managed_trial_proof_outcome_boundary_missing')
 } catch (error) {
   fail(`managed_trial_proof_runtime_failed:${error instanceof Error ? error.message : String(error)}`)
 }
@@ -2518,7 +2531,7 @@ if (!websiteSource.includes('Recovery settings')
   || !websiteModelSource.includes('The original value is untouched; export a backup or review the guided repair.')
   || !settingsPageSource.includes('collectLocalProductRecords(window.localStorage)')
   || !settingsPageSource.includes('localProductRecords')
-  || !settingsPageSource.includes('version: 23')
+  || !settingsPageSource.includes('version: 24')
   || !settingsPageSource.includes('behaviorTrail')
   || !settingsPageSource.includes('agentBehaviorRows')
   || !settingsPageSource.includes('activationManifestRows')
@@ -10898,4 +10911,78 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
+  || !pilotOutcomeSource.includes("supermega.local_pilot_outcome_checkpoint.v1")
+  || !pilotOutcomeSource.includes("supermega.local_pilot_outcome_review.v1")
+  || !pilotOutcomeSource.includes("PILOT_OUTCOME_STORAGE_KEY = 'supermega.pilot-outcome.v1'")
+  || !pilotOutcomeSource.includes("if (current.value === 0) return 'target_met'")
+  || !pilotOutcomeSource.includes("Only the named owner can accept a clear or improved pilot result.")
+  || !pilotOutcomeUiSource.includes('Free outcome proof')
+  || !pilotOutcomeUiSource.includes('Accept measured result')
+  || !pilotOutcomeUiSource.includes('Download accepted proof')
+  || !pilotOutcomeUiSource.includes("unit === 'exceptions'")
+  || !pilotOutcomeUiSource.includes('Aggregate counts only. No raw records')
+  || !pilotOutcomeHookSource.includes("window.addEventListener('storage', onStorage)")
+  || !settingsPageSource.includes('pilotOutcomeReport')
+  || !settingsPageSource.includes('pilotOutcomeDigest')
+  || !settingsPageSource.includes('pilotReady: isPilotReady && Boolean(pilotOutcomeReport?.review)')
+  || !settingsPageSource.includes('version: 24')
+  || !coreCssSource.includes('.pilot-outcome-proof')
+  || !coreCssSource.includes('.pilot-outcome-rows, .pilot-outcome-empty { grid-template-columns: 1fr; }')
+  || !coreCssSource.includes('.orders-module { overflow-y: auto; scrollbar-gutter: stable; }')
+  || !coreCssSource.includes('.orders-module > .order-workspace { min-height: 640px; flex: 0 0 auto; }')
+  || !coreCssSource.includes('.orders-module > .order-workspace { min-height: 0; flex: none; }')
+  || !managedActivationRunbookSource
+  || !managedTrialRuntimeSource
+  || !managedActivationSource.includes('_pilot_outcome_report')
+  || !managedActivationSource.includes('Pilot outcome lacks exact named-owner acceptance.')) fail('pilot_outcome_contract_missing')
+try {
+  const outcome = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'pilot-outcome.ts')).href}?pilot-outcome=${Date.now()}`)
+  const values = new Map()
+  const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) }
+  const setup = { product: 'commerce', workspace: 'Mingalar Fresh Mart', owner: 'Swan Htet', templateId: 'retail-wholesale' }
+  const snapshot = {
+    contract: 'supermega.local_business_snapshot.v1',
+    shop: { status: 'ready', itemCount: 4, lowStock: 2, activeOrders: 1, paymentExceptions: 1, refundsDue: 0, openPurchaseOrders: 0, incomingRequests: 0 },
+    plant: { status: 'ready', jobCount: 2, unfinishedJobs: 1, heldJobs: 1, openIssues: 2, priorityIssues: 1, stoppedMachines: 0 },
+    website: { status: 'ready', pageCount: 2, readyPages: 1, readinessPassed: 3, readinessTotal: 5, approved: false, released: false },
+    ecommerce: { status: 'ready', draftState: 'ready', selectedSkus: 2, incomingRequests: 0, shopSourceReady: true },
+  }
+  const baselineMetric = outcome.buildPilotOutcomeMetric(snapshot, setup.product)
+  outcome.startPilotOutcome(storage, setup, baselineMetric, new Date('2026-07-30T10:00:00.000Z'))
+  const collecting = outcome.buildPilotOutcomeReport(storage, setup, baselineMetric, new Date('2026-07-30T10:01:00.000Z'))
+  if (collecting?.outcomeStatus !== 'collecting' || collecting.review !== null) fail('pilot_outcome_collecting_invalid')
+  pilotOutcomeRuntimeChecks += 1
+  let collectingRejected = false
+  try { outcome.acceptPilotOutcome(storage, collecting, setup.owner) } catch { collectingRejected = true }
+  if (!collectingRejected) fail('pilot_outcome_collecting_acceptance_allowed')
+  pilotOutcomeRuntimeChecks += 1
+  const improvedSnapshot = { ...snapshot, shop: { ...snapshot.shop, lowStock: 0, paymentExceptions: 0 } }
+  const improvedMetric = outcome.buildPilotOutcomeMetric(improvedSnapshot, setup.product)
+  const improved = outcome.buildPilotOutcomeReport(storage, setup, improvedMetric, new Date('2026-07-30T10:05:00.000Z'))
+  if (improved?.outcomeStatus !== 'target_met' || improved.change !== -3 || improved.rawRecordsIncluded !== false || improved.externalWritesPerformed !== false) fail('pilot_outcome_improvement_invalid')
+  pilotOutcomeRuntimeChecks += 1
+  const review = outcome.acceptPilotOutcome(storage, improved, setup.owner, new Date('2026-07-30T10:06:00.000Z'))
+  const accepted = outcome.buildPilotOutcomeReport(storage, setup, improvedMetric, new Date('2026-07-30T10:10:00.000Z'))
+  if (accepted?.review?.reportDigest !== accepted?.reportDigest || accepted?.measuredAt !== review.reviewedAt) fail('pilot_outcome_acceptance_invalid')
+  pilotOutcomeRuntimeChecks += 1
+  const changedAgain = { ...improvedSnapshot, shop: { ...improvedSnapshot.shop, activeOrders: 2 } }
+  const changedMetric = outcome.buildPilotOutcomeMetric(changedAgain, setup.product)
+  const reopened = outcome.buildPilotOutcomeReport(storage, setup, changedMetric, new Date('2026-07-30T10:11:00.000Z'))
+  if (reopened?.review !== null || reopened?.outcomeStatus !== 'target_met') fail('pilot_outcome_source_reopen_invalid')
+  pilotOutcomeRuntimeChecks += 1
+  const plantMetric = outcome.buildPilotOutcomeMetric(snapshot, 'production')
+  const websiteMetric = outcome.buildPilotOutcomeMetric(snapshot, 'website')
+  const ecommerceMetric = outcome.buildPilotOutcomeMetric(snapshot, 'ecommerce')
+  if (plantMetric?.value !== 2 || websiteMetric?.value !== 4 || ecommerceMetric?.value !== 0) fail('pilot_outcome_product_metrics_invalid')
+  pilotOutcomeRuntimeChecks += 1
+  const tamperedState = JSON.parse(values.get(outcome.PILOT_OUTCOME_STORAGE_KEY))
+  tamperedState.checkpoints[0].metric.value = 999
+  values.set(outcome.PILOT_OUTCOME_STORAGE_KEY, JSON.stringify(tamperedState))
+  if (outcome.buildPilotOutcomeReport(storage, setup, improvedMetric) !== null) fail('pilot_outcome_tampered_checkpoint_accepted')
+  pilotOutcomeRuntimeChecks += 1
+} catch (error) {
+  fail(`pilot_outcome_runtime_failed:${error instanceof Error ? error.message : String(error)}`)
+}
+
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
