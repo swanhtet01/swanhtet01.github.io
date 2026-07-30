@@ -13,6 +13,11 @@
       "productId": "ecommerce",
       "workOrderId": "ecommerce-promotion-review",
       "checkpoint": "ENG-134"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-promotion-policy-setup",
+      "checkpoint": "ENG-135"
     }
   ],
   "agentOperatingModel": {
@@ -172,11 +177,11 @@
       "localAutomation": {
         "contract": "supermega.product-work-authority.v2",
         "productId": "ecommerce",
-        "workOrderId": "ecommerce-promotion-policy-setup",
+        "workOrderId": "ecommerce-shipping-policy-review",
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Ecommerce: add one compact internal client-setup control for versioned Shop promotion policies, with preview, effective dates, limits, accountable save evidence, and safe reset without exposing configuration as the customer starting point.",
-        "reason": "ENG-134 completed deterministic promotion review and net Shop order pricing. The next local gap is founder-friendly policy setup; policies are currently contract-valid but only seeded or imported, which is not a usable client onboarding workflow."
+        "workOrder": "Ecommerce: add one governed shipping-policy review that resolves delivery township or zone against Shop-owned versioned fees, service eligibility, and promise windows while preserving the original cart and requiring Shop confirmation.",
+        "reason": "ENG-135 completed founder-friendly promotion policy setup with local and managed event parity. Shipping remains pending Shop review with zero amount, so the next local value is one deterministic Shop authority before any provider or delivery booking is connected."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }

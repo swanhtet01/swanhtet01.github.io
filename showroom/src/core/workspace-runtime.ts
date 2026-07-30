@@ -134,6 +134,7 @@ export type ActionKind =
   | 'tax_configuration'
   | 'account_mapping'
   | 'customer_credit_policy'
+  | 'promotion_policy'
   | 'production_job'
   | 'production_job_schedule'
   | 'production_job_close'

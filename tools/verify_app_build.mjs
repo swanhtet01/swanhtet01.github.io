@@ -2983,6 +2983,14 @@ if (!coreSource.includes('data-customer-credit-policy="versioned"')
   || !managedCommerceRuntime.includes('def _validate_customer_credit_policy_saved(')
   || !managedCommerceRuntime.includes('a new credit order requires the exact active customer policy, terms, and exposure decision.')
   || !managedCommerceRuntime.includes('command evidence must match the saved customer credit policy proof.')) fail('commerce_customer_credit_policy_ui_or_managed_boundary_missing')
+if (!coreSource.includes('data-promotion-policy="versioned"')
+  || !coreSource.includes("kind: 'promotion_policy'")
+  || !coreSource.includes("'commerce.promotion_policy.saved'")
+  || !coreSource.includes('configureCommercePromotionPolicy(current, input, commerceActionProof(action))')
+  || !coreSource.includes('inactive safely stops the code without deleting history')
+  || !commerceSource.includes('export function configureCommercePromotionPolicy(')
+  || !managedCommerceRuntime.includes('def _validate_promotion_policy_saved(')
+  || !managedCommerceRuntime.includes('command evidence must match the saved promotion policy proof.')) fail('commerce_promotion_policy_setup_ui_or_managed_boundary_missing')
 if (!coreSource.includes("'commerce.order.return_recorded'")
   || !coreSource.includes("kind: 'order_return'")
   || !coreSource.includes('Record return')
@@ -8781,6 +8789,35 @@ async function verifyCommerceRuntime() {
       sku: 'SKU-LONG-NAME',
       name: 'x'.repeat(181),
     }, proof('ACT-ITEM-LONG-NAME')) === null, 'oversized_catalog_item_was_registered')
+    const promotionPolicyProof = proof('ACT-PROMOTION-WELCOME-R1', -1_500)
+    const promotionPolicyInput = {
+      code: 'WELCOME',
+      discountBasisPoints: 1_000,
+      minimumSubtotalMmk: 100,
+      maximumDiscountMmk: 50,
+      status: 'active',
+      effectiveFrom: promotionPolicyProof.capturedAt,
+      effectiveUntil: '2026-08-23T09:00:00.000Z',
+    }
+    const promotionConfigured = model.configureCommercePromotionPolicy(base, promotionPolicyInput, promotionPolicyProof)
+    assert(promotionConfigured?.promotionPolicies.length === 1
+      && promotionConfigured.promotionPolicies[0].revision === 1
+      && promotionConfigured.promotionPolicies[0].proof.actionId === promotionPolicyProof.actionId,
+    'promotion_policy_setup_not_versioned_or_attributed')
+    assert(model.configureCommercePromotionPolicy(promotionConfigured, promotionPolicyInput, promotionPolicyProof) === promotionConfigured,
+      'promotion_policy_setup_retry_not_idempotent')
+    assert(model.configureCommercePromotionPolicy(promotionConfigured, {
+      ...promotionPolicyInput,
+      maximumDiscountMmk: 49,
+    }, promotionPolicyProof) === null,
+    'promotion_policy_setup_conflicting_retry_succeeded')
+    assert(model.configureCommercePromotionPolicy(promotionConfigured, promotionPolicyInput, proof('ACT-PROMOTION-UNCHANGED', -1_500)) === null,
+      'unchanged_promotion_policy_advanced_revision')
+    assert(model.configureCommercePromotionPolicy(base, {
+      ...promotionPolicyInput,
+      effectiveFrom: '2026-07-23T08:00:00.000Z',
+    }, proof('ACT-PROMOTION-LATE-PROOF')) === null,
+    'promotion_policy_setup_accepted_late_review_proof')
     const creditPolicyProof = proof('ACT-CREDIT-CUSTOMER', -2_000)
     const creditBase = model.configureCommerceCustomerCreditPolicy(base, {
       customer: 'Customer',

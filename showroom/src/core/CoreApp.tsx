@@ -68,6 +68,7 @@ import {
   commerceCurrentTaxConfiguration,
   commerceCurrentAccountMappingConfiguration,
   commerceCurrentCustomerCreditPolicy,
+  commerceCurrentPromotionPolicy,
   commerceCustomerCreditReview,
   commerceOrderCalculation,
   commerceOrderCorrectionExpectation,
@@ -102,6 +103,7 @@ import {
   configureCommerceTax,
   configureCommerceAccountMapping,
   configureCommerceCustomerCreditPolicy,
+  configureCommercePromotionPolicy,
   createCommerceCatalogBaseline,
   createCommercePurchaseOrder,
   receiveCommercePurchaseOrder,
@@ -248,6 +250,16 @@ type CustomerCreditPolicyDraft = {
   creditLimitMmk: string
   maxPaymentTermsDays: 0 | 7 | 30
   status: CommerceCustomerCreditPolicyStatus
+}
+
+type PromotionPolicyDraft = {
+  code: string
+  discountPercent: string
+  minimumSubtotalMmk: string
+  maximumDiscountMmk: string
+  status: 'active' | 'inactive'
+  effectiveFrom: string
+  effectiveUntil: string
 }
 
 type CloseSettlementDraftLine = {
@@ -1664,6 +1676,15 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
     maxPaymentTermsDays: 30,
     status: 'active',
   })
+  const [promotionPolicyDraft, setPromotionPolicyDraft] = useState<PromotionPolicyDraft>({
+    code: 'WELCOME',
+    discountPercent: '10',
+    minimumSubtotalMmk: '10000',
+    maximumDiscountMmk: '10000',
+    status: 'active',
+    effectiveFrom: '',
+    effectiveUntil: '',
+  })
   const [closeSettlementDraft, setCloseSettlementDraft] = useState<CloseSettlementDraftLine[]>([])
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [catalogError, setCatalogError] = useState('')
@@ -1698,6 +1719,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
   const currentCreditPolicy = creditPolicyCustomer
     ? commerceCurrentCustomerCreditPolicy(commerce, creditPolicyCustomer)
     : null
+  const currentPromotionPolicy = commerceCurrentPromotionPolicy(commerce, promotionPolicyDraft.code)
   const orderDraftHasMeaningfulFields = Boolean(customer.trim()
     || channel !== 'Messenger'
     || payment
@@ -4668,6 +4690,63 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
     }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
   }
 
+  function reviewPromotionPolicy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const code = promotionPolicyDraft.code.trim().toUpperCase()
+    const discountBasisPoints = parseTaxRateBasisPoints(promotionPolicyDraft.discountPercent)
+    const minimumText = promotionPolicyDraft.minimumSubtotalMmk.trim()
+    const maximumText = promotionPolicyDraft.maximumDiscountMmk.trim()
+    const minimumSubtotalMmk = /^(?:0|[1-9]\d*)$/.test(minimumText) ? Number(minimumText) : Number.NaN
+    const maximumDiscountMmk = /^[1-9]\d*$/.test(maximumText) ? Number(maximumText) : Number.NaN
+    const effectiveFromDate = new Date(promotionPolicyDraft.effectiveFrom)
+    const effectiveUntilDate = promotionPolicyDraft.effectiveUntil ? new Date(promotionPolicyDraft.effectiveUntil) : null
+    if (!/^[A-Z0-9][A-Z0-9-]{2,39}$/.test(code)
+      || discountBasisPoints === null
+      || discountBasisPoints < 1
+      || !Number.isSafeInteger(minimumSubtotalMmk)
+      || minimumSubtotalMmk < 0
+      || !Number.isSafeInteger(maximumDiscountMmk)
+      || maximumDiscountMmk < 1
+      || Number.isNaN(effectiveFromDate.getTime())
+      || effectiveFromDate.getTime() < purchaseOrderClock + 60_000
+      || (effectiveUntilDate && (Number.isNaN(effectiveUntilDate.getTime()) || effectiveUntilDate <= effectiveFromDate))) {
+      setNotice('Enter an uppercase code, discount from 0.01% to 100%, whole-MMK limits, and an effective start at least one minute ahead. End time must be later or blank.')
+      return
+    }
+    const expectedRevision = commerce.promotionPolicies?.length ?? 0
+    const input = {
+      code,
+      discountBasisPoints,
+      minimumSubtotalMmk,
+      maximumDiscountMmk,
+      status: promotionPolicyDraft.status,
+      effectiveFrom: effectiveFromDate.toISOString(),
+      effectiveUntil: effectiveUntilDate?.toISOString() ?? null,
+    }
+    const previous = commerceCurrentPromotionPolicy(commerce, code)
+    queueAction({
+      kind: 'promotion_policy',
+      subjectId: `SHOP-PROMOTION-${code}-R${expectedRevision + 1}`,
+      summary: `${input.status === 'active' ? 'Set' : 'Stop'} promotion ${code}`,
+      before: previous
+        ? `${formatTaxRate(previous.discountBasisPoints)} · minimum ${formatMoney(previous.minimumSubtotalMmk)} · cap ${formatMoney(previous.maximumDiscountMmk)} · ${previous.status} · revision ${previous.revision}`
+        : 'No Shop promotion policy for this code',
+      after: `${formatTaxRate(input.discountBasisPoints)} · minimum ${formatMoney(input.minimumSubtotalMmk)} · cap ${formatMoney(input.maximumDiscountMmk)} · ${input.status} · effective ${formatTime(input.effectiveFrom)}${input.effectiveUntil ? ` to ${formatTime(input.effectiveUntil)}` : ' until changed'} · future Shop reviews only`,
+      reasonSuggestion: 'Reviewed the Shop promotion boundary for future Ecommerce orders.',
+      apply: async (action) => {
+        await mutateCommerce(
+          'commerce.promotion_policy.saved',
+          action.commandId,
+          commerceActionProof(action),
+          (current) => {
+            if ((current.promotionPolicies?.length ?? 0) !== expectedRevision) return null
+            return configureCommercePromotionPolicy(current, input, commerceActionProof(action))
+          },
+        )
+      },
+    }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
+  }
+
   function closeDay() {
     const queuedAt = new Date().toISOString()
     const expected = commerceCloseExpectation(commerce, queuedAt)
@@ -5059,11 +5138,32 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
     supportWorkloadDownload={supportWorkloadDownload}
   />
   <details className="core-panel today-more order-daily-controls" id="shop-close-controls">
-    <summary><span>Close and exceptions</span><small>{paymentReview.length + lowStock.length} {paymentReview.length + lowStock.length === 1 ? 'item needs' : 'items need'} attention</small></summary>
+    <summary><span>Pricing, credit, and close</span><small>{paymentReview.length + lowStock.length} {paymentReview.length + lowStock.length === 1 ? 'item needs' : 'items need'} attention</small></summary>
     <div className="today-more-content">
       <div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div>
       <div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/shop/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div>
       <p className="form-notice">Orders ready: {closePreview?.orderIds.length ? closePreview.orderIds.join(', ') : 'none'} · Payment exceptions: {paymentReview.length ? paymentReview.map((order) => order.id).join(', ') : 'none'} · Stock exceptions: {lowStock.length ? lowStock.map((item) => item.sku).join(', ') : 'none'}</p>
+      <details className="compact-disclosure" data-promotion-policy="versioned">
+        <summary><span>Promotions</span><small>{currentPromotionPolicy ? `${currentPromotionPolicy.code} · ${formatTaxRate(currentPromotionPolicy.discountBasisPoints)} · ${currentPromotionPolicy.status}` : 'No policy for this code'}</small></summary>
+        <form className="core-form compact-form" onSubmit={reviewPromotionPolicy}>
+          <div className="form-row">
+            <label>Customer code<input autoCapitalize="characters" disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, code: event.target.value.toUpperCase() }))} placeholder="WELCOME" required value={promotionPolicyDraft.code} /></label>
+            <label>Discount (%)<input disabled={commerceControlsDisabled} inputMode="decimal" max="100" min="0.01" onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, discountPercent: event.target.value }))} required step="0.01" type="number" value={promotionPolicyDraft.discountPercent} /></label>
+          </div>
+          <div className="form-row">
+            <label>Minimum order (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="0" onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, minimumSubtotalMmk: event.target.value }))} required step="1" type="number" value={promotionPolicyDraft.minimumSubtotalMmk} /></label>
+            <label>Maximum discount (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, maximumDiscountMmk: event.target.value }))} required step="1" type="number" value={promotionPolicyDraft.maximumDiscountMmk} /></label>
+          </div>
+          <div className="form-row">
+            <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, effectiveFrom: event.target.value }))} required type="datetime-local" value={promotionPolicyDraft.effectiveFrom} /></label>
+            <label>End (optional)<input autoComplete="off" disabled={commerceControlsDisabled} min={promotionPolicyDraft.effectiveFrom || localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} type="datetime-local" value={promotionPolicyDraft.effectiveUntil} /></label>
+          </div>
+          <label>Policy status<select disabled={commerceControlsDisabled} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, status: event.target.value as 'active' | 'inactive' }))} value={promotionPolicyDraft.status}><option value="active">Active · approve when limits match</option><option value="inactive">Inactive · reject this code safely</option></select></label>
+          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review promotion</button></div>
+          <p className="panel-copy">Shop remains the only price authority. Saving creates a new reviewed revision; inactive safely stops the code without deleting history. Quotes, orders, payments, and customer messages do not run from this setup.</p>
+          {currentPromotionPolicy ? <p className="form-notice">Revision {currentPromotionPolicy.revision} · effective {formatTime(currentPromotionPolicy.effectiveFrom)}{currentPromotionPolicy.effectiveUntil ? ` to ${formatTime(currentPromotionPolicy.effectiveUntil)}` : ''} · saved by {currentPromotionPolicy.proof.actor} · evidence {currentPromotionPolicy.proof.evidenceReference}</p> : null}
+        </form>
+      </details>
       <details className="compact-disclosure" data-customer-credit-policy="versioned">
         <summary><span>Customer credit</span><small>{commerce.customerCreditPolicies?.length ? `${commerce.customerCreditPolicies.length} reviewed ${commerce.customerCreditPolicies.length === 1 ? 'policy' : 'revisions'}` : 'Cash terms only'}</small></summary>
         <form className="core-form compact-form" onSubmit={reviewCustomerCreditPolicy}>

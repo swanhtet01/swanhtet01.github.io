@@ -45,6 +45,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.tax_configuration.saved",
         "commerce.account_mapping.saved",
         "commerce.customer_credit_policy.saved",
+        "commerce.promotion_policy.saved",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
@@ -86,6 +87,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.tax_configuration.saved",
         "commerce.account_mapping.saved",
         "commerce.customer_credit_policy.saved",
+        "commerce.promotion_policy.saved",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
@@ -3862,6 +3864,12 @@ def _validate_event_evidence(
         if not _proof_matches_evidence(proof, evidence):
             raise TrialValidationError(
                 "command evidence must match the saved customer credit policy proof."
+            )
+    elif event_type == "commerce.promotion_policy.saved":
+        proof = next_state["promotionPolicies"][0]["proof"]
+        if not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the saved promotion policy proof."
             )
     elif event_type == "commerce.service_schedule.initialized":
         schedule = next_state["serviceSchedule"]
@@ -7751,6 +7759,54 @@ def _validate_customer_credit_policy_saved(
         )
 
 
+def _validate_promotion_policy_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    current_without_policies = dict(current)
+    current_without_policies.pop("promotionPolicies", None)
+    next_without_policies = dict(next_state)
+    next_without_policies.pop("promotionPolicies", None)
+    if current_without_policies != next_without_policies:
+        raise TrialValidationError(
+            "commerce.promotion_policy.saved may change only promotionPolicies."
+        )
+    before = _promotion_policies(current)
+    after = _promotion_policies(next_state)
+    if len(after) != len(before) + 1 or after[1:] != before:
+        raise TrialValidationError(
+            "commerce.promotion_policy.saved must prepend exactly one promotion policy."
+        )
+    policy = after[0]
+    if policy["revision"] != len(before) + 1:
+        raise TrialValidationError(
+            "promotion policy revision must advance exactly once."
+        )
+    prior = next(
+        (
+            candidate
+            for candidate in before
+            if candidate.get("code") == policy["code"]
+        ),
+        None,
+    )
+    if prior is not None and all(
+        prior[field] == policy[field]
+        for field in (
+            "code",
+            "discountBasisPoints",
+            "minimumSubtotalMmk",
+            "maximumDiscountMmk",
+            "status",
+            "effectiveFrom",
+            "effectiveUntil",
+        )
+    ):
+        raise TrialValidationError(
+            "an unchanged promotion policy cannot advance."
+        )
+
+
 def _service_schedule(state: Mapping[str, Any]) -> dict[str, Any] | None:
     value = state.get("serviceSchedule")
     return _validate_service_schedule(value) if value is not None else None
@@ -7926,6 +7982,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.tax_configuration.saved": _validate_tax_configuration_saved,
     "commerce.account_mapping.saved": _validate_account_mapping_saved,
     "commerce.customer_credit_policy.saved": _validate_customer_credit_policy_saved,
+    "commerce.promotion_policy.saved": _validate_promotion_policy_saved,
     "commerce.service_schedule.initialized": _validate_service_schedule_initialized,
     "commerce.service_schedule.saved": _validate_service_schedule_saved,
 }
@@ -7979,7 +8036,8 @@ def reduce_commerce_state(
         _require_account_mapping_configurations_unchanged(current_state, next_state)
     if event_type != "commerce.customer_credit_policy.saved":
         _require_customer_credit_policies_unchanged(current_state, next_state)
-    _require_promotion_policies_unchanged(current_state, next_state)
+    if event_type != "commerce.promotion_policy.saved":
+        _require_promotion_policies_unchanged(current_state, next_state)
     if event_type not in {
         "commerce.service_schedule.initialized",
         "commerce.service_schedule.saved",

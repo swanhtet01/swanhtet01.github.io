@@ -161,6 +161,8 @@ export type CommercePromotionPolicy = {
   proof: CommerceActionProof
 }
 
+export type CommercePromotionPolicyInput = Omit<CommercePromotionPolicy, 'revision' | 'proof'>
+
 export type CommercePromotionDecisionReason = 'approved' | 'not_requested' | 'not_found' | 'inactive' | 'not_effective' | 'minimum_not_met'
 
 export type CommercePromotionDecision = {
@@ -3887,6 +3889,16 @@ export function commercePromotionPolicies(state: CommerceState) {
   return state.promotionPolicies ?? []
 }
 
+export function commerceCurrentPromotionPolicy(state: CommerceState, codeValue: string, atTime?: string) {
+  const code = codeValue.trim().toUpperCase()
+  const atMicros = atTime === undefined ? null : timestampMicros(atTime)
+  if (!/^[A-Z0-9][A-Z0-9-]{2,39}$/.test(code) || (atTime !== undefined && atMicros === null)) return null
+  return commercePromotionPolicies(state).find((policy) => (
+    policy.code === code
+    && (atMicros === null || (timestampMicros(policy.proof.capturedAt) as bigint) <= atMicros)
+  )) ?? null
+}
+
 export function commercePromotionDecision(
   policies: readonly CommercePromotionPolicy[],
   codeValue: string | null,
@@ -5043,6 +5055,63 @@ export function configureCommerceCustomerCreditPolicy(
   return validateCommerceState({
     ...current,
     customerCreditPolicies: [policy, ...history],
+  })
+}
+
+export function configureCommercePromotionPolicy(
+  state: CommerceState,
+  input: CommercePromotionPolicyInput,
+  proof: CommerceActionProof,
+) {
+  if (!validProof(proof)
+    || typeof input?.code !== 'string'
+    || input.code !== input.code.trim().toUpperCase()
+    || !/^[A-Z0-9][A-Z0-9-]{2,39}$/.test(input.code)
+    || !Number.isSafeInteger(input.discountBasisPoints)
+    || input.discountBasisPoints < 1
+    || input.discountBasisPoints > 10_000
+    || !Number.isSafeInteger(input.minimumSubtotalMmk)
+    || input.minimumSubtotalMmk < 0
+    || !Number.isSafeInteger(input.maximumDiscountMmk)
+    || input.maximumDiscountMmk < 1
+    || (input.status !== 'active' && input.status !== 'inactive')
+    || !validTimestamp(input.effectiveFrom)
+    || (timestampMicros(proof.capturedAt) as bigint) > (timestampMicros(input.effectiveFrom) as bigint)
+    || (input.effectiveUntil !== null && (!validTimestamp(input.effectiveUntil)
+      || (timestampMicros(input.effectiveUntil) as bigint) <= (timestampMicros(input.effectiveFrom) as bigint)))) return null
+  const current = validateCommerceState(state)
+  const history = commercePromotionPolicies(current)
+  const replay = history.find((policy) => policy.proof.actionId === proof.actionId)
+  if (replay) {
+    return replay.code === input.code
+      && replay.discountBasisPoints === input.discountBasisPoints
+      && replay.minimumSubtotalMmk === input.minimumSubtotalMmk
+      && replay.maximumDiscountMmk === input.maximumDiscountMmk
+      && replay.status === input.status
+      && replay.effectiveFrom === input.effectiveFrom
+      && replay.effectiveUntil === input.effectiveUntil
+      && sameActionProof(replay.proof, proof) ? current : null
+  }
+  const currentPolicy = commerceCurrentPromotionPolicy(current, input.code)
+  const latest = history[0]
+  if (history.length >= maxPromotionPolicies
+    || actionIdIsUsed(current, proof.actionId)
+    || (currentPolicy
+      && currentPolicy.discountBasisPoints === input.discountBasisPoints
+      && currentPolicy.minimumSubtotalMmk === input.minimumSubtotalMmk
+      && currentPolicy.maximumDiscountMmk === input.maximumDiscountMmk
+      && currentPolicy.status === input.status
+      && currentPolicy.effectiveFrom === input.effectiveFrom
+      && currentPolicy.effectiveUntil === input.effectiveUntil)
+    || (latest && (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(latest.proof.capturedAt) as bigint))) return null
+  const policy: CommercePromotionPolicy = {
+    revision: history.length + 1,
+    ...input,
+    proof: { ...proof },
+  }
+  return validateCommerceState({
+    ...current,
+    promotionPolicies: [policy, ...history],
   })
 }
 

@@ -60,6 +60,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.tax_configuration.saved",
         "commerce.account_mapping.saved",
         "commerce.customer_credit_policy.saved",
+        "commerce.promotion_policy.saved",
         "commerce.service_schedule.initialized",
         "commerce.service_schedule.saved",
         "production.workspace.initialized",
@@ -1938,10 +1939,18 @@ def _authoritative_command_payload(
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative
-    if event_type == "commerce.customer_credit_policy.saved":
+    if event_type in {
+        "commerce.customer_credit_policy.saved",
+        "commerce.promotion_policy.saved",
+    }:
         evidence = authoritative.get("evidence")
         state = authoritative.get("state")
-        policies = state.get("customerCreditPolicies") if isinstance(state, Mapping) else None
+        policy_collection = (
+            "customerCreditPolicies"
+            if event_type == "commerce.customer_credit_policy.saved"
+            else "promotionPolicies"
+        )
+        policies = state.get(policy_collection) if isinstance(state, Mapping) else None
         policy = policies[0] if isinstance(policies, list) and policies else None
         if (
             not isinstance(evidence, Mapping)
@@ -1959,7 +1968,7 @@ def _authoritative_command_payload(
             "proof": deepcopy(authoritative_evidence),
         }
         authoritative_state = dict(state)
-        authoritative_state["customerCreditPolicies"] = [
+        authoritative_state[policy_collection] = [
             authoritative_policy,
             *deepcopy(policies[1:]),
         ]

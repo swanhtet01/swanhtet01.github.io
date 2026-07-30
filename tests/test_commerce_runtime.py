@@ -873,6 +873,8 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         return dict(next_state["accountMappingConfigurations"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.customer_credit_policy.saved":
         return dict(next_state["customerCreditPolicies"][0]["proof"])  # type: ignore[index,arg-type]
+    if event_type == "commerce.promotion_policy.saved":
+        return dict(next_state["promotionPolicies"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.order.advanced":
         completed_orders = [
             order
@@ -1078,8 +1080,9 @@ def apply_event(
 
 class CommerceRuntimeTests(unittest.TestCase):
     def test_ecommerce_promotion_is_policy_bound_and_prices_the_shop_order(self) -> None:
-        state = created_state("ORD-PROMO-1")
-        state["promotionPolicies"] = [
+        current = created_state("ORD-PROMO-1")
+        configured_state = deepcopy(current)
+        configured_state["promotionPolicies"] = [
             {
                 "revision": 1,
                 "code": "WELCOME",
@@ -1096,6 +1099,28 @@ class CommerceRuntimeTests(unittest.TestCase):
                 ),
             }
         ]
+        state = apply_event(
+            current,
+            "commerce.promotion_policy.saved",
+            configured_state,
+        )
+        self.assertEqual(state["promotionPolicies"], configured_state["promotionPolicies"])
+        self.assertEqual(
+            apply_event(
+                current,
+                "commerce.promotion_policy.saved",
+                configured_state,
+            ),
+            state,
+        )
+        with self.assertRaisesRegex(TrialValidationError, "promotion policy proof"):
+            apply_event(
+                current,
+                "commerce.promotion_policy.saved",
+                configured_state,
+                action_evidence("ACT-PROMOTION-WRONG-EVIDENCE"),
+            )
+
         order = state["orders"][0]  # type: ignore[index]
         order["sourceRecordId"] = "ECR-00000000-0000-4000-8000-000000000099"
         order["lines"] = [
@@ -1138,6 +1163,61 @@ class CommerceRuntimeTests(unittest.TestCase):
         ungoverned["promotionPolicies"] = []
         with self.assertRaisesRegex(TrialValidationError, "versioned Shop policy"):
             validate_commerce_state(ungoverned)
+
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-promotion", "operator-promotion", "human")
+        agent = TrialPrincipal("workspace-promotion", "promotion-agent", "agent")
+        for principal in (operator, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={
+                "state": catalog_state(),
+                "evidence": action_evidence("ACT-INIT-PROMOTION"),
+            },
+        )
+        future_policy = deepcopy(configured_state["promotionPolicies"][0])  # type: ignore[index]
+        future_policy["effectiveFrom"] = "2099-02-01T00:00:00.000Z"
+        future_policy["proof"] = action_evidence(
+            "ACT-PROMOTION-SERVER",
+            captured_at="2099-01-01T00:00:00.000Z",
+            actor="forged-actor",
+        )
+        managed_state = deepcopy(initialized.state)
+        managed_state["promotionPolicies"] = [future_policy]
+        payload = {
+            "state": managed_state,
+            "evidence": dict(future_policy["proof"]),
+        }
+        saved = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.promotion_policy.saved",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        saved_proof = saved.state["promotionPolicies"][0]["proof"]  # type: ignore[index]
+        self.assertEqual(saved_proof["actor"], operator.actor_id)
+        self.assertNotEqual(saved_proof["capturedAt"], "2099-01-01T00:00:00.000Z")
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.promotion_policy.saved",
+                expected_version=saved.version,
+                payload=payload,
+            )
 
     def test_production_material_issue_decrements_one_item_with_linked_evidence(self) -> None:
         current = catalog_state()
@@ -2500,6 +2580,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.tax_configuration.saved",
                     "commerce.account_mapping.saved",
                     "commerce.customer_credit_policy.saved",
+                    "commerce.promotion_policy.saved",
                     "commerce.service_schedule.initialized",
                     "commerce.service_schedule.saved",
                 }
@@ -2510,6 +2591,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIn("commerce.tax_configuration.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.account_mapping.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.customer_credit_policy.saved", COMMERCE_EVENTS)
+        self.assertIn("commerce.promotion_policy.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.service_schedule.initialized", COMMERCE_EVENTS)
         self.assertIn("commerce.service_schedule.saved", COMMERCE_EVENTS)
 
