@@ -34,7 +34,79 @@ RELEASE_COMMIT = "a" * 40
 ADMIN_CA_SHA256 = "sha256:" + "1" * 64
 
 
+def pilot_outcome_report(product: str = "commerce") -> dict[str, object]:
+    workspace = "Mingalar Fresh Mart"
+    owner = "Swan Htet"
+    template = "retail-wholesale"
+    started_at = "2026-07-30T11:30:00.000Z"
+    reviewed_at = "2026-07-30T11:35:00.000Z"
+    checkpoint_digest = "sha256:" + "2" * 64
+    baseline = {
+        "metricId": "shop-exceptions",
+        "label": "Shop exceptions",
+        "value": 3,
+        "unit": "exceptions",
+        "better": "lower",
+        "detail": "2 low stock, 1 payment, 0 refund.",
+        "sourceDigest": "sha256:" + "3" * 64,
+    }
+    current = {
+        **baseline,
+        "value": 1,
+        "detail": "1 low stock, 0 payment, 0 refund.",
+        "sourceDigest": "sha256:" + "4" * 64,
+    }
+    recommendation = "Accept the measured improvement or continue until the product is clear."
+    projection = [
+        "supermega.pilot_outcome_report.v1",
+        1,
+        product,
+        workspace,
+        owner,
+        template,
+        checkpoint_digest,
+        started_at,
+        list(baseline.values()),
+        list(current.values()),
+        "improved",
+        -2,
+        recommendation,
+        False,
+        False,
+    ]
+    report_digest = "sha256:" + sha256(
+        json.dumps(projection, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return {
+        "contract": "supermega.pilot_outcome_report.v1",
+        "version": 1,
+        "product": product,
+        "workspace": workspace,
+        "owner": owner,
+        "templateId": template,
+        "checkpointDigest": checkpoint_digest,
+        "startedAt": started_at,
+        "measuredAt": reviewed_at,
+        "baseline": baseline,
+        "current": current,
+        "outcomeStatus": "improved",
+        "change": -2,
+        "recommendation": recommendation,
+        "review": {
+            "contract": "supermega.local_pilot_outcome_review.v1",
+            "reportDigest": report_digest,
+            "reviewedBy": owner,
+            "reviewedAt": reviewed_at,
+            "decision": "accepted",
+        },
+        "rawRecordsIncluded": False,
+        "externalWritesPerformed": False,
+        "reportDigest": report_digest,
+    }
+
+
 def managed_trial_request() -> dict[str, object]:
+    outcome = pilot_outcome_report()
     data_package = {
         "evidenceFilename": "supermega-trial-evidence.json",
         "localRecords": 12,
@@ -43,12 +115,13 @@ def managed_trial_request() -> dict[str, object]:
         "productSources": ["commerce"],
         "approvalPackets": 2,
         "behaviorSignals": 4,
+        "pilotOutcomeDigest": outcome["reportDigest"],
     }
     provisioning = {
         "contract": "supermega.managed_workspace_provisioning.v1",
         "version": 1,
         "createdAt": "2026-07-30T11:40:00.000Z",
-        "evidenceVersion": 23,
+        "evidenceVersion": 24,
         "workspace": "Mingalar Fresh Mart",
         "owner": "Swan Htet",
         "product": "Shop",
@@ -86,7 +159,8 @@ def managed_trial_request() -> dict[str, object]:
         "localRecords": 12,
         "approvalPackets": 2,
         "behaviorSignals": 4,
-        "evidenceVersion": 23,
+        "evidenceVersion": 24,
+        "pilotOutcomeReport": outcome,
         "managedWorkspaceProvisioningPacket": provisioning,
         "importProvisioningPacket": {
             "contract": "supermega.import_provisioning_readiness.v1",
@@ -103,6 +177,9 @@ def activation_plan(product_slug: str = "shop") -> dict[str, object]:
     if product_slug in {"plant", "production"}:
         request["product"] = "Plant"
         request["managedWorkspaceProvisioningPacket"]["product"] = "Plant"  # type: ignore[index]
+        outcome = pilot_outcome_report("production")
+        request["pilotOutcomeReport"] = outcome
+        request["managedWorkspaceProvisioningPacket"]["dataPackage"]["pilotOutcomeDigest"] = outcome["reportDigest"]  # type: ignore[index]
     return compile_activation_plan(
         request,
         workspace_id="mingalar-fresh-mart",
@@ -339,6 +416,7 @@ class ManagedActivationPlanTests(unittest.TestCase):
         self.assertNotIn("production.write", first["ownerCapabilities"])
         self.assertIn("company.baseline.approve", first["ownerCapabilities"])
         self.assertIn("company.control.approve", first["ownerCapabilities"])
+        self.assertEqual(first["evidence"]["pilotOutcomeStatus"], "improved")
         self.assertEqual(first["rollback"]["authorizationScope"], "automatic_activation_compensation")
         self.assertEqual(first["rollback"]["trigger"], "downstream_release_gate_failure")
         serialized = json.dumps(first, sort_keys=True)
@@ -359,6 +437,7 @@ class ManagedActivationPlanTests(unittest.TestCase):
             ("not ready", lambda value: value.__setitem__("pilotReady", False)),
             ("database secret", lambda value: value.__setitem__("database_url", "postgresql://owner:secret@host/db")),
             ("access token", lambda value: value.__setitem__("accessToken", "must-not-enter-an-activation-plan")),
+            ("missing pilot outcome", lambda value: value.__setitem__("pilotOutcomeReport", None)),
         ):
             with self.subTest(label=label):
                 request = managed_trial_request()
@@ -380,6 +459,22 @@ class ManagedActivationPlanTests(unittest.TestCase):
         forged["ownerCapabilities"].append("production.write")
         with self.assertRaises(ManagedActivationError):
             validate_activation_plan(forged)
+
+        tampered_outcome = managed_trial_request()
+        tampered_outcome["pilotOutcomeReport"]["current"]["value"] = 2  # type: ignore[index]
+        with self.assertRaises(ManagedActivationError):
+            compile_activation_plan(
+                tampered_outcome,
+                workspace_id="mingalar-fresh-mart",
+                owner_actor_id=OWNER_ID,
+                approval_id=APPROVAL_ID,
+                approved_by="Swan Htet",
+                approved_at="2026-07-30T11:55:00.000Z",
+                project_ref=PROJECT_REF,
+                release_commit=RELEASE_COMMIT,
+                admin_ca_sha256=ADMIN_CA_SHA256,
+                now=NOW,
+            )
 
     def test_expired_plan_cannot_activate(self) -> None:
         plan = activation_plan()

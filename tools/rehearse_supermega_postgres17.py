@@ -645,6 +645,71 @@ def _seed_rehearsal_data(admin_database_url: str) -> None:
 
 
 def _managed_activation_request() -> dict[str, Any]:
+    started_at = "2026-07-30T11:30:00.000Z"
+    reviewed_at = "2026-07-30T11:35:00.000Z"
+    checkpoint_digest = "sha256:" + "2" * 64
+    baseline = {
+        "metricId": "shop-exceptions",
+        "label": "Shop exceptions",
+        "value": 3,
+        "unit": "exceptions",
+        "better": "lower",
+        "detail": "2 low stock, 1 payment, 0 refund.",
+        "sourceDigest": "sha256:" + "3" * 64,
+    }
+    current = {
+        **baseline,
+        "value": 1,
+        "detail": "1 low stock, 0 payment, 0 refund.",
+        "sourceDigest": "sha256:" + "4" * 64,
+    }
+    recommendation = "Accept the measured improvement or continue until the product is clear."
+    projection = [
+        "supermega.pilot_outcome_report.v1",
+        1,
+        "commerce",
+        "Managed rehearsal workspace",
+        "Rehearsal Owner",
+        "retail-wholesale",
+        checkpoint_digest,
+        started_at,
+        list(baseline.values()),
+        list(current.values()),
+        "improved",
+        -2,
+        recommendation,
+        False,
+        False,
+    ]
+    report_digest = "sha256:" + sha256(
+        json.dumps(projection, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    outcome = {
+        "contract": "supermega.pilot_outcome_report.v1",
+        "version": 1,
+        "product": "commerce",
+        "workspace": "Managed rehearsal workspace",
+        "owner": "Rehearsal Owner",
+        "templateId": "retail-wholesale",
+        "checkpointDigest": checkpoint_digest,
+        "startedAt": started_at,
+        "measuredAt": reviewed_at,
+        "baseline": baseline,
+        "current": current,
+        "outcomeStatus": "improved",
+        "change": -2,
+        "recommendation": recommendation,
+        "review": {
+            "contract": "supermega.local_pilot_outcome_review.v1",
+            "reportDigest": report_digest,
+            "reviewedBy": "Rehearsal Owner",
+            "reviewedAt": reviewed_at,
+            "decision": "accepted",
+        },
+        "rawRecordsIncluded": False,
+        "externalWritesPerformed": False,
+        "reportDigest": report_digest,
+    }
     data_package = {
         "evidenceFilename": "supermega-trial-evidence.json",
         "localRecords": 12,
@@ -653,6 +718,7 @@ def _managed_activation_request() -> dict[str, Any]:
         "productSources": ["commerce"],
         "approvalPackets": 2,
         "behaviorSignals": 4,
+        "pilotOutcomeDigest": report_digest,
     }
     return {
         "contract": "supermega.managed_trial_request.v1",
@@ -668,12 +734,13 @@ def _managed_activation_request() -> dict[str, Any]:
         "localRecords": 12,
         "approvalPackets": 2,
         "behaviorSignals": 4,
-        "evidenceVersion": 23,
+        "evidenceVersion": 24,
+        "pilotOutcomeReport": outcome,
         "managedWorkspaceProvisioningPacket": {
             "contract": "supermega.managed_workspace_provisioning.v1",
             "version": 1,
             "createdAt": "2026-07-30T11:40:00.000Z",
-            "evidenceVersion": 23,
+            "evidenceVersion": 24,
             "workspace": "Managed rehearsal workspace",
             "owner": "Rehearsal Owner",
             "product": "Shop",

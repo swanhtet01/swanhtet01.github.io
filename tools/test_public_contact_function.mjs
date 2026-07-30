@@ -80,12 +80,15 @@ function trialProofFields({
   sources = 12,
   behavior = 4,
   decisions = 2,
+  outcome = 'improved',
+  outcomeDigest = `sha256:${'b'.repeat(64)}`,
+  outcomeAccepted = true,
 } = {}) {
-  const contract = 'supermega.managed_trial_proof.v1'
-  const projection = [contract, 1, product, template, readiness, sources, behavior, decisions, false]
+  const contract = 'supermega.managed_trial_proof.v2'
+  const projection = [contract, 2, product, template, readiness, sources, behavior, decisions, outcome, outcomeDigest, outcomeAccepted, false]
   return {
     proof_contract: contract,
-    proof_version: '1',
+    proof_version: '2',
     proof_digest: `sha256:${createHash('sha256').update(JSON.stringify(projection)).digest('hex')}`,
     proof_product: product,
     proof_template: template,
@@ -93,6 +96,9 @@ function trialProofFields({
     proof_sources: String(sources),
     proof_behavior: String(behavior),
     proof_decisions: String(decisions),
+    proof_outcome: outcome,
+    proof_outcome_digest: outcomeDigest ?? '',
+    proof_outcome_accepted: String(outcomeAccepted),
     proof_raw_records: 'false',
   }
 }
@@ -221,8 +227,8 @@ try {
   assert.equal(proofEvent.record.source_url, 'https://supermega.dev/contact/?product=plant&template=production-control')
   assert.equal(proofEvent.record.referrer, 'https://app.supermega.dev/settings/?product=plant')
   assert.deepEqual(proofEvent.record.raw.trial_proof, {
-    contract: 'supermega.managed_trial_proof.v1',
-    version: 1,
+    contract: 'supermega.managed_trial_proof.v2',
+    version: 2,
     summary_digest: attachedProof.proof_digest,
     product: 'plant',
     template: 'production-control',
@@ -230,6 +236,9 @@ try {
     source_record_count: 12,
     behavior_signal_count: 4,
     reviewed_decision_count: 2,
+    outcome_status: 'improved',
+    outcome_digest: `sha256:${'b'.repeat(64)}`,
+    outcome_accepted: true,
     raw_records_included: false,
     verification: 'client_provided_summary',
   })

@@ -1,6 +1,6 @@
-export const MANAGED_TRIAL_PROOF_CONTRACT = 'supermega.managed_trial_proof.v1'
+export const MANAGED_TRIAL_PROOF_CONTRACT = 'supermega.managed_trial_proof.v2'
 
-const MANAGED_TRIAL_PROOF_VERSION = 1
+const MANAGED_TRIAL_PROOF_VERSION = 2
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/
 const PRODUCT_PATTERN = /^(shop|plant|website|ecommerce)$/
 const TEMPLATE_PATTERN = /^[a-z0-9][a-z0-9._-]{0,119}$/
@@ -16,6 +16,9 @@ export type ManagedTrialProof = {
   reviewedDecisionCount: number
   product: string
   templateId: string
+  outcomeStatus: 'not_started' | 'collecting' | 'target_met' | 'improved' | 'unchanged' | 'regressed'
+  outcomeDigest: string | null
+  outcomeAccepted: boolean
   rawRecordsIncluded: false
 }
 
@@ -32,6 +35,19 @@ function normalizedIdentity(value: string, pattern: RegExp, field: string) {
   return normalized
 }
 
+function normalizedOutcome(input: ManagedTrialProofInput) {
+  const statuses = new Set(['not_started', 'collecting', 'target_met', 'improved', 'unchanged', 'regressed'])
+  if (!statuses.has(input.outcomeStatus)) throw new Error('Outcome status is invalid for trial proof.')
+  const outcomeDigest = input.outcomeDigest
+  if (!(outcomeDigest === null || DIGEST_PATTERN.test(outcomeDigest))) throw new Error('Outcome digest is invalid for trial proof.')
+  if (input.outcomeStatus === 'not_started' && outcomeDigest !== null) throw new Error('An unstarted outcome cannot include a digest.')
+  if (input.outcomeStatus !== 'not_started' && outcomeDigest === null) throw new Error('A started outcome must include a digest.')
+  if (input.outcomeAccepted && (!['target_met', 'improved'].includes(input.outcomeStatus) || outcomeDigest === null)) {
+    throw new Error('Only a clear or improved measured outcome can be accepted.')
+  }
+  return { outcomeStatus: input.outcomeStatus, outcomeDigest, outcomeAccepted: input.outcomeAccepted }
+}
+
 export function managedTrialProofProjection(input: ManagedTrialProofInput) {
   const product = normalizedIdentity(input.product, PRODUCT_PATTERN, 'Product')
   const templateId = normalizedIdentity(input.templateId, TEMPLATE_PATTERN, 'Template')
@@ -39,6 +55,7 @@ export function managedTrialProofProjection(input: ManagedTrialProofInput) {
   const sourceRecordCount = boundedInteger(input.sourceRecordCount, MAX_COUNT, 'Source record count')
   const behaviorSignalCount = boundedInteger(input.behaviorSignalCount, MAX_COUNT, 'Behavior signal count')
   const reviewedDecisionCount = boundedInteger(input.reviewedDecisionCount, MAX_COUNT, 'Reviewed decision count')
+  const outcome = normalizedOutcome(input)
   return [
     MANAGED_TRIAL_PROOF_CONTRACT,
     MANAGED_TRIAL_PROOF_VERSION,
@@ -48,6 +65,9 @@ export function managedTrialProofProjection(input: ManagedTrialProofInput) {
     sourceRecordCount,
     behaviorSignalCount,
     reviewedDecisionCount,
+    outcome.outcomeStatus,
+    outcome.outcomeDigest,
+    outcome.outcomeAccepted,
     false,
   ] as const
 }
@@ -67,7 +87,7 @@ const sha256RoundConstants = new Uint32Array([
   0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ])
 
-function sha256Hex(source: string) {
+export function sha256Hex(source: string) {
   const input = new TextEncoder().encode(source)
   const paddedLength = Math.ceil((input.length + 9) / 64) * 64
   const padded = new Uint8Array(paddedLength)
@@ -128,6 +148,9 @@ export function buildManagedTrialProof(input: ManagedTrialProofInput): ManagedTr
     sourceRecordCount: projection[5],
     behaviorSignalCount: projection[6],
     reviewedDecisionCount: projection[7],
+    outcomeStatus: projection[8],
+    outcomeDigest: projection[9],
+    outcomeAccepted: projection[10],
     rawRecordsIncluded: false,
     summaryDigest: `sha256:${sha256Hex(JSON.stringify(projection))}`,
   }
@@ -142,6 +165,9 @@ export function managedTrialProofFragmentFields(proof: ManagedTrialProof, produc
       sourceRecordCount: proof.sourceRecordCount,
       behaviorSignalCount: proof.behaviorSignalCount,
       reviewedDecisionCount: proof.reviewedDecisionCount,
+      outcomeStatus: proof.outcomeStatus,
+      outcomeDigest: proof.outcomeDigest,
+      outcomeAccepted: proof.outcomeAccepted,
     })
     if (proof.contract !== expected.contract
       || proof.version !== expected.version
@@ -160,6 +186,9 @@ export function managedTrialProofFragmentFields(proof: ManagedTrialProof, produc
       ['proof_sources', String(proof.sourceRecordCount)],
       ['proof_behavior', String(proof.behaviorSignalCount)],
       ['proof_decisions', String(proof.reviewedDecisionCount)],
+      ['proof_outcome', proof.outcomeStatus],
+      ['proof_outcome_digest', proof.outcomeDigest ?? ''],
+      ['proof_outcome_accepted', String(proof.outcomeAccepted)],
       ['proof_raw_records', 'false'],
     ] as const
   } catch {
