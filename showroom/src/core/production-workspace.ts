@@ -173,6 +173,10 @@ export type ProductionEvent = {
   maintenanceStrategyRevision?: number
   maintenanceProcedureReference?: string
   maintenancePlannedDueAt?: string
+  maintenanceOutcome?: ProductionMaintenanceOutcome
+  maintenanceFindings?: string
+  maintenanceProcedureCompleted?: boolean
+  maintenanceReturnToService?: ProductionMaintenanceReturnToService
   equipmentIds?: string[]
   installedAt?: string
   workCentreId?: string
@@ -367,7 +371,18 @@ export type ProductionMaintenanceRecord = {
     outcome: string
     evidenceReference: string
     nextDueAt?: string
+    result?: ProductionMaintenanceResult
   }
+}
+
+export type ProductionMaintenanceOutcome = 'completed' | 'completed_with_findings'
+export type ProductionMaintenanceReturnToService = 'recommended' | 'restricted' | 'not_recommended'
+
+export type ProductionMaintenanceResult = {
+  outcome: ProductionMaintenanceOutcome
+  findings: string
+  procedureCompleted: true
+  returnToService: ProductionMaintenanceReturnToService
 }
 
 export type ProductionMaintenanceDueItem = {
@@ -406,8 +421,10 @@ const materialEventFields = [...baseEventFields, 'quantity', 'shiftRef', 'materi
 const materialOptionalEventFields = ['materialLot']
 const downtimeEndEventFields = [...baseEventFields, 'downtimeStartActionId']
 const maintenanceStrategyBindingFields = ['maintenanceStrategyActionId', 'maintenanceStrategyRevision', 'maintenanceProcedureReference', 'maintenancePlannedDueAt']
+const maintenanceResultFields = ['maintenanceOutcome', 'maintenanceFindings', 'maintenanceProcedureCompleted', 'maintenanceReturnToService']
 const maintenanceStartEventFields = [...baseEventFields, 'maintenanceOwner', ...maintenanceStrategyBindingFields]
-const maintenanceCompleteEventFields = [...baseEventFields, 'maintenanceStartActionId', ...maintenanceStrategyBindingFields, 'nextDueAt']
+const maintenanceCompleteEventFields = [...baseEventFields, 'maintenanceStartActionId', ...maintenanceStrategyBindingFields, ...maintenanceResultFields, 'nextDueAt']
+const maintenanceHistoricalCompleteEventFields = maintenanceCompleteEventFields.filter((field) => !maintenanceResultFields.includes(field))
 const equipmentImportEventFields = [...baseEventFields, 'equipmentIds']
 const equipmentCommissionEventFields = [...baseEventFields, 'installedAt', 'toState', 'workCentreId']
 const equipmentMaintenanceStrategyEventFields = [...baseEventFields, 'strategyRevision', 'maintenanceOwner', 'intervalDays', 'nextDueAt', 'procedureReference']
@@ -424,6 +441,8 @@ const productionEquipmentAssetFields = ['id', 'name', 'workCentreId', 'criticali
 const productionEquipmentCommissioningFields = ['actionId', 'commissionedAt', 'commissionedBy', 'installedAt', 'initialState', 'safetyBaselineReference']
 const productionEquipmentMaintenanceStrategyFields = ['revision', 'actionId', 'savedAt', 'savedBy', 'maintenanceOwner', 'intervalDays', 'nextDueAt', 'procedureReference', 'safetyBaselineReference']
 const productionEquipmentCriticalities: ProductionEquipmentCriticality[] = ['critical', 'high', 'medium', 'low']
+const productionMaintenanceOutcomes: ProductionMaintenanceOutcome[] = ['completed', 'completed_with_findings']
+const productionMaintenanceReturnToServiceValues: ProductionMaintenanceReturnToService[] = ['recommended', 'restricted', 'not_recommended']
 const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
   job_created: jobCreatedEventFields,
   job_schedule_updated: jobScheduleUpdateEventFields,
@@ -937,7 +956,7 @@ export function validateProductionState(value: unknown): ProductionState {
     const issueSnapshotFields = ['issueSeverity', 'issueOwner', 'issueDueAt', 'issueContainment'] as const
     const issueSnapshotFieldCount = issueSnapshotFields.filter((field) => candidate[field] !== undefined).length
     const materialFieldCount = ['materialRef', 'materialLot', 'materialUnit'].filter((field) => candidate[field] !== undefined).length
-    const maintenanceFieldCount = ['maintenanceOwner', 'maintenanceStartActionId', ...maintenanceStrategyBindingFields, 'nextDueAt'].filter((field) => candidate[field] !== undefined).length
+    const maintenanceFieldCount = ['maintenanceOwner', 'maintenanceStartActionId', ...maintenanceStrategyBindingFields, ...maintenanceResultFields, 'nextDueAt'].filter((field) => candidate[field] !== undefined).length
     if (candidate.kind === 'equipment_master_imported') {
       if (candidate.subjectId !== 'equipment-master') throw new Error(`events[${index}] must reference the equipment master authority.`)
       if (!Array.isArray(candidate.equipmentIds) || candidate.equipmentIds.length < 1 || candidate.equipmentIds.length > 100) throw new Error(`events[${index}].equipmentIds are invalid.`)
@@ -1050,9 +1069,15 @@ export function validateProductionState(value: unknown): ProductionState {
       const bindingFieldCount = maintenanceStrategyBindingFields.filter((field) => candidate[field] !== undefined).length
       const strategyBound = bindingFieldCount === maintenanceStrategyBindingFields.length
       if (bindingFieldCount !== 0 && !strategyBound) throw new Error(`events[${index}] maintenance strategy binding is incomplete.`)
+      const resultFieldCount = maintenanceResultFields.filter((field) => candidate[field] !== undefined).length
+      const hasResult = resultFieldCount === maintenanceResultFields.length
+      if (resultFieldCount !== 0 && !hasResult) throw new Error(`events[${index}] maintenance result is incomplete.`)
+      if (hasResult && (candidate.kind !== 'maintenance_completed' || !strategyBound)) throw new Error(`events[${index}] maintenance result requires strategy-bound completion.`)
       const expectedFields = candidate.kind === 'maintenance_started'
         ? (strategyBound ? maintenanceStartEventFields : [...baseEventFields, 'maintenanceOwner'])
-        : (strategyBound ? maintenanceCompleteEventFields : [...baseEventFields, 'maintenanceStartActionId'])
+        : (strategyBound
+            ? (hasResult ? maintenanceCompleteEventFields : maintenanceHistoricalCompleteEventFields)
+            : [...baseEventFields, 'maintenanceStartActionId'])
       if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...expectedFields].sort())) throw new Error(`events[${index}] maintenance event fields are invalid.`)
       if (candidate.kind === 'maintenance_started') canonicalText(candidate.maintenanceOwner, `events[${index}].maintenanceOwner`, 120)
       else canonicalText(candidate.maintenanceStartActionId, `events[${index}].maintenanceStartActionId`, 160)
@@ -1063,6 +1088,13 @@ export function validateProductionState(value: unknown): ProductionState {
         if (!validDowntimeTimestamp(candidate.maintenancePlannedDueAt)) throw new Error(`events[${index}].maintenancePlannedDueAt is invalid.`)
         if (candidate.kind === 'maintenance_completed') {
           if (!validDowntimeTimestamp(candidate.nextDueAt) || timestampAtOrBefore(candidate.nextDueAt as string, candidate.createdAt as string)) throw new Error(`events[${index}].nextDueAt must follow reviewed completion.`)
+          if (hasResult) {
+            if (!productionMaintenanceOutcomes.includes(candidate.maintenanceOutcome as ProductionMaintenanceOutcome)) throw new Error(`events[${index}].maintenanceOutcome is invalid.`)
+            canonicalText(candidate.maintenanceFindings, `events[${index}].maintenanceFindings`, 360)
+            if (candidate.maintenanceProcedureCompleted !== true) throw new Error(`events[${index}].maintenanceProcedureCompleted must be confirmed.`)
+            if (!productionMaintenanceReturnToServiceValues.includes(candidate.maintenanceReturnToService as ProductionMaintenanceReturnToService)) throw new Error(`events[${index}].maintenanceReturnToService is invalid.`)
+            if (candidate.maintenanceOutcome === 'completed' && candidate.maintenanceReturnToService !== 'recommended') throw new Error(`events[${index}] completed maintenance must recommend return to service.`)
+          }
         }
       }
     } else if (candidate.kind === 'issue_opened') {
@@ -1586,6 +1618,14 @@ function deriveProductionMaintenanceRecords(
         outcome: event.reason,
         evidenceReference: event.evidenceReference,
         ...(event.nextDueAt === undefined ? {} : { nextDueAt: event.nextDueAt }),
+        ...(event.maintenanceOutcome === undefined ? {} : {
+          result: {
+            outcome: event.maintenanceOutcome,
+            findings: event.maintenanceFindings as string,
+            procedureCompleted: true,
+            returnToService: event.maintenanceReturnToService as ProductionMaintenanceReturnToService,
+          },
+        }),
       }
       activeRecord = undefined
     }
@@ -2781,15 +2821,30 @@ export function completeProductionMaintenance(
   machineId: string,
   maintenanceStartActionId: string,
   proof: ProductionActionProof,
+  result?: ProductionMaintenanceResult,
 ) {
   validateProductionState(state)
   if (!validProof(proof)
     || !validDowntimeTimestamp(proof.capturedAt)
-    || !validCanonicalText(maintenanceStartActionId, 160)) return null
+    || !validCanonicalText(maintenanceStartActionId, 160)
+    || (result !== undefined && (!isRecord(result)
+      || JSON.stringify(Object.keys(result).sort()) !== JSON.stringify(['findings', 'outcome', 'procedureCompleted', 'returnToService'])
+      || !productionMaintenanceOutcomes.includes(result.outcome)
+      || !validCanonicalText(result.findings, 360)
+      || result.procedureCompleted !== true
+      || !productionMaintenanceReturnToServiceValues.includes(result.returnToService)
+      || (result.outcome === 'completed' && result.returnToService !== 'recommended')))) return null
   const existing = state.events.find((event) => event.actionId === proof.actionId)
   if (existing) return existing.kind === 'maintenance_completed'
     && existing.subjectId === machineId
     && existing.maintenanceStartActionId === maintenanceStartActionId
+    && (existing.maintenanceStrategyActionId === undefined
+      ? result === undefined
+      : result !== undefined
+        && existing.maintenanceOutcome === result.outcome
+        && existing.maintenanceFindings === result.findings
+        && existing.maintenanceProcedureCompleted === result.procedureCompleted
+        && existing.maintenanceReturnToService === result.returnToService)
     && sameProof(existing, proof) ? state : null
   const machine = state.machines.find((candidate) => candidate.id === machineId)
   const equipmentAsset = state.equipmentMaster?.assets.find((candidate) => candidate.id === machineId)
@@ -2802,6 +2857,7 @@ export function completeProductionMaintenance(
     || actionIdIsUsed(state, proof.actionId)
     || state.revision >= Number.MAX_SAFE_INTEGER) return null
   if (Boolean(strategy) !== Boolean(openRecord.strategy)
+    || Boolean(strategy) !== Boolean(result)
     || (strategy && openRecord.strategy && (strategy.actionId !== openRecord.strategy.actionId
       || strategy.revision !== openRecord.strategy.revision
       || strategy.procedureReference !== openRecord.strategy.procedureReference
@@ -2819,6 +2875,10 @@ export function completeProductionMaintenance(
       maintenanceStrategyRevision: strategy.revision,
       maintenanceProcedureReference: strategy.procedureReference,
       maintenancePlannedDueAt: strategy.nextDueAt,
+      maintenanceOutcome: result?.outcome,
+      maintenanceFindings: result?.findings,
+      maintenanceProcedureCompleted: result?.procedureCompleted,
+      maintenanceReturnToService: result?.returnToService,
       nextDueAt,
     }),
   })

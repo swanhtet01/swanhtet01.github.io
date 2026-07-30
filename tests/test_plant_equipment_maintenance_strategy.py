@@ -102,6 +102,10 @@ def _strategy_maintenance_state(
     }
     if completing:
         event["maintenanceStartActionId"] = start_action_id
+        event["maintenanceOutcome"] = "completed"
+        event["maintenanceFindings"] = "No findings outside the reviewed procedure"
+        event["maintenanceProcedureCompleted"] = True
+        event["maintenanceReturnToService"] = "recommended"
         event["nextDueAt"] = "2026-09-15T10:00:00.000Z"
         strategy["nextDueAt"] = event["nextDueAt"]
     else:
@@ -248,6 +252,23 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
             "2026-09-15T10:00:00.000Z",
         )
         self.assertEqual(
+            {
+                field: completed["events"][0][field]
+                for field in (
+                    "maintenanceOutcome",
+                    "maintenanceFindings",
+                    "maintenanceProcedureCompleted",
+                    "maintenanceReturnToService",
+                )
+            },
+            {
+                "maintenanceOutcome": "completed",
+                "maintenanceFindings": "No findings outside the reviewed procedure",
+                "maintenanceProcedureCompleted": True,
+                "maintenanceReturnToService": "recommended",
+            },
+        )
+        self.assertEqual(
             completed["equipmentMaster"]["assets"][0]["maintenanceStrategy"]["nextDueAt"],
             "2026-09-15T10:00:00.000Z",
         )
@@ -302,19 +323,41 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
             "2026-08-16T10:00:00.000Z",
             "Completed reviewed preventive maintenance",
         )
-        forged_completion = _strategy_maintenance_state(
+        valid_completion = _strategy_maintenance_state(
             started,
             completion_evidence,
             start_action_id=start_evidence["actionId"],
         )
+        completion_cases = []
+        forged_completion = deepcopy(valid_completion)
         forged_completion["events"][0]["nextDueAt"] = "2026-09-14T10:00:00.000Z"
         forged_completion["equipmentMaster"]["assets"][0]["maintenanceStrategy"]["nextDueAt"] = "2026-09-14T10:00:00.000Z"
-        with self.assertRaises(TrialValidationError):
-            reduce_production_state(
-                "production.maintenance.completed",
-                started,
-                {"state": forged_completion, "evidence": completion_evidence},
-            )
+        completion_cases.append(forged_completion)
+        missing_result = deepcopy(valid_completion)
+        for field in (
+            "maintenanceOutcome",
+            "maintenanceFindings",
+            "maintenanceProcedureCompleted",
+            "maintenanceReturnToService",
+        ):
+            missing_result["events"][0].pop(field)
+        completion_cases.append(missing_result)
+        partial_result = deepcopy(valid_completion)
+        partial_result["events"][0].pop("maintenanceFindings")
+        completion_cases.append(partial_result)
+        unconfirmed_procedure = deepcopy(valid_completion)
+        unconfirmed_procedure["events"][0]["maintenanceProcedureCompleted"] = False
+        completion_cases.append(unconfirmed_procedure)
+        contradictory_result = deepcopy(valid_completion)
+        contradictory_result["events"][0]["maintenanceReturnToService"] = "restricted"
+        completion_cases.append(contradictory_result)
+        for candidate in completion_cases:
+            with self.subTest(candidate=candidate), self.assertRaises(TrialValidationError):
+                reduce_production_state(
+                    "production.maintenance.completed",
+                    started,
+                    {"state": candidate, "evidence": completion_evidence},
+                )
 
     def test_due_queue_orders_real_strategies_and_retains_completion_basis(self) -> None:
         first_commissioned = _commissioned_state()

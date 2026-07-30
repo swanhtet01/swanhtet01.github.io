@@ -151,8 +151,8 @@
       "localAutomation": {
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Give strategy-bound Plant maintenance completion one structured reviewed result with outcome, bounded findings, procedure-completion confirmation, and return-to-service recommendation while retaining the original strategy and evidence; do not auto-change machine state, dispatch work, buy parts, control equipment, or infer telemetry.",
-        "reason": "Plant now presents a deterministic due-work queue and routes its first item into accountable review. The next enterprise gap is replacing a free-text-only completion with a precise result packet that operations and audit can understand without pretending to control the physical asset."
+        "workOrder": "Let a named human turn exactly one restricted or not-recommended strategy maintenance result into a prefilled Plant problem review linked to the completion evidence, owner, asset, and finding; never open the problem automatically, change machine state, dispatch work, buy parts, control equipment, or infer telemetry.",
+        "reason": "Plant now retains a structured maintenance result without pretending that a recommendation changes the asset. The next operational gap is an explicit, evidence-linked path from a limiting finding into the existing accountable problem lifecycle instead of leaving the finding buried in history."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }

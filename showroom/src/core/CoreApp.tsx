@@ -186,7 +186,10 @@ import {
   type ProductionIssueSeverity,
   type ProductionJob,
   type ProductionJobPriority,
+  type ProductionMaintenanceOutcome,
   type ProductionMaintenanceRecord,
+  type ProductionMaintenanceResult,
+  type ProductionMaintenanceReturnToService,
   type ProductionMaterialUnit,
   type ProductionMachineState,
   type ProductionOutputKind,
@@ -5752,6 +5755,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [maintenanceDialogOpen, setMaintenanceDialogOpen] = useState(false)
   const [maintenanceMachineId, setMaintenanceMachineId] = useState(production.machines[0]?.id ?? '')
   const [maintenanceOwner, setMaintenanceOwner] = useState('')
+  const [maintenanceCompletionDraft, setMaintenanceCompletionDraft] = useState<{
+    startActionId: string
+    outcome: ProductionMaintenanceOutcome
+    findings: string
+    procedureCompleted: boolean
+    returnToService: ProductionMaintenanceReturnToService
+  } | null>(null)
   const [jobDraft, setJobDraft] = useState<{ id: string; line: string; product: string; target: string; owner: string; priority: ProductionJobPriority; dueAt: string }>({
     id: '',
     line: '',
@@ -5794,6 +5804,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const maintenanceDialogRef = useRef<HTMLDialogElement>(null)
   const maintenanceTriggerRef = useRef<HTMLButtonElement>(null)
   const maintenanceMachineSelectRef = useRef<HTMLSelectElement>(null)
+  const maintenanceOutcomeRef = useRef<HTMLSelectElement>(null)
   const scheduleDialogRef = useRef<HTMLDialogElement>(null)
   const scheduleTriggerRef = useRef<HTMLButtonElement | null>(null)
   const outputJobSelectRef = useRef<HTMLSelectElement>(null)
@@ -5866,6 +5877,16 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const maintenanceRecords = productionMaintenanceRecords(production)
   const openMaintenanceRecords = maintenanceRecords.filter((record) => !record.completion)
   const recentMaintenanceRecords = maintenanceRecords.filter((record) => record.completion).slice(0, 3)
+  const selectedMaintenanceCompletionRecord = maintenanceCompletionDraft
+    ? openMaintenanceRecords.find((record) => record.startActionId === maintenanceCompletionDraft.startActionId)
+    : undefined
+  const maintenanceCompletionFindings = maintenanceCompletionDraft?.findings.trim() ?? ''
+  const maintenanceCompletionIsValid = Boolean(maintenanceCompletionDraft
+    && selectedMaintenanceCompletionRecord?.strategy
+    && maintenanceCompletionFindings
+    && maintenanceCompletionFindings.length <= 360
+    && maintenanceCompletionDraft.procedureCompleted
+    && (maintenanceCompletionDraft.outcome !== 'completed' || maintenanceCompletionDraft.returnToService === 'recommended'))
   const maintenanceMachineIds = new Set(openMaintenanceRecords.map((record) => record.machineId))
   const maintenanceDueQueue = productionMaintenanceDueQueue(production, new Date(issueClock).toISOString())
   const readyMaintenanceDueItems = maintenanceDueQueue.items.filter((item) => !maintenanceMachineIds.has(item.assetId)).slice(0, 6)
@@ -6987,27 +7008,60 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }, maintenanceTriggerRef.current)
   }
 
-  function reviewMaintenanceCompletion(record: ProductionMaintenanceRecord) {
+  function beginMaintenanceCompletion(record: ProductionMaintenanceRecord) {
+    if (record.completion) return
+    if (!record.strategy) {
+      queueMaintenanceCompletion(record)
+      return
+    }
+    setMaintenanceCompletionDraft({
+      startActionId: record.startActionId,
+      outcome: 'completed',
+      findings: '',
+      procedureCompleted: false,
+      returnToService: 'recommended',
+    })
+    requestAnimationFrame(() => maintenanceOutcomeRef.current?.focus())
+  }
+
+  function reviewMaintenanceCompletion(event: FormEvent) {
+    event.preventDefault()
+    if (!maintenanceCompletionDraft || !selectedMaintenanceCompletionRecord || !maintenanceCompletionIsValid) {
+      setNotice('Confirm the procedure and record one valid maintenance result before review.')
+      return
+    }
+    const result: ProductionMaintenanceResult = {
+      outcome: maintenanceCompletionDraft.outcome,
+      findings: maintenanceCompletionFindings,
+      procedureCompleted: true,
+      returnToService: maintenanceCompletionDraft.returnToService,
+    }
+    queueMaintenanceCompletion(selectedMaintenanceCompletionRecord, result)
+  }
+
+  function queueMaintenanceCompletion(record: ProductionMaintenanceRecord, result?: ProductionMaintenanceResult) {
     const machine = production.machines.find((candidate) => candidate.id === record.machineId)
     if (!machine || record.completion) return
     maintenanceDialogRef.current?.close()
     setMaintenanceDialogOpen(false)
+    setMaintenanceCompletionDraft(null)
     queueAction({
       kind: 'maintenance_complete',
       subjectId: machine.id,
       summary: `Complete maintenance for ${machine.name}`,
       before: `${machine.name} · open maintenance owned by ${record.owner} since ${formatTime(record.startedAt)}`,
       after: record.strategy
-        ? `${machine.name} · reviewed completion advances next due from the strategy interval · machine status and downtime unchanged`
+        ? `${machine.name} · ${result?.outcome === 'completed_with_findings' ? 'completed with findings' : 'completed'} · ${result?.returnToService.replaceAll('_', ' ')} · next due advances · machine status unchanged`
         : `${machine.name} · maintenance completed with outcome and evidence · machine status and downtime records unchanged`,
       apply: async (action) => {
-        await mutateProduction('production.maintenance.completed', action.commandId, productionActionProof(action), (current) => completeProductionMaintenance(current, machine.id, record.startActionId, productionActionProof(action)))
+        await mutateProduction('production.maintenance.completed', action.commandId, productionActionProof(action), (current) => completeProductionMaintenance(current, machine.id, record.startActionId, productionActionProof(action), result))
       },
     }, maintenanceTriggerRef.current)
   }
 
   function closeMaintenanceDialog() {
     setMaintenanceDialogOpen(false)
+    setMaintenanceCompletionDraft(null)
     requestAnimationFrame(() => maintenanceTriggerRef.current?.focus())
   }
 
@@ -7287,20 +7341,28 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     </dialog>
     <dialog aria-labelledby="maintenance-dialog-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMaintenanceDialog() }} ref={maintenanceDialogRef}>
       <div className="panel-head"><div><span className="core-eyebrow">Owned work</span><h2 id="maintenance-dialog-title">Machine maintenance</h2></div><button aria-label="Close maintenance work" className="text-link" onClick={closeMaintenanceDialog} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
-      {readyMaintenanceDueItems.length ? <><p className="panel-copy"><strong>Preventive work</strong> · {overdueMaintenanceCount ? `${overdueMaintenanceCount} overdue` : `${readyMaintenanceDueItems.length} planned`}</p><div className="action-history-list">{readyMaintenanceDueItems.map((item, index) => <article key={item.assetId}><div><strong>{item.assetName} · {item.status === 'overdue' ? (item.daysUntilDue === 0 ? 'Due now' : `${Math.abs(item.daysUntilDue)}d overdue`) : item.status === 'due_soon' ? `Due in ${item.daysUntilDue}d` : formatIssueDue(item.dueAt)}</strong><small style={wrappedIssueDetail}>{item.criticality} · {item.owner} · Strategy R{item.strategyRevision}</small><small style={wrappedIssueDetail}>{item.procedureReference}</small></div>{index === 0 ? <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => { setMaintenanceMachineId(item.assetId); requestAnimationFrame(() => maintenanceMachineSelectRef.current?.focus()) }} type="button">Review next</button> : null}</article>)}</div></> : null}
+      {readyMaintenanceDueItems.length ? <><p className="panel-copy"><strong>Preventive work</strong> · {overdueMaintenanceCount ? `${overdueMaintenanceCount} overdue` : `${readyMaintenanceDueItems.length} planned`}</p><div className="action-history-list">{readyMaintenanceDueItems.map((item, index) => <article key={item.assetId}><div><strong>{item.assetName} · {item.status === 'overdue' ? (item.daysUntilDue === 0 ? 'Due now' : `${Math.abs(item.daysUntilDue)}d overdue`) : item.status === 'due_soon' ? `Due in ${item.daysUntilDue}d` : formatIssueDue(item.dueAt)}</strong><small style={wrappedIssueDetail}>{item.criticality} · {item.owner} · Strategy R{item.strategyRevision}</small><small style={wrappedIssueDetail}>{item.procedureReference}</small></div>{index === 0 ? <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => { setMaintenanceCompletionDraft(null); setMaintenanceMachineId(item.assetId); requestAnimationFrame(() => maintenanceMachineSelectRef.current?.focus()) }} type="button">Review next</button> : null}</article>)}</div></> : null}
       {openMaintenanceRecords.length ? <div className="issue-list">{openMaintenanceRecords.map((record, index) => <article key={record.startActionId}>
         <span aria-hidden="true" className="issue-mark">MX</span>
         <div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started {formatTime(record.startedAt)} by {record.startedBy}</small>{record.strategy ? <small style={wrappedIssueDetail}>Strategy R{record.strategy.revision} · Due {formatIssueDue(record.strategy.plannedDueAt)} · {record.strategy.procedureReference}</small> : null}<small style={wrappedIssueDetail}>Scope: {record.scope}</small><small style={wrappedIssueDetail}>Evidence: {record.startEvidenceReference} · Action: {record.startActionId}</small></div>
-        <button className="core-button" data-maintenance-primary={index === 0 ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => reviewMaintenanceCompletion(record)} type="button">Review complete</button>
+        <button className="core-button" data-maintenance-primary={index === 0 ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => beginMaintenanceCompletion(record)} type="button">{record.strategy ? 'Add result' : 'Review complete'}</button>
       </article>)}</div> : <p className="panel-copy">No machine has open maintenance work.</p>}
-      {availableMaintenanceMachines.length ? <form autoComplete="off" className="core-form compact-form" onSubmit={reviewMaintenanceStart}>
+      {maintenanceCompletionDraft && selectedMaintenanceCompletionRecord ? <form autoComplete="off" className="core-form compact-form" onSubmit={reviewMaintenanceCompletion}>
+        <p className="panel-copy"><strong>Completion result · {selectedMaintenanceCompletionRecord.machineName}</strong><br />Strategy R{selectedMaintenanceCompletionRecord.strategy?.revision} · {selectedMaintenanceCompletionRecord.strategy?.procedureReference}</p>
+        <label>Outcome<select onChange={(event) => { const outcome = event.target.value as ProductionMaintenanceOutcome; setMaintenanceCompletionDraft((current) => current ? { ...current, outcome, returnToService: outcome === 'completed' ? 'recommended' : current.returnToService } : current) }} ref={maintenanceOutcomeRef} value={maintenanceCompletionDraft.outcome}><option value="completed">Completed · no limiting finding</option><option value="completed_with_findings">Completed with findings</option></select></label>
+        <label>Findings<textarea maxLength={360} onChange={(event) => setMaintenanceCompletionDraft((current) => current ? { ...current, findings: event.target.value } : current)} placeholder="Record inspected condition and findings; use 'No findings' only when confirmed." required value={maintenanceCompletionDraft.findings} /></label>
+        <label className="website-intake-confirm"><input checked={maintenanceCompletionDraft.procedureCompleted} onChange={(event) => setMaintenanceCompletionDraft((current) => current ? { ...current, procedureCompleted: event.target.checked } : current)} type="checkbox" /><span>Reviewed procedure completed</span></label>
+        <label>Return-to-service recommendation<select disabled={maintenanceCompletionDraft.outcome === 'completed'} onChange={(event) => setMaintenanceCompletionDraft((current) => current ? { ...current, returnToService: event.target.value as ProductionMaintenanceReturnToService } : current)} value={maintenanceCompletionDraft.returnToService}><option value="recommended">Recommended</option><option value="restricted">Restricted service</option><option value="not_recommended">Not recommended</option></select></label>
+        <p className="panel-copy">This recommendation does not change recorded machine status. Record any status observation or problem separately.</p>
+        <div className="form-actions"><button className="core-button" onClick={() => setMaintenanceCompletionDraft(null)} type="button">Cancel result</button><button className="core-button primary" disabled={!maintenanceCompletionIsValid || Boolean(pendingAction)} type="submit">Review completion</button></div>
+      </form> : availableMaintenanceMachines.length ? <form autoComplete="off" className="core-form compact-form" onSubmit={reviewMaintenanceStart}>
         <label>Machine<select data-maintenance-primary={!openMaintenanceRecords.length ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setMaintenanceMachineId(event.target.value)} ref={maintenanceMachineSelectRef} value={selectedMaintenanceMachineId}>{availableMaintenanceMachines.map((machine) => { const strategy = production.equipmentMaster?.assets.find((asset) => asset.id === machine.id)?.maintenanceStrategy; return <option key={machine.id} value={machine.id}>{machine.name} · {strategy ? `planned R${strategy.revision}` : `recorded ${productionMachineStateLabels[machine.state]}`}</option> })}</select></label>
         {selectedMaintenanceStrategy ? <p className="panel-copy"><strong>Strategy R{selectedMaintenanceStrategy.revision}</strong> · Due {formatIssueDue(selectedMaintenanceStrategy.nextDueAt)}<br />Procedure: {selectedMaintenanceStrategy.procedureReference}</p> : null}
         <label>{selectedMaintenanceStrategy ? 'Strategy owner' : 'Owner'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setMaintenanceOwner(event.target.value)} placeholder="Named person or role" readOnly={Boolean(selectedMaintenanceStrategy)} required value={selectedMaintenanceStrategy ? selectedMaintenanceOwner : maintenanceOwner} /></label>
         <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaintenanceMachine || !selectedMaintenanceOwner || selectedMaintenanceOwner.length > 120} type="submit">Review start</button>
       </form> : <p className="panel-copy">Every recorded machine already has open maintenance work.</p>}
-      {recentMaintenanceRecords.length ? <><p className="panel-copy"><strong>Recent completed work</strong></p><div className="action-history-list">{recentMaintenanceRecords.map((record) => <article key={record.startActionId}><div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started: {record.startedBy} · {record.scope} · {record.startEvidenceReference}</small><small style={wrappedIssueDetail}>Completed: {record.completion?.completedBy} · {record.completion?.outcome} · {record.completion?.evidenceReference}</small>{record.completion?.nextDueAt ? <small style={wrappedIssueDetail}>Next due: {formatIssueDue(record.completion.nextDueAt)} · Strategy R{record.strategy?.revision}</small> : null}<small style={wrappedIssueDetail}>{formatTime(record.startedAt)} to {formatTime(record.completion?.completedAt ?? record.startedAt)}</small></div></article>)}</div></> : null}
-      <p className="panel-copy">A commissioned asset uses its reviewed owner, procedure, revision, and due date. Completion advances the next due from the strategy interval. No equipment command, telemetry, parts purchase, status change, downtime, or job change occurs.</p>
+      {recentMaintenanceRecords.length ? <><p className="panel-copy"><strong>Recent completed work</strong></p><div className="action-history-list">{recentMaintenanceRecords.map((record) => <article key={record.startActionId}><div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started: {record.startedBy} · {record.scope} · {record.startEvidenceReference}</small><small style={wrappedIssueDetail}>Completed: {record.completion?.completedBy} · {record.completion?.outcome} · {record.completion?.evidenceReference}</small>{record.completion?.result ? <small style={wrappedIssueDetail}>{record.completion.result.outcome.replaceAll('_', ' ')} · Return: {record.completion.result.returnToService.replaceAll('_', ' ')} · {record.completion.result.findings}</small> : null}{record.completion?.nextDueAt ? <small style={wrappedIssueDetail}>Next due: {formatIssueDue(record.completion.nextDueAt)} · Strategy R{record.strategy?.revision}</small> : null}<small style={wrappedIssueDetail}>{formatTime(record.startedAt)} to {formatTime(record.completion?.completedAt ?? record.startedAt)}</small></div></article>)}</div></> : null}
+      <p className="panel-copy">Strategy-bound completion retains outcome, findings, procedure confirmation, recommendation, and next due. It performs no equipment command, telemetry, parts purchase, status change, downtime, or job change.</p>
     </dialog>
     <dialog aria-labelledby="machine-observation-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMachineObservation() }} ref={machineDialogRef}>
       {observedMachine && machineObservation ? <>

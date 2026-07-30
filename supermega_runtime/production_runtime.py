@@ -228,8 +228,20 @@ _MAINTENANCE_STRATEGY_BINDING_FIELDS = frozenset(
         "maintenancePlannedDueAt",
     }
 )
+_MAINTENANCE_RESULT_FIELDS = frozenset(
+    {
+        "maintenanceOutcome",
+        "maintenanceFindings",
+        "maintenanceProcedureCompleted",
+        "maintenanceReturnToService",
+    }
+)
 _MAINTENANCE_COMPLETION_STRATEGY_FIELDS = (
-    _MAINTENANCE_STRATEGY_BINDING_FIELDS | {"nextDueAt"}
+    _MAINTENANCE_STRATEGY_BINDING_FIELDS | _MAINTENANCE_RESULT_FIELDS | {"nextDueAt"}
+)
+_MAINTENANCE_OUTCOMES = frozenset({"completed", "completed_with_findings"})
+_MAINTENANCE_RETURN_TO_SERVICE = frozenset(
+    {"recommended", "restricted", "not_recommended"}
 )
 _TIMESTAMP_PATTERN = re.compile(
     r"^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})"
@@ -1222,6 +1234,17 @@ def _validate_event(
             raise TrialValidationError(
                 f"{field} strategy-bound completion requires one next due timestamp."
             )
+        result_fields = _MAINTENANCE_RESULT_FIELDS.intersection(event)
+        if result_fields and result_fields != _MAINTENANCE_RESULT_FIELDS:
+            raise TrialValidationError(
+                f"{field} maintenance result must be complete or absent."
+            )
+        if result_fields and (
+            kind != "maintenance_completed" or not binding_fields
+        ):
+            raise TrialValidationError(
+                f"{field} maintenance result requires strategy-bound completion."
+            )
         if binding_fields:
             _text(
                 event["maintenanceStrategyActionId"],
@@ -1253,6 +1276,34 @@ def _validate_event(
                     raise TrialValidationError(
                         f"{field}.nextDueAt must follow reviewed completion."
                     )
+                if result_fields:
+                    if event["maintenanceOutcome"] not in _MAINTENANCE_OUTCOMES:
+                        raise TrialValidationError(
+                            f"{field}.maintenanceOutcome is unsupported."
+                        )
+                    _text(
+                        event["maintenanceFindings"],
+                        f"{field}.maintenanceFindings",
+                        maximum=360,
+                    )
+                    if event["maintenanceProcedureCompleted"] is not True:
+                        raise TrialValidationError(
+                            f"{field}.maintenanceProcedureCompleted must be confirmed."
+                        )
+                    if (
+                        event["maintenanceReturnToService"]
+                        not in _MAINTENANCE_RETURN_TO_SERVICE
+                    ):
+                        raise TrialValidationError(
+                            f"{field}.maintenanceReturnToService is unsupported."
+                        )
+                    if (
+                        event["maintenanceOutcome"] == "completed"
+                        and event["maintenanceReturnToService"] != "recommended"
+                    ):
+                        raise TrialValidationError(
+                            f"{field} completed maintenance must recommend return to service."
+                        )
     elif kind == "issue_opened":
         if subject_id not in issue_ids:
             raise TrialValidationError(f"{field} references an unknown issue.")
@@ -3206,6 +3257,10 @@ def _validate_maintenance_completed(
                 "legacy maintenance completion cannot change the equipment master."
             )
         return
+    if not _MAINTENANCE_RESULT_FIELDS.issubset(event):
+        raise TrialValidationError(
+            "new strategy-bound maintenance completion requires one structured reviewed result."
+        )
     assets = current.get("equipmentMaster", {}).get("assets", [])
     asset_index = next(
         (
