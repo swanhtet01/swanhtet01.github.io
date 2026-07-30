@@ -150,6 +150,10 @@ const assetCorpus = (await Promise.all([...scriptPaths, ...cssPaths].map(async (
 const productHomeReadinessChunkPath = /assets\/ProductHomeReadiness-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!productHomeReadinessChunkPath) throw new Error('product_home_readiness_chunk_missing')
 const productHomeReadinessChunk = (await get(`/${productHomeReadinessChunkPath}`)).body
+const businessCommandChunkPath = /assets\/business-command-[A-Za-z0-9_-]+\.js/.exec(productHomeReadinessChunk)?.[0]
+if (!businessCommandChunkPath) throw new Error('business_command_chunk_missing')
+const businessCommandChunk = (await get(`/${businessCommandChunkPath}`)).body
+const productHomeReadinessCorpus = `${productHomeReadinessChunk}\n${businessCommandChunk}`
 const operationsChunkPath = /assets\/CoreApp-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!operationsChunkPath) throw new Error('operations_chunk_missing')
 const operationsChunk = (await get(`/${operationsChunkPath}`)).body
@@ -197,7 +201,7 @@ for (const required of ['AI learned', 'Managed company brief']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_operating_learning_ui:${required}`)
 }
 for (const required of ['Ask SuperMega', 'Ask what needs attention.', 'Free mode answers from validated local Shop, Plant, Website, and Ecommerce records.', 'Premium can add approved managed history and cross-workflow context.', 'Business question', 'Ask a business question', 'What needs attention?', 'What stock is low?', 'What blocks production?', 'Is the website ready?', 'Are online orders ready?', 'Raw questions stay in this field and are not written to behavior memory.', 'supermega.local_business_snapshot.v1', 'supermega.local_business_answer.v1', 'supermega.local_owner_control_run.v1', 'supermega.local_owner_control_acknowledgement.v1', 'sourceFingerprint', 'Owner Control run', 'Free local control', 'Premium managed control', 'Acknowledge review', 'Acknowledgement confirms review only.', 'Changed records will reopen the run.', 'Owner control refreshed from current managed evidence.', 'Keep learning checkpoint', 'Checkpoint retained', 'AI learned', 'Reading approved managed context...', 'Managed context is unavailable. The validated local answer remains on screen.', 'validated product sources', 'This answer reads validated local records only.', 'It does not send messages, publish, charge, move stock, write production, or train models.', 'Why this answer', 'Finish setup', 'Export evidence', 'Continue ', 'Owner pattern', 'Operate products', 'Shop, Plant, Website, and Ecommerce stay separate apps but share one evidence and approval system.', 'Starter paths', 'Start one product in 2 clicks.', 'Choose a local template, then open the working app.', 'AI prepares the setup and keeps business changes behind owner approval.', 'Product starter paths', 'Product starter actions', 'Prepare catalog', 'Prepare jobs', 'Prepare brand brief', 'Prepare orders', 'Open setup hub', 'Open Shop', 'Open Plant', 'Open Website', 'Open Ecommerce', 'agent_job_chosen']) {
-  if (!productHomeReadinessChunk.includes(required)) throw new Error(`missing_live_launch_readiness_context:${required}`)
+  if (!productHomeReadinessCorpus.includes(required)) throw new Error(`missing_live_launch_readiness_context:${required}`)
 }
 for (const required of ['supermega.behavior-trail.v1', 'supermega.behavior_preference.v1', 'agent_job_seen', 'agent_job_chosen']) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_behavior_context:${required}`)
