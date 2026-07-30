@@ -1131,6 +1131,8 @@ requireContract('Ally CEO execution uses one exact local-company run and no exte
   && allyCeoLocalCycleText.includes('dynamicDelegation: false')
   && allyCeoLocalCycleText.includes('recursiveDelegation: false')
   && allyCeoLocalCycleText.includes("MEMORY_RECOVERY_BLOCKERS = Object.freeze(new Set(['memory_pressure_critical', 'codex_working_set_high']))")
+  && allyCeoLocalCycleText.includes('MEMORY_CRITICAL_SETTLEMENT_DELAY_MS = 12_000')
+  && allyCeoLocalCycleText.includes('waitForMemorySettlement(memoryRecovery.stabilizationDelayMs)')
   && allyCeoLocalCycleText.includes('ally_ceo_local_cycle_memory_recovery_invalid')
   && allyCeoLocalCycleText.includes("kind === 'trim'")
   && allyCeoLocalCycleText.includes("'-Apply', '-Json'")

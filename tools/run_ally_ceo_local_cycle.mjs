@@ -20,6 +20,7 @@ const powershell = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 
 const MAX_COMMAND_BYTES = 512 * 1024
 const MAX_REPORT_BYTES = 256 * 1024
 const MEMORY_SETTLEMENT_DELAY_MS = 3_000
+const MEMORY_CRITICAL_SETTLEMENT_DELAY_MS = 12_000
 const EXECUTION_SPEC_VERSION = '2026-07-29.23'
 const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.22', '2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
 const MEMORY_RECOVERY_BLOCKERS = Object.freeze(new Set(['memory_pressure_critical', 'codex_working_set_high']))
@@ -403,6 +404,12 @@ function canAttemptMemoryRecovery(audit) {
     && hostIsIdle(audit)
 }
 
+function memorySettlementDelayMs(audit) {
+  return audit?.hostAdmission?.blockers?.includes('memory_pressure_critical')
+    ? MEMORY_CRITICAL_SETTLEMENT_DELAY_MS
+    : MEMORY_SETTLEMENT_DELAY_MS
+}
+
 function validateMemoryRecovery(receipt, beforeAudit) {
   const beforeWorkingSetMb = Number(receipt?.beforeWorkingSetMb)
   const afterWorkingSetMb = Number(receipt?.afterWorkingSetMb)
@@ -431,7 +438,7 @@ function validateMemoryRecovery(receipt, beforeAudit) {
   return {
     attempted: true,
     initialMemoryUsedPercent: Number(beforeAudit.memory?.usedPercent),
-    stabilizationDelayMs: MEMORY_SETTLEMENT_DELAY_MS,
+    stabilizationDelayMs: memorySettlementDelayMs(beforeAudit),
     targetCount: receipt.targetCount,
     beforeWorkingSetMb,
     afterWorkingSetMb,
@@ -1049,7 +1056,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   const cycleNow = input.now ?? new Date()
   const buildPlan = dependencies.buildPlan || ((completedOutcomeIds) => currentPlan(cycleNow, completedOutcomeIds))
   const waitForMemorySettlement = dependencies.waitForMemorySettlement
-    || (() => new Promise((resolveDelay) => setTimeout(resolveDelay, MEMORY_SETTLEMENT_DELAY_MS)))
+    || ((delayMs) => new Promise((resolveDelay) => setTimeout(resolveDelay, delayMs)))
 
   let audit = parseJson(await runCommand({ kind: 'audit', args: [], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_audit_json_invalid')
   let memoryRecovery = {
@@ -1068,7 +1075,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
       'ally_ceo_local_cycle_memory_recovery_json_invalid',
     )
     memoryRecovery = validateMemoryRecovery(receipt, audit)
-    await waitForMemorySettlement()
+    await waitForMemorySettlement(memoryRecovery.stabilizationDelayMs)
     audit = parseJson(await runCommand({ kind: 'audit', args: [], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_recovery_audit_json_invalid')
   }
   const host = { ...validateAudit(audit), memoryRecovery }

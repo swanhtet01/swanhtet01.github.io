@@ -1439,6 +1439,7 @@ test('one idle memory-only blocker receives a bounded trim and fresh admission a
   const recovered = harness({ auditSequence: [audit(false), audit(true), audit(true)] })
   let auditCalls = 0
   let memorySettled = false
+  let settlementDelayMs = 0
   const runCommand = async (request) => {
     if (request.kind === 'audit') {
       auditCalls += 1
@@ -1451,7 +1452,7 @@ test('one idle memory-only blocker receives a bounded trim and fresh admission a
     {
       plan: plan(),
       runCommand,
-      waitForMemorySettlement: async () => { memorySettled = true },
+      waitForMemorySettlement: async (delayMs) => { settlementDelayMs = delayMs; memorySettled = true },
       inspectReport: async () => ({
         path: 'C:\\state\\outputs\\recovered.md',
         bytes: Buffer.byteLength(acceptedStructuredReport),
@@ -1464,13 +1465,14 @@ test('one idle memory-only blocker receives a bounded trim and fresh admission a
   assert.deepEqual(result.host.memoryRecovery, {
     attempted: true,
     initialMemoryUsedPercent: 90,
-    stabilizationDelayMs: 3000,
+    stabilizationDelayMs: 12000,
     targetCount: 35,
     beforeWorkingSetMb: 2806,
     afterWorkingSetMb: 268.3,
     releasedWorkingSetMb: 2537.7,
     processTerminations: 0,
   })
+  assert.equal(settlementDelayMs, 12000)
   assert.equal(recovered.calls.filter((call) => call.kind === 'trim').length, 1)
   assert.equal(recovered.calls.filter((call) => call.kind === 'audit').length, 3)
 })
