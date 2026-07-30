@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { execFile } from 'node:child_process'
-import { lstat, readFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { lstat, open, readFile, rename, unlink } from 'node:fs/promises'
+import { freemem, tmpdir, totalmem } from 'node:os'
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
@@ -17,11 +17,14 @@ const execFileAsync = promisify(execFile)
 const root = resolve(import.meta.dirname, '..')
 const defaultLocalCompanyRoot = resolve(root, '..', 'local-agent-company')
 const defaultLocalCompanyHome = resolve(root, '..', 'supermega-local-company-state')
+const defaultLocalCompanyPython = resolve('C:\\Users\\thesw\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe')
 const powershell = resolve(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const MAX_COMMAND_BYTES = 512 * 1024
 const MAX_REPORT_BYTES = 256 * 1024
+const MAX_CYCLE_RECEIPT_BYTES = 64 * 1024
 const MEMORY_SETTLEMENT_DELAY_MS = 3_000
 const MEMORY_CRITICAL_SETTLEMENT_DELAY_MS = 12_000
+const SCHEDULED_MEMORY_BLOCK_PERCENT = 85
 const EXECUTION_SPEC_VERSION = '2026-07-29.23'
 const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.22', '2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
 const MEMORY_RECOVERY_BLOCKERS = Object.freeze(new Set(['memory_pressure_critical', 'codex_working_set_high']))
@@ -132,6 +135,34 @@ function fail(reason) {
   throw new Error(reason)
 }
 
+async function writeCycleReceipt(result, output = resolve(defaultLocalCompanyHome, 'ally-ceo-cycle-last.json')) {
+  const absolute = resolve(output)
+  const parent = dirname(absolute)
+  const parentStat = await lstat(parent).catch(() => null)
+  const existing = await lstat(absolute).catch((error) => error?.code === 'ENOENT' ? null : Promise.reject(error))
+  if (!parentStat?.isDirectory() || parentStat.isSymbolicLink()
+    || existing && (!existing.isFile() || existing.isSymbolicLink() || existing.size > MAX_CYCLE_RECEIPT_BYTES)) {
+    fail('ally_ceo_local_cycle_receipt_path_unsafe')
+  }
+  const bytes = Buffer.from(`${JSON.stringify(result)}\n`, 'utf8')
+  if (bytes.length < 2 || bytes.length > MAX_CYCLE_RECEIPT_BYTES) fail('ally_ceo_local_cycle_receipt_size_invalid')
+  const temporary = resolve(parent, `.ally-ceo-cycle-last.${randomUUID()}.tmp`)
+  let handle = null
+  try {
+    handle = await open(temporary, 'wx', 0o600)
+    await handle.writeFile(bytes)
+    await handle.sync()
+    await handle.close()
+    handle = null
+    await rename(temporary, absolute)
+  } catch (error) {
+    await handle?.close().catch(() => {})
+    await unlink(temporary).catch(() => {})
+    fail(`ally_ceo_local_cycle_receipt_write_failed:${String(error?.code || 'error').slice(0, 40)}`)
+  }
+  return { path: absolute, bytes: bytes.length, digest: `sha256:${sha256(bytes)}` }
+}
+
 function buildOwnerBrief({
   status,
   outcomeId = null,
@@ -200,6 +231,87 @@ function buildOwnerBrief({
       connectorRequests: 0,
     },
   }
+}
+
+function scheduledDeferredReceipt(audit, memoryRecovery) {
+  const blockers = audit?.hostAdmission?.blockers
+  if (audit?.contract !== 'supermega.ally-runtime-audit.v1'
+    || audit.mode !== 'read_only'
+    || audit.hostAdmission?.contract !== 'supermega.ally-host-admission.v1'
+    || audit.hostAdmission.eligible !== false
+    || !Array.isArray(blockers)
+    || blockers.length < 1
+    || blockers.length > 8
+    || new Set(blockers).size !== blockers.length
+    || blockers.some((blocker) => !/^[a-z0-9_]{1,80}$/.test(String(blocker)))) {
+    fail('ally_ceo_local_cycle_scheduled_defer_invalid')
+  }
+  return {
+    ok: true,
+    contract: ALLY_CEO_LOCAL_CYCLE_CONTRACT,
+    status: 'deferred',
+    replayed: true,
+    period: null,
+    outcomeId: null,
+    completedOutcomeIds: [],
+    host: {
+      generatedAt: String(audit.generatedAt || ''),
+      memoryUsedPercent: Number(audit.memory?.usedPercent),
+      maxConcurrentLocalRuns: 0,
+      loadedModels: Number(audit.localModels?.loaded),
+      admissionEligible: false,
+      admissionBlockers: [...blockers],
+      memoryRecovery,
+    },
+    liveHq: { performed: false, skipped: 'host_not_admitted' },
+    sourceCount: null,
+    knowledgeRefresh: { requested: false, performed: false, refreshedSources: 0, skipped: 'host_not_admitted' },
+    modelCalls: 0,
+    queueWrites: 0,
+    ownerBrief: {
+      contract: ALLY_CEO_OWNER_BRIEF_CONTRACT,
+      status: 'no_action',
+      reviewBudgetMinutes: 10,
+      headline: 'Local CEO work was deferred until the Ally is safely admitted.',
+      nextAction: 'wait_for_next_scheduled_cycle',
+      completedOutcomeCount: 0,
+      attentionCount: 1,
+      attention: [{ code: 'host_admission_deferred', count: blockers.length, blockers: [...blockers] }],
+      controls: { codeOwned: true, externalActionPerformed: false, connectorRequests: 0 },
+    },
+    controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
+  }
+}
+
+function scheduledMemoryPressureReceipt() {
+  const totalBytes = totalmem()
+  const freeBytes = freemem()
+  const usedPercent = totalBytes > 0
+    ? Math.round(((totalBytes - freeBytes) / totalBytes) * 1000) / 10
+    : 100
+  if (usedPercent < SCHEDULED_MEMORY_BLOCK_PERCENT) return null
+  const audit = {
+    contract: 'supermega.ally-runtime-audit.v1',
+    mode: 'read_only',
+    generatedAt: new Date().toISOString(),
+    memory: { usedPercent },
+    localModels: { loaded: 0 },
+    hostAdmission: {
+      contract: 'supermega.ally-host-admission.v1',
+      eligible: false,
+      blockers: ['memory_pressure_critical'],
+    },
+  }
+  return scheduledDeferredReceipt(audit, {
+    attempted: false,
+    initialMemoryUsedPercent: usedPercent,
+    stabilizationDelayMs: 0,
+    targetCount: 0,
+    beforeWorkingSetMb: 0,
+    afterWorkingSetMb: 0,
+    releasedWorkingSetMb: 0,
+    processTerminations: 0,
+  })
 }
 
 function sha256(value) {
@@ -878,7 +990,7 @@ export function commandFailureReason(kind, error) {
   return fallback
 }
 
-async function defaultCommandRunner({ kind, args, timeoutMs, localCompanyRoot, localCompanyHome }) {
+async function defaultCommandRunner({ kind, args, timeoutMs, localCompanyRoot, localCompanyHome, localCompanyPython }) {
   let file
   let commandArgs
   let cwd
@@ -899,7 +1011,7 @@ async function defaultCommandRunner({ kind, args, timeoutMs, localCompanyRoot, l
     cwd = root
     env = limitedEnvironment(localCompanyRoot)
   } else if (kind === 'local') {
-    file = resolve(localCompanyRoot, '.venv', 'Scripts', 'python.exe')
+    file = localCompanyPython
     commandArgs = ['-m', 'local_company.cli', '--home', localCompanyHome, ...args]
     cwd = localCompanyRoot
     env = limitedEnvironment(localCompanyRoot)
@@ -1146,6 +1258,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   const refreshKnowledge = input.refreshKnowledge === true
   const repairRejected = input.repairRejected === true
   const recoverMemory = input.recoverMemory !== false
+  const scheduled = input.scheduled === true
   const provider = input.provider || 'ollama'
   const model = input.model || 'qwen3.5:0.8b'
   if (refreshKnowledge && !execute) fail('ally_ceo_local_cycle_knowledge_refresh_requires_execution')
@@ -1153,9 +1266,14 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   if (!['ollama', 'mock'].includes(provider) || !/^[a-zA-Z0-9._:-]{1,80}$/.test(model)) {
     fail('ally_ceo_local_cycle_provider_invalid')
   }
+  if (scheduled && !dependencies.runCommand) {
+    const pressureReceipt = scheduledMemoryPressureReceipt()
+    if (pressureReceipt) return pressureReceipt
+  }
   const localCompanyRoot = resolve(input.localCompanyRoot || defaultLocalCompanyRoot)
   const localCompanyHome = resolve(input.localCompanyHome || defaultLocalCompanyHome)
-  const runCommand = dependencies.runCommand || ((request) => defaultCommandRunner({ ...request, localCompanyRoot, localCompanyHome }))
+  const localCompanyPython = resolve(input.localCompanyPython || defaultLocalCompanyPython)
+  const runCommand = dependencies.runCommand || ((request) => defaultCommandRunner({ ...request, localCompanyRoot, localCompanyHome, localCompanyPython }))
   const inspectReport = dependencies.inspectReport || ((path) => defaultReportInspector(path, localCompanyHome))
   const cycleNow = input.now ?? new Date()
   const buildPlan = dependencies.buildPlan || ((completedOutcomeIds) => currentPlan(cycleNow, completedOutcomeIds))
@@ -1172,6 +1290,9 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     afterWorkingSetMb: 0,
     releasedWorkingSetMb: 0,
     processTerminations: 0,
+  }
+  if (scheduled && (audit.hostAdmission?.eligible !== true || !hostIsIdle(audit))) {
+    return scheduledDeferredReceipt(audit, memoryRecovery)
   }
   const health = parseJson(await runCommand({ kind: 'local', args: ['health'], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_health_invalid')
   validateHealth(health)
@@ -1443,13 +1564,15 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
 }
 
 function parseArgs(argv) {
-  const result = { execute: false, refreshKnowledge: false, repairRejected: false, recoverMemory: true, provider: 'ollama' }
+  const result = { execute: false, refreshKnowledge: false, repairRejected: false, recoverMemory: true, recordResult: false, scheduled: false, provider: 'ollama' }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--execute') result.execute = true
     else if (arg === '--refresh-knowledge') result.refreshKnowledge = true
     else if (arg === '--repair-rejected') result.repairRejected = true
     else if (arg === '--no-memory-recovery') result.recoverMemory = false
+    else if (arg === '--record-result') result.recordResult = true
+    else if (arg === '--scheduled') result.scheduled = true
     else if (arg === '--provider') result.provider = argv[++index]
     else if (arg === '--help' || arg === '-h') result.help = true
     else fail(`ally_ceo_local_cycle_unknown_argument:${arg}`)
@@ -1459,6 +1582,7 @@ function parseArgs(argv) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
+  if (args.scheduled && (!args.execute || !args.recordResult)) fail('ally_ceo_local_cycle_scheduled_contract_invalid')
   if (args.help) {
     process.stdout.write([
       'SuperMega Ally CEO local company cycle',
@@ -1472,10 +1596,13 @@ async function main() {
       'Repair replaces at most one rejected prior-version artifact; a current-version failure is never retried.',
       'Missing, unavailable, unstable, or malformed source evidence fails before queue or model work.',
       'No connector, deployment, payment, message, or customer action is available.',
+      '--record-result atomically replaces only the fixed local CEO receipt after a complete result.',
+      '--scheduled requires execution plus result recording and safely defers before work when host admission is unavailable.',
     ].join('\n') + '\n')
     return
   }
   const result = await runAllyCeoLocalCycle(args)
+  if (args.recordResult) await writeCycleReceipt(result)
   process.stdout.write(`${JSON.stringify(result)}\n`)
   if (!result.ok) process.exitCode = 2
 }
@@ -1488,4 +1615,4 @@ if (invokedDirectly) {
   })
 }
 
-export default { ALLY_CEO_LOCAL_CYCLE_CONTRACT, ALLY_CEO_OWNER_BRIEF_CONTRACT, runAllyCeoLocalCycle }
+export default { ALLY_CEO_LOCAL_CYCLE_CONTRACT, ALLY_CEO_OWNER_BRIEF_CONTRACT, runAllyCeoLocalCycle, writeCycleReceipt }
