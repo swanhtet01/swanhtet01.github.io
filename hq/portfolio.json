@@ -151,8 +151,8 @@
       "localAutomation": {
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Let a named human review one approved substitute material for a Plant job against the retained BOM requirement, unit and quantity basis before issue; preserve both original and substitute identities, require explicit reason and evidence, and never substitute automatically, rewrite the BOM, infer equivalence, post costing or accounting, or control equipment.",
-        "reason": "ENG-127 now returns unused issued material to its exact Shop lot with conversion and cumulative caps. The next verified roadmap gap is controlled substitution: no current Plant or Shop contract records why a different approved material satisfies one job requirement while preserving the original BOM demand."
+        "workOrder": "Let a named human revoke one approved Plant material substitute before any new substitute issue, with explicit reason and evidence; retain all prior issue and genealogy history, reject later substitute requests, and never choose another substitute automatically, rewrite the BOM, reverse stock, post costing or accounting, or control equipment.",
+        "reason": "ENG-128 now records one evidence-bound substitute approval, issues only its exact physical material and lot through Shop, credits the unchanged original BOM by an exact reviewed ratio, and preserves both identities. The next lifecycle gap is accountable revocation without erasing historical genealogy or silently selecting a replacement."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }
