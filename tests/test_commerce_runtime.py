@@ -1141,10 +1141,31 @@ class CommerceRuntimeTests(unittest.TestCase):
             validate_commerce_state(tax_inclusive_limit)
         tax_inclusive_limit["paymentPolicies"][0]["maximumOrderMmk"] = 210  # type: ignore[index]
         tax_inclusive_limit["orders"][0]["paymentDecision"]["maximumOrderMmk"] = 210  # type: ignore[index]
+        tax_inclusive_limit["orders"][0]["taxDecision"] = {  # type: ignore[index]
+            "schema": "supermega.ecommerce.tax-decision.v1",
+            "status": "configured",
+            "catalogRevision": 0,
+            "taxConfigurationRevision": 1,
+            "taxCode": "CT5",
+            "taxJurisdictionCode": "MM",
+            "taxEffectiveFrom": NOW,
+            "taxRateBasisPoints": 500,
+            "taxMode": "exclusive",
+            "listedSubtotalMmk": 200,
+            "subtotalMmk": 200,
+            "taxMmk": 10,
+            "totalMmk": 210,
+            "policyActionId": "ACT-TAX-R1",
+            "reviewedAt": NOW,
+        }
         self.assertEqual(
-            validate_commerce_state(tax_inclusive_limit)["orders"][0]["paymentDecision"]["maximumOrderMmk"],  # type: ignore[index]
-            210,
+            validate_commerce_state(tax_inclusive_limit)["orders"][0]["taxDecision"]["policyActionId"],  # type: ignore[index]
+            "ACT-TAX-R1",
         )
+        forged_tax = deepcopy(tax_inclusive_limit)
+        forged_tax["orders"][0]["taxDecision"]["policyActionId"] = "ACT-TAX-FORGED"  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "taxDecision"):
+            validate_commerce_state(forged_tax)
         wrong_evidence = action_evidence("ACT-PAYMENT-WRONG-EVIDENCE")
         with self.assertRaisesRegex(TrialValidationError, "payment policy proof"):
             apply_event(current, "commerce.payment_policy.saved", configured, wrong_evidence)

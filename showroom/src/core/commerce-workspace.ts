@@ -82,6 +82,24 @@ export type CommerceOrderCalculationV2 = {
 
 export type CommerceOrderCalculation = CommerceOrderCalculationV1 | CommerceOrderCalculationV2
 
+export type CommerceTaxDecision = {
+  schema: 'supermega.ecommerce.tax-decision.v1'
+  status: 'configured' | 'not_configured'
+  catalogRevision: number
+  taxConfigurationRevision: number | null
+  taxCode: string | null
+  taxJurisdictionCode: string | null
+  taxEffectiveFrom: string | null
+  taxRateBasisPoints: number
+  taxMode: CommerceTaxMode | 'not_configured'
+  listedSubtotalMmk: number
+  subtotalMmk: number
+  taxMmk: number
+  totalMmk: number
+  policyActionId: string | null
+  reviewedAt: string
+}
+
 export type CommerceTaxConfiguration = {
   revision: number
   code: string
@@ -377,6 +395,7 @@ export type CommerceOrder = {
   promotionDecision?: CommercePromotionDecision
   shippingDecision?: CommerceShippingDecision
   paymentDecision?: CommercePaymentDecision
+  taxDecision?: CommerceTaxDecision
   sourceRecordId?: string
   evidenceReference?: string
   lines?: CommerceOrderLine[]
@@ -2567,6 +2586,22 @@ export function validateCommerceState(value: unknown): CommerceState {
       if (!Number.isSafeInteger(deliveredTotal)) throw new Error(`${field} exceeds the safe MMK boundary.`)
       pricedSubtotal = deliveredTotal
     }
+    let payableTotal = pricedSubtotal
+    if (candidate.taxDecision !== undefined) {
+      const field = `orders[${index}].taxDecision`
+      if (!isRecord(candidate.taxDecision) || !hasExactKeys(candidate.taxDecision, [
+        'schema', 'status', 'catalogRevision', 'taxConfigurationRevision', 'taxCode', 'taxJurisdictionCode',
+        'taxEffectiveFrom', 'taxRateBasisPoints', 'taxMode', 'listedSubtotalMmk', 'subtotalMmk', 'taxMmk',
+        'totalMmk', 'policyActionId', 'reviewedAt',
+      ]) || pricedSubtotal === null || !String(candidate.sourceRecordId ?? '').startsWith('ECR-')) throw new Error(`${field} is invalid.`)
+      const decision = candidate.taxDecision as unknown as CommerceTaxDecision
+      const expected = commerceTaxDecision(value as CommerceState, pricedSubtotal, decision.reviewedAt)
+      if (!expected || JSON.stringify(expected) !== JSON.stringify(decision)
+        || (timestampMicros(decision.reviewedAt) as bigint) > (timestampMicros(candidate.createdAt) as bigint)) {
+        throw new Error(`${field} does not match the Shop tax schedule.`)
+      }
+      payableTotal = decision.totalMmk
+    }
     if (candidate.paymentDecision !== undefined) {
       const field = `orders[${index}].paymentDecision`
       if (!isRecord(candidate.paymentDecision) || !hasExactKeys(candidate.paymentDecision, [
@@ -2574,11 +2609,13 @@ export function validateCommerceState(value: unknown): CommerceState {
         'maximumOrderMmk', 'instructions', 'reviewedAt', 'authorized',
       ]) || pricedSubtotal === null || !String(candidate.sourceRecordId ?? '').startsWith('ECR-')) throw new Error(`${field} is invalid.`)
       const decision = candidate.paymentDecision as unknown as CommercePaymentDecision
+      const reviewedCalculation = commerceOrderCalculation(value as CommerceState, pricedSubtotal, decision.reviewedAt)
+      if (!reviewedCalculation) throw new Error(`${field} total is invalid.`)
       const expected = commercePaymentDecision(
         paymentPolicies as CommercePaymentPolicy[],
         decision.adapter,
         candidate.fulfilment as 'pickup' | 'delivery',
-        pricedSubtotal,
+        candidate.taxDecision ? payableTotal as number : reviewedCalculation.totalMmk,
         decision.reviewedAt,
       )
       if (!expected || JSON.stringify(expected) !== JSON.stringify(decision)
@@ -4415,6 +4452,53 @@ export function commerceOrderCalculation(
   }
 }
 
+export function commerceTaxDecision(
+  state: CommerceState,
+  listedSubtotalMmk: number,
+  reviewedAtValue: string,
+): CommerceTaxDecision | null {
+  if (!validTimestamp(reviewedAtValue)) return null
+  const reviewedAt = new Date(reviewedAtValue).toISOString()
+  const calculation = commerceOrderCalculation(state, listedSubtotalMmk, reviewedAt)
+  if (!calculation) return null
+  if (calculation.schema === COMMERCE_ORDER_CALCULATION_SCHEMA) return {
+    schema: 'supermega.ecommerce.tax-decision.v1',
+    status: 'not_configured',
+    catalogRevision: calculation.catalogRevision,
+    taxConfigurationRevision: null,
+    taxCode: null,
+    taxJurisdictionCode: null,
+    taxEffectiveFrom: null,
+    taxRateBasisPoints: 0,
+    taxMode: 'not_configured',
+    listedSubtotalMmk,
+    subtotalMmk: calculation.subtotalMmk,
+    taxMmk: 0,
+    totalMmk: calculation.totalMmk,
+    policyActionId: null,
+    reviewedAt,
+  }
+  const configuration = commerceTaxConfigurations(state).find((candidate) => candidate.revision === calculation.taxConfigurationRevision)
+  if (!configuration) return null
+  return {
+    schema: 'supermega.ecommerce.tax-decision.v1',
+    status: 'configured',
+    catalogRevision: calculation.catalogRevision,
+    taxConfigurationRevision: calculation.taxConfigurationRevision,
+    taxCode: calculation.taxCode,
+    taxJurisdictionCode: calculation.taxJurisdictionCode ?? null,
+    taxEffectiveFrom: calculation.taxEffectiveFrom ?? null,
+    taxRateBasisPoints: calculation.taxRateBasisPoints,
+    taxMode: calculation.taxMode,
+    listedSubtotalMmk: calculation.listedSubtotalMmk,
+    subtotalMmk: calculation.subtotalMmk,
+    taxMmk: calculation.taxMmk,
+    totalMmk: calculation.totalMmk,
+    policyActionId: configuration.proof.actionId,
+    reviewedAt,
+  }
+}
+
 export function commerceOrderCalculationDigest(order: CommerceOrder) {
   if (!order.calculation) return null
   return `sha256:${sha256Hex(JSON.stringify([
@@ -5643,10 +5727,22 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
       || (order.shippingDecision.promiseMinutes !== null
         && (promisedAt as bigint) < (timestampMicros(order.shippingDecision.reviewedAt) as bigint) + BigInt(order.shippingDecision.promiseMinutes) * 60_000_000n)) return null
   }
-  if (order.paymentDecision) {
-    const reviewedListedSubtotal = (order.promotionDecision?.netSubtotalMmk ?? (order.lines
+  const reviewedListedSubtotal = order.taxDecision || order.paymentDecision
+    ? (order.promotionDecision?.netSubtotalMmk ?? (order.lines
       ? order.lines.reduce((sum, line) => sum + line.unitPriceMmk * line.quantity, 0)
       : order.total - (order.shippingDecision?.feeMmk ?? 0))) + (order.shippingDecision?.feeMmk ?? 0)
+    : null
+  if (order.taxDecision) {
+    const expectedTax = reviewedListedSubtotal === null
+      ? null
+      : commerceTaxDecision(state, reviewedListedSubtotal, order.taxDecision.reviewedAt)
+    if (!order.sourceRecordId?.startsWith('ECR-')
+      || !expectedTax
+      || JSON.stringify(expectedTax) !== JSON.stringify(order.taxDecision)
+      || (timestampMicros(order.taxDecision.reviewedAt) as bigint) > (timestampMicros(order.createdAt) as bigint)) return null
+  }
+  if (order.paymentDecision) {
+    if (reviewedListedSubtotal === null) return null
     const reviewedCalculation = commerceOrderCalculation(state, reviewedListedSubtotal, order.paymentDecision.reviewedAt)
     if (!reviewedCalculation) return null
     const expectedPayment = commercePaymentDecision(

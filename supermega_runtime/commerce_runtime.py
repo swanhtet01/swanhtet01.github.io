@@ -20,6 +20,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     review_ecommerce_payment,
     review_ecommerce_promotion,
     review_ecommerce_shipping,
+    validate_ecommerce_tax_decision,
     validate_ecommerce_payment_policy,
     validate_ecommerce_promotion_policy,
     validate_ecommerce_shipping_policy,
@@ -310,6 +311,7 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "promotionDecision",
         "shippingDecision",
         "paymentDecision",
+        "taxDecision",
         "owner",
         "sourceRecordId",
         "evidenceReference",
@@ -1954,6 +1956,23 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 if promised < minimum_promise:
                     raise TrialValidationError(f"{decision_field} promise is earlier than the Shop policy.")
             priced_total += expected_shipping["feeMmk"]
+        payable_total = priced_total
+        if "taxDecision" in order:
+            decision_field = f"orders[{index}].taxDecision"
+            decision = _object(order["taxDecision"], decision_field)
+            if priced_total is None or not str(order.get("sourceRecordId", "")).startswith("ECR-"):
+                raise TrialValidationError(f"{decision_field} requires immutable Ecommerce lines and an ECR source.")
+            try:
+                expected_tax = validate_ecommerce_tax_decision(decision, tax_configurations)
+            except EcommerceLifecycleValidationError as exc:
+                raise TrialValidationError(f"{decision_field} is invalid: {exc}") from exc
+            reviewed_at = _timestamp(expected_tax["reviewedAt"], f"{decision_field}.reviewedAt")
+            if (
+                expected_tax["listedSubtotalMmk"] != priced_total
+                or datetime.fromisoformat(reviewed_at.replace("Z", "+00:00")) > order_created_at
+            ):
+                raise TrialValidationError(f"{decision_field} does not match the Shop tax schedule.")
+            payable_total = expected_tax["totalMmk"]
         if "paymentDecision" in order:
             decision_field = f"orders[{index}].paymentDecision"
             decision = _object(order["paymentDecision"], decision_field)
@@ -1966,9 +1985,9 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             reviewed_at = _timestamp(decision["reviewedAt"], f"{decision_field}.reviewedAt")
             if datetime.fromisoformat(reviewed_at.replace("Z", "+00:00")) > order_created_at:
                 raise TrialValidationError(f"{decision_field}.reviewedAt cannot be later than order creation.")
-            reviewed_amount = priced_total
-            tax_configuration = _effective_tax_configuration(state, reviewed_at)
-            if tax_configuration is not None:
+            reviewed_amount = payable_total
+            tax_configuration = None if "taxDecision" in order else _effective_tax_configuration(state, reviewed_at)
+            if tax_configuration is not None and priced_total is not None:
                 reviewed_calculation = _configured_order_calculation(
                     tax_configuration,
                     priced_total,

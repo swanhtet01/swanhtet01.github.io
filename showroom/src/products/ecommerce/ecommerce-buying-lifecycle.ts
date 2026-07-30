@@ -11,6 +11,7 @@ import {
   type CommercePaymentDecision,
   type CommercePaymentPolicy,
   type CommerceTaxConfiguration,
+  type CommerceTaxDecision,
 } from '../../core/commerce-workspace.ts'
 import {
   storefrontPreviewDigest,
@@ -38,23 +39,7 @@ export const EMPTY_ECOMMERCE_BUYING_DIGEST = `sha256:${'0'.repeat(64)}`
 
 export type EcommercePaymentAdapter = 'pay_on_pickup' | 'cash_on_delivery' | 'kbzpay_manual'
 export type EcommerceFulfilment = 'pickup' | 'delivery'
-export type EcommerceTaxDecision = {
-  schema: 'supermega.ecommerce.tax-decision.v1'
-  status: 'configured' | 'not_configured'
-  catalogRevision: number
-  taxConfigurationRevision: number | null
-  taxCode: string | null
-  taxJurisdictionCode: string | null
-  taxEffectiveFrom: string | null
-  taxRateBasisPoints: number
-  taxMode: 'exclusive' | 'inclusive' | 'not_configured'
-  listedSubtotalMmk: number
-  subtotalMmk: number
-  taxMmk: number
-  totalMmk: number
-  policyActionId: string | null
-  reviewedAt: string
-}
+export type EcommerceTaxDecision = CommerceTaxDecision
 export type EcommerceReturnDisposition = 'restock' | 'not_restocked'
 export type EcommerceSupportCategory = 'order_status' | 'delivery_issue' | 'payment_question' | 'item_issue' | 'other'
 

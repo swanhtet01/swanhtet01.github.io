@@ -11885,6 +11885,7 @@ async function verifyStorefrontRuntime() {
       promotionDecision: buyingDraft.pricing.promotion,
       shippingDecision: buyingDraft.pricing.shipping,
       paymentDecision: buyingDraft.pricing.payment,
+      taxDecision: buyingDraft.pricing.tax,
       total: buyingDraft.pricing.tax.listedSubtotalMmk,
       status: 'confirmed',
     }
@@ -11901,6 +11902,8 @@ async function verifyStorefrontRuntime() {
       && storedPromotedOrder.shippingDecision?.policyRevision === 1
       && storedPromotedOrder.paymentDecision?.policyRevision === 3
       && storedPromotedOrder.paymentDecision?.authorized === false
+      && storedPromotedOrder.taxDecision?.policyActionId === 'ACT-TAX-COMMERCIAL-R1'
+      && storedPromotedOrder.taxDecision?.reviewedAt === buyingDraft.confirmedAt
       && commerce.reserveCommerceOrder(promotedOrderState, promotedOrder, promotionOrderProof) === promotedOrderState,
     'ecommerce_approved_promotion_did_not_price_the_real_shop_order')
     buyingAssert(commerce.reserveCommerceOrder(
@@ -11936,6 +11939,15 @@ async function verifyStorefrontRuntime() {
       promotionOrderProof,
     ) === null,
     'ecommerce_forged_payment_authorization_reached_the_real_shop_order')
+    buyingAssert(commerce.reserveCommerceOrder(
+      promotionBuyingState,
+      {
+        ...promotedOrder,
+        taxDecision: { ...promotedOrder.taxDecision, policyActionId: 'ACT-TAX-FORGED' },
+      },
+      promotionOrderProof,
+    ) === null,
+    'ecommerce_forged_tax_policy_action_reached_the_real_shop_order')
     const taxLimitedPaymentPolicies = paymentPolicies.map((policy) => policy.adapter === promotedOrder.paymentDecision.adapter
       ? { ...policy, maximumOrderMmk: buyingDraft.pricing.tax.listedSubtotalMmk }
       : policy)

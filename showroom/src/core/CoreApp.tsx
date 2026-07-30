@@ -3568,6 +3568,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
       ...(promotionDecision ? { promotionDecision } : {}),
       ...(shippingDecision ? { shippingDecision } : {}),
       ...(paymentDecision ? { paymentDecision } : {}),
+      ...(taxDecision ? { taxDecision } : {}),
       total: listedOrderTotal,
       status: 'confirmed',
     }
