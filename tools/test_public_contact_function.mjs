@@ -103,6 +103,22 @@ function trialProofFields({
   }
 }
 
+function approvedContextFields({
+  contract = 'supermega.ai_context_export.v1',
+  digest = `sha256:${'c'.repeat(64)}`,
+  outcomeDigest = `sha256:${'b'.repeat(64)}`,
+  approved = true,
+  rawRecords = false,
+} = {}) {
+  return {
+    proof_context_contract: contract,
+    proof_context_digest: digest,
+    proof_context_outcome_digest: outcomeDigest,
+    proof_context_approved: String(approved),
+    proof_context_raw_records: String(rawRecords),
+  }
+}
+
 try {
   clearChannels()
   globalThis.fetch = async () => { throw new Error('unexpected_external_request') }
@@ -211,11 +227,13 @@ try {
   assert.equal(ecommerceEvent.record.requested_package, 'social-storefront')
 
   const attachedProof = trialProofFields()
+  const attachedContext = approvedContextFields()
   const proofAccepted = await invoke({
     body: {
       ...validSubmission,
       ...attachedProof,
-      source_url: `https://supermega.dev/contact/?product=plant&template=production-control#${new URLSearchParams(attachedProof)}`,
+      ...attachedContext,
+      source_url: `https://supermega.dev/contact/?product=plant&template=production-control#${new URLSearchParams({ ...attachedProof, ...attachedContext })}`,
       referrer: 'https://app.supermega.dev/settings/?product=plant#private-fragment',
     },
     headers: withKey(6, { 'x-forwarded-for': '203.0.113.13' }),
@@ -241,6 +259,14 @@ try {
     outcome_accepted: true,
     raw_records_included: false,
     verification: 'client_provided_summary',
+    approved_context: {
+      contract: 'supermega.ai_context_export.v1',
+      digest: attachedContext.proof_context_digest,
+      outcome_digest: attachedProof.proof_outcome_digest,
+      approved: true,
+      raw_records_included: false,
+      verification: 'client_provided_digest',
+    },
   })
   assert.equal(proofEvent.record.raw.contact_idempotency.version, 2)
   assert.equal(JSON.stringify(proofEvent.record.raw).includes('private-fragment'), false)
@@ -266,6 +292,57 @@ try {
   })
   assert.equal(mismatchedProof.status, 400)
   assert.equal(mismatchedProof.body.reason, 'trial_proof_invalid')
+
+  const partialContext = await invoke({
+    body: { ...validSubmission, ...attachedProof, proof_context_contract: attachedContext.proof_context_contract },
+    headers: withKey(10, { 'x-forwarded-for': '203.0.113.18' }),
+  })
+  assert.equal(partialContext.status, 400)
+  assert.equal(partialContext.body.reason, 'trial_proof_invalid')
+
+  const mismatchedContextOutcome = await invoke({
+    body: { ...validSubmission, ...attachedProof, ...approvedContextFields({ outcomeDigest: `sha256:${'d'.repeat(64)}` }) },
+    headers: withKey(11, { 'x-forwarded-for': '203.0.113.19' }),
+  })
+  assert.equal(mismatchedContextOutcome.status, 400)
+  assert.equal(mismatchedContextOutcome.body.reason, 'trial_proof_invalid')
+
+  const wrongContextContract = await invoke({
+    body: { ...validSubmission, ...attachedProof, ...approvedContextFields({ contract: 'supermega.ai_context_export.v2' }) },
+    headers: withKey(12, { 'x-forwarded-for': '203.0.113.20' }),
+  })
+  assert.equal(wrongContextContract.status, 400)
+  assert.equal(wrongContextContract.body.reason, 'trial_proof_invalid')
+
+  const unapprovedContext = await invoke({
+    body: { ...validSubmission, ...attachedProof, ...approvedContextFields({ approved: false }) },
+    headers: withKey(13, { 'x-forwarded-for': '203.0.113.21' }),
+  })
+  assert.equal(unapprovedContext.status, 400)
+  assert.equal(unapprovedContext.body.reason, 'trial_proof_invalid')
+
+  const rawContext = await invoke({
+    body: { ...validSubmission, ...attachedProof, ...approvedContextFields({ rawRecords: true }) },
+    headers: withKey(14, { 'x-forwarded-for': '203.0.113.22' }),
+  })
+  assert.equal(rawContext.status, 400)
+  assert.equal(rawContext.body.reason, 'trial_proof_invalid')
+
+  const unacceptedProof = trialProofFields({ outcomeAccepted: false })
+  const contextWithoutAcceptedOutcome = await invoke({
+    body: { ...validSubmission, ...unacceptedProof, ...attachedContext },
+    headers: withKey(15, { 'x-forwarded-for': '203.0.113.23' }),
+  })
+  assert.equal(contextWithoutAcceptedOutcome.status, 400)
+  assert.equal(contextWithoutAcceptedOutcome.body.reason, 'trial_proof_invalid')
+
+  const emptyContextProof = trialProofFields({ sources: 0, behavior: 0, decisions: 0 })
+  const contextWithoutEligibleEvidence = await invoke({
+    body: { ...validSubmission, ...emptyContextProof, ...attachedContext },
+    headers: withKey(16, { 'x-forwarded-for': '203.0.113.24' }),
+  })
+  assert.equal(contextWithoutEligibleEvidence.status, 400)
+  assert.equal(contextWithoutEligibleEvidence.body.reason, 'trial_proof_invalid')
 
   const changedProofFields = trialProofFields({ sources: 13 })
   const proofConflict = await invoke({
@@ -366,6 +443,7 @@ try {
   const durableProofSubmission = {
     ...validSubmission,
     ...trialProofFields(),
+    ...approvedContextFields(),
     source_url: 'https://supermega.dev/contact/?product=plant&template=production-control#proof_digest=must-not-persist',
   }
   const durableProofAccepted = await invoke({
@@ -380,6 +458,9 @@ try {
   assert.equal(durableProofRecord.raw.trial_proof.verification, 'client_provided_summary')
   assert.equal(durableProofRecord.raw.trial_proof.summary_digest, durableProofSubmission.proof_digest)
   assert.equal(durableProofRecord.raw.trial_proof.raw_records_included, false)
+  assert.equal(durableProofRecord.raw.trial_proof.approved_context.digest, durableProofSubmission.proof_context_digest)
+  assert.equal(durableProofRecord.raw.trial_proof.approved_context.outcome_digest, durableProofSubmission.proof_outcome_digest)
+  assert.equal(durableProofRecord.raw.trial_proof.approved_context.raw_records_included, false)
   assert.equal(durableProofRecord.source_url.includes('#'), false)
 
   const durableProofReplay = await invoke({
