@@ -23,6 +23,7 @@ const EXECUTION_SPEC_VERSION = '2026-07-29.23'
 const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.22', '2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
 const MEMORY_RECOVERY_BLOCKERS = Object.freeze(new Set(['memory_pressure_critical', 'codex_working_set_high']))
 const SAFE_HQ_LIVE_FAILURES = Object.freeze(new Set([
+  'app_product_contract_drift',
   'app_release_contract_invalid',
   'public_release_contract_invalid',
   'paired_release_identity_mismatch',

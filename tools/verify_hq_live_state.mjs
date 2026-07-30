@@ -138,7 +138,7 @@ function sameReleaseIdentity(left, right) {
     .every((field) => typeof left?.[field] === 'string' && left[field] === right?.[field])
 }
 
-export function assessHqLiveState({ hq, appRelease, publicRelease, health, cloud, now = new Date() }) {
+export function assessHqLiveState({ hq, appProductContract, appRelease, publicRelease, health, cloud, now = new Date() }) {
   const failures = []
   const requireCheck = (name, condition) => { if (!condition) failures.push(name) }
   const observedAtMs = Date.parse(hq.observedAt)
@@ -146,6 +146,10 @@ export function assessHqLiveState({ hq, appRelease, publicRelease, health, cloud
   const scheduler = cloud?.scheduler
   const capacity = cloud?.capacity
 
+  requireCheck('app_product_contract_drift', appProductContract?.ok === true
+    && appProductContract.contract === APP_LIVE_CONTRACT
+    && appProductContract.status === 'current'
+    && appProductContract.reason === null)
   requireCheck('app_release_contract_invalid', appRelease?.service === 'supermega-app' && validReleaseIdentity(appRelease))
   requireCheck('public_release_contract_invalid', publicRelease?.service === 'supermega-public-site' && validReleaseIdentity(publicRelease))
   requireCheck('paired_release_identity_mismatch', sameReleaseIdentity(appRelease, publicRelease))
@@ -266,7 +270,8 @@ Live security ready: \`false\``)
     capacity: { scale_to_zero_when_idle: true, idle_active_execution_target: 0, registered_specialists_consume_compute: false },
     execution_policy: 'review_gated_no_external_send_or_money_actions',
   }
-  const baseline = { hq, appRelease, publicRelease, health, cloud, now }
+  const appProductContract = { ok: true, contract: APP_LIVE_CONTRACT, status: 'current', reason: null }
+  const baseline = { hq, appProductContract, appRelease, publicRelease, health, cloud, now }
   if (!assessHqLiveState(baseline).ok) throw new Error('self_test_baseline_failed')
 
   const liveReceipt = JSON.stringify({
@@ -350,6 +355,7 @@ Live security ready: \`false\``)
   }
 
   const failureCases = [
+    ['app_product_contract_drift', { ...baseline, appProductContract: { ok: false, contract: APP_LIVE_CONTRACT, status: 'drifted', reason: 'release_context_version_mismatch:ctx' } }],
     ['app_release_contract_invalid', { ...baseline, appRelease: { ...appRelease, brandVersion: '' } }],
     ['public_release_contract_invalid', { ...baseline, publicRelease: { ...publicRelease, service: 'wrong' } }],
     ['paired_release_identity_mismatch', { ...baseline, publicRelease: { ...publicRelease, commit: 'b'.repeat(40) } }],
@@ -409,7 +415,7 @@ async function main() {
   const publicRelease = publicReleaseProbe.value
   const health = healthProbe.value
   const cloud = cloudProbe.value
-  const result = assessHqLiveState({ hq, appRelease, publicRelease, health, cloud })
+  const result = assessHqLiveState({ hq, appProductContract, appRelease, publicRelease, health, cloud })
   return {
     ...result,
     observedAt: new Date().toISOString(),
