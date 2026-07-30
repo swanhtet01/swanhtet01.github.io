@@ -100,6 +100,7 @@ type InterfaceTheme = 'light' | 'dark'
 
 type LocalSetupReadiness = {
   product: 'commerce' | 'production' | 'website' | 'ecommerce'
+  hasCanonicalProduct: boolean
   workspace: string
   currentRecord: string
   acceptanceEvidence: string
@@ -107,17 +108,25 @@ type LocalSetupReadiness = {
   ready: boolean
 }
 
+function isStoredSetupProduct(value: unknown): value is LocalSetupReadiness['product'] {
+  return value === 'commerce' || value === 'production' || value === 'website' || value === 'ecommerce'
+}
+
 function readLocalSetupReadiness(): LocalSetupReadiness {
   try {
     const source = JSON.parse(window.localStorage.getItem(SETUP_KEY) ?? '{}') as Record<string, unknown>
     const field = (name: string) => typeof source[name] === 'string' ? source[name].trim() : ''
-    const product = source.product === 'production' || source.product === 'website' || source.product === 'ecommerce'
-      ? source.product
-      : 'commerce'
+    let hasCanonicalProduct = false
+    let product: LocalSetupReadiness['product'] = 'commerce'
+    if (isStoredSetupProduct(source.product)) {
+      hasCanonicalProduct = true
+      product = source.product
+    }
     const completed = setupRequiredFields.filter((name) => field(name)).length
     const progress = Math.round((completed / setupRequiredFields.length) * 100)
     return {
       product,
+      hasCanonicalProduct,
       workspace: field('workspace'),
       currentRecord: field('currentRecord'),
       acceptanceEvidence: field('acceptanceEvidence'),
@@ -125,7 +134,7 @@ function readLocalSetupReadiness(): LocalSetupReadiness {
       ready: progress === 100 && Boolean(field('savedAt')),
     }
   } catch {
-    return { product: 'commerce', workspace: '', currentRecord: '', acceptanceEvidence: '', progress: 0, ready: false }
+    return { product: 'commerce', hasCanonicalProduct: false, workspace: '', currentRecord: '', acceptanceEvidence: '', progress: 0, ready: false }
   }
 }
 
@@ -280,10 +289,11 @@ export function CoreLayout() {
   const workspaceMainRef = useRef<HTMLElement>(null)
   const routeProduct = productFromPathname(location.pathname)
   const settingsProduct = location.pathname.startsWith('/settings/') ? setupProductFromQuery(new URLSearchParams(location.search).get('product')) : null
+  const storedSettingsSetup = location.pathname.startsWith('/settings/') ? readLocalSetupReadiness() : null
   const sensitiveAccountRoute = location.pathname.startsWith('/account/')
   const loginRoute = location.pathname === '/login' || location.pathname === '/login/'
   const accountEntryRoute = loginRoute || sensitiveAccountRoute
-  const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct)
+  const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))
   const routeName = loginRoute
     ? 'Sign in'
     : sensitiveAccountRoute
