@@ -111,6 +111,7 @@ const settingsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core
 const productSetupSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'product-setup.ts'), 'utf8')
 const workspaceRuntimeSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'workspace-runtime.ts'), 'utf8')
 const operationalReportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'operational-report.ts'), 'utf8')
+const sharedMasterDataSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shared-master-data.ts'), 'utf8')
 const channelOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ChannelOrderIntake.tsx'), 'utf8')
 const plantOrderSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts'), 'utf8')
 const plantOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantOrderFoundation.tsx'), 'utf8')
@@ -797,6 +798,11 @@ if (!productHomeTodaySource.includes('buildOperationalReport')
   || !operationalReportSource.includes("OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v2'")
   || !operationalReportSource.includes("OPERATIONAL_REPORT_EXPORT_CONTRACT = 'supermega.operational_report_export.v2'")
   || !operationalReportSource.includes('export async function validateOperationalReportExport')
+  || !operationalReportSource.includes('buildSharedMasterDataRegistry')
+  || !sharedMasterDataSource.includes("SHARED_MASTER_DATA_CONTRACT = 'supermega.shared_master_data_registry.v1'")
+  || !sharedMasterDataSource.includes('export function buildSharedMasterDataRegistry')
+  || !sharedMasterDataSource.includes('export function validateSharedMasterDataRegistry')
+  || !sharedMasterDataSource.includes('recordValuesExcluded: true')
   || !operationalReportSource.includes('permissionFiltered: true')
   || !operationalReportSource.includes('containsCustomerValues: false')
   || !operationalReportSource.includes('safeToShareExternally: false')
@@ -14309,11 +14315,12 @@ async function verifyOperationalReportRuntime() {
   }
   try {
     const nonce = Date.now()
-    const [model, commerce, production, website] = await Promise.all([
+    const [model, commerce, production, website, masterData] = await Promise.all([
       import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'operational-report.ts')).href}?operational-report=${nonce}`),
       import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?operational-report-commerce=${nonce}`),
       import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts')).href}?operational-report-production=${nonce}`),
       import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?operational-report-website=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shared-master-data.ts')).href}?operational-report-master-data=${nonce}`),
     ])
     const now = Date.parse('2026-07-29T12:00:00.000Z')
     const commerceState = commerce.createSeedCommerce()
@@ -14334,7 +14341,22 @@ async function verifyOperationalReportRuntime() {
     })
     assert(report.contract === model.OPERATIONAL_REPORT_CONTRACT && report.controls.permissionFiltered && report.controls.readOnly, 'operational_report_contract_invalid')
     assert(new Set(report.entries.map((entry) => entry.product)).size === 4 && report.allowedProducts.length === 4, 'operational_report_product_coverage_incomplete')
-    assert(report.masterData.dimensions.length === 10 && report.masterData.controls.countsOnly && report.masterData.totalRecords > 0, 'operational_report_master_data_coverage_missing')
+    assert(report.masterData.registryContract === masterData.SHARED_MASTER_DATA_CONTRACT && report.masterData.dimensions.length === 12 && report.masterData.controls.countsOnly && report.masterData.totalRecords > 0, 'operational_report_master_data_coverage_missing')
+    const registry = masterData.buildSharedMasterDataRegistry({ allowedProducts: masterData.sharedMasterDataProducts, commerce: commerceState, production: productionState, website: websiteState })
+    assert(registry.contract === masterData.SHARED_MASTER_DATA_CONTRACT && registry.records.length === registry.summary.totalRecords && registry.controls.readOnly, 'shared_master_data_registry_contract_invalid')
+    assert(registry.records.every((record) => !('name' in record) && !('value' in record)) && !JSON.stringify(registry).includes('May') && !JSON.stringify(registry).includes('Ko Aung'), 'shared_master_data_registry_exposed_record_values')
+    const tamperedRegistry = structuredClone(registry)
+    tamperedRegistry.summary.totalRecords += 1
+    let tamperedRegistryRejected = false
+    try { masterData.validateSharedMasterDataRegistry(tamperedRegistry) } catch { tamperedRegistryRejected = true }
+    assert(tamperedRegistryRejected, 'shared_master_data_registry_tamper_accepted')
+    const authorityTamper = structuredClone(registry)
+    authorityTamper.records[0].sourceAuthority = 'website_workspace'
+    let authorityTamperRejected = false
+    try { masterData.validateSharedMasterDataRegistry(authorityTamper) } catch { authorityTamperRejected = true }
+    assert(authorityTamperRejected, 'shared_master_data_registry_authority_drift_accepted')
+    const websiteRegistry = masterData.buildSharedMasterDataRegistry({ allowedProducts: ['website'], website: websiteState })
+    assert(Object.keys(websiteRegistry.summary.byOwner).join(',') === 'website' && websiteRegistry.records.every((record) => record.ownerProduct === 'website' && record.consumers.length === 0), 'shared_master_data_registry_permission_filter_failed')
     assert(!JSON.stringify(report).includes('May') && !JSON.stringify(report).includes('Ko Aung'), 'operational_report_exposed_customer_value')
     assert(report.entries.every((entry, index, entries) => !index || ({ critical: 4, warning: 3, action: 2, ready: 1 })[entries[index - 1].severity] >= ({ critical: 4, warning: 3, action: 2, ready: 1 })[entry.severity]), 'operational_report_priority_order_invalid')
 
@@ -14347,7 +14369,7 @@ async function verifyOperationalReportRuntime() {
     })
     assert(websiteOnly.entries.every((entry) => entry.product === 'website') && websiteOnly.sources.length === 1, 'operational_report_permission_filter_failed')
     assert(!JSON.stringify(websiteOnly).includes('commerce') && !JSON.stringify(websiteOnly).includes('production'), 'operational_report_hidden_product_metadata_leaked')
-    assert(websiteOnly.masterData.dimensions.length === 2 && websiteOnly.masterData.dimensions.every((dimension) => dimension.product === 'website' && dimension.consumers.length === 0), 'operational_report_master_data_permission_filter_failed')
+    assert(websiteOnly.masterData.dimensions.length === 1 && websiteOnly.masterData.dimensions.every((dimension) => dimension.product === 'website' && dimension.consumers.length === 0), 'operational_report_master_data_permission_filter_failed')
 
     const unprovisioned = model.buildOperationalReport({
       mode: 'managed',
@@ -14376,7 +14398,7 @@ async function verifyOperationalReportRuntime() {
     const exported = await model.exportOperationalReport(websiteOnly, { product: 'website', urgency: 'all' })
     assert(exported.contract === model.OPERATIONAL_REPORT_EXPORT_CONTRACT && /^sha256:[0-9a-f]{64}$/.test(exported.digest), 'operational_report_export_not_digest_bound')
     assert(exported.entries.every((entry) => entry.product === 'website') && exported.controls.externalWritesPerformed === false, 'operational_report_export_broadened_scope')
-    assert((await model.validateOperationalReportExport(exported)).digest === exported.digest && exported.masterData.dimensions.length === 2, 'operational_report_export_not_revalidated')
+    assert((await model.validateOperationalReportExport(exported)).digest === exported.digest && exported.masterData.dimensions.length === 1, 'operational_report_export_not_revalidated')
     const tamperedExport = structuredClone(exported)
     tamperedExport.masterData.dimensions[0].recordCount += 1
     let tamperedExportRejected = false

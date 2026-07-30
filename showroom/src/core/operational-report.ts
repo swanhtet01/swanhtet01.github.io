@@ -14,6 +14,12 @@ import {
   readinessChecks,
   type WebsiteWorkspace,
 } from '../products/website/website-model.ts'
+import {
+  buildSharedMasterDataRegistry,
+  SHARED_MASTER_DATA_CONTRACT,
+  type SharedMasterDataKind,
+  type SharedMasterDataRegistry,
+} from './shared-master-data.ts'
 
 export const OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v2' as const
 export const OPERATIONAL_REPORT_EXPORT_CONTRACT = 'supermega.operational_report_export.v2' as const
@@ -56,6 +62,7 @@ export type OperationalMasterDataDimension = {
 }
 
 export type OperationalMasterData = {
+  registryContract: typeof SHARED_MASTER_DATA_CONTRACT
   dimensions: OperationalMasterDataDimension[]
   totalRecords: number
   attentionDimensions: number
@@ -120,34 +127,55 @@ const severityScore: Record<OperationalSeverity, number> = {
 }
 
 const masterDimensionIds: Record<OperationalProduct, readonly string[]> = {
-  commerce: ['commerce.catalog_items', 'commerce.orders', 'commerce.suppliers'],
-  production: ['production.jobs', 'production.equipment', 'production.problems'],
-  website: ['website.pages', 'website.releases'],
-  ecommerce: ['ecommerce.catalog_items', 'ecommerce.requests'],
+  commerce: ['commerce.customers', 'commerce.suppliers', 'commerce.items', 'commerce.currency', 'commerce.tax_codes', 'commerce.account_codes', 'commerce.locations', 'commerce.trace_units'],
+  production: ['production.units', 'production.documents'],
+  website: ['website.documents'],
+  ecommerce: ['ecommerce.documents'],
 }
 
 const masterConsumers: Record<string, readonly OperationalProduct[]> = {
-  'commerce.catalog_items': ['production', 'ecommerce'],
-  'commerce.orders': ['production'],
+  'commerce.customers': ['ecommerce'],
   'commerce.suppliers': ['production'],
-  'production.jobs': ['commerce'],
-  'website.pages': ['ecommerce'],
-  'website.releases': ['ecommerce'],
-  'ecommerce.catalog_items': ['commerce', 'website'],
-  'ecommerce.requests': ['commerce'],
+  'commerce.items': ['production', 'website', 'ecommerce'],
+  'commerce.currency': ['production', 'website', 'ecommerce'],
+  'commerce.tax_codes': ['ecommerce'],
+  'commerce.account_codes': ['production'],
+  'commerce.locations': ['production', 'ecommerce'],
+  'commerce.trace_units': ['production'],
+  'production.units': ['commerce'],
+  'production.documents': ['commerce'],
+  'website.documents': ['ecommerce'],
+  'ecommerce.documents': ['commerce'],
 }
 
 const masterDimensionLabels: Record<string, string> = {
-  'commerce.catalog_items': 'Catalog items',
-  'commerce.orders': 'Orders',
+  'commerce.customers': 'Customers',
   'commerce.suppliers': 'Suppliers',
-  'production.jobs': 'Production jobs',
-  'production.equipment': 'Equipment',
-  'production.problems': 'Problems',
-  'website.pages': 'Website pages',
-  'website.releases': 'Website releases',
-  'ecommerce.catalog_items': 'Storefront products',
-  'ecommerce.requests': 'Storefront requests',
+  'commerce.items': 'Items',
+  'commerce.currency': 'Currency',
+  'commerce.tax_codes': 'Tax codes',
+  'commerce.account_codes': 'Account codes',
+  'commerce.locations': 'Locations',
+  'commerce.trace_units': 'Lots and serials',
+  'production.units': 'Units of measure',
+  'production.documents': 'Plant documents',
+  'website.documents': 'Website documents',
+  'ecommerce.documents': 'Ecommerce documents',
+}
+
+const masterDimensionKinds: Record<string, readonly SharedMasterDataKind[]> = {
+  'commerce.customers': ['customer'],
+  'commerce.suppliers': ['supplier'],
+  'commerce.items': ['item'],
+  'commerce.currency': ['currency'],
+  'commerce.tax_codes': ['tax'],
+  'commerce.account_codes': ['account'],
+  'commerce.locations': ['location'],
+  'commerce.trace_units': ['lot', 'serial'],
+  'production.units': ['unit'],
+  'production.documents': ['document'],
+  'website.documents': ['document'],
+  'ecommerce.documents': ['document'],
 }
 
 function exactIso(value: string) {
@@ -211,41 +239,23 @@ function masterDimension(
   }
 }
 
-function buildOperationalMasterData(input: OperationalReportInput, sources: readonly OperationalSource[], allowedProducts: readonly OperationalProduct[]): OperationalMasterData {
+function buildOperationalMasterData(registry: SharedMasterDataRegistry, sources: readonly OperationalSource[], allowedProducts: readonly OperationalProduct[]): OperationalMasterData {
   const bySurface = new Map(sources.map((source) => [source.surface, source]))
   const dimensions = allowedProducts.flatMap((product): OperationalMasterDataDimension[] => {
     const source = bySurface.get(productSurface[product]) as OperationalSource
     const sourceAvailable = source.mode !== 'error' && !(source.mode === 'managed' && source.revision === 0)
-    if (product === 'commerce') {
-      const state = sourceAvailable ? input.commerce : undefined
-      return [
-        masterDimension(allowedProducts, source, product, 'commerce.catalog_items', 'Catalog items', state?.items.length ?? 0, sourceAvailable),
-        masterDimension(allowedProducts, source, product, 'commerce.orders', 'Orders', state?.orders.length ?? 0, sourceAvailable),
-        masterDimension(allowedProducts, source, product, 'commerce.suppliers', 'Suppliers', new Set(state ? commercePurchaseOrders(state).map((order) => order.supplier) : []).size, sourceAvailable),
-      ]
-    }
-    if (product === 'production') {
-      const state = sourceAvailable ? input.production : undefined
-      return [
-        masterDimension(allowedProducts, source, product, 'production.jobs', 'Production jobs', state?.jobs.length ?? 0, sourceAvailable),
-        masterDimension(allowedProducts, source, product, 'production.equipment', 'Equipment', state?.machines.length ?? 0, sourceAvailable),
-        masterDimension(allowedProducts, source, product, 'production.problems', 'Problems', state?.issues.length ?? 0, sourceAvailable),
-      ]
-    }
-    if (product === 'website') {
-      const state = sourceAvailable ? input.website : undefined
-      return [
-        masterDimension(allowedProducts, source, product, 'website.pages', 'Website pages', state?.pages.length ?? 0, sourceAvailable),
-        masterDimension(allowedProducts, source, product, 'website.releases', 'Website releases', state?.localPublishes.length ?? 0, sourceAvailable),
-      ]
-    }
-    const state = sourceAvailable ? input.commerce : undefined
-    return [
-      masterDimension(allowedProducts, source, product, 'ecommerce.catalog_items', 'Storefront products', state?.storefrontConfiguration?.selectedSkus.length ?? 0, sourceAvailable),
-      masterDimension(allowedProducts, source, product, 'ecommerce.requests', 'Storefront requests', state ? commerceStorefrontRequests(state).length : 0, sourceAvailable),
-    ]
+    return masterDimensionIds[product].map((id) => masterDimension(
+      allowedProducts,
+      source,
+      product,
+      id,
+      masterDimensionLabels[id],
+      sourceAvailable ? registry.records.filter((record) => record.ownerProduct === product && masterDimensionKinds[id].includes(record.kind)).length : 0,
+      sourceAvailable,
+    ))
   })
   return {
+    registryContract: SHARED_MASTER_DATA_CONTRACT,
     dimensions,
     totalRecords: dimensions.reduce((total, dimension) => total + dimension.recordCount, 0),
     attentionDimensions: dimensions.filter((dimension) => dimension.status !== 'ready').length,
@@ -353,7 +363,8 @@ export function buildOperationalReport(input: OperationalReportInput): Operation
     action: entries.filter((entry) => entry.severity === 'action').length,
     ready: entries.filter((entry) => entry.severity === 'ready').length,
   }
-  const masterData = buildOperationalMasterData(input, sources, allowedProducts)
+  const registry = buildSharedMasterDataRegistry({ allowedProducts, commerce: input.commerce, production: input.production, website: input.website })
+  const masterData = buildOperationalMasterData(registry, sources, allowedProducts)
   return {
     contract: OPERATIONAL_REPORT_CONTRACT,
     observedAt,
@@ -404,9 +415,9 @@ function exactKeys(value: unknown, keys: readonly string[]) {
 }
 
 function validateExportMasterData(value: unknown, allowedProducts: readonly OperationalProduct[], sources: readonly OperationalSource[]) {
-  if (!exactKeys(value, ['dimensions', 'totalRecords', 'attentionDimensions', 'controls'])) throw new Error('Operational report export master data is invalid.')
+  if (!exactKeys(value, ['registryContract', 'dimensions', 'totalRecords', 'attentionDimensions', 'controls'])) throw new Error('Operational report export master data is invalid.')
   const masterData = value as OperationalMasterData
-  if (!Array.isArray(masterData.dimensions)
+  if (masterData.registryContract !== SHARED_MASTER_DATA_CONTRACT || !Array.isArray(masterData.dimensions)
     || !exactKeys(masterData.controls, ['countsOnly', 'customerValuesExcluded', 'permissionFiltered'])
     || masterData.controls.countsOnly !== true || masterData.controls.customerValuesExcluded !== true || masterData.controls.permissionFiltered !== true) {
     throw new Error('Operational report export master data is invalid.')
