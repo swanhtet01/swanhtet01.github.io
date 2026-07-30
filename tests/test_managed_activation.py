@@ -12,6 +12,11 @@ import unittest
 from unittest import mock
 from urllib.parse import quote
 
+from supermega_runtime.managed_context import (
+    MANAGED_CONTEXT_ALLOWED_USES,
+    MANAGED_CONTEXT_FORBIDDEN_ACTIONS,
+    managed_ai_context_export_digest,
+)
 from supermega_runtime.managed_activation import (
     ACTIVATION_PLAN_CONTRACT,
     ACTIVATION_RECEIPT_CONTRACT,
@@ -37,7 +42,7 @@ ADMIN_CA_SHA256 = "sha256:" + "1" * 64
 def pilot_outcome_report(product: str = "commerce") -> dict[str, object]:
     workspace = "Mingalar Fresh Mart"
     owner = "Swan Htet"
-    template = "retail-wholesale"
+    template = "production-control" if product == "production" else "retail-wholesale"
     started_at = "2026-07-30T11:30:00.000Z"
     reviewed_at = "2026-07-30T11:35:00.000Z"
     checkpoint_digest = "sha256:" + "2" * 64
@@ -105,6 +110,49 @@ def pilot_outcome_report(product: str = "commerce") -> dict[str, object]:
     }
 
 
+def approved_ai_context(outcome: dict[str, object]) -> dict[str, object]:
+    product = "plant" if outcome["product"] == "production" else "shop"
+    template = "production-control" if product == "plant" else "retail-wholesale"
+    behavior_product = "production" if product == "plant" else "commerce"
+    body: dict[str, object] = {
+        "contract": "supermega.ai_context_export.v1",
+        "version": 1,
+        "product": product,
+        "templateId": template,
+        "sourceCounts": {
+            "selectedProductRecords": 12,
+            "behaviorSignals": 4,
+            "reviewedDecisions": 2,
+        },
+        "behaviorPreference": {
+            "product": behavior_product,
+            "chosenCount": 3,
+        },
+        "outcome": {
+            "status": outcome["outcomeStatus"],
+            "digest": outcome["reportDigest"],
+            "accepted": True,
+        },
+        "allowedUses": list(MANAGED_CONTEXT_ALLOWED_USES),
+        "forbiddenActions": list(MANAGED_CONTEXT_FORBIDDEN_ACTIONS),
+        "handoff": {"route": "managed_activation_review", "activationRequired": True},
+        "ownerReview": {
+            "status": "approved_for_managed_review",
+            "reviewedBy": "Swan Htet",
+            "reviewedAt": "2026-07-30T11:36:00.000Z",
+        },
+        "privacyBoundary": {
+            "rawProductRecordsIncluded": False,
+            "rawBehaviorEntriesIncluded": False,
+            "rawDecisionRecordsIncluded": False,
+            "externalSendPerformed": False,
+            "managedWritePerformed": False,
+            "modelTrainingAllowed": False,
+        },
+    }
+    return {**body, "contextDigest": managed_ai_context_export_digest(body)}
+
+
 def managed_trial_request() -> dict[str, object]:
     outcome = pilot_outcome_report()
     data_package = {
@@ -161,6 +209,7 @@ def managed_trial_request() -> dict[str, object]:
         "behaviorSignals": 4,
         "evidenceVersion": 24,
         "pilotOutcomeReport": outcome,
+        "approvedAiContext": approved_ai_context(outcome),
         "managedWorkspaceProvisioningPacket": provisioning,
         "importProvisioningPacket": {
             "contract": "supermega.import_provisioning_readiness.v1",
@@ -176,9 +225,13 @@ def activation_plan(product_slug: str = "shop") -> dict[str, object]:
     request["productSlug"] = product_slug
     if product_slug in {"plant", "production"}:
         request["product"] = "Plant"
+        request["templateId"] = "production-control"
+        request["templateName"] = "Production control"
         request["managedWorkspaceProvisioningPacket"]["product"] = "Plant"  # type: ignore[index]
+        request["managedWorkspaceProvisioningPacket"]["template"] = "Production control"  # type: ignore[index]
         outcome = pilot_outcome_report("production")
         request["pilotOutcomeReport"] = outcome
+        request["approvedAiContext"] = approved_ai_context(outcome)
         request["managedWorkspaceProvisioningPacket"]["dataPackage"]["pilotOutcomeDigest"] = outcome["reportDigest"]  # type: ignore[index]
     return compile_activation_plan(
         request,
@@ -417,6 +470,13 @@ class ManagedActivationPlanTests(unittest.TestCase):
         self.assertIn("company.baseline.approve", first["ownerCapabilities"])
         self.assertIn("company.control.approve", first["ownerCapabilities"])
         self.assertEqual(first["evidence"]["pilotOutcomeStatus"], "improved")
+        request = managed_trial_request()
+        self.assertEqual(first["evidence"]["approvedContextDigest"], request["approvedAiContext"]["contextDigest"])
+        self.assertEqual(first["evidence"]["approvedContextOutcomeDigest"], first["evidence"]["pilotOutcomeDigest"])
+        self.assertEqual(first["evidence"]["approvedContextContract"], "supermega.ai_context_export.v1")
+        self.assertEqual(first["evidence"]["approvedContextApprovedBy"], "Swan Htet")
+        self.assertFalse(first["evidence"]["approvedContextRawRecordsIncluded"])
+        self.assertFalse(first["evidence"]["approvedContextModelTrainingAllowed"])
         self.assertEqual(first["rollback"]["authorizationScope"], "automatic_activation_compensation")
         self.assertEqual(first["rollback"]["trigger"], "downstream_release_gate_failure")
         serialized = json.dumps(first, sort_keys=True)
@@ -438,6 +498,10 @@ class ManagedActivationPlanTests(unittest.TestCase):
             ("database secret", lambda value: value.__setitem__("database_url", "postgresql://owner:secret@host/db")),
             ("access token", lambda value: value.__setitem__("accessToken", "must-not-enter-an-activation-plan")),
             ("missing pilot outcome", lambda value: value.__setitem__("pilotOutcomeReport", None)),
+            ("missing approved context", lambda value: value.__setitem__("approvedAiContext", None)),
+            ("tampered context digest", lambda value: value["approvedAiContext"].__setitem__("contextDigest", "sha256:" + "9" * 64)),
+            ("raw behavior context", lambda value: value["approvedAiContext"]["privacyBoundary"].__setitem__("rawBehaviorEntriesIncluded", True)),
+            ("wrong context owner", lambda value: value["approvedAiContext"]["ownerReview"].__setitem__("reviewedBy", "Another owner")),
         ):
             with self.subTest(label=label):
                 request = managed_trial_request()
@@ -475,6 +539,28 @@ class ManagedActivationPlanTests(unittest.TestCase):
                 admin_ca_sha256=ADMIN_CA_SHA256,
                 now=NOW,
             )
+
+    def test_context_reapproval_changes_the_activation_plan_digest(self) -> None:
+        request = managed_trial_request()
+        first = activation_plan()
+        updated = deepcopy(request)
+        updated_context = updated["approvedAiContext"]
+        updated_context["ownerReview"]["reviewedAt"] = "2026-07-30T11:37:00.000Z"  # type: ignore[index]
+        updated_context["contextDigest"] = managed_ai_context_export_digest(updated_context)  # type: ignore[index]
+        second = compile_activation_plan(
+            updated,
+            workspace_id="mingalar-fresh-mart",
+            owner_actor_id=OWNER_ID,
+            approval_id=APPROVAL_ID,
+            approved_by="Swan Htet",
+            approved_at="2026-07-30T11:55:00.000Z",
+            project_ref=PROJECT_REF,
+            release_commit=RELEASE_COMMIT,
+            admin_ca_sha256=ADMIN_CA_SHA256,
+            now=NOW,
+        )
+        self.assertNotEqual(first["evidence"]["approvedContextDigest"], second["evidence"]["approvedContextDigest"])
+        self.assertNotEqual(first["planDigest"], second["planDigest"])
 
     def test_expired_plan_cannot_activate(self) -> None:
         plan = activation_plan()

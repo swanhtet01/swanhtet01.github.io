@@ -137,6 +137,9 @@ const companyBackupUiSource = await readFile(resolve(root, 'showroom', 'src', 'c
 if (!managedContextSource.includes("supermega.managed_context_profile_request.v1")
   || !managedContextSource.includes('buildManagedContextProfileRequest')
   || !managedContextSource.includes("supermega.ai_context_export.v1")
+  || !managedContextSource.includes("supermega.managed_context_profile.v2")
+  || !managedContextSource.includes("supermega.managed_context_profile_validation.v2")
+  || !managedContextSource.includes("supermega.managed_context_profile_retention.v2")
   || !managedContextSource.includes('buildManagedAiContextExport')
   || !managedContextSource.includes('structurallyValidManagedAiContextExport')
   || !managedContextSource.includes('rawBehaviorEntriesIncluded: false')
@@ -145,16 +148,26 @@ if (!managedContextSource.includes("supermega.managed_context_profile_request.v1
   || !managedContextSource.includes('rawProductRecordsIncluded: false')
   || !managedContextSource.includes('modelTrainingAllowed: false')
   || managedContextSource.includes('preference.detail')
-  || !managedContextUiSource.includes('Keep managed context')
-  || !managedContextUiSource.includes('I approve these summarized source counts, owner behavior pattern, and reviewed decision counts for managed AI recommendations.')
+  || !managedContextUiSource.includes('Keep approved context')
+  || !managedContextUiSource.includes('I approve retention of this exact summary and accepted outcome for managed AI recommendations.')
+  || !managedContextUiSource.includes('approvedContextDigest')
   || !managedContextUiSource.includes('Raw records and browser text stay out.')
   || !settingsPageSource.includes("approval.status === 'approved' || approval.status === 'declined'")
   || !settingsPageSource.includes("approval.decidedActorKind === 'human'")
   || !settingsPageSource.includes('<ManagedContextConsent')
+  || !settingsPageSource.includes('approvedContext={approvedAiContextExport}')
   || !managedTrialSource.includes('/api/trial/v1/managed-context/validate')
   || !managedTrialSource.includes('/api/trial/v1/managed-context/retain')
   || !managedTrialRuntimeSource.includes('@router.post("/managed-context/validate")')
   || !managedTrialRuntimeSource.includes('@router.post("/managed-context/retain")')
+  || !managedActivationSource.includes('validate_managed_ai_context_export')
+  || !managedActivationSource.includes('approvedContextDigest')
+  || !managedActivationSource.includes('approvedContextOutcomeDigest')
+  || !managedActivationSource.includes('approvedContextApprovedAt')
+  || !managedActivationSource.includes('approvedContextRawRecordsIncluded')
+  || !managedActivationSource.includes('approvedContextModelTrainingAllowed')
+  || !managedContextPythonSource.includes('validate_managed_ai_context_export')
+  || !managedContextPythonSource.includes('approvedContextDigest')
   || !managedContextPythonSource.includes('managed_context_validation_digest')
   || !managedContextPythonSource.includes('managed_context_brief_projection')
   || !companyBriefRuntimeSource.includes('_attention_rank')
@@ -5466,28 +5479,35 @@ async function verifyManagedContextRuntime() {
       reviewedDecisions: 1, behaviorPreference, outcomeStatus: 'unchanged', outcomeDigest: `sha256:${'c'.repeat(64)}`,
       reviewedBy: 'Business owner', reviewedAt: '2026-07-31T00:00:00.000Z',
     }) === null, 'managed_ai_context_export_unaccepted_outcome_accepted')
-    const profileDigest = `sha256:${createHash('sha256').update(JSON.stringify(model.managedContextProfileProjection(request, identity))).digest('hex')}`
+    const profileDigest = `sha256:${createHash('sha256').update(JSON.stringify(model.managedContextProfileProjection(approvedExport, identity))).digest('hex')}`
     const profile = {
-      contract: 'supermega.managed_context_profile.v1',
-      version: 1,
+      contract: 'supermega.managed_context_profile.v2',
+      version: 2,
       workspaceId: identity.workspaceId,
       retainedBy: identity.userId,
-      product: request.product,
-      templateId: request.templateId,
-      sourceCounts: request.sourceCounts,
-      behaviorPreference: request.behaviorPreference,
-      allowedUses: request.allowedUses,
-      forbiddenActions: request.forbiddenActions,
+      approvedContextDigest: approvedExport.contextDigest,
+      product: approvedExport.product,
+      templateId: approvedExport.templateId,
+      sourceCounts: approvedExport.sourceCounts,
+      behaviorPreference: approvedExport.behaviorPreference,
+      outcome: approvedExport.outcome,
+      approvedBy: approvedExport.ownerReview.reviewedBy,
+      approvedAt: approvedExport.ownerReview.reviewedAt,
+      allowedUses: approvedExport.allowedUses,
+      forbiddenActions: approvedExport.forbiddenActions,
       profileDigest,
       rawProductRecordsIncluded: false,
+      rawBehaviorEntriesIncluded: false,
+      rawDecisionRecordsIncluded: false,
       modelTrainingAllowed: false,
     }
-    assert(model.structurallyValidManagedContextProfile(profile, request, identity), 'managed_context_profile_shape_rejected')
-    assert(!model.structurallyValidManagedContextProfile({ ...profile, retainedBy: 'OTHER-ACTOR' }, request, identity), 'managed_context_actor_tamper_accepted')
+    assert(model.structurallyValidManagedContextProfile(profile, approvedExport, identity), 'managed_context_profile_shape_rejected')
+    assert(!model.structurallyValidManagedContextProfile({ ...profile, retainedBy: 'OTHER-ACTOR' }, approvedExport, identity), 'managed_context_actor_tamper_accepted')
+    assert(!model.structurallyValidManagedContextProfile({ ...profile, approvedContextDigest: `sha256:${'f'.repeat(64)}` }, approvedExport, identity), 'managed_context_approved_digest_tamper_accepted')
     const companyVersion = 4
     const validationDigest = `sha256:${createHash('sha256').update(JSON.stringify(model.managedContextValidationProjection(profileDigest, companyVersion, identity))).digest('hex')}`
     const validation = {
-      contract: 'supermega.managed_context_profile_validation.v1',
+      contract: 'supermega.managed_context_profile_validation.v2',
       status: 'ready_for_owner_confirmation',
       profileDigest,
       validationDigest,
@@ -5501,19 +5521,19 @@ async function verifyManagedContextRuntime() {
       identity: { workspace_id: identity.workspaceId, actor_id: identity.userId, actor_kind: 'human' },
       secretValuesExposed: false,
     }
-    const checked = await managedTrial.assertManagedContextValidation(validationResponse, request, identity)
+    const checked = await managedTrial.assertManagedContextValidation(validationResponse, approvedExport, identity)
     assert(checked.validation.validationDigest === validationDigest, 'managed_context_revision_validation_rejected')
     await rejectsAsync(
       () => managedTrial.assertManagedContextValidation({
         ...validationResponse,
         validation: { ...validation, companyVersion: companyVersion + 1 },
-      }, request, identity),
+      }, approvedExport, identity),
       'managed_context_stale_validation_digest_accepted',
     )
     const retentionResponse = {
       profile,
       retention: {
-        contract: 'supermega.managed_context_profile_retention.v1',
+        contract: 'supermega.managed_context_profile_retention.v2',
         status: 'retained',
         profileDigest,
         companyVersion: companyVersion + 1,
@@ -5525,19 +5545,21 @@ async function verifyManagedContextRuntime() {
       identity: validationResponse.identity,
       secretValuesExposed: false,
     }
-    const retained = await managedTrial.assertManagedContextRetention(retentionResponse, request, validation, identity)
+    const retained = await managedTrial.assertManagedContextRetention(retentionResponse, approvedExport, validation, identity)
     assert(retained.profile.profileDigest === profileDigest, 'managed_context_retention_rejected')
     await rejectsAsync(
       () => managedTrial.assertManagedContextRetention({
         ...retentionResponse,
         retention: { ...retentionResponse.retention, externalWritesPerformed: true },
-      }, request, validation, identity),
+      }, approvedExport, validation, identity),
       'managed_context_external_write_tamper_accepted',
     )
     assert(model.structurallyValidManagedContextBriefProjection({
-      contract: 'supermega.managed_context_brief_projection.v1',
-      version: 1,
+      contract: 'supermega.managed_context_brief_projection.v2',
+      version: 2,
       profileDigest,
+      approvedContextDigest: approvedExport.contextDigest,
+      acceptedOutcomeDigest: approvedExport.outcome.digest,
       preferredProduct: 'commerce',
     }), 'managed_context_brief_projection_rejected')
   } catch (error) {

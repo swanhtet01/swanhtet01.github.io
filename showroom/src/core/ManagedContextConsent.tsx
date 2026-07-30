@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   managedContextProductLabel,
+  type ManagedAiContextExport,
   type ManagedContextProfile,
-  type ManagedContextProfileRequest,
 } from './managed-context'
 import {
   ManagedTrialError,
@@ -14,7 +14,7 @@ import {
 
 
 type Props = {
-  contextPackage: ManagedContextProfileRequest | null
+  approvedContext: ManagedAiContextExport | null
   identity: ManagedIdentity | null
   onRetained?: (profile: ManagedContextProfile) => void
 }
@@ -34,7 +34,7 @@ function managedContextError(error: unknown) {
   return error instanceof Error ? error.message : 'Managed context could not be retained.'
 }
 
-export function ManagedContextConsent({ contextPackage, identity, onRetained }: Props) {
+export function ManagedContextConsent({ approvedContext, identity, onRetained }: Props) {
   const [approvedKey, setApprovedKey] = useState('')
   const [busyKey, setBusyKey] = useState('')
   const [noticeState, setNoticeState] = useState({ key: '', text: '' })
@@ -44,8 +44,8 @@ export function ManagedContextConsent({ contextPackage, identity, onRetained }: 
   const contextKey = useMemo(() => JSON.stringify([
     identity?.workspaceId ?? '',
     identity?.userId ?? '',
-    contextPackage,
-  ]), [contextPackage, identity])
+    approvedContext,
+  ]), [approvedContext, identity])
   const approved = approvedKey === contextKey
   const busy = busyKey === contextKey
   const notice = noticeState.key === contextKey ? noticeState.text : ''
@@ -57,23 +57,23 @@ export function ManagedContextConsent({ contextPackage, identity, onRetained }: 
     return () => { requestRef.current += 1 }
   }, [contextKey])
 
-  if (!identity || !contextPackage) return null
+  if (!identity || !approvedContext) return null
 
   async function keepContext() {
-    if (!approved || busy || !identity || !contextPackage) return
+    if (!approved || busy || !identity || !approvedContext) return
     const submittedIdentity = identity
-    const submittedPackage = contextPackage
+    const submittedContext = approvedContext
     const requestId = requestRef.current + 1
     requestRef.current = requestId
     commandRef.current ||= commandId()
     setBusyKey(contextKey)
     setNoticeState({ key: contextKey, text: 'Checking the exact company revision...' })
     try {
-      const checked = await validateManagedContextProfile(submittedPackage, submittedIdentity)
+      const checked = await validateManagedContextProfile(submittedContext, submittedIdentity)
       if (requestRef.current !== requestId) return
       const result = await retainManagedContextProfile({
         commandId: commandRef.current,
-        contextPackage: submittedPackage,
+        approvedContext: submittedContext,
         identity: submittedIdentity,
         validation: checked.validation,
       })
@@ -94,34 +94,35 @@ export function ManagedContextConsent({ contextPackage, identity, onRetained }: 
     }
   }
 
-  const sourceCounts = contextPackage.sourceCounts
-  const preference = managedContextProductLabel(contextPackage.behaviorPreference.product)
+  const sourceCounts = approvedContext.sourceCounts
+  const preference = managedContextProductLabel(approvedContext.behaviorPreference.product)
   return (
     <div aria-label="Managed context consent" className="managed-context-consent">
       <div>
         <span className="core-eyebrow">Managed memory</span>
         <h3>Remember how this owner works.</h3>
-        <p>Keep only source counts, reviewed decision counts, and a product preference. Raw records and browser text stay out.</p>
+        <p>Keep the exact owner-approved summary, accepted outcome digest, source counts, and product preference. Raw records and browser text stay out.</p>
       </div>
       <div className="premium-pilot-rows">
         <span><small>Prepared sources</small><strong>{sourceCounts.selectedProductRecords}</strong><em>Count only</em></span>
         <span><small>Behavior signals</small><strong>{sourceCounts.behaviorSignals}</strong><em>{preference} preferred</em></span>
         <span><small>Human decisions</small><strong>{sourceCounts.reviewedDecisions}</strong><em>Approved or declined</em></span>
+        <span><small>Accepted outcome</small><strong>{approvedContext.outcome.status}</strong><em>{approvedContext.outcome.digest.slice(0, 19)}...</em></span>
         <span><small>Boundary</small><strong>Recommendations only</strong><em>No sends, payments, stock, production, publishing, CRM, or training</em></span>
       </div>
       {retained ? (
         <div className="managed-context-kept" role="status">
           <strong>Managed context retained</strong>
-          <span>{preference} preference / {retained.profileDigest.slice(0, 19)}...</span>
+          <span>{preference} preference / context {retained.approvedContextDigest.slice(0, 19)}...</span>
         </div>
       ) : (
         <>
           <label className="managed-context-approval">
             <input checked={approved} onChange={(event) => setApprovedKey(event.target.checked ? contextKey : '')} type="checkbox" />
-            <span>I approve these summarized source counts, owner behavior pattern, and reviewed decision counts for managed AI recommendations.</span>
+            <span>I approve retention of this exact summary and accepted outcome for managed AI recommendations.</span>
           </label>
           <button className="core-button primary" disabled={!approved || busy} onClick={() => void keepContext()} type="button">
-            {busy ? 'Checking...' : 'Keep managed context'}
+            {busy ? 'Checking...' : 'Keep approved context'}
           </button>
         </>
       )}

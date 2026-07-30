@@ -1257,6 +1257,12 @@ def create_trial_router(
             raise _error(403, "trial_human_approval_required")
         readiness = _readiness(store, principal)
         _require_write_ready(readiness, "company.write")
+        if "company.control.approve" not in readiness.capabilities:
+            raise _error(
+                403,
+                "trial_capability_required",
+                required_capability="company.control.approve",
+            )
         profile = _invoke(
             lambda: build_managed_context_profile(
                 body.package,
