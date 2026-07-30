@@ -1669,6 +1669,10 @@ export function createEmptyCommerce(): CommerceState {
 }
 
 export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
+  const completedOrderAt = new Date(now - 5 * 60 * 60 * 1000).toISOString()
+  const completedPaymentAt = new Date(now - 4 * 60 * 60 * 1000).toISOString()
+  const completedFulfilmentAt = new Date(now - 3 * 60 * 60 * 1000).toISOString()
+  const purchaseOrderAt = new Date(now - 2 * 60 * 60 * 1000).toISOString()
   const firstOrderAt = new Date(now - 54 * 60 * 1000).toISOString()
   const secondOrderAt = new Date(now - 29 * 60 * 1000).toISOString()
   const items: CommerceItem[] = [
@@ -1691,17 +1695,61 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
     orders: [
       { id: 'ORD-1042', createdAt: firstOrderAt, customer: 'May', owner: 'Demo operator', channel: 'Messenger', item: 'Daily essentials basket', itemSku: 'SM-1001', quantity: 2, payment: 'KBZPay', paymentStatus: 'pending', refundStatus: 'none', promisedAt: new Date(now + 60 * 60 * 1000).toISOString(), calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 37000, taxMode: 'not_configured', taxMmk: 0, totalMmk: 37000 }, total: 37000, status: 'preparing' },
       { id: 'ORD-1041', createdAt: secondOrderAt, customer: 'Ko Aung', owner: 'Demo operator', channel: 'Phone', item: 'Household refill', itemSku: 'SM-1003', quantity: 1, payment: 'Cash on delivery', paymentStatus: 'pending', refundStatus: 'none', promisedAt: new Date(now + 90 * 60 * 1000).toISOString(), calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 12000, taxMode: 'not_configured', taxMmk: 0, totalMmk: 12000 }, total: 12000, status: 'ready' },
+      {
+        id: 'ORD-1039',
+        createdAt: completedOrderAt,
+        customer: 'Daw Mya',
+        owner: 'Demo operator',
+        channel: 'Counter',
+        item: 'Personal care set',
+        itemSku: 'SM-1004',
+        quantity: 1,
+        payment: 'Cash',
+        paymentStatus: 'reconciled',
+        paymentReconciledAt: completedPaymentAt,
+        paymentReconciliationActionId: 'ACT-DEMO-PAY-1039',
+        paymentReconciledBy: 'Demo operator',
+        paymentReconciliationReason: 'Matched the counter settlement.',
+        paymentEvidenceReference: 'DEMO-SEED-PAY-1039',
+        refundStatus: 'none',
+        promisedAt: new Date(now - 2 * 60 * 60 * 1000).toISOString(),
+        calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 22500, taxMode: 'not_configured', taxMmk: 0, totalMmk: 22500 },
+        total: 22500,
+        status: 'completed',
+        completion: {
+          actionId: 'ACT-DEMO-COMPLETE-1039',
+          capturedAt: completedFulfilmentAt,
+          actor: 'Demo operator',
+          reason: 'Confirmed the counter handoff.',
+          evidenceReference: 'DEMO-SEED-FULFILMENT-1039',
+        },
+      },
     ],
     movements: [
       { id: 'MOV-ACT-DEMO-1042', actionId: 'ACT-DEMO-1042', createdAt: firstOrderAt, actor: 'Demo operator', reason: 'Seed the local Commerce walkthrough.', evidenceReference: 'DEMO-SEED-ORD-1042', kind: 'reserve', sku: 'SM-1001', quantityDelta: -2, orderId: 'ORD-1042' },
       { id: 'MOV-ACT-DEMO-1041', actionId: 'ACT-DEMO-1041', createdAt: secondOrderAt, actor: 'Demo operator', reason: 'Seed the local Commerce walkthrough.', evidenceReference: 'DEMO-SEED-ORD-1041', kind: 'reserve', sku: 'SM-1003', quantityDelta: -1, orderId: 'ORD-1041' },
+      { id: 'MOV-ACT-DEMO-1039', actionId: 'ACT-DEMO-1039', createdAt: completedOrderAt, actor: 'Demo operator', reason: 'Seed a completed order with accountable payment and fulfilment proof.', evidenceReference: 'DEMO-SEED-ORD-1039', kind: 'reserve', sku: 'SM-1004', quantityDelta: -1, orderId: 'ORD-1039' },
     ],
     closes: [],
     catalogBaselines: items.map((item) => createCommerceCatalogBaseline(item, baselineProof)),
     catalogChanges: [],
     websiteIntakes: [],
     storefrontRequests: [],
-    purchaseOrders: [],
+    purchaseOrders: [{
+      id: 'PO-11111111-1111-4111-8111-111111111111',
+      createdAt: purchaseOrderAt,
+      expectedAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
+      supplier: 'Myanmar Beverage Supply',
+      sku: 'SM-1002',
+      quantityOrdered: 40,
+      creation: {
+        actionId: 'ACT-DEMO-PO-1001',
+        capturedAt: purchaseOrderAt,
+        actor: 'Demo buyer',
+        reason: 'Replenish the low-stock cold drink pack.',
+        evidenceReference: 'DEMO-SEED-PO-1001',
+      },
+    }],
   }
 }
 

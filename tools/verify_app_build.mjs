@@ -4316,6 +4316,10 @@ async function verifyChannelOrderRuntime() {
     }), 'channel_order_ready_guard_accepted_invalid_quote_span')
 
     const seed = commerce.createSeedCommerce()
+    assert(seed.orders.some((order) => order.status === 'completed' && order.paymentStatus === 'reconciled' && order.completion)
+      && seed.purchaseOrders?.length === 1
+      && seed.purchaseOrders[0].sku === 'SM-1002'
+      && seed.purchaseOrders[0].quantityOrdered === 40, 'shop_seed_missing_completed_sale_or_replenishment_work')
     const seedBefore = JSON.stringify(seed)
     const incomplete = intake.buildChannelOrderDraft({
       ...fixtures[0],
@@ -5877,16 +5881,23 @@ async function verifyClientOnboardingRuntime() {
         && capabilityPlan.workspace === blueprint.client.workspace
         && capabilityPlan.products.length === blueprint.products.length
         && capabilityPlan.phases.length === 3, `client_demo_${preset.id}_capability_plan_identity_wrong`)
-      assert(capabilityPlan.summary.demoReady === blueprint.products.length * 3
-        && capabilityPlan.summary.configureNext === blueprint.products.length * 3
-        && capabilityPlan.summary.scaleLater === blueprint.products.length * 3
-        && capabilityPlan.summary.total === blueprint.products.length * 9
-        && new Set(capabilityPlan.phases.flatMap((phase) => phase.capabilities.map((capability) => capability.id))).size === capabilityPlan.summary.total, `client_demo_${preset.id}_capability_plan_scope_wrong`)
-      assert(capabilityPlan.sharedControls.length === 6
+      const productCapabilityCount = blueprint.products.length * 12
+      const productCapabilities = capabilityPlan.phases.flatMap((phase) => phase.capabilities)
+      assert(capabilityPlan.summary.demoReady === blueprint.products.length * 4
+        && capabilityPlan.summary.configureNext === blueprint.products.length * 4
+        && capabilityPlan.summary.scaleLater === blueprint.products.length * 4
+        && capabilityPlan.summary.sharedPlatform === 12
+        && capabilityPlan.summary.total === productCapabilityCount + 12
+        && capabilityPlan.platformCapabilities.length === 12
+        && new Set(productCapabilities.map((capability) => capability.id)).size === productCapabilityCount
+        && new Set(capabilityPlan.platformCapabilities.map((capability) => capability.id)).size === capabilityPlan.summary.sharedPlatform
+        && [...productCapabilities, ...capabilityPlan.platformCapabilities].every((capability) => capability.records.length >= 3 && capability.roles.length >= 2 && capability.delivery), `client_demo_${preset.id}_capability_plan_scope_wrong`)
+      assert(capabilityPlan.sharedControls.length === 8
         && capabilityPlan.controls.roadmapOnly === true
         && capabilityPlan.controls.humanReviewRequired === true
         && capabilityPlan.controls.externalWritesPerformed === false
-        && capabilityPlan.controls.capabilityPresenceMustBeVerified === true, `client_demo_${preset.id}_capability_plan_controls_wrong`)
+        && capabilityPlan.controls.capabilityPresenceMustBeVerified === true
+        && capabilityPlan.controls.noPlaceholderModules === true, `client_demo_${preset.id}_capability_plan_controls_wrong`)
       assert(blueprint.schema === model.CLIENT_DEMO_BLUEPRINT_SCHEMA && blueprint.client.presetId === preset.id && blueprint.client.shopIndustryPackId === preset.shopIndustryPackId && blueprint.client.plantIndustryPackId === preset.plantIndustryPackId, `client_demo_${preset.id}_identity_wrong`)
       assert(blueprint.foundation.schema === model.CLIENT_OPERATING_FOUNDATION_SCHEMA
         && blueprint.foundation.organization.displayName === 'Golden Valley Trading'
