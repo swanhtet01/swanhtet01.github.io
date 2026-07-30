@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 
 import {
@@ -46,6 +47,23 @@ const portfolio = JSON.parse(portfolioText)
 const workforce = JSON.parse(workforceText)
 const agentWorkspace = JSON.parse(agentWorkspaceText)
 const databaseRehearsal = JSON.parse(databaseRehearsalText)
+const databaseImplementationPaths = [
+  'supermega_runtime/managed_activation.py',
+  'supermega_runtime/trial_store.py',
+  'supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql',
+  'tools/activate_supermega_database.ps1',
+  'tools/rehearse_supermega_postgres17.py',
+  'tools/validate_supermega_database_url.py',
+  'tools/verify_managed_runtime_environment_values.mjs',
+]
+const databaseImplementationHash = createHash('sha256')
+for (const relativePath of databaseImplementationPaths) {
+  databaseImplementationHash.update(relativePath, 'utf8')
+  databaseImplementationHash.update('\0', 'utf8')
+  databaseImplementationHash.update(await readFile(resolve(root, relativePath)))
+  databaseImplementationHash.update('\0', 'utf8')
+}
+const databaseImplementationDigest = `sha256:${databaseImplementationHash.digest('hex')}`
 const executionOrderMarker = '## Execution order'
 const workboardExecutionOrder = workboard.includes(executionOrderMarker)
   ? workboard.slice(workboard.indexOf(executionOrderMarker))
@@ -528,21 +546,29 @@ requireContract('research decision is superseded',
 requireContract('local PostgreSQL rehearsal remains bounded',
   databaseRehearsal.schemaVersion === 'supermega.hq.database-rehearsal.v1'
   && /^[0-9a-f]{40}$/.test(databaseRehearsal.implementationCommit || '')
+  && JSON.stringify(databaseRehearsal.implementation?.paths) === JSON.stringify(databaseImplementationPaths)
+  && databaseRehearsal.implementation?.digest === databaseImplementationDigest
   && databaseRehearsal.engine?.major === 17
   && databaseRehearsal.engine?.tlsActive === true
   && databaseRehearsal.engine?.loopbackOnly === true
   && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
   && databaseRehearsal.runtime?.explicitTransaction === true
-  && databaseRehearsal.migration?.count === 6
-  && databaseRehearsal.migration?.schemaVersion === 5
+  && databaseRehearsal.migration?.count === 7
+  && databaseRehearsal.migration?.schemaVersion === 6
   && databaseRehearsal.migration?.productionValidatorReady === true
-  && Object.keys(databaseRehearsal.checks || {}).length === 37
+  && Object.keys(databaseRehearsal.checks || {}).length === 43
   && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
   && databaseRehearsal.checks?.capabilityScopedReads === true
   && databaseRehearsal.checks?.capabilityScopedEventReads === true
   && databaseRehearsal.checks?.approvalRequesterReadScoped === true
   && databaseRehearsal.checks?.approvalReviewerReadsAll === true
   && databaseRehearsal.checks?.writeCapabilityImpliesRead === true
+  && databaseRehearsal.checks?.managedOwnerAuthorizationDurable === true
+  && databaseRehearsal.checks?.managedActivationAtomicRollback === true
+  && databaseRehearsal.checks?.managedActivationIdempotentReplay === true
+  && databaseRehearsal.checks?.managedSuspensionDatabaseEnforced === true
+  && databaseRehearsal.checks?.managedSuspensionBlocksAdditionalMember === true
+  && databaseRehearsal.checks?.managedSuspensionWriteDenied === true
   && databaseRehearsal.safety?.cleanupComplete === true
   && databaseRehearsal.safety?.secretValuesExposed === false
   && databaseRehearsal.safety?.productionMutated === false

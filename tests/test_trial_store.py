@@ -569,7 +569,7 @@ class TrialStoreTests(unittest.TestCase):
             ],
         )
 
-    def test_postgres_schema_probe_requires_version_5_and_hardening_controls(self) -> None:
+    def test_postgres_schema_probe_requires_version_6_and_hardening_controls(self) -> None:
         def canonical_trigger_rows() -> list[dict[str, object]]:
             return [
                 {
@@ -618,8 +618,9 @@ class TrialStoreTests(unittest.TestCase):
                 return self.trigger_rows
 
         ready = {
-            "schema_version": 5,
+            "schema_version": 6,
             "actor_decision_columns_ready": True,
+            "workspace_access_control_ready": True,
             "security_constraints_ready": True,
         }
         cursor = SchemaCursor(ready)
@@ -635,8 +636,9 @@ class TrialStoreTests(unittest.TestCase):
         self.assertEqual(cursor.parameters, ())
 
         for field, value in (
-            ("schema_version", 4),
+            ("schema_version", 5),
             ("actor_decision_columns_ready", False),
+            ("workspace_access_control_ready", False),
             ("security_constraints_ready", False),
         ):
             with self.subTest(field=field):

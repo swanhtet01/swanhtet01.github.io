@@ -40,6 +40,7 @@ on:
       - tools/verify_vercel_project_state.mjs
       - tools/test_vercel_project_state.mjs
       - tools/verify_vercel_environment_state.mjs
+      - tools/verify_managed_runtime_environment_values.mjs
       - tools/test_vercel_environment_state.mjs
       - tools/verify_vercel_domain_state.mjs
       - tools/verify_retired_vercel_alias_state.mjs
@@ -162,7 +163,18 @@ jobs:
           npx --yes vercel@56.1.0 api "/v4/aliases?domain=pos.supermega.dev&teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_retired_vercel_alias_state.mjs pos.supermega.dev
           APP_ENV_AUDIT="$(npx --yes vercel@56.1.0 api "/v10/projects/$APP_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID" --raw --token="$VERCEL_TOKEN" | node tools/verify_vercel_environment_state.mjs app)"
           printf '%s\n' "$APP_ENV_AUDIT"
-          OPERATING_MODE="$(printf '%s' "$APP_ENV_AUDIT" | node -e "let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{const value=JSON.parse(input);if(!['isolated_demo','managed_trial'].includes(value.operatingMode))process.exit(1);process.stdout.write(value.operatingMode)})")"
+          CANDIDATE_MODE="$(printf '%s' "$APP_ENV_AUDIT" | node -e "let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{const value=JSON.parse(input);if(!['isolated_demo','managed_trial_candidate'].includes(value.operatingMode))process.exit(1);process.stdout.write(value.operatingMode)})")"
+          case "$CANDIDATE_MODE" in
+            managed_trial_candidate)
+              VALUE_AUDIT="$(npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- node tools/verify_managed_runtime_environment_values.mjs managed_trial)"
+              OPERATING_MODE=managed_trial
+              ;;
+            isolated_demo)
+              VALUE_AUDIT="$(npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- node tools/verify_managed_runtime_environment_values.mjs isolated_demo)"
+              OPERATING_MODE=isolated_demo
+              ;;
+          esac
+          printf '%s\n' "$VALUE_AUDIT"
           printf 'operating_mode=%s\n' "$OPERATING_MODE" >> "$GITHUB_OUTPUT"
 
       - name: Enforce exact app runtime database and RLS gate
@@ -223,6 +235,7 @@ jobs:
           VERCEL_PROTECTED_PREVIEW: '1'
           APP_BASE_URL: ${{ steps.deploy-app.outputs.url }}
           EXPECTED_RELEASE_COMMIT: ${{ github.sha }}
+          EXPECTED_OPERATING_MODE: ${{ steps.app-environment.outputs.operating_mode }}
         run: |
           npx --yes vercel@56.1.0 inspect "$APP_BASE_URL" --token="$VERCEL_TOKEN"
           node tools/verify_app_release_live.mjs
@@ -332,6 +345,7 @@ jobs:
           APP_BASE_URL: https://app.supermega.dev
           PUBLIC_BASE_URL: https://supermega.dev
           EXPECTED_RELEASE_COMMIT: ${{ github.sha }}
+          EXPECTED_OPERATING_MODE: ${{ steps.app-environment.outputs.operating_mode }}
         run: |
           node tools/verify_app_release_live.mjs
           npm run public:verify:live

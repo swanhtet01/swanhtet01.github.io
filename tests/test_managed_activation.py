@@ -1,0 +1,703 @@
+from __future__ import annotations
+
+from copy import deepcopy
+import contextlib
+from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+import io
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest import mock
+from urllib.parse import quote
+
+from supermega_runtime.managed_activation import (
+    ACTIVATION_PLAN_CONTRACT,
+    ACTIVATION_RECEIPT_CONTRACT,
+    SUSPENSION_RECEIPT_CONTRACT,
+    ManagedActivationConflict,
+    ManagedActivationError,
+    ManagedWorkspaceProvisioner,
+    compile_activation_plan,
+    main,
+    validate_activation_plan,
+    _validate_admin_target,
+)
+
+
+NOW = datetime(2026, 7, 30, 12, 0, 0, tzinfo=timezone.utc)
+OWNER_ID = "c63af44e-b7c1-4dbf-970d-389d5bba93a7"
+APPROVAL_ID = "7f201a3b-d6d9-4c1a-b6c6-3d0d1e123731"
+PROJECT_REF = "zvtzwcimpvvtkowflhda"
+RELEASE_COMMIT = "a" * 40
+ADMIN_CA_SHA256 = "sha256:" + "1" * 64
+
+
+def managed_trial_request() -> dict[str, object]:
+    data_package = {
+        "evidenceFilename": "supermega-trial-evidence.json",
+        "localRecords": 12,
+        "storagePackages": 1,
+        "selectedProductRecords": 12,
+        "productSources": ["commerce"],
+        "approvalPackets": 2,
+        "behaviorSignals": 4,
+    }
+    provisioning = {
+        "contract": "supermega.managed_workspace_provisioning.v1",
+        "version": 1,
+        "createdAt": "2026-07-30T11:40:00.000Z",
+        "evidenceVersion": 23,
+        "workspace": "Mingalar Fresh Mart",
+        "owner": "Swan Htet",
+        "product": "Shop",
+        "template": "Retail and wholesale",
+        "tenantMode": "managed_required",
+        "dataPackage": data_package,
+        "requiredControls": [
+            "dedicated_postgres_rls",
+            "trusted_identity_gateway",
+            "private_storage",
+            "audit_trail",
+            "owner_write_approvals",
+            "scheduler_budget_limits",
+        ],
+        "firstSafeActivation": "Create managed tenant from exported evidence after activation gates pass.",
+        "forbiddenUntilProvisioned": [
+            "copy_browser_storage_to_production",
+            "enable_hosted_scheduler",
+            "send_customer_messages",
+            "capture_payments",
+            "publish_domains",
+        ],
+    }
+    return {
+        "contract": "supermega.managed_trial_request.v1",
+        "version": 1,
+        "createdAt": "2026-07-30T11:40:00.000Z",
+        "product": "Shop",
+        "productSlug": "shop",
+        "templateId": "retail-wholesale",
+        "templateName": "Retail and wholesale",
+        "workspace": "Mingalar Fresh Mart",
+        "owner": "Swan Htet",
+        "pilotReady": True,
+        "localRecords": 12,
+        "approvalPackets": 2,
+        "behaviorSignals": 4,
+        "evidenceVersion": 23,
+        "managedWorkspaceProvisioningPacket": provisioning,
+        "importProvisioningPacket": {
+            "contract": "supermega.import_provisioning_readiness.v1",
+            "status": "blocked",
+            "secretValuesExposed": False,
+        },
+        "noExternalSend": True,
+    }
+
+
+def activation_plan(product_slug: str = "shop") -> dict[str, object]:
+    request = managed_trial_request()
+    request["productSlug"] = product_slug
+    if product_slug in {"plant", "production"}:
+        request["product"] = "Plant"
+        request["managedWorkspaceProvisioningPacket"]["product"] = "Plant"  # type: ignore[index]
+    return compile_activation_plan(
+        request,
+        workspace_id="mingalar-fresh-mart",
+        owner_actor_id=OWNER_ID,
+        approval_id=APPROVAL_ID,
+        approved_by="Swan Htet",
+        approved_at="2026-07-30T11:55:00.000Z",
+        project_ref=PROJECT_REF,
+        release_commit=RELEASE_COMMIT,
+        admin_ca_sha256=ADMIN_CA_SHA256,
+        now=NOW,
+    )
+
+
+class FakeDatabase:
+    def __init__(self) -> None:
+        self.memberships: list[dict[str, object]] = []
+        self.access_controls: dict[str, dict[str, object]] = {}
+        self.approvals: list[dict[str, object]] = []
+        self.events: dict[tuple[str, str], dict[str, object]] = {}
+        self.statements: list[tuple[str, tuple[object, ...]]] = []
+        self.clock = NOW
+        self.current_user = "postgres"
+        self.provisioning_role_privileged = True
+
+    def connect(self, _database_url: str):
+        return FakeConnection(self)
+
+
+class FakeConnection:
+    def __init__(self, database: FakeDatabase) -> None:
+        self.database = database
+        self.closed = False
+        self.snapshot = None
+
+    def transaction(self):
+        return self
+
+    def cursor(self):
+        return FakeCursor(self.database)
+
+    def __enter__(self):
+        self.snapshot = (
+            deepcopy(self.database.memberships),
+            deepcopy(self.database.access_controls),
+            deepcopy(self.database.approvals),
+            deepcopy(self.database.events),
+            self.database.clock,
+        )
+        return self
+
+    def __exit__(self, exc_type, *_args):
+        if exc_type is not None and self.snapshot is not None:
+            (
+                self.database.memberships,
+                self.database.access_controls,
+                self.database.approvals,
+                self.database.events,
+                self.database.clock,
+            ) = self.snapshot
+        return False
+
+    def close(self):
+        self.closed = True
+
+
+class FakeCursor:
+    def __init__(self, database: FakeDatabase) -> None:
+        self.database = database
+        self.rows: list[object] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def execute(self, statement, params=()):
+        sql = " ".join(str(statement).split()).lower()
+        values = tuple(params)
+        self.database.statements.append((sql, values))
+        self.rows = []
+        if "current_setting('server_version_num')" in sql:
+            self.rows = [
+                {
+                    "server_version_num": 170006,
+                    "current_user": self.database.current_user,
+                    "transaction_read_only": "set transaction read only" in self.database.statements[-2][0]
+                    if len(self.database.statements) > 1
+                    else False,
+                    "provisioning_role_privileged": self.database.provisioning_role_privileged,
+                    "schema_version": 6,
+                    "backend_role_safe": True,
+                    "access_select": True,
+                    "access_insert": True,
+                    "access_update": True,
+                    "approval_select": True,
+                    "approval_insert": True,
+                    "membership_select": True,
+                    "membership_insert": True,
+                    "membership_update": True,
+                    "event_select": True,
+                    "event_insert": True,
+                }
+            ]
+        elif "from app_private.approval_requests" in sql and sql.startswith("select"):
+            approval_id, workspace_id, command_id, _approval_order = values
+            matches = [
+                deepcopy(row)
+                for row in self.database.approvals
+                if row["approval_id"] == approval_id
+                or (row["workspace_id"] == workspace_id and row["command_id"] == command_id)
+            ]
+            self.rows = matches[:1]
+        elif "from app_private.workspace_access_controls" in sql and sql.startswith("select"):
+            row = self.database.access_controls.get(str(values[0]))
+            self.rows = [deepcopy(row)] if row else []
+        elif "from app_private.workspace_memberships" in sql and sql.startswith("select"):
+            workspace_id = values[0]
+            self.rows = [
+                deepcopy(row)
+                for row in self.database.memberships
+                if row["workspace_id"] == workspace_id
+            ]
+        elif "from app_private.workspace_events" in sql and sql.startswith("select"):
+            event = self.database.events.get((str(values[0]), str(values[1])))
+            self.rows = [deepcopy(event)] if event else []
+        elif sql.startswith("insert into app_private.approval_requests"):
+            (
+                approval_id,
+                workspace_id,
+                command_id,
+                fingerprint,
+                _title,
+                proposal,
+                evidence,
+                requested_by,
+                decided_by,
+                note,
+            ) = values
+            self.database.clock += timedelta(seconds=1)
+            self.database.approvals.append(
+                {
+                    "approval_id": approval_id,
+                    "workspace_id": workspace_id,
+                    "command_id": command_id,
+                    "command_fingerprint": fingerprint,
+                    "proposal_json": json.loads(proposal),
+                    "evidence_refs_json": json.loads(evidence),
+                    "status": "approved",
+                    "requested_by": requested_by,
+                    "requested_actor_kind": "human",
+                    "requested_at": self.database.clock,
+                    "decided_by": decided_by,
+                    "decided_actor_kind": "human",
+                    "decided_at": self.database.clock,
+                    "decision_note": note,
+                    "decision_contract_version": 2,
+                    "version": 1,
+                }
+            )
+            self.rows = [{"requested_at": self.database.clock, "decided_at": self.database.clock}]
+        elif sql.startswith("insert into app_private.workspace_access_controls"):
+            workspace_id, activation_id, authorization_id, plan_digest, owner_actor_id, project_ref, release_commit = values
+            self.database.clock += timedelta(seconds=1)
+            self.database.access_controls[str(workspace_id)] = {
+                "activation_id": activation_id,
+                "authorization_id": authorization_id,
+                "authorization_contract": "managed_owner_approval_v1",
+                "plan_digest": plan_digest,
+                "owner_actor_id": owner_actor_id,
+                "project_ref": project_ref,
+                "release_commit": release_commit,
+                "status": "active",
+                "activated_at": self.database.clock,
+                "suspended_at": None,
+            }
+        elif sql.startswith("update app_private.workspace_access_controls"):
+            workspace_id, activation_id = values
+            row = self.database.access_controls.get(str(workspace_id))
+            if row and row["activation_id"] == activation_id and row["status"] == "active":
+                row["status"] = "suspended"
+                row["suspended_at"] = self.database.clock
+                self.rows = [{"updated_at": self.database.clock}]
+        elif sql.startswith("insert into app_private.workspace_memberships"):
+            self.database.memberships.append(
+                {
+                    "workspace_id": values[0],
+                    "actor_id": values[1],
+                    "actor_kind": "human",
+                    "status": "active",
+                    "capabilities": list(values[2]),
+                }
+            )
+        elif sql.startswith("update app_private.workspace_memberships"):
+            workspace_id, actor_id = values
+            for row in self.database.memberships:
+                if row["workspace_id"] == workspace_id and row["actor_id"] == actor_id and row["status"] == "active":
+                    row["status"] = "suspended"
+                    self.rows = [{"updated_at": self.database.clock}]
+                    break
+        elif sql.startswith("insert into app_private.workspace_events"):
+            event_id, workspace_id, command_id, fingerprint, actor_id, payload, result = values
+            self.database.clock += timedelta(seconds=1)
+            event = {
+                "event_id": event_id,
+                "workspace_id": workspace_id,
+                "command_id": command_id,
+                "command_fingerprint": fingerprint,
+                "actor_id": actor_id,
+                "payload_json": json.loads(payload),
+                "result_json": json.loads(result),
+                "created_at": self.database.clock,
+            }
+            self.database.events[(str(workspace_id), str(command_id))] = event
+            self.rows = [{"created_at": self.database.clock}]
+
+    def fetchone(self):
+        return self.rows[0] if self.rows else None
+
+    def fetchall(self):
+        return list(self.rows)
+
+
+class ManagedActivationPlanTests(unittest.TestCase):
+    def test_plan_is_deterministic_redacted_and_capability_scoped(self) -> None:
+        first = activation_plan()
+        second = activation_plan()
+        self.assertEqual(first, second)
+        self.assertEqual(first["contract"], ACTIVATION_PLAN_CONTRACT)
+        self.assertEqual(first["target"]["schemaVersion"], 6)
+        self.assertEqual(first["target"]["adminCaSha256"], ADMIN_CA_SHA256)
+        self.assertIn("commerce.write", first["ownerCapabilities"])
+        self.assertNotIn("production.write", first["ownerCapabilities"])
+        self.assertIn("company.baseline.approve", first["ownerCapabilities"])
+        self.assertEqual(first["rollback"]["authorizationScope"], "automatic_activation_compensation")
+        self.assertEqual(first["rollback"]["trigger"], "downstream_release_gate_failure")
+        serialized = json.dumps(first, sort_keys=True)
+        self.assertNotIn("currentRecord", serialized)
+        self.assertNotIn("postgresql://", serialized)
+        self.assertFalse(first["secretValuesExposed"])
+        self.assertEqual(validate_activation_plan(first), first)
+
+    def test_product_capabilities_do_not_leak_across_tracks(self) -> None:
+        plan = activation_plan("plant")
+        self.assertIn("production.write", plan["ownerCapabilities"])
+        self.assertNotIn("commerce.write", plan["ownerCapabilities"])
+        self.assertNotIn("website.write", plan["ownerCapabilities"])
+
+    def test_plan_rejects_missing_evidence_secrets_and_tampering(self) -> None:
+        for label, mutate in (
+            ("no records", lambda value: value.__setitem__("localRecords", 0)),
+            ("not ready", lambda value: value.__setitem__("pilotReady", False)),
+            ("database secret", lambda value: value.__setitem__("database_url", "postgresql://owner:secret@host/db")),
+            ("access token", lambda value: value.__setitem__("accessToken", "must-not-enter-an-activation-plan")),
+        ):
+            with self.subTest(label=label):
+                request = managed_trial_request()
+                mutate(request)
+                with self.assertRaises(ManagedActivationError):
+                    compile_activation_plan(
+                        request,
+                        workspace_id="mingalar-fresh-mart",
+                        owner_actor_id=OWNER_ID,
+                        approval_id=APPROVAL_ID,
+                        approved_by="Swan Htet",
+                        approved_at="2026-07-30T11:55:00.000Z",
+                        project_ref=PROJECT_REF,
+                        release_commit=RELEASE_COMMIT,
+                        admin_ca_sha256=ADMIN_CA_SHA256,
+                        now=NOW,
+                    )
+        forged = activation_plan()
+        forged["ownerCapabilities"].append("production.write")
+        with self.assertRaises(ManagedActivationError):
+            validate_activation_plan(forged)
+
+    def test_expired_plan_cannot_activate(self) -> None:
+        plan = activation_plan()
+        with self.assertRaises(ManagedActivationError):
+            validate_activation_plan(plan, now=NOW + timedelta(days=8), require_current=True)
+
+
+class ManagedWorkspaceProvisionerTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.database = FakeDatabase()
+        self.plan = activation_plan()
+        self.provisioner = ManagedWorkspaceProvisioner(
+            "postgresql://ignored",
+            connection_factory=self.database.connect,
+        )
+
+    def authorize(self) -> dict[str, object]:
+        return self.provisioner.authorize(
+            self.plan,
+            verified_owner_actor_id=OWNER_ID,
+            decision_note="Owner reviewed the exact workspace, release, and plan digest.",
+        )
+
+    def test_apply_replay_suspend_and_suspension_replay_are_idempotent(self) -> None:
+        preflight = self.provisioner.inspect(self.plan)
+        self.assertEqual(preflight["status"], "authorization_required")
+        self.assertEqual(preflight["mutationStatementsExecuted"], 0)
+        authorization = self.authorize()
+        self.assertFalse(authorization["replayed"])
+        proposal = self.database.approvals[0]["proposal_json"]
+        self.assertEqual(proposal["contract"], "decision_packet.v1")
+        self.assertEqual(
+            proposal["subject"]["contract"],
+            "supermega.managed_workspace_activation_authorization.v1",
+        )
+        self.assertEqual(len(proposal["claims"]), 4)
+        self.assertEqual(
+            proposal["subject"]["automaticCompensationAuthorizationId"],
+            self.plan["rollback"]["authorizationId"],
+        )
+        self.assertTrue(self.authorize()["replayed"])
+        self.assertEqual(self.provisioner.inspect(self.plan)["status"], "ready_to_apply")
+
+        activated = self.provisioner.apply(self.plan)
+        self.assertEqual(activated["contract"], ACTIVATION_RECEIPT_CONTRACT)
+        self.assertFalse(activated["replayed"])
+        self.assertEqual(len(self.database.memberships), 1)
+        self.assertEqual(self.database.access_controls[str(self.plan["workspaceId"])]["status"], "active")
+        self.assertEqual(len(self.database.events), 1)
+        self.assertFalse(activated["localProjectionTrusted"])
+        self.assertEqual(activated["authority"]["verification"], "requery_required")
+
+        replay = self.provisioner.apply(self.plan)
+        self.assertTrue(replay["replayed"])
+        self.assertEqual(replay["activatedAt"], activated["activatedAt"])
+        self.assertEqual(len(self.database.memberships), 1)
+        self.assertEqual(len(self.database.events), 1)
+
+        suspended = self.provisioner.suspend(
+            self.plan,
+            suspension_approval_id=self.plan["rollback"]["authorizationId"],
+            suspended_by=OWNER_ID,
+            reason="Activation compensation after a downstream release gate failure.",
+        )
+        self.assertEqual(suspended["contract"], SUSPENSION_RECEIPT_CONTRACT)
+        self.assertFalse(suspended["replayed"])
+        self.assertFalse(suspended["customerDataDeleted"])
+        self.assertEqual(self.database.memberships[0]["status"], "suspended")
+        self.assertEqual(self.database.access_controls[str(self.plan["workspaceId"])]["status"], "suspended")
+        self.assertEqual(len(self.database.events), 2)
+
+        suspension_replay = self.provisioner.suspend(
+            self.plan,
+            suspension_approval_id=self.plan["rollback"]["authorizationId"],
+            suspended_by=OWNER_ID,
+            reason="Activation compensation after a downstream release gate failure.",
+        )
+        self.assertTrue(suspension_replay["replayed"])
+        self.assertEqual(len(self.database.events), 2)
+
+    def test_conflicting_membership_blocks_activation_without_writes(self) -> None:
+        self.authorize()
+        self.database.memberships.append(
+            {
+                "workspace_id": self.plan["workspaceId"],
+                "actor_id": "b90445d0-3eef-45ec-a36d-f093856084b0",
+                "actor_kind": "human",
+                "status": "active",
+                "capabilities": ["company.read"],
+            }
+        )
+        with self.assertRaises(ManagedActivationConflict):
+            self.provisioner.apply(self.plan)
+        self.assertEqual(len(self.database.memberships), 1)
+        self.assertEqual(len(self.database.events), 0)
+
+    def test_runtime_or_nonprivileged_connection_cannot_provision(self) -> None:
+        for current_user, privileged in (("supermega_trial_login", True), ("operator", False)):
+            with self.subTest(current_user=current_user, privileged=privileged):
+                database = FakeDatabase()
+                database.current_user = current_user
+                database.provisioning_role_privileged = privileged
+                provisioner = ManagedWorkspaceProvisioner(
+                    "postgresql://ignored",
+                    connection_factory=database.connect,
+                )
+                with self.assertRaises(ManagedActivationError):
+                    provisioner.apply(self.plan)
+                self.assertEqual(database.memberships, [])
+                self.assertEqual(database.events, {})
+
+    def test_apply_requires_durable_owner_authorization(self) -> None:
+        with self.assertRaisesRegex(ManagedActivationConflict, "Durable owner authorization"):
+            self.provisioner.apply(self.plan)
+        self.assertEqual(self.database.memberships, [])
+        self.assertEqual(self.database.access_controls, {})
+
+    def test_suspension_cannot_be_attributed_to_a_different_person(self) -> None:
+        self.authorize()
+        self.provisioner.apply(self.plan)
+        with self.assertRaises(ManagedActivationError):
+            self.provisioner.suspend(
+                self.plan,
+                suspension_approval_id=self.plan["rollback"]["authorizationId"],
+                suspended_by="b90445d0-3eef-45ec-a36d-f093856084b0",
+                reason="Activation compensation after a downstream release gate failure.",
+            )
+        self.assertEqual(self.database.memberships[0]["status"], "active")
+
+    def test_suspension_requires_the_pre_authorized_compensation_command(self) -> None:
+        self.authorize()
+        self.provisioner.apply(self.plan)
+        with self.assertRaisesRegex(ManagedActivationError, "owner-authorized compensation"):
+            self.provisioner.suspend(
+                self.plan,
+                suspension_approval_id="af2b74cf-4974-4f0f-b3aa-5a7f129a706c",
+                suspended_by=OWNER_ID,
+                reason="Activation compensation after a downstream release gate failure.",
+            )
+        with self.assertRaisesRegex(ManagedActivationError, "authorized compensation trigger"):
+            self.provisioner.suspend(
+                self.plan,
+                suspension_approval_id=self.plan["rollback"]["authorizationId"],
+                suspended_by=OWNER_ID,
+                reason="Unreviewed manual suspension.",
+            )
+        self.assertEqual(self.database.access_controls[str(self.plan["workspaceId"])]["status"], "active")
+
+    def test_sql_is_static_and_customer_values_are_parameters(self) -> None:
+        self.authorize()
+        self.provisioner.apply(self.plan)
+        statements = "\n".join(statement for statement, _params in self.database.statements)
+        self.assertNotIn(str(self.plan["workspaceId"]), statements)
+        self.assertNotIn(str(self.plan["ownerActorId"]), statements)
+        self.assertIn("pg_advisory_xact_lock", statements)
+        self.assertIn("insert into app_private.approval_requests", statements)
+        self.assertIn("insert into app_private.workspace_access_controls", statements)
+        self.assertIn("insert into app_private.workspace_memberships", statements)
+        self.assertIn("insert into app_private.workspace_events", statements)
+
+
+class ManagedActivationCliTests(unittest.TestCase):
+    def test_pre_authorized_compensation_does_not_depend_on_mutable_release_aliases(self) -> None:
+        class StubProvisioner:
+            def __init__(self, _database_url: str) -> None:
+                pass
+
+            def suspend(self, _plan: object, **_kwargs: object) -> dict[str, object]:
+                return {"status": "suspended", "replayed": False}
+
+        with tempfile.TemporaryDirectory() as directory:
+            plan = activation_plan()
+            plan_path = Path(directory) / "plan.json"
+            database_url_path = Path(directory) / "admin-url.txt"
+            receipt_path = Path(directory) / "receipt.json"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            database_url_path.write_text(
+                "postgresql://postgres:secret@db.example.invalid:5432/postgres?sslmode=require",
+                encoding="utf-8",
+            )
+            with (
+                mock.patch("supermega_runtime.managed_activation._validate_admin_target"),
+                mock.patch("supermega_runtime.managed_activation._require_release_checkout") as provenance,
+                mock.patch("supermega_runtime.managed_activation.ManagedWorkspaceProvisioner", StubProvisioner),
+                mock.patch("supermega_runtime.managed_activation._write_receipt"),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                exit_code = main(
+                    [
+                        "suspend",
+                        "--plan-file",
+                        str(plan_path),
+                        "--database-url-file",
+                        str(database_url_path),
+                        "--confirm-owner-approval",
+                        APPROVAL_ID,
+                        "--production-handoff",
+                        "--receipt-file",
+                        str(receipt_path),
+                        "--suspension-approval-id",
+                        str(plan["rollback"]["authorizationId"]),
+                        "--suspended-by",
+                        OWNER_ID,
+                        "--reason",
+                        "Activation compensation after a downstream release gate failure.",
+                    ]
+                )
+            self.assertEqual(exit_code, 0)
+            provenance.assert_not_called()
+
+    def test_apply_reports_committed_mutation_when_local_receipt_write_fails(self) -> None:
+        class StubProvisioner:
+            def __init__(self, _database_url: str) -> None:
+                pass
+
+            def apply(self, _plan: object) -> dict[str, object]:
+                return {"status": "active", "replayed": False}
+
+        with tempfile.TemporaryDirectory() as directory:
+            plan_path = Path(directory) / "plan.json"
+            database_url_path = Path(directory) / "admin-url.txt"
+            receipt_path = Path(directory) / "receipt.json"
+            plan_path.write_text(json.dumps(activation_plan()), encoding="utf-8")
+            database_url_path.write_text(
+                "postgresql://postgres:secret@db.example.invalid:5432/postgres?sslmode=require",
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+            with (
+                mock.patch("supermega_runtime.managed_activation._validate_admin_target"),
+                mock.patch("supermega_runtime.managed_activation._require_release_checkout"),
+                mock.patch("supermega_runtime.managed_activation.ManagedWorkspaceProvisioner", StubProvisioner),
+                mock.patch(
+                    "supermega_runtime.managed_activation._write_receipt",
+                    side_effect=ManagedActivationError("simulated local receipt failure"),
+                ),
+                contextlib.redirect_stdout(output),
+            ):
+                exit_code = main(
+                    [
+                        "apply",
+                        "--plan-file",
+                        str(plan_path),
+                        "--database-url-file",
+                        str(database_url_path),
+                        "--confirm-owner-approval",
+                        APPROVAL_ID,
+                        "--production-handoff",
+                        "--receipt-file",
+                        str(receipt_path),
+                    ]
+                )
+            result = json.loads(output.getvalue().strip().splitlines()[-1])
+            self.assertEqual(exit_code, 1)
+            self.assertTrue(result["externalMutationPerformed"])
+            self.assertEqual(result["status"], "blocked")
+
+    def test_remote_admin_target_requires_hostname_verification_and_reviewed_ca(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            certificate = Path(directory) / "supabase-ca.crt"
+            certificate.write_text(
+                "-----BEGIN CERTIFICATE-----\nTEST-CA\n-----END CERTIFICATE-----\n",
+                encoding="ascii",
+            )
+            certificate_digest = f"sha256:{sha256(certificate.read_bytes()).hexdigest()}"
+            base = f"postgresql://postgres:secret@db.{PROJECT_REF}.supabase.co:5432/postgres"
+            with self.assertRaisesRegex(ManagedActivationError, "sslmode=verify-full"):
+                _validate_admin_target(f"{base}?sslmode=require", PROJECT_REF, certificate_digest)
+            with self.assertRaisesRegex(ManagedActivationError, "sslmode=verify-full"):
+                _validate_admin_target(f"{base}?sslmode=verify-full", PROJECT_REF, certificate_digest)
+            reviewed_url = f"{base}?sslmode=verify-full&sslrootcert={quote(str(certificate), safe='')}"
+            with self.assertRaisesRegex(ManagedActivationError, "owner-reviewed activation plan"):
+                _validate_admin_target(reviewed_url, PROJECT_REF, "sha256:" + "0" * 64)
+            _validate_admin_target(
+                reviewed_url,
+                PROJECT_REF,
+                certificate_digest,
+            )
+
+    def test_prepare_command_writes_only_a_sanitized_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            request_path = Path(directory) / "request.json"
+            output_path = Path(directory) / "plan.json"
+            certificate_path = Path(directory) / "supabase-ca.crt"
+            request_path.write_text(json.dumps(managed_trial_request()), encoding="utf-8")
+            certificate_path.write_text(
+                "-----BEGIN CERTIFICATE-----\nTEST-CA\n-----END CERTIFICATE-----\n",
+                encoding="ascii",
+            )
+            result = main(
+                [
+                    "prepare",
+                    "--request-file",
+                    str(request_path),
+                    "--workspace-id",
+                    "mingalar-fresh-mart",
+                    "--owner-actor-id",
+                    OWNER_ID,
+                    "--approval-id",
+                    APPROVAL_ID,
+                    "--approved-by",
+                    "Swan Htet",
+                    "--approved-at",
+                    datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+                    "--project-ref",
+                    PROJECT_REF,
+                    "--release-commit",
+                    RELEASE_COMMIT,
+                    "--admin-ca-file",
+                    str(certificate_path),
+                    "--output",
+                    str(output_path),
+                ]
+            )
+            self.assertEqual(result, 0)
+            plan = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(plan["contract"], ACTIVATION_PLAN_CONTRACT)
+            self.assertFalse(plan["secretValuesExposed"])
+
+
+if __name__ == "__main__":
+    unittest.main()

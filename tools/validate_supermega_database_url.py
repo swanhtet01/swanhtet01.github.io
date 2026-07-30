@@ -20,14 +20,14 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 
-CONTRACT = "supermega_private_trial_database_v5"
+CONTRACT = "supermega_private_trial_database_v6"
 REHEARSAL_PREFLIGHT_CONTRACT = "supermega_supabase_rehearsal_preflight_v1"
 ACTIVATION_TARGET_CONTRACT = "supermega_supabase_activation_target_v1"
 SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
 TRUSTED_OWNER = "postgres"
 SCHEMA_COMPONENT = "private_trial_backend"
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 EXPECTED_POSTGRES_MAJOR = 17
 SAFE_SSL_MODES = frozenset({"require", "verify-ca", "verify-full"})
 EXPECTED_TABLES = frozenset(
@@ -37,6 +37,7 @@ EXPECTED_TABLES = frozenset(
         "workspace_state",
         "workspace_events",
         "approval_requests",
+        "workspace_access_controls",
     }
 )
 TENANT_TABLES = frozenset(EXPECTED_TABLES - {"trial_schema_meta"})
@@ -54,6 +55,9 @@ EXPECTED_INDEXES = frozenset(
         "approval_requests_pkey",
         "approval_requests_workspace_id_command_id_key",
         "approval_requests_queue_idx",
+        "workspace_access_controls_pkey",
+        "workspace_access_controls_activation_id_key",
+        "workspace_access_controls_authorization_id_key",
     }
 )
 EXPECTED_INDEX_CONTRACT: dict[str, dict[str, Any]] = {
@@ -129,14 +133,41 @@ EXPECTED_INDEX_CONTRACT: dict[str, dict[str, Any]] = {
         "primary": False,
         "constraint": None,
     },
+    "workspace_access_controls_pkey": {
+        "table": "workspace_access_controls",
+        "keys": ("workspace_id",),
+        "options": (0,),
+        "unique": True,
+        "primary": True,
+        "constraint": "p",
+    },
+    "workspace_access_controls_activation_id_key": {
+        "table": "workspace_access_controls",
+        "keys": ("activation_id",),
+        "options": (0,),
+        "unique": True,
+        "primary": False,
+        "constraint": "u",
+    },
+    "workspace_access_controls_authorization_id_key": {
+        "table": "workspace_access_controls",
+        "keys": ("authorization_id",),
+        "options": (0,),
+        "unique": True,
+        "primary": False,
+        "constraint": "u",
+    },
 }
-EXPECTED_FUNCTIONS = frozenset(
-    {
-        "reject_workspace_event_mutation",
-        "guard_workspace_state_update",
-        "stamp_workspace_event_insert",
-        "guard_approval_mutation",
-    }
+EXPECTED_FUNCTIONS = {
+    "reject_workspace_event_mutation": ("", "trigger"),
+    "guard_workspace_state_update": ("", "trigger"),
+    "stamp_workspace_event_insert": ("", "trigger"),
+    "guard_approval_mutation": ("", "trigger"),
+    "guard_workspace_access_control": ("", "trigger"),
+    "workspace_is_active": ("target_workspace_id text", "boolean"),
+}
+WORKSPACE_ACCESS_FUNCTION_FINGERPRINT = (
+    "db273aa3f0342e648db5b5e37560b08009ee22a3e274f9395718bdfbbd257a35"
 )
 EXPECTED_NON_OWNER_ACL = frozenset(
     {
@@ -151,6 +182,8 @@ EXPECTED_NON_OWNER_ACL = frozenset(
         ("table", "approval_requests", BACKEND_ROLE, "SELECT", False),
         ("table", "approval_requests", BACKEND_ROLE, "INSERT", False),
         ("table", "approval_requests", BACKEND_ROLE, "UPDATE", False),
+        ("table", "workspace_access_controls", BACKEND_ROLE, "SELECT", False),
+        ("function", "workspace_is_active", BACKEND_ROLE, "EXECUTE", False),
     }
 )
 EXPECTED_BACKEND_ACL_DEPENDENCIES = frozenset(
@@ -161,6 +194,12 @@ EXPECTED_BACKEND_ACL_DEPENDENCIES = frozenset(
         ("relation", f"{SCHEMA}.workspace_state", 0),
         ("relation", f"{SCHEMA}.workspace_events", 0),
         ("relation", f"{SCHEMA}.approval_requests", 0),
+        ("relation", f"{SCHEMA}.workspace_access_controls", 0),
+        (
+            "function",
+            f"{SCHEMA}.workspace_is_active(target_workspace_id text)",
+            0,
+        ),
     }
 )
 EVENT_SURFACE_CONSTRAINT = "workspace_events_approval_surface_v4_check"
@@ -179,6 +218,43 @@ EXPECTED_SECURITY_CONSTRAINTS: dict[str, dict[str, str]] = {
     },
 }
 EXPECTED_TRIGGERS: dict[str, dict[str, Any]] = {
+    "workspace_access_control_guard": {
+        "table": "workspace_access_controls",
+        "function": "guard_workspace_access_control",
+        "trigger_type": 31,
+        "function_source": """
+            begin
+              if tg_op = 'INSERT' then
+                new.activated_at := transaction_timestamp();
+                new.updated_at := transaction_timestamp();
+                if new.status = 'suspended' then
+                  new.suspended_at := transaction_timestamp();
+                end if;
+                return new;
+              end if;
+              if tg_op = 'DELETE' then
+                raise exception using errcode = '55000', message = 'workspace access controls cannot be deleted';
+              end if;
+              if new.workspace_id is distinct from old.workspace_id
+                 or new.activation_id is distinct from old.activation_id
+                 or new.authorization_id is distinct from old.authorization_id
+                 or new.authorization_contract is distinct from old.authorization_contract
+                 or new.plan_digest is distinct from old.plan_digest
+                 or new.owner_actor_id is distinct from old.owner_actor_id
+                 or new.project_ref is distinct from old.project_ref
+                 or new.release_commit is distinct from old.release_commit
+                 or new.activated_at is distinct from old.activated_at then
+                raise exception using errcode = '55000', message = 'workspace activation identity is immutable';
+              end if;
+              if old.status <> 'active' or new.status <> 'suspended' then
+                raise exception using errcode = '55000', message = 'workspace access can only transition from active to suspended';
+              end if;
+              new.suspended_at := transaction_timestamp();
+              new.updated_at := transaction_timestamp();
+              return new;
+            end
+        """,
+    },
     "workspace_events_immutable": {
         "table": "workspace_events",
         "function": "reject_workspace_event_mutation",
@@ -274,21 +350,45 @@ EXPECTED_TRIGGERS: dict[str, dict[str, Any]] = {
     },
 }
 EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
+    "approval_requests_access_gate": {
+        "table": "approval_requests",
+        "command": "ALL",
+        "permissive": "RESTRICTIVE",
+        "qual": ("workspace_is_active",),
+        "check": ("workspace_is_active",),
+    },
+    "workspace_access_controls_member_read": {
+        "table": "workspace_access_controls",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE",
+        "qual": ("app.workspace_id", "active"),
+        "check": (),
+    },
+    "workspace_memberships_access_gate": {
+        "table": "workspace_memberships",
+        "command": "ALL",
+        "permissive": "RESTRICTIVE",
+        "qual": ("workspace_is_active",),
+        "check": ("workspace_is_active",),
+    },
     "workspace_memberships_self_read": {
         "table": "workspace_memberships",
         "command": "SELECT",
+        "permissive": "PERMISSIVE",
         "qual": ("app.workspace_id", "app.actor_id", "app.actor_kind", "active"),
         "check": (),
     },
     "workspace_state_member_read": {
         "table": "workspace_state",
         "command": "SELECT",
+        "permissive": "PERMISSIVE",
         "qual": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "active"),
         "check": (),
     },
     "workspace_state_capability_insert": {
         "table": "workspace_state",
         "command": "INSERT",
+        "permissive": "PERMISSIVE",
         "qual": (),
         "check": (
             "app.workspace_id",
@@ -306,6 +406,7 @@ EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
     "workspace_state_capability_update": {
         "table": "workspace_state",
         "command": "UPDATE",
+        "permissive": "PERMISSIVE",
         "qual": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships"),
         "check": (
             "app.workspace_id",
@@ -319,15 +420,24 @@ EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
             "setup.write",
         ),
     },
+    "workspace_state_access_gate": {
+        "table": "workspace_state",
+        "command": "ALL",
+        "permissive": "RESTRICTIVE",
+        "qual": ("workspace_is_active",),
+        "check": ("workspace_is_active",),
+    },
     "workspace_events_member_read": {
         "table": "workspace_events",
         "command": "SELECT",
+        "permissive": "PERMISSIVE",
         "qual": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "active"),
         "check": (),
     },
     "workspace_events_capability_insert": {
         "table": "workspace_events",
         "command": "INSERT",
+        "permissive": "PERMISSIVE",
         "qual": (),
         "check": (
             "app.workspace_id",
@@ -347,26 +457,48 @@ EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
         ),
         "check_or": "approval_human_guard",
     },
+    "workspace_events_access_gate": {
+        "table": "workspace_events",
+        "command": "ALL",
+        "permissive": "RESTRICTIVE",
+        "qual": ("workspace_is_active",),
+        "check": ("workspace_is_active",),
+    },
     "approval_requests_member_read": {
         "table": "approval_requests",
         "command": "SELECT",
+        "permissive": "PERMISSIVE",
         "qual": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "active"),
         "check": (),
     },
     "approval_requests_capability_insert": {
         "table": "approval_requests",
         "command": "INSERT",
+        "permissive": "PERMISSIVE",
         "qual": (),
         "check": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "approvals.request"),
     },
     "approval_requests_capability_update": {
         "table": "approval_requests",
         "command": "UPDATE",
+        "permissive": "PERMISSIVE",
         "qual": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "approvals.decide", "human"),
         "check": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "approvals.decide", "human"),
     },
 }
 EXPECTED_POLICY_FINGERPRINTS: dict[str, dict[str, str | None]] = {
+    "approval_requests_access_gate": {
+        "qual": "62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b",
+        "check": "62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b",
+    },
+    "workspace_access_controls_member_read": {
+        "qual": "daef66070ab4a84d31066b2e149765ce39f8a42d7e885d2224852d9759ed4461",
+        "check": None,
+    },
+    "workspace_memberships_access_gate": {
+        "qual": "62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b",
+        "check": "62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b",
+    },
     "workspace_memberships_self_read": {
         "qual": "4c3f673c1afe3e423619aed98c55d2a41a7cd22c408a35542e546bc3a0dc0c21",
         "check": None,
@@ -374,6 +506,10 @@ EXPECTED_POLICY_FINGERPRINTS: dict[str, dict[str, str | None]] = {
     "workspace_state_member_read": {
         "qual": "8737b02ce9573202ada4159efafbabb0eb641da45361f297c456e6aa2b903b8d",
         "check": None,
+    },
+    "workspace_state_access_gate": {
+        "qual": "62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b",
+        "check": "62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b",
     },
     "workspace_state_capability_insert": {
         "qual": None,
@@ -386,6 +522,10 @@ EXPECTED_POLICY_FINGERPRINTS: dict[str, dict[str, str | None]] = {
     "workspace_events_member_read": {
         "qual": "b0a36ce4bd6d748d8f81f6329e07170a7db2bf945871b1d7f33d50c8c5b8c2e6",
         "check": None,
+    },
+    "workspace_events_access_gate": {
+        "qual": "62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b",
+        "check": "62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b",
     },
     "workspace_events_capability_insert": {
         "qual": None,
@@ -594,8 +734,11 @@ def validate_supabase_activation_target(
 
     parsed = urlsplit(database_url)
     query = parse_qs(parsed.query, keep_blank_values=True)
-    if set(query) - {"sslmode"}:
+    if set(query) - {"sslmode", "sslrootcert"}:
         raise AuditConfigurationError("activation_connection_parameter_not_allowed")
+    root_certificates = query.get("sslrootcert", [])
+    if len(root_certificates) > 1 or (root_certificates and not root_certificates[0].strip()):
+        raise AuditConfigurationError("activation_ssl_root_certificate_invalid")
     host = str(parsed.hostname or "").lower()
     username = unquote(parsed.username or "")
     port = parsed.port or 5432
@@ -951,6 +1094,7 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
               case
                 when dependency.classid = 'pg_namespace'::regclass then 'schema'
                 when dependency.classid = 'pg_class'::regclass then 'relation'
+                when dependency.classid = 'pg_proc'::regclass then 'function'
                 else 'unexpected:' || dependency.classid::regclass::text
               end as object_kind,
               case
@@ -958,6 +1102,9 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
                   then schema_record.nspname
                 when dependency.classid = 'pg_class'::regclass
                   then relation_schema.nspname || '.' || relation_record.relname
+                when dependency.classid = 'pg_proc'::regclass
+                  then function_schema.nspname || '.' || function_record.proname
+                    || '(' || pg_get_function_identity_arguments(function_record.oid) || ')'
                 else dependency.objid::text
               end as object_name,
               dependency.objsubid
@@ -974,6 +1121,11 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
              and relation_record.oid = dependency.objid
             left join pg_namespace relation_schema
               on relation_schema.oid = relation_record.relnamespace
+            left join pg_proc function_record
+              on dependency.classid = 'pg_proc'::regclass
+             and function_record.oid = dependency.objid
+            left join pg_namespace function_schema
+              on function_schema.oid = function_record.pronamespace
             where backend_role.rolname = 'supermega_trial_backend'
             order by object_kind, object_name, dependency.objsubid
             """,
@@ -1088,11 +1240,16 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
                    owner_role.rolname as owner_name,
                    function_record.prokind::text as function_kind,
                    pg_get_function_identity_arguments(function_record.oid) as identity_arguments,
-                   pg_get_function_result(function_record.oid) as result_type
+                   pg_get_function_result(function_record.oid) as result_type,
+                   function_record.prosrc as function_source,
+                   function_record.prosecdef as security_definer,
+                   function_record.proconfig as function_config,
+                   language_record.lanname as function_language
             from pg_proc function_record
             join pg_namespace schema_record
               on schema_record.oid = function_record.pronamespace
             join pg_roles owner_role on owner_role.oid = function_record.proowner
+            join pg_language language_record on language_record.oid = function_record.prolang
             where schema_record.nspname = 'app_private'
             order by function_record.proname, function_record.oid
             """,
@@ -1478,14 +1635,22 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     functions = {str(row.get("function_name")): row for row in function_rows}
     exact_functions = (
         len(function_rows) == len(EXPECTED_FUNCTIONS)
-        and frozenset(functions) == EXPECTED_FUNCTIONS
+        and frozenset(functions) == frozenset(EXPECTED_FUNCTIONS)
         and all(
             str(functions[name].get("owner_name")) == TRUSTED_OWNER
             and str(functions[name].get("function_kind")) == "f"
-            and str(functions[name].get("identity_arguments", "")) == ""
-            and str(functions[name].get("result_type", "")).lower() == "trigger"
-            for name in EXPECTED_FUNCTIONS
+            and str(functions[name].get("identity_arguments", "")) == expected[0]
+            and str(functions[name].get("result_type", "")).lower() == expected[1]
+            for name, expected in EXPECTED_FUNCTIONS.items()
         )
+        and str(functions["workspace_is_active"].get("function_language")) == "sql"
+        and functions["workspace_is_active"].get("security_definer") is False
+        and _ordered_texts(functions["workspace_is_active"].get("function_config"))
+        == ("search_path=pg_catalog, app_private",)
+        and _catalog_expression_fingerprint(
+            functions["workspace_is_active"].get("function_source")
+        )
+        == WORKSPACE_ACCESS_FUNCTION_FINGERPRINT
     )
     trusted_private_ownership = (
         str(schema.get("owner_name")) == TRUSTED_OWNER
@@ -1506,7 +1671,8 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             policy_contract = policy_contract and (
                 str(row.get("table_name")) == expected["table"]
                 and str(row.get("command", "")).upper() == expected["command"]
-                and str(row.get("permissive", "")).upper() == "PERMISSIVE"
+                and str(row.get("permissive", "")).upper()
+                == expected["permissive"]
                 and _roles(row.get("roles")) == {BACKEND_ROLE}
                 and _policy_expression_matches(row.get("qual"), fingerprints["qual"])
                 and _policy_expression_matches(row.get("with_check"), fingerprints["check"])
@@ -1883,7 +2049,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--ensure-schema",
         action="store_true",
-        help="Require the complete v5 schema contract; this flag never applies migrations.",
+        help="Require the complete v6 schema contract; this flag never applies migrations.",
     )
     parser.add_argument("--require-ready", action="store_true")
     parser.add_argument(
