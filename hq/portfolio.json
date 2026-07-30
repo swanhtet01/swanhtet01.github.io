@@ -151,8 +151,8 @@
       "localAutomation": {
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Let a named human turn one released Plant output batch into one exact Shop inventory receipt at a reviewed location and lot, duplicate-safe and evidence-linked; never move stock automatically, rewrite Plant output, post costing or accounting, or infer telemetry.",
-        "reason": "Plant maintenance now has a governed finding-to-closeout lifecycle. The highest-value integration gap is the other side of manufacturing flow: released finished goods should enter Shop inventory through one accountable receipt instead of manual duplicate entry or a second stock authority."
+        "workOrder": "Let a named human return unconsumed material from one Plant job to the exact Shop location and lot it came from, capped by prior issue evidence and duplicate-safe; never move stock automatically, rewrite consumption, post costing or accounting, or infer telemetry.",
+        "reason": "The audit confirmed that released Plant output already enters Shop through the existing production-receipt authority, so duplicating it is forbidden. The true integration gap is material return: unused issued stock currently cannot re-enter its exact Shop lot through an accountable reverse flow."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }
