@@ -60,7 +60,8 @@ const databaseImplementationHash = createHash('sha256')
 for (const relativePath of databaseImplementationPaths) {
   databaseImplementationHash.update(relativePath, 'utf8')
   databaseImplementationHash.update('\0', 'utf8')
-  databaseImplementationHash.update(await readFile(resolve(root, relativePath)))
+  const implementationSource = await readFile(resolve(root, relativePath), 'utf8')
+  databaseImplementationHash.update(implementationSource.replace(/\r\n/g, '\n'), 'utf8')
   databaseImplementationHash.update('\0', 'utf8')
 }
 const databaseImplementationDigest = `sha256:${databaseImplementationHash.digest('hex')}`

@@ -78,7 +78,7 @@ def _implementation_digest() -> str:
     for relative_path in IMPLEMENTATION_PATHS:
         digest.update(relative_path.encode("utf-8"))
         digest.update(b"\0")
-        digest.update((ROOT / relative_path).read_bytes())
+        digest.update((ROOT / relative_path).read_bytes().replace(b"\r\n", b"\n"))
         digest.update(b"\0")
     return f"sha256:{digest.hexdigest()}"
 
