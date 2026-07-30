@@ -54,6 +54,7 @@ async function readPage(route) {
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
     'aria-label="SuperMega home"',
     '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
+    'href="https://app.supermega.dev/login">Company sign in</a>',
     'href="/contact/"',
     'href="/privacy/">Privacy</a>',
   ]) assert(html.includes(token), 'page_shared_contract_missing', { route, token })
