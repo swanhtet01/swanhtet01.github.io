@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   buildEcommerceCheckoutQuote,
   buildEcommerceCancellationIntent,
+  buildEcommerceCorrectionIntent,
   buildEcommerceOrderAmendmentIntent,
   buildEcommerceOrderRescheduleIntent,
   buildEcommerceOrderRequestV2,
@@ -14,10 +15,12 @@ import {
   ecommercePaymentMatchesFulfilment,
   prepareEcommerceShopDraftV2,
   projectEcommerceReturnOutcome,
+  projectEcommerceCorrectionOutcome,
   projectEcommerceSupportOutcome,
   readEcommerceBuyingState,
   saveEcommerceOrderRequestV2,
   saveEcommerceCancellationIntent,
+  saveEcommerceCorrectionIntent,
   saveEcommerceOrderAmendment,
   saveEcommerceOrderReschedule,
   saveEcommerceReturnIntent,
@@ -25,6 +28,7 @@ import {
   type EcommerceBuyingState,
   type EcommerceCancellationIntent,
   type EcommerceCancellationReasonCode,
+  type EcommerceCorrectionIntent,
   type EcommerceOrderAmendmentIntent,
   type EcommerceOrderRescheduleIntent,
   type EcommerceCartLine,
@@ -38,9 +42,12 @@ import {
 } from './ecommerce-buying-lifecycle'
 import {
   commerceOrderAcknowledgement,
+  commerceOrderCorrectionExpectation,
   commerceStorefrontOrderTimeline,
   commerceStorefrontRequests,
   type CommerceItem,
+  type CommerceCorrectionKind,
+  type CommerceCorrectionReasonCode,
   type CommerceState,
   type CommerceStorefrontOrderTimelineEntry,
 } from '../../core/commerce-workspace'
@@ -55,6 +62,7 @@ type EcommerceBuyingWorkspaceProps = {
   onDraft: (draft: EcommerceShopDraftV2) => void
   onOpenManagedRequest?: (requestId: string) => void
   onOpenCancellation: (intent: EcommerceCancellationIntent) => void
+  onOpenCorrection: (intent: EcommerceCorrectionIntent) => void
   onOpenAmendment: (intent: EcommerceOrderAmendmentIntent) => void
   onOpenReschedule: (intent: EcommerceOrderRescheduleIntent) => void
   onOpenReturns: (intent: EcommerceReturnIntent) => void
@@ -122,6 +130,7 @@ export function EcommerceBuyingWorkspace({
   onDraft,
   onOpenManagedRequest,
   onOpenCancellation,
+  onOpenCorrection,
   onOpenAmendment,
   onOpenReschedule,
   onOpenReturns,
@@ -168,6 +177,14 @@ export function EcommerceBuyingWorkspace({
     description: string
   } | null>(null)
   const [supportBusy, setSupportBusy] = useState(false)
+  const [correctionDraft, setCorrectionDraft] = useState<{
+    orderId: string
+    requestedKind: CommerceCorrectionKind
+    reasonCode: CommerceCorrectionReasonCode
+    listedAmountMmk: string
+    reason: string
+  } | null>(null)
+  const [correctionBusy, setCorrectionBusy] = useState(false)
   const [cancellationDraft, setCancellationDraft] = useState<{
     orderId: string
     reasonCode: EcommerceCancellationReasonCode
@@ -189,6 +206,7 @@ export function EcommerceBuyingWorkspace({
   const activeBuyingState = buyingState.scope === scope
     ? {
       ...buyingState,
+      correctionIntents: buyingState.correctionIntents ?? [],
       amendmentIntents: buyingState.amendmentIntents ?? [],
       rescheduleIntents: buyingState.rescheduleIntents ?? [],
     }
@@ -218,6 +236,7 @@ export function EcommerceBuyingWorkspace({
       setFreshQuoteId('')
       setReturnDraft(null)
       setSupportDraft(null)
+      setCorrectionDraft(null)
       setCancellationDraft(null)
       setAmendmentDraft(null)
       setRescheduleDraft(null)
@@ -338,6 +357,16 @@ export function EcommerceBuyingWorkspace({
   const supportOutcomeIntentIds = new Set(supportOutcomes.map((outcome) => outcome.intentId))
   const pendingSupportIntents = activeBuyingState.supportIntents.filter((intent) => (
     !supportOutcomeIntentIds.has(intent.id)
+      && completedCustomerOrders.some((entry) => entry.order?.id === intent.orderId)
+  ))
+  const correctionOutcomes = activeBuyingState.correctionIntents.flatMap((intent) => {
+    const order = completedCustomerOrders.find((entry) => entry.order?.id === intent.orderId)?.order
+    const outcome = order ? projectEcommerceCorrectionOutcome(intent, order) : null
+    return outcome ? [outcome] : []
+  })
+  const correctionOutcomeIntentIds = new Set(correctionOutcomes.map((outcome) => outcome.intentId))
+  const pendingCorrectionIntents = activeBuyingState.correctionIntents.filter((intent) => (
+    !correctionOutcomeIntentIds.has(intent.id)
       && completedCustomerOrders.some((entry) => entry.order?.id === intent.orderId)
   ))
   const cancellationDecisionByIntentId = new Map(activeBuyingState.cancellationDecisions.map((decision) => [decision.intentId, decision]))
@@ -900,6 +929,64 @@ export function EcommerceBuyingWorkspace({
     }
   }
 
+  function openCorrectionRequest(entry: CommerceStorefrontOrderTimelineEntry) {
+    const order = entry.order
+    if (!order || !commerceOrderCorrectionExpectation(commerceState, order.id)) {
+      setNotice('Balance corrections require an unclosed, reconciled, completed Shop order.')
+      return
+    }
+    if (pendingCorrectionIntents.some((intent) => intent.orderId === order.id)) {
+      setNotice('This order already has a balance correction waiting for Shop review.')
+      return
+    }
+    setCancellationDraft(null)
+    setReturnDraft(null)
+    setSupportDraft(null)
+    setCorrectionDraft({ orderId: order.id, requestedKind: 'credit', reasonCode: 'pricing_error', listedAmountMmk: '', reason: '' })
+    setNotice('Describe the balance issue. Shop must recheck tax and totals before recording a review-only correction note.')
+  }
+
+  async function submitCorrectionRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!correctionDraft || correctionBusy || disabled || recoveryBlocked) return
+    const order = completedCustomerOrders.find((entry) => entry.order?.id === correctionDraft.orderId)?.order
+    const listedAmountMmk = /^(?:[1-9]\d*)$/.test(correctionDraft.listedAmountMmk)
+      ? Number(correctionDraft.listedAmountMmk)
+      : Number.NaN
+    if (!order || !commerceOrderCorrectionExpectation(commerceState, order.id) || !Number.isSafeInteger(listedAmountMmk)) {
+      setNotice('Choose an eligible completed order and enter a positive whole-MMK amount.')
+      return
+    }
+    if (!globalThis.crypto?.randomUUID) {
+      setNotice('Secure correction identity is unavailable. Nothing was recorded.')
+      return
+    }
+    setCorrectionBusy(true)
+    setNotice('')
+    try {
+      const intent = buildEcommerceCorrectionIntent({
+        scope,
+        orderSnapshot: order,
+        requestedKind: correctionDraft.requestedKind,
+        reasonCode: correctionDraft.reasonCode,
+        listedAmountMmk,
+        reason: correctionDraft.reason,
+        idempotencyKey: `COI-${globalThis.crypto.randomUUID().toUpperCase()}`,
+        createdAt: new Date().toISOString(),
+      })
+      const saved = await saveEcommerceCorrectionIntent(scope, intent, activeBuyingState.headDigest)
+      setBuyingState(saved)
+      setRecoveryRead({ scope, status: 'ready', issue: '' })
+      setCorrectionDraft(null)
+      setNotice(`${intent.id} is saved for Shop review. No invoice, payment, refund, ledger, tax filing, provider, or customer message changed.`)
+      onOpenCorrection(intent)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Correction request failed closed.')
+    } finally {
+      setCorrectionBusy(false)
+    }
+  }
+
   async function reviewOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (disabled || quoteBusy || recoveryBlocked || !cart.length) return
@@ -1176,8 +1263,8 @@ export function EcommerceBuyingWorkspace({
         </div>
       </details>
 
-      <details className="ecommerce-after-purchase" open={Boolean(amendmentDraft || rescheduleDraft || cancellationDraft || returnDraft || supportDraft) || undefined}>
-        <summary><span><strong>Order help</strong><small>Change time, items, or cancellation before preparation</small></span><b>{pendingAmendmentIntents.length + pendingRescheduleIntents.length + pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length ? `${pendingAmendmentIntents.length + pendingRescheduleIntents.length + pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length} waiting` : 'Shop review'}</b></summary>
+      <details className="ecommerce-after-purchase" open={Boolean(amendmentDraft || rescheduleDraft || cancellationDraft || returnDraft || supportDraft || correctionDraft) || undefined}>
+        <summary><span><strong>Order help</strong><small>Change active orders or resolve completed-order issues</small></span><b>{pendingAmendmentIntents.length + pendingRescheduleIntents.length + pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length + pendingCorrectionIntents.length ? `${pendingAmendmentIntents.length + pendingRescheduleIntents.length + pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length + pendingCorrectionIntents.length} waiting` : 'Shop review'}</b></summary>
         <div className="ecommerce-return-workspace">
           <p>Shop reviews every change, cancellation, return, and help request. Nothing here changes an order, stock, payment, refund, delivery, provider, or customer message by itself.</p>
           {pendingAmendmentIntents.map(({ intent, state }) => <article className="ecommerce-return-status" key={intent.id}>
@@ -1218,7 +1305,15 @@ export function EcommerceBuyingWorkspace({
             <span><strong>{outcome.state === 'resolved' ? 'Help resolved' : 'Shop is reviewing'}</strong><small>{outcome.orderId} / {outcome.category.replaceAll('_', ' ')} / owner {outcome.owner}</small></span>
             <b>{outcome.state === 'resolved' ? outcome.resolutionOutcome?.replaceAll('_', ' ') : `${outcome.priority} priority`}</b>
           </article>)}
-          {!amendmentDraft && !rescheduleDraft && !cancellationDraft && !returnDraft && !supportDraft ? activeCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
+          {pendingCorrectionIntents.map((intent) => <article className="ecommerce-return-status" key={intent.id}>
+            <span><strong>Balance review waiting</strong><small>{intent.orderId} / {intent.requestedKind} {formatMmk(intent.listedAmountMmk)} / {intent.reasonCode.replaceAll('_', ' ')}</small></span>
+            <button className="core-button secondary" disabled={disabled} onClick={() => onOpenCorrection(intent)} type="button">Continue in Shop</button>
+          </article>)}
+          {correctionOutcomes.slice(0, 3).map((outcome) => <article className="ecommerce-return-status" key={`correction-outcome:${outcome.intentId}`}>
+            <span><strong>Correction reviewed</strong><small>{outcome.orderId} / {outcome.kind} {formatMmk(outcome.adjustmentTotalMmk)} / reviewed by {outcome.reviewedBy}</small></span>
+            <b>Posting review required</b>
+          </article>)}
+          {!amendmentDraft && !rescheduleDraft && !cancellationDraft && !returnDraft && !supportDraft && !correctionDraft ? activeCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
             <span><strong>{entry.order?.id}</strong><small>{orderStageLabel(entry)} / {formatMmk(entry.order?.total ?? entry.request.totalMmk)}</small></span>
             <div className="ecommerce-return-actions">
               {entry.order?.status === 'confirmed' && entry.order.paymentStatus === 'pending' && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openRescheduleRequest(entry)} type="button">Change time</button> : null}
@@ -1226,11 +1321,12 @@ export function EcommerceBuyingWorkspace({
               {!activeBuyingState.cancellationIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openCancellationRequest(entry)} type="button">Cancel order</button> : null}
             </div>
           </article>) : null}
-          {!amendmentDraft && !rescheduleDraft && !cancellationDraft && !returnDraft && !supportDraft ? completedCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
+          {!amendmentDraft && !rescheduleDraft && !cancellationDraft && !returnDraft && !supportDraft && !correctionDraft ? completedCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
             <span><strong>{entry.order?.id}</strong><small>{entry.order?.lines?.map((line) => `${line.name} x ${line.quantity}`).join(' / ') ?? entry.order?.item}</small></span>
             <div className="ecommerce-return-actions">
               {!pendingReturnIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openReturnRequest(entry)} type="button">Return</button> : null}
               {!pendingSupportIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openSupportRequest(entry)} type="button">Get help</button> : null}
+              {!pendingCorrectionIntents.some((intent) => intent.orderId === entry.order?.id) && entry.order && commerceOrderCorrectionExpectation(commerceState, entry.order.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openCorrectionRequest(entry)} type="button">Fix balance</button> : null}
             </div>
           </article>) : null}
           {amendmentDraft ? <form className="ecommerce-return-form" onSubmit={(event) => void submitAmendmentRequest(event)}>
@@ -1265,7 +1361,15 @@ export function EcommerceBuyingWorkspace({
             <label className="ecommerce-return-reason">What do you need?<textarea disabled={disabled || supportBusy} maxLength={300} onChange={(event) => setSupportDraft((current) => current ? { ...current, description: event.target.value } : current)} placeholder="One clear description for Shop" required rows={2} value={supportDraft.description} /></label>
             <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || supportBusy} type="submit">{supportBusy ? 'Saving...' : 'Send to Shop review'}</button><button className="core-button secondary" disabled={disabled || supportBusy} onClick={() => { setSupportDraft(null); setNotice('Help request closed. Nothing changed.') }} type="button">Cancel</button></div>
           </form> : null}
-          {!activeCustomerOrders.length && !completedCustomerOrders.length && !pendingAmendmentIntents.length && !pendingRescheduleIntents.length && !pendingCancellationIntents.length && !pendingReturnIntents.length && !pendingSupportIntents.length ? <p>Active and completed orders for this exact contact will appear here.</p> : null}
+          {correctionDraft ? <form className="ecommerce-return-form" onSubmit={(event) => void submitCorrectionRequest(event)}>
+            <span><strong>Fix balance for {correctionDraft.orderId}</strong><small>Shop recalculates tax and records a review-only correction note. This does not move money or replace the original invoice.</small></span>
+            <label>Balance issue<select disabled={disabled || correctionBusy} onChange={(event) => setCorrectionDraft((current) => current ? { ...current, requestedKind: event.target.value as CommerceCorrectionKind } : current)} value={correctionDraft.requestedKind}><option value="credit">Charged too much / reduce balance</option><option value="debit">Charged too little / increase balance</option></select></label>
+            <label>Reason<select disabled={disabled || correctionBusy} onChange={(event) => setCorrectionDraft((current) => current ? { ...current, reasonCode: event.target.value as CommerceCorrectionReasonCode } : current)} value={correctionDraft.reasonCode}><option value="pricing_error">Pricing error</option><option value="service_recovery">Service recovery</option><option value="fee_adjustment">Fee adjustment</option><option value="other">Other</option></select></label>
+            <label>Amount before tax (MMK)<input disabled={disabled || correctionBusy} inputMode="numeric" min="1" onChange={(event) => setCorrectionDraft((current) => current ? { ...current, listedAmountMmk: event.target.value } : current)} required step="1" type="number" value={correctionDraft.listedAmountMmk} /></label>
+            <label className="ecommerce-return-reason">What is wrong?<textarea disabled={disabled || correctionBusy} maxLength={300} onChange={(event) => setCorrectionDraft((current) => current ? { ...current, reason: event.target.value } : current)} placeholder="One clear reason for Shop review" required rows={2} value={correctionDraft.reason} /></label>
+            <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || correctionBusy} type="submit">{correctionBusy ? 'Saving...' : 'Send balance review'}</button><button className="core-button secondary" disabled={disabled || correctionBusy} onClick={() => { setCorrectionDraft(null); setNotice('Balance review closed. Nothing changed.') }} type="button">Cancel</button></div>
+          </form> : null}
+          {!activeCustomerOrders.length && !completedCustomerOrders.length && !pendingAmendmentIntents.length && !pendingRescheduleIntents.length && !pendingCancellationIntents.length && !pendingReturnIntents.length && !pendingSupportIntents.length && !pendingCorrectionIntents.length ? <p>Active and completed orders for this exact contact will appear here.</p> : null}
         </div>
       </details>
     </>

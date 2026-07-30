@@ -4,7 +4,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useS
 import './core-app.css'
 import { WebsiteCommerceIntake } from '../products/WebsiteCommerceIntake'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
-import type { EcommerceCancellationIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceReturnIntent, EcommerceShopDraftV2, EcommerceSupportIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
+import type { EcommerceCancellationIntent, EcommerceCorrectionIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceReturnIntent, EcommerceShopDraftV2, EcommerceSupportIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
 import { readWebsiteEcommerceHandoff, type WebsiteOrderRecord } from '../products/product-handoff'
 import {
   createManagedApproval,
@@ -714,6 +714,7 @@ type CommerceCorrectionDraft = {
   kind: CommerceCorrectionKind
   reasonCode: CommerceCorrectionReasonCode
   listedAmountMmk: string
+  sourceIntent?: EcommerceCorrectionIntent
 }
 
 function formatTaxRate(rateBasisPoints: number) {
@@ -1438,6 +1439,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   const ecommerceNavigationDraft = (location.state as { ecommerceShopDraft?: EcommerceShopDraft } | null)?.ecommerceShopDraft ?? null
   const ecommerceReturnNavigationIntent = (location.state as { ecommerceReturnIntent?: EcommerceReturnIntent } | null)?.ecommerceReturnIntent ?? null
   const ecommerceSupportNavigationIntent = (location.state as { ecommerceSupportIntent?: EcommerceSupportIntent } | null)?.ecommerceSupportIntent ?? null
+  const ecommerceCorrectionNavigationIntent = (location.state as { ecommerceCorrectionIntent?: EcommerceCorrectionIntent } | null)?.ecommerceCorrectionIntent ?? null
   const ecommerceCancellationNavigationIntent = (location.state as { ecommerceCancellationIntent?: EcommerceCancellationIntent } | null)?.ecommerceCancellationIntent ?? null
   const ecommerceOrderAmendmentNavigationIntent = (location.state as { ecommerceOrderAmendmentIntent?: EcommerceOrderAmendmentIntent } | null)?.ecommerceOrderAmendmentIntent ?? null
   const ecommerceOrderRescheduleNavigationIntent = (location.state as { ecommerceOrderRescheduleIntent?: EcommerceOrderRescheduleIntent } | null)?.ecommerceOrderRescheduleIntent ?? null
@@ -1492,7 +1494,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceCorrectionNavigationIntent={ecommerceCorrectionNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1677,8 +1679,9 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceOrderRescheduleNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, managedIdentity, requestedRequestId, requestedSource, tab }: {
+function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrectionNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceOrderRescheduleNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, managedIdentity, requestedRequestId, requestedSource, tab }: {
   ecommerceCancellationNavigationIntent: EcommerceCancellationIntent | null
+  ecommerceCorrectionNavigationIntent: EcommerceCorrectionIntent | null
   ecommerceNavigationDraft: EcommerceShopDraft | null
   ecommerceOrderAmendmentNavigationIntent: EcommerceOrderAmendmentIntent | null
   ecommerceOrderRescheduleNavigationIntent: EcommerceOrderRescheduleIntent | null
@@ -1749,6 +1752,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
   const consumedEcommerceDraftId = useRef('')
   const consumedEcommerceReturnIntentId = useRef('')
   const consumedEcommerceSupportIntentId = useRef('')
+  const consumedEcommerceCorrectionIntentId = useRef('')
   const consumedEcommerceCancellationIntentId = useRef('')
   const consumedEcommerceOrderAmendmentIntentId = useRef('')
   const consumedEcommerceOrderRescheduleIntentId = useRef('')
@@ -2672,6 +2676,69 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
       })
     return () => { current = false }
   }, [commerce, ecommerceSupportNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
+
+  useEffect(() => {
+    if (!ecommerceCorrectionNavigationIntent
+      || tab !== 'orders'
+      || managedIdentity && workspaceMode !== 'managed-ready'
+      || consumedEcommerceCorrectionIntentId.current === ecommerceCorrectionNavigationIntent.id) return
+    let current = true
+    void import('../products/ecommerce/ecommerce-buying-lifecycle')
+      .then(async (lifecycle) => {
+        const intent = lifecycle.validateEcommerceCorrectionIntent(ecommerceCorrectionNavigationIntent)
+        const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
+        if (!current) return
+        consumedEcommerceCorrectionIntentId.current = intent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        const storedIntent = recovered.state?.correctionIntents.find((candidate) => candidate.id === intent.id)
+        if (recovered.status !== 'ready' || !storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(intent)) {
+          throw new Error('The balance request no longer matches its recovered Ecommerce evidence. Nothing was prepared.')
+        }
+        const order = commerce.orders.find((candidate) => candidate.id === intent.orderId)
+        const outcome = order ? lifecycle.projectEcommerceCorrectionOutcome(intent, order) : null
+        const existing = order?.corrections?.filter((record) => record.evidenceReference === intent.evidenceReference) ?? []
+        if (outcome || existing.length) {
+          setCorrectionDraft(null)
+          setNotice(outcome
+            ? `${intent.id} was already reviewed by ${outcome.reviewedBy}. Ecommerce can recover the correction outcome; no second note was prepared.`
+            : 'The Shop correction evidence conflicts with the exact Ecommerce request. No second note was prepared.')
+          return
+        }
+        const expectation = commerceOrderCorrectionExpectation(commerce, intent.orderId)
+        if (!order
+          || order.sourceRecordId !== intent.sourceRequestId
+          || order.paymentStatus !== intent.paymentStatus
+          || order.refundStatus !== intent.refundStatus
+          || !expectation
+          || expectation.sourceCalculationDigest !== intent.sourceCalculationDigest
+          || expectation.correctionCount !== intent.sourceCorrectionCount
+          || expectation.currentBalanceMmk !== intent.originalBalanceMmk) {
+          setCorrectionDraft(null)
+          setNotice('The Ecommerce balance request no longer matches the current Shop calculation, payment, refund, or correction history. Nothing was prepared.')
+          return
+        }
+        setReturnDraft(null)
+        setSupportDraft(null)
+        setCancellationDraft(null)
+        setCorrectionDraft({
+          orderId: intent.orderId,
+          kind: intent.requestedKind,
+          reasonCode: intent.reasonCode,
+          listedAmountMmk: String(intent.listedAmountMmk),
+          sourceIntent: intent,
+        })
+        setNotice(`${intent.id} is ready for Shop review. Recheck the calculated adjustment before recording a review-only correction note.`)
+        requestAnimationFrame(() => correctionEditorRef.current?.querySelector<HTMLElement>('#order-correction-amount')?.focus())
+      })
+      .catch((error) => {
+        if (!current) return
+        consumedEcommerceCorrectionIntentId.current = ecommerceCorrectionNavigationIntent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        setCorrectionDraft(null)
+        setNotice(error instanceof Error ? error.message : 'The Ecommerce balance request could not be verified. Nothing was prepared.')
+      })
+    return () => { current = false }
+  }, [commerce, ecommerceBuyingScope, ecommerceCorrectionNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
 
   useEffect(() => {
     const sourceKey = requestedRequestId || 'ecommerce-inbox'
@@ -4558,6 +4625,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
       setNotice('A credit cannot exceed the order’s current corrected balance.')
       return
     }
+    const sourceIntent = correctionDraft.sourceIntent
+    if (sourceIntent && (correctionDraftOrder.sourceRecordId !== sourceIntent.sourceRequestId
+      || correctionDraftOrder.paymentStatus !== sourceIntent.paymentStatus
+      || correctionDraftOrder.refundStatus !== sourceIntent.refundStatus
+      || correctionReviewExpectation.sourceCalculationDigest !== sourceIntent.sourceCalculationDigest
+      || correctionReviewExpectation.correctionCount !== sourceIntent.sourceCorrectionCount
+      || correctionReviewExpectation.currentBalanceMmk !== sourceIntent.originalBalanceMmk
+      || correctionDraft.kind !== sourceIntent.requestedKind
+      || correctionDraft.reasonCode !== sourceIntent.reasonCode
+      || correctionCalculation.listedAmountMmk !== sourceIntent.listedAmountMmk)) {
+      setCorrectionDraft(null)
+      setNotice(`${sourceIntent.id} no longer matches the current Shop correction review. Nothing was prepared.`)
+      return
+    }
     const input = {
       orderId: correctionDraft.orderId,
       kind: correctionDraft.kind,
@@ -4568,9 +4649,22 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
       kind: 'order_correction',
       subjectId: input.orderId,
       summary: `Record ${input.kind} note for ${input.orderId}`,
+      ...(sourceIntent ? {
+        reasonSuggestion: sourceIntent.reason.slice(0, 180),
+        evidenceReferenceSuggestion: sourceIntent.evidenceReference,
+        evidenceReferenceLocked: true,
+      } : {}),
       before: `Original invoice preserved · corrected balance ${formatMoney(correctionReviewExpectation.currentBalanceMmk)}`,
       after: `${input.kind} ${formatMoney(correctionCalculation.totalMmk)} · corrected balance ${formatMoney(balanceAfter)} · external posting not performed`,
       apply: async (action) => {
+        if (sourceIntent) {
+          const { readEcommerceBuyingState } = await import('../products/ecommerce/ecommerce-buying-lifecycle')
+          const recovered = await readEcommerceBuyingState(ecommerceBuyingScope)
+          const storedIntent = recovered.state?.correctionIntents.find((candidate) => candidate.id === sourceIntent.id)
+          if (recovered.status !== 'ready' || !storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(sourceIntent)) {
+            throw new ShopReviewRequiredError(`${sourceIntent.id} recovery changed during review. No correction was recorded.`)
+          }
+        }
         const proof = commerceActionProof(action)
         await mutateCommerce(
           'commerce.order.correction_recorded',
@@ -6575,10 +6669,10 @@ function ClosedOrderHistory({
         <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review resolution</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportResolution} type="button">Cancel</button></div>
       </form> : null}
       {activeCorrectionDraft ? <form aria-label={`Correct invoice ${order.id}`} className="order-return-editor" onSubmit={onReviewCorrection} ref={onCorrectionEditor}>
-        <div className="order-return-copy"><span className="core-eyebrow">Correction note</span><strong>{order.id}</strong><small>The original invoice stays unchanged. This records review evidence; it does not post externally.</small></div>
-        <label>Type<select disabled={disabled} onChange={(event) => onChangeCorrection({ kind: event.target.value as CommerceCorrectionKind })} value={activeCorrectionDraft.kind}><option value="credit">Credit · reduce balance</option><option value="debit">Debit · increase balance</option></select></label>
-        <label>Reason<select disabled={disabled} onChange={(event) => onChangeCorrection({ reasonCode: event.target.value as CommerceCorrectionReasonCode })} value={activeCorrectionDraft.reasonCode}><option value="pricing_error">Pricing error</option><option value="service_recovery">Service recovery</option><option value="fee_adjustment">Fee adjustment</option><option value="other">Other</option></select></label>
-        <label>Amount before tax<input disabled={disabled} id="order-correction-amount" inputMode="numeric" min="1" onChange={(event) => onChangeCorrection({ listedAmountMmk: event.target.value })} required step="1" type="number" value={activeCorrectionDraft.listedAmountMmk} /></label>
+        <div className="order-return-copy"><span className="core-eyebrow">Correction note</span><strong>{order.id}</strong><small>{activeCorrectionDraft.sourceIntent ? `Prepared from customer request ${activeCorrectionDraft.sourceIntent.id}. Recheck the calculation; request details stay locked.` : 'The original invoice stays unchanged.'} This records review evidence; it does not post externally.</small></div>
+        <label>Type<select disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} onChange={(event) => onChangeCorrection({ kind: event.target.value as CommerceCorrectionKind })} value={activeCorrectionDraft.kind}><option value="credit">Credit · reduce balance</option><option value="debit">Debit · increase balance</option></select></label>
+        <label>Reason<select disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} onChange={(event) => onChangeCorrection({ reasonCode: event.target.value as CommerceCorrectionReasonCode })} value={activeCorrectionDraft.reasonCode}><option value="pricing_error">Pricing error</option><option value="service_recovery">Service recovery</option><option value="fee_adjustment">Fee adjustment</option><option value="other">Other</option></select></label>
+        <label>Amount before tax<input disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} id="order-correction-amount" inputMode="numeric" min="1" onChange={(event) => onChangeCorrection({ listedAmountMmk: event.target.value })} required step="1" type="number" value={activeCorrectionDraft.listedAmountMmk} /></label>
         {correctionCalculation ? <small role="note">Tax {formatMoney(correctionCalculation.taxMmk)} · note total {formatMoney(correctionCalculation.totalMmk)} · same tax snapshot as the original invoice</small> : null}
         <div className="form-actions"><button className="core-button primary compact" disabled={disabled || !correctionCalculation} type="submit">Review correction</button><button className="core-button compact" disabled={disabled} onClick={onCancelCorrection} type="button">Cancel</button></div>
       </form> : null}

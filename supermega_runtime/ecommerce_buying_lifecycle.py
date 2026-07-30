@@ -28,6 +28,8 @@ ECOMMERCE_RETURN_INTENT_SCHEMA = "supermega.ecommerce.return_intent.v1"
 ECOMMERCE_RETURN_OUTCOME_SCHEMA = "supermega.ecommerce.return_outcome.v1"
 ECOMMERCE_SUPPORT_INTENT_SCHEMA = "supermega.ecommerce.support_intent.v1"
 ECOMMERCE_SUPPORT_OUTCOME_SCHEMA = "supermega.ecommerce.support_outcome.v1"
+ECOMMERCE_CORRECTION_INTENT_SCHEMA = "supermega.ecommerce.correction_intent.v1"
+ECOMMERCE_CORRECTION_OUTCOME_SCHEMA = "supermega.ecommerce.correction_outcome.v1"
 ECOMMERCE_CANCELLATION_INTENT_SCHEMA = "supermega.ecommerce.cancellation_intent.v1"
 ECOMMERCE_CANCELLATION_DECISION_SCHEMA = "supermega.ecommerce.cancellation_decision.v1"
 ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA = "supermega.ecommerce.order_amendment_intent.v1"
@@ -48,6 +50,8 @@ _RETURN_ID = re.compile(rf"^ERR-{_UUID}$")
 _RETURN_KEY = re.compile(rf"^ERI-{_UUID}$")
 _SUPPORT_ID = re.compile(rf"^ESR-{_UUID}$")
 _SUPPORT_KEY = re.compile(rf"^ESI-{_UUID}$")
+_CORRECTION_ID = re.compile(rf"^ECO-{_UUID}$")
+_CORRECTION_KEY = re.compile(rf"^COI-{_UUID}$")
 _CANCELLATION_ID = re.compile(rf"^ECN-{_UUID}$")
 _CANCELLATION_KEY = re.compile(rf"^CNI-{_UUID}$")
 _CANCELLATION_DECISION_ID = re.compile(rf"^ECD-{_UUID}$")
@@ -75,6 +79,10 @@ _SUPPORT_CATEGORIES = frozenset(
 _SUPPORT_PRIORITIES = frozenset({"urgent", "high", "normal", "low"})
 _SUPPORT_RESOLUTION_OUTCOMES = frozenset(
     {"information_provided", "replacement_review_required", "refund_review_required", "no_action"}
+)
+_CORRECTION_KINDS = frozenset({"credit", "debit"})
+_CORRECTION_REASON_CODES = frozenset(
+    {"pricing_error", "service_recovery", "fee_adjustment", "other"}
 )
 _CANCELLATION_REASON_CODES = frozenset(
     {"changed_mind", "duplicate_order", "order_error", "delivery_too_slow", "other"}
@@ -1923,6 +1931,242 @@ def project_ecommerce_support_outcome(
         return None
 
 
+def build_ecommerce_correction_intent(
+    *,
+    scope: str,
+    order_snapshot: Mapping[str, object],
+    requested_kind: str,
+    reason_code: str,
+    listed_amount_mmk: int,
+    reason: str,
+    idempotency_key: str,
+    created_at: str,
+) -> dict[str, Any]:
+    """Prepare exact balance-review evidence without moving money or posting."""
+
+    from supermega_runtime.commerce_runtime import commerce_order_calculation_digest
+
+    order = order_snapshot
+    if (
+        not isinstance(order, Mapping)
+        or order.get("status") != "completed"
+        or order.get("paymentStatus") != "reconciled"
+        or not isinstance(order.get("completion"), Mapping)
+    ):
+        raise _fail("Corrections require a calculated, reconciled, completed Shop order.")
+    calculation_digest = commerce_order_calculation_digest(order)
+    if calculation_digest is None:
+        raise _fail("Correction order calculation evidence is unavailable.")
+    order_id = _token(order.get("id"), "orderSnapshot.id")
+    request_id = _text(order.get("sourceRecordId"), "orderSnapshot.sourceRecordId", maximum=40)
+    if _REQUEST_ID.fullmatch(request_id) is None:
+        raise _fail("Correction order is not attributable to an Ecommerce request.")
+    if requested_kind not in _CORRECTION_KINDS:
+        raise _fail("Correction type is unsupported.")
+    if reason_code not in _CORRECTION_REASON_CODES:
+        raise _fail("Correction reason is unsupported.")
+    key = _text(idempotency_key, "idempotencyKey", maximum=40)
+    if _CORRECTION_KEY.fullmatch(key) is None:
+        raise _fail("Correction idempotency key is invalid.")
+    corrections = order.get("corrections", [])
+    if not isinstance(corrections, list) or len(corrections) > _MAX_RECORDS:
+        raise _fail("Correction history is invalid.")
+    balance = _integer(order.get("total"), "orderSnapshot.total", minimum=0)
+    for index, correction in enumerate(corrections):
+        if not isinstance(correction, Mapping) or not isinstance(correction.get("calculation"), Mapping):
+            raise _fail(f"orderSnapshot.corrections[{index}] is invalid.")
+        total = _integer(
+            correction["calculation"].get("totalMmk"),
+            f"orderSnapshot.corrections[{index}].calculation.totalMmk",
+            minimum=1,
+        )
+        if correction.get("kind") not in _CORRECTION_KINDS:
+            raise _fail(f"orderSnapshot.corrections[{index}].kind is invalid.")
+        balance += total if correction["kind"] == "debit" else -total
+        if not 0 <= balance <= _MAX_SAFE_INTEGER:
+            raise _fail("Correction history exceeds the safe balance boundary.")
+    reference = (
+        f"ECOMMERCE-CORRECTION:{key[4:]}:{order_id}:{request_id}:"
+        f"{calculation_digest[7:15]}:{len(corrections)}"
+    )
+    return validate_ecommerce_correction_intent(
+        {
+            "schema": ECOMMERCE_CORRECTION_INTENT_SCHEMA,
+            "state": "pending_shop_review",
+            "scope": _token(scope, "scope"),
+            "id": f"ECO-{key[4:]}",
+            "idempotencyKey": key,
+            "createdAt": _timestamp(created_at, "createdAt"),
+            "orderId": order_id,
+            "sourceRequestId": request_id,
+            "sourceCalculationDigest": calculation_digest,
+            "sourceCorrectionCount": len(corrections),
+            "originalBalanceMmk": balance,
+            "paymentStatus": "reconciled",
+            "refundStatus": order.get("refundStatus"),
+            "requestedKind": requested_kind,
+            "reasonCode": reason_code,
+            "listedAmountMmk": _integer(listed_amount_mmk, "listedAmountMmk", minimum=1),
+            "reason": _text(reason, "reason", maximum=300),
+            "orderChanged": False,
+            "paymentChanged": False,
+            "refundStarted": False,
+            "ledgerPosted": False,
+            "taxFiled": False,
+            "customerMessageSent": False,
+            "providerCalled": False,
+            "evidenceReference": reference,
+        }
+    )
+
+
+def validate_ecommerce_correction_intent(value: object) -> dict[str, Any]:
+    source = _object(
+        value,
+        "correction intent",
+        (
+            "schema", "state", "scope", "id", "idempotencyKey", "createdAt", "orderId",
+            "sourceRequestId", "sourceCalculationDigest", "sourceCorrectionCount",
+            "originalBalanceMmk", "paymentStatus", "refundStatus", "requestedKind",
+            "reasonCode", "listedAmountMmk", "reason", "orderChanged", "paymentChanged",
+            "refundStarted", "ledgerPosted", "taxFiled", "customerMessageSent",
+            "providerCalled", "evidenceReference",
+        ),
+    )
+    correction_id = _text(source["id"], "correction intent.id", maximum=40)
+    key = _text(source["idempotencyKey"], "correction intent.idempotencyKey", maximum=40)
+    order_id = _token(source["orderId"], "correction intent.orderId")
+    request_id = _text(source["sourceRequestId"], "correction intent.sourceRequestId", maximum=40)
+    calculation_digest = _digest(source["sourceCalculationDigest"], "correction intent.sourceCalculationDigest")
+    correction_count = _integer(source["sourceCorrectionCount"], "correction intent.sourceCorrectionCount")
+    reference = (
+        f"ECOMMERCE-CORRECTION:{key[4:]}:{order_id}:{request_id}:"
+        f"{calculation_digest[7:15]}:{correction_count}"
+    )
+    if (
+        source["schema"] != ECOMMERCE_CORRECTION_INTENT_SCHEMA
+        or source["state"] != "pending_shop_review"
+        or _CORRECTION_ID.fullmatch(correction_id) is None
+        or _CORRECTION_KEY.fullmatch(key) is None
+        or correction_id[4:] != key[4:]
+        or _REQUEST_ID.fullmatch(request_id) is None
+        or source["paymentStatus"] != "reconciled"
+        or source["refundStatus"] not in {"none", "due", "settled"}
+        or source["requestedKind"] not in _CORRECTION_KINDS
+        or source["reasonCode"] not in _CORRECTION_REASON_CODES
+        or any(source[field] is not False for field in (
+            "orderChanged", "paymentChanged", "refundStarted", "ledgerPosted", "taxFiled",
+            "customerMessageSent", "providerCalled",
+        ))
+        or source["evidenceReference"] != reference
+    ):
+        raise _fail("Correction intent boundary is invalid.")
+    return {
+        "schema": ECOMMERCE_CORRECTION_INTENT_SCHEMA,
+        "state": "pending_shop_review",
+        "scope": _token(source["scope"], "correction intent.scope"),
+        "id": correction_id,
+        "idempotencyKey": key,
+        "createdAt": _timestamp(source["createdAt"], "correction intent.createdAt"),
+        "orderId": order_id,
+        "sourceRequestId": request_id,
+        "sourceCalculationDigest": calculation_digest,
+        "sourceCorrectionCount": correction_count,
+        "originalBalanceMmk": _integer(source["originalBalanceMmk"], "correction intent.originalBalanceMmk"),
+        "paymentStatus": "reconciled",
+        "refundStatus": source["refundStatus"],
+        "requestedKind": source["requestedKind"],
+        "reasonCode": source["reasonCode"],
+        "listedAmountMmk": _integer(source["listedAmountMmk"], "correction intent.listedAmountMmk", minimum=1),
+        "reason": _text(source["reason"], "correction intent.reason", maximum=300),
+        "orderChanged": False,
+        "paymentChanged": False,
+        "refundStarted": False,
+        "ledgerPosted": False,
+        "taxFiled": False,
+        "customerMessageSent": False,
+        "providerCalled": False,
+        "evidenceReference": reference,
+    }
+
+
+def project_ecommerce_correction_outcome(
+    intent_value: Mapping[str, object],
+    order_value: Mapping[str, object],
+) -> dict[str, Any] | None:
+    """Recover one exact Shop correction without claiming financial posting."""
+
+    try:
+        intent = validate_ecommerce_correction_intent(intent_value)
+        corrections = order_value.get("corrections") if isinstance(order_value, Mapping) else None
+        if (
+            not isinstance(order_value, Mapping)
+            or order_value.get("id") != intent["orderId"]
+            or order_value.get("status") != "completed"
+            or order_value.get("sourceRecordId") != intent["sourceRequestId"]
+            or not isinstance(corrections, list)
+        ):
+            return None
+        matches = [
+            (index, record)
+            for index, record in enumerate(corrections)
+            if isinstance(record, Mapping) and record.get("evidenceReference") == intent["evidenceReference"]
+        ]
+        if len(matches) != 1:
+            return None
+        index, record = matches[0]
+        calculation = record.get("calculation")
+        if not isinstance(calculation, Mapping):
+            return None
+        adjustment = _integer(calculation.get("totalMmk"), "correction outcome.adjustmentTotalMmk", minimum=1)
+        expected_balance = intent["originalBalanceMmk"] + (
+            adjustment if intent["requestedKind"] == "debit" else -adjustment
+        )
+        if (
+            len(corrections) - index - 1 != intent["sourceCorrectionCount"]
+            or record.get("sourceCalculationDigest") != intent["sourceCalculationDigest"]
+            or record.get("kind") != intent["requestedKind"]
+            or record.get("reasonCode") != intent["reasonCode"]
+            or calculation.get("listedAmountMmk") != intent["listedAmountMmk"]
+            or record.get("balanceAfterMmk") != expected_balance
+            or not 0 <= expected_balance <= _MAX_SAFE_INTEGER
+            or record.get("financialStatus") != "review_required"
+            or record.get("postingAuthority") != "none"
+            or record.get("externalPostingPerformed") is not False
+        ):
+            return None
+        reviewed_at = _timestamp(record.get("createdAt"), "correction outcome.reviewedAt")
+        if datetime.fromisoformat(reviewed_at.replace("Z", "+00:00")) < datetime.fromisoformat(
+            intent["createdAt"].replace("Z", "+00:00")
+        ):
+            return None
+        return {
+            "schema": ECOMMERCE_CORRECTION_OUTCOME_SCHEMA,
+            "state": "review_required",
+            "scope": intent["scope"],
+            "intentId": intent["id"],
+            "orderId": intent["orderId"],
+            "sourceRequestId": intent["sourceRequestId"],
+            "reviewedAt": reviewed_at,
+            "reviewedBy": _text(record.get("actor"), "correction outcome.reviewedBy", maximum=180),
+            "correctionActionId": _token(record.get("actionId"), "correction outcome.correctionActionId"),
+            "kind": intent["requestedKind"],
+            "reasonCode": intent["reasonCode"],
+            "listedAmountMmk": intent["listedAmountMmk"],
+            "adjustmentTotalMmk": adjustment,
+            "balanceAfterMmk": expected_balance,
+            "financialStatus": "review_required",
+            "postingAuthority": "none",
+            "externalPostingPerformed": False,
+            "automaticPaymentPerformed": False,
+            "automaticRefundPerformed": False,
+            "customerMessageSent": False,
+            "providerCalled": False,
+        }
+    except (EcommerceLifecycleValidationError, TypeError, ValueError):
+        return None
+
+
 def build_ecommerce_cancellation_intent(
     *,
     scope: str,
@@ -2846,6 +3090,7 @@ def create_empty_ecommerce_lifecycle_state(scope: str) -> dict[str, Any]:
         "requests": [],
         "returnIntents": [],
         "supportIntents": [],
+        "correctionIntents": [],
         "cancellationIntents": [],
         "cancellationDecisions": [],
         "amendmentIntents": [],
@@ -2874,6 +3119,7 @@ def _event(value: object, field: str) -> dict[str, Any]:
         "request_recorded",
         "return_intent_recorded",
         "support_intent_recorded",
+        "correction_intent_recorded",
         "cancellation_intent_recorded",
         "cancellation_decision_recorded",
         "order_amendment_intent_recorded",
@@ -2908,13 +3154,15 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
     cancellation_fields = frozenset({*current_fields, "cancellationIntents"})
     decision_fields = frozenset({*cancellation_fields, "cancellationDecisions"})
     amendment_fields = frozenset({*decision_fields, "amendmentIntents"})
-    latest_fields = frozenset({*amendment_fields, "rescheduleIntents"})
+    reschedule_fields = frozenset({*amendment_fields, "rescheduleIntents"})
+    latest_fields = frozenset({*reschedule_fields, "correctionIntents"})
     if frozenset(value) not in {
         legacy_fields,
         current_fields,
         cancellation_fields,
         decision_fields,
         amendment_fields,
+        reschedule_fields,
         latest_fields,
     }:
         raise _fail("lifecycle state fields do not match the contract.")
@@ -2939,6 +3187,14 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
         for candidate in _array(
             source.get("supportIntents", []),
             "lifecycle state.supportIntents",
+            maximum=_MAX_RECORDS,
+        )
+    ]
+    correction_intents = [
+        validate_ecommerce_correction_intent(candidate)
+        for candidate in _array(
+            source.get("correctionIntents", []),
+            "lifecycle state.correctionIntents",
             maximum=_MAX_RECORDS,
         )
     ]
@@ -2977,7 +3233,7 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
     events = [
         _event(candidate, f"lifecycle state.events[{index}]")
         for index, candidate in enumerate(
-            _array(source["events"], "lifecycle state.events", maximum=_MAX_RECORDS * 7)
+            _array(source["events"], "lifecycle state.events", maximum=_MAX_RECORDS * 8)
         )
     ]
     revision = _integer(source["revision"], "lifecycle state.revision")
@@ -2995,6 +3251,7 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
         *requests,
         *return_intents,
         *support_intents,
+        *correction_intents,
         *cancellation_intents,
         *cancellation_decisions,
         *amendment_intents,
@@ -3011,6 +3268,8 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
         raise _fail("Return intent is not attributable to one recovered Ecommerce request.")
     if any(intent["sourceRequestId"] not in request_ids for intent in support_intents):
         raise _fail("Support intent is not attributable to one recovered Ecommerce request.")
+    if any(intent["sourceRequestId"] not in request_ids for intent in correction_intents):
+        raise _fail("Correction intent is not attributable to one recovered Ecommerce request.")
     if any(intent["sourceRequestId"] not in request_ids for intent in cancellation_intents):
         raise _fail("Cancellation intent is not attributable to one recovered Ecommerce request.")
     if len({intent["orderId"] for intent in cancellation_intents}) != len(cancellation_intents):
@@ -3116,6 +3375,7 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
         "requests": requests,
         "returnIntents": return_intents,
         "supportIntents": support_intents,
+        "correctionIntents": correction_intents,
         "cancellationIntents": cancellation_intents,
         "cancellationDecisions": cancellation_decisions,
         "amendmentIntents": amendment_intents,
@@ -3142,6 +3402,7 @@ def _record_lifecycle_value(
         *state["requests"],
         *state["returnIntents"],
         *state["supportIntents"],
+        *state["correctionIntents"],
         *state["cancellationIntents"],
         *state["cancellationDecisions"],
         *state["amendmentIntents"],
@@ -3223,6 +3484,21 @@ def record_ecommerce_support_intent(
         validate_ecommerce_support_intent(intent),
         collection="supportIntents",
         action="support_intent_recorded",
+        expected_head_digest=expected_head_digest,
+    )
+
+
+def record_ecommerce_correction_intent(
+    state: Mapping[str, object],
+    intent: Mapping[str, object],
+    *,
+    expected_head_digest: str,
+) -> dict[str, Any]:
+    return _record_lifecycle_value(
+        state,
+        validate_ecommerce_correction_intent(intent),
+        collection="correctionIntents",
+        action="correction_intent_recorded",
         expected_head_digest=expected_head_digest,
     )
 

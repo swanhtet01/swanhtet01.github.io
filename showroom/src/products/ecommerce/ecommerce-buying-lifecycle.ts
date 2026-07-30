@@ -1,6 +1,8 @@
 import {
   COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA,
   commerceOrderAcknowledgement,
+  commerceOrderAdjustedTotal,
+  commerceOrderCalculationDigest,
   commerceOrderHasReleasableReservation,
   commercePromotionDecision,
   commerceSupportServiceState,
@@ -8,6 +10,8 @@ import {
   commercePaymentDecision,
   type CommerceItem,
   type CommerceActionProof,
+  type CommerceCorrectionKind,
+  type CommerceCorrectionReasonCode,
   type CommerceOrder,
   type CommerceState,
   type CommercePromotionDecision,
@@ -42,6 +46,8 @@ export const ECOMMERCE_RETURN_INTENT_SCHEMA = 'supermega.ecommerce.return_intent
 export const ECOMMERCE_RETURN_OUTCOME_SCHEMA = 'supermega.ecommerce.return_outcome.v1' as const
 export const ECOMMERCE_SUPPORT_INTENT_SCHEMA = 'supermega.ecommerce.support_intent.v1' as const
 export const ECOMMERCE_SUPPORT_OUTCOME_SCHEMA = 'supermega.ecommerce.support_outcome.v1' as const
+export const ECOMMERCE_CORRECTION_INTENT_SCHEMA = 'supermega.ecommerce.correction_intent.v1' as const
+export const ECOMMERCE_CORRECTION_OUTCOME_SCHEMA = 'supermega.ecommerce.correction_outcome.v1' as const
 export const ECOMMERCE_CANCELLATION_INTENT_SCHEMA = 'supermega.ecommerce.cancellation_intent.v1' as const
 export const ECOMMERCE_CANCELLATION_DECISION_SCHEMA = 'supermega.ecommerce.cancellation_decision.v1' as const
 export const ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA = 'supermega.ecommerce.order_amendment_intent.v1' as const
@@ -508,6 +514,58 @@ export type EcommerceSupportOutcome = {
   providerCalled: false
 }
 
+export type EcommerceCorrectionIntent = {
+  schema: typeof ECOMMERCE_CORRECTION_INTENT_SCHEMA
+  state: 'pending_shop_review'
+  scope: string
+  id: string
+  idempotencyKey: string
+  createdAt: string
+  orderId: string
+  sourceRequestId: string
+  sourceCalculationDigest: string
+  sourceCorrectionCount: number
+  originalBalanceMmk: number
+  paymentStatus: 'reconciled'
+  refundStatus: 'none' | 'due' | 'settled'
+  requestedKind: CommerceCorrectionKind
+  reasonCode: CommerceCorrectionReasonCode
+  listedAmountMmk: number
+  reason: string
+  orderChanged: false
+  paymentChanged: false
+  refundStarted: false
+  ledgerPosted: false
+  taxFiled: false
+  customerMessageSent: false
+  providerCalled: false
+  evidenceReference: string
+}
+
+export type EcommerceCorrectionOutcome = {
+  schema: typeof ECOMMERCE_CORRECTION_OUTCOME_SCHEMA
+  state: 'review_required'
+  scope: string
+  intentId: string
+  orderId: string
+  sourceRequestId: string
+  reviewedAt: string
+  reviewedBy: string
+  correctionActionId: string
+  kind: CommerceCorrectionKind
+  reasonCode: CommerceCorrectionReasonCode
+  listedAmountMmk: number
+  adjustmentTotalMmk: number
+  balanceAfterMmk: number
+  financialStatus: 'review_required'
+  postingAuthority: 'none'
+  externalPostingPerformed: false
+  automaticPaymentPerformed: false
+  automaticRefundPerformed: false
+  customerMessageSent: false
+  providerCalled: false
+}
+
 export type EcommerceCancellationIntent = {
   schema: typeof ECOMMERCE_CANCELLATION_INTENT_SCHEMA
   state: 'pending_shop_review'
@@ -624,7 +682,7 @@ export type EcommerceOrderRescheduleIntent = {
 export type EcommerceBuyingEvent = {
   schema: typeof ECOMMERCE_BUYING_EVENT_SCHEMA
   sequence: number
-  action: 'request_recorded' | 'return_intent_recorded' | 'support_intent_recorded' | 'cancellation_intent_recorded' | 'cancellation_decision_recorded' | 'order_amendment_intent_recorded' | 'order_reschedule_intent_recorded'
+  action: 'request_recorded' | 'return_intent_recorded' | 'support_intent_recorded' | 'correction_intent_recorded' | 'cancellation_intent_recorded' | 'cancellation_decision_recorded' | 'order_amendment_intent_recorded' | 'order_reschedule_intent_recorded'
   subjectId: string
   idempotencyKey: string
   payloadDigest: string
@@ -640,6 +698,7 @@ export type EcommerceBuyingState = {
   requests: EcommerceOrderRequestV2[]
   returnIntents: EcommerceReturnIntent[]
   supportIntents: EcommerceSupportIntent[]
+  correctionIntents: EcommerceCorrectionIntent[]
   cancellationIntents: EcommerceCancellationIntent[]
   cancellationDecisions: EcommerceCancellationDecision[]
   amendmentIntents: EcommerceOrderAmendmentIntent[]
@@ -679,6 +738,8 @@ const returnIdPattern = new RegExp(`^ERR-${uuidPattern}$`)
 const returnKeyPattern = new RegExp(`^ERI-${uuidPattern}$`)
 const supportIdPattern = new RegExp(`^ESR-${uuidPattern}$`)
 const supportKeyPattern = new RegExp(`^ESI-${uuidPattern}$`)
+const correctionIdPattern = new RegExp(`^ECO-${uuidPattern}$`)
+const correctionKeyPattern = new RegExp(`^COI-${uuidPattern}$`)
 const cancellationIdPattern = new RegExp(`^ECN-${uuidPattern}$`)
 const cancellationKeyPattern = new RegExp(`^CNI-${uuidPattern}$`)
 const cancellationDecisionIdPattern = new RegExp(`^ECD-${uuidPattern}$`)
@@ -693,6 +754,8 @@ const fulfilmentMethods: EcommerceFulfilment[] = ['delivery', 'pickup']
 const returnDispositions: EcommerceReturnDisposition[] = ['not_restocked', 'restock']
 const supportCategories: EcommerceSupportCategory[] = ['delivery_issue', 'item_issue', 'order_status', 'other', 'payment_question']
 const supportResolutionOutcomes: CommerceSupportResolutionOutcome[] = ['information_provided', 'replacement_review_required', 'refund_review_required', 'no_action']
+const correctionKinds: CommerceCorrectionKind[] = ['credit', 'debit']
+const correctionReasonCodes: CommerceCorrectionReasonCode[] = ['pricing_error', 'service_recovery', 'fee_adjustment', 'other']
 const cancellationReasonCodes: EcommerceCancellationReasonCode[] = ['changed_mind', 'delivery_too_slow', 'duplicate_order', 'order_error', 'other']
 const maxSafeInteger = Number.MAX_SAFE_INTEGER
 const maxLines = 20
@@ -1343,6 +1406,7 @@ export function createEmptyEcommerceBuyingState(scope: string): EcommerceBuyingS
     requests: [],
     returnIntents: [],
     supportIntents: [],
+    correctionIntents: [],
     cancellationIntents: [],
     cancellationDecisions: [],
     amendmentIntents: [],
@@ -1357,7 +1421,7 @@ async function validateBuyingEvent(value: unknown, field: string): Promise<Ecomm
     'previousDigest', 'eventDigest',
   ])
   if (source.schema !== ECOMMERCE_BUYING_EVENT_SCHEMA
-    || !['request_recorded', 'return_intent_recorded', 'support_intent_recorded', 'cancellation_intent_recorded', 'cancellation_decision_recorded', 'order_amendment_intent_recorded', 'order_reschedule_intent_recorded'].includes(String(source.action))) {
+    || !['request_recorded', 'return_intent_recorded', 'support_intent_recorded', 'correction_intent_recorded', 'cancellation_intent_recorded', 'cancellation_decision_recorded', 'order_amendment_intent_recorded', 'order_reschedule_intent_recorded'].includes(String(source.action))) {
     throw new Error(`${field} boundary is invalid.`)
   }
   const core = {
@@ -1381,15 +1445,17 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
   const cancellationKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'cancellationIntents', 'events']
   const decisionKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'cancellationIntents', 'cancellationDecisions', 'events']
   const amendmentKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'cancellationIntents', 'cancellationDecisions', 'amendmentIntents', 'events']
-  const latestKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'cancellationIntents', 'cancellationDecisions', 'amendmentIntents', 'rescheduleIntents', 'events']
+  const rescheduleKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'cancellationIntents', 'cancellationDecisions', 'amendmentIntents', 'rescheduleIntents', 'events']
+  const latestKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'correctionIntents', 'cancellationIntents', 'cancellationDecisions', 'amendmentIntents', 'rescheduleIntents', 'events']
   const actualKeys = Object.keys(value)
   const hasExactShape = (keys: string[]) => actualKeys.length === keys.length && keys.every((key) => actualKeys.includes(key))
-  if (!hasExactShape(legacyKeys) && !hasExactShape(currentKeys) && !hasExactShape(cancellationKeys) && !hasExactShape(decisionKeys) && !hasExactShape(amendmentKeys) && !hasExactShape(latestKeys)) throw new Error('Buying state fields do not match the contract.')
+  if (!hasExactShape(legacyKeys) && !hasExactShape(currentKeys) && !hasExactShape(cancellationKeys) && !hasExactShape(decisionKeys) && !hasExactShape(amendmentKeys) && !hasExactShape(rescheduleKeys) && !hasExactShape(latestKeys)) throw new Error('Buying state fields do not match the contract.')
   const source = value
   if (source.schema !== ECOMMERCE_BUYING_STATE_SCHEMA
     || !Array.isArray(source.requests)
     || !Array.isArray(source.returnIntents)
     || source.supportIntents !== undefined && !Array.isArray(source.supportIntents)
+    || source.correctionIntents !== undefined && !Array.isArray(source.correctionIntents)
     || source.cancellationIntents !== undefined && !Array.isArray(source.cancellationIntents)
     || source.cancellationDecisions !== undefined && !Array.isArray(source.cancellationDecisions)
     || source.amendmentIntents !== undefined && !Array.isArray(source.amendmentIntents)
@@ -1398,16 +1464,18 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
     || source.requests.length > maxRecords
     || source.returnIntents.length > maxRecords
     || (source.supportIntents?.length ?? 0) > maxRecords
+    || (source.correctionIntents?.length ?? 0) > maxRecords
     || (source.cancellationIntents?.length ?? 0) > maxRecords
     || (source.cancellationDecisions?.length ?? 0) > maxRecords
     || (source.amendmentIntents?.length ?? 0) > maxRecords
     || (source.rescheduleIntents?.length ?? 0) > maxRecords
-    || source.events.length > maxRecords * 7) throw new Error('Buying state contract is invalid.')
+    || source.events.length > maxRecords * 8) throw new Error('Buying state contract is invalid.')
   const scope = canonicalToken(source.scope, 'buying state.scope')
   if (expectedScope && scope !== canonicalToken(expectedScope, 'expectedScope')) throw new Error('Buying state belongs to a different workspace.')
   const requests = await Promise.all(source.requests.map((request) => validateEcommerceOrderRequestV2(request)))
   const returnIntents = source.returnIntents.map((intent) => validateEcommerceReturnIntent(intent))
   const supportIntents = (source.supportIntents ?? []).map((intent) => validateEcommerceSupportIntent(intent))
+  const correctionIntents = (source.correctionIntents ?? []).map((intent) => validateEcommerceCorrectionIntent(intent))
   const cancellationIntents = (source.cancellationIntents ?? []).map((intent) => validateEcommerceCancellationIntent(intent))
   const cancellationDecisions = (source.cancellationDecisions ?? []).map((decision) => validateEcommerceCancellationDecision(decision))
   const amendmentIntents = (source.amendmentIntents ?? []).map((intent) => validateEcommerceOrderAmendmentIntent(intent))
@@ -1422,7 +1490,7 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
   })
   const headDigest = canonicalDigest(source.headDigest, 'buying state.headDigest')
   if (headDigest !== previousDigest) throw new Error('Buying state head digest is invalid.')
-  const records: EcommerceBuyingRecord[] = [...requests, ...returnIntents, ...supportIntents, ...cancellationIntents, ...cancellationDecisions, ...amendmentIntents, ...rescheduleIntents]
+  const records: EcommerceBuyingRecord[] = [...requests, ...returnIntents, ...supportIntents, ...correctionIntents, ...cancellationIntents, ...cancellationDecisions, ...amendmentIntents, ...rescheduleIntents]
   if (records.some((record) => record.scope !== scope)
     || new Set(records.map((record) => record.id)).size !== records.length
     || new Set(records.map((record) => record.idempotencyKey)).size !== records.length
@@ -1433,6 +1501,9 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
   }
   if (supportIntents.some((intent) => !requestIds.has(intent.sourceRequestId))) {
     throw new Error('Support intent is not attributable to one recovered Ecommerce request.')
+  }
+  if (correctionIntents.some((intent) => !requestIds.has(intent.sourceRequestId))) {
+    throw new Error('Correction intent is not attributable to one recovered Ecommerce request.')
   }
   if (cancellationIntents.some((intent) => !requestIds.has(intent.sourceRequestId))) {
     throw new Error('Cancellation intent is not attributable to one recovered Ecommerce request.')
@@ -1509,22 +1580,22 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
       || record.idempotencyKey !== event.idempotencyKey
       || await ecommerceLifecycleDigest(record) !== event.payloadDigest) throw new Error('Buying event does not match its record.')
   }
-  return { schema: ECOMMERCE_BUYING_STATE_SCHEMA, scope, revision, headDigest, requests, returnIntents, supportIntents, cancellationIntents, cancellationDecisions, amendmentIntents, rescheduleIntents, events }
+  return { schema: ECOMMERCE_BUYING_STATE_SCHEMA, scope, revision, headDigest, requests, returnIntents, supportIntents, correctionIntents, cancellationIntents, cancellationDecisions, amendmentIntents, rescheduleIntents, events }
 }
 
-type EcommerceBuyingRecord = EcommerceOrderRequestV2 | EcommerceReturnIntent | EcommerceSupportIntent | EcommerceCancellationIntent | EcommerceCancellationDecision | EcommerceOrderAmendmentIntent | EcommerceOrderRescheduleIntent
+type EcommerceBuyingRecord = EcommerceOrderRequestV2 | EcommerceReturnIntent | EcommerceSupportIntent | EcommerceCorrectionIntent | EcommerceCancellationIntent | EcommerceCancellationDecision | EcommerceOrderAmendmentIntent | EcommerceOrderRescheduleIntent
 
 async function appendBuyingRecord(
   stateValue: EcommerceBuyingState,
   record: EcommerceBuyingRecord,
-  collection: 'requests' | 'returnIntents' | 'supportIntents' | 'cancellationIntents' | 'cancellationDecisions' | 'amendmentIntents' | 'rescheduleIntents',
+  collection: 'requests' | 'returnIntents' | 'supportIntents' | 'correctionIntents' | 'cancellationIntents' | 'cancellationDecisions' | 'amendmentIntents' | 'rescheduleIntents',
   action: EcommerceBuyingEvent['action'],
   expectedHeadDigest: string,
 ) {
   const state = await validateEcommerceBuyingState(stateValue)
   if (canonicalDigest(expectedHeadDigest, 'expectedHeadDigest') !== state.headDigest) throw new Error('Buying state changed before this record was applied.')
   if (record.scope !== state.scope) throw new Error('Buying record belongs to a different workspace.')
-  const allRecords: EcommerceBuyingRecord[] = [...state.requests, ...state.returnIntents, ...state.supportIntents, ...state.cancellationIntents, ...state.cancellationDecisions, ...state.amendmentIntents, ...state.rescheduleIntents]
+  const allRecords: EcommerceBuyingRecord[] = [...state.requests, ...state.returnIntents, ...state.supportIntents, ...state.correctionIntents, ...state.cancellationIntents, ...state.cancellationDecisions, ...state.amendmentIntents, ...state.rescheduleIntents]
   const existing = allRecords.find((candidate) => candidate.id === record.id || candidate.idempotencyKey === record.idempotencyKey)
   if (existing) {
     if (canonicalJson(existing) !== canonicalJson(record)) throw new Error('Buying idempotency key conflicts with a different record.')
@@ -1876,6 +1947,196 @@ export function projectEcommerceSupportOutcome(
     resolutionEvidenceReference,
     externalMessageSent: false,
     refundStarted: false,
+    providerCalled: false,
+  }
+}
+
+export function buildEcommerceCorrectionIntent(input: {
+  scope: string
+  orderSnapshot: CommerceOrder
+  requestedKind: CommerceCorrectionKind
+  reasonCode: CommerceCorrectionReasonCode
+  listedAmountMmk: number
+  reason: string
+  idempotencyKey: string
+  createdAt: string
+}): EcommerceCorrectionIntent {
+  const order = input.orderSnapshot
+  const sourceCalculationDigest = isRecord(order) ? commerceOrderCalculationDigest(order) : null
+  const originalBalanceMmk = isRecord(order) ? commerceOrderAdjustedTotal(order) : null
+  if (!isRecord(order)
+    || order.status !== 'completed'
+    || order.paymentStatus !== 'reconciled'
+    || !isRecord(order.completion)
+    || !sourceCalculationDigest
+    || originalBalanceMmk === null) {
+    throw new Error('Corrections require a calculated, reconciled, completed Shop order.')
+  }
+  const orderId = canonicalToken(order.id, 'orderSnapshot.id')
+  const sourceRequestId = canonicalText(order.sourceRecordId, 'orderSnapshot.sourceRecordId', 40)
+  if (!requestIdPattern.test(sourceRequestId)) throw new Error('Correction order is not attributable to an Ecommerce request.')
+  if (!correctionKinds.includes(input.requestedKind)) throw new Error('Correction type is unsupported.')
+  if (!correctionReasonCodes.includes(input.reasonCode)) throw new Error('Correction reason is unsupported.')
+  const idempotencyKey = canonicalText(input.idempotencyKey, 'idempotencyKey', 40)
+  if (!correctionKeyPattern.test(idempotencyKey)) throw new Error('Correction idempotency key is invalid.')
+  const sourceCorrectionCount = safeInteger(order.corrections?.length ?? 0, 'orderSnapshot.corrections.length', 0, maxRecords)
+  return validateEcommerceCorrectionIntent({
+    schema: ECOMMERCE_CORRECTION_INTENT_SCHEMA,
+    state: 'pending_shop_review',
+    scope: canonicalToken(input.scope, 'scope'),
+    id: `ECO-${idempotencyKey.slice(4)}`,
+    idempotencyKey,
+    createdAt: canonicalTimestamp(input.createdAt, 'createdAt'),
+    orderId,
+    sourceRequestId,
+    sourceCalculationDigest,
+    sourceCorrectionCount,
+    originalBalanceMmk,
+    paymentStatus: 'reconciled',
+    refundStatus: order.refundStatus,
+    requestedKind: input.requestedKind,
+    reasonCode: input.reasonCode,
+    listedAmountMmk: safeInteger(input.listedAmountMmk, 'listedAmountMmk', 1, maxSafeInteger),
+    reason: canonicalText(input.reason, 'reason', 300),
+    orderChanged: false,
+    paymentChanged: false,
+    refundStarted: false,
+    ledgerPosted: false,
+    taxFiled: false,
+    customerMessageSent: false,
+    providerCalled: false,
+    evidenceReference: `ECOMMERCE-CORRECTION:${idempotencyKey.slice(4)}:${orderId}:${sourceRequestId}:${sourceCalculationDigest.slice(7, 15)}:${sourceCorrectionCount}`,
+  })
+}
+
+export function validateEcommerceCorrectionIntent(value: unknown): EcommerceCorrectionIntent {
+  const source = exactObject(value, 'correction intent', [
+    'schema', 'state', 'scope', 'id', 'idempotencyKey', 'createdAt', 'orderId', 'sourceRequestId',
+    'sourceCalculationDigest', 'sourceCorrectionCount', 'originalBalanceMmk', 'paymentStatus', 'refundStatus',
+    'requestedKind', 'reasonCode', 'listedAmountMmk', 'reason', 'orderChanged', 'paymentChanged',
+    'refundStarted', 'ledgerPosted', 'taxFiled', 'customerMessageSent', 'providerCalled', 'evidenceReference',
+  ])
+  const id = canonicalText(source.id, 'correction intent.id', 40)
+  const idempotencyKey = canonicalText(source.idempotencyKey, 'correction intent.idempotencyKey', 40)
+  const orderId = canonicalToken(source.orderId, 'correction intent.orderId')
+  const sourceRequestId = canonicalText(source.sourceRequestId, 'correction intent.sourceRequestId', 40)
+  const sourceCalculationDigest = canonicalDigest(source.sourceCalculationDigest, 'correction intent.sourceCalculationDigest')
+  const sourceCorrectionCount = safeInteger(source.sourceCorrectionCount, 'correction intent.sourceCorrectionCount', 0, maxRecords)
+  const evidenceReference = `ECOMMERCE-CORRECTION:${idempotencyKey.slice(4)}:${orderId}:${sourceRequestId}:${sourceCalculationDigest.slice(7, 15)}:${sourceCorrectionCount}`
+  if (source.schema !== ECOMMERCE_CORRECTION_INTENT_SCHEMA
+    || source.state !== 'pending_shop_review'
+    || !correctionIdPattern.test(id)
+    || !correctionKeyPattern.test(idempotencyKey)
+    || id.slice(4) !== idempotencyKey.slice(4)
+    || !requestIdPattern.test(sourceRequestId)
+    || source.paymentStatus !== 'reconciled'
+    || !['none', 'due', 'settled'].includes(String(source.refundStatus))
+    || !correctionKinds.includes(source.requestedKind as CommerceCorrectionKind)
+    || !correctionReasonCodes.includes(source.reasonCode as CommerceCorrectionReasonCode)
+    || source.orderChanged !== false
+    || source.paymentChanged !== false
+    || source.refundStarted !== false
+    || source.ledgerPosted !== false
+    || source.taxFiled !== false
+    || source.customerMessageSent !== false
+    || source.providerCalled !== false
+    || source.evidenceReference !== evidenceReference) throw new Error('Correction intent boundary is invalid.')
+  return {
+    schema: ECOMMERCE_CORRECTION_INTENT_SCHEMA,
+    state: 'pending_shop_review',
+    scope: canonicalToken(source.scope, 'correction intent.scope'),
+    id,
+    idempotencyKey,
+    createdAt: canonicalTimestamp(source.createdAt, 'correction intent.createdAt'),
+    orderId,
+    sourceRequestId,
+    sourceCalculationDigest,
+    sourceCorrectionCount,
+    originalBalanceMmk: safeInteger(source.originalBalanceMmk, 'correction intent.originalBalanceMmk', 0, maxSafeInteger),
+    paymentStatus: 'reconciled',
+    refundStatus: source.refundStatus as EcommerceCorrectionIntent['refundStatus'],
+    requestedKind: source.requestedKind as CommerceCorrectionKind,
+    reasonCode: source.reasonCode as CommerceCorrectionReasonCode,
+    listedAmountMmk: safeInteger(source.listedAmountMmk, 'correction intent.listedAmountMmk', 1, maxSafeInteger),
+    reason: canonicalText(source.reason, 'correction intent.reason', 300),
+    orderChanged: false,
+    paymentChanged: false,
+    refundStarted: false,
+    ledgerPosted: false,
+    taxFiled: false,
+    customerMessageSent: false,
+    providerCalled: false,
+    evidenceReference,
+  }
+}
+
+export function projectEcommerceCorrectionOutcome(
+  intentValue: EcommerceCorrectionIntent,
+  orderValue: CommerceOrder,
+): EcommerceCorrectionOutcome | null {
+  let intent: EcommerceCorrectionIntent
+  try {
+    intent = validateEcommerceCorrectionIntent(intentValue)
+  } catch {
+    return null
+  }
+  if (!isRecord(orderValue)
+    || orderValue.id !== intent.orderId
+    || orderValue.status !== 'completed'
+    || orderValue.sourceRecordId !== intent.sourceRequestId
+    || !Array.isArray(orderValue.corrections)) return null
+  const matches = orderValue.corrections
+    .map((record, index) => ({ record, index }))
+    .filter(({ record }) => record?.evidenceReference === intent.evidenceReference)
+  if (matches.length !== 1) return null
+  const { record, index } = matches[0]
+  if (orderValue.corrections.length - index - 1 !== intent.sourceCorrectionCount
+    || record.sourceCalculationDigest !== intent.sourceCalculationDigest
+    || record.kind !== intent.requestedKind
+    || record.reasonCode !== intent.reasonCode
+    || record.calculation?.listedAmountMmk !== intent.listedAmountMmk
+    || record.financialStatus !== 'review_required'
+    || record.postingAuthority !== 'none'
+    || record.externalPostingPerformed !== false) return null
+  const adjustmentTotalMmk = record.calculation.totalMmk
+  const expectedBalance = intent.originalBalanceMmk + (intent.requestedKind === 'debit' ? adjustmentTotalMmk : -adjustmentTotalMmk)
+  if (!Number.isSafeInteger(adjustmentTotalMmk)
+    || adjustmentTotalMmk < 1
+    || !Number.isSafeInteger(expectedBalance)
+    || expectedBalance < 0
+    || record.balanceAfterMmk !== expectedBalance) return null
+  let reviewedAt: string
+  let reviewedBy: string
+  let correctionActionId: string
+  try {
+    reviewedAt = canonicalTimestamp(record.createdAt, 'correction outcome.reviewedAt')
+    reviewedBy = canonicalText(record.actor, 'correction outcome.reviewedBy', 180)
+    correctionActionId = canonicalToken(record.actionId, 'correction outcome.correctionActionId')
+    if (taxTimestampMicros(reviewedAt, 'correction outcome.reviewedAt') < taxTimestampMicros(intent.createdAt, 'correction intent.createdAt')) return null
+  } catch {
+    return null
+  }
+  return {
+    schema: ECOMMERCE_CORRECTION_OUTCOME_SCHEMA,
+    state: 'review_required',
+    scope: intent.scope,
+    intentId: intent.id,
+    orderId: intent.orderId,
+    sourceRequestId: intent.sourceRequestId,
+    reviewedAt,
+    reviewedBy,
+    correctionActionId,
+    kind: intent.requestedKind,
+    reasonCode: intent.reasonCode,
+    listedAmountMmk: intent.listedAmountMmk,
+    adjustmentTotalMmk,
+    balanceAfterMmk: record.balanceAfterMmk,
+    financialStatus: 'review_required',
+    postingAuthority: 'none',
+    externalPostingPerformed: false,
+    automaticPaymentPerformed: false,
+    automaticRefundPerformed: false,
+    customerMessageSent: false,
     providerCalled: false,
   }
 }
@@ -2551,6 +2812,14 @@ export async function recordEcommerceSupportIntent(
   return appendBuyingRecord(state, validateEcommerceSupportIntent(intentValue), 'supportIntents', 'support_intent_recorded', expectedHeadDigest)
 }
 
+export async function recordEcommerceCorrectionIntent(
+  state: EcommerceBuyingState,
+  intentValue: EcommerceCorrectionIntent,
+  expectedHeadDigest: string,
+) {
+  return appendBuyingRecord(state, validateEcommerceCorrectionIntent(intentValue), 'correctionIntents', 'correction_intent_recorded', expectedHeadDigest)
+}
+
 export async function saveEcommerceReturnIntent(
   scope: string,
   intent: EcommerceReturnIntent,
@@ -2627,6 +2896,46 @@ export async function saveEcommerceSupportIntent(
       throw error instanceof Error
         ? error
         : new Error('Support request recovery write failed. The previous value was restored.', { cause: error })
+    }
+  })
+}
+
+export async function saveEcommerceCorrectionIntent(
+  scope: string,
+  intent: EcommerceCorrectionIntent,
+  expectedHeadDigest: string,
+  options: { storage?: EcommerceBuyingStorage; locks?: EcommerceBuyingLocks } = {},
+) {
+  const canonicalScope = canonicalToken(scope, 'scope')
+  const storage = options.storage ?? browserStorage()
+  const locks = options.locks ?? browserLocks()
+  if (!storage) throw new Error('Browser recovery is unavailable. The correction request was not saved.')
+  if (!locks) throw new Error('Safe browser locking is unavailable. The correction request was not saved.')
+  const storageKey = ecommerceBuyingStateStorageKey(canonicalScope)
+  return locks.request(`supermega:ecommerce:buying-lifecycle:${encodeURIComponent(canonicalScope)}`, { mode: 'exclusive' }, async () => {
+    const currentRead = await readEcommerceBuyingState(canonicalScope, storage)
+    if (!currentRead.state || currentRead.status === 'invalid' || currentRead.status === 'unavailable') {
+      throw new Error(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
+    }
+    const next = await recordEcommerceCorrectionIntent(currentRead.state, intent, expectedHeadDigest)
+    if (next === currentRead.state || canonicalJson(next) === canonicalJson(currentRead.state)) return next
+    const previousRaw = storage.getItem(storageKey)
+    const nextRaw = canonicalJson(next)
+    try {
+      storage.setItem(storageKey, nextRaw)
+      if (storage.getItem(storageKey) !== nextRaw) throw new Error('Correction request recovery write could not be confirmed.')
+      return next
+    } catch (error) {
+      try {
+        if (previousRaw === null) storage.removeItem(storageKey)
+        else storage.setItem(storageKey, previousRaw)
+        if (storage.getItem(storageKey) !== previousRaw) throw new Error('rollback confirmation failed', { cause: error })
+      } catch (rollbackError) {
+        throw new Error('Correction request recovery failed and rollback could not be confirmed. Stop and export local evidence.', { cause: rollbackError })
+      }
+      throw error instanceof Error
+        ? error
+        : new Error('Correction request recovery failed. The previous value was restored.', { cause: error })
     }
   })
 }

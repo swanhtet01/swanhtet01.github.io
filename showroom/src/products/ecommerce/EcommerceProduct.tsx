@@ -2175,6 +2175,7 @@ export function EcommerceProduct() {
               onDraft={openShopDraft}
               onOpenManagedRequest={managedIdentity ? (requestId) => navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestId)}`) : undefined}
               onOpenCancellation={(intent: EcommerceCancellationIntent) => navigate('/shop/?tab=orders', { state: { ecommerceCancellationIntent: intent } })}
+              onOpenCorrection={(intent) => navigate('/shop/?tab=orders', { state: { ecommerceCorrectionIntent: intent } })}
               onOpenAmendment={(intent: EcommerceOrderAmendmentIntent) => navigate('/shop/?tab=orders', { state: { ecommerceOrderAmendmentIntent: intent } })}
               onOpenReschedule={(intent: EcommerceOrderRescheduleIntent) => navigate('/shop/?tab=orders', { state: { ecommerceOrderRescheduleIntent: intent } })}
               onOpenReturns={(intent: EcommerceReturnIntent) => navigate('/shop/?tab=orders', { state: { ecommerceReturnIntent: intent } })}

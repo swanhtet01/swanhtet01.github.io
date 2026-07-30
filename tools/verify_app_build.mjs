@@ -2149,6 +2149,9 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('saveEcommerceReturnIntent')
   || !ecommerceBuyingUiSource.includes('buildEcommerceSupportIntent')
   || !ecommerceBuyingUiSource.includes('saveEcommerceSupportIntent')
+  || !ecommerceBuyingUiSource.includes('buildEcommerceCorrectionIntent')
+  || !ecommerceBuyingUiSource.includes('saveEcommerceCorrectionIntent')
+  || !ecommerceBuyingUiSource.includes('Fix balance')
   || !ecommerceBuyingUiSource.includes('{entry.returnedQuantity ? <small>{entry.returnedQuantity} returned in Shop</small> : null}')
   || !ecommerceBuyingUiSource.includes('buildEcommercePimProjection')
   || !ecommerceBuyingUiSource.includes('buildEcommerceCheckoutQuote')
@@ -2191,6 +2194,9 @@ if (addToCartStart < 0
   || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceSupportIntent(')
   || !ecommerceBuyingLifecycleSource.includes('export function projectEcommerceSupportOutcome(')
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceSupportIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceCorrectionIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export function projectEcommerceCorrectionOutcome(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceCorrectionIntent(')
   || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceCancellationIntent(')
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceCancellationIntent(')
   || !ecommerceBuyingLifecycleSource.includes('export async function buildEcommerceCancellationDecision(')
@@ -2238,6 +2244,8 @@ if (addToCartStart < 0
   || !managedEcommerceBuyingLifecycleSource.includes('def record_ecommerce_order_reschedule(')
   || !managedEcommerceBuyingLifecycleSource.includes('def project_ecommerce_return_outcome(')
   || !managedEcommerceBuyingLifecycleSource.includes('def project_ecommerce_support_outcome(')
+  || !managedEcommerceBuyingLifecycleSource.includes('def build_ecommerce_correction_intent(')
+  || !managedEcommerceBuyingLifecycleSource.includes('def project_ecommerce_correction_outcome(')
   || !coreSource.includes('ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent}')
   || !coreSource.includes('validateEcommerceCancellationIntent(ecommerceCancellationNavigationIntent)')
   || !coreSource.includes('function ecommerceCancellationMatchesCurrentShop(')
@@ -2251,6 +2259,7 @@ if (addToCartStart < 0
   || !coreSource.includes('ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent}')
   || !coreSource.includes('validateEcommerceReturnIntent(ecommerceReturnNavigationIntent)')
   || !coreSource.includes('validateEcommerceSupportIntent(ecommerceSupportNavigationIntent)')
+  || !coreSource.includes('validateEcommerceCorrectionIntent(ecommerceCorrectionNavigationIntent)')
   || !coreSource.includes('sourceIntent: intent')
   || !coreSource.includes('Customer requested return review: ${returnDraft.sourceIntent.reason}')
   || !commerceSource.includes("quote.payment.adapter !== 'kbzpay_manual'")
@@ -11341,6 +11350,54 @@ async function verifyStorefrontRuntime() {
     buyingAssert(settledReturnOutcome?.refundStatus === 'settled'
       && settledReturnOutcome.refundEvidenceReference === 'REFUND-EXTERNAL-RETURN-1',
     'ecommerce_settled_refund_evidence_not_projected')
+    const correctionIntent = buyingModel.buildEcommerceCorrectionIntent({
+      scope: buyingScope,
+      orderSnapshot: completedOrder,
+      requestedKind: 'credit',
+      reasonCode: 'pricing_error',
+      listedAmountMmk: 100,
+      reason: 'The confirmed unit price was too high.',
+      idempotencyKey: 'COI-62345678-1234-4ABC-8ABC-1234567890AB',
+      createdAt: '2026-07-24T09:45:00.000Z',
+    })
+    const correctionExpectation = commerce.commerceOrderCorrectionExpectation(completedOrderState, completedOrder.id)
+    const correctedState = correctionExpectation && commerce.recordCommerceOrderCorrection(
+      completedOrderState,
+      {
+        orderId: correctionIntent.orderId,
+        kind: correctionIntent.requestedKind,
+        reasonCode: correctionIntent.reasonCode,
+        listedAmountMmk: correctionIntent.listedAmountMmk,
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-CORRECTION-1',
+        capturedAt: '2026-07-24T09:46:00.000Z',
+        actor: 'OP-OWNER',
+        reason: correctionIntent.reason,
+        evidenceReference: correctionIntent.evidenceReference,
+      },
+      correctionExpectation,
+    )
+    const correctedOrder = correctedState?.orders.find((order) => order.id === completedOrder.id)
+    const correctionOutcome = correctedOrder && buyingModel.projectEcommerceCorrectionOutcome(correctionIntent, correctedOrder)
+    buyingAssert(correctionOutcome?.schema === 'supermega.ecommerce.correction_outcome.v1'
+      && correctionOutcome.state === 'review_required'
+      && correctionOutcome.intentId === correctionIntent.id
+      && correctionOutcome.kind === 'credit'
+      && correctionOutcome.postingAuthority === 'none'
+      && correctionOutcome.externalPostingPerformed === false
+      && correctionOutcome.automaticPaymentPerformed === false
+      && correctionOutcome.automaticRefundPerformed === false
+      && correctionOutcome.customerMessageSent === false
+      && correctionOutcome.providerCalled === false,
+    'ecommerce_correction_outcome_not_exact_or_side_effect_free')
+    const forgedCorrectionOrder = correctedOrder && structuredClone(correctedOrder)
+    if (forgedCorrectionOrder?.corrections?.[0]) forgedCorrectionOrder.corrections[0].balanceAfterMmk += 1
+    buyingAssert(Boolean(forgedCorrectionOrder) && buyingModel.projectEcommerceCorrectionOutcome(correctionIntent, forgedCorrectionOrder) === null,
+      'ecommerce_forged_correction_outcome_was_accepted')
+    const duplicateCorrectionOrder = correctedOrder && { ...structuredClone(correctedOrder), corrections: [...(correctedOrder.corrections ?? []), ...(correctedOrder.corrections?.[0] ? [structuredClone(correctedOrder.corrections[0])] : [])] }
+    buyingAssert(Boolean(duplicateCorrectionOrder) && buyingModel.projectEcommerceCorrectionOutcome(correctionIntent, duplicateCorrectionOrder) === null,
+      'ecommerce_duplicate_correction_outcome_was_accepted')
     const supportIntent = buyingModel.buildEcommerceSupportIntent({
       scope: buyingScope,
       orderSnapshot: completedOrder,

@@ -11,6 +11,8 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     ECOMMERCE_RETURN_OUTCOME_SCHEMA,
     ECOMMERCE_SUPPORT_INTENT_SCHEMA,
     ECOMMERCE_SUPPORT_OUTCOME_SCHEMA,
+    ECOMMERCE_CORRECTION_INTENT_SCHEMA,
+    ECOMMERCE_CORRECTION_OUTCOME_SCHEMA,
     ECOMMERCE_CANCELLATION_INTENT_SCHEMA,
     ECOMMERCE_CANCELLATION_DECISION_SCHEMA,
     ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA,
@@ -23,6 +25,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     build_ecommerce_pim_projection,
     build_ecommerce_return_intent,
     build_ecommerce_support_intent,
+    build_ecommerce_correction_intent,
     build_ecommerce_cancellation_intent,
     build_ecommerce_cancellation_decision,
     build_ecommerce_order_amendment_intent,
@@ -32,10 +35,12 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     prepare_ecommerce_shop_handoff,
     project_ecommerce_return_outcome,
     project_ecommerce_support_outcome,
+    project_ecommerce_correction_outcome,
     review_ecommerce_tax,
     record_ecommerce_order_request,
     record_ecommerce_return_intent,
     record_ecommerce_support_intent,
+    record_ecommerce_correction_intent,
     record_ecommerce_cancellation_intent,
     record_ecommerce_cancellation_decision,
     record_ecommerce_order_amendment,
@@ -51,6 +56,7 @@ SCOPE = "ecommerce:client-demo"
 CHECKOUT_KEY = "ECI-12345678-1234-4ABC-8ABC-1234567890AB"
 RETURN_KEY = "ERI-12345678-1234-4ABC-8ABC-1234567890AC"
 SUPPORT_KEY = "ESI-12345678-1234-4ABC-8ABC-1234567890AD"
+CORRECTION_KEY = "COI-22345678-1234-4ABC-8ABC-1234567890AD"
 CANCELLATION_KEY = "CNI-12345678-1234-4ABC-8ABC-1234567890AE"
 AMENDMENT_KEY = "AMI-12345678-1234-4ABC-8ABC-1234567890AF"
 RESCHEDULE_KEY = "RSI-32345678-1234-4ABC-8ABC-1234567890AF"
@@ -896,6 +902,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
 
         legacy = deepcopy(state)
         legacy.pop("supportIntents")
+        legacy.pop("correctionIntents")
         legacy.pop("cancellationIntents")
         legacy.pop("cancellationDecisions")
         legacy.pop("amendmentIntents")
@@ -972,6 +979,96 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         incomplete = deepcopy(resolved)
         incomplete["supportCases"][0].pop("resolution")  # type: ignore[index]
         self.assertIsNone(project_ecommerce_support_outcome(intent, incomplete))
+
+    def test_correction_request_and_outcome_are_exact_recoverable_and_side_effect_free(self) -> None:
+        order = deepcopy(active_commerce_state()["orders"][0])  # type: ignore[index]
+        order.update({
+            "status": "completed",
+            "paymentStatus": "reconciled",
+            "refundStatus": "none",
+            "completion": {
+                "actionId": "ACT-COMPLETE-CORRECTION-01",
+                "capturedAt": "2026-07-26T11:00:00+06:30",
+            },
+            "corrections": [],
+        })
+        intent = build_ecommerce_correction_intent(
+            scope=SCOPE,
+            order_snapshot=order,
+            requested_kind="credit",
+            reason_code="pricing_error",
+            listed_amount_mmk=1_000,
+            reason="The confirmed unit price was too high.",
+            idempotency_key=CORRECTION_KEY,
+            created_at="2026-07-26T11:10:00+06:30",
+        )
+        self.assertEqual(intent["schema"], ECOMMERCE_CORRECTION_INTENT_SCHEMA)
+        for field in (
+            "orderChanged", "paymentChanged", "refundStarted", "ledgerPosted", "taxFiled",
+            "customerMessageSent", "providerCalled",
+        ):
+            self.assertFalse(intent[field])
+
+        state = create_empty_ecommerce_lifecycle_state(SCOPE)
+        state = record_ecommerce_order_request(
+            state,
+            request(),
+            expected_head_digest=state["headDigest"],
+        )
+        retained = record_ecommerce_correction_intent(
+            state,
+            intent,
+            expected_head_digest=state["headDigest"],
+        )
+        replay = record_ecommerce_correction_intent(
+            retained,
+            deepcopy(intent),
+            expected_head_digest=retained["headDigest"],
+        )
+        self.assertEqual(replay, retained)
+        self.assertEqual(retained["events"][-1]["action"], "correction_intent_recorded")
+
+        correction = {
+            "documentId": "COR2:ACT-CORRECTION-01",
+            "actionId": "ACT-CORRECTION-01",
+            "createdAt": "2026-07-26T11:20:00+06:30",
+            "actor": "Shop owner",
+            "reason": intent["reason"],
+            "evidenceReference": intent["evidenceReference"],
+            "kind": intent["requestedKind"],
+            "reasonCode": intent["reasonCode"],
+            "sourceCalculationDigest": intent["sourceCalculationDigest"],
+            "calculation": {
+                "listedAmountMmk": 1_000,
+                "subtotalMmk": 1_000,
+                "taxMmk": 0,
+                "totalMmk": 1_000,
+            },
+            "balanceAfterMmk": intent["originalBalanceMmk"] - 1_000,
+            "financialStatus": "review_required",
+            "postingAuthority": "none",
+            "externalPostingPerformed": False,
+        }
+        reviewed = deepcopy(order)
+        reviewed["corrections"] = [correction]
+        outcome = project_ecommerce_correction_outcome(intent, reviewed)
+        self.assertEqual(outcome["schema"], ECOMMERCE_CORRECTION_OUTCOME_SCHEMA)  # type: ignore[index]
+        self.assertEqual(outcome["balanceAfterMmk"], 47_000)  # type: ignore[index]
+        for field in (
+            "externalPostingPerformed", "automaticPaymentPerformed", "automaticRefundPerformed",
+            "customerMessageSent", "providerCalled",
+        ):
+            self.assertFalse(outcome[field])  # type: ignore[index]
+
+        forged = deepcopy(reviewed)
+        forged["corrections"][0]["balanceAfterMmk"] += 1  # type: ignore[index]
+        self.assertIsNone(project_ecommerce_correction_outcome(intent, forged))
+        duplicate = deepcopy(reviewed)
+        duplicate["corrections"].append(deepcopy(duplicate["corrections"][0]))  # type: ignore[union-attr]
+        self.assertIsNone(project_ecommerce_correction_outcome(intent, duplicate))
+        backdated = deepcopy(reviewed)
+        backdated["corrections"][0]["createdAt"] = "2026-07-26T11:00:00+06:30"  # type: ignore[index]
+        self.assertIsNone(project_ecommerce_correction_outcome(intent, backdated))
 
     def test_cancellation_request_is_acknowledgement_bound_duplicate_safe_and_side_effect_free(self) -> None:
         commerce_state = active_commerce_state()
@@ -1083,6 +1180,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
                     )
 
         legacy = deepcopy(state)
+        legacy.pop("correctionIntents")
         legacy.pop("cancellationIntents")
         legacy.pop("cancellationDecisions")
         legacy.pop("amendmentIntents")
