@@ -2189,6 +2189,7 @@ if (addToCartStart < 0
   || !ecommerceBuyingLifecycleSource.includes('export function projectEcommerceReturnOutcome(')
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceReturnIntent(')
   || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceSupportIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export function projectEcommerceSupportOutcome(')
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceSupportIntent(')
   || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceCancellationIntent(')
   || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceCancellationIntent(')
@@ -2219,7 +2220,10 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('No order, stock, payment, refund, rider, message, or provider changed.')
   || !ecommerceBuyingUiSource.includes('Return accepted')
   || !ecommerceBuyingUiSource.includes('No refund recorded')
+  || !ecommerceBuyingUiSource.includes('Shop is reviewing')
+  || !ecommerceBuyingUiSource.includes('Help resolved')
   || !coreSource.includes('The return evidence conflicts with the exact Ecommerce request.')
+  || !coreSource.includes('The Shop help-case evidence conflicts with the exact Ecommerce request.')
   || !coreSource.includes('validateEcommerceOrderAmendmentIntent(ecommerceOrderAmendmentNavigationIntent)')
   || !coreSource.includes('async function prepareOrderAmendmentReplacement()')
   || !coreSource.includes("kind: 'order_cancel'")
@@ -2233,6 +2237,7 @@ if (addToCartStart < 0
   || !managedEcommerceBuyingLifecycleSource.includes('def build_ecommerce_order_reschedule_intent(')
   || !managedEcommerceBuyingLifecycleSource.includes('def record_ecommerce_order_reschedule(')
   || !managedEcommerceBuyingLifecycleSource.includes('def project_ecommerce_return_outcome(')
+  || !managedEcommerceBuyingLifecycleSource.includes('def project_ecommerce_support_outcome(')
   || !coreSource.includes('ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent}')
   || !coreSource.includes('validateEcommerceCancellationIntent(ecommerceCancellationNavigationIntent)')
   || !coreSource.includes('function ecommerceCancellationMatchesCurrentShop(')
@@ -11384,6 +11389,24 @@ async function verifyStorefrontRuntime() {
       && JSON.stringify(openedSupportState?.items) === JSON.stringify(completedOrderState.items)
       && JSON.stringify(openedSupportState?.movements) === JSON.stringify(completedOrderState.movements),
     'ecommerce_support_case_opening_claimed_side_effects')
+    const openedSupportOrder = openedSupportState?.orders.find((order) => order.id === completedOrder.id)
+    const openSupportOutcome = openedSupportOrder && buyingModel.projectEcommerceSupportOutcome(supportIntent, openedSupportOrder)
+    buyingAssert(openSupportOutcome?.schema === 'supermega.ecommerce.support_outcome.v1'
+      && openSupportOutcome.state === 'open'
+      && openSupportOutcome.caseId === supportCase.caseId
+      && openSupportOutcome.owner === 'Support owner'
+      && openSupportOutcome.priority === 'high'
+      && openSupportOutcome.externalMessageSent === false
+      && openSupportOutcome.refundStarted === false
+      && openSupportOutcome.providerCalled === false,
+    'ecommerce_open_support_outcome_not_exact_or_side_effect_free')
+    const forgedSupportOrder = openedSupportOrder && structuredClone(openedSupportOrder)
+    if (forgedSupportOrder?.supportCases?.[0]) forgedSupportOrder.supportCases[0].sourceRequestId = 'ECR-92345678-1234-4ABC-8ABC-1234567890AB'
+    buyingAssert(Boolean(forgedSupportOrder) && buyingModel.projectEcommerceSupportOutcome(supportIntent, forgedSupportOrder) === null,
+      'ecommerce_forged_support_outcome_was_accepted')
+    const duplicateSupportOrder = openedSupportOrder && { ...structuredClone(openedSupportOrder), supportCases: [...(openedSupportOrder.supportCases ?? []), ...(openedSupportOrder.supportCases?.[0] ? [structuredClone(openedSupportOrder.supportCases[0])] : [])] }
+    buyingAssert(Boolean(duplicateSupportOrder) && buyingModel.projectEcommerceSupportOutcome(supportIntent, duplicateSupportOrder) === null,
+      'ecommerce_duplicate_support_outcome_was_accepted')
     const missingSupportOwner = commerce.recordCommerceOrderSupportCase(
       completedOrderState,
       {
@@ -11642,6 +11665,13 @@ async function verifyStorefrontRuntime() {
     buyingAssert(resolvedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]?.status === 'resolved',
       'ecommerce_support_case_did_not_resolve')
     const resolvedSupportCase = resolvedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    const resolvedSupportOrder = resolvedSupportState?.orders.find((order) => order.id === completedOrder.id)
+    const resolvedSupportOutcome = resolvedSupportOrder && buyingModel.projectEcommerceSupportOutcome(supportIntent, resolvedSupportOrder)
+    buyingAssert(resolvedSupportOutcome?.state === 'resolved'
+      && resolvedSupportOutcome.resolutionOutcome === 'information_provided'
+      && resolvedSupportOutcome.resolvedBy === 'OP-OWNER'
+      && resolvedSupportOutcome.resolutionEvidenceReference === `SUPPORT-RESOLUTION:${resolvedSupportCase?.caseId}`,
+    'ecommerce_resolved_support_outcome_not_accountable')
     const supportReopenExpectation = resolvedSupportCase && commerce.commerceOrderSupportReopenExpectation(
       resolvedSupportState,
       completedOrder.id,

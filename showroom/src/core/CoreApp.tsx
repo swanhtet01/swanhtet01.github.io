@@ -2630,17 +2630,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
       || consumedEcommerceSupportIntentId.current === ecommerceSupportNavigationIntent.id) return
     let current = true
     void import('../products/ecommerce/ecommerce-buying-lifecycle')
-      .then(({ validateEcommerceSupportIntent }) => {
+      .then(({ projectEcommerceSupportOutcome, validateEcommerceSupportIntent }) => {
         if (!current) return
         const intent = validateEcommerceSupportIntent(ecommerceSupportNavigationIntent)
         const order = commerce.orders.find((candidate) => candidate.id === intent.orderId)
         const existing = order?.supportCases?.find((supportCase) => supportCase.sourceIntentId === intent.id)
+        const outcome = order ? projectEcommerceSupportOutcome(intent, order) : null
         const expected = commerceOrderSupportOpenExpectation(commerce, intent.orderId, intent.id)
         consumedEcommerceSupportIntentId.current = intent.id
         navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
         if (existing) {
           setSupportDraft(null)
-          setNotice(`${intent.id} is already ${existing.status} as ${existing.caseId}.`)
+          setNotice(outcome
+            ? `${intent.id} is already ${outcome.state} as ${outcome.caseId}. Ecommerce can recover the accountable Shop outcome.`
+            : 'The Shop help-case evidence conflicts with the exact Ecommerce request. No second case was prepared.')
           return
         }
         if (!order
@@ -4189,6 +4192,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
     event.preventDefault()
     if (!supportDraft) return
     const intent = supportDraft.intent
+    const sourceOrder = commerce.orders.find((order) => order.id === intent.orderId)
+    if (sourceOrder?.supportCases?.some((supportCase) => supportCase.sourceIntentId === intent.id)) {
+      setSupportDraft(null)
+      setNotice('This Ecommerce help request already has a Shop case. No second case was queued.')
+      return
+    }
     const dueAt = new Date(supportDraft.dueAt)
     const owner = supportDraft.owner.trim()
     const expected = commerceOrderSupportOpenExpectation(commerce, intent.orderId, intent.id)
@@ -4229,7 +4238,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceNavigati
           'commerce.order.support_case_opened',
           action.commandId,
           proof,
-          (current) => recordCommerceOrderSupportCase(current, input, proof, expected),
+          (current) => {
+            const latestOrder = current.orders.find((order) => order.id === input.orderId)
+            if (latestOrder?.supportCases?.some((supportCase) => supportCase.sourceIntentId === input.sourceIntentId)) return null
+            return recordCommerceOrderSupportCase(current, input, proof, expected)
+          },
         )
         setSupportDraft(null)
       },

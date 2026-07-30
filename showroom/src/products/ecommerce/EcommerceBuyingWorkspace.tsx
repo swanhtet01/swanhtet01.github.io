@@ -14,6 +14,7 @@ import {
   ecommercePaymentMatchesFulfilment,
   prepareEcommerceShopDraftV2,
   projectEcommerceReturnOutcome,
+  projectEcommerceSupportOutcome,
   readEcommerceBuyingState,
   saveEcommerceOrderRequestV2,
   saveEcommerceCancellationIntent,
@@ -329,10 +330,16 @@ export function EcommerceBuyingWorkspace({
     !returnOutcomeIntentIds.has(intent.id)
       && completedCustomerOrders.some((entry) => entry.order?.id === intent.orderId)
   ))
-  const pendingSupportIntents = activeBuyingState.supportIntents.filter((intent) => {
+  const supportOutcomes = activeBuyingState.supportIntents.flatMap((intent) => {
     const order = completedCustomerOrders.find((entry) => entry.order?.id === intent.orderId)?.order
-    return Boolean(order && !(order.supportCases ?? []).some((supportCase) => supportCase.sourceIntentId === intent.id))
+    const outcome = order ? projectEcommerceSupportOutcome(intent, order) : null
+    return outcome ? [outcome] : []
   })
+  const supportOutcomeIntentIds = new Set(supportOutcomes.map((outcome) => outcome.intentId))
+  const pendingSupportIntents = activeBuyingState.supportIntents.filter((intent) => (
+    !supportOutcomeIntentIds.has(intent.id)
+      && completedCustomerOrders.some((entry) => entry.order?.id === intent.orderId)
+  ))
   const cancellationDecisionByIntentId = new Map(activeBuyingState.cancellationDecisions.map((decision) => [decision.intentId, decision]))
   const pendingCancellationIntents = activeBuyingState.cancellationIntents.filter((intent) => {
     const order = activeCustomerOrders.find((entry) => entry.order?.id === intent.orderId)?.order
@@ -402,9 +409,6 @@ export function EcommerceBuyingWorkspace({
     return statuses
   }, [])
   const pendingRescheduleIntents = rescheduleStatuses.filter((status) => status.state !== 'replacement_created')
-  const visibleSupportCases = completedCustomerOrders.flatMap((entry) => (
-    (entry.order?.supportCases ?? []).map((supportCase) => ({ orderId: entry.order?.id ?? '', supportCase }))
-  ))
   const quoteCurrent = Boolean(latestRequest
     && latestRequest.id === freshQuoteId
     && latestRequest.scope === scope
@@ -1210,9 +1214,9 @@ export function EcommerceBuyingWorkspace({
             <span><strong>Help waiting</strong><small>{intent.category.replaceAll('_', ' ')} / {intent.orderId}</small></span>
             <button className="core-button secondary" disabled={disabled} onClick={() => onOpenSupport(intent)} type="button">Continue in Shop</button>
           </article>)}
-          {visibleSupportCases.slice(0, 3).map(({ orderId, supportCase }) => <article className="ecommerce-return-status" key={supportCase.caseId}>
-            <span><strong>{supportCase.status === 'resolved' ? 'Help resolved' : 'Help open'}</strong><small>{orderId} / {supportCase.category.replaceAll('_', ' ')}</small></span>
-            <b>{supportCase.status}</b>
+          {supportOutcomes.slice(0, 3).map((outcome) => <article className="ecommerce-return-status" key={outcome.caseId}>
+            <span><strong>{outcome.state === 'resolved' ? 'Help resolved' : 'Shop is reviewing'}</strong><small>{outcome.orderId} / {outcome.category.replaceAll('_', ' ')} / owner {outcome.owner}</small></span>
+            <b>{outcome.state === 'resolved' ? outcome.resolutionOutcome?.replaceAll('_', ' ') : `${outcome.priority} priority`}</b>
           </article>)}
           {!amendmentDraft && !rescheduleDraft && !cancellationDraft && !returnDraft && !supportDraft ? activeCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
             <span><strong>{entry.order?.id}</strong><small>{orderStageLabel(entry)} / {formatMmk(entry.order?.total ?? entry.request.totalMmk)}</small></span>

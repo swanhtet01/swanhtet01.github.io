@@ -3,6 +3,7 @@ import {
   commerceOrderAcknowledgement,
   commerceOrderHasReleasableReservation,
   commercePromotionDecision,
+  commerceSupportServiceState,
   commerceShippingDecision,
   commercePaymentDecision,
   type CommerceItem,
@@ -13,6 +14,8 @@ import {
   type CommercePromotionPolicy,
   type CommerceShippingDecision,
   type CommerceShippingPolicy,
+  type CommerceSupportPriority,
+  type CommerceSupportResolutionOutcome,
   type CommercePaymentDecision,
   type CommercePaymentPolicy,
   type CommerceTaxConfiguration,
@@ -38,6 +41,7 @@ export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V2 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V7
 export const ECOMMERCE_RETURN_INTENT_SCHEMA = 'supermega.ecommerce.return_intent.v1' as const
 export const ECOMMERCE_RETURN_OUTCOME_SCHEMA = 'supermega.ecommerce.return_outcome.v1' as const
 export const ECOMMERCE_SUPPORT_INTENT_SCHEMA = 'supermega.ecommerce.support_intent.v1' as const
+export const ECOMMERCE_SUPPORT_OUTCOME_SCHEMA = 'supermega.ecommerce.support_outcome.v1' as const
 export const ECOMMERCE_CANCELLATION_INTENT_SCHEMA = 'supermega.ecommerce.cancellation_intent.v1' as const
 export const ECOMMERCE_CANCELLATION_DECISION_SCHEMA = 'supermega.ecommerce.cancellation_decision.v1' as const
 export const ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA = 'supermega.ecommerce.order_amendment_intent.v1' as const
@@ -481,6 +485,29 @@ export type EcommerceSupportIntent = {
   evidenceReference: string
 }
 
+export type EcommerceSupportOutcome = {
+  schema: typeof ECOMMERCE_SUPPORT_OUTCOME_SCHEMA
+  state: 'open' | 'resolved'
+  scope: string
+  intentId: string
+  orderId: string
+  sourceRequestId: string
+  caseId: string
+  category: EcommerceSupportCategory
+  openedAt: string
+  openedBy: string
+  owner: string
+  priority: CommerceSupportPriority
+  dueAt: string
+  resolutionOutcome: CommerceSupportResolutionOutcome | null
+  resolvedAt: string | null
+  resolvedBy: string | null
+  resolutionEvidenceReference: string | null
+  externalMessageSent: false
+  refundStarted: false
+  providerCalled: false
+}
+
 export type EcommerceCancellationIntent = {
   schema: typeof ECOMMERCE_CANCELLATION_INTENT_SCHEMA
   state: 'pending_shop_review'
@@ -665,6 +692,7 @@ const paymentAdapters: EcommercePaymentAdapter[] = ['cash_on_delivery', 'kbzpay_
 const fulfilmentMethods: EcommerceFulfilment[] = ['delivery', 'pickup']
 const returnDispositions: EcommerceReturnDisposition[] = ['not_restocked', 'restock']
 const supportCategories: EcommerceSupportCategory[] = ['delivery_issue', 'item_issue', 'order_status', 'other', 'payment_question']
+const supportResolutionOutcomes: CommerceSupportResolutionOutcome[] = ['information_provided', 'replacement_review_required', 'refund_review_required', 'no_action']
 const cancellationReasonCodes: EcommerceCancellationReasonCode[] = ['changed_mind', 'delivery_too_slow', 'duplicate_order', 'order_error', 'other']
 const maxSafeInteger = Number.MAX_SAFE_INTEGER
 const maxLines = 20
@@ -1768,6 +1796,87 @@ export function validateEcommerceSupportIntent(value: unknown): EcommerceSupport
     externalMessageSent: false,
     refundStarted: false,
     evidenceReference,
+  }
+}
+
+export function projectEcommerceSupportOutcome(
+  intentValue: EcommerceSupportIntent,
+  orderValue: CommerceOrder,
+): EcommerceSupportOutcome | null {
+  let intent: EcommerceSupportIntent
+  try {
+    intent = validateEcommerceSupportIntent(intentValue)
+  } catch {
+    return null
+  }
+  if (!isRecord(orderValue)
+    || orderValue.id !== intent.orderId
+    || orderValue.status !== 'completed'
+    || orderValue.sourceRecordId !== intent.sourceRequestId
+    || !Array.isArray(orderValue.supportCases)) return null
+  const matches = orderValue.supportCases.filter((supportCase) => supportCase?.sourceIntentId === intent.id)
+  if (matches.length !== 1) return null
+  const supportCase = matches[0]
+  const service = commerceSupportServiceState(supportCase)
+  const expectedCaseId = `CASE-${intent.id.slice(4)}`
+  if (!service
+    || supportCase.caseId !== expectedCaseId
+    || supportCase.sourceRequestId !== intent.sourceRequestId
+    || supportCase.customerRequestedAt !== intent.createdAt
+    || supportCase.category !== intent.category
+    || supportCase.customerDescription !== intent.description
+    || supportCase.opening.evidenceReference !== intent.evidenceReference
+    || supportCase.externalMessageSent !== false
+    || supportCase.refundStarted !== false) return null
+  let openedAt: string
+  let openedBy: string
+  let dueAt: string
+  try {
+    openedAt = canonicalTimestamp(supportCase.opening.capturedAt, 'support outcome.openedAt')
+    openedBy = canonicalText(supportCase.opening.actor, 'support outcome.openedBy', 180)
+    dueAt = canonicalTimestamp(service.dueAt, 'support outcome.dueAt')
+    if (taxTimestampMicros(openedAt, 'support outcome.openedAt') < taxTimestampMicros(intent.createdAt, 'support intent.createdAt')) return null
+  } catch {
+    return null
+  }
+  const currentResolution = supportCase.reopen ? supportCase.followUpResolution : supportCase.resolution
+  let resolutionOutcome: CommerceSupportResolutionOutcome | null = null
+  let resolvedAt: string | null = null
+  let resolvedBy: string | null = null
+  let resolutionEvidenceReference: string | null = null
+  if (supportCase.status === 'resolved') {
+    if (!currentResolution || !supportResolutionOutcomes.includes(currentResolution.outcome)) return null
+    try {
+      resolutionOutcome = currentResolution.outcome
+      resolvedAt = canonicalTimestamp(currentResolution.proof.capturedAt, 'support outcome.resolvedAt')
+      resolvedBy = canonicalText(currentResolution.proof.actor, 'support outcome.resolvedBy', 180)
+      resolutionEvidenceReference = canonicalText(currentResolution.proof.evidenceReference, 'support outcome.resolutionEvidenceReference', 180)
+      if (taxTimestampMicros(resolvedAt, 'support outcome.resolvedAt') < taxTimestampMicros(openedAt, 'support outcome.openedAt')) return null
+    } catch {
+      return null
+    }
+  } else if (supportCase.status !== 'open' || currentResolution) return null
+  return {
+    schema: ECOMMERCE_SUPPORT_OUTCOME_SCHEMA,
+    state: supportCase.status,
+    scope: intent.scope,
+    intentId: intent.id,
+    orderId: intent.orderId,
+    sourceRequestId: intent.sourceRequestId,
+    caseId: supportCase.caseId,
+    category: intent.category,
+    openedAt,
+    openedBy,
+    owner: service.owner,
+    priority: service.priority,
+    dueAt,
+    resolutionOutcome,
+    resolvedAt,
+    resolvedBy,
+    resolutionEvidenceReference,
+    externalMessageSent: false,
+    refundStarted: false,
+    providerCalled: false,
   }
 }
 

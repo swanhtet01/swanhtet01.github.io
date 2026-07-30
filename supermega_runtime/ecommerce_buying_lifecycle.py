@@ -27,6 +27,7 @@ ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v7"
 ECOMMERCE_RETURN_INTENT_SCHEMA = "supermega.ecommerce.return_intent.v1"
 ECOMMERCE_RETURN_OUTCOME_SCHEMA = "supermega.ecommerce.return_outcome.v1"
 ECOMMERCE_SUPPORT_INTENT_SCHEMA = "supermega.ecommerce.support_intent.v1"
+ECOMMERCE_SUPPORT_OUTCOME_SCHEMA = "supermega.ecommerce.support_outcome.v1"
 ECOMMERCE_CANCELLATION_INTENT_SCHEMA = "supermega.ecommerce.cancellation_intent.v1"
 ECOMMERCE_CANCELLATION_DECISION_SCHEMA = "supermega.ecommerce.cancellation_decision.v1"
 ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA = "supermega.ecommerce.order_amendment_intent.v1"
@@ -70,6 +71,10 @@ _FULFILMENT_METHODS = frozenset({"pickup", "delivery"})
 _RETURN_DISPOSITIONS = frozenset({"restock", "not_restocked"})
 _SUPPORT_CATEGORIES = frozenset(
     {"order_status", "delivery_issue", "payment_question", "item_issue", "other"}
+)
+_SUPPORT_PRIORITIES = frozenset({"urgent", "high", "normal", "low"})
+_SUPPORT_RESOLUTION_OUTCOMES = frozenset(
+    {"information_provided", "replacement_review_required", "refund_review_required", "no_action"}
 )
 _CANCELLATION_REASON_CODES = frozenset(
     {"changed_mind", "duplicate_order", "order_error", "delivery_too_slow", "other"}
@@ -1810,6 +1815,112 @@ def validate_ecommerce_support_intent(value: object) -> dict[str, Any]:
         "refundStarted": False,
         "evidenceReference": expected_reference,
     }
+
+
+def project_ecommerce_support_outcome(
+    intent_value: Mapping[str, object],
+    order_value: Mapping[str, object],
+) -> dict[str, Any] | None:
+    """Project one exact Shop case without claiming customer delivery or refund."""
+
+    try:
+        intent = validate_ecommerce_support_intent(intent_value)
+        if (
+            not isinstance(order_value, Mapping)
+            or order_value.get("id") != intent["orderId"]
+            or order_value.get("status") != "completed"
+            or order_value.get("sourceRecordId") != intent["sourceRequestId"]
+            or not isinstance(order_value.get("supportCases"), list)
+        ):
+            return None
+        matches = [
+            case
+            for case in order_value["supportCases"]
+            if isinstance(case, Mapping) and case.get("sourceIntentId") == intent["id"]
+        ]
+        if len(matches) != 1:
+            return None
+        case = matches[0]
+        opening = case.get("opening")
+        if not isinstance(opening, Mapping):
+            return None
+        reopen = case.get("reopen")
+        service_events = case.get("followUpServiceEvents") if isinstance(reopen, Mapping) else case.get("serviceEvents")
+        latest_service = service_events[0] if isinstance(service_events, list) and service_events else None
+        service = latest_service if isinstance(latest_service, Mapping) else reopen if isinstance(reopen, Mapping) else case
+        owner = _text(service.get("owner"), "support outcome.owner", maximum=120)
+        priority = service.get("priority")
+        due_at = _timestamp(service.get("dueAt"), "support outcome.dueAt")
+        if (
+            priority not in _SUPPORT_PRIORITIES
+            or case.get("caseId") != f"CASE-{intent['id'][4:]}"
+            or case.get("sourceRequestId") != intent["sourceRequestId"]
+            or case.get("customerRequestedAt") != intent["createdAt"]
+            or case.get("category") != intent["category"]
+            or case.get("customerDescription") != intent["description"]
+            or opening.get("evidenceReference") != intent["evidenceReference"]
+            or case.get("externalMessageSent") is not False
+            or case.get("refundStarted") is not False
+        ):
+            return None
+        opened_at = _timestamp(opening.get("capturedAt"), "support outcome.openedAt")
+        opened_by = _text(opening.get("actor"), "support outcome.openedBy", maximum=180)
+        if datetime.fromisoformat(opened_at.replace("Z", "+00:00")) < datetime.fromisoformat(
+            intent["createdAt"].replace("Z", "+00:00")
+        ):
+            return None
+        current_resolution = case.get("followUpResolution") if isinstance(reopen, Mapping) else case.get("resolution")
+        resolution_outcome = None
+        resolved_at = None
+        resolved_by = None
+        resolution_evidence_reference = None
+        if case.get("status") == "resolved":
+            if not isinstance(current_resolution, Mapping):
+                return None
+            proof = current_resolution.get("proof")
+            if (
+                current_resolution.get("outcome") not in _SUPPORT_RESOLUTION_OUTCOMES
+                or not isinstance(proof, Mapping)
+            ):
+                return None
+            resolution_outcome = current_resolution["outcome"]
+            resolved_at = _timestamp(proof.get("capturedAt"), "support outcome.resolvedAt")
+            resolved_by = _text(proof.get("actor"), "support outcome.resolvedBy", maximum=180)
+            resolution_evidence_reference = _text(
+                proof.get("evidenceReference"),
+                "support outcome.resolutionEvidenceReference",
+                maximum=180,
+            )
+            if datetime.fromisoformat(resolved_at.replace("Z", "+00:00")) < datetime.fromisoformat(
+                opened_at.replace("Z", "+00:00")
+            ):
+                return None
+        elif case.get("status") != "open" or current_resolution is not None:
+            return None
+        return {
+            "schema": ECOMMERCE_SUPPORT_OUTCOME_SCHEMA,
+            "state": case["status"],
+            "scope": intent["scope"],
+            "intentId": intent["id"],
+            "orderId": intent["orderId"],
+            "sourceRequestId": intent["sourceRequestId"],
+            "caseId": case["caseId"],
+            "category": intent["category"],
+            "openedAt": opened_at,
+            "openedBy": opened_by,
+            "owner": owner,
+            "priority": priority,
+            "dueAt": due_at,
+            "resolutionOutcome": resolution_outcome,
+            "resolvedAt": resolved_at,
+            "resolvedBy": resolved_by,
+            "resolutionEvidenceReference": resolution_evidence_reference,
+            "externalMessageSent": False,
+            "refundStarted": False,
+            "providerCalled": False,
+        }
+    except (EcommerceLifecycleValidationError, TypeError, ValueError):
+        return None
 
 
 def build_ecommerce_cancellation_intent(

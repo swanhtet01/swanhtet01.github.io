@@ -10,6 +10,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     ECOMMERCE_RETURN_INTENT_SCHEMA,
     ECOMMERCE_RETURN_OUTCOME_SCHEMA,
     ECOMMERCE_SUPPORT_INTENT_SCHEMA,
+    ECOMMERCE_SUPPORT_OUTCOME_SCHEMA,
     ECOMMERCE_CANCELLATION_INTENT_SCHEMA,
     ECOMMERCE_CANCELLATION_DECISION_SCHEMA,
     ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA,
@@ -30,6 +31,7 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     ecommerce_payment_matches_fulfilment,
     prepare_ecommerce_shop_handoff,
     project_ecommerce_return_outcome,
+    project_ecommerce_support_outcome,
     review_ecommerce_tax,
     record_ecommerce_order_request,
     record_ecommerce_return_intent,
@@ -900,6 +902,76 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         legacy.pop("rescheduleIntents")
         migrated = validate_ecommerce_lifecycle_state(legacy)
         self.assertEqual(migrated["supportIntents"], [])
+
+    def test_support_outcome_requires_one_exact_accountable_shop_case(self) -> None:
+        order = completed_order()
+        intent = build_ecommerce_support_intent(
+            scope=SCOPE,
+            order_snapshot=order,
+            category="delivery_issue",
+            description="Delivery arrived later than the confirmed promise.",
+            idempotency_key=SUPPORT_KEY,
+            created_at="2026-07-26T11:10:00+06:30",
+        )
+        support_case = {
+            "caseId": f"CASE-{intent['id'][4:]}",
+            "sourceIntentId": intent["id"],
+            "sourceRequestId": intent["sourceRequestId"],
+            "customerRequestedAt": intent["createdAt"],
+            "category": intent["category"],
+            "customerDescription": intent["description"],
+            "status": "open",
+            "priority": "normal",
+            "owner": "Shop owner",
+            "dueAt": "2026-07-26T15:00:00+06:30",
+            "opening": {
+                "actionId": "ACT-SUPPORT-OPEN-01",
+                "capturedAt": "2026-07-26T11:20:00+06:30",
+                "actor": "Shop owner",
+                "reason": "Open the customer help case.",
+                "evidenceReference": intent["evidenceReference"],
+            },
+            "externalMessageSent": False,
+            "refundStarted": False,
+        }
+        order["supportCases"] = [support_case]
+        open_outcome = project_ecommerce_support_outcome(intent, order)
+        self.assertEqual(open_outcome["schema"], ECOMMERCE_SUPPORT_OUTCOME_SCHEMA)  # type: ignore[index]
+        self.assertEqual(open_outcome["state"], "open")  # type: ignore[index]
+        self.assertEqual(open_outcome["owner"], "Shop owner")  # type: ignore[index]
+        for field in ("externalMessageSent", "refundStarted", "providerCalled"):
+            self.assertFalse(open_outcome[field])  # type: ignore[index]
+
+        resolved = deepcopy(order)
+        resolved_case = resolved["supportCases"][0]  # type: ignore[index]
+        resolved_case["status"] = "resolved"
+        resolved_case["resolution"] = {
+            "outcome": "information_provided",
+            "note": "Reviewed the delivery record and explained the delay.",
+            "proof": {
+                "actionId": "ACT-SUPPORT-RESOLVE-01",
+                "capturedAt": "2026-07-26T12:00:00+06:30",
+                "actor": "Shop owner",
+                "reason": "Resolve the accountable case.",
+                "evidenceReference": f"SUPPORT-RESOLUTION:{support_case['caseId']}",
+            },
+        }
+        resolved_outcome = project_ecommerce_support_outcome(intent, resolved)
+        self.assertEqual(resolved_outcome["state"], "resolved")  # type: ignore[index]
+        self.assertEqual(resolved_outcome["resolutionOutcome"], "information_provided")  # type: ignore[index]
+
+        forged = deepcopy(order)
+        forged["supportCases"][0]["sourceRequestId"] = "ECR-92345678-1234-4ABC-8ABC-1234567890AB"  # type: ignore[index]
+        self.assertIsNone(project_ecommerce_support_outcome(intent, forged))
+        duplicate = deepcopy(order)
+        duplicate["supportCases"].append(deepcopy(duplicate["supportCases"][0]))  # type: ignore[union-attr]
+        self.assertIsNone(project_ecommerce_support_outcome(intent, duplicate))
+        backdated = deepcopy(order)
+        backdated["supportCases"][0]["opening"]["capturedAt"] = "2026-07-26T11:00:00+06:30"  # type: ignore[index]
+        self.assertIsNone(project_ecommerce_support_outcome(intent, backdated))
+        incomplete = deepcopy(resolved)
+        incomplete["supportCases"][0].pop("resolution")  # type: ignore[index]
+        self.assertIsNone(project_ecommerce_support_outcome(intent, incomplete))
 
     def test_cancellation_request_is_acknowledgement_bound_duplicate_safe_and_side_effect_free(self) -> None:
         commerce_state = active_commerce_state()
