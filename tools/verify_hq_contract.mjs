@@ -1183,6 +1183,8 @@ requireContract('Ally CEO execution uses one exact local-company run and no exte
   && workboard.includes('| OPS-072 | CEO + Product Portfolio Quality Recovery Codex | done-local |')
   && workboard.includes('| OPS-073 | CEO + Growth Pipeline Quality Recovery Codex | done-local |')
   && workboard.includes('| OPS-074 | CEO + Finance/Risk Period Close Codex | done-local |')
+  && workboard.includes('| OPS-107 | CEO + No-Waste Company Progression Codex | done-local |')
+  && workboard.includes('Real Growth job `8a5193212cc5` and Finance/Risk job `8482aaf939d9`')
   && workboard.includes('job `b7fe6524a638`')
   && workboard.includes('two specialist model calls, and zero synthesis model calls')
   && workboard.includes('Exact replay returned the same report with zero model calls and zero queue writes')
