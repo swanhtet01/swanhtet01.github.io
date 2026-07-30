@@ -1838,7 +1838,15 @@ if (!coreSource.includes('const shopProcurementRows = [')
   || !coreSource.includes("['Open units', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} remaining` : 'Clear']")
   || !coreSource.includes("['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Owner confirms' : 'Locked']")
   || !coreCssSource.includes('.shop-order-control.supplier-control')) fail('shop_procurement_readiness_missing')
-if (!settingsPageSource.includes('LEGACY_TEAM_WORK_KEYS') || !settingsPageSource.includes('LEGACY_COMMERCE_KEYS') || !settingsPageSource.includes('LEGACY_PRODUCTION_KEYS') || !coreSource.includes('LEGACY_APPROVAL_KEYS') || !coreSource.includes('LEGACY_SETUP_KEYS')) fail('legacy_local_workspace_not_migrated')
+if (!companyBackupSource.includes("'supermega.website.workspace.v1'")
+  || !companyBackupSource.includes("'supermega.commerce.workspace.v1'")
+  || !companyBackupSource.includes("'supermega.shop.workspace.v2'")
+  || !companyBackupSource.includes("'supermega.production.workspace.v1'")
+  || !companyBackupSource.includes("'supermega.plant.workspace.v2'")
+  || !companyBackupSource.includes("'supermega.approvals.v2'")
+  || !companyBackupSource.includes("'supermega.setup.v2'")
+  || !companyBackupSource.includes("'supermega.team.workspace.v3'")
+  || !companyBackupSource.includes("'supermega.team.workspace.v2'")) fail('legacy_local_workspace_not_migrated')
 if (!coreSource.includes('decisionPacketFingerprint') || !coreSource.includes("status: 'superseded' as const")) fail('stale_approval_packet_not_superseded')
 if (!coreSource.includes('toManagedDecisionPacket') || !settingsPageSource.includes('managedApprovalRequests')) fail('managed_decision_packet_serializer_missing')
 if (!teamSource.includes('Accept and record') || !teamSource.includes("acceptedActorKind: 'human'") || !teamModel.includes('acceptanceEvidenceReference')) fail('product_decision_not_human_attributed')
@@ -2002,7 +2010,7 @@ if (!storefrontDraftStoragePrefix
   || !localProductResetBlock.includes("const { resetCommerceOrderDraftRecovery } = await import('./commerce-order-draft')")
   || !localProductResetBlock.includes('await resetCommerceOrderDraftRecovery()')
   || !localProductResetBlock.includes('listResettableCompanyStorageKeys(window.localStorage)')
-  || !localProductResetBlock.includes('...resettableKeys')
+  || !localProductResetBlock.includes('resettableKeys.forEach')
   || !companyBackupSource.includes("'supermega.shop.order_draft.v1.'")
   || !companyBackupSource.includes("'supermega.ecommerce.storefront_draft.v2.'")
   || !companyBackupSource.includes("'supermega.ecommerce.storefront_draft.v1.'")
@@ -11053,32 +11061,52 @@ try {
   try { await backup.inspectEncryptedCompanyBackup(JSON.stringify(tamperedEnvelope), passphrase) } catch { tamperRejected = true }
   if (!tamperRejected) fail('company_backup_ciphertext_tamper_accepted')
   companyBackupRuntimeChecks += 1
+  const legacyResetKeys = [
+    'supermega.shop.order_draft_reset.v1',
+    'supermega.ecommerce.storefront_draft_reset.v1',
+    'supermega.website.workspace.v1',
+    'supermega.commerce.workspace.v1',
+    'supermega.shop.workspace.v2',
+    'supermega.production.workspace.v1',
+    'supermega.plant.workspace.v2',
+    'supermega.approvals.v2',
+    'supermega.setup.v2',
+    'supermega.team.workspace.v3',
+    'supermega.team.workspace.v2',
+    'supermega.website.workspace.recovery.v1.index',
+    'supermega.ecommerce.storefront_draft.v1.legacy',
+  ]
   const target = new MemoryStorage([
     ['supermega.commerce.workspace.v2', JSON.stringify({ stale: true })],
     ['supermega.website.workspace.v2', JSON.stringify({ remove: true })],
+    ...legacyResetKeys.map((key) => [key, JSON.stringify({ stale: key })]),
     ['supermega.auth.session.v1', JSON.stringify({ accessToken: 'current-auth-kept' })],
     ['supermega.managed.workspace.v1', 'current-managed-kept'],
     ['unrelated.browser.state', JSON.stringify({ keep: 'unchanged' })],
   ])
   const restored = await backup.restoreCompanyBackup(target, inspection)
-  if (restored.restoredCount !== 5 || restored.removedCount !== 1 || target.getItem('supermega.website.workspace.v2') !== null) fail('company_backup_restore_set_invalid')
+  if (restored.restoredCount !== 5
+    || restored.removedCount !== legacyResetKeys.length + 1
+    || target.getItem('supermega.website.workspace.v2') !== null
+    || legacyResetKeys.some((key) => target.getItem(key) !== null)) fail('company_backup_restore_set_invalid')
   if (!target.getItem('supermega.commerce.workspace.v2').includes('Mingalar Private Buyer')) fail('company_backup_restore_record_missing')
   if (!target.getItem('supermega.auth.session.v1').includes('current-auth-kept') || target.getItem('supermega.managed.workspace.v1') !== 'current-managed-kept' || !target.getItem('unrelated.browser.state').includes('unchanged')) fail('company_backup_restore_boundary_broken')
   companyBackupRuntimeChecks += 1
   const rollbackTarget = new MemoryStorage([
     ['supermega.commerce.workspace.v2', JSON.stringify({ original: 'commerce' })],
     ['supermega.behavior-trail.v1', JSON.stringify({ original: 'behavior' })],
+    ['supermega.ecommerce.storefront_draft.v1.legacy', JSON.stringify({ original: 'legacy-draft' })],
   ])
-  const rollbackBefore = JSON.stringify([...rollbackTarget.values])
-  const originalSetItem = rollbackTarget.setItem.bind(rollbackTarget)
+  const rollbackBefore = JSON.stringify([...rollbackTarget.values.entries()].sort())
+  const originalRemoveItem = rollbackTarget.removeItem.bind(rollbackTarget)
   let injected = false
-  rollbackTarget.setItem = (key, value) => {
-    if (!injected && key === 'supermega.commerce.workspace.v2') { injected = true; throw new Error('injected write failure') }
-    originalSetItem(key, value)
+  rollbackTarget.removeItem = (key) => {
+    originalRemoveItem(key)
+    if (!injected && key === 'supermega.ecommerce.storefront_draft.v1.legacy') { injected = true; throw new Error('injected reset-only removal failure') }
   }
   let rollbackRejected = false
   try { await backup.restoreCompanyBackup(rollbackTarget, inspection) } catch (error) { rollbackRejected = String(error).includes('previous company state was restored') }
-  if (!rollbackRejected || JSON.stringify([...rollbackTarget.values]) !== rollbackBefore) fail('company_backup_restore_rollback_invalid')
+  if (!rollbackRejected || JSON.stringify([...rollbackTarget.values.entries()].sort()) !== rollbackBefore) fail('company_backup_restore_rollback_invalid')
   companyBackupRuntimeChecks += 1
   let unknownRejected = false
   try {
@@ -11095,6 +11123,7 @@ try {
   if (!backup.isResettableCompanyStorageKey('supermega.pilot-outcome.v1')
     || !backup.isResettableCompanyStorageKey('supermega.owner-control-acknowledgements.v1')
     || !backup.isResettableCompanyStorageKey('supermega.website.workspace.recovery.v1.index')
+    || legacyResetKeys.some((key) => !backup.isResettableCompanyStorageKey(key))
     || backup.isResettableCompanyStorageKey('supermega.auth.session.v1')
     || backup.isResettableCompanyStorageKey('supermega.managed.workspace.v1')) fail('company_backup_reset_classifier_invalid')
   companyBackupRuntimeChecks += 1

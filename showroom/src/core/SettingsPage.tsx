@@ -6,7 +6,6 @@ import {
   WEBSITE_ECOMMERCE_HANDOFF_KEY,
   WEBSITE_STORAGE_KEY,
 } from '../products/product-handoff'
-import { LEGACY_COMMERCE_KEYS } from './commerce-workspace'
 import { readBehaviorTrail, recordBehaviorSignal, summarizeBehaviorPreferences } from './behavior-trail'
 import { ManagedContextConsent } from './ManagedContextConsent'
 import { buildManagedContextProfileRequest, managedContextProductLabel } from './managed-context'
@@ -14,8 +13,6 @@ import { operatingChangeCopy } from './operating-baseline'
 import {
   collectLocalProductRecords,
   clientSetupPath,
-  LEGACY_APPROVAL_KEYS,
-  LEGACY_SETUP_KEYS,
   LEGACY_STOREFRONT_DRAFT_RESET_PREFIX,
   managedTrialRequestUrl,
   mergeManagedApprovals,
@@ -69,8 +66,7 @@ import {
   validateEcommerceOrderImportReviewPacket,
   type EcommerceOrderQueueReadinessPacket,
 } from '../products/ecommerce/ecommerce-order-review-packet'
-import { LEGACY_PRODUCTION_KEYS } from './production-workspace'
-import { formatTime, LEGACY_TEAM_WORK_KEYS, useTeamWorkspace } from './team-work'
+import { formatTime, useTeamWorkspace } from './team-work'
 import { buildManagedTrialProof } from './managed-trial-proof'
 import { PilotOutcomePanel } from './PilotOutcomePanel'
 import { useLocalPilotOutcome } from './useLocalPilotOutcome'
@@ -1323,15 +1319,7 @@ export function SettingsPage() {
       const { resetCommerceOrderDraftRecovery } = await import('./commerce-order-draft')
       await resetCommerceOrderDraftRecovery()
       const resettableKeys = listResettableCompanyStorageKeys(window.localStorage)
-      ;[
-        LEGACY_WEBSITE_STORAGE_KEY,
-        ...resettableKeys,
-        ...LEGACY_TEAM_WORK_KEYS,
-        ...LEGACY_COMMERCE_KEYS,
-        ...LEGACY_PRODUCTION_KEYS,
-        ...LEGACY_APPROVAL_KEYS,
-        ...LEGACY_SETUP_KEYS,
-      ].forEach((key) => window.localStorage.removeItem(key))
+      resettableKeys.forEach((key) => window.localStorage.removeItem(key))
       window.location.assign('/')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The local trial could not be reset safely.')

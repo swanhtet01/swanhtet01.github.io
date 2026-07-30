@@ -37,6 +37,15 @@ const portablePrefixes = [
 const resetOnlyExactKeys = new Set([
   'supermega.shop.order_draft_reset.v1',
   'supermega.ecommerce.storefront_draft_reset.v1',
+  'supermega.website.workspace.v1',
+  'supermega.commerce.workspace.v1',
+  'supermega.shop.workspace.v2',
+  'supermega.production.workspace.v1',
+  'supermega.plant.workspace.v2',
+  'supermega.approvals.v2',
+  'supermega.setup.v2',
+  'supermega.team.workspace.v3',
+  'supermega.team.workspace.v2',
 ])
 
 const resetOnlyPrefixes = [
@@ -424,7 +433,9 @@ export async function restoreCompanyBackup(storage: CompanyStorage, inspection: 
   if (snapshotDigest !== inspection.snapshotDigest || snapshot.records.length !== inspection.recordCount) {
     throw backupError('The inspected backup changed before restore. Inspect it again.')
   }
-  const currentKeys = listPortableCompanyStorageKeys(storage)
+  // Recovery markers and legacy drafts are not portable, but they can override
+  // restored records. Clear them inside the same rollback-protected transaction.
+  const currentKeys = listResettableCompanyStorageKeys(storage)
   const incoming = new Map(snapshot.records.map((record) => [record.key, record.value]))
   const affectedKeys = [...new Set([...currentKeys, ...incoming.keys()])].sort()
   const previous = new Map(affectedKeys.map((key) => [key, storage.getItem(key)]))
