@@ -23,6 +23,14 @@ export type PilotOutcomeMetric = {
   sourceDigest: string
 }
 
+type GuidedShopSaleAction = {
+  capturedAt: string
+  domain: string
+  kind: string
+  summary: string
+  evidenceReference: string
+}
+
 type PilotOutcomeCheckpoint = {
   contract: 'supermega.local_pilot_outcome_checkpoint.v1'
   checkpointDigest: string
@@ -234,6 +242,34 @@ function metric(
     better: 'lower',
     detail,
     sourceDigest: digest(['supermega.local_pilot_outcome_source.v1', product, source]),
+  }
+}
+
+export function buildShopGuidedSaleOutcomeMetric(
+  actions: readonly GuidedShopSaleAction[],
+  trialStartedAt: string,
+): PilotOutcomeMetric | null {
+  const startedAt = Date.parse(trialStartedAt)
+  if (!Number.isFinite(startedAt)) return null
+  const completedSaleCount = actions.filter((action) => (
+    action.domain === 'commerce'
+    && action.kind === 'order_create'
+    && action.summary.startsWith('Complete ')
+    && action.summary.endsWith(' sale')
+    && action.evidenceReference.endsWith(' counter receipt')
+    && Number.isFinite(Date.parse(action.capturedAt))
+    && Date.parse(action.capturedAt) >= startedAt
+  )).length
+  return {
+    metricId: 'shop-guided-sale-gap',
+    label: 'Guided Shop sale gap',
+    value: completedSaleCount > 0 ? 0 : 1,
+    unit: 'gaps',
+    better: 'lower',
+    detail: completedSaleCount > 0
+      ? `${completedSaleCount} owner-confirmed guided counter sale${completedSaleCount === 1 ? '' : 's'} completed after the trial started.`
+      : 'No owner-confirmed guided counter sale completed after the trial started.',
+    sourceDigest: digest(['supermega.shop_guided_sale_outcome_source.v1', trialStartedAt, completedSaleCount]),
   }
 }
 

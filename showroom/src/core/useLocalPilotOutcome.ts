@@ -5,10 +5,11 @@ import {
   PILOT_OUTCOME_STORAGE_KEY,
   buildPilotOutcomeMetric,
   buildPilotOutcomeReport,
+  type PilotOutcomeMetric,
   type PilotOutcomeSetup,
 } from './pilot-outcome'
 
-export function useLocalPilotOutcome(setup: PilotOutcomeSetup) {
+export function useLocalPilotOutcome(setup: PilotOutcomeSetup, metricOverride?: PilotOutcomeMetric) {
   const [, setRevision] = useState(0)
   useEffect(() => {
     const refresh = () => setRevision((value) => value + 1)
@@ -24,7 +25,7 @@ export function useLocalPilotOutcome(setup: PilotOutcomeSetup) {
       window.removeEventListener('supermega:pilot-outcome', refresh)
     }
   }, [])
-  const metric = buildPilotOutcomeMetric(readLocalBusinessSnapshot(window.localStorage), setup.product)
+  const metric = metricOverride ?? buildPilotOutcomeMetric(readLocalBusinessSnapshot(window.localStorage), setup.product)
   return {
     metric,
     report: buildPilotOutcomeReport(window.localStorage, setup, metric),

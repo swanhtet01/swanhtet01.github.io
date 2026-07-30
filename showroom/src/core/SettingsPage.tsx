@@ -72,7 +72,12 @@ import { formatTime, useTeamWorkspace } from './team-work'
 import { buildManagedTrialProof } from './managed-trial-proof'
 import { PilotOutcomePanel } from './PilotOutcomePanel'
 import { buildPilotOutcomeDecisionApproval } from './pilot-outcome-decision'
-import { type PilotOutcomeReport, type PilotOutcomeReview } from './pilot-outcome'
+import {
+  buildShopGuidedSaleOutcomeMetric,
+  startPilotOutcome,
+  type PilotOutcomeReport,
+  type PilotOutcomeReview,
+} from './pilot-outcome'
 import { useLocalPilotOutcome } from './useLocalPilotOutcome'
 import { listResettableCompanyStorageKeys } from './company-backup'
 
@@ -231,11 +236,14 @@ export function SettingsPage() {
     owner: setup.owner,
     templateId: setup.templateId,
   }
-  const { metric: pilotOutcomeMetric, report: pilotOutcomeReport, refresh: refreshPilotOutcome } = useLocalPilotOutcome(pilotOutcomeSetup)
+  const [actions] = useAccountableActions()
+  const guidedShopOutcomeMetric = setup.product === 'commerce' && setup.startedAt
+    ? buildShopGuidedSaleOutcomeMetric(actions, setup.startedAt) ?? undefined
+    : undefined
+  const { metric: pilotOutcomeMetric, report: pilotOutcomeReport, refresh: refreshPilotOutcome } = useLocalPilotOutcome(pilotOutcomeSetup, guidedShopOutcomeMetric)
   const [commerce] = useCommerceWorkspace()
   const [production] = useProductionWorkspace()
   const [approvals, setApprovals] = useApprovalWorkspace()
-  const [actions] = useAccountableActions()
   const [teamWorkspace] = useTeamWorkspace()
   const [notice, setNotice] = useState('')
   const [resetArmed, setResetArmed] = useState(false)
@@ -995,6 +1003,18 @@ export function SettingsPage() {
     }
     const startedAt = new Date().toISOString()
     setSetup((current) => ({ ...current, startedAt }))
+    if (setup.product === 'commerce') {
+      const metric = buildShopGuidedSaleOutcomeMetric(actions, startedAt)
+      if (metric) {
+        startPilotOutcome(window.localStorage, pilotOutcomeSetup, metric, new Date(startedAt))
+        recordBehaviorSignal(window.localStorage, {
+          event: 'agent_job_chosen',
+          product: setup.product,
+          route: clientSetupPath(setup.product),
+          detail: 'Start Shop outcome proof',
+        })
+      }
+    }
     navigate(setupProductPreviewPath(setup.product))
   }
 

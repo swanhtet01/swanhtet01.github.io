@@ -11052,6 +11052,10 @@ if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !pilotOutcomeSource.includes("if (current.value === 0) return 'target_met'")
   || !pilotOutcomeSource.includes("if (source.status === 'invalid') return null")
   || !pilotOutcomeSource.includes('Storefront not saved,')
+  || !pilotOutcomeSource.includes("metricId: 'shop-guided-sale-gap'")
+  || !pilotOutcomeSource.includes("supermega.shop_guided_sale_outcome_source.v1")
+  || !pilotOutcomeSource.includes("action.evidenceReference.endsWith(' counter receipt')")
+  || !pilotOutcomeSource.includes('Date.parse(action.capturedAt) >= startedAt')
   || !pilotOutcomeSource.includes("Only the named owner can accept a clear or improved pilot result.")
   || !pilotOutcomeDecisionSource.includes("subject: { kind: 'pilot_outcome' as const")
   || !pilotOutcomeDecisionSource.includes("decidedActorKind: 'human'")
@@ -11063,7 +11067,10 @@ if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !pilotOutcomeUiSource.includes("unit === 'exceptions'")
   || !pilotOutcomeUiSource.includes('Aggregate counts only. No raw records')
   || !pilotOutcomeHookSource.includes("window.addEventListener('storage', onStorage)")
+  || !pilotOutcomeHookSource.includes('metricOverride ?? buildPilotOutcomeMetric')
   || !settingsPageSource.includes('pilotOutcomeReport')
+  || !settingsPageSource.includes("detail: 'Start Shop outcome proof'")
+  || !settingsPageSource.includes('startPilotOutcome(window.localStorage, pilotOutcomeSetup, metric, new Date(startedAt))')
   || !settingsPageSource.includes('buildPilotOutcomeDecisionApproval')
   || !settingsPageSource.includes('onAccepted={recordAcceptedPilotOutcomeDecision}')
   || !settingsPageSource.includes('pilotOutcomeDigest')
@@ -11096,6 +11103,22 @@ try {
   const collecting = outcome.buildPilotOutcomeReport(storage, setup, baselineMetric, new Date('2026-07-30T10:01:00.000Z'))
   if (collecting?.outcomeStatus !== 'collecting' || collecting.review !== null) fail('pilot_outcome_collecting_invalid')
   pilotOutcomeRuntimeChecks += 1
+  const guidedStartedAt = '2026-07-30T09:00:00.000Z'
+  const guidedBaseline = outcome.buildShopGuidedSaleOutcomeMetric([], guidedStartedAt)
+  if (guidedBaseline?.value !== 1 || guidedBaseline.unit !== 'gaps' || !guidedBaseline.sourceDigest.startsWith('sha256:')) fail('shop_guided_sale_baseline_invalid')
+  const oldCounterSale = { capturedAt: '2026-07-30T08:59:59.000Z', domain: 'commerce', kind: 'order_create', summary: 'Complete 18,500 MMK sale', evidenceReference: 'ORD-OLD counter receipt' }
+  const wrongAction = { capturedAt: '2026-07-30T09:01:00.000Z', domain: 'commerce', kind: 'order_status', summary: 'Complete 18,500 MMK sale', evidenceReference: 'ORD-WRONG counter receipt' }
+  const guidedBefore = outcome.buildShopGuidedSaleOutcomeMetric([oldCounterSale, wrongAction], guidedStartedAt)
+  if (guidedBefore?.value !== 1 || guidedBefore.sourceDigest !== guidedBaseline.sourceDigest) fail('shop_guided_sale_unrelated_action_changed_metric')
+  const guidedSale = { capturedAt: '2026-07-30T09:02:00.000Z', domain: 'commerce', kind: 'order_create', summary: 'Complete 18,500 MMK sale', evidenceReference: 'ORD-NEW counter receipt' }
+  const guidedCurrent = outcome.buildShopGuidedSaleOutcomeMetric([oldCounterSale, wrongAction, guidedSale], guidedStartedAt)
+  if (guidedCurrent?.value !== 0 || guidedCurrent.sourceDigest === guidedBaseline.sourceDigest || !guidedCurrent.detail.includes('1 owner-confirmed guided counter sale')) fail('shop_guided_sale_completion_invalid')
+  const guidedStorageValues = new Map()
+  const guidedStorage = { getItem: (key) => guidedStorageValues.get(key) ?? null, setItem: (key, value) => guidedStorageValues.set(key, value) }
+  outcome.startPilotOutcome(guidedStorage, setup, guidedBaseline, new Date(guidedStartedAt))
+  const guidedReport = outcome.buildPilotOutcomeReport(guidedStorage, setup, guidedCurrent, new Date('2026-07-30T09:03:00.000Z'))
+  if (guidedReport?.outcomeStatus !== 'target_met' || guidedReport.change !== -1 || guidedReport.rawRecordsIncluded !== false || guidedReport.externalWritesPerformed !== false) fail('shop_guided_sale_report_invalid')
+  pilotOutcomeRuntimeChecks += 4
   let collectingRejected = false
   try { outcome.acceptPilotOutcome(storage, collecting, setup.owner) } catch { collectingRejected = true }
   if (!collectingRejected) fail('pilot_outcome_collecting_acceptance_allowed')
