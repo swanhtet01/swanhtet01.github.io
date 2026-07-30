@@ -200,6 +200,38 @@ const health = JSON.stringify({
   pending_completion: [],
 })
 
+const capacity = JSON.stringify({
+  schema: 'local-company.machine-capacity.v1',
+  status: 'ready',
+  focus: { enabled: true, project_id: '9fb0ee15570b', max_roles: 4 },
+  company: {
+    registered_roles: 15,
+    resident_role_processes: 0,
+    execution_parallelism: 1,
+    active_jobs: 0,
+    running_missions: 0,
+  },
+  runtime: {
+    service_live: true,
+    service_identity: 'match',
+    listener_counts: { 5173: 1, 8765: 1, 8788: 1, 11434: 1 },
+    loaded_models: 0,
+    available_memory_bytes: 2 * 1024 * 1024 * 1024,
+    minimum_available_memory_bytes: 1024 * 1024 * 1024,
+  },
+  company_attention: { status: 'ready', next_action: 'queue_or_schedule_reviewed_mission' },
+  blockers: [],
+  indeterminate: [],
+  next_action: 'queue_or_schedule_reviewed_mission',
+  effects: {
+    database_mutated: false,
+    model_called: false,
+    process_started: false,
+    process_stopped: false,
+    queue_changed: false,
+  },
+})
+
 const knowledge = JSON.stringify({
   schema: 'local-company.knowledge-freshness.v1',
   project_id: '9fb0ee15570b',
@@ -275,6 +307,7 @@ function harness(overrides = {}) {
     if (request.kind === 'trim') return overrides.trimReceipt || trimReceipt
     if (request.kind === 'hq_live') return overrides.hqLive || hqLive
     if (args[0] === 'health') return health
+    if (args[0] === 'capacity') return overrides.capacity || capacity
     if (args[0] === 'knowledge' && args[1] === 'audit') {
       const sequence = overrides.knowledgeSequence || [overrides.knowledge || knowledge]
       const response = sequence[Math.min(knowledgeAuditIndex, sequence.length - 1)]
@@ -364,6 +397,9 @@ test('preflight binds the CEO plan to one local specialist without queue or mode
   assert.deepEqual(result.roles, ['operations'])
   assert.equal(result.modelCalls, 0)
   assert.equal(result.queueWrites, 0)
+  assert.equal(result.capacityAdmission.status, 'ready')
+  assert.equal(result.capacityAdmission.executionParallelism, 1)
+  assert.equal(result.capacityAdmission.residentRoleProcesses, 0)
   assert.equal(result.liveHq.releaseCommit, 'a'.repeat(40))
   assert.equal(result.liveHq.performed, true)
   assert.equal(result.liveHq.launchReadinessCurrent, true)
@@ -371,6 +407,22 @@ test('preflight binds the CEO plan to one local specialist without queue or mode
   assert.deepEqual(result.liveHq.probeAttempts, [1, 2, 1, 1])
   assert.equal(state.calls.findIndex((call) => call.kind === 'hq_live') < state.calls.findIndex((call) => call.args?.[0] === 'knowledge'), true)
   assert.equal(state.calls.some((call) => call.args?.includes('add')), false)
+})
+
+test('machine capacity blocks before live HQ, queue, or model work', async () => {
+  const blockedReceipt = JSON.parse(capacity)
+  blockedReceipt.status = 'attention_required'
+  blockedReceipt.runtime.available_memory_bytes = 512 * 1024 * 1024
+  blockedReceipt.blockers = ['memory_headroom_below_1gib']
+  blockedReceipt.next_action = 'review_capacity_blockers'
+  const state = harness({ capacity: JSON.stringify(blockedReceipt) })
+  await assert.rejects(
+    runAllyCeoLocalCycle({ execute: false }, { plan: plan(), runCommand: state.runCommand }),
+    /ally_ceo_local_cycle_capacity_blocked:memory_headroom_below_1gib/,
+  )
+  assert.equal(state.calls.some((call) => call.kind === 'hq_live'), false)
+  assert.equal(state.calls.some((call) => call.args?.includes('add')), false)
+  assert.equal(state.calls.some((call) => call.args?.includes('run-next')), false)
 })
 
 test('product work-order focus is manifest-bound and rejects injected control text before useful work', async () => {
@@ -757,7 +809,9 @@ test('execution can atomically refresh changed registered evidence before queue 
   assert.equal(result.ok, true)
   assert.deepEqual(result.knowledgeRefresh, { requested: true, performed: true, refreshedSources: 1 })
   const localCalls = state.calls.filter((call) => call.kind === 'local').map((call) => call.args.slice(0, 2).join(' '))
-  assert.deepEqual(localCalls.slice(1, 5), ['queue list', 'knowledge audit', 'knowledge refresh', 'knowledge audit'])
+  assert.deepEqual(localCalls.slice(1, 6), [
+    'queue list', 'capacity --project', 'knowledge audit', 'knowledge refresh', 'knowledge audit',
+  ])
 })
 
 test('knowledge refresh is execution-only and stale evidence still fails without the explicit control', async () => {

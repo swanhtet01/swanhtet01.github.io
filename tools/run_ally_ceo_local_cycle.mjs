@@ -464,6 +464,63 @@ function validateHealth(health, provider, model) {
   }
 }
 
+function validateCapacityAdmission(receipt, spec) {
+  const listenerCounts = receipt?.runtime?.listener_counts
+  const listenerKeys = ['11434', '5173', '8765', '8788']
+  const effects = receipt?.effects
+  if (receipt?.schema !== 'local-company.machine-capacity.v1'
+    || receipt.status !== 'ready'
+    || receipt.focus?.enabled !== true
+    || !/^[a-f0-9]{12}$/.test(String(receipt.focus?.project_id || ''))
+    || !Number.isInteger(receipt.focus?.max_roles)
+    || receipt.focus.max_roles < spec.roles.length
+    || receipt.focus.max_roles > 6
+    || receipt.company?.resident_role_processes !== 0
+    || receipt.company?.execution_parallelism !== 1
+    || receipt.company?.active_jobs !== 0
+    || receipt.company?.running_missions !== 0
+    || receipt.runtime?.service_live !== true
+    || receipt.runtime?.service_identity !== 'match'
+    || !listenerCounts
+    || Object.keys(listenerCounts).sort().join(',') !== listenerKeys.join(',')
+    || listenerKeys.some((port) => !Number.isInteger(listenerCounts[port]) || listenerCounts[port] < 0 || listenerCounts[port] > 1)
+    || listenerCounts['8765'] !== 1
+    || receipt.runtime?.loaded_models !== 0
+    || !Number.isInteger(receipt.runtime?.available_memory_bytes)
+    || !Number.isInteger(receipt.runtime?.minimum_available_memory_bytes)
+    || receipt.runtime.minimum_available_memory_bytes < 1024 * 1024 * 1024
+    || receipt.runtime.available_memory_bytes < receipt.runtime.minimum_available_memory_bytes
+    || !['ready', 'work_pending'].includes(receipt.company_attention?.status)
+    || !Array.isArray(receipt.blockers)
+    || receipt.blockers.length !== 0
+    || !Array.isArray(receipt.indeterminate)
+    || receipt.indeterminate.length !== 0
+    || effects?.database_mutated !== false
+    || effects?.model_called !== false
+    || effects?.process_started !== false
+    || effects?.process_stopped !== false
+    || effects?.queue_changed !== false) {
+    const blockers = Array.isArray(receipt?.blockers) && receipt.blockers.length > 0
+      ? receipt.blockers.join(',')
+      : Array.isArray(receipt?.indeterminate) && receipt.indeterminate.length > 0
+        ? receipt.indeterminate.join(',')
+        : 'invalid'
+    fail(`ally_ceo_local_cycle_capacity_blocked:${blockers}`)
+  }
+  return {
+    status: 'ready',
+    focusProjectId: receipt.focus.project_id,
+    maxRoles: receipt.focus.max_roles,
+    registeredRoles: receipt.company.registered_roles,
+    residentRoleProcesses: 0,
+    executionParallelism: 1,
+    availableMemoryBytes: receipt.runtime.available_memory_bytes,
+    minimumAvailableMemoryBytes: receipt.runtime.minimum_available_memory_bytes,
+    loadedModels: 0,
+    nextAction: String(receipt.next_action || ''),
+  }
+}
+
 function knowledgeStatus(knowledge) {
   const counts = knowledge?.status_counts
   if (knowledge?.schema !== 'local-company.knowledge-freshness.v1'
@@ -976,6 +1033,10 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
       controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
     }
   }
+  const capacityAdmission = validateCapacityAdmission(parseJson(
+    await runCommand({ kind: 'local', args: ['capacity', '--project', 'SuperMega'], timeoutMs: 30_000 }),
+    'ally_ceo_local_cycle_capacity_invalid',
+  ), rotation.spec)
   const liveHq = validateHqLiveReceipt(parseJson(
     await runCommand({ kind: 'hq_live', args: [], timeoutMs: 90_000 }),
     'ally_ceo_local_cycle_hq_live_invalid',
@@ -1044,6 +1105,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
         report: inspected.report,
         reason: inspected.reason,
         host,
+        capacityAdmission,
         liveHq,
         sourceCount,
         knowledgeRefresh,
@@ -1076,6 +1138,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     resourceEnvelope: spec.resourceEnvelope,
     repair,
     host,
+    capacityAdmission,
     liveHq,
     sourceCount,
     knowledgeRefresh,
