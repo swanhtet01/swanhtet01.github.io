@@ -222,6 +222,7 @@ const capacity = JSON.stringify({
   company_attention: { status: 'ready', next_action: 'queue_or_schedule_reviewed_mission' },
   blockers: [],
   indeterminate: [],
+  advisories: [],
   next_action: 'queue_or_schedule_reviewed_mission',
   effects: {
     database_mutated: false,
@@ -404,6 +405,8 @@ test('preflight binds the CEO plan to one local specialist without queue or mode
   assert.equal(result.capacityAdmission.roleCapabilitiesAvailable, 15)
   assert.equal(result.capacityAdmission.focusedRoleLimit, 4)
   assert.equal(result.capacityAdmission.roleDefinitionsConsumeCompute, false)
+  assert.equal(result.capacityAdmission.companyAttentionStatus, 'ready')
+  assert.deepEqual(result.capacityAdmission.companyAdvisories, [])
   assert.equal(result.liveHq.releaseCommit, 'a'.repeat(40))
   assert.equal(result.liveHq.performed, true)
   assert.equal(result.liveHq.launchReadinessCurrent, true)
@@ -411,6 +414,40 @@ test('preflight binds the CEO plan to one local specialist without queue or mode
   assert.deepEqual(result.liveHq.probeAttempts, [1, 2, 1, 1])
   assert.equal(state.calls.findIndex((call) => call.kind === 'hq_live') < state.calls.findIndex((call) => call.args?.[0] === 'knowledge'), true)
   assert.equal(state.calls.some((call) => call.args?.includes('add')), false)
+})
+
+test('retained quality failures remain visible without deadlocking fresh reviewed work', async () => {
+  const advisoryReceipt = JSON.parse(capacity)
+  advisoryReceipt.company_attention = {
+    status: 'attention_required',
+    next_action: 'review_quality_failures_before_retry',
+  }
+  advisoryReceipt.advisories = ['quality_failures_retained_for_review']
+  advisoryReceipt.next_action = 'review_quality_failures_before_retry'
+  const state = harness({ capacity: JSON.stringify(advisoryReceipt) })
+  const result = await runAllyCeoLocalCycle(
+    { execute: false },
+    { plan: plan(), runCommand: state.runCommand },
+  )
+  assert.equal(result.ok, true)
+  assert.equal(result.capacityAdmission.companyAttentionStatus, 'attention_required')
+  assert.deepEqual(result.capacityAdmission.companyAdvisories, ['quality_failures_retained_for_review'])
+  assert.equal(state.calls.some((call) => call.args?.includes('run-next')), false)
+})
+
+test('unrecognized company advisories still fail before live or model work', async () => {
+  const unsafeReceipt = JSON.parse(capacity)
+  unsafeReceipt.company_attention = {
+    status: 'attention_required',
+    next_action: 'review_pending_approval',
+  }
+  unsafeReceipt.advisories = ['quality_failures_retained_for_review']
+  const state = harness({ capacity: JSON.stringify(unsafeReceipt) })
+  await assert.rejects(
+    runAllyCeoLocalCycle({ execute: false }, { plan: plan(), runCommand: state.runCommand }),
+    /ally_ceo_local_cycle_capacity_blocked:invalid/,
+  )
+  assert.equal(state.calls.some((call) => call.kind === 'hq_live'), false)
 })
 
 test('historical swarm-sized role capability claims fail before live or model work', async () => {

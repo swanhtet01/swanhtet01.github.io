@@ -469,6 +469,16 @@ function validateCapacityAdmission(receipt, spec) {
   const listenerCounts = receipt?.runtime?.listener_counts
   const listenerKeys = ['11434', '5173', '8765', '8788']
   const effects = receipt?.effects
+  const advisories = receipt?.advisories
+  const companyAttention = receipt?.company_attention
+  const clearCompanyAttention = ['ready', 'work_pending'].includes(companyAttention?.status)
+    && Array.isArray(advisories)
+    && advisories.length === 0
+  const retainedQualityAttention = companyAttention?.status === 'attention_required'
+    && companyAttention?.next_action === 'review_quality_failures_before_retry'
+    && Array.isArray(advisories)
+    && advisories.length === 1
+    && advisories[0] === 'quality_failures_retained_for_review'
   if (receipt?.company?.registered_roles !== EXPECTED_ROLE_CAPABILITY_COUNT) {
     fail('ally_ceo_local_cycle_capacity_role_capabilities_invalid')
   }
@@ -494,7 +504,7 @@ function validateCapacityAdmission(receipt, spec) {
     || !Number.isInteger(receipt.runtime?.minimum_available_memory_bytes)
     || receipt.runtime.minimum_available_memory_bytes < 1024 * 1024 * 1024
     || receipt.runtime.available_memory_bytes < receipt.runtime.minimum_available_memory_bytes
-    || !['ready', 'work_pending'].includes(receipt.company_attention?.status)
+    || (!clearCompanyAttention && !retainedQualityAttention)
     || !Array.isArray(receipt.blockers)
     || receipt.blockers.length !== 0
     || !Array.isArray(receipt.indeterminate)
@@ -518,6 +528,8 @@ function validateCapacityAdmission(receipt, spec) {
     registeredRoles: spec.resourceEnvelope.registeredRoleRecords,
     roleCapabilitiesAvailable: receipt.company.registered_roles,
     roleDefinitionsConsumeCompute: false,
+    companyAttentionStatus: companyAttention.status,
+    companyAdvisories: [...advisories],
     residentRoleProcesses: 0,
     executionParallelism: 1,
     availableMemoryBytes: receipt.runtime.available_memory_bytes,
