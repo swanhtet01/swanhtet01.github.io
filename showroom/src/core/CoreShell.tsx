@@ -162,6 +162,11 @@ function setupProductFromQuery(value: string | null) {
   return null
 }
 
+function managedLoginPath(product: string | null) {
+  const slug = product === 'commerce' ? 'shop' : product === 'production' ? 'plant' : product === 'website' || product === 'ecommerce' ? product : null
+  return slug ? `/login?product=${slug}` : '/login'
+}
+
 function useRuntimeHealth() {
   const [runtime, setRuntime] = useState<RuntimeHealth>(checkingRuntime)
 
@@ -276,7 +281,10 @@ export function CoreLayout() {
   const routeProduct = productFromPathname(location.pathname)
   const settingsProduct = location.pathname.startsWith('/settings/') ? setupProductFromQuery(new URLSearchParams(location.search).get('product')) : null
   const sensitiveAccountRoute = location.pathname.startsWith('/account/')
-  const routeName = location.pathname === '/login' || location.pathname === '/login/'
+  const loginRoute = location.pathname === '/login' || location.pathname === '/login/'
+  const accountEntryRoute = loginRoute || sensitiveAccountRoute
+  const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct)
+  const routeName = loginRoute
     ? 'Sign in'
     : sensitiveAccountRoute
       ? (location.pathname.startsWith('/account/recovery') ? 'Account recovery' : 'Account setup')
@@ -335,10 +343,10 @@ export function CoreLayout() {
         <nav className="core-nav" aria-label="Application">
           {navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={'end' in item ? item.end : undefined} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav>
-        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} /><button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '*' : 'o'}</span>{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
+        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} />{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Company sign in</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '*' : 'o'}</span>{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta"><button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '*' : 'o'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Company sign in" className="account-shell-link mobile-account-link" to={companyLoginPath}>Sign in</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '*' : 'o'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
         <nav className="mobile-nav" aria-label="Mobile application">{navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={'end' in item ? item.end : undefined} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
         <main id="workspace-main" className={`core-main${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
           <div className="core-route-content"><Outlet context={runtime} /></div>

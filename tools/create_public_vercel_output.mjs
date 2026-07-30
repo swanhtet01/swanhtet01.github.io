@@ -293,7 +293,7 @@ function brandHtml() {
 }
 
 function headerHtml() {
-  return `<header class="site-header"><div class="frame header-inner">${brandHtml()}</div></header>`
+  return `<header class="site-header"><div class="frame header-inner">${brandHtml()}<a class="button compact header-cta" href="https://app.supermega.dev/login">Company sign in</a></div></header>`
 }
 
 function footerHtml(route) {
