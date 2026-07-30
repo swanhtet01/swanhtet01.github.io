@@ -249,7 +249,7 @@ for (const required of ['Review one owner decision', 'Finish proof run', 'Start 
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_managed_trial_request_gate:${required}`)
 }
 for (const required of ['supermega.managed_trial_proof.v2', 'proof_contract', 'proof_digest', 'proof_readiness', 'proof_sources', 'proof_behavior', 'proof_decisions', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'proof_raw_records']) {
-  if (!operationsChunk.includes(required)) throw new Error(`missing_live_managed_trial_proof_contract:${required}`)
+  if (!operatingModelsChunk.includes(required)) throw new Error(`missing_live_managed_trial_proof_contract:${required}`)
 }
 for (const required of ['supermega.pilot_outcome_report.v1', 'Free outcome proof', 'Prove one result from real', 'Start proof run', 'Accept measured result', 'Download accepted proof', 'Aggregate counts only. No raw records', 'Named-owner acceptance and its exact decision proof were saved.', 'Accept the measured', 'local://pilot-outcome/', 'no raw records or external writes were included.', 'Storefront not saved,', 'shop-guided-sale-gap', 'Guided Shop sale gap', 'owner-confirmed guided counter sale', 'Start Shop outcome proof', 'plant-guided-shift-close-gap', 'Guided Plant shift-close gap', 'named-owner Plant shift-close record', 'Start Plant shift-close proof', 'Close one shift packet with output, trace, quality, and WCM evidence.', 'One accountable shift close']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_pilot_outcome_contract:${required}`)

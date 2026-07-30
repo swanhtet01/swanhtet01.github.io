@@ -1293,7 +1293,8 @@ if (!managedTrialProofSource.includes("MANAGED_TRIAL_PROOF_CONTRACT = 'supermega
   || !managedTrialProofSource.includes("['proof_outcome_digest', proof.outcomeDigest ?? '']")
   || !managedTrialProofSource.includes("['proof_outcome_accepted', String(proof.outcomeAccepted)]")
   || !managedTrialProofSource.includes("['proof_raw_records', 'false']")) fail('managed_trial_proof_contract_missing')
-if (!appLiveVerifierSource.includes('if (!operationsChunk.includes(required)) throw new Error(`missing_live_managed_trial_proof_contract:${required}`)')
+if (!appLiveVerifierSource.includes('if (!operatingModelsChunk.includes(required)) throw new Error(`missing_live_managed_trial_proof_contract:${required}`)')
+  || appLiveVerifierSource.includes('if (!operationsChunk.includes(required)) throw new Error(`missing_live_managed_trial_proof_contract:${required}`)')
   || appLiveVerifierSource.includes('if (!assetCorpus.includes(required)) throw new Error(`missing_live_managed_trial_proof_contract:${required}`)')) fail('managed_trial_proof_live_chunk_contract_missing')
 try {
   const proofModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'managed-trial-proof.ts')).href}?verify=${Date.now()}`)
