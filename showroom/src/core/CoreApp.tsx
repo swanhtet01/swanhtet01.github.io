@@ -73,6 +73,8 @@ import {
   commerceCurrentPaymentPolicy,
   commerceCustomerCreditReview,
   commerceOrderCalculation,
+  commerceOrderAcknowledgement,
+  commerceOrderAcknowledgementText,
   commerceOrderCorrectionExpectation,
   commerceOrderAdjustedTotal,
   commerceOrderReturnExpectation,
@@ -134,6 +136,7 @@ import {
   type CommerceOrder,
   type CommerceOrderLine,
   type CommerceOrderStatus,
+  type CommerceState,
   type CommercePurchaseOrderDiscrepancyCode,
   type CommerceReturnDisposition,
   type CommerceSupportResolutionOutcome,
@@ -1847,6 +1850,14 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
   const actionOrders = commerce.orders.filter(commerceOrderNeedsAction).sort(compareCommerceOrderPromise)
   const actionOrderIds = new Set(actionOrders.map((order) => order.id))
   const closedOrders = commerce.orders.filter((order) => !actionOrderIds.has(order.id))
+  const orderAcknowledgementDownloads = useMemo(() => {
+    const downloads = new Map<string, OrderAcknowledgementDownload>()
+    commerce.orders.forEach((order) => {
+      const download = orderAcknowledgementDownload(commerce, order.id)
+      if (download) downloads.set(order.id, download)
+    })
+    return downloads
+  }, [commerce])
   const latestClose = commerce.closes.find((close) => close.operator)
   const latestCloseDownload = useMemo(() => {
     if (!latestClose) return null
@@ -5159,7 +5170,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
           {orderDraftRead.status !== 'unavailable' ? <button className="text-link danger-text" disabled={orderDraftSaving} onClick={() => void discardSavedOrderDraft()} type="button">{orderDraftRead.status === 'ready' ? 'Discard' : 'Discard unreadable draft'}</button> : null}
         </div>
       </div> : null}
-      <OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />
+      <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />
     </section>
     <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={commerceControlsDisabled} /></Suspense>
     <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
@@ -5318,6 +5329,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
       if (node) returnTriggerRefs.current.set(orderId, node)
       else returnTriggerRefs.current.delete(orderId)
     }}
+    acknowledgementDownloads={orderAcknowledgementDownloads}
     orders={closedOrders}
     returnDraft={returnDraft}
     returnLocationPreview={returnLocationPreview}
@@ -5673,7 +5685,25 @@ function OrderCalculationNote({ order }: { order: CommerceOrder }) {
   return <small data-order-calculation-note="true" data-order-calculation-status={'taxCode' in order.calculation ? 'configured' : 'not-configured'}>{formatCommerceCalculation(order.calculation)}</small>
 }
 
+function orderAcknowledgementDownload(commerce: CommerceState, orderId: string) {
+  try {
+    const artifact = commerceOrderAcknowledgement(commerce, orderId)
+    if (!artifact) return null
+    const safeOrderId = artifact.orderId.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'order'
+    return {
+      artifact,
+      filename: `supermega-${safeOrderId}-acknowledgement.txt`,
+      href: `data:text/plain;charset=utf-8,${encodeURIComponent(`\uFEFF${commerceOrderAcknowledgementText(artifact)}`)}`,
+    }
+  } catch {
+    return null
+  }
+}
+
+type OrderAcknowledgementDownload = NonNullable<ReturnType<typeof orderAcknowledgementDownload>>
+
 function OrderList({
+  acknowledgementDownloads,
   orders,
   canCancel,
   disabled,
@@ -5682,6 +5712,7 @@ function OrderList({
   onReconcilePayment,
   onSettleRefund,
 }: {
+  acknowledgementDownloads: Map<string, OrderAcknowledgementDownload>
   orders: CommerceOrder[]
   canCancel: (id: string) => boolean
   disabled: boolean
@@ -5699,6 +5730,7 @@ function OrderList({
     const reconcileIsPrimary = needsPayment && (order.status === 'ready' || order.status === 'completed')
     const canAdvance = active && !reconcileIsPrimary
     const promiseUrgency = active ? commerceOrderPromiseUrgency(order, promiseNow) : 'scheduled'
+    const acknowledgement = acknowledgementDownloads.get(order.id)
     return <article key={order.id}>
       <div>
         <div className="order-statuses">
@@ -5724,6 +5756,7 @@ function OrderList({
         {reconcileIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Reconcile payment</button> : null}
         {order.refundStatus === 'due' ? <button className="text-link" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
         {canAdvance ? <button className="text-link" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{nextAction[order.status as 'confirmed' | 'preparing' | 'ready']}</button> : null}
+        {acknowledgement ? <a className="text-link subtle" data-order-acknowledgement="local-download" download={acknowledgement.filename} href={acknowledgement.href}>Download acknowledgement</a> : null}
         {active && canCancel(order.id) ? <button className="text-link subtle" disabled={disabled} onClick={() => onCancel(order.id)} type="button">Cancel</button> : null}
       </div>
     </article>
@@ -5731,6 +5764,7 @@ function OrderList({
 }
 
 function ClosedOrderHistory({
+  acknowledgementDownloads,
   canCorrect,
   canReturn,
   correctionCalculation,
@@ -5772,6 +5806,7 @@ function ClosedOrderHistory({
   supportResolutionDraft,
   supportWorkloadDownload,
 }: {
+  acknowledgementDownloads: Map<string, OrderAcknowledgementDownload>
   canCorrect: (orderId: string) => boolean
   canReturn: (orderId: string) => boolean
   correctionCalculation: ReturnType<typeof commerceCorrectionCalculation>
@@ -5873,6 +5908,7 @@ function ClosedOrderHistory({
       const returnable = canReturn(order.id)
       const correctable = canCorrect(order.id)
       const adjustedTotal = commerceOrderAdjustedTotal(order) ?? order.total
+      const acknowledgement = acknowledgementDownloads.get(order.id)
       return <article className={editing || correcting ? 'is-returning' : undefined} key={order.id}>
       <div className="order-archive-main">
         <strong>{order.customer} · {order.lines
@@ -5891,6 +5927,7 @@ function ClosedOrderHistory({
       <div className="order-archive-actions">
         <b>{formatMoney(adjustedTotal)}</b>
         {adjustedTotal !== order.total ? <small>original {formatMoney(order.total)}</small> : null}
+        {acknowledgement ? <a className="text-link subtle" data-order-acknowledgement="local-download" download={acknowledgement.filename} href={acknowledgement.href}>Download acknowledgement</a> : null}
         {order.status === 'completed' && (returnable || editing) ? <button
           aria-expanded={editing}
           className="text-link"

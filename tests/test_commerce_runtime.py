@@ -18,6 +18,8 @@ from supermega_runtime.commerce_runtime import (
     commerce_accounting_handoff_csv,
     commerce_daily_close_csv,
     commerce_daily_close_export,
+    commerce_order_acknowledgement,
+    commerce_order_acknowledgement_text,
     commerce_order_calculation_digest,
     commerce_storefront_preview_digest,
     commerce_website_intake_snapshot_digest,
@@ -6102,6 +6104,79 @@ class CommerceRuntimeTests(unittest.TestCase):
                 expected_version=saved.version,
                 payload=payload,
             )
+
+    def test_order_acknowledgement_is_deterministic_customer_safe_and_fail_closed(self) -> None:
+        current = created_state()
+        current["orders"][0]["lines"] = [  # type: ignore[index]
+            {
+                "sku": "SKU-1",
+                "name": "Test item",
+                "quantity": 2,
+                "unitPriceMmk": 100,
+            }
+        ]
+        current["orders"][0]["calculation"] = {  # type: ignore[index]
+            "schema": "supermega.commerce.order-calculation.v1",
+            "currency": "MMK",
+            "catalogRevision": 0,
+            "subtotalMmk": 200,
+            "taxMode": "not_configured",
+            "taxMmk": 0,
+            "totalMmk": 200,
+        }
+        current = validate_commerce_state(current)
+
+        artifact = commerce_order_acknowledgement(current, "ORD-1")
+        self.assertIsNotNone(artifact)
+        assert artifact is not None
+        self.assertEqual(artifact, commerce_order_acknowledgement(current, "ORD-1"))
+        self.assertEqual(artifact["schema"], "supermega.commerce.order-acknowledgement.v1")
+        self.assertEqual(artifact["lines"][0]["lineTotalMmk"], 200)
+        self.assertEqual(artifact["promotion"]["status"], "not_recorded")
+        self.assertEqual(artifact["tax"]["status"], "not_configured")
+        self.assertEqual(artifact["payment"]["status"], "pending")
+        self.assertEqual(artifact["cancellation"]["state"], "not_cancelled")
+        self.assertEqual(artifact["evidence"]["confirmationActionId"], "ACT-ORD-1")
+        self.assertEqual(
+            artifact["controls"],
+            {
+                "customerMessageSent": False,
+                "taxInvoiceIssued": False,
+                "paymentProviderCalled": False,
+                "externalWritePerformed": False,
+            },
+        )
+        self.assertEqual(
+            artifact["digest"],
+            "sha256:ae097cca2bb06cbedb37863950f51513ec6c30cc86cc2f23bcdcbeaa9e6ef4fb",
+        )
+        text = commerce_order_acknowledgement_text(artifact)
+        self.assertIn("Not a tax invoice, receipt, or payment confirmation.", text)
+        self.assertIn("Document digest: sha256:", text)
+        self.assertNotIn("Accountable operator", text)
+        self.assertNotIn("Verified against the source record", text)
+
+        legacy = created_state("ORD-LEGACY")
+        self.assertIsNone(commerce_order_acknowledgement(legacy, "ORD-LEGACY"))
+        self.assertIsNone(commerce_order_acknowledgement(current, "ORD-UNKNOWN"))
+
+        tampered = deepcopy(current)
+        tampered["orders"][0]["lines"][0]["unitPriceMmk"] = 101  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            commerce_order_acknowledgement(tampered, "ORD-1")
+
+        cancelled = cancelled_due_state()
+        cancelled["orders"][0]["lines"] = deepcopy(current["orders"][0]["lines"])  # type: ignore[index]
+        cancelled["orders"][0]["calculation"] = deepcopy(current["orders"][0]["calculation"])  # type: ignore[index]
+        cancelled_artifact = commerce_order_acknowledgement(
+            validate_commerce_state(cancelled),
+            "ORD-REFUND",
+        )
+        self.assertIsNotNone(cancelled_artifact)
+        assert cancelled_artifact is not None
+        self.assertEqual(cancelled_artifact["cancellation"]["state"], "cancelled")
+        self.assertEqual(cancelled_artifact["cancellation"]["actionId"], "ACT-CANCEL-ORD-REFUND")
+        self.assertEqual(cancelled_artifact["payment"]["refundStatus"], "due")
 
     def test_daily_close_export_is_deterministic_minimal_and_formula_safe(self) -> None:
         current = completed_state()

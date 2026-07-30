@@ -42,6 +42,7 @@ COMMERCE_SCHEMA = "supermega.commerce.workspace.v2"
 COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v3"
 COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v3"
 COMMERCE_CLOSE_SETTLEMENT_SCHEMA = "supermega.commerce.close-settlement.v1"
+COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA = "supermega.commerce.order-acknowledgement.v1"
 COMMERCE_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
@@ -4627,6 +4628,239 @@ def commerce_order_calculation_digest(order: Mapping[str, Any]) -> str | None:
     )
 
 
+def commerce_order_acknowledgement(
+    state: Mapping[str, Any],
+    order_id: str,
+) -> dict[str, Any] | None:
+    """Build a deterministic customer-safe acknowledgement without external side effects."""
+
+    current = validate_commerce_state(state)
+    order = next(
+        (candidate for candidate in current["orders"] if candidate["id"] == order_id),
+        None,
+    )
+    if (
+        order is None
+        or not isinstance(order.get("calculation"), Mapping)
+        or not isinstance(order.get("lines"), list)
+        or not order["lines"]
+        or not order.get("fulfilment")
+        or not order.get("fulfilmentReference")
+        or not order.get("promisedAt")
+    ):
+        return None
+    calculation = order["calculation"]
+    calculation_digest = commerce_order_calculation_digest(order)
+    if calculation_digest is None:
+        return None
+    lines = [
+        {
+            "sku": line["sku"],
+            "name": line["name"],
+            **({"variant": line["variant"]} if "variant" in line else {}),
+            "quantity": line["quantity"],
+            "unitPriceMmk": line["unitPriceMmk"],
+            "lineTotalMmk": line["quantity"] * line["unitPriceMmk"],
+        }
+        for line in order["lines"]
+    ]
+    reserves = [
+        movement
+        for movement in current["movements"]
+        if movement.get("kind") == "reserve" and movement.get("orderId") == order_id
+    ]
+    if len(reserves) != len(lines):
+        return None
+    confirmation = reserves[0]
+    if any(
+        movement["actionId"] != confirmation["actionId"]
+        or movement["createdAt"] != confirmation["createdAt"]
+        or movement["evidenceReference"] != confirmation["evidenceReference"]
+        for movement in reserves
+    ):
+        return None
+    releases = [
+        movement
+        for movement in current["movements"]
+        if movement.get("kind") == "release" and movement.get("orderId") == order_id
+    ]
+    cancelled = order["status"] == "cancelled"
+    if (cancelled and len(releases) != len(lines)) or (not cancelled and releases):
+        return None
+    cancellation = releases[0] if cancelled else None
+    if cancellation is not None and any(
+        movement["actionId"] != cancellation["actionId"]
+        or movement["createdAt"] != cancellation["createdAt"]
+        or movement["evidenceReference"] != cancellation["evidenceReference"]
+        for movement in releases
+    ):
+        return None
+
+    promotion = order.get("promotionDecision")
+    shipping = order.get("shippingDecision")
+    configured_tax = (
+        calculation
+        if calculation.get("schema") == "supermega.commerce.order-calculation.v2"
+        else None
+    )
+    gross_subtotal = sum(line["lineTotalMmk"] for line in lines)
+    artifact: dict[str, Any] = {
+        "schema": COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA,
+        "documentType": "order_acknowledgement",
+        "notice": "Not a tax invoice, receipt, or payment confirmation.",
+        "orderId": order["id"],
+        "createdAt": order["createdAt"],
+        "customer": order["customer"],
+        "channel": order["channel"],
+        "status": order["status"],
+        "currency": "MMK",
+        "lines": lines,
+        "grossSubtotalMmk": gross_subtotal,
+        "promotion": {
+            "status": (
+                "applied"
+                if isinstance(promotion, Mapping) and promotion["status"] == "approved"
+                else "not_applied"
+                if isinstance(promotion, Mapping)
+                else "not_recorded"
+            ),
+            "code": promotion.get("code") if isinstance(promotion, Mapping) else None,
+            "reason": promotion.get("reason") if isinstance(promotion, Mapping) else None,
+            "discountMmk": promotion.get("discountMmk", 0) if isinstance(promotion, Mapping) else 0,
+            "netSubtotalMmk": promotion.get("netSubtotalMmk", gross_subtotal) if isinstance(promotion, Mapping) else gross_subtotal,
+        },
+        "delivery": {
+            "fulfilment": order["fulfilment"],
+            "reference": order["fulfilmentReference"],
+            "township": shipping.get("township") if isinstance(shipping, Mapping) else None,
+            "status": shipping.get("status", "not_recorded") if isinstance(shipping, Mapping) else "not_recorded",
+            "feeMmk": shipping.get("feeMmk", 0) if isinstance(shipping, Mapping) else 0,
+            "promisedAt": order["promisedAt"],
+        },
+        "tax": {
+            "status": "configured" if configured_tax is not None else "not_configured",
+            "code": configured_tax.get("taxCode") if configured_tax is not None else None,
+            "jurisdictionCode": configured_tax.get("taxJurisdictionCode") if configured_tax is not None else None,
+            "rateBasisPoints": configured_tax.get("taxRateBasisPoints", 0) if configured_tax is not None else 0,
+            "mode": configured_tax.get("taxMode", "not_configured") if configured_tax is not None else "not_configured",
+            "subtotalMmk": calculation["subtotalMmk"],
+            "taxMmk": calculation["taxMmk"],
+        },
+        "totalMmk": calculation["totalMmk"],
+        "payment": {
+            "method": order["payment"],
+            "status": order["paymentStatus"],
+            "dueAt": order.get("paymentDueAt"),
+            "reconciledAt": order.get("paymentReconciledAt"),
+            "refundStatus": order["refundStatus"],
+        },
+        "cancellation": {
+            "state": "cancelled" if cancelled else "not_cancelled",
+            "cancelledAt": cancellation.get("createdAt") if cancellation else None,
+            "actionId": cancellation.get("actionId") if cancellation else None,
+            "evidenceReference": cancellation.get("evidenceReference") if cancellation else None,
+        },
+        "evidence": {
+            "confirmationActionId": confirmation["actionId"],
+            "confirmationCapturedAt": confirmation["createdAt"],
+            "confirmationEvidenceReference": confirmation["evidenceReference"],
+            "sourceRecordId": order.get("sourceRecordId"),
+            "sourceEvidenceReference": order.get("evidenceReference"),
+            "calculationDigest": calculation_digest,
+        },
+        "controls": {
+            "customerMessageSent": False,
+            "taxInvoiceIssued": False,
+            "paymentProviderCalled": False,
+            "externalWritePerformed": False,
+        },
+    }
+    artifact["digest"] = _projection_digest(
+        [
+            artifact["schema"], artifact["documentType"], artifact["notice"],
+            artifact["orderId"], artifact["createdAt"], artifact["customer"],
+            artifact["channel"], artifact["status"], artifact["currency"],
+            [[line["sku"], line["name"], line.get("variant"), line["quantity"], line["unitPriceMmk"], line["lineTotalMmk"]] for line in artifact["lines"]],
+            artifact["grossSubtotalMmk"],
+            [artifact["promotion"][field] for field in ("status", "code", "reason", "discountMmk", "netSubtotalMmk")],
+            [artifact["delivery"][field] for field in ("fulfilment", "reference", "township", "status", "feeMmk", "promisedAt")],
+            [artifact["tax"][field] for field in ("status", "code", "jurisdictionCode", "rateBasisPoints", "mode", "subtotalMmk", "taxMmk")],
+            artifact["totalMmk"],
+            [artifact["payment"][field] for field in ("method", "status", "dueAt", "reconciledAt", "refundStatus")],
+            [artifact["cancellation"][field] for field in ("state", "cancelledAt", "actionId", "evidenceReference")],
+            [artifact["evidence"][field] for field in ("confirmationActionId", "confirmationCapturedAt", "confirmationEvidenceReference", "sourceRecordId", "sourceEvidenceReference", "calculationDigest")],
+            [artifact["controls"][field] for field in ("customerMessageSent", "taxInvoiceIssued", "paymentProviderCalled", "externalWritePerformed")],
+        ]
+    )
+    return artifact
+
+
+def commerce_order_acknowledgement_text(artifact: Mapping[str, Any]) -> str:
+    """Format a customer-readable local download from a validated acknowledgement."""
+
+    def one_line(value: Any) -> str:
+        return " ".join(str(value).splitlines()).strip()
+
+    promotion = artifact["promotion"]
+    promotion_text = (
+        f"{promotion.get('code') or 'Promotion'} - {promotion['discountMmk']} MMK discount"
+        if promotion["status"] == "applied"
+        else f"{promotion.get('code') or 'Promotion'} - not applied ({promotion.get('reason') or 'not approved'})"
+        if promotion["status"] == "not_applied"
+        else "No promotion recorded"
+    )
+    cancellation = artifact["cancellation"]
+    cancellation_text = (
+        f"Cancelled at {cancellation['cancelledAt']} - evidence {cancellation['evidenceReference']}"
+        if cancellation["state"] == "cancelled"
+        else "Not cancelled"
+    )
+    rows = [
+        "SUPERMEGA ORDER ACKNOWLEDGEMENT",
+        artifact["notice"],
+        "",
+        f"Order: {one_line(artifact['orderId'])}",
+        f"Created: {artifact['createdAt']}",
+        f"Customer: {one_line(artifact['customer'])}",
+        f"Channel: {one_line(artifact['channel'])}",
+        f"Status: {artifact['status']}",
+        "",
+        "ITEMS",
+    ]
+    for line in artifact["lines"]:
+        variant = f" ({one_line(line['variant'])})" if line.get("variant") else ""
+        rows.append(
+            f"- {line['quantity']} x {one_line(line['name'])}{variant} "
+            f"[{one_line(line['sku'])}] @ {line['unitPriceMmk']} MMK = "
+            f"{line['lineTotalMmk']} MMK"
+        )
+    tax_code = (
+        f" - {one_line(artifact['tax']['code'])}"
+        if artifact["tax"].get("code")
+        else ""
+    )
+    rows.extend(
+        [
+            "",
+            f"Gross subtotal: {artifact['grossSubtotalMmk']} MMK",
+            f"Promotion: {promotion_text}",
+            f"Delivery: {one_line(artifact['delivery']['fulfilment'])} - {one_line(artifact['delivery']['reference'])} - fee {artifact['delivery']['feeMmk']} MMK",
+            f"Promise: {artifact['delivery']['promisedAt']}",
+            f"Tax: {artifact['tax']['status']}{tax_code} - {artifact['tax']['taxMmk']} MMK",
+            f"Total: {artifact['totalMmk']} MMK",
+            f"Payment: {one_line(artifact['payment']['method'])} - {artifact['payment']['status']} - refund {artifact['payment']['refundStatus']}",
+            f"Cancellation: {cancellation_text}",
+            "",
+            f"Confirmation evidence: {one_line(artifact['evidence']['confirmationActionId'])} - {one_line(artifact['evidence']['confirmationEvidenceReference'])}",
+            f"Calculation evidence: {artifact['evidence']['calculationDigest']}",
+            f"Document digest: {artifact['digest']}",
+            "",
+            "No customer message was sent. No tax invoice was issued. No payment provider or external system was called.",
+        ]
+    )
+    return "\r\n".join(rows)
+
+
 def _correction_calculation(
     order: Mapping[str, Any],
     listed_amount_mmk: int,
@@ -8326,11 +8560,14 @@ __all__ = [
     "COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA",
     "COMMERCE_EVENTS",
     "COMMERCE_HUMAN_EVENTS",
+    "COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA",
     "COMMERCE_SCHEMA",
     "COMMERCE_CLOSE_SETTLEMENT_SCHEMA",
     "commerce_catalog_baseline_digest",
     "commerce_catalog_digest",
     "commerce_order_calculation_digest",
+    "commerce_order_acknowledgement",
+    "commerce_order_acknowledgement_text",
     "commerce_accounting_handoff",
     "commerce_accounting_handoff_csv",
     "commerce_daily_close_csv",

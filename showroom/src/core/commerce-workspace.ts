@@ -23,6 +23,7 @@ export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-clos
 export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v3' as const
 export const COMMERCE_CLOSE_SETTLEMENT_SCHEMA = 'supermega.commerce.close-settlement.v1' as const
 export const COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA = 'supermega.commerce.support-workload.v1' as const
+export const COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA = 'supermega.commerce.order-acknowledgement.v1' as const
 const COMMERCE_STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
 export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
 export const LEGACY_COMMERCE_KEYS = ['supermega.commerce.workspace.v1', 'supermega.shop.workspace.v2']
@@ -407,6 +408,73 @@ export type CommerceOrder = {
   calculation?: CommerceOrderCalculation
   total: number
   status: CommerceOrderStatus
+}
+
+export type CommerceOrderAcknowledgement = {
+  schema: typeof COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA
+  documentType: 'order_acknowledgement'
+  notice: 'Not a tax invoice, receipt, or payment confirmation.'
+  orderId: string
+  createdAt: string
+  customer: string
+  channel: string
+  status: CommerceOrderStatus
+  currency: 'MMK'
+  lines: Array<CommerceOrderLine & { lineTotalMmk: number }>
+  grossSubtotalMmk: number
+  promotion: {
+    status: 'applied' | 'not_applied' | 'not_recorded'
+    code: string | null
+    reason: CommercePromotionDecisionReason | null
+    discountMmk: number
+    netSubtotalMmk: number
+  }
+  delivery: {
+    fulfilment: string
+    reference: string
+    township: string | null
+    status: CommerceShippingDecision['status'] | 'not_recorded'
+    feeMmk: number
+    promisedAt: string
+  }
+  tax: {
+    status: 'configured' | 'not_configured'
+    code: string | null
+    jurisdictionCode: string | null
+    rateBasisPoints: number
+    mode: CommerceTaxMode | 'not_configured'
+    subtotalMmk: number
+    taxMmk: number
+  }
+  totalMmk: number
+  payment: {
+    method: string
+    status: CommercePaymentStatus
+    dueAt: string | null
+    reconciledAt: string | null
+    refundStatus: CommerceRefundStatus
+  }
+  cancellation: {
+    state: 'not_cancelled' | 'cancelled'
+    cancelledAt: string | null
+    actionId: string | null
+    evidenceReference: string | null
+  }
+  evidence: {
+    confirmationActionId: string
+    confirmationCapturedAt: string
+    confirmationEvidenceReference: string
+    sourceRecordId: string | null
+    sourceEvidenceReference: string | null
+    calculationDigest: string
+  }
+  controls: {
+    customerMessageSent: false
+    taxInvoiceIssued: false
+    paymentProviderCalled: false
+    externalWritePerformed: false
+  }
+  digest: string
 }
 
 export type CommerceOrderPromiseUrgency = 'late' | 'due_soon' | 'scheduled' | 'unrecorded'
@@ -1807,8 +1875,8 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
     schema: COMMERCE_WORKSPACE_SCHEMA,
     items,
     orders: [
-      { id: 'ORD-1042', createdAt: firstOrderAt, customer: 'May', owner: 'Demo operator', channel: 'Messenger', item: 'Daily essentials basket', itemSku: 'SM-1001', quantity: 2, payment: 'KBZPay', paymentStatus: 'pending', refundStatus: 'none', promisedAt: new Date(now + 60 * 60 * 1000).toISOString(), calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 37000, taxMode: 'not_configured', taxMmk: 0, totalMmk: 37000 }, total: 37000, status: 'preparing' },
-      { id: 'ORD-1041', createdAt: secondOrderAt, customer: 'Ko Aung', owner: 'Demo operator', channel: 'Phone', item: 'Household refill', itemSku: 'SM-1003', quantity: 1, payment: 'Cash on delivery', paymentStatus: 'pending', refundStatus: 'none', promisedAt: new Date(now + 90 * 60 * 1000).toISOString(), calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 12000, taxMode: 'not_configured', taxMmk: 0, totalMmk: 12000 }, total: 12000, status: 'ready' },
+      { id: 'ORD-1042', createdAt: firstOrderAt, customer: 'May', owner: 'Demo operator', channel: 'Messenger', item: 'Daily essentials basket', itemSku: 'SM-1001', quantity: 2, payment: 'KBZPay', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery', fulfilmentReference: 'Messenger delivery review #1042', promisedAt: new Date(now + 60 * 60 * 1000).toISOString(), lines: [{ sku: 'SM-1001', name: 'Daily essentials basket', quantity: 2, unitPriceMmk: 18500 }], calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 37000, taxMode: 'not_configured', taxMmk: 0, totalMmk: 37000 }, total: 37000, status: 'preparing' },
+      { id: 'ORD-1041', createdAt: secondOrderAt, customer: 'Ko Aung', owner: 'Demo operator', channel: 'Phone', item: 'Household refill', itemSku: 'SM-1003', quantity: 1, payment: 'Cash on delivery', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'delivery', fulfilmentReference: 'Phone delivery review #1041', promisedAt: new Date(now + 90 * 60 * 1000).toISOString(), lines: [{ sku: 'SM-1003', name: 'Household refill', quantity: 1, unitPriceMmk: 12000 }], calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 12000, taxMode: 'not_configured', taxMmk: 0, totalMmk: 12000 }, total: 12000, status: 'ready' },
       {
         id: 'ORD-1039',
         createdAt: completedOrderAt,
@@ -1826,7 +1894,10 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
         paymentReconciliationReason: 'Matched the counter settlement.',
         paymentEvidenceReference: 'DEMO-SEED-PAY-1039',
         refundStatus: 'none',
+        fulfilment: 'pickup',
+        fulfilmentReference: 'Counter handoff #1039',
         promisedAt: new Date(now - 2 * 60 * 60 * 1000).toISOString(),
+        lines: [{ sku: 'SM-1004', name: 'Personal care set', quantity: 1, unitPriceMmk: 22500 }],
         calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 22500, taxMode: 'not_configured', taxMmk: 0, totalMmk: 22500 },
         total: 22500,
         status: 'completed',
@@ -1937,9 +2008,36 @@ export function upgradeCommerceSeedPolicies(stateValue: CommerceState) {
   const needsPromotion = (state.promotionPolicies?.length ?? 0) === 0
   const needsShipping = (state.shippingPolicies?.length ?? 0) === 0
   const needsPayment = (state.paymentPolicies?.length ?? 0) === 0
-  if (!needsPromotion && !needsShipping && !needsPayment) return state
+  let needsOrderContract = false
+  const upgradedOrders = state.orders.map((order) => {
+    const seedOrder = seed.orders.find((candidate) => candidate.id === order.id)
+    const seededReserve = state.movements.find((movement) => movement.kind === 'reserve'
+      && movement.orderId === order.id
+      && movement.actionId === `ACT-DEMO-${order.id.slice(4)}`)
+    if (!seedOrder?.lines
+      || !seedOrder.fulfilment
+      || !seedOrder.fulfilmentReference
+      || order.lines !== undefined
+      || order.fulfilment !== undefined
+      || order.fulfilmentReference !== undefined
+      || order.customer !== seedOrder.customer
+      || order.item !== seedOrder.item
+      || order.itemSku !== seedOrder.itemSku
+      || order.quantity !== seedOrder.quantity
+      || order.total !== seedOrder.total
+      || !seededReserve) return order
+    needsOrderContract = true
+    return {
+      ...order,
+      fulfilment: seedOrder.fulfilment,
+      fulfilmentReference: seedOrder.fulfilmentReference,
+      lines: seedOrder.lines,
+    }
+  })
+  if (!needsPromotion && !needsShipping && !needsPayment && !needsOrderContract) return state
   return validateCommerceState({
     ...state,
+    ...(needsOrderContract ? { orders: upgradedOrders } : {}),
     ...(needsPromotion ? { promotionPolicies: seed.promotionPolicies } : {}),
     ...(needsShipping ? { shippingPolicies: seed.shippingPolicies } : {}),
     ...(needsPayment ? { paymentPolicies: seed.paymentPolicies } : {}),
@@ -4506,6 +4604,229 @@ export function commerceOrderCalculationDigest(order: CommerceOrder) {
     order.id,
     order.calculation,
   ]))}`
+}
+
+function commerceOrderAcknowledgementProjection(
+  artifact: Omit<CommerceOrderAcknowledgement, 'digest'>,
+) {
+  return [
+    artifact.schema,
+    artifact.documentType,
+    artifact.notice,
+    artifact.orderId,
+    artifact.createdAt,
+    artifact.customer,
+    artifact.channel,
+    artifact.status,
+    artifact.currency,
+    artifact.lines.map((line) => [
+      line.sku,
+      line.name,
+      line.variant ?? null,
+      line.quantity,
+      line.unitPriceMmk,
+      line.lineTotalMmk,
+    ]),
+    artifact.grossSubtotalMmk,
+    [
+      artifact.promotion.status,
+      artifact.promotion.code,
+      artifact.promotion.reason,
+      artifact.promotion.discountMmk,
+      artifact.promotion.netSubtotalMmk,
+    ],
+    [
+      artifact.delivery.fulfilment,
+      artifact.delivery.reference,
+      artifact.delivery.township,
+      artifact.delivery.status,
+      artifact.delivery.feeMmk,
+      artifact.delivery.promisedAt,
+    ],
+    [
+      artifact.tax.status,
+      artifact.tax.code,
+      artifact.tax.jurisdictionCode,
+      artifact.tax.rateBasisPoints,
+      artifact.tax.mode,
+      artifact.tax.subtotalMmk,
+      artifact.tax.taxMmk,
+    ],
+    artifact.totalMmk,
+    [
+      artifact.payment.method,
+      artifact.payment.status,
+      artifact.payment.dueAt,
+      artifact.payment.reconciledAt,
+      artifact.payment.refundStatus,
+    ],
+    [
+      artifact.cancellation.state,
+      artifact.cancellation.cancelledAt,
+      artifact.cancellation.actionId,
+      artifact.cancellation.evidenceReference,
+    ],
+    [
+      artifact.evidence.confirmationActionId,
+      artifact.evidence.confirmationCapturedAt,
+      artifact.evidence.confirmationEvidenceReference,
+      artifact.evidence.sourceRecordId,
+      artifact.evidence.sourceEvidenceReference,
+      artifact.evidence.calculationDigest,
+    ],
+    [
+      artifact.controls.customerMessageSent,
+      artifact.controls.taxInvoiceIssued,
+      artifact.controls.paymentProviderCalled,
+      artifact.controls.externalWritePerformed,
+    ],
+  ]
+}
+
+export function commerceOrderAcknowledgement(
+  state: CommerceState,
+  orderId: string,
+): CommerceOrderAcknowledgement | null {
+  const current = validateCommerceState(state)
+  const order = current.orders.find((candidate) => candidate.id === orderId)
+  if (!order?.calculation || !order.fulfilment || !order.fulfilmentReference || !order.promisedAt) return null
+  const lineSnapshots = validatedOrderLineSnapshots(order)
+  const calculationDigest = commerceOrderCalculationDigest(order)
+  if (!lineSnapshots || !calculationDigest) return null
+  const reserves = current.movements.filter((movement) => movement.kind === 'reserve' && movement.orderId === order.id)
+  if (reserves.length !== lineSnapshots.length) return null
+  const confirmation = reserves[0]
+  if (!confirmation || reserves.some((movement) => movement.actionId !== confirmation.actionId
+    || movement.createdAt !== confirmation.createdAt
+    || movement.evidenceReference !== confirmation.evidenceReference)) return null
+  const releases = current.movements.filter((movement) => movement.kind === 'release' && movement.orderId === order.id)
+  const cancelled = order.status === 'cancelled'
+  if ((cancelled && releases.length !== lineSnapshots.length) || (!cancelled && releases.length !== 0)) return null
+  const cancellation = cancelled ? releases[0] : undefined
+  if (cancelled && (!cancellation || releases.some((movement) => movement.actionId !== cancellation.actionId
+    || movement.createdAt !== cancellation.createdAt
+    || movement.evidenceReference !== cancellation.evidenceReference))) return null
+
+  const lines = lineSnapshots.map((line) => ({
+    ...line,
+    lineTotalMmk: line.quantity * line.unitPriceMmk,
+  }))
+  const grossSubtotalMmk = lines.reduce((sum, line) => sum + line.lineTotalMmk, 0)
+  const promotion = order.promotionDecision
+  const calculation = order.calculation
+  const configuredTax = calculation.schema === COMMERCE_ORDER_CALCULATION_V2_SCHEMA ? calculation : null
+  const artifact: Omit<CommerceOrderAcknowledgement, 'digest'> = {
+    schema: COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA,
+    documentType: 'order_acknowledgement',
+    notice: 'Not a tax invoice, receipt, or payment confirmation.',
+    orderId: order.id,
+    createdAt: order.createdAt,
+    customer: order.customer,
+    channel: order.channel,
+    status: order.status,
+    currency: 'MMK',
+    lines,
+    grossSubtotalMmk,
+    promotion: {
+      status: promotion?.status === 'approved' ? 'applied' : promotion ? 'not_applied' : 'not_recorded',
+      code: promotion?.code ?? null,
+      reason: promotion?.reason ?? null,
+      discountMmk: promotion?.discountMmk ?? 0,
+      netSubtotalMmk: promotion?.netSubtotalMmk ?? grossSubtotalMmk,
+    },
+    delivery: {
+      fulfilment: order.fulfilment,
+      reference: order.fulfilmentReference,
+      township: order.shippingDecision?.township ?? null,
+      status: order.shippingDecision?.status ?? 'not_recorded',
+      feeMmk: order.shippingDecision?.feeMmk ?? 0,
+      promisedAt: order.promisedAt,
+    },
+    tax: {
+      status: configuredTax ? 'configured' : 'not_configured',
+      code: configuredTax?.taxCode ?? null,
+      jurisdictionCode: configuredTax?.taxJurisdictionCode ?? null,
+      rateBasisPoints: configuredTax?.taxRateBasisPoints ?? 0,
+      mode: configuredTax?.taxMode ?? 'not_configured',
+      subtotalMmk: calculation.subtotalMmk,
+      taxMmk: calculation.taxMmk,
+    },
+    totalMmk: calculation.totalMmk,
+    payment: {
+      method: order.payment,
+      status: order.paymentStatus,
+      dueAt: order.paymentDueAt ?? null,
+      reconciledAt: order.paymentReconciledAt ?? null,
+      refundStatus: order.refundStatus,
+    },
+    cancellation: {
+      state: cancelled ? 'cancelled' : 'not_cancelled',
+      cancelledAt: cancellation?.createdAt ?? null,
+      actionId: cancellation?.actionId ?? null,
+      evidenceReference: cancellation?.evidenceReference ?? null,
+    },
+    evidence: {
+      confirmationActionId: confirmation.actionId,
+      confirmationCapturedAt: confirmation.createdAt,
+      confirmationEvidenceReference: confirmation.evidenceReference,
+      sourceRecordId: order.sourceRecordId ?? null,
+      sourceEvidenceReference: order.evidenceReference ?? null,
+      calculationDigest,
+    },
+    controls: {
+      customerMessageSent: false,
+      taxInvoiceIssued: false,
+      paymentProviderCalled: false,
+      externalWritePerformed: false,
+    },
+  }
+  return {
+    ...artifact,
+    digest: `sha256:${sha256Hex(JSON.stringify(commerceOrderAcknowledgementProjection(artifact)))}`,
+  }
+}
+
+function acknowledgementTextValue(value: string) {
+  return value.replace(/[\r\n]+/g, ' ').trim()
+}
+
+export function commerceOrderAcknowledgementText(artifact: CommerceOrderAcknowledgement) {
+  const promotion = artifact.promotion.status === 'applied'
+    ? `${artifact.promotion.code ?? 'Promotion'} - ${artifact.promotion.discountMmk} MMK discount`
+    : artifact.promotion.status === 'not_applied'
+      ? `${artifact.promotion.code ?? 'Promotion'} - not applied (${artifact.promotion.reason ?? 'not approved'})`
+      : 'No promotion recorded'
+  const cancellation = artifact.cancellation.state === 'cancelled'
+    ? `Cancelled at ${artifact.cancellation.cancelledAt} - evidence ${artifact.cancellation.evidenceReference}`
+    : 'Not cancelled'
+  return [
+    'SUPERMEGA ORDER ACKNOWLEDGEMENT',
+    artifact.notice,
+    '',
+    `Order: ${acknowledgementTextValue(artifact.orderId)}`,
+    `Created: ${artifact.createdAt}`,
+    `Customer: ${acknowledgementTextValue(artifact.customer)}`,
+    `Channel: ${acknowledgementTextValue(artifact.channel)}`,
+    `Status: ${artifact.status}`,
+    '',
+    'ITEMS',
+    ...artifact.lines.map((line) => `- ${line.quantity} x ${acknowledgementTextValue(line.name)}${line.variant ? ` (${acknowledgementTextValue(line.variant)})` : ''} [${acknowledgementTextValue(line.sku)}] @ ${line.unitPriceMmk} MMK = ${line.lineTotalMmk} MMK`),
+    '',
+    `Gross subtotal: ${artifact.grossSubtotalMmk} MMK`,
+    `Promotion: ${promotion}`,
+    `Delivery: ${acknowledgementTextValue(artifact.delivery.fulfilment)} - ${acknowledgementTextValue(artifact.delivery.reference)} - fee ${artifact.delivery.feeMmk} MMK`,
+    `Promise: ${artifact.delivery.promisedAt}`,
+    `Tax: ${artifact.tax.status}${artifact.tax.code ? ` - ${acknowledgementTextValue(artifact.tax.code)}` : ''} - ${artifact.tax.taxMmk} MMK`,
+    `Total: ${artifact.totalMmk} MMK`,
+    `Payment: ${acknowledgementTextValue(artifact.payment.method)} - ${artifact.payment.status} - refund ${artifact.payment.refundStatus}`,
+    `Cancellation: ${cancellation}`,
+    '',
+    `Confirmation evidence: ${acknowledgementTextValue(artifact.evidence.confirmationActionId)} - ${acknowledgementTextValue(artifact.evidence.confirmationEvidenceReference)}`,
+    `Calculation evidence: ${artifact.evidence.calculationDigest}`,
+    `Document digest: ${artifact.digest}`,
+    '',
+    'No customer message was sent. No tax invoice was issued. No payment provider or external system was called.',
+  ].join('\r\n')
 }
 
 export function commerceCorrectionCalculation(

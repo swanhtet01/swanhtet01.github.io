@@ -4397,15 +4397,23 @@ async function verifyChannelOrderRuntime() {
       && seed.purchaseOrders[0].sku === 'SM-1002'
       && seed.purchaseOrders[0].quantityOrdered === 40
       && seed.paymentPolicies?.length === 3, 'shop_seed_missing_completed_sale_replenishment_or_payment_work')
-    const staleSeed = { ...seed, promotionPolicies: [], shippingPolicies: [], paymentPolicies: [] }
+    const staleSeed = {
+      ...seed,
+      orders: seed.orders.map(({ lines: _lines, fulfilment: _fulfilment, fulfilmentReference: _fulfilmentReference, ...order }) => order),
+      promotionPolicies: [],
+      shippingPolicies: [],
+      paymentPolicies: [],
+    }
     const upgradedSeed = commerce.upgradeCommerceSeedPolicies(staleSeed)
     const ordinaryWorkspace = commerce.createEmptyCommerce()
     assert(upgradedSeed.promotionPolicies?.length === 1
       && upgradedSeed.shippingPolicies?.length === 1
       && upgradedSeed.paymentPolicies?.length === 3
       && upgradedSeed.paymentPolicies[0].adapter === 'kbzpay_manual'
+      && upgradedSeed.orders.every((order) => order.lines?.length === 1 && order.fulfilment && order.fulfilmentReference)
+      && upgradedSeed.orders.every((order) => commerce.commerceOrderAcknowledgement(upgradedSeed, order.id))
       && commerce.upgradeCommerceSeedPolicies(ordinaryWorkspace) === ordinaryWorkspace,
-    'shop_seed_policy_upgrade_not_scoped_to_sample_evidence')
+    'shop_seed_upgrade_not_current_or_scoped_to_sample_evidence')
     const seedBefore = JSON.stringify(seed)
     const incomplete = intake.buildChannelOrderDraft({
       ...fixtures[0],
@@ -11906,6 +11914,90 @@ async function verifyStorefrontRuntime() {
       && storedPromotedOrder.taxDecision?.reviewedAt === buyingDraft.confirmedAt
       && commerce.reserveCommerceOrder(promotedOrderState, promotedOrder, promotionOrderProof) === promotedOrderState,
     'ecommerce_approved_promotion_did_not_price_the_real_shop_order')
+    const promotedAcknowledgement = commerce.commerceOrderAcknowledgement(
+      promotedOrderState,
+      promotedOrder.id,
+    )
+    buyingAssert(promotedAcknowledgement?.schema === 'supermega.commerce.order-acknowledgement.v1'
+      && promotedAcknowledgement.notice === 'Not a tax invoice, receipt, or payment confirmation.'
+      && promotedAcknowledgement.lines.length === promotedOrderLines.length
+      && promotedAcknowledgement.promotion.status === 'applied'
+      && promotedAcknowledgement.promotion.discountMmk === buyingDraft.pricing.promotion.discountMmk
+      && promotedAcknowledgement.delivery.feeMmk === buyingDraft.pricing.shipping.feeMmk
+      && promotedAcknowledgement.delivery.promisedAt === promotedOrder.promisedAt
+      && promotedAcknowledgement.tax.taxMmk === buyingDraft.pricing.tax.taxMmk
+      && promotedAcknowledgement.totalMmk === buyingDraft.totalMmk
+      && promotedAcknowledgement.payment.status === 'pending'
+      && promotedAcknowledgement.cancellation.state === 'not_cancelled'
+      && promotedAcknowledgement.evidence.confirmationActionId === promotionOrderProof.actionId
+      && promotedAcknowledgement.evidence.sourceRecordId === buyingDraft.sourceRequestId
+      && /^sha256:[a-f0-9]{64}$/.test(promotedAcknowledgement.digest)
+      && Object.values(promotedAcknowledgement.controls).every((value) => value === false),
+    'ecommerce_order_acknowledgement_not_exact_or_customer_safe')
+    const promotedAcknowledgementText = commerce.commerceOrderAcknowledgementText(promotedAcknowledgement)
+    buyingAssert(promotedAcknowledgementText.includes('SUPERMEGA ORDER ACKNOWLEDGEMENT')
+      && promotedAcknowledgementText.includes(promotedAcknowledgement.digest)
+      && promotedAcknowledgementText.includes('No customer message was sent.')
+      && !promotedAcknowledgementText.includes(promotionOrderProof.actor)
+      && !promotedAcknowledgementText.includes(promotionOrderProof.reason),
+    'ecommerce_order_acknowledgement_text_leaked_internal_review_or_overclaimed_action')
+    const acknowledgementGoldenState = commerce.validateCommerceState({
+      schema: 'supermega.commerce.workspace.v2',
+      items: [{ sku: 'SKU-1', name: 'Test item', onHand: 8, reorderAt: 2, price: 100 }],
+      orders: [{
+        id: 'ORD-1',
+        createdAt: '2026-07-23T09:00:00.000Z',
+        customer: 'Customer ref',
+        owner: 'Accountable operator',
+        channel: 'Website',
+        item: 'Test item',
+        itemSku: 'SKU-1',
+        quantity: 2,
+        payment: 'Manual QR review',
+        paymentStatus: 'pending',
+        refundStatus: 'none',
+        fulfilment: 'pickup',
+        fulfilmentReference: 'FUL-ORD-1',
+        promisedAt: '2026-07-23T11:00:00.000Z',
+        sourceRecordId: 'WEB-ORD-1',
+        lines: [{ sku: 'SKU-1', name: 'Test item', quantity: 2, unitPriceMmk: 100 }],
+        calculation: {
+          schema: 'supermega.commerce.order-calculation.v1',
+          currency: 'MMK',
+          catalogRevision: 0,
+          subtotalMmk: 200,
+          taxMode: 'not_configured',
+          taxMmk: 0,
+          totalMmk: 200,
+        },
+        total: 200,
+        status: 'confirmed',
+      }],
+      movements: [{
+        id: 'MOV2:ACT-ORD-1',
+        actionId: 'ACT-ORD-1',
+        createdAt: '2026-07-23T09:00:00.000Z',
+        actor: 'Accountable operator',
+        reason: 'Verified against the source record.',
+        evidenceReference: 'EV-ACT-ORD-1',
+        kind: 'reserve',
+        sku: 'SKU-1',
+        quantityDelta: -2,
+        orderId: 'ORD-1',
+      }],
+      closes: [],
+    })
+    const acknowledgementGolden = commerce.commerceOrderAcknowledgement(acknowledgementGoldenState, 'ORD-1')
+    buyingAssert(acknowledgementGolden
+      && acknowledgementGolden.digest === 'sha256:ae097cca2bb06cbedb37863950f51513ec6c30cc86cc2f23bcdcbeaa9e6ef4fb'
+      && acknowledgementGolden.digest === commerce.commerceOrderAcknowledgement(acknowledgementGoldenState, 'ORD-1')?.digest
+      && commerce.commerceOrderAcknowledgement(acknowledgementGoldenState, 'ORD-UNKNOWN') === null,
+    'ecommerce_order_acknowledgement_not_deterministic_or_fail_closed')
+    const acknowledgementTamper = structuredClone(acknowledgementGoldenState)
+    acknowledgementTamper.orders[0].lines[0].unitPriceMmk = 101
+    let acknowledgementTamperRejected = false
+    try { commerce.commerceOrderAcknowledgement(acknowledgementTamper, 'ORD-1') } catch { acknowledgementTamperRejected = true }
+    buyingAssert(acknowledgementTamperRejected, 'ecommerce_order_acknowledgement_accepted_tampered_order_lines')
     buyingAssert(commerce.reserveCommerceOrder(
       promotionBuyingState,
       {
