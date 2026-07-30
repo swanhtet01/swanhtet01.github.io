@@ -555,6 +555,13 @@ export type ManagedTrialRequestPrefill = {
   company?: string
   goal?: string
   proof?: ManagedTrialProof
+  approvedContext?: {
+    contract: 'supermega.ai_context_export.v1'
+    digest: string
+    outcomeDigest: string
+    approved: true
+    rawRecordsIncluded: false
+  }
 }
 
 export function managedTrialRequestUrl(product: SetupProductId, templateId: string, prefill?: ManagedTrialRequestPrefill) {
@@ -573,6 +580,27 @@ export function managedTrialRequestUrl(product: SetupProductId, templateId: stri
     for (const [name, value] of managedTrialProofFragmentFields(prefill.proof, productContracts[product].slug, templateId)) {
       fragment.set(name, value)
     }
+  }
+  if (prefill?.approvedContext) {
+    const context = prefill.approvedContext
+    const proof = prefill.proof
+    if (context.contract !== 'supermega.ai_context_export.v1'
+      || !/^sha256:[0-9a-f]{64}$/.test(context.digest)
+      || !/^sha256:[0-9a-f]{64}$/.test(context.outcomeDigest)
+      || !proof
+      || proof.outcomeDigest !== context.outcomeDigest
+      || proof.outcomeAccepted !== true
+      || (proof.outcomeStatus !== 'target_met' && proof.outcomeStatus !== 'improved')
+      || proof.sourceRecordCount < 1
+      || proof.behaviorSignalCount < 1
+      || proof.reviewedDecisionCount < 1
+      || context.approved !== true
+      || context.rawRecordsIncluded !== false) throw new Error('approved_context_invalid')
+    fragment.set('proof_context_contract', context.contract)
+    fragment.set('proof_context_digest', context.digest)
+    fragment.set('proof_context_outcome_digest', context.outcomeDigest)
+    fragment.set('proof_context_approved', 'true')
+    fragment.set('proof_context_raw_records', 'false')
   }
   const handoff = fragment.toString()
   return `https://supermega.dev/contact/?${query.toString()}${handoff ? `#${handoff}` : ''}`

@@ -630,16 +630,21 @@ export function SettingsPage() {
     ['Controls', runtime.writesReady && evidencePlanReady ? 'Ready' : 'Locked', aiContextReadinessGates[3][2]],
   ] as const
   const provisioningReady = isPilotReady && preparedRecordCount > 0 && reviewedDecisionCount > 0 && Boolean(pilotOutcomeReport?.review)
-  const managedTrialProofReady = reviewedDecisionCount > 0
+  const measuredManagedTrialProofReady = reviewedDecisionCount > 0
     && Boolean(pilotOutcomeReport?.review)
     && Boolean(pilotOutcomeReport?.reportDigest)
     && (pilotOutcomeReport?.outcomeStatus === 'target_met' || pilotOutcomeReport?.outcomeStatus === 'improved')
-  const managedTrialProofActionLabel = pilotOutcomeReport?.review && !reviewedDecisionCount
+  const managedTrialProofReady = measuredManagedTrialProofReady && Boolean(approvedAiContextExport)
+  const managedTrialProofActionLabel = measuredManagedTrialProofReady && !approvedAiContextExport
+    ? 'Approve AI context'
+    : pilotOutcomeReport?.review && !reviewedDecisionCount
     ? 'Review one owner decision'
     : pilotOutcomeReport
       ? 'Finish proof run'
       : 'Start proof run'
-  const managedTrialProofActionPath = pilotOutcomeReport?.review && !reviewedDecisionCount
+  const managedTrialProofActionPath = measuredManagedTrialProofReady && !approvedAiContextExport
+    ? '#approved-ai-context'
+    : pilotOutcomeReport?.review && !reviewedDecisionCount
     ? setupProductPreviewPath(setup.product)
     : '#pilot-outcome-proof'
   const managedWorkspaceProvisioningPacket = {
@@ -738,6 +743,7 @@ export function SettingsPage() {
     importProvisioning: runtime.importProvisioning,
     schedulerActivation,
     pilotOutcomeReport,
+    approvedAiContext: approvedAiContextExport,
     blockedGateIds: runtime.activationManifest?.blocked_gate_ids ?? [],
     safeEnable: runtime.activationManifest?.safe_enable ?? ['browser_local_trial', 'evidence_export'],
     nextHostedBlocker: runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Configure managed activation.',
@@ -749,6 +755,7 @@ export function SettingsPage() {
     ['Product', `${managedTrialRequest.product} / ${managedTrialRequest.templateName}`],
     ['Evidence', `${managedTrialRequest.evidenceFilename} v${managedTrialRequest.evidenceVersion}`],
     ['Pilot outcome', pilotOutcomeReport?.review ? `${pilotOutcomeReport.outcomeStatus} / owner accepted` : pilotOutcomeReport ? `${pilotOutcomeReport.outcomeStatus} / review needed` : 'Start outcome proof'],
+    ['AI context', approvedAiContextExport ? `Approved summary / ${approvedAiContextExport.contextDigest}` : 'Approval required'],
     ['Scheduler', schedulerActivation?.configured ? 'Ready for bounded autopilot' : schedulerActivation?.nextAction ?? 'Scheduler proof required'],
     ['Hosted blocker', managedTrialRequest.nextHostedBlocker],
     ['Safe enables', managedTrialRequest.safeEnable.join(', ')],
@@ -863,6 +870,13 @@ export function SettingsPage() {
       outcomeDigest: pilotOutcomeReport?.reportDigest ?? null,
       outcomeAccepted: Boolean(pilotOutcomeReport?.review),
     }),
+    approvedContext: approvedAiContextExport ? {
+      contract: approvedAiContextExport.contract,
+      digest: approvedAiContextExport.contextDigest,
+      outcomeDigest: approvedAiContextExport.outcome.digest,
+      approved: true as const,
+      rawRecordsIncluded: false as const,
+    } : undefined,
   }
   const premiumPilotProofKept = managedPilotRetained || managedPilotBrief?.retention === 'persisted_managed_audit'
   const retainedOwnerProduct = managedPilotBrief?.ownerContext?.preferredProduct
@@ -1598,7 +1612,7 @@ export function SettingsPage() {
       {setup.savedAt ? <section aria-label="Premium pilot" className="premium-pilot">
         <div className="premium-pilot-head"><div><span className="core-eyebrow">Premium pilot</span><h2>Your business context, remembered.</h2><p>SuperMega combines approved product data and owner patterns, then prepares one next move for review.</p></div><span className={`status-pill ${premiumPilotProofKept ? 'approved' : managedPilotBrief ? 'bounded' : ''}`}>{premiumPilotProofKept ? 'checkpoint kept' : managedPilotBrief ? 'verified' : 'local'}</span></div>
         <div className="premium-pilot-rows">{premiumPilotRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
-        <div aria-label="Approved AI context export" className="managed-context-consent">
+        <div aria-label="Approved AI context export" className="managed-context-consent" id="approved-ai-context">
           <div><span className="core-eyebrow">Local context handoff</span><h3>Review the summary AI can receive.</h3><p>Contains counts and a preferred product only. Raw product records, behavior entries, decision records, notes, and browser text are excluded.</p></div>
           <div className="premium-pilot-rows">
             <span><small>Prepared sources</small><strong>{preparedRecordCount}</strong><em>Count only</em></span>
@@ -1690,10 +1704,10 @@ export function SettingsPage() {
                 <div className="managed-request-rows">{schedulerActivationRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
               </div>
               <div aria-label="Managed trial request packet" className="learning-plan-agent managed-request-panel">
-                <div><span className="core-eyebrow">Managed trial request</span><h3>What support needs</h3><p>This packet is local. It packages the workspace, product, evidence file, blocked gates, and safe automation boundary for handoff.</p></div>
+                <div><span className="core-eyebrow">Managed trial request</span><h3>What support needs</h3><p>This local activation packet includes the exact owner-approved context summary and digest. Raw records remain excluded; managed writes stay locked.</p></div>
                 <div className="managed-request-rows">{managedTrialRequestRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
               </div>
-              <div className="learning-plan-actions">{approvedAiContextExport ? <a className="core-button" download={approvedAiContextExportFilename} href={approvedAiContextExportHref}>Download approved context</a> : <button className="core-button" disabled type="button">Review context above</button>}{setup.savedAt ? <><a className="core-button" download={managedTrialRequestFilename} href={managedTrialRequestHref}>Download request packet</a>{managedTrialProofReady ? <a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed trial</a> : <a className="core-button primary" href={managedTrialProofActionPath}>{managedTrialProofActionLabel}</a>}</> : <button className="core-button primary" disabled type="button">Save trial first</button>}</div>
+              <div className="learning-plan-actions">{approvedAiContextExport ? <a className="core-button" download={approvedAiContextExportFilename} href={approvedAiContextExportHref}>Download approved context</a> : <button className="core-button" disabled type="button">Review context above</button>}{setup.savedAt ? <>{approvedAiContextExport ? <a className="core-button" download={managedTrialRequestFilename} href={managedTrialRequestHref}>Download managed activation packet</a> : <button className="core-button" disabled type="button">Approve context first</button>}{managedTrialProofReady ? <a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed trial</a> : <a className="core-button primary" href={managedTrialProofActionPath}>{managedTrialProofActionLabel}</a>}</> : <button className="core-button primary" disabled type="button">Save trial first</button>}</div>
             </div>
             <Suspense fallback={<p className="form-notice" role="status">Loading managed activation plan...</p>}><ManagedActivationRunbook runtime={runtime} /></Suspense>
             {runtime.status !== 'enterprise' ? <ul className="requirement-list">{(runtime.requirements.length ? runtime.requirements : ['Configure managed tenant persistence.', 'Verify production identity and source coverage.']).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
