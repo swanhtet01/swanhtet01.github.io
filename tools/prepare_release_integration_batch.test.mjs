@@ -7,13 +7,18 @@ import test from 'node:test'
 import {
   APP_SHELL_BATCH,
   APP_SHELL_REQUIREMENTS,
+  ECOMMERCE_BATCH,
+  ECOMMERCE_REQUIREMENTS,
   IDENTITY_DATA_REQUIREMENTS,
   RELEASE_INTEGRATION_BATCH_CONTRACT,
   assessAppShellSources,
+  assessEcommerceSources,
   assessIdentityDataSources,
   buildAppShellComparison,
+  buildEcommerceComparison,
   buildIdentityDataComparison,
   validateAppShellComparison,
+  validateEcommerceComparison,
   validateIdentityDataComparison,
   writeExclusiveJson,
 } from './prepare_release_integration_batch.mjs'
@@ -21,6 +26,7 @@ import {
 const sha = (value) => value.repeat(40)
 const files = [...new Set(IDENTITY_DATA_REQUIREMENTS.map((entry) => entry.file))].sort()
 const appShellFiles = [...new Set(APP_SHELL_REQUIREMENTS.map((entry) => entry.file))].sort()
+const ecommerceFiles = [...new Set(ECOMMERCE_REQUIREMENTS.map((entry) => entry.file))].sort()
 
 function sources(authorities = ['upstream', 'candidate']) {
   return Object.fromEntries(files.map((file) => [file, IDENTITY_DATA_REQUIREMENTS
@@ -52,6 +58,21 @@ function appShellTree(ref, commit, authorities) {
     commit,
     sources: appShellSources(authorities),
     blobs: Object.fromEntries(appShellFiles.map((file, index) => [file, String((index % 8) + 1).repeat(40)])),
+  }
+}
+
+function ecommerceSources(authorities = ['upstream', 'candidate']) {
+  return Object.fromEntries(ecommerceFiles.map((file) => [file, ECOMMERCE_REQUIREMENTS
+    .filter((entry) => entry.file === file && authorities.includes(entry.authority))
+    .flatMap((entry) => entry.tokens).join('\n') || '// retained source']))
+}
+
+function ecommerceTree(ref, commit, authorities) {
+  return {
+    ref,
+    commit,
+    sources: ecommerceSources(authorities),
+    blobs: Object.fromEntries(ecommerceFiles.map((file, index) => [file, String((index % 8) + 1).repeat(40)])),
   }
 }
 
@@ -154,4 +175,38 @@ test('app shell comparison is exact, no-write, and batch-specific', () => {
   assert.equal(packet.candidate.authority.candidate.passed, true)
   assert.equal(validateAppShellComparison(packet).digest, packet.digest)
   assert.throws(() => validateIdentityDataComparison(packet), /release_integration_batch_packet_invalid/)
+})
+
+test('Ecommerce requires simple private UX and governed lifecycle depth together', () => {
+  const upstream = assessEcommerceSources(ecommerceSources(['upstream']))
+  const candidate = assessEcommerceSources(ecommerceSources(['candidate']))
+  const integrated = assessEcommerceSources(ecommerceSources())
+  assert.equal(upstream.ok, false)
+  assert.equal(upstream.authority.upstream.passed, true)
+  assert.equal(candidate.ok, false)
+  assert.equal(candidate.authority.candidate.passed, true)
+  assert.equal(integrated.ok, true)
+
+  const exposed = ecommerceSources()
+  exposed['showroom/src/products/ecommerce/EcommerceProduct.tsx'] = exposed['showroom/src/products/ecommerce/EcommerceProduct.tsx'].replace('Managed Shop - connected company', '')
+  assert.equal(assessEcommerceSources(exposed).ok, false)
+
+  const shallow = ecommerceSources()
+  shallow['showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx'] = shallow['showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx'].replace('function submitCorrectionRequest', '')
+  assert.equal(assessEcommerceSources(shallow).ok, false)
+})
+
+test('Ecommerce comparison is exact, no-write, and batch-specific', () => {
+  const packet = buildEcommerceComparison({
+    generatedAt: '2026-07-30T16:00:00.000Z',
+    upstream: ecommerceTree('origin/main', sha('e'), ['upstream']),
+    candidate: ecommerceTree('HEAD', sha('f'), ['candidate']),
+  })
+  assert.equal(packet.batch, ECOMMERCE_BATCH)
+  assert.equal(packet.decision.status, 'manual_union_required')
+  assert.match(packet.decision.acceptanceCommand, /--batch ecommerce$/)
+  assert.equal(packet.upstream.authority.upstream.passed, true)
+  assert.equal(packet.candidate.authority.candidate.passed, true)
+  assert.equal(validateEcommerceComparison(packet).digest, packet.digest)
+  assert.throws(() => validateAppShellComparison(packet), /release_integration_batch_packet_invalid/)
 })

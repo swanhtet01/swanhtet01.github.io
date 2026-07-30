@@ -9,6 +9,7 @@ import { spawnSync } from 'node:child_process'
 export const RELEASE_INTEGRATION_BATCH_CONTRACT = 'supermega.release-integration-batch.v1'
 export const IDENTITY_DATA_BATCH = 'identity-data-onboarding'
 export const APP_SHELL_BATCH = 'app-shell'
+export const ECOMMERCE_BATCH = 'ecommerce'
 
 const root = resolve(import.meta.dirname, '..')
 const MAX_SOURCE_BYTES = 2_000_000
@@ -201,6 +202,83 @@ export const APP_SHELL_REQUIREMENTS = [
   },
 ]
 
+export const ECOMMERCE_REQUIREMENTS = [
+  {
+    id: 'upstream-live-quote-clock', authority: 'upstream', file: 'showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx', tokens: [
+      'const [quoteClockMs, setQuoteClockMs] = useState(Date.now)',
+      'window.setInterval(() => setQuoteClockMs(Date.now()), 1_000)',
+      'Date.parse(latestRequest.quote.expiresAt) - quoteClockMs',
+      'setQuoteClockMs(quotedAt.getTime())',
+    ],
+  },
+  {
+    id: 'upstream-private-company-labels', authority: 'upstream', file: 'showroom/src/products/ecommerce/EcommerceProduct.tsx', tokens: [
+      'Already saved for this company as revision',
+      'Saved for this company as revision',
+      'Managed Shop - connected company',
+    ],
+  },
+  {
+    id: 'upstream-progressive-enterprise-controls', authority: 'upstream', file: 'showroom/src/products/ecommerce/EcommerceProduct.tsx', tokens: [
+      '<details className="ecommerce-order-import-workspace"',
+      'aria-label="Order batch review workspace"',
+      'Upload CSV or paste channel orders only when needed.',
+      '<details aria-label="Enterprise order controls"',
+      'Inbox, payment, delivery, recovery, replies, and activation evidence.',
+    ],
+  },
+  {
+    id: 'candidate-governed-active-order-changes', authority: 'candidate', file: 'showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx', tokens: [
+      'type EcommerceCancellationOutcome',
+      'type EcommerceAmendmentStatus',
+      'type EcommerceRescheduleStatus',
+      'function openAmendmentRequest',
+      'function submitAmendmentRequest',
+      'function openRescheduleRequest',
+      'function submitRescheduleRequest',
+      'function submitCancellationRequest',
+    ],
+  },
+  {
+    id: 'candidate-governed-after-sale-help', authority: 'candidate', file: 'showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx', tokens: [
+      'function submitReturnRequest',
+      'function submitSupportRequest',
+      'function submitCorrectionRequest',
+      '<strong>Order help</strong>',
+      'pendingReturnIntents',
+      'pendingSupportIntents',
+      'pendingCorrectionIntents',
+    ],
+  },
+  {
+    id: 'candidate-managed-shop-handoff', authority: 'candidate', file: 'showroom/src/products/ecommerce/EcommerceProduct.tsx', tokens: [
+      'async function recordManagedBuyingRequest',
+      'function openShopDraft',
+      'commerce.storefront_request.received',
+      'exactRequestIsRetained',
+      'managedOrderTimeline',
+    ],
+  },
+  {
+    id: 'candidate-order-operations-depth', authority: 'candidate', file: 'showroom/src/products/ecommerce/EcommerceProduct.tsx', tokens: [
+      'const lifecyclePaymentAttention',
+      'const lifecycleRefundAttention',
+      'const requestInboxFilteredRequests',
+      'aria-label="Order lifecycle queue"',
+      'aria-label="Order lifecycle control"',
+      'aria-label="Customer follow-up controls"',
+    ],
+  },
+  {
+    id: 'candidate-safe-order-import', authority: 'candidate', file: 'showroom/src/products/ecommerce/EcommerceProduct.tsx', tokens: [
+      'function parseOrderImportCsv',
+      'function reviewOrderImportBatch',
+      'function downloadOrderImportReviewPacket',
+      'No order import, customer message, payment, delivery booking, stock move, refund, Shop write, or managed activation ran.',
+    ],
+  },
+]
+
 const BATCH_POLICIES = new Map([
   [IDENTITY_DATA_BATCH, {
     batch: IDENTITY_DATA_BATCH,
@@ -211,6 +289,11 @@ const BATCH_POLICIES = new Map([
     batch: APP_SHELL_BATCH,
     requirements: APP_SHELL_REQUIREMENTS,
     firstAuthority: 'upstream-account-consequence-and-source-evidence',
+  }],
+  [ECOMMERCE_BATCH, {
+    batch: ECOMMERCE_BATCH,
+    requirements: ECOMMERCE_REQUIREMENTS,
+    firstAuthority: 'upstream-private-progressive-and-live-quote-ux',
   }],
 ].map(([batch, policy]) => [batch, {
   ...policy,
@@ -299,6 +382,10 @@ export function assessAppShellSources(value) {
   return assessSources(value, exactBatch(APP_SHELL_BATCH))
 }
 
+export function assessEcommerceSources(value) {
+  return assessSources(value, exactBatch(ECOMMERCE_BATCH))
+}
+
 function exactBlobMap(value, files) {
   if (!value || typeof value !== 'object' || Array.isArray(value)
     || Object.keys(value).sort().join(',') !== files.join(',')) fail('release_integration_batch_blobs_invalid')
@@ -377,6 +464,10 @@ export function buildAppShellComparison(input) {
   return buildComparison(input, exactBatch(APP_SHELL_BATCH))
 }
 
+export function buildEcommerceComparison(input) {
+  return buildComparison(input, exactBatch(ECOMMERCE_BATCH))
+}
+
 function validateComparison(packet, policy) {
   if (!packet || typeof packet !== 'object' || Array.isArray(packet)) fail('release_integration_batch_packet_invalid')
   const { digest, ...body } = packet
@@ -403,6 +494,10 @@ export function validateIdentityDataComparison(packet) {
 
 export function validateAppShellComparison(packet) {
   return validateComparison(packet, exactBatch(APP_SHELL_BATCH))
+}
+
+export function validateEcommerceComparison(packet) {
+  return validateComparison(packet, exactBatch(ECOMMERCE_BATCH))
 }
 
 function runGit(args) {
