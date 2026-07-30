@@ -8,6 +8,7 @@ import { BEHAVIOR_TRAIL_KEY } from './behavior-trail'
 import { COMMERCE_KEY, LEGACY_COMMERCE_KEYS } from './commerce-workspace'
 import { CLIENT_DEMO_WORKSPACE_STORAGE_KEY } from './client-onboarding'
 import { PLANT_INDUSTRY_PACK_STORAGE_KEY } from './plant-industry-packs'
+import { PLANT_ORDER_STORAGE_PREFIX } from './plant-order-foundation'
 import {
   ACTION_KEY,
   APPROVAL_KEY,
@@ -65,6 +66,7 @@ const exactWorkspaceKeys = new Set([
 
 export function isLocalWorkspaceKey(key: string) {
   return exactWorkspaceKeys.has(key)
+    || key.startsWith(PLANT_ORDER_STORAGE_PREFIX)
     || key.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)
     || key.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)
     || key.startsWith(SHOP_ORDER_DRAFT_RESET_PREFIX)

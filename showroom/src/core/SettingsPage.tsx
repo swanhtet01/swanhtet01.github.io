@@ -99,7 +99,7 @@ import {
   type ClientDemoPreparationArtifact,
   type ClientDemoWorkspace,
 } from './client-onboarding'
-import { projectPlantOrder } from './plant-order-foundation'
+import { PLANT_ORDER_STORAGE_PREFIX, projectPlantOrder } from './plant-order-foundation'
 import {
   SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
   createShopServiceSchedule,
@@ -1500,7 +1500,8 @@ export function SettingsPage() {
       const { resetCommerceOrderDraftRecovery } = await import('./commerce-order-draft')
       await resetCommerceOrderDraftRecovery()
       const retainedKeys = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index))
-        .filter((key): key is string => Boolean(key?.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)
+        .filter((key): key is string => Boolean(key?.startsWith(PLANT_ORDER_STORAGE_PREFIX)
+          || key?.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)
           || key?.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)
           || key?.startsWith(SHOP_ORDER_DRAFT_RESET_PREFIX)))
       ;[
