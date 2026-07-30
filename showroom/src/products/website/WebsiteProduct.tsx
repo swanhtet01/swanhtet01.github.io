@@ -764,6 +764,7 @@ export function WebsiteProduct() {
     && Boolean(page.hero.ctaHref.trim()))
   const websiteLeads = leadLedger.leads.filter((lead) => lead.siteName === workspace.siteName)
   const leadCounts = websiteLeadCounts(leadLedger, workspace.siteName)
+  const managedReleaseRequired = storageMode === 'managed'
   const websiteAgentJob = storageIssue || canRepairLocalStorage
     ? 'Recover Website workspace'
     : starterSetupActive
@@ -776,11 +777,11 @@ export function WebsiteProduct() {
             ? 'Fix content readiness'
             : leadCounts.new
               ? 'Review new inquiries'
-              : !approvalIsCurrent
+              : managedReleaseRequired && !approvalIsCurrent
                 ? 'Record owner approval'
-                : !publishIsCurrent
+                : managedReleaseRequired && !publishIsCurrent
                   ? 'Record release snapshot'
-                  : storageMode === 'managed'
+                  : managedReleaseRequired
                     ? 'Prepare rollout plan'
                     : 'Download site handoff'
   const websiteAgentReason = storageIssue || canRepairLocalStorage
@@ -795,13 +796,13 @@ export function WebsiteProduct() {
             ? `${failingContentChecks.length} readiness check${failingContentChecks.length === 1 ? '' : 's'} must pass before owner approval.`
             : leadCounts.new
               ? `${leadCounts.new} new inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} a named owner and a local decision before follow-up.`
-              : !approvalIsCurrent
+              : managedReleaseRequired && !approvalIsCurrent
                 ? 'The current Website revision needs named owner review before a release snapshot is recorded.'
-                : !publishIsCurrent
+                : managedReleaseRequired && !publishIsCurrent
                   ? 'The approved revision needs an immutable static site package for handoff.'
-                  : storageMode === 'managed'
+                  : managedReleaseRequired
                     ? 'The managed release can prepare a rollout plan, but provider deployment still requires owner execution.'
-                    : 'The approved static site package is ready to download; no domain or deployment changes happen here.'
+                    : 'The reviewed local site is ready to download; no domain or deployment changes happen here.'
   const websiteOwnerGate = storageIssue || canRepairLocalStorage
     ? 'Owner exports backup or confirms repair before continuing.'
     : starterSetupActive
@@ -814,11 +815,11 @@ export function WebsiteProduct() {
             ? 'Owner fixes content, navigation, proof, and CTA readiness.'
             : leadCounts.new
               ? 'Owner qualifies or closes each inquiry; no customer message is sent here.'
-              : !approvalIsCurrent
+              : managedReleaseRequired && !approvalIsCurrent
                 ? 'Owner records approval with evidence.'
-                : !publishIsCurrent
+                : managedReleaseRequired && !publishIsCurrent
                   ? 'Owner records the release snapshot.'
-                  : storageMode === 'managed'
+                  : managedReleaseRequired
                     ? 'Owner approves release manager and reviewer before deployment planning.'
                     : 'Owner downloads the package and decides where it goes live.'
   const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
@@ -829,7 +830,7 @@ export function WebsiteProduct() {
         ? 'Open editor'
         : leadCounts.new
           ? 'Review inquiries'
-        : !approvalIsCurrent || !publishIsCurrent || storageMode === 'managed'
+        : managedReleaseRequired
           ? 'Open release'
           : 'Get website'
   const websiteTodayState = storageIssue || canRepairLocalStorage
@@ -844,8 +845,8 @@ export function WebsiteProduct() {
     ['Pages', `${statusWorkspace.pages.filter((page) => page.stage === 'ready').length}/${statusWorkspace.pages.length} ready`],
     ['Readiness', hasUnsavedChanges ? 'Review draft' : failingContentChecks.length ? `${failingContentChecks.length} to fix` : 'Clear'],
     ['Inquiries', leadCounts.new ? `${leadCounts.new} new` : websiteLeads.length ? `${websiteLeads.length} total` : 'None yet'],
-    ['Approval', hasUnsavedChanges ? 'Blocked by draft' : approvalIsCurrent ? 'Recorded' : 'Needed'],
-    ['Site package', hasUnsavedChanges ? 'Blocked by draft' : publishIsCurrent ? 'Ready' : 'Needed'],
+    ['Approval', hasUnsavedChanges ? 'Blocked by draft' : managedReleaseRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required'],
+    ['Site package', hasUnsavedChanges ? 'Blocked by draft' : managedReleaseRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download'],
   ] as const
   const websiteTodaySource = storageMode === 'managed'
     ? `Managed Website · ${managedActorId || 'authenticated workspace'}`
@@ -898,11 +899,7 @@ export function WebsiteProduct() {
       })
       return
     }
-    if (!approvalIsCurrent || !publishIsCurrent || storageMode === 'managed') {
-      openWorkspaceView('publish')
-      return
-    }
-    downloadTrialSite()
+    openWorkspaceView('publish')
   }
 
   function saveLeadLedger(nextLedger: typeof leadLedger, success: string) {

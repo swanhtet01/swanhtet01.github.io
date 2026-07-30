@@ -1482,11 +1482,13 @@
 }
 
 .website-preview-frame.is-tablet {
-  width: min(768px, 100%);
+  width: 100%;
+  max-width: 768px;
 }
 
 .website-preview-frame.is-mobile {
-  width: min(390px, 100%);
+  width: 100%;
+  max-width: 390px;
 }
 
 .website-preview-site {
