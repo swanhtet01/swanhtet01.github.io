@@ -95,6 +95,7 @@ let schedulerExecutionBudget
 try { schedulerExecutionBudget = validateSchedulerExecutionBudget(schedulerAuthority) } catch { fail('scheduler_execution_budget_invalid') }
 const indexSource = await readFile(resolve(root, 'showroom', 'index.html'), 'utf8')
 const viteConfigSource = await readFile(resolve(root, 'showroom', 'vite.config.ts'), 'utf8')
+const staticRouteSource = await readFile(resolve(root, 'showroom', 'scripts', 'prepare-static-routes.mjs'), 'utf8')
 const websiteStarterSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-starter.ts'), 'utf8')
 const websiteLeadSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-leads.ts'), 'utf8')
 const websiteStarterSetupSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteStarterSetup.tsx'), 'utf8')
@@ -266,9 +267,15 @@ async function walk(directory) {
   return files
 }
 
-for (const route of ['', 'work', 'operations', 'shop', 'plant', 'website', 'ecommerce', 'operations/commerce', 'operations/production', 'products/website', 'products/ecommerce', 'agents', 'settings']) {
-  const page = resolve(dist, route, 'index.html')
-  if (!await exists(page)) fail(`missing_route:${route || '/'}`)
+const rootPage = resolve(dist, 'index.html')
+const fallbackPage = resolve(dist, '404.html')
+if (!await exists(rootPage)) fail('missing_route:/')
+if (!await exists(fallbackPage)) fail('missing_spa_fallback')
+else if (await readFile(rootPage, 'utf8') !== await readFile(fallbackPage, 'utf8')) fail('spa_fallback_drift')
+if (!staticRouteSource.includes("writeFile(resolve(distDir, '404.html'), indexHtml, 'utf8')")
+  || staticRouteSource.includes('routePaths') || staticRouteSource.includes('mkdir(')) fail('static_spa_fallback_contract_invalid')
+for (const route of ['work', 'operations', 'shop', 'plant', 'website', 'ecommerce', 'operations/commerce', 'operations/production', 'products/website', 'products/ecommerce', 'agents', 'settings']) {
+  if (await exists(resolve(dist, route, 'index.html'))) fail(`redundant_static_route:${route}`)
 }
 
 const releasePath = resolve(dist, '__release.json')
