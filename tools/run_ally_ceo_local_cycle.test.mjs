@@ -741,6 +741,58 @@ test('a closed period permits exactly one explicit legacy repair and remains clo
   assert.match(repair.calls.find((call) => call.args?.[1] === 'add').args[2], /\[ALLY_CEO_REPAIR:2026-07-29:daily-company-control:[a-f0-9]{12}\]/)
 })
 
+test('explicit repair stops at the first eligible rejection without planning unrelated later outcomes', async () => {
+  const dailyJobId = '000000000065'
+  const engineeringJobId = '000000000066'
+  const dailyPath = 'C:\\state\\outputs\\daily-accepted.md'
+  const engineeringPath = 'C:\\state\\outputs\\engineering-rejected.md'
+  const rejectedEngineeringReport = acceptedStructuredReport.replaceAll(
+    'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
+    'Not verified or performed: specialist draft withheld after incomplete model output.',
+  )
+  const state = harness({
+    queueList: completedOutcomeLine('daily-company-control', 0) + completedOutcomeLine('engineering-release-control', 1),
+    jobObjectives: {
+      [dailyJobId]: 'accepted daily objective',
+      [engineeringJobId]: '[ALLY_CEO_OUTCOME:2026-07-29:engineering-release-control] [ALLY_CEO_CYCLE:0123456789ab] [ALLY_CEO_PLAN:fedcba987654] Each specialist section must be at most 90 words and contain exactly these advisory labels: Proposed next action, Assumption, and Missing proof. Specialists must not claim execution or verified facts; the evidence-grounded executive synthesis remains code-owned. The executive synthesis must be at most 120 words and end with: Owner review required.',
+    },
+    reportPaths: { [dailyJobId]: dailyPath, [engineeringJobId]: engineeringPath },
+    preflight: JSON.stringify({
+      schema: 'local-company.queue-preflight.v1',
+      status: 'ready',
+      queue_id: '123456789abc',
+      reviewed_queue_matches: true,
+      submission_allowed: true,
+      model_execution_ready: true,
+      blockers: [],
+      owner_gate_categories: [],
+      team: { selection: 'explicit', roles: ['engineering'] },
+      knowledge: { status: 'ready', source_count: 17, status_counts: { current: 17, changed: 0, missing: 0, unavailable: 0 } },
+      effects: { model_called: false, work_started: false },
+    }),
+  })
+  let planCalls = 0
+  const result = await runAllyCeoLocalCycle(
+    { execute: true, refreshKnowledge: true, repairRejected: true },
+    {
+      buildPlan: async (completedOutcomeIds) => {
+        planCalls += 1
+        if (completedOutcomeIds.length > 1) throw new Error('later_outcome_must_not_be_planned')
+        return rotatingPlan(completedOutcomeIds)
+      },
+      runCommand: state.runCommand,
+      inspectReport: async (path) => {
+        const text = path === engineeringPath ? rejectedEngineeringReport : acceptedStructuredReport
+        return { path, bytes: Buffer.byteLength(text), digest: 'sha256:' + '9'.repeat(64), text }
+      },
+    },
+  )
+  assert.equal(result.status, 'accepted')
+  assert.equal(result.outcomeId, 'engineering-release-control')
+  assert.equal(result.repair.jobId, engineeringJobId)
+  assert.equal(planCalls, 2)
+})
+
 test('a closed period never repairs a rejected current-version outcome', async () => {
   const firstJobId = '000000000065'
   const firstReportPath = 'C:\\state\\outputs\\current-rejected.md'

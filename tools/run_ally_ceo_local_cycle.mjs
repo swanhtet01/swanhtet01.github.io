@@ -920,7 +920,6 @@ async function selectRotatingPlan({ buildPlan, queueText, runCommand, inspectRep
   const completedOutcomeIds = []
   const processedOutcomeIds = []
   const rejectedOutcomes = []
-  const repairCandidates = []
   let period = null
   for (const expectedOutcomeId of OUTCOME_SEQUENCE) {
     const plan = await buildPlan([...processedOutcomeIds])
@@ -946,7 +945,17 @@ async function selectRotatingPlan({ buildPlan, queueText, runCommand, inspectRep
         && existing.jobId
         && inspection.legacyExecution
         && LEGACY_REPAIRABLE_REASONS.has(inspection.reason)) {
-        repairCandidates.push({ plan, spec, existing, inspection })
+        return {
+          allDone: false,
+          periodIncomplete: false,
+          period,
+          plan,
+          spec,
+          existing,
+          inspection,
+          completedOutcomeIds,
+          rejectedOutcomes,
+        }
       }
     }
     processedOutcomeIds.push(spec.outcomeId)
@@ -960,20 +969,6 @@ async function selectRotatingPlan({ buildPlan, queueText, runCommand, inspectRep
     || declined.manifest !== null
     || declined.plan !== null) {
     fail('ally_ceo_local_cycle_rotation_completion_invalid')
-  }
-  if (repairCandidates.length > 0) {
-    const selected = repairCandidates[0]
-    return {
-      allDone: false,
-      periodIncomplete: false,
-      period,
-      plan: selected.plan,
-      spec: selected.spec,
-      existing: selected.existing,
-      inspection: selected.inspection,
-      completedOutcomeIds,
-      rejectedOutcomes,
-    }
   }
   return {
     allDone: rejectedOutcomes.length === 0,
