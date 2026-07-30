@@ -43,18 +43,20 @@ import {
   type ManagedEcommerceOrderQueueImportPlan,
   type ManagedEcommerceOrderQueueValidation,
   buildManagedEcommerceOrderQueueValidation,
+  completeManagedWorkspaceSignIn,
   createManagedApproval,
-  currentManagedWorkspace,
   loadManagedCompanyBrief,
   loadManagedBootstrap,
   managedTrialAuthConfigured,
   planManagedEcommerceOrderQueueImport,
   preflightManagedEcommerceOrderQueueApply,
   retainManagedCompanyBrief,
-  signInManagedTrial,
+  signInAndDiscoverManagedWorkspaces,
   signOutManagedTrial,
   validateManagedEcommerceOrderQueue,
   type ManagedCompanyBrief,
+  type ManagedIdentity,
+  type ManagedWorkspaceSignIn,
 } from './managed-trial'
 import {
   buildEcommerceManagedStoreActivationPacket,
@@ -240,7 +242,8 @@ export function SettingsPage() {
   const [managedIdentity, setManagedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const [managedEmail, setManagedEmail] = useState('')
   const [managedPassword, setManagedPassword] = useState('')
-  const [managedWorkspace, setManagedWorkspace] = useState(currentManagedWorkspace())
+  const [managedWorkspace, setManagedWorkspace] = useState('')
+  const [managedWorkspaceSignIn, setManagedWorkspaceSignIn] = useState<ManagedWorkspaceSignIn | null>(null)
   const [managedNotice, setManagedNotice] = useState('')
   const [managedBusy, setManagedBusy] = useState(false)
   const [managedPilotBrief, setManagedPilotBrief] = useState<ManagedCompanyBrief | null>(null)
@@ -288,7 +291,7 @@ export function SettingsPage() {
           setManagedPilotBrief(brief)
           setManagedPilotCommandId(settingsCommandUuid())
           setManagedPilotRetained(brief.retention === 'persisted_managed_audit')
-          setManagedPilotNotice(`${brief.sourceCount} managed source${brief.sourceCount === 1 ? '' : 's'} verified for ${managedIdentity.workspaceId}.`)
+          setManagedPilotNotice(`${brief.sourceCount} managed source${brief.sourceCount === 1 ? '' : 's'} verified for this company.`)
         })
         .catch((error) => {
           if (managedPilotRequestRef.current !== requestId) return
@@ -796,7 +799,7 @@ export function SettingsPage() {
   const operatingLearning = managedPilotBrief ? operatingChangeCopy(managedPilotBrief.operatingChange) : null
   const premiumPilotRows = [
     ['Owner pattern', retainedOwnerProduct ? `${managedContextProductLabel(retainedOwnerProduct)} retained` : topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.detail}` : 'Not learned yet', retainedOwnerProduct ? 'Managed briefs may use this preference only after risk and evidence checks.' : topAgentJob ? `${topAgentJob.chosenCount} local choice${topAgentJob.chosenCount === 1 ? '' : 's'}.` : 'Choose a recommended product action to teach the next handoff.'],
-    ['Managed account', managedIdentity?.email ?? 'Not connected', managedIdentity ? managedIdentity.workspaceId : 'Your local trial remains usable without an account.'],
+    ['Managed account', managedIdentity?.email ?? 'Not connected', managedIdentity ? 'Named-user access verified for this company.' : 'Your local trial remains usable without an account.'],
     ['Approved sources', managedPilotBrief ? `${managedPilotBrief.sourceCount} managed` : preparedRecordCount ? `${preparedRecordCount} local prepared` : 'No source proof yet', managedPilotBrief ? 'Counts only; raw source records are not shown here.' : 'Connect a managed workspace to verify tenant-scoped sources.'],
     ['Learning checkpoint', premiumPilotProofKept ? 'Kept in audit' : managedPilotBrief ? 'Ready to keep' : 'Local preview only', premiumPilotProofKept ? 'The aggregate operating baseline has a managed audit receipt.' : 'No external action runs from this panel.'],
   ] as const
@@ -810,13 +813,13 @@ export function SettingsPage() {
     : null
   const ecommerceOrderQueueManagedRows: Array<readonly [string, string, string]> = ecommerceOrderQueueReadinessPacket
     ? [
-        ['Workspace', managedIdentity?.workspaceId ?? 'Connect workspace', managedIdentity ? 'Identity selected for zero-write check.' : 'Premium check waits for managed sign-in.'],
+        ['Company access', managedIdentity ? 'Connected' : 'Connect company', managedIdentity ? 'Named-user access selected for zero-write check.' : 'Premium check waits for managed sign-in.'],
         ['Rows', `${ecommerceOrderQueueReadinessPacket.sourceReview.readyRows}/${ecommerceOrderQueueReadinessPacket.sourceReview.totalRows} ready`, `${ecommerceOrderQueueReadinessPacket.sourceReview.blockedRows} blocked rows.`],
         ['Managed check', ecommerceOrderQueueServerBusy ? 'Checking' : ecommerceOrderQueueManagedValidation?.status ?? 'Waiting', ecommerceOrderQueueServerValidation ? 'Server validation passed with zero records written.' : ecommerceOrderQueueManagedValidation ? 'Local receipt ready; run managed check before owner approval.' : 'No managed request or write has run.'],
         ['Boundary', ecommerceOrderQueueManagedValidation?.external_writes_performed === false ? 'Zero write' : 'Locked', 'Order import, customer send, payment, delivery, stock, and Shop writes remain blocked.'],
       ]
     : [
-        ['Workspace', managedIdentity?.workspaceId ?? 'Connect workspace', 'Validate an order packet first.'],
+        ['Company access', managedIdentity ? 'Connected' : 'Connect company', 'Validate an order packet first.'],
         ['Managed check', 'Waiting', 'No managed request or write has run.'],
       ]
   const ecommerceOrderQueueApprovalPacket = ecommerceOrderQueueReadinessPacket && ecommerceOrderQueueServerValidation
@@ -1327,24 +1330,45 @@ export function SettingsPage() {
     }
   }
 
+  async function activateManagedWorkspace(identity: ManagedIdentity) {
+    setManagedIdentity(identity)
+    setEcommerceOrderQueueServerValidation(null)
+    setEcommerceOrderQueueImportPlan(null)
+    setEcommerceOrderQueueApplyPreflight(null)
+    setManagedPassword('')
+    try {
+      const bootstrap = await loadManagedBootstrap(identity)
+      setApprovals((current) => mergeManagedApprovals(current, bootstrap.approvals))
+      setManagedNotice('Connected. Managed approvals are ready.')
+    } catch (workspaceError) {
+      setManagedNotice(workspaceError instanceof Error ? workspaceError.message : 'Signed in, but this workspace is not ready.')
+    }
+  }
+
   async function connectManagedWorkspace(event: FormEvent) {
     event.preventDefault()
     setManagedBusy(true)
-    setManagedNotice('Checking workspace membership...')
     try {
-      const identity = await signInManagedTrial(managedEmail, managedPassword, managedWorkspace)
-      setManagedIdentity(identity)
-      setEcommerceOrderQueueServerValidation(null)
-      setEcommerceOrderQueueImportPlan(null)
-      setEcommerceOrderQueueApplyPreflight(null)
-      setManagedPassword('')
-      try {
-        const bootstrap = await loadManagedBootstrap(identity)
-        setApprovals((current) => mergeManagedApprovals(current, bootstrap.approvals))
-        setManagedNotice(`Connected to ${identity.workspaceId}. Managed approvals are ready.`)
-      } catch (workspaceError) {
-        setManagedNotice(workspaceError instanceof Error ? workspaceError.message : 'Signed in, but this workspace is not ready.')
+      if (managedWorkspaceSignIn) {
+        setManagedNotice('Opening the selected company...')
+        await activateManagedWorkspace(
+          await completeManagedWorkspaceSignIn(managedWorkspaceSignIn, managedWorkspace),
+        )
+        setManagedWorkspaceSignIn(null)
+        return
       }
+      setManagedNotice('Finding companies assigned to this account...')
+      const signIn = await signInAndDiscoverManagedWorkspaces(managedEmail, managedPassword)
+      if (signIn.workspaces.length === 1) {
+        await activateManagedWorkspace(
+          await completeManagedWorkspaceSignIn(signIn, signIn.workspaces[0].workspaceId),
+        )
+        return
+      }
+      setManagedWorkspaceSignIn(signIn)
+      setManagedWorkspace(signIn.workspaces[0].workspaceId)
+      setManagedPassword('')
+      setManagedNotice(`Choose one of ${signIn.workspaces.length} companies assigned to ${signIn.email}.`)
     } catch (error) {
       setManagedNotice(error instanceof Error ? error.message : 'Managed sign-in failed.')
     } finally {
@@ -1365,7 +1389,7 @@ export function SettingsPage() {
       setManagedPilotBrief(brief)
       setManagedPilotCommandId(settingsCommandUuid())
       setManagedPilotRetained(brief.retention === 'persisted_managed_audit')
-      setManagedPilotNotice(`${brief.sourceCount} managed source${brief.sourceCount === 1 ? '' : 's'} verified for ${identity.workspaceId}.`)
+      setManagedPilotNotice(`${brief.sourceCount} managed source${brief.sourceCount === 1 ? '' : 's'} verified for this company.`)
     } catch (error) {
       if (managedPilotRequestRef.current !== requestId) return
       setManagedPilotBrief(null)
@@ -1407,6 +1431,8 @@ export function SettingsPage() {
     setManagedBusy(true)
     managedPilotRequestRef.current += 1
     await signOutManagedTrial()
+    setManagedWorkspaceSignIn(null)
+    setManagedWorkspace('')
     setManagedIdentity(null)
     setManagedPilotBrief(null)
     setManagedPilotCommandId('')
@@ -1482,7 +1508,7 @@ export function SettingsPage() {
         <div className="premium-pilot-rows">{premiumPilotRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
         {managedPilotBrief ? <div className="premium-pilot-brief"><div><span className="core-eyebrow">Managed company brief</span><h3>{managedPilotBrief.title}</h3><p>{managedPilotBrief.summary}</p>{operatingLearning ? <div className="premium-pilot-learning"><span className="core-eyebrow">AI learned</span><strong>{operatingLearning.label}</strong><small>{operatingLearning.detail}</small></div> : null}</div><div className="premium-pilot-next"><small>Reviewed next move</small><strong>{managedPilotBrief.nextAction.label}</strong><em>{managedPilotBrief.boundary}</em></div></div> : null}
         <ManagedContextConsent contextPackage={managedContextPackage} identity={managedIdentity} onRetained={() => void verifyManagedPilot()} />
-        {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="premium-pilot-actions"><button className="core-button" disabled={managedPilotBusy} onClick={() => void verifyManagedPilot()} type="button">{managedPilotBusy && !managedPilotBrief ? 'Verifying...' : 'Verify context'}</button>{managedPilotBrief ? <><Link className="core-button" to={managedPilotBrief.nextAction.path}>{managedPilotBrief.nextAction.label}</Link><button className="core-button primary" disabled={managedPilotBusy || premiumPilotProofKept} onClick={() => void keepManagedPilotProof()} type="button">{premiumPilotProofKept ? 'Checkpoint kept' : managedPilotBusy ? 'Keeping...' : 'Keep learning checkpoint'}</button></> : null}</div> : <form className="premium-pilot-login" onSubmit={(event) => void connectManagedWorkspace(event)}><div><span className="core-eyebrow">Connect managed workspace</span><strong>Verify this company, not a generic demo.</strong></div><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label><label>Workspace ID<input maxLength={128} onChange={(event) => setManagedWorkspace(event.target.value)} placeholder="Provisioned workspace" required value={managedWorkspace} /></label><button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking...' : 'Connect and verify'}</button></form> : <div className="premium-pilot-actions"><a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed pilot</a></div>}
+        {runtime.status === 'enterprise' && managedTrialAuthConfigured() ? managedIdentity ? <div className="premium-pilot-actions"><button className="core-button" disabled={managedPilotBusy} onClick={() => void verifyManagedPilot()} type="button">{managedPilotBusy && !managedPilotBrief ? 'Verifying...' : 'Verify context'}</button>{managedPilotBrief ? <><Link className="core-button" to={managedPilotBrief.nextAction.path}>{managedPilotBrief.nextAction.label}</Link><button className="core-button primary" disabled={managedPilotBusy || premiumPilotProofKept} onClick={() => void keepManagedPilotProof()} type="button">{premiumPilotProofKept ? 'Checkpoint kept' : managedPilotBusy ? 'Keeping...' : 'Keep learning checkpoint'}</button></> : null}</div> : <form className="premium-pilot-login" onSubmit={(event) => void connectManagedWorkspace(event)}><div><span className="core-eyebrow">Connect managed workspace</span><strong>Verify this company, not a generic demo.</strong></div>{managedWorkspaceSignIn ? <label>Company<select onChange={(event) => setManagedWorkspace(event.target.value)} required value={managedWorkspace}>{managedWorkspaceSignIn.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label> : <><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></>}<button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking...' : managedWorkspaceSignIn ? 'Open company' : 'Find my company'}</button></form> : <div className="premium-pilot-actions"><a className="core-button primary" href={managedTrialRequestUrl(setup.product, selectedTemplate.id, managedTrialPrefill)}>Request managed pilot</a></div>}
         {managedNotice || managedPilotNotice ? <p className="form-notice" role="status">{managedPilotNotice || managedNotice}</p> : null}
         <p className="premium-pilot-boundary">Review only. No customer send, payment, stock move, production write, domain publish, or model training runs from this pilot.</p>
       </section> : null}
@@ -1491,7 +1517,7 @@ export function SettingsPage() {
         <div className="settings-advanced-content">
           <section className="core-panel system-boundary-panel">
             <div className="panel-head"><div><span className="core-eyebrow">System boundary</span><h2>{runtime.status === 'enterprise' ? 'Managed mode ready' : 'Managed mode locked'}</h2></div><RuntimeBadge status={runtime.status} /></div>
-            {managedIdentity ? <div className="template-contract"><span>Managed account</span><strong>{managedIdentity.email}</strong><small>{managedIdentity.workspaceId} - verified in Premium pilot</small><button className="text-link" disabled={managedBusy} onClick={() => void disconnectManagedWorkspace()} type="button">Disconnect</button></div> : runtime.status === 'enterprise' && managedTrialAuthConfigured() && !setup.savedAt ? <form className="core-form compact-form managed-recovery-login" onSubmit={(event) => void connectManagedWorkspace(event)}><span className="core-eyebrow">Managed access recovery</span><p className="authority-note">Connect an existing workspace before rebuilding a local trial.</p><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label><label>Workspace ID<input maxLength={128} onChange={(event) => setManagedWorkspace(event.target.value)} placeholder="Provisioned workspace" required value={managedWorkspace} /></label><button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking...' : 'Recover managed access'}</button>{managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}</form> : runtime.status === 'enterprise' && managedTrialAuthConfigured() ? <p className="authority-note">Connect through Premium pilot after saving a trial.</p> : null}
+            {managedIdentity ? <div className="template-contract"><span>Managed account</span><strong>{managedIdentity.email}</strong><small>Named-user access verified in Premium pilot</small><button className="text-link" disabled={managedBusy} onClick={() => void disconnectManagedWorkspace()} type="button">Disconnect</button></div> : runtime.status === 'enterprise' && managedTrialAuthConfigured() && !setup.savedAt ? <form className="core-form compact-form managed-recovery-login" onSubmit={(event) => void connectManagedWorkspace(event)}><span className="core-eyebrow">Managed access recovery</span><p className="authority-note">Sign in and SuperMega will find the active companies assigned to you.</p>{managedWorkspaceSignIn ? <label>Company<select onChange={(event) => setManagedWorkspace(event.target.value)} required value={managedWorkspace}>{managedWorkspaceSignIn.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label> : <><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></>}<button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking...' : managedWorkspaceSignIn ? 'Open company' : 'Recover managed access'}</button>{managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}</form> : runtime.status === 'enterprise' && managedTrialAuthConfigured() ? <p className="authority-note">Connect through Premium pilot after saving a trial.</p> : null}
             <div className="readiness-list" aria-label="Managed activation readiness">{activationRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
             <div className="readiness-list" aria-label="AI learning readiness">{learningRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
             <div className="learning-plan" aria-label="Premium AI context plan">

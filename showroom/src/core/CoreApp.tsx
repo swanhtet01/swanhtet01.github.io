@@ -1670,7 +1670,9 @@ export function CoreLayout() {
   const workspaceMainRef = useRef<HTMLElement>(null)
   const routeProduct = productFromPathname(location.pathname)
   const settingsProduct = location.pathname.startsWith('/settings/') ? setupProductFromQuery(new URLSearchParams(location.search).get('product')) : null
-  const routeName = location.pathname.startsWith('/website/')
+  const routeName = location.pathname === '/login' || location.pathname === '/login/'
+    ? 'Sign in'
+    : location.pathname.startsWith('/website/')
       ? 'Website'
     : location.pathname.startsWith('/ecommerce/')
       ? 'Ecommerce'
@@ -1988,7 +1990,7 @@ export function OverviewPage() {
       .then((bootstrap) => {
         if (!active) return
         setApprovals((current) => mergeManagedApprovals(current, bootstrap.approvals))
-        setBriefNotice(`Connected to ${managedIdentity.workspaceId}; approval records are managed.`)
+        setBriefNotice('Connected. Approval records are managed for this company.')
       })
       .catch((error) => {
         if (active) setBriefNotice(error instanceof Error ? error.message : 'Managed approvals could not be loaded.')
@@ -2065,7 +2067,7 @@ export function OverviewPage() {
       const managedApproval = fromManagedApproval(await createManagedApproval(request))
       setApprovals((current) => [managedApproval, ...current.filter((candidate) => candidate.id !== managedApproval.id).map((candidate) => candidate.status === 'pending' && candidate.title === managedApproval.title ? { ...candidate, status: 'superseded' as const } : candidate)])
       setSelectedApprovalId(managedApproval.id)
-      setBriefNotice(`Approval recorded in ${managedIdentity.workspaceId}.`)
+      setBriefNotice('Approval recorded for this company.')
     } catch (error) {
       setBriefNotice(error instanceof Error ? error.message : 'The approval was not recorded. No local fallback was claimed.')
     } finally {
@@ -2083,7 +2085,7 @@ export function OverviewPage() {
         note,
       }))
       setApprovals((current) => current.map((candidate) => candidate.id === id ? updated : candidate))
-      setBriefNotice(`Decision recorded in ${managedIdentity?.workspaceId ?? 'the managed workspace'}.`)
+      setBriefNotice('Decision recorded for this company.')
     } else {
       setApprovals((current) => current.map((candidate) => candidate.id === id ? { ...candidate, status, decidedAt: new Date().toISOString(), decidedBy: reviewer, decidedActorKind: 'human', decisionNote: note } : candidate))
     }
@@ -3039,7 +3041,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       : !commerceCanWrite
         ? 'Writes paused: this browser could not confirm durable local storage and write locking.'
         : notice || (managedIdentity
-          ? `Workspace ${managedIdentity.workspaceId} · revision ${managedVersion ?? 0}. Writes are confirmed by the tenant API.`
+          ? `Company records - revision ${managedVersion ?? 0}. Writes are confirmed by the tenant API.`
           : 'Sample records saved only in this browser. Connect a managed workspace before using shared operational data.')}</p>
     {!commerceCanWrite ? <Link to="/settings/#controls">Open Settings</Link> : null}
   </div>
@@ -6515,7 +6517,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       : !productionCanWrite
         ? 'Writes paused: this browser could not confirm durable local storage and write locking.'
         : notice || (managedIdentity
-          ? `Workspace ${managedIdentity.workspaceId} · revision ${managedVersion ?? 0}. Records are confirmed by the tenant API; no equipment control is connected.`
+          ? `Company records - revision ${managedVersion ?? 0}. Records are confirmed by the tenant API; no equipment control is connected.`
           : 'Sample records saved on this device. Status changes record operator observations only; they do not control equipment.')}</p>
     {!productionCanWrite ? <Link to="/settings/#controls">Open Settings</Link> : null}
   </div>

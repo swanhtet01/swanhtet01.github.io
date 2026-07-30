@@ -19,7 +19,7 @@ from supermega_runtime.shop_inventory_runtime import (
 
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
-TRIAL_SCHEMA_VERSION = 6
+TRIAL_SCHEMA_VERSION = 7
 TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
 TRUSTED_ACTOR_KINDS = frozenset({"human", "service", "agent"})
 HUMAN_ACTOR_KIND = "human"
@@ -284,6 +284,20 @@ class TrialPrincipal:
 
 
 @dataclass(frozen=True, slots=True)
+class ManagedWorkspaceAccess:
+    workspace_id: str
+    label: str
+    access: str
+
+    def to_dict(self) -> JsonObject:
+        return {
+            "workspace_id": self.workspace_id,
+            "label": self.label,
+            "access": self.access,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class TrialReadiness:
     backend: str
     database_ready: bool
@@ -422,6 +436,14 @@ class ApprovalRecord:
 
 class TrialStore(Protocol):
     def readiness(self, principal: TrialPrincipal | None) -> TrialReadiness: ...
+
+    def list_actor_workspaces(
+        self,
+        actor_id: str,
+        *,
+        actor_kind: str = HUMAN_ACTOR_KIND,
+        limit: int = 50,
+    ) -> tuple[list[ManagedWorkspaceAccess], bool]: ...
 
     def get_state(self, principal: TrialPrincipal, surface: str) -> TrialState: ...
 
@@ -2229,6 +2251,82 @@ class PostgresTrialStore:
         if str(row.get("actor_kind", "")).strip().lower() != principal.actor_kind:
             raise TrialNotReadyError(("membership_ready",))
         return frozenset(str(item) for item in (row.get("capabilities") or []))
+
+    @staticmethod
+    def _workspace_access_label(capabilities: Sequence[str]) -> str:
+        normalized = frozenset(str(item).strip() for item in capabilities if str(item).strip())
+        if "company.control.approve" in normalized or "company.write" in normalized:
+            return "owner"
+        if "approvals.decide" in normalized or any(item.endswith(".write") for item in normalized):
+            return "operator"
+        return "viewer"
+
+    def list_actor_workspaces(
+        self,
+        actor_id: str,
+        *,
+        actor_kind: str = HUMAN_ACTOR_KIND,
+        limit: int = 50,
+    ) -> tuple[list[ManagedWorkspaceAccess], bool]:
+        normalized_actor_id = str(actor_id or "").strip()
+        normalized_actor_kind = str(actor_kind or "").strip().lower()
+        if not normalized_actor_id or normalized_actor_kind not in TRUSTED_ACTOR_KINDS:
+            raise TrialNotReadyError(("auth_ready",))
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 50:
+            raise TrialValidationError("Workspace discovery limit must be between 1 and 50.")
+        try:
+            connection = self._connect()
+        except TrialStoreError:
+            raise
+        except Exception as exc:
+            raise TrialNotReadyError(("database_ready",)) from exc
+
+        try:
+            with connection:
+                with connection.transaction():
+                    with connection.cursor() as cursor:
+                        cursor.execute("set transaction read only")
+                        self._assert_runtime_role(cursor)
+                        self._assert_schema(cursor)
+                        discovery_principal = TrialPrincipal(
+                            workspace_id="workspace-discovery",
+                            actor_id=normalized_actor_id,
+                            actor_kind=normalized_actor_kind,
+                            authenticated=True,
+                        )
+                        self._set_context(cursor, discovery_principal)
+                        cursor.execute(
+                            """
+                            select workspace_id, capabilities, display_name
+                            from app_private.actor_workspace_directory()
+                            limit %s
+                            """,
+                            (limit + 1,),
+                        )
+                        rows = cursor.fetchall()
+                        truncated = len(rows) > limit
+                        workspaces: list[ManagedWorkspaceAccess] = []
+                        for row in rows[:limit]:
+                            workspace_id = str(row.get("workspace_id", "")).strip()
+                            if not workspace_id:
+                                continue
+                            display_name = str(row.get("display_name") or "").strip()
+                            if not display_name or len(display_name) > 120:
+                                display_name = f"Managed company {len(workspaces) + 1}"
+                            workspaces.append(
+                                ManagedWorkspaceAccess(
+                                    workspace_id=workspace_id,
+                                    label=display_name,
+                                    access=self._workspace_access_label(
+                                        row.get("capabilities") or ()
+                                    ),
+                                )
+                            )
+                        return workspaces, truncated
+        except TrialStoreError:
+            raise
+        except Exception as exc:
+            raise TrialNotReadyError(("database_or_schema_ready",)) from exc
 
     @staticmethod
     def _assert_audit(cursor: Any) -> None:

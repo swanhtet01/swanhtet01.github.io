@@ -99,6 +99,7 @@ const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'c
 const shopInventoryPythonSource = await readFile(resolve(root, 'supermega_runtime', 'shop_inventory_runtime.py'), 'utf8')
 const managedActivationRunbookSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedActivationRunbook.tsx'), 'utf8')
 const settingsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'SettingsPage.tsx'), 'utf8')
+const managedLoginPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedLoginPage.tsx'), 'utf8')
 const managedTrialProofSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'managed-trial-proof.ts'), 'utf8')
 const channelOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ChannelOrderIntake.tsx'), 'utf8')
 const plantOrderSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts'), 'utf8')
@@ -1300,15 +1301,25 @@ if (!settingsPageSource.includes('aria-label="Premium pilot"')
   || !settingsPageSource.includes('managedPilotRequestRef.current !== requestId')
   || !settingsPageSource.includes('Counts only; raw source records are not shown here.')
   || !settingsPageSource.includes('Verify this company, not a generic demo.')
-  || !settingsPageSource.includes('Connect and verify')
+  || !settingsPageSource.includes('Find my company')
+  || !settingsPageSource.includes('Open company')
+  || !settingsPageSource.includes('signInAndDiscoverManagedWorkspaces')
+  || !settingsPageSource.includes('completeManagedWorkspaceSignIn')
   || !settingsPageSource.includes('Keep learning checkpoint')
   || !settingsPageSource.includes('Learning checkpoint kept in the managed audit. No external action ran.')
   || !settingsPageSource.includes('Review only. No customer send, payment, stock move, production write, domain publish, or model training runs from this pilot.')
   || !settingsPageSource.includes('managedTrialAuthConfigured() && !setup.savedAt')
   || !settingsPageSource.includes('Managed access recovery')
-  || !settingsPageSource.includes('Connect an existing workspace before rebuilding a local trial.')
+  || !settingsPageSource.includes('Sign in and SuperMega will find the active companies assigned to you.')
   || !settingsPageSource.includes('Recover managed access')
   || !settingsPageSource.includes('Connect through Premium pilot after saving a trial.')
+  || !settingsPageSource.includes('Named-user access verified for this company.')
+  || !settingsPageSource.includes("setManagedNotice('Connected. Managed approvals are ready.')")
+  || settingsPageSource.includes('Workspace ID')
+  || settingsPageSource.includes('verified for ${managedIdentity.workspaceId}')
+  || settingsPageSource.includes('verified for ${identity.workspaceId}')
+  || settingsPageSource.includes('Connected to ${identity.workspaceId}')
+  || settingsPageSource.includes('{managedIdentity.workspaceId} - verified in Premium pilot')
   || settingsPageSource.includes('className="core-form compact-form" onSubmit={(event) => void connectManagedWorkspace(event)}')
   || !coreCssSource.includes('.premium-pilot')
   || !coreCssSource.includes('.premium-pilot-rows')
@@ -1902,6 +1913,7 @@ if (coreLayoutRouteStart < 0
   || !coreSource.includes("location.pathname.startsWith('/website/')")
   || !coreSource.includes("location.pathname.startsWith('/shop/')")
   || !coreSource.includes("location.pathname.startsWith('/plant/')")
+  || !coreShellSource.includes("location.pathname === '/login' || location.pathname === '/login/'")
   || websiteSource.includes('className="website-topbar"')
   || websiteSource.includes('className="website-brand"')
   || websiteSource.includes('<main id="website-workspace"')
@@ -1945,6 +1957,39 @@ if (!appSource.includes("lazy(() => import('./core/SettingsPage')")
   || !appSource.includes('<SettingsPage /></Suspense>} path="settings/*"')
   || appSource.includes('SettingsPage,\n} from \'./core/CoreApp\'')
   || coreSource.includes('export function SettingsPage()')) fail('settings_route_not_lazy_loaded')
+if (!appSource.includes("lazy(() => import('./core/ManagedLoginPage')")
+  || !appSource.includes('<ManagedLoginPage /></Suspense>} path="login"')
+  || !appSource.includes('<Navigate replace to="/login" />} path="signup"')
+  || !managedLoginPageSource.includes('title="Open your company."')
+  || !managedLoginPageSource.includes('No workspace code or technical setup is required.')
+  || !managedLoginPageSource.includes('Only active companies assigned to this account are shown.')
+  || !managedLoginPageSource.includes('Request managed activation')
+  || !managedLoginPageSource.includes('Open free workspace')
+  || managedLoginPageSource.includes('Workspace ID')) fail('managed_login_route_missing')
+const managedCustomerUiSources = [coreSource, productHomeReadinessSource, clientOnboardingUiSource, ecommerceSource]
+const managedInternalIdCopy = [
+  'Already saved in ${identity.workspaceId}',
+  'Saved to ${identity.workspaceId}',
+  'Managed Shop · ${managedInbox?.identity.workspaceId',
+  'Connected to ${managedIdentity.workspaceId}',
+  'Approval recorded in ${managedIdentity.workspaceId}',
+  'Decision recorded in ${managedIdentity?.workspaceId',
+  'Workspace ${managedIdentity.workspaceId} · revision',
+  'Managed workspace ${identity.workspaceId}',
+  'confirmed in ${managedIdentity?.workspaceId}',
+  'imported into ${managedIdentity?.workspaceId}',
+  'checked with ${managedIdentity.workspaceId}',
+  'Validated by ${managedIdentity?.workspaceId}',
+  '${managedIdentity?.workspaceId ?? \'Managed workspace\'} has a confirmed import receipt.',
+]
+if (managedCustomerUiSources.some((source) => managedInternalIdCopy.some((copy) => source.includes(copy)))
+  || !coreSource.includes('Connected. Approval records are managed for this company.')
+  || !coreSource.includes('Decision recorded for this company.')
+  || !coreSource.includes('Company records - revision ${managedVersion ?? 0}. Writes are confirmed by the tenant API.')
+  || !productHomeReadinessSource.includes('Managed company / ${brief.sourceCount} validated product sources.')
+  || !clientOnboardingUiSource.includes('Validated for this company.')
+  || !clientOnboardingUiSource.includes('This company has a confirmed import receipt.')
+  || !ecommerceSource.includes('Managed Shop - connected company')) fail('managed_internal_workspace_id_visible')
 if (!appSource.includes('<Navigate replace to="/website/" />')
   || !appSource.includes('<Navigate replace to="/ecommerce/" />')
   || !appSource.includes('path="products/website/*"')

@@ -71,6 +71,12 @@ MIGRATION_V6 = (
     / "migrations"
     / "20260730113000_private_trial_backend_v6_managed_activation.sql"
 )
+MIGRATION_V7 = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / "20260730123000_private_trial_backend_v7_workspace_discovery.sql"
+)
 MIGRATIONS = (
     MIGRATION_PREFLIGHT,
     MIGRATION_V1,
@@ -79,6 +85,7 @@ MIGRATIONS = (
     MIGRATION_V4,
     MIGRATION_V5,
     MIGRATION_V6,
+    MIGRATION_V7,
 )
 
 PRIVATE_SCHEMA = "app_private"
@@ -125,6 +132,7 @@ EVENT_SURFACE_CONSTRAINT = "workspace_events_approval_surface_v4_check"
 EXPECTED_INDEXES = (
     "trial_schema_meta_pkey",
     "workspace_memberships_pkey",
+    "workspace_memberships_actor_directory_idx",
     "workspace_state_pkey",
     "workspace_events_pkey",
     "workspace_events_workspace_id_command_id_key",
@@ -139,6 +147,7 @@ EXPECTED_INDEXES = (
 EXPLICIT_INDEXES = (
     "workspace_events_timeline_idx",
     "approval_requests_queue_idx",
+    "workspace_memberships_actor_directory_idx",
 )
 FORBIDDEN_ROLES = ("public", "anon", "authenticated", "service_role")
 
@@ -190,7 +199,7 @@ def _first_sql_token(statement: str) -> str:
 
 
 class MigrationSecurityEvidenceTests(unittest.TestCase):
-    def test_historical_migrations_are_unchanged_and_v6_is_additive(self) -> None:
+    def test_historical_migrations_are_unchanged_and_v7_is_additive(self) -> None:
         preflight = _normalized_sql(MIGRATION_PREFLIGHT)
         v1 = _normalized_sql(MIGRATION_V1)
         v2 = _normalized_sql(MIGRATION_V2)
@@ -198,6 +207,7 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
         v4 = _normalized_sql(MIGRATION_V4)
         v5 = _normalized_sql(MIGRATION_V5)
         v6 = _normalized_sql(MIGRATION_V6)
+        v7 = _normalized_sql(MIGRATION_V7)
         self.assertIn("pre-existing supermega trial backend role attributes are unsafe", preflight)
         self.assertIn("membership.roleid = backend_record.oid", preflight)
         self.assertIn("dependency.refclassid = 'pg_authid'::regclass", preflight)
@@ -232,6 +242,14 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
         self.assertIn("'legacy_migration_v1'", v6)
         self.assertIn("'suspended'", v6)
         self.assertIn("set schema_version = 6", v6)
+        self.assertIn("private trial backend v7 requires schema version 6", v7)
+        self.assertIn("create function app_private.actor_workspace_directory()", v7)
+        self.assertIn("security definer", v7)
+        self.assertIn("actor_id = current_setting('app.actor_id', true)", v7)
+        self.assertIn("access_control.status = 'active'", v7)
+        self.assertIn("revoke all on function app_private.actor_workspace_directory()", v7)
+        self.assertIn("create index workspace_memberships_actor_directory_idx", v7)
+        self.assertIn("set schema_version = 7", v7)
 
     def test_private_schema_and_runtime_role_are_restricted(self) -> None:
         sql = _normalized_sql()
@@ -305,7 +323,15 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
             self.assertIn(f"create trigger {trigger}", sql)
         for index in EXPLICIT_INDEXES:
             self.assertIn(f"create index {index}", sql)
-        self.assertNotIn("security definer", sql)
+        self.assertEqual(sql.count("security definer"), 1)
+        self.assertIn(
+            "create function app_private.actor_workspace_directory() returns table",
+            sql,
+        )
+        self.assertIn(
+            "security definer set search_path = pg_catalog, app_private",
+            sql,
+        )
         self.assertGreaterEqual(sql.count("security invoker"), 3)
 
     def test_approval_decisions_require_a_trusted_human_actor_kind(self) -> None:
@@ -1193,10 +1219,26 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         "end if; new.suspended_at := transaction_timestamp(); "
                         "new.updated_at := transaction_timestamp(); return new; end"
                     ),
+                    "actor_workspace_directory": (
+                        "select membership.workspace_id, membership.capabilities, "
+                        "nullif(btrim(coalesce(setup_state.state_json ->> 'workspace', '')), '') "
+                        "from app_private.workspace_memberships membership "
+                        "join app_private.workspace_access_controls access_control "
+                        "on access_control.workspace_id = membership.workspace_id "
+                        "and access_control.status = 'active' "
+                        "left join app_private.workspace_state setup_state "
+                        "on setup_state.workspace_id = membership.workspace_id "
+                        "and setup_state.surface = 'setup' "
+                        "where current_setting('app.actor_kind', true) in ('human', 'service', 'agent') "
+                        "and membership.actor_id = current_setting('app.actor_id', true) "
+                        "and membership.actor_kind = current_setting('app.actor_kind', true) "
+                        "and membership.status = 'active' order by membership.workspace_id"
+                    ),
                 }
                 INDEXES = [
                     "trial_schema_meta_pkey",
                     "workspace_memberships_pkey",
+                    "workspace_memberships_actor_directory_idx",
                     "workspace_state_pkey",
                     "workspace_events_pkey",
                     "workspace_events_workspace_id_command_id_key",
@@ -1320,6 +1362,14 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         True,
                         "p",
                     ),
+                    "workspace_memberships_actor_directory_idx": (
+                        "workspace_memberships",
+                        ["actor_id", "actor_kind", "status", "workspace_id"],
+                        [0, 0, 0, 0],
+                        False,
+                        False,
+                        None,
+                    ),
                     "workspace_state_pkey": (
                         "workspace_state", ["workspace_id", "surface"], [0, 0], True, True, "p"
                     ),
@@ -1385,6 +1435,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                     ("table", "approval_requests", "supermega_trial_backend", "UPDATE"),
                     ("table", "workspace_access_controls", "supermega_trial_backend", "SELECT"),
                     ("function", "workspace_is_active", "supermega_trial_backend", "EXECUTE"),
+                    ("function", "actor_workspace_directory", "supermega_trial_backend", "EXECUTE"),
                 ]
 
                 class Row(dict):
@@ -1424,7 +1475,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         schema_exists=scenario != "missing_schema",
                         schema_ready=scenario != "missing_schema",
                         component="private_trial_backend",
-                        schema_version=0 if scenario == "wrong_version" else 6,
+                        schema_version=0 if scenario == "wrong_version" else 7,
                         tables=tables,
                         table_names=tables,
                         table_count=len(tables),
@@ -1532,6 +1583,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                                 "app_private.workspace_is_active(target_workspace_id text)",
                                 0,
                             ),
+                            ("function", "app_private.actor_workspace_directory()", 0),
                         ]
                         if scenario == "backend_outside_grant":
                             dependencies.append(("relation", "public.sensitive_data", 0))
@@ -1581,7 +1633,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                             return []
                         return [
                             _snapshot(
-                                schema_version=0 if scenario == "wrong_version" else 6,
+                                schema_version=0 if scenario == "wrong_version" else 7,
                             )
                         ]
                     if "buckets_table_exists" in q and "objects_table_exists" in q:
@@ -1831,12 +1883,14 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                             "guard_approval_mutation",
                             "guard_workspace_access_control",
                             "workspace_is_active",
+                            "actor_workspace_directory",
                         ]
                         if scenario == "extra_function":
                             names.append("unexpected_private_function")
                         rows = []
                         for name in names:
                             access_function = name == "workspace_is_active"
+                            directory_function = name == "actor_workspace_directory"
                             rows.append(_snapshot(
                                 function_name=name,
                                 owner_name="runtime_login" if scenario == "wrong_owner" else "postgres",
@@ -1852,10 +1906,12 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                                     "and access_control.status = 'active' )"
                                     if access_function else FUNCTION_SOURCES.get(name, "")
                                 ),
-                                security_definer=False,
+                                security_definer=directory_function,
                                 function_config=["search_path=pg_catalog, app_private"],
-                                function_language="sql" if access_function else "plpgsql",
+                                function_language="sql" if access_function or directory_function else "plpgsql",
                             ))
+                            if directory_function:
+                                rows[-1]["result_type"] = "TABLE(workspace_id text, capabilities text[], display_name text)"
                         return rows
                     if "pg_indexes" in q or "pg_index" in q:
                         rows = []
@@ -2229,7 +2285,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         payload = _extract_json(result.stdout + result.stderr)
         serialized = json.dumps(payload, sort_keys=True).lower()
         self.assertTrue(payload.get("ok") is True or payload.get("status") == "ready")
-        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v6")
+        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v7")
         checks = payload.get("checks")
         self.assertIsInstance(checks, dict)
         assert isinstance(checks, dict)
@@ -2273,7 +2329,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             {
                 "name": PRIVATE_SCHEMA,
                 "component": "private_trial_backend",
-                "version": 6,
+                "version": 7,
             },
         )
         self.assertEqual(
@@ -2295,8 +2351,8 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         self.assertEqual(
             evidence.get("grant"),
             {
-                "runtime_acl_entries": 13,
-                "expected_runtime_acl_entries": 13,
+                "runtime_acl_entries": 14,
+                "expected_runtime_acl_entries": 14,
                 "default_acl_entries": 0,
             },
         )

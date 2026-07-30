@@ -12,7 +12,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from supermega_runtime.runtime import create_app, reduce_trial_state
-from supermega_runtime.trial_store import TrialValidationError
+from supermega_runtime.trial_store import ManagedWorkspaceAccess, TrialNotReadyError, TrialValidationError
 
 
 STRONG_TEST_IDENTITY_SECRET = "mN7!qP2#vR9$kT4@xC8&dF5*zH1_wS6+"
@@ -135,6 +135,79 @@ class CanonicalRuntimeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("database_ready", response.json()["blockers"])
         verify.assert_called_once()
+
+    def test_named_user_discovers_only_bounded_active_workspace_summaries(self) -> None:
+        environment = {
+            "SUPERMEGA_SUPABASE_URL": "https://example.supabase.co",
+            "SUPERMEGA_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_abcdefghijklmnopqrstuvwxyz",
+        }
+        with patch(
+            "supermega_runtime.runtime.verify_supabase_user_token",
+            return_value="2f8d24d8-308c-4dc8-a352-7b61df756728",
+        ) as verify, patch(
+            "supermega_runtime.trial_store.PostgresTrialStore.list_actor_workspaces",
+            return_value=([ManagedWorkspaceAccess("company-a", "Mingalar Fresh Mart", "owner")], False),
+        ) as discover:
+            with self._client(**environment) as client:
+                response = client.get(
+                    "/api/trial/v1/workspaces",
+                    headers={
+                        "authorization": "Bearer header.payload.signature",
+                        "x-supermega-workspace-id": "spoofed-company",
+                        "x-supermega-actor-id": "spoofed-service",
+                        "x-supermega-actor-kind": "service",
+                    },
+                )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "contract": "supermega.managed_workspace_directory.v1",
+                "status": "ready",
+                "workspaces": [
+                    {"workspace_id": "company-a", "label": "Mingalar Fresh Mart", "access": "owner"}
+                ],
+                "truncated": False,
+                "external_writes_performed": False,
+                "secret_values_exposed": False,
+            },
+        )
+        verify.assert_called_once()
+        discover.assert_called_once_with(
+            "2f8d24d8-308c-4dc8-a352-7b61df756728",
+            actor_kind="human",
+            limit=50,
+        )
+
+    def test_workspace_directory_rejects_gateway_headers_and_fails_closed(self) -> None:
+        with self._client(SUPERMEGA_TRIAL_IDENTITY_SECRET=STRONG_TEST_IDENTITY_SECRET) as client:
+            gateway_only = client.get(
+                "/api/trial/v1/workspaces",
+                headers={
+                    "x-supermega-workspace-id": "company-a",
+                    "x-supermega-actor-id": "owner-a",
+                    "x-supermega-actor-kind": "human",
+                },
+            )
+        self.assertEqual(gateway_only.status_code, 401)
+        self.assertEqual(gateway_only.json()["detail"]["code"], "managed_auth_required")
+
+        environment = {
+            "SUPERMEGA_SUPABASE_URL": "https://example.supabase.co",
+            "SUPERMEGA_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_abcdefghijklmnopqrstuvwxyz",
+        }
+        with patch("supermega_runtime.runtime.verify_supabase_user_token", return_value="owner-a"), patch(
+            "supermega_runtime.trial_store.PostgresTrialStore.list_actor_workspaces",
+            side_effect=TrialNotReadyError(("schema_ready",)),
+        ):
+            with self._client(**environment) as client:
+                blocked = client.get(
+                    "/api/trial/v1/workspaces",
+                    headers={"authorization": "Bearer header.payload.signature"},
+                )
+        self.assertEqual(blocked.status_code, 503)
+        self.assertEqual(blocked.json()["detail"]["code"], "workspace_directory_not_ready")
+        self.assertEqual(blocked.json()["detail"]["blockers"], ["schema_ready"])
 
     def test_invalid_supabase_token_or_workspace_fails_closed(self) -> None:
         environment = {

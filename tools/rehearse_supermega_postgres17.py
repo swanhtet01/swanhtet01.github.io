@@ -37,6 +37,7 @@ MIGRATIONS = (
     "20260723144500_private_trial_backend_v4_hardening.sql",
     "20260724204920_private_trial_backend_v5_read_capabilities.sql",
     "20260730113000_private_trial_backend_v6_managed_activation.sql",
+    "20260730123000_private_trial_backend_v7_workspace_discovery.sql",
 )
 VALIDATOR = ROOT / "tools" / "validate_supermega_database_url.py"
 CONTRACT = "supermega_postgres17_rehearsal_v1"
@@ -48,6 +49,7 @@ IMPLEMENTATION_PATHS = (
     "supermega_runtime/managed_activation.py",
     "supermega_runtime/trial_store.py",
     "supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql",
+    "supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql",
     "tools/activate_supermega_database.ps1",
     "tools/rehearse_supermega_postgres17.py",
     "tools/validate_supermega_database_url.py",
@@ -785,6 +787,7 @@ def _exercise_managed_activation_control(
         ManagedWorkspaceProvisioner,
         compile_activation_plan,
     )
+    from supermega_runtime.trial_store import PostgresTrialStore
 
     now = datetime.now(timezone.utc)
     plan = compile_activation_plan(
@@ -899,6 +902,19 @@ def _exercise_managed_activation_control(
             (MANAGED_WORKSPACE, MANAGED_OWNER_ACTOR),
         )
 
+    directory_store = PostgresTrialStore(
+        runtime_database_url,
+        reducer=lambda _surface, _event_type, state, _payload: state,
+        write_enabled=False,
+    )
+    active_directory, active_directory_truncated = directory_store.list_actor_workspaces(
+        MANAGED_SECOND_ACTOR,
+        actor_kind="human",
+        limit=50,
+    )
+    if active_directory_truncated or [item.workspace_id for item in active_directory] != [MANAGED_WORKSPACE]:
+        raise RehearsalFailure("managed_workspace_discovery_active_failed")
+
     def visible_counts() -> tuple[int, int, int, int, int]:
         with _connect(runtime_database_url) as runtime:
             with runtime.transaction():
@@ -967,6 +983,13 @@ def _exercise_managed_activation_control(
         raise RehearsalFailure("managed_suspension_failed")
     if visible_counts() != (0, 0, 0, 0, 0):
         raise RehearsalFailure("managed_suspension_rls_bypass")
+    suspended_directory, suspended_directory_truncated = directory_store.list_actor_workspaces(
+        MANAGED_SECOND_ACTOR,
+        actor_kind="human",
+        limit=50,
+    )
+    if suspended_directory_truncated or suspended_directory:
+        raise RehearsalFailure("managed_workspace_discovery_suspension_failed")
     suspension_write_denied = False
     try:
         append_runtime_probe(
@@ -994,6 +1017,8 @@ def _exercise_managed_activation_control(
         "managed_suspension_database_enforced": True,
         "managed_suspension_blocks_additional_member": True,
         "managed_suspension_write_denied": True,
+        "managed_workspace_discovery_actor_scoped": True,
+        "managed_workspace_discovery_suspension_filtered": True,
     }
 
 
@@ -2684,7 +2709,7 @@ def _verify_restored_data(
               (select count(*) from app_private.approval_requests)
             """
         ).fetchone()
-    if row != (6, 11, 7, 19, 3):
+    if row != (7, 11, 7, 19, 3):
         raise RehearsalFailure("restored_data_mismatch")
     restored_approval_authority_snapshot = _approval_authority_snapshot(
         admin_database_url
@@ -2929,7 +2954,7 @@ def _run_rehearsal(
                 },
                 "migrations": {
                     "count": len(MIGRATIONS),
-                    "schema_version": 6,
+                    "schema_version": 7,
                     "production_validator_ready": primary_validation.get("ready") is True,
                 },
                 "storage": {
@@ -2959,7 +2984,7 @@ def _run_rehearsal(
                 "recovery": {
                     "format": "pg_dump_custom",
                     "backup_nonempty": True,
-                    "restored_schema_version": 6,
+                    "restored_schema_version": 7,
                 },
                 "cleanup_complete": False,
                 "secret_values_exposed": False,

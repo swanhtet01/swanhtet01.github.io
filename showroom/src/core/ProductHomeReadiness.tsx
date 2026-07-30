@@ -120,7 +120,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
       const run = await loadManagedOwnerControlRun(identity)
       if (requestId !== ownerControlRequestRef.current) return
       setManagedOwnerControl({ run, identity })
-      setOwnerControlNotice(successNotice || `Managed workspace ${identity.workspaceId} / exact-source owner control.`)
+      setOwnerControlNotice(successNotice || 'Managed company / exact-source owner control.')
     } catch {
       if (requestId !== ownerControlRequestRef.current) return
       setManagedOwnerControl(null)
@@ -167,7 +167,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
       if (requestId !== managedRequestRef.current) return
       setAnswer(brief)
       setManagedContext({ brief, identity })
-      setManagedNotice(`Managed workspace ${identity.workspaceId} / ${brief.sourceCount} validated product sources.`)
+      setManagedNotice(`Managed company / ${brief.sourceCount} validated product sources.`)
     } catch {
       if (requestId !== managedRequestRef.current) return
       setManagedContext(null)
