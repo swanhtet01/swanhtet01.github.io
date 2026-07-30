@@ -8,6 +8,11 @@
       "productId": "ecommerce",
       "workOrderId": "ecommerce-today-surface",
       "checkpoint": "ENG-130"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-promotion-review",
+      "checkpoint": "ENG-134"
     }
   ],
   "agentOperatingModel": {
@@ -167,11 +172,11 @@
       "localAutomation": {
         "contract": "supermega.product-work-authority.v2",
         "productId": "ecommerce",
-        "workOrderId": "ecommerce-promotion-review",
+        "workOrderId": "ecommerce-promotion-policy-setup",
         "priority": 100,
         "status": "ready-local",
-        "workOrder": "Ecommerce: add one governed promotion-review lifecycle that accepts an optional customer code, resolves it only against a Shop-owned price policy, preserves quote digest and replay safety, and shows approval or rejection without creating a second price authority.",
-        "reason": "ENG-130 completed the Ecommerce Today surface. The current quote contract retains a promotion code as pending Shop review with zero amount, while the enterprise capability plan still labels governed promotions and B2B pricing as configure-level work."
+        "workOrder": "Ecommerce: add one compact internal client-setup control for versioned Shop promotion policies, with preview, effective dates, limits, accountable save evidence, and safe reset without exposing configuration as the customer starting point.",
+        "reason": "ENG-134 completed deterministic promotion review and net Shop order pricing. The next local gap is founder-friendly policy setup; policies are currently contract-valid but only seeded or imported, which is not a usable client onboarding workflow."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }

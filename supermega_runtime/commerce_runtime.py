@@ -17,6 +17,8 @@ from supermega_runtime.client_import_runtime import (
 )
 from supermega_runtime.ecommerce_buying_lifecycle import (
     EcommerceLifecycleValidationError,
+    review_ecommerce_promotion,
+    validate_ecommerce_promotion_policy,
     validate_ecommerce_order_request,
 )
 from supermega_runtime.shop_inventory_runtime import (
@@ -173,6 +175,7 @@ _MAX_CATALOG_CHANGES = 500
 _MAX_TAX_CONFIGURATIONS = 100
 _MAX_ACCOUNT_MAPPING_CONFIGURATIONS = 100
 _MAX_CUSTOMER_CREDIT_POLICIES = 500
+_MAX_PROMOTION_POLICIES = 200
 _MAX_ORDER_LINES = 20
 _MAX_RETURNS_PER_ORDER = 100
 _MAX_SUPPORT_CASES_PER_ORDER = 100
@@ -292,6 +295,7 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "paymentDueAt",
         "collectionActions",
         "creditDecision",
+        "promotionDecision",
         "owner",
         "sourceRecordId",
         "evidenceReference",
@@ -1035,6 +1039,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "taxConfigurations",
                 "accountMappingConfigurations",
                 "customerCreditPolicies",
+                "promotionPolicies",
                 "inventoryFoundation",
                 "serviceSchedule",
             }
@@ -1076,6 +1081,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         state.get("customerCreditPolicies", []),
         "commerce state.customerCreditPolicies",
     )
+    promotion_policies = _list(
+        state.get("promotionPolicies", []),
+        "commerce state.promotionPolicies",
+    )
     if "serviceSchedule" in state:
         _validate_service_schedule(state["serviceSchedule"])
     if "storefrontConfiguration" in state and state["storefrontConfiguration"] is None:
@@ -1112,6 +1121,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         raise TrialValidationError(
             "commerce state.customerCreditPolicies cannot exceed "
             f"{_MAX_CUSTOMER_CREDIT_POLICIES}."
+        )
+    if len(promotion_policies) > _MAX_PROMOTION_POLICIES:
+        raise TrialValidationError(
+            "commerce state.promotionPolicies cannot exceed "
+            f"{_MAX_PROMOTION_POLICIES}."
         )
 
     item_skus: list[str] = []
@@ -1435,6 +1449,33 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 )
         newer_customer_credit_policy = policy
         customer_credit_policy_action_ids.append(proof["actionId"])
+
+    promotion_policy_action_ids: list[str] = []
+    validated_promotion_policies: list[dict[str, Any]] = []
+    newer_promotion_policy: dict[str, Any] | None = None
+    for index, candidate in enumerate(promotion_policies):
+        field = f"promotionPolicies[{index}]"
+        try:
+            policy = validate_ecommerce_promotion_policy(candidate, field)
+        except EcommerceLifecycleValidationError as exc:
+            raise TrialValidationError(
+                f"commerce state.{field} is invalid: {exc}"
+            ) from exc
+        if policy["revision"] != len(promotion_policies) - index:
+            raise TrialValidationError(
+                f"{field}.revision breaks the newest-first sequence."
+            )
+        if newer_promotion_policy is not None and datetime.fromisoformat(
+            str(newer_promotion_policy["proof"]["capturedAt"]).replace("Z", "+00:00")
+        ) < datetime.fromisoformat(
+            str(policy["proof"]["capturedAt"]).replace("Z", "+00:00")
+        ):
+            raise TrialValidationError(
+                f"{field} promotion policies must be newest first."
+            )
+        newer_promotion_policy = policy
+        validated_promotion_policies.append(policy)
+        promotion_policy_action_ids.append(policy["proof"]["actionId"])
 
     purchase_order_ids: list[str] = []
     purchase_order_action_ids: list[str] = []
@@ -1764,6 +1805,54 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 raise TrialValidationError(
                     f"orders[{index}] does not match its immutable line snapshots."
                 )
+        priced_total = captured_total
+        if "promotionDecision" in order:
+            decision_field = f"orders[{index}].promotionDecision"
+            decision = _object(order["promotionDecision"], decision_field)
+            _exact_fields(
+                decision,
+                decision_field,
+                required=frozenset(
+                    {
+                        "schema",
+                        "status",
+                        "code",
+                        "policyRevision",
+                        "policyActionId",
+                        "discountBasisPoints",
+                        "grossSubtotalMmk",
+                        "discountMmk",
+                        "netSubtotalMmk",
+                        "reviewedAt",
+                        "reason",
+                    }
+                ),
+            )
+            if captured_total is None or not str(order.get("sourceRecordId", "")).startswith("ECR-"):
+                raise TrialValidationError(
+                    f"{decision_field} requires immutable Ecommerce lines and an ECR source."
+                )
+            reviewed_at = _timestamp(decision["reviewedAt"], f"{decision_field}.reviewedAt")
+            if datetime.fromisoformat(reviewed_at.replace("Z", "+00:00")) > order_created_at:
+                raise TrialValidationError(
+                    f"{decision_field}.reviewedAt cannot be later than order creation."
+                )
+            try:
+                expected_decision = review_ecommerce_promotion(
+                    validated_promotion_policies,
+                    decision["code"],
+                    captured_total,
+                    reviewed_at,
+                )
+            except EcommerceLifecycleValidationError as exc:
+                raise TrialValidationError(
+                    f"{decision_field} is invalid: {exc}"
+                ) from exc
+            if dict(decision) != expected_decision:
+                raise TrialValidationError(
+                    f"{decision_field} does not match the versioned Shop policy."
+                )
+            priced_total = expected_decision["netSubtotalMmk"]
         calculation_candidate = order.get("calculation")
         if calculation_candidate is not None:
             calculation = _object(
@@ -1821,8 +1910,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     or tax_mmk != 0
                     or total_mmk != subtotal_mmk
                     or (
-                        captured_total is not None
-                        and subtotal_mmk != captured_total
+                        priced_total is not None
+                        and subtotal_mmk != priced_total
                     )
                 ):
                     raise TrialValidationError(
@@ -1855,10 +1944,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 expected = (
                     _configured_order_calculation(
                         configuration,
-                        captured_total,
+                        priced_total,
                         catalog_revision,
                     )
-                    if configuration is not None and captured_total is not None
+                    if configuration is not None and priced_total is not None
                     else None
                 )
                 if (
@@ -1885,7 +1974,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     raise TrialValidationError(
                         f"orders[{index}].calculation does not match its immutable tax configuration."
                     )
-        elif captured_total is not None and order["total"] != captured_total:
+        elif priced_total is not None and order["total"] != priced_total:
             raise TrialValidationError(
                 f"orders[{index}] legacy total does not match its immutable line snapshots."
             )
@@ -3548,6 +3637,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *tax_configuration_action_ids,
             *account_mapping_configuration_action_ids,
             *customer_credit_policy_action_ids,
+            *promotion_policy_action_ids,
             *storefront_action_ids,
             *(
                 [storefront_configuration_action_id]
@@ -4220,6 +4310,10 @@ def _account_mapping_configurations(state: Mapping[str, Any]) -> list[Any]:
 
 def _customer_credit_policies(state: Mapping[str, Any]) -> list[Any]:
     return state.get("customerCreditPolicies", [])
+
+
+def _promotion_policies(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("promotionPolicies", [])
 
 
 def _effective_customer_credit_policy(
@@ -5607,6 +5701,16 @@ def _validate_inventory_transferred(
     ):
         raise TrialValidationError(
             "location ATP drifted from aggregate Shop stock; reconcile before transfer."
+        )
+
+
+def _require_promotion_policies_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _promotion_policies(current) != _promotion_policies(next_state):
+        raise TrialValidationError(
+            "event cannot change: promotionPolicies."
         )
 
 
@@ -7855,6 +7959,7 @@ def reduce_commerce_state(
             or _tax_configurations(next_state)
             or _account_mapping_configurations(next_state)
             or _customer_credit_policies(next_state)
+            or _promotion_policies(next_state)
         ):
             raise TrialValidationError("Commerce initialization requires a non-empty catalog and no operating history.")
         return next_state
@@ -7874,6 +7979,7 @@ def reduce_commerce_state(
         _require_account_mapping_configurations_unchanged(current_state, next_state)
     if event_type != "commerce.customer_credit_policy.saved":
         _require_customer_credit_policies_unchanged(current_state, next_state)
+    _require_promotion_policies_unchanged(current_state, next_state)
     if event_type not in {
         "commerce.service_schedule.initialized",
         "commerce.service_schedule.saved",

@@ -1,4 +1,10 @@
-import type { CommerceItem, CommerceOrder } from '../../core/commerce-workspace.ts'
+import {
+  commercePromotionDecision,
+  type CommerceItem,
+  type CommerceOrder,
+  type CommercePromotionDecision,
+  type CommercePromotionPolicy,
+} from '../../core/commerce-workspace.ts'
 import {
   storefrontPreviewDigest,
   validateStorefrontPreview,
@@ -10,8 +16,9 @@ export const ECOMMERCE_QUOTE_SCHEMA = 'supermega.ecommerce.checkout_quote.v1' as
 export const ECOMMERCE_CUSTOMER_PROFILE_SCHEMA = 'supermega.ecommerce.customer_profile_snapshot.v1' as const
 export const ECOMMERCE_DELIVERY_ADDRESS_SCHEMA = 'supermega.ecommerce.delivery_address_snapshot.v1' as const
 export const ECOMMERCE_REQUEST_SCHEMA_V2 = 'supermega.ecommerce.order_request.v2' as const
-export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V3 = 'supermega.ecommerce.shop_draft.v3' as const
-export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V2 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V3
+export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V4 = 'supermega.ecommerce.shop_draft.v4' as const
+export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V3 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V4
+export const ECOMMERCE_SHOP_DRAFT_SCHEMA_V2 = ECOMMERCE_SHOP_DRAFT_SCHEMA_V4
 export const ECOMMERCE_RETURN_INTENT_SCHEMA = 'supermega.ecommerce.return_intent.v1' as const
 export const ECOMMERCE_SUPPORT_INTENT_SCHEMA = 'supermega.ecommerce.support_intent.v1' as const
 export const ECOMMERCE_BUYING_STATE_SCHEMA = 'supermega.ecommerce.buying_lifecycle.v1' as const
@@ -141,7 +148,7 @@ export type EcommerceOrderRequestV2 = {
 }
 
 export type EcommerceShopDraftV2 = {
-  schema: typeof ECOMMERCE_SHOP_DRAFT_SCHEMA_V3
+  schema: typeof ECOMMERCE_SHOP_DRAFT_SCHEMA_V4
   mode: 'browser-memory-shop-draft'
   state: 'review_required'
   id: string
@@ -167,7 +174,7 @@ export type EcommerceShopDraftV2 = {
   lines: EcommerceQuoteLine[]
   pricing: {
     subtotalMmk: number
-    promotion: EcommerceCheckoutQuote['promotion']
+    promotion: CommercePromotionDecision
     tax: EcommerceCheckoutQuote['tax']
     shipping: EcommerceCheckoutQuote['shipping']
     payment: EcommerceCheckoutQuote['payment']
@@ -1386,6 +1393,7 @@ export async function prepareEcommerceShopDraftV2(input: {
   request: EcommerceOrderRequestV2
   state: EcommerceBuyingState
   currentCatalog: CommerceItem[]
+  currentPromotionPolicies: readonly CommercePromotionPolicy[]
   confirmedAt: string
 }): Promise<EcommerceShopDraftV2> {
   const request = await validateEcommerceOrderRequestV2(input.request)
@@ -1405,8 +1413,15 @@ export async function prepareEcommerceShopDraftV2(input: {
       || item.price !== line.unitPriceMmk
       || item.onHand < line.quantity) throw new Error('A quoted item, variant, price, or availability changed.')
   })
+  const promotion = commercePromotionDecision(
+    input.currentPromotionPolicies,
+    request.quote.promotion.code,
+    request.quote.subtotalMmk,
+    confirmedAt,
+  )
+  if (!promotion) throw new Error('The Shop promotion decision is invalid.')
   return {
-    schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V3,
+    schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V4,
     mode: 'browser-memory-shop-draft',
     state: 'review_required',
     id: `ESD-${request.id.slice(4)}`,
@@ -1434,20 +1449,21 @@ export async function prepareEcommerceShopDraftV2(input: {
     lines: canonicalCopy(request.lines),
     pricing: {
       subtotalMmk: request.quote.subtotalMmk,
-      promotion: canonicalCopy(request.quote.promotion),
+      promotion,
       tax: canonicalCopy(request.quote.tax),
       shipping: canonicalCopy(request.quote.shipping),
       payment: canonicalCopy(request.quote.payment),
-      totalMmk: request.quote.totalMmk,
+      totalMmk: promotion.netSubtotalMmk,
     },
-    totalMmk: request.totalMmk,
-    evidenceReference: `ECOMMERCE:${request.id}:${request.sourcePreviewDigest}:${request.quote.quoteDigest}:${request.scope}:LOC-MAIN:ecommerce>commerce:human_review_required`,
+    totalMmk: promotion.netSubtotalMmk,
+    evidenceReference: `ECOMMERCE:${request.id}:${request.sourcePreviewDigest}:${request.quote.quoteDigest}:${request.scope}:LOC-MAIN:ecommerce>commerce:human_review_required:${promotion.status}:${promotion.policyRevision ?? 'none'}:${promotion.discountMmk}`,
   }
 }
 
 export async function prepareManagedEcommerceShopDraftV2(input: {
   request: EcommerceOrderRequestV2
   currentCatalog: CommerceItem[]
+  currentPromotionPolicies: readonly CommercePromotionPolicy[]
   confirmedAt: string
 }) {
   const request = await validateEcommerceOrderRequestV2(input.request)
@@ -1484,7 +1500,7 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
   const structuredFields = ['customerProfile', 'deliveryAddress']
   const structured = isRecord(value) && structuredFields.some((field) => field in value)
   const source = exactObject(value, 'Shop draft', structured ? [...baseFields, ...structuredFields] : baseFields)
-  if (source.schema !== ECOMMERCE_SHOP_DRAFT_SCHEMA_V3
+  if (source.schema !== ECOMMERCE_SHOP_DRAFT_SCHEMA_V4
     || source.mode !== 'browser-memory-shop-draft'
     || source.state !== 'review_required'
     || !Array.isArray(source.lines)
@@ -1537,15 +1553,47 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
   const subtotalMmk = safeInteger(pricing.subtotalMmk, 'Shop draft.pricing.subtotalMmk', 1)
   const totalMmk = safeInteger(source.totalMmk, 'Shop draft.totalMmk', 1)
   const pricingTotal = safeInteger(pricing.totalMmk, 'Shop draft.pricing.totalMmk', 1)
-  if (subtotalMmk !== productTotal || totalMmk !== productTotal || pricingTotal !== productTotal) {
-    throw new Error('Shop draft pricing total is invalid.')
-  }
-  const promotion = exactObject(pricing.promotion, 'Shop draft.pricing.promotion', ['adapter', 'status', 'code', 'amountMmk'])
+  if (subtotalMmk !== productTotal) throw new Error('Shop draft pricing subtotal is invalid.')
+  const promotion = exactObject(pricing.promotion, 'Shop draft.pricing.promotion', [
+    'schema', 'status', 'code', 'policyRevision', 'policyActionId', 'discountBasisPoints',
+    'grossSubtotalMmk', 'discountMmk', 'netSubtotalMmk', 'reviewedAt', 'reason',
+  ])
   const promotionCode = optionalText(promotion.code, 'Shop draft.pricing.promotion.code', 40)
-  const promotionStatus = promotionCode ? 'pending_shop_review' : 'not_requested'
-  if (promotion.adapter !== 'shop_promotion_review' || promotion.status !== promotionStatus || promotion.amountMmk !== 0) {
-    throw new Error('Shop draft promotion boundary is invalid.')
-  }
+  const policyRevision = promotion.policyRevision === null ? null : safeInteger(promotion.policyRevision, 'Shop draft.pricing.promotion.policyRevision', 1)
+  const policyActionId = promotion.policyActionId === null ? null : canonicalText(promotion.policyActionId, 'Shop draft.pricing.promotion.policyActionId', 160)
+  const discountBasisPoints = safeInteger(promotion.discountBasisPoints, 'Shop draft.pricing.promotion.discountBasisPoints')
+  const grossSubtotalMmk = safeInteger(promotion.grossSubtotalMmk, 'Shop draft.pricing.promotion.grossSubtotalMmk', 1)
+  const discountMmk = safeInteger(promotion.discountMmk, 'Shop draft.pricing.promotion.discountMmk')
+  const netSubtotalMmk = safeInteger(promotion.netSubtotalMmk, 'Shop draft.pricing.promotion.netSubtotalMmk', 1)
+  const reviewedAt = canonicalTimestamp(promotion.reviewedAt, 'Shop draft.pricing.promotion.reviewedAt')
+  const promotionStatus = promotion.status
+  const promotionReason = promotion.reason
+  const approved = promotionStatus === 'approved'
+    && promotionReason === 'approved'
+    && promotionCode !== null
+    && policyRevision !== null
+    && policyActionId !== null
+    && discountBasisPoints >= 1
+    && discountBasisPoints <= 10_000
+    && discountMmk >= 1
+  const notRequested = promotionStatus === 'not_requested'
+    && promotionReason === 'not_requested'
+    && promotionCode === null
+    && policyRevision === null
+    && policyActionId === null
+    && discountBasisPoints === 0
+    && discountMmk === 0
+  const rejected = promotionStatus === 'rejected'
+    && ['not_found', 'inactive', 'not_effective', 'minimum_not_met'].includes(String(promotionReason))
+    && promotionCode !== null
+    && discountMmk === 0
+  if (promotion.schema !== 'supermega.commerce.promotion-decision.v1'
+    || (!approved && !notRequested && !rejected)
+    || grossSubtotalMmk !== subtotalMmk
+    || netSubtotalMmk !== grossSubtotalMmk - discountMmk
+    || reviewedAt !== confirmedAt
+    || pricingTotal !== netSubtotalMmk
+    || totalMmk !== netSubtotalMmk) throw new Error('Shop draft promotion boundary is invalid.')
   const tax = exactObject(pricing.tax, 'Shop draft.pricing.tax', ['adapter', 'status', 'amountMmk'])
   if (tax.adapter !== 'price_inclusive' || tax.status !== 'included' || tax.amountMmk !== 0) {
     throw new Error('Shop draft tax boundary is invalid.')
@@ -1559,10 +1607,10 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
   if (!paymentAdapters.includes(payment.adapter as EcommercePaymentAdapter)
     || payment.status !== 'not_authorized'
     || payment.amountMmk !== 0) throw new Error('Shop draft payment boundary is invalid.')
-  const evidenceReference = `ECOMMERCE:${sourceRequestId}:${sourcePreviewDigest}:${quoteDigest}:${organizationScope}:LOC-MAIN:ecommerce>commerce:human_review_required`
+  const evidenceReference = `ECOMMERCE:${sourceRequestId}:${sourcePreviewDigest}:${quoteDigest}:${organizationScope}:LOC-MAIN:ecommerce>commerce:human_review_required:${promotionStatus}:${policyRevision ?? 'none'}:${discountMmk}`
   if (source.evidenceReference !== evidenceReference) throw new Error('Shop draft evidence reference is invalid.')
   return {
-    schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V3,
+    schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V4,
     mode: 'browser-memory-shop-draft',
     state: 'review_required',
     id,
@@ -1588,10 +1636,17 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
     pricing: {
       subtotalMmk,
       promotion: {
-        adapter: 'shop_promotion_review',
-        status: promotionStatus,
+        schema: 'supermega.commerce.promotion-decision.v1',
+        status: promotionStatus as CommercePromotionDecision['status'],
         code: promotionCode,
-        amountMmk: 0,
+        policyRevision,
+        policyActionId,
+        discountBasisPoints,
+        grossSubtotalMmk,
+        discountMmk,
+        netSubtotalMmk,
+        reviewedAt,
+        reason: promotionReason as CommercePromotionDecision['reason'],
       },
       tax: { adapter: 'price_inclusive', status: 'included', amountMmk: 0 },
       shipping: expectedShipping as EcommerceCheckoutQuote['shipping'],

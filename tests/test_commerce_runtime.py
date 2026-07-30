@@ -1077,6 +1077,68 @@ def apply_event(
 
 
 class CommerceRuntimeTests(unittest.TestCase):
+    def test_ecommerce_promotion_is_policy_bound_and_prices_the_shop_order(self) -> None:
+        state = created_state("ORD-PROMO-1")
+        state["promotionPolicies"] = [
+            {
+                "revision": 1,
+                "code": "WELCOME",
+                "discountBasisPoints": 1_000,
+                "minimumSubtotalMmk": 100,
+                "maximumDiscountMmk": 50,
+                "status": "active",
+                "effectiveFrom": "2026-07-23T08:00:00.000Z",
+                "effectiveUntil": None,
+                "proof": action_evidence(
+                    "ACT-PROMOTION-WELCOME-R1",
+                    captured_at="2026-07-23T08:00:00.000Z",
+                    reason="Approved the launch promotion policy.",
+                ),
+            }
+        ]
+        order = state["orders"][0]  # type: ignore[index]
+        order["sourceRecordId"] = "ECR-00000000-0000-4000-8000-000000000099"
+        order["lines"] = [
+            {
+                "sku": "SKU-1",
+                "name": "Test item",
+                "quantity": 2,
+                "unitPriceMmk": 100,
+            }
+        ]
+        order["promotionDecision"] = {
+            "schema": "supermega.commerce.promotion-decision.v1",
+            "status": "approved",
+            "code": "WELCOME",
+            "policyRevision": 1,
+            "policyActionId": "ACT-PROMOTION-WELCOME-R1",
+            "discountBasisPoints": 1_000,
+            "grossSubtotalMmk": 200,
+            "discountMmk": 20,
+            "netSubtotalMmk": 180,
+            "reviewedAt": NOW,
+            "reason": "approved",
+        }
+        order["total"] = 180
+
+        accepted = validate_commerce_state(state)
+        self.assertEqual(accepted["orders"][0]["total"], 180)  # type: ignore[index]
+
+        for field, value in (
+            ("discountMmk", 19),
+            ("policyActionId", "ACT-PROMOTION-FORGED"),
+            ("netSubtotalMmk", 181),
+        ):
+            tampered = deepcopy(state)
+            tampered["orders"][0]["promotionDecision"][field] = value  # type: ignore[index]
+            with self.assertRaisesRegex(TrialValidationError, "versioned Shop policy"):
+                validate_commerce_state(tampered)
+
+        ungoverned = deepcopy(state)
+        ungoverned["promotionPolicies"] = []
+        with self.assertRaisesRegex(TrialValidationError, "versioned Shop policy"):
+            validate_commerce_state(ungoverned)
+
     def test_production_material_issue_decrements_one_item_with_linked_evidence(self) -> None:
         current = catalog_state()
         issue = movement(

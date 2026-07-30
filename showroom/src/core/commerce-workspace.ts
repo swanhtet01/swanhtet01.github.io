@@ -149,6 +149,34 @@ export type CommerceOrderCreditDecision = {
   status: 'approved'
 }
 
+export type CommercePromotionPolicy = {
+  revision: number
+  code: string
+  discountBasisPoints: number
+  minimumSubtotalMmk: number
+  maximumDiscountMmk: number
+  status: 'active' | 'inactive'
+  effectiveFrom: string
+  effectiveUntil: string | null
+  proof: CommerceActionProof
+}
+
+export type CommercePromotionDecisionReason = 'approved' | 'not_requested' | 'not_found' | 'inactive' | 'not_effective' | 'minimum_not_met'
+
+export type CommercePromotionDecision = {
+  schema: 'supermega.commerce.promotion-decision.v1'
+  status: 'not_requested' | 'approved' | 'rejected'
+  code: string | null
+  policyRevision: number | null
+  policyActionId: string | null
+  discountBasisPoints: number
+  grossSubtotalMmk: number
+  discountMmk: number
+  netSubtotalMmk: number
+  reviewedAt: string
+  reason: CommercePromotionDecisionReason
+}
+
 export type CommerceCustomerCreditReview = {
   customer: string
   policy: CommerceCustomerCreditPolicy | null
@@ -288,6 +316,7 @@ export type CommerceOrder = {
   paymentDueAt?: string
   collectionActions?: CommerceCollectionAction[]
   creditDecision?: CommerceOrderCreditDecision
+  promotionDecision?: CommercePromotionDecision
   sourceRecordId?: string
   evidenceReference?: string
   lines?: CommerceOrderLine[]
@@ -845,6 +874,7 @@ export type CommerceState = {
   taxConfigurations?: CommerceTaxConfiguration[]
   accountMappingConfigurations?: CommerceAccountMappingConfiguration[]
   customerCreditPolicies?: CommerceCustomerCreditPolicy[]
+  promotionPolicies?: CommercePromotionPolicy[]
   websiteIntakes?: CommerceWebsiteIntake[]
   storefrontRequests?: CommerceStorefrontRequest[]
   storefrontConfiguration?: CommerceStorefrontConfiguration
@@ -1093,6 +1123,7 @@ const maxCatalogChanges = 500
 const maxTaxConfigurations = 100
 const maxAccountMappingConfigurations = 100
 const maxCustomerCreditPolicies = 500
+const maxPromotionPolicies = 200
 const customerCreditTerms = new Set([0, 7, 30])
 const maxOrderLines = 20
 const maxReturnsPerOrder = 100
@@ -1665,7 +1696,7 @@ export function commerceOrderLocationAllocationPreview(state: CommerceState, ord
 }
 
 export function createEmptyCommerce(): CommerceState {
-  return { schema: COMMERCE_WORKSPACE_SCHEMA, items: [], orders: [], movements: [], closes: [], catalogBaselines: [], catalogChanges: [], websiteIntakes: [], storefrontRequests: [], purchaseOrders: [] }
+  return { schema: COMMERCE_WORKSPACE_SCHEMA, items: [], orders: [], movements: [], closes: [], catalogBaselines: [], catalogChanges: [], promotionPolicies: [], websiteIntakes: [], storefrontRequests: [], purchaseOrders: [] }
 }
 
 export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
@@ -1733,6 +1764,22 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
     closes: [],
     catalogBaselines: items.map((item) => createCommerceCatalogBaseline(item, baselineProof)),
     catalogChanges: [],
+    promotionPolicies: [{
+      revision: 1,
+      code: 'WELCOME',
+      discountBasisPoints: 1_000,
+      minimumSubtotalMmk: 10_000,
+      maximumDiscountMmk: 10_000,
+      status: 'active',
+      effectiveFrom: baselineProof.capturedAt,
+      effectiveUntil: null,
+      proof: {
+        ...baselineProof,
+        actionId: 'ACT-DEMO-PROMOTION-WELCOME',
+        reason: 'Approve the sample welcome promotion for Shop review.',
+        evidenceReference: 'DEMO-SEED-PROMOTION-WELCOME',
+      },
+    }],
     websiteIntakes: [],
     storefrontRequests: [],
     purchaseOrders: [{
@@ -1761,6 +1808,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (value.taxConfigurations !== undefined && !Array.isArray(value.taxConfigurations)) throw new Error('Commerce tax configurations must be an array when present.')
   if (value.accountMappingConfigurations !== undefined && !Array.isArray(value.accountMappingConfigurations)) throw new Error('Commerce account mapping configurations must be an array when present.')
   if (value.customerCreditPolicies !== undefined && !Array.isArray(value.customerCreditPolicies)) throw new Error('Commerce customer credit policies must be an array when present.')
+  if (value.promotionPolicies !== undefined && !Array.isArray(value.promotionPolicies)) throw new Error('Commerce promotion policies must be an array when present.')
   if (value.websiteIntakes !== undefined && !Array.isArray(value.websiteIntakes)) throw new Error('Commerce Website intakes must be an array when present.')
   if (value.storefrontRequests !== undefined && !Array.isArray(value.storefrontRequests)) throw new Error('Commerce storefront requests must be an array when present.')
   if (value.storefrontConfiguration !== undefined && !isRecord(value.storefrontConfiguration)) throw new Error('Commerce storefront configuration must be an object when present.')
@@ -1790,6 +1838,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const taxConfigurations = (value.taxConfigurations ?? []) as unknown[]
   const accountMappingConfigurations = (value.accountMappingConfigurations ?? []) as unknown[]
   const customerCreditPolicies = (value.customerCreditPolicies ?? []) as unknown[]
+  const promotionPolicies = (value.promotionPolicies ?? []) as unknown[]
   const websiteIntakes = (value.websiteIntakes ?? []) as unknown[]
   const storefrontRequests = (value.storefrontRequests ?? []) as unknown[]
   const storefrontConfiguration = value.storefrontConfiguration
@@ -1799,6 +1848,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (taxConfigurations.length > maxTaxConfigurations) throw new Error(`Commerce tax configurations cannot exceed ${maxTaxConfigurations}.`)
   if (accountMappingConfigurations.length > maxAccountMappingConfigurations) throw new Error(`Commerce account mapping configurations cannot exceed ${maxAccountMappingConfigurations}.`)
   if (customerCreditPolicies.length > maxCustomerCreditPolicies) throw new Error(`Commerce customer credit policies cannot exceed ${maxCustomerCreditPolicies}.`)
+  if (promotionPolicies.length > maxPromotionPolicies) throw new Error(`Commerce promotion policies cannot exceed ${maxPromotionPolicies}.`)
   if (storefrontRequests.length > maxStorefrontRequests) throw new Error(`Commerce storefront requests cannot exceed ${maxStorefrontRequests}.`)
   if (purchaseOrders.length > maxPurchaseOrders) throw new Error(`Commerce purchase orders cannot exceed ${maxPurchaseOrders}.`)
   const itemSkus: string[] = []
@@ -1828,6 +1878,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const taxConfigurationActionIds: string[] = []
   const accountMappingConfigurationActionIds: string[] = []
   const customerCreditPolicyActionIds: string[] = []
+  const promotionPolicyActionIds: string[] = []
   const purchaseOrderActionIds: string[] = []
   const purchaseOrderIds: string[] = []
   const activePurchaseOrderSkus: string[] = []
@@ -2065,6 +2116,42 @@ export function validateCommerceState(value: unknown): CommerceState {
     customerCreditPolicyActionIds.push(policy.proof.actionId)
   }
 
+  let newerPromotionPolicy: CommercePromotionPolicy | null = null
+  for (const [index, candidate] of promotionPolicies.entries()) {
+    const field = `promotionPolicies[${index}]`
+    if (!isRecord(candidate) || !hasExactKeys(candidate, [
+      'revision', 'code', 'discountBasisPoints', 'minimumSubtotalMmk', 'maximumDiscountMmk',
+      'status', 'effectiveFrom', 'effectiveUntil', 'proof',
+    ])) throw new Error(`${field} is invalid.`)
+    assertSafeInteger(candidate.revision, `${field}.revision`, 1)
+    if (candidate.revision !== promotionPolicies.length - index) throw new Error(`${field}.revision breaks the newest-first sequence.`)
+    const code = canonicalText(candidate.code, `${field}.code`, 40)
+    if (!/^[A-Z0-9][A-Z0-9-]{2,39}$/.test(code)) throw new Error(`${field}.code is invalid.`)
+    assertSafeInteger(candidate.discountBasisPoints, `${field}.discountBasisPoints`, 1)
+    if (Number(candidate.discountBasisPoints) > 10_000) throw new Error(`${field}.discountBasisPoints is invalid.`)
+    assertSafeInteger(candidate.minimumSubtotalMmk, `${field}.minimumSubtotalMmk`)
+    assertSafeInteger(candidate.maximumDiscountMmk, `${field}.maximumDiscountMmk`, 1)
+    if (candidate.status !== 'active' && candidate.status !== 'inactive') throw new Error(`${field}.status is invalid.`)
+    if (!validTimestamp(candidate.effectiveFrom)
+      || candidate.effectiveUntil !== null && (!validTimestamp(candidate.effectiveUntil)
+        || (timestampMicros(candidate.effectiveUntil) as bigint) <= (timestampMicros(candidate.effectiveFrom) as bigint))) {
+      throw new Error(`${field} effective window is invalid.`)
+    }
+    if (!isRecord(candidate.proof)
+      || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !validProof(candidate.proof as CommerceActionProof)
+      || (timestampMicros(candidate.proof.capturedAt) as bigint) > (timestampMicros(candidate.effectiveFrom) as bigint)) {
+      throw new Error(`${field}.proof is invalid.`)
+    }
+    const policy = candidate as unknown as CommercePromotionPolicy
+    if (newerPromotionPolicy
+      && (timestampMicros(newerPromotionPolicy.proof.capturedAt) as bigint) < (timestampMicros(policy.proof.capturedAt) as bigint)) {
+      throw new Error(`${field} breaks the newest-first chronology.`)
+    }
+    newerPromotionPolicy = policy
+    promotionPolicyActionIds.push(policy.proof.actionId)
+  }
+
   for (const [index, candidate] of purchaseOrders.entries()) {
     if (!isRecord(candidate) || !hasExactKeys(
       candidate,
@@ -2235,6 +2322,29 @@ export function validateCommerceState(value: unknown): CommerceState {
         || candidate.itemSku !== expectedItemSku
         || candidate.quantity !== capturedQuantity) throw new Error(`orders[${index}] does not match its immutable line snapshots.`)
     }
+    let pricedSubtotal = capturedLineSubtotal
+    if (candidate.promotionDecision !== undefined) {
+      const field = `orders[${index}].promotionDecision`
+      if (!isRecord(candidate.promotionDecision) || !hasExactKeys(candidate.promotionDecision, [
+        'schema', 'status', 'code', 'policyRevision', 'policyActionId', 'discountBasisPoints',
+        'grossSubtotalMmk', 'discountMmk', 'netSubtotalMmk', 'reviewedAt', 'reason',
+      ]) || capturedLineSubtotal === null || !String(candidate.sourceRecordId ?? '').startsWith('ECR-')) {
+        throw new Error(`${field} is invalid.`)
+      }
+      const decision = candidate.promotionDecision as unknown as CommercePromotionDecision
+      const expected = commercePromotionDecision(
+        promotionPolicies as CommercePromotionPolicy[],
+        decision.code,
+        capturedLineSubtotal,
+        decision.reviewedAt,
+      )
+      if (!expected
+        || JSON.stringify(expected) !== JSON.stringify(decision)
+        || (timestampMicros(decision.reviewedAt) as bigint) > (timestampMicros(candidate.createdAt) as bigint)) {
+        throw new Error(`${field} does not match the Shop price policy.`)
+      }
+      pricedSubtotal = decision.netSubtotalMmk
+    }
     if (candidate.calculation !== undefined) {
       if (!isRecord(candidate.calculation)) throw new Error(`orders[${index}].calculation is invalid.`)
       const calculation = candidate.calculation
@@ -2269,7 +2379,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         if (calculation.taxMode !== 'not_configured'
           || calculation.taxMmk !== 0
           || calculation.totalMmk !== calculation.subtotalMmk
-          || (capturedLineSubtotal !== null && calculation.subtotalMmk !== capturedLineSubtotal)) {
+          || (pricedSubtotal !== null && calculation.subtotalMmk !== pricedSubtotal)) {
           throw new Error(`orders[${index}].calculation must preserve its deterministic untaxed MMK subtotal.`)
         }
       } else {
@@ -2277,8 +2387,8 @@ export function validateCommerceState(value: unknown): CommerceState {
         assertSafeInteger(calculation.taxRateBasisPoints, `orders[${index}].calculation.taxRateBasisPoints`)
         assertSafeInteger(calculation.listedSubtotalMmk, `orders[${index}].calculation.listedSubtotalMmk`, 1)
         const configuration = (taxConfigurations as CommerceTaxConfiguration[]).find((entry) => entry.revision === calculation.taxConfigurationRevision)
-        const expected = configuration && capturedLineSubtotal !== null
-          ? configuredOrderCalculation(configuration, capturedLineSubtotal, Number(calculation.catalogRevision))
+        const expected = configuration && pricedSubtotal !== null
+          ? configuredOrderCalculation(configuration, pricedSubtotal, Number(calculation.catalogRevision))
           : null
         if (!configuration
           || !expected
@@ -2296,7 +2406,7 @@ export function validateCommerceState(value: unknown): CommerceState {
           throw new Error(`orders[${index}].calculation does not match its immutable tax configuration.`)
         }
       }
-    } else if (capturedLineSubtotal !== null && candidate.total !== capturedLineSubtotal) {
+    } else if (pricedSubtotal !== null && candidate.total !== pricedSubtotal) {
       throw new Error(`orders[${index}] legacy total does not match its immutable line snapshots.`)
     }
     if (!orderStatuses.includes(candidate.status as CommerceOrderStatus)) throw new Error(`orders[${index}].status is invalid.`)
@@ -3290,6 +3400,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     ...taxConfigurationActionIds,
     ...accountMappingConfigurationActionIds,
     ...customerCreditPolicyActionIds,
+    ...promotionPolicyActionIds,
     ...websiteIntakeCreationActionIds,
     ...closeActionIds,
     ...purchaseOrderActionIds,
@@ -3770,6 +3881,70 @@ export function commerceCurrentCustomerCreditPolicy(state: CommerceState, custom
     policy.customer === customer
     && (atMicros === null || (timestampMicros(policy.proof.capturedAt) as bigint) <= atMicros)
   )) ?? null
+}
+
+export function commercePromotionPolicies(state: CommerceState) {
+  return state.promotionPolicies ?? []
+}
+
+export function commercePromotionDecision(
+  policies: readonly CommercePromotionPolicy[],
+  codeValue: string | null,
+  grossSubtotalMmk: number,
+  reviewedAtValue: string,
+): CommercePromotionDecision | null {
+  if (!Number.isSafeInteger(grossSubtotalMmk) || grossSubtotalMmk < 1 || !validTimestamp(reviewedAtValue)) return null
+  const reviewedAt = new Date(reviewedAtValue).toISOString()
+  const code = codeValue === null ? null : codeValue.trim().toUpperCase()
+  if (code === '') return null
+  const base = {
+    schema: 'supermega.commerce.promotion-decision.v1' as const,
+    code,
+    grossSubtotalMmk,
+    reviewedAt,
+  }
+  if (code === null) return {
+    ...base,
+    status: 'not_requested',
+    policyRevision: null,
+    policyActionId: null,
+    discountBasisPoints: 0,
+    discountMmk: 0,
+    netSubtotalMmk: grossSubtotalMmk,
+    reason: 'not_requested',
+  }
+  if (!/^[A-Z0-9][A-Z0-9-]{2,39}$/.test(code)) return null
+  const policy = policies.find((candidate) => candidate.code === code
+    && (timestampMicros(candidate.proof.capturedAt) as bigint) <= (timestampMicros(reviewedAt) as bigint)) ?? null
+  const rejected = (reason: Exclude<CommercePromotionDecisionReason, 'approved' | 'not_requested'>): CommercePromotionDecision => ({
+    ...base,
+    status: 'rejected',
+    policyRevision: policy?.revision ?? null,
+    policyActionId: policy?.proof.actionId ?? null,
+    discountBasisPoints: policy?.discountBasisPoints ?? 0,
+    discountMmk: 0,
+    netSubtotalMmk: grossSubtotalMmk,
+    reason,
+  })
+  if (!policy) return rejected('not_found')
+  if (policy.status !== 'active') return rejected('inactive')
+  const at = timestampMicros(reviewedAt) as bigint
+  if ((timestampMicros(policy.effectiveFrom) as bigint) > at
+    || policy.effectiveUntil && (timestampMicros(policy.effectiveUntil) as bigint) < at) return rejected('not_effective')
+  if (grossSubtotalMmk < policy.minimumSubtotalMmk) return rejected('minimum_not_met')
+  const rawDiscount = Number(BigInt(grossSubtotalMmk) * BigInt(policy.discountBasisPoints) / 10_000n)
+  const discountMmk = Math.min(rawDiscount, policy.maximumDiscountMmk, grossSubtotalMmk - 1)
+  if (!Number.isSafeInteger(discountMmk) || discountMmk < 1) return rejected('minimum_not_met')
+  return {
+    ...base,
+    status: 'approved',
+    policyRevision: policy.revision,
+    policyActionId: policy.proof.actionId,
+    discountBasisPoints: policy.discountBasisPoints,
+    discountMmk,
+    netSubtotalMmk: grossSubtotalMmk - discountMmk,
+    reason: 'approved',
+  }
 }
 
 export function commerceCustomerCreditExposure(state: CommerceState, customer: string) {
@@ -4894,12 +5069,16 @@ function validatedOrderLineSnapshots(order: CommerceOrder): CommerceOrderLine[] 
     total = nextTotal
   }
   const expectedItemSku = order.lines.length === 1 ? order.lines[0].sku : undefined
+  const pricedTotal = order.promotionDecision?.netSubtotalMmk ?? total
+  if (order.promotionDecision && (order.promotionDecision.grossSubtotalMmk !== total
+    || order.promotionDecision.netSubtotalMmk !== total - order.promotionDecision.discountMmk
+    || order.promotionDecision.netSubtotalMmk < 1)) return null
   return order.item === commerceOrderItemSummary(order.lines)
     && order.itemSku === expectedItemSku
     && order.quantity === quantity
     && (order.calculation?.schema === COMMERCE_ORDER_CALCULATION_V2_SCHEMA
-      ? order.calculation.listedSubtotalMmk === total && order.total === order.calculation.totalMmk
-      : order.total === total) ? order.lines : null
+      ? order.calculation.listedSubtotalMmk === pricedTotal && order.total === order.calculation.totalMmk
+      : order.total === pricedTotal) ? order.lines : null
 }
 
 export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder, proof: CommerceActionProof) {
@@ -4928,6 +5107,18 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
     || order.refundStatus !== 'none') return null
   if (Boolean(order.sourceRecordId) !== Boolean(order.evidenceReference)
     || (order.evidenceReference && order.evidenceReference !== proof.evidenceReference)) return null
+  if (order.promotionDecision) {
+    const expectedPromotion = commercePromotionDecision(
+      commercePromotionPolicies(state),
+      order.promotionDecision.code,
+      order.promotionDecision.grossSubtotalMmk,
+      order.promotionDecision.reviewedAt,
+    )
+    if (!order.sourceRecordId?.startsWith('ECR-')
+      || !expectedPromotion
+      || JSON.stringify(expectedPromotion) !== JSON.stringify(order.promotionDecision)
+      || (timestampMicros(order.promotionDecision.reviewedAt) as bigint) > (timestampMicros(order.createdAt) as bigint)) return null
+  }
   const proofMovements = state.movements.filter((movement) => movement.actionId === proof.actionId)
   if (proofMovements.length) {
     const storedOrder = state.orders.find((candidate) => candidate.id === order.id)
@@ -4987,7 +5178,7 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
     if (nextBalance === null) return null
     nextBalances.set(item.sku, nextBalance)
   }
-  const calculation = commerceOrderCalculation(state, order.total, proof.capturedAt)
+  const calculation = commerceOrderCalculation(state, order.promotionDecision?.netSubtotalMmk ?? order.total, proof.capturedAt)
   if (!calculation) return null
   const paymentTermsDays = commerceOrderPaymentTermsDays(order)
   if (paymentTermsDays === null) return null

@@ -57,7 +57,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
 - Both domains serve deployed `df4d26ca3eb427578607c6a5016848d046bdb34f`; paired brand, context, and catalog identities match.
 - Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-- Ally runs one serial specialist with zero external/Vercel/scheduler actions and 4,096/768/0s. Stable portfolio work IDs block completed ENG-130 replay; Ecommerce promotion review is next. Shared focus changes require an idle atomic handoff. `supermega.ally-working-set-trim.v1` released 2,949.3 MB without Codex process stops. Audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Four CEO outcomes are accepted; Finance/Risk remains quarantined.
+- Ally runs one serial specialist with zero external/Vercel/scheduler actions and 4,096/768/0s. Stable IDs block ENG-130/ENG-134 replay; promotion setup is next. `supermega.ally-working-set-trim.v1` released 2,949.3 MB without Codex process stops. Audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Four CEO outcomes are accepted; Finance/Risk remains quarantined.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
 ## Owner-gated actions

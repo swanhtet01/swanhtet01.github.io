@@ -2252,15 +2252,15 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !coreSource.includes('const draftLines = ecommerceShopDraftLines(ecommerceNavigationDraft)')
   || !coreSource.includes('setExtraOrderLines(draftLines.slice(1).map')
   || !coreSource.includes('setPayment(ecommerceShopDraftPayment(ecommerceNavigationDraft))')
-  || !coreSource.includes("ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v3'")
+  || !coreSource.includes("ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v4'")
   || !coreSource.includes("setNotice('The Ecommerce request has no valid Shop operating authority. Nothing was prepared.')")
   || !coreSource.includes("setNotice('The Shop operating location changed after Ecommerce review. Reopen the request; no order was prepared.')")
   || !coreSource.includes('governed handoff')
   || !coreSource.includes('? ecommerceDraft.lines')
   || !coreSource.includes('orderLines.length !== ecommerceLines.length')
-  || !coreSource.includes('orderTotal !== ecommerceDraft.totalMmk')
+  || !coreSource.includes('pricedOrderTotal !== ecommerceDraft.totalMmk')
   || !coreSource.includes('commerceOrderItemSummary(orderLines)')
-  || !coreSource.includes('...(!sourceBacked || orderLines.length > 1 ? { lines: orderLines } : {})')
+  || !coreSource.includes('...(!sourceBacked || orderLines.length > 1 || promotionDecision ? { lines: orderLines } : {})')
   || ecommerceOrderSubmitStart < 0
   || ecommerceOrderSubmitEnd < 0
   || ecommercePaymentPosition < 0
@@ -2282,10 +2282,13 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !coreSource.includes('credit ${formatMoney(creditReview.exposureBeforeMmk)} → ${formatMoney(creditReview.exposureAfterMmk)} under policy R${creditReview.policy?.revision}')
   || !coreSource.includes('Stock ${reservationReview}')
   || !coreCssSource.includes('.order-ecommerce-payment')
-  || !ecommerceBuyingLifecycleSource.includes("ECOMMERCE_SHOP_DRAFT_SCHEMA_V3 = 'supermega.ecommerce.shop_draft.v3'")
+  || !ecommerceBuyingLifecycleSource.includes("ECOMMERCE_SHOP_DRAFT_SCHEMA_V4 = 'supermega.ecommerce.shop_draft.v4'")
+  || !ecommerceBuyingLifecycleSource.includes('commercePromotionDecision(')
+  || !commerceSource.includes("schema: 'supermega.commerce.promotion-decision.v1'")
+  || !commerceSource.includes('promotionPolicies?: CommercePromotionPolicy[]')
   || !ecommerceBuyingLifecycleSource.includes("operatingUnitLocationId: 'LOC-MAIN'")
   || !ecommerceBuyingLifecycleSource.includes("writePolicy: 'human_review_required'")
-  || !managedEcommerceBuyingLifecycleSource.includes('ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v3"')
+  || !managedEcommerceBuyingLifecycleSource.includes('ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v4"')
   || !managedEcommerceBuyingLifecycleSource.includes('"operatingUnitLocationId": "LOC-MAIN"')
   || !coreSource.includes("import('../products/ecommerce/ecommerce-shop-handoff')")
   || ['setItem(', 'removeItem(', 'localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest', 'navigator.locks', 'convertCommerceWebsiteIntake', 'reserveCommerceOrder', 'mutateCommerceWorkspace'].some((marker) => ecommerceConfirmSource.includes(marker) || ecommerceHandoffSource.includes(marker))) fail('ecommerce_shop_handoff_contract_missing_or_mutating')
@@ -10857,6 +10860,7 @@ async function verifyStorefrontRuntime() {
       ecommerceBuyingRuntimeChecks += 1
     }
     const buyingScope = 'ecommerce:runtime-client'
+    const promotionPolicies = commerce.createSeedCommerce(Date.parse('2026-07-24T08:00:00.000Z')).promotionPolicies ?? []
     const pim = await buyingModel.buildEcommercePimProjection(buyingScope, firstDigest, preview)
     const pimRetry = await buyingModel.buildEcommercePimProjection(buyingScope, firstDigest, reordered)
     buyingAssert(pim.schema === 'supermega.ecommerce.pim_projection.v1'
@@ -11595,6 +11599,7 @@ async function verifyStorefrontRuntime() {
     const managedBuyingDraft = await buyingModel.prepareManagedEcommerceShopDraftV2({
       request: buyingRequest,
       currentCatalog: catalog,
+      currentPromotionPolicies: promotionPolicies,
       confirmedAt: '2026-07-24T09:10:00.000Z',
     })
     buyingAssert(managedBuyingDraft.lines.length === 2
@@ -11638,13 +11643,18 @@ async function verifyStorefrontRuntime() {
       request: buyingRequest,
       state: recordedBuying,
       currentCatalog: catalog,
+      currentPromotionPolicies: promotionPolicies,
       confirmedAt: '2026-07-24T09:10:00.000Z',
     })
-    buyingAssert(buyingDraft.schema === 'supermega.ecommerce.shop_draft.v3'
+    buyingAssert(buyingDraft.schema === 'supermega.ecommerce.shop_draft.v4'
       && buyingDraft.lines.length === 2
       && buyingDraft.customerProfile?.name === 'Ma Su'
       && buyingDraft.deliveryAddress?.township === 'Hlaing'
       && buyingDraft.pricing.payment.status === 'not_authorized'
+      && buyingDraft.pricing.promotion.status === 'approved'
+      && buyingDraft.pricing.promotion.code === 'WELCOME'
+      && buyingDraft.pricing.promotion.discountMmk === Math.min(Math.floor(buyingDraft.pricing.subtotalMmk / 10), 10_000)
+      && buyingDraft.totalMmk === buyingDraft.pricing.subtotalMmk - buyingDraft.pricing.promotion.discountMmk
       && buyingDraft.operatingContext.organizationScope === buyingScope
       && buyingDraft.operatingContext.operatingUnitLocationId === 'LOC-MAIN'
       && buyingDraft.operatingContext.sourceAuthority === 'ecommerce'
@@ -11655,6 +11665,72 @@ async function verifyStorefrontRuntime() {
     buyingAssert(handoffModel.ecommerceShopDraftMatchesOperatingContext(buyingDraft, ['LOC-MAIN'])
       && !handoffModel.ecommerceShopDraftMatchesOperatingContext(buyingDraft, ['LOC-BRANCH']),
     'ecommerce_buying_shop_draft_operating_location_not_enforced')
+    const promotionBuyingState = commerce.validateCommerceState({
+      ...managedBuyingState,
+      promotionPolicies,
+    })
+    const promotionOrderProof = {
+      actionId: 'ACT-ECOMMERCE-PROMOTION-ORDER-1',
+      capturedAt: buyingDraft.confirmedAt,
+      actor: 'OP-OWNER',
+      reason: 'Confirm the policy-reviewed Ecommerce promotion in Shop.',
+      evidenceReference: `ECOMMERCE:${buyingRequest.id}:PROMOTION-ORDER`,
+    }
+    const promotedOrderLines = buyingDraft.lines.map((line) => ({
+      sku: line.sku,
+      name: line.name,
+      ...(line.variant ? { variant: line.variant } : {}),
+      quantity: line.quantity,
+      unitPriceMmk: line.unitPriceMmk,
+    }))
+    const promotedOrder = {
+      id: 'ORD-ECOMMERCE-PROMOTION-1',
+      createdAt: buyingDraft.confirmedAt,
+      customer: buyingDraft.customerReference,
+      owner: promotionOrderProof.actor,
+      channel: 'Ecommerce',
+      item: commerce.commerceOrderItemSummary(promotedOrderLines),
+      quantity: promotedOrderLines.reduce((total, line) => total + line.quantity, 0),
+      payment: 'KBZPay',
+      paymentStatus: 'pending',
+      refundStatus: 'none',
+      fulfilment: buyingDraft.fulfilment,
+      fulfilmentReference: buyingDraft.sourceRequestId,
+      promisedAt: '2026-07-24T10:00:00.000Z',
+      paymentDueAt: buyingDraft.confirmedAt,
+      sourceRecordId: buyingDraft.sourceRequestId,
+      evidenceReference: promotionOrderProof.evidenceReference,
+      lines: promotedOrderLines,
+      promotionDecision: buyingDraft.pricing.promotion,
+      total: buyingDraft.totalMmk,
+      status: 'confirmed',
+    }
+    const promotedOrderState = commerce.reserveCommerceOrder(
+      promotionBuyingState,
+      promotedOrder,
+      promotionOrderProof,
+    )
+    const storedPromotedOrder = promotedOrderState?.orders.find((order) => order.id === promotedOrder.id)
+    buyingAssert(storedPromotedOrder?.total === buyingDraft.totalMmk
+      && storedPromotedOrder.total === buyingDraft.pricing.promotion.netSubtotalMmk
+      && storedPromotedOrder.calculation?.subtotalMmk === buyingDraft.pricing.promotion.netSubtotalMmk
+      && storedPromotedOrder.promotionDecision?.policyRevision === 1
+      && commerce.reserveCommerceOrder(promotedOrderState, promotedOrder, promotionOrderProof) === promotedOrderState,
+    'ecommerce_approved_promotion_did_not_price_the_real_shop_order')
+    buyingAssert(commerce.reserveCommerceOrder(
+      promotionBuyingState,
+      {
+        ...promotedOrder,
+        promotionDecision: {
+          ...promotedOrder.promotionDecision,
+          discountMmk: promotedOrder.promotionDecision.discountMmk + 1,
+          netSubtotalMmk: promotedOrder.promotionDecision.netSubtotalMmk - 1,
+        },
+        total: promotedOrder.total - 1,
+      },
+      promotionOrderProof,
+    ) === null,
+    'ecommerce_forged_promotion_reached_the_real_shop_order')
     const authorityTamper = structuredClone(buyingDraft)
     authorityTamper.operatingContext.targetAuthority = 'production'
     let authorityTamperRejected = false
@@ -11676,6 +11752,7 @@ async function verifyStorefrontRuntime() {
         request: buyingRequest,
         state: recordedBuying,
         currentCatalog: catalog,
+        currentPromotionPolicies: promotionPolicies,
         confirmedAt: '2026-07-24T09:15:01.000Z',
       })
     } catch { expiredBuyingRejected = true }
@@ -11686,6 +11763,7 @@ async function verifyStorefrontRuntime() {
         request: buyingRequest,
         state: recordedBuying,
         currentCatalog: catalog.map((item) => item.sku === 'SM-1001' ? { ...item, price: item.price + 1 } : item),
+        currentPromotionPolicies: promotionPolicies,
         confirmedAt: '2026-07-24T09:10:00.000Z',
       })
     } catch { repricedBuyingRejected = true }

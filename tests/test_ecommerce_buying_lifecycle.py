@@ -109,6 +109,26 @@ def current_catalog() -> list[dict[str, object]]:
     ]
 
 
+def promotion_policies() -> list[dict[str, object]]:
+    return [{
+        "revision": 1,
+        "code": "WELCOME",
+        "discountBasisPoints": 1_000,
+        "minimumSubtotalMmk": 10_000,
+        "maximumDiscountMmk": 10_000,
+        "status": "active",
+        "effectiveFrom": "2026-07-26T09:00:00+06:30",
+        "effectiveUntil": None,
+        "proof": {
+            "actionId": "ACT-PROMOTION-WELCOME-R1",
+            "capturedAt": "2026-07-26T09:00:00+06:30",
+            "actor": "Pricing manager",
+            "reason": "Approve the welcome policy for reviewed Shop orders.",
+            "evidenceReference": "PRICING-WELCOME-R1",
+        },
+    }]
+
+
 def completed_order() -> dict[str, object]:
     return {
         "id": "ORD-1001",
@@ -195,6 +215,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         draft = prepare_ecommerce_shop_handoff(
             customer_request,
             current_catalog=current_catalog(),
+            current_promotion_policies=promotion_policies(),
             confirmed_at="2026-07-26T10:10:00+06:30",
         )
         self.assertEqual(draft["customerProfile"], first["customerProfile"])
@@ -308,17 +329,22 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         draft = prepare_ecommerce_shop_handoff(
             candidate,
             current_catalog=current_catalog(),
+            current_promotion_policies=promotion_policies(),
             confirmed_at="2026-07-26T10:10:00+06:30",
         )
         self.assertEqual(draft["schema"], ECOMMERCE_SHOP_DRAFT_SCHEMA)
         self.assertEqual(draft["state"], "review_required")
         self.assertEqual(draft["lines"], candidate["lines"])
         self.assertEqual(draft["pricing"]["payment"]["status"], "not_authorized")
-        self.assertEqual(draft["totalMmk"], candidate["totalMmk"])
+        self.assertEqual(draft["pricing"]["promotion"]["status"], "approved")
+        self.assertEqual(draft["pricing"]["promotion"]["policyRevision"], 1)
+        self.assertEqual(draft["pricing"]["promotion"]["discountMmk"], 5_650)
+        self.assertEqual(draft["totalMmk"], 50_850)
         with self.assertRaisesRegex(EcommerceLifecycleValidationError, "expired"):
             prepare_ecommerce_shop_handoff(
                 candidate,
                 current_catalog=current_catalog(),
+                current_promotion_policies=promotion_policies(),
                 confirmed_at="2026-07-26T10:15:01+06:30",
             )
 
@@ -337,6 +363,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
                     prepare_ecommerce_shop_handoff(
                         candidate,
                         current_catalog=catalog,
+                        current_promotion_policies=promotion_policies(),
                         confirmed_at="2026-07-26T10:10:00+06:30",
                     )
                 self.assertEqual(catalog, before)

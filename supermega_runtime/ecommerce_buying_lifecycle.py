@@ -22,7 +22,7 @@ ECOMMERCE_QUOTE_SCHEMA = "supermega.ecommerce.checkout_quote.v1"
 ECOMMERCE_CUSTOMER_PROFILE_SCHEMA = "supermega.ecommerce.customer_profile_snapshot.v1"
 ECOMMERCE_DELIVERY_ADDRESS_SCHEMA = "supermega.ecommerce.delivery_address_snapshot.v1"
 ECOMMERCE_REQUEST_SCHEMA = "supermega.ecommerce.order_request.v2"
-ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v3"
+ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v4"
 ECOMMERCE_RETURN_INTENT_SCHEMA = "supermega.ecommerce.return_intent.v1"
 ECOMMERCE_SUPPORT_INTENT_SCHEMA = "supermega.ecommerce.support_intent.v1"
 ECOMMERCE_LIFECYCLE_STATE_SCHEMA = "supermega.ecommerce.buying_lifecycle.v1"
@@ -879,10 +879,97 @@ def _current_catalog_item(value: object, field: str) -> dict[str, Any]:
     }
 
 
+def _promotion_policy(value: object, field: str) -> dict[str, Any]:
+    source = _object(value, field, (
+        "revision", "code", "discountBasisPoints", "minimumSubtotalMmk",
+        "maximumDiscountMmk", "status", "effectiveFrom", "effectiveUntil", "proof",
+    ))
+    code = _text(source["code"], f"{field}.code", maximum=40)
+    if re.fullmatch(r"[A-Z0-9][A-Z0-9-]{2,39}", code) is None:
+        raise _fail(f"{field}.code is invalid.")
+    proof = _object(source["proof"], f"{field}.proof", ("actionId", "capturedAt", "actor", "reason", "evidenceReference"))
+    effective_from = _timestamp(source["effectiveFrom"], f"{field}.effectiveFrom")
+    effective_until = None if source["effectiveUntil"] is None else _timestamp(source["effectiveUntil"], f"{field}.effectiveUntil")
+    if effective_until is not None and _instant(effective_until) <= _instant(effective_from):
+        raise _fail(f"{field} effective window is invalid.")
+    captured_at = _timestamp(proof["capturedAt"], f"{field}.proof.capturedAt")
+    if _instant(captured_at) > _instant(effective_from):
+        raise _fail(f"{field}.proof is later than its effective start.")
+    status = source["status"]
+    if status not in {"active", "inactive"}:
+        raise _fail(f"{field}.status is invalid.")
+    return {
+        "revision": _integer(source["revision"], f"{field}.revision", minimum=1),
+        "code": code,
+        "discountBasisPoints": _integer(source["discountBasisPoints"], f"{field}.discountBasisPoints", minimum=1, maximum=10_000),
+        "minimumSubtotalMmk": _integer(source["minimumSubtotalMmk"], f"{field}.minimumSubtotalMmk"),
+        "maximumDiscountMmk": _integer(source["maximumDiscountMmk"], f"{field}.maximumDiscountMmk", minimum=1),
+        "status": status,
+        "effectiveFrom": effective_from,
+        "effectiveUntil": effective_until,
+        "proof": {
+            "actionId": _text(proof["actionId"], f"{field}.proof.actionId", maximum=160),
+            "capturedAt": captured_at,
+            "actor": _text(proof["actor"], f"{field}.proof.actor", maximum=180),
+            "reason": _text(proof["reason"], f"{field}.proof.reason", maximum=180),
+            "evidenceReference": _text(proof["evidenceReference"], f"{field}.proof.evidenceReference", maximum=180),
+        },
+    }
+
+
+def _promotion_decision(
+    policies: Sequence[Mapping[str, object]],
+    code_value: object,
+    gross_subtotal_mmk: int,
+    reviewed_at: str,
+) -> dict[str, Any]:
+    code = _optional_text(code_value, "promotionCode", maximum=40)
+    if code is not None:
+        code = code.upper()
+        if re.fullmatch(r"[A-Z0-9][A-Z0-9-]{2,39}", code) is None:
+            raise _fail("promotionCode is invalid.")
+    rows = [_promotion_policy(value, f"promotionPolicies[{index}]") for index, value in enumerate(policies)]
+    policy = next((row for row in rows if row["code"] == code and _instant(row["proof"]["capturedAt"]) <= _instant(reviewed_at)), None)
+    base = {"schema": "supermega.commerce.promotion-decision.v1", "code": code, "grossSubtotalMmk": gross_subtotal_mmk, "reviewedAt": reviewed_at}
+    if code is None:
+        return {**base, "status": "not_requested", "policyRevision": None, "policyActionId": None, "discountBasisPoints": 0, "discountMmk": 0, "netSubtotalMmk": gross_subtotal_mmk, "reason": "not_requested"}
+
+    def rejected(reason: str) -> dict[str, Any]:
+        return {**base, "status": "rejected", "policyRevision": policy["revision"] if policy else None, "policyActionId": policy["proof"]["actionId"] if policy else None, "discountBasisPoints": policy["discountBasisPoints"] if policy else 0, "discountMmk": 0, "netSubtotalMmk": gross_subtotal_mmk, "reason": reason}
+
+    if policy is None:
+        return rejected("not_found")
+    if policy["status"] != "active":
+        return rejected("inactive")
+    if (_instant(policy["effectiveFrom"]) > _instant(reviewed_at)
+            or policy["effectiveUntil"] is not None and _instant(policy["effectiveUntil"]) < _instant(reviewed_at)):
+        return rejected("not_effective")
+    if gross_subtotal_mmk < policy["minimumSubtotalMmk"]:
+        return rejected("minimum_not_met")
+    discount = min(gross_subtotal_mmk * policy["discountBasisPoints"] // 10_000, policy["maximumDiscountMmk"], gross_subtotal_mmk - 1)
+    if discount < 1:
+        return rejected("minimum_not_met")
+    return {**base, "status": "approved", "policyRevision": policy["revision"], "policyActionId": policy["proof"]["actionId"], "discountBasisPoints": policy["discountBasisPoints"], "discountMmk": discount, "netSubtotalMmk": gross_subtotal_mmk - discount, "reason": "approved"}
+
+
+def validate_ecommerce_promotion_policy(value: object, field: str = "promotionPolicy") -> dict[str, Any]:
+    return _promotion_policy(value, field)
+
+
+def review_ecommerce_promotion(
+    policies: Sequence[Mapping[str, object]],
+    code: object,
+    gross_subtotal_mmk: int,
+    reviewed_at: str,
+) -> dict[str, Any]:
+    return _promotion_decision(policies, code, gross_subtotal_mmk, _timestamp(reviewed_at, "reviewedAt"))
+
+
 def prepare_ecommerce_shop_handoff(
     request_value: Mapping[str, object],
     *,
     current_catalog: Sequence[Mapping[str, object]],
+    current_promotion_policies: Sequence[Mapping[str, object]],
     confirmed_at: str,
 ) -> dict[str, Any]:
     """Revalidate quote intent and prepare one review-only Shop draft."""
@@ -913,6 +1000,12 @@ def prepare_ecommerce_shop_handoff(
             or item["onHand"] < line["quantity"]
         ):
             raise _fail("A quoted item, variant, price, or availability changed.")
+    promotion = _promotion_decision(
+        current_promotion_policies,
+        quote["promotion"]["code"],
+        quote["subtotalMmk"],
+        confirmed,
+    )
     draft = {
         "schema": ECOMMERCE_SHOP_DRAFT_SCHEMA,
         "mode": "browser-memory-shop-draft",
@@ -942,17 +1035,19 @@ def prepare_ecommerce_shop_handoff(
         "lines": _canonical_copy(request["lines"]),
         "pricing": {
             "subtotalMmk": quote["subtotalMmk"],
-            "promotion": _canonical_copy(quote["promotion"]),
+            "promotion": promotion,
             "tax": _canonical_copy(quote["tax"]),
             "shipping": _canonical_copy(quote["shipping"]),
             "payment": _canonical_copy(quote["payment"]),
-            "totalMmk": quote["totalMmk"],
+            "totalMmk": promotion["netSubtotalMmk"],
         },
-        "totalMmk": request["totalMmk"],
+        "totalMmk": promotion["netSubtotalMmk"],
         "evidenceReference": (
             f"ECOMMERCE:{request['id']}:{request['sourcePreviewDigest']}:"
             f"{quote['quoteDigest']}:{request['scope']}:LOC-MAIN:"
-            "ecommerce>commerce:human_review_required"
+            f"ecommerce>commerce:human_review_required:{promotion['status']}:"
+            f"{promotion['policyRevision'] if promotion['policyRevision'] is not None else 'none'}:"
+            f"{promotion['discountMmk']}"
         ),
     }
     return _canonical_copy(draft)

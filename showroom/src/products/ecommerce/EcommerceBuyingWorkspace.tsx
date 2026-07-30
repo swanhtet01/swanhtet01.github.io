@@ -577,13 +577,14 @@ export function EcommerceBuyingWorkspace({
         request: latestRequest,
         state: activeBuyingState,
         currentCatalog,
+        currentPromotionPolicies: commerceState.promotionPolicies ?? [],
         confirmedAt: new Date().toISOString(),
       })
       if (onOpenManagedRequest) {
         setNotice(`${latestRequest.id} is ready in the managed Shop inbox. Payment remains unauthorized.`)
         onOpenManagedRequest(latestRequest.id)
       } else {
-        setNotice(`${draft.id} is ready for accountable Shop review. Payment remains unauthorized.`)
+        setNotice(`${draft.id} is ready for Shop review. ${draft.pricing.promotion.status === 'approved' ? `${formatMmk(draft.pricing.promotion.discountMmk)} promotion approved.` : draft.pricing.promotion.status === 'rejected' ? 'The promotion code was rejected by Shop policy.' : 'No promotion requested.'} Payment remains unauthorized.`)
         onDraft(draft)
       }
     } catch (error) {

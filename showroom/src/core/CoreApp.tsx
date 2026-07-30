@@ -1680,7 +1680,10 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
   }))
   const manualOrderQuantity = manualOrderLineDrafts.reduce((total, line) => total + Math.max(line.quantity, 0), 0)
   const manualOrderTotal = manualOrderLineItems.reduce((total, line) => total + (line.item?.price ?? 0) * Math.max(line.quantity, 0), 0)
-  const orderCreditCalculation = commerceOrderCalculation(commerce, manualOrderTotal, new Date(purchaseOrderClock).toISOString())
+  const manualOrderPricedTotal = preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v4'
+    ? preparedEcommerceDraft.totalMmk
+    : manualOrderTotal
+  const orderCreditCalculation = commerceOrderCalculation(commerce, manualOrderPricedTotal, new Date(purchaseOrderClock).toISOString())
   const orderCreditReview = orderCreditCalculation
     ? commerceCustomerCreditReview(
       commerce,
@@ -2230,10 +2233,10 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
           setNotice('The Ecommerce request no longer matches the current Shop catalog. Nothing was prepared.')
           return
         }
-        const navigationCustomer = ecommerceNavigationDraft.schema === 'supermega.ecommerce.shop_draft.v3'
+        const navigationCustomer = ecommerceNavigationDraft.schema === 'supermega.ecommerce.shop_draft.v4'
           ? ecommerceNavigationDraft.customerProfile?.name ?? ecommerceNavigationDraft.customerReference
           : ecommerceNavigationDraft.customerReference
-        const navigationAddress = ecommerceNavigationDraft.schema === 'supermega.ecommerce.shop_draft.v3'
+        const navigationAddress = ecommerceNavigationDraft.schema === 'supermega.ecommerce.shop_draft.v4'
           ? ecommerceNavigationDraft.deliveryAddress
           : null
         setPreparedChannelDraft(null)
@@ -3142,6 +3145,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
         const draft = await prepareManagedEcommerceShopDraftV2({
           request,
           currentCatalog: commerce.items,
+          currentPromotionPolicies: commerce.promotionPolicies ?? [],
           confirmedAt: new Date().toISOString(),
         })
         const [firstLine, ...remainingLines] = draft.lines
@@ -3377,27 +3381,31 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
       return
     }
     const ecommerceLines = ecommerceDraft
-      ? ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v3'
+      ? ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v4'
         ? ecommerceDraft.lines
         : [ecommerceDraft.line]
       : []
-    const ecommercePayment = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v3'
+    const ecommercePayment = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v4'
       ? ecommerceDraft.pricing.payment.adapter === 'cash_on_delivery'
         ? 'Cash on delivery'
         : ecommerceDraft.pricing.payment.adapter === 'kbzpay_manual'
           ? 'KBZPay'
           : 'Cash'
       : ''
-    const ecommerceCustomer = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v3'
+    const ecommerceCustomer = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v4'
       ? ecommerceDraft.customerProfile?.name ?? ecommerceDraft.customerReference
       : ecommerceDraft?.customerReference ?? ''
-    if (ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v3'
+    if (ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v4'
       && commerce.inventoryFoundation
       && !managedInventoryProjection?.locations.some((candidate) => candidate.id === ecommerceDraft.operatingContext.operatingUnitLocationId)) {
       detachPreparedOrderSources({ ecommerce: true })
       setNotice('The Shop operating location changed after Ecommerce review. Reopen the request; no order was prepared.')
       return
     }
+    const promotionDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v4'
+      ? ecommerceDraft.pricing.promotion
+      : undefined
+    const pricedOrderTotal = promotionDecision?.netSubtotalMmk ?? orderTotal
     if (ecommerceDraft && (customer.trim() !== ecommerceCustomer
       || channel !== 'Ecommerce'
       || fulfilment !== ecommerceDraft.fulfilment
@@ -3412,7 +3420,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
           || (line.variant ?? null) !== expected.variant
           || line.unitPriceMmk !== expected.unitPriceMmk
       })
-      || orderTotal !== ecommerceDraft.totalMmk)) {
+      || pricedOrderTotal !== ecommerceDraft.totalMmk)) {
       detachPreparedOrderSources({ channel: false })
       setNotice('The Ecommerce request changed after confirmation. Return to Ecommerce or continue as a manual order.')
       return
@@ -3446,8 +3454,9 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
       paymentDueAt,
       sourceRecordId,
       evidenceReference: sourceEvidence,
-      ...(!sourceBacked || orderLines.length > 1 ? { lines: orderLines } : {}),
-      total: orderTotal,
+      ...(!sourceBacked || orderLines.length > 1 || promotionDecision ? { lines: orderLines } : {}),
+      ...(promotionDecision ? { promotionDecision } : {}),
+      total: pricedOrderTotal,
       status: 'confirmed',
     }
     const lineReview = orderLines.map((line) => `${line.sku} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(', ')
@@ -3468,7 +3477,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
         return
       }
     }
-    const calculationReview = commerceOrderCalculation(commerce, orderTotal, reviewedAt.toISOString())
+    const calculationReview = commerceOrderCalculation(commerce, pricedOrderTotal, reviewedAt.toISOString())
     if (!calculationReview) {
       setNotice('The order total cannot be calculated safely. Review item prices and tax setup before continuing.')
       return
@@ -3495,7 +3504,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
       subjectId: order.id,
       summary: ecommerceDraft ? 'Review Ecommerce order' : `Confirm order for ${order.customer}`,
       before: `${sourceRecordId ? `Request ${sourceRecordId} · ` : ''}Customer ${order.customer} · ${lineReview}`,
-      after: `Order ${order.id} · ${formatCommerceCalculation(calculationReview)} · Payment ${payment} · due ${formatIssueDue(paymentDueAt)}${paymentTermsDays ? ` · credit ${formatMoney(creditReview.exposureBeforeMmk)} → ${formatMoney(creditReview.exposureAfterMmk)} under policy R${creditReview.policy?.revision}` : ''} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
+      after: `Order ${order.id} · ${formatCommerceCalculation(calculationReview)}${promotionDecision?.status === 'approved' ? ` · promotion ${promotionDecision.code} -${formatMoney(promotionDecision.discountMmk)} under policy R${promotionDecision.policyRevision}` : promotionDecision?.status === 'rejected' ? ` · promotion ${promotionDecision.code} rejected (${promotionDecision.reason.replaceAll('_', ' ')})` : ''} · Payment ${payment} · due ${formatIssueDue(paymentDueAt)}${paymentTermsDays ? ` · credit ${formatMoney(creditReview.exposureBeforeMmk)} → ${formatMoney(creditReview.exposureAfterMmk)} under policy R${creditReview.policy?.revision}` : ''} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
       evidenceReferenceSuggestion: confirmationEvidence,
       evidenceReferenceLocked: Boolean(sourceRecordId),
       reasonSuggestion: ecommerceDraft
@@ -4932,7 +4941,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
       {orderEntryMode === 'manual' ? <>
         <div className="order-entry-panel" data-mode="manual">
         {preparedEcommerceDraft ? <div className="channel-source-ready">
-          <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.schema === 'supermega.ecommerce.shop_draft.v3' ? `${preparedEcommerceDraft.operatingContext.operatingUnitLocationId} · ${preparedEcommerceDraft.customerProfile?.phone ? `${preparedEcommerceDraft.customerProfile.phone} · ` : ''}${preparedEcommerceDraft.deliveryAddress ? `${preparedEcommerceDraft.deliveryAddress.township}, ${preparedEcommerceDraft.deliveryAddress.city} · ` : ''}governed handoff · ` : ''}{preparedEcommerceDraft.fulfilment} · price locked · no stock reserved</small></div>
+          <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.schema === 'supermega.ecommerce.shop_draft.v4' ? `${preparedEcommerceDraft.operatingContext.operatingUnitLocationId} · ${preparedEcommerceDraft.customerProfile?.phone ? `${preparedEcommerceDraft.customerProfile.phone} · ` : ''}${preparedEcommerceDraft.deliveryAddress ? `${preparedEcommerceDraft.deliveryAddress.township}, ${preparedEcommerceDraft.deliveryAddress.city} · ` : ''}${preparedEcommerceDraft.pricing.promotion.status === 'approved' ? `${preparedEcommerceDraft.pricing.promotion.code} approved · -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)} · ` : preparedEcommerceDraft.pricing.promotion.status === 'rejected' ? `${preparedEcommerceDraft.pricing.promotion.code} rejected · ` : ''}governed handoff · ` : ''}{preparedEcommerceDraft.fulfilment} · price locked · no stock reserved</small></div>
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ channel: false }); setNotice('Ecommerce source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
         </div> : null}
         {preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? <div className="channel-source-ready" ref={preparedChannelRef} tabIndex={-1}>
@@ -4955,7 +4964,7 @@ function CommercePage({ ecommerceNavigationDraft, ecommerceReturnNavigationInten
             <label>Handoff reference<input disabled={commerceControlsDisabled} maxLength={160} onChange={(event) => setFulfilmentReference(event.target.value)} placeholder="Pickup ticket or delivery route" required value={fulfilmentReference} /></label>
             <label>{extraOrderLines.length ? 'Item 1' : 'Item'}<select disabled={commerceControlsDisabled} value={selectedSku} onChange={(event) => { setSku(event.target.value); detachPreparedOrderSources() }}>{!commerce.items.some((item) => item.sku === selectedSku) && selectedSku ? <option disabled value={selectedSku}>{selectedSku} · no longer in Shop</option> : null}{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
             <label>{extraOrderLines.length ? 'Quantity 1' : 'Quantity'}<input disabled={commerceControlsDisabled} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); detachPreparedOrderSources() }} /></label>
-            <div className="order-total"><span>{manualOrderLineDrafts.length} {manualOrderLineDrafts.length === 1 ? 'item' : 'items'} · {manualOrderQuantity} units</span><strong>{formatMoney(manualOrderTotal)}</strong></div>
+            <div className="order-total"><span>{manualOrderLineDrafts.length} {manualOrderLineDrafts.length === 1 ? 'item' : 'items'} · {manualOrderQuantity} units{preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v4' && preparedEcommerceDraft.pricing.promotion.status === 'approved' ? ` · ${preparedEcommerceDraft.pricing.promotion.code} -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)}` : ''}</span><strong>{formatMoney(manualOrderPricedTotal)}</strong></div>
           </div>
           {paymentTermsDays !== 0 ? <p className="form-notice" data-customer-credit-review={orderCreditReview?.reason ?? 'calculation_unavailable'}>
             {orderCreditReview?.allowed
