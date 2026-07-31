@@ -3989,7 +3989,7 @@ if (schedulerAuthority.contract !== 'supermega.scheduler-authority.v2'
   || JSON.stringify(schedulerAuthority.activation?.required_evidence) !== JSON.stringify(expectedSchedulerActivationEvidence)
   || JSON.stringify(schedulerAuthority.crons?.map(({ path, schedule }) => ({ path, schedule }))) !== JSON.stringify(expectedSchedulerCrons)
   || schedulerAuthority.maximum_scheduler_invocations_per_day !== 0
-  || schedulerExecutionBudget?.maxClaimsPerInvocation !== 2
+  || schedulerExecutionBudget?.maxClaimsPerInvocation !== 1
   || schedulerExecutionBudget?.maximumActivationInvocationsPerDay !== 25
   || JSON.stringify(schedulerAuthority.activation_plan?.crons?.map(({ path, schedule }) => ({ path, schedule }))) !== JSON.stringify(expectedSchedulerActivationPlan)
   || schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day !== 25

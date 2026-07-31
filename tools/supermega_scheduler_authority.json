@@ -36,7 +36,7 @@
         "path": "/api/cron/supermega/agent-queue",
         "schedule": "5 * * * *",
         "job_types": ["task_triage", "ops_watch"],
-        "max_claims_per_invocation": 2,
+        "max_claims_per_invocation": 1,
         "maximum_invocations_per_day": 24
       },
       {
@@ -44,7 +44,7 @@
         "path": "/api/cron/supermega/daily",
         "schedule": "45 0 * * *",
         "job_types": ["founder_brief", "github_release_watch"],
-        "max_claims_per_invocation": 2,
+        "max_claims_per_invocation": 1,
         "maximum_invocations_per_day": 1
       }
     ],

@@ -411,7 +411,7 @@ requireContract('single production scheduler authority',
   && schedulerAuthority.activation?.required_evidence?.length === 5
   && schedulerAuthority.crons?.length === 0
   && schedulerAuthority.maximum_scheduler_invocations_per_day === 0
-  && schedulerExecutionBudget.maxClaimsPerInvocation === 2
+  && schedulerExecutionBudget.maxClaimsPerInvocation === 1
   && schedulerExecutionBudget.maximumActivationInvocationsPerDay === 25
   && schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day === 25
   && JSON.stringify(normalizeCrons(schedulerAuthority.activation_plan?.crons)) === JSON.stringify(normalizeCrons([

@@ -6,7 +6,7 @@ const EXPECTED_ACTIVATION_CRONS = Object.freeze([
     path: '/api/cron/supermega/agent-queue',
     schedule: '5 * * * *',
     job_types: Object.freeze(['task_triage', 'ops_watch']),
-    max_claims_per_invocation: 2,
+    max_claims_per_invocation: 1,
     maximum_invocations_per_day: 24,
   }),
   Object.freeze({
@@ -14,7 +14,7 @@ const EXPECTED_ACTIVATION_CRONS = Object.freeze([
     path: '/api/cron/supermega/daily',
     schedule: '45 0 * * *',
     job_types: Object.freeze(['founder_brief', 'github_release_watch']),
-    max_claims_per_invocation: 2,
+    max_claims_per_invocation: 1,
     maximum_invocations_per_day: 1,
   }),
 ])
@@ -42,7 +42,7 @@ export function validateSchedulerExecutionBudget(authority) {
     contract: SCHEDULER_EXECUTION_BUDGET_CONTRACT,
     activeCronCount: 0,
     activationCronCount: EXPECTED_ACTIVATION_CRONS.length,
-    maxClaimsPerInvocation: 2,
+    maxClaimsPerInvocation: 1,
     maximumActivationInvocationsPerDay: activationInvocations,
     activationCrons: EXPECTED_ACTIVATION_CRONS.map(({ path, schedule }) => ({ path, schedule })),
   }
