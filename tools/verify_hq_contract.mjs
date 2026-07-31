@@ -569,7 +569,7 @@ requireContract('agent roster consolidation is recorded',
   && now.includes('Storage privacy now has a six-request owner-confirmed verifier')
   && now.includes('zero-network configuration preflight')
   && now.includes('HQ keeps 12 dormant roles but admits one active assignment and one specialist per cycle')
-  && now.includes('each Ally cycle activates exactly one local specialist')
+  && now.includes('Each Ally cycle activates exactly one local specialist')
   && now.includes('registered roles consume no idle compute'))
 requireContract('agent security brief is reconciled to current controls',
   agentSecurity.includes('Agent-operations checkpoint: `a2e1b89`')
@@ -1257,6 +1257,9 @@ requireContract('Ally CEO execution uses one exact local-company run and no exte
 
 requireContract('agent job cycles are canonical, bounded, and scale to zero',
   workforce.runtime_policy.max_batch_jobs === 1
+  && workboard.includes('| OPS-122 | CEO + Agent Runtime Parity Codex | done-local |')
+  && workboard.includes('one active assignment, one specialist per company cycle, and one job per automated or direct batch')
+  && workboard.includes('The 12 dormant roles consume zero idle compute')
   && workforce.runtime_policy.scale_to_zero === true
   && agentJobRunnerText.includes('AGENT_RUNNER_CYCLE_CONTRACT = "supermega.agent-runner-cycle-budget.v1"')
   && agentJobRunnerText.includes('MAX_PROCESSED_PER_CYCLE = 1')
