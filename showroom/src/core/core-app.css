@@ -106,6 +106,7 @@ a { color: inherit; }
 .product-system-capability > strong { grid-column: 1/-1; font-size: 11px; }
 .product-system-capability > p { grid-column: 1/-1; margin: 0; color: var(--core-muted); font-size: 9px; line-height: 1.4; }
 .product-system-capability > small { grid-column: 1/-1; overflow: hidden; color: var(--core-quiet); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.product-system-capability > small.product-system-meta { line-height: 1.35; text-overflow: clip; white-space: normal; }
 .product-system-capability > a,.product-system-capability > em { grid-column: 1/-1; justify-self: start; color: var(--core-green); font-size: 9px; font-style: normal; font-weight: 760; text-decoration: none; }
 .product-system-capability > em { color: var(--core-quiet); }
 .product-system-body > footer { color: var(--core-muted); font-size: 9px; line-height: 1.5; }

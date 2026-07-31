@@ -6217,6 +6217,9 @@ async function verifyClientOnboardingRuntime() {
     assert(websiteLeadModel.restoreWebsiteLeadLedger({ ...closedLeadLedger, unexpected: true }) === null, 'website_lead_unknown_field_accepted')
 
     assert(model.clientDemoPresets.length === 5 && new Set(model.clientDemoPresets.map((preset) => preset.id)).size === 5, 'client_demo_presets_missing_or_duplicated')
+    assert(capabilityModel.clientCapabilityDependencyLabel('platform-identity') === 'Identity and role boundaries'
+      && capabilityModel.clientCapabilityDependencyLabel('shop-order-to-cash') === 'Order to cash'
+      && capabilityModel.clientCapabilityDependencyLabel('future-control') === 'future control', 'client_capability_dependency_labels_wrong')
     for (const preset of model.clientDemoPresets) {
       const blueprint = model.buildClientDemoBlueprint({ workspace: 'Golden Valley Trading', owner: 'Operations lead', presetId: preset.id, selections: preset.selections })
       const capabilityPlan = capabilityModel.buildClientCapabilityPlan(blueprint, '2026-07-29T00:00:00.000Z')

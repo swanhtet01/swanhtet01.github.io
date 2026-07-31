@@ -157,6 +157,15 @@ export function productCapabilityCatalog(product: ClientSolutionId): ClientCapab
   return catalog[product].map((capability) => ({ ...capability, product }))
 }
 
+const capabilityLabels = new Map<string, string>([
+  ...platformCatalog.map((capability) => [capability.id, capability.label] as const),
+  ...Object.values(catalog).flat().map((capability) => [capability.id, capability.label] as const),
+])
+
+export function clientCapabilityDependencyLabel(id: string) {
+  return capabilityLabels.get(id) ?? id.replaceAll('-', ' ')
+}
+
 export function productCapabilitySummary(product: ClientSolutionId) {
   const capabilities = productCapabilityCatalog(product)
   return {
