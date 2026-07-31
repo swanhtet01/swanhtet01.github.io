@@ -214,7 +214,11 @@ export const ECOMMERCE_REQUIREMENTS = [
   {
     id: 'upstream-live-quote-clock', authority: 'upstream', file: 'showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx', tokens: [
       'const [quoteClockMs, setQuoteClockMs] = useState(Date.now)',
-      'window.setInterval(() => setQuoteClockMs(Date.now()), 1_000)',
+      `useEffect(() => {
+    if (!freshQuoteId) return
+    const intervalId = window.setInterval(() => setQuoteClockMs(Date.now()), 1_000)
+    return () => window.clearInterval(intervalId)
+  }, [freshQuoteId])`,
       'Date.parse(latestRequest.quote.expiresAt) - quoteClockMs',
       'setQuoteClockMs(quotedAt.getTime())',
     ],

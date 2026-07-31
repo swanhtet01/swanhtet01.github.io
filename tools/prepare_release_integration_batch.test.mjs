@@ -238,6 +238,21 @@ test('Ecommerce requires simple private UX and governed lifecycle depth together
   const shallow = ecommerceSources()
   shallow['showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx'] = shallow['showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx'].replace('function submitCorrectionRequest', '')
   assert.equal(assessEcommerceSources(shallow).ok, false)
+
+  const leakingQuoteClock = ecommerceSources()
+  leakingQuoteClock['showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx'] = leakingQuoteClock['showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx']
+    .replace('return () => window.clearInterval(intervalId)', '')
+  assert.equal(assessEcommerceSources(leakingQuoteClock).ok, false)
+
+  const unrelatedCleanup = ecommerceSources()
+  const quoteLifecycle = `useEffect(() => {
+    if (!freshQuoteId) return
+    const intervalId = window.setInterval(() => setQuoteClockMs(Date.now()), 1_000)
+    return () => window.clearInterval(intervalId)
+  }, [freshQuoteId])`
+  unrelatedCleanup['showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx'] = unrelatedCleanup['showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx']
+    .replace(quoteLifecycle, 'window.setInterval(() => setQuoteClockMs(Date.now()), 1_000)\nreturn () => window.clearInterval(intervalId)\n}, [freshQuoteId])')
+  assert.equal(assessEcommerceSources(unrelatedCleanup).ok, false)
 })
 
 test('Ecommerce comparison is exact, no-write, and batch-specific', () => {
