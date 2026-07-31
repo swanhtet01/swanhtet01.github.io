@@ -1322,6 +1322,13 @@ requireContract('identity data integration authority follows the owning module',
   && workboard.includes('main `7c76b810` lacks 24 candidate tokens')
   && workboard.includes('candidate `a1eb2b58` lacks 38 upstream managed-account'))
 
+requireContract('app shell integration keeps actions reachable and consequences explicit',
+  workboard.includes('| OPS-125 | CEO + App Shell Integration Contract Codex | done-local |')
+  && workboard.includes('exact rule-bound desktop and mobile invariants')
+  && workboard.includes('main `7c76b810` passing every upstream requirement while lacking 22 candidate tokens')
+  && workboard.includes('candidate `96177d24` passes every candidate requirement while lacking 23 upstream')
+  && workboard.includes('move sizing or padding into a decoy rule and now fail'))
+
 requireContract('current CEO platform evidence is recorded without expanding authority',
   workboard.includes('| OPS-039 | CEO + Agent Operations / Evidence Quality Codex | done-local |')
   && workboard.includes('Checkpoint `e8a3adb` adds `supermega.platform-status.v1`')
