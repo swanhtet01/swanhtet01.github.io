@@ -145,9 +145,9 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.manager === 'CEO / Codex integrator'
   && portfolio.agentOperatingModel?.buildTeams?.join(',') === 'product,engineering,growth,finance-risk'
   && portfolio.agentOperatingModel?.registeredRoleLimit === 12
-  && portfolio.agentOperatingModel?.activeAssignmentLimit === 2
-  && portfolio.agentOperatingModel?.batchJobLimit === 2
-  && portfolio.agentOperatingModel?.maxAgentsPerCycle === 2
+  && portfolio.agentOperatingModel?.activeAssignmentLimit === 1
+  && portfolio.agentOperatingModel?.batchJobLimit === 1
+  && portfolio.agentOperatingModel?.maxAgentsPerCycle === 1
   && portfolio.agentOperatingModel?.maxConcurrentCompanyCycles === 1
   && portfolio.agentOperatingModel?.validatedCrewCapabilities === 15
   && portfolio.agentOperatingModel?.ceoOutcomeAuthority === 'supermega.ceo-outcome-authority.v2'
@@ -340,7 +340,7 @@ requireContract('agent capacity agrees across HQ, coordinator, and Kernel',
   && MAX_CYCLE_AGENTS === portfolio.agentOperatingModel?.maxAgentsPerCycle
   && kernelCrewCapabilities.length === portfolio.agentOperatingModel?.validatedCrewCapabilities
   && new Set(kernelCrewCapabilities).size === kernelCrewCapabilities.length
-  && agentArchitectureText.includes('at most two assignments may run inside the single admitted company cycle')
+  && agentArchitectureText.includes('one assignment may run inside the single admitted company cycle')
   && !/four unique (?:job families|active assignments)/i.test(agentArchitectureText)
   && !/four unique active assignments/i.test(workforceInstructionText)
   && agentGovernanceText.includes('AGENT_DAILY_RUN_LIMIT = sum(AGENT_JOB_DAILY_LIMITS.values())')
@@ -568,7 +568,7 @@ requireContract('agent roster consolidation is recorded',
   && now.includes('owner-send uncertainty is explicit, retains claims, and is never auto-retried')
   && now.includes('Storage privacy now has a six-request owner-confirmed verifier')
   && now.includes('zero-network configuration preflight')
-  && now.includes('HQ keeps 12 registered roles and two active assignment records')
+  && now.includes('HQ keeps 12 dormant roles but admits one active assignment and one specialist per cycle')
   && now.includes('each Ally cycle activates exactly one local specialist')
   && now.includes('registered roles consume no idle compute'))
 requireContract('agent security brief is reconciled to current controls',
@@ -1098,8 +1098,8 @@ requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect
   && allyCeoPlannerText.includes("selection: 'portfolio_priority_ready'")
   && allyCeoPlannerText.includes("'failure_recovery'")
   && allyCeoPlannerText.includes("registeredRoleLimit !== 12")
-  && allyCeoPlannerText.includes("activeAssignmentLimit !== 2")
-  && allyCeoPlannerText.includes("maxAgentsPerCycle !== 2")
+  && allyCeoPlannerText.includes("activeAssignmentLimit !== 1")
+  && allyCeoPlannerText.includes("maxAgentsPerCycle !== 1")
   && allyCeoPlannerText.includes("maxConcurrentCompanyCycles !== 1")
   && allyCeoPlannerText.includes("maxConcurrentAllyRuns: 1")
   && allyCeoPlannerText.includes("maxAgents: 1")

@@ -235,7 +235,7 @@ in recovery instead of being retried blindly.
 - The token cap can modestly overshoot under highly concurrent calls because storage updates are not
   a database-side atomic increment in every store mode.
 - The default cron is one daily UTC schedule. Each isolated client deployment sets its own UTC time.
-- Agent Company cycles are synchronous waves capped at two specialists and eight planned role calls.
+- Agent Company cycles admit one specialist and at most eight planned role calls.
   Failed or partial waves require a new explicit cycle id; there is no automatic retry or hidden loop.
 - Durable missions remain operator-staged. The server verifies stage eligibility, but no mission
   automatically queues or dispatches work and no stage receives raw prior output automatically.

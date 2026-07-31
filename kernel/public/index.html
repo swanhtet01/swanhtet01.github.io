@@ -450,7 +450,7 @@ const hasOpsKey=()=>getOpsKey().length>0
 let consoleAccessGranted=false
 let requestedConsoleView=location.hash==='#company'?'company':location.hash==='#activation'?'workcells':'overview'
 let dealLead=null, lastPacket=null
-let companyRoster=[], companyDraft=null, companyAgentLimit=2, companyWorkOrders=[], companyOperations=null, companyOpenWorkOrder=null, companyCeoCycle=null
+let companyRoster=[], companyDraft=null, companyAgentLimit=1, companyWorkOrders=[], companyOperations=null, companyOpenWorkOrder=null, companyCeoCycle=null
 let companyPlaybooks=[], companyPlaybookPlan=null, companyPreparedPlaybookStage=null, companyMissions=[], companyOpenMission=null
 let companyAuth=null, companyAccessInventory=null
 const hasCompanyAccess=()=>Boolean(companyAuth)
@@ -1006,7 +1006,7 @@ async function loadCompanyAgents(){
   renderCompanyAccess()
   renderCompanyWeek(response.ceoCycle)
   renderHostedActivation(response.hostedActivation)
-  companyAgentLimit=Number(response.limits&&response.limits.maxAgents)||2
+  companyAgentLimit=Number(response.limits&&response.limits.maxAgents)||1
   const maxBudget=Number(response.limits&&response.limits.maxRoleBudget)||8
   $('#companyRoleBudget').max=String(maxBudget)
   if(Number($('#companyRoleBudget').value)>maxBudget)$('#companyRoleBudget').value=String(maxBudget)

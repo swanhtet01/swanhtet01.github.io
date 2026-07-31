@@ -384,7 +384,7 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertEqual(status.json()["capacity"]["contract"], AGENT_CAPACITY_PLAN_CONTRACT)
         self.assertEqual(status.json()["capacity"]["execution_model"], "ephemeral_demand_driven")
         self.assertFalse(status.json()["capacity"]["registered_specialists_consume_compute"])
-        self.assertEqual(status.json()["scheduler"]["max_jobs_per_run"], 2)
+        self.assertEqual(status.json()["scheduler"]["max_jobs_per_run"], 1)
         self.assertEqual(queue.json()["status"], "accepted")
         self.assertEqual(daily.json()["status"], "accepted")
         queue_request = open_worker.call_args_list[0].args[0]
@@ -394,12 +394,12 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertEqual(queue_payload["contract_version"], "supermega.hosted-agent-scheduler.v1")
         self.assertEqual(queue_payload["cycle"], "queue")
         self.assertEqual(queue_payload["job_types"], ["task_triage", "ops_watch"])
-        self.assertEqual(queue_payload["limit"], 2)
+        self.assertEqual(queue_payload["limit"], 1)
         self.assertEqual(queue_payload["capacity_contract"], AGENT_CAPACITY_PLAN_CONTRACT)
         self.assertEqual(queue_payload["execution_model"], "ephemeral_demand_driven")
         self.assertEqual(queue_payload["budget_grant"]["contract"], AGENT_BUDGET_GRANT_CONTRACT)
         self.assertEqual(queue_payload["budget_grant"]["job_types"], queue_payload["job_types"])
-        self.assertEqual(queue_payload["budget_grant"]["max_runs"], 2)
+        self.assertEqual(queue_payload["budget_grant"]["max_runs"], 1)
         verify_agent_budget_grant(
             queue_payload["budget_grant"],
             secret=self.worker_secret,
@@ -407,7 +407,7 @@ class CloudRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(daily_payload["cycle"], "daily")
         self.assertEqual(daily_payload["job_types"], ["founder_brief", "github_release_watch"])
-        self.assertEqual(daily_payload["limit"], 2)
+        self.assertEqual(daily_payload["limit"], 1)
         self.assertEqual(tuple(queue_payload["job_types"]), AGENT_AUTOMATION_LANES["queue"])
         self.assertEqual(tuple(daily_payload["job_types"]), AGENT_AUTOMATION_LANES["daily"])
         self.assertEqual(
@@ -686,10 +686,10 @@ class AgentGovernanceTests(unittest.TestCase):
             requested_job_types=["task_triage", "ops_watch"],
             now=observed_at + timedelta(minutes=1),
         )
-        self.assertEqual(verified["max_runs"], 2)
-        self.assertEqual(verified["max_work_units"], 2)
+        self.assertEqual(verified["max_runs"], 1)
+        self.assertEqual(verified["max_work_units"], 1)
 
-        tampered = {**grant, "max_runs": 1}
+        tampered = {**grant, "max_runs": 2}
         with self.assertRaises(AgentGovernanceError) as tampered_error:
             verify_agent_budget_grant(tampered, secret=self.grant_secret, now=observed_at)
         self.assertEqual(tampered_error.exception.code, "budget_grant_signature_invalid")
@@ -827,14 +827,11 @@ class AgentGovernanceTests(unittest.TestCase):
         self.assertEqual(busy["target_active_executions"], load_agent_workforce_policy().max_running)
         self.assertEqual(
             busy["recommended_claim_job_types"],
-            ["ops_watch", "github_release_watch"],
+            ["ops_watch"],
         )
         self.assertEqual(
             busy["recommended_claims"],
-            [
-                {"job_type": "ops_watch", "priority": 100, "work_units": 1},
-                {"job_type": "github_release_watch", "priority": 90, "work_units": 2},
-            ],
+            [{"job_type": "ops_watch", "priority": 100, "work_units": 1}],
         )
         self.assertEqual(busy["idle_registered_specialists"], AGENT_ROSTER_LIMIT - AGENT_ACTIVE_ASSIGNMENT_LIMIT)
 
@@ -983,17 +980,17 @@ class AgentGovernanceTests(unittest.TestCase):
             running_job_types=[],
             daily_job_types=[],
             registered_specialists=AGENT_ROSTER_LIMIT,
-            max_claim_runs=2,
+            max_claim_runs=1,
             max_claim_work_units=4,
         )
         self.assertEqual(plan["selection_policy"], "fixed_priority_then_work_unit_efficiency_then_fifo")
         self.assertEqual(
             plan["recommended_claim_job_types"],
-            ["ops_watch", "github_release_watch"],
+            ["ops_watch"],
         )
-        self.assertEqual(plan["recommended_claim_work_units"], 3)
-        self.assertEqual(plan["target_active_executions"], 2)
-        self.assertEqual(plan["deferred_reasons"]["run_or_concurrency_limit"], 5)
+        self.assertEqual(plan["recommended_claim_work_units"], 1)
+        self.assertEqual(plan["target_active_executions"], 1)
+        self.assertEqual(plan["deferred_reasons"]["run_or_concurrency_limit"], 6)
 
         with self._database() as (database_url, workspace_id, _):
             for job_type in self.job_types:
@@ -1001,7 +998,7 @@ class AgentGovernanceTests(unittest.TestCase):
             claimed = claim_agent_runs(database_url, workspace_id=workspace_id, limit=4)
             self.assertEqual(
                 [row["job_type"] for row in claimed],
-                ["ops_watch", "github_release_watch"],
+                ["ops_watch"],
             )
 
     def test_capacity_plan_skips_expensive_work_that_cannot_fit_remaining_budget(self) -> None:
@@ -1183,7 +1180,7 @@ class AgentGovernanceTests(unittest.TestCase):
                 grant_secret=self.grant_secret,
                 require_budget_grant=True,
             )
-            self.assertEqual(len(claimed), 2)
+            self.assertEqual(len(claimed), 1)
             self.assertEqual({row["budget_reservation"]["grant_id"] for row in claimed}, {grant["grant_id"]})
             with self.assertRaises(AgentGovernanceError) as replay_error:
                 claim_agent_runs(

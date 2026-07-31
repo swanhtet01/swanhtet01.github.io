@@ -153,8 +153,8 @@ function portfolioView(value) {
   const model = value.agentOperatingModel
   if (model.mode !== 'bounded-demand-driven'
     || model.registeredRoleLimit !== 12
-    || model.activeAssignmentLimit !== 2
-    || model.maxAgentsPerCycle !== 2
+    || model.activeAssignmentLimit !== 1
+    || model.maxAgentsPerCycle !== 1
     || model.maxConcurrentCompanyCycles !== 1
     || model.scaleToZero !== true
     || model.idleCapabilitiesConsumeCompute !== false
@@ -170,8 +170,8 @@ function portfolioView(value) {
     completedLocalAutomations,
     limits: {
       registeredRoles: 12,
-      activeAssignments: 2,
-      agentsPerCycle: 2,
+      activeAssignments: 1,
+      agentsPerCycle: 1,
       concurrentKernelCycles: 1,
       concurrentAllyRuns: 1,
       scaleToZero: true,
@@ -218,7 +218,7 @@ function assertSafePlan(plan, expectedAgents) {
     || plan.controls?.externalWrites !== false
     || plan.controls?.durableClaimRequired !== true
     || plan.controls?.maxConcurrentCycles !== 1
-    || plan.controls?.maxActiveAssignments !== 2) {
+    || plan.controls?.maxActiveAssignments !== 1) {
     fail('ally_ceo_company_plan_unsafe')
   }
 }
@@ -266,7 +266,7 @@ function buildResourceEnvelope() {
     contract: ALLY_CEO_RESOURCE_ENVELOPE_CONTRACT,
     registeredRoleRecords: 12,
     selectedAgents: 1,
-    maxActiveAssignments: 2,
+    maxActiveAssignments: 1,
     maxConcurrentCycles: 1,
     execution: 'sequential',
     providerPolicy: 'local_ollama_or_test_mock',

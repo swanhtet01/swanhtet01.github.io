@@ -16,11 +16,10 @@ import { createCompanyWorkOrder } from './agent-company-work-orders.mjs'
 const MANIFEST = {
   clientId: 'supermega-internal',
   cycleId: 'internal-proof-a',
-  agents: ['operations-analyst', 'project-controller'],
-  roleBudget: 6,
+  agents: ['operations-analyst'],
+  roleBudget: 3,
   evidence: {
     'operations-analyst': { objective: 'Rank one redacted operating period.', facts: ['No customer claim.'] },
-    'project-controller': { outcome: 'Produce one bounded delivery plan.', blockers: ['Owner evidence required.'] },
   },
 }
 const PREFLIGHT = buildAgentCompanyManifestPreflight(MANIFEST)
@@ -42,21 +41,12 @@ const PLAN = {
       evidenceBytes: 80,
       returns: ['brief'],
     },
-    {
-      agentId: 'project-controller',
-      name: 'Project Controller',
-      department: 'delivery',
-      crew: 'project-control-desk',
-      roleCount: 3,
-      evidenceBytes: 90,
-      returns: ['status'],
-    },
   ],
-  budget: { agentLimit: 2, selectedAgents: 2, roleLimit: 6, plannedRoles: 6, remainingRoles: 0 },
+  budget: { agentLimit: 1, selectedAgents: 1, roleLimit: 3, plannedRoles: 3, remainingRoles: 0 },
   controls: {
     execution: 'sequential',
     maxConcurrentCycles: 1,
-    maxActiveAssignments: 2,
+    maxActiveAssignments: 1,
     dynamicDelegation: false,
     crossAgentContext: false,
     externalWrites: false,
@@ -154,7 +144,7 @@ test('operator validates a bounded redacted manifest and rejects secret-shaped e
   let requests = 0
   await assert.rejects(runGuidedAgentCompany({
     ...MANIFEST,
-    evidence: { ...MANIFEST.evidence, 'project-controller': { nested: { accessToken: 'blocked' } } },
+    evidence: { 'operations-analyst': { nested: { accessToken: 'blocked' } } },
   }, {
     request: async () => { requests += 1 },
     readConfirmation: async () => '',
@@ -338,8 +328,8 @@ test('CLI takes the Ops key only from the environment and has no customer-review
   assert.match(output.preflight.expectedPlanHash, /^[a-f0-9]{64}$/)
   assert.match(output.preflight.expectedRunId, /^agent-company:[a-f0-9]{40}$/)
   assert.match(output.preflight.expectedWorkOrderId, /^company-order:[a-f0-9]{40}$/)
-  assert.equal(output.preflight.planner.assignments.length, 2)
-  assert.equal(output.preflight.planner.budget.plannedRoles, 6)
+  assert.equal(output.preflight.planner.assignments.length, 1)
+  assert.equal(output.preflight.planner.budget.plannedRoles, 3)
   assert.equal(output.preflight.planner.controls.externalWrites, false)
   assert.equal(result.stdout.includes('owner-approved business evidence'), false)
   assert.equal(result.stdout.includes('approved baseline and current state'), false)

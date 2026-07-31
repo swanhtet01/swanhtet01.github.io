@@ -3,9 +3,9 @@ import { createHash } from 'node:crypto'
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/
 const HASH_RE = /^[a-f0-9]{64}$/
 const MANIFEST_FIELDS = new Set(['clientId', 'cycleId', 'agents', 'evidence', 'roleBudget'])
-const MAX_AGENTS = 2
+const MAX_AGENTS = 1
 const MAX_ROLE_BUDGET = 8
-const MAX_ACTIVE_ASSIGNMENTS = 2
+const MAX_ACTIVE_ASSIGNMENTS = 1
 const MAX_CONCURRENT_CYCLES = Math.floor(MAX_ACTIVE_ASSIGNMENTS / MAX_AGENTS)
 const MAX_EVIDENCE_BYTES = 8_192
 const TERMINAL_STATUSES = new Set(['completed', 'partial', 'failed'])

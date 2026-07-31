@@ -31,7 +31,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 ## Implemented reality
 
-- HQ keeps 12 registered roles and two active assignment records; each Ally cycle activates exactly one local specialist, and registered roles consume no idle compute. Ally stays zero-subagent: its audit requires exactly one `[features] multi_agent = false` declaration; no duplicate dev server or loaded local model. Idle Ollama hosts were stopped; one lease blocks duplicates (`21afe44`).
+- HQ keeps 12 dormant roles but admits one active assignment and one specialist per cycle. Ally stays zero-subagent: its audit requires exactly one `[features] multi_agent = false` declaration; no duplicate dev server or loaded local model. Idle Ollama hosts were stopped; one lease blocks duplicates (`21afe44`).
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation (`07dd959`).
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked (`be78a02`).
 - Each CEO cycle selects one outcome. Invalid identity/evidence stops before spend; owner-send uncertainty is explicit, retains claims, and is never auto-retried (`f1328a0`, `cafdafe`, `f626ee7`).
@@ -80,7 +80,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 - Delivery stays on Shop, Plant, Website, and Ecommerce; Ecommerce feeds Shop, and AI remains gated R&D.
 - Use one app, identity foundation, evidence/approval model, and release path.
-- Keep four teams, twelve dormant roles, one cycle, two active assignments, and zero idle compute.
+- Keep four teams, twelve dormant roles, one cycle, one active assignment, and zero idle compute.
 - New modules require a real user job, an implemented state transition, a failure/recovery path, and an acceptance test.
 
 ## Build rule

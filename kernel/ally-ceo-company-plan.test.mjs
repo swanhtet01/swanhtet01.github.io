@@ -43,8 +43,8 @@ function portfolio(overrides = {}, automationOverrides = {}) {
     agentOperatingModel: {
       mode: 'bounded-demand-driven',
       registeredRoleLimit: 12,
-      activeAssignmentLimit: 2,
-      maxAgentsPerCycle: 2,
+      activeAssignmentLimit: 1,
+      maxAgentsPerCycle: 1,
       maxConcurrentCompanyCycles: 1,
       scaleToZero: true,
       idleCapabilitiesConsumeCompute: false,
@@ -96,7 +96,7 @@ test('CEO planning selects one scale-to-zero specialist with deterministic contr
   assert.equal(result.manifest.cycleId, 'ally-ceo-20260729-daily-company-control')
   assert.equal(result.manifest.roleBudget, result.plan.budget.plannedRoles)
   assert.equal(result.plan.budget.remainingRoles, 0)
-  assert.equal(result.plan.controls.maxActiveAssignments, 2)
+  assert.equal(result.plan.controls.maxActiveAssignments, 1)
   assert.equal(result.plan.controls.maxConcurrentCycles, 1)
   assert.equal(result.plan.controls.execution, 'sequential')
   assert.equal(result.plan.controls.externalWrites, false)
@@ -110,7 +110,7 @@ test('CEO planning selects one scale-to-zero specialist with deterministic contr
     contract: 'supermega.ally-ceo-resource-envelope.v1',
     registeredRoleRecords: 12,
     selectedAgents: 1,
-    maxActiveAssignments: 2,
+    maxActiveAssignments: 1,
     maxConcurrentCycles: 1,
     execution: 'sequential',
     providerPolicy: 'local_ollama_or_test_mock',

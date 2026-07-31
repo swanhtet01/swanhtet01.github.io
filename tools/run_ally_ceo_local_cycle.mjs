@@ -64,7 +64,7 @@ const EXPECTED_RESOURCE_ENVELOPE = Object.freeze({
   contract: ALLY_CEO_RESOURCE_ENVELOPE_CONTRACT,
   registeredRoleRecords: 12,
   selectedAgents: 1,
-  maxActiveAssignments: 2,
+  maxActiveAssignments: 1,
   maxConcurrentCycles: 1,
   execution: 'sequential',
   providerPolicy: 'local_ollama_or_test_mock',

@@ -71,9 +71,9 @@ test('GET returns the protected fixed roster and hard limits', async () => {
     15,
   )
   assert.equal(result.json.agents.every((agent) => agent.evidenceHint), true)
-  assert.equal(result.json.limits.maxAgents, 2)
+  assert.equal(result.json.limits.maxAgents, 1)
   assert.equal(result.json.limits.maxRoleBudget, 8)
-  assert.equal(result.json.limits.maxActiveAssignments, 2)
+  assert.equal(result.json.limits.maxActiveAssignments, 1)
   assert.equal(result.json.limits.maxConcurrentCycles, 1)
   assert.equal(result.json.limits.capacityClaimContract, 'supermega.agent-company-capacity-claims.v1')
   assert.equal(result.json.limits.capacityClaimTtlSeconds, 120)

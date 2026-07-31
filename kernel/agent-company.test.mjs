@@ -18,12 +18,11 @@ import { loadCrew } from './crew-runner.mjs'
 const cycle = (patch = {}) => ({
   clientId: 'client-acme',
   cycleId: '2026-07-13-am',
-  agents: ['operations-analyst', 'receivables-agent'],
+  agents: ['operations-analyst'],
   evidence: {
     'operations-analyst': { sales_mmk: 450000, refunds_mmk: 12000 },
-    'receivables-agent': 'Invoice INV-7 has 85000 MMK outstanding.',
   },
-  roleBudget: 6,
+  roleBudget: 3,
   ...patch,
 })
 
@@ -58,12 +57,12 @@ test('agent roster is fixed, bounded, and backed by validated crews', async () =
   const roster = listCompanyAgents()
   assert.equal(roster.length, 12)
   assert.equal(MAX_REGISTERED_COMPANY_AGENTS, 12)
-  assert.equal(MAX_ACTIVE_COMPANY_ASSIGNMENTS, 2)
+  assert.equal(MAX_ACTIVE_COMPANY_ASSIGNMENTS, 1)
   assert.equal(MAX_RUNNING_COMPANY_CYCLES, 1)
   assert.equal(MAX_RUNNING_COMPANY_CYCLES * MAX_CYCLE_AGENTS, MAX_ACTIVE_COMPANY_ASSIGNMENTS)
   assert.equal(COMPANY_CAPACITY_CLAIM_CONTRACT, 'supermega.agent-company-capacity-claims.v1')
   assert.equal(COMPANY_CAPACITY_CLAIM_TTL_SECONDS, 120)
-  assert.equal(MAX_CYCLE_AGENTS, 2)
+  assert.equal(MAX_CYCLE_AGENTS, 1)
   assert.equal(MAX_CYCLE_ROLE_BUDGET, 8)
   assert.equal(new Set(roster.map((agent) => agent.id)).size, roster.length)
   assert.equal(roster.every((agent) => Array.isArray(agent.capabilityCrews)), true)
@@ -95,12 +94,12 @@ test('agent roster is fixed, bounded, and backed by validated crews', async () =
   assert.equal(plan.ok, true)
   assert.equal(plan.actionMode, 'draft_only')
   assert.equal(plan.approvalRequired, true)
-  assert.equal(plan.budget.plannedRoles, 6)
-  assert.equal(plan.budget.roleLimit, 6)
+  assert.equal(plan.budget.plannedRoles, 3)
+  assert.equal(plan.budget.roleLimit, 3)
   assert.equal(plan.budget.remainingRoles, 0)
   assert.equal(plan.controls.execution, 'sequential')
   assert.equal(plan.controls.maxConcurrentCycles, 1)
-  assert.equal(plan.controls.maxActiveAssignments, 2)
+  assert.equal(plan.controls.maxActiveAssignments, 1)
   assert.equal(plan.controls.capacityClaimContract, COMPANY_CAPACITY_CLAIM_CONTRACT)
   assert.equal(plan.controls.capacityClaimTtlSeconds, COMPANY_CAPACITY_CLAIM_TTL_SECONDS)
   assert.equal(plan.controls.dynamicDelegation, false)
@@ -134,20 +133,17 @@ test('planner uses the caller role budget only as an admission ceiling', async (
   assert.equal(plan.budget.remainingRoles, 0)
 })
 
-test('general-use specialists plan through primary fixed crews under the same budget', async () => {
+test('general-use specialists plan one at a time through primary fixed crews', async () => {
   const plan = await planCompanyCycle({
     clientId: 'client-acme',
     cycleId: '2026-07-14-general-work',
-    agents: ['operations-analyst', 'customer-support-operator'],
-    evidence: {
-      'operations-analyst': 'Approved sales export, field dictionary, January to June, explain repeat purchase decline.',
-      'customer-support-operator': 'Approved ticket 42, order facts, returns policy, and prior support actions.',
-    },
-    roleBudget: 6,
+    agents: ['customer-support-operator'],
+    evidence: { 'customer-support-operator': 'Approved ticket 42, order facts, returns policy, and prior support actions.' },
+    roleBudget: 3,
   })
   assert.equal(plan.ok, true)
-  assert.deepEqual(plan.assignments.map((assignment) => assignment.crew), ['daily-operator-brief', 'customer-support-desk'])
-  assert.equal(plan.budget.plannedRoles, 6)
+  assert.deepEqual(plan.assignments.map((assignment) => assignment.crew), ['customer-support-desk'])
+  assert.equal(plan.budget.plannedRoles, 3)
   assert.equal(plan.controls.execution, 'sequential')
   assert.equal(plan.controls.dynamicDelegation, false)
   assert.equal(plan.controls.externalWrites, false)
@@ -172,13 +168,13 @@ test('specialized capabilities are consolidated without registering duplicate ag
 
 test('planner rejects dynamic agents, excess roles, unassigned evidence, and action fields', async () => {
   assert.equal((await planCompanyCycle(cycle({ agents: ['invented-agent'] }))).reason, 'company_unknown_agent')
-  assert.equal((await planCompanyCycle(cycle({ agents: ['operations-analyst', 'operations-analyst'] }))).reason, 'company_duplicate_agent')
-  assert.equal((await planCompanyCycle(cycle({ roleBudget: 5 }))).reason, 'company_role_budget_exceeded')
+  assert.equal((await planCompanyCycle(cycle({ agents: ['operations-analyst', 'receivables-agent'] }))).reason, 'company_agent_limit_exceeded')
+  assert.equal((await planCompanyCycle(cycle({ roleBudget: 2 }))).reason, 'company_role_budget_exceeded')
   assert.equal((await planCompanyCycle(cycle({ evidence: { ...cycle().evidence, hidden: 'data' } }))).reason, 'company_unassigned_evidence')
   assert.equal((await planCompanyCycle({ ...cycle(), execute: true })).reason, 'company_unknown_field')
 })
 
-test('runner uses a durable claim, executes serially, and isolates each agent evidence', async () => {
+test('runner uses a durable claim and executes one specialist', async () => {
   const calls = []
   let active = 0
   let maxActive = 0
@@ -215,14 +211,11 @@ test('runner uses a durable claim, executes serially, and isolates each agent ev
   assert.equal(result.ok, true)
   assert.equal(result.status, 'completed')
   assert.equal(maxActive, 1)
-  assert.deepEqual(calls.map((call) => call.slug), ['daily-operator-brief', 'chase-the-money'])
+  assert.deepEqual(calls.map((call) => call.slug), ['daily-operator-brief'])
   assert.equal(calls[0].clientId, 'client-acme')
   assert.match(calls[0].intake, /sales_mmk/)
-  assert.doesNotMatch(calls[0].intake, /INV-7/)
-  assert.match(calls[1].intake, /INV-7/)
-  assert.doesNotMatch(calls[1].intake, /sales_mmk/)
-  assert.equal(result.budget.usedRoleCalls, 2)
-  assert.equal(result.persistedAgentResults, 2)
+  assert.equal(result.budget.usedRoleCalls, 1)
+  assert.equal(result.persistedAgentResults, 1)
   assert.equal(result.durableResultStored, true)
   assert.equal(result.retry, null)
   assert.deepEqual(result.results[0].guardrails, {
@@ -345,22 +338,20 @@ test('expired capacity is atomically reassigned and an old owner cannot release 
   assert.equal(state.claims.has('agent-company-capacity:1'), false)
 })
 
-test('runner preserves partial results and never feeds one specialist output to another', async () => {
+test('runner preserves a failed specialist result without another dispatch', async () => {
   const intakes = []
   const result = await runCompanyCycle(cycle(), {
     claimActivity: async () => ({ fresh: true, durable: true }),
     putRunResult: async () => true,
     runCrew: async (slug, intake) => {
       intakes.push(intake)
-      if (slug === 'daily-operator-brief') return { ok: false, reason: 'crew_role_failed', role: 'ranker' }
-      return { ok: true, output: { reminders: ['draft only'] }, usageByRole: [], trace: [] }
+      return { ok: false, reason: 'crew_role_failed', role: 'ranker' }
     },
   })
-  assert.equal(result.ok, true)
-  assert.equal(result.status, 'partial')
-  assert.deepEqual(result.results.map((item) => item.status), ['failed', 'completed'])
-  assert.equal(intakes.length, 2)
-  assert.doesNotMatch(intakes[1], /crew_role_failed|ranker/)
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 'failed')
+  assert.deepEqual(result.results.map((item) => item.status), ['failed'])
+  assert.equal(intakes.length, 1)
   assert.deepEqual(result.retry, { requiresNewCycleId: true })
 })
 
@@ -398,7 +389,7 @@ test('company budget admission failures are blocked, durable, and replay without
   }
 })
 
-test('a shared company budget block stops the remaining specialists before another crew attempt', async () => {
+test('a shared company budget block stops the one specialist without another crew attempt', async () => {
   for (const reason of ['crew_company_budget_exhausted', 'crew_company_budget_unavailable']) {
     const claims = durableClaimHarness()
     const records = new Map()
@@ -418,12 +409,9 @@ test('a shared company budget block stops the remaining specialists before anoth
     assert.equal(result.ok, false)
     assert.equal(result.status, 'blocked')
     assert.deepEqual(calls, ['daily-operator-brief'])
-    assert.deepEqual(result.results.map((item) => item.status), ['blocked', 'not_run'])
-    assert.equal(result.results[1].reason, 'company_shared_budget_blocked')
-    assert.equal(result.results[1].blockedBy, reason)
-    assert.equal(result.results[1].usedRoleCalls, 0)
+    assert.deepEqual(result.results.map((item) => item.status), ['blocked'])
     assert.equal(result.budget.usedRoleCalls, 0)
-    assert.equal(result.persistedAgentResults, 2)
+    assert.equal(result.persistedAgentResults, 1)
     assert.equal(result.durableResultStored, true)
 
     const replay = await runCompanyCycle(input, options)

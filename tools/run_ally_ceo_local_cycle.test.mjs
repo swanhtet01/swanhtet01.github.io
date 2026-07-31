@@ -16,7 +16,7 @@ const resourceEnvelope = {
   contract: 'supermega.ally-ceo-resource-envelope.v1',
   registeredRoleRecords: 12,
   selectedAgents: 1,
-  maxActiveAssignments: 2,
+  maxActiveAssignments: 1,
   maxConcurrentCycles: 1,
   execution: 'sequential',
   providerPolicy: 'local_ollama_or_test_mock',

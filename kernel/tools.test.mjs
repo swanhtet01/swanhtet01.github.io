@@ -73,7 +73,7 @@ test('runTool executes an allow-listed local tool', async () => {
   assert.equal(r.data.agentCompany.dynamicDelegation, false)
   assert.equal(r.data.agentCompany.recursiveDelegation, false)
   assert.equal(r.data.agentCompany.modelRequest, false)
-  assert.ok(r.data.agentCompany.maxAgents <= 2)
+  assert.ok(r.data.agentCompany.maxAgents <= 1)
   assert.ok(r.data.agentCompany.maxRoleBudget > 0)
   assert.ok(r.data.ai.configuredProviders >= 0)
   assert.ok(r.data.paymentAdapters.configured <= r.data.paymentAdapters.total)
@@ -88,7 +88,7 @@ test('platform status is exact, metadata-only, and fails malformed readiness clo
     db: { ok: true, mode: 'supabase', detail: 'postgres://must-not-escape' },
     connectors: { total: 69, configured: 4, registrationErrors: 0, byCategory: { data: 10, ai: 4 } },
     ai: { providers: ['provider-one', 'provider-two'], failover: true },
-    agentCompany: { plannerReady: true, maxAgents: 2, maxRoleBudget: 8 },
+    agentCompany: { plannerReady: true, maxAgents: 1, maxRoleBudget: 8 },
     money: { first: true, second: false },
     tenant: 'must-not-escape',
     prompt: 'must-not-escape',

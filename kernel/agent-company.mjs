@@ -14,11 +14,11 @@ import {
   transitionActivityClaim,
 } from './store.mjs'
 
-export const MAX_CYCLE_AGENTS = 2
+export const MAX_CYCLE_AGENTS = 1
 export const MAX_CYCLE_ROLE_BUDGET = 8
 export const MAX_AGENT_EVIDENCE_BYTES = 12_000
 export const MAX_REGISTERED_COMPANY_AGENTS = 12
-export const MAX_ACTIVE_COMPANY_ASSIGNMENTS = 2
+export const MAX_ACTIVE_COMPANY_ASSIGNMENTS = 1
 export const MAX_RUNNING_COMPANY_CYCLES = Math.floor(MAX_ACTIVE_COMPANY_ASSIGNMENTS / MAX_CYCLE_AGENTS)
 export const COMPANY_CAPACITY_CLAIM_CONTRACT = 'supermega.agent-company-capacity-claims.v1'
 export const COMPANY_CAPACITY_CLAIM_TTL_SECONDS = 120

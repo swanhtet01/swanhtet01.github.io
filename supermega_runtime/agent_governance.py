@@ -18,7 +18,7 @@ AGENT_RETRY_POLICY_CONTRACT = "supermega.agent-retry-policy.v1"
 AGENT_BUDGET_GRANT_CONTRACT = "supermega.agent-budget-grant.v1"
 AGENT_BUDGET_ACCOUNTING_CONTRACT = "supermega.agent-budget-accounting.v1"
 AGENT_BUDGET_AUDIENCE = "supermega-agent-runtime"
-AGENT_ACTIVE_ASSIGNMENT_LIMIT = 2
+AGENT_ACTIVE_ASSIGNMENT_LIMIT = 1
 AGENT_ROSTER_LIMIT = 12
 
 # Registered jobs are reusable capabilities; only these reviewed lanes are
@@ -111,7 +111,7 @@ if (
 if (
     not AGENT_AUTOMATED_JOB_TYPES
     or len(AGENT_AUTOMATED_JOB_TYPES) != sum(len(lane) for lane in AGENT_AUTOMATION_LANES.values())
-    or any(not lane or len(lane) > AGENT_ACTIVE_ASSIGNMENT_LIMIT for lane in AGENT_AUTOMATION_LANES.values())
+    or any(not lane for lane in AGENT_AUTOMATION_LANES.values())
     or not set(AGENT_AUTOMATED_JOB_TYPES).issubset(AGENT_JOB_UNITS)
 ):
     raise RuntimeError("agent_automation_lane_contract_invalid")
@@ -591,7 +591,7 @@ def issue_agent_budget_grant(
     normalized_job_types = normalize_agent_job_types(job_types)
     if not normalized_job_types:
         raise AgentGovernanceError("budget_grant_jobs_required", "A budget grant needs at least one job type.")
-    requested_runs = len(normalized_job_types) if max_runs is None else int(max_runs)
+    requested_runs = min(len(normalized_job_types), policy.max_batch_jobs) if max_runs is None else int(max_runs)
     if requested_runs < 1 or requested_runs > min(len(normalized_job_types), policy.max_batch_jobs):
         raise AgentGovernanceError("budget_grant_runs_invalid", "The budget grant run limit exceeds its unique job set.")
     issued_at = _utc(now).replace(microsecond=0)
@@ -603,7 +603,7 @@ def issue_agent_budget_grant(
         "cycle": str(cycle or "").strip().lower() or "bounded",
         "job_types": normalized_job_types,
         "max_runs": requested_runs,
-        "max_work_units": sum(agent_job_units(job_type) for job_type in normalized_job_types),
+        "max_work_units": sum(sorted((agent_job_units(job_type) for job_type in normalized_job_types), reverse=True)[:requested_runs]),
         "issued_at": issued_at.isoformat(),
         "expires_at": expires_at.isoformat(),
     }

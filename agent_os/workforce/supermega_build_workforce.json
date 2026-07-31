@@ -5,23 +5,23 @@
   "dialectic": {
     "thesis": "Reusable specialists let a small company cover product, engineering, growth, and risk.",
     "antithesis": "Always-on swarms duplicate work, increase cost, and blur accountability.",
-    "synthesis": "Keep a dormant registry, run one cycle with at most two specialists, and require evidence plus human gates."
+    "synthesis": "Keep a dormant registry, run one cycle with one specialist, and require evidence plus human gates."
   },
   "runtime_policy": {
     "execution_model": "ephemeral_demand_driven",
     "scale_to_zero": true,
     "registered_specialists_consume_compute": false,
     "max_registered_specialists": 12,
-    "max_running": 2,
+    "max_running": 1,
     "max_company_cycles": 1,
-    "max_specialists_per_company_cycle": 2,
+    "max_specialists_per_company_cycle": 1,
     "local_host_admission_contract": "supermega.ally-host-admission.v1",
     "max_local_running": 1,
     "local_memory_pressure_blocks_dispatch": true,
     "local_duplicate_listener_blocks_dispatch": true,
     "local_loaded_model_blocks_dispatch": true,
     "max_queued": 24,
-    "max_batch_jobs": 2,
+    "max_batch_jobs": 1,
     "max_daily_runs": 57,
     "max_daily_work_units": 83,
     "in_flight_per_job": 1,
@@ -182,7 +182,7 @@
       "name": "Agent Capacity Pack",
       "audience": "All teams",
       "workspace": "/work/?team=engineering&view=agents",
-      "instructions": ["Registry records are dormant until work is queued.", "Keep at most twelve registered roles, two active assignments in one company cycle, and one in-flight run per job family.", "Pause stale work and require evidence before review."],
+      "instructions": ["Registry records are dormant until work is queued.", "Keep at most twelve registered roles, one active assignment in one company cycle, and one in-flight run per job family.", "Pause stale work and require evidence before review."],
       "done_when": "No idle execution is running and each active job has one owner, budget, lease, and acceptance target."
     },
     {
