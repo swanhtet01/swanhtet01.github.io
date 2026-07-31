@@ -178,6 +178,15 @@ try {
   assert.equal(ecommerceEvent.record.workflow, 'ecommerce')
   assert.equal(ecommerceEvent.record.requested_package, 'social-storefront')
 
+  const visionAccepted = await invoke({
+    body: { ...validSubmission, product: 'vision', template: 'release-qa' },
+    headers: withKey(6, { 'x-forwarded-for': '203.0.113.13' }),
+  })
+  assert.equal(visionAccepted.status, 202)
+  const visionEvent = JSON.parse(delivered.options.body)
+  assert.equal(visionEvent.record.workflow, 'vision')
+  assert.equal(visionEvent.record.requested_package, 'release-qa')
+
   const rateHeaders = { 'x-forwarded-for': '203.0.113.77' }
   for (let index = 0; index < 5; index += 1) {
     const limited = await invoke({ body: validSubmission, headers: withKey(100 + index, rateHeaders) })
@@ -292,7 +301,7 @@ try {
   assert.equal(ambiguousReplay.body.reason, 'contact_persistence_unavailable')
   assert.equal(unexpectedDeliveryCalls, 0)
 
-  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 87 }, null, 2))
+  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 91 }, null, 2))
 } finally {
   globalThis.fetch = originalFetch
   for (const name of environmentNames) {

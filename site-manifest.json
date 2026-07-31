@@ -1,7 +1,7 @@
 {
   "schemaVersion": "supermega.site-context.v2",
-  "contextVersion": "2026-07-28.1",
-  "catalogVersion": "2026-07-28.1",
+  "contextVersion": "2026-07-31.1",
+  "catalogVersion": "2026-07-31.1",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
@@ -348,6 +348,49 @@
       "boundaries": ["No duplicate stock ledger", "No isolated hosted tenant proof", "Managed inbox uses a 100-entry revisioned Shop workspace pilot envelope; a normalized indexed queue is gated on measured scale", "No Shop order or stock reservation before separate accountable confirmation", "No payment authorization or charge", "Delivery stays an intent until Shop confirms fee and fulfilment", "Returns and refunds are completed in Shop", "No customer send", "No publishing", "No external write"]
     }
   ],
+  "serviceProducts": [
+    {
+      "id": "vision",
+      "runtimeId": "vision",
+      "kind": "service-product",
+      "name": "Vision",
+      "publicAnchor": "/#vision",
+      "appRoute": "https://app.supermega.dev/vision/",
+      "status": "founding-pilot-local",
+      "eyebrow": "Private screen workflows",
+      "headline": "Teach one repetitive screen workflow and measure it locally.",
+      "description": "Define approved screen states, train on customer-authorized examples, measure held-out recognition, and deliver an observation-only Windows or Android pilot without sending screenshots to a cloud model provider.",
+      "workflow": ["Choose one repetitive workflow", "Confirm screenshot rights", "Capture representative states", "Review local annotations", "Train and calibrate locally", "Measure held-out performance", "Run observation-only pilot"],
+      "templates": [
+        {
+          "id": "release-qa",
+          "name": "Software release QA",
+          "outcome": "Recognize ready, loading, error, and degraded application states before a human release decision.",
+          "workflow": ["Define release states", "Capture approved screens", "Annotate visual evidence", "Train local detector", "Measure held-out states", "Review release observations"],
+          "entryPoints": ["Release checklist", "Test environment", "Owned application screenshots"],
+          "metric": "Review time, missed visible failures, and abstention rate"
+        },
+        {
+          "id": "legacy-windows",
+          "name": "Legacy Windows workflow",
+          "outcome": "Recognize stable states in desktop software where reliable APIs are unavailable.",
+          "workflow": ["Map operator steps", "Capture approved states", "Label visible controls", "Train local detector", "Run shadow workflow", "Measure exceptions"],
+          "entryPoints": ["Desktop procedure", "Operator checklist", "Owned Windows screenshots"],
+          "metric": "Operator review time and correctly recognized workflow states"
+        },
+        {
+          "id": "android-field",
+          "name": "Android field workflow",
+          "outcome": "Recognize approved states in a fixed Android field application while keeping screen data local.",
+          "workflow": ["Choose field task", "Qualify Android device", "Capture authorized states", "Review annotations", "Train portable detector", "Measure physical-device performance"],
+          "entryPoints": ["Field procedure", "Approved Android device", "Owned application screenshots"],
+          "metric": "Recognition accuracy, device latency, and manual fallback rate"
+        }
+      ],
+      "proof": ["Sealed Windows runtime", "Android AAR and APK packages", "Content-addressed model and evidence receipts", "Replayable buyer evaluation kit", "Observation-only workflow qualification", "Tamper and supply-chain verification"],
+      "boundaries": ["No surveillance", "No biometric identification", "No CAPTCHA bypass", "No credential handling", "No medical or safety-critical decisions", "No consequential action without separate exact approval", "Physical Android performance remains device-qualified"]
+    }
+  ],
   "sharedCapabilities": [
     {
       "id": "ai-assistance",
@@ -362,7 +405,7 @@
     }
   ],
   "pages": [
-    { "route": "/", "file": "index.html", "title": "SuperMega | Four focused business products" },
+    { "route": "/", "file": "index.html", "title": "SuperMega | Five focused business products" },
     { "route": "/contact/", "file": "contact/index.html", "title": "Contact | SuperMega" },
     { "route": "/privacy/", "file": "privacy/index.html", "title": "Privacy | SuperMega" }
   ],

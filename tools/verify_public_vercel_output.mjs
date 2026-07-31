@@ -37,8 +37,11 @@ if (manifest.customerProducts?.map((product) => `${product.id}:${product.runtime
 if (manifest.customerProducts?.map((product) => product.appRoute).join(',') !== 'https://app.supermega.dev/shop/?tab=counter,https://app.supermega.dev/plant/?tab=production,https://app.supermega.dev/website/,https://app.supermega.dev/ecommerce/') fail('customer_product_routes_drift')
 const operatingProducts = manifest.customerProducts?.filter((product) => product.kind === 'operating-product') || []
 const makerProducts = manifest.customerProducts?.filter((product) => product.kind === 'maker-product') || []
+const serviceProducts = manifest.serviceProducts || []
+const publicProducts = [...(manifest.customerProducts || []), ...serviceProducts]
 if (operatingProducts.map((product) => product.id).join(',') !== 'shop,plant') fail('operating_product_portfolio_drift')
 if (makerProducts.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:available-in-app,ecommerce:release-candidate-local') fail('maker_product_portfolio_drift')
+if (serviceProducts.map((product) => `${product.id}:${product.status}`).join(',') !== 'vision:founding-pilot-local') fail('service_product_portfolio_drift')
 const website = manifest.customerProducts?.find((product) => product.id === 'website')
 if (website?.views?.join(',') !== 'Start,Edit,Preview,Download'
   || website?.templates?.some((template) => template.workflow?.at(-1) !== 'Download website')
@@ -61,8 +64,15 @@ if (ecommerce?.views?.join(',') !== 'Storefront,Cart and quote,Request receipt,S
   || !ecommerce?.boundaries?.includes('No payment authorization or charge')
   || !ecommerce?.boundaries?.includes('Delivery stays an intent until Shop confirms fee and fulfilment')
   || !ecommerce?.boundaries?.includes('Returns and refunds are completed in Shop')) fail('ecommerce_request_receipt_contract_drift')
+const vision = serviceProducts.find((product) => product.id === 'vision')
+if (vision?.headline !== 'Teach one repetitive screen workflow and measure it locally.'
+  || !vision?.proof?.includes('Sealed Windows runtime')
+  || !vision?.proof?.includes('Android AAR and APK packages')
+  || !vision?.proof?.includes('Replayable buyer evaluation kit')
+  || !vision?.boundaries?.includes('No credential handling')
+  || !vision?.boundaries?.includes('No consequential action without separate exact approval')) fail('vision_founding_pilot_contract_drift')
 if (manifest.sharedCapabilities?.map((capability) => `${capability.id}:${capability.status}`).join(',') !== 'ai-assistance:gated-r-and-d') fail('shared_capability_drift')
-for (const product of manifest.customerProducts || []) {
+for (const product of publicProducts) {
   if (product.templates?.length !== 3) fail('public_template_count_wrong', { product: product.id })
   for (const template of product.templates || []) {
     if (!template.outcome?.trim() || !template.metric?.trim() || template.workflow?.length < 5 || template.entryPoints?.length < 3) fail('public_template_contract_incomplete', { product: product.id, template: template.id })
@@ -145,7 +155,7 @@ if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_n
 for (const token of [
   manifest.company.headline,
   manifest.company.supporting,
-  'Four separate products',
+  'Five separate products',
   'One secure foundation',
   'Mobile-ready workflows',
   'aria-label="Core capabilities"',
@@ -166,16 +176,19 @@ for (const token of [
   'id="ecommerce"',
   'Create a Shop-backed storefront and hand customer intent to human review.',
   'https://app.supermega.dev/ecommerce/',
+  'id="vision"',
+  'Teach one repetitive screen workflow and measure it locally.',
+  'https://app.supermega.dev/vision/',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
-for (const product of manifest.customerProducts || []) {
+for (const product of publicProducts) {
   if (!home.includes(product.appRoute)) fail('direct_product_route_missing', { product: product.id })
   for (const capability of (product.modules?.length ? product.modules : product.workflow).slice(0, 3)) {
     if (!home.includes(capability)) fail('module_catalog_missing', { product: product.id, capability })
   }
 }
-if ((home.match(/>Open product<\/a>/g) || []).length !== 4) fail('direct_product_cta_count_wrong')
+if ((home.match(/>Open product<\/a>/g) || []).length !== 5) fail('direct_product_cta_count_wrong')
 if (home.includes('Start guided trial') || home.includes('app.supermega.dev/settings/?product=') || home.includes('aria-label="Templates"')) fail('setup_first_public_path_returned')
 for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Owners, evidence, review, and release', 'Gated R&amp;D']) {
   if (home.includes(internalLabel)) fail('internal_system_exposed_on_public_home', { internalLabel })
@@ -184,10 +197,10 @@ for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
   if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })
 }
 if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
-if ((home.match(/<a\b/g) || []).length > 8) fail('homepage_link_surface_too_large')
+if ((home.match(/<a\b/g) || []).length > 9) fail('homepage_link_surface_too_large')
 
 const contact = pages.get('/contact/')?.html || ''
-for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="plant"', 'value="website"', 'value="ecommerce"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', '>Shop<', '>Plant<', '>Website<', '>Ecommerce<', 'No account, data connection, automation, or external action begins from this form.', 'swanhtet@supermega.dev']) {
+for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="plant"', 'value="website"', 'value="ecommerce"', 'value="vision"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', '>Shop<', '>Plant<', '>Website<', '>Ecommerce<', '>Vision<', 'No account, data connection, automation, or external action begins from this form.', 'swanhtet@supermega.dev']) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
 if (contact.includes('value="agents"') || contact.includes('>AI Agent Solutions<')) fail('shared_capability_listed_as_contact_product')
