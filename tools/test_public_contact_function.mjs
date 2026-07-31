@@ -179,13 +179,49 @@ try {
   assert.equal(ecommerceEvent.record.requested_package, 'social-storefront')
 
   const visionAccepted = await invoke({
-    body: { ...validSubmission, product: 'vision', template: 'release-qa' },
+    body: {
+      ...validSubmission,
+      product: 'vision',
+      template: 'release-qa',
+      vision_platform: 'windows',
+      vision_state_count: '6',
+      vision_weekly_runs: '10',
+      vision_minutes_per_run: '30',
+      vision_labor_hourly_usd: '8',
+      vision_screenshot_rights: 'yes',
+      vision_human_fallback: 'yes',
+      vision_observation_only: 'yes',
+    },
     headers: withKey(6, { 'x-forwarded-for': '203.0.113.13' }),
   })
   assert.equal(visionAccepted.status, 202)
   const visionEvent = JSON.parse(delivered.options.body)
   assert.equal(visionEvent.record.workflow, 'vision')
   assert.equal(visionEvent.record.requested_package, 'release-qa')
+  assert.deepEqual(visionEvent.record.raw.vision, {
+    platform: 'windows',
+    state_count: 6,
+    weekly_runs: 10,
+    minutes_per_run: 30,
+    labor_hourly_usd: 8,
+    screenshot_rights: true,
+    human_fallback: true,
+    observation_only: true,
+  })
+
+  const visionMissingFields = await invoke({
+    body: { ...validSubmission, product: 'vision', template: 'release-qa' },
+    headers: withKey(7, { 'x-forwarded-for': '203.0.113.14' }),
+  })
+  assert.equal(visionMissingFields.status, 400)
+  assert.equal(visionMissingFields.body.reason, 'vision_fields_missing')
+
+  const nonVisionIgnored = await invoke({
+    body: { ...validSubmission, vision_platform: 'both', vision_state_count: '12', vision_weekly_runs: '10', vision_minutes_per_run: '30' },
+    headers: withKey(8, { 'x-forwarded-for': '203.0.113.15' }),
+  })
+  assert.equal(nonVisionIgnored.status, 202)
+  assert.equal(JSON.parse(delivered.options.body).record.raw.vision, null)
 
   const rateHeaders = { 'x-forwarded-for': '203.0.113.77' }
   for (let index = 0; index < 5; index += 1) {

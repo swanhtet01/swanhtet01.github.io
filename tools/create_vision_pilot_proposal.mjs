@@ -56,6 +56,26 @@ export function qualifyVisionPilot(input) {
   }
 }
 
+export function visionInputFromContactEvent(event) {
+  if (!event || event.event !== 'supermega.contact.created' || !event.record || event.record.workflow !== 'vision') {
+    throw new Error('vision_contact_event_required')
+  }
+  const vision = event.record.raw?.vision
+  if (!vision || typeof vision !== 'object' || Array.isArray(vision)) throw new Error('vision_contact_qualification_missing')
+  return {
+    company: event.record.company,
+    workflow: event.record.goal,
+    platform: vision.platform,
+    stateCount: vision.state_count,
+    screenshotRights: vision.screenshot_rights,
+    humanFallback: vision.human_fallback,
+    observationOnly: vision.observation_only,
+    weeklyRuns: vision.weekly_runs,
+    minutesPerRun: vision.minutes_per_run,
+    laborHourlyUsd: vision.labor_hourly_usd,
+  }
+}
+
 export function renderVisionPilotProposal(input) {
   const result = qualifyVisionPilot(input)
   const platformLabel = result.platform === 'both' ? 'Windows and Android' : result.platform[0].toUpperCase() + result.platform.slice(1)
@@ -108,6 +128,7 @@ This document is a local draft. It does not contact the buyer, accept payment, o
 async function main() {
   const args = process.argv.slice(2)
   const inputIndex = args.indexOf('--input')
+  const contactEventIndex = args.indexOf('--contact-event')
   const outputIndex = args.indexOf('--output')
   if (args.includes('--example')) {
     process.stdout.write(`${JSON.stringify({
@@ -116,12 +137,15 @@ async function main() {
     }, null, 2)}\n`)
     return
   }
-  if (inputIndex < 0 || !args[inputIndex + 1] || outputIndex < 0 || !args[outputIndex + 1]) {
-    throw new Error('usage: node tools/create_vision_pilot_proposal.mjs --input lead.json --output proposal.md')
+  const sourceIndex = contactEventIndex >= 0 ? contactEventIndex : inputIndex
+  if (sourceIndex < 0 || !args[sourceIndex + 1] || outputIndex < 0 || !args[outputIndex + 1]) {
+    throw new Error('usage: node tools/create_vision_pilot_proposal.mjs (--input lead.json | --contact-event event.json) --output proposal.md')
   }
-  const inputPath = resolve(args[inputIndex + 1])
+  const inputPath = resolve(args[sourceIndex + 1])
   const outputPath = resolve(args[outputIndex + 1])
-  const proposal = renderVisionPilotProposal(JSON.parse(await readFile(inputPath, 'utf8')))
+  const source = JSON.parse(await readFile(inputPath, 'utf8'))
+  const input = contactEventIndex >= 0 ? visionInputFromContactEvent(source) : source
+  const proposal = renderVisionPilotProposal(input)
   await writeFile(outputPath, proposal, { encoding: 'utf8', flag: 'wx' })
   process.stdout.write(`${JSON.stringify({ ok: true, contract: 'supermega.vision.pilot_proposal.v1', output: outputPath })}\n`)
 }
