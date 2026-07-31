@@ -108,10 +108,18 @@ export const IDENTITY_DATA_REQUIREMENTS = [
   {
     id: 'candidate-four-product-setup-ui', authority: 'candidate', file: 'showroom/src/core/SettingsPage.tsx', tokens: [
       'buildClientCapabilityPlan',
-      'createClientDemoWorkspace',
       'function changeShopIndustryPack',
       'function changePlantIndustryPack',
       '<ClientDataOnboarding managedIdentity=',
+    ],
+  },
+  {
+    id: 'candidate-client-demo-workspace-core', authority: 'candidate', file: 'showroom/src/core/client-onboarding.ts', tokens: [
+      'export async function prepareClientDemoInBrowser',
+      'export function createClientDemoWorkspace',
+      'export function restoreClientDemoWorkspace',
+      'export function reconcileClientDemoWorkspace',
+      'export function updateClientDemoWorkspaceProgress',
     ],
   },
 ]

@@ -113,6 +113,22 @@ test('one composed tree must retain both authorities', () => {
   assert.equal(assessIdentityDataSources(missing).ok, false)
 })
 
+test('client demo workspace authority stays in its owning onboarding module', () => {
+  const integrated = sources()
+  const onboardingFile = 'showroom/src/core/client-onboarding.ts'
+  const settingsFile = 'showroom/src/core/SettingsPage.tsx'
+  assert.equal(files.includes(onboardingFile), true)
+  const token = 'export function createClientDemoWorkspace'
+  integrated[onboardingFile] = integrated[onboardingFile].replace(token, '')
+  integrated[settingsFile] += `\n${token}`
+  const assessment = assessIdentityDataSources(integrated)
+  assert.equal(assessment.ok, false)
+  assert.deepEqual(
+    assessment.requirements.filter((entry) => !entry.passed).map(({ id, missing }) => ({ id, missing })),
+    [{ id: 'candidate-client-demo-workspace-core', missing: [token] }],
+  )
+})
+
 test('unrelated YTF source is rejected from the SuperMega batch', () => {
   const contaminated = sources()
   contaminated['supermega_runtime/trial_runtime.py'] += '\n# Yangon Tyre'

@@ -102,6 +102,7 @@ requireContract('ordered integration batches preserve production safeguards and 
   && releaseIntegrationBatch.includes('test_browser_auth_and_write_enablement_are_complete_and_ordered')
   && releaseIntegrationBatch.includes('validateManagedPlantEquipmentImport')
   && releaseIntegrationBatch.includes('createClientDemoWorkspace')
+  && releaseIntegrationBatch.includes("file: 'showroom/src/core/client-onboarding.ts'")
   && releaseIntegrationBatch.includes('function managedLoginPath(product: string | null)')
   && releaseIntegrationBatch.includes('Browser-local sample only. Completing this records a sample order and sample stock change in this browser.')
   && releaseIntegrationBatch.includes('loadManagedOwnerControlRun')
