@@ -315,8 +315,8 @@ export function CoreLayout() {
 }
 
 const customerTracks = [
-  ['Shop', 'Retail, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/?tab=counter', '/settings/?product=commerce'],
-  ['Plant', 'Factory, workshop, service floor.', 'Plan, record, hand off shifts.', '/plant/?tab=production', '/settings/?product=production'],
+  ['Shop', 'Retail, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/?tab=counter', '/settings/?product=shop'],
+  ['Plant', 'Factory, workshop, service floor.', 'Plan, record, hand off shifts.', '/plant/?tab=production', '/settings/?product=plant'],
   ['Website', 'Company site and proof catalog.', 'Create pages, offers, leads.', '/website/', '/settings/?product=website'],
   ['Ecommerce', 'Online ordering and delivery.', 'Build storefronts and Shop handoff.', '/ecommerce/', '/settings/?product=ecommerce'],
 ] as const

@@ -337,7 +337,7 @@ if (!indexSource.includes('<title>SuperMega</title>')
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
 const corpus = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')))).join('\n')
-for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Sample workspace', 'Start guided sample', 'Request managed trial', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
+for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Sample workspace', 'Open working sample', 'Request managed trial', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!corpus.includes(required)) fail(`missing_context:${required}`)
 }
 if (!ecommerceSource.includes('const ecommerceTodayMetrics = [')
@@ -2834,7 +2834,7 @@ if (!coreSource.includes('className="core-panel next-task-card"')
   || !coreSource.includes('<details className="core-panel today-more')
   || !settingsPageSource.includes("useState<'workflow' | 'success'>('workflow')")
   || !settingsPageSource.includes('aria-label="Setup steps"')
-  || !settingsPageSource.includes("requestedProduct ? 'Guided trial' : 'Client setup'")
+  || !settingsPageSource.includes("requestedProduct ? 'Product setup' : 'Client setup'")
   || !settingsPageSource.includes("location.hash === '#controls'")
   || !settingsPageSource.includes("navigate('/settings/', { replace: true })")
   || !coreSource.includes('role="columnheader"')
