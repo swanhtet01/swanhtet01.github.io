@@ -5,7 +5,7 @@ Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
 Live release commit: `7c76b810d5eb466f3917e785ff1be6db4c9d8007`
-Live state observed: `2026-07-31T11:19:40.387Z`
+Live state observed: `2026-07-31T12:30:15.683Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -31,10 +31,10 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 ## Implemented reality
 
-- HQ keeps 12 dormant roles but admits one active assignment and one specialist per cycle. Each Ally cycle activates exactly one local specialist; registered roles consume no idle compute. Ally stays zero-subagent: its audit requires exactly one `[features] multi_agent = false` declaration; no duplicate dev server or loaded local model. Idle Ollama hosts were stopped; one lease blocks duplicates (`21afe44`).
+- HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle. `multi_agent = false`; one lease blocks duplicates, and unloaded roles/models consume no idle compute (`21afe44`).
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation (`07dd959`).
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked (`be78a02`).
-- Each CEO cycle selects one outcome. Invalid identity/evidence stops before spend; owner-send uncertainty is explicit, retains claims, and is never auto-retried (`f1328a0`, `cafdafe`, `f626ee7`).
+- Each CEO cycle selects one outcome. Exact disabled two-job live drift may admit local-only work, but any other failure blocks; Vercel, hosted scheduling, release, connectors, and external writes remain zero. Owner-send uncertainty retains claims and is never auto-retried (`34f601d8`).
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
 - Client setup keeps one manifest-backed smart import, one shared launchpad, and browser-local four-product CSV preparation; missing data uses connected samples and installation stays review-gated (`ef9e2e7`, `3a56a7d`).
 - Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancel releases, complete consumes, and sellable returns restore the exact fulfilled location/lot (`3cd4825`).
@@ -59,7 +59,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - First-action QA routes Shop, Plant, and Website blockers to the next task.
 - Both domains serve deployed `7c76b810d5eb466f3917e785ff1be6db4c9d8007`; paired brand, context, and catalog identities match, but local context drift and the deployed two-job scheduler ceiling block release readiness.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
-- `supermega.ally-working-set-trim.v1` previously released 2,949.3 MB without Codex process stops; audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Stable IDs block ENG-130/134/135/136/137/138/139/140/141/142/143/144/145/146. Four CEO outcomes are accepted; Finance/Risk remains quarantined.
+- Working-set trim is non-terminating; audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
 ## Owner-gated actions
