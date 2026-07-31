@@ -155,16 +155,16 @@ if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_n
 for (const token of [
   manifest.company.headline,
   manifest.company.supporting,
-  'Five separate products',
-  'One secure foundation',
+  'Four managed products',
+  'One Vision founding service',
   'Mobile-ready workflows',
   'aria-label="Core capabilities"',
   'min-height: 44px',
   'id="products"',
-  'SuperMega products',
-  'Open a working product.',
-  'Each product starts with a usable sample. Explore the main job first; configuration and data import stay out of the way until you need them.',
-  'Choose a product',
+  'Products and services',
+  'Open a product or request a focused pilot.',
+  'Shop, Plant, Website, and Ecommerce open working samples. Vision starts with a qualified four-week founding pilot request.',
+  'Choose an offering',
   'Need a workspace for your company?',
   'id="trust"',
   'aria-label="Security boundary"',
@@ -178,17 +178,20 @@ for (const token of [
   'https://app.supermega.dev/ecommerce/',
   'id="vision"',
   'Teach one repetitive screen workflow and measure it locally.',
-  'https://app.supermega.dev/vision/',
+  '/contact/?product=vision&amp;template=release-qa',
+  'Request founding pilot',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 for (const product of publicProducts) {
-  if (!home.includes(product.appRoute)) fail('direct_product_route_missing', { product: product.id })
+  const destination = product.kind === 'service-product' ? product.salesRoute.replaceAll('&', '&amp;') : product.appRoute
+  if (!home.includes(destination)) fail('direct_product_route_missing', { product: product.id })
   for (const capability of (product.modules?.length ? product.modules : product.workflow).slice(0, 3)) {
     if (!home.includes(capability)) fail('module_catalog_missing', { product: product.id, capability })
   }
 }
-if ((home.match(/>Open product<\/a>/g) || []).length !== 5) fail('direct_product_cta_count_wrong')
+if ((home.match(/>Open product<\/a>/g) || []).length !== 4 || (home.match(/>Request founding pilot<\/a>/g) || []).length !== 1) fail('direct_product_cta_count_wrong')
+if (home.includes('https://app.supermega.dev/vision/')) fail('vision_dead_app_route_present')
 if (home.includes('Start guided trial') || home.includes('app.supermega.dev/settings/?product=') || home.includes('aria-label="Templates"')) fail('setup_first_public_path_returned')
 for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Owners, evidence, review, and release', 'Gated R&amp;D']) {
   if (home.includes(internalLabel)) fail('internal_system_exposed_on_public_home', { internalLabel })

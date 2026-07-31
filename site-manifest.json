@@ -1,7 +1,7 @@
 {
   "schemaVersion": "supermega.site-context.v2",
-  "contextVersion": "2026-07-31.1",
-  "catalogVersion": "2026-07-31.1",
+  "contextVersion": "2026-07-31.2",
+  "catalogVersion": "2026-07-31.2",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
@@ -355,7 +355,7 @@
       "kind": "service-product",
       "name": "Vision",
       "publicAnchor": "/#vision",
-      "appRoute": "https://app.supermega.dev/vision/",
+      "salesRoute": "/contact/?product=vision&template=release-qa",
       "status": "founding-pilot-local",
       "eyebrow": "Private screen workflows",
       "headline": "Teach one repetitive screen workflow and measure it locally.",
@@ -405,7 +405,7 @@
     }
   ],
   "pages": [
-    { "route": "/", "file": "index.html", "title": "SuperMega | Five focused business products" },
+    { "route": "/", "file": "index.html", "title": "SuperMega | Four products and Vision" },
     { "route": "/contact/", "file": "contact/index.html", "title": "Contact | SuperMega" },
     { "route": "/privacy/", "file": "privacy/index.html", "title": "Privacy | SuperMega" }
   ],
