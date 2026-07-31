@@ -650,8 +650,8 @@ class LegacyPilotSecurityTests(unittest.TestCase):
         self.assertEqual(queued["contract"], "supermega.agent-runner-cycle-budget.v1")
         self.assertEqual(queued["job_types"], runner.DEFAULT_JOB_TYPES)
         self.assertEqual(queued["requested_count"], 7)
-        self.assertEqual(queued["process_limit"], 2)
-        self.assertEqual(queued["max_processed_per_cycle"], 2)
+        self.assertEqual(queued["process_limit"], 1)
+        self.assertEqual(queued["max_processed_per_cycle"], 1)
         self.assertTrue(queued["scale_to_zero"])
 
         canonical = runner.build_job_cycle_plan(
@@ -662,14 +662,14 @@ class LegacyPilotSecurityTests(unittest.TestCase):
             canonical["job_types"],
             ["ops_watch", "github_release_watch", "task_triage", "founder_brief", "list_clerk"],
         )
-        self.assertEqual(canonical["process_limit"], 2)
+        self.assertEqual(canonical["process_limit"], 1)
 
         direct = runner.build_job_cycle_plan(["ops_watch"], durable_queue=False)
         self.assertEqual(direct["mode"], "workspace_login")
         self.assertEqual(direct["process_limit"], 1)
         for values, durable_queue, error in (
             (None, False, "workspace_login_requires_explicit_job_types"),
-            (["ops_watch", "github_release_watch", "task_triage"], False, "workspace_login_job_limit_exceeded"),
+            (["ops_watch", "github_release_watch"], False, "workspace_login_job_limit_exceeded"),
             (["unknown"], True, "job_type_not_canonical"),
             ([""], True, "job_type_empty"),
             (["ops_watch"] * 25, True, "job_type_argument_limit_exceeded"),

@@ -1256,10 +1256,10 @@ requireContract('Ally CEO execution uses one exact local-company run and no exte
   && !/\b(?:fetch|XMLHttpRequest|WebSocket|https?:\/\/|vercel|supabase|stripe|resend)\b/i.test(allyCeoLocalCycleText))
 
 requireContract('agent job cycles are canonical, bounded, and scale to zero',
-  workforce.runtime_policy.max_batch_jobs === 2
+  workforce.runtime_policy.max_batch_jobs === 1
   && workforce.runtime_policy.scale_to_zero === true
   && agentJobRunnerText.includes('AGENT_RUNNER_CYCLE_CONTRACT = "supermega.agent-runner-cycle-budget.v1"')
-  && agentJobRunnerText.includes('MAX_PROCESSED_PER_CYCLE = 2')
+  && agentJobRunnerText.includes('MAX_PROCESSED_PER_CYCLE = 1')
   && agentJobRunnerText.includes('MAX_JOB_TYPE_ARGUMENTS = 24')
   && agentJobRunnerText.includes('def build_job_cycle_plan(')
   && agentJobRunnerText.includes('raise RuntimeError("job_type_not_canonical")')
