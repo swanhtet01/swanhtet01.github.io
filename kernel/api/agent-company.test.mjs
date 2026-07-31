@@ -146,7 +146,7 @@ test('GET observes fixed-origin hosted activation metadata without returning sec
           activation_evidence_digest: 'private-evidence-digest',
           activation_evidence_environment_key: 'PRIVATE_EVIDENCE_ENV',
           configuration_errors: ['private-configuration-detail'],
-          max_jobs_per_run: 2,
+          max_jobs_per_run: 1,
         },
       })
     },
@@ -162,6 +162,7 @@ test('GET observes fixed-origin hosted activation metadata without returning sec
   assert.equal(result.json.hostedActivation.liveState, 'enabled_unverified')
   assert.equal(result.json.hostedActivation.activationReady, false)
   assert.equal(result.json.hostedActivation.scheduler.runtimeReady, true)
+  assert.equal(result.json.hostedActivation.scheduler.maxJobsPerRun, 1)
   assert.equal(result.json.hostedActivation.verifiedProofCount, 5)
   assert.equal(result.json.hostedActivation.requiredProofCount, 5)
   assert.equal(result.json.hostedActivation.nextProof, null)

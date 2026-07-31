@@ -4,8 +4,8 @@ Updated: 2026-07-31
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `d268bd6366848e76e64ea2991048589f608984e3`
-Live state observed: `2026-07-30T10:23:04.018Z`
+Live release commit: `7c76b810d5eb466f3917e785ff1be6db4c9d8007`
+Live state observed: `2026-07-31T11:19:40.387Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -57,7 +57,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Contact-correction `8386c78b` passes 105 Ecommerce checks, 24 Python lifecycle tests, lint, build, and clean four-route phone-width shell QA.
 - Checks pass: 105 Ecommerce, 305 Commerce, 274 Production, 64 managed Commerce, 77 security, 223 onboarding, and 82 managed import.
 - First-action QA routes Shop, Plant, and Website blockers to the next task.
-- Both domains serve deployed `d268bd6366848e76e64ea2991048589f608984e3`; paired brand, context, and catalog identities match, but local context drift blocks release readiness.
+- Both domains serve deployed `7c76b810d5eb466f3917e785ff1be6db4c9d8007`; paired brand, context, and catalog identities match, but local context drift and the deployed two-job scheduler ceiling block release readiness.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - `supermega.ally-working-set-trim.v1` previously released 2,949.3 MB without Codex process stops; audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Stable IDs block ENG-130/134/135/136/137/138/139/140/141/142/143/144/145/146. Four CEO outcomes are accepted; Finance/Risk remains quarantined.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
@@ -71,7 +71,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
 - `supermegabase` is not a trial target: it has existing records, one recorded migration, and 27 public RLS tables without policies. No isolated branch is verified, so managed writes remain off.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
-- Production `d268bd63` and the local candidate diverge from common base `5d1c5d7c`; direct release is unsafe. Integrate selectively from current `origin/main`; PR #258 is historical only.
+- Production `7c76b810` and the local candidate diverge from common base `5d1c5d7c`; direct release is unsafe. Integrate selectively from current `origin/main`; PR #258 is historical only.
 - Live HQ reports `app_product_contract_drift`; preview, marketing, and managed activation remain blocked; any external handoff must pass `release:handoff:verify`.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.

@@ -169,7 +169,7 @@ export function assessHqLiveState({ hq, appProductContract, appRelease, publicRe
   requireCheck('scheduler_configuration_drift', scheduler?.configured === hq.schedulerConfigured)
   requireCheck('scheduler_pc_dependency_forbidden', cloud?.pc_dependency === false)
   requireCheck('scheduler_budget_grant_required', scheduler?.budget_grants_required === true)
-  requireCheck('scheduler_batch_limit_exceeded', Number.isInteger(scheduler?.max_jobs_per_run) && scheduler.max_jobs_per_run >= 0 && scheduler.max_jobs_per_run <= 2)
+  requireCheck('scheduler_batch_limit_exceeded', scheduler?.max_jobs_per_run === 1)
   requireCheck('capacity_not_scale_to_zero', capacity?.scale_to_zero_when_idle === true)
   requireCheck('idle_execution_target_nonzero', capacity?.idle_active_execution_target === 0)
   requireCheck('registered_specialists_consume_compute', capacity?.registered_specialists_consume_compute === false)
@@ -267,7 +267,7 @@ Live security ready: \`false\``)
   const cloud = {
     status: 'degraded',
     pc_dependency: false,
-    scheduler: { configured: false, budget_grants_required: true, max_jobs_per_run: 2 },
+    scheduler: { configured: false, budget_grants_required: true, max_jobs_per_run: 1 },
     capacity: { scale_to_zero_when_idle: true, idle_active_execution_target: 0, registered_specialists_consume_compute: false },
     execution_policy: 'review_gated_no_external_send_or_money_actions',
   }
@@ -375,7 +375,7 @@ Live security ready: \`false\``)
     ['scheduler_configuration_drift', { ...baseline, cloud: { ...cloud, scheduler: { ...cloud.scheduler, configured: true } } }],
     ['scheduler_pc_dependency_forbidden', { ...baseline, cloud: { ...cloud, pc_dependency: true } }],
     ['scheduler_budget_grant_required', { ...baseline, cloud: { ...cloud, scheduler: { ...cloud.scheduler, budget_grants_required: false } } }],
-    ['scheduler_batch_limit_exceeded', { ...baseline, cloud: { ...cloud, scheduler: { ...cloud.scheduler, max_jobs_per_run: -1 } } }],
+    ['scheduler_batch_limit_exceeded', { ...baseline, cloud: { ...cloud, scheduler: { ...cloud.scheduler, max_jobs_per_run: 2 } } }],
     ['capacity_not_scale_to_zero', { ...baseline, cloud: { ...cloud, capacity: { ...cloud.capacity, scale_to_zero_when_idle: false } } }],
     ['idle_execution_target_nonzero', { ...baseline, cloud: { ...cloud, capacity: { ...cloud.capacity, idle_active_execution_target: 1 } } }],
     ['registered_specialists_consume_compute', { ...baseline, cloud: { ...cloud, capacity: { ...cloud.capacity, registered_specialists_consume_compute: true } } }],

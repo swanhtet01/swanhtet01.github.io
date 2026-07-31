@@ -988,7 +988,7 @@ function renderHostedActivation(view){
   const facts=[
     [String(scheduler.currentInvocationsPerDay??0),'Current runs / day'],
     [String(scheduler.plannedInvocationsPerDay??25),'Planned runs / day'],
-    [String(scheduler.maxJobsPerRun??2),'Max jobs / run'],
+    [String(scheduler.maxJobsPerRun??1),'Max jobs / run'],
     [scheduler.cadenceCompatibility==='verified'?'Verified':'Unverified','Plan supports cadence'],
   ].map(([value,label])=>`<div class="hosted-fact"><b>${esc(value)}</b><span>${esc(label)}</span></div>`).join('')
   box.className='hosted-activation-layout'
