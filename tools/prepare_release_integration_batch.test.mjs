@@ -192,6 +192,18 @@ test('app shell requires production safeguards and candidate task-first UX toget
   const withoutBoundary = appShellSources()
   withoutBoundary['showroom/src/core/CoreApp.tsx'] = withoutBoundary['showroom/src/core/CoreApp.tsx'].replace('counter-local-boundary', '')
   assert.equal(assessAppShellSources(withoutBoundary).ok, false)
+
+  const detachedShopSizing = appShellSources()
+  const shopRule = '.shop-counter-module > .shop-counter-surface { min-height: 500px; flex: 0 0 clamp(500px,calc(100svh - 280px),620px); overflow: hidden; }'
+  detachedShopSizing['showroom/src/core/core-app.css'] = detachedShopSizing['showroom/src/core/core-app.css']
+    .replace(shopRule, '.shop-counter-module > .shop-counter-surface { min-height: 500px; overflow: hidden; }\n.decoy { flex: 0 0 clamp(500px,calc(100svh - 280px),620px); }')
+  assert.equal(assessAppShellSources(detachedShopSizing).ok, false)
+
+  const detachedMobileSetup = appShellSources()
+  const mobileSetupRule = '.product-home-setup > summary { align-items: flex-start; padding-block: 12px; }'
+  detachedMobileSetup['showroom/src/core/core-app.css'] = detachedMobileSetup['showroom/src/core/core-app.css']
+    .replace(mobileSetupRule, '.product-home-setup > summary { align-items: flex-start; }\n.decoy { padding-block: 12px; }')
+  assert.equal(assessAppShellSources(detachedMobileSetup).ok, false)
 })
 
 test('app shell comparison is exact, no-write, and batch-specific', () => {

@@ -152,11 +152,9 @@ export const APP_SHELL_REQUIREMENTS = [
   },
   {
     id: 'upstream-action-reachability', authority: 'upstream', file: 'showroom/src/core/core-app.css', tokens: [
-      '.shop-counter-module > .shop-counter-surface',
-      'scrollbar-gutter: stable',
-      '.operations-screen:not(.commerce-screen) .workspace-view',
-      '.plant-production-module > .production-view',
-      'flex: 0 0 clamp(500px,calc(100svh - 280px),620px)',
+      '.shop-counter-module > .shop-counter-surface { min-height: 500px; flex: 0 0 clamp(500px,calc(100svh - 280px),620px); overflow: hidden; }',
+      '.operations-screen:not(.commerce-screen) .workspace-view { overflow-y: auto; scrollbar-gutter: stable; }',
+      '.plant-production-module > .production-view { min-height: 500px; flex: 0 0 clamp(500px,calc(100svh - 280px),620px); overflow: hidden; }',
     ],
   },
   {
@@ -183,10 +181,11 @@ export const APP_SHELL_REQUIREMENTS = [
   },
   {
     id: 'candidate-responsive-system-navigation', authority: 'candidate', file: 'showroom/src/core/core-app.css', tokens: [
-      '.core-main.has-system-navigator',
-      '.product-system-navigator > summary',
-      '.product-home-setup > summary',
-      '@media (max-width: 840px)',
+      '.core-main.has-system-navigator { display: flex; flex-direction: column; }',
+      '.product-system-navigator > summary { min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 20px; cursor: pointer; list-style: none; }',
+      '.product-home-setup > summary { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 15px; cursor: pointer; list-style: none; }',
+      '.product-system-navigator > summary { min-height: 52px; padding-inline: 12px; }',
+      '.product-home-setup > summary { align-items: flex-start; padding-block: 12px; }',
     ],
   },
   {
