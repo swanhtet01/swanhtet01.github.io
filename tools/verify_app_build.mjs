@@ -776,7 +776,20 @@ if (!coreShellSource.includes("{ to: '/', label: 'Home', end: true }")
   || !coreShellSource.includes("{ to: '/ecommerce/', label: 'Ecommerce' }")
   || coreShellSource.includes("{ to: '/work/', label: 'HQ'")
   || coreShellSource.includes("{ to: '/operations/', label: 'Products'")) fail('first_run_navigation_not_simple')
-const productHomePageContract = coreShellSource.slice(coreShellSource.indexOf('const customerTracks'), coreShellSource.length)
+const shellNavigationContract = coreShellSource.slice(
+  coreShellSource.indexOf('const navigation ='),
+  coreShellSource.indexOf('] as const', coreShellSource.indexOf('const navigation =')) + '] as const'.length,
+)
+const shellProductRoutes = [...shellNavigationContract.matchAll(/\{ to: '\/([a-z][a-z0-9-]*)\/', label: '[^']+' \}/g)]
+  .map((match) => match[1])
+  .filter((route) => route !== 'settings')
+if (shellProductRoutes.join(',') !== 'shop,plant,website,ecommerce') fail('shell_product_navigation_drift')
+const productHomeStart = coreShellSource.indexOf('const customerTracks')
+const productHomeEnd = coreShellSource.indexOf('] as const', productHomeStart) + '] as const'.length
+const productHomePageContract = coreShellSource.slice(productHomeStart, coreShellSource.length)
+const customerTrackContract = coreShellSource.slice(productHomeStart, productHomeEnd)
+const customerTrackLabels = [...customerTrackContract.matchAll(/^\s+\['([^']+)'/gm)].map((match) => match[1])
+if (customerTrackLabels.join(',') !== 'Shop,Plant,Website,Ecommerce') fail('customer_product_launcher_drift')
 if (!productHomePageContract.includes('title="What needs attention?"')
   || !productHomePageContract.includes('const customerTracks =')
   || !productHomePageContract.includes("'Shop'")
@@ -1818,6 +1831,10 @@ if (!appSource.includes("lazy(() => import('./products/ecommerce/EcommerceProduc
   || !appSource.includes('path="shop/*"')
   || !appSource.includes('<OperationsPage product="production" />')
   || !appSource.includes('path="plant/*"')) fail('canonical_product_routes_missing')
+const publicProductRoutes = [...appSource.matchAll(/<Route element=\{<Suspense fallback=\{<ProductLoading name="[^"]+" \/>\}>.*?path="([a-z][a-z0-9-]*)\/\*" \/>/g)]
+  .map((match) => match[1])
+  .filter((route) => route !== 'settings')
+if (publicProductRoutes.join(',') !== 'shop,plant,website,ecommerce') fail('public_product_route_drift')
 if (!appSource.includes("} from './core/CoreShell'")
   || appSource.includes("} from './core/CoreApp'")
   || !appSource.includes("const OperationsPage = lazy(() => import('./core/CoreApp')")
