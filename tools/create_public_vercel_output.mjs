@@ -20,7 +20,7 @@ assert(manifest.brand?.version && manifest.contextVersion && manifest.catalogVer
 assert(manifest.customerProducts?.map((product) => product.id).join(',') === 'shop,plant,website,ecommerce', 'site_manifest_customer_product_order_changed')
 assert(manifest.customerProducts?.map((product) => product.runtimeId).join(',') === 'commerce,production,website,ecommerce', 'site_manifest_runtime_identity_changed')
 assert(manifest.serviceProducts?.map((product) => product.id).join(',') === 'vision', 'site_manifest_service_product_changed')
-assert(manifest.serviceProducts[0].salesRoute === '/contact/?product=vision&template=release-qa' && !manifest.serviceProducts[0].appRoute, 'vision_service_sales_route_changed')
+assert(manifest.serviceProducts[0].publicRoute === '/vision/' && manifest.serviceProducts[0].salesRoute === '/contact/?product=vision&template=release-qa' && !manifest.serviceProducts[0].appRoute, 'vision_service_sales_route_changed')
 assert(manifest.sharedCapabilities?.map((capability) => capability.id).join(',') === 'ai-assistance', 'site_manifest_shared_capability_missing')
 assert(manifest.company?.publicPricing === false, 'public_pricing_must_remain_hidden')
 
@@ -328,13 +328,13 @@ function documentHtml({ route, title, description, content, robots = 'index,foll
 function productCardHtml(product, index) {
   const capabilities = (product.modules?.length ? product.modules : product.workflow).slice(0, 3)
   const service = product.kind === 'service-product'
-  const destination = service ? product.salesRoute : product.appRoute
+  const destination = service ? product.publicRoute : product.appRoute
   return `<article class="compact-solution" id="${escapeHtml(product.id)}">
     <span class="card-index">0${index + 1} / ${escapeHtml(product.eyebrow)}</span>
     <h3>${escapeHtml(product.name)}</h3>
     <p>${escapeHtml(product.headline)}</p>
     <div class="module-tags" aria-label="Core capabilities">${capabilities.map((capability) => `<span>${escapeHtml(capability)}</span>`).join('')}</div>
-    <a class="card-link" href="${escapeHtml(destination)}">${service ? 'Request founding pilot' : 'Open product'}</a>
+    <a class="card-link" href="${escapeHtml(destination)}">${service ? 'Explore founding pilot' : 'Open product'}</a>
   </article>`
 }
 
@@ -347,6 +347,17 @@ const homeHtml = documentHtml({
     <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products and services</span><h2>Open a product or request a focused pilot.</h2><p>Shop, Plant, Website, and Ecommerce open working samples. Vision starts with a qualified four-week founding pilot request.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div><div class="closing-strip"><div><h2>Need a workspace for your company?</h2><p>Tell us the product, existing data, and first workflow. We will define the implementation and acceptance test.</p></div><a class="button primary" href="/contact/">Contact SuperMega</a></div></section>
     <section class="frame trust-strip" id="trust" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>AI may prepare drafts from approved records. Sends, payments, publishing, access changes, and production writes require explicit authority and verified server-side controls.</p></div></section>
   </main>`,
+})
+
+const vision = manifest.serviceProducts[0]
+const visionTemplateCards = vision.templates.map((template) => `<article class="template-card"><span class="card-index">${escapeHtml(template.name)}</span><h3>${escapeHtml(template.outcome)}</h3><p>${escapeHtml(template.metric)}</p><a class="card-link" href="${escapeHtml(vision.salesRoute.replace('release-qa', template.id))}">Discuss this workflow</a></article>`).join('')
+const visionWorkflowCards = vision.workflow.map((step, index) => `<article class="module-card"><span>0${index + 1}</span><strong>${escapeHtml(step)}</strong></article>`).join('')
+const visionBoundaryCards = vision.boundaries.slice(0, 6).map((boundary) => `<article class="principle-card"><h3>Boundary</h3><p>${escapeHtml(boundary)}</p></article>`).join('')
+const visionHtml = documentHtml({
+  route: vision.publicRoute,
+  title: 'Vision founding pilot | SuperMega',
+  description: vision.description,
+  content: `<main><section class="frame page-hero"><span class="eyebrow">${escapeHtml(vision.eyebrow)}</span><h1>${escapeHtml(vision.headline)}</h1><p class="lede">${escapeHtml(vision.description)}</p><div class="actions"><a class="button primary" href="${escapeHtml(vision.salesRoute)}">Request founding pilot</a><a class="button secondary" href="#workflows">See workflow fits</a></div></section><section class="frame section" id="workflows"><div class="section-head"><span class="eyebrow">Good first workflows</span><h2>Start with one repetitive screen decision.</h2><p>Choose a narrow workflow with owned screenshots, stable visible states, and a person who can review uncertain results.</p></div><div class="template-grid">${visionTemplateCards}</div></section><section class="frame section"><div class="section-head"><span class="eyebrow">Four-week founding pilot</span><h2>From approved screens to measured evidence.</h2><p>The pilot stays local, reports held-out results, and begins observation-only. It does not quietly become production automation.</p></div><div class="module-grid">${visionWorkflowCards}</div></section><section class="frame section"><div class="section-head"><span class="eyebrow">What you receive</span><h2>Portable evidence, not a hidden demo.</h2><p>${escapeHtml(vision.proof.join(' · '))}</p></div><div class="principle-grid">${visionBoundaryCards}</div></section><section class="frame section"><div class="callout"><div><h2>Have one workflow worth measuring?</h2><p>The intake asks about device, visual states, frequency, screenshot rights, and human fallback. It does not upload screenshots or start work.</p></div><a class="button primary" href="${escapeHtml(vision.salesRoute)}">Qualify the pilot</a></div></section></main>`,
 })
 
 const contactScript = `<script>(function(){var form=document.querySelector('[data-contact-form]');if(!form)return;var query=new URLSearchParams(location.search),status=form.querySelector('[data-form-status]'),submit=form.querySelector('button[type="submit"]'),product=form.querySelector('[name="product"]'),template=form.querySelector('[name="template"]'),visionFields=form.querySelector('[data-vision-fields]'),requestKey=form.querySelector('[name="idempotency_key"]'),source=form.querySelector('[name="source_url"]'),referrer=form.querySelector('[name="referrer"]');function newKey(){if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();var bytes=new Uint8Array(24);crypto.getRandomValues(bytes);return Array.from(bytes,function(value){return value.toString(16).padStart(2,'0')}).join('')}function syncVision(){var active=product&&product.value==='vision';if(!visionFields)return;visionFields.hidden=!active;visionFields.querySelectorAll('[data-vision-required]').forEach(function(field){field.required=active})}if(query.get('product')&&product)product.value=query.get('product');if(query.get('template')&&template)template.value=query.get('template');if(product)product.addEventListener('change',syncVision);syncVision();form.addEventListener('submit',async function(event){event.preventDefault();status.textContent='Sending...';submit.disabled=true;if(!requestKey.value)requestKey.value=newKey();source.value=location.href;referrer.value=document.referrer||'';var payload=Object.fromEntries(new FormData(form).entries());try{var response=await fetch('/api/contact-submissions',{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-idempotency-key':requestKey.value},body:JSON.stringify(payload)});var body=await response.json().catch(function(){return {};});if(!response.ok)throw new Error(body.reason||'send_failed');form.reset();syncVision();requestKey.value='';status.textContent='Request received. We will reply with the clearest next step.';}catch(error){status.textContent=error&&error.message==='rate_limited'?'Too many requests from this connection. Please wait ten minutes or email swanhtet@supermega.dev.':'Could not route the request here. Email swanhtet@supermega.dev.';}finally{submit.disabled=false;}});})();</script>`
@@ -749,6 +760,7 @@ module.exports = async function handler(req, res) {
 
 const pageFiles = new Map([
   ['index.html', homeHtml],
+  ['vision/index.html', visionHtml],
   ['contact/index.html', contactHtml],
   ['privacy/index.html', privacyHtml],
   ['404.html', notFoundHtml],

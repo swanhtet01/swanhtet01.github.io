@@ -1,7 +1,7 @@
 {
   "schemaVersion": "supermega.site-context.v2",
-  "contextVersion": "2026-07-31.2",
-  "catalogVersion": "2026-07-31.2",
+  "contextVersion": "2026-07-31.3",
+  "catalogVersion": "2026-07-31.3",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
@@ -355,6 +355,7 @@
       "kind": "service-product",
       "name": "Vision",
       "publicAnchor": "/#vision",
+      "publicRoute": "/vision/",
       "salesRoute": "/contact/?product=vision&template=release-qa",
       "status": "founding-pilot-local",
       "eyebrow": "Private screen workflows",
@@ -406,6 +407,7 @@
   ],
   "pages": [
     { "route": "/", "file": "index.html", "title": "SuperMega | Four products and Vision" },
+    { "route": "/vision/", "file": "vision/index.html", "title": "Vision founding pilot | SuperMega" },
     { "route": "/contact/", "file": "contact/index.html", "title": "Contact | SuperMega" },
     { "route": "/privacy/", "file": "privacy/index.html", "title": "Privacy | SuperMega" }
   ],

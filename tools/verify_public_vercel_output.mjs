@@ -78,7 +78,7 @@ for (const product of publicProducts) {
     if (!template.outcome?.trim() || !template.metric?.trim() || template.workflow?.length < 5 || template.entryPoints?.length < 3) fail('public_template_contract_incomplete', { product: product.id, template: template.id })
   }
 }
-if (manifest.pages?.map((page) => page.route).join(',') !== '/,/contact/,/privacy/') fail('public_page_surface_not_minimal')
+if (manifest.pages?.map((page) => page.route).join(',') !== '/,/vision/,/contact/,/privacy/') fail('public_page_surface_not_minimal')
 
 const expectedStaticFiles = new Set([
   ...manifest.pages.map((page) => page.file),
@@ -178,19 +178,19 @@ for (const token of [
   'https://app.supermega.dev/ecommerce/',
   'id="vision"',
   'Teach one repetitive screen workflow and measure it locally.',
-  '/contact/?product=vision&amp;template=release-qa',
-  'Request founding pilot',
+  '/vision/',
+  'Explore founding pilot',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 for (const product of publicProducts) {
-  const destination = product.kind === 'service-product' ? product.salesRoute.replaceAll('&', '&amp;') : product.appRoute
+  const destination = product.kind === 'service-product' ? product.publicRoute : product.appRoute
   if (!home.includes(destination)) fail('direct_product_route_missing', { product: product.id })
   for (const capability of (product.modules?.length ? product.modules : product.workflow).slice(0, 3)) {
     if (!home.includes(capability)) fail('module_catalog_missing', { product: product.id, capability })
   }
 }
-if ((home.match(/>Open product<\/a>/g) || []).length !== 4 || (home.match(/>Request founding pilot<\/a>/g) || []).length !== 1) fail('direct_product_cta_count_wrong')
+if ((home.match(/>Open product<\/a>/g) || []).length !== 4 || (home.match(/>Explore founding pilot<\/a>/g) || []).length !== 1) fail('direct_product_cta_count_wrong')
 if (home.includes('https://app.supermega.dev/vision/')) fail('vision_dead_app_route_present')
 if (home.includes('Start guided trial') || home.includes('app.supermega.dev/settings/?product=') || home.includes('aria-label="Templates"')) fail('setup_first_public_path_returned')
 for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Owners, evidence, review, and release', 'Gated R&amp;D']) {
@@ -201,6 +201,15 @@ for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
 }
 if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
 if ((home.match(/<a\b/g) || []).length > 9) fail('homepage_link_surface_too_large')
+
+const visionPage = pages.get('/vision/')?.html || ''
+for (const token of [vision.headline, vision.description, 'Good first workflows', 'Four-week founding pilot', 'From approved screens to measured evidence.', 'What you receive', 'Portable evidence, not a hidden demo.', 'Request founding pilot', 'Qualify the pilot', '/contact/?product=vision&amp;template=release-qa', 'It does not upload screenshots or start work.', ...vision.templates.map((template) => template.name), ...vision.templates.map((template) => template.outcome), ...vision.workflow, ...vision.boundaries.slice(0, 6)]) {
+  if (!visionPage.includes(token)) fail('vision_page_contract_missing', { token })
+}
+for (const template of vision.templates) {
+  if (!visionPage.includes(`/contact/?product=vision&amp;template=${template.id}`)) fail('vision_template_cta_missing', { template: template.id })
+}
+if (visionPage.includes('https://app.supermega.dev/vision/') || !visionPage.includes('<link rel="canonical" href="https://supermega.dev/vision/"')) fail('vision_page_route_contract_wrong')
 
 const contact = pages.get('/contact/')?.html || ''
 for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="plant"', 'value="website"', 'value="ecommerce"', 'value="vision"', 'name="template"', 'name="goal"', 'data-vision-fields hidden', 'name="vision_platform"', 'name="vision_state_count"', 'name="vision_weekly_runs"', 'name="vision_minutes_per_run"', 'name="vision_labor_hourly_usd"', 'name="vision_screenshot_rights"', 'name="vision_human_fallback"', 'name="vision_observation_only"', "product.value==='vision'", 'name="idempotency_key"', 'name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', '>Shop<', '>Plant<', '>Website<', '>Ecommerce<', '>Vision<', 'No account, data connection, automation, or external action begins from this form.', 'swanhtet@supermega.dev']) {
