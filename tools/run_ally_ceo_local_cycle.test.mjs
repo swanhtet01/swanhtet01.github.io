@@ -1615,6 +1615,62 @@ test('one idle memory-only blocker receives a bounded trim and fresh admission a
   assert.equal(recovered.calls.filter((call) => call.kind === 'audit').length, 3)
 })
 
+test('a scheduled cycle attempts one safe trim before returning a memory-pressure defer receipt', async () => {
+  const stillBlocked = harness({ auditSequence: [audit(false), audit(false)] })
+  let settlementDelayMs = 0
+  const result = await runAllyCeoLocalCycle(
+    { execute: true, scheduled: true },
+    {
+      plan: plan(),
+      runCommand: stillBlocked.runCommand,
+      waitForMemorySettlement: async (delayMs) => { settlementDelayMs = delayMs },
+    },
+  )
+  assert.equal(result.ok, true)
+  assert.equal(result.status, 'deferred')
+  assert.equal(result.modelCalls, 0)
+  assert.equal(result.queueWrites, 0)
+  assert.equal(result.host.admissionEligible, false)
+  assert.deepEqual(result.host.admissionBlockers, ['memory_pressure_critical'])
+  assert.deepEqual(result.host.memoryRecovery, {
+    attempted: true,
+    initialMemoryUsedPercent: 90,
+    stabilizationDelayMs: 12000,
+    targetCount: 35,
+    beforeWorkingSetMb: 2806,
+    afterWorkingSetMb: 268.3,
+    releasedWorkingSetMb: 2537.7,
+    processTerminations: 0,
+  })
+  assert.equal(settlementDelayMs, 12000)
+  assert.deepEqual(stillBlocked.calls.map((call) => call.kind), ['audit', 'trim', 'audit'])
+  assert.equal(stillBlocked.calls.some((call) => call.kind === 'local'), false)
+})
+
+test('a scheduled cycle continues after one safe trim restores admission', async () => {
+  const recovered = harness({ auditSequence: [audit(false), audit(true), audit(true)] })
+  const result = await runAllyCeoLocalCycle(
+    { execute: true, scheduled: true },
+    {
+      plan: plan(),
+      runCommand: recovered.runCommand,
+      waitForMemorySettlement: async () => {},
+      inspectReport: async () => ({
+        path: 'C:\\state\\outputs\\scheduled-recovered.md',
+        bytes: Buffer.byteLength(acceptedStructuredReport),
+        digest: 'sha256:' + '9'.repeat(64),
+        text: acceptedStructuredReport,
+      }),
+    },
+  )
+  assert.equal(result.status, 'accepted')
+  assert.equal(result.qualityPassed, true)
+  assert.equal(result.host.memoryRecovery.attempted, true)
+  assert.equal(recovered.calls.filter((call) => call.kind === 'trim').length, 1)
+  assert.equal(recovered.calls.filter((call) => call.kind === 'audit').length, 3)
+  assert.equal(recovered.calls.filter((call) => call.args?.[1] === 'run-next').length, 1)
+})
+
 test('memory recovery is execution-only, opt-out capable, and never handles another blocker', async () => {
   const preview = harness({ audit: audit(false) })
   await assert.rejects(

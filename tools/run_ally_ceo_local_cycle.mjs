@@ -1267,7 +1267,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   if (!['ollama', 'mock'].includes(provider) || !/^[a-zA-Z0-9._:-]{1,80}$/.test(model)) {
     fail('ally_ceo_local_cycle_provider_invalid')
   }
-  if (scheduled && !dependencies.runCommand) {
+  if (scheduled && !recoverMemory && !dependencies.runCommand) {
     const pressureReceipt = scheduledMemoryPressureReceipt()
     if (pressureReceipt) return pressureReceipt
   }
@@ -1291,6 +1291,15 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
     afterWorkingSetMb: 0,
     releasedWorkingSetMb: 0,
     processTerminations: 0,
+  }
+  if (scheduled && execute && recoverMemory && canAttemptMemoryRecovery(audit)) {
+    const receipt = parseJson(
+      await runCommand({ kind: 'trim', args: [], timeoutMs: 30_000 }),
+      'ally_ceo_local_cycle_memory_recovery_json_invalid',
+    )
+    memoryRecovery = validateMemoryRecovery(receipt, audit)
+    await waitForMemorySettlement(memoryRecovery.stabilizationDelayMs)
+    audit = parseJson(await runCommand({ kind: 'audit', args: [], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_recovery_audit_json_invalid')
   }
   if (scheduled && (audit.hostAdmission?.eligible !== true || !hostIsIdle(audit))) {
     return scheduledDeferredReceipt(audit, memoryRecovery)
@@ -1345,7 +1354,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
       controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
     }
   }
-  if (execute && recoverMemory && canAttemptMemoryRecovery(audit)) {
+  if (execute && !memoryRecovery.attempted && recoverMemory && canAttemptMemoryRecovery(audit)) {
     const receipt = parseJson(
       await runCommand({ kind: 'trim', args: [], timeoutMs: 30_000 }),
       'ally_ceo_local_cycle_memory_recovery_json_invalid',
@@ -1598,7 +1607,7 @@ async function main() {
       'Missing, unavailable, unstable, or malformed source evidence fails before queue or model work.',
       'No connector, deployment, payment, message, or customer action is available.',
       '--record-result atomically replaces only the fixed local CEO receipt after a complete result.',
-      '--scheduled requires execution plus result recording and safely defers before work when host admission is unavailable.',
+      '--scheduled requires execution plus result recording, attempts at most one verified non-terminating memory trim, and safely defers while admission remains unavailable.',
     ].join('\n') + '\n')
     return
   }
