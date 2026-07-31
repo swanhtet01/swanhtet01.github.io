@@ -1320,14 +1320,18 @@ requireContract('identity data integration authority follows the owning module',
   && workboard.includes('binds the owning `client-onboarding.ts` module')
   && workboard.includes('seven-file, ten-group batch')
   && workboard.includes('main `7c76b810` lacks 24 candidate tokens')
-  && workboard.includes('candidate `a1eb2b58` lacks 38 upstream managed-account'))
+  && workboard.includes('candidate `a1eb2b58` lacks 38 upstream managed-account')
+  && workboard.includes('verified immutable 9,667-byte comparison binds both exact commits')
+  && workboard.includes('packet digest `sha256:de8d161ac5f527a2227e631e236a15e1c27718db4825cf852ba518a1b308f9af`'))
 
 requireContract('app shell integration keeps actions reachable and consequences explicit',
   workboard.includes('| OPS-125 | CEO + App Shell Integration Contract Codex | done-local |')
   && workboard.includes('exact rule-bound desktop and mobile invariants')
   && workboard.includes('main `7c76b810` passing every upstream requirement while lacking 22 candidate tokens')
   && workboard.includes('candidate `96177d24` passes every candidate requirement while lacking 23 upstream')
-  && workboard.includes('move sizing or padding into a decoy rule and now fail'))
+  && workboard.includes('move sizing or padding into a decoy rule and now fail')
+  && workboard.includes('verified immutable 8,718-byte comparison binds both exact commits')
+  && workboard.includes('packet digest `sha256:e48b213fd823588a2df1664da2b48b1db0337e475822a235c16f2ec39a2792b2`'))
 
 requireContract('Ecommerce integration keeps quote cleanup and governed order operations together',
   workboard.includes('| OPS-126 | CEO + Ecommerce Integration Contract Codex | done-local |')
