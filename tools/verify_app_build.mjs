@@ -3792,6 +3792,11 @@ if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !clientOnboardingUiSource.includes('clientImportTemplate(product, workflowTemplateId, templateContext)')
   || ['fetch(', 'localStorage', 'sessionStorage', 'supabase'].some((marker) => clientOnboardingUiSource.includes(marker))) fail('four_product_client_onboarding_ui_missing_or_unsafe')
 const settingsStepNavContract = sourceBlock(settingsPageSource, '      {requestedProduct ? <nav aria-label="Setup steps"', '\n      </nav> : null}')
+const founderBusinessTypeField = settingsPageSource.indexOf('<label className="demo-preset-select">Business type')
+const founderCreateDemoAction = settingsPageSource.indexOf('>Create client demo</button>')
+const founderCustomizeProducts = settingsPageSource.indexOf('<summary><span>Customize products</span>')
+const founderShopPackOverride = settingsPageSource.indexOf('<label className="demo-pack-select">Shop pack')
+const founderPlantPackOverride = settingsPageSource.indexOf('<label className="demo-pack-select">Plant pack')
 if (!productSetupSource.includes('templateId: string')
   || !productSetupSource.includes('template.id === name || template.name === name')
   || !productSetupSource.includes("String(source.templateId || source.template || '')")
@@ -3835,7 +3840,11 @@ if (!productSetupSource.includes('templateId: string')
   || !settingsPageSource.includes('onProgress={recordDemoProductProgress}')
   || !settingsPageSource.includes("not_started: 'Not started'")
   || !settingsPageSource.includes('Create client demo')
-  || settingsPageSource.indexOf('>Create client demo</button>') > settingsPageSource.indexOf('<summary><span>Customize products</span>')
+  || founderBusinessTypeField < 0
+  || founderCreateDemoAction < founderBusinessTypeField
+  || founderCustomizeProducts < founderCreateDemoAction
+  || founderShopPackOverride < founderCustomizeProducts
+  || founderPlantPackOverride < founderCustomizeProducts
   || !settingsPageSource.includes('<summary><span>Customize products</span><small>{selectedDemoEntries.length} selected</small></summary>')
   || !settingsPageSource.includes('<summary><span>All product missions</span><small>{demoRunbook?.products.length ?? 0} workflows</small></summary>')
   || !settingsPageSource.includes('const demoInputReady = Boolean(')
