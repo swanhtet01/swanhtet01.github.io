@@ -11,11 +11,13 @@ Run this first on a development machine with PostgreSQL 17 binaries, matching `p
 ```powershell
 npm run database:postgres17:preflight
 npm run database:postgres17:rehearse
+npm run database:postgres17:record
+npm run database:postgres17:record:verify
 ```
 
 The runner accepts only executable paths, never database credentials. It creates two disposable PostgreSQL 17 clusters with generated in-memory secrets, TLS, and a `127.0.0.1` listener. The first cluster applies the six migrations as `postgres`, carries representative v1 records through v5, provisions the exact runtime membership, runs the production read-only validator, and exercises identity locality, tenant isolation, capability-scoped state and event reads, request-only and reviewer approval visibility, browser-role isolation, role settings, `SET ROLE` denial, concurrency, immutable events, server timestamps, and revocation. It then creates a custom-format backup. A second clean cluster recreates only the required global roles, restores the backup, revalidates schema version 5 and the runtime role, verifies retained rows, and is removed with the first cluster.
 
-The current sanitized proof is `hq/research/postgres17-rehearsal.json`. It records PostgreSQL 17.10, the official Windows distribution source, the observed archive checksum, all passing checks, complete cleanup, and zero Supabase, Vercel, or production mutation. This is a repeatable local release gate—not hosted activation. It does not replace an isolated Supabase target, Security Advisor, the provider transaction-mode pooler, or provider backup and recovery proof. PostgreSQL documents the [Windows binary distribution](https://www.postgresql.org/download/windows/), and Supabase documents its separate [local-development boundary](https://supabase.com/docs/guides/local-development/overview).
+The current sanitized proof is `hq/research/postgres17-rehearsal.json`. `database:postgres17:record` requires a clean worktree, reruns the complete disposable rehearsal, hashes the exact migrations, validator, runner, and managed Python runtime files, verifies the observed PostgreSQL archive, and atomically replaces the proof only after every check and cleanup gate passes. `hq:verify` fails when the recorded implementation digest becomes stale. The receipt records PostgreSQL 17.10, all passing checks, complete cleanup, and zero Supabase, Vercel, or production mutation without storing a URL or credential. This remains a repeatable local release gate—not hosted activation. It explicitly retains the isolated Supabase, Security Advisor, private Storage, transaction-mode pooler, and provider backup/recovery gates. PostgreSQL documents the [Windows binary distribution](https://www.postgresql.org/download/windows/), and Supabase documents its separate [local-development boundary](https://supabase.com/docs/guides/local-development/overview).
 
 ## One-time non-production proof
 

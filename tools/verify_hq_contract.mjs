@@ -907,8 +907,14 @@ requireContract('research decision is superseded',
   && research.includes('Ecommerce owns the storefront and order-intent layer and feeds Shop'))
 
 requireContract('local PostgreSQL rehearsal remains bounded',
-  databaseRehearsal.schemaVersion === 'supermega.hq.database-rehearsal.v1'
+  databaseRehearsal.schemaVersion === 'supermega.hq.database-rehearsal.v2'
   && /^[0-9a-f]{40}$/.test(databaseRehearsal.implementationCommit || '')
+  && /^sha256:[0-9a-f]{64}$/.test(databaseRehearsal.implementationDigest || '')
+  && Number.isSafeInteger(databaseRehearsal.implementationFileCount)
+  && databaseRehearsal.implementationFileCount >= 10
+  && databaseRehearsal.localVerification?.conclusion === 'success'
+  && databaseRehearsal.localVerification?.externallyHosted === false
+  && databaseRehearsal.githubCi?.coversImplementationCommit === false
   && databaseRehearsal.engine?.major === 17
   && databaseRehearsal.engine?.tlsActive === true
   && databaseRehearsal.engine?.loopbackOnly === true
@@ -924,6 +930,8 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.checks?.approvalRequesterReadScoped === true
   && databaseRehearsal.checks?.approvalReviewerReadsAll === true
   && databaseRehearsal.checks?.writeCapabilityImpliesRead === true
+  && databaseRehearsal.storage?.hostedStoragePrivacyProofRequired === true
+  && databaseRehearsal.storage?.publicBucketCount === 0
   && databaseRehearsal.safety?.cleanupComplete === true
   && databaseRehearsal.safety?.secretValuesExposed === false
   && databaseRehearsal.safety?.productionMutated === false
