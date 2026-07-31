@@ -1315,6 +1315,13 @@ requireContract('hosted one-job release drift is recorded',
   && workboard.includes('zero merge, push, deployment, or provider authority')
   && now.includes('local context drift and the deployed two-job scheduler ceiling block release readiness'))
 
+requireContract('identity data integration authority follows the owning module',
+  workboard.includes('| OPS-124 | CEO + Identity/Data Integration Contract Codex | done-local |')
+  && workboard.includes('binds the owning `client-onboarding.ts` module')
+  && workboard.includes('seven-file, ten-group batch')
+  && workboard.includes('main `7c76b810` lacks 24 candidate tokens')
+  && workboard.includes('candidate `a1eb2b58` lacks 38 upstream managed-account'))
+
 requireContract('current CEO platform evidence is recorded without expanding authority',
   workboard.includes('| OPS-039 | CEO + Agent Operations / Evidence Quality Codex | done-local |')
   && workboard.includes('Checkpoint `e8a3adb` adds `supermega.platform-status.v1`')
