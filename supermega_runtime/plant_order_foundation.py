@@ -27,6 +27,7 @@ PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT = (
     "supermega.plant.material-substitution-approval.v1"
 )
 EMPTY_PLANT_ORDER_DIGEST = f"sha256:{'0' * 64}"
+PLANT_ORDER_PLAN_REVISION_MAX = 25
 
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _BUSINESS_ID = re.compile(r"^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$")
@@ -40,6 +41,7 @@ _MATERIAL_UNITS = frozenset(
 _COMMAND_KINDS = frozenset(
     {
         "import_plan",
+        "supersede_plan",
         "availability_check",
         "release_order",
         "record_calibration",
@@ -768,6 +770,23 @@ def _command_payload(value: object, field: str) -> dict[str, Any]:
             "proof": _proof(source["proof"], f"{field}.proof"),
         }
 
+    if kind == "supersede_plan":
+        source = _object(
+            value,
+            field,
+            ("kind", "id", "supersededPlanId", "package", "reason", "proof"),
+        )
+        return {
+            "kind": kind,
+            "id": _identifier(source["id"], f"{field}.id", "REV"),
+            "supersededPlanId": _identifier(
+                source["supersededPlanId"], f"{field}.supersededPlanId", "PLN"
+            ),
+            "package": _validate_plan_package(source["package"]),
+            "reason": _text(source["reason"], f"{field}.reason", maximum=300),
+            "proof": _proof(source["proof"], f"{field}.proof"),
+        }
+
     if kind == "availability_check":
         source = _object(
             value,
@@ -1207,6 +1226,8 @@ def _assert_plan_effective_at_release(
 def _empty_projection() -> dict[str, Any]:
     return {
         "plan": None,
+        "planHistory": [],
+        "planRevisions": [],
         "status": "unplanned",
         "latestAvailability": None,
         "orderRelease": None,
@@ -1242,6 +1263,8 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
         return _empty_projection()
 
     plan: dict[str, Any] | None = None
+    plan_history: list[dict[str, Any]] = []
+    plan_revisions: list[dict[str, Any]] = []
     latest_availability: dict[str, Any] | None = None
     order_release: dict[str, Any] | None = None
     effectiveness_window: dict[str, Any] | None = None
@@ -1267,6 +1290,7 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             if plan is not None or index != 0:
                 raise _fail(f"{field} attempts to replace the immutable reviewed plan.")
             plan = command["package"]
+            plan_history.append(command["package"])
             issued = {row["materialId"]: 0 for row in plan["materials"]}
             operation_quantities = {
                 row["operationId"]: 0 for row in plan["routing"]
@@ -1278,6 +1302,70 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
         if plan is None:
             raise _fail(f"{field} has no reviewed plan.")
         job = plan["job"]
+
+        if kind == "supersede_plan":
+            successor = command["package"]
+            if order_release is not None:
+                raise _fail(f"{field} cannot supersede a released work package.")
+            if len(plan_revisions) >= PLANT_ORDER_PLAN_REVISION_MAX:
+                raise _fail(f"{field} exceeds the plan revision limit.")
+            if (
+                plan["contract"] != PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT
+                or successor["contract"] != PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT
+            ):
+                raise _fail(
+                    f"{field} requires version 4 effective-dated predecessor and successor plans."
+                )
+            if command["supersededPlanId"] != plan["planId"]:
+                raise _fail(f"{field}.supersededPlanId is not the current reviewed plan.")
+            if successor["planId"] == plan["planId"]:
+                raise _fail(f"{field}.package.planId must identify a new reviewed plan.")
+            if any(
+                retained["planId"] == successor["planId"]
+                for retained in plan_history
+            ):
+                raise _fail(
+                    f"{field}.package.planId was already retained in this revision chain."
+                )
+            if (
+                successor["job"]["jobId"] != job["jobId"]
+                or successor["job"]["product"] != job["product"]
+            ):
+                raise _fail(
+                    f"{field}.package must remain bound to the same production job and product."
+                )
+            reviewed_at = datetime.fromisoformat(
+                command["proof"]["capturedAt"].replace("Z", "+00:00")
+            )
+            effective_until = datetime.fromisoformat(
+                successor["effectiveUntil"].replace("Z", "+00:00")
+            )
+            if effective_until <= reviewed_at:
+                raise _fail(
+                    f"{field}.package must remain effective after its supersession review."
+                )
+            plan = successor
+            plan_history.append(successor)
+            plan_revisions.append(command)
+            latest_availability = None
+            effectiveness_window = None
+            calibrations.clear()
+            quality_reworks.clear()
+            material_substitutions.clear()
+            material_issue_commands.clear()
+            operation_commands.clear()
+            output_entries.clear()
+            inspections.clear()
+            batch_release = None
+            total_output = 0
+            issued = {row["materialId"]: 0 for row in successor["materials"]}
+            operation_quantities = {
+                row["operationId"]: 0 for row in successor["routing"]
+            }
+            operation_minutes = {
+                row["operationId"]: 0 for row in successor["routing"]
+            }
+            continue
 
         if kind == "availability_check":
             if order_release is not None:
@@ -1746,6 +1834,8 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
 
     return {
         "plan": plan,
+        "planHistory": plan_history,
+        "planRevisions": plan_revisions,
         "status": status,
         "latestAvailability": latest_availability,
         "orderRelease": order_release,
@@ -1991,6 +2081,30 @@ def issue_plant_order_material(
             "materialId": material_id,
             "inputLotId": input_lot_id,
             "quantityMilli": quantity_milli,
+            "proof": _proof(proof, "proof"),
+        },
+        expected_head_digest=expected_head_digest,
+    )
+
+
+def supersede_plant_order_plan(
+    state: object,
+    *,
+    revision_id: object,
+    superseded_plan_id: object,
+    package: object,
+    reason: object,
+    proof: object,
+    expected_head_digest: object,
+) -> dict[str, Any]:
+    return _append_command(
+        state,
+        {
+            "kind": "supersede_plan",
+            "id": revision_id,
+            "supersededPlanId": superseded_plan_id,
+            "package": _validate_plan_package(package),
+            "reason": reason,
             "proof": _proof(proof, "proof"),
         },
         expected_head_digest=expected_head_digest,
@@ -2255,6 +2369,7 @@ __all__ = (
     "PLANT_ORDER_EXECUTION_PLAN_CONTRACT",
     "PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT",
     "PLANT_ORDER_PLAN_CONTRACT",
+    "PLANT_ORDER_PLAN_REVISION_MAX",
     "PLANT_ORDER_PROJECTION_CONTRACT",
     "PLANT_ORDER_STATE_SCHEMA",
     "PlantOrderValidationError",
@@ -2278,5 +2393,6 @@ __all__ = (
     "record_plant_order_output",
     "release_plant_order",
     "release_plant_order_batch",
+    "supersede_plant_order_plan",
     "validate_plant_order_state",
 )

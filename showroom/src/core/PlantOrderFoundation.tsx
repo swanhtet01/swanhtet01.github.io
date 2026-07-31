@@ -6,6 +6,7 @@ import {
   PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
   PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT,
   PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
+  PLANT_ORDER_PLAN_REVISION_MAX,
   PLANT_ORDER_WORKSPACE_UPDATED_EVENT,
   applyPlantOrderPlan,
   approvePlantOrderMaterialSubstitution,
@@ -35,6 +36,7 @@ import {
   recordPlantOrderQualityRework,
   releasePlantOrder,
   releasePlantOrderBatch,
+  supersedePlantOrderPlan,
   validatePlantOrderState,
   type PlantOrderProof,
   type PlantOrderMaterial,
@@ -80,6 +82,7 @@ type SetupDraft = {
   outputBatchId: string
   effectiveFrom: string
   effectiveUntil: string
+  revisionReason: string
   materialId: string
   materialName: string
   materialUnit: PlantOrderMaterial['unit']
@@ -211,7 +214,28 @@ function defaultSetup(job: ProductionJob | undefined, industryPackId: PlantIndus
   const now = new Date(); const minimumUntil = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1_000)
   const dueAt = job?.dueAt ? new Date(job.dueAt) : null
   const effectiveUntil = dueAt && Number.isFinite(dueAt.getTime()) && dueAt > now ? dueAt : minimumUntil
-  return { ...plantIndustryPackSetup(industryPackId, job), effectiveFrom: localDateTimeInput(now), effectiveUntil: localDateTimeInput(effectiveUntil) }
+  return { ...plantIndustryPackSetup(industryPackId, job), effectiveFrom: localDateTimeInput(now), effectiveUntil: localDateTimeInput(effectiveUntil), revisionReason: '' }
+}
+
+function revisionSetup(plan: PlantOrderPlan, job: ProductionJob | undefined, industryPackId: PlantIndustryPackId): SetupDraft {
+  const defaults = defaultSetup(job, industryPackId)
+  const primaryMaterial = plan.materials[0]; const primaryOperation = plan.routing[0]
+  const centreNames = new Map(plan.workCentres.map((centre) => [centre.workCentreId, centre.name]))
+  return {
+    ...defaults,
+    outputBatchId: plan.job.outputBatchId,
+    materialId: primaryMaterial.materialId,
+    materialName: primaryMaterial.name,
+    materialUnit: primaryMaterial.unit,
+    quantityPerUnit: milliInputValue(primaryMaterial.quantityPerUnitMilli),
+    standardCostPerUnitMmk: primaryMaterial.standardCostPerUnitMmk ? String(primaryMaterial.standardCostPerUnitMmk) : '',
+    additionalMaterials: plan.materials.slice(1).map((material) => `${material.materialId} | ${material.name} | ${material.unit} | ${milliInputValue(material.quantityPerUnitMilli)} | ${material.standardCostPerUnitMmk ?? ''}`).join('\n'),
+    workCentreId: primaryOperation.workCentreId,
+    workCentreName: centreNames.get(primaryOperation.workCentreId) ?? primaryOperation.workCentreId,
+    minutesPerUnit: milliInputValue(primaryOperation.minutesPerUnitMilli),
+    standardCostPerMinuteMmk: primaryOperation.standardCostPerMinuteMmk ? String(primaryOperation.standardCostPerMinuteMmk) : '',
+    additionalOperations: plan.routing.slice(1).map((operation) => `${operation.operationId} | ${operation.name} | ${operation.workCentreId} | ${centreNames.get(operation.workCentreId) ?? operation.workCentreId} | ${milliInputValue(operation.minutesPerUnitMilli)} | ${operation.standardCostPerMinuteMmk ?? ''}`).join('\n'),
+  }
 }
 
 function availabilityDefaultsForPlan(plan: PlantOrderPlan): AvailabilityDraft {
@@ -310,13 +334,14 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   const effectivePlan = projection.plan?.contract === PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT
   const controlledPlan = projection.plan?.contract === PLANT_ORDER_CONTROLLED_PLAN_CONTRACT || effectivePlan
   const releaseWindowOpen = !effectivePlan || Boolean(projection.orderRelease) || (Date.parse(projection.plan!.effectiveFrom!) <= evaluationTime && evaluationTime < Date.parse(projection.plan!.effectiveUntil!))
+  const releaseWindowExpired = Boolean(effectivePlan && !projection.orderRelease && evaluationTime >= Date.parse(projection.plan!.effectiveUntil!))
   const releaseWindowStatus = !effectivePlan ? 'Legacy plan · effective dates not recorded'
     : projection.orderRelease ? `Plan frozen at release · original window ${new Date(projection.plan!.effectiveFrom!).toLocaleString()} to ${new Date(projection.plan!.effectiveUntil!).toLocaleString()}`
       : evaluationTime < Date.parse(projection.plan!.effectiveFrom!) ? `Not effective until ${new Date(projection.plan!.effectiveFrom!).toLocaleString()}`
         : evaluationTime >= Date.parse(projection.plan!.effectiveUntil!) ? `Expired ${new Date(projection.plan!.effectiveUntil!).toLocaleString()}`
           : `Effective until ${new Date(projection.plan!.effectiveUntil!).toLocaleString()}`
   const calibrationByCentre = new Map(projection.calibrations.map((calibration) => [calibration.workCentreId, calibration]))
-  const calibrationDueCentre = controlledPlan && projection.status !== 'released_to_stock'
+  const calibrationDueCentre = controlledPlan && !releaseWindowExpired && projection.status !== 'released_to_stock'
     ? projection.plan?.workCentres.find((centre) => projection.routing.some((operation) => operation.workCentreId === centre.workCentreId)
       && (!calibrationByCentre.has(centre.workCentreId) || Date.parse(calibrationByCentre.get(centre.workCentreId)!.validUntil) <= evaluationTime))
     : undefined
@@ -347,7 +372,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   const outputRemaining = projection.metrics.targetQuantity - projection.totalOutput
   const awaitingWarehouse = !nextMaterial && pendingWarehouseIssues.length > 0
     && Boolean(nextOperation || outputRemaining > 0)
-  const visibleStatus = calibrationDueCentre ? 'Calibration required' : projection.status === 'ready' && !releaseWindowOpen ? effectivePlan && evaluationTime < Date.parse(projection.plan!.effectiveFrom!) ? 'Plan not effective' : 'Plan expired' : awaitingWarehouse ? 'Await Shop issue' : statusCopy[projection.status]
+  const visibleStatus = releaseWindowExpired ? 'Plan expired' : calibrationDueCentre ? 'Calibration required' : projection.status === 'ready' && !releaseWindowOpen ? 'Plan not effective' : awaitingWarehouse ? 'Await Shop issue' : statusCopy[projection.status]
   const inspectedQuantity = projection.totalOutput
   const rejected = /^\d+$/.test(inspectionDraft.rejected) ? Number(inspectionDraft.rejected) : Number.NaN
   const inspectionValid = Number.isSafeInteger(rejected) && rejected >= 0 && rejected <= inspectedQuantity
@@ -358,7 +383,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         : projection.status === 'released' || projection.status === 'in_process' ? 3
           : projection.status === 'inspection_due' || projection.status === 'quality_hold' ? 4
             : projection.status === 'ready_to_release' ? 5 : 6
-  const flowBlocked = projection.status === 'shortfall' || projection.status === 'quality_hold' || Boolean(calibrationDueCentre) || awaitingWarehouse || !bindingCurrent || (projection.status === 'ready' && !releaseWindowOpen)
+  const flowBlocked = projection.status === 'shortfall' || projection.status === 'quality_hold' || Boolean(calibrationDueCentre) || awaitingWarehouse || !bindingCurrent || releaseWindowExpired || (projection.status === 'ready' && !releaseWindowOpen)
   const flowStages = [
     { id: 'plan', label: 'Plan', detail: projection.plan ? projection.plan.job.jobId : activeJobs.length ? `${activeJobs.length} active ${activeJobs.length === 1 ? 'job' : 'jobs'}` : 'Add a job first' },
     { id: 'check', label: 'Check', detail: calibrationDueCentre ? `${calibrationDueCentre.workCentreId} calibration` : projection.latestAvailability ? projection.latestAvailability.passed ? 'Material + capacity passed' : `${projection.latestAvailability.shortfalls.length} ${projection.latestAvailability.shortfalls.length === 1 ? 'shortfall' : 'shortfalls'}` : 'Calibration + material + capacity' },
@@ -372,6 +397,8 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   }))
   const flowNext = projection.status === 'unplanned'
     ? activeJobs.length ? { title: 'Set up this batch', detail: 'Choose one active job, then review its BOM and routing.' } : { title: 'Add a production job first', detail: 'A controlled batch must start from one scheduled, owned job.' }
+    : releaseWindowExpired
+      ? { title: 'Create a current plan revision', detail: 'Keep the expired package in history and review its accountable successor.' }
     : calibrationDueCentre
       ? { title: `Review ${calibrationDueCentre.name} calibration`, detail: 'Bind one current certificate before release or routed work continues.' }
     : qualityReworkRequired
@@ -473,8 +500,17 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
     requestAnimationFrame(() => setupTriggerRef.current?.focus())
   }
 
+  function openPlanRevision() {
+    if (!projection.plan || projection.orderRelease || projection.plan.contract !== PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT) return
+    const job = activeJobs.find((candidate) => candidate.id === projection.plan?.job.jobId)
+    if (!job) return setError('The bound production job is no longer active. Reconcile the job before revising its execution plan.')
+    setSetupDraft(revisionSetup(projection.plan, job, industryPackId))
+    setReview(null)
+    setSetupOpen(true)
+  }
+
   function editReview() {
-    const editsSetup = projection.status === 'unplanned'
+    const editsSetup = projection.status === 'unplanned' || review?.title === 'Plan revision'
     if (reviewDialogRef.current?.open) reviewDialogRef.current.close()
     setReview(null)
     if (editsSetup) setSetupOpen(true)
@@ -518,6 +554,8 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
       const effectiveFrom = explicitOffsetTimestamp(setupDraft.effectiveFrom, 'the plan effective date')
       const effectiveUntil = explicitOffsetTimestamp(setupDraft.effectiveUntil, 'the plan expiry date')
       if (Date.parse(effectiveUntil) <= Date.parse(effectiveFrom)) throw new Error('Plan expiry must follow its effective date.')
+      const revisionReason = setupDraft.revisionReason.trim()
+      if (projection.plan && !revisionReason) throw new Error('Enter why this reviewed plan is being superseded.')
       const plan = buildPlantOrderEffectivePlan({
         planId: commandId('PLN'), sourceDigest,
         effectiveFrom,
@@ -528,19 +566,24 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         routing,
       })
       setAvailabilityDraft(availabilityDefaultsForPlan(plan))
-      const actionProof = proof(actor, 'the reviewed BOM and routing')
+      const previousPlan = projection.plan
+      const revisionId = commandId('REV')
+      const actionProof = proof(actor, previousPlan ? 'a successor BOM and routing plan' : 'the reviewed BOM and routing')
       stage({
-        title: 'Execution plan',
+        title: previousPlan ? 'Plan revision' : 'Execution plan',
         summary: `${selectedSetupJob.id} · ${targetQuantity.toLocaleString()} units remaining`,
         details: [
+          ...(previousPlan ? [{ label: 'Supersedes', value: `${previousPlan.planId} · ${revisionReason}` }] : []),
           { label: 'Output batch', value: `${selectedSetupJob.product} · ${targetQuantity.toLocaleString()} units → ${plan.job.outputBatchId}` },
           { label: 'Effective release window', value: `${effectiveFrom} → ${effectiveUntil}` },
           { label: 'Materials', value: materials.map((material) => `${material.name} (${material.materialId}) · ${formatMilli(material.quantityPerUnitMilli)} ${material.unit}/unit · ${formatMmk(material.standardCostPerUnitMmk!)}/${material.unit}`).join(' · ') },
           { label: 'Routing', value: routing.map((operation) => `${operation.name} (${operation.operationId}) · ${formatMilli(operation.minutesPerUnitMilli)} min/unit · ${formatMmk(operation.standardCostPerMinuteMmk!)}/min · ${operation.workCentreId}`).join(' → ') },
         ],
-        boundary: 'Creates an immutable effective-dated execution package. Release is blocked before or after its reviewed window; a released package is frozen for the batch. Current calibration is still required before release and each routed operation. No staff schedule, stock move, accounting post, or machine command occurs.',
+        boundary: previousPlan ? 'Appends a successor while retaining the prior package and reason in immutable history. Earlier availability and calibration are invalidated; release requires a new check and current certificates. No production, stock, accounting, or machine action occurs.' : 'Creates an immutable effective-dated execution package. Release is blocked before or after its reviewed window; a released package is frozen for the batch. Current calibration is still required before release and each routed operation. No staff schedule, stock move, accounting post, or machine command occurs.',
         proof: actionProof,
-        apply: (current) => applyPlantOrderPlan(current, plan, actionProof, expectedHeadDigest),
+        apply: (current) => previousPlan
+          ? supersedePlantOrderPlan(current, { revisionId, supersededPlanId: previousPlan.planId, plan, reason: revisionReason, proof: actionProof, expectedHeadDigest })
+          : applyPlantOrderPlan(current, plan, actionProof, expectedHeadDigest),
       })
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Execution plan could not be prepared.')
@@ -774,6 +817,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
           {projection.plan ? <small>{releaseWindowStatus}</small> : null}
         </div>
         {!projection.plan ? <button aria-controls="plant-execution-setup" aria-expanded={setupOpen} className="core-button primary" disabled={disabled} onClick={() => { setSetupOpen(true); setReview(null) }} ref={setupTriggerRef} type="button">Set up batch</button> : null}
+        {effectivePlan && !projection.orderRelease ? <button aria-controls="plant-execution-setup" aria-expanded={setupOpen} className={`core-button ${releaseWindowExpired ? 'primary' : ''}`} disabled={disabled || busy || Boolean(review)} onClick={openPlanRevision} ref={setupTriggerRef} type="button">{releaseWindowExpired ? 'Create current revision' : 'Revise plan'}</button> : null}
         {projection.plan ? <span className={`status-pill ${calibrationDueCentre || awaitingWarehouse || projection.status === 'quality_hold' || projection.status === 'shortfall' ? 'pending' : 'bounded'}`}>{visibleStatus}</span> : null}
       </div>
       <section aria-label="Plant operating flow" className="plant-operating-flow" id="plant-operating-flow">
@@ -878,16 +922,18 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         <label>Closed downtime intervals (optional)<textarea disabled={controlsDisabled} maxLength={32_000} onChange={(event) => setEffectivenessDraft((current) => ({ ...current, downtimeIntervals: event.target.value }))} placeholder="DT-LINESTOP-01 | WC-ASSEMBLY-01 | 2026-07-28T08:20:00+06:30 | 2026-07-28T08:35:00+06:30" rows={3} value={effectivenessDraft.downtimeIntervals} /><small>One row per closed interval: downtime ID | work centre ID | started at | ended at. Intervals must be inside this order window and cannot overlap.</small></label>
         <button className="core-button" disabled={controlsDisabled} type="submit">Review effectiveness evidence</button>
       </form> : <p className="panel-copy">Release the reviewed order before recording its production window.</p>}</details> : null}
+      {projection.planRevisions.length ? <details className="compact-disclosure production-history"><summary>Plan revisions <span>{projection.planRevisions.length}/{PLANT_ORDER_PLAN_REVISION_MAX}</span></summary><div className="issue-list">{projection.planRevisions.map((revision, index) => <article key={revision.id}><span aria-hidden="true" className="issue-mark resolved">REV</span><div><strong>{revision.supersededPlanId} → {projection.planHistory[index + 1]?.planId}</strong><small>{revision.reason} · {new Date(revision.proof.capturedAt).toLocaleString()} · {revision.proof.actor}</small></div></article>)}</div><p className="panel-copy">Every predecessor remains digest-bound. A successor clears prior availability and calibration evidence and cannot replace a released package.</p></details> : null}
       {projection.genealogy.length ? <details className="compact-disclosure production-history"><summary>Batch genealogy <span>{projection.genealogy.length}</span></summary><div className="issue-list">{projection.genealogy.map((row, index) => <article key={`${row.materialId}-${row.inputLotId}-${index}`}><span aria-hidden="true" className="issue-mark resolved">LOT</span><div><strong>{row.inputLotId} → {row.outputBatchId}</strong><small>{row.substituteMaterialId ? `${row.substituteMaterialId} · ${formatMilli(row.substituteQuantityMilli ?? 0)} ${row.substituteUnit} → ${row.materialId} credit ${formatMilli(row.issuedQuantityMilli)} ${row.unit}` : `${row.materialId} · ${formatMilli(row.issuedQuantityMilli)} ${row.unit}`}</small></div></article>)}</div></details> : null}
       <p aria-live="polite" className="form-notice">{error || notice || (projection.status === 'released_to_stock' ? 'Batch release is recorded. Post Shop receipt, costing, and accounting only through their own reviewed controls.' : `${managed ? 'Managed' : 'Local'} execution evidence only. No machine command, external send, inventory posting, payment, or accounting action occurs.`)}</p>
     </section>
 
     <dialog aria-labelledby="plant-execution-setup-title" className="production-issue-dialog" id="plant-execution-setup" onCancel={(event) => { event.preventDefault(); closeSetup() }} ref={setupDialogRef}>
-      <div className="panel-head"><div><span className="core-eyebrow">Plant execution</span><h2 id="plant-execution-setup-title">Set up controlled batch</h2></div><button aria-label="Close batch setup" className="text-link" onClick={closeSetup} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
-      {!projection.plan ? <form autoComplete="off" className="core-form" onSubmit={reviewSetup}>
-        <p className="form-notice"><strong>{industryPack.name} pack.</strong> {industryPack.firstWorkflow}. Review quantities and costs before recording.</p>
-        <label>Active job<select disabled={disabled || Boolean(review)} onChange={(event) => { const job = activeJobs.find((candidate) => candidate.id === event.target.value); setSetupDraft(defaultSetup(job, industryPackId)) }} value={selectedSetupJob?.id ?? ''}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {remaining(job).toLocaleString()} left</option>) : <option value="">No active jobs</option>}</select></label>
+      <div className="panel-head"><div><span className="core-eyebrow">Plant execution</span><h2 id="plant-execution-setup-title">{projection.plan ? 'Revise controlled batch' : 'Set up controlled batch'}</h2></div><button aria-label="Close batch setup" className="text-link" onClick={closeSetup} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
+      {(!projection.plan || (effectivePlan && !projection.orderRelease)) ? <form autoComplete="off" className="core-form" onSubmit={reviewSetup}>
+        <p className="form-notice"><strong>{industryPack.name} pack.</strong> {projection.plan ? 'Review a successor without deleting the prior package.' : `${industryPack.firstWorkflow}. Review quantities and costs before recording.`}</p>
+        <label>Active job<select disabled={disabled || Boolean(review) || Boolean(projection.plan)} onChange={(event) => { const job = activeJobs.find((candidate) => candidate.id === event.target.value); setSetupDraft(defaultSetup(job, industryPackId)) }} value={selectedSetupJob?.id ?? ''}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {remaining(job).toLocaleString()} left</option>) : <option value="">No active jobs</option>}</select></label>
         <label>Output batch ID<input disabled={disabled || Boolean(review)} maxLength={80} onChange={(event) => setSetupDraft((current) => ({ ...current, outputBatchId: event.target.value }))} required value={setupDraft.outputBatchId} /></label>
+        {projection.plan ? <label>Revision reason<textarea disabled={disabled || Boolean(review)} maxLength={300} onChange={(event) => setSetupDraft((current) => ({ ...current, revisionReason: event.target.value }))} placeholder="Supplier specification changed; revise BOM and release window." required rows={2} value={setupDraft.revisionReason} /><small>This reason and both plan packages remain in the append-only evidence chain.</small></label> : null}
         <div className="form-row"><label>Plan effective from<input disabled={disabled || Boolean(review)} onChange={(event) => setSetupDraft((current) => ({ ...current, effectiveFrom: event.target.value }))} required type="datetime-local" value={setupDraft.effectiveFrom} /></label><label>Plan valid until<input disabled={disabled || Boolean(review)} onChange={(event) => setSetupDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} required type="datetime-local" value={setupDraft.effectiveUntil} /></label></div>
         <small>Supervisors can release only inside this reviewed window. Once released, this exact BOM and routing remain frozen for the batch.</small>
         <details className="compact-disclosure production-history" open>
@@ -903,7 +949,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
           </div>
         </details>
         <p className="panel-copy">One material and one operation are prefilled. Add only the BOM and routing steps this batch needs. No stock, staff, machine, costing, or accounting action occurs.</p>
-        <div className="form-actions"><button className="core-button" onClick={closeSetup} type="button">Cancel</button><button className="core-button primary" disabled={disabled || Boolean(review) || !selectedSetupJob} type="submit">Review execution plan</button></div>
+        <div className="form-actions"><button className="core-button" onClick={closeSetup} type="button">Cancel</button><button className="core-button primary" disabled={disabled || Boolean(review) || !selectedSetupJob} type="submit">{projection.plan ? 'Review plan revision' : 'Review execution plan'}</button></div>
       </form> : null}
     </dialog>
 

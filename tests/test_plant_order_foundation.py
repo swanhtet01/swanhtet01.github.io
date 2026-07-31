@@ -31,6 +31,7 @@ from supermega_runtime.plant_order_foundation import (
     record_plant_order_output,
     release_plant_order,
     release_plant_order_batch,
+    supersede_plant_order_plan,
     validate_plant_order_state,
 )
 
@@ -257,6 +258,153 @@ def fully_issued_execution_state() -> dict[str, object]:
 
 
 class PlantOrderFoundationTests(unittest.TestCase):
+    def test_v4_plan_supersession_preserves_history_and_invalidates_checks(self) -> None:
+        predecessor = effective_plan()
+        state = create_empty_plant_order_state()
+        state = apply_plant_order_plan(
+            state,
+            predecessor,
+            proof(1, "approved predecessor plan"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        state = check_state(state, sequence=2)
+        successor_materials = deepcopy(predecessor["materials"])
+        successor_materials[0]["quantityPerUnitMilli"] = 1_600
+        successor = build_plant_order_effective_plan(
+            plan_id="PLN-20260726-005",
+            source_digest=plant_order_evidence_digest(
+                {"jobId": "JOB-401", "revision": 13, "target": 10}
+            ),
+            effective_from="2026-07-26T09:00:00+06:30",
+            effective_until="2026-07-26T11:00:00+06:30",
+            job=predecessor["job"],
+            materials=successor_materials,
+            work_centres=predecessor["workCentres"],
+            routing=predecessor["routing"],
+        )
+        wrong_job = deepcopy(successor["job"])
+        wrong_job["jobId"] = "JOB-999"
+        wrong_successor = build_plant_order_effective_plan(
+            plan_id="PLN-20260726-WRONG",
+            source_digest=successor["sourceDigest"],
+            effective_from=successor["effectiveFrom"],
+            effective_until=successor["effectiveUntil"],
+            job=wrong_job,
+            materials=successor["materials"],
+            work_centres=successor["workCentres"],
+            routing=successor["routing"],
+        )
+        with self.assertRaisesRegex(PlantOrderValidationError, "same production job"):
+            supersede_plant_order_plan(
+                state,
+                revision_id="REV-20260726-WRONG",
+                superseded_plan_id=predecessor["planId"],
+                package=wrong_successor,
+                reason="Attempted cross-job replacement.",
+                proof=proof(3),
+                expected_head_digest=state["headDigest"],
+            )
+
+        revision_proof = proof(3, "supplier specification changed")
+        result = supersede_plant_order_plan(
+            state,
+            revision_id="REV-20260726-001",
+            superseded_plan_id=predecessor["planId"],
+            package=successor,
+            reason="Supplier specification changed the primary material allowance.",
+            proof=revision_proof,
+            expected_head_digest=state["headDigest"],
+        )
+        state = result["state"]
+        replay = supersede_plant_order_plan(
+            state,
+            revision_id="REV-20260726-001",
+            superseded_plan_id=predecessor["planId"],
+            package=successor,
+            reason="Supplier specification changed the primary material allowance.",
+            proof=revision_proof,
+            expected_head_digest=EMPTY_PLANT_ORDER_DIGEST,
+        )
+        self.assertTrue(replay["replayed"])
+        projection = project_plant_order(state)
+        self.assertEqual([row["planId"] for row in projection["planHistory"]], [predecessor["planId"], successor["planId"]])
+        self.assertEqual(projection["planRevisions"][0]["reason"], "Supplier specification changed the primary material allowance.")
+        self.assertIsNone(projection["latestAvailability"])
+        self.assertEqual(projection["materials"][0]["quantityPerUnitMilli"], 1_600)
+        with self.assertRaisesRegex(PlantOrderValidationError, "current availability"):
+            release_plant_order(
+                state,
+                release_id="REL-REVISION-STALE-CHECK",
+                availability_check_id="CHK-20260726-001",
+                proof=proof(4),
+                expected_head_digest=state["headDigest"],
+            )
+        with self.assertRaisesRegex(PlantOrderValidationError, "not the current reviewed plan"):
+            supersede_plant_order_plan(
+                state,
+                revision_id="REV-20260726-STALE",
+                superseded_plan_id=predecessor["planId"],
+                package=successor,
+                reason="Attempted stale predecessor reference.",
+                proof=proof(4),
+                expected_head_digest=state["headDigest"],
+            )
+        with self.assertRaisesRegex(PlantOrderValidationError, "already retained"):
+            supersede_plant_order_plan(
+                state,
+                revision_id="REV-20260726-REUSED",
+                superseded_plan_id=successor["planId"],
+                package=predecessor,
+                reason="Attempted to recycle an older plan identifier.",
+                proof=proof(4),
+                expected_head_digest=state["headDigest"],
+            )
+
+        state = check_state(
+            state,
+            sequence=4,
+            check_id="CHK-REVISION-002",
+            filter_available=16_000,
+        )
+        for sequence, centre in ((5, "WC-ASSEMBLY-01"), (6, "WC-TEST-01")):
+            state = record_plant_order_calibration(
+                state,
+                calibration_id=f"CAL-REVISION-{sequence:03d}",
+                work_centre_id=centre,
+                certificate_id=f"CERT-{centre.removeprefix('WC-')}-REVISION",
+                calibrated_at="2026-07-26T08:00:00+06:30",
+                valid_until="2027-07-26T10:00:00+06:30",
+                standard_reference="Approved reference standard",
+                proof=proof(sequence),
+                expected_head_digest=state["headDigest"],
+            )["state"]
+        state = release_plant_order(
+            state,
+            release_id="REL-REVISION-001",
+            availability_check_id="CHK-REVISION-002",
+            proof=proof(7),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        with self.assertRaisesRegex(PlantOrderValidationError, "released work package"):
+            supersede_plant_order_plan(
+                state,
+                revision_id="REV-20260726-LATE",
+                superseded_plan_id=successor["planId"],
+                package=build_plant_order_effective_plan(
+                    plan_id="PLN-20260726-007",
+                    source_digest=successor["sourceDigest"],
+                    effective_from=successor["effectiveFrom"],
+                    effective_until="2026-07-26T12:00:00+06:30",
+                    job=successor["job"],
+                    materials=successor["materials"],
+                    work_centres=successor["workCentres"],
+                    routing=successor["routing"],
+                ),
+                reason="Attempted change after accountable release.",
+                proof=proof(8),
+                expected_head_digest=state["headDigest"],
+            )
+
     def test_v4_effective_window_gates_release_and_freezes_released_plan(self) -> None:
         package = effective_plan()
         self.assertEqual(package["contract"], PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT)

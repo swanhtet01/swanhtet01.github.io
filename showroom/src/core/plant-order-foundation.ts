@@ -14,6 +14,7 @@ export const PLANT_ORDER_STORAGE_PREFIX = 'supermega.plant.order-foundation.v1:'
 export const PLANT_ORDER_WORKSPACE_UPDATED_EVENT = 'supermega:plant-order-workspace-updated'
 export const PLANT_ORDER_ADDITIONAL_MATERIAL_MAX = 11
 export const PLANT_ORDER_ADDITIONAL_OPERATION_MAX = 11
+export const PLANT_ORDER_PLAN_REVISION_MAX = 25
 
 export type PlantOrderProof = {
   actionId: string
@@ -68,6 +69,7 @@ export type PlantOrderCapacityAvailability = {
 }
 
 type ImportPlanCommand = { kind: 'import_plan'; id: string; package: PlantOrderPlan; proof: PlantOrderProof }
+export type SupersedePlanCommand = { kind: 'supersede_plan'; id: string; supersededPlanId: string; package: PlantOrderPlan; reason: string; proof: PlantOrderProof }
 type AvailabilityCommand = {
   kind: 'availability_check'
   id: string
@@ -151,7 +153,7 @@ export type InspectOutputCommand = {
   proof: PlantOrderProof
 }
 type ReleaseBatchCommand = { kind: 'release_batch'; id: string; outputBatchId: string; inspectionId: string; proof: PlantOrderProof }
-export type PlantOrderCommandPayload = ImportPlanCommand | AvailabilityCommand | ReleaseOrderCommand | RecordCalibrationCommand | RecordQualityReworkCommand | ApproveMaterialSubstitutionCommand | IssueMaterialCommand | IssueSubstituteMaterialCommand | RecordEffectivenessCommand | RecordOperationCommand | RecordOutputCommand | InspectOutputCommand | ReleaseBatchCommand
+export type PlantOrderCommandPayload = ImportPlanCommand | SupersedePlanCommand | AvailabilityCommand | ReleaseOrderCommand | RecordCalibrationCommand | RecordQualityReworkCommand | ApproveMaterialSubstitutionCommand | IssueMaterialCommand | IssueSubstituteMaterialCommand | RecordEffectivenessCommand | RecordOperationCommand | RecordOutputCommand | InspectOutputCommand | ReleaseBatchCommand
 
 export type PlantOrderCommand = {
   sequence: number
@@ -185,6 +187,8 @@ export type PlantOrderProjection = {
   revision: number
   headDigest: string
   plan: PlantOrderPlan | null
+  planHistory: PlantOrderPlan[]
+  planRevisions: SupersedePlanCommand[]
   status: 'unplanned' | 'planned' | 'shortfall' | 'ready' | 'released' | 'in_process' | 'inspection_due' | 'quality_hold' | 'ready_to_release' | 'released_to_stock'
   latestAvailability: PlantOrderAvailabilityProjection | null
   orderRelease: ReleaseOrderCommand | null
@@ -315,7 +319,7 @@ const digestPattern = /^sha256:[0-9a-f]{64}$/
 const businessIdPattern = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$/
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
 const materialUnits = new Set(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
-const commandKinds = new Set(['import_plan', 'availability_check', 'release_order', 'record_calibration', 'record_quality_rework', 'approve_material_substitution', 'issue_material', 'issue_substitute_material', 'record_effectiveness', 'record_operation', 'record_output', 'inspect_output', 'release_batch'])
+const commandKinds = new Set(['import_plan', 'supersede_plan', 'availability_check', 'release_order', 'record_calibration', 'record_quality_rework', 'approve_material_substitution', 'issue_material', 'issue_substitute_material', 'record_effectiveness', 'record_operation', 'record_output', 'inspect_output', 'release_batch'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -740,6 +744,17 @@ function commandPayload(value: unknown, field: string): PlantOrderCommandPayload
     if (id !== plan.planId) throw new Error(`${field}.id must equal its reviewed plan ID.`)
     return { kind: 'import_plan', id, package: plan, proof: actionProof(row.proof, `${field}.proof`) }
   }
+  if (value.kind === 'supersede_plan') {
+    const row = exact(value, field, ['kind', 'id', 'supersededPlanId', 'package', 'reason', 'proof'])
+    return {
+      kind: 'supersede_plan',
+      id: identifier(row.id, `${field}.id`, 'REV'),
+      supersededPlanId: identifier(row.supersededPlanId, `${field}.supersededPlanId`, 'PLN'),
+      package: validatePlanPackage(row.package),
+      reason: text(row.reason, `${field}.reason`, 300),
+      proof: actionProof(row.proof, `${field}.proof`),
+    }
+  }
   if (value.kind === 'availability_check') {
     const row = exact(value, field, ['kind', 'id', 'sourceDigest', 'materials', 'workCentres', 'proof'])
     return { kind: 'availability_check', id: identifier(row.id, `${field}.id`, 'CHK'), sourceDigest: digest(row.sourceDigest, `${field}.sourceDigest`), materials: validateMaterialAvailability(row.materials, `${field}.materials`), workCentres: validateCapacityAvailability(row.workCentres, `${field}.workCentres`), proof: actionProof(row.proof, `${field}.proof`) }
@@ -893,12 +908,12 @@ function assertPlanEffectiveAtRelease(plan: PlantOrderPlan, capturedAt: string, 
 }
 
 function emptyProjection(): Omit<PlantOrderProjection, 'contract' | 'revision' | 'headDigest'> {
-  return { plan: null, status: 'unplanned', latestAvailability: null, orderRelease: null, calibrations: [], qualityReworks: [], materialSubstitutions: [], materialIssues: [], effectivenessWindow: null, materials: [], routing: [], operations: [], workCentres: [], outputEntries: [], totalOutput: 0, inspections: [], latestInspection: null, qualityHold: null, batchRelease: null, genealogy: [], metrics: { targetQuantity: 0, issuedMaterialCount: 0, completedOperationCount: 0, actualOperationMinutesMilli: 0, outputQuantity: 0, acceptedQuantity: 0 } }
+  return { plan: null, planHistory: [], planRevisions: [], status: 'unplanned', latestAvailability: null, orderRelease: null, calibrations: [], qualityReworks: [], materialSubstitutions: [], materialIssues: [], effectivenessWindow: null, materials: [], routing: [], operations: [], workCentres: [], outputEntries: [], totalOutput: 0, inspections: [], latestInspection: null, qualityHold: null, batchRelease: null, genealogy: [], metrics: { targetQuantity: 0, issuedMaterialCount: 0, completedOperationCount: 0, actualOperationMinutesMilli: 0, outputQuantity: 0, acceptedQuantity: 0 } }
 }
 
 function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderProjection, 'contract' | 'revision' | 'headDigest'> {
   if (!commands.length) return emptyProjection()
-  let plan: PlantOrderPlan | null = null; let latestAvailability: PlantOrderAvailabilityProjection | null = null; let orderRelease: ReleaseOrderCommand | null = null; let effectivenessWindow: RecordEffectivenessCommand | null = null
+  let plan: PlantOrderPlan | null = null; const planHistory: PlantOrderPlan[] = []; const planRevisions: SupersedePlanCommand[] = []; let latestAvailability: PlantOrderAvailabilityProjection | null = null; let orderRelease: ReleaseOrderCommand | null = null; let effectivenessWindow: RecordEffectivenessCommand | null = null
   let issued = new Map<string, number>(); let operationQuantities = new Map<string, number>(); let operationMinutes = new Map<string, number>(); const calibrations = new Map<string, RecordCalibrationCommand>(); const qualityReworks: RecordQualityReworkCommand[] = []; const materialSubstitutions = new Map<string, ApproveMaterialSubstitutionCommand>(); const materialIssueCommands: Array<IssueMaterialCommand | IssueSubstituteMaterialCommand> = []; const operationCommands: RecordOperationCommand[] = []; const outputEntries: RecordOutputCommand[] = []; const inspections: InspectOutputCommand[] = []
   let batchRelease: ReleaseBatchCommand | null = null; let totalOutput = 0
   commands.forEach((command, index) => {
@@ -906,10 +921,25 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
     if (index === 0 && command.kind !== 'import_plan') throw new Error('The first Plant order command must be the reviewed plan.')
     if (command.kind === 'import_plan') {
       if (plan || index !== 0) throw new Error(`${field} attempts to replace the immutable reviewed plan.`)
-      plan = command.package; issued = new Map(command.package.materials.map((row) => [row.materialId, 0])); operationQuantities = new Map(command.package.routing.map((row) => [row.operationId, 0])); operationMinutes = new Map(command.package.routing.map((row) => [row.operationId, 0])); return
+      plan = command.package; planHistory.push(command.package); issued = new Map(command.package.materials.map((row) => [row.materialId, 0])); operationQuantities = new Map(command.package.routing.map((row) => [row.operationId, 0])); operationMinutes = new Map(command.package.routing.map((row) => [row.operationId, 0])); return
     }
     if (!plan) throw new Error(`${field} has no reviewed plan.`)
     const currentPlan = plan as PlantOrderPlan
+    if (command.kind === 'supersede_plan') {
+      if (orderRelease) throw new Error(`${field} cannot supersede a released work package.`)
+      if (planRevisions.length >= PLANT_ORDER_PLAN_REVISION_MAX) throw new Error(`${field} exceeds the plan revision limit.`)
+      if (currentPlan.contract !== PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT || command.package.contract !== PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT) throw new Error(`${field} requires version 4 effective-dated predecessor and successor plans.`)
+      if (command.supersededPlanId !== currentPlan.planId) throw new Error(`${field}.supersededPlanId is not the current reviewed plan.`)
+      if (command.package.planId === currentPlan.planId) throw new Error(`${field}.package.planId must identify a new reviewed plan.`)
+      if (planHistory.some((retained) => retained.planId === command.package.planId)) throw new Error(`${field}.package.planId was already retained in this revision chain.`)
+      if (command.package.job.jobId !== currentPlan.job.jobId || command.package.job.product !== currentPlan.job.product) throw new Error(`${field}.package must remain bound to the same production job and product.`)
+      const reviewedAt = timestampMicros(command.proof.capturedAt, `${field}.proof.capturedAt`).micros
+      if (timestampMicros(command.package.effectiveUntil, `${field}.package.effectiveUntil`).micros <= reviewedAt) throw new Error(`${field}.package must remain effective after its supersession review.`)
+      plan = command.package; planHistory.push(command.package); planRevisions.push(command)
+      latestAvailability = null; effectivenessWindow = null; calibrations.clear(); qualityReworks.length = 0; materialSubstitutions.clear(); materialIssueCommands.length = 0; outputEntries.length = 0; inspections.length = 0; batchRelease = null; totalOutput = 0
+      issued = new Map(command.package.materials.map((row) => [row.materialId, 0])); operationQuantities = new Map(command.package.routing.map((row) => [row.operationId, 0])); operationMinutes = new Map(command.package.routing.map((row) => [row.operationId, 0])); operationCommands.length = 0
+      return
+    }
     if (command.kind === 'availability_check') {
       if (orderRelease) throw new Error(`${field} cannot replace availability after order release.`)
       latestAvailability = availabilityProjection(currentPlan, command); return
@@ -1086,7 +1116,7 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
   else if (totalOutput === finalPlan.job.targetQuantity) status = inspectionIsCurrent && latestInspection?.result === 'pass' ? 'ready_to_release' : 'inspection_due'
   else if (totalOutput || materialIssueCommands.length || operationCommands.length) status = 'in_process'
   else status = 'released'
-  return { plan: finalPlan, status, latestAvailability: finalAvailability, orderRelease: finalOrderRelease, calibrations: [...calibrations.values()].sort((left, right) => compareCanonicalText(left.workCentreId, right.workCentreId)), qualityReworks, materialSubstitutions: [...materialSubstitutions.values()].sort((left, right) => compareCanonicalText(left.materialId, right.materialId)), materialIssues: materialIssueCommands, effectivenessWindow, materials, routing: finalPlan.routing, operations, workCentres: finalAvailability?.workCentres ?? [], outputEntries, totalOutput, inspections, latestInspection, qualityHold, batchRelease: finalBatchRelease, genealogy, metrics: { targetQuantity: finalPlan.job.targetQuantity, issuedMaterialCount: [...issued.values()].filter(Boolean).length, completedOperationCount: operations.filter((row) => row.status === 'complete').length, actualOperationMinutesMilli: [...operationMinutes.values()].reduce((total, value) => total + value, 0), outputQuantity: totalOutput, acceptedQuantity: inspectionIsCurrent && latestInspection ? latestInspection.acceptedQuantity : 0 } }
+  return { plan: finalPlan, planHistory, planRevisions, status, latestAvailability: finalAvailability, orderRelease: finalOrderRelease, calibrations: [...calibrations.values()].sort((left, right) => compareCanonicalText(left.workCentreId, right.workCentreId)), qualityReworks, materialSubstitutions: [...materialSubstitutions.values()].sort((left, right) => compareCanonicalText(left.materialId, right.materialId)), materialIssues: materialIssueCommands, effectivenessWindow, materials, routing: finalPlan.routing, operations, workCentres: finalAvailability?.workCentres ?? [], outputEntries, totalOutput, inspections, latestInspection, qualityHold, batchRelease: finalBatchRelease, genealogy, metrics: { targetQuantity: finalPlan.job.targetQuantity, issuedMaterialCount: [...issued.values()].filter(Boolean).length, completedOperationCount: operations.filter((row) => row.status === 'complete').length, actualOperationMinutesMilli: [...operationMinutes.values()].reduce((total, value) => total + value, 0), outputQuantity: totalOutput, acceptedQuantity: inspectionIsCurrent && latestInspection ? latestInspection.acceptedQuantity : 0 } }
 }
 
 export function validatePlantOrderState(value: unknown): PlantOrderState {
@@ -1386,6 +1416,10 @@ export function checkPlantOrderAvailability(state: unknown, input: { checkId: un
 
 export function releasePlantOrder(state: unknown, input: { releaseId: unknown; availabilityCheckId: unknown; proof: unknown; expectedHeadDigest: unknown }) {
   return appendCommand(state, { kind: 'release_order', id: input.releaseId, availabilityCheckId: input.availabilityCheckId, proof: actionProof(input.proof, 'proof') }, input.expectedHeadDigest)
+}
+
+export function supersedePlantOrderPlan(state: unknown, input: { revisionId: unknown; supersededPlanId: unknown; plan: unknown; reason: unknown; proof: unknown; expectedHeadDigest: unknown }) {
+  return appendCommand(state, { kind: 'supersede_plan', id: input.revisionId, supersededPlanId: input.supersededPlanId, package: validatePlanPackage(input.plan), reason: input.reason, proof: actionProof(input.proof, 'proof') }, input.expectedHeadDigest)
 }
 
 export function recordPlantOrderCalibration(state: unknown, input: { calibrationId: unknown; workCentreId: unknown; certificateId: unknown; calibratedAt: unknown; validUntil: unknown; standardReference: unknown; proof: unknown; expectedHeadDigest: unknown }) {

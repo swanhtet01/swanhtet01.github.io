@@ -3380,11 +3380,13 @@ if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.orde
   || !plantOrderSource.includes("PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v4'")
   || !plantOrderSource.includes('PLANT_ORDER_ADDITIONAL_MATERIAL_MAX = 11')
   || !plantOrderSource.includes('PLANT_ORDER_ADDITIONAL_OPERATION_MAX = 11')
+  || !plantOrderSource.includes('PLANT_ORDER_PLAN_REVISION_MAX = 25')
   || !plantOrderSource.includes('export function parsePlantOrderMaterialPaste')
   || !plantOrderSource.includes('export function parsePlantOrderRoutingPaste')
   || !plantOrderSource.includes('export function buildPlantOrderExecutionPlan')
   || !plantOrderSource.includes('export function buildPlantOrderControlledPlan')
   || !plantOrderSource.includes('export function buildPlantOrderEffectivePlan')
+  || !plantOrderSource.includes('export function supersedePlantOrderPlan')
   || !plantOrderSource.includes('export function checkPlantOrderAvailability')
   || !plantOrderSource.includes('export function releasePlantOrder')
   || !plantOrderSource.includes('export function recordPlantOrderCalibration')
@@ -3425,6 +3427,10 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || !plantOrderUiSource.includes('Plan effective from')
   || !plantOrderUiSource.includes('Plan valid until')
   || !plantOrderUiSource.includes('Create a newly reviewed revision; the old package cannot be silently reused.')
+  || !plantOrderUiSource.includes('Create current revision')
+  || !plantOrderUiSource.includes('Revision reason')
+  || !plantOrderUiSource.includes('Plan revisions')
+  || !plantOrderUiSource.includes('supersedePlantOrderPlan(current')
   || !plantOrderUiSource.includes('projection.materials.map((material)')
   || !plantOrderUiSource.includes('projection.plan.workCentres.map((centre)')
   || !plantOrderUiSource.includes('parsePlantOrderQuantityMilli(draft.availableQuantity, true)')
@@ -3458,6 +3464,7 @@ if (!plantOrderPythonSource.includes('PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = "su
   || !plantOrderPythonSource.includes('PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v4"')
   || !plantOrderPythonSource.includes('def build_plant_order_controlled_plan(')
   || !plantOrderPythonSource.includes('def build_plant_order_effective_plan(')
+  || !plantOrderPythonSource.includes('def supersede_plant_order_plan(')
   || !plantOrderPythonSource.includes('def record_plant_order_calibration(')
   || !plantOrderPythonSource.includes('def record_plant_order_quality_rework(')
   || !plantOrderPythonSource.includes('requires current calibration for')) fail('managed_plant_calibration_parity_missing')
@@ -5702,6 +5709,34 @@ async function verifyPlantOrderRuntime() {
     assertThrows(() => model.releasePlantOrder(effectiveResult.state, { releaseId: 'REL-EFFECTIVE-EXPIRED', availabilityCheckId: 'CHK-EFFECTIVE-001', proof: { ...proof(6, 'expired effective release'), capturedAt: '2026-07-26T10:00:00+06:30' }, expectedHeadDigest: effectiveResult.state.headDigest }), 'plant_order_v4_expired_release_succeeded')
     effectiveResult = model.releasePlantOrder(effectiveResult.state, { releaseId: 'REL-EFFECTIVE-001', availabilityCheckId: 'CHK-EFFECTIVE-001', proof: { ...proof(7, 'current effective release'), capturedAt: '2026-07-26T09:30:00+06:30' }, expectedHeadDigest: effectiveResult.state.headDigest })
     assert(model.projectPlantOrder(effectiveResult.state).orderRelease?.id === 'REL-EFFECTIVE-001', 'plant_order_v4_current_release_not_frozen')
+    const revisedMaterials = planInput.materials.map((material, index) => index ? material : { ...material, quantityPerUnitMilli: 1_600 })
+    const successorPlan = model.buildPlantOrderEffectivePlan({ ...planInput, planId: 'PLN-SUCCESSOR-401', materials: revisedMaterials, effectiveFrom: '2026-07-26T09:00:00+06:30', effectiveUntil: '2026-07-26T11:00:00+06:30' })
+    let revisionResult = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), effectivePlan, proof(1, 'approved predecessor plan'), model.EMPTY_PLANT_ORDER_DIGEST)
+    revisionResult = model.checkPlantOrderAvailability(revisionResult.state, {
+      checkId: 'CHK-REVISION-OLD', sourceDigest: model.plantOrderEvidenceDigest({ revision: 'old' }), materials: controlledAvailabilityMaterials, workCentres: controlledAvailabilityCentres, proof: proof(2, 'checked predecessor availability'), expectedHeadDigest: revisionResult.state.headDigest,
+    })
+    const revisionProof = proof(3, 'supplier specification changed')
+    revisionResult = model.supersedePlantOrderPlan(revisionResult.state, { revisionId: 'REV-SUCCESSOR-401', supersededPlanId: effectivePlan.planId, plan: successorPlan, reason: 'Supplier specification changed the primary material allowance.', proof: revisionProof, expectedHeadDigest: revisionResult.state.headDigest })
+    const revisionProjection = model.projectPlantOrder(revisionResult.state)
+    assert(revisionProjection.plan?.planId === successorPlan.planId
+      && revisionProjection.planHistory.map((plan) => plan.planId).join(',') === `${effectivePlan.planId},${successorPlan.planId}`
+      && revisionProjection.planRevisions[0].supersededPlanId === effectivePlan.planId
+      && revisionProjection.latestAvailability === null
+      && revisionProjection.materials[0].quantityPerUnitMilli === 1_600,
+    'plant_order_v4_supersession_history_or_invalidation_wrong')
+    const revisionReplay = model.supersedePlantOrderPlan(revisionResult.state, { revisionId: 'REV-SUCCESSOR-401', supersededPlanId: effectivePlan.planId, plan: successorPlan, reason: 'Supplier specification changed the primary material allowance.', proof: revisionProof, expectedHeadDigest: model.EMPTY_PLANT_ORDER_DIGEST })
+    assert(revisionReplay.replayed && revisionReplay.state.headDigest === revisionResult.state.headDigest, 'plant_order_v4_supersession_not_idempotent')
+    assertThrows(() => model.supersedePlantOrderPlan(revisionResult.state, { revisionId: 'REV-SUCCESSOR-REUSED', supersededPlanId: successorPlan.planId, plan: effectivePlan, reason: 'Attempted to recycle an older plan identifier.', proof: proof(4, 'reused predecessor'), expectedHeadDigest: revisionResult.state.headDigest }), 'plant_order_v4_reused_plan_identifier_succeeded')
+    assertThrows(() => model.releasePlantOrder(revisionResult.state, { releaseId: 'REL-REVISION-STALE', availabilityCheckId: 'CHK-REVISION-OLD', proof: proof(4, 'release with stale availability'), expectedHeadDigest: revisionResult.state.headDigest }), 'plant_order_v4_revision_retained_stale_availability')
+    revisionResult = model.checkPlantOrderAvailability(revisionResult.state, {
+      checkId: 'CHK-REVISION-NEW', sourceDigest: model.plantOrderEvidenceDigest({ revision: 'new' }), materials: [{ ...controlledAvailabilityMaterials[0], availableQuantityMilli: 16_000 }, controlledAvailabilityMaterials[1]], workCentres: controlledAvailabilityCentres, proof: proof(4, 'checked successor availability'), expectedHeadDigest: revisionResult.state.headDigest,
+    })
+    for (const [sequence, workCentreId] of [[5, 'WC-ASSEMBLY-01'], [6, 'WC-TEST-01']]) {
+      revisionResult = model.recordPlantOrderCalibration(revisionResult.state, { calibrationId: `CAL-REVISION-${sequence}`, workCentreId, certificateId: `CERT-${workCentreId}-REVISION`, calibratedAt: '2026-07-26T08:00:00+06:30', validUntil: '2027-07-26T10:00:00+06:30', standardReference: 'Approved reference standard', proof: proof(sequence, `reviewed successor ${workCentreId}`), expectedHeadDigest: revisionResult.state.headDigest })
+    }
+    revisionResult = model.releasePlantOrder(revisionResult.state, { releaseId: 'REL-REVISION-001', availabilityCheckId: 'CHK-REVISION-NEW', proof: proof(7, 'released successor plan'), expectedHeadDigest: revisionResult.state.headDigest })
+    const lateSuccessor = model.buildPlantOrderEffectivePlan({ ...planInput, planId: 'PLN-SUCCESSOR-402', materials: revisedMaterials, effectiveFrom: '2026-07-26T09:00:00+06:30', effectiveUntil: '2026-07-26T12:00:00+06:30' })
+    assertThrows(() => model.supersedePlantOrderPlan(revisionResult.state, { revisionId: 'REV-SUCCESSOR-LATE', supersededPlanId: successorPlan.planId, plan: lateSuccessor, reason: 'Attempted revision after release.', proof: proof(8, 'late successor'), expectedHeadDigest: revisionResult.state.headDigest }), 'plant_order_v4_released_plan_was_superseded')
     let controlledResult = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), controlledPlan, proof(1, 'approved controlled execution plan'), model.EMPTY_PLANT_ORDER_DIGEST)
     controlledResult = model.checkPlantOrderAvailability(controlledResult.state, {
       checkId: 'CHK-CONTROLLED-001', sourceDigest: model.plantOrderEvidenceDigest({ filter: 15_000, shell: 20_000, assembly: 5, test: 10 }),
