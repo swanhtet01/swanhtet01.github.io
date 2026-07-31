@@ -9,6 +9,7 @@ import {
 const OperationsPage = lazy(() => import('./core/CoreApp').then((module) => ({ default: module.OperationsPage })))
 const WebsiteProduct = lazy(() => import('./products/website/WebsiteProduct').then((module) => ({ default: module.WebsiteProduct })))
 const EcommerceProduct = lazy(() => import('./products/ecommerce/EcommerceProduct').then((module) => ({ default: module.EcommerceProduct })))
+const VisionProduct = lazy(() => import('./products/vision/VisionProduct').then((module) => ({ default: module.VisionProduct })))
 const SettingsPage = lazy(() => import('./core/SettingsPage').then((module) => ({ default: module.SettingsPage })))
 
 function ProductLoading({ name }: { name: string }) {
@@ -21,6 +22,7 @@ function productDemoPath(value: string | null) {
   if (demo === 'shop' || demo === 'retail') return '/shop/'
   if (demo === 'website' || demo === 'site') return '/website/'
   if (demo === 'ecommerce' || demo === 'storefront' || demo === 'online-orders') return '/ecommerce/'
+  if (demo === 'vision' || demo === 'screen-ai' || demo === 'visual-worker') return '/vision/'
   return null
 }
 
@@ -48,6 +50,7 @@ export default function App() {
           <Route element={<Suspense fallback={<ProductLoading name="Plant" />}><OperationsPage product="production" /></Suspense>} path="plant/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Website" />}><WebsiteProduct /></Suspense>} path="website/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Ecommerce" />}><EcommerceProduct /></Suspense>} path="ecommerce/*" />
+          <Route element={<Suspense fallback={<ProductLoading name="Vision" />}><VisionProduct /></Suspense>} path="vision/*" />
           <Route element={<Navigate replace to="/shop/" />} path="operations/commerce/*" />
           <Route element={<Navigate replace to="/plant/" />} path="operations/production/*" />
           <Route element={<Navigate replace to="/" />} path="operations/*" />

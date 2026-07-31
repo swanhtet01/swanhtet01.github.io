@@ -93,6 +93,7 @@ const navigation = [
   { to: '/plant/', label: 'Plant' },
   { to: '/website/', label: 'Website' },
   { to: '/ecommerce/', label: 'Ecommerce' },
+  { to: '/vision/', label: 'Vision' },
   { to: '/settings/', label: 'Settings' },
 ] as const
 
@@ -319,6 +320,7 @@ const customerTracks = [
   ['Plant', 'Factory, workshop, service floor.', 'Plan, record, hand off shifts.', '/plant/?tab=production', '/settings/?product=production'],
   ['Website', 'Company site and proof catalog.', 'Create pages, offers, leads.', '/website/', '/settings/?product=website'],
   ['Ecommerce', 'Online ordering and delivery.', 'Build storefronts and Shop handoff.', '/ecommerce/', '/settings/?product=ecommerce'],
+  ['Vision', 'Legacy screens and repetitive QA.', 'Learn one private visual workflow.', '/vision/', '/vision/#pilot-fit'],
 ] as const
 
 export function ProductHomePage() {
@@ -328,7 +330,7 @@ export function ProductHomePage() {
   const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Managed activation proof is still required.'
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Four products, one operating system. Start with the most important work." eyebrow="SuperMega" title="What needs attention?" />
+      <PageHeading copy="Five products, one operating system. Start with the most important work." eyebrow="SuperMega" title="What needs attention?" />
       <Suspense fallback={<p className="form-notice" role="status">Loading today...</p>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense>
       <nav aria-label="Business tracks" className="product-track-grid">
         {customerTracks.map(([name, fit, outcome, path, setupPath]) => (
