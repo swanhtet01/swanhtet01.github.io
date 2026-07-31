@@ -401,16 +401,15 @@ class TrialRuntimeTests(unittest.TestCase):
             "line": {"sku": "SKU-1", "name": "Test item", "variant": None, "quantity": 2, "unitPriceMmk": 100},
             "totalMmk": 200,
         }
-        next_state = {
-            **configured_states["operator-session"],
-            "storefrontRequests": [request],
-        }
         command = {
             "command_id": request_uuid,
             "surface": "commerce",
             "event_type": "commerce.storefront_request.received",
             "expected_version": 2,
-            "payload": {"state": next_state, "evidence": evidence("actor-operator")},
+            "payload": {
+                "intent": {"request": request},
+                "evidence": evidence("actor-operator"),
+            },
         }
         first = client.post("/api/trial/v1/commands", headers=self._headers(), json=command)
         replay = client.post("/api/trial/v1/commands", headers=self._headers(), json=command)
@@ -429,9 +428,8 @@ class TrialRuntimeTests(unittest.TestCase):
             **command,
             "payload": {
                 **command["payload"],
-                "state": {
-                    **next_state,
-                    "storefrontRequests": [{**request, "customerReference": "Conflict"}],
+                "intent": {
+                    "request": {**request, "customerReference": "Conflict"},
                 },
             },
         }
@@ -445,6 +443,38 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(stale.status_code, 409)
         self.assertEqual(stale.json()["detail"]["code"], "trial_version_conflict")
+
+        future_uuid = str(uuid4()).upper()
+        future_request = {
+            **request,
+            "id": f"ECR-{future_uuid}",
+            "idempotencyKey": f"ECI-{future_uuid}",
+            "createdAt": "2099-01-01T00:00:00.000Z",
+        }
+        future = client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers("other-operator-session"),
+            json={
+                "command_id": str(uuid4()),
+                "surface": "commerce",
+                "event_type": "commerce.storefront_request.received",
+                "expected_version": 2,
+                "payload": {
+                    "intent": {"request": future_request},
+                    "evidence": {
+                        "actionId": f"ACT-{future_uuid}",
+                        "capturedAt": future_request["createdAt"],
+                        "actor": "actor-other",
+                        "reason": "Retain this customer request for human Shop review.",
+                        "evidenceReference": (
+                            f"ECOMMERCE:{future_request['id']}:{digest}"
+                        ),
+                    },
+                },
+            },
+        )
+        self.assertEqual(future.status_code, 422)
+        self.assertIn("cannot predate", future.text)
 
         other = client.get("/api/trial/v1/bootstrap", headers=self._headers("other-operator-session"))
         self.assertNotIn("storefrontRequests", other.json()["states"]["commerce"]["state"])

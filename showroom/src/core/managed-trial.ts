@@ -2382,6 +2382,28 @@ function managedCounterOrderIntent(state: Record<string, unknown>, evidence: Man
   }
 }
 
+function managedStorefrontRequestIntent(
+  state: Record<string, unknown>,
+  evidence: ManagedCommandEvidence,
+) {
+  const requests = Array.isArray(state.storefrontRequests) ? state.storefrontRequests : []
+  const request = requests[0]
+  if (!isRecord(request)
+    || typeof request.id !== 'string'
+    || !request.id.startsWith('ECR-')
+    || typeof request.schema !== 'string'
+    || typeof request.createdAt !== 'string'
+    || typeof request.sourcePreviewDigest !== 'string'
+    || evidence.actionId !== `ACT-${request.id.slice(4)}`
+    || evidence.evidenceReference !== `ECOMMERCE:${request.id}:${request.sourcePreviewDigest}`) {
+    throw new ManagedTrialError(
+      'The Ecommerce customer request could not be isolated from the reviewed checkout.',
+      { code: 'managed_storefront_request_intent_invalid' },
+    )
+  }
+  return { request }
+}
+
 export async function saveManagedCommerceCommand(request: {
   commandId: string
   evidence: ManagedCommandEvidence
@@ -2393,6 +2415,9 @@ export async function saveManagedCommerceCommand(request: {
   const counterOrderIntent = request.eventType === 'commerce.order.created'
     ? managedCounterOrderIntent(request.state, request.evidence)
     : null
+  const storefrontRequestIntent = request.eventType === 'commerce.storefront_request.received'
+    ? managedStorefrontRequestIntent(request.state, request.evidence)
+    : null
   const response = await authorizedRequest<{ result: ManagedCommandResult }>(
     '/api/trial/v1/commands',
     {
@@ -2402,8 +2427,10 @@ export async function saveManagedCommerceCommand(request: {
         surface: 'commerce',
         event_type: request.eventType,
         expected_version: request.expectedVersion,
-        payload: counterOrderIntent
-          ? { intent: counterOrderIntent, evidence: request.evidence }
+        payload: storefrontRequestIntent
+          ? { intent: storefrontRequestIntent, evidence: request.evidence }
+          : counterOrderIntent
+            ? { intent: counterOrderIntent, evidence: request.evidence }
           : { state: request.state, evidence: request.evidence },
       }),
     },

@@ -3996,11 +3996,24 @@ def _validate_event_evidence(
             raise TrialValidationError("command evidence must match the Website intake conversion proof.")
     elif event_type == "commerce.storefront_request.received":
         request = next_state["storefrontRequests"][0]
+        requested_at = datetime.fromisoformat(
+            request["createdAt"].replace("Z", "+00:00")
+        )
+        received_at = datetime.fromisoformat(
+            evidence["capturedAt"].replace("Z", "+00:00")
+        )
         if (
             evidence["actionId"] != f"ACT-{request['id'][4:]}"
-            or evidence["capturedAt"] != request["createdAt"]
             or evidence["evidenceReference"]
             != f"ECOMMERCE:{request['id']}:{request['sourcePreviewDigest']}"
+            or received_at < requested_at
+            or (
+                request["schema"] == "supermega.ecommerce.order_request.v2"
+                and received_at
+                > datetime.fromisoformat(
+                    request["quote"]["expiresAt"].replace("Z", "+00:00")
+                )
+            )
         ):
             raise TrialValidationError("command evidence must match the retained Ecommerce request receipt.")
     elif event_type == "commerce.storefront.configuration.saved":
@@ -8239,6 +8252,47 @@ def _validate_storefront_request_received(current: Mapping[str, Any], next_state
         )
 
 
+def create_commerce_storefront_request_from_intent(
+    current_value: Mapping[str, Any],
+    intent_value: Mapping[str, Any],
+    evidence_value: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Retain one customer checkout request without accepting browser-built Shop state."""
+
+    current = validate_commerce_state(current_value)
+    intent = _object(intent_value, "storefront request intent")
+    _exact_fields(
+        intent,
+        "storefront request intent",
+        required=frozenset({"request"}),
+    )
+    request = _storefront_request(
+        intent["request"],
+        "storefront request intent.request",
+    )
+    evidence = _action_proof(evidence_value, "evidence")
+    requested_at = datetime.fromisoformat(request["createdAt"].replace("Z", "+00:00"))
+    received_at = datetime.fromisoformat(evidence["capturedAt"].replace("Z", "+00:00"))
+    if received_at < requested_at:
+        raise TrialValidationError(
+            "the Ecommerce request receipt cannot predate its customer quote."
+        )
+    if (
+        request["schema"] == "supermega.ecommerce.order_request.v2"
+        and received_at
+        > datetime.fromisoformat(request["quote"]["expiresAt"].replace("Z", "+00:00"))
+    ):
+        raise TrialValidationError(
+            "the Ecommerce request quote expired before Shop received it."
+        )
+    return validate_commerce_state(
+        {
+            **current,
+            "storefrontRequests": [request, *_storefront_requests(current)],
+        }
+    )
+
+
 def _validate_storefront_configuration_saved(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -8697,6 +8751,23 @@ def reduce_commerce_state(
     if event_type == "commerce.order.created" and isinstance(payload.get("intent"), Mapping):
         payload = {
             "state": create_commerce_order_from_intent(
+                current,
+                payload["intent"],
+                payload.get("evidence", {}),
+            ),
+            "evidence": payload.get("evidence"),
+        }
+    if (
+        event_type == "commerce.storefront_request.received"
+        and isinstance(payload.get("intent"), Mapping)
+    ):
+        _exact_fields(
+            payload,
+            "payload",
+            required=frozenset({"intent", "evidence"}),
+        )
+        payload = {
+            "state": create_commerce_storefront_request_from_intent(
                 current,
                 payload["intent"],
                 payload.get("evidence", {}),
