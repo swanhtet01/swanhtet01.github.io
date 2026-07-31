@@ -2,6 +2,7 @@ export const PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.order_foundation.v1' as
 export const PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1' as const
 export const PLANT_ORDER_EXECUTION_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v2' as const
 export const PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v3' as const
+export const PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v4' as const
 export const PLANT_ORDER_PROJECTION_CONTRACT = 'supermega.plant.order_projection.v1' as const
 export const PLANT_ORDER_EFFECTIVENESS_CONTRACT = 'supermega.plant.order_effectiveness.v2' as const
 export const PLANT_ORDER_COST_DRIVER_CONTRACT = 'supermega.plant.cost_driver_variance.v1' as const
@@ -43,9 +44,11 @@ export type PlantOrderRoutingStep = {
 export type PlantOrderRoutingDraft = Omit<PlantOrderRoutingStep, 'sequence'> & { workCentreName: string }
 
 export type PlantOrderPlan = {
-  contract: typeof PLANT_ORDER_PLAN_CONTRACT | typeof PLANT_ORDER_EXECUTION_PLAN_CONTRACT | typeof PLANT_ORDER_CONTROLLED_PLAN_CONTRACT
+  contract: typeof PLANT_ORDER_PLAN_CONTRACT | typeof PLANT_ORDER_EXECUTION_PLAN_CONTRACT | typeof PLANT_ORDER_CONTROLLED_PLAN_CONTRACT | typeof PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT
   planId: string
   sourceDigest: string
+  effectiveFrom?: string
+  effectiveUntil?: string
   job: { jobId: string; product: string; targetQuantity: number; outputBatchId: string }
   materials: PlantOrderMaterial[]
   workCentres: PlantOrderWorkCentre[]
@@ -578,16 +581,20 @@ function validateRouting(value: unknown, field: string, workCentreIds: Set<strin
 }
 
 function validatePlanPackage(value: unknown): PlantOrderPlan {
-  const source = exact(value, 'plan package', ['contract', 'planId', 'sourceDigest', 'job', 'materials', 'workCentres', 'routing', 'packageDigest'])
-  if (source.contract !== PLANT_ORDER_PLAN_CONTRACT && source.contract !== PLANT_ORDER_EXECUTION_PLAN_CONTRACT && source.contract !== PLANT_ORDER_CONTROLLED_PLAN_CONTRACT) throw new Error('plan package.contract is unsupported.')
+  const effectiveContract = isRecord(value) && value.contract === PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT
+  const source = exact(value, 'plan package', ['contract', 'planId', 'sourceDigest', ...(effectiveContract ? ['effectiveFrom', 'effectiveUntil'] : []), 'job', 'materials', 'workCentres', 'routing', 'packageDigest'])
+  if (source.contract !== PLANT_ORDER_PLAN_CONTRACT && source.contract !== PLANT_ORDER_EXECUTION_PLAN_CONTRACT && source.contract !== PLANT_ORDER_CONTROLLED_PLAN_CONTRACT && source.contract !== PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT) throw new Error('plan package.contract is unsupported.')
   const contract = source.contract
   const planId = identifier(source.planId, 'plan package.planId', 'PLN'); const sourceDigest = digest(source.sourceDigest, 'plan package.sourceDigest')
+  const effectiveFrom = effectiveContract ? timestampMicros(source.effectiveFrom, 'plan package.effectiveFrom') : null
+  const effectiveUntil = effectiveContract ? timestampMicros(source.effectiveUntil, 'plan package.effectiveUntil') : null
+  if (effectiveFrom && effectiveUntil && effectiveUntil.micros <= effectiveFrom.micros) throw new Error('plan package.effectiveUntil must follow effectiveFrom.')
   const job = validateJob(source.job, 'plan package.job'); const materials = validateMaterials(source.materials, 'plan package.materials')
   const workCentres = validateWorkCentres(source.workCentres, 'plan package.workCentres')
   const routing = validateRouting(source.routing, 'plan package.routing', new Set(workCentres.map((row) => row.workCentreId)))
   materials.forEach((row) => safeProduct(job.targetQuantity, row.quantityPerUnitMilli, `plan package material requirement for ${row.materialId}`))
   routing.forEach((row) => safeProduct(job.targetQuantity, row.minutesPerUnitMilli, `plan package capacity requirement for ${row.operationId}`))
-  const canonical = { contract, planId, sourceDigest, job, materials, workCentres, routing }
+  const canonical = { contract, planId, sourceDigest, ...(effectiveFrom && effectiveUntil ? { effectiveFrom: effectiveFrom.value, effectiveUntil: effectiveUntil.value } : {}), job, materials, workCentres, routing }
   const packageDigest = digest(source.packageDigest, 'plan package.packageDigest')
   if (packageDigest !== canonicalDigest(canonical)) throw new Error('plan package.packageDigest does not match its reviewed contents.')
   return { ...canonical, packageDigest }
@@ -605,6 +612,11 @@ export function buildPlantOrderExecutionPlan(input: Omit<PlantOrderPlan, 'contra
 
 export function buildPlantOrderControlledPlan(input: Omit<PlantOrderPlan, 'contract' | 'packageDigest'>) {
   const candidate = { contract: PLANT_ORDER_CONTROLLED_PLAN_CONTRACT, ...input }
+  return validatePlanPackage({ ...candidate, packageDigest: canonicalDigest(candidate) })
+}
+
+export function buildPlantOrderEffectivePlan(input: Omit<PlantOrderPlan, 'contract' | 'packageDigest' | 'effectiveFrom' | 'effectiveUntil'> & { effectiveFrom: string; effectiveUntil: string }) {
+  const candidate = { contract: PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT, ...input }
   return validatePlanPackage({ ...candidate, packageDigest: canonicalDigest(candidate) })
 }
 
@@ -867,6 +879,19 @@ function calibrationCovers(command: RecordCalibrationCommand, capturedAt: string
     && observed < timestampMicros(command.validUntil, `${field}.validUntil`).micros
 }
 
+function isControlledPlan(plan: PlantOrderPlan) {
+  return plan.contract === PLANT_ORDER_CONTROLLED_PLAN_CONTRACT || plan.contract === PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT
+}
+
+function assertPlanEffectiveAtRelease(plan: PlantOrderPlan, capturedAt: string, field: string) {
+  if (plan.contract !== PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT) return
+  const observed = timestampMicros(capturedAt, `${field}.proof.capturedAt`).micros
+  const effectiveFrom = timestampMicros(plan.effectiveFrom, `${field}.plan.effectiveFrom`).micros
+  const effectiveUntil = timestampMicros(plan.effectiveUntil, `${field}.plan.effectiveUntil`).micros
+  if (observed < effectiveFrom) throw new Error(`${field} cannot release a plan before its effective window.`)
+  if (observed >= effectiveUntil) throw new Error(`${field} cannot release an expired plan.`)
+}
+
 function emptyProjection(): Omit<PlantOrderProjection, 'contract' | 'revision' | 'headDigest'> {
   return { plan: null, status: 'unplanned', latestAvailability: null, orderRelease: null, calibrations: [], qualityReworks: [], materialSubstitutions: [], materialIssues: [], effectivenessWindow: null, materials: [], routing: [], operations: [], workCentres: [], outputEntries: [], totalOutput: 0, inspections: [], latestInspection: null, qualityHold: null, batchRelease: null, genealogy: [], metrics: { targetQuantity: 0, issuedMaterialCount: 0, completedOperationCount: 0, actualOperationMinutesMilli: 0, outputQuantity: 0, acceptedQuantity: 0 } }
 }
@@ -890,7 +915,7 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
       latestAvailability = availabilityProjection(currentPlan, command); return
     }
     if (command.kind === 'record_calibration') {
-      if (currentPlan.contract !== PLANT_ORDER_CONTROLLED_PLAN_CONTRACT) throw new Error(`${field} requires a version 3 controlled plan.`)
+      if (!isControlledPlan(currentPlan)) throw new Error(`${field} requires a version 3 or 4 controlled plan.`)
       if (batchRelease) throw new Error(`${field} follows final batch release.`)
       if (!currentPlan.routing.some((operation) => operation.workCentreId === command.workCentreId)) throw new Error(`${field}.workCentreId is not in the reviewed routing.`)
       const previous = calibrations.get(command.workCentreId)
@@ -903,7 +928,8 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
       if (!latestAvailability) throw new Error(`${field} requires a current availability check.`)
       if (command.availabilityCheckId !== latestAvailability.checkId) throw new Error(`${field} references a stale availability check.`)
       if (!latestAvailability.passed) throw new Error(`${field} cannot release an order with a shortfall.`)
-      if (currentPlan.contract === PLANT_ORDER_CONTROLLED_PLAN_CONTRACT) {
+      assertPlanEffectiveAtRelease(currentPlan, command.proof.capturedAt, field)
+      if (isControlledPlan(currentPlan)) {
         const routedCentreIds = [...new Set(currentPlan.routing.map((operation) => operation.workCentreId))]
         const missing = routedCentreIds.filter((workCentreId) => {
           const calibration = calibrations.get(workCentreId)
@@ -934,7 +960,7 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
     }
     const latestInspection = inspections.at(-1); const currentHold = Boolean(latestInspection && latestInspection.inspectedQuantity === totalOutput && latestInspection.result === 'fail')
     if (command.kind === 'record_quality_rework') {
-      if (currentPlan.contract !== PLANT_ORDER_CONTROLLED_PLAN_CONTRACT) throw new Error(`${field} requires a version 3 controlled plan.`)
+      if (!isControlledPlan(currentPlan)) throw new Error(`${field} requires a version 3 or 4 controlled plan.`)
       if (!currentHold || !latestInspection || command.inspectionId !== latestInspection.id) throw new Error(`${field} requires the current failed inspection.`)
       if (qualityReworks.some((rework) => rework.inspectionId === command.inspectionId)) throw new Error(`${field} attempts to rework one failed inspection twice.`)
       if (command.quantity !== latestInspection.rejectedQuantity) throw new Error(`${field}.quantity must equal the current rejected quantity.`)
@@ -977,10 +1003,10 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
     }
     if (command.kind === 'record_operation') {
       if (currentHold) throw new Error(`${field} is blocked by the failed current inspection.`)
-      if (currentPlan.contract !== PLANT_ORDER_EXECUTION_PLAN_CONTRACT && currentPlan.contract !== PLANT_ORDER_CONTROLLED_PLAN_CONTRACT) throw new Error(`${field} requires a version 2 or 3 execution plan.`)
+      if (currentPlan.contract !== PLANT_ORDER_EXECUTION_PLAN_CONTRACT && !isControlledPlan(currentPlan)) throw new Error(`${field} requires a version 2, 3, or 4 execution plan.`)
       const operationIndex = currentPlan.routing.findIndex((row) => row.operationId === command.operationId)
       if (operationIndex < 0) throw new Error(`${field}.operationId is not in the reviewed routing.`)
-      if (currentPlan.contract === PLANT_ORDER_CONTROLLED_PLAN_CONTRACT) {
+      if (isControlledPlan(currentPlan)) {
         const workCentreId = currentPlan.routing[operationIndex].workCentreId; const calibration = calibrations.get(workCentreId)
         if (!calibration || !calibrationCovers(calibration, command.proof.capturedAt, `${field}.calibration.${workCentreId}`)) throw new Error(`${field} requires current calibration for ${workCentreId}.`)
       }
@@ -1004,7 +1030,7 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
       if (command.outputBatchId !== currentPlan.job.outputBatchId) throw new Error(`${field}.outputBatchId differs from the reviewed batch.`)
       const nextOutput = totalOutput + command.quantity
       if (nextOutput > currentPlan.job.targetQuantity) throw new Error(`${field} exceeds the reviewed order target.`)
-      if (currentPlan.contract === PLANT_ORDER_EXECUTION_PLAN_CONTRACT || currentPlan.contract === PLANT_ORDER_CONTROLLED_PLAN_CONTRACT) {
+      if (currentPlan.contract === PLANT_ORDER_EXECUTION_PLAN_CONTRACT || isControlledPlan(currentPlan)) {
         const finalOperation = currentPlan.routing.at(-1)!
         if ((operationQuantities.get(finalOperation.operationId) ?? 0) < nextOutput) throw new Error(`${field} exceeds completed final-operation quantity.`)
       }
@@ -1017,7 +1043,7 @@ function replayCommands(commands: PlantOrderCommandPayload[]): Omit<PlantOrderPr
     if (command.kind === 'inspect_output') {
       if (command.outputBatchId !== currentPlan.job.outputBatchId) throw new Error(`${field}.outputBatchId differs from the reviewed batch.`)
       if (totalOutput < 1 || command.inspectedQuantity !== totalOutput) throw new Error(`${field} must inspect all currently recorded output.`)
-      if (currentHold && currentPlan.contract === PLANT_ORDER_CONTROLLED_PLAN_CONTRACT && latestInspection && !qualityReworks.some((rework) => rework.inspectionId === latestInspection.id)) throw new Error(`${field} requires attributable rework for the current failed inspection.`)
+      if (currentHold && isControlledPlan(currentPlan) && latestInspection && !qualityReworks.some((rework) => rework.inspectionId === latestInspection.id)) throw new Error(`${field} requires attributable rework for the current failed inspection.`)
       inspections.push(command); return
     }
     if (command.outputBatchId !== currentPlan.job.outputBatchId) throw new Error(`${field}.outputBatchId differs from the reviewed batch.`)

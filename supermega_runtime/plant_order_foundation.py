@@ -21,6 +21,7 @@ PLANT_ORDER_STATE_SCHEMA = "supermega.plant.order_foundation.v1"
 PLANT_ORDER_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v1"
 PLANT_ORDER_EXECUTION_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v2"
 PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v3"
+PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v4"
 PLANT_ORDER_PROJECTION_CONTRACT = "supermega.plant.order_projection.v1"
 PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT = (
     "supermega.plant.material-substitution-approval.v1"
@@ -326,6 +327,10 @@ def _routing(
 
 
 def _validate_plan_package(value: object) -> dict[str, Any]:
+    effective_contract = (
+        isinstance(value, Mapping)
+        and value.get("contract") == PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT
+    )
     source = _object(
         value,
         "plan package",
@@ -333,6 +338,7 @@ def _validate_plan_package(value: object) -> dict[str, Any]:
             "contract",
             "planId",
             "sourceDigest",
+            *(("effectiveFrom", "effectiveUntil") if effective_contract else ()),
             "job",
             "materials",
             "workCentres",
@@ -344,11 +350,27 @@ def _validate_plan_package(value: object) -> dict[str, Any]:
         PLANT_ORDER_PLAN_CONTRACT,
         PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
         PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
+        PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT,
     }:
         raise _fail("plan package.contract is unsupported.")
     contract = source["contract"]
     plan_id = _identifier(source["planId"], "plan package.planId", "PLN")
     source_digest = _digest(source["sourceDigest"], "plan package.sourceDigest")
+    effective_from = (
+        _timestamp(source["effectiveFrom"], "plan package.effectiveFrom")
+        if effective_contract
+        else None
+    )
+    effective_until = (
+        _timestamp(source["effectiveUntil"], "plan package.effectiveUntil")
+        if effective_contract
+        else None
+    )
+    if effective_from is not None and effective_until is not None:
+        start = datetime.fromisoformat(effective_from.replace("Z", "+00:00"))
+        end = datetime.fromisoformat(effective_until.replace("Z", "+00:00"))
+        if end <= start:
+            raise _fail("plan package.effectiveUntil must follow effectiveFrom.")
     job = _job(source["job"], "plan package.job")
     materials = _materials(source["materials"], "plan package.materials")
     work_centres = _work_centres(source["workCentres"], "plan package.workCentres")
@@ -373,6 +395,11 @@ def _validate_plan_package(value: object) -> dict[str, Any]:
         "contract": contract,
         "planId": plan_id,
         "sourceDigest": source_digest,
+        **(
+            {"effectiveFrom": effective_from, "effectiveUntil": effective_until}
+            if effective_from is not None and effective_until is not None
+            else {}
+        ),
         "job": job,
         "materials": materials,
         "workCentres": work_centres,
@@ -447,6 +474,34 @@ def build_plant_order_controlled_plan(
         "contract": PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
         "planId": plan_id,
         "sourceDigest": source_digest,
+        "job": job,
+        "materials": materials,
+        "workCentres": work_centres,
+        "routing": routing,
+    }
+    candidate["packageDigest"] = _canonical_digest(candidate)
+    return _validate_plan_package(candidate)
+
+
+def build_plant_order_effective_plan(
+    *,
+    plan_id: object,
+    source_digest: object,
+    effective_from: object,
+    effective_until: object,
+    job: object,
+    materials: object,
+    work_centres: object,
+    routing: object,
+) -> dict[str, Any]:
+    """Build a v4 controlled package with an accountable release window."""
+
+    candidate = {
+        "contract": PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT,
+        "planId": plan_id,
+        "sourceDigest": source_digest,
+        "effectiveFrom": effective_from,
+        "effectiveUntil": effective_until,
         "job": job,
         "materials": materials,
         "workCentres": work_centres,
@@ -1128,6 +1183,27 @@ def _calibration_covers(command: Mapping[str, Any], captured_at: str) -> bool:
     return calibrated <= observed < valid_until
 
 
+def _is_controlled_plan(plan: Mapping[str, Any]) -> bool:
+    return plan["contract"] in {
+        PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
+        PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT,
+    }
+
+
+def _assert_plan_effective_at_release(
+    plan: Mapping[str, Any], captured_at: str, field: str
+) -> None:
+    if plan["contract"] != PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT:
+        return
+    observed = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+    effective_from = datetime.fromisoformat(plan["effectiveFrom"].replace("Z", "+00:00"))
+    effective_until = datetime.fromisoformat(plan["effectiveUntil"].replace("Z", "+00:00"))
+    if observed < effective_from:
+        raise _fail(f"{field} cannot release a plan before its effective window.")
+    if observed >= effective_until:
+        raise _fail(f"{field} cannot release an expired plan.")
+
+
 def _empty_projection() -> dict[str, Any]:
     return {
         "plan": None,
@@ -1210,8 +1286,8 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             continue
 
         if kind == "record_calibration":
-            if plan["contract"] != PLANT_ORDER_CONTROLLED_PLAN_CONTRACT:
-                raise _fail(f"{field} requires a version 3 controlled plan.")
+            if not _is_controlled_plan(plan):
+                raise _fail(f"{field} requires a version 3 or 4 controlled plan.")
             if batch_release is not None:
                 raise _fail(f"{field} follows final batch release.")
             work_centre_id = command["workCentreId"]
@@ -1237,7 +1313,8 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
                 raise _fail(f"{field} references a stale availability check.")
             if not latest_availability["passed"]:
                 raise _fail(f"{field} cannot release an order with a shortfall.")
-            if plan["contract"] == PLANT_ORDER_CONTROLLED_PLAN_CONTRACT:
+            _assert_plan_effective_at_release(plan, command["proof"]["capturedAt"], field)
+            if _is_controlled_plan(plan):
                 routed_centres = sorted({row["workCentreId"] for row in plan["routing"]})
                 missing = [
                     work_centre_id
@@ -1311,8 +1388,8 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
         )
 
         if kind == "record_quality_rework":
-            if plan["contract"] != PLANT_ORDER_CONTROLLED_PLAN_CONTRACT:
-                raise _fail(f"{field} requires a version 3 controlled plan.")
+            if not _is_controlled_plan(plan):
+                raise _fail(f"{field} requires a version 3 or 4 controlled plan.")
             if (
                 not current_hold
                 or latest_inspection is None
@@ -1424,8 +1501,9 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             if plan["contract"] not in {
                 PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
                 PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
+                PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT,
             }:
-                raise _fail(f"{field} requires a version 2 or 3 execution plan.")
+                raise _fail(f"{field} requires a version 2, 3, or 4 execution plan.")
             operation_index = next(
                 (
                     route_index
@@ -1436,7 +1514,7 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             )
             if operation_index < 0:
                 raise _fail(f"{field}.operationId is not in the reviewed routing.")
-            if plan["contract"] == PLANT_ORDER_CONTROLLED_PLAN_CONTRACT:
+            if _is_controlled_plan(plan):
                 work_centre_id = plan["routing"][operation_index]["workCentreId"]
                 calibration = calibrations.get(work_centre_id)
                 if calibration is None or not _calibration_covers(calibration, command["proof"]["capturedAt"]):
@@ -1488,6 +1566,7 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             if plan["contract"] in {
                 PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
                 PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
+                PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT,
             }:
                 final_operation_id = plan["routing"][-1]["operationId"]
                 if operation_quantities[final_operation_id] < next_output:
@@ -1515,7 +1594,7 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
                 raise _fail(f"{field} must inspect all currently recorded output.")
             if (
                 current_hold
-                and plan["contract"] == PLANT_ORDER_CONTROLLED_PLAN_CONTRACT
+                and _is_controlled_plan(plan)
                 and latest_inspection is not None
                 and not any(row["inspectionId"] == latest_inspection["id"] for row in quality_reworks)
             ):
@@ -2172,6 +2251,7 @@ def release_plant_order_batch(
 __all__ = (
     "EMPTY_PLANT_ORDER_DIGEST",
     "PLANT_ORDER_CONTROLLED_PLAN_CONTRACT",
+    "PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT",
     "PLANT_ORDER_EXECUTION_PLAN_CONTRACT",
     "PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT",
     "PLANT_ORDER_PLAN_CONTRACT",
@@ -2182,6 +2262,7 @@ __all__ = (
     "approve_plant_order_material_substitution",
     "build_plant_order_execution_plan",
     "build_plant_order_controlled_plan",
+    "build_plant_order_effective_plan",
     "build_plant_order_plan",
     "check_plant_order_availability",
     "create_empty_plant_order_state",

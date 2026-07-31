@@ -6,6 +6,7 @@ import unittest
 from supermega_runtime.plant_order_foundation import (
     EMPTY_PLANT_ORDER_DIGEST,
     PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
+    PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT,
     PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
     PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT,
     PLANT_ORDER_PLAN_CONTRACT,
@@ -14,6 +15,7 @@ from supermega_runtime.plant_order_foundation import (
     approve_plant_order_material_substitution,
     build_plant_order_execution_plan,
     build_plant_order_controlled_plan,
+    build_plant_order_effective_plan,
     build_plant_order_plan,
     check_plant_order_availability,
     create_empty_plant_order_state,
@@ -101,6 +103,20 @@ def controlled_plan(*, target: int = 10) -> dict[str, object]:
         materials=legacy["materials"],
         work_centres=legacy["workCentres"],
         routing=legacy["routing"],
+    )
+
+
+def effective_plan(*, target: int = 10) -> dict[str, object]:
+    controlled = controlled_plan(target=target)
+    return build_plant_order_effective_plan(
+        plan_id="PLN-20260726-004",
+        source_digest=controlled["sourceDigest"],
+        effective_from="2026-07-26T09:30:00+06:30",
+        effective_until="2026-07-26T10:00:00+06:30",
+        job=controlled["job"],
+        materials=controlled["materials"],
+        work_centres=controlled["workCentres"],
+        routing=controlled["routing"],
     )
 
 
@@ -241,6 +257,99 @@ def fully_issued_execution_state() -> dict[str, object]:
 
 
 class PlantOrderFoundationTests(unittest.TestCase):
+    def test_v4_effective_window_gates_release_and_freezes_released_plan(self) -> None:
+        package = effective_plan()
+        self.assertEqual(package["contract"], PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT)
+        self.assertEqual(package["effectiveFrom"], "2026-07-26T09:30:00+06:30")
+        tampered = deepcopy(package)
+        tampered["effectiveUntil"] = "2026-07-26T11:00:00+06:30"
+        with self.assertRaisesRegex(PlantOrderValidationError, "packageDigest"):
+            apply_plant_order_plan(
+                create_empty_plant_order_state(),
+                tampered,
+                proof(1),
+                expected_head_digest=EMPTY_PLANT_ORDER_DIGEST,
+            )
+
+        state = create_empty_plant_order_state()
+        state = apply_plant_order_plan(
+            state,
+            package,
+            proof(1, "approved effective-dated BOM and routing"),
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        state = check_state(state, sequence=2)
+        for sequence, centre in ((3, "WC-ASSEMBLY-01"), (4, "WC-TEST-01")):
+            state = record_plant_order_calibration(
+                state,
+                calibration_id=f"CAL-EFFECTIVE-{sequence:03d}",
+                work_centre_id=centre,
+                certificate_id=f"CERT-{centre.removeprefix('WC-')}-EFFECTIVE",
+                calibrated_at="2026-07-26T08:00:00+06:30",
+                valid_until="2027-07-26T10:00:00+06:30",
+                standard_reference="Approved reference standard",
+                proof=proof(sequence, f"reviewed {centre} calibration"),
+                expected_head_digest=state["headDigest"],
+            )["state"]
+
+        with self.assertRaisesRegex(PlantOrderValidationError, "before its effective window"):
+            release_plant_order(
+                state,
+                release_id="REL-EFFECTIVE-EARLY",
+                availability_check_id="CHK-20260726-001",
+                proof=proof(5, "attempted early release"),
+                expected_head_digest=state["headDigest"],
+            )
+        expired_proof = proof(6, "attempted expired release")
+        expired_proof["capturedAt"] = "2026-07-26T10:00:00+06:30"
+        with self.assertRaisesRegex(PlantOrderValidationError, "expired plan"):
+            release_plant_order(
+                state,
+                release_id="REL-EFFECTIVE-EXPIRED",
+                availability_check_id="CHK-20260726-001",
+                proof=expired_proof,
+                expected_head_digest=state["headDigest"],
+            )
+
+        release_proof = proof(7, "released inside effective window")
+        release_proof["capturedAt"] = "2026-07-26T09:30:00+06:30"
+        state = release_plant_order(
+            state,
+            release_id="REL-EFFECTIVE-001",
+            availability_check_id="CHK-20260726-001",
+            proof=release_proof,
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        for index, (material, lot, quantity) in enumerate((
+            ("MAT-FILTER-001", "LOT-FILTER-2407", 15_000),
+            ("MAT-SHELL-001", "LOT-SHELL-2407", 20_000),
+        ), start=1):
+            issue_proof = proof(10 + index, f"issued {material} after plan expiry")
+            issue_proof["capturedAt"] = f"2026-07-26T10:01:0{index}+06:30"
+            state = issue_plant_order_material(
+                state,
+                issue_id=f"ISSUE-EFFECTIVE-{index:03d}",
+                material_id=material,
+                input_lot_id=lot,
+                quantity_milli=quantity,
+                proof=issue_proof,
+                expected_head_digest=state["headDigest"],
+            )["state"]
+        operation_proof = proof(13, "completed released assembly after plan expiry")
+        operation_proof["capturedAt"] = "2026-07-26T10:01:03+06:30"
+        state = record_plant_order_operation(
+            state,
+            operation_run_id="OPRUN-EFFECTIVE-001",
+            operation_id="OP-ASSEMBLY-10",
+            quantity=10,
+            actual_minutes_milli=5_000,
+            proof=operation_proof,
+            expected_head_digest=state["headDigest"],
+        )["state"]
+        projection = project_plant_order(state)
+        self.assertEqual(projection["orderRelease"]["proof"]["capturedAt"], release_proof["capturedAt"])
+        self.assertEqual(projection["operations"][0]["completedQuantity"], 10)
+
     def test_v3_calibration_gates_release_and_operation_with_renewal(self) -> None:
         state = create_empty_plant_order_state()
         package = controlled_plan()

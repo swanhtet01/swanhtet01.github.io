@@ -3377,12 +3377,14 @@ if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.orde
   || !plantOrderSource.includes("PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1'")
   || !plantOrderSource.includes("PLANT_ORDER_EXECUTION_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v2'")
   || !plantOrderSource.includes("PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v3'")
+  || !plantOrderSource.includes("PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v4'")
   || !plantOrderSource.includes('PLANT_ORDER_ADDITIONAL_MATERIAL_MAX = 11')
   || !plantOrderSource.includes('PLANT_ORDER_ADDITIONAL_OPERATION_MAX = 11')
   || !plantOrderSource.includes('export function parsePlantOrderMaterialPaste')
   || !plantOrderSource.includes('export function parsePlantOrderRoutingPaste')
   || !plantOrderSource.includes('export function buildPlantOrderExecutionPlan')
   || !plantOrderSource.includes('export function buildPlantOrderControlledPlan')
+  || !plantOrderSource.includes('export function buildPlantOrderEffectivePlan')
   || !plantOrderSource.includes('export function checkPlantOrderAvailability')
   || !plantOrderSource.includes('export function releasePlantOrder')
   || !plantOrderSource.includes('export function recordPlantOrderCalibration')
@@ -3419,7 +3421,10 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || !plantOrderUiSource.includes('review.details?.length')
   || !plantOrderUiSource.includes('additionalMaterials: event.target.value')
   || !plantOrderUiSource.includes('additionalOperations: event.target.value')
-  || !plantOrderUiSource.includes('buildPlantOrderControlledPlan({')
+  || !plantOrderUiSource.includes('buildPlantOrderEffectivePlan({')
+  || !plantOrderUiSource.includes('Plan effective from')
+  || !plantOrderUiSource.includes('Plan valid until')
+  || !plantOrderUiSource.includes('Create a newly reviewed revision; the old package cannot be silently reused.')
   || !plantOrderUiSource.includes('projection.materials.map((material)')
   || !plantOrderUiSource.includes('projection.plan.workCentres.map((centre)')
   || !plantOrderUiSource.includes('parsePlantOrderQuantityMilli(draft.availableQuantity, true)')
@@ -3450,7 +3455,9 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || !plantOrderUiSource.includes('navigator.locks')
   || plantOrderUiSource.includes('fetch(')) fail('plant_order_foundation_ui_boundary_missing')
 if (!plantOrderPythonSource.includes('PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v3"')
+  || !plantOrderPythonSource.includes('PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v4"')
   || !plantOrderPythonSource.includes('def build_plant_order_controlled_plan(')
+  || !plantOrderPythonSource.includes('def build_plant_order_effective_plan(')
   || !plantOrderPythonSource.includes('def record_plant_order_calibration(')
   || !plantOrderPythonSource.includes('def record_plant_order_quality_rework(')
   || !plantOrderPythonSource.includes('requires current calibration for')) fail('managed_plant_calibration_parity_missing')
@@ -5674,6 +5681,27 @@ async function verifyPlantOrderRuntime() {
     ]
     const controlledPlan = model.buildPlantOrderControlledPlan({ ...planInput, planId: 'PLN-CONTROLLED-401' })
     assert(controlledPlan.contract === model.PLANT_ORDER_CONTROLLED_PLAN_CONTRACT, 'plant_order_v3_contract_missing')
+    const effectivePlan = model.buildPlantOrderEffectivePlan({ ...planInput, planId: 'PLN-EFFECTIVE-401', effectiveFrom: '2026-07-26T09:30:00+06:30', effectiveUntil: '2026-07-26T10:00:00+06:30' })
+    assert(effectivePlan.contract === model.PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT
+      && effectivePlan.effectiveFrom === '2026-07-26T09:30:00+06:30'
+      && effectivePlan.packageDigest !== controlledPlan.packageDigest,
+    'plant_order_v4_effective_window_not_digest_bound')
+    const tamperedEffectivePlan = structuredClone(effectivePlan)
+    tamperedEffectivePlan.effectiveUntil = '2026-07-26T11:00:00+06:30'
+    assertThrows(() => model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), tamperedEffectivePlan, proof(1, 'tampered effective plan'), model.EMPTY_PLANT_ORDER_DIGEST), 'plant_order_v4_tampered_window_succeeded')
+    let effectiveResult = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), effectivePlan, proof(1, 'approved effective plan'), model.EMPTY_PLANT_ORDER_DIGEST)
+    effectiveResult = model.checkPlantOrderAvailability(effectiveResult.state, {
+      checkId: 'CHK-EFFECTIVE-001', sourceDigest: model.plantOrderEvidenceDigest({ effective: true }), materials: controlledAvailabilityMaterials, workCentres: controlledAvailabilityCentres, proof: proof(2, 'checked effective availability'), expectedHeadDigest: effectiveResult.state.headDigest,
+    })
+    for (const [sequence, workCentreId] of [[3, 'WC-ASSEMBLY-01'], [4, 'WC-TEST-01']]) {
+      effectiveResult = model.recordPlantOrderCalibration(effectiveResult.state, {
+        calibrationId: `CAL-EFFECTIVE-${sequence}`, workCentreId, certificateId: `CERT-${workCentreId}-EFFECTIVE`, calibratedAt: '2026-07-26T08:00:00+06:30', validUntil: '2027-07-26T10:00:00+06:30', standardReference: 'Approved reference standard', proof: proof(sequence, `reviewed ${workCentreId} calibration`), expectedHeadDigest: effectiveResult.state.headDigest,
+      })
+    }
+    assertThrows(() => model.releasePlantOrder(effectiveResult.state, { releaseId: 'REL-EFFECTIVE-EARLY', availabilityCheckId: 'CHK-EFFECTIVE-001', proof: proof(5, 'early effective release'), expectedHeadDigest: effectiveResult.state.headDigest }), 'plant_order_v4_early_release_succeeded')
+    assertThrows(() => model.releasePlantOrder(effectiveResult.state, { releaseId: 'REL-EFFECTIVE-EXPIRED', availabilityCheckId: 'CHK-EFFECTIVE-001', proof: { ...proof(6, 'expired effective release'), capturedAt: '2026-07-26T10:00:00+06:30' }, expectedHeadDigest: effectiveResult.state.headDigest }), 'plant_order_v4_expired_release_succeeded')
+    effectiveResult = model.releasePlantOrder(effectiveResult.state, { releaseId: 'REL-EFFECTIVE-001', availabilityCheckId: 'CHK-EFFECTIVE-001', proof: { ...proof(7, 'current effective release'), capturedAt: '2026-07-26T09:30:00+06:30' }, expectedHeadDigest: effectiveResult.state.headDigest })
+    assert(model.projectPlantOrder(effectiveResult.state).orderRelease?.id === 'REL-EFFECTIVE-001', 'plant_order_v4_current_release_not_frozen')
     let controlledResult = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), controlledPlan, proof(1, 'approved controlled execution plan'), model.EMPTY_PLANT_ORDER_DIGEST)
     controlledResult = model.checkPlantOrderAvailability(controlledResult.state, {
       checkId: 'CHK-CONTROLLED-001', sourceDigest: model.plantOrderEvidenceDigest({ filter: 15_000, shell: 20_000, assembly: 5, test: 10 }),
