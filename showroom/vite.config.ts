@@ -66,6 +66,7 @@ export default defineConfig({
   server: { proxy: apiProxy },
   preview: { proxy: apiProxy },
   build: {
+    target: 'es2022',
     rollupOptions: {
       output: {
         manualChunks(id) {

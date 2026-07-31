@@ -6,7 +6,7 @@ import {
   ProductHomePage,
 } from './core/CoreShell'
 
-const OperationsPage = lazy(() => import('./core/CoreApp').then((module) => ({ default: module.OperationsPage })))
+const OperationsPage = lazy(() => import('./core/OperationsPageRoute'))
 const WebsiteProduct = lazy(() => import('./products/website/WebsiteProduct').then((module) => ({ default: module.WebsiteProduct })))
 const EcommerceProduct = lazy(() => import('./products/ecommerce/EcommerceProduct').then((module) => ({ default: module.EcommerceProduct })))
 const SettingsPage = lazy(() => import('./core/SettingsPage').then((module) => ({ default: module.SettingsPage })))

@@ -186,7 +186,7 @@ const assetCorpus = (await Promise.all([...scriptPaths, ...cssPaths].map(async (
 const productHomeReadinessChunkPath = /assets\/ProductHomeReadiness-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!productHomeReadinessChunkPath) throw new Error('product_home_readiness_chunk_missing')
 const productHomeReadinessChunk = (await get(`/${productHomeReadinessChunkPath}`)).body
-const operationsChunkPath = /assets\/CoreApp-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
+const operationsChunkPath = /assets\/(?:CoreApp|core-app)-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!operationsChunkPath) throw new Error('operations_chunk_missing')
 const operationsChunk = (await get(`/${operationsChunkPath}`)).body
 const settingsChunkPath = /assets\/SettingsPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
