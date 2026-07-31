@@ -114,7 +114,7 @@ function TrialReadyWorkspace({
         <ol className="website-trial-ready-steps">
           <li>
             <span aria-hidden="true">1</span>
-            <div><strong>Preview</strong><p>Use Back to edit to check desktop, tablet, or mobile again.</p></div>
+            <div><strong>Preview</strong><p>Go back, then Preview to check desktop, tablet, or mobile.</p></div>
           </li>
           <li>
             <span aria-hidden="true">2</span>
@@ -786,7 +786,7 @@ export function WebsiteProduct() {
                   ? 'Record release snapshot'
                   : managedReleaseRequired
                     ? 'Prepare rollout plan'
-                    : 'Download site handoff'
+                    : 'Download website'
   const websiteAgentReason = storageIssue || canRepairLocalStorage
     ? 'Saving or recovery needs attention before Website work can be trusted.'
     : starterSetupActive
@@ -805,7 +805,7 @@ export function WebsiteProduct() {
                   ? 'The approved revision needs an immutable static site package for handoff.'
                   : managedReleaseRequired
                     ? 'The managed release can prepare a rollout plan, but provider deployment still requires owner execution.'
-                    : 'The reviewed local site is ready to download; no domain or deployment changes happen here.'
+                    : 'Your reviewed site is ready to download. Nothing is deployed here.'
   const websiteOwnerGate = storageIssue || canRepairLocalStorage
     ? 'Owner exports backup or confirms repair before continuing.'
     : starterSetupActive
@@ -824,7 +824,7 @@ export function WebsiteProduct() {
                   ? 'Owner records the release snapshot.'
                   : managedReleaseRequired
                     ? 'Owner approves release manager and reviewer before deployment planning.'
-                    : 'Owner downloads the package and decides where it goes live.'
+                    : 'Owner decides where it goes live.'
   const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
     ? 'Open recovery'
     : starterSetupActive || starterAvailable
@@ -1170,7 +1170,7 @@ export function WebsiteProduct() {
             ) : null}
           </header>
 
-          <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState}>
+          {websiteTodayState !== 'ready' ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState}>
             <div className="website-today-priority">
               <span className="website-kicker">Today</span>
               <h2 id="website-today-title">{websiteAgentJob}</h2>
@@ -1184,7 +1184,7 @@ export function WebsiteProduct() {
               <span>{websiteTodaySource}</span>
               <small>{websiteOwnerGate}</small>
             </div>
-          </section>
+          </section> : null}
 
           <details className="website-business-controls">
             <summary><span><strong>Inquiry inbox</strong><small>Local capture, ownership, decisions, and export</small></span><b>{leadCounts.new} new</b></summary>

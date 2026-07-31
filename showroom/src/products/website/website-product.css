@@ -849,7 +849,7 @@
   border: 1px solid var(--website-line-strong);
   border-radius: 5px;
   padding: 0 12px;
-  background: #ffffff;
+  background: var(--website-panel);
   color: var(--website-ink);
   font-size: 9px;
   font-weight: 760;
