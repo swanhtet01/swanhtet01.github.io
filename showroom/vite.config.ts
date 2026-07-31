@@ -74,8 +74,10 @@ export default defineConfig({
             || id.includes('/node_modules/react-router-dom/')) {
             return 'router'
           }
-          if (id.includes('/src/core/commerce-workspace.ts')
-            || id.includes('/src/core/production-workspace.ts')
+          if (id.includes('/src/core/commerce-workspace.ts')) {
+            return 'commerce-model'
+          }
+          if (id.includes('/src/core/production-workspace.ts')
             || id.includes('/src/core/channel-order-intake.ts')
             || id.includes('/src/core/managed-trial.ts')
             || id.includes('/src/core/team-work.ts')) {

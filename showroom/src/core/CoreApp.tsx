@@ -99,6 +99,7 @@ import {
   commercePurchaseOrderArrivalUrgency,
   commercePurchaseOrderProgress,
   commercePurchaseOrders,
+  commerceSupplierInvoiceMatch,
   commerceSupplierPerformance,
   commerceStorefrontRequestLines,
   commerceStorefrontRequests,
@@ -112,6 +113,8 @@ import {
   configureCommercePaymentPolicy,
   createCommerceCatalogBaseline,
   createCommercePurchaseOrder,
+  markCommerceSupplierInvoicePayableReady,
+  recordCommerceSupplierInvoice,
   receiveCommercePurchaseOrder,
   reconcileCommercePayment,
   recordCommerceCollectionAction,
@@ -223,8 +226,17 @@ const PlantOrderFoundation = lazy(() => import('./PlantOrderFoundation').then((m
 const ProductHomeReadiness = lazy(() => import('./ProductHomeReadiness').then((module) => ({ default: module.ProductHomeReadiness })))
 
 type PurchaseOrderDraft =
-  | { mode: 'create'; sku: string; supplier: string; expectedAt: string; quantity: string }
+  | { mode: 'create'; sku: string; supplier: string; expectedAt: string; quantity: string; unitCostMmk: string }
   | { mode: 'receive'; purchaseOrderId: string; quantity: string; rejectedQuantity: string; discrepancyCode: CommercePurchaseOrderDiscrepancyCode; locationId: string; trackingCode: string }
+
+type SupplierInvoiceDraft = {
+  purchaseOrderId: string
+  supplierReference: string
+  issuedAt: string
+  dueAt: string
+  quantity: string
+  unitCostMmk: string
+}
 
 type StockCountDraft = {
   sku: string
@@ -1789,6 +1801,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [catalogCreateOpen, setCatalogCreateOpen] = useState(false)
   const [catalogEditDraft, setCatalogEditDraft] = useState<CatalogItemEditDraft | null>(null)
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
+  const [supplierInvoiceDraft, setSupplierInvoiceDraft] = useState<SupplierInvoiceDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
   const [cancellationDraft, setCancellationDraft] = useState<EcommerceCancellationIntent | null>(null)
@@ -2072,6 +2085,44 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     && purchaseOrderExpectedAtTime > purchaseOrderClock
     ? new Date(purchaseOrderExpectedAtTime).toISOString()
     : null
+  const purchaseOrderUnitCostText = purchaseOrderDraft?.mode === 'create' ? purchaseOrderDraft.unitCostMmk.trim() : ''
+  const purchaseOrderUnitCost = /^\d+$/.test(purchaseOrderUnitCostText) ? Number(purchaseOrderUnitCostText) : Number.NaN
+  const purchaseOrderUnitCostResult = Number.isSafeInteger(purchaseOrderUnitCost) && purchaseOrderUnitCost > 0
+    ? purchaseOrderUnitCost
+    : null
+  const purchaseOrderDraftTotal = purchaseOrderQuantityResult !== null && purchaseOrderUnitCostResult !== null
+    && Number.isSafeInteger(purchaseOrderQuantityResult * purchaseOrderUnitCostResult)
+    ? purchaseOrderQuantityResult * purchaseOrderUnitCostResult
+    : null
+  const supplierInvoiceDraftRow = supplierInvoiceDraft
+    ? purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === supplierInvoiceDraft.purchaseOrderId)
+    : null
+  const supplierInvoiceQuantity = supplierInvoiceDraft && /^\d+$/.test(supplierInvoiceDraft.quantity.trim())
+    ? Number(supplierInvoiceDraft.quantity)
+    : Number.NaN
+  const supplierInvoiceUnitCost = supplierInvoiceDraft && /^\d+$/.test(supplierInvoiceDraft.unitCostMmk.trim())
+    ? Number(supplierInvoiceDraft.unitCostMmk)
+    : Number.NaN
+  const supplierInvoiceIssuedAt = supplierInvoiceDraft ? new Date(supplierInvoiceDraft.issuedAt).getTime() : Number.NaN
+  const supplierInvoiceDueAt = supplierInvoiceDraft ? new Date(supplierInvoiceDraft.dueAt).getTime() : Number.NaN
+  const supplierInvoiceTotal = Number.isSafeInteger(supplierInvoiceQuantity)
+    && supplierInvoiceQuantity > 0
+    && Number.isSafeInteger(supplierInvoiceUnitCost)
+    && supplierInvoiceUnitCost > 0
+    && Number.isSafeInteger(supplierInvoiceQuantity * supplierInvoiceUnitCost)
+    ? supplierInvoiceQuantity * supplierInvoiceUnitCost
+    : null
+  const supplierInvoiceDraftReady = Boolean(
+    supplierInvoiceDraftRow
+    && !supplierInvoiceDraftRow.purchaseOrder.supplierInvoice
+    && supplierInvoiceDraft?.supplierReference.trim()
+    && supplierInvoiceDraft.supplierReference.trim().length <= 80
+    && supplierInvoiceTotal !== null
+    && Number.isFinite(supplierInvoiceIssuedAt)
+    && Number.isFinite(supplierInvoiceDueAt)
+    && supplierInvoiceIssuedAt >= Date.parse(supplierInvoiceDraftRow.purchaseOrder.createdAt)
+    && supplierInvoiceDueAt >= supplierInvoiceIssuedAt,
+  )
   const purchaseReceiptLocation = purchaseOrderDraft?.mode === 'receive'
     ? managedInventoryProjection?.locations.find((location) => location.id === purchaseOrderDraft.locationId)
     : undefined
@@ -5020,7 +5071,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     const receiptDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date()).replaceAll('-', '')
     setPurchaseOrderDraft(active
       ? { mode: 'receive', purchaseOrderId: active.purchaseOrder.id, quantity: '', rejectedQuantity: '0', discrepancyCode: 'damaged', locationId: defaultReceiptLocationId, trackingCode: `IN-${receiptDate}-${commandUuid().slice(0, 8).toUpperCase()}` }
-      : { mode: 'create', sku: itemSku, supplier: '', expectedAt: defaultPurchaseOrderExpectedInput(), quantity: '' })
+      : { mode: 'create', sku: itemSku, supplier: '', expectedAt: defaultPurchaseOrderExpectedInput(), quantity: '', unitCostMmk: '' })
     setNotice(active
       ? `Record only units counted against ${active.purchaseOrder.id}. Nothing changes until confirmation.`
       : `Create an internal order for ${item.name}. This does not contact a supplier or create a payment.`)
@@ -5044,7 +5095,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       return
     }
     const reorderQuantity = Math.max(item.reorderAt * 2 - item.onHand, 1)
-    setPurchaseOrderDraft({ mode: 'create', sku: item.sku, supplier: 'Preferred supplier', expectedAt: defaultPurchaseOrderExpectedInput(), quantity: String(reorderQuantity) })
+    setPurchaseOrderDraft({ mode: 'create', sku: item.sku, supplier: 'Preferred supplier', expectedAt: defaultPurchaseOrderExpectedInput(), quantity: String(reorderQuantity), unitCostMmk: String(Math.max(1, Math.round(item.price * 0.6))) })
     setNotice(`Supplier request drafted for ${item.name}. Review supplier, arrival, and quantity; no RFQ, message, payment, payable, costing, or stock write is created.`)
     requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
   }
@@ -5078,6 +5129,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         setNotice('Choose an expected arrival later than the current time.')
         return
       }
+      if (purchaseOrderUnitCostResult === null || purchaseOrderDraftTotal === null) {
+        setNotice('Enter a positive whole-MMK unit cost within the supported total range.')
+        return
+      }
       const expectedAt = new Date(expectedAtTime).toISOString()
       const item = purchaseOrderDraftItem
       const quantityOrdered = purchaseOrderQuantityResult
@@ -5087,12 +5142,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         subjectId: purchaseOrderId,
         summary: `Create internal order for ${quantityOrdered.toLocaleString()} units of ${item.name}`,
         before: `${item.onHand.toLocaleString()} on hand · no active stock order · supplier not contacted`,
-        after: `${purchaseOrderId} · ${supplier} · ${quantityOrdered.toLocaleString()} ordered internally · expected ${formatIssueDue(expectedAt)} · no message or payment created`,
+        after: `${purchaseOrderId} · ${supplier} · ${quantityOrdered.toLocaleString()} ordered at ${formatMoney(purchaseOrderUnitCostResult)} each · ${formatMoney(purchaseOrderDraftTotal)} total · expected ${formatIssueDue(expectedAt)} · no message or payment created`,
         apply: async (action) => {
           const proof = commerceActionProof(action)
           await mutateCommerce('commerce.purchase_order.created', action.commandId, proof, (current) => createCommercePurchaseOrder(
             current,
-            { id: purchaseOrderId, expectedAt, supplier, sku: item.sku, quantityOrdered },
+            { id: purchaseOrderId, expectedAt, supplier, sku: item.sku, quantityOrdered, unitCostMmk: purchaseOrderUnitCostResult },
             proof,
           ))
           setPurchaseOrderDraft((current) => current?.mode === 'create' && current.sku === item.sku ? null : current)
@@ -5301,6 +5356,81 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           return cancelCommercePurchaseOrder(current, purchaseOrderId, proof)
         })
         setPurchaseOrderDraft((current) => current?.mode === 'receive' && current.purchaseOrderId === purchaseOrderId ? null : current)
+      },
+    }, purchaseOrderTriggerRefs.current.get(row.purchaseOrder.sku))
+  }
+
+  function openSupplierInvoice(purchaseOrderId: string) {
+    const row = purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === purchaseOrderId)
+    const purchaseOrder = row?.purchaseOrder
+    if (!purchaseOrder || purchaseOrder.supplierInvoice || purchaseOrder.unitCostMmk === undefined) return
+    const issuedAt = new Date(Math.max(purchaseOrderClock, Date.parse(purchaseOrder.createdAt)))
+    setSupplierInvoiceDraft({
+      purchaseOrderId,
+      supplierReference: '',
+      issuedAt: localDateTimeInputValue(issuedAt),
+      dueAt: localDateTimeInputValue(new Date(issuedAt.getTime() + 30 * 24 * 60 * 60 * 1000)),
+      quantity: String(purchaseOrder.quantityOrdered),
+      unitCostMmk: String(purchaseOrder.unitCostMmk),
+    })
+    setNotice(`Enter the supplier's invoice reference and confirm the billed terms for ${purchaseOrderId}. No payable or payment is created.`)
+  }
+
+  function reviewSupplierInvoice(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supplierInvoiceDraft || !supplierInvoiceDraftRow || !supplierInvoiceDraftReady || supplierInvoiceTotal === null) {
+      setNotice('Enter one supplier reference, valid invoice and due dates, quantity, and whole-MMK unit cost.')
+      return
+    }
+    const purchaseOrder = supplierInvoiceDraftRow.purchaseOrder
+    const supplierReference = supplierInvoiceDraft.supplierReference.trim()
+    const input = {
+      id: uid('PINV'),
+      supplierReference,
+      issuedAt: new Date(supplierInvoiceIssuedAt).toISOString(),
+      dueAt: new Date(supplierInvoiceDueAt).toISOString(),
+      quantityInvoiced: supplierInvoiceQuantity,
+      unitCostMmk: supplierInvoiceUnitCost,
+    }
+    queueAction({
+      kind: 'purchase_order_receive',
+      subjectId: purchaseOrder.id,
+      summary: `Record supplier invoice ${supplierReference} against ${purchaseOrder.id}`,
+      before: `${purchaseOrder.quantityOrdered.toLocaleString()} ordered at ${formatMoney(purchaseOrder.unitCostMmk ?? 0)} · invoice not recorded`,
+      after: `${input.quantityInvoiced.toLocaleString()} billed at ${formatMoney(input.unitCostMmk)} · ${formatMoney(supplierInvoiceTotal)} retained for three-way review · no payable or payment created`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce('commerce.supplier_invoice.recorded', action.commandId, proof, (current) => {
+          const currentPurchaseOrder = commercePurchaseOrders(current).find((candidate) => candidate.id === purchaseOrder.id)
+          if (!currentPurchaseOrder || currentPurchaseOrder.supplierInvoice) return null
+          return recordCommerceSupplierInvoice(current, purchaseOrder.id, input, proof)
+        })
+        setSupplierInvoiceDraft((current) => current?.purchaseOrderId === purchaseOrder.id ? null : current)
+      },
+    }, purchaseOrderTriggerRefs.current.get(purchaseOrder.sku))
+  }
+
+  function reviewSupplierInvoicePayable(purchaseOrderId: string) {
+    const row = purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === purchaseOrderId)
+    const invoice = row?.purchaseOrder.supplierInvoice
+    if (!row || !invoice || invoice.payableReview) return
+    const match = commerceSupplierInvoiceMatch(commerce, row.purchaseOrder)
+    if (match.status !== 'matched') return
+    queueAction({
+      kind: 'purchase_order_receive',
+      subjectId: purchaseOrderId,
+      summary: `Mark supplier invoice ${invoice.supplierReference} payable-ready`,
+      before: `${match.orderedQuantity.toLocaleString()} ordered · ${match.acceptedQuantity.toLocaleString()} accepted · ${match.invoicedQuantity.toLocaleString()} invoiced · exact match pending review`,
+      after: `payable-ready evidence retained for accountant handoff · no ledger post, bank instruction, or supplier payment created`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce('commerce.supplier_invoice.payable_ready', action.commandId, proof, (current) => {
+          const currentPurchaseOrder = commercePurchaseOrders(current).find((candidate) => candidate.id === purchaseOrderId)
+          if (!currentPurchaseOrder?.supplierInvoice
+            || currentPurchaseOrder.supplierInvoice.id !== invoice.id
+            || commerceSupplierInvoiceMatch(current, currentPurchaseOrder).status !== 'matched') return null
+          return markCommerceSupplierInvoicePayableReady(current, purchaseOrderId, proof)
+        })
       },
     }, purchaseOrderTriggerRefs.current.get(row.purchaseOrder.sku))
   }
@@ -5680,6 +5810,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const pendingPaymentOrders = commerce.orders.filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending')
   const refundExposureOrders = commerce.orders.filter((order) => order.refundStatus === 'due')
   const supplierReceiptExposure = overduePurchaseOrders.length + dueSoonPurchaseOrders.length + partiallyReceivedPurchaseOrders.length
+  const supplierInvoiceMatches = purchaseOrderRows.flatMap(({ purchaseOrder }) => (
+    purchaseOrder.supplierInvoice ? [commerceSupplierInvoiceMatch(commerce, purchaseOrder)] : []
+  ))
+  const supplierInvoiceExceptions = supplierInvoiceMatches.filter((match) => match.status !== 'matched')
+  const supplierInvoicesPendingReview = supplierInvoiceMatches.filter((match) => match.status === 'matched' && !match.payableReady)
+  const supplierInvoicesPayableReady = supplierInvoiceMatches.filter((match) => match.payableReady)
   const shopAccountingNext = !commerceCanWrite
     ? 'Restore accounting readiness'
     : pendingAction
@@ -5688,6 +5824,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         ? 'Review payment exceptions'
         : refundExposureOrders.length
           ? 'Review refund exposure'
+          : supplierInvoiceExceptions.length
+            ? 'Resolve invoice variance'
+            : supplierInvoicesPendingReview.length
+              ? 'Review matched invoice'
           : supplierReceiptExposure
             ? 'Receive supplier evidence'
             : lowStock.length
@@ -5700,6 +5840,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Payments', pendingPaymentOrders.length ? `${pendingPaymentOrders.length} exception` : 'Clear'],
     ['Refunds', refundExposureOrders.length ? `${refundExposureOrders.length} due` : commerce.orders.some((order) => order.refundStatus === 'settled') ? 'Settled evidence' : 'Clear'],
     ['Receipts', supplierReceiptExposure ? `${supplierReceiptExposure} review` : activePurchaseOrders.length ? 'Open supply' : 'Clear'],
+    ['Invoices', supplierInvoiceExceptions.length ? `${supplierInvoiceExceptions.length} variance` : supplierInvoicesPendingReview.length ? `${supplierInvoicesPendingReview.length} review` : supplierInvoicesPayableReady.length ? `${supplierInvoicesPayableReady.length} ready` : 'None'],
     ['Inventory', lowStock.length ? `${lowStock.length} reconcile` : managedInventoryProjection ? 'ATP evidence' : 'Catalog evidence'],
     ['Export gate', commerceCanWrite && !pendingAction ? 'Review only' : 'Locked'],
   ] as const
@@ -5711,7 +5852,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Close', latestCloseDownload ? 'CSV ready' : closePreview ? `${closableOrders.length} ready` : 'Close first'],
     ['Ledger', latestCloseDownload ? 'Review import' : 'Not posted'],
     ['Tax', 'Not configured'],
-    ['Payables', activePurchaseOrders.length ? `${activePurchaseOrders.length} supplier review` : 'None created'],
+    ['Payables', supplierInvoiceExceptions.length ? `${supplierInvoiceExceptions.length} blocked` : supplierInvoicesPendingReview.length ? `${supplierInvoicesPendingReview.length} match review` : supplierInvoicesPayableReady.length ? `${supplierInvoicesPayableReady.length} ready` : 'None created'],
     ['Settlement', paymentReview.length ? `${paymentReview.length} exception` : 'External proof only'],
     ['Audit', latestClose?.evidenceReference ? 'Evidence linked' : 'Need close evidence'],
   ] as const
@@ -6264,15 +6405,24 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         {purchaseOrderDraft.mode === 'create' ? <label>Supplier reference{managedInventoryProjection ? <select autoFocus disabled={commerceControlsDisabled} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} required value={purchaseOrderDraft.supplier}><option value="">Choose supplier</option>{managedInventoryProjection.vendors.map((vendor) => <option key={vendor.id} value={vendor.name}>{vendor.name}</option>)}</select> : <input autoFocus disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} placeholder="Supplier name" required value={purchaseOrderDraft.supplier} />}</label> : null}
         {purchaseOrderDraft.mode === 'create' ? <label>Expected arrival<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, expectedAt: event.target.value } : current)} required type="datetime-local" value={purchaseOrderDraft.expectedAt} /></label> : null}
         <label>{purchaseOrderDraft.mode === 'create' ? 'Quantity to order' : 'Accepted units'}<input aria-describedby="stock-receipt-preview" autoFocus={purchaseOrderDraft.mode === 'receive'} disabled={commerceControlsDisabled} inputMode="numeric" max={purchaseOrderQuantityLimit} min="1" onChange={(event) => setPurchaseOrderDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="10" required step="1" type="number" value={purchaseOrderDraft.quantity} /></label>
+        {purchaseOrderDraft.mode === 'create' ? <label>Unit cost (MMK)<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, unitCostMmk: event.target.value } : current)} placeholder="5000" required step="1" type="number" value={purchaseOrderDraft.unitCostMmk} /></label> : null}
         {purchaseOrderDraft.mode === 'receive' ? <div className="form-row"><label>Rejected units<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" max={Math.max(0, (purchaseOrderDraftOrder?.progress.remaining ?? 0) - (purchaseOrderQuantityResult ?? 0))} min="0" onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, rejectedQuantity: event.target.value } : current)} required step="1" type="number" value={purchaseOrderDraft.rejectedQuantity} /></label><label>Discrepancy reason<select disabled={commerceControlsDisabled || purchaseOrderRejectedResult === 0} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, discrepancyCode: event.target.value as CommercePurchaseOrderDiscrepancyCode } : current)} required={Boolean(purchaseOrderRejectedResult)} value={purchaseOrderDraft.discrepancyCode}><option value="damaged">Damaged</option><option value="wrong_item">Wrong item</option><option value="quality_failed">Quality failed</option></select></label></div> : null}
         {purchaseOrderDraft.mode === 'receive' && commerce.inventoryFoundation ? <label>Receive into<select disabled={commerceControlsDisabled || !managedInventoryProjection} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, locationId: event.target.value } : current)} required value={purchaseOrderDraft.locationId}><option value="">Choose location</option>{managedInventoryProjection?.locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label> : null}
         {purchaseOrderDraft.mode === 'receive' && commerce.inventoryFoundation ? <label>Lot or batch<input autoComplete="off" disabled={commerceControlsDisabled || !managedInventoryProjection} maxLength={80} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, trackingCode: event.target.value } : current)} placeholder="Scan or enter lot" required value={purchaseOrderDraft.trackingCode} /></label> : null}
         <div aria-live="polite" className="stock-receipt-preview" id="stock-receipt-preview"><small>{purchaseOrderDraft.mode === 'create' ? 'Internal order' : 'New on hand'}</small><strong>{purchaseOrderQuantityResult === null
           ? 'Enter whole units'
           : purchaseOrderDraft.mode === 'create'
-            ? `${purchaseOrderQuantityResult.toLocaleString()} units`
+            ? `${purchaseOrderQuantityResult.toLocaleString()} units${purchaseOrderDraftTotal === null ? ' · enter unit cost' : ` · ${formatMoney(purchaseOrderDraftTotal)} total`}`
             : `${purchaseOrderDraftItem.onHand.toLocaleString()} → ${(purchaseOrderDraftItem.onHand + purchaseOrderQuantityResult).toLocaleString()} accepted into stock${purchaseOrderRejectedResult ? ` · ${purchaseOrderRejectedResult.toLocaleString()} rejected / return to vendor` : ''}${purchaseReceiptLocation ? ` · ${purchaseReceiptLocation.name}` : ''}`}</strong></div>
-        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelPurchaseOrderEditor} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || purchaseOrderQuantityResult === null || !purchaseReceiptAllocationReady || !purchaseReceiptDiscrepancyReady || (purchaseOrderDraft.mode === 'create' && (!purchaseOrderDraft.supplier.trim() || purchaseOrderExpectedAtResult === null))} type="submit">{purchaseOrderDraft.mode === 'create' ? 'Review order' : 'Review receipt'}</button></div>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelPurchaseOrderEditor} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || purchaseOrderQuantityResult === null || !purchaseReceiptAllocationReady || !purchaseReceiptDiscrepancyReady || (purchaseOrderDraft.mode === 'create' && (!purchaseOrderDraft.supplier.trim() || purchaseOrderExpectedAtResult === null || purchaseOrderUnitCostResult === null || purchaseOrderDraftTotal === null))} type="submit">{purchaseOrderDraft.mode === 'create' ? 'Review order' : 'Review receipt'}</button></div>
+      </form> : null}
+      {supplierInvoiceDraft && supplierInvoiceDraftRow ? <form aria-label="Supplier invoice review" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierInvoice}>
+        <div className="stock-receipt-copy"><span className="core-eyebrow">Supplier invoice</span><h3>{supplierInvoiceDraftRow.purchaseOrder.supplier}</h3><small>{supplierInvoiceDraftRow.purchaseOrder.id} · three-way review only</small></div>
+        <label>Invoice reference<input autoFocus disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, supplierReference: event.target.value } : current)} placeholder="Supplier invoice number" required value={supplierInvoiceDraft.supplierReference} /></label>
+        <div className="form-row"><label>Invoice date<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(supplierInvoiceDraftRow.purchaseOrder.createdAt))} onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, issuedAt: event.target.value } : current)} required type="datetime-local" value={supplierInvoiceDraft.issuedAt} /></label><label>Due date<input disabled={commerceControlsDisabled} min={supplierInvoiceDraft.issuedAt} onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, dueAt: event.target.value } : current)} required type="datetime-local" value={supplierInvoiceDraft.dueAt} /></label></div>
+        <div className="form-row"><label>Invoiced units<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, quantity: event.target.value } : current)} required step="1" type="number" value={supplierInvoiceDraft.quantity} /></label><label>Unit cost (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, unitCostMmk: event.target.value } : current)} required step="1" type="number" value={supplierInvoiceDraft.unitCostMmk} /></label></div>
+        <div className="stock-receipt-preview"><small>Invoice total</small><strong>{supplierInvoiceTotal === null ? 'Enter valid terms' : formatMoney(supplierInvoiceTotal)}</strong></div>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierInvoiceDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || !supplierInvoiceDraftReady} type="submit">Review invoice</button></div>
       </form> : null}
       <details className="compact-disclosure purchase-order-history" id="purchase-orders" ref={purchaseOrderHistoryRef}>
         <summary><span>Purchase orders</span><strong>{purchaseOrderRows.filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received').length} active · {purchaseOrderRows.length} total</strong></summary>
@@ -6286,12 +6436,24 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         </section> : null}
         {purchaseOrderRows.length ? <div className="purchase-order-list">{purchaseOrderRows.map(({ purchaseOrder, progress, item }) => {
           const arrivalUrgency = commercePurchaseOrderArrivalUrgency(purchaseOrder, progress, purchaseOrderClock)
+          const invoiceMatch = purchaseOrder.supplierInvoice ? commerceSupplierInvoiceMatch(commerce, purchaseOrder) : null
+          const nextControl = purchaseOrder.supplierInvoice
+            ? purchaseOrder.supplierInvoice.payableReview
+              ? <small className="purchase-order-closed">Payable ready</small>
+              : invoiceMatch?.status === 'matched'
+                ? <button aria-label={`Mark invoice payable-ready for ${purchaseOrder.id}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => reviewSupplierInvoicePayable(purchaseOrder.id)} type="button">Review payable</button>
+                : <small className="purchase-order-closed">{invoiceMatch?.status.replaceAll('_', ' ')}</small>
+            : (progress.status === 'received' || progress.status === 'received_with_discrepancy') && purchaseOrder.unitCostMmk !== undefined
+              ? <button aria-label={`Record supplier invoice for ${purchaseOrder.id}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => openSupplierInvoice(purchaseOrder.id)} type="button">Record invoice</button>
+              : progress.remaining > 0 && progress.status !== 'cancelled'
+                ? <button aria-label={`Cancel remainder for ${purchaseOrder.id}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => reviewPurchaseOrderCancellation(purchaseOrder.id)} type="button">Cancel remainder</button>
+                : <small className="purchase-order-closed">{progress.status === 'received' ? 'Complete' : progress.status === 'received_with_discrepancy' ? 'Return due' : 'Closed'}</small>
           return <article key={purchaseOrder.id}>
-            <div><strong>{item?.name ?? purchaseOrder.sku}</strong><small>{purchaseOrder.supplier} · {purchaseOrder.id}</small><small data-arrival-risk={arrivalUrgency}>{purchaseOrder.expectedAt
+            <div><strong>{item?.name ?? purchaseOrder.sku}</strong><small>{purchaseOrder.supplier} · {purchaseOrder.id}</small><small>{purchaseOrder.unitCostMmk === undefined ? 'Legacy PO · commercial terms not retained' : `${formatMoney(purchaseOrder.unitCostMmk)} each · ${formatMoney(purchaseOrder.unitCostMmk * purchaseOrder.quantityOrdered)}`}</small><small data-arrival-risk={arrivalUrgency}>{purchaseOrder.expectedAt
               ? `Expected ${formatIssueDue(purchaseOrder.expectedAt)}${arrivalUrgency === 'late' ? ' · Late' : arrivalUrgency === 'due_soon' ? ' · Due soon' : ''}`
               : 'Arrival not recorded · legacy order'}</small></div>
-            <span><strong>{progress.received} accepted{progress.rejected ? ` · ${progress.rejected} rejected` : ''}/{purchaseOrder.quantityOrdered}</strong><small>{progress.status.replaceAll('_', ' ')}</small></span>
-            {progress.remaining > 0 && progress.status !== 'cancelled' ? <button aria-label={`Cancel remainder for ${purchaseOrder.id}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => reviewPurchaseOrderCancellation(purchaseOrder.id)} type="button">Cancel remainder</button> : <small className="purchase-order-closed">{progress.status === 'received' ? 'Complete' : progress.status === 'received_with_discrepancy' ? 'Return due' : 'Closed'}</small>}
+            <span><strong>{progress.received} accepted{progress.rejected ? ` · ${progress.rejected} rejected` : ''}/{purchaseOrder.quantityOrdered}</strong><small>{invoiceMatch ? `Invoice · ${invoiceMatch.status.replaceAll('_', ' ')}` : progress.status.replaceAll('_', ' ')}</small></span>
+            {nextControl}
           </article>
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>

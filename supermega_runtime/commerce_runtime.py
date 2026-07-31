@@ -78,6 +78,8 @@ COMMERCE_EVENTS = frozenset(
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
+        "commerce.supplier_invoice.recorded",
+        "commerce.supplier_invoice.payable_ready",
         "commerce.close.saved",
         "commerce.website_intake.created",
         "commerce.website_intake.converted",
@@ -122,6 +124,8 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
+        "commerce.supplier_invoice.recorded",
+        "commerce.supplier_invoice.payable_ready",
         "commerce.close.saved",
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
@@ -214,6 +218,9 @@ _SERVICE_SCHEDULE_BOOKING_STATUSES = frozenset(
 )
 _PURCHASE_ORDER_ID_PATTERN = re.compile(
     r"PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_SUPPLIER_INVOICE_ID_PATTERN = re.compile(
+    r"PINV-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
 _TAX_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{0,11}")
 _TAX_JURISDICTION_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{1,15}")
@@ -486,7 +493,16 @@ _PRODUCTION_ISSUE_FIELDS = frozenset(
 _PURCHASE_ORDER_REQUIRED_FIELDS = frozenset(
     {"id", "createdAt", "supplier", "sku", "quantityOrdered", "creation"}
 )
-_PURCHASE_ORDER_OPTIONAL_FIELDS = frozenset({"expectedAt", "cancellation"})
+_PURCHASE_ORDER_OPTIONAL_FIELDS = frozenset(
+    {"expectedAt", "unitCostMmk", "cancellation", "supplierInvoice"}
+)
+_SUPPLIER_INVOICE_REQUIRED_FIELDS = frozenset(
+    {
+        "id", "supplierReference", "issuedAt", "dueAt", "quantityInvoiced",
+        "unitCostMmk", "totalMmk", "recording",
+    }
+)
+_SUPPLIER_INVOICE_OPTIONAL_FIELDS = frozenset({"payableReview"})
 _CLOSE_REQUIRED_FIELDS = frozenset({"id", "createdAt", "total", "orders"})
 _CLOSE_SNAPSHOT_FIELDS = frozenset(
     {
@@ -1555,6 +1571,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
 
     purchase_order_ids: list[str] = []
     purchase_order_action_ids: list[str] = []
+    supplier_invoice_ids: list[str] = []
+    supplier_invoice_references: list[str] = []
     purchase_order_by_id: dict[str, dict[str, Any]] = {}
     for index, candidate in enumerate(purchase_orders):
         field = f"purchaseOrders[{index}]"
@@ -1593,6 +1611,14 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             f"{field}.quantityOrdered",
             minimum=1,
         )
+        if "unitCostMmk" in purchase_order:
+            unit_cost_mmk = _integer(
+                purchase_order["unitCostMmk"],
+                f"{field}.unitCostMmk",
+                minimum=1,
+            )
+            if purchase_order["quantityOrdered"] * unit_cost_mmk > _MAX_SAFE_INTEGER:
+                raise TrialValidationError(f"{field} total exceeds the safe integer range.")
         creation = _action_proof(purchase_order["creation"], f"{field}.creation")
         if creation["capturedAt"] != created_at:
             raise TrialValidationError(
@@ -1611,9 +1637,83 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     f"{field}.cancellation cannot precede creation."
                 )
             purchase_order_action_ids.append(cancellation["actionId"])
+        if "supplierInvoice" in purchase_order:
+            invoice_field = f"{field}.supplierInvoice"
+            if "unitCostMmk" not in purchase_order:
+                raise TrialValidationError(
+                    f"{invoice_field} requires retained purchase order commercial terms."
+                )
+            invoice = _object(purchase_order["supplierInvoice"], invoice_field)
+            _exact_fields(
+                invoice,
+                invoice_field,
+                required=_SUPPLIER_INVOICE_REQUIRED_FIELDS,
+                optional=_SUPPLIER_INVOICE_OPTIONAL_FIELDS,
+            )
+            invoice_id = _text(invoice["id"], f"{invoice_field}.id", maximum=80)
+            if _SUPPLIER_INVOICE_ID_PATTERN.fullmatch(invoice_id) is None:
+                raise TrialValidationError(f"{invoice_field}.id is invalid.")
+            supplier_reference = _text(
+                invoice["supplierReference"],
+                f"{invoice_field}.supplierReference",
+                maximum=80,
+            )
+            issued_at = _timestamp(invoice["issuedAt"], f"{invoice_field}.issuedAt")
+            due_at = _timestamp(invoice["dueAt"], f"{invoice_field}.dueAt")
+            if (
+                datetime.fromisoformat(issued_at.replace("Z", "+00:00"))
+                < datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                or datetime.fromisoformat(due_at.replace("Z", "+00:00"))
+                < datetime.fromisoformat(issued_at.replace("Z", "+00:00"))
+            ):
+                raise TrialValidationError(f"{invoice_field} invoice dates are invalid.")
+            quantity_invoiced = _integer(
+                invoice["quantityInvoiced"],
+                f"{invoice_field}.quantityInvoiced",
+                minimum=1,
+            )
+            invoice_unit_cost = _integer(
+                invoice["unitCostMmk"],
+                f"{invoice_field}.unitCostMmk",
+                minimum=1,
+            )
+            total_mmk = _integer(
+                invoice["totalMmk"],
+                f"{invoice_field}.totalMmk",
+                minimum=1,
+            )
+            if (
+                quantity_invoiced * invoice_unit_cost > _MAX_SAFE_INTEGER
+                or total_mmk != quantity_invoiced * invoice_unit_cost
+            ):
+                raise TrialValidationError(
+                    f"{invoice_field}.totalMmk must equal quantity times unit cost."
+                )
+            recording = _action_proof(invoice["recording"], f"{invoice_field}.recording")
+            if datetime.fromisoformat(
+                recording["capturedAt"].replace("Z", "+00:00")
+            ) < datetime.fromisoformat(issued_at.replace("Z", "+00:00")):
+                raise TrialValidationError(f"{invoice_field}.recording is invalid.")
+            purchase_order_action_ids.append(recording["actionId"])
+            if "payableReview" in invoice:
+                payable_review = _action_proof(
+                    invoice["payableReview"],
+                    f"{invoice_field}.payableReview",
+                )
+                if datetime.fromisoformat(
+                    payable_review["capturedAt"].replace("Z", "+00:00")
+                ) < datetime.fromisoformat(recording["capturedAt"].replace("Z", "+00:00")):
+                    raise TrialValidationError(f"{invoice_field}.payableReview is invalid.")
+                purchase_order_action_ids.append(payable_review["actionId"])
+            supplier_invoice_ids.append(invoice_id)
+            supplier_invoice_references.append(
+                f"{purchase_order['supplier']}\0{supplier_reference}"
+            )
         purchase_order_ids.append(purchase_order_id)
         purchase_order_by_id[purchase_order_id] = purchase_order
     _unique(purchase_order_ids, "Purchase order ID")
+    _unique(supplier_invoice_ids, "Supplier invoice ID")
+    _unique(supplier_invoice_references, "Supplier invoice reference")
 
     storefront_configuration_action_id = ""
     if storefront_configuration is not None:
@@ -3417,7 +3517,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 )
             )
             if (
-                delivered >= purchase_order["quantityOrdered"]
+                "supplierInvoice" in purchase_order
+                or delivered >= purchase_order["quantityOrdered"]
                 or cancellation_at
                 < latest_receipt_at_by_purchase_order.get(
                     purchase_order_id,
@@ -3431,6 +3532,25 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 )
         elif delivered < purchase_order["quantityOrdered"]:
             active_purchase_order_skus.append(purchase_order["sku"])
+        invoice = purchase_order.get("supplierInvoice")
+        if isinstance(invoice, Mapping) and "payableReview" in invoice:
+            match = commerce_supplier_invoice_match(state, purchase_order)
+            review_at = datetime.fromisoformat(
+                str(invoice["payableReview"]["capturedAt"]).replace("Z", "+00:00")
+            )
+            if (
+                match["status"] != "matched"
+                or review_at
+                < latest_receipt_at_by_purchase_order.get(
+                    purchase_order_id,
+                    datetime.fromisoformat(
+                        str(invoice["recording"]["capturedAt"]).replace("Z", "+00:00")
+                    ),
+                )
+            ):
+                raise TrialValidationError(
+                    f"{purchase_order_id} has an invalid payable-ready review."
+                )
     _unique(active_purchase_order_skus, "Active purchase order SKU")
 
     close_ids: list[str] = []
@@ -4103,6 +4223,34 @@ def _validate_event_evidence(
             raise TrialValidationError(
                 "command evidence must match the purchase order cancellation proof."
             )
+    elif event_type == "commerce.supplier_invoice.recorded":
+        _, changed_purchase_order = _one_changed(
+            _purchase_orders(current),
+            _purchase_orders(next_state),
+            "purchaseOrders",
+        )
+        invoice = changed_purchase_order.get("supplierInvoice")
+        recording = invoice.get("recording") if isinstance(invoice, Mapping) else None
+        if not isinstance(recording, Mapping) or not _proof_matches_evidence(
+            recording, evidence
+        ):
+            raise TrialValidationError(
+                "command evidence must match the supplier invoice recording proof."
+            )
+    elif event_type == "commerce.supplier_invoice.payable_ready":
+        _, changed_purchase_order = _one_changed(
+            _purchase_orders(current),
+            _purchase_orders(next_state),
+            "purchaseOrders",
+        )
+        invoice = changed_purchase_order.get("supplierInvoice")
+        review = invoice.get("payableReview") if isinstance(invoice, Mapping) else None
+        if not isinstance(review, Mapping) or not _proof_matches_evidence(
+            review, evidence
+        ):
+            raise TrialValidationError(
+                "command evidence must match the supplier invoice payable-ready review proof."
+            )
     elif event_type == "commerce.order.advanced":
         _, advanced_order = _one_changed(
             current["orders"],
@@ -4468,6 +4616,59 @@ def _storefront_configuration(state: Mapping[str, Any]) -> Mapping[str, Any] | N
 
 def _purchase_orders(state: Mapping[str, Any]) -> list[Any]:
     return state.get("purchaseOrders", [])
+
+
+def commerce_supplier_invoice_match(
+    state: Mapping[str, Any],
+    purchase_order: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Project a fail-closed three-way match without posting or paying externally."""
+
+    invoice = purchase_order.get("supplierInvoice")
+    ordered_unit_cost = purchase_order.get("unitCostMmk")
+    if not isinstance(invoice, Mapping) or not isinstance(ordered_unit_cost, int):
+        raise TrialValidationError(
+            "Supplier invoice matching requires retained PO commercial terms and an invoice."
+        )
+    received = sum(
+        movement["quantityDelta"]
+        for movement in state.get("movements", [])
+        if isinstance(movement, Mapping)
+        and movement.get("kind") == "receipt"
+        and movement.get("purchaseOrderId") == purchase_order.get("id")
+    )
+    rejected = sum(
+        movement.get("rejectedQuantity", 0)
+        for movement in state.get("movements", [])
+        if isinstance(movement, Mapping)
+        and movement.get("kind") == "receipt"
+        and movement.get("purchaseOrderId") == purchase_order.get("id")
+    )
+    invoiced_quantity = int(invoice["quantityInvoiced"])
+    if received < invoiced_quantity:
+        status = "awaiting_receipt"
+    elif (
+        invoiced_quantity != purchase_order["quantityOrdered"]
+        or received != invoiced_quantity
+        or rejected > 0
+    ):
+        status = "quantity_variance"
+    elif invoice["unitCostMmk"] != ordered_unit_cost:
+        status = "price_variance"
+    else:
+        status = "matched"
+    return {
+        "status": status,
+        "orderedQuantity": purchase_order["quantityOrdered"],
+        "acceptedQuantity": received,
+        "rejectedQuantity": rejected,
+        "invoicedQuantity": invoiced_quantity,
+        "orderedUnitCostMmk": ordered_unit_cost,
+        "invoicedUnitCostMmk": invoice["unitCostMmk"],
+        "orderedTotalMmk": purchase_order["quantityOrdered"] * ordered_unit_cost,
+        "invoicedTotalMmk": invoice["totalMmk"],
+        "payableReady": status == "matched" and "payableReview" in invoice,
+    }
 
 
 def _catalog_changes(state: Mapping[str, Any]) -> list[Any]:
@@ -7837,6 +8038,10 @@ def _validate_purchase_order_created(
         raise TrialValidationError(
             "a new purchase order requires an expected arrival."
         )
+    if "unitCostMmk" not in next_orders[0]:
+        raise TrialValidationError(
+            "a new purchase order requires retained whole-MMK unit cost terms."
+        )
     if "cancellation" in next_orders[0]:
         raise TrialValidationError("a new purchase order cannot start cancelled.")
     foundation = _inventory_foundation(current)
@@ -8028,6 +8233,63 @@ def _validate_purchase_order_cancelled(
     ):
         raise TrialValidationError(
             "purchase order cancellation may only add proof to an order with an outstanding remainder."
+        )
+
+
+def _validate_supplier_invoice_recorded(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    before, after = _one_changed(
+        _purchase_orders(current),
+        _purchase_orders(next_state),
+        "purchaseOrders",
+    )
+    if (
+        "supplierInvoice" in before
+        or "supplierInvoice" not in after
+        or "cancellation" in before
+        or "unitCostMmk" not in before
+        or _without(before, frozenset())
+        != _without(after, frozenset({"supplierInvoice"}))
+    ):
+        raise TrialValidationError(
+            "supplier invoice recording may only add one immutable invoice to one open commercial purchase order."
+        )
+
+
+def _validate_supplier_invoice_payable_ready(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    before, after = _one_changed(
+        _purchase_orders(current),
+        _purchase_orders(next_state),
+        "purchaseOrders",
+    )
+    before_invoice = before.get("supplierInvoice")
+    after_invoice = after.get("supplierInvoice")
+    if (
+        not isinstance(before_invoice, Mapping)
+        or not isinstance(after_invoice, Mapping)
+        or "payableReview" in before_invoice
+        or "payableReview" not in after_invoice
+        or _without(before, frozenset({"supplierInvoice"}))
+        != _without(after, frozenset({"supplierInvoice"}))
+        or _without(before_invoice, frozenset())
+        != _without(after_invoice, frozenset({"payableReview"}))
+        or commerce_supplier_invoice_match(current, before)["status"] != "matched"
+    ):
+        raise TrialValidationError(
+            "payable-ready review requires one exact PO, receipt, and supplier invoice match."
         )
 
 
@@ -8721,6 +8983,8 @@ _TRANSITION_VALIDATORS = {
     "commerce.purchase_order.created": _validate_purchase_order_created,
     "commerce.purchase_order.received": _validate_purchase_order_received,
     "commerce.purchase_order.cancelled": _validate_purchase_order_cancelled,
+    "commerce.supplier_invoice.recorded": _validate_supplier_invoice_recorded,
+    "commerce.supplier_invoice.payable_ready": _validate_supplier_invoice_payable_ready,
     "commerce.close.saved": _validate_close,
     "commerce.website_intake.created": _validate_website_intake_created,
     "commerce.website_intake.converted": _validate_website_intake_converted,
@@ -8827,6 +9091,8 @@ def reduce_commerce_state(
     if event_type not in {
         "commerce.purchase_order.created",
         "commerce.purchase_order.cancelled",
+        "commerce.supplier_invoice.recorded",
+        "commerce.supplier_invoice.payable_ready",
     }:
         _require_purchase_orders_unchanged(current_state, next_state)
     if event_type not in {
@@ -8869,6 +9135,7 @@ __all__ = [
     "commerce_daily_close_csv",
     "commerce_daily_close_export",
     "commerce_storefront_preview_digest",
+    "commerce_supplier_invoice_match",
     "commerce_website_intake_snapshot_digest",
     "reduce_commerce_state",
     "validate_commerce_state",

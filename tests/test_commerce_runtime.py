@@ -22,6 +22,7 @@ from supermega_runtime.commerce_runtime import (
     commerce_order_acknowledgement_text,
     commerce_order_calculation_digest,
     commerce_storefront_preview_digest,
+    commerce_supplier_invoice_match,
     commerce_website_intake_snapshot_digest,
     validate_commerce_state,
 )
@@ -170,6 +171,7 @@ def purchase_order_record(
     quantity: int = 10,
     captured_at: str = NOW,
     expected_at: str = PURCHASE_ORDER_EXPECTED_AT,
+    unit_cost_mmk: int = 75,
 ) -> dict[str, object]:
     return {
         "id": purchase_order_id,
@@ -178,6 +180,7 @@ def purchase_order_record(
         "supplier": "Yangon Supply",
         "sku": "SKU-1",
         "quantityOrdered": quantity,
+        "unitCostMmk": unit_cost_mmk,
         "creation": action_evidence(action_id, captured_at=captured_at),
     }
 
@@ -196,6 +199,25 @@ def action_evidence(
         "actor": actor,
         "reason": reason,
         "evidenceReference": evidence_reference or f"EV-{action_id}",
+    }
+
+
+def supplier_invoice_record(
+    *,
+    action_id: str = "ACT-SUPPLIER-INVOICE-RECORD",
+    captured_at: str = "2026-07-23T09:30:00.000Z",
+    quantity: int = 10,
+    unit_cost_mmk: int = 75,
+) -> dict[str, object]:
+    return {
+        "id": "PINV-00000000-0000-4000-8000-000000000030",
+        "supplierReference": "YS-INV-2026-0030",
+        "issuedAt": "2026-07-23T09:20:00.000Z",
+        "dueAt": "2026-08-22T09:20:00.000Z",
+        "quantityInvoiced": quantity,
+        "unitCostMmk": unit_cost_mmk,
+        "totalMmk": quantity * unit_cost_mmk,
+        "recording": action_evidence(action_id, captured_at=captured_at),
     }
 
 
@@ -859,6 +881,22 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
             if "cancellation" in purchase_order
         )
         return dict(cancelled["cancellation"])
+    if event_type in {
+        "commerce.supplier_invoice.recorded",
+        "commerce.supplier_invoice.payable_ready",
+    }:
+        proof_key = (
+            "recording"
+            if event_type == "commerce.supplier_invoice.recorded"
+            else "payableReview"
+        )
+        invoice = next(
+            purchase_order["supplierInvoice"]
+            for purchase_order in next_state["purchaseOrders"]  # type: ignore[union-attr]
+            if "supplierInvoice" in purchase_order
+            and proof_key in purchase_order["supplierInvoice"]
+        )
+        return dict(invoice[proof_key])
     if event_type == "commerce.website_intake.created":
         return dict(next_state["websiteIntakes"][0]["creation"])  # type: ignore[index, arg-type]
     if event_type == "commerce.website_intake.converted":
@@ -2730,6 +2768,8 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.purchase_order.created",
                     "commerce.purchase_order.received",
                     "commerce.purchase_order.cancelled",
+                    "commerce.supplier_invoice.recorded",
+                    "commerce.supplier_invoice.payable_ready",
                     "commerce.close.saved",
                     "commerce.website_intake.converted",
                     "commerce.storefront.configuration.saved",
@@ -3710,6 +3750,115 @@ class CommerceRuntimeTests(unittest.TestCase):
                 },
             )
 
+    def test_supplier_invoice_three_way_match_gates_payable_handoff(self) -> None:
+        current = catalog_state()
+        created_state = deepcopy(current)
+        created_state["purchaseOrders"] = [purchase_order_record()]
+        created = apply_event(current, "commerce.purchase_order.created", created_state)
+
+        invoice = supplier_invoice_record()
+        invoiced_state = deepcopy(created)
+        invoiced_state["purchaseOrders"][0]["supplierInvoice"] = invoice  # type: ignore[index]
+        invoiced = apply_event(
+            created,
+            "commerce.supplier_invoice.recorded",
+            invoiced_state,
+        )
+        match = commerce_supplier_invoice_match(
+            invoiced,
+            invoiced["purchaseOrders"][0],  # type: ignore[index,arg-type]
+        )
+        self.assertEqual(match["status"], "awaiting_receipt")
+        self.assertFalse(match["payableReady"])
+
+        forged_payable = deepcopy(invoiced)
+        forged_payable["purchaseOrders"][0]["supplierInvoice"]["payableReview"] = (  # type: ignore[index]
+            action_evidence(
+                "ACT-SUPPLIER-INVOICE-PAYABLE-EARLY",
+                captured_at="2026-07-23T09:31:00.000Z",
+            )
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                invoiced,
+                "commerce.supplier_invoice.payable_ready",
+                forged_payable,
+            )
+
+        received_state = deepcopy(invoiced)
+        received_state["items"][0]["onHand"] = 20  # type: ignore[index]
+        received_state["movements"] = [
+            movement(
+                "receipt",
+                "ACT-PURCHASE-RECEIVE-FULL",
+                10,
+                created_at="2026-07-23T09:40:00.000Z",
+                purchase_order_id=PURCHASE_ORDER_ID,
+            )
+        ]
+        received = apply_event(
+            invoiced,
+            "commerce.purchase_order.received",
+            received_state,
+        )
+        matched = commerce_supplier_invoice_match(
+            received,
+            received["purchaseOrders"][0],  # type: ignore[index,arg-type]
+        )
+        self.assertEqual(matched["status"], "matched")
+        self.assertEqual(matched["orderedTotalMmk"], 750)
+        self.assertEqual(matched["invoicedTotalMmk"], 750)
+
+        review = action_evidence(
+            "ACT-SUPPLIER-INVOICE-PAYABLE",
+            captured_at="2026-07-23T09:50:00.000Z",
+        )
+        payable_state = deepcopy(received)
+        payable_state["purchaseOrders"][0]["supplierInvoice"]["payableReview"] = review  # type: ignore[index]
+        payable = apply_event(
+            received,
+            "commerce.supplier_invoice.payable_ready",
+            payable_state,
+        )
+        payable_match = commerce_supplier_invoice_match(
+            payable,
+            payable["purchaseOrders"][0],  # type: ignore[index,arg-type]
+        )
+        self.assertTrue(payable_match["payableReady"])
+
+        price_variance_state = deepcopy(created)
+        price_variance_state["purchaseOrders"][0]["supplierInvoice"] = (  # type: ignore[index]
+            supplier_invoice_record(unit_cost_mmk=80)
+        )
+        price_variance = apply_event(
+            created,
+            "commerce.supplier_invoice.recorded",
+            price_variance_state,
+        )
+        price_variance_received = deepcopy(price_variance)
+        price_variance_received["items"][0]["onHand"] = 20  # type: ignore[index]
+        price_variance_received["movements"] = received_state["movements"]
+        price_variance_received = apply_event(
+            price_variance,
+            "commerce.purchase_order.received",
+            price_variance_received,
+        )
+        self.assertEqual(
+            commerce_supplier_invoice_match(
+                price_variance_received,
+                price_variance_received["purchaseOrders"][0],  # type: ignore[index,arg-type]
+            )["status"],
+            "price_variance",
+        )
+
+        cancellation = deepcopy(invoiced)
+        cancellation["purchaseOrders"][0]["cancellation"] = action_evidence(  # type: ignore[index]
+            "ACT-PURCHASE-CANCEL-INVOICED",
+            captured_at="2026-07-23T09:35:00.000Z",
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(invoiced, "commerce.purchase_order.cancelled", cancellation)
+
     def test_purchase_order_lifecycle_supports_partial_receipt_and_cancellation(self) -> None:
         current = catalog_state()
         purchase_order = purchase_order_record()
@@ -3829,6 +3978,150 @@ class CommerceRuntimeTests(unittest.TestCase):
                 cancellation,
             )
 
+    def test_store_stamps_supplier_invoice_and_payable_review(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-invoice", "shop-finance-owner", "human")
+        store.provision_membership(
+            workspace_id=operator.workspace_id,
+            actor_id=operator.actor_id,
+            actor_kind=operator.actor_kind,
+            capabilities=("commerce.write",),
+        )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={"state": catalog_state(), "evidence": action_evidence("ACT-INVOICE-INIT")},
+        )
+        created_state = deepcopy(initialized.state)
+        created_state["purchaseOrders"] = [purchase_order_record()]
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:00:00.000+00:00",
+        ):
+            created = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.created",
+                expected_version=initialized.version,
+                payload={
+                    "state": created_state,
+                    "evidence": evidence_for("commerce.purchase_order.created", created_state),
+                },
+            )
+
+        received_state = deepcopy(created.state)
+        received_state["items"][0]["onHand"] = 20  # type: ignore[index]
+        received_state["movements"] = [
+            movement(
+                "receipt",
+                "ACT-INVOICE-RECEIPT",
+                10,
+                created_at="2099-01-01T00:00:00.000Z",
+                purchase_order_id=PURCHASE_ORDER_ID,
+            )
+        ]
+        received_state["movements"][0]["actor"] = "Fabricated receiver"  # type: ignore[index]
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:10:00.000+00:00",
+        ):
+            received = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.received",
+                expected_version=created.version,
+                payload={
+                    "state": received_state,
+                    "evidence": action_evidence(
+                        "ACT-INVOICE-RECEIPT",
+                        captured_at="2099-01-01T00:00:00.000Z",
+                        actor="Fabricated receiver",
+                    ),
+                },
+            )
+
+        invoiced_state = deepcopy(received.state)
+        invoice = supplier_invoice_record(
+            captured_at="2099-01-01T00:00:00.000Z",
+        )
+        invoice["recording"]["actor"] = "Fabricated accounts bot"  # type: ignore[index]
+        invoiced_state["purchaseOrders"][0]["supplierInvoice"] = invoice  # type: ignore[index]
+        invoice_command_id = str(uuid4())
+        invoice_payload = {
+            "state": invoiced_state,
+            "evidence": dict(invoice["recording"]),  # type: ignore[arg-type]
+        }
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:20:00.000+00:00",
+        ):
+            invoiced = store.apply_command(
+                operator,
+                command_id=invoice_command_id,
+                surface="commerce",
+                event_type="commerce.supplier_invoice.recorded",
+                expected_version=received.version,
+                payload=invoice_payload,
+            )
+            invoice_replay = store.apply_command(
+                operator,
+                command_id=invoice_command_id,
+                surface="commerce",
+                event_type="commerce.supplier_invoice.recorded",
+                expected_version=received.version,
+                payload=invoice_payload,
+            )
+        retained_invoice = invoiced.state["purchaseOrders"][0]["supplierInvoice"]  # type: ignore[index]
+        self.assertEqual(retained_invoice["recording"]["actor"], operator.actor_id)  # type: ignore[index]
+        self.assertEqual(
+            datetime.fromisoformat(retained_invoice["recording"]["capturedAt"]),  # type: ignore[index]
+            datetime.fromisoformat("2026-07-23T09:20:00.000+00:00"),
+        )
+        self.assertTrue(invoice_replay.idempotent_replay)
+
+        payable_state = deepcopy(invoiced.state)
+        payable_state["purchaseOrders"][0]["supplierInvoice"]["payableReview"] = (  # type: ignore[index]
+            action_evidence(
+                "ACT-INVOICE-PAYABLE-MANAGED",
+                captured_at="2099-01-01T00:00:00.000Z",
+                actor="Fabricated payable bot",
+            )
+        )
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:30:00.000+00:00",
+        ):
+            payable = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.supplier_invoice.payable_ready",
+                expected_version=invoiced.version,
+                payload={
+                    "state": payable_state,
+                    "evidence": evidence_for(
+                        "commerce.supplier_invoice.payable_ready", payable_state
+                    ),
+                },
+            )
+        review = payable.state["purchaseOrders"][0]["supplierInvoice"]["payableReview"]  # type: ignore[index]
+        self.assertEqual(review["actor"], operator.actor_id)
+        self.assertEqual(
+            datetime.fromisoformat(review["capturedAt"]),
+            datetime.fromisoformat("2026-07-23T09:30:00.000+00:00"),
+        )
+        self.assertTrue(
+            commerce_supplier_invoice_match(
+                payable.state,
+                payable.state["purchaseOrders"][0],  # type: ignore[index,arg-type]
+            )["payableReady"]
+        )
+
     def test_purchase_order_creation_requires_future_arrival_but_legacy_records_remain_readable(self) -> None:
         current = catalog_state()
         legacy_purchase_order = purchase_order_record()
@@ -3848,6 +4141,17 @@ class CommerceRuntimeTests(unittest.TestCase):
                 "commerce.purchase_order.created",
                 legacy,
             )
+
+        missing_terms = deepcopy(current)
+        purchase_order_without_terms = purchase_order_record()
+        purchase_order_without_terms.pop("unitCostMmk")
+        missing_terms["purchaseOrders"] = [purchase_order_without_terms]
+        self.assertEqual(
+            validate_commerce_state(missing_terms)["purchaseOrders"],
+            [purchase_order_without_terms],
+        )
+        with self.assertRaisesRegex(TrialValidationError, "requires retained whole-MMK unit cost"):
+            apply_event(current, "commerce.purchase_order.created", missing_terms)
 
         for expected_at in (
             NOW,

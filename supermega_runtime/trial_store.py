@@ -53,6 +53,8 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
+        "commerce.supplier_invoice.recorded",
+        "commerce.supplier_invoice.payable_ready",
         "commerce.close.saved",
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
@@ -1412,6 +1414,72 @@ def _authoritative_command_payload(
             authoritative_orders[order_index] = authoritative_order
         authoritative_state = dict(state)
         authoritative_state["orders"] = authoritative_orders
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type in {
+        "commerce.supplier_invoice.recorded",
+        "commerce.supplier_invoice.payable_ready",
+    }:
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        purchase_orders = (
+            state.get("purchaseOrders") if isinstance(state, Mapping) else None
+        )
+        proof_key = (
+            "recording"
+            if event_type == "commerce.supplier_invoice.recorded"
+            else "payableReview"
+        )
+        matches: list[tuple[int, Mapping[str, Any], Mapping[str, Any]]] = []
+        if isinstance(purchase_orders, list) and isinstance(evidence, Mapping):
+            for index, candidate in enumerate(purchase_orders):
+                invoice = (
+                    candidate.get("supplierInvoice")
+                    if isinstance(candidate, Mapping)
+                    else None
+                )
+                proof = invoice.get(proof_key) if isinstance(invoice, Mapping) else None
+                if (
+                    isinstance(proof, Mapping)
+                    and proof.get("actionId") == evidence.get("actionId")
+                ):
+                    matches.append((index, candidate, invoice))
+        if len(matches) != 1 or not isinstance(state, Mapping):
+            return authoritative
+        purchase_order_index, purchase_order, invoice = matches[0]
+        receipt_times = [
+            movement.get("createdAt")
+            for movement in state.get("movements", [])
+            if isinstance(movement, Mapping)
+            and movement.get("kind") == "receipt"
+            and movement.get("purchaseOrderId") == purchase_order.get("id")
+        ]
+        effective_captured_at = _not_before(
+            captured_at,
+            purchase_order.get("createdAt"),
+            invoice.get("issuedAt"),
+            invoice.get("recording", {}).get("capturedAt")
+            if event_type == "commerce.supplier_invoice.payable_ready"
+            and isinstance(invoice.get("recording"), Mapping)
+            else None,
+            *receipt_times,
+        )
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": effective_captured_at,
+        }
+        authoritative_invoice = dict(invoice)
+        authoritative_invoice[proof_key] = deepcopy(authoritative_evidence)
+        authoritative_purchase_order = {
+            **dict(purchase_order),
+            "supplierInvoice": authoritative_invoice,
+        }
+        authoritative_purchase_orders = deepcopy(purchase_orders)
+        authoritative_purchase_orders[purchase_order_index] = authoritative_purchase_order
+        authoritative_state = dict(state)
+        authoritative_state["purchaseOrders"] = authoritative_purchase_orders
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative

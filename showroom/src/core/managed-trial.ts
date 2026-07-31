@@ -99,6 +99,8 @@ export type ManagedCommerceEvent =
   | 'commerce.purchase_order.created'
   | 'commerce.purchase_order.received'
   | 'commerce.purchase_order.cancelled'
+  | 'commerce.supplier_invoice.recorded'
+  | 'commerce.supplier_invoice.payable_ready'
   | 'commerce.close.saved'
 
 export type ManagedWebsiteEvent =

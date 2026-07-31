@@ -1710,6 +1710,7 @@ if (!coreSource.includes('const shopAccountingRows = [')
   || !coreSource.includes("['Payments', pendingPaymentOrders.length ? `${pendingPaymentOrders.length} exception` : 'Clear']")
   || !coreSource.includes("['Refunds', refundExposureOrders.length ? `${refundExposureOrders.length} due`")
   || !coreSource.includes("['Receipts', supplierReceiptExposure ? `${supplierReceiptExposure} review`")
+  || !coreSource.includes("['Invoices', supplierInvoiceExceptions.length ? `${supplierInvoiceExceptions.length} variance`")
   || !coreSource.includes("['Inventory', lowStock.length ? `${lowStock.length} reconcile`")
   || !coreSource.includes("['Export gate', commerceCanWrite && !pendingAction ? 'Review only' : 'Locked']")
   || !coreSource.includes('{shopAccountingReadiness}')) fail('shop_accounting_readiness_missing')
@@ -1724,7 +1725,7 @@ if (!coreSource.includes('const shopAccountingPacketRows = [')
   || !coreSource.includes("['Close', latestCloseDownload ? 'CSV ready' : closePreview ? `${closableOrders.length} ready` : 'Close first']")
   || !coreSource.includes("['Ledger', latestCloseDownload ? 'Review import' : 'Not posted']")
   || !coreSource.includes("['Tax', 'Not configured']")
-  || !coreSource.includes("['Payables', activePurchaseOrders.length ? `${activePurchaseOrders.length} supplier review` : 'None created']")
+  || !coreSource.includes("['Payables', supplierInvoiceExceptions.length ? `${supplierInvoiceExceptions.length} blocked`")
   || !coreSource.includes("['Settlement', paymentReview.length ? `${paymentReview.length} exception` : 'External proof only']")
   || !coreSource.includes("['Audit', latestClose?.evidenceReference ? 'Evidence linked' : 'Need close evidence']")
   || !coreSource.includes('{shopAccountingPacket}')) fail('shop_accounting_packet_missing')
@@ -3093,7 +3094,7 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${shopInventoryUiSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.support_case_opened', 'commerce.order.support_case_reopened', 'commerce.order.support_case_service_recorded', 'commerce.order.support_case_resolved', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.collection_action.recorded', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved', 'commerce.customer_credit_policy.saved']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.support_case_opened', 'commerce.order.support_case_reopened', 'commerce.order.support_case_service_recorded', 'commerce.order.support_case_resolved', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.collection_action.recorded', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.supplier_invoice.recorded', 'commerce.supplier_invoice.payable_ready', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved', 'commerce.customer_credit_policy.saved']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.storefront_request.received')
@@ -4145,6 +4146,22 @@ if (!commercePageContract.includes('purchaseOrderDraft')
   || !coreCssSource.includes('.purchase-order-editor[data-mode="receive"] { grid-template-columns: repeat(3,minmax(0,1fr)); }')
   || !coreCssSource.includes('.purchase-order-editor[data-mode="receive"] { grid-template-columns: 1fr; }')
   || !coreCssSource.includes('.purchase-order-editor[data-mode="create"] { grid-template-columns: repeat(2,minmax(0,1fr)); }')) fail('commerce_purchase_order_ui_missing')
+if (!commerceSource.includes('export type CommerceSupplierInvoice')
+  || !commerceSource.includes('export function commerceSupplierInvoiceMatch')
+  || !commerceSource.includes('export function recordCommerceSupplierInvoice')
+  || !commerceSource.includes('export function markCommerceSupplierInvoicePayableReady')
+  || !commerceSource.includes("'awaiting_receipt' | 'quantity_variance' | 'price_variance' | 'matched'")
+  || !commercePageContract.includes('Supplier invoice review')
+  || !commercePageContract.includes("'commerce.supplier_invoice.recorded'")
+  || !commercePageContract.includes("'commerce.supplier_invoice.payable_ready'")
+  || !commercePageContract.includes('Record invoice')
+  || !commercePageContract.includes('Review payable')
+  || !commercePageContract.includes('no ledger post, bank instruction, or supplier payment created')
+  || !managedCommerceRuntime.includes('def commerce_supplier_invoice_match(')
+  || !managedCommerceRuntime.includes('def _validate_supplier_invoice_recorded(')
+  || !managedCommerceRuntime.includes('def _validate_supplier_invoice_payable_ready(')
+  || !managedTrialStoreRuntime.includes('"commerce.supplier_invoice.recorded"')
+  || !managedTrialStoreRuntime.includes('"commerce.supplier_invoice.payable_ready"')) fail('commerce_supplier_invoice_three_way_match_missing')
 const commerceOrdersContract = commercePageContract.slice(commercePageContract.indexOf("if (tab === 'orders')"), commercePageContract.indexOf("if (tab === 'inventory')"))
 if (!commerceOrdersContract.includes('order-daily-controls') || !commerceOrdersContract.includes('Review and save close') || !commerceOrdersContract.includes('Close and exceptions')) fail('commerce_daily_controls_not_inside_orders')
 if (!coreSource.includes('data-close-settlement=')
@@ -5372,10 +5389,10 @@ async function verifyShopInventoryRuntime() {
       'managed_sellable_return_accepted_forged_location_allocation')
     const managedPurchaseOrderId = 'PO-00000000-0000-4000-8000-000000000072'
     const managedOrdered = commerce.createCommercePurchaseOrder(managedBase, {
-      id: managedPurchaseOrderId, expectedAt: '2026-07-28T05:00:00.000Z', supplier: 'Opening source', sku: 'SKU-1', quantityOrdered: 6,
+      id: managedPurchaseOrderId, expectedAt: '2026-07-28T05:00:00.000Z', supplier: 'Opening source', sku: 'SKU-1', quantityOrdered: 6, unitCostMmk: 75,
     }, proof(2, 'managed-order'))
     assert(commerce.createCommercePurchaseOrder(managedBase, {
-      id: 'PO-00000000-0000-4000-8000-000000000073', expectedAt: '2026-07-28T05:00:00.000Z', supplier: 'Unregistered supplier', sku: 'SKU-1', quantityOrdered: 6,
+      id: 'PO-00000000-0000-4000-8000-000000000073', expectedAt: '2026-07-28T05:00:00.000Z', supplier: 'Unregistered supplier', sku: 'SKU-1', quantityOrdered: 6, unitCostMmk: 75,
     }, proof(2, 'unregistered-supplier')) === null, 'location_purchase_order_accepted_unregistered_supplier')
     const managedReceiptProof = proof(3, 'managed-receipt')
     const managedLocationReceipt = {
@@ -10095,6 +10112,7 @@ async function verifyCommerceRuntime() {
       supplier: 'Yangon Supply',
       sku: 'SKU-1',
       quantityOrdered: 10,
+      unitCostMmk: 75,
     }, purchaseCreationProof)
     assert(purchaseCreated
       && purchaseCreated.items === base.items
@@ -10134,6 +10152,7 @@ async function verifyCommerceRuntime() {
       supplier: 'Yangon Supply',
       sku: 'SKU-1',
       quantityOrdered: 10,
+      unitCostMmk: 75,
     }, purchaseCreationProof) === purchaseCreated, 'purchase_order_exact_retry_not_idempotent')
     assert(model.createCommercePurchaseOrder(purchaseCreated, {
       id: 'PO-00000000-0000-4000-8000-000000000021',
@@ -10141,6 +10160,7 @@ async function verifyCommerceRuntime() {
       supplier: 'Second supplier',
       sku: 'SKU-1',
       quantityOrdered: 5,
+      unitCostMmk: 75,
     }, proof('ACT-PURCHASE-CREATE-2')) === null, 'duplicate_active_purchase_order_succeeded')
     assert(model.createCommercePurchaseOrder(base, {
       id: purchaseOrderId,
@@ -10148,12 +10168,14 @@ async function verifyCommerceRuntime() {
       supplier: 'Yangon Supply',
       sku: 'SKU-1',
       quantityOrdered: 10,
+      unitCostMmk: 75,
     }, purchaseCreationProof) === null, 'nonfuture_purchase_arrival_succeeded')
     assert(model.createCommercePurchaseOrder(base, {
       id: purchaseOrderId,
       supplier: 'Yangon Supply',
       sku: 'SKU-1',
       quantityOrdered: 10,
+      unitCostMmk: 75,
     }, purchaseCreationProof) === null, 'missing_purchase_arrival_succeeded')
     assert(model.createCommercePurchaseOrder(purchaseCreated, {
       id: purchaseOrderId,
@@ -10161,6 +10183,7 @@ async function verifyCommerceRuntime() {
       supplier: 'Yangon Supply',
       sku: 'SKU-1',
       quantityOrdered: 10,
+      unitCostMmk: 75,
     }, purchaseCreationProof) === null, 'changed_purchase_arrival_retry_succeeded')
     const purchasePartialProof = proof('ACT-PURCHASE-RECEIVE-1', 60_000)
     const purchasePartial = model.receiveCommercePurchaseOrder(purchaseCreated, purchaseOrderId, 4, purchasePartialProof)
@@ -10234,6 +10257,52 @@ async function verifyCommerceRuntime() {
     assert(purchaseFilled
       && model.commercePurchaseOrderProgress(purchaseFilled, purchaseFilled.purchaseOrders[0]).status === 'received'
       && model.cancelCommercePurchaseOrder(purchaseFilled, purchaseOrderId, proof('ACT-PURCHASE-CANCEL-FILLED', 180_000)) === null, 'completed_purchase_order_was_cancellable')
+    const supplierInvoiceInput = {
+      id: 'PINV-00000000-0000-4000-8000-000000000030',
+      supplierReference: 'YS-INV-2026-0030',
+      issuedAt: purchaseFilled.movements[0].createdAt,
+      dueAt: '2026-08-23T09:00:00.000Z',
+      quantityInvoiced: 10,
+      unitCostMmk: 75,
+    }
+    const invoiceRecordingProof = proof('ACT-SUPPLIER-INVOICE-RECORD', 180_000)
+    const invoiceBeforeReceipt = model.recordCommerceSupplierInvoice(
+      purchaseCreated, purchaseOrderId, supplierInvoiceInput, invoiceRecordingProof,
+    )
+    assert(invoiceBeforeReceipt
+      && model.commerceSupplierInvoiceMatch(invoiceBeforeReceipt, invoiceBeforeReceipt.purchaseOrders[0]).status === 'awaiting_receipt'
+      && model.markCommerceSupplierInvoicePayableReady(
+        invoiceBeforeReceipt, purchaseOrderId, proof('ACT-SUPPLIER-INVOICE-EARLY', 240_000),
+      ) === null, 'supplier_invoice_payable_gate_ignored_missing_receipt')
+    const invoiced = model.recordCommerceSupplierInvoice(
+      purchaseFilled, purchaseOrderId, supplierInvoiceInput, invoiceRecordingProof,
+    )
+    const invoiceMatch = invoiced && model.commerceSupplierInvoiceMatch(invoiced, invoiced.purchaseOrders[0])
+    assert(invoiced
+      && invoiceMatch?.status === 'matched'
+      && invoiceMatch.orderedTotalMmk === 750
+      && invoiceMatch.invoicedTotalMmk === 750
+      && !invoiceMatch.payableReady, 'supplier_invoice_three_way_match_not_exact')
+    const payableProof = proof('ACT-SUPPLIER-INVOICE-PAYABLE', 240_000)
+    const payable = model.markCommerceSupplierInvoicePayableReady(invoiced, purchaseOrderId, payableProof)
+    assert(payable
+      && model.commerceSupplierInvoiceMatch(payable, payable.purchaseOrders[0]).payableReady
+      && model.markCommerceSupplierInvoicePayableReady(payable, purchaseOrderId, payableProof) === payable,
+    'supplier_invoice_payable_review_not_attributed_or_idempotent')
+    assert(model.cancelCommercePurchaseOrder(
+      invoiceBeforeReceipt, purchaseOrderId, proof('ACT-PURCHASE-CANCEL-INVOICED', 240_000),
+    ) === null, 'invoiced_purchase_order_was_cancellable')
+    const priceVariance = model.recordCommerceSupplierInvoice(
+      purchaseFilled,
+      purchaseOrderId,
+      { ...supplierInvoiceInput, unitCostMmk: 80 },
+      proof('ACT-SUPPLIER-INVOICE-VARIANCE', 180_000),
+    )
+    assert(priceVariance
+      && model.commerceSupplierInvoiceMatch(priceVariance, priceVariance.purchaseOrders[0]).status === 'price_variance'
+      && model.markCommerceSupplierInvoicePayableReady(
+        priceVariance, purchaseOrderId, proof('ACT-SUPPLIER-INVOICE-VARIANCE-PAYABLE', 240_000),
+      ) === null, 'supplier_invoice_price_variance_was_payable')
     const openSupplierPerformance = model.commerceSupplierPerformance(
       purchaseCreated,
       Date.parse('2026-07-25T09:00:00.000Z'),
@@ -10301,6 +10370,7 @@ async function verifyCommerceRuntime() {
       supplier: 'Precision supplier',
       sku: 'SKU-1',
       quantityOrdered: 2,
+      unitCostMmk: 75,
     }, proof('ACT-PURCHASE-PRECISE-CREATE', 0, { capturedAt: '2026-07-23T09:00:00.000000Z' }))
     const precisePurchaseReceived = model.receiveCommercePurchaseOrder(
       precisePurchaseCreated,
@@ -10322,6 +10392,8 @@ async function verifyCommerceRuntime() {
       supplier: 'Attention supplier',
       sku,
       quantityOrdered: 2,
+      unitCostMmk: 75,
+      unitCostMmk: 75,
       creation: proof(actionId),
       ...(cancellation ? { cancellation } : {}),
     })
