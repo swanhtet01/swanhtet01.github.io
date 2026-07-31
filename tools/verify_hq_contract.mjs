@@ -1329,6 +1329,14 @@ requireContract('app shell integration keeps actions reachable and consequences 
   && workboard.includes('candidate `96177d24` passes every candidate requirement while lacking 23 upstream')
   && workboard.includes('move sizing or padding into a decoy rule and now fail'))
 
+requireContract('Ecommerce integration keeps quote cleanup and governed order operations together',
+  workboard.includes('| OPS-126 | CEO + Ecommerce Integration Contract Codex | done-local |')
+  && workboard.includes('binds the live quote clock to one exact `useEffect` lifecycle')
+  && workboard.includes('Removing the cleanup or scattering matching interval, cleanup, and dependency strings')
+  && workboard.includes('main `7c76b810` passing every upstream requirement while lacking 19 candidate tokens')
+  && workboard.includes('candidate `771a6c3d` passes every candidate requirement while lacking 12 upstream')
+  && workboard.includes('packet digest `sha256:a6f432e07b53b5f3ac852ec8af090112f8bf81d56896c5153c66e22fd9fb14d7`'))
+
 requireContract('current CEO platform evidence is recorded without expanding authority',
   workboard.includes('| OPS-039 | CEO + Agent Operations / Evidence Quality Codex | done-local |')
   && workboard.includes('Checkpoint `e8a3adb` adds `supermega.platform-status.v1`')
