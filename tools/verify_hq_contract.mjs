@@ -1308,6 +1308,13 @@ requireContract('live HQ state is machine-verifiable and read-only',
   && workboard.includes('Checkpoint `bc19dac2` adds `supermega.hq-live-state.v1`')
   && workboard.includes('A one-off non-terminating working-set trim released 2,084.8 MB'))
 
+requireContract('hosted one-job release drift is recorded',
+  workboard.includes('| OPS-123 | CEO + Hosted Agent Release Integrity Codex | done-local |')
+  && workboard.includes('production remains `isolated_demo`, scheduler-disabled, and scale-to-zero, but still reports the superseded two-job ceiling')
+  && workboard.includes('24 conflicts across five bounded batches')
+  && workboard.includes('zero merge, push, deployment, or provider authority')
+  && now.includes('local context drift and the deployed two-job scheduler ceiling block release readiness'))
+
 requireContract('current CEO platform evidence is recorded without expanding authority',
   workboard.includes('| OPS-039 | CEO + Agent Operations / Evidence Quality Codex | done-local |')
   && workboard.includes('Checkpoint `e8a3adb` adds `supermega.platform-status.v1`')
