@@ -992,6 +992,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
   padding: 11px;
+  color: #17231d;
 }
 
 .ecommerce-order-autopilot {

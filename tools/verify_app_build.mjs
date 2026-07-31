@@ -2199,7 +2199,8 @@ if (addToCartStart < 0
   || !addToCartAction.includes('catalogHydrating || !previewResult.preview || !digest || (Boolean(managedIdentity) && !savedDraftIsCurrent)')
   || !addToCartAction.includes('setBuyingCart((current) => current.some')
   || !addToCartAction.includes('workspace instanceof HTMLDetailsElement')
-  || !addToCartAction.includes("scrollIntoView({ behavior: 'smooth', block: 'start' })")
+  || !addToCartAction.includes("scrollIntoView({ block: 'start' })")
+  || !addToCartAction.includes('workspace?.focus({ preventScroll: true })')
   || ['saveCurrentStorefront', 'saveManagedCommerceCommand', 'saveStorefrontDraft', 'prepareEcommerceShopDraftV2', 'navigate(', 'fetch('].some((marker) => addToCartAction.includes(marker))
   || prepareQuoteRecoveryStart < 0
   || prepareQuoteRecoveryEnd < 0
@@ -2244,6 +2245,7 @@ if (addToCartStart < 0
   || !openFilteredRequestAction.includes("navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestInboxNextRequest.id)}`)")
   || ['saveCurrentStorefront', 'saveManagedCommerceCommand', 'saveStorefrontDraft', 'prepareEcommerceShopDraftV2', 'recordCommerceStorefrontRequest', 'fetch(', 'navigator.clipboard', 'mailto:', 'sms:', 'viber', 'whatsapp', 'bookDelivery', 'chargePayment'].some((marker) => openFilteredRequestAction.includes(marker))
   || !ecommerceBuyingUiSource.includes('id="ecommerce-buying-workspace"')
+  || !ecommerceBuyingUiSource.includes('tabIndex={-1}')
   || !ecommerceBuyingUiSource.includes('Cart and checkout')
   || !ecommerceBuyingUiSource.includes('Review order')
   || !ecommerceBuyingUiSource.includes('Open in Shop')
@@ -2378,6 +2380,7 @@ if (addToCartStart < 0
   || !ecommerceCssSource.includes('.ecommerce-preview-gate .core-button')
   || !ecommerceCssSource.includes('.storefront-request-button')
   || !ecommerceCssSource.includes('.ecommerce-buying-workspace')
+  || !ecommerceCssSource.slice(ecommerceCssSource.indexOf('.ecommerce-buying-body {'), ecommerceCssSource.indexOf('}', ecommerceCssSource.indexOf('.ecommerce-buying-body {'))).includes('color: #17231d;')
   || !ecommerceCssSource.includes('.ecommerce-order-autopilot')
   || !ecommerceCssSource.includes('.ecommerce-order-autopilot-rows')
   || !ecommerceCssSource.includes('@media (min-width: 981px)')

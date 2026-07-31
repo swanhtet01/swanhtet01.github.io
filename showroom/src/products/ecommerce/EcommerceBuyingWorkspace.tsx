@@ -1143,6 +1143,7 @@ export function EcommerceBuyingWorkspace({
         id="ecommerce-buying-workspace"
         onToggle={(event) => setOpen(event.currentTarget.open)}
         open={open}
+        tabIndex={-1}
       >
         <summary>
           <span><strong>Cart and checkout</strong><small>Review one total before Shop</small></span>

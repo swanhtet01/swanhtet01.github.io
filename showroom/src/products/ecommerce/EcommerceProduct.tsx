@@ -937,7 +937,8 @@ export function EcommerceProduct() {
     requestAnimationFrame(() => {
       const workspace = document.getElementById('ecommerce-buying-workspace')
       if (workspace instanceof HTMLDetailsElement) workspace.open = true
-      workspace?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      workspace?.scrollIntoView({ block: 'start' })
+      workspace?.focus({ preventScroll: true })
     })
   }
 
