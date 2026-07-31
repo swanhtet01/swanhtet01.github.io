@@ -209,7 +209,7 @@ for (const token of ['data-contact-form', 'action="/api/contact-submissions"', '
 if (contact.includes('value="agents"') || contact.includes('>AI Agent Solutions<')) fail('shared_capability_listed_as_contact_product')
 
 const privacy = pages.get('/privacy/')?.html || ''
-for (const token of ['Contact requests', 'Product data', 'AI processing', 'Deletion']) {
+for (const token of ['Contact requests', 'Product data', 'AI processing', 'Deletion', 'Vision qualification', 'target device, number of visual states, weekly frequency, minutes per run, optional labor estimate', 'screenshot rights, human fallback, and an observation-only first pilot', 'only to qualify the request and prepare a local proposal draft', 'This form does not upload screenshots or capture your screen.']) {
   if (!privacy.includes(token)) fail('privacy_contract_missing', { token })
 }
 
