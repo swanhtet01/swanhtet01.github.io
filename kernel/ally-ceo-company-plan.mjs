@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 
 import { buildAgentCompanyManifestPreflight } from './agent-company-operator.mjs'
 import { planCompanyCycle } from './agent-company.mjs'
+import { validateManagedPilotReadiness } from './managed-pilot-readiness.mjs'
 import { selectCeoOutcome } from './supermega-hq-authority.mjs'
 
 export const ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'
@@ -297,6 +298,15 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
     if (error?.message?.startsWith('ally_ceo_company_plan_')) throw error
     fail('ally_ceo_company_plan_portfolio_invalid')
   }
+  let managedReadiness = null
+  if (input.managedReadinessText !== undefined) {
+    try { managedReadiness = validateManagedPilotReadiness(JSON.parse(boundedSource(input.managedReadinessText, 'managed_readiness'))) }
+    catch (error) {
+      if (error?.message?.startsWith('managed_pilot_readiness_')) fail('ally_ceo_company_plan_managed_readiness_invalid')
+      if (error?.message?.startsWith('ally_ceo_company_plan_')) throw error
+      fail('ally_ceo_company_plan_managed_readiness_invalid')
+    }
+  }
 
   const selection = selectCeoOutcome({
     authority: input.authority,
@@ -331,7 +341,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
     markdownSection(hqNow, 'Next evidence'),
   ]
   const executionOrder = markdownSection(workboard, 'Execution order')
-  const evidenceText = stableStringify({ currentState, executionOrder, portfolio })
+  const evidenceText = stableStringify({ currentState, executionOrder, portfolio, managedReadiness })
   if (SOCIAL_SIGNAL_RE.test(evidenceText)) fail('ally_ceo_company_plan_non_authoritative_source')
   if (SENSITIVE_VALUE_RE.test(evidenceText)) fail('ally_ceo_company_plan_sensitive_evidence')
 
@@ -339,6 +349,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
     { path: 'hq/NOW.md', digest: `sha256:${digest(hqNow)}` },
     { path: 'hq/WORKBOARD.md#execution-order', digest: `sha256:${digest(stableStringify(executionOrder))}` },
     { path: 'hq/portfolio.json', digest: `sha256:${digest(portfolioText)}` },
+    ...(managedReadiness ? [{ path: 'hq/readiness/managed-pilot-readiness.json', digest: `sha256:${digest(stableStringify(managedReadiness))}` }] : []),
   ]
   if (selection.selected.id === 'product-portfolio-control' && !productFocus) {
     return {
@@ -391,6 +402,17 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
       count: portfolio.completedLocalAutomations.length,
       digest: `sha256:${digest(stableStringify(portfolio.completedLocalAutomations))}`,
     },
+    ...(managedReadiness ? {
+      managedPilotReadiness: {
+        contract: managedReadiness.contract,
+        sourceDigest: managedReadiness.sourceDigest,
+        status: managedReadiness.overall.status,
+        localDatabaseProofReady: managedReadiness.overall.localDatabaseProofReady,
+        hostedActivationReady: managedReadiness.overall.hostedActivationReady,
+        blockingGateIds: managedReadiness.gates.filter(({ status }) => status === 'blocked').map(({ id }) => id),
+        products: managedReadiness.products.map(({ productId, managedPilotStatus }) => ({ productId, managedPilotStatus })),
+      },
+    } : {}),
   }
   const resourceEnvelope = buildResourceEnvelope()
   const evidence = {

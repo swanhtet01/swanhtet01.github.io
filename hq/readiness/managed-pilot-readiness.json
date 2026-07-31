@@ -1,0 +1,150 @@
+{
+  "contract": "supermega.managed-pilot-readiness.v1",
+  "asOf": "2026-07-31T10:14:43.592Z",
+  "sourceDigest": "sha256:498f71ab22cdf7c813e2eac28ed7c7586a0cb38110dabb3d119c7d701208f23c",
+  "overall": {
+    "status": "blocked",
+    "localDatabaseProofReady": true,
+    "hostedActivationReady": false,
+    "blockingGateCount": 7,
+    "nextAction": "Obtain founder approval for one isolated non-production Supabase target and one named Shop pilot operator."
+  },
+  "gates": [
+    {
+      "id": "local_postgres17",
+      "status": "ready-local",
+      "evidence": "37 checks, TLS, RLS, tenant isolation, approval, backup and restore.",
+      "nextAction": "Keep the digest-bound rehearsal current."
+    },
+    {
+      "id": "hosted_postgres17",
+      "status": "blocked",
+      "evidence": "Local evidence explicitly does not prove hosted activation.",
+      "nextAction": "Run the approved isolated Supabase rehearsal and validator."
+    },
+    {
+      "id": "hosted_storage_privacy",
+      "status": "blocked",
+      "evidence": "The six-request verifier is ready, but hosted proof is absent.",
+      "nextAction": "Run the verifier against an owner-approved isolated private bucket."
+    },
+    {
+      "id": "live_product_contract",
+      "status": "blocked",
+      "evidence": "HQ records app_product_contract_drift.",
+      "nextAction": "Reconcile and verify the exact paired release before any pilot claim."
+    },
+    {
+      "id": "managed_persistence",
+      "status": "blocked",
+      "evidence": "Live managed persistence ready is false.",
+      "nextAction": "Prove durable commands, recovery, and tenant isolation on the isolated target."
+    },
+    {
+      "id": "security",
+      "status": "blocked",
+      "evidence": "Live security ready is false.",
+      "nextAction": "Resolve hosted Security Advisor and exact policy evidence."
+    },
+    {
+      "id": "named_pilot",
+      "status": "blocked",
+      "evidence": "HQ records no named pilot customer or measured baseline.",
+      "nextAction": "Select one Shop design partner, named operator, baseline, and acceptance evidence."
+    },
+    {
+      "id": "production_activation",
+      "status": "blocked",
+      "evidence": "The production Supabase target remains protected-unapproved.",
+      "nextAction": "Keep writes disabled until separate founder approval after every hosted gate passes."
+    }
+  ],
+  "products": [
+    {
+      "productId": "shop",
+      "localStatus": "release-candidate-local",
+      "managedPilotStatus": "blocked",
+      "automationStatus": "owner-gated",
+      "workOrderId": "shop-managed-order-close-pilot",
+      "proposedWork": "Shop: rehearse one authenticated order-to-close and return exception with a named operator on an isolated managed tenant.",
+      "blockingReason": "The next Shop proof requires a founder-selected operator and approved isolated tenant, so local automation must not spend a model call pretending it can complete it.",
+      "requiredProof": "Repeat one authenticated order-to-close and return-exception pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
+    },
+    {
+      "productId": "plant",
+      "localStatus": "release-candidate-local",
+      "managedPilotStatus": "blocked",
+      "automationStatus": "owner-gated",
+      "workOrderId": "plant-managed-oee-pilot",
+      "proposedWork": "Plant: validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant.",
+      "blockingReason": "The Plant evidence gate needs named human timing evidence and an approved managed tenant; automation cannot manufacture either input.",
+      "requiredProof": "Validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant, reconcile the exact work-centre downtime source, and measure correction effort before adding costing or calibration adapters."
+    },
+    {
+      "productId": "website",
+      "localStatus": "release-candidate-local",
+      "managedPilotStatus": "blocked",
+      "automationStatus": "owner-gated",
+      "workOrderId": "website-managed-brief-acceptance",
+      "proposedWork": "Website: run one named business brief through responsive review and retain the accepted managed artifact.",
+      "blockingReason": "A real named business brief and accepted owner review are missing, so a generated sample cannot truthfully close the Website gate.",
+      "requiredProof": "Complete one named-business brief through accepted responsive preview and retained managed artifact before connecting domain or publish authority."
+    },
+    {
+      "productId": "ecommerce",
+      "localStatus": "release-candidate-local",
+      "managedPilotStatus": "blocked",
+      "automationStatus": "owner-gated",
+      "workOrderId": "ecommerce-managed-order-exception-pilot",
+      "proposedWork": "Ecommerce: prove checkout, acknowledgement, contact or delivery correction, and Shop replacement review with a named operator on one isolated managed tenant.",
+      "blockingReason": "ENG-146 completed the local correction boundary. The next proof needs a founder-selected operator and approved isolated managed tenant; automation cannot manufacture those inputs or claim hosted persistence.",
+      "requiredProof": "Prove the completed cart-to-Shop handoff and customer-safe acknowledgement on a protected preview and isolated managed tenant, then add tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
+    }
+  ],
+  "controls": {
+    "externalWritesPerformed": false,
+    "connectorRequestsPerformed": 0,
+    "modelCallsRequiredToBuild": 0,
+    "productionWritesEnabled": false,
+    "ownerApprovalRequired": true,
+    "safeAutomatedActions": [
+      "rebuild_local_evidence",
+      "verify_current_ledger",
+      "rehearse_local_client_package"
+    ],
+    "forbiddenUntilReady": [
+      "deploy",
+      "publish",
+      "production_write",
+      "customer_message",
+      "payment",
+      "hosted_scheduler_activation"
+    ]
+  },
+  "sourceReceipts": [
+    {
+      "path": "hq/portfolio.json",
+      "digest": "sha256:8328597f06eea157459c55716eaac897833b1844669528f22eb0ba3a64682d8d"
+    },
+    {
+      "path": "hq/research/postgres17-rehearsal.json",
+      "digest": "sha256:0efcf286db10b14dd4e84775bfe44a758045c89569cc1e2ec545764b30a06b57"
+    },
+    {
+      "path": "hq/pilots/private-storage-privacy-audit.md",
+      "digest": "sha256:84a1508fdfb3bf1ab4a4e428fdc9f725ecda18c2bbd7773fc2aeda9f95545251"
+    },
+    {
+      "path": "hq/NOW.md",
+      "digest": "sha256:3ba15f0ea8ed272270e68529ecbb7e481eb70d6861ec90bed90b524e827a7a30"
+    },
+    {
+      "path": "package.json",
+      "digest": "sha256:18881e013169e7bd2fcb193a43b9783247b5907ba4a788fe4e4ef10ebf9e84a6"
+    },
+    {
+      "path": "kernel/managed-pilot-readiness.mjs",
+      "digest": "sha256:092012e678b145712cf2acd3661e6c1de8ffbeaf182599479cf8d1838ab97399"
+    }
+  ]
+}

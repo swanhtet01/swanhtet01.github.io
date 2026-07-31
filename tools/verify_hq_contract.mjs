@@ -65,6 +65,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'supermega_runtime', 'agent_governance.py'), 'utf8'),
 ])
 const enterpriseRoadmap = await readFile(resolve(root, 'hq', 'research', 'enterprise-product-roadmap-2026-07-28.md'), 'utf8')
+const managedPilotReadiness = JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8'))
 
 const manifest = JSON.parse(manifestText)
 const portfolio = JSON.parse(portfolioText)
@@ -938,6 +939,19 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.safety?.supabaseMutated === false
   && databaseRehearsal.safety?.vercelMutated === false)
 
+requireContract('managed pilot readiness is derived and fail closed',
+  managedPilotReadiness.contract === 'supermega.managed-pilot-readiness.v1'
+  && managedPilotReadiness.overall?.status === 'blocked'
+  && managedPilotReadiness.overall?.localDatabaseProofReady === true
+  && managedPilotReadiness.overall?.hostedActivationReady === false
+  && managedPilotReadiness.overall?.blockingGateCount === 7
+  && managedPilotReadiness.products?.map((product) => product.productId).join(',') === 'shop,plant,website,ecommerce'
+  && managedPilotReadiness.products?.every((product) => product.managedPilotStatus === 'blocked' && product.automationStatus === 'owner-gated')
+  && managedPilotReadiness.controls?.externalWritesPerformed === false
+  && managedPilotReadiness.controls?.connectorRequestsPerformed === 0
+  && managedPilotReadiness.controls?.modelCallsRequiredToBuild === 0
+  && managedPilotReadiness.controls?.productionWritesEnabled === false)
+
 requireContract('current Supabase compatibility is a release gate',
   packageText.includes('"database:supabase:compatibility": "node tools/verify_supabase_compatibility.mjs"')
   && packageText.includes('npm run database:supabase:compatibility && npm run database:migrations:verify')
@@ -1099,12 +1113,16 @@ requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect
   && allyCeoPlannerText.includes("ally_ceo_company_plan_non_authoritative_source")
   && allyCeoPlannerText.includes("ally_ceo_company_plan_sensitive_evidence")
   && allyCeoPlannerText.includes("ally_ceo_company_plan_product_routing_invalid")
+  && allyCeoPlannerText.includes('validateManagedPilotReadiness')
+  && allyCeoPlannerText.includes('managedPilotReadiness')
   && allyCeoPlannerText.includes("hq/WORKBOARD.md#execution-order")
   && allyCeoPlannerCliText.includes('supermega-ally-ceo-company-plan-${planHash.slice(0, 12)}.json')
+  && allyCeoPlannerCliText.includes("resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json')")
   && allyCeoPlannerCliText.includes("flag: 'wx'")
   && allyCeoPlannerCliText.includes("ally_ceo_company_plan_current_evidence_mismatch")
   && packageText.includes('"company:ally:plan": "node kernel/scripts/plan-ally-ceo-company.mjs"')
   && packageText.includes('"company:ally:plan:verify": "node kernel/scripts/plan-ally-ceo-company.mjs --verify"')
+  && packageText.includes('"readiness:managed:verify": "node tools/manage_managed_pilot_readiness.mjs --verify"')
   && workboard.includes('| OPS-063 | CEO + Agent Operations / Ally Planning Codex | done-local |')
   && workboard.includes('| OPS-080 | CEO + R&D Efficiency Codex | done-local |')
   && workboard.includes('| OPS-081 | CEO + Local Runtime Efficiency Codex | done-local |')
@@ -1117,6 +1135,7 @@ requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect
 
 requireContract('Ally CEO execution uses one exact local-company run and no external action surface',
   allyCeoLocalCycleText.includes("ALLY_CEO_LOCAL_CYCLE_CONTRACT = 'supermega.ally-ceo-local-cycle.v1'")
+  && allyCeoLocalCycleText.includes("resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json')")
   && allyCeoLocalCycleText.includes("'operations-analyst': 'operations'")
   && allyCeoLocalCycleText.includes("'delivery-planner': 'product'")
   && allyCeoLocalCycleText.includes("'project-controller': 'chief-of-staff'")

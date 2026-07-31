@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { buildAllyCeoCompanyPlan } from './ally-ceo-company-plan.mjs'
+import { buildManagedPilotReadiness, readinessDigest } from './managed-pilot-readiness.mjs'
 
 const now = `# Now
 
@@ -59,6 +60,25 @@ function portfolio(overrides = {}, automationOverrides = {}) {
       localAutomation: { contract: 'supermega.product-work-authority.v2', productId: id, ...automation[id], ...automationOverrides[id] },
     })),
   })
+}
+
+function managedReadiness() {
+  const sourceReceipts = ['portfolio', 'database', 'storage', 'now', 'package', 'kernel']
+    .map((path) => ({ path, digest: readinessDigest(path) }))
+  return JSON.stringify(buildManagedPilotReadiness({
+    portfolio: JSON.parse(portfolio({}, { ecommerce: { status: 'owner-gated' } })),
+    databaseEvidence: {
+      schemaVersion: 'supermega.hq.database-rehearsal.v2',
+      recordedAt: '2026-07-31T10:00:00.000Z',
+      checks: Object.fromEntries(Array.from({ length: 37 }, (_, index) => [`check${index}`, true])),
+      storage: { hostedStoragePrivacyProofRequired: true },
+      localVerification: { externallyHosted: false },
+    },
+    storageAudit: 'Status: local verifier ready; hosted proof blocked',
+    hqNow: 'Live operating mode: `isolated_demo`\nLive managed persistence ready: `false`\nLive security ready: `false`\napp_product_contract_drift\nNo named pilot customer',
+    packageManifest: { supermega: { productionSupabaseTargetStatus: 'protected-unapproved' } },
+    sourceReceipts,
+  }))
 }
 
 test('CEO planning selects one scale-to-zero specialist with deterministic control and zero planning side effects', async () => {
@@ -124,6 +144,25 @@ test('CEO planning selects one scale-to-zero specialist with deterministic contr
   assert.equal(result.preflight.expectedRunId, result.plan.runId)
   assert.equal(result.preflight.controls.planOnlyDefault, true)
   assert.equal(JSON.stringify(result.manifest).includes('instagram.com'), false)
+})
+
+test('CEO planning carries compact four-product managed-pilot truth within the evidence cap', async () => {
+  const result = await buildAllyCeoCompanyPlan({
+    now: '2026-07-31T00:00:00.000Z',
+    hqNow: now,
+    workboard,
+    portfolioText: portfolio(),
+    managedReadinessText: managedReadiness(),
+  })
+
+  const readiness = result.manifest.evidence['operations-analyst'].portfolio.managedPilotReadiness
+  assert.equal(readiness.status, 'blocked')
+  assert.equal(readiness.localDatabaseProofReady, true)
+  assert.equal(readiness.hostedActivationReady, false)
+  assert.equal(readiness.blockingGateIds.length, 7)
+  assert.deepEqual(readiness.products.map(({ productId }) => productId), ['shop', 'plant', 'website', 'ecommerce'])
+  assert.equal(result.manifest.evidence['operations-analyst'].sourceReceipts.at(-1).path, 'hq/readiness/managed-pilot-readiness.json')
+  assert.ok(result.preflight.totalEvidenceBytes <= 8_192)
 })
 
 test('growing Workboard history stays out of active context while current execution order remains bounded', async () => {

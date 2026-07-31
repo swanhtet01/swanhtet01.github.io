@@ -945,12 +945,13 @@ function parseQueueResult(text, queueId) {
 }
 
 async function currentPlan(now, completedOutcomeIds = []) {
-  const [hqNow, workboard, portfolioText] = await Promise.all([
+  const [hqNow, workboard, portfolioText, managedReadinessText] = await Promise.all([
     readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
     readFile(resolve(root, 'hq', 'WORKBOARD.md'), 'utf8'),
     readFile(resolve(root, 'hq', 'portfolio.json'), 'utf8'),
+    readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8'),
   ])
-  return buildAllyCeoCompanyPlan({ now, hqNow, workboard, portfolioText, completedOutcomeIds })
+  return buildAllyCeoCompanyPlan({ now, hqNow, workboard, portfolioText, managedReadinessText, completedOutcomeIds })
 }
 
 function limitedEnvironment(localCompanyRoot) {
