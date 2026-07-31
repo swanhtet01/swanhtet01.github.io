@@ -1335,7 +1335,8 @@ requireContract('Ecommerce integration keeps quote cleanup and governed order op
   && workboard.includes('Removing the cleanup or scattering matching interval, cleanup, and dependency strings')
   && workboard.includes('main `7c76b810` passing every upstream requirement while lacking 19 candidate tokens')
   && workboard.includes('candidate `771a6c3d` passes every candidate requirement while lacking 12 upstream')
-  && workboard.includes('packet digest `sha256:a6f432e07b53b5f3ac852ec8af090112f8bf81d56896c5153c66e22fd9fb14d7`'))
+  && workboard.includes('verified immutable 6,654-byte comparison binds both exact commits')
+  && workboard.includes('packet digest `sha256:c0d50b17783962e1f66ae6c8b4991631c19fbcf5ed410e4dd4ccd62aa96d67bb`'))
 
 requireContract('current CEO platform evidence is recorded without expanding authority',
   workboard.includes('| OPS-039 | CEO + Agent Operations / Evidence Quality Codex | done-local |')
