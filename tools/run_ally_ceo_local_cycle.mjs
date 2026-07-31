@@ -906,7 +906,7 @@ function validateSkippedOutcome(plan, expectedOutcomeId, expectedPeriod = null) 
       || !['owner-gated', 'external-blocked'].includes(item.status)
       || !new RegExp(`^${productIds[index]}-[a-z0-9-]{2,79}$`).test(String(item.workOrderId || '')))
     || !Array.isArray(plan.sourceReceipts)
-    || plan.sourceReceipts.map((receipt) => receipt?.path).join(',') !== 'hq/NOW.md,hq/WORKBOARD.md#execution-order,hq/portfolio.json'
+    || plan.sourceReceipts.map((receipt) => receipt?.path).join(',') !== 'hq/NOW.md,hq/WORKBOARD.md#execution-order,hq/portfolio.json,hq/readiness/managed-pilot-readiness.json'
     || plan.sourceReceipts.some((receipt) => !/^sha256:[a-f0-9]{64}$/.test(String(receipt?.digest || '')))
     || plan.controls?.planningModelCalls !== 0
     || plan.controls?.planningConnectorRequests !== 0
@@ -1108,6 +1108,12 @@ function balancedSpecialistDelimiters(text) {
   return stack.length === 0 && (text.match(/`/g) || []).length % 2 === 0
 }
 
+function specialistSectionHasSourceReference(text) {
+  return /[\\/`]/.test(text)
+    || /\b[A-Za-z0-9][A-Za-z0-9._-]{0,80}[.,;:](?:md|json|toml|ya?ml|csv|sql|html|css|tsx?|m?js|py|ps1)\b/i.test(text)
+    || /\b(?:dot|comma|period)\s+(?:md|json|toml|ya?ml|csv|sql|html|css|tsx?|m?js|py|ps1)\b/i.test(text)
+}
+
 function validateSpecialistSections(text, requiredRoles) {
   if (!Array.isArray(requiredRoles) || requiredRoles.length !== 1 || new Set(requiredRoles).size !== 1) {
     fail('ally_ceo_local_cycle_specialist_roles_invalid')
@@ -1127,6 +1133,7 @@ function validateSpecialistSections(text, requiredRoles) {
       || /\b(?:and|or|to|for|with|using|before|after|the|a|an|of|in|on|at|from|does|is|are|has|have|can|will|must|should|could|would|may|might|verify|confirm|assuming|currently|whether)\.?$/i.test(section)
       || /\b(?:and|or|to|for|with|using|before|after|the|a|an|of|in|on|at|from|does|is|are|has|have|can|will|must|should|could|would|may|might|verify|confirm|assuming|currently|whether|not|state|reusable|consequential)\s*;\s*(?:Keep the scope local|Treat this as unverified|Require evidence before consequential action)\b/i.test(section)
       || !balancedSpecialistDelimiters(section)
+      || specialistSectionHasSourceReference(section)
       || /\[EVIDENCE:/i.test(section)) {
       fail('ally_ceo_local_cycle_specialist_section_rejected')
     }

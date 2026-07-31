@@ -162,7 +162,7 @@ function rotatingPlanWithGatedProduct(completedOutcomeIds) {
         status: 'owner-gated',
         workOrderId: `${productId}-managed-pilot`,
       })),
-      sourceReceipts: ['hq/NOW.md', 'hq/WORKBOARD.md#execution-order', 'hq/portfolio.json']
+      sourceReceipts: ['hq/NOW.md', 'hq/WORKBOARD.md#execution-order', 'hq/portfolio.json', 'hq/readiness/managed-pilot-readiness.json']
         .map((path) => ({ path, digest: 'sha256:' + 'a'.repeat(64) })),
       manifest: null,
       preflight: null,
@@ -758,6 +758,33 @@ test('gated product work consumes no model call and lets Growth continue', async
   assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)
 })
 
+test('gated product work must retain the managed-readiness source receipt', async () => {
+  const queueList = completedOutcomeLine('daily-company-control', 0) + completedOutcomeLine('engineering-release-control', 1)
+  const state = harness({ queueList })
+  await assert.rejects(
+    runAllyCeoLocalCycle(
+      { execute: false },
+      {
+        buildPlan: async (completedOutcomeIds) => {
+          const next = rotatingPlanWithGatedProduct(completedOutcomeIds)
+          if (next.skipped) next.sourceReceipts.pop()
+          return next
+        },
+        runCommand: state.runCommand,
+        inspectReport: async (path) => ({
+          path,
+          bytes: Buffer.byteLength(acceptedStructuredReport),
+          digest: 'sha256:' + '8'.repeat(64),
+          text: acceptedStructuredReport,
+        }),
+      },
+    ),
+    /ally_ceo_local_cycle_skipped_outcome_invalid/,
+  )
+  assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)
+  assert.equal(state.calls.some((call) => call.args?.[1] === 'run-next'), false)
+})
+
 test('a gated product outcome keeps a fully observed period incomplete without useful work', async () => {
   const acceptedOutcomes = ['daily-company-control', 'engineering-release-control', 'growth-pipeline-control', 'finance-risk-control']
   const queueList = acceptedOutcomes.map((outcomeId, index) => completedOutcomeLine(outcomeId, index)).join('')
@@ -1316,6 +1343,39 @@ test('quality-passed reports with unbalanced specialist markdown cannot advance'
             path: 'C:\\state\\outputs\\malformed.md',
             bytes: Buffer.byteLength(malformedReport),
             digest: 'sha256:' + '7'.repeat(64),
+            text: malformedReport,
+          }),
+        },
+      ),
+      /ally_ceo_local_cycle_specialist_section_rejected/,
+    )
+  }
+})
+
+test('quality-passed specialist text cannot smuggle filenames or source paths', async () => {
+  const sourceReferences = [
+    'supermega-platform/CURRENT,md',
+    'CURRENT.md',
+    'hq\\NOW,md',
+    'CURRENT dot md',
+    '`CURRENT.md`',
+  ]
+  for (const sourceReference of sourceReferences) {
+    const state = harness({ modelEventCount: 2 })
+    const malformedReport = acceptedStructuredReport.replace(
+      'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
+      `Not verified or performed: Proposed next action: review ${sourceReference} for readiness. Assumption: its priority is unconfirmed. Missing proof: owner-reviewed evidence.`,
+    )
+    await assert.rejects(
+      runAllyCeoLocalCycle(
+        { execute: true },
+        {
+          plan: plan(),
+          runCommand: state.runCommand,
+          inspectReport: async () => ({
+            path: 'C:\\state\\outputs\\source-reference.md',
+            bytes: Buffer.byteLength(malformedReport),
+            digest: 'sha256:' + 'b'.repeat(64),
             text: malformedReport,
           }),
         },
