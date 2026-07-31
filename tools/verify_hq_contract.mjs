@@ -1338,6 +1338,15 @@ requireContract('Ecommerce integration keeps quote cleanup and governed order op
   && workboard.includes('verified immutable 6,654-byte comparison binds both exact commits')
   && workboard.includes('packet digest `sha256:c0d50b17783962e1f66ae6c8b4991631c19fbcf5ed410e4dd4ccd62aa96d67bb`'))
 
+requireContract('final release integration keeps activation security and product operations together',
+  workboard.includes('| OPS-127 | CEO + Release/Security/HQ Integration Contract Codex | done-local |')
+  && workboard.includes('updates the production context gate to the real `Keep approved context` language')
+  && workboard.includes('stable `supermega.hq.portfolio.v3` schema invariant')
+  && workboard.includes('main `7c76b810` passing every upstream requirement while lacking 25 candidate')
+  && workboard.includes('candidate `98b555d0` passes every candidate requirement while lacking 21 upstream')
+  && workboard.includes('verified immutable 9,117-byte comparison binds both exact commits')
+  && workboard.includes('packet digest `sha256:090061f2c921406be4b9c7a2f085c53d99939d1eefa1ac976718f5c5608709ee`'))
+
 requireContract('current CEO platform evidence is recorded without expanding authority',
   workboard.includes('| OPS-039 | CEO + Agent Operations / Evidence Quality Codex | done-local |')
   && workboard.includes('Checkpoint `e8a3adb` adds `supermega.platform-status.v1`')
