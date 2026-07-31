@@ -88,7 +88,7 @@ import {
   clientDemoPreparationConfirmationMatches,
   clientDemoPresets,
   clientImportWorkflowTemplateIds,
-  createClientDemoWorkspace,
+  reconcileClientDemoWorkspace,
   restoreClientDemoWorkspace,
   restoreClientDemoKit,
   restoreClientDemoPreparationArtifact,
@@ -303,6 +303,7 @@ export function SettingsPage() {
   const [preparedBusyProduct, setPreparedBusyProduct] = useState<SetupProductId | null>(null)
   const [preparedInstallStep, setPreparedInstallStep] = useState('')
   const [preparedNotice, setPreparedNotice] = useState('')
+  const [preparedBlockedProduct, setPreparedBlockedProduct] = useState<SetupProductId | null>(null)
   const [ecommerceActivationPacketText, setEcommerceActivationPacketText] = useState('')
   const [ecommerceActivationPacketReview, setEcommerceActivationPacketReview] = useState<Array<readonly [string, string]>>([
     ['Status', 'Waiting for packet'],
@@ -398,6 +399,9 @@ export function SettingsPage() {
   const preparedApprovalReady = Boolean(preparedArtifact && clientDemoPreparationConfirmationMatches(preparedArtifact, preparedConfirmation))
   const preparedAppliedProducts = new Set(demoWorkspace?.products.filter((product) => product.status === 'applied').map((product) => product.product) ?? [])
   const preparedRemainingCount = preparedArtifact?.products.filter((product) => !preparedAppliedProducts.has(product.product)).length ?? 0
+  const preparedBlockedEntry = preparedBlockedProduct
+    ? preparedArtifact?.products.find((product) => product.product === preparedBlockedProduct) ?? null
+    : null
   const plantReleasedBatches = (() => {
     try { return production.orderExecution && projectPlantOrder(production.orderExecution).status === 'released_to_stock' ? 1 : 0 } catch { return 0 }
   })()
@@ -951,7 +955,7 @@ export function SettingsPage() {
     setPlantIndustryPackId(blueprint.client.plantIndustryPackId)
     setDemoSelections(Object.fromEntries(blueprint.products.map((product) => [product.product, product.templateId])))
     setDemoBlueprint(blueprint)
-    setDemoWorkspace(createClientDemoWorkspace(blueprint, new Date().toISOString()))
+    setDemoWorkspace((currentWorkspace) => reconcileClientDemoWorkspace(blueprint, currentWorkspace, new Date().toISOString()))
     setDemoDataSetupOpen(false)
     if (first) {
       const template = templateFor(first.product, first.templateId)
@@ -992,10 +996,12 @@ export function SettingsPage() {
       installDemoBlueprint(clientDemoPreparationBlueprint(artifact), 'loaded')
       setPreparedArtifact(artifact)
       setPreparedConfirmation('')
+      setPreparedBlockedProduct(null)
       setPreparedNotice(`${artifact.products.length}-product private package verified. Review it, then approve one serial installation.`)
     } catch (error) {
       setPreparedArtifact(null)
       setPreparedConfirmation('')
+      setPreparedBlockedProduct(null)
       setPreparedNotice(error instanceof Error ? error.message : 'The private package could not be loaded.')
     }
   }
@@ -1014,6 +1020,7 @@ export function SettingsPage() {
     if (!artifact || preparedBusyProduct || managedIdentity || !preparedApprovalReady) return
     const installedBeforeRun = new Set(demoWorkspace?.products.filter((product) => product.status === 'applied').map((product) => product.product) ?? [])
     let activeProduct: SetupProductId | null = null
+    setPreparedBlockedProduct(null)
     try {
       const { applyPreparedLocalClientDemoProduct, preparedLocalClientDemoInstallOrder } = await import('./local-client-import')
       const installOrder = (await preparedLocalClientDemoInstallOrder(artifact)).filter((product) => !installedBeforeRun.has(product))
@@ -1051,9 +1058,11 @@ export function SettingsPage() {
         summaries.push(`${productDisplayName(product)} ${installed.created ? `${installed.created} new` : 'current'}`)
         setPreparedNotice(`${productDisplayName(product)} installed.${packNotice}`)
       }
+      setPreparedBlockedProduct(null)
       setPreparedNotice(`Demo ready: ${summaries.join(' · ')}. Open each product below and run its proof workflow.`)
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'The product could not be installed.'
+      setPreparedBlockedProduct(activeProduct)
       setPreparedNotice(`Stopped${activeProduct ? ` at ${productDisplayName(activeProduct)}` : ''}: ${detail} Products already installed are preserved; fix the issue and run the remaining installation again.`)
     } finally {
       setPreparedBusyProduct(null)
@@ -1661,9 +1670,11 @@ export function SettingsPage() {
                   <div aria-label="Install prepared products" className="demo-solution-grid">{preparedArtifact.products.map((product) => {
                     const applied = demoWorkspace?.products.find((entry) => entry.product === product.product)?.status === 'applied'
                     const busy = preparedBusyProduct === product.product
-                    return <section className="demo-solution-card" data-selected key={product.product}><div><strong>{product.label}</strong><small>{busy ? 'Installing now...' : applied ? 'Installed and ready' : `${product.rowCount} rows · ${product.sourceMode === 'client_csv' ? 'client CSV' : 'prepared sample'}`}</small></div>{applied ? <Link className="core-button" to={product.demoPath}>Open</Link> : null}</section>
+                    const blocked = preparedBlockedProduct === product.product
+                    return <section className="demo-solution-card" data-selected key={product.product}><div><strong>{product.label}</strong><small>{busy ? 'Installing now...' : applied ? 'Installed and ready' : blocked ? 'Existing work needs a decision' : `${product.rowCount} rows · ${product.sourceMode === 'client_csv' ? 'client CSV' : 'prepared sample'}`}</small></div>{applied || blocked ? <Link className="core-button" to={product.demoPath}>{blocked ? 'Review existing work' : 'Open'}</Link> : null}</section>
                   })}</div>
                   <p className="form-notice" aria-live="polite">{preparedNotice}</p>
+                  {preparedBlockedEntry ? <div className="settings-step-actions" aria-label="Blocked installation recovery"><span>Keep the existing {preparedBlockedEntry.label} work, or use the recoverable reset controls before retrying.</span><div className="setup-action-group"><Link className="core-button" to={preparedBlockedEntry.demoPath}>Review {preparedBlockedEntry.label}</Link><a className="core-button primary" href="#controls">Open restore or reset controls</a></div></div> : null}
                 </div>
               </section> : null}
               <details className="compact-disclosure demo-mission-list"><summary><span>All product missions</span><small>{demoRunbook?.products.length ?? 0} workflows</small></summary><div className="demo-runbook-products">{demoRunbook?.products.map((mission, index) => {

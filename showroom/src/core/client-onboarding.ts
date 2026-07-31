@@ -1491,6 +1491,18 @@ export function restoreClientDemoWorkspace(value: unknown): ClientDemoWorkspace 
   return { schema: CLIENT_DEMO_WORKSPACE_SCHEMA, blueprint, products: products as ClientDemoProductProgress[], updatedAt }
 }
 
+export function reconcileClientDemoWorkspace(
+  blueprintValue: unknown,
+  currentWorkspaceValue: unknown,
+  updatedAtValue: unknown,
+): ClientDemoWorkspace {
+  const nextWorkspace = createClientDemoWorkspace(blueprintValue, updatedAtValue)
+  const currentWorkspace = restoreClientDemoWorkspace(currentWorkspaceValue)
+  return currentWorkspace && JSON.stringify(currentWorkspace.blueprint) === JSON.stringify(nextWorkspace.blueprint)
+    ? currentWorkspace
+    : nextWorkspace
+}
+
 export function updateClientDemoWorkspaceProgress(
   workspaceValue: unknown,
   progressValue: unknown,

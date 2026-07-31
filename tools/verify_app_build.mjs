@@ -3587,6 +3587,7 @@ if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_i
   || !clientOnboardingSource.includes("CLIENT_DEMO_WORKSPACE_STORAGE_KEY = 'supermega.client-demo-workspace.v1'")
   || !clientOnboardingSource.includes('export function createClientDemoWorkspace')
   || !clientOnboardingSource.includes('export function restoreClientDemoWorkspace')
+  || !clientOnboardingSource.includes('export function reconcileClientDemoWorkspace')
   || !clientOnboardingSource.includes('export function buildClientDemoKit')
   || !clientOnboardingSource.includes('export function restoreClientDemoKit')
   || !clientOnboardingSource.includes('export function updateClientDemoWorkspaceProgress')
@@ -3661,6 +3662,10 @@ if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermeg
   || !settingsPageSource.includes('Shop installs before Ecommerce.')
   || !settingsPageSource.includes('Install remaining ${preparedRemainingCount}')
   || !settingsPageSource.includes('Products already installed are preserved; fix the issue and run the remaining installation again.')
+  || !settingsPageSource.includes('Existing work needs a decision')
+  || !settingsPageSource.includes('aria-label="Blocked installation recovery"')
+  || !settingsPageSource.includes('Review existing work')
+  || !settingsPageSource.includes('Open restore or reset controls')
   || !settingsPageSource.includes("await import('./local-client-import')")
   || !settingsPageSource.includes('preparedLocalClientDemoInstallOrder(artifact)')
   || !settingsPageSource.includes('applyPreparedLocalClientDemoProduct(artifact, product, preparedConfirmation)')) fail('private_client_demo_installer_contract_missing')
@@ -3787,6 +3792,7 @@ if (!productSetupSource.includes('templateId: string')
   || !settingsPageSource.includes('Existing local evidence stays authoritative.')
   || !settingsPageSource.includes('loadClientDemoWorkspace')
   || !settingsPageSource.includes('restoreClientDemoWorkspace')
+  || !settingsPageSource.includes('reconcileClientDemoWorkspace(blueprint, currentWorkspace')
   || !settingsPageSource.includes('updateClientDemoWorkspaceProgress')
   || !settingsPageSource.includes("previous.status === 'applied' && progress.status !== 'applied'")
   || !settingsPageSource.includes('buildClientDemoRunbook')
@@ -6458,6 +6464,10 @@ async function verifyClientOnboardingRuntime() {
     const shopReadyAt = '2026-07-28T08:05:00.000Z'
     const shopReady = model.updateClientDemoWorkspaceProgress(demoWorkspace, { product: 'commerce', status: 'data_ready', rows: 2, readyRows: 2, issueRows: 0, updatedAt: null }, shopReadyAt)
     assert(shopReady.updatedAt === shopReadyAt && shopReady.products[0].status === 'data_ready' && shopReady.products.slice(1).every((product) => product.status === 'not_started'), 'client_demo_workspace_progress_not_isolated')
+    const reopenedShopReady = model.reconcileClientDemoWorkspace(manufacturingBlueprint, shopReady, '2026-07-28T08:10:00.000Z')
+    assert(JSON.stringify(reopenedShopReady) === JSON.stringify(shopReady), 'client_demo_matching_package_erased_progress')
+    const changedWorkspace = model.reconcileClientDemoWorkspace(schoolIntegratedBlueprint, shopReady, '2026-07-28T08:10:00.000Z')
+    assert(changedWorkspace.blueprint.client.workspace === 'Learning Centre' && changedWorkspace.products.every((product) => product.status === 'not_started'), 'client_demo_changed_package_preserved_wrong_progress')
     const noOperationalEvidence = {
       commerce: { completedOrders: 0, reconciledOrders: 0 },
       production: { releasedBatches: 0 },
