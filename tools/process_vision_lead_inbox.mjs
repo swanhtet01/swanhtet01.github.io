@@ -27,6 +27,30 @@ function safeLeadId(event) {
   return value
 }
 
+function oneLine(value, fallback, maximum = 180) {
+  const safe = String(value || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, maximum)
+  return safe || fallback
+}
+
+function blockerQuestion(blocker) {
+  if (blocker === 'written_screenshot_rights_required') return 'Can your company confirm it owns or is authorized to use the pilot screenshots?'
+  if (blocker === 'human_fallback_required') return 'Who will review uncertain or low-confidence results?'
+  if (blocker === 'observation_only_first_pilot_required') return 'Can the first pilot observe and report without clicking or taking actions?'
+  return `Can we resolve this start gate: ${oneLine(blocker, 'unknown gate').replaceAll('_', ' ')}?`
+}
+
+export function renderVisionLeadReply(event, qualification) {
+  const name = oneLine(event?.record?.name, 'there', 120)
+  const email = oneLine(event?.record?.email, 'address missing', 180)
+  const company = oneLine(event?.record?.company, 'your company')
+  const platform = oneLine(event?.record?.raw?.vision?.platform, 'the approved device', 20)
+  const header = `DRAFT — OWNER REVIEW REQUIRED — NOT SENT\nTo: ${email}\nSubject: SuperMega Vision pilot for ${company}`
+  if (!qualification.qualified) {
+    return `${header}\n\nHi ${name},\n\nThanks for describing the screen workflow you want to improve. Before SuperMega can offer a founding pilot, please confirm:\n\n${qualification.blockers.map((blocker, index) => `${index + 1}. ${blockerQuestion(blocker)}`).join('\n')}\n\nPlease do not email screenshots yet. We will agree a local, authorized capture method first.\n\nRegards,\nSuperMega\n`
+  }
+  return `${header}\n\nHi ${name},\n\nThanks for describing your ${platform} screen workflow. Based on the submitted scope, we can prepare a four-week, observation-only founding pilot for owner review at a fixed draft price of USD ${qualification.priceUsd.toLocaleString('en-US')}.\n\nTo confirm the scope, please reply with:\n\n1. The names of the visual states the workflow must recognize.\n2. The approved test device or Windows application version.\n3. The person who will review uncertain results and accept the held-out test report.\n\nPlease do not email screenshots yet. We will agree a local, authorized capture method first. No clicking, message sending, payment handling, or consequential action is included in the first pilot.\n\nRegards,\nSuperMega\n`
+}
+
 async function recordRejection(rejectionsDirectory, sourceFile, inputSha256, reason) {
   const source = basename(sourceFile, '.json').replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 60) || 'event'
   const target = join(rejectionsDirectory, `${source}-${inputSha256.slice(0, 12)}.json`)
@@ -46,9 +70,10 @@ export async function processVisionLeadInbox({ inbox, outbox }) {
   const inboxDirectory = resolve(inbox)
   const outboxDirectory = resolve(outbox)
   const proposalsDirectory = join(outboxDirectory, 'proposals')
+  const repliesDirectory = join(outboxDirectory, 'reply-drafts')
   const receiptsDirectory = join(outboxDirectory, 'receipts')
   const rejectionsDirectory = join(outboxDirectory, 'rejections')
-  await Promise.all([mkdir(proposalsDirectory, { recursive: true }), mkdir(receiptsDirectory, { recursive: true }), mkdir(rejectionsDirectory, { recursive: true })])
+  await Promise.all([mkdir(proposalsDirectory, { recursive: true }), mkdir(repliesDirectory, { recursive: true }), mkdir(receiptsDirectory, { recursive: true }), mkdir(rejectionsDirectory, { recursive: true })])
 
   const entries = (await readdir(inboxDirectory, { withFileTypes: true }))
     .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.json'))
@@ -88,10 +113,13 @@ export async function processVisionLeadInbox({ inbox, outbox }) {
       const leadId = safeLeadId(event)
       const receiptPath = join(receiptsDirectory, `${leadId}.json`)
       const proposalPath = join(proposalsDirectory, `${leadId}.proposal.md`)
+      const replyPath = join(repliesDirectory, `${leadId}.reply.txt`)
 
       try {
         const existing = JSON.parse(await readFile(receiptPath, 'utf8'))
         if (existing.input_sha256 === inputSha256 && existing.lead_id === leadId) {
+          const [savedProposal, savedReply] = await Promise.all([readFile(proposalPath), readFile(replyPath)])
+          if (digest(savedProposal) !== existing.proposal_sha256 || digest(savedReply) !== existing.reply_sha256) throw new Error('sales_artifact_integrity_failed')
           result.replayed += 1
           continue
         }
@@ -103,18 +131,23 @@ export async function processVisionLeadInbox({ inbox, outbox }) {
       const proposalInput = visionInputFromContactEvent(event)
       const qualification = qualifyVisionPilot(proposalInput)
       const proposal = renderVisionPilotProposal(proposalInput)
+      const reply = renderVisionLeadReply(event, qualification)
       const proposalSha256 = digest(proposal)
+      const replySha256 = digest(reply)
       await writeNew(proposalPath, proposal)
+      await writeNew(replyPath, reply)
       const receipt = {
-        contract: 'supermega.vision.lead_proposal_receipt.v1',
+        contract: 'supermega.vision.lead_proposal_receipt.v2',
         lead_id: leadId,
         source_file: entry.name,
         input_sha256: inputSha256,
         proposal_sha256: proposalSha256,
+        reply_sha256: replySha256,
         qualified: qualification.qualified,
         blockers: qualification.blockers,
         price_usd: qualification.priceUsd,
         proposal_file: basename(proposalPath),
+        reply_file: basename(replyPath),
         effects: result.effects,
       }
       await writeNew(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`)

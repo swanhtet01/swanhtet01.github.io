@@ -11,6 +11,8 @@ function event(overrides = {}) {
     event: 'supermega.contact.created',
     record: {
       lead_id: 'LEAD-0123456789ABCDEF',
+      name: 'Mya',
+      email: 'mya@example.com',
       company: 'Example Works',
       workflow: 'vision',
       goal: 'Review an owned application screen before release',
@@ -37,17 +39,27 @@ test('processes Vision contact events offline and replays without overwriting', 
     assert.equal(first.processed, 1)
     assert.deepEqual(first.effects, { external_requests: 0, messages_sent: 0, payments_accepted: 0, input_files_modified: 0 })
     const proposalPath = join(outbox, 'proposals', 'LEAD-0123456789ABCDEF.proposal.md')
+    const replyPath = join(outbox, 'reply-drafts', 'LEAD-0123456789ABCDEF.reply.txt')
     const receiptPath = join(outbox, 'receipts', 'LEAD-0123456789ABCDEF.json')
     const proposal = await readFile(proposalPath, 'utf8')
     const receipt = JSON.parse(await readFile(receiptPath, 'utf8'))
     assert.match(proposal, /QUALIFIED FOR OWNER REVIEW/)
     assert.equal(receipt.price_usd, 1_500)
     assert.equal(receipt.qualified, true)
+    assert.equal(receipt.contract, 'supermega.vision.lead_proposal_receipt.v2')
+    assert.match(await readFile(replyPath, 'utf8'), /DRAFT — OWNER REVIEW REQUIRED — NOT SENT/)
+    assert.match(await readFile(replyPath, 'utf8'), /fixed draft price of USD 1,500/)
 
     const replay = await processVisionLeadInbox({ inbox, outbox })
     assert.equal(replay.processed, 0)
     assert.equal(replay.replayed, 1)
     assert.equal(await readFile(proposalPath, 'utf8'), proposal)
+
+    await writeFile(replyPath, 'tampered reply')
+    const tampered = await processVisionLeadInbox({ inbox, outbox })
+    assert.equal(tampered.rejected, 1)
+    assert.equal(tampered.replayed, 0)
+    assert.equal((await readdir(join(outbox, 'rejections'))).length, 1)
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -92,6 +104,9 @@ test('creates a blocked proposal when commercial gates are not yet satisfied', a
     assert.equal(receipt.qualified, false)
     assert.deepEqual(receipt.blockers, ['written_screenshot_rights_required'])
     assert.match(await readFile(join(outbox, 'proposals', 'LEAD-0123456789ABCDEF.proposal.md'), 'utf8'), /NOT READY TO OFFER/)
+    const reply = await readFile(join(outbox, 'reply-drafts', 'LEAD-0123456789ABCDEF.reply.txt'), 'utf8')
+    assert.match(reply, /Can your company confirm it owns or is authorized/)
+    assert.doesNotMatch(reply, /fixed draft price/)
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -112,6 +127,7 @@ test('Windows entry point initializes a local sales workspace and runs the inbox
     assert.equal(result.status, 0, result.stderr)
     assert.match(result.stdout, /"processed":1/)
     assert.match(await readFile(join(root, 'outbox', 'proposals', 'LEAD-0123456789ABCDEF.proposal.md'), 'utf8'), /QUALIFIED FOR OWNER REVIEW/)
+    assert.match(await readFile(join(root, 'outbox', 'reply-drafts', 'LEAD-0123456789ABCDEF.reply.txt'), 'utf8'), /NOT SENT/)
   } finally {
     await rm(root, { recursive: true, force: true })
   }
