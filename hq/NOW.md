@@ -38,6 +38,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
 - Client setup keeps one manifest-backed smart import, one shared launchpad, and browser-local four-product CSV preparation; missing data uses connected samples and installation stays review-gated (`ef9e2e7`, `3a56a7d`).
 - Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancel releases, complete consumes, and sellable returns restore the exact fulfilled location/lot (`3cd4825`).
+- Shop Sell hides the empty mobile cart, closes it after last-item removal or completion, and confirms with a receipt reference instead of an internal action UUID (`7e321378`).
 - Shop keeps a balanced accounting-review CSV grouped by payment method and a human-approved versioned tax code, rate, and inclusive/exclusive treatment. Receiving separates accepted stock from rejected supplier units and measures defects; no posting occurs (`d47f5d9`, `39b7fc2`, `a37c933c`, `552ed20a`).
 - Ecommerce return intent opens the exact completed Shop order; Shop alone records return and refund evidence.
 - Ecommerce carries versioned contact/address snapshots through recovery and Shop handoff; hosted identity and provider execution remain absent.
