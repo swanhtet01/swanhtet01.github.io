@@ -1,8 +1,16 @@
+import { createHash } from 'node:crypto'
+import { lstat, readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
 
+import {
+  CLIENT_DEMO_PREPARATION_MAX_BYTES,
+  verifyClientDemoPreparation,
+} from './prepare_client_demo.mjs'
+
 const ROOT = resolve(import.meta.dirname, '..')
 export const INTEGRATED_CLIENT_PILOT_CONTRACT = 'supermega.integrated_client_pilot.v1'
+export const CLIENT_BOUND_INTEGRATED_PILOT_CONTRACT = 'supermega.client_bound_integrated_pilot.v1'
 
 const timeline = Object.freeze({
   websiteEvidence: [
@@ -33,6 +41,10 @@ const timeline = Object.freeze({
 
 function invariant(condition, reason) {
   if (!condition) throw new Error(reason)
+}
+
+function sha256(value) {
+  return `sha256:${createHash('sha256').update(value).digest('hex')}`
 }
 
 function proof(actionId, capturedAt, evidenceReference, reason) {
@@ -357,10 +369,160 @@ export async function runIntegratedClientPilots() {
   return receipt
 }
 
+export function bindIntegratedClientPilot(preparation, pilotReceipt, boundAt = new Date().toISOString()) {
+  verifyClientDemoPreparation(preparation)
+  invariant(
+    typeof boundAt === 'string'
+      && Number.isFinite(Date.parse(boundAt))
+      && new Date(boundAt).toISOString() === boundAt,
+    'client_bound_pilot_time_invalid',
+  )
+  invariant(
+    pilotReceipt?.ok === true
+      && pilotReceipt.contract === INTEGRATED_CLIENT_PILOT_CONTRACT
+      && JSON.stringify(pilotReceipt.products) === JSON.stringify(['Website', 'Ecommerce', 'Shop', 'Plant'])
+      && pilotReceipt.metrics?.completedOrders === 2
+      && pilotReceipt.metrics?.reconciledPayments === 2
+      && pilotReceipt.metrics?.demandBoundPlantJobs === 1
+      && pilotReceipt.metrics?.externalWrites === 0
+      && pilotReceipt.metrics?.networkRequests === 0
+      && pilotReceipt.metrics?.modelCalls === 0
+      && pilotReceipt.controls?.syntheticFixture === true
+      && pilotReceipt.controls?.managedPersistenceProven === false
+      && pilotReceipt.controls?.productionActivationPerformed === false,
+    'client_bound_pilot_evidence_invalid',
+  )
+  const selectedProducts = new Set(preparation.products.map((product) => product.product))
+  const workflow = (id, label, requiredProducts, proof) => {
+    const missingProducts = requiredProducts.filter((product) => !selectedProducts.has(product))
+    return {
+      id,
+      label,
+      requiredProducts,
+      status: missingProducts.length ? 'not_selected' : 'ready_for_local_rehearsal',
+      missingProducts,
+      proof,
+    }
+  }
+  const payload = {
+    contract: CLIENT_BOUND_INTEGRATED_PILOT_CONTRACT,
+    boundAt,
+    preparation: {
+      contract: preparation.contract,
+      bundleDigest: preparation.bundleDigest,
+      presetId: preparation.client.presetId,
+      shopIndustryPackId: preparation.client.shopIndustryPackId,
+      plantIndustryPackId: preparation.client.plantIndustryPackId,
+      containsNormalizedClientData: preparation.controls.containsNormalizedClientData,
+      containsSampleFixtures: preparation.controls.containsSampleFixtures,
+      activationStatus: preparation.controls.activationStatus,
+    },
+    products: preparation.products.map((product) => ({
+      product: product.product,
+      label: product.label,
+      templateId: product.templateId,
+      sourceMode: product.sourceMode,
+      rowCount: product.rowCount,
+      previewDigest: product.previewDigest,
+      packageDigest: product.packageDigest,
+      demoPath: product.demoPath,
+    })),
+    workflows: [
+      workflow(
+        'quote_to_close',
+        'Website and Ecommerce to completed Shop order',
+        ['commerce', 'website', 'ecommerce'],
+        {
+          completedOrders: pilotReceipt.metrics.completedOrders,
+          reconciledPayments: pilotReceipt.metrics.reconciledPayments,
+          websiteReleaseFingerprint: pilotReceipt.outcomes.website.releaseFingerprint,
+          ecommercePreviewDigest: pilotReceipt.outcomes.ecommerce.previewDigest,
+        },
+      ),
+      workflow(
+        'plan_to_stock',
+        'Shop demand to accountable Plant job',
+        ['commerce', 'production'],
+        {
+          demandBoundPlantJobs: pilotReceipt.metrics.demandBoundPlantJobs,
+          demandDigest: pilotReceipt.outcomes.plant.demandDigest,
+          sourceAuthority: pilotReceipt.outcomes.plant.sourceAuthority,
+          targetAuthority: pilotReceipt.outcomes.plant.targetAuthority,
+        },
+      ),
+    ],
+    controls: {
+      metadataOnly: true,
+      containsClientValues: false,
+      clientDataApplied: false,
+      syntheticRuntimeProofOnly: true,
+      localRehearsalRequired: true,
+      humanReviewRequired: true,
+      managedPersistenceProven: false,
+      productionActivationPerformed: false,
+      externalWrites: 0,
+      networkRequests: 0,
+      modelCalls: 0,
+    },
+  }
+  return { ...payload, digest: sha256(JSON.stringify(payload)) }
+}
+
+async function preparationFromFile(pathValue) {
+  invariant(typeof pathValue === 'string' && pathValue.trim(), 'client_bound_pilot_preparation_path_missing')
+  const path = resolve(pathValue)
+  const metadata = await lstat(path)
+  invariant(metadata.isFile() && !metadata.isSymbolicLink(), 'client_bound_pilot_preparation_file_invalid')
+  invariant(metadata.size > 0 && metadata.size <= CLIENT_DEMO_PREPARATION_MAX_BYTES, 'client_bound_pilot_preparation_size_invalid')
+  const text = await readFile(path, 'utf8')
+  let value
+  try {
+    value = JSON.parse(text)
+  } catch {
+    throw new Error('client_bound_pilot_preparation_json_invalid')
+  }
+  verifyClientDemoPreparation(value)
+  return value
+}
+
+function parseArgs(argv) {
+  const options = { preparationPath: '', boundAt: '' }
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index]
+    if (argument === '--preparation') options.preparationPath = argv[++index] ?? ''
+    else if (argument === '--bound-at') options.boundAt = argv[++index] ?? ''
+    else if (argument === '--help' || argument === '-h') options.help = true
+    else throw new Error(`integrated_client_pilot_unknown_argument:${argument}`)
+  }
+  return options
+}
+
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : ''
 if (invokedPath === resolve(import.meta.filename)) {
   try {
-    process.stdout.write(`${JSON.stringify(await runIntegratedClientPilots(), null, 2)}\n`)
+    const options = parseArgs(process.argv.slice(2))
+    if (options.help) {
+      process.stdout.write([
+        'SuperMega integrated client pilot',
+        '',
+        '  npm run client:pilot:rehearse',
+        '  npm run client:pilot:rehearse -- --preparation <private-review.json>',
+        '',
+        'Without a preparation file, runs the deterministic four-product fixture.',
+        'With a verified preparation file, returns a metadata-only client-bound pilot receipt.',
+        'No client values, product writes, network requests, model calls, or activation are performed.',
+      ].join('\n') + '\n')
+    } else {
+      const pilot = await runIntegratedClientPilots()
+      const output = options.preparationPath
+        ? bindIntegratedClientPilot(
+            await preparationFromFile(options.preparationPath),
+            pilot,
+            options.boundAt || new Date().toISOString(),
+          )
+        : pilot
+      process.stdout.write(`${JSON.stringify(output, null, 2)}\n`)
+    }
   } catch (error) {
     process.stderr.write(`${JSON.stringify({
       ok: false,
