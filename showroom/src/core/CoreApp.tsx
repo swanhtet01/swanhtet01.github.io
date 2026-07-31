@@ -1546,14 +1546,15 @@ function ShopCounter({ disabled, items, lowStockCount, onReview, openOrderCount 
   const total = lines.reduce((sum, line) => sum + line.item.price * line.quantity, 0)
 
   function changeQuantity(item: CommerceItem, next: number) {
+    const nextQuantity = Math.max(0, Math.min(next, item.onHand))
+    if (!nextQuantity && unitCount === 1) setCartOpen(false)
     setCart((current) => {
-      const quantity = Math.max(0, Math.min(next, item.onHand))
-      if (!quantity) {
+      if (!nextQuantity) {
         const remaining = { ...current }
         delete remaining[item.sku]
         return remaining
       }
-      return { ...current, [item.sku]: quantity }
+      return { ...current, [item.sku]: nextQuantity }
     })
   }
 
@@ -1576,6 +1577,7 @@ function ShopCounter({ disabled, items, lowStockCount, onReview, openOrderCount 
     setCart({})
     setCustomer('')
     setPayment('Cash')
+    setCartOpen(false)
   }
 
   function reviewSale(event: MouseEvent<HTMLButtonElement>) {
@@ -1586,7 +1588,6 @@ function ShopCounter({ disabled, items, lowStockCount, onReview, openOrderCount 
       payment,
       onCommitted: () => {
         clearSale()
-        setCartOpen(false)
       },
     }, event.currentTarget)
   }
@@ -1624,7 +1625,7 @@ function ShopCounter({ disabled, items, lowStockCount, onReview, openOrderCount 
         <footer><div><span>Total</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={!unitCount || disabled} onClick={reviewSale} type="button">{disabled ? 'Sales paused' : 'Review sale'}<span aria-hidden="true">→</span></button><small>Nothing changes until the cashier confirms.</small></footer>
       </aside>
     </div>
-    <button aria-controls="shop-current-sale" aria-expanded={cartOpen} className="shop-mobile-cart" onClick={() => setCartOpen(true)} type="button"><span><small>Current sale</small><strong>{unitCount || 'Empty'}</strong></span><b>{formatMoney(total)}</b></button>
+    {unitCount ? <button aria-controls="shop-current-sale" aria-expanded={cartOpen} className="shop-mobile-cart" onClick={() => setCartOpen(true)} type="button"><span><small>Current sale</small><strong>{unitCount} {unitCount === 1 ? 'item' : 'items'}</strong></span><b>{formatMoney(total)}</b></button> : null}
   </section>
 }
 
@@ -3498,7 +3499,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       throw error
     }
     if (!managedIdentity) setActions((current) => [record, ...current])
-    setNotice(managedIdentity ? `${record.id} confirmed by the managed Shop API.` : `${record.id} applied and added to the action history.`)
+    setNotice(pendingAction.presentation === 'counter'
+      ? `Sale ${commerceOrderDisplayReference(pendingAction.subjectId)} complete. Stock updated. Receipt saved.`
+      : `${pendingAction.summary} ${managedIdentity ? 'confirmed.' : 'completed.'}`)
     setPendingAction(null)
   }
 
