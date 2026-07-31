@@ -278,6 +278,11 @@ test('final batch requires production activation gates and candidate product ope
   assert.equal(candidate.authority.candidate.passed, true)
   assert.equal(candidate.ok, false)
   assert.equal(assessReleaseSecurityHqSources(finalBatchSources()).ok, true)
+
+  const stalePolicyLiterals = finalBatchSources()
+  stalePolicyLiterals['tools/verify_app_build.mjs'] = stalePolicyLiterals['tools/verify_app_build.mjs'].replace('Keep approved context', 'Keep managed context')
+  stalePolicyLiterals['tools/verify_hq_contract.mjs'] = stalePolicyLiterals['tools/verify_hq_contract.mjs'].replace("portfolio.schemaVersion === 'supermega.hq.portfolio.v3'", 'Updated: 2026-07-30')
+  assert.equal(assessReleaseSecurityHqSources(stalePolicyLiterals).ok, false)
 })
 
 test('final batch comparison is exact and no-write', () => {

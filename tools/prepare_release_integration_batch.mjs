@@ -300,7 +300,7 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   },
   {
     id: 'upstream-build-ux-and-context-gates', authority: 'upstream', file: 'tools/verify_app_build.mjs', tokens: [
-      'function managedLoginPath(product: string | null)', 'Keep managed context', 'Raw records and browser text stay out.',
+      'function managedLoginPath(product: string | null)', 'Keep approved context', 'Raw records and browser text stay out.',
       'Order batch review workspace', 'Enterprise order controls', 'Browser-local sample only.',
     ],
   },
@@ -352,7 +352,7 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   },
   {
     id: 'candidate-current-hq-governance', authority: 'candidate', file: 'tools/verify_hq_contract.mjs', tokens: [
-      'Updated: 2026-07-30', 'local inference is explicit, loopback-only, budgeted, and scale-to-zero',
+      "portfolio.schemaVersion === 'supermega.hq.portfolio.v3'", 'local inference is explicit, loopback-only, budgeted, and scale-to-zero',
       'hosted runtimes never admit the loopback provider', 'maxConcurrentCompanyCycles',
     ],
   },
