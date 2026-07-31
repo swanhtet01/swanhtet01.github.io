@@ -253,6 +253,18 @@ if (!websiteModelSource.includes('releaseRecords?: WebsiteReleaseState[]')
   || !managedWebsitePythonRuntime.includes('Website release package does not match the exact current approved site file.')
   || !managedTrialStoreRuntime.includes('"website.release.recorded"')
   || !managedTrialStoreRuntime.includes('surface == "website" and event_type in HUMAN_COMMAND_EVENTS')) fail('managed_website_release_persistence_contract_missing')
+if (!websiteModelSource.includes('leadLedger?: WebsiteLeadLedger')
+  || !websiteWorkspaceSource.includes("eventType: 'website.inquiry.received'")
+  || !websiteWorkspaceSource.includes("eventType: 'website.inquiry.reviewed'")
+  || !managedTrialSource.includes("| 'website.inquiry.received'")
+  || !managedTrialSource.includes("| 'website.inquiry.reviewed'")
+  || !managedWebsitePythonRuntime.includes('"website.inquiry.received"')
+  || !managedWebsitePythonRuntime.includes('"website.inquiry.reviewed"')
+  || !managedWebsitePythonRuntime.includes('Website inquiry review is invalid or rewrites customer evidence.')
+  || !managedTrialStoreRuntime.includes('event_type == "website.inquiry.received"')
+  || !websiteSource.includes('Inquiry saved to the managed Website inbox')
+  || websiteSource.includes('Managed Website inquiries require the managed form endpoint')
+  || websiteSource.includes("disabled={storageMode === 'managed'}")) fail('managed_website_inquiry_lifecycle_missing')
 
 if (!viteConfigSource.includes("id.includes('/src/core/channel-order-intake.ts')")
   || !viteConfigSource.includes("id.includes('/src/core/managed-trial.ts')")
@@ -1571,11 +1583,11 @@ if (!websiteSource.includes('aria-labelledby="website-today-title"')
   || !websiteSource.includes('Capture and route inquiries')
   || !websiteSource.includes('function captureDemoInquiry(')
   || !websiteSource.includes('function decideLead(')
-  || !websiteSource.includes('Add demo inquiry')
+  || !websiteSource.includes('Add inquiry')
   || !websiteSource.includes('Qualify')
   || !websiteSource.includes('Close')
   || !websiteSource.includes('Export lead record')
-  || !websiteSource.includes('Managed Website inquiries require the managed form endpoint. No local customer record was created.')
+  || !websiteSource.includes('Inquiry saved to the managed Website inbox for accountable review.')
   || !websiteSource.includes('No message, CRM write, or external send ran.')
   || !websiteSource.includes('const statusWorkspace = hasUnsavedChanges ? editorWorkspace : workspace')
   || !websiteSource.includes("['Readiness', hasUnsavedChanges ? 'Review draft'")
@@ -2661,7 +2673,8 @@ if (managedWebsiteCommandStart < 0
   || !managedWebsiteSource.includes("result.surface !== 'website'")
   || !managedWebsiteSource.includes('result.event_type !== expected.eventType')
   || !managedWebsiteSource.includes('result.version !== expected.priorVersion + 1')
-  || !managedWebsiteSource.includes('!sameWorkspace(confirmed, planned)')) fail('managed_website_command_client_missing')
+  || !managedWebsiteSource.includes('sameAuthoritativeInquiryWorkspace')
+  || !managedWebsiteSource.includes('!confirmed || !planned || !stateMatches')) fail('managed_website_command_client_missing')
 if (!websiteWorkspaceSource.includes('bindManagedActor') || !websiteWorkspaceSource.includes('verifiedBy: actor') || !websiteWorkspaceSource.includes('reviewer: actor') || !websiteWorkspaceSource.includes('recordedBy: actor')) fail('managed_website_actor_binding_missing')
 const websiteHydrationStart = websiteWorkspaceSource.indexOf('void (async () => {')
 const websiteHydrationEnd = websiteWorkspaceSource.indexOf('})()', websiteHydrationStart)
@@ -12964,6 +12977,60 @@ async function verifyManagedWebsiteRuntime() {
       })
     } catch { swappedStateRejected = true }
     assert(swappedStateRejected, 'managed_website_swapped_state_receipt_accepted')
+    const plannedInquiry = {
+      ...seed,
+      revision: 1,
+      leadLedger: {
+        schema: 'supermega.website.lead-ledger.v1',
+        revision: 1,
+        leads: [{
+          id: 'lead-managed-1',
+          siteName: seed.siteName,
+          sourcePage: '/',
+          name: 'Customer A',
+          contact: 'customer@example.test',
+          request: 'Need a quotation.',
+          consentRecorded: true,
+          status: 'new',
+          owner: '',
+          decisionNote: '',
+          createdAt: '2026-07-31T00:00:00.000Z',
+          updatedAt: '2026-07-31T00:00:00.000Z',
+        }],
+      },
+    }
+    const confirmedInquiry = structuredClone(plannedInquiry)
+    confirmedInquiry.leadLedger.leads[0].createdAt = '2026-07-31T00:00:01.000Z'
+    confirmedInquiry.leadLedger.leads[0].updatedAt = '2026-07-31T00:00:01.000Z'
+    const inquiryReceipt = {
+      ...result,
+      event_type: 'website.inquiry.received',
+      state: confirmedInquiry,
+    }
+    const acceptedInquiry = managedWebsite.acceptManagedWebsiteCommand(plannedInquiry, inquiryReceipt, {
+      commandId,
+      eventType: 'website.inquiry.received',
+      priorVersion: 0,
+    })
+    assert(acceptedInquiry.workspace.leadLedger.leads[0].createdAt === '2026-07-31T00:00:01.000Z', 'managed_website_authoritative_inquiry_timestamp_rejected')
+    let rewrittenInquiryRejected = false
+    try {
+      managedWebsite.acceptManagedWebsiteCommand(plannedInquiry, {
+        ...inquiryReceipt,
+        state: {
+          ...confirmedInquiry,
+          leadLedger: {
+            ...confirmedInquiry.leadLedger,
+            leads: [{ ...confirmedInquiry.leadLedger.leads[0], contact: 'rewritten@example.test' }],
+          },
+        },
+      }, {
+        commandId,
+        eventType: 'website.inquiry.received',
+        priorVersion: 0,
+      })
+    } catch { rewrittenInquiryRejected = true }
+    assert(rewrittenInquiryRejected, 'managed_website_authoritative_inquiry_rewrite_accepted')
   } catch (error) {
     fail(`managed_website_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }

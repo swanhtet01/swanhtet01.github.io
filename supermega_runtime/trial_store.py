@@ -88,6 +88,8 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "website.revision.approved",
         "website.snapshot.recorded",
         "website.release.recorded",
+        "website.inquiry.received",
+        "website.inquiry.reviewed",
     }
 )
 SURFACE_WRITE_CAPABILITIES = {
@@ -615,6 +617,55 @@ def _authoritative_command_payload(
         authoritative_state["openingPlan"] = {
             **dict(opening_plan),
             "confirmedAt": website_captured_at,
+        }
+        authoritative["state"] = authoritative_state
+        authoritative["evidence"] = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": website_captured_at,
+        }
+        return authoritative
+    if surface == "website" and event_type in {
+        "website.inquiry.received",
+        "website.inquiry.reviewed",
+    }:
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        ledger = state.get("leadLedger") if isinstance(state, Mapping) else None
+        leads = ledger.get("leads") if isinstance(ledger, Mapping) else None
+        reference = evidence.get("evidenceReference") if isinstance(evidence, Mapping) else None
+        suffix = "received" if event_type == "website.inquiry.received" else "reviewed"
+        prefix = "website:inquiry:"
+        trailer = f":{suffix}"
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(ledger, Mapping)
+            or not isinstance(leads, list)
+            or not isinstance(reference, str)
+            or not reference.startswith(prefix)
+            or not reference.endswith(trailer)
+        ):
+            return authoritative
+        lead_id = reference[len(prefix):-len(trailer)]
+        indexes = [
+            index
+            for index, lead in enumerate(leads)
+            if isinstance(lead, Mapping) and lead.get("id") == lead_id
+        ]
+        if len(indexes) != 1:
+            return authoritative
+        website_captured_at = _canonical_millisecond_utc(captured_at)
+        authoritative_leads = deepcopy(leads)
+        authoritative_lead = dict(authoritative_leads[indexes[0]])
+        authoritative_lead["updatedAt"] = website_captured_at
+        if event_type == "website.inquiry.received":
+            authoritative_lead["createdAt"] = website_captured_at
+        authoritative_leads[indexes[0]] = authoritative_lead
+        authoritative_state = dict(state)
+        authoritative_state["leadLedger"] = {
+            **dict(ledger),
+            "leads": authoritative_leads,
         }
         authoritative["state"] = authoritative_state
         authoritative["evidence"] = {

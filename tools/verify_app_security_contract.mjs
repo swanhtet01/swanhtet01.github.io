@@ -328,6 +328,8 @@ const expectedHumanProductionEvents = [
 ]
 const expectedHumanWebsiteEvents = [
   'website.evidence.recorded',
+  'website.inquiry.received',
+  'website.inquiry.reviewed',
   'website.release.recorded',
   'website.revision.approved',
   'website.snapshot.recorded',

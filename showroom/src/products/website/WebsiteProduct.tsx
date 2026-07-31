@@ -181,10 +181,13 @@ export function WebsiteProduct() {
   ))
   const [notice, setNotice] = useState(DEFAULT_NOTICE)
   const [deleteCandidateId, setDeleteCandidateId] = useState('')
-  const [leadLedger, setLeadLedger] = useState(() => {
+  const [localLeadLedger, setLocalLeadLedger] = useState(() => {
     if (typeof window === 'undefined') return emptyWebsiteLeadLedger()
     try { return readWebsiteLeadLedger(window.localStorage) } catch { return emptyWebsiteLeadLedger() }
   })
+  const leadLedger = storageMode === 'managed'
+    ? workspace.leadLedger ?? emptyWebsiteLeadLedger()
+    : localLeadLedger
   const [leadDraft, setLeadDraft] = useState({ name: '', contact: '', request: '', consentRecorded: false })
   const [leadOwner, setLeadOwner] = useState('')
   const [leadDecisionNote, setLeadDecisionNote] = useState('')
@@ -905,7 +908,7 @@ export function WebsiteProduct() {
   function saveLeadLedger(nextLedger: typeof leadLedger, success: string) {
     try {
       const confirmed = writeWebsiteLeadLedger(window.localStorage, nextLedger)
-      setLeadLedger(confirmed)
+      setLocalLeadLedger(confirmed)
       setNotice(success)
       return true
     } catch (error) {
@@ -914,18 +917,28 @@ export function WebsiteProduct() {
     }
   }
 
-  function captureDemoInquiry(event: FormEvent<HTMLFormElement>) {
+  async function captureDemoInquiry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (storageMode === 'managed') {
-      setNotice('Managed Website inquiries require the managed form endpoint. No local customer record was created.')
-      return
-    }
     try {
       const next = captureWebsiteLead(leadLedger, {
         siteName: workspace.siteName,
         sourcePage: selectedPage.slug,
         ...leadDraft,
       }, { id: createId('lead'), now: new Date().toISOString() })
+      if (storageMode === 'managed') {
+        const result = await mutateWorkspace((current) => ({
+          ...current,
+          leadLedger: captureWebsiteLead(current.leadLedger ?? emptyWebsiteLeadLedger(), {
+            siteName: current.siteName,
+            sourcePage: selectedPage.slug,
+            ...leadDraft,
+          }, { id: next.leads[0].id, now: next.leads[0].createdAt }),
+        }), { durable: true })
+        if (!result.ok) throw new Error(result.error)
+        setLeadDraft({ name: '', contact: '', request: '', consentRecorded: false })
+        setNotice('Inquiry saved to the managed Website inbox for accountable review. No message, CRM write, or external send ran.')
+        return
+      }
       if (saveLeadLedger(next, 'Demo inquiry saved to the local Website inbox. No message, CRM write, or external send ran.')) {
         setLeadDraft({ name: '', contact: '', request: '', consentRecorded: false })
       }
@@ -934,13 +947,31 @@ export function WebsiteProduct() {
     }
   }
 
-  function decideLead(leadId: string, status: 'qualified' | 'closed') {
+  async function decideLead(leadId: string, status: 'qualified' | 'closed') {
     try {
       const next = reviewWebsiteLead(leadLedger, leadId, {
         status,
         owner: leadOwner,
         decisionNote: leadDecisionNote,
       }, new Date().toISOString())
+      if (storageMode === 'managed') {
+        const reviewed = next.leads.find((lead) => lead.id === leadId)
+        if (!reviewed) throw new Error('The Website inquiry no longer exists.')
+        const result = await mutateWorkspace((current) => ({
+          ...current,
+          leadLedger: reviewWebsiteLead(current.leadLedger ?? emptyWebsiteLeadLedger(), leadId, {
+            status,
+            owner: leadOwner,
+            decisionNote: leadDecisionNote,
+          }, reviewed.updatedAt),
+        }), { durable: true })
+        if (!result.ok) throw new Error(result.error)
+        setLeadDecisionNote('')
+        setNotice(status === 'qualified'
+          ? 'Inquiry qualified and assigned in the managed Website workspace. No customer message was sent.'
+          : 'Inquiry closed in the managed Website workspace. No customer message was sent.')
+        return
+      }
       if (saveLeadLedger(next, status === 'qualified'
         ? 'Inquiry qualified and assigned locally. No customer message was sent.'
         : 'Inquiry closed locally. No customer message was sent.')) setLeadDecisionNote('')
@@ -1160,16 +1191,16 @@ export function WebsiteProduct() {
             <div className="website-business-controls-content">
               <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox" id="website-lead-inbox">
                 <header>
-                  <div><span className="website-kicker">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture and route inquiries</h2><p>Try the full workflow locally. Contact data stays in this browser; no form, message, CRM, or Shop write is sent.</p></div>
+                  <div><span className="website-kicker">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture and route inquiries</h2><p>{storageMode === 'managed' ? 'Inquiries stay in this managed workspace with ownership and decision history.' : 'Try the full workflow locally. Contact data stays in this browser.'} No message, CRM, or Shop write is sent.</p></div>
                   <div className="website-lead-counts"><span><strong>{leadCounts.new}</strong><small>New</small></span><span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span><span><strong>{leadCounts.closed}</strong><small>Closed</small></span></div>
                 </header>
 
                 <form className="website-lead-capture-form" onSubmit={captureDemoInquiry}>
-                  <label>Name<input autoComplete="name" disabled={storageMode === 'managed'} maxLength={80} onChange={(event) => setLeadDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Customer name" required value={leadDraft.name} /></label>
-                  <label>Phone or email<input autoComplete="email" disabled={storageMode === 'managed'} maxLength={120} onChange={(event) => setLeadDraft((current) => ({ ...current, contact: event.target.value }))} placeholder="09… or name@example.com" required value={leadDraft.contact} /></label>
-                  <label className="website-lead-request">What do they need?<textarea disabled={storageMode === 'managed'} maxLength={500} onChange={(event) => setLeadDraft((current) => ({ ...current, request: event.target.value }))} placeholder="Product, service, quantity, timing, or question" required rows={3} value={leadDraft.request} /></label>
-                  <label className="website-lead-consent"><input checked={leadDraft.consentRecorded} disabled={storageMode === 'managed'} onChange={(event) => setLeadDraft((current) => ({ ...current, consentRecorded: event.target.checked }))} required type="checkbox" /> Customer agreed to save these contact details for follow-up.</label>
-                  <button className="website-button is-primary is-compact" disabled={storageMode === 'managed' || !readyBuyerCtaPages.length} type="submit">Add demo inquiry</button>
+                  <label>Name<input autoComplete="name" maxLength={80} onChange={(event) => setLeadDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Customer name" required value={leadDraft.name} /></label>
+                  <label>Phone or email<input autoComplete="email" maxLength={120} onChange={(event) => setLeadDraft((current) => ({ ...current, contact: event.target.value }))} placeholder="09… or name@example.com" required value={leadDraft.contact} /></label>
+                  <label className="website-lead-request">What do they need?<textarea maxLength={500} onChange={(event) => setLeadDraft((current) => ({ ...current, request: event.target.value }))} placeholder="Product, service, quantity, timing, or question" required rows={3} value={leadDraft.request} /></label>
+                  <label className="website-lead-consent"><input checked={leadDraft.consentRecorded} onChange={(event) => setLeadDraft((current) => ({ ...current, consentRecorded: event.target.checked }))} required type="checkbox" /> Customer agreed to save these contact details for follow-up.</label>
+                  <button className="website-button is-primary is-compact" disabled={!readyBuyerCtaPages.length} type="submit">Add inquiry</button>
                   {!readyBuyerCtaPages.length ? <small className="website-field-error">Add a ready page with a contact action before capturing inquiries.</small> : null}
                 </form>
 

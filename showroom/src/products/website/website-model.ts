@@ -1,4 +1,5 @@
 import type { WebsiteReleaseState } from './website-release-foundation'
+import { restoreWebsiteLeadLedger, type WebsiteLeadLedger } from './website-leads.ts'
 
 export const WEBSITE_SCHEMA = 'supermega.website.workspace.v2'
 export const WEBSITE_STORAGE_KEY = 'supermega.website.workspace.v2'
@@ -170,6 +171,7 @@ export type WebsiteWorkspace = {
   events: WebsiteWorkflowEvent[]
   openingPlan?: WebsiteOpeningPlan
   releaseRecords?: WebsiteReleaseState[]
+  leadLedger?: WebsiteLeadLedger
 }
 
 export type WebsiteEditSession = {
@@ -1371,6 +1373,7 @@ function isWebsiteWorkspace(value: unknown, pendingReleaseRecords = 0): value is
   ]
   if (Object.hasOwn(value, 'openingPlan')) workspaceKeys.push('openingPlan')
   if (Object.hasOwn(value, 'releaseRecords')) workspaceKeys.push('releaseRecords')
+  if (Object.hasOwn(value, 'leadLedger')) workspaceKeys.push('leadLedger')
   if (!hasExactKeys(value, workspaceKeys)) return false
   if (value.schema !== WEBSITE_SCHEMA || value.version !== 2) return false
   const revision = value.revision
@@ -1402,6 +1405,7 @@ function isWebsiteWorkspace(value: unknown, pendingReleaseRecords = 0): value is
       || !value.releaseRecords.every(isWebsiteReleaseStateEnvelope)
       || !hasUniqueStrings(value.releaseRecords.map((record) => record.scope))) return false
   }
+  if (Object.hasOwn(value, 'leadLedger') && restoreWebsiteLeadLedger(value.leadLedger) === null) return false
   const releaseRecords = [...value.evidence, ...value.approvals, ...value.localPublishes]
   if (releaseRecords.some((record) => record.migratedFromV1)) return false
   const releaseRecordCount = releaseRecords.length

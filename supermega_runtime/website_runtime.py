@@ -30,6 +30,8 @@ WEBSITE_EVENTS = frozenset(
         "website.revision.approved",
         "website.snapshot.recorded",
         "website.release.recorded",
+        "website.inquiry.received",
+        "website.inquiry.reviewed",
     }
 )
 WEBSITE_HUMAN_EVENTS = frozenset(
@@ -38,6 +40,8 @@ WEBSITE_HUMAN_EVENTS = frozenset(
         "website.revision.approved",
         "website.snapshot.recorded",
         "website.release.recorded",
+        "website.inquiry.received",
+        "website.inquiry.reviewed",
     }
 )
 
@@ -71,7 +75,7 @@ _STATE_FIELDS = frozenset(
         "events",
     }
 )
-_STATE_OPTIONAL_FIELDS = frozenset({"openingPlan", "releaseRecords"})
+_STATE_OPTIONAL_FIELDS = frozenset({"openingPlan", "releaseRecords", "leadLedger"})
 _OPENING_PLAN_FIELDS = frozenset(
     {"contract", "packageDigest", "workflowTemplateId", "confirmedAt", "pageIds"}
 )
@@ -119,6 +123,15 @@ _EVENT_FIELDS = frozenset(
     {"id", "createdAt", "actorKind", "actor", "action", "subjectId", "reason", "evidenceReference", "source"}
 )
 _COMMAND_EVIDENCE_FIELDS = frozenset({"actionId", "capturedAt", "actor", "reason", "evidenceReference"})
+_LEAD_LEDGER_FIELDS = frozenset({"schema", "revision", "leads"})
+_LEAD_FIELDS = frozenset(
+    {
+        "id", "siteName", "sourcePage", "name", "contact", "request",
+        "consentRecorded", "status", "owner", "decisionNote", "createdAt", "updatedAt",
+    }
+)
+_LEAD_STATUSES = frozenset({"new", "qualified", "closed"})
+_MAX_LEADS = 100
 
 
 def _object(value: object, field: str) -> dict[str, Any]:
@@ -553,6 +566,39 @@ def _validate_opening_plan(value: object) -> dict[str, Any]:
     return plan
 
 
+def _validate_lead_ledger(value: object) -> dict[str, Any]:
+    ledger = _object(value, "website state.leadLedger")
+    _exact(ledger, "website state.leadLedger", _LEAD_LEDGER_FIELDS)
+    if ledger["schema"] != "supermega.website.lead-ledger.v1":
+        raise TrialValidationError("website state.leadLedger schema is invalid.")
+    revision = _integer(ledger["revision"], "website state.leadLedger.revision")
+    leads = _array(ledger["leads"], "website state.leadLedger.leads")
+    if len(leads) > _MAX_LEADS or revision < len(leads):
+        raise TrialValidationError("website state.leadLedger size or revision is invalid.")
+    validated: list[dict[str, Any]] = []
+    for index, candidate in enumerate(leads):
+        field = f"website state.leadLedger.leads[{index}]"
+        lead = _object(candidate, field)
+        _exact(lead, field, _LEAD_FIELDS)
+        if lead["consentRecorded"] is not True or lead["status"] not in _LEAD_STATUSES:
+            raise TrialValidationError(f"{field} consent or status is invalid.")
+        for name, maximum, allow_blank in (
+            ("id", 80, False), ("siteName", 60, False), ("sourcePage", 120, False),
+            ("name", 80, False), ("contact", 120, False), ("request", 500, False),
+            ("owner", 120, True), ("decisionNote", 500, True),
+        ):
+            _text(lead[name], f"{field}.{name}", maximum=maximum, allow_blank=allow_blank)
+        created_at = _timestamp(lead["createdAt"], f"{field}.createdAt")
+        updated_at = _timestamp(lead["updatedAt"], f"{field}.updatedAt")
+        if _timestamp_value(updated_at) < _timestamp_value(created_at):
+            raise TrialValidationError(f"{field} update predates creation.")
+        if lead["status"] != "new" and not _js_trim(lead["owner"]):
+            raise TrialValidationError(f"{field} requires an owner after review.")
+        validated.append(deepcopy(lead))
+    _unique([lead["id"] for lead in validated], "Website inquiry ID")
+    return {"schema": ledger["schema"], "revision": revision, "leads": validated}
+
+
 def validate_website_state(value: object) -> dict[str, Any]:
     """Validate one Website snapshot structurally; command history establishes managed provenance."""
 
@@ -671,6 +717,8 @@ def validate_website_state(value: object) -> dict[str, Any]:
         validated["openingPlan"] = _validate_opening_plan(state["openingPlan"])
     if "releaseRecords" in state:
         validated["releaseRecords"] = _validate_release_records(state["releaseRecords"])
+    if "leadLedger" in state:
+        validated["leadLedger"] = _validate_lead_ledger(state["leadLedger"])
     return validated
 
 
@@ -738,7 +786,7 @@ def _command_payload(payload: Mapping[str, Any]) -> tuple[dict[str, Any], dict[s
 
 
 def _unchanged(current: Mapping[str, Any], next_state: Mapping[str, Any], *fields: str) -> None:
-    changed = [field for field in fields if current[field] != next_state[field]]
+    changed = [field for field in fields if current.get(field) != next_state.get(field)]
     if changed:
         raise TrialValidationError(f"Website event cannot change: {', '.join(changed)}.")
 
@@ -964,7 +1012,11 @@ def reduce_website_state(
             raise TrialValidationError("An empty Website workspace must be initialized first.")
         if next_state["revision"] != 0 or next_state["contentRevision"] != 0:
             raise TrialValidationError("A managed Website workspace must initialize at revision zero.")
-        if any(next_state[field] for field in ("evidence", "approvals", "localPublishes", "events")) or next_state.get("releaseRecords"):
+        if (
+            any(next_state[field] for field in ("evidence", "approvals", "localPublishes", "events"))
+            or next_state.get("releaseRecords")
+            or next_state.get("leadLedger", {}).get("leads")
+        ):
             raise TrialValidationError("A managed Website workspace cannot initialize with client-asserted release history.")
         return next_state
 
@@ -977,6 +1029,11 @@ def reduce_website_state(
         raise TrialValidationError("Website opening plan is immutable after activation.")
     if event_type != "website.release.recorded" and current_state.get("releaseRecords", []) != next_state.get("releaseRecords", []):
         raise TrialValidationError("Website release records can change only through their dedicated event.")
+    if (
+        event_type not in {"website.inquiry.received", "website.inquiry.reviewed"}
+        and current_state.get("leadLedger") != next_state.get("leadLedger")
+    ):
+        raise TrialValidationError("Website inquiries can change only through their dedicated events.")
 
     if event_type == "website.content.saved":
         if next_state["contentRevision"] != current_state["contentRevision"] + 1:
@@ -990,6 +1047,70 @@ def reduce_website_state(
         raise TrialValidationError("This Website event cannot change contentRevision.")
     if _website_fingerprint(next_state) != _website_fingerprint(current_state):
         raise TrialValidationError("This Website event cannot change publishable content.")
+
+    if event_type in {"website.inquiry.received", "website.inquiry.reviewed"}:
+        _unchanged(
+            current_state,
+            next_state,
+            "siteName",
+            "pages",
+            "selectedPageId",
+            "evidence",
+            "approvals",
+            "localPublishes",
+            "events",
+            "releaseRecords",
+        )
+        before = current_state.get(
+            "leadLedger",
+            {"schema": "supermega.website.lead-ledger.v1", "revision": 0, "leads": []},
+        )
+        after = next_state.get("leadLedger")
+        if not isinstance(after, Mapping) or after["revision"] != before["revision"] + 1:
+            raise TrialValidationError("Website inquiry revision must advance exactly once.")
+        before_leads = before["leads"]
+        after_leads = after["leads"]
+        if event_type == "website.inquiry.received":
+            if len(after_leads) != len(before_leads) + 1 or after_leads[1:] != before_leads:
+                raise TrialValidationError("Website inquiry receipt must prepend exactly one record.")
+            lead = after_leads[0]
+            if (
+                lead["status"] != "new"
+                or lead["owner"]
+                or lead["decisionNote"]
+                or lead["siteName"] != current_state["siteName"]
+                or lead["createdAt"] != command_evidence["capturedAt"]
+                or lead["updatedAt"] != command_evidence["capturedAt"]
+                or command_evidence["evidenceReference"]
+                != f"website:inquiry:{lead['id']}:received"
+            ):
+                raise TrialValidationError("Website inquiry receipt does not match its command evidence.")
+        else:
+            if len(after_leads) != len(before_leads):
+                raise TrialValidationError("Website inquiry review cannot add or remove records.")
+            changed = [
+                (before_leads[index], lead)
+                for index, lead in enumerate(after_leads)
+                if lead != before_leads[index]
+            ]
+            if len(changed) != 1:
+                raise TrialValidationError("Website inquiry review must change exactly one record.")
+            prior, lead = changed[0]
+            immutable = {
+                "id", "siteName", "sourcePage", "name", "contact", "request",
+                "consentRecorded", "createdAt",
+            }
+            if (
+                any(prior[field] != lead[field] for field in immutable)
+                or prior["status"] == "closed"
+                or lead["status"] not in {"qualified", "closed"}
+                or not _js_trim(lead["owner"])
+                or lead["updatedAt"] != command_evidence["capturedAt"]
+                or command_evidence["evidenceReference"]
+                != f"website:inquiry:{lead['id']}:reviewed"
+            ):
+                raise TrialValidationError("Website inquiry review is invalid or rewrites customer evidence.")
+        return next_state
 
     if event_type == "website.release.recorded":
         _validate_release_recorded(current_state, next_state, command_evidence)

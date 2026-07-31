@@ -109,6 +109,8 @@ export type ManagedWebsiteEvent =
   | 'website.revision.approved'
   | 'website.snapshot.recorded'
   | 'website.release.recorded'
+  | 'website.inquiry.received'
+  | 'website.inquiry.reviewed'
 
 export type ManagedProductionEvent =
   | 'production.workspace.initialized'
