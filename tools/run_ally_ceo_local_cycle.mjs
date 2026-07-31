@@ -29,6 +29,7 @@ const EXECUTION_SPEC_VERSION = '2026-07-29.23'
 const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.22', '2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
 const MEMORY_RECOVERY_BLOCKERS = Object.freeze(new Set(['memory_pressure_critical', 'codex_working_set_high']))
 const CEO_LIVE_ADVISORIES = Object.freeze(new Set(['app_product_contract_drift', 'hq_release_commit_stale']))
+const LOCAL_ONLY_HQ_LIVE_FAILURE = 'scheduler_batch_limit_exceeded'
 const SAFE_HQ_LIVE_FAILURES = Object.freeze(new Set([
   'app_product_contract_drift',
   'app_release_contract_invalid',
@@ -532,10 +533,20 @@ function validateHqLiveReceipt(receipt) {
     && productContract.ok === false
     && productContract.status === 'drifted'
     && /^(?:missing_live_[a-z0-9_]+|live_[a-z0-9_]+|[a-z0-9_]+_(?:missing|wrong|invalid|mismatch|rejected))(?::[A-Za-z0-9_.=/-]+){0,3}$/.test(String(productContract.reason || ''))
+  const failures = receipt?.failures
+  const localOnlySchedulerDrift = receipt?.ok === false
+    && Array.isArray(failures)
+    && failures.length === 1
+    && failures[0] === LOCAL_ONLY_HQ_LIVE_FAILURE
+    && receipt.scheduler?.status === 'degraded'
+    && receipt.scheduler?.configured === false
+    && receipt.scheduler?.pcDependency === false
+    && receipt.scheduler?.maxJobsPerRun === 2
+    && receipt.scheduler?.budgetGrantsRequired === true
+  const liveReceiptAccepted = (receipt?.ok === true && Array.isArray(failures) && failures.length === 0)
+    || localOnlySchedulerDrift
   if (receipt?.contract !== 'supermega.hq-live-state.v1'
-    || receipt.ok !== true
-    || !Array.isArray(receipt.failures)
-    || receipt.failures.length !== 0
+    || !liveReceiptAccepted
     || !Array.isArray(advisories)
     || advisories.some((advisory) => !CEO_LIVE_ADVISORIES.has(advisory))
     || new Set(advisories).size !== advisories.length
@@ -571,6 +582,11 @@ function validateHqLiveReceipt(receipt) {
     productContractStatus: productContract.status,
     productContractReason: productContract.reason,
     advisories: [...advisories],
+    failures: [...failures],
+    executionMode: localOnlySchedulerDrift ? 'local_only_scheduler_drift' : 'live_observed',
+    productionReleaseAccepted: false,
+    vercelActionsAllowed: false,
+    hostedSchedulerActionsAllowed: false,
   }
 }
 
@@ -991,6 +1007,23 @@ export function commandFailureReason(kind, error) {
   return fallback
 }
 
+export function recoverableHqLiveOutput(error) {
+  if (error?.code !== 1 || error?.killed === true || error?.signal) return null
+  const output = String(error?.stdout || '').trim()
+  if (!output || Buffer.byteLength(output) > MAX_COMMAND_BYTES) return null
+  try {
+    const receipt = JSON.parse(output)
+    if (receipt?.contract !== 'supermega.hq-live-state.v1'
+      || receipt.ok !== false
+      || !Array.isArray(receipt.failures)
+      || receipt.failures.length !== 1
+      || receipt.failures[0] !== LOCAL_ONLY_HQ_LIVE_FAILURE) return null
+    return output
+  } catch {
+    return null
+  }
+}
+
 async function defaultCommandRunner({ kind, args, timeoutMs, localCompanyRoot, localCompanyHome, localCompanyPython }) {
   let file
   let commandArgs
@@ -1039,6 +1072,8 @@ async function defaultCommandRunner({ kind, args, timeoutMs, localCompanyRoot, l
     })
     return String(result.stdout || '')
   } catch (error) {
+    const recoverable = kind === 'hq_live' ? recoverableHqLiveOutput(error) : null
+    if (recoverable) return recoverable
     fail(commandFailureReason(kind, error))
   }
 }
@@ -1454,7 +1489,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
           skippedOutcomes,
           capacityAdmission,
         }),
-        controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
+        controls: { externalWrites: false, connectors: 0, vercelActions: 0, hostedSchedulerActions: 0, productionReleaseAccepted: false, maxLocalRuns: 1, scaleToZero: true },
       }
     }
   } else if (repairRejected) {
@@ -1494,7 +1529,7 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
       skippedOutcomes,
       capacityAdmission,
     }),
-    controls: { externalWrites: false, connectors: 0, maxLocalRuns: 1, scaleToZero: true },
+    controls: { externalWrites: false, connectors: 0, vercelActions: 0, hostedSchedulerActions: 0, productionReleaseAccepted: false, maxLocalRuns: 1, scaleToZero: true },
   }
   if (!execute) return { ...base, status: 'ready', modelCalls: 0, queueWrites: 0 }
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import test from 'node:test'
 
-import { commandFailureReason, runAllyCeoLocalCycle } from './run_ally_ceo_local_cycle.mjs'
+import { commandFailureReason, recoverableHqLiveOutput, runAllyCeoLocalCycle } from './run_ally_ceo_local_cycle.mjs'
 
 const outcomeAgents = {
   'daily-company-control': ['operations-analyst'],
@@ -63,6 +63,23 @@ test('HQ live command failures retain only recognized contract categories', () =
     stdout: JSON.stringify({ contract: 'supermega.hq-live-state.v1', failures: ['token_must_not_escape'] }),
   }), 'ally_ceo_local_cycle_command_failed:hq_live:1')
   assert.equal(commandFailureReason('local', { code: 2, stderr: 'private output' }), 'ally_ceo_local_cycle_command_failed:local:2')
+})
+
+test('only the exact non-terminating scheduler drift receipt can reach local-only validation', () => {
+  const output = JSON.stringify({
+    ok: false,
+    contract: 'supermega.hq-live-state.v1',
+    failures: ['scheduler_batch_limit_exceeded'],
+  })
+  assert.equal(recoverableHqLiveOutput({ code: 1, stdout: output }), output)
+  assert.equal(recoverableHqLiveOutput({ code: 2, stdout: output }), null)
+  assert.equal(recoverableHqLiveOutput({ code: 1, killed: true, stdout: output }), null)
+  assert.equal(recoverableHqLiveOutput({ code: 1, stdout: JSON.stringify({
+    contract: 'supermega.hq-live-state.v1',
+    ok: false,
+    failures: ['scheduler_batch_limit_exceeded', 'security_readiness_drift'],
+  }) }), null)
+  assert.equal(recoverableHqLiveOutput({ code: 1, stderr: output }), null)
 })
 
 function plan({ outcomeId = 'daily-company-control', hashCharacter = 'a' } = {}) {
@@ -334,6 +351,27 @@ const hqLive = JSON.stringify({
   runtime: { operatingMode: 'isolated_demo', managedPersistenceReady: false, securityReady: false },
   capacity: { scaleToZero: true, idleActiveExecutionTarget: 0, registeredSpecialistsConsumeCompute: false },
 })
+
+function localOnlySchedulerDriftReceipt() {
+  const receipt = JSON.parse(hqLive)
+  receipt.ok = false
+  receipt.failures = ['scheduler_batch_limit_exceeded']
+  receipt.advisories = ['app_product_contract_drift']
+  receipt.appProductContract = {
+    ok: false,
+    contract: 'supermega_app_live',
+    status: 'drifted',
+    reason: 'release_context_version_mismatch:2026-07-30.2',
+  }
+  receipt.scheduler = {
+    status: 'degraded',
+    configured: false,
+    pcDependency: false,
+    maxJobsPerRun: 2,
+    budgetGrantsRequired: true,
+  }
+  return receipt
+}
 
 function harness(overrides = {}) {
   const calls = []
@@ -607,6 +645,53 @@ test('read-only CEO work can report bounded live product drift without weakening
     runAllyCeoLocalCycle({ execute: false }, { plan: plan(), runCommand: invalid.runCommand }),
     /ally_ceo_local_cycle_hq_live_rejected/,
   )
+})
+
+test('exact hosted scheduler drift permits one local-only outcome with zero Vercel or scheduler authority', async () => {
+  const receipt = localOnlySchedulerDriftReceipt()
+  const state = harness({ hqLive: JSON.stringify(receipt) })
+  const result = await runAllyCeoLocalCycle(
+    { execute: true, provider: 'mock' },
+    {
+      plan: plan(),
+      runCommand: state.runCommand,
+      inspectReport: async () => ({
+        path: 'C:\\state\\outputs\\report.md',
+        bytes: Buffer.byteLength(acceptedReport),
+        digest: 'sha256:' + 'd'.repeat(64),
+        text: acceptedReport,
+      }),
+    },
+  )
+  assert.equal(result.status, 'accepted')
+  assert.equal(result.liveHq.executionMode, 'local_only_scheduler_drift')
+  assert.deepEqual(result.liveHq.failures, ['scheduler_batch_limit_exceeded'])
+  assert.equal(result.liveHq.productionReleaseAccepted, false)
+  assert.equal(result.liveHq.vercelActionsAllowed, false)
+  assert.equal(result.liveHq.hostedSchedulerActionsAllowed, false)
+  assert.equal(result.controls.externalWrites, false)
+  assert.equal(result.controls.vercelActions, 0)
+  assert.equal(result.controls.hostedSchedulerActions, 0)
+  assert.equal(result.controls.productionReleaseAccepted, false)
+  assert.equal(result.queueWrites, 1)
+  assert.equal(result.modelCalls, 3)
+
+  for (const mutate of [
+    (candidate) => { candidate.failures.push('security_readiness_drift') },
+    (candidate) => { candidate.scheduler.configured = true },
+    (candidate) => { candidate.scheduler.maxJobsPerRun = 3 },
+    (candidate) => { candidate.scheduler.budgetGrantsRequired = false },
+  ]) {
+    const rejected = localOnlySchedulerDriftReceipt()
+    mutate(rejected)
+    const rejectedState = harness({ hqLive: JSON.stringify(rejected) })
+    await assert.rejects(
+      runAllyCeoLocalCycle({ execute: true, provider: 'mock' }, { plan: plan(), runCommand: rejectedState.runCommand }),
+      /ally_ceo_local_cycle_hq_live_rejected/,
+    )
+    assert.equal(rejectedState.calls.some((call) => call.args?.[1] === 'add'), false)
+    assert.equal(rejectedState.calls.some((call) => call.args?.[1] === 'run-next'), false)
+  }
 })
 
 test('fresh outcomes audit current knowledge but fail before refresh, queue, or model work when live HQ truth is rejected', async () => {
