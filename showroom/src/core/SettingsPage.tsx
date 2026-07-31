@@ -82,12 +82,14 @@ import {
   buildClientDemoRunbook,
   CLIENT_DEMO_KIT_MAX_BYTES,
   CLIENT_DEMO_PREPARATION_MAX_BYTES,
+  CLIENT_IMPORT_MAX_BYTES,
   CLIENT_DEMO_WORKSPACE_STORAGE_KEY,
   clientDemoKitReadiness,
   clientDemoPreparationBlueprint,
   clientDemoPreparationConfirmationMatches,
   clientDemoPresets,
   clientImportWorkflowTemplateIds,
+  prepareClientDemoInBrowser,
   reconcileClientDemoWorkspace,
   restoreClientDemoWorkspace,
   restoreClientDemoKit,
@@ -97,7 +99,9 @@ import {
   type ClientDemoProductProgress,
   type ClientDemoPresetId,
   type ClientDemoPreparationArtifact,
+  type ClientDemoPreparationSource,
   type ClientDemoWorkspace,
+  type ClientSolutionId,
 } from './client-onboarding'
 import { PLANT_ORDER_STORAGE_PREFIX, projectPlantOrder } from './plant-order-foundation'
 import {
@@ -126,6 +130,15 @@ import {
   restoreLocalWorkspaceBackupFromEvidence,
   type LocalWorkspaceBackup,
 } from './local-workspace-backup'
+
+const clientCsvProductByName: Readonly<Record<string, ClientSolutionId>> = {
+  'shop.csv': 'commerce',
+  'commerce.csv': 'commerce',
+  'plant.csv': 'production',
+  'production.csv': 'production',
+  'website.csv': 'website',
+  'ecommerce.csv': 'ecommerce',
+}
 
 const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding').then((module) => ({ default: module.ClientDataOnboarding })))
 const ManagedActivationRunbook = lazy(() => import('./ManagedActivationRunbook').then((module) => ({ default: module.ManagedActivationRunbook })))
@@ -306,6 +319,7 @@ export function SettingsPage() {
   const demoRecoveryNeeded = Boolean((demoWorkspaceSource || demoBlueprintSource) && (!demoWorkspace || !demoBlueprint))
   const [demoDataSetupOpen, setDemoDataSetupOpen] = useState(false)
   const [preparedArtifact, setPreparedArtifact] = useState<ClientDemoPreparationArtifact | null>(null)
+  const [preparingClientFiles, setPreparingClientFiles] = useState(false)
   const [preparedConfirmation, setPreparedConfirmation] = useState('')
   const [preparedBusyProduct, setPreparedBusyProduct] = useState<SetupProductId | null>(null)
   const [preparedInstallStep, setPreparedInstallStep] = useState('')
@@ -401,7 +415,6 @@ export function SettingsPage() {
     : null
   const capabilityPlanFilename = `supermega-capability-plan-${setup.workspace.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || evidenceDate}.json`
   const capabilityPlanHref = capabilityPlan ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(capabilityPlan, null, 2))}` : ''
-  const privatePreparationCommand = `npm run client:prepare -- --kit "${demoBlueprintFilename}" --data-dir "client-data" --out "private-review.json"`
   const demoReadyCount = demoWorkspace?.products.filter((product) => ['data_ready', 'workspace_checked', 'applied'].includes(product.status)).length ?? 0
   const preparedApprovalReady = Boolean(preparedArtifact && clientDemoPreparationConfirmationMatches(preparedArtifact, preparedConfirmation))
   const preparedAppliedProducts = new Set(demoWorkspace?.products.filter((product) => product.status === 'applied').map((product) => product.product) ?? [])
@@ -1014,12 +1027,34 @@ export function SettingsPage() {
     }
   }
 
-  async function copyPrivatePreparationCommand() {
+  async function prepareClientFiles(files: readonly File[]) {
+    if (!files.length || !demoKitReadiness?.kit) return
+    setPreparingClientFiles(true)
+    setPreparedArtifact(null)
+    setPreparedConfirmation('')
+    setPreparedBlockedProduct(null)
+    setPreparedNotice('Checking the selected files locally...')
     try {
-      await navigator.clipboard.writeText(privatePreparationCommand)
-      setNotice('Private preparation command copied. Run it from the SuperMega project folder after adding the client CSV files.')
-    } catch {
-      setNotice('Copy was unavailable. Select the command below and run it from the SuperMega project folder.')
+      if (files.length > 4) throw new Error('Choose no more than four product CSV files.')
+      const selectedProducts = new Set(demoKitReadiness.kit.blueprint.products.map((product) => product.product))
+      const seenProducts = new Set<ClientSolutionId>()
+      const sources: ClientDemoPreparationSource[] = []
+      for (const file of files) {
+        const product = clientCsvProductByName[file.name.trim().toLowerCase()]
+        if (!product) throw new Error('Use shop.csv, plant.csv, website.csv, or ecommerce.csv.')
+        if (!selectedProducts.has(product)) throw new Error(`${productDisplayName(product)} is not selected in this client demo.`)
+        if (seenProducts.has(product)) throw new Error(`Choose only one ${productDisplayName(product)} CSV.`)
+        if (file.size < 1 || file.size > CLIENT_IMPORT_MAX_BYTES) throw new Error(`${file.name} must be between 1 byte and 512 KB.`)
+        seenProducts.add(product)
+        sources.push({ product, sourceName: file.name, csvText: await file.text() })
+      }
+      const artifact = await prepareClientDemoInBrowser(demoKitReadiness.kit, sources)
+      setPreparedArtifact(artifact)
+      setPreparedNotice(`${artifact.products.length}-product package verified locally. ${sources.length} client file${sources.length === 1 ? '' : 's'} used; missing products use visible sample data.`)
+    } catch (error) {
+      setPreparedNotice(error instanceof Error ? error.message : 'The selected client files could not be prepared.')
+    } finally {
+      setPreparingClientFiles(false)
     }
   }
 
@@ -1665,15 +1700,19 @@ export function SettingsPage() {
                 {demoBlueprint.integrations.length ? <ol className="demo-integration-flow">{demoBlueprint.integrations.map((integration) => <li key={`${integration.from}-${integration.to}`}><strong>{productDisplayName(integration.from)} → {productDisplayName(integration.to)}</strong><span>{integration.outcome}</span></li>)}</ol> : <p className="form-notice">This demo has one standalone product.</p>}
               </details>
               <details className="compact-disclosure client-preparation-handoff">
-                <summary><span>Prepare private client files</span><small>Internal founder workflow</small></summary>
-                <ol>
-                  <li>Download the setup kit above.</li>
-                  <li>Create a <code>client-data</code> folder beside it and add {demoBlueprint.products.map((product) => `${product.product}.csv`).join(', ')}.</li>
-                  <li>Run the command below from the SuperMega project folder.</li>
-                  <li>Load <code>private-review.json</code> with <strong>Load private package</strong>, review the digest, then install.</li>
-                </ol>
-                <div className="client-preparation-command"><code>{privatePreparationCommand}</code><button className="core-button compact" onClick={() => void copyPrivatePreparationCommand()} type="button">Copy command</button></div>
-                <p>Preparation is local, serial, and fail-closed. It performs no model call, network send, managed write, or activation.</p>
+                <summary><span>Use client data</span><small>One local step</small></summary>
+                <div className="client-preparation-picker">
+                  <div><strong>Choose only the files you have.</strong><p>Shop, Plant, Website, and Ecommerce are prepared together. Missing files use the visible sample data in this setup.</p><small>Accepted: shop.csv (or commerce.csv), plant.csv (or production.csv), website.csv, ecommerce.csv. Each file: 512 KB maximum.</small></div>
+                  <label className={`core-button primary${preparingClientFiles ? ' disabled' : ''}`}>
+                    <input accept=".csv,text/csv" disabled={preparingClientFiles} multiple onChange={(event) => {
+                      const files = Array.from(event.currentTarget.files ?? [])
+                      event.currentTarget.value = ''
+                      void prepareClientFiles(files)
+                    }} type="file" />
+                    {preparingClientFiles ? 'Checking files...' : 'Choose client CSV files'}
+                  </label>
+                </div>
+                <p>Files stay in this browser. Preparation makes no upload, model call, managed write, or activation.</p>
               </details>
               {preparedArtifact ? <section aria-label="Private client package installer" className="setup-template-summary">
                 <div><span className="core-eyebrow">Verified private package</span><strong>Install one connected local demo.</strong><small>Private client rows stay in this browser. Nothing is uploaded, shared, or installed automatically.</small></div>

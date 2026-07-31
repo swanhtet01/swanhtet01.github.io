@@ -448,6 +448,12 @@ export type ClientDemoPreparationArtifact = {
   }
 }
 
+export type ClientDemoPreparationSource = {
+  product: ClientSolutionId
+  sourceName: string
+  csvText: string
+}
+
 const clientDemoProductOrder: readonly ClientSolutionId[] = ['commerce', 'production', 'website', 'ecommerce']
 
 const clientDemoProductDetails: Record<ClientSolutionId, { label: string; demoPath: string; setupPath: string }> = {
@@ -1275,6 +1281,138 @@ function clientDemoPreparationChecks(packages: readonly ClientImportStagingPacka
   }
 }
 
+function ecommerceFixtureFromShop(stagingPackage: ClientImportStagingPackage) {
+  const cell = (value: string) => `"${value.replaceAll('"', '""')}"`
+  const rows = stagingPackage.rows.map((row, index) => [
+    row.values.sku,
+    index === 0 ? 'true' : 'false',
+    'Client catalog',
+    row.values.name,
+    'Review before publishing.',
+  ].map(cell).join(','))
+  return `sku,featured,collection,display_name,merchandising_note\r\n${rows.join('\r\n')}\r\n`
+}
+
+export async function prepareClientDemoInBrowser(
+  kitValue: unknown,
+  sourcesValue: unknown,
+  preparedAtValue: unknown = new Date().toISOString(),
+): Promise<ClientDemoPreparationArtifact> {
+  const kit = restoreClientDemoKit(kitValue)
+  const preparedAt = canonicalTimestamp(preparedAtValue)
+  if (!kit || !preparedAt) throw new Error('The client demo setup kit is invalid.')
+  if (!Array.isArray(sourcesValue) || sourcesValue.length > kit.blueprint.products.length) {
+    throw new Error('Choose no more than one CSV for each selected product.')
+  }
+
+  const selectedProducts = new Set(kit.blueprint.products.map((product) => product.product))
+  const sources = new Map<ClientSolutionId, ClientDemoPreparationSource>()
+  for (const value of sourcesValue) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)
+      || !hasExactKeys(value, ['product', 'sourceName', 'csvText'])) {
+      throw new Error('One selected client CSV has an invalid file description.')
+    }
+    const source = value as Partial<ClientDemoPreparationSource>
+    if (!source.product || !clientDemoProductOrder.includes(source.product)
+      || !selectedProducts.has(source.product) || sources.has(source.product)
+      || typeof source.sourceName !== 'string' || typeof source.csvText !== 'string') {
+      throw new Error('Choose one correctly named CSV for each selected product.')
+    }
+    sources.set(source.product, source as ClientDemoPreparationSource)
+  }
+
+  const products: ClientDemoPreparationArtifact['products'] = []
+  for (const product of kit.blueprint.products) {
+    const source = sources.get(product.product)
+    const sourceMode = source ? 'client_csv' as const : 'kit_sample_fixture' as const
+    const shopPackage = products.find((entry) => entry.product === 'commerce')?.stagingPackage
+    const sourceText = !source && product.product === 'ecommerce' && sources.has('commerce') && shopPackage
+      ? ecommerceFixtureFromShop(shopPackage)
+      : source?.csvText ?? product.sampleCsv
+    const preview = await createClientImportPreview(
+      sourceText,
+      product.product,
+      undefined,
+      source?.sourceName ?? `sample-${product.product}.csv`,
+      product.templateId,
+    )
+    if (!preview.readyForStaging || preview.totals.ready !== preview.totals.rows) {
+      throw new Error(`${product.label} data needs correction before this demo can be prepared.`)
+    }
+    const stagingPackage = buildClientImportStagingPackage(preview, {
+      workflowTemplateId: product.templateId,
+      workspace: kit.blueprint.client.workspace,
+      owner: kit.blueprint.client.owner,
+      plantIndustryPackId: kit.blueprint.client.plantIndustryPackId,
+    })
+    const details = clientDemoProductDetails[product.product]
+    products.push({
+      product: product.product,
+      label: details.label,
+      templateId: product.templateId,
+      sourceMode,
+      sourceName: stagingPackage.source.name,
+      rowCount: stagingPackage.rows.length,
+      previewDigest: stagingPackage.source.previewDigest,
+      packageDigest: await sha256(JSON.stringify(stagingPackage)),
+      demoPath: details.demoPath,
+      setupPath: details.setupPath,
+      stagingPackage,
+    })
+  }
+
+  const checks = clientDemoPreparationChecks(products.map((product) => product.stagingPackage))
+  if (Object.values(checks).some((check) => check !== true)) {
+    throw new Error('The selected files do not yet form one connected four-product demo.')
+  }
+  const verifiedChecks: ClientDemoPreparationArtifact['checks'] = {
+    ecommerceCatalogAligned: true,
+    websiteHomePresent: true,
+    plantLinesPresent: true,
+    oneWorkspaceAndOwner: true,
+  }
+  const customSourceCount = products.filter((product) => product.sourceMode === 'client_csv').length
+  const payload = {
+    contract: CLIENT_DEMO_PREPARATION_SCHEMA,
+    preparedAt,
+    kit: { schema: kit.schema, digest: await sha256(JSON.stringify(kit)), exportedAt: kit.exportedAt },
+    client: kit.blueprint.client,
+    foundation: kit.blueprint.foundation,
+    topology: kit.blueprint.topology,
+    products,
+    integrations: kit.blueprint.integrations,
+    checks: verifiedChecks,
+    controls: {
+      localArtifactOnly: true as const,
+      containsNormalizedClientData: customSourceCount > 0,
+      containsSampleFixtures: customSourceCount < products.length,
+      safeToShareExternally: false as const,
+      humanReviewRequired: true as const,
+      externalWritesPerformed: false as const,
+      hostedWritesPerformed: false as const,
+      connectorCallsPerformed: false as const,
+      modelCallsPerformed: false as const,
+      activationStatus: 'not_applied' as const,
+    },
+  }
+  const bundleDigest = await sha256(JSON.stringify(payload))
+  const artifact: ClientDemoPreparationArtifact = {
+    ...payload,
+    bundleDigest,
+    review: {
+      status: 'awaiting_founder_review',
+      confirmation: `APPROVE CLIENT DEMO ${bundleDigest}`,
+      checklist: [...clientDemoPreparationReviewChecklist],
+    },
+  }
+  if (byteLength(JSON.stringify(artifact)) > CLIENT_DEMO_PREPARATION_MAX_BYTES) {
+    throw new Error('The prepared client demo is larger than 5 MB.')
+  }
+  const restored = await restoreClientDemoPreparationArtifact(artifact)
+  if (!restored) throw new Error('The client demo failed its final local integrity check.')
+  return restored
+}
+
 function clientDemoPreparationBlueprintFromSource(source: ClientDemoPreparationArtifact) {
   return buildClientDemoBlueprint({
     workspace: source.client.workspace,
@@ -1621,7 +1759,7 @@ export function buildClientImportStagingPackage(preview: ClientImportPreview, co
   workspace: string
   owner: string
   plantIndustryPackId?: PlantIndustryPackId
-}) {
+}): ClientImportStagingPackage {
   if (preview.schema !== CLIENT_IMPORT_SCHEMA || !preview.readyForStaging || preview.rows.some((row) => row.status !== 'ready')) {
     throw new Error('Resolve every mapping and row issue before creating a staging package.')
   }

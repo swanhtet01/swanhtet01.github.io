@@ -3640,6 +3640,8 @@ if (manifestPlantPackIds.join(',') !== 'general-manufacturing,batch-process,food
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => clientOnboardingSource.toLowerCase().includes(marker.toLowerCase()))) fail('client_import_external_or_persistent_side_effect_added')
 if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermega.client_demo_preparation.v3'")
   || !clientOnboardingSource.includes('CLIENT_DEMO_PREPARATION_MAX_BYTES = 5 * 1024 * 1024')
+  || !clientOnboardingSource.includes('export async function prepareClientDemoInBrowser')
+  || !clientOnboardingSource.includes('const restored = await restoreClientDemoPreparationArtifact(artifact)')
   || !clientOnboardingSource.includes('export async function restoreClientDemoPreparationArtifact')
   || !clientOnboardingSource.includes("await sha256(JSON.stringify(stagingPackage)) !== product.packageDigest")
   || !clientOnboardingSource.includes('await sha256(JSON.stringify(payload)) !== source.bundleDigest')
@@ -3651,6 +3653,11 @@ if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermeg
   || !localClientImportSource.includes('return activateLocalStagingPackage(preparedProduct.stagingPackage, {')
   || !localClientImportSource.includes("replaceExistingEcommerceDraft: product === 'ecommerce'")
   || ['applyManagedClientImport', 'validateManagedClientImport', 'fetch(', 'supabase'].some((marker) => localClientImportSource.includes(marker))
+  || !settingsPageSource.includes("'shop.csv': 'commerce'")
+  || !settingsPageSource.includes("'plant.csv': 'production'")
+  || !settingsPageSource.includes('multiple onChange={(event) =>')
+  || !settingsPageSource.includes('Choose client CSV files')
+  || !settingsPageSource.includes('Files stay in this browser.')
   || !settingsPageSource.includes('Load private package')
   || !settingsPageSource.includes('Private client rows stay in this browser. Nothing is uploaded, shared, or installed automatically.')
   || !settingsPageSource.includes('aria-label="Shared operating foundation"')
@@ -6358,73 +6365,33 @@ async function verifyClientOnboardingRuntime() {
     const extraFieldDemoKit = structuredClone(demoKit)
     extraFieldDemoKit.customerData = 'must-not-load'
     assert(model.restoreClientDemoKit(extraFieldDemoKit) === null, 'client_demo_kit_extra_field_accepted')
-    const digest = async (value) => {
-      const bytes = new TextEncoder().encode(value)
-      const hashed = await globalThis.crypto.subtle.digest('SHA-256', bytes)
-      return `sha256:${Array.from(new Uint8Array(hashed), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
-    }
-    const preparedProducts = []
-    for (const product of manufacturingBlueprint.products) {
-      const preview = await model.createClientImportPreview(product.sampleCsv, product.product, undefined, `sample-${product.product}.csv`, product.templateId)
-      const stagingPackage = model.buildClientImportStagingPackage(preview, {
-        workflowTemplateId: product.templateId,
-        workspace: manufacturingBlueprint.client.workspace,
-        owner: manufacturingBlueprint.client.owner,
-        plantIndustryPackId: manufacturingBlueprint.client.plantIndustryPackId,
-      })
-      preparedProducts.push({
-        product: product.product,
-        label: product.label,
-        templateId: product.templateId,
-        sourceMode: 'kit_sample_fixture',
-        sourceName: stagingPackage.source.name,
-        rowCount: stagingPackage.rows.length,
-        previewDigest: stagingPackage.source.previewDigest,
-        packageDigest: await digest(JSON.stringify(stagingPackage)),
-        demoPath: product.demoPath,
-        setupPath: product.setupPath,
-        stagingPackage,
-      })
-    }
-    const preparationPayload = {
-      contract: model.CLIENT_DEMO_PREPARATION_SCHEMA,
-      preparedAt: workspaceCreatedAt,
-      kit: { schema: model.CLIENT_DEMO_KIT_SCHEMA, digest: await digest(JSON.stringify(demoKit)), exportedAt: workspaceCreatedAt },
-      client: manufacturingBlueprint.client,
-      foundation: manufacturingBlueprint.foundation,
-      topology: manufacturingBlueprint.topology,
-      products: preparedProducts,
-      integrations: manufacturingBlueprint.integrations,
-      checks: { ecommerceCatalogAligned: true, websiteHomePresent: true, plantLinesPresent: true, oneWorkspaceAndOwner: true },
-      controls: {
-        localArtifactOnly: true,
-        containsNormalizedClientData: false,
-        containsSampleFixtures: true,
-        safeToShareExternally: false,
-        humanReviewRequired: true,
-        externalWritesPerformed: false,
-        hostedWritesPerformed: false,
-        connectorCallsPerformed: false,
-        modelCallsPerformed: false,
-        activationStatus: 'not_applied',
-      },
-    }
-    const preparedBundleDigest = await digest(JSON.stringify(preparationPayload))
-    const preparedArtifact = {
-      ...preparationPayload,
-      bundleDigest: preparedBundleDigest,
-      review: {
-        status: 'awaiting_founder_review',
-        confirmation: `APPROVE CLIENT DEMO ${preparedBundleDigest}`,
-        checklist: [
-          'Confirm the workspace, owner, selected templates, and industry packs.',
-          'Review every normalized source row and resolve client-data corrections.',
-          'Open each product demo path and complete its operational proof scenario.',
-          'Confirm Shop, Plant, Website, and Ecommerce cross-product checks.',
-          'Approve this exact bundle digest before any managed activation.',
-        ],
-      },
-    }
+    const shopSample = 'sku,item_name,opening_stock,reorder_at,price_mmk\nCLIENT-001,Client product,20,5,12000\n'
+    const preparedArtifact = await model.prepareClientDemoInBrowser(demoKit, [{
+      product: 'commerce',
+      sourceName: 'shop.csv',
+      csvText: shopSample,
+    }], workspaceCreatedAt)
+    const preparedBundleDigest = preparedArtifact.bundleDigest
+    assert(preparedArtifact.products.map((product) => product.product).join(',') === 'commerce,production,website,ecommerce'
+      && preparedArtifact.products[0].sourceMode === 'client_csv'
+      && preparedArtifact.products.slice(1).every((product) => product.sourceMode === 'kit_sample_fixture')
+      && preparedArtifact.products[3].stagingPackage.rows[0].key === 'CLIENT-001'
+      && preparedArtifact.controls.containsNormalizedClientData === true
+      && preparedArtifact.controls.containsSampleFixtures === true
+      && preparedArtifact.controls.externalWritesPerformed === false,
+    'client_demo_browser_preparation_did_not_build_bounded_mixed_source_artifact')
+    await rejects(() => model.prepareClientDemoInBrowser(demoKit, [
+      { product: 'commerce', sourceName: 'shop.csv', csvText: shopSample },
+      { product: 'commerce', sourceName: 'commerce.csv', csvText: shopSample },
+    ], workspaceCreatedAt), 'client_demo_browser_preparation_accepted_duplicate_product')
+    await rejects(() => model.prepareClientDemoInBrowser(demoKit, [{
+      product: 'commerce', sourceName: 'shop.csv', csvText: 'sku,item_name\nBROKEN'
+    }], workspaceCreatedAt), 'client_demo_browser_preparation_accepted_invalid_csv')
+    await rejects(() => model.prepareClientDemoInBrowser(demoKit, [{
+      product: 'ecommerce',
+      sourceName: 'ecommerce.csv',
+      csvText: 'sku,featured,collection,display_name,merchandising_note\nNOT-IN-SHOP,true,New,New item,Review first\n',
+    }], workspaceCreatedAt), 'client_demo_browser_preparation_accepted_cross_product_drift')
     const restoredPreparation = await model.restoreClientDemoPreparationArtifact(preparedArtifact)
     assert(restoredPreparation?.bundleDigest === preparedBundleDigest && restoredPreparation.products.length === 4, 'client_demo_preparation_not_restorable')
     assert(model.clientDemoPreparationConfirmationMatches(restoredPreparation, preparedArtifact.review.confirmation), 'client_demo_preparation_confirmation_not_exact')
@@ -6440,7 +6407,7 @@ async function verifyClientOnboardingRuntime() {
     await rejects(() => localInstaller.preparedLocalClientDemoInstallOrder(rowTamper), 'client_demo_preparation_tamper_reached_install_plan')
     await rejects(() => localInstaller.applyPreparedLocalClientDemoProduct(rowTamper, 'commerce', preparedArtifact.review.confirmation), 'client_demo_preparation_tamper_reached_local_write')
     const packageDigestTamper = structuredClone(preparedArtifact)
-    packageDigestTamper.products[1].packageDigest = await digest('wrong-package')
+    packageDigestTamper.products[1].packageDigest = `sha256:${'0'.repeat(64)}`
     assert(await model.restoreClientDemoPreparationArtifact(packageDigestTamper) === null, 'client_demo_preparation_package_digest_tamper_accepted')
     const foundationTamper = structuredClone(preparedArtifact)
     foundationTamper.foundation.controls.externalRegistryChecked = true
