@@ -10,6 +10,7 @@ export const CLIENT_DEMO_RUNBOOK_SCHEMA = 'supermega.client_demo_runbook.v1' as 
 export const CLIENT_DEMO_PREPARATION_SCHEMA = 'supermega.client_demo_preparation.v3' as const
 export const CLIENT_OPERATING_FOUNDATION_SCHEMA = 'supermega.client_operating_foundation.v1' as const
 export const CLIENT_OPERATIONAL_TOPOLOGY_SCHEMA = 'supermega.client_operational_topology.v1' as const
+export const CLIENT_CSV_STARTER_PACK_SCHEMA = 'supermega.client_csv_starter_pack.v1' as const
 const LEGACY_CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v1' as const
 const LEGACY_V2_CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v2' as const
 const LEGACY_CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v1' as const
@@ -142,6 +143,133 @@ export type ClientDemoBlueprint = {
     humanReviewRequired: true
     externalWritesPerformed: false
   }
+}
+
+export type ClientCsvStarterPack = {
+  schema: typeof CLIENT_CSV_STARTER_PACK_SCHEMA
+  filename: string
+  bytes: Uint8Array
+}
+
+const clientCsvFilename: Readonly<Record<ClientSolutionId, string>> = {
+  commerce: 'shop.csv',
+  production: 'plant.csv',
+  website: 'website.csv',
+  ecommerce: 'ecommerce.csv',
+}
+
+const crc32Table = (() => {
+  const table = new Uint32Array(256)
+  for (let index = 0; index < table.length; index += 1) {
+    let value = index
+    for (let bit = 0; bit < 8; bit += 1) value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : (value >>> 1)
+    table[index] = value >>> 0
+  }
+  return table
+})()
+
+function crc32(bytes: Uint8Array) {
+  let value = 0xffffffff
+  for (const byte of bytes) value = crc32Table[(value ^ byte) & 0xff] ^ (value >>> 8)
+  return (value ^ 0xffffffff) >>> 0
+}
+
+function writeZipUint16(target: number[], value: number) {
+  target.push(value & 0xff, (value >>> 8) & 0xff)
+}
+
+function writeZipUint32(target: number[], value: number) {
+  target.push(value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff)
+}
+
+function appendZipBytes(target: number[], bytes: Uint8Array) {
+  for (const byte of bytes) target.push(byte)
+}
+
+function workspaceFilenameSlug(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'client'
+}
+
+function zipStore(entries: Array<{ filename: string; bytes: Uint8Array }>) {
+  const encoder = new TextEncoder()
+  const archive: number[] = []
+  const centralDirectory: number[] = []
+  const utf8Flag = 0x0800
+  const dosDate = 0x0021 // 1980-01-01; fixed so the starter pack is deterministic.
+
+  for (const entry of entries) {
+    const filename = encoder.encode(entry.filename)
+    const checksum = crc32(entry.bytes)
+    const localOffset = archive.length
+    writeZipUint32(archive, 0x04034b50)
+    writeZipUint16(archive, 20)
+    writeZipUint16(archive, utf8Flag)
+    writeZipUint16(archive, 0)
+    writeZipUint16(archive, 0)
+    writeZipUint16(archive, dosDate)
+    writeZipUint32(archive, checksum)
+    writeZipUint32(archive, entry.bytes.length)
+    writeZipUint32(archive, entry.bytes.length)
+    writeZipUint16(archive, filename.length)
+    writeZipUint16(archive, 0)
+    appendZipBytes(archive, filename)
+    appendZipBytes(archive, entry.bytes)
+
+    writeZipUint32(centralDirectory, 0x02014b50)
+    writeZipUint16(centralDirectory, 20)
+    writeZipUint16(centralDirectory, 20)
+    writeZipUint16(centralDirectory, utf8Flag)
+    writeZipUint16(centralDirectory, 0)
+    writeZipUint16(centralDirectory, 0)
+    writeZipUint16(centralDirectory, dosDate)
+    writeZipUint32(centralDirectory, checksum)
+    writeZipUint32(centralDirectory, entry.bytes.length)
+    writeZipUint32(centralDirectory, entry.bytes.length)
+    writeZipUint16(centralDirectory, filename.length)
+    writeZipUint16(centralDirectory, 0)
+    writeZipUint16(centralDirectory, 0)
+    writeZipUint16(centralDirectory, 0)
+    writeZipUint16(centralDirectory, 0)
+    writeZipUint32(centralDirectory, 0)
+    writeZipUint32(centralDirectory, localOffset)
+    appendZipBytes(centralDirectory, filename)
+  }
+
+  const centralOffset = archive.length
+  appendZipBytes(archive, Uint8Array.from(centralDirectory))
+  writeZipUint32(archive, 0x06054b50)
+  writeZipUint16(archive, 0)
+  writeZipUint16(archive, 0)
+  writeZipUint16(archive, entries.length)
+  writeZipUint16(archive, entries.length)
+  writeZipUint32(archive, centralDirectory.length)
+  writeZipUint32(archive, centralOffset)
+  writeZipUint16(archive, 0)
+  return Uint8Array.from(archive)
+}
+
+export function buildClientCsvStarterPack(blueprintValue: unknown): ClientCsvStarterPack {
+  const blueprint = canonicalClientDemoBlueprint(blueprintValue)
+  if (!blueprint) throw new Error('Create a valid client demo before downloading its CSV starter pack.')
+  const encoder = new TextEncoder()
+  const entries = blueprint.products.map((product) => ({
+    product: product.product,
+    filename: clientCsvFilename[product.product],
+    bytes: encoder.encode(product.sampleCsv),
+  }))
+  const bytes = zipStore(entries)
+  return {
+    schema: CLIENT_CSV_STARTER_PACK_SCHEMA,
+    filename: `supermega-${workspaceFilenameSlug(blueprint.client.workspace)}-csv-starter-pack.zip`,
+    bytes,
+  }
+}
+
+export function clientCsvStarterPackHref(pack: ClientCsvStarterPack) {
+  if (pack.schema !== CLIENT_CSV_STARTER_PACK_SCHEMA || !pack.bytes.length) {
+    throw new Error('The client CSV starter pack is invalid.')
+  }
+  return `data:application/zip;base64,${btoa(String.fromCharCode(...pack.bytes))}`
 }
 
 export type ClientDemoProductProgressStatus = 'not_started' | 'needs_fix' | 'data_ready' | 'workspace_checked' | 'applied'

@@ -3639,6 +3639,9 @@ if (manifestPlantPackIds.join(',') !== 'general-manufacturing,batch-process,food
   || !settingsPageSource.includes('plantIndustryPacks.map((pack)')) fail('plant_industry_pack_contract_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => clientOnboardingSource.toLowerCase().includes(marker.toLowerCase()))) fail('client_import_external_or_persistent_side_effect_added')
 if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermega.client_demo_preparation.v3'")
+  || !clientOnboardingSource.includes("CLIENT_CSV_STARTER_PACK_SCHEMA = 'supermega.client_csv_starter_pack.v1'")
+  || !clientOnboardingSource.includes('export function buildClientCsvStarterPack')
+  || !clientOnboardingSource.includes('export function clientCsvStarterPackHref')
   || !clientOnboardingSource.includes('CLIENT_DEMO_PREPARATION_MAX_BYTES = 5 * 1024 * 1024')
   || !clientOnboardingSource.includes('export async function prepareClientDemoInBrowser')
   || !clientOnboardingSource.includes('const restored = await restoreClientDemoPreparationArtifact(artifact)')
@@ -3657,6 +3660,7 @@ if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermeg
   || !settingsPageSource.includes("'plant.csv': 'production'")
   || !settingsPageSource.includes('multiple onChange={(event) =>')
   || !settingsPageSource.includes('Choose client CSV files')
+  || !settingsPageSource.includes('Download CSV starter pack')
   || !settingsPageSource.includes('Files stay in this browser.')
   || !settingsPageSource.includes('Load private package')
   || !settingsPageSource.includes('Private client rows stay in this browser. Nothing is uploaded, shared, or installed automatically.')
@@ -6241,6 +6245,17 @@ async function verifyClientOnboardingRuntime() {
       && capabilityModel.clientCapabilityDependencyLabel('future-control') === 'future control', 'client_capability_dependency_labels_wrong')
     for (const preset of model.clientDemoPresets) {
       const blueprint = model.buildClientDemoBlueprint({ workspace: 'Golden Valley Trading', owner: 'Operations lead', presetId: preset.id, selections: preset.selections })
+      const starterPack = model.buildClientCsvStarterPack(blueprint)
+      const starterPackText = new TextDecoder().decode(starterPack.bytes)
+      const starterPackFilenames = { commerce: 'shop.csv', production: 'plant.csv', website: 'website.csv', ecommerce: 'ecommerce.csv' }
+      assert(starterPack.schema === model.CLIENT_CSV_STARTER_PACK_SCHEMA
+        && starterPack.filename === 'supermega-golden-valley-trading-csv-starter-pack.zip'
+        && blueprint.products.every((product) => starterPackText.includes(starterPackFilenames[product.product]))
+        && starterPack.bytes[0] === 0x50 && starterPack.bytes[1] === 0x4b
+        && starterPack.bytes.at(-22) === 0x50 && starterPack.bytes.at(-21) === 0x4b
+        && model.clientCsvStarterPackHref(starterPack).startsWith('data:application/zip;base64,UEsDB'), `client_demo_${preset.id}_csv_starter_pack_wrong`)
+      const repeatedStarterPack = model.buildClientCsvStarterPack(blueprint)
+      assert(Buffer.from(starterPack.bytes).equals(Buffer.from(repeatedStarterPack.bytes)), `client_demo_${preset.id}_csv_starter_pack_not_deterministic`)
       const capabilityPlan = capabilityModel.buildClientCapabilityPlan(blueprint, '2026-07-29T00:00:00.000Z')
       assert(capabilityPlan.schema === capabilityModel.CLIENT_CAPABILITY_PLAN_SCHEMA
         && capabilityPlan.workspace === blueprint.client.workspace

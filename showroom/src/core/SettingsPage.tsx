@@ -78,6 +78,7 @@ import { LEGACY_PRODUCTION_KEYS, PRODUCTION_KEY } from './production-workspace'
 import { formatTime, LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY, useTeamWorkspace } from './team-work'
 import { buildClientCapabilityPlan } from './client-capability-plan'
 import {
+  buildClientCsvStarterPack,
   buildClientDemoBlueprint,
   buildClientDemoRunbook,
   CLIENT_DEMO_KIT_MAX_BYTES,
@@ -88,6 +89,7 @@ import {
   clientDemoPreparationBlueprint,
   clientDemoPreparationConfirmationMatches,
   clientDemoPresets,
+  clientCsvStarterPackHref,
   clientImportWorkflowTemplateIds,
   prepareClientDemoInBrowser,
   reconcileClientDemoWorkspace,
@@ -410,6 +412,8 @@ export function SettingsPage() {
   const evidenceFilename = `supermega-trial-evidence-${evidenceDate}.json`
   const demoBlueprintFilename = `supermega-client-demo-${setup.workspace.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || evidenceDate}.json`
   const demoBlueprintHref = demoKitReadiness?.ready ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(demoKitReadiness.kit, null, 2))}` : ''
+  const clientCsvStarterPack = useMemo(() => demoBlueprint ? buildClientCsvStarterPack(demoBlueprint) : null, [demoBlueprint])
+  const clientCsvStarterPackDownloadHref = useMemo(() => clientCsvStarterPack ? clientCsvStarterPackHref(clientCsvStarterPack) : '', [clientCsvStarterPack])
   const capabilityPlan = demoBlueprint && demoKitReadiness?.kit
     ? buildClientCapabilityPlan(demoBlueprint, demoKitReadiness.kit.exportedAt)
     : null
@@ -1702,15 +1706,18 @@ export function SettingsPage() {
               <details className="compact-disclosure client-preparation-handoff">
                 <summary><span>Use client data</span><small>One local step</small></summary>
                 <div className="client-preparation-picker">
-                  <div><strong>Choose only the files you have.</strong><p>Shop, Plant, Website, and Ecommerce are prepared together. Missing files use the visible sample data in this setup.</p><small>Accepted: shop.csv (or commerce.csv), plant.csv (or production.csv), website.csv, ecommerce.csv. Each file: 512 KB maximum.</small></div>
-                  <label className={`core-button primary${preparingClientFiles ? ' disabled' : ''}`}>
-                    <input accept=".csv,text/csv" disabled={preparingClientFiles} multiple onChange={(event) => {
-                      const files = Array.from(event.currentTarget.files ?? [])
-                      event.currentTarget.value = ''
-                      void prepareClientFiles(files)
-                    }} type="file" />
-                    {preparingClientFiles ? 'Checking files...' : 'Choose client CSV files'}
-                  </label>
+                  <div><strong>Download ready files or choose client files.</strong><p>Selected product templates are included. Missing files keep sample data.</p><small>Accepted: shop.csv, plant.csv, website.csv, ecommerce.csv (512 KB each).</small></div>
+                  <div className="client-preparation-actions">
+                    {clientCsvStarterPack ? <a className="core-button" download={clientCsvStarterPack.filename} href={clientCsvStarterPackDownloadHref}>Download CSV starter pack</a> : null}
+                    <label className={`core-button primary${preparingClientFiles ? ' disabled' : ''}`}>
+                      <input accept=".csv,text/csv" disabled={preparingClientFiles} multiple onChange={(event) => {
+                        const files = Array.from(event.currentTarget.files ?? [])
+                        event.currentTarget.value = ''
+                        void prepareClientFiles(files)
+                      }} type="file" />
+                      {preparingClientFiles ? 'Checking files...' : 'Choose client CSV files'}
+                    </label>
+                  </div>
                 </div>
                 <p>Files stay in this browser. Preparation makes no upload, model call, managed write, or activation.</p>
               </details>
