@@ -6,6 +6,7 @@ const staticDir = resolve(root, '.vercel', 'output', 'static')
 const functionsDir = resolve(root, '.vercel', 'output', 'functions', 'api')
 const configPath = resolve(root, '.vercel', 'output', 'config.json')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
+const visionProof = JSON.parse(readFileSync(resolve(root, 'evidence', 'vision-service-proof.json'), 'utf8'))
 
 function fail(code, detail = {}) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_public_output', code, ...detail }, null, 2))
@@ -71,6 +72,15 @@ if (vision?.headline !== 'Teach one repetitive screen workflow and measure it lo
   || !vision?.proof?.includes('Replayable buyer evaluation kit')
   || !vision?.boundaries?.includes('No credential handling')
   || !vision?.boundaries?.includes('No consequential action without separate exact approval')) fail('vision_founding_pilot_contract_drift')
+if (visionProof.contract !== 'supermega.vision.service-proof.v1'
+  || !/^[a-f0-9]{40}$/.test(visionProof.sourceCommit || '')
+  || !/^[a-f0-9]{40}$/.test(visionProof.sourceTree || '')
+  || visionProof.verification?.tests !== 264
+  || visionProof.verification?.exitCode !== 0
+  || visionProof.verification?.passed !== true
+  || Object.keys(visionProof.claims || {}).join('|') !== vision.proof.join('|')
+  || !visionProof.limitations?.includes('Physical Android performance remains unproven until the owner-selected device passes the device gate.')
+  || !visionProof.limitations?.includes('No buyer workflow, customer screenshots, production automation, or commercial acceptance is proven by the engineering suite.')) fail('vision_service_proof_snapshot_invalid')
 if (manifest.sharedCapabilities?.map((capability) => `${capability.id}:${capability.status}`).join(',') !== 'ai-assistance:gated-r-and-d') fail('shared_capability_drift')
 for (const product of publicProducts) {
   if (product.templates?.length !== 3) fail('public_template_count_wrong', { product: product.id })
@@ -203,7 +213,7 @@ if (home.includes('Commerce and Production carry real records and actions.')) fa
 if ((home.match(/<a\b/g) || []).length > 9) fail('homepage_link_surface_too_large')
 
 const visionPage = pages.get('/vision/')?.html || ''
-for (const token of [vision.headline, vision.description, 'Good first workflows', 'Four-week founding pilot', 'From approved screens to measured evidence.', 'What you receive', 'Portable evidence, not a hidden demo.', 'Request founding pilot', 'Qualify the pilot', '/contact/?product=vision&amp;template=release-qa', 'It does not upload screenshots or start work.', ...vision.templates.map((template) => template.name), ...vision.templates.map((template) => template.outcome), ...vision.workflow, ...vision.boundaries.slice(0, 6)]) {
+for (const token of [vision.headline, vision.description, 'Good first workflows', 'Four-week founding pilot', 'From approved screens to measured evidence.', 'What you receive', 'Portable evidence, not a hidden demo.', 'Request founding pilot', 'Qualify the pilot', '/contact/?product=vision&amp;template=release-qa', 'It does not upload screenshots or start work.', 'Native packages are built and sealed for the agreed pilot.', "Physical Android performance remains unproven until the buyer's approved device passes its device gate.", ...vision.templates.map((template) => template.name), ...vision.templates.map((template) => template.outcome), ...vision.workflow, ...vision.boundaries]) {
   if (!visionPage.includes(token)) fail('vision_page_contract_missing', { token })
 }
 for (const template of vision.templates) {

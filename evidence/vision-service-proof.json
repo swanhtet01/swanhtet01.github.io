@@ -1,0 +1,26 @@
+{
+  "contract": "supermega.vision.service-proof.v1",
+  "sourceRepository": "supermega-vision",
+  "sourceCommit": "a20506eac5051eca38f2775fae123ea16c62b73b",
+  "sourceTree": "a979759d46f4f17b8f05fa402a85350b92566cdc",
+  "verification": {
+    "command": "verify.cmd",
+    "tests": 264,
+    "exitCode": 0,
+    "passed": true,
+    "observedAt": "2026-07-31T14:41:33.3360564Z"
+  },
+  "claims": {
+    "Sealed Windows runtime": ["hosts/windows/SuperMega.Vision.Windows/SuperMega.Vision.Windows.csproj", "scripts/verify-windows-host.ps1", "docs/WINDOWS-HOST.md"],
+    "Android AAR and APK packages": ["scripts/verify-android-host.ps1", "scripts/build-android-device-conformance.ps1", "docs/ANDROID-HOST.md"],
+    "Content-addressed model and evidence receipts": ["src/supermega_vision", "docs/DETECTOR.md", "docs/DATASET-TRAINING.md"],
+    "Replayable buyer evaluation kit": ["scripts/build-evaluation-kit.ps1", "scripts/run-evaluation-kit.ps1", "docs/EVALUATION-KIT.md"],
+    "Observation-only workflow qualification": ["src/supermega_vision/workflow_fit.py", "src/supermega_vision/workflow_learn.py", "docs/SELLING.md"],
+    "Tamper and supply-chain verification": ["scripts/verify-release-sbom.ps1", "security", "docs/THIRD-PARTY-NOTICES.md"]
+  },
+  "limitations": [
+    "Native deliverables are built and sealed for the agreed pilot; this snapshot is implementation proof, not a buyer-specific package.",
+    "Physical Android performance remains unproven until the owner-selected device passes the device gate.",
+    "No buyer workflow, customer screenshots, production automation, or commercial acceptance is proven by the engineering suite."
+  ]
+}
