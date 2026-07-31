@@ -859,12 +859,24 @@ textarea { min-height: 72px; resize: vertical; }
 .demo-integration-flow li:last-child { border-bottom: 0; }
 .demo-integration-flow strong { color: var(--core-green); font-size: 10px; }
 .demo-integration-flow span { color: var(--core-muted); font-size: 10px; line-height: 1.4; }
-.demo-next-mission { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 14px; border: 1px solid rgba(11,116,94,.3); border-radius: 10px; padding: 12px; background: var(--core-panel); }
-.demo-next-mission.complete { background: var(--core-green-soft); }
-.demo-next-mission > div { min-width: 0; display: grid; gap: 3px; }
-.demo-next-mission strong { color: var(--core-ink); font-size: 13px; line-height: 1.35; }
-.demo-next-mission small { color: var(--core-muted); font-size: 9px; line-height: 1.45; }
-.demo-next-mission .core-button { flex: 0 0 auto; }
+.client-demo-launchpad { min-width: 0; display: grid; gap: 9px; border: 1px solid rgba(11,116,94,.3); border-radius: 10px; padding: 12px; background: var(--core-panel); }
+.client-demo-launchpad-head { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.client-demo-launchpad-head > div { min-width: 0; display: grid; gap: 3px; }
+.client-demo-launchpad-head strong { color: var(--core-ink); font-size: 14px; line-height: 1.35; }
+.client-demo-launchpad-head small { max-width: 620px; color: var(--core-muted); font-size: 9px; line-height: 1.45; }
+.client-demo-launchpad-head .core-button { flex: 0 0 auto; }
+.client-demo-launch-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+.client-demo-launch-card { min-width: 0; min-height: 76px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; border: 1px solid var(--core-line); border-radius: 9px; padding: 10px; color: inherit; background: var(--core-panel-raised); text-decoration: none; }
+.client-demo-launch-card[data-next="true"] { border-color: rgba(11,116,94,.55); box-shadow: inset 3px 0 var(--core-green); }
+.client-demo-launch-card:hover { border-color: rgba(11,116,94,.55); background: var(--core-green-soft); }
+.client-demo-launch-card:focus-visible { outline: 3px solid var(--core-focus); outline-offset: 2px; }
+.client-demo-launch-card > span:first-child { min-width: 0; display: grid; gap: 3px; }
+.client-demo-launch-card small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; font-weight: 760; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.client-demo-launch-card strong { color: var(--core-ink); font-size: 13px; }
+.client-demo-launch-card em { overflow: hidden; color: var(--core-muted); font-size: 9px; font-style: normal; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.client-demo-launch-data { min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--core-line); padding-top: 8px; }
+.client-demo-launch-data > span { color: var(--core-muted); font-size: 9px; line-height: 1.4; }
+.client-demo-launch-data .text-link { flex: 0 0 auto; }
 .demo-runbook-products { display: grid; gap: 7px; }
 .demo-runbook-products details { overflow: hidden; border: 1px solid var(--core-line); border-radius: 9px; background: var(--core-panel); }
 .demo-runbook-products details[data-status="proven"] { border-color: rgba(11,116,94,.3); }
@@ -1764,8 +1776,9 @@ textarea { min-height: 72px; resize: vertical; }
   .capability-platform-grid li, .capability-platform-grid li:nth-child(3n) { border-right: 0; }
   .capability-phase-grid { grid-template-columns: 1fr; }
   .capability-phase-grid ul { max-height: 220px; }
-  .demo-next-mission { align-items: stretch; flex-direction: column; }
-  .demo-next-mission .core-button { width: 100%; }
+  .client-demo-launchpad-head, .client-demo-launch-data { align-items: stretch; flex-direction: column; }
+  .client-demo-launchpad-head .core-button, .client-demo-launch-data .text-link { width: 100%; }
+  .client-demo-launch-grid { grid-template-columns: 1fr; }
   .demo-runbook-products details > div { grid-template-columns: 1fr; align-items: stretch; }
   .demo-runbook-products .core-button { width: 100%; }
   .demo-integration-flow li { grid-template-columns: 1fr; gap: 4px; }

@@ -164,6 +164,13 @@ const demoRunbookLabels = {
   proven: 'Evidence proven',
 } as const
 
+const demoLaunchLabels = {
+  prepare_data: 'Sample ready',
+  needs_fix: 'Fix client data',
+  ready_to_run: 'Client data ready',
+  proven: 'Evidence proven',
+} as const
+
 type SchedulerActivation = {
   status: string
   configured: boolean
@@ -422,6 +429,7 @@ export function SettingsPage() {
     },
   }) : null
   const nextDemoMission = demoRunbook?.products.find((product) => product.product === demoRunbook.nextProduct) ?? null
+  const demoLaunchPath = nextDemoMission?.startPath ?? demoRunbook?.products[0]?.startPath ?? '/'
   const managedTrialRequestFilename = `supermega-managed-trial-request-${evidenceDate}.json`
   const managedApprovalRequests = approvals.map(toManagedApprovalRequest).filter((request): request is NonNullable<typeof request> => Boolean(request))
   const localProductRecords = collectLocalProductRecords(window.localStorage)
@@ -1586,7 +1594,7 @@ export function SettingsPage() {
 
   return (
     <div className="workspace-screen settings-screen">
-      <PageHeading eyebrow={requestedProduct ? 'Product setup' : 'Client setup'} title={requestedProduct ? `Prepare ${selectedProduct.name}` : 'Set up a client demo'} copy={requestedProduct ? requestedProduct === 'commerce' ? 'Choose the client and business pack, then open a working Shop sample or import their data.' : 'Choose the client and starting workflow, then open a working sample or import their data.' : 'Name the client, choose the business, create the demo, then follow one product mission at a time.'} />
+      <PageHeading eyebrow={requestedProduct ? 'Product setup' : 'Client setup'} title={requestedProduct ? `Prepare ${selectedProduct.name}` : 'Set up a client demo'} copy={requestedProduct ? requestedProduct === 'commerce' ? 'Choose the client and business pack, then open a working Shop sample or import their data.' : 'Choose the client and starting workflow, then open a working sample or import their data.' : 'Name the client, choose the business, create one workspace, then open any selected product demo.'} />
       {restorePoint ? <section aria-label="Local workspace restore point" className="setup-complete"><div><strong>Restore point ready.</strong><small>{restorePointLabel} · {Object.keys(restorePoint.records).length} local records</small></div><button className="core-button" disabled={restoreBusy} onClick={restoreSavedLocalWorkspace} type="button">{restoreBusy ? 'Restoring...' : 'Restore previous workspace'}</button></section> : null}
       {restoreNotice ? <p className="form-notice" role="status">{restoreNotice}</p> : null}
       {!preparedArtifact && preparedNotice ? <p className="form-notice" role="status">{preparedNotice}</p> : null}
@@ -1631,7 +1639,15 @@ export function SettingsPage() {
             {demoRecoveryNeeded ? <section aria-label="Client demo recovery" className="demo-kit-result"><div className="panel-head"><div><span className="core-eyebrow">Recovery needed</span><h3>Rebuild the saved client demo</h3><p>{demoKitReadiness?.reason ?? 'The saved workspace no longer matches the current setup contract.'}</p></div><button className="core-button primary" disabled={!demoInputReady} onClick={createDemoKit} type="button">Rebuild demo</button></div></section> : null}
             {demoBlueprint ? <section aria-label="Client demo kit" className="demo-kit-result">
               <div className="panel-head"><div><span className="core-eyebrow">Client workspace</span><h3>{demoBlueprint.client.workspace}</h3><p>{demoRunbook?.provenCount ?? 0} proven · {demoReadyCount} data-ready · owner {demoBlueprint.client.owner}</p></div><a className="core-button" download={demoBlueprintFilename} href={demoBlueprintHref}>Download setup kit</a></div>
-              {nextDemoMission ? <div className="demo-next-mission"><div><span className="core-eyebrow">Do this next</span><strong>{nextDemoMission.label}: {nextDemoMission.scenario}</strong><small>{nextDemoMission.status === 'ready_to_run' ? nextDemoMission.evidenceRequirement : 'Prepare clean client data, then run the real workflow.'}</small></div>{nextDemoMission.status === 'prepare_data' || nextDemoMission.status === 'needs_fix' ? <button className="core-button primary" onClick={() => prepareDemoProduct(nextDemoMission.product, demoBlueprint.products.find((product) => product.product === nextDemoMission.product)?.templateId ?? '')} type="button">{nextDemoMission.actionLabel}</button> : <div className="setup-action-group"><button className="core-button" onClick={() => prepareDemoProduct(nextDemoMission.product, demoBlueprint.products.find((product) => product.product === nextDemoMission.product)?.templateId ?? '')} type="button">Review {nextDemoMission.label} data</button><Link className="core-button primary" to={nextDemoMission.actionPath}>{nextDemoMission.actionLabel}</Link></div>}</div> : <div className="demo-next-mission complete"><div><span className="core-eyebrow">Demo evidence complete</span><strong>All selected product missions are proven.</strong><small>Export the setup kit and use the recorded product evidence for the client review.</small></div></div>}
+              <section aria-label="Client demo launchpad" className="client-demo-launchpad">
+                <div className="client-demo-launchpad-head"><div><span className="core-eyebrow">Demo launchpad</span><strong>{nextDemoMission ? `Next: ${nextDemoMission.label}` : 'All selected demos are proven'}</strong><small>Every product below uses this client workspace. Open any working sample now; add client data only when it is ready.</small></div><Link className="core-button primary" to={demoLaunchPath}>{nextDemoMission ? 'Open next demo' : 'Review demos'}</Link></div>
+                <div className="client-demo-launch-grid">{demoRunbook?.products.map((mission) => {
+                  const blueprintProduct = demoBlueprint.products.find((product) => product.product === mission.product)
+                  const statusClass = mission.status === 'proven' ? 'approved' : mission.status === 'needs_fix' ? 'pending' : 'bounded'
+                  return <Link aria-label={`Open ${mission.label} demo`} className="client-demo-launch-card" data-next={mission.product === demoRunbook.nextProduct || undefined} key={mission.product} to={mission.startPath}><span><small>{templateFor(mission.product, blueprintProduct?.templateId ?? '').name}</small><strong>{mission.label}</strong><em>{mission.scenario}</em></span><span className={`status-pill ${statusClass}`}>{demoLaunchLabels[mission.status]}</span></Link>
+                })}</div>
+                {nextDemoMission && (nextDemoMission.status === 'prepare_data' || nextDemoMission.status === 'needs_fix') ? <div className="client-demo-launch-data"><span>The sample is ready. Personalize it when you have reviewed client data.</span><button className="text-link" onClick={() => prepareDemoProduct(nextDemoMission.product, demoBlueprint.products.find((product) => product.product === nextDemoMission.product)?.templateId ?? '')} type="button">Add {nextDemoMission.label} data</button></div> : null}
+              </section>
               <details className="compact-disclosure client-system-details">
                 <summary><span>Client system details</span><small>{demoBlueprint.products.length} products · {demoBlueprint.integrations.length} connections</small></summary>
               <div aria-label="Shared operating foundation" className="readiness-list client-foundation-summary"><span><small>Operating unit</small><strong>{demoBlueprint.foundation.operatingUnit.name}</strong><em>{demoBlueprint.foundation.operatingUnit.code} · {demoBlueprint.foundation.operatingUnit.kind}</em></span><span><small>Market</small><strong>{demoBlueprint.foundation.localization.countryCode} · {demoBlueprint.foundation.localization.currency}</strong><em>{demoBlueprint.foundation.localization.locale}</em></span><span><small>Topology</small><strong>{demoBlueprint.topology.locations.length} location · {demoBlueprint.topology.channels.length} channels</strong><em>{demoBlueprint.topology.recordAuthorities.length} product authorities</em></span><span><small>Timezone</small><strong>{demoBlueprint.foundation.localization.timeZone}</strong><em>Shared by all selected products</em></span><span><small>Authority</small><strong>Client review required</strong><em>Managed identity required before activation</em></span></div>
