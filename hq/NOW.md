@@ -1,6 +1,6 @@
 # HQ now
 
-Updated: 2026-07-30
+Updated: 2026-07-31
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
@@ -36,7 +36,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked (`be78a02`).
 - Each CEO cycle selects one outcome. Invalid identity/evidence stops before spend; owner-send uncertainty is explicit, retains claims, and is never auto-retried (`f1328a0`, `cafdafe`, `f626ee7`).
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
-- Client setup keeps one manifest-backed smart import and one shared launchpad for direct Shop, Plant, Website, and Ecommerce demos; data and proof stay review-gated (`ab9a89e`, `ef9e2e7`).
+- Client setup keeps one manifest-backed smart import, one shared launchpad, and browser-local four-product CSV preparation; missing data uses connected samples and installation stays review-gated (`ef9e2e7`, `3a56a7d`).
 - Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancel releases, complete consumes, and sellable returns restore the exact fulfilled location/lot (`3cd4825`).
 - Shop keeps a balanced accounting-review CSV grouped by payment method and a human-approved versioned tax code, rate, and inclusive/exclusive treatment. Receiving separates accepted stock from rejected supplier units and measures defects; no posting occurs (`d47f5d9`, `39b7fc2`, `a37c933c`, `552ed20a`).
 - Ecommerce return intent opens the exact completed Shop order; Shop alone records return and refund evidence.
@@ -55,7 +55,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 - Current local checkpoints: Ecommerce tax authority `b70d3412`, governed v7 Shop handoff `1975c550`, tax-inclusive limits `0eb180f9`, and order proof `9ff26ba3`; all gates pass.
 - Contact-correction `8386c78b` passes 105 Ecommerce checks, 24 Python lifecycle tests, lint, build, and clean four-route phone-width shell QA.
-- Checks pass: 105 Ecommerce, 305 Commerce, 274 Production, 64 managed Commerce, 77 security, 219 onboarding, and 82 managed import.
+- Checks pass: 105 Ecommerce, 305 Commerce, 274 Production, 64 managed Commerce, 77 security, 223 onboarding, and 82 managed import.
 - First-action QA routes Shop, Plant, and Website blockers to the next task.
 - Both domains serve deployed `d268bd6366848e76e64ea2991048589f608984e3`; paired brand, context, and catalog identities match, but local context drift blocks release readiness.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
