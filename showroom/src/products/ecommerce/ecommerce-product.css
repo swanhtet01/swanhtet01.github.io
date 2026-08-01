@@ -12,6 +12,7 @@
 }
 
 .ecommerce-workspace-switch {
+  order: 1;
   width: min(100%, 360px);
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -44,6 +45,7 @@
 }
 
 .ecommerce-workspace {
+  order: 2;
   grid-template-columns: minmax(0, 1fr);
 }
 
@@ -155,6 +157,8 @@
 }
 
 .ecommerce-business-controls {
+  order: 3;
+  margin-top: 12px;
   border: 1px solid var(--core-line);
   border-radius: 10px;
   background: var(--core-panel);
