@@ -29,7 +29,8 @@ img, svg { display: block; max-width: 100%; }
   place-content: center;
   gap: 10px;
   padding: 24px;
-  color: #aab3ad;
+  background: var(--core-bg, #f6f4ee);
+  color: var(--core-muted, #56665d);
   text-align: center;
 }
 .product-route-loading span { color: var(--sm-green); font: 700 18px/1 Geist Mono, ui-monospace, monospace; }
