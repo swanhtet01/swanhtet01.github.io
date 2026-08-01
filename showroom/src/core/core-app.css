@@ -549,6 +549,13 @@ textarea { min-height: 72px; resize: vertical; }
 .shop-order-control-rows span:last-child { border-right: 0; }
 .shop-order-control-rows small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .shop-order-control-rows b { overflow: hidden; color: var(--core-ink); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.shop-replenishment-list { grid-column: 1 / -1; display: grid; gap: 6px; }
+.shop-replenishment-list > div { min-width: 0; display: grid; grid-template-columns: minmax(0,1.2fr) minmax(180px,.8fr); gap: 12px; align-items: center; border-top: 1px solid var(--core-line); padding: 8px 2px 1px; }
+.shop-replenishment-list > div > span { min-width: 0; display: grid; gap: 2px; }
+.shop-replenishment-list > div > span:last-child { justify-items: end; text-align: right; }
+.shop-replenishment-list strong, .shop-replenishment-list b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shop-replenishment-list [data-status="terms_required"] b, .shop-replenishment-list [data-status="order_required"] b { color: var(--core-warn); }
+.shop-replenishment-list [data-status="supply_at_risk"] b { color: var(--core-danger); }
 .plant-control { display: grid; grid-template-columns: minmax(220px,.5fr) minmax(0,1fr); gap: 9px; border: 1px solid rgba(11,116,94,.18); border-radius: 10px; padding: 10px; background: rgba(11,116,94,.045); }
 .mes-dispatch-control { border-color: rgba(30, 64, 175, .18); background: rgba(30, 64, 175, .045); }
 .plant-compliance-dossier { border-color: rgba(15, 118, 110, .2); background: rgba(15, 118, 110, .055); }
@@ -1871,6 +1878,8 @@ textarea { min-height: 72px; resize: vertical; }
   .shop-order-control-rows span { border-right: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); }
   .shop-order-control-rows span:nth-child(2n) { border-right: 0; }
   .shop-order-control-rows span:last-child { grid-column: 1 / -1; border-right: 0; border-bottom: 0; }
+  .shop-replenishment-list > div { grid-template-columns: 1fr; gap: 5px; }
+  .shop-replenishment-list > div > span:last-child { justify-items: start; text-align: left; }
   .plant-control { grid-template-columns: 1fr; }
   .plant-control-rows { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .plant-control-rows span { border-right: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); }

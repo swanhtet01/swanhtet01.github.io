@@ -38,6 +38,7 @@ let operationalReportRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 let shopProductionDemandRuntimeChecks = 0
+let shopReplenishmentRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
 const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productHomeReadinessSource, productHomeTodaySource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
@@ -141,6 +142,7 @@ const shopTodayUiSource = await readFile(resolve(root, 'showroom', 'src', 'core'
 const shopServiceScheduleSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-service-scheduling.ts'), 'utf8')
 const shopServiceScheduleUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopServiceSchedule.tsx'), 'utf8')
 const shopProductionDemandSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-production-demand.ts'), 'utf8')
+const shopReplenishmentSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-replenishment.ts'), 'utf8')
 
 if (!shopOperatingFlowSource.includes("export type ShopOperatingStageId = 'intake' | 'accepted' | 'fulfilment' | 'money' | 'close'")
   || !shopOperatingFlowSource.includes('export function buildShopOperatingFlow')
@@ -1732,32 +1734,30 @@ if (!coreSource.includes('const shopAccountingPacketRows = [')
   || !coreSource.includes("['Settlement', paymentReview.length ? `${paymentReview.length} exception` : 'External proof only']")
   || !coreSource.includes("['Audit', latestClose?.evidenceReference ? 'Evidence linked' : 'Need close evidence']")
   || !coreSource.includes('{shopAccountingPacket}')) fail('shop_accounting_packet_missing')
-if (!coreSource.includes('const shopProcurementRows = [')
-  || !coreSource.includes('const shopProcurementNext =')
+if (!shopReplenishmentSource.includes("SHOP_REPLENISHMENT_PLAN_CONTRACT = 'supermega.shop.replenishment_plan.v1'")
+  || !shopReplenishmentSource.includes('export function projectShopReplenishment(')
+  || !shopReplenishmentSource.includes("status: ShopReplenishmentStatus = recommendedOrderUnits")
+  || !shopReplenishmentSource.includes("suggestedSupplier = supplierOrder?.supplier ?? (retainedVendors.length === 1 ? retainedVendors[0].name : null)")
+  || !shopReplenishmentSource.includes('suggestedUnitCostMmk = costOrder?.unitCostMmk ?? null')
+  || !shopReplenishmentSource.includes('purchaseCreated: false')
+  || !shopReplenishmentSource.includes('supplierContacted: false')
+  || !shopReplenishmentSource.includes('providerCalled: false')
+  || !coreSource.includes('const shopReplenishment = useMemo(')
+  || !coreSource.includes('const purchaseRecommendations = shopReplenishment.rows.filter((row) => row.recommendedOrderUnits > 0)')
   || !coreSource.includes('const supplierControlRows = [')
   || !coreSource.includes('const supplierControlNext =')
-  || !coreSource.includes('const activeSupplierCount = new Set(activePurchaseOrders.map(({ purchaseOrder }) => purchaseOrder.supplier)).size')
   || !coreSource.includes("const partiallyReceivedPurchaseOrders = activePurchaseOrders.filter(({ progress }) => progress.status === 'partially_received')")
-  || !coreSource.includes('const uncoveredReorderItems = lowStock.filter((item) => !activePurchaseOrderBySku.has(item.sku))')
   || !coreSource.includes('commercePurchaseOrderArrivalUrgency(row.purchaseOrder, row.progress, purchaseOrderClock)')
-  || !coreSource.includes("['Need', uncoveredReorderItems.length ? `${uncoveredReorderItems.length} SKU` : 'Covered']")
-  || !coreSource.includes("['On order', activePurchaseOrders.length ? `${activePurchaseOrders.length} PO` : 'None']")
-  || !coreSource.includes("['Remaining', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} units` : 'Clear']")
-  || !coreSource.includes("['Arrival', overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : dueSoonPurchaseOrders.length ? `${dueSoonPurchaseOrders.length} due soon` : 'Scheduled']")
-  || !coreSource.includes("['Receipt', commerce.inventoryFoundation && managedInventoryProjection ? 'Location + lot' : 'Simple stock']")
-  || !coreSource.includes('aria-label="Shop procurement readiness"')
-  || !coreSource.includes('Procurement readiness')
-  || !coreSource.includes('AI checks reorder demand, open POs, arrival risk, receipt evidence, and location/lot readiness.')
-  || !coreSource.includes('No supplier message, payment, receipt, stock, costing, or accounting write runs from this panel.')
   || !coreSource.includes('aria-label="Supplier control"')
-  || !coreSource.includes('Supplier control')
-  || !coreSource.includes('AI turns supplier reference, promised arrival, open quantity, receipt evidence, and owner approval into one purchasing queue. No RFQ, supplier send, payment, payable, costing, or inventory write runs from this panel.')
+  || !coreSource.includes('Replenishment plan')
+  || !coreSource.includes('Combines reorder floors, remaining Plant materials, Shop stock, and open purchase orders.')
+  || !coreSource.includes('Supplier and cost come only from retained records; missing terms stay blank.')
   || !coreSource.includes('function startSupplierRequest()')
-  || !coreSource.includes('Start supplier request')
-  || !coreSource.includes("supplier: 'Preferred supplier'")
-  || !coreSource.includes('const reorderQuantity = Math.max(item.reorderAt * 2 - item.onHand, 1)')
-  || !coreSource.includes('Supplier request drafted for ${item.name}. Review supplier, arrival, and quantity; no RFQ, message, payment, payable, costing, or stock write is created.')
-  || !coreSource.includes('Supplier request is clear. No uncovered reorder item needs a draft.')
+  || !coreSource.includes('Prepare next purchase order')
+  || !coreSource.includes("supplier: recommendation.suggestedSupplier ?? ''")
+  || !coreSource.includes("unitCostMmk: recommendation.suggestedUnitCostMmk ? String(recommendation.suggestedUnitCostMmk) : ''")
+  || !coreSource.includes('Purchase order prepared for ${item.name}: ${recommendation.recommendedOrderUnits} units')
+  || !coreSource.includes('Shop stock, open purchase orders, and current Plant demand are covered.')
   || !coreSource.includes("'Restore purchasing readiness'")
   || !coreSource.includes("'Approve pending supplier action'")
   || !coreSource.includes("'Resolve late supplier order'")
@@ -1766,10 +1766,16 @@ if (!coreSource.includes('const shopProcurementRows = [')
   || !coreSource.includes("'Choose supplier and arrival'")
   || !coreSource.includes("'Monitor supplier promise'")
   || !coreSource.includes("'Supplier controls ready'")
-  || !coreSource.includes("['Suppliers', activeSupplierCount ? `${activeSupplierCount} active` : uncoveredReorderItems.length ? 'Choose one' : 'None needed']")
-  || !coreSource.includes("['Open units', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} remaining` : 'Clear']")
+  || !coreSource.includes("['Buy', purchaseRecommendations.length ? `${shopReplenishment.summary.recommendedOrderUnits} units` : 'Covered']")
+  || !coreSource.includes("['Plant', shopReplenishment.summary.productionDemandUnits ? `${shopReplenishment.summary.productionDemandUnits} units` : 'No demand']")
+  || !coreSource.includes("['On order', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} units` : 'None']")
   || !coreSource.includes("['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Owner confirms' : 'Locked']")
-  || !coreCssSource.includes('.shop-order-control.supplier-control')) fail('shop_procurement_readiness_missing')
+  || !coreSource.includes('aria-label="Shop replenishment recommendations"')
+  || coreSource.includes("supplier: 'Preferred supplier'")
+  || coreSource.includes('Math.round(item.price * 0.6)')
+  || !coreCssSource.includes('.shop-order-control.supplier-control')
+  || !coreCssSource.includes('.shop-replenishment-list')) fail('shop_replenishment_plan_missing')
+if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopReplenishmentSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_replenishment_side_effect_added')
 if (!settingsPageSource.includes('LEGACY_TEAM_WORK_KEYS') || !settingsPageSource.includes('LEGACY_COMMERCE_KEYS') || !settingsPageSource.includes('LEGACY_PRODUCTION_KEYS') || !productSetupSource.includes('LEGACY_APPROVAL_KEYS') || !productSetupSource.includes('LEGACY_SETUP_KEYS')) fail('legacy_local_workspace_not_migrated')
 if (!workspaceRuntimeSource.includes('decisionPacketFingerprint') || !coreSource.includes("status: 'superseded' as const")) fail('stale_approval_packet_not_superseded')
 if (!workspaceRuntimeSource.includes('toManagedDecisionPacket') || !settingsPageSource.includes('managedApprovalRequests')) fail('managed_decision_packet_serializer_missing')
@@ -5637,11 +5643,21 @@ async function verifyPlantOrderRuntime() {
     try { action() } catch { plantOrderRuntimeChecks += 1; return }
     throw new Error(reason)
   }
+  const assertReplenishment = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopReplenishmentRuntimeChecks += 1
+  }
+  const assertReplenishmentThrows = (action, reason) => {
+    try { action() } catch { shopReplenishmentRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts')).href}?plant-order-verify=${Date.now()}`)
     const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?plant-mrp-commerce-verify=${Date.now()}`)
     const materialHandoff = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-material-handoff.ts')).href}?plant-mrp-verify=${Date.now()}`)
     const orderPortfolio = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-order-portfolio.ts')).href}?plant-portfolio-verify=${Date.now()}`)
+    const productionWorkspace = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts')).href}?shop-replenishment-production-verify=${Date.now()}`)
+    const replenishment = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-replenishment.ts')).href}?shop-replenishment-verify=${Date.now()}`)
     const proof = (sequence, label) => ({
       actionId: `ACT-20260726-${String(sequence).padStart(3, '0')}`,
       capturedAt: `2026-07-26T09:${String(Math.floor(sequence / 60)).padStart(2, '0')}:${String(sequence % 60).padStart(2, '0')}+06:30`,
@@ -5887,6 +5903,45 @@ async function verifyPlantOrderRuntime() {
       && portfolioMrp.summary.shortage === 1
       && Object.values(portfolioMrp.authority).every((allowed) => allowed === false),
     'plant_portfolio_mrp_double_counted_shop_or_purchase_supply')
+    const productionForReplenishment = productionWorkspace.validateProductionState({
+      ...productionWorkspace.createEmptyProduction(),
+      jobs: [
+        { id: 'JOB-401', line: 'Line 01', product: 'Premium water filter', target: 10, output: 0, owner: 'Plant planner', priority: 'normal', dueAt: '2026-08-05T09:00:00.000Z' },
+        { id: 'JOB-402', line: 'Line 02', product: 'Premium water filter', target: 10, output: 0, owner: 'Plant planner', priority: 'urgent', dueAt: '2026-08-04T09:00:00.000Z' },
+      ],
+      orderPortfolio: portfolio.orderPortfolio,
+    })
+    const replenishmentPlan = replenishment.projectShopReplenishment(mrpPurchaseOrder, productionForReplenishment)
+    const replenishmentRow = replenishmentPlan.rows.find((row) => row.sku === 'SKU-RM-BAG')
+    assertReplenishment(replenishmentPlan.contract === 'supermega.shop.replenishment_plan.v1'
+      && replenishmentRow?.productionDemandUnits === 6
+      && replenishmentRow.operatingTargetUnits === 7
+      && replenishmentRow.openPurchaseUnits === 2
+      && replenishmentRow.recommendedOrderUnits === 3,
+    'shop_replenishment_did_not_combine_floor_plant_stock_and_open_po')
+    assertReplenishment(replenishmentRow?.suggestedSupplier === 'Reviewed material supplier'
+      && replenishmentRow.suggestedUnitCostMmk === 5_000
+      && replenishmentRow.earliestNeedAt === '2026-08-04T09:00:00.000Z'
+      && replenishmentRow.jobIds.join(',') === 'JOB-401,JOB-402',
+    'shop_replenishment_did_not_retain_supplier_terms_or_job_due_evidence')
+    assertReplenishment(replenishmentRow?.status === 'order_required'
+      && replenishmentPlan.summary.orderRequired === 1
+      && replenishmentPlan.summary.recommendedOrderUnits === 3
+      && Object.values(replenishmentPlan.authority).every((allowed) => allowed === false),
+    'shop_replenishment_status_or_authority_wrong')
+    assertReplenishment(replenishment.validateShopReplenishment(replenishmentPlan, mrpPurchaseOrder, productionForReplenishment).digest === replenishmentPlan.digest,
+      'shop_replenishment_current_packet_rejected')
+    const tamperedReplenishment = structuredClone(replenishmentPlan)
+    tamperedReplenishment.rows[0].recommendedOrderUnits += 1
+    assertReplenishmentThrows(() => replenishment.validateShopReplenishment(tamperedReplenishment, mrpPurchaseOrder, productionForReplenishment),
+      'shop_replenishment_tamper_succeeded')
+    const missingTermsPlan = replenishment.projectShopReplenishment(mrpBaseCommerce, productionForReplenishment)
+    const missingTermsRow = missingTermsPlan.rows.find((row) => row.sku === 'SKU-RM-BAG')
+    assertReplenishment(missingTermsRow?.status === 'terms_required'
+      && missingTermsRow.recommendedOrderUnits === 5
+      && missingTermsRow.suggestedSupplier === null
+      && missingTermsRow.suggestedUnitCostMmk === null,
+    'shop_replenishment_invented_missing_supplier_or_cost_terms')
     const unmappedRequirements = materialHandoff.projectProductionMaterialRequirements(pricedPlanState, mrpBaseCommerce)
     assert(unmappedRequirements?.status === 'mapping_required' && unmappedRequirements.summary.mappingRequired === 2, 'plant_mrp_invented_supply_mapping')
     assert(plan.sourceDigest === 'sha256:9415e4d6d6dda852c2014d611c1f93e385d31c40df2b4ec30d293b12991ba519'
@@ -15112,4 +15167,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, shopReplenishmentRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

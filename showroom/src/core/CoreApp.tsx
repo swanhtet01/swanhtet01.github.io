@@ -218,6 +218,7 @@ import {
 } from './shop-production-demand'
 import { projectPlantOrder } from './plant-order-foundation'
 import { productionOrderPortfolioEntries } from './production-order-portfolio'
+import { projectShopReplenishment } from './shop-replenishment'
 
 const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
 const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').then((module) => ({ default: module.ShopInventoryFoundation })))
@@ -2037,6 +2038,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       .filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received')
       .map((row) => [row.purchaseOrder.sku, row]),
   )
+  const shopReplenishment = useMemo(
+    () => projectShopReplenishment(commerce, relatedProduction),
+    [commerce, relatedProduction],
+  )
+  const purchaseRecommendations = shopReplenishment.rows.filter((row) => row.recommendedOrderUnits > 0)
   const managedInventoryProjection = useMemo(() => {
     if (!commerce.inventoryFoundation) return null
     try {
@@ -2919,33 +2925,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }))
   const overduePurchaseOrders = procurementArrivalRows.filter(({ urgency }) => urgency === 'late')
   const dueSoonPurchaseOrders = procurementArrivalRows.filter(({ urgency }) => urgency === 'due_soon')
-  const uncoveredReorderItems = lowStock.filter((item) => !activePurchaseOrderBySku.has(item.sku))
   const openPurchaseRemainingUnits = activePurchaseOrders.reduce((total, { progress }) => total + progress.remaining, 0)
-  const activeSupplierCount = new Set(activePurchaseOrders.map(({ purchaseOrder }) => purchaseOrder.supplier)).size
   const partiallyReceivedPurchaseOrders = activePurchaseOrders.filter(({ progress }) => progress.status === 'partially_received')
-  const shopProcurementNext = !commerceCanWrite
-    ? 'Restore Shop readiness'
-    : pendingAction
-      ? 'Approve pending stock action'
-      : overduePurchaseOrders.length
-        ? 'Receive or cancel late PO'
-        : dueSoonPurchaseOrders.length
-          ? 'Check arriving PO'
-          : uncoveredReorderItems.length
-            ? 'Order uncovered stock'
-            : activePurchaseOrders.length
-              ? 'Track open supply'
-              : !commerce.inventoryFoundation || !managedInventoryProjection
-                ? 'Set up stock foundation'
-                : 'Supply ready'
-  const shopProcurementRows = [
-    ['Need', uncoveredReorderItems.length ? `${uncoveredReorderItems.length} SKU` : 'Covered'],
-    ['On order', activePurchaseOrders.length ? `${activePurchaseOrders.length} PO` : 'None'],
-    ['Remaining', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} units` : 'Clear'],
-    ['Arrival', overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : dueSoonPurchaseOrders.length ? `${dueSoonPurchaseOrders.length} due soon` : 'Scheduled'],
-    ['Receipt', commerce.inventoryFoundation && managedInventoryProjection ? 'Location + lot' : 'Simple stock'],
-    ['Owner gate', commerceCanWrite && !pendingAction ? 'Required' : 'Locked'],
-  ] as const
   const supplierControlNext = !commerceCanWrite
     ? 'Restore purchasing readiness'
     : pendingAction
@@ -2956,25 +2937,22 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           ? 'Prepare receiving evidence'
           : partiallyReceivedPurchaseOrders.length
             ? 'Close partial receipt'
-            : uncoveredReorderItems.length
+            : purchaseRecommendations.length
               ? 'Choose supplier and arrival'
               : activePurchaseOrders.length
                 ? 'Monitor supplier promise'
                 : 'Supplier controls ready'
   const supplierControlRows = [
-    ['Suppliers', activeSupplierCount ? `${activeSupplierCount} active` : uncoveredReorderItems.length ? 'Choose one' : 'None needed'],
-    ['Arrival', overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : dueSoonPurchaseOrders.length ? `${dueSoonPurchaseOrders.length} due` : activePurchaseOrders.length ? 'Scheduled' : 'Clear'],
-    ['Open units', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} remaining` : 'Clear'],
-    ['Receipt', commerce.inventoryFoundation && managedInventoryProjection ? 'Lot evidence' : 'Simple count'],
+    ['Buy', purchaseRecommendations.length ? `${shopReplenishment.summary.recommendedOrderUnits} units` : 'Covered'],
+    ['Plant', shopReplenishment.summary.productionDemandUnits ? `${shopReplenishment.summary.productionDemandUnits} units` : 'No demand'],
+    ['On order', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} units` : 'None'],
+    ['Risk', overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : shopReplenishment.summary.supplyAtRisk ? `${shopReplenishment.summary.supplyAtRisk} at risk` : 'Clear'],
     ['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Owner confirms' : 'Locked'],
   ] as const
-  const shopProcurement = <section className="shop-order-control" aria-label="Shop procurement readiness">
-    <div><span className="core-eyebrow">Procurement readiness</span><strong>{shopProcurementNext}</strong><small>AI checks reorder demand, open POs, arrival risk, receipt evidence, and location/lot readiness. No supplier message, payment, receipt, stock, costing, or accounting write runs from this panel.</small></div>
-    <div className="shop-order-control-rows">{shopProcurementRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
-  </section>
   const supplierControl = <section className="shop-order-control supplier-control" aria-label="Supplier control">
-    <div><span className="core-eyebrow">Supplier control</span><strong>{supplierControlNext}</strong><small>AI turns supplier reference, promised arrival, open quantity, receipt evidence, and owner approval into one purchasing queue. No RFQ, supplier send, payment, payable, costing, or inventory write runs from this panel.</small><button className="text-link" disabled={commerceControlsDisabled || !uncoveredReorderItems.length} onClick={startSupplierRequest} type="button">Start supplier request</button></div>
+    <div><span className="core-eyebrow">Replenishment plan</span><strong>{supplierControlNext}</strong><small>Combines reorder floors, remaining Plant materials, Shop stock, and open purchase orders. Supplier and cost come only from retained records; missing terms stay blank. No RFQ, message, payment, receipt, payable, costing, or stock write runs here.</small><button className="text-link" disabled={commerceControlsDisabled || !purchaseRecommendations.length} onClick={startSupplierRequest} type="button">Prepare next purchase order</button></div>
     <div className="shop-order-control-rows">{supplierControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    {shopReplenishment.rows.length ? <div aria-label="Shop replenishment recommendations" className="shop-replenishment-list" role="list">{shopReplenishment.rows.slice(0, 4).map((row) => <div data-status={row.status} key={row.sku} role="listitem"><span><strong>{row.itemName}</strong><small>{row.sku}{row.jobIds.length ? ` · Plant ${row.jobIds.join(', ')}` : ' · reorder floor'}</small></span><span><b>{row.recommendedOrderUnits ? `Buy ${row.recommendedOrderUnits}` : row.status === 'supply_at_risk' ? 'Check arrival' : 'Covered'}</b><small>{row.onHandUnits} stock + {row.openPurchaseUnits} on order · target {row.operatingTargetUnits}</small></span></div>)}</div> : null}
   </section>
   const shopAgentJob = !commerceCanWrite
     ? 'Restore Shop write readiness'
@@ -5080,9 +5058,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   function startSupplierRequest() {
-    const item = uncoveredReorderItems[0]
-    if (!item) {
-      setNotice('Supplier request is clear. No uncovered reorder item needs a draft.')
+    const recommendation = purchaseRecommendations[0]
+    const item = recommendation ? commerce.items.find((candidate) => candidate.sku === recommendation.sku) : null
+    if (!recommendation || !item) {
+      setNotice('Replenishment is clear. Shop stock, open purchase orders, and current Plant demand are covered.')
       return
     }
     if (catalogEditDraft) {
@@ -5096,9 +5075,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice('Finish or cancel the stock count before starting a supplier request. Your count draft was preserved.')
       return
     }
-    const reorderQuantity = Math.max(item.reorderAt * 2 - item.onHand, 1)
-    setPurchaseOrderDraft({ mode: 'create', sku: item.sku, supplier: 'Preferred supplier', expectedAt: defaultPurchaseOrderExpectedInput(), quantity: String(reorderQuantity), unitCostMmk: String(Math.max(1, Math.round(item.price * 0.6))) })
-    setNotice(`Supplier request drafted for ${item.name}. Review supplier, arrival, and quantity; no RFQ, message, payment, payable, costing, or stock write is created.`)
+    const earliestSafeArrival = recommendation.earliestNeedAt
+      ? new Date(Math.max(purchaseOrderClock + 60 * 60 * 1000, Date.parse(recommendation.earliestNeedAt) - 24 * 60 * 60 * 1000))
+      : null
+    setPurchaseOrderDraft({
+      mode: 'create',
+      sku: item.sku,
+      supplier: recommendation.suggestedSupplier ?? '',
+      expectedAt: earliestSafeArrival && Number.isFinite(earliestSafeArrival.getTime()) ? localDateTimeInputValue(earliestSafeArrival) : defaultPurchaseOrderExpectedInput(),
+      quantity: String(recommendation.recommendedOrderUnits),
+      unitCostMmk: recommendation.suggestedUnitCostMmk ? String(recommendation.suggestedUnitCostMmk) : '',
+    })
+    setNotice(`Purchase order prepared for ${item.name}: ${recommendation.recommendedOrderUnits} units${recommendation.jobIds.length ? ` cover Plant ${recommendation.jobIds.join(', ')}` : ' restore the Shop reorder target'}. Review any missing supplier, cost, and arrival terms; nothing was sent or written.`)
     requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
   }
 
@@ -6328,7 +6316,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     {shopGuidance}
     <section className="core-panel inventory-panel">
       <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : 'Count stock'}</button></div></div>
-      {shopProcurement}
       {supplierControl}
       {stockCountDraft ? <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
         <div className="stock-receipt-copy">
