@@ -40,6 +40,7 @@ let productionRuntimeChecks = 0
 let shopProductionDemandRuntimeChecks = 0
 let shopDemandIntelligenceRuntimeChecks = 0
 let shopReplenishmentRuntimeChecks = 0
+let shopProcurementDecisionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
 const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productHomeReadinessSource, productHomeTodaySource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
@@ -1753,7 +1754,15 @@ if (!shopDemandIntelligenceSource.includes("SHOP_DEMAND_INTELLIGENCE_CONTRACT = 
   || !coreSource.includes("['Demand', shopDemandIntelligence.summary.forecastWeeklyUnits")) fail('shop_demand_intelligence_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopDemandIntelligenceSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_demand_intelligence_side_effect_added')
 if (!shopReplenishmentSource.includes("SHOP_REPLENISHMENT_PLAN_CONTRACT = 'supermega.shop.replenishment_plan.v1'")
+  || !shopReplenishmentSource.includes("SHOP_PROCUREMENT_DECISION_CONTRACT = 'supermega.shop.procurement-decision.v1'")
   || !shopReplenishmentSource.includes('export function projectShopReplenishment(')
+  || !shopReplenishmentSource.includes('export function projectShopProcurementDecision(')
+  || !shopReplenishmentSource.includes('export function validateShopProcurementDecision(')
+  || !shopReplenishmentSource.includes("termsStatus: 'comparable' | 'cost_required'")
+  || !shopReplenishmentSource.includes('commerceSupplierPerformance(commerce, asOfValue)')
+  || !shopReplenishmentSource.includes('recommendationOnly: true, requisitionRecorded: false, purchaseCreated: false')
+  || !managedCommerceRuntime.includes('def commerce_shop_procurement_decision(')
+  || !managedCommerceRuntime.includes('"contract": "supermega.shop.procurement-decision.v1"')
   || !shopReplenishmentSource.includes("status: ShopReplenishmentStatus = recommendedOrderUnits")
   || !shopReplenishmentSource.includes('const recommendedOrderUnits = roundOrderUnits(unroundedOrderUnits, policy, item.sku)')
   || !shopReplenishmentSource.includes('policy.minimumOrderUnits')
@@ -1766,34 +1775,38 @@ if (!shopReplenishmentSource.includes("SHOP_REPLENISHMENT_PLAN_CONTRACT = 'super
   || !shopReplenishmentSource.includes('supplierContacted: false')
   || !shopReplenishmentSource.includes('providerCalled: false')
   || !coreSource.includes('const shopReplenishment = useMemo(')
+  || !coreSource.includes('const shopProcurementDecision = useMemo(')
+  || !coreSource.includes('projectShopProcurementDecision(commerce, shopReplenishment, purchaseOrderClock)')
   || !coreSource.includes('const purchaseRecommendations = shopReplenishment.rows.filter((row) => row.recommendedOrderUnits > 0)')
   || !coreSource.includes('const supplierControlRows = [')
   || !coreSource.includes('const supplierControlNext =')
   || !coreSource.includes("const partiallyReceivedPurchaseOrders = activePurchaseOrders.filter(({ progress }) => progress.status === 'partially_received')")
   || !coreSource.includes('commercePurchaseOrderArrivalUrgency(row.purchaseOrder, row.progress, purchaseOrderClock)')
   || !coreSource.includes('aria-label="Supplier control"')
-  || !coreSource.includes('Replenishment plan')
-  || !coreSource.includes('Combines reorder floors, remaining Plant materials, Shop stock, and open purchase orders.')
-  || !coreSource.includes('Supplier and cost come only from retained records; missing terms stay blank.')
+  || !coreSource.includes('aria-label="Shop procurement decisions"')
+  || !coreSource.includes('Procurement control')
+  || !coreSource.includes('AI combines demand, Shop stock, Plant materials, open orders, retained supplier terms, delivery evidence, quality, and exposure.')
+  || !coreSource.includes('Source-bound ranking · owner approval required')
   || !coreSource.includes('function startSupplierRequest()')
-  || !coreSource.includes('Prepare next purchase order')
-  || !coreSource.includes("supplier: recommendation.suggestedSupplier ?? ''")
-  || !coreSource.includes("unitCostMmk: recommendation.suggestedUnitCostMmk ? String(recommendation.suggestedUnitCostMmk) : ''")
-  || !coreSource.includes('Purchase order prepared for ${item.name}: ${recommendation.recommendedOrderUnits} units')
+  || !coreSource.includes('Review next requisition')
+  || !coreSource.includes("supplier: decision.recommendedSupplier ?? ''")
+  || !coreSource.includes("unitCostMmk: decision.recommendedUnitCostMmk ? String(decision.recommendedUnitCostMmk) : ''")
+  || !coreSource.includes('${decision.requisitionReference} prepared for owner review')
   || !coreSource.includes('Shop stock, open purchase orders, and current Plant demand are covered.')
   || !coreSource.includes("'Restore purchasing readiness'")
   || !coreSource.includes("'Approve pending supplier action'")
   || !coreSource.includes("'Resolve late supplier order'")
   || !coreSource.includes("'Prepare receiving evidence'")
   || !coreSource.includes("'Close partial receipt'")
-  || !coreSource.includes("'Choose supplier and arrival'")
+  || !coreSource.includes("'Review supplier risk'")
+  || !coreSource.includes("'Complete supplier terms'")
+  || !coreSource.includes("'Review next requisition'")
   || !coreSource.includes("'Monitor supplier promise'")
   || !coreSource.includes("'Supplier controls ready'")
   || !coreSource.includes("['Buy', purchaseRecommendations.length ? `${shopReplenishment.summary.recommendedOrderUnits} units` : 'Covered']")
+  || !coreSource.includes("['Budget', shopProcurementDecision.summary.unknownExposure")
   || !coreSource.includes("['Plant', shopReplenishment.summary.productionDemandUnits ? `${shopReplenishment.summary.productionDemandUnits} units` : 'No demand']")
-  || !coreSource.includes("['On order', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} units` : 'None']")
   || !coreSource.includes("['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Owner confirms' : 'Locked']")
-  || !coreSource.includes('aria-label="Shop replenishment recommendations"')
   || coreSource.includes("supplier: 'Preferred supplier'")
   || coreSource.includes('Math.round(item.price * 0.6)')
   || !coreCssSource.includes('.shop-order-control.supplier-control')
@@ -5720,6 +5733,14 @@ async function verifyPlantOrderRuntime() {
     try { action() } catch { shopReplenishmentRuntimeChecks += 1; return }
     throw new Error(reason)
   }
+  const assertProcurement = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopProcurementDecisionRuntimeChecks += 1
+  }
+  const assertProcurementThrows = (action, reason) => {
+    try { action() } catch { shopProcurementDecisionRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts')).href}?plant-order-verify=${Date.now()}`)
     const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?plant-mrp-commerce-verify=${Date.now()}`)
@@ -6064,6 +6085,31 @@ async function verifyPlantOrderRuntime() {
       && policyRow.supplierPolicy.serviceLevelBasisPoints === 9_800
       && replenishment.validateShopReplenishment(policyPlan, policyCommerce, productionForReplenishment).digest === policyPlan.digest,
     'shop_replenishment_supplier_policy_evidence_or_lead_time_wrong')
+    const procurementDecision = replenishment.projectShopProcurementDecision(policyCommerce, policyPlan, Date.parse('2026-07-26T09:00:00.000Z'))
+    const procurementRow = procurementDecision.rows.find((row) => row.sku === 'SKU-RM-BAG')
+    assertProcurement(procurementDecision.contract === 'supermega.shop.procurement-decision.v1'
+      && procurementDecision.summary.requisitions === 1
+      && procurementDecision.summary.knownExposureMmk === 40_000
+      && procurementDecision.summary.unknownExposure === 0,
+    'shop_procurement_decision_summary_or_exposure_wrong')
+    assertProcurement(procurementRow?.recommendedSupplier === 'Reviewed material supplier'
+      && procurementRow.recommendedUnitCostMmk === 5_000
+      && procurementRow.estimatedTotalMmk === 40_000
+      && procurementRow.supplierOptions[0].leadTimeDays === 7
+      && procurementRow.supplierOptions[0].serviceLevelBasisPoints === 9_800,
+    'shop_procurement_decision_did_not_rank_retained_terms_and_policy')
+    assertProcurement(procurementRow?.status === 'ready_for_owner_review'
+      && procurementRow.requisitionReference.startsWith('REQ-')
+      && procurementRow.plantJobIds.join(',') === 'JOB-401,JOB-402'
+      && procurementDecision.authority.recommendationOnly
+      && Object.entries(procurementDecision.authority).filter(([key]) => key !== 'recommendationOnly').every(([, value]) => value === false),
+    'shop_procurement_decision_authority_or_source_evidence_wrong')
+    assertProcurement(replenishment.validateShopProcurementDecision(procurementDecision, policyCommerce, policyPlan, Date.parse('2026-07-26T09:00:00.000Z')).digest === procurementDecision.digest,
+      'shop_procurement_decision_current_packet_rejected')
+    assertProcurementThrows(() => replenishment.validateShopProcurementDecision({ ...procurementDecision, rows: [] }, policyCommerce, policyPlan, Date.parse('2026-07-26T09:00:00.000Z')),
+      'shop_procurement_decision_tamper_succeeded')
+    assertProcurementThrows(() => replenishment.projectShopProcurementDecision(policyCommerce, policyPlan, Number.NaN),
+      'shop_procurement_decision_invalid_as_of_succeeded')
     assertReplenishmentThrows(() => shopInventory.setShopSupplierPolicy(supplierPolicyResult.state, {
       commandId: 'SPP-SUPPLIER-POLICY-INVALID',
       policy: { ...supplierPolicyResult.state.commands.at(-1).payload.policy, serviceLevelBasisPoints: 10_000 },
@@ -15297,4 +15343,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

@@ -4952,6 +4952,196 @@ def commerce_shop_demand_intelligence(
     return {**body, "digest": _order_inventory_digest(body)}
 
 
+def commerce_shop_procurement_decision(
+    value: Mapping[str, Any],
+    replenishment_value: Mapping[str, Any],
+    as_of: str,
+) -> dict[str, Any]:
+    """Rank retained supplier evidence for owner review without creating a requisition or purchase."""
+
+    state = validate_commerce_state(value)
+    canonical_as_of = _timestamp(as_of, "Shop procurement asOf")
+    as_of_time = datetime.fromisoformat(canonical_as_of.replace("Z", "+00:00"))
+    plan = _object(replenishment_value, "Shop replenishment plan")
+    if plan.get("contract") != "supermega.shop.replenishment_plan.v1":
+        raise TrialValidationError("Shop procurement requires a v1 replenishment plan.")
+    plan_digest = _text(plan.get("digest"), "Shop replenishment plan.digest", maximum=71)
+    plan_body = {key: item for key, item in plan.items() if key != "digest"}
+    if plan_digest != _order_inventory_digest(plan_body):
+        raise TrialValidationError("Shop procurement requires an untampered replenishment plan.")
+    plan_rows = plan.get("rows")
+    if not isinstance(plan_rows, list) or len(plan_rows) > 2_000:
+        raise TrialValidationError("Shop replenishment plan.rows is invalid.")
+    plan_source = _object(plan.get("source"), "Shop replenishment plan.source")
+    commerce_digest = _text(plan_source.get("commerceDigest"), "Shop replenishment plan.source.commerceDigest", maximum=71)
+    purchase_orders = [order for order in state.get("purchaseOrders", []) if isinstance(order, Mapping)]
+
+    def safe_add(left: int, right: int, field: str) -> int:
+        result = left + right
+        if abs(result) > _MAX_SAFE_INTEGER:
+            raise TrialValidationError(f"{field} exceeds the supported safe integer range.")
+        return result
+
+    def purchase_progress(order: Mapping[str, Any]) -> tuple[int, int, int, bool]:
+        receipts = [
+            movement for movement in state["movements"]
+            if isinstance(movement, Mapping)
+            and movement.get("kind") == "receipt"
+            and movement.get("purchaseOrderId") == order.get("id")
+        ]
+        received = sum(int(movement["quantityDelta"]) for movement in receipts)
+        rejected = sum(int(movement.get("rejectedQuantity", 0)) for movement in receipts)
+        remaining = int(order["quantityOrdered"]) - received - rejected
+        return received, rejected, remaining, "cancellation" not in order and remaining > 0
+
+    supplier_performance: dict[str, dict[str, Any]] = {}
+    for order in purchase_orders:
+        supplier = str(order["supplier"])
+        received, rejected, remaining, active = purchase_progress(order)
+        receipts = [
+            movement for movement in state["movements"]
+            if isinstance(movement, Mapping)
+            and movement.get("kind") == "receipt"
+            and movement.get("purchaseOrderId") == order.get("id")
+        ]
+        completed_at = max(
+            (datetime.fromisoformat(str(receipt["createdAt"]).replace("Z", "+00:00")) for receipt in receipts),
+            default=None,
+        )
+        promised_at = datetime.fromisoformat(str(order["expectedAt"]).replace("Z", "+00:00")) if order.get("expectedAt") else None
+        completed = remaining == 0 and completed_at is not None and promised_at is not None and "cancellation" not in order
+        on_time = completed and completed_at <= promised_at
+        late_delivery = completed and not on_time
+        late_open = active and promised_at is not None and promised_at <= as_of_time
+        measured = supplier_performance.setdefault(supplier, {
+            "orderedUnits": 0, "rejectedUnits": 0, "lateOpenOrders": 0,
+            "completedDeliveries": 0, "onTimeDeliveries": 0, "lateDeliveries": 0,
+        })
+        measured["orderedUnits"] = safe_add(measured["orderedUnits"], int(order["quantityOrdered"]), "Supplier ordered units")
+        measured["rejectedUnits"] = safe_add(measured["rejectedUnits"], rejected, "Supplier rejected units")
+        measured["lateOpenOrders"] += int(late_open)
+        measured["completedDeliveries"] += int(completed)
+        measured["onTimeDeliveries"] += int(on_time)
+        measured["lateDeliveries"] += int(late_delivery)
+
+    catalog_skus = sorted(str(item["sku"]) for item in state["items"])
+    inventory = state.get("inventoryFoundation")
+    vendors: list[Mapping[str, Any]] = []
+    policies: list[Mapping[str, Any]] = []
+    if inventory is not None:
+        partners = shop_inventory_business_partners(inventory, catalog_skus)
+        vendors = [vendor for vendor in partners["vendors"] if isinstance(vendor, Mapping)]
+        policies = shop_inventory_supplier_policies(inventory, catalog_skus)
+    vendor_ids = {str(vendor["name"]): str(vendor["id"]) for vendor in vendors}
+    vendor_names = {str(vendor["id"]): str(vendor["name"]) for vendor in vendors}
+    status_rank = {"on_track": 0, "collecting": 1, "attention": 2}
+    rows: list[dict[str, Any]] = []
+    for raw_row in plan_rows:
+        row = _object(raw_row, "Shop replenishment plan row")
+        quantity = _integer(row.get("recommendedOrderUnits"), "Shop replenishment recommendedOrderUnits", minimum=0)
+        if quantity == 0:
+            continue
+        sku = _text(row.get("sku"), "Shop replenishment sku", maximum=80)
+        item_name = _text(row.get("itemName"), "Shop replenishment itemName", maximum=180)
+        suppliers = sorted({
+            *[str(order["supplier"]) for order in purchase_orders if order.get("sku") == sku and "cancellation" not in order],
+            *[vendor_names[str(policy["vendorId"])] for policy in policies if policy["sku"] == sku and policy["status"] == "active" and str(policy["vendorId"]) in vendor_names],
+            *([str(row["suggestedSupplier"])] if row.get("suggestedSupplier") else []),
+        })
+        options: list[dict[str, Any]] = []
+        for supplier in suppliers:
+            source_orders = sorted(
+                [order for order in purchase_orders if order.get("sku") == sku and order.get("supplier") == supplier and "cancellation" not in order],
+                key=lambda order: (-datetime.fromisoformat(str(order["createdAt"]).replace("Z", "+00:00")).timestamp(), str(order["id"])),
+            )
+            commercial_order = next((order for order in source_orders if isinstance(order.get("unitCostMmk"), int)), None)
+            policy = next((candidate for candidate in policies if candidate["sku"] == sku and candidate["vendorId"] == vendor_ids.get(supplier) and candidate["status"] == "active"), None)
+            measured = supplier_performance.get(supplier)
+            unit_cost = int(commercial_order["unitCostMmk"]) if commercial_order else None
+            estimated_total = safe_add(0, quantity * unit_cost, f"Procurement exposure for {sku}") if unit_cost is not None else None
+            completed = int(measured["completedDeliveries"]) if measured else 0
+            on_time_rate = ((int(measured["onTimeDeliveries"]) * 10_000 + completed // 2) // completed) if measured and completed else None
+            ordered = int(measured["orderedUnits"]) if measured else 0
+            defect_rate = ((int(measured["rejectedUnits"]) * 10_000 + ordered // 2) // ordered) if measured and ordered else 0
+            performance_status = "attention" if measured and (measured["rejectedUnits"] or measured["lateOpenOrders"] or measured["lateDeliveries"]) else "on_track" if completed else "collecting"
+            options.append({
+                "supplier": supplier,
+                "unitCostMmk": unit_cost,
+                "estimatedTotalMmk": estimated_total,
+                "leadTimeDays": int(policy["leadTimeDays"]) if policy else None,
+                "serviceLevelBasisPoints": int(policy["serviceLevelBasisPoints"]) if policy else None,
+                "completedDeliveries": completed,
+                "onTimeRateBasisPoints": on_time_rate,
+                "defectRateBasisPoints": defect_rate,
+                "performanceStatus": performance_status,
+                "termsStatus": "comparable" if unit_cost is not None else "cost_required",
+                "sourcePurchaseOrderIds": [str(order["id"]) for order in source_orders],
+                "supplierPolicyCommandId": str(policy["commandId"]) if policy else None,
+            })
+        options.sort(key=lambda option: (
+            0 if option["termsStatus"] == "comparable" else 1,
+            status_rank[option["performanceStatus"]],
+            0 if option["supplierPolicyCommandId"] else 1,
+            -option["completedDeliveries"],
+            -(option["onTimeRateBasisPoints"] if option["onTimeRateBasisPoints"] is not None else -1),
+            option["defectRateBasisPoints"],
+            option["estimatedTotalMmk"] if option["estimatedTotalMmk"] is not None else _MAX_SAFE_INTEGER,
+            option["supplier"],
+        ))
+        recommended = next((option for option in options if option["termsStatus"] == "comparable"), None)
+        status = "terms_required" if recommended is None else "risk_review_required" if recommended["performanceStatus"] == "attention" else "ready_for_owner_review"
+        selection_reason = (
+            "Retain supplier cost terms before owner review." if recommended is None
+            else "Best retained commercial option has delivery or quality risk requiring owner review." if status == "risk_review_required"
+            else "Ranked by retained terms, delivery evidence, quality, then estimated exposure." if recommended["completedDeliveries"]
+            else "Commercial terms are retained; delivery evidence is still collecting."
+        )
+        rows.append({
+            "requisitionReference": f"REQ-{plan_digest[7:19].upper()}-{sku}",
+            "sku": sku,
+            "itemName": item_name,
+            "quantity": quantity,
+            "desiredAt": row.get("earliestNeedAt"),
+            "plantJobIds": list(row.get("jobIds", [])),
+            "recommendedSupplier": recommended["supplier"] if recommended else None,
+            "recommendedUnitCostMmk": recommended["unitCostMmk"] if recommended else None,
+            "estimatedTotalMmk": recommended["estimatedTotalMmk"] if recommended else None,
+            "status": status,
+            "selectionReason": selection_reason,
+            "supplierOptions": options,
+        })
+    summary = {
+        "requisitions": len(rows),
+        "readyForReview": sum(row["status"] == "ready_for_owner_review" for row in rows),
+        "riskReviews": sum(row["status"] == "risk_review_required" for row in rows),
+        "termsRequired": sum(row["status"] == "terms_required" for row in rows),
+        "comparedSuppliers": sum(len(row["supplierOptions"]) for row in rows),
+        "knownExposureMmk": sum(row["estimatedTotalMmk"] or 0 for row in rows),
+        "unknownExposure": sum(row["estimatedTotalMmk"] is None for row in rows),
+    }
+    body = {
+        "contract": "supermega.shop.procurement-decision.v1",
+        "asOf": canonical_as_of,
+        "rows": rows,
+        "summary": summary,
+        "source": {
+            "commerceDigest": commerce_digest,
+            "replenishmentDigest": plan_digest,
+            "purchaseOrderIds": sorted(str(order["id"]) for order in purchase_orders),
+        },
+        "authority": {
+            "recommendationOnly": True,
+            "requisitionRecorded": False,
+            "purchaseCreated": False,
+            "supplierContacted": False,
+            "paymentCreated": False,
+            "inventoryChanged": False,
+            "providerCalled": False,
+        },
+    }
+    return {**body, "digest": _order_inventory_digest(body)}
+
+
 def _catalog_changes(state: Mapping[str, Any]) -> list[Any]:
     return state.get("catalogChanges", [])
 

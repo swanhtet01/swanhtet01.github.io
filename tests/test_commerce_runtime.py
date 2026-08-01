@@ -22,6 +22,7 @@ from supermega_runtime.commerce_runtime import (
     commerce_order_acknowledgement_text,
     commerce_order_calculation_digest,
     commerce_shop_demand_intelligence,
+    commerce_shop_procurement_decision,
     commerce_storefront_preview_digest,
     commerce_supplier_invoice_match,
     commerce_website_intake_snapshot_digest,
@@ -1180,6 +1181,73 @@ class CommerceRuntimeTests(unittest.TestCase):
     def test_shop_demand_intelligence_rejects_invalid_as_of(self) -> None:
         with self.assertRaises(TrialValidationError):
             commerce_shop_demand_intelligence(completed_state(), "not-a-time")
+
+    def test_shop_procurement_decision_ranks_evidence_and_preserves_authority(self) -> None:
+        current = catalog_state()
+        first_order = purchase_order_record(
+            captured_at="2026-07-20T09:00:00.000Z",
+            expected_at="2026-07-22T09:00:00.000Z",
+            unit_cost_mmk=75,
+        )
+        second_order = purchase_order_record(
+            purchase_order_id="PO-00000000-0000-4000-8000-000000000021",
+            action_id="ACT-PURCHASE-CREATE-2",
+            captured_at="2026-07-20T10:00:00.000Z",
+            expected_at="2026-07-22T10:00:00.000Z",
+            unit_cost_mmk=70,
+        )
+        second_order["supplier"] = "Mandalay Trade"
+        current["items"][0]["onHand"] = 30  # type: ignore[index]
+        current["purchaseOrders"] = [second_order, first_order]
+        current["movements"] = [
+            movement("receipt", "ACT-PURCHASE-RECEIVE-2", 10, created_at="2026-07-23T10:00:00.000Z", purchase_order_id=str(second_order["id"])),
+            movement("receipt", "ACT-PURCHASE-RECEIVE-1", 10, created_at="2026-07-22T08:00:00.000Z", purchase_order_id=str(first_order["id"])),
+        ]
+        plan_body = {
+            "contract": "supermega.shop.replenishment_plan.v1",
+            "source": {"commerceDigest": f"sha256:{'1' * 64}", "productionOrders": []},
+            "rows": [{
+                "sku": "SKU-1", "itemName": "Test item", "recommendedOrderUnits": 8,
+                "suggestedSupplier": "Yangon Supply", "earliestNeedAt": "2026-07-30T09:00:00.000Z",
+                "jobIds": ["JOB-1"],
+            }],
+            "summary": {"recommendedOrderUnits": 8},
+            "authority": {"purchaseCreated": False, "supplierContacted": False},
+        }
+        plan = {
+            **plan_body,
+            "digest": f"sha256:{sha256(json.dumps(plan_body, ensure_ascii=False, separators=(',', ':'), sort_keys=True).encode('utf-8')).hexdigest()}",
+        }
+
+        decision = commerce_shop_procurement_decision(current, plan, "2026-07-24T09:00:00.000Z")
+
+        self.assertEqual(decision["contract"], "supermega.shop.procurement-decision.v1")
+        self.assertEqual(decision["summary"], {
+            "requisitions": 1, "readyForReview": 1, "riskReviews": 0,
+            "termsRequired": 0, "comparedSuppliers": 2,
+            "knownExposureMmk": 600, "unknownExposure": 0,
+        })
+        row = decision["rows"][0]
+        self.assertEqual(row["recommendedSupplier"], "Yangon Supply")
+        self.assertEqual(row["recommendedUnitCostMmk"], 75)
+        self.assertEqual(row["estimatedTotalMmk"], 600)
+        self.assertEqual(row["status"], "ready_for_owner_review")
+        self.assertEqual(row["supplierOptions"][0]["performanceStatus"], "on_track")
+        self.assertEqual(row["supplierOptions"][1]["performanceStatus"], "attention")
+        self.assertEqual(row["plantJobIds"], ["JOB-1"])
+        self.assertTrue(decision["authority"]["recommendationOnly"])
+        self.assertFalse(any(value for key, value in decision["authority"].items() if key != "recommendationOnly"))
+        self.assertRegex(decision["digest"], r"^sha256:[0-9a-f]{64}$")
+
+    def test_shop_procurement_decision_rejects_tampered_plan(self) -> None:
+        plan = {
+            "contract": "supermega.shop.replenishment_plan.v1",
+            "source": {"commerceDigest": f"sha256:{'1' * 64}"},
+            "rows": [],
+            "digest": f"sha256:{'0' * 64}",
+        }
+        with self.assertRaisesRegex(TrialValidationError, "untampered"):
+            commerce_shop_procurement_decision(catalog_state(), plan, NOW)
 
     def test_ecommerce_payment_is_policy_bound_limited_and_never_authorized(self) -> None:
         current = created_state("ORD-PAYMENT-POLICY-1")

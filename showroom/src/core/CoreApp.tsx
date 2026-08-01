@@ -219,7 +219,7 @@ import {
 import { projectPlantOrder } from './plant-order-foundation'
 import { productionOrderPortfolioEntries } from './production-order-portfolio'
 import { projectShopDemandIntelligence } from './shop-demand-intelligence'
-import { projectShopReplenishment } from './shop-replenishment'
+import { projectShopProcurementDecision, projectShopReplenishment } from './shop-replenishment'
 
 const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
 const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').then((module) => ({ default: module.ShopInventoryFoundation })))
@@ -2049,6 +2049,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     [commerce, relatedProduction],
   )
   const purchaseRecommendations = shopReplenishment.rows.filter((row) => row.recommendedOrderUnits > 0)
+  const shopProcurementDecision = useMemo(
+    () => projectShopProcurementDecision(commerce, shopReplenishment, purchaseOrderClock),
+    [commerce, purchaseOrderClock, shopReplenishment],
+  )
+  const procurementReviews = shopProcurementDecision.rows
   const managedInventoryProjection = useMemo(() => {
     if (!commerce.inventoryFoundation) return null
     try {
@@ -2931,7 +2936,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }))
   const overduePurchaseOrders = procurementArrivalRows.filter(({ urgency }) => urgency === 'late')
   const dueSoonPurchaseOrders = procurementArrivalRows.filter(({ urgency }) => urgency === 'due_soon')
-  const openPurchaseRemainingUnits = activePurchaseOrders.reduce((total, { progress }) => total + progress.remaining, 0)
   const partiallyReceivedPurchaseOrders = activePurchaseOrders.filter(({ progress }) => progress.status === 'partially_received')
   const supplierControlNext = !commerceCanWrite
     ? 'Restore purchasing readiness'
@@ -2943,23 +2947,23 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           ? 'Prepare receiving evidence'
           : partiallyReceivedPurchaseOrders.length
             ? 'Close partial receipt'
-            : purchaseRecommendations.length
-              ? 'Choose supplier and arrival'
+            : procurementReviews.length
+              ? shopProcurementDecision.summary.riskReviews ? 'Review supplier risk' : shopProcurementDecision.summary.termsRequired ? 'Complete supplier terms' : 'Review next requisition'
               : activePurchaseOrders.length
                 ? 'Monitor supplier promise'
                 : 'Supplier controls ready'
   const supplierControlRows = [
     ['Buy', purchaseRecommendations.length ? `${shopReplenishment.summary.recommendedOrderUnits} units` : 'Covered'],
+    ['Budget', shopProcurementDecision.summary.unknownExposure ? `${shopProcurementDecision.summary.unknownExposure} need terms` : shopProcurementDecision.summary.knownExposureMmk ? formatMoney(shopProcurementDecision.summary.knownExposureMmk) : 'Covered'],
     ['Demand', shopDemandIntelligence.summary.forecastWeeklyUnits ? `${shopDemandIntelligence.summary.forecastWeeklyUnits}/week` : 'Collecting'],
     ['Plant', shopReplenishment.summary.productionDemandUnits ? `${shopReplenishment.summary.productionDemandUnits} units` : 'No demand'],
-    ['On order', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} units` : 'None'],
     ['Risk', overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : shopReplenishment.summary.supplyAtRisk ? `${shopReplenishment.summary.supplyAtRisk} at risk` : 'Clear'],
     ['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Owner confirms' : 'Locked'],
   ] as const
   const supplierControl = <section className="shop-order-control supplier-control" aria-label="Supplier control">
-    <div><span className="core-eyebrow">Replenishment plan</span><strong>{supplierControlNext}</strong><small>Combines reorder floors, remaining Plant materials, Shop stock, and open purchase orders. Supplier and cost come only from retained records; missing terms stay blank. No RFQ, message, payment, receipt, payable, costing, or stock write runs here.</small><button className="text-link" disabled={commerceControlsDisabled || !purchaseRecommendations.length} onClick={startSupplierRequest} type="button">Prepare next purchase order</button></div>
+    <div><span className="core-eyebrow">Procurement control</span><strong>{supplierControlNext}</strong><small>AI combines demand, Shop stock, Plant materials, open orders, retained supplier terms, delivery evidence, quality, and exposure. The owner reviews the requisition and confirms the purchase order; no RFQ, supplier message, payment, receipt, payable, costing, or stock write runs here.</small><button className="text-link" disabled={commerceControlsDisabled || !procurementReviews.length} onClick={startSupplierRequest} type="button">Review next requisition</button></div>
     <div className="shop-order-control-rows">{supplierControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
-    {shopReplenishment.rows.length ? <div aria-label="Shop replenishment recommendations" className="shop-replenishment-list" role="list">{shopReplenishment.rows.slice(0, 4).map((row) => <div data-status={row.status} key={row.sku} role="listitem"><span><strong>{row.itemName}</strong><small>{row.sku}{row.jobIds.length ? ` · Plant ${row.jobIds.join(', ')}` : ' · reorder floor'}{row.supplierPolicy ? ` · ${(row.supplierPolicy.serviceLevelBasisPoints / 100).toFixed(2)}% service` : ''}</small></span><span><b>{row.recommendedOrderUnits ? `Buy ${row.recommendedOrderUnits}` : row.status === 'supply_at_risk' ? 'Check arrival' : 'Covered'}</b><small>{row.onHandUnits} stock + {row.openPurchaseUnits} on order · target {row.operatingTargetUnits}{row.supplierPolicy ? ` · ${row.supplierPolicy.leadTimeDays}d / MOQ ${row.supplierPolicy.minimumOrderUnits}` : ''}</small></span></div>)}</div> : null}
+    {procurementReviews.length ? <section aria-label="Shop procurement decisions" className="supplier-performance"><div className="supplier-performance-heading"><span className="core-eyebrow">Requisition review</span><small>Source-bound ranking · owner approval required</small></div><div className="shop-replenishment-list" role="list">{procurementReviews.slice(0, 4).map((row) => <div data-status={row.status} key={row.requisitionReference} role="listitem"><span><strong>{row.itemName}</strong><small>{row.requisitionReference} · {row.quantity} units{row.plantJobIds.length ? ` · Plant ${row.plantJobIds.join(', ')}` : ''}</small></span><span><b>{row.recommendedSupplier ?? 'Supplier terms needed'}</b><small>{row.estimatedTotalMmk === null ? 'Cost not retained' : formatMoney(row.estimatedTotalMmk)} · {row.supplierOptions.length} {row.supplierOptions.length === 1 ? 'option' : 'options'} · {row.status === 'risk_review_required' ? 'risk review' : row.status === 'terms_required' ? 'terms review' : 'ready for owner'}</small></span></div>)}</div></section> : null}
     {demandForecastRows.length ? <section aria-label="Shop demand intelligence" className="supplier-performance">
       <div className="supplier-performance-heading"><span className="core-eyebrow">Demand intelligence</span><small>28-day completed sales · returns netted · recommendation only</small></div>
       <div className="shop-replenishment-list" role="list">{demandForecastRows.slice(0, 4).map((row) => <div data-status={row.status} key={row.sku} role="listitem"><span><strong>{row.itemName}</strong><small>{row.completedOrderCount} completed {row.completedOrderCount === 1 ? 'order' : 'orders'} · {row.confidence} evidence</small></span><span><b>{row.status === 'stockout_risk' ? 'Stockout risk' : row.status === 'reorder_soon' ? 'Reorder soon' : `${row.forecastWeeklyUnits}/week`}</b><small>{row.projectedDaysOfCover === null ? 'Cover collecting' : `${row.projectedDaysOfCover}d projected cover`} · {row.planningHorizonDays}d {row.planningHorizonSource === 'supplier_policy' ? 'supplier lead' : 'planning horizon'}{row.recommendedSafetyStockUnits === null ? '' : ` · ${row.recommendedSafetyStockUnits} safety suggested`}</small></span></div>)}</div>
@@ -5069,9 +5073,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   function startSupplierRequest() {
-    const recommendation = purchaseRecommendations[0]
+    const decision = procurementReviews[0]
+    const recommendation = decision ? purchaseRecommendations.find((row) => row.sku === decision.sku) : null
     const item = recommendation ? commerce.items.find((candidate) => candidate.sku === recommendation.sku) : null
-    if (!recommendation || !item) {
+    if (!decision || !recommendation || !item) {
       setNotice('Replenishment is clear. Shop stock, open purchase orders, and current Plant demand are covered.')
       return
     }
@@ -5086,21 +5091,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice('Finish or cancel the stock count before starting a supplier request. Your count draft was preserved.')
       return
     }
-    const policyArrivalAt = recommendation.supplierPolicy
-      ? purchaseOrderClock + recommendation.supplierPolicy.leadTimeDays * 24 * 60 * 60 * 1000
-      : purchaseOrderClock + 60 * 60 * 1000
+    const recommendedOption = decision.supplierOptions.find((option) => option.supplier === decision.recommendedSupplier)
+    const policyArrivalAt = purchaseOrderClock + (recommendedOption?.leadTimeDays ?? 7) * 24 * 60 * 60 * 1000
     const earliestSafeArrival = recommendation.earliestNeedAt
       ? new Date(Math.max(policyArrivalAt, Date.parse(recommendation.earliestNeedAt) - 24 * 60 * 60 * 1000))
       : new Date(policyArrivalAt)
     setPurchaseOrderDraft({
       mode: 'create',
       sku: item.sku,
-      supplier: recommendation.suggestedSupplier ?? '',
+      supplier: decision.recommendedSupplier ?? '',
       expectedAt: earliestSafeArrival && Number.isFinite(earliestSafeArrival.getTime()) ? localDateTimeInputValue(earliestSafeArrival) : defaultPurchaseOrderExpectedInput(),
       quantity: String(recommendation.recommendedOrderUnits),
-      unitCostMmk: recommendation.suggestedUnitCostMmk ? String(recommendation.suggestedUnitCostMmk) : '',
+      unitCostMmk: decision.recommendedUnitCostMmk ? String(decision.recommendedUnitCostMmk) : '',
     })
-    setNotice(`Purchase order prepared for ${item.name}: ${recommendation.recommendedOrderUnits} units${recommendation.supplierPolicy && recommendation.recommendedOrderUnits !== recommendation.unroundedOrderUnits ? ` (rounded from ${recommendation.unroundedOrderUnits} by MOQ/order multiple)` : ''}${recommendation.jobIds.length ? ` cover Plant ${recommendation.jobIds.join(', ')}` : ' restore the Shop reorder target'}. Review any missing supplier, cost, and arrival terms; nothing was sent or written.`)
+    setNotice(`${decision.requisitionReference} prepared for owner review: ${recommendation.recommendedOrderUnits} ${item.name} units${decision.recommendedSupplier ? ` with ${decision.recommendedSupplier}` : ''}${recommendation.supplierPolicy && recommendation.recommendedOrderUnits !== recommendation.unroundedOrderUnits ? ` (rounded from ${recommendation.unroundedOrderUnits} by MOQ/order multiple)` : ''}. Confirm supplier, cost, and arrival; nothing was sent, purchased, or written.`)
     requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
   }
 

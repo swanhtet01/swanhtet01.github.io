@@ -1,6 +1,7 @@
 import {
   commercePurchaseOrderProgress,
   commercePurchaseOrders,
+  commerceSupplierPerformance,
   validateCommerceState,
   type CommerceState,
 } from './commerce-workspace.ts'
@@ -12,6 +13,7 @@ import { projectShopInventory } from './shop-inventory-foundation.ts'
 import type { ShopSupplierPolicy } from './shop-inventory-foundation.ts'
 
 export const SHOP_REPLENISHMENT_PLAN_CONTRACT = 'supermega.shop.replenishment_plan.v1' as const
+export const SHOP_PROCUREMENT_DECISION_CONTRACT = 'supermega.shop.procurement-decision.v1' as const
 
 export type ShopReplenishmentStatus = 'terms_required' | 'order_required' | 'supply_at_risk' | 'covered_by_open_po' | 'stock_ready'
 
@@ -62,6 +64,60 @@ export type ShopReplenishmentPlan = {
   digest: string
 }
 
+export type ShopSupplierComparison = {
+  supplier: string
+  unitCostMmk: number | null
+  estimatedTotalMmk: number | null
+  leadTimeDays: number | null
+  serviceLevelBasisPoints: number | null
+  completedDeliveries: number
+  onTimeRateBasisPoints: number | null
+  defectRateBasisPoints: number
+  performanceStatus: 'attention' | 'on_track' | 'collecting'
+  termsStatus: 'comparable' | 'cost_required'
+  sourcePurchaseOrderIds: string[]
+  supplierPolicyCommandId: string | null
+}
+
+export type ShopProcurementDecision = {
+  contract: typeof SHOP_PROCUREMENT_DECISION_CONTRACT
+  asOf: string
+  rows: Array<{
+    requisitionReference: string
+    sku: string
+    itemName: string
+    quantity: number
+    desiredAt: string | null
+    plantJobIds: string[]
+    recommendedSupplier: string | null
+    recommendedUnitCostMmk: number | null
+    estimatedTotalMmk: number | null
+    status: 'ready_for_owner_review' | 'risk_review_required' | 'terms_required'
+    selectionReason: string
+    supplierOptions: ShopSupplierComparison[]
+  }>
+  summary: {
+    requisitions: number
+    readyForReview: number
+    riskReviews: number
+    termsRequired: number
+    comparedSuppliers: number
+    knownExposureMmk: number
+    unknownExposure: number
+  }
+  source: { commerceDigest: string; replenishmentDigest: string; purchaseOrderIds: string[] }
+  authority: {
+    recommendationOnly: true
+    requisitionRecorded: false
+    purchaseCreated: false
+    supplierContacted: false
+    paymentCreated: false
+    inventoryChanged: false
+    providerCalled: false
+  }
+  digest: string
+}
+
 function safeAdd(left: number, right: number, field: string) {
   const value = left + right
   if (!Number.isSafeInteger(value)) throw new Error(`${field} exceeds the supported quantity range.`)
@@ -72,6 +128,12 @@ function safeDouble(value: number, field: string) {
   const result = value * 2
   if (!Number.isSafeInteger(result)) throw new Error(`${field} exceeds the supported quantity range.`)
   return result
+}
+
+function safeMultiply(left: number, right: number, field: string) {
+  const value = left * right
+  if (!Number.isSafeInteger(value)) throw new Error(`${field} exceeds the supported quantity range.`)
+  return value
 }
 
 function roundOrderUnits(required: number, policy: ShopSupplierPolicy | null, sku: string) {
@@ -233,6 +295,124 @@ export function validateShopReplenishment(value: unknown, commerce: CommerceStat
     || (value as { contract?: unknown }).contract !== SHOP_REPLENISHMENT_PLAN_CONTRACT
     || plantOrderEvidenceDigest(value) !== plantOrderEvidenceDigest(expected)) {
     throw new Error('Shop replenishment plan does not match current Shop and Plant evidence.')
+  }
+  return expected
+}
+
+const supplierStatusRank = { on_track: 0, collecting: 1, attention: 2 } as const
+
+export function projectShopProcurementDecision(
+  commerceValue: CommerceState,
+  planValue: ShopReplenishmentPlan,
+  asOfValue: number,
+): ShopProcurementDecision {
+  if (!Number.isFinite(asOfValue)) throw new Error('Shop procurement as-of time is invalid.')
+  const commerce = validateCommerceState(commerceValue)
+  const { digest: planDigest, ...planBody } = planValue
+  if (planValue.contract !== SHOP_REPLENISHMENT_PLAN_CONTRACT || planDigest !== plantOrderEvidenceDigest(planBody)) {
+    throw new Error('Shop procurement requires a current, untampered replenishment plan.')
+  }
+  const purchaseOrders = commercePurchaseOrders(commerce)
+  const inventory = commerce.inventoryFoundation
+    ? projectShopInventory(commerce.inventoryFoundation, commerce.items.map((item) => item.sku).sort())
+    : null
+  const performance = new Map(commerceSupplierPerformance(commerce, asOfValue).map((row) => [row.supplier, row]))
+  const vendorNames = new Map((inventory?.vendors ?? []).map((vendor) => [vendor.id, vendor.name]))
+  const rows = planValue.rows.filter((row) => row.recommendedOrderUnits > 0).map((row) => {
+    const suppliers = [...new Set([
+      ...purchaseOrders.filter((order) => order.sku === row.sku && !order.cancellation).map((order) => order.supplier),
+      ...(inventory?.supplierPolicies ?? []).filter((policy) => policy.sku === row.sku && policy.status === 'active').flatMap((policy) => vendorNames.get(policy.vendorId) ?? []),
+      ...(row.suggestedSupplier ? [row.suggestedSupplier] : []),
+    ])].sort((left, right) => left.localeCompare(right))
+    const supplierOptions = suppliers.map<ShopSupplierComparison>((supplier) => {
+      const sourceOrders = purchaseOrders.filter((order) => order.sku === row.sku && order.supplier === supplier && !order.cancellation)
+        .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt) || left.id.localeCompare(right.id))
+      const commercialOrder = sourceOrders.find((order) => order.unitCostMmk !== undefined)
+      const vendorId = inventory?.vendors.find((vendor) => vendor.name === supplier)?.id
+      const policy = inventory?.supplierPolicies.find((candidate) => candidate.vendorId === vendorId && candidate.sku === row.sku && candidate.status === 'active')
+      const measured = performance.get(supplier)
+      const unitCostMmk = commercialOrder?.unitCostMmk ?? null
+      const estimatedTotalMmk = unitCostMmk === null ? null : safeMultiply(row.recommendedOrderUnits, unitCostMmk, `Procurement exposure for ${row.sku}`)
+      return {
+        supplier,
+        unitCostMmk,
+        estimatedTotalMmk,
+        leadTimeDays: policy?.leadTimeDays ?? null,
+        serviceLevelBasisPoints: policy?.serviceLevelBasisPoints ?? null,
+        completedDeliveries: measured?.completedDeliveries ?? 0,
+        onTimeRateBasisPoints: measured?.onTimeRateBasisPoints ?? null,
+        defectRateBasisPoints: measured?.defectRateBasisPoints ?? 0,
+        performanceStatus: measured?.status ?? 'collecting',
+        termsStatus: unitCostMmk === null ? 'cost_required' : 'comparable',
+        sourcePurchaseOrderIds: sourceOrders.map((order) => order.id),
+        supplierPolicyCommandId: policy?.commandId ?? null,
+      }
+    }).sort((left, right) => {
+      if (left.termsStatus !== right.termsStatus) return left.termsStatus === 'comparable' ? -1 : 1
+      if (supplierStatusRank[left.performanceStatus] !== supplierStatusRank[right.performanceStatus]) return supplierStatusRank[left.performanceStatus] - supplierStatusRank[right.performanceStatus]
+      if (Boolean(left.supplierPolicyCommandId) !== Boolean(right.supplierPolicyCommandId)) return left.supplierPolicyCommandId ? -1 : 1
+      if (left.completedDeliveries !== right.completedDeliveries) return right.completedDeliveries - left.completedDeliveries
+      if ((left.onTimeRateBasisPoints ?? -1) !== (right.onTimeRateBasisPoints ?? -1)) return (right.onTimeRateBasisPoints ?? -1) - (left.onTimeRateBasisPoints ?? -1)
+      if (left.defectRateBasisPoints !== right.defectRateBasisPoints) return left.defectRateBasisPoints - right.defectRateBasisPoints
+      if ((left.estimatedTotalMmk ?? Number.MAX_SAFE_INTEGER) !== (right.estimatedTotalMmk ?? Number.MAX_SAFE_INTEGER)) return (left.estimatedTotalMmk ?? Number.MAX_SAFE_INTEGER) - (right.estimatedTotalMmk ?? Number.MAX_SAFE_INTEGER)
+      return left.supplier.localeCompare(right.supplier)
+    })
+    const recommended = supplierOptions.find((option) => option.termsStatus === 'comparable') ?? null
+    const status = !recommended
+      ? 'terms_required' as const
+      : recommended.performanceStatus === 'attention' ? 'risk_review_required' as const : 'ready_for_owner_review' as const
+    const selectionReason = !recommended
+      ? 'Retain supplier cost terms before owner review.'
+      : recommended.performanceStatus === 'attention'
+        ? 'Best retained commercial option has delivery or quality risk requiring owner review.'
+        : recommended.completedDeliveries
+          ? 'Ranked by retained terms, delivery evidence, quality, then estimated exposure.'
+          : 'Commercial terms are retained; delivery evidence is still collecting.'
+    return {
+      requisitionReference: `REQ-${planDigest.slice(7, 19).toUpperCase()}-${row.sku}`,
+      sku: row.sku,
+      itemName: row.itemName,
+      quantity: row.recommendedOrderUnits,
+      desiredAt: row.earliestNeedAt,
+      plantJobIds: row.jobIds,
+      recommendedSupplier: recommended?.supplier ?? null,
+      recommendedUnitCostMmk: recommended?.unitCostMmk ?? null,
+      estimatedTotalMmk: recommended?.estimatedTotalMmk ?? null,
+      status,
+      selectionReason,
+      supplierOptions,
+    }
+  })
+  const summary = {
+    requisitions: rows.length,
+    readyForReview: rows.filter((row) => row.status === 'ready_for_owner_review').length,
+    riskReviews: rows.filter((row) => row.status === 'risk_review_required').length,
+    termsRequired: rows.filter((row) => row.status === 'terms_required').length,
+    comparedSuppliers: rows.reduce((total, row) => safeAdd(total, row.supplierOptions.length, 'Compared suppliers'), 0),
+    knownExposureMmk: rows.reduce((total, row) => safeAdd(total, row.estimatedTotalMmk ?? 0, 'Known procurement exposure'), 0),
+    unknownExposure: rows.filter((row) => row.estimatedTotalMmk === null).length,
+  }
+  const body = {
+    contract: SHOP_PROCUREMENT_DECISION_CONTRACT,
+    asOf: new Date(asOfValue).toISOString(),
+    rows,
+    summary,
+    source: {
+      commerceDigest: planValue.source.commerceDigest,
+      replenishmentDigest: planDigest,
+      purchaseOrderIds: purchaseOrders.map((order) => order.id).sort(),
+    },
+    authority: { recommendationOnly: true, requisitionRecorded: false, purchaseCreated: false, supplierContacted: false, paymentCreated: false, inventoryChanged: false, providerCalled: false } as const,
+  }
+  return { ...body, digest: plantOrderEvidenceDigest(body) }
+}
+
+export function validateShopProcurementDecision(value: unknown, commerce: CommerceState, plan: ShopReplenishmentPlan, asOf: number) {
+  const expected = projectShopProcurementDecision(commerce, plan, asOf)
+  if (!value || typeof value !== 'object'
+    || (value as { contract?: unknown }).contract !== SHOP_PROCUREMENT_DECISION_CONTRACT
+    || plantOrderEvidenceDigest(value) !== plantOrderEvidenceDigest(expected)) {
+    throw new Error('Shop procurement decision does not match current replenishment and supplier evidence.')
   }
   return expected
 }
