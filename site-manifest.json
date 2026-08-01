@@ -406,8 +406,7 @@
     }
   ],
   "pages": [
-    { "route": "/", "file": "index.html", "title": "SuperMega | Four products and Vision" },
-    { "route": "/vision/", "file": "vision/index.html", "title": "Vision founding pilot | SuperMega" },
+    { "route": "/", "file": "index.html", "title": "SuperMega | Four products" },
     { "route": "/contact/", "file": "contact/index.html", "title": "Contact | SuperMega" },
     { "route": "/privacy/", "file": "privacy/index.html", "title": "Privacy | SuperMega" }
   ],
@@ -423,7 +422,7 @@
     { "source": "^/products/(?:production|factory|operations|erp|plant)/?.*$", "destination": "/#plant" },
     { "source": "^/products/website/?.*$", "destination": "/#website" },
     { "source": "^/products/ecommerce/?.*$", "destination": "/#ecommerce" },
-    { "source": "^/(?:ai-agent-solutions|ai-agents|agents|agent-templates|workcell|machine|agentops)/?.*$", "destination": "/#products" },
+    { "source": "^/(?:vision|ai-agent-solutions|ai-agents|agents|agent-templates|workcell|machine|agentops)/?.*$", "destination": "/#products" },
     { "source": "^/(?:find-clients|company-list|receiving-control|receiving-log|founder-brief|reconcile)/?.*$", "destination": "/#products" },
     { "source": "^/(?:start|book|setup|get-started|intake)/?.*$", "destination": "/contact/" },
     { "source": "^/(?:app|login|clients)/?.*$", "destination": "https://app.supermega.dev/" },

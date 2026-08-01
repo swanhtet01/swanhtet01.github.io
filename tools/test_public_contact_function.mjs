@@ -174,7 +174,7 @@ try {
   const readyStatus = await invoke({ method: 'GET' })
   assert.equal(readyStatus.body.accepting, true)
 
-  const accepted = await invoke({ body: { ...validSubmission, product: 'UNRECOGNIZED' }, headers: withKey(3) })
+  const accepted = await invoke({ body: { ...validSubmission, product: 'guide' }, headers: withKey(3) })
   assert.equal(accepted.status, 202)
   assert.match(accepted.body.request_id, /^LEAD-[A-F0-9]{16}$/)
   assert.equal(fetchCalls, 1)
@@ -188,13 +188,13 @@ try {
   assert.equal(event.record.source, 'supermega.dev')
   assert.equal(accepted.body.proof_bound, false)
 
-  const replay = await invoke({ body: { ...validSubmission, product: 'UNRECOGNIZED' }, headers: withKey(3) })
+  const replay = await invoke({ body: { ...validSubmission, product: 'guide' }, headers: withKey(3) })
   assert.equal(replay.status, 202)
   assert.equal(replay.body.request_id, accepted.body.request_id)
   assert.equal(replay.headers['x-idempotent-replay'], 'true')
   assert.equal(fetchCalls, 1)
 
-  const conflict = await invoke({ body: { ...validSubmission, product: 'UNRECOGNIZED', goal: 'Different request.' }, headers: withKey(3) })
+  const conflict = await invoke({ body: { ...validSubmission, product: 'guide', goal: 'Different request.' }, headers: withKey(3) })
   assert.equal(conflict.status, 409)
   assert.equal(conflict.body.reason, 'idempotency_conflict')
 
@@ -351,50 +351,19 @@ try {
   })
   assert.equal(proofConflict.status, 409)
   assert.equal(proofConflict.body.reason, 'idempotency_conflict')
-  const visionAccepted = await invoke({
-    body: {
-      ...validSubmission,
-      product: 'vision',
-      template: 'release-qa',
-      vision_platform: 'windows',
-      vision_state_count: '6',
-      vision_weekly_runs: '10',
-      vision_minutes_per_run: '30',
-      vision_labor_hourly_usd: '8',
-      vision_screenshot_rights: 'yes',
-      vision_human_fallback: 'yes',
-      vision_observation_only: 'yes',
-    },
+  const retiredProduct = await invoke({
+    body: { ...validSubmission, product: 'vision', template: 'release-qa' },
     headers: withKey(300, { 'x-forwarded-for': '203.0.113.30' }),
   })
-  assert.equal(visionAccepted.status, 202)
-  const visionEvent = JSON.parse(delivered.options.body)
-  assert.equal(visionEvent.record.workflow, 'vision')
-  assert.equal(visionEvent.record.requested_package, 'release-qa')
-  assert.deepEqual(visionEvent.record.raw.vision, {
-    platform: 'windows',
-    state_count: 6,
-    weekly_runs: 10,
-    minutes_per_run: 30,
-    labor_hourly_usd: 8,
-    screenshot_rights: true,
-    human_fallback: true,
-    observation_only: true,
-  })
+  assert.equal(retiredProduct.status, 400)
+  assert.equal(retiredProduct.body.reason, 'product_not_supported')
 
-  const visionMissingFields = await invoke({
-    body: { ...validSubmission, product: 'vision', template: 'release-qa' },
+  const unknownProduct = await invoke({
+    body: { ...validSubmission, product: 'unrecognized' },
     headers: withKey(301, { 'x-forwarded-for': '203.0.113.31' }),
   })
-  assert.equal(visionMissingFields.status, 400)
-  assert.equal(visionMissingFields.body.reason, 'vision_fields_missing')
-
-  const nonVisionIgnored = await invoke({
-    body: { ...validSubmission, vision_platform: 'both', vision_state_count: '12', vision_weekly_runs: '10', vision_minutes_per_run: '30' },
-    headers: withKey(302, { 'x-forwarded-for': '203.0.113.32' }),
-  })
-  assert.equal(nonVisionIgnored.status, 202)
-  assert.equal(JSON.parse(delivered.options.body).record.raw.vision, null)
+  assert.equal(unknownProduct.status, 400)
+  assert.equal(unknownProduct.body.reason, 'product_not_supported')
 
   const rateHeaders = { 'x-forwarded-for': '203.0.113.77' }
   for (let index = 0; index < 5; index += 1) {
