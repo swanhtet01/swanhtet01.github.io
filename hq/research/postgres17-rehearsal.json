@@ -1,9 +1,9 @@
 {
   "schemaVersion": "supermega.hq.database-rehearsal.v2",
-  "recordedAt": "2026-08-01T09:13:47.642Z",
+  "recordedAt": "2026-08-01T09:50:27.680Z",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "592b941df8b049656b41a291ad25d4879b93d267",
-  "implementationDigest": "sha256:bcbab072402df026044233742b526a62a9b4193e27d4fa769cd37732e74f7d84",
+  "implementationCommit": "3ab88dc14aaf3a0aa27b125eee21f30d36420565",
+  "implementationDigest": "sha256:3f1d44a4c49a2dc9ecad76dbe27e2625a365ffa59473dc451f55435a06fa340a",
   "implementationFileCount": 32,
   "localVerification": {
     "command": "npm run database:postgres17:record",
