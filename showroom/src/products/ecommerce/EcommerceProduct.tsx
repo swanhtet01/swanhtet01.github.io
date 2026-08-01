@@ -274,7 +274,7 @@ export function EcommerceProduct() {
   const [selectedSkus, setSelectedSkus] = useState(initialState.selectedSkus)
   const [merchandising, setMerchandising] = useState<CommerceStorefrontMerchandising[] | null>(initialState.merchandising)
   const [device, setDevice] = useState<PreviewDevice>('phone')
-  const [mobileWorkspace, setMobileWorkspace] = useState<'setup' | 'preview'>('preview')
+  const [workspaceView, setWorkspaceView] = useState<'setup' | 'preview'>('preview')
   const [digestState, setDigestState] = useState({ previewJson: '', value: '', error: '' })
   const [managedCatalogDigestState, setManagedCatalogDigestState] = useState({
     source: '',
@@ -725,16 +725,15 @@ export function EcommerceProduct() {
     setOrderImportNotice('Order import review packet downloaded. No order import, customer message, payment, delivery booking, stock move, refund, Shop write, or managed activation ran.')
   }
 
-  function showMobileWorkspace(view: 'setup' | 'preview') {
-    setMobileWorkspace(view)
-    if (!window.matchMedia('(max-width: 840px)').matches) return
+  function showWorkspace(view: 'setup' | 'preview') {
+    setWorkspaceView(view)
     requestAnimationFrame(() => {
       document.getElementById(`ecommerce-${view}-panel`)?.scrollIntoView({ block: 'start' })
     })
   }
 
   function finishStorefrontSetup() {
-    showMobileWorkspace('setup')
+    showWorkspace('setup')
     requestAnimationFrame(() => {
       storefrontSaveRef.current?.scrollIntoView({ block: 'center' })
       storefrontSaveRef.current?.focus({ preventScroll: true })
@@ -742,7 +741,7 @@ export function EcommerceProduct() {
   }
 
   function showSavedStorefrontPreview() {
-    showMobileWorkspace('preview')
+    showWorkspace('preview')
     requestAnimationFrame(() => {
       storefrontPreviewHeadingRef.current?.focus({ preventScroll: true })
     })
@@ -1905,12 +1904,12 @@ export function EcommerceProduct() {
         </div>
       </details>
 
-      <div aria-label="Ecommerce workspace" className="ecommerce-mobile-switch" role="group">
-        <button aria-controls="ecommerce-preview-panel" aria-pressed={mobileWorkspace === 'preview'} onClick={() => showMobileWorkspace('preview')} type="button">Store</button>
-        <button aria-controls="ecommerce-setup-panel" aria-pressed={mobileWorkspace === 'setup'} onClick={() => showMobileWorkspace('setup')} type="button">Edit store</button>
+      <div aria-label="Storefront view" className="ecommerce-workspace-switch" role="group">
+        <button aria-controls="ecommerce-preview-panel" aria-pressed={workspaceView === 'preview'} onClick={() => showWorkspace('preview')} type="button">Store</button>
+        <button aria-controls="ecommerce-setup-panel" aria-pressed={workspaceView === 'setup'} onClick={() => showWorkspace('setup')} type="button">Edit store</button>
       </div>
 
-      <div className="ecommerce-workspace" data-mobile-view={mobileWorkspace}>
+      <div className="ecommerce-workspace" data-view={workspaceView}>
         <section className="core-panel ecommerce-setup" aria-busy={catalogHydrating || draftBusy} aria-labelledby="ecommerce-setup-title" id="ecommerce-setup-panel">
           <div className="panel-head">
             <div><span className="core-eyebrow">1 · Storefront</span><h2 id="ecommerce-setup-title">Choose what customers see</h2></div>

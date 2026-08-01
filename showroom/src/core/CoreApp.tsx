@@ -8264,6 +8264,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   function openJobOutput(job: ProductionJob, trigger: HTMLButtonElement) {
     outputTriggerRef.current = trigger
     setJobId(job.id)
+    if (!managedIdentity && !shiftRef.trim()) {
+      const suggestedShiftRef = shiftReferencePlaceholder()
+      setShiftRef(suggestedShiftRef)
+      setHandoffShiftRef(suggestedShiftRef)
+    }
     setOutputOpen(true)
     requestAnimationFrame(() => {
       outputJobSelectRef.current?.scrollIntoView({ block: 'center' })
