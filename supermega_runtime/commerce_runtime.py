@@ -32,6 +32,7 @@ from supermega_runtime.shop_inventory_runtime import (
     shop_inventory_available_balances,
     shop_inventory_balances,
     shop_inventory_business_partners,
+    shop_inventory_supplier_policies,
     shop_inventory_sku_available_to_promise,
     shop_inventory_sku_totals,
     validate_shop_inventory_state,
@@ -4673,6 +4674,339 @@ def commerce_supplier_invoice_match(
         "invoicedTotalMmk": invoice["totalMmk"],
         "payableReady": status == "matched" and "payableReview" in invoice,
     }
+
+
+def commerce_shop_demand_intelligence(
+    value: Mapping[str, Any],
+    as_of: str,
+) -> dict[str, Any]:
+    """Project explainable 28-day Shop demand without changing operational state."""
+
+    state = validate_commerce_state(value)
+    canonical_as_of = _timestamp(as_of, "Shop demand asOf")
+    as_of_time = datetime.fromisoformat(canonical_as_of.replace("Z", "+00:00"))
+    lookback_days = 28
+    window_start = as_of_time - timedelta(days=lookback_days)
+
+    def safe_add(left: int, right: int, field: str) -> int:
+        result = left + right
+        if abs(result) > _MAX_SAFE_INTEGER:
+            raise TrialValidationError(f"{field} exceeds the supported quantity range.")
+        return result
+
+    def safe_multiply(left: int, right: int, field: str) -> int:
+        result = left * right
+        if abs(result) > _MAX_SAFE_INTEGER:
+            raise TrialValidationError(f"{field} exceeds the supported quantity range.")
+        return result
+
+    def order_lines(order: Mapping[str, Any]) -> list[dict[str, Any]]:
+        lines = order.get("lines")
+        if isinstance(lines, list) and lines:
+            return [
+                {"sku": str(line["sku"]), "quantity": int(line["quantity"])}
+                for line in lines
+                if isinstance(line, Mapping)
+            ]
+        sku = order.get("itemSku")
+        return [{"sku": str(sku), "quantity": int(order["quantity"])}] if sku else []
+
+    completed_orders: list[Mapping[str, Any]] = []
+    for order_value in state["orders"]:
+        order = order_value if isinstance(order_value, Mapping) else {}
+        completion = order.get("completion")
+        if order.get("status") != "completed" or not isinstance(completion, Mapping):
+            continue
+        completed_at = datetime.fromisoformat(
+            str(completion["capturedAt"]).replace("Z", "+00:00")
+        )
+        if window_start < completed_at <= as_of_time:
+            completed_orders.append(order)
+
+    purchase_orders = [
+        order for order in state.get("purchaseOrders", []) if isinstance(order, Mapping)
+    ]
+
+    def purchase_progress(order: Mapping[str, Any]) -> tuple[int, bool]:
+        delivered = sum(
+            int(movement["quantityDelta"]) + int(movement.get("rejectedQuantity", 0))
+            for movement in state["movements"]
+            if isinstance(movement, Mapping)
+            and movement.get("kind") == "receipt"
+            and movement.get("purchaseOrderId") == order.get("id")
+        )
+        remaining = int(order["quantityOrdered"]) - delivered
+        active = "cancellation" not in order and remaining > 0
+        return remaining, active
+
+    active_purchase_orders = [
+        order for order in purchase_orders if purchase_progress(order)[1]
+    ]
+    catalog_skus = sorted(str(item["sku"]) for item in state["items"])
+    policies: list[dict[str, Any]] = []
+    vendor_names: dict[str, str] = {}
+    inventory = state.get("inventoryFoundation")
+    if inventory is not None:
+        partners = shop_inventory_business_partners(inventory, catalog_skus)
+        vendor_names = {vendor["id"]: vendor["name"] for vendor in partners["vendors"]}
+        policies = shop_inventory_supplier_policies(inventory, catalog_skus)
+
+    def select_policy(sku: str, recent_supplier: str | None) -> Mapping[str, Any] | None:
+        active = [
+            policy
+            for policy in policies
+            if policy["sku"] == sku and policy["status"] == "active"
+        ]
+        if recent_supplier:
+            return next(
+                (
+                    policy
+                    for policy in active
+                    if vendor_names.get(str(policy["vendorId"])) == recent_supplier
+                ),
+                None,
+            )
+        return active[0] if len(active) == 1 else None
+
+    rows: list[dict[str, Any]] = []
+    for item in state["items"]:
+        sku = str(item["sku"])
+        weekly = [0, 0, 0, 0]
+        source_order_ids: list[str] = []
+        source_return_action_ids: list[str] = []
+        gross_units = 0
+        returned_units = 0
+        for order in completed_orders:
+            quantity = sum(
+                int(line["quantity"]) for line in order_lines(order) if line["sku"] == sku
+            )
+            if quantity == 0:
+                continue
+            source_order_ids.append(str(order["id"]))
+            gross_units = safe_add(gross_units, quantity, f"Gross demand for {sku}")
+            completion = order["completion"]
+            completed_at = datetime.fromisoformat(
+                str(completion["capturedAt"]).replace("Z", "+00:00")
+            )
+            bucket = min(3, int((as_of_time - completed_at).total_seconds() // (7 * 86_400)))
+            weekly[bucket] = safe_add(weekly[bucket], quantity, f"Weekly demand for {sku}")
+            for returned in order.get("returns", []):
+                if not isinstance(returned, Mapping) or returned.get("sku") != sku:
+                    continue
+                returned_at = datetime.fromisoformat(
+                    str(returned["createdAt"]).replace("Z", "+00:00")
+                )
+                if returned_at > as_of_time:
+                    continue
+                returned_quantity = int(returned["quantity"])
+                returned_units = safe_add(
+                    returned_units, returned_quantity, f"Returns for {sku}"
+                )
+                source_return_action_ids.append(str(returned["actionId"]))
+                return_bucket = min(
+                    3,
+                    max(0, int((as_of_time - returned_at).total_seconds() // (7 * 86_400))),
+                )
+                weekly[return_bucket] = safe_add(
+                    weekly[return_bucket], -returned_quantity, f"Weekly demand for {sku}"
+                )
+        net_units = max(0, gross_units - returned_units)
+        forecast_weekly = (net_units + 3) // 4
+        peak_weekly = max([0, *weekly])
+        average_daily_basis_points = (
+            safe_multiply(net_units, 10_000, f"Average demand for {sku}")
+            + lookback_days // 2
+        ) // lookback_days
+        completed_order_count = len(source_order_ids)
+        confidence = (
+            "established"
+            if completed_order_count >= 6
+            else "emerging" if completed_order_count >= 2 else "insufficient"
+        )
+        recent_orders = sorted(
+            [
+                order
+                for order in purchase_orders
+                if order.get("sku") == sku and "cancellation" not in order
+            ],
+            key=lambda order: (
+                -datetime.fromisoformat(str(order["createdAt"]).replace("Z", "+00:00")).timestamp(),
+                str(order["id"]),
+            ),
+        )
+        recent_supplier = str(recent_orders[0]["supplier"]) if recent_orders else None
+        policy = select_policy(sku, recent_supplier)
+        horizon_days = int(policy["leadTimeDays"]) if policy else 7
+        horizon_source = "supplier_policy" if policy else "planning_default"
+        horizon_demand = (
+            safe_multiply(net_units, horizon_days, f"Planning demand for {sku}")
+            + lookback_days - 1
+        ) // lookback_days
+        open_purchase_units = sum(
+            purchase_progress(order)[0]
+            for order in active_purchase_orders
+            if order.get("sku") == sku
+        )
+        projected_supply = safe_add(
+            int(item["onHand"]), open_purchase_units, f"Projected supply for {sku}"
+        )
+        projected_cover = (
+            safe_multiply(projected_supply, lookback_days, f"Projected cover for {sku}")
+            // net_units
+            if net_units
+            else None
+        )
+        suggested_safety = (
+            None if confidence == "insufficient" else max(0, peak_weekly - forecast_weekly)
+        )
+        if net_units > 0 and projected_supply < horizon_demand:
+            status = "stockout_risk"
+            reason = f"Projected supply is below {horizon_days}-day demand."
+        elif net_units > 0 and projected_supply < safe_add(
+            horizon_demand, forecast_weekly, f"Demand threshold for {sku}"
+        ):
+            status = "reorder_soon"
+            reason = "Projected supply covers the planning horizon but not one additional forecast week."
+        elif confidence == "insufficient":
+            status = "insufficient_history"
+            reason = "Fewer than two completed orders are available in the 28-day window."
+        else:
+            status = "monitor"
+            reason = "Projected supply covers the planning horizon and one additional forecast week."
+        rows.append(
+            {
+                "sku": sku,
+                "itemName": item["name"],
+                "completedOrderCount": completed_order_count,
+                "sourceOrderIds": sorted(source_order_ids),
+                "sourceReturnActionIds": sorted(source_return_action_ids),
+                "grossDemandUnits": gross_units,
+                "returnedUnits": returned_units,
+                "netDemandUnits": net_units,
+                "weeklyNetDemandUnits": weekly,
+                "forecastWeeklyUnits": forecast_weekly,
+                "peakWeeklyDemandUnits": peak_weekly,
+                "averageDailyDemandBasisPoints": average_daily_basis_points,
+                "planningHorizonDays": horizon_days,
+                "planningHorizonSource": horizon_source,
+                "horizonDemandUnits": horizon_demand,
+                "onHandUnits": item["onHand"],
+                "openPurchaseUnits": open_purchase_units,
+                "projectedSupplyUnits": projected_supply,
+                "projectedDaysOfCover": projected_cover,
+                "existingSafetyStockUnits": policy["safetyStockUnits"] if policy else None,
+                "recommendedSafetyStockUnits": suggested_safety,
+                "confidence": confidence,
+                "status": status,
+                "reason": reason,
+            }
+        )
+
+    status_rank = {
+        "stockout_risk": 0,
+        "reorder_soon": 1,
+        "insufficient_history": 2,
+        "monitor": 3,
+    }
+    rows.sort(key=lambda row: (status_rank[row["status"]], -row["netDemandUnits"], row["sku"]))
+    completed_order_ids = sorted(str(order["id"]) for order in completed_orders)
+    return_action_ids = sorted(
+        str(returned["actionId"])
+        for order in completed_orders
+        for returned in order.get("returns", [])
+        if isinstance(returned, Mapping)
+        and datetime.fromisoformat(str(returned["createdAt"]).replace("Z", "+00:00")) <= as_of_time
+    )
+    commerce_source = {
+        "asOf": canonical_as_of,
+        "items": sorted(
+            [
+                {"sku": item["sku"], "name": item["name"], "onHand": item["onHand"]}
+                for item in state["items"]
+            ],
+            key=lambda item: item["sku"],
+        ),
+        "completedOrders": sorted(
+            [
+                {
+                    "id": order["id"],
+                    "completedAt": order["completion"]["capturedAt"],
+                    "lines": sorted(order_lines(order), key=lambda line: line["sku"]),
+                    "returns": sorted(
+                        [
+                            {
+                                "actionId": returned["actionId"],
+                                "createdAt": returned["createdAt"],
+                                "sku": returned["sku"],
+                                "quantity": returned["quantity"],
+                            }
+                            for returned in order.get("returns", [])
+                            if isinstance(returned, Mapping)
+                            and datetime.fromisoformat(str(returned["createdAt"]).replace("Z", "+00:00")) <= as_of_time
+                        ],
+                        key=lambda returned: returned["actionId"],
+                    ),
+                }
+                for order in completed_orders
+            ],
+            key=lambda order: order["id"],
+        ),
+        "activePurchases": sorted(
+            [
+                {
+                    "id": order["id"],
+                    "sku": order["sku"],
+                    "remaining": purchase_progress(order)[0],
+                }
+                for order in active_purchase_orders
+            ],
+            key=lambda order: order["id"],
+        ),
+        "supplierPolicies": sorted(
+            [
+                {
+                    "vendorId": policy["vendorId"],
+                    "sku": policy["sku"],
+                    "leadTimeDays": policy["leadTimeDays"],
+                    "safetyStockUnits": policy["safetyStockUnits"],
+                    "status": policy["status"],
+                }
+                for policy in policies
+            ],
+            key=lambda policy: f"{policy['sku']}|{policy['vendorId']}",
+        ),
+    }
+    source = {
+        "commerceDigest": _order_inventory_digest(commerce_source),
+        "completedOrderIds": completed_order_ids,
+        "returnActionIds": return_action_ids,
+    }
+    summary = {
+        "reviewedSkus": len(rows),
+        "demandSkus": sum(1 for row in rows if row["netDemandUnits"] > 0),
+        "stockoutRisks": sum(1 for row in rows if row["status"] == "stockout_risk"),
+        "reorderSoon": sum(1 for row in rows if row["status"] == "reorder_soon"),
+        "insufficientHistory": sum(1 for row in rows if row["confidence"] == "insufficient"),
+        "netDemandUnits": sum(row["netDemandUnits"] for row in rows),
+        "forecastWeeklyUnits": sum(row["forecastWeeklyUnits"] for row in rows),
+    }
+    body = {
+        "contract": "supermega.shop.demand-intelligence.v1",
+        "asOf": canonical_as_of,
+        "lookbackDays": lookback_days,
+        "rows": rows,
+        "summary": summary,
+        "source": source,
+        "authority": {
+            "recommendationOnly": True,
+            "purchaseCreated": False,
+            "supplierContacted": False,
+            "inventoryChanged": False,
+            "policyChanged": False,
+            "providerCalled": False,
+        },
+    }
+    return {**body, "digest": _order_inventory_digest(body)}
 
 
 def _catalog_changes(state: Mapping[str, Any]) -> list[Any]:

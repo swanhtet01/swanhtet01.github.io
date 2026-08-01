@@ -21,6 +21,7 @@ from supermega_runtime.commerce_runtime import (
     commerce_order_acknowledgement,
     commerce_order_acknowledgement_text,
     commerce_order_calculation_digest,
+    commerce_shop_demand_intelligence,
     commerce_storefront_preview_digest,
     commerce_supplier_invoice_match,
     commerce_website_intake_snapshot_digest,
@@ -1123,6 +1124,63 @@ def apply_event(
 
 
 class CommerceRuntimeTests(unittest.TestCase):
+    def test_shop_demand_intelligence_nets_returns_and_preserves_authority(self) -> None:
+        first = completed_state("ORD-DEMAND-1")
+        second = completed_state("ORD-DEMAND-2")
+        current = deepcopy(first)
+        current["items"][0]["onHand"] = 6  # type: ignore[index]
+        current["orders"] = [first["orders"][0], second["orders"][0]]  # type: ignore[index]
+        current["movements"] = [first["movements"][0], second["movements"][0]]  # type: ignore[index]
+        current = returned_state(
+            current,
+            action_id="ACT-DEMAND-RETURN",
+            captured_at=RETURN_AT,
+        )
+
+        projection = commerce_shop_demand_intelligence(
+            current,
+            "2026-07-24T09:00:00.000Z",
+        )
+
+        self.assertEqual(projection["contract"], "supermega.shop.demand-intelligence.v1")
+        self.assertEqual(projection["lookbackDays"], 28)
+        self.assertEqual(projection["summary"]["netDemandUnits"], 3)
+        self.assertEqual(projection["summary"]["forecastWeeklyUnits"], 1)
+        self.assertEqual(len(projection["rows"]), 1)
+        row = projection["rows"][0]
+        self.assertEqual(row["completedOrderCount"], 2)
+        self.assertEqual(row["sourceOrderIds"], ["ORD-DEMAND-1", "ORD-DEMAND-2"])
+        self.assertEqual(row["sourceReturnActionIds"], ["ACT-DEMAND-RETURN"])
+        self.assertEqual(row["grossDemandUnits"], 4)
+        self.assertEqual(row["returnedUnits"], 1)
+        self.assertEqual(row["netDemandUnits"], 3)
+        self.assertEqual(row["weeklyNetDemandUnits"], [3, 0, 0, 0])
+        self.assertEqual(row["forecastWeeklyUnits"], 1)
+        self.assertEqual(row["recommendedSafetyStockUnits"], 2)
+        self.assertEqual(row["confidence"], "emerging")
+        self.assertEqual(row["planningHorizonSource"], "planning_default")
+        self.assertEqual(row["status"], "monitor")
+        self.assertEqual(
+            projection["authority"],
+            {
+                "recommendationOnly": True,
+                "purchaseCreated": False,
+                "supplierContacted": False,
+                "inventoryChanged": False,
+                "policyChanged": False,
+                "providerCalled": False,
+            },
+        )
+        self.assertRegex(projection["digest"], r"^sha256:[0-9a-f]{64}$")
+        self.assertEqual(
+            projection,
+            commerce_shop_demand_intelligence(current, "2026-07-24T09:00:00.000Z"),
+        )
+
+    def test_shop_demand_intelligence_rejects_invalid_as_of(self) -> None:
+        with self.assertRaises(TrialValidationError):
+            commerce_shop_demand_intelligence(completed_state(), "not-a-time")
+
     def test_ecommerce_payment_is_policy_bound_limited_and_never_authorized(self) -> None:
         current = created_state("ORD-PAYMENT-POLICY-1")
         configured = deepcopy(current)

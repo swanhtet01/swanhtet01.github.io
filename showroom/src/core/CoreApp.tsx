@@ -218,6 +218,7 @@ import {
 } from './shop-production-demand'
 import { projectPlantOrder } from './plant-order-foundation'
 import { productionOrderPortfolioEntries } from './production-order-portfolio'
+import { projectShopDemandIntelligence } from './shop-demand-intelligence'
 import { projectShopReplenishment } from './shop-replenishment'
 
 const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
@@ -2038,6 +2039,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       .filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received')
       .map((row) => [row.purchaseOrder.sku, row]),
   )
+  const shopDemandIntelligence = useMemo(
+    () => projectShopDemandIntelligence(commerce, purchaseOrderClock),
+    [commerce, purchaseOrderClock],
+  )
+  const demandForecastRows = shopDemandIntelligence.rows.filter((row) => row.netDemandUnits > 0)
   const shopReplenishment = useMemo(
     () => projectShopReplenishment(commerce, relatedProduction),
     [commerce, relatedProduction],
@@ -2944,6 +2950,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
                 : 'Supplier controls ready'
   const supplierControlRows = [
     ['Buy', purchaseRecommendations.length ? `${shopReplenishment.summary.recommendedOrderUnits} units` : 'Covered'],
+    ['Demand', shopDemandIntelligence.summary.forecastWeeklyUnits ? `${shopDemandIntelligence.summary.forecastWeeklyUnits}/week` : 'Collecting'],
     ['Plant', shopReplenishment.summary.productionDemandUnits ? `${shopReplenishment.summary.productionDemandUnits} units` : 'No demand'],
     ['On order', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} units` : 'None'],
     ['Risk', overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : shopReplenishment.summary.supplyAtRisk ? `${shopReplenishment.summary.supplyAtRisk} at risk` : 'Clear'],
@@ -2953,6 +2960,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     <div><span className="core-eyebrow">Replenishment plan</span><strong>{supplierControlNext}</strong><small>Combines reorder floors, remaining Plant materials, Shop stock, and open purchase orders. Supplier and cost come only from retained records; missing terms stay blank. No RFQ, message, payment, receipt, payable, costing, or stock write runs here.</small><button className="text-link" disabled={commerceControlsDisabled || !purchaseRecommendations.length} onClick={startSupplierRequest} type="button">Prepare next purchase order</button></div>
     <div className="shop-order-control-rows">{supplierControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
     {shopReplenishment.rows.length ? <div aria-label="Shop replenishment recommendations" className="shop-replenishment-list" role="list">{shopReplenishment.rows.slice(0, 4).map((row) => <div data-status={row.status} key={row.sku} role="listitem"><span><strong>{row.itemName}</strong><small>{row.sku}{row.jobIds.length ? ` · Plant ${row.jobIds.join(', ')}` : ' · reorder floor'}{row.supplierPolicy ? ` · ${(row.supplierPolicy.serviceLevelBasisPoints / 100).toFixed(2)}% service` : ''}</small></span><span><b>{row.recommendedOrderUnits ? `Buy ${row.recommendedOrderUnits}` : row.status === 'supply_at_risk' ? 'Check arrival' : 'Covered'}</b><small>{row.onHandUnits} stock + {row.openPurchaseUnits} on order · target {row.operatingTargetUnits}{row.supplierPolicy ? ` · ${row.supplierPolicy.leadTimeDays}d / MOQ ${row.supplierPolicy.minimumOrderUnits}` : ''}</small></span></div>)}</div> : null}
+    {demandForecastRows.length ? <section aria-label="Shop demand intelligence" className="supplier-performance">
+      <div className="supplier-performance-heading"><span className="core-eyebrow">Demand intelligence</span><small>28-day completed sales · returns netted · recommendation only</small></div>
+      <div className="shop-replenishment-list" role="list">{demandForecastRows.slice(0, 4).map((row) => <div data-status={row.status} key={row.sku} role="listitem"><span><strong>{row.itemName}</strong><small>{row.completedOrderCount} completed {row.completedOrderCount === 1 ? 'order' : 'orders'} · {row.confidence} evidence</small></span><span><b>{row.status === 'stockout_risk' ? 'Stockout risk' : row.status === 'reorder_soon' ? 'Reorder soon' : `${row.forecastWeeklyUnits}/week`}</b><small>{row.projectedDaysOfCover === null ? 'Cover collecting' : `${row.projectedDaysOfCover}d projected cover`} · {row.planningHorizonDays}d {row.planningHorizonSource === 'supplier_policy' ? 'supplier lead' : 'planning horizon'}{row.recommendedSafetyStockUnits === null ? '' : ` · ${row.recommendedSafetyStockUnits} safety suggested`}</small></span></div>)}</div>
+    </section> : <p className="empty-state">Demand forecast starts after the first completed sale.</p>}
   </section>
   const shopAgentJob = !commerceCanWrite
     ? 'Restore Shop write readiness'

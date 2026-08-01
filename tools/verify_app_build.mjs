@@ -38,6 +38,7 @@ let operationalReportRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 let shopProductionDemandRuntimeChecks = 0
+let shopDemandIntelligenceRuntimeChecks = 0
 let shopReplenishmentRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
@@ -142,6 +143,7 @@ const shopTodayUiSource = await readFile(resolve(root, 'showroom', 'src', 'core'
 const shopServiceScheduleSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-service-scheduling.ts'), 'utf8')
 const shopServiceScheduleUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopServiceSchedule.tsx'), 'utf8')
 const shopProductionDemandSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-production-demand.ts'), 'utf8')
+const shopDemandIntelligenceSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-demand-intelligence.ts'), 'utf8')
 const shopReplenishmentSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-replenishment.ts'), 'utf8')
 
 if (!shopOperatingFlowSource.includes("export type ShopOperatingStageId = 'intake' | 'accepted' | 'fulfilment' | 'money' | 'close'")
@@ -1734,6 +1736,22 @@ if (!coreSource.includes('const shopAccountingPacketRows = [')
   || !coreSource.includes("['Settlement', paymentReview.length ? `${paymentReview.length} exception` : 'External proof only']")
   || !coreSource.includes("['Audit', latestClose?.evidenceReference ? 'Evidence linked' : 'Need close evidence']")
   || !coreSource.includes('{shopAccountingPacket}')) fail('shop_accounting_packet_missing')
+if (!shopDemandIntelligenceSource.includes("SHOP_DEMAND_INTELLIGENCE_CONTRACT = 'supermega.shop.demand-intelligence.v1'")
+  || !shopDemandIntelligenceSource.includes('export function projectShopDemandIntelligence(')
+  || !shopDemandIntelligenceSource.includes("ShopDemandConfidence = 'insufficient' | 'emerging' | 'established'")
+  || !shopDemandIntelligenceSource.includes("ShopDemandStatus = 'stockout_risk' | 'reorder_soon' | 'monitor' | 'insufficient_history'")
+  || !shopDemandIntelligenceSource.includes('completedOrders')
+  || !shopDemandIntelligenceSource.includes('weeklyNetDemandUnits')
+  || !shopDemandIntelligenceSource.includes('recommendedSafetyStockUnits')
+  || !shopDemandIntelligenceSource.includes('recommendationOnly: true')
+  || !shopDemandIntelligenceSource.includes('providerCalled: false')
+  || !managedCommerceRuntime.includes('def commerce_shop_demand_intelligence(')
+  || !managedCommerceRuntime.includes('"contract": "supermega.shop.demand-intelligence.v1"')
+  || !coreSource.includes('const shopDemandIntelligence = useMemo(')
+  || !coreSource.includes('aria-label="Shop demand intelligence"')
+  || !coreSource.includes('28-day completed sales · returns netted · recommendation only')
+  || !coreSource.includes("['Demand', shopDemandIntelligence.summary.forecastWeeklyUnits")) fail('shop_demand_intelligence_missing')
+if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopDemandIntelligenceSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_demand_intelligence_side_effect_added')
 if (!shopReplenishmentSource.includes("SHOP_REPLENISHMENT_PLAN_CONTRACT = 'supermega.shop.replenishment_plan.v1'")
   || !shopReplenishmentSource.includes('export function projectShopReplenishment(')
   || !shopReplenishmentSource.includes("status: ShopReplenishmentStatus = recommendedOrderUnits")
@@ -5639,6 +5657,49 @@ async function verifyShopProductionDemandRuntime() {
     assert(await model.shopProductionDemandIsCurrent(signal, commerce, [unrelatedJob]), 'shop_production_demand_unrelated_job_invalidated_signal')
   } catch (error) {
     fail(`shop_production_demand_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyShopDemandIntelligenceRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopDemandIntelligenceRuntimeChecks += 1
+  }
+  const assertThrows = (action, reason) => {
+    try { action() } catch { shopDemandIntelligenceRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-demand-intelligence.ts')).href}?shop-demand-intelligence-verify=${Date.now()}`)
+    const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-demand-commerce-verify=${Date.now()}`)
+    const state = commerce.createSeedCommerce()
+    const before = JSON.stringify(state)
+    const asOf = Date.now() + 60_000
+    const projection = model.projectShopDemandIntelligence(state, asOf)
+    const completedSale = projection.rows.find((row) => row.sku === 'SM-1004')
+    assert(projection.contract === 'supermega.shop.demand-intelligence.v1'
+      && projection.lookbackDays === 28
+      && projection.rows.length === state.items.length, 'shop_demand_intelligence_contract_not_exact')
+    assert(completedSale?.completedOrderCount === 1
+      && completedSale.sourceOrderIds.includes('ORD-1039')
+      && completedSale.grossDemandUnits === 1
+      && completedSale.returnedUnits === 0
+      && completedSale.netDemandUnits === 1
+      && completedSale.forecastWeeklyUnits === 1
+      && completedSale.confidence === 'insufficient', 'shop_demand_intelligence_completed_sale_not_measured')
+    assert(projection.summary.demandSkus === 1
+      && projection.summary.netDemandUnits === 1
+      && projection.summary.forecastWeeklyUnits === 1, 'shop_demand_intelligence_summary_not_exact')
+    assert(Object.values(projection.authority).every((value) => value === false || value === true)
+      && projection.authority.recommendationOnly === true
+      && Object.entries(projection.authority).filter(([key]) => key !== 'recommendationOnly').every(([, value]) => value === false)
+      && /^sha256:[0-9a-f]{64}$/.test(projection.digest), 'shop_demand_intelligence_authority_or_digest_broadened')
+    assert(JSON.stringify(state) === before, 'shop_demand_intelligence_changed_commerce_state')
+    assert(model.validateShopDemandIntelligence(projection, state, asOf).digest === projection.digest, 'shop_demand_intelligence_validation_failed')
+    assertThrows(() => model.validateShopDemandIntelligence({ ...projection, rows: [] }, state, asOf), 'tampered_shop_demand_intelligence_succeeded')
+    assertThrows(() => model.projectShopDemandIntelligence(state, Number.NaN), 'invalid_shop_demand_as_of_succeeded')
+  } catch (error) {
+    fail(`shop_demand_intelligence_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
@@ -15195,6 +15256,7 @@ await verifyChannelOrderRuntime()
 await verifyShopInventoryRuntime()
 await verifyShopServiceScheduleRuntime()
 await verifyShopProductionDemandRuntime()
+await verifyShopDemandIntelligenceRuntime()
 await verifyPlantOrderRuntime()
 await verifyWebsiteReleaseRuntime()
 await verifyCatalogImportRuntime()
@@ -15235,4 +15297,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, shopReplenishmentRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
