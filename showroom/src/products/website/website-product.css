@@ -3897,15 +3897,16 @@
 }
 
 .website-starter-actions {
-  position: relative;
+  position: sticky;
   z-index: 3;
+  top: 0;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   margin: 0;
-  border-top: 1px solid var(--website-line);
-  padding: 10px 14px 14px;
-  background: linear-gradient(to bottom, color-mix(in srgb, var(--website-panel) 88%, transparent), var(--website-panel) 28%);
+  border-bottom: 1px solid var(--website-line);
+  padding: 0 0 12px;
+  background: var(--website-panel);
 }
 
 @media screen and (max-width: 900px) {
@@ -3923,10 +3924,11 @@
   }
 
   .website-starter-actions {
-    position: static;
+    top: 54px;
     margin: 0;
-    padding: 14px 0 0;
-    background: transparent;
+    padding: 10px 0;
+    background: color-mix(in srgb, var(--website-panel) 96%, transparent);
+    backdrop-filter: blur(12px);
   }
 }
 

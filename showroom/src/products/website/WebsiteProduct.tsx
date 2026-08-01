@@ -221,8 +221,8 @@ export function WebsiteProduct() {
       }
     : starterSetupActive
     ? {
-        title: 'Start your website',
-        copy: 'Choose a three-page layout, answer five short questions, then preview before anything is saved.',
+        title: 'Make this website yours',
+        copy: 'Edit the ready example, then preview it before anything is saved.',
       }
     : view === 'content' && surface === 'preview'
     ? {
@@ -615,6 +615,11 @@ export function WebsiteProduct() {
     setSurface('work')
     setSiteSettingsOpen(false)
     requestHeadingFocus()
+  }
+
+  function viewWebsiteSample() {
+    setStarterDismissed(true)
+    openContentSurface('preview')
   }
 
   function copySelectedPage() {
@@ -1172,8 +1177,8 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
-          <details className="website-start-tools">
-            <summary><span><strong>Customize this demo</strong><small>Business brief and inquiry workflow</small></span><b>Open</b></summary>
+          {!starterSetupActive ? <details className="website-start-tools">
+            <summary><span><strong>Inquiries &amp; follow-up</strong><small>Capture, ownership, and automation</small></span><b>Optional</b></summary>
             <div>
           {websiteTodayState !== 'ready' ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState}>
             <div className="website-today-priority">
@@ -1221,7 +1226,7 @@ export function WebsiteProduct() {
             </div>
           </details>
             </div>
-          </details>
+          </details> : null}
 
           <div
             aria-label={view === 'content' ? 'Edit' : 'Publish'}
@@ -1235,7 +1240,7 @@ export function WebsiteProduct() {
                 starterSetupActive ? (
                   <WebsiteStarterSetup
                     onCreate={startWithBusiness}
-                    onViewSample={() => setStarterDismissed(true)}
+                    onViewSample={viewWebsiteSample}
                   />
                 ) : (
                   <ContentWorkspace

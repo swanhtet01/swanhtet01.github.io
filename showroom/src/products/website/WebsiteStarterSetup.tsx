@@ -11,15 +11,6 @@ type WebsiteStarterSetupProps = {
   onViewSample: () => void
 }
 
-const EMPTY_BRIEF: WebsiteStarterBrief = {
-  templateId: 'business-presence',
-  businessName: '',
-  audience: '',
-  offer: '',
-  proof: '',
-  contactHref: '',
-}
-
 const SAMPLE_BRIEF: WebsiteStarterBrief = {
   templateId: 'catalog-showcase',
   businessName: 'Mingalar Fresh Mart',
@@ -30,7 +21,7 @@ const SAMPLE_BRIEF: WebsiteStarterBrief = {
 }
 
 export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSetupProps) {
-  const [brief, setBrief] = useState(EMPTY_BRIEF)
+  const [brief, setBrief] = useState<WebsiteStarterBrief>(() => ({ ...SAMPLE_BRIEF }))
   const [attempted, setAttempted] = useState(false)
   const starterFormRef = useRef<HTMLFormElement>(null)
   const issues = websiteStarterBriefIssues(brief)
@@ -45,12 +36,6 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
 
   function updateBrief<Field extends keyof WebsiteStarterBrief>(field: Field, value: WebsiteStarterBrief[Field]) {
     setBrief((current) => ({ ...current, [field]: value }))
-  }
-
-  function loadSampleBrief() {
-    setBrief(SAMPLE_BRIEF)
-    setAttempted(false)
-    requestAnimationFrame(() => starterFormRef.current?.querySelector<HTMLInputElement>('input')?.focus())
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -72,13 +57,18 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
       <header className="website-panel-head">
         <div>
           <span className="website-eyebrow">Three-page starter</span>
-          <h2 id="website-starter-title">Start with your business</h2>
-          <p>Choose a layout and answer five short questions. Preview before saving; no website or domain changes here.</p>
+          <h2 id="website-starter-title">Make this website yours</h2>
+          <p>Edit the ready example, then preview it before saving. No website or domain changes happen here.</p>
         </div>
-        <span className="website-status is-draft">Not saved</span>
+        <span className="website-status is-draft">Example ready</span>
       </header>
 
       <form className="website-editor-scroll website-starter-form" noValidate onSubmit={submit} ref={starterFormRef}>
+        <footer className="website-starter-actions">
+          <button className="website-button is-secondary" onClick={onViewSample} type="button">Back to demo</button>
+          <button className="website-button is-primary" type="submit">Preview my site</button>
+        </footer>
+
         <div className="website-form-grid two-columns website-starter-identity-grid">
           <label>
             <span>Website layout</span>
@@ -163,11 +153,6 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
           </label>
         </div>
 
-        <footer className="website-starter-actions">
-          <button className="website-button is-secondary" onClick={loadSampleBrief} type="button">Load sample brief</button>
-          <button className="website-button is-secondary" onClick={onViewSample} type="button">View sample</button>
-          <button className="website-button is-primary" type="submit">Preview my site</button>
-        </footer>
       </form>
     </section>
   )
