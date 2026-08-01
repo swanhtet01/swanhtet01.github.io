@@ -1,6 +1,6 @@
 # HQ now
 
-Updated: 2026-08-01
+Updated: 2026-07-31
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
@@ -46,7 +46,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Shop Orders downloads digest-bound acknowledgements from exact evidence; no invoice, receipt, message, or provider action (`ENG-139`, `263434db`).
 - Ecommerce post-order exceptions bind Shop evidence through cancellation, amendment, reschedule, return, support, balance review, and contact/address correction (`ENG-140`-`ENG-146`). Accepted orders stay immutable; Shop reviews a separate replacement.
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Shop remains stock authority for exact returns and substitution. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
-- Plant controls a compact portfolio of up to 20 job-bound order plans in the same workspace. Priority-and-due MRP reserves the Shop floor once, consumes on-hand and open purchase orders once, and exposes each order's shortage or timing exception; managed commands change one order chain at a time and legacy single-order state migrates only on a reviewed action.
+- Plant controls up to 20 job-bound order plans in one workspace. Priority-and-due MRP consumes Shop stock and open POs once, exposes per-order exceptions, and changes one managed order chain per reviewed command.
 - Plant maintenance binds strategy, due work, structured results, evidence-linked finding problems, and corrective-action closeout with final human disposition. It performs no automatic problem opening, dispatch, control, telemetry, status, or parts action.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
@@ -56,9 +56,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 ## Verified baseline
 
 - Current local checkpoints: Ecommerce tax authority `b70d3412`, governed v7 Shop handoff `1975c550`, tax-inclusive limits `0eb180f9`, and order proof `9ff26ba3`; all gates pass.
-- Contact-correction `8386c78b` passes 105 Ecommerce checks, 24 Python lifecycle tests, lint, build, and clean four-route phone-width shell QA.
 - Checks pass: 105 Ecommerce, 310 Commerce, 274 Production including 93 Plant-order checks, 64 managed Commerce, 77 security, 233 onboarding, and 82 managed import.
-- First-action QA routes Shop, Plant, and Website blockers to the next task.
 - Both domains serve deployed `7c76b810d5eb466f3917e785ff1be6db4c9d8007`; paired brand, context, and catalog identities match, but local context drift and the deployed two-job scheduler ceiling block release readiness.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating; audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
