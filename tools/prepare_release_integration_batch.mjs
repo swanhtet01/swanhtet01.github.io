@@ -358,7 +358,7 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   },
   {
     id: 'candidate-current-hq-workboard', authority: 'candidate', file: 'hq/WORKBOARD.md', tokens: [
-      '| OPS-103 |', '| OPS-104 |', 'release:integration:batch:check -- --tree <ref> --batch ecommerce',
+      '| OPS-103 |', '| OPS-104 |', 'release:integration:batch:check -- <ref> --batch ecommerce',
     ],
   },
 ]
@@ -533,8 +533,8 @@ function buildComparison(input, policy) {
       resolutionRule: 'preserve_all_upstream_and_candidate_requirements_in_one_tree',
       firstAuthority: policy.firstAuthority,
       acceptanceCommand: policy.batch === IDENTITY_DATA_BATCH
-        ? 'npm run release:integration:batch:check -- --tree <integration-ref>'
-        : `npm run release:integration:batch:check -- --tree <integration-ref> --batch ${policy.batch}`,
+        ? 'npm run release:integration:batch:check -- <integration-ref>'
+        : `npm run release:integration:batch:check -- <integration-ref> --batch ${policy.batch}`,
     },
     authority: {
       branchCreationApproved: false,
