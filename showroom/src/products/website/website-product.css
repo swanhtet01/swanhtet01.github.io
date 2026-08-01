@@ -3212,6 +3212,31 @@
   padding: 0;
 }
 
+.website-start-tools {
+  border: 1px solid var(--website-line);
+  border-radius: 12px;
+  background: var(--website-panel);
+}
+
+.website-start-tools > summary {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 13px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.website-start-tools > summary::-webkit-details-marker { display: none; }
+.website-start-tools > summary > span { display: grid; gap: 2px; }
+.website-start-tools > summary strong { color: var(--website-ink); font-size: 13px; }
+.website-start-tools > summary small,
+.website-start-tools > summary b { color: var(--website-quiet); font-size: 10px; }
+.website-start-tools > summary b { text-transform: uppercase; }
+.website-start-tools > div { display: grid; gap: 12px; border-top: 1px solid var(--website-line); padding: 12px; }
+
 @media screen and (max-width: 900px) {
   .website-product {
     height: auto;

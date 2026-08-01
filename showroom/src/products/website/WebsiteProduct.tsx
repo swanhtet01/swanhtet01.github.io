@@ -1168,6 +1168,9 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
+          <details className="website-start-tools">
+            <summary><span><strong>Customize this demo</strong><small>Business brief and inquiry workflow</small></span><b>Open</b></summary>
+            <div>
           {websiteTodayState !== 'ready' ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState}>
             <div className="website-today-priority">
               <span className="website-kicker">Today</span>
@@ -1211,6 +1214,8 @@ export function WebsiteProduct() {
                 </div>
                 {websiteLeads.length ? <a className="website-button is-secondary is-compact website-lead-export" download={`website-leads-${workspace.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.json`} href={leadExportHref}>Export lead record</a> : null}
               </section>
+            </div>
+          </details>
             </div>
           </details>
 
