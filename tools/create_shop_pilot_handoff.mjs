@@ -211,6 +211,22 @@ Contract: \`${handoff.contract}\`
 
 async function main() {
   const args = process.argv.slice(2)
+  if (args.length === 1 && args[0] === '--owner-example') {
+    process.stdout.write(`${JSON.stringify({
+      operatorRole: 'Shop manager',
+      tenantLabel: 'example-shop-isolated-pilot',
+      startDate: '2026-08-03',
+      reviewDate: '2026-08-07',
+      baseline: { weeklyOrders: 120, medianMinutesPerOrder: 8, weeklyExceptionCount: 12, closeMinutesPerDay: 45 },
+      fixedPilotFeeUsd: 500,
+      contactIsNamedOperator: false,
+      isolatedNonProductionTenantApproved: false,
+      namedOperatorAuthorized: false,
+      pilotDataHandlingApproved: false,
+      ownerReviewedCommercialDraft: false,
+    }, null, 2)}\n`)
+    return
+  }
   if (args.length === 1 && args[0] === '--example') {
     process.stdout.write(`${JSON.stringify({
       company: 'Example Shop',

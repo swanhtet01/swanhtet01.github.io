@@ -112,6 +112,19 @@ test('rejects non-Shop events and refuses to infer that a contact is the pilot o
   assert.throws(() => shopPilotInputFromContactEvent({ ...shopContactEvent, record: { ...shopContactEvent.record, lead_id: '' } }, ownerInput), /contact_lead_id_required/)
 })
 
+test('CLI emits a contact owner template with every authority gate closed', () => {
+  const result = spawnSync(process.execPath, [resolve('tools/create_shop_pilot_handoff.mjs'), '--owner-example'], { encoding: 'utf8' })
+  assert.equal(result.status, 0, result.stderr)
+  const template = JSON.parse(result.stdout)
+  assert.equal(template.contactIsNamedOperator, false)
+  assert.equal(template.isolatedNonProductionTenantApproved, false)
+  assert.equal(template.namedOperatorAuthorized, false)
+  assert.equal(template.pilotDataHandlingApproved, false)
+  assert.equal(template.ownerReviewedCommercialDraft, false)
+  assert.equal('company' in template, false)
+  assert.equal('operatorName' in template, false)
+})
+
 test('CLI writes and verifies one private artifact exclusively while reporting metadata only', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'supermega-shop-handoff-'))
   const inputPath = join(directory, 'private-input.json')
