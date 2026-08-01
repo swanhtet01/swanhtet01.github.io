@@ -1,70 +1,16 @@
 name: SuperMega - Coordinated Verified Release
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - CURRENT.md
-      - site-manifest.json
-      - package.json
-      - package-lock.json
-      - 'api/**'
-      - api_app.py
-      - 'supermega_runtime/**'
-      - 'tests/**'
-      - 'supabase/migrations/**'
-      - 'showroom/**'
-      - tools/create_public_vercel_output.mjs
-      - tools/verify_public_vercel_artifact_budget.mjs
-      - tools/verify_public_vercel_output.mjs
-      - tools/test_public_contact_function.mjs
-      - tools/verify_public_deploy_guard.mjs
-      - tools/serve_solution.py
-      - tools/run_vercel_release_gate.ps1
-      - tools/deploy_supermega_gcp.ps1
-      - tools/deploy_showroom_cloud_run.ps1
-      - tools/cloudrun_preflight.ps1
-      - tools/verify_public_release_live.mjs
-      - tools/verify_public_preview_live.mjs
-      - tools/write_app_vercel_config.mjs
-      - tools/supermega_scheduler_authority.json
-      - tools/ensure_supermega_scheduler.ps1
-      - tools/write_app_release_metadata.mjs
-      - tools/verify_app_build.mjs
-      - tools/verify_app_deploy_workflow.mjs
-      - tools/verify_app_release_live.mjs
-      - tools/verify_app_security_contract.mjs
-      - tools/verify_private_trial_migrations.mjs
-      - tools/verify_coordinated_release_live.mjs
-      - tools/verify_vercel_project_state.mjs
-      - tools/test_vercel_project_state.mjs
-      - tools/verify_vercel_environment_state.mjs
-      - tools/verify_managed_runtime_environment_values.mjs
-      - tools/test_vercel_environment_state.mjs
-      - tools/verify_vercel_domain_state.mjs
-      - tools/verify_retired_vercel_alias_state.mjs
-      - tools/test_vercel_domain_state.mjs
-      - tools/verify_public_firewall_state.mjs
-      - tools/resolve_vercel_rollback_target.mjs
-      - tools/validate_supermega_database_url.py
-      - tools/activate_supermega_database.ps1
-      - tools/rehearse_supermega_postgres17.py
-      - tools/run_postgres17_rehearsal.mjs
-      - tools/deny_stale_public_deploy.mjs
-      - tools/deploy_website_actions.ps1
-      - vercel.json
-      - .vercelignore
-      - requirements.txt
-      - requirements-test.txt
-      - pyproject.toml
-      - uv.lock
-      - showroom/package-lock.json
-      - .github/workflows/supermega-app-deploy.yml
-      - .github/workflows/supermega-public-release.yml
-      - .github/workflows/supermega-public-live-health.yml
-      - .github/workflows/public-hosting-guard.yml
   workflow_dispatch:
+    inputs:
+      release_commit:
+        description: Exact 40-character main commit approved for paired production release
+        required: true
+        type: string
+      confirmation:
+        description: Type DEPLOY SUPERMEGA PAIRED PRODUCTION
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -86,6 +32,29 @@ jobs:
       PUBLIC_VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR
 
     steps:
+      - name: Require exact owner release instruction
+        env:
+          REQUESTED_RELEASE_COMMIT: ${{ inputs.release_commit }}
+          RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+          RELEASE_ACTOR: ${{ github.actor }}
+        run: |
+          if ! [[ "$REQUESTED_RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::release_commit must be the exact 40-character lowercase commit."
+            exit 1
+          fi
+          if [ "$REQUESTED_RELEASE_COMMIT" != "$GITHUB_SHA" ]; then
+            echo "::error::release_commit does not match the selected main revision."
+            exit 1
+          fi
+          if [ "$RELEASE_CONFIRMATION" != "DEPLOY SUPERMEGA PAIRED PRODUCTION" ]; then
+            echo "::error::paired production confirmation is missing."
+            exit 1
+          fi
+          if [ "$RELEASE_ACTOR" != "swanhtet01" ]; then
+            echo "::error::only the repository owner may authorize production promotion."
+            exit 1
+          fi
+
       - name: Checkout the release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

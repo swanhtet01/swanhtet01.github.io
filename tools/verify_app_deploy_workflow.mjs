@@ -54,7 +54,7 @@ requireContract('source line endings normalize across platforms',
 requireContract('release handoff is exact, review-only, and cannot deploy',
   packageJson.scripts?.['release:handoff:prepare'] === 'node tools/prepare_release_handoff.mjs'
   && packageJson.scripts?.['release:handoff:self-test'] === 'node --test tools/prepare_release_handoff.test.mjs'
-  && releaseHandoff.includes("export const RELEASE_HANDOFF_CONTRACT = 'supermega.release-handoff.v1'")
+  && releaseHandoff.includes("export const RELEASE_HANDOFF_CONTRACT = 'supermega.release-handoff.v2'")
   && releaseHandoff.includes("mode: 'owner_review_only'")
   && releaseHandoff.includes('pushApproved: false')
   && releaseHandoff.includes('mergeApproved: false')
@@ -228,20 +228,25 @@ requireContract('canonical SPA routes use one filesystem-first fallback',
 requireContract('canonical API function', config.routes?.[0]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.maxDuration === 60 && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes('maxDuration: 60') && generator.includes("includeFiles: 'supermega_runtime/**'"))
 requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))
-requireContract('deployment control files trigger coordinated release', workflow.includes('- vercel.json') && workflow.includes('- .vercelignore'))
+requireContract('deployment control files trigger non-mutating review gates',
+  [ciWorkflow, appWorkflow].every((source) => source.includes("- 'vercel.json'") && source.includes("- '.vercelignore'")))
 requireContract('remote app build includes kernel release contract', generator.includes("['.github', 'kernel', 'supabase']"))
-requireContract('retired alias control triggers coordinated release', workflow.includes('tools/verify_retired_vercel_alias_state.mjs'))
-requireContract('app and public changes trigger one release authority', workflow.includes("- 'showroom/**'") && workflow.includes('tools/create_public_vercel_output.mjs') && workflow.includes('tools/verify_coordinated_release_live.mjs'))
+requireContract('retired alias control triggers non-mutating review gates', [ciWorkflow, appWorkflow].every((source) => source.includes('tools/verify_retired_vercel_alias_state.mjs')))
+requireContract('app and public changes trigger non-mutating review before manual release',
+  [ciWorkflow, appWorkflow].every((source) => source.includes("- 'showroom/**'") && source.includes('tools/create_public_vercel_output.mjs') && source.includes('tools/verify_coordinated_release_live.mjs')))
 requireContract('HQ-only evidence validates without redeploying unchanged products',
   !workflow.includes("- 'hq/**'")
   && !workflow.includes('tools/verify_hq_contract.mjs')
   && ciWorkflow.includes("- 'hq/**'")
   && ciWorkflow.includes("- 'tools/verify_hq_contract.mjs'"))
-requireContract('all API tests trigger and execute', workflow.includes("- 'tests/**'") && workflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v"))
-requireContract('runtime package changes trigger release', workflow.includes("- 'supermega_runtime/**'"))
-requireContract('database activation controls trigger release', workflow.includes('tools/validate_supermega_database_url.py') && workflow.includes('tools/activate_supermega_database.ps1'))
-requireContract('PostgreSQL 17 rehearsal changes trigger every database-aware workflow',
-  [workflow, ciWorkflow, appWorkflow].every((source) =>
+requireContract('all API tests trigger review and execute before manual release',
+  [ciWorkflow, appWorkflow].every((source) => source.includes("- 'tests/**'"))
+  && workflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v"))
+requireContract('runtime package changes trigger non-mutating review', [ciWorkflow, appWorkflow].every((source) => source.includes("- 'supermega_runtime/**'")))
+requireContract('database activation controls trigger non-mutating review',
+  [ciWorkflow, appWorkflow].every((source) => source.includes('tools/validate_supermega_database_url.py') && source.includes('tools/activate_supermega_database.ps1')))
+requireContract('PostgreSQL 17 rehearsal changes trigger every non-mutating database review',
+  [ciWorkflow, appWorkflow].every((source) =>
     source.includes('tools/rehearse_supermega_postgres17.py')
     && source.includes('tools/run_postgres17_rehearsal.mjs')))
 requireContract('migration proof changes trigger every database-aware workflow',
@@ -342,6 +347,19 @@ requireContract('kernel failed production verification restores the exact prior 
   && kernelWorkflow.includes('[ "$RESTORED_URL" != "$PREVIOUS_URL" ]'))
 requireContract('production environment gate', /environment:\s*production/.test(workflow))
 requireContract('production is main-only in the canonical repository', workflow.includes("if: ${{ github.ref == 'refs/heads/main' && github.repository == 'swanhtet01/swanhtet01.github.io' }}"))
+requireContract('production release requires an exact manual owner instruction before checkout or credentials',
+  workflow.includes('workflow_dispatch:')
+  && workflow.includes('release_commit:')
+  && workflow.includes('confirmation:')
+  && workflow.includes('REQUESTED_RELEASE_COMMIT: ${{ inputs.release_commit }}')
+  && workflow.includes('RELEASE_CONFIRMATION: ${{ inputs.confirmation }}')
+  && workflow.includes('RELEASE_ACTOR: ${{ github.actor }}')
+  && workflow.includes('[ "$REQUESTED_RELEASE_COMMIT" != "$GITHUB_SHA" ]')
+  && workflow.includes('[ "$RELEASE_CONFIRMATION" != "DEPLOY SUPERMEGA PAIRED PRODUCTION" ]')
+  && workflow.includes('[ "$RELEASE_ACTOR" != "swanhtet01" ]')
+  && workflow.indexOf('Require exact owner release instruction') < workflow.indexOf('Checkout the release commit')
+  && workflow.indexOf('Require exact owner release instruction') < workflow.indexOf('Require production deploy credential')
+  && !/^\s*push:/m.test(workflow))
 requireContract('deployment metadata uses the guarded runtime ref', (workflow.match(/githubCommitRef=\$\{\{ github\.ref_name \}\}/g) || []).length === 2 && !workflow.includes('githubCommitRef=main'))
 const coreWorkflowActions = `${workflow}\n${appWorkflow}\n${ciWorkflow}\n${publicHealthWorkflow}\n${kernelWorkflow}`
 requireContract('core actions are commit-pinned', !/uses:\s+[^\s#]+@v\d+/m.test(coreWorkflowActions) && /uses:\s+actions\/checkout@[0-9a-f]{40}/.test(workflow))
@@ -449,8 +467,8 @@ requireContract('Vercel config is generated from scheduler authority',
 requireContract('public live health follows the canonical release workflow',
   publicHealthWorkflow.includes('SuperMega - Coordinated Verified Release')
   && !publicHealthWorkflow.includes('SuperMega Public - Verified Prebuilt Release'))
-requireContract('scheduler authority changes trigger every release gate',
-  [workflow, appWorkflow, ciWorkflow].every((source) =>
+requireContract('scheduler authority changes trigger every non-mutating review gate',
+  [appWorkflow, ciWorkflow].every((source) =>
     source.includes('tools/supermega_scheduler_authority.json')
     && source.includes('tools/verify_vercel_project_state.mjs')
     && source.includes('tools/test_vercel_project_state.mjs')))

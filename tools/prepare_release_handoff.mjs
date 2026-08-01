@@ -6,7 +6,7 @@ import { dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { spawnSync } from 'node:child_process'
 
-export const RELEASE_HANDOFF_CONTRACT = 'supermega.release-handoff.v1'
+export const RELEASE_HANDOFF_CONTRACT = 'supermega.release-handoff.v2'
 
 const root = resolve(import.meta.dirname, '..')
 const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
@@ -56,6 +56,15 @@ export function validateWorkflowAuthority(source) {
   if (typeof source !== 'string'
     || !source.includes('name: SuperMega - Coordinated Verified Release')
     || !source.includes('workflow_dispatch:')
+    || !source.includes('release_commit:')
+    || !source.includes('confirmation:')
+    || !source.includes('REQUESTED_RELEASE_COMMIT: ${{ inputs.release_commit }}')
+    || !source.includes('RELEASE_CONFIRMATION: ${{ inputs.confirmation }}')
+    || !source.includes('RELEASE_ACTOR: ${{ github.actor }}')
+    || !source.includes('DEPLOY SUPERMEGA PAIRED PRODUCTION')
+    || !source.includes('[ "$REQUESTED_RELEASE_COMMIT" != "$GITHUB_SHA" ]')
+    || !source.includes('[ "$RELEASE_ACTOR" != "swanhtet01" ]')
+    || /^\s*push:/m.test(source)
     || !source.includes("github.ref == 'refs/heads/main'")
     || !source.includes('environment: production')
     || !source.includes('permissions:\n  contents: read')
@@ -72,6 +81,10 @@ export function validateWorkflowAuthority(source) {
     workflow: '.github/workflows/supermega-public-release.yml',
     productionEnvironment: 'production',
     sourceBranch: 'main',
+    trigger: 'manual_exact_commit',
+    ownerActor: 'swanhtet01',
+    confirmation: 'DEPLOY SUPERMEGA PAIRED PRODUCTION',
+    automaticPushDeployment: false,
     concurrency: 'supermega-coordinated-production',
     appProjectId: 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG',
     publicProjectId: 'prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR',
@@ -91,6 +104,10 @@ function releaseWorkflowAuthority(value) {
   if (value?.workflow !== '.github/workflows/supermega-public-release.yml'
     || value.productionEnvironment !== 'production'
     || value.sourceBranch !== 'main'
+    || value.trigger !== 'manual_exact_commit'
+    || value.ownerActor !== 'swanhtet01'
+    || value.confirmation !== 'DEPLOY SUPERMEGA PAIRED PRODUCTION'
+    || value.automaticPushDeployment !== false
     || value.concurrency !== 'supermega-coordinated-production'
     || value.appProjectId !== 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'
     || value.publicProjectId !== 'prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR'
@@ -102,6 +119,10 @@ function releaseWorkflowAuthority(value) {
     workflow: value.workflow,
     productionEnvironment: value.productionEnvironment,
     sourceBranch: value.sourceBranch,
+    trigger: value.trigger,
+    ownerActor: value.ownerActor,
+    confirmation: value.confirmation,
+    automaticPushDeployment: false,
     concurrency: value.concurrency,
     appProjectId: value.appProjectId,
     publicProjectId: value.publicProjectId,

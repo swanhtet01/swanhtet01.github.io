@@ -16,6 +16,9 @@ const workflow = `
 name: SuperMega - Coordinated Verified Release
 on:
   workflow_dispatch:
+    inputs:
+      release_commit:
+      confirmation:
 permissions:
   contents: read
 concurrency:
@@ -29,6 +32,15 @@ jobs:
       APP_VERCEL_PROJECT_ID: prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG
       PUBLIC_VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR
     steps:
+      - name: Require exact owner release instruction
+        env:
+          REQUESTED_RELEASE_COMMIT: \${{ inputs.release_commit }}
+          RELEASE_CONFIRMATION: \${{ inputs.confirmation }}
+          RELEASE_ACTOR: \${{ github.actor }}
+        run: |
+          if [ "$REQUESTED_RELEASE_COMMIT" != "$GITHUB_SHA" ]; then exit 1; fi
+          if [ "$RELEASE_CONFIRMATION" != "DEPLOY SUPERMEGA PAIRED PRODUCTION" ]; then exit 1; fi
+          if [ "$RELEASE_ACTOR" != "swanhtet01" ]; then exit 1; fi
       - name: Capture app production rollback target
       - name: Capture current production rollback target
       - name: Roll back a failed production verification
@@ -50,7 +62,7 @@ function valid(overrides = {}) {
 
 test('release handoff is immutable, review-only, and exact-commit bound', () => {
   const packet = buildReleaseHandoff(valid())
-  assert.equal(packet.contract, 'supermega.release-handoff.v1')
+  assert.equal(packet.contract, 'supermega.release-handoff.v2')
   assert.equal(packet.digestScope, 'utf8_compact_json_without_digest')
   assert.equal(packet.mode, 'owner_review_only')
   assert.equal(packet.candidate.commit, candidate)
@@ -93,8 +105,13 @@ test('release ancestry gate reports the exact divergence before expensive verifi
 test('workflow authority rejects missing production and rollback controls', () => {
   const authority = validateWorkflowAuthority(workflow)
   assert.equal(authority.rollbackRequired, true)
+  assert.equal(authority.trigger, 'manual_exact_commit')
+  assert.equal(authority.ownerActor, 'swanhtet01')
+  assert.equal(authority.automaticPushDeployment, false)
   assert.match(authority.workflowDigest, /^sha256:[a-f0-9]{64}$/)
   assert.throws(() => validateWorkflowAuthority(workflow.replace('environment: production', 'environment: preview')), /release_handoff_workflow_authority_invalid/)
+  assert.throws(() => validateWorkflowAuthority(workflow.replace('  workflow_dispatch:', '  push:\n  workflow_dispatch:')), /release_handoff_workflow_authority_invalid/)
+  assert.throws(() => validateWorkflowAuthority(workflow.replace('DEPLOY SUPERMEGA PAIRED PRODUCTION', 'DEPLOY')), /release_handoff_workflow_authority_invalid/)
 })
 
 test('release handoff output is exclusive and non-overwriting', async () => {
