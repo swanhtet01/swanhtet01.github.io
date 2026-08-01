@@ -27,6 +27,7 @@
     "database:supabase:compatibility:self-test": "node tools/verify_supabase_compatibility.mjs --self-test",
     "storage:privacy:self-test": "node tools/run_python_tool.mjs tools/verify_private_storage_privacy.py --self-test",
     "storage:privacy:preflight": "node tools/run_python_tool.mjs tools/verify_private_storage_privacy.py --preflight",
+    "security:dependencies": "npm audit --audit-level=low && npm --prefix showroom audit --audit-level=low && npm --prefix kernel audit --audit-level=low",
     "vercel:deploy": "node tools/deny_stale_public_deploy.mjs",
     "vercel:deploy:prod": "node tools/deny_stale_public_deploy.mjs",
     "vercel:contracts:test": "node --test tools/scheduler_authority_contract.test.mjs tools/write_app_vercel_config.test.mjs && node tools/test_vercel_environment_state.mjs && node tools/verify_managed_runtime_environment_values.mjs --self-test && node tools/test_vercel_project_state.mjs && node tools/test_vercel_domain_state.mjs",

@@ -16,6 +16,7 @@ const root = resolve(import.meta.dirname, '..')
 const appWorkflow = await readFile(resolve(root, '.github/workflows/supermega-app-deploy.yml'), 'utf8')
 const workflow = await readFile(resolve(root, '.github/workflows/supermega-public-release.yml'), 'utf8')
 const ciWorkflow = await readFile(resolve(root, '.github/workflows/showroom-ci.yml'), 'utf8')
+const dependencyAuditWorkflow = await readFile(resolve(root, '.github/workflows/dependency-security.yml'), 'utf8')
 const publicHealthWorkflow = await readFile(resolve(root, '.github/workflows/supermega-public-live-health.yml'), 'utf8')
 const kernelWorkflow = await readFile(resolve(root, '.github/workflows/kernel-deploy.yml'), 'utf8')
 const generator = await readFile(resolve(root, 'tools/write_app_vercel_config.mjs'), 'utf8')
@@ -51,6 +52,18 @@ function requireContract(name, condition) {
 
 requireContract('source line endings normalize across platforms',
   normalizeSourceText('line one\r\nline two\rline three') === 'line one\nline two\nline three')
+requireContract('dependency audit is read-only, scheduled, and covers every npm lockfile',
+  packageJson.scripts?.['security:dependencies'] === 'npm audit --audit-level=low && npm --prefix showroom audit --audit-level=low && npm --prefix kernel audit --audit-level=low'
+  && dependencyAuditWorkflow.includes("- 'package-lock.json'")
+  && dependencyAuditWorkflow.includes("- 'showroom/package-lock.json'")
+  && dependencyAuditWorkflow.includes("- 'kernel/package-lock.json'")
+  && dependencyAuditWorkflow.includes('workflow_dispatch:')
+  && dependencyAuditWorkflow.includes("cron: '25 3 * * 1'")
+  && dependencyAuditWorkflow.includes('contents: read')
+  && dependencyAuditWorkflow.includes('run: npm audit --audit-level=low')
+  && !dependencyAuditWorkflow.includes('pull_request_target:')
+  && !dependencyAuditWorkflow.includes('contents: write')
+  && !dependencyAuditWorkflow.includes('pull-requests: write'))
 requireContract('release handoff is exact, review-only, and cannot deploy',
   packageJson.scripts?.['release:handoff:prepare'] === 'node tools/prepare_release_handoff.mjs'
   && packageJson.scripts?.['release:handoff:self-test'] === 'node --test tools/prepare_release_handoff.test.mjs'
