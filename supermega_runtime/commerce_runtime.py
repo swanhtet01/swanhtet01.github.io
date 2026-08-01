@@ -85,6 +85,8 @@ COMMERCE_EVENTS = frozenset(
         "commerce.purchase_order.cancelled",
         "commerce.supplier_invoice.recorded",
         "commerce.supplier_invoice.payable_ready",
+        "commerce.supplier_return.authorized",
+        "commerce.supplier_credit.recorded",
         "commerce.close.saved",
         "commerce.website_intake.created",
         "commerce.website_intake.converted",
@@ -135,6 +137,8 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.purchase_order.cancelled",
         "commerce.supplier_invoice.recorded",
         "commerce.supplier_invoice.payable_ready",
+        "commerce.supplier_return.authorized",
+        "commerce.supplier_credit.recorded",
         "commerce.close.saved",
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
@@ -199,6 +203,8 @@ _MAX_PURCHASE_BUDGET_ENVELOPES = 200
 _MAX_SUPPLIER_SOURCING_DECISIONS = 200
 _MAX_PURCHASE_REQUISITIONS = 100
 _MAX_PURCHASE_ORDERS = 100
+_MAX_SUPPLIER_RETURNS_PER_PURCHASE_ORDER = 50
+_MAX_SUPPLIER_CREDITS_PER_RETURN = 50
 _MAX_CATALOG_BASELINES = 500
 _MAX_CATALOG_CHANGES = 500
 _MAX_TAX_CONFIGURATIONS = 100
@@ -243,6 +249,12 @@ _SUPPLIER_SOURCING_DECISION_ID_PATTERN = re.compile(
 )
 _SUPPLIER_INVOICE_ID_PATTERN = re.compile(
     r"PINV-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_SUPPLIER_RETURN_ID_PATTERN = re.compile(
+    r"SRET-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_SUPPLIER_CREDIT_ID_PATTERN = re.compile(
+    r"SCN-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
 _TAX_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{0,11}")
 _TAX_JURISDICTION_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{1,15}")
@@ -516,7 +528,7 @@ _PURCHASE_ORDER_REQUIRED_FIELDS = frozenset(
     {"id", "createdAt", "supplier", "sku", "quantityOrdered", "creation"}
 )
 _PURCHASE_ORDER_OPTIONAL_FIELDS = frozenset(
-    {"requisitionId", "expectedAt", "unitCostMmk", "cancellation", "supplierInvoice"}
+    {"requisitionId", "expectedAt", "unitCostMmk", "cancellation", "supplierInvoice", "supplierReturns"}
 )
 _PURCHASE_REQUISITION_REQUIRED_FIELDS = frozenset(
     {
@@ -550,6 +562,16 @@ _SUPPLIER_INVOICE_REQUIRED_FIELDS = frozenset(
     }
 )
 _SUPPLIER_INVOICE_OPTIONAL_FIELDS = frozenset({"payableReview"})
+_SUPPLIER_RETURN_FIELDS = frozenset(
+    {
+        "id", "createdAt", "receiptMovementId", "quantityRejected", "reasonCode",
+        "claimAmountMmk", "internalReturnReference", "physicalReturnStatus",
+        "supplierContacted", "accountingPosted", "authorization", "creditNotes",
+    }
+)
+_SUPPLIER_CREDIT_FIELDS = frozenset(
+    {"id", "supplierReference", "issuedAt", "amountMmk", "accountingPosted", "recording"}
+)
 _CLOSE_REQUIRED_FIELDS = frozenset({"id", "createdAt", "total", "orders"})
 _CLOSE_SNAPSHOT_FIELDS = frozenset(
     {
@@ -1907,6 +1929,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     purchase_order_action_ids: list[str] = []
     supplier_invoice_ids: list[str] = []
     supplier_invoice_references: list[str] = []
+    supplier_return_ids: list[str] = []
+    supplier_return_receipt_ids: list[str] = []
+    supplier_return_references: list[str] = []
+    supplier_credit_ids: list[str] = []
+    supplier_credit_references: list[str] = []
     purchase_order_by_id: dict[str, dict[str, Any]] = {}
     converted_requisition_ids: list[str] = []
     for index, candidate in enumerate(purchase_orders):
@@ -1998,6 +2025,63 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     f"{field}.cancellation cannot precede creation."
                 )
             purchase_order_action_ids.append(cancellation["actionId"])
+        if "supplierReturns" in purchase_order:
+            return_records = _list(purchase_order["supplierReturns"], f"{field}.supplierReturns")
+            if "unitCostMmk" not in purchase_order or not 1 <= len(return_records) <= _MAX_SUPPLIER_RETURNS_PER_PURCHASE_ORDER:
+                raise TrialValidationError(f"{field}.supplierReturns is invalid.")
+            newer_return_at: datetime | None = None
+            for return_index, return_candidate in enumerate(return_records):
+                return_field = f"{field}.supplierReturns[{return_index}]"
+                return_record = _object(return_candidate, return_field)
+                _exact_fields(return_record, return_field, required=_SUPPLIER_RETURN_FIELDS)
+                return_id = _text(return_record["id"], f"{return_field}.id", maximum=80)
+                if _SUPPLIER_RETURN_ID_PATTERN.fullmatch(return_id) is None:
+                    raise TrialValidationError(f"{return_field}.id is invalid.")
+                return_created_at = _timestamp(return_record["createdAt"], f"{return_field}.createdAt")
+                return_created_time = datetime.fromisoformat(return_created_at.replace("Z", "+00:00"))
+                if return_created_time < datetime.fromisoformat(created_at.replace("Z", "+00:00")) or newer_return_at is not None and return_created_time > newer_return_at:
+                    raise TrialValidationError(f"{return_field}.createdAt is outside the purchase chronology.")
+                newer_return_at = return_created_time
+                receipt_movement_id = _text(return_record["receiptMovementId"], f"{return_field}.receiptMovementId", maximum=_MAX_MOVEMENT_ID_LENGTH)
+                _integer(return_record["quantityRejected"], f"{return_field}.quantityRejected", minimum=1)
+                if return_record["reasonCode"] not in _PURCHASE_DISCREPANCY_CODES:
+                    raise TrialValidationError(f"{return_field}.reasonCode is invalid.")
+                claim_amount = _integer(return_record["claimAmountMmk"], f"{return_field}.claimAmountMmk", minimum=1)
+                internal_reference = _text(return_record["internalReturnReference"], f"{return_field}.internalReturnReference", maximum=80)
+                authorization = _action_proof(return_record["authorization"], f"{return_field}.authorization")
+                if authorization["capturedAt"] != return_created_at or return_record["physicalReturnStatus"] != "not_dispatched" or return_record["supplierContacted"] is not False or return_record["accountingPosted"] is not False:
+                    raise TrialValidationError(f"{return_field} overclaims return execution or has invalid authorization.")
+                credits = _list(return_record["creditNotes"], f"{return_field}.creditNotes")
+                if len(credits) > _MAX_SUPPLIER_CREDITS_PER_RETURN:
+                    raise TrialValidationError(f"{return_field}.creditNotes exceeds the supported limit.")
+                credited_amount = 0
+                newer_credit_at: datetime | None = None
+                for credit_index, credit_candidate in enumerate(credits):
+                    credit_field = f"{return_field}.creditNotes[{credit_index}]"
+                    credit = _object(credit_candidate, credit_field)
+                    _exact_fields(credit, credit_field, required=_SUPPLIER_CREDIT_FIELDS)
+                    credit_id = _text(credit["id"], f"{credit_field}.id", maximum=80)
+                    if _SUPPLIER_CREDIT_ID_PATTERN.fullmatch(credit_id) is None:
+                        raise TrialValidationError(f"{credit_field}.id is invalid.")
+                    supplier_reference = _text(credit["supplierReference"], f"{credit_field}.supplierReference", maximum=80)
+                    issued_at = _timestamp(credit["issuedAt"], f"{credit_field}.issuedAt")
+                    issued_time = datetime.fromisoformat(issued_at.replace("Z", "+00:00"))
+                    amount = _integer(credit["amountMmk"], f"{credit_field}.amountMmk", minimum=1)
+                    recording = _action_proof(credit["recording"], f"{credit_field}.recording")
+                    recording_time = datetime.fromisoformat(recording["capturedAt"].replace("Z", "+00:00"))
+                    if issued_time < return_created_time or recording_time < issued_time or newer_credit_at is not None and recording_time > newer_credit_at or credit["accountingPosted"] is not False:
+                        raise TrialValidationError(f"{credit_field} is outside the claim chronology or overclaims posting.")
+                    newer_credit_at = recording_time
+                    credited_amount += amount
+                    if credited_amount > _MAX_SAFE_INTEGER or credited_amount > claim_amount:
+                        raise TrialValidationError(f"{return_field} supplier credits exceed the authorized claim.")
+                    purchase_order_action_ids.append(recording["actionId"])
+                    supplier_credit_ids.append(credit_id)
+                    supplier_credit_references.append(f"{purchase_order['supplier']}\0{supplier_reference}")
+                purchase_order_action_ids.append(authorization["actionId"])
+                supplier_return_ids.append(return_id)
+                supplier_return_receipt_ids.append(receipt_movement_id)
+                supplier_return_references.append(f"{purchase_order['supplier']}\0{internal_reference}")
         if "supplierInvoice" in purchase_order:
             invoice_field = f"{field}.supplierInvoice"
             if "unitCostMmk" not in purchase_order:
@@ -2080,6 +2164,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     )
     _unique(supplier_invoice_ids, "Supplier invoice ID")
     _unique(supplier_invoice_references, "Supplier invoice reference")
+    _unique(supplier_return_ids, "Supplier return ID")
+    _unique(supplier_return_receipt_ids, "Supplier return receipt movement ID")
+    _unique(supplier_return_references, "Supplier return reference")
+    _unique(supplier_credit_ids, "Supplier credit note ID")
+    _unique(supplier_credit_references, "Supplier credit note reference")
     for envelope_id, envelope in purchase_budget_by_id.items():
         committed = sum(
             int(requisition["totalMmk"])
@@ -3891,6 +3980,31 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         received = receipt_quantity_by_purchase_order.get(purchase_order_id, 0)
         rejected = rejected_quantity_by_purchase_order.get(purchase_order_id, 0)
         delivered = received + rejected
+        for claim in purchase_order.get("supplierReturns", []):
+            receipt = next(
+                (
+                    movement for movement in movements
+                    if isinstance(movement, Mapping)
+                    and movement.get("id") == claim["receiptMovementId"]
+                ),
+                None,
+            )
+            if (
+                receipt is None
+                or receipt.get("kind") != "receipt"
+                or receipt.get("purchaseOrderId") != purchase_order_id
+                or receipt.get("rejectedQuantity") != claim["quantityRejected"]
+                or receipt.get("discrepancyCode") != claim["reasonCode"]
+                or receipt.get("discrepancyDisposition") != "return_to_vendor"
+                or "unitCostMmk" not in purchase_order
+                or claim["quantityRejected"] * purchase_order["unitCostMmk"] > _MAX_SAFE_INTEGER
+                or claim["claimAmountMmk"] != claim["quantityRejected"] * purchase_order["unitCostMmk"]
+                or datetime.fromisoformat(str(claim["createdAt"]).replace("Z", "+00:00"))
+                < datetime.fromisoformat(str(receipt["createdAt"]).replace("Z", "+00:00"))
+            ):
+                raise TrialValidationError(
+                    f"{claim['id']} does not bind one exact rejected supplier receipt."
+                )
         if "cancellation" in purchase_order:
             cancellation_at = datetime.fromisoformat(
                 str(purchase_order["cancellation"]["capturedAt"]).replace(
@@ -4654,6 +4768,33 @@ def _validate_event_evidence(
             raise TrialValidationError(
                 "command evidence must match the supplier invoice payable-ready review proof."
             )
+    elif event_type == "commerce.supplier_return.authorized":
+        _, changed_purchase_order = _one_changed(
+            _purchase_orders(current), _purchase_orders(next_state), "purchaseOrders"
+        )
+        returns = changed_purchase_order.get("supplierReturns")
+        authorization = returns[0].get("authorization") if isinstance(returns, list) and returns and isinstance(returns[0], Mapping) else None
+        if not isinstance(authorization, Mapping) or not _proof_matches_evidence(authorization, evidence):
+            raise TrialValidationError(
+                "command evidence must match the supplier return authorization proof."
+            )
+    elif event_type == "commerce.supplier_credit.recorded":
+        _, changed_purchase_order = _one_changed(
+            _purchase_orders(current), _purchase_orders(next_state), "purchaseOrders"
+        )
+        recordings = [
+            credit["recording"]
+            for claim in changed_purchase_order.get("supplierReturns", [])
+            if isinstance(claim, Mapping)
+            for credit in claim.get("creditNotes", [])
+            if isinstance(credit, Mapping)
+            and isinstance(credit.get("recording"), Mapping)
+            and credit["recording"].get("actionId") == evidence["actionId"]
+        ]
+        if len(recordings) != 1 or not _proof_matches_evidence(recordings[0], evidence):
+            raise TrialValidationError(
+                "command evidence must match the supplier credit recording proof."
+            )
     elif event_type == "commerce.order.advanced":
         _, advanced_order = _one_changed(
             current["orders"],
@@ -5062,15 +5203,37 @@ def commerce_supplier_invoice_match(
         and movement.get("purchaseOrderId") == purchase_order.get("id")
     )
     invoiced_quantity = int(invoice["quantityInvoiced"])
-    if received < invoiced_quantity:
+    supplier_claim_mmk = sum(
+        claim["claimAmountMmk"]
+        for claim in purchase_order.get("supplierReturns", [])
+        if isinstance(claim, Mapping)
+    )
+    supplier_credit_mmk = sum(
+        credit["amountMmk"]
+        for claim in purchase_order.get("supplierReturns", [])
+        if isinstance(claim, Mapping)
+        for credit in claim.get("creditNotes", [])
+        if isinstance(credit, Mapping)
+    )
+    expected_supplier_return_mmk = rejected * ordered_unit_cost
+    supplier_return_balance_mmk = expected_supplier_return_mmk - supplier_credit_mmk
+    net_invoice_total_mmk = invoice["totalMmk"] - supplier_credit_mmk
+    accepted_total_mmk = received * ordered_unit_cost
+    if received + rejected < invoiced_quantity:
         status = "awaiting_receipt"
+    elif rejected > 0 and (
+        supplier_claim_mmk != expected_supplier_return_mmk
+        or supplier_return_balance_mmk > 0
+    ):
+        status = "supplier_credit_pending"
     elif (
         invoiced_quantity != purchase_order["quantityOrdered"]
-        or received != invoiced_quantity
-        or rejected > 0
     ):
         status = "quantity_variance"
-    elif invoice["unitCostMmk"] != ordered_unit_cost:
+    elif (
+        invoice["unitCostMmk"] != ordered_unit_cost
+        or net_invoice_total_mmk != accepted_total_mmk
+    ):
         status = "price_variance"
     else:
         status = "matched"
@@ -5084,6 +5247,11 @@ def commerce_supplier_invoice_match(
         "invoicedUnitCostMmk": invoice["unitCostMmk"],
         "orderedTotalMmk": purchase_order["quantityOrdered"] * ordered_unit_cost,
         "invoicedTotalMmk": invoice["totalMmk"],
+        "supplierClaimMmk": supplier_claim_mmk,
+        "supplierCreditMmk": supplier_credit_mmk,
+        "supplierReturnBalanceMmk": supplier_return_balance_mmk,
+        "netInvoiceTotalMmk": net_invoice_total_mmk,
+        "acceptedTotalMmk": accepted_total_mmk,
         "payableReady": status == "matched" and "payableReview" in invoice,
     }
 
@@ -9349,6 +9517,72 @@ def _validate_supplier_invoice_payable_ready(
         )
 
 
+def _validate_supplier_return_authorized(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    before, after = _one_changed(_purchase_orders(current), _purchase_orders(next_state), "purchaseOrders")
+    before_returns = before.get("supplierReturns", [])
+    after_returns = after.get("supplierReturns", [])
+    if (
+        not isinstance(before_returns, list)
+        or not isinstance(after_returns, list)
+        or len(after_returns) != len(before_returns) + 1
+        or after_returns[1:] != before_returns
+        or _without(before, frozenset({"supplierReturns"}))
+        != _without(after, frozenset({"supplierReturns"}))
+    ):
+        raise TrialValidationError(
+            "supplier return authorization must prepend exactly one immutable claim to one purchase order."
+        )
+
+
+def _validate_supplier_credit_recorded(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    before, after = _one_changed(_purchase_orders(current), _purchase_orders(next_state), "purchaseOrders")
+    before_returns = before.get("supplierReturns", [])
+    after_returns = after.get("supplierReturns", [])
+    if (
+        not isinstance(before_returns, list)
+        or not isinstance(after_returns, list)
+        or len(after_returns) != len(before_returns)
+        or _without(before, frozenset({"supplierReturns"}))
+        != _without(after, frozenset({"supplierReturns"}))
+    ):
+        raise TrialValidationError("supplier credit recording may change only one existing return claim.")
+    changed = [
+        (before_claim, after_claim)
+        for before_claim, after_claim in zip(before_returns, after_returns, strict=True)
+        if before_claim != after_claim
+    ]
+    if len(changed) != 1:
+        raise TrialValidationError("supplier credit recording must change exactly one return claim.")
+    before_claim, after_claim = changed[0]
+    before_credits = before_claim.get("creditNotes", [])
+    after_credits = after_claim.get("creditNotes", [])
+    if (
+        not isinstance(before_credits, list)
+        or not isinstance(after_credits, list)
+        or len(after_credits) != len(before_credits) + 1
+        or after_credits[1:] != before_credits
+        or _without(before_claim, frozenset({"creditNotes"}))
+        != _without(after_claim, frozenset({"creditNotes"}))
+    ):
+        raise TrialValidationError(
+            "supplier credit recording must prepend exactly one immutable credit note."
+        )
+
+
 def _commerce_order_close_basis(order: Mapping[str, Any]) -> datetime:
     timestamps = [str(order["createdAt"])]
     if order.get("paymentReconciledAt"):
@@ -10045,6 +10279,8 @@ _TRANSITION_VALIDATORS = {
     "commerce.purchase_order.cancelled": _validate_purchase_order_cancelled,
     "commerce.supplier_invoice.recorded": _validate_supplier_invoice_recorded,
     "commerce.supplier_invoice.payable_ready": _validate_supplier_invoice_payable_ready,
+    "commerce.supplier_return.authorized": _validate_supplier_return_authorized,
+    "commerce.supplier_credit.recorded": _validate_supplier_credit_recorded,
     "commerce.close.saved": _validate_close,
     "commerce.website_intake.created": _validate_website_intake_created,
     "commerce.website_intake.converted": _validate_website_intake_converted,
@@ -10162,6 +10398,8 @@ def reduce_commerce_state(
         "commerce.purchase_order.cancelled",
         "commerce.supplier_invoice.recorded",
         "commerce.supplier_invoice.payable_ready",
+        "commerce.supplier_return.authorized",
+        "commerce.supplier_credit.recorded",
     }:
         _require_purchase_orders_unchanged(current_state, next_state)
     if event_type not in {

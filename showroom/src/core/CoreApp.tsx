@@ -58,6 +58,7 @@ import {
   approveCommercePurchaseBudgetEnvelope,
   approveCommercePurchaseRequisition,
   approveCommerceSupplierSourcingDecision,
+  authorizeCommerceSupplierReturn,
   cancelCommercePurchaseOrder,
   cancelCommerceOrder,
   countCommerceStock,
@@ -108,6 +109,8 @@ import {
   commerceSupplierSourcingDecisions,
   commerceSupplierSourcingSelectedQuote,
   commerceSupplierInvoiceMatch,
+  commerceSupplierReturnClaimBalance,
+  commerceSupplierReturnClaimStatus,
   commerceSupplierPerformance,
   commerceStorefrontRequestLines,
   commerceStorefrontRequests,
@@ -123,6 +126,7 @@ import {
   createCommercePurchaseOrder,
   markCommerceSupplierInvoicePayableReady,
   recordCommerceSupplierInvoice,
+  recordCommerceSupplierCreditNote,
   receiveCommercePurchaseOrder,
   reconcileCommercePayment,
   recordCommerceCollectionAction,
@@ -149,6 +153,7 @@ import {
   type CommerceOrderStatus,
   type CommerceState,
   type CommercePurchaseOrderDiscrepancyCode,
+  type CommerceSupplierReturnClaim,
   type CommerceReturnDisposition,
   type CommerceSupportResolutionOutcome,
   type CommerceSupportPriority,
@@ -275,6 +280,20 @@ type SupplierInvoiceDraft = {
   dueAt: string
   quantity: string
   unitCostMmk: string
+}
+
+type SupplierReturnDraft = {
+  purchaseOrderId: string
+  receiptMovementId: string
+  internalReturnReference: string
+}
+
+type SupplierCreditDraft = {
+  purchaseOrderId: string
+  supplierReturnId: string
+  supplierReference: string
+  issuedAt: string
+  amountMmk: string
 }
 
 type StockCountDraft = {
@@ -1843,6 +1862,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [supplierSourcingDraft, setSupplierSourcingDraft] = useState<SupplierSourcingDraft | null>(null)
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
   const [supplierInvoiceDraft, setSupplierInvoiceDraft] = useState<SupplierInvoiceDraft | null>(null)
+  const [supplierReturnDraft, setSupplierReturnDraft] = useState<SupplierReturnDraft | null>(null)
+  const [supplierCreditDraft, setSupplierCreditDraft] = useState<SupplierCreditDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
   const [cancellationDraft, setCancellationDraft] = useState<EcommerceCancellationIntent | null>(null)
@@ -2194,6 +2215,39 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     && Number.isFinite(supplierInvoiceDueAt)
     && supplierInvoiceIssuedAt >= Date.parse(supplierInvoiceDraftRow.purchaseOrder.createdAt)
     && supplierInvoiceDueAt >= supplierInvoiceIssuedAt,
+  )
+  const supplierReturnDraftRow = supplierReturnDraft
+    ? purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === supplierReturnDraft.purchaseOrderId)
+    : null
+  const supplierReturnDraftReceipt = supplierReturnDraft
+    ? commerce.movements.find((movement) => movement.id === supplierReturnDraft.receiptMovementId)
+    : null
+  const supplierReturnDraftReady = Boolean(
+    supplierReturnDraftRow
+    && supplierReturnDraftReceipt?.kind === 'receipt'
+    && supplierReturnDraftReceipt.purchaseOrderId === supplierReturnDraftRow.purchaseOrder.id
+    && supplierReturnDraftReceipt.rejectedQuantity
+    && supplierReturnDraft?.internalReturnReference.trim()
+    && supplierReturnDraft.internalReturnReference.trim().length <= 80,
+  )
+  const supplierCreditDraftRow = supplierCreditDraft
+    ? purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === supplierCreditDraft.purchaseOrderId)
+    : null
+  const supplierCreditDraftClaim = supplierCreditDraftRow?.purchaseOrder.supplierReturns
+    ?.find((claim) => claim.id === supplierCreditDraft?.supplierReturnId)
+  const supplierCreditAmount = supplierCreditDraft && /^\d+$/.test(supplierCreditDraft.amountMmk.trim())
+    ? Number(supplierCreditDraft.amountMmk)
+    : Number.NaN
+  const supplierCreditIssuedAt = supplierCreditDraft ? new Date(supplierCreditDraft.issuedAt).getTime() : Number.NaN
+  const supplierCreditDraftReady = Boolean(
+    supplierCreditDraftClaim
+    && supplierCreditDraft?.supplierReference.trim()
+    && supplierCreditDraft.supplierReference.trim().length <= 80
+    && Number.isSafeInteger(supplierCreditAmount)
+    && supplierCreditAmount > 0
+    && supplierCreditAmount <= commerceSupplierReturnClaimBalance(supplierCreditDraftClaim)
+    && Number.isFinite(supplierCreditIssuedAt)
+    && supplierCreditIssuedAt >= Date.parse(supplierCreditDraftClaim.createdAt),
   )
   const purchaseReceiptLocation = purchaseOrderDraft?.mode === 'receive'
     ? managedInventoryProjection?.locations.find((location) => location.id === purchaseOrderDraft.locationId)
@@ -5656,6 +5710,98 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setNotice(`Enter the supplier's invoice reference and confirm the billed terms for ${purchaseOrderId}. No payable or payment is created.`)
   }
 
+  function openSupplierReturn(purchaseOrderId: string, receiptMovementId: string) {
+    const row = purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === purchaseOrderId)
+    const receipt = commerce.movements.find((movement) => movement.id === receiptMovementId)
+    if (!row?.purchaseOrder.unitCostMmk || receipt?.kind !== 'receipt' || !receipt.rejectedQuantity
+      || row.purchaseOrder.supplierReturns?.some((claim) => claim.receiptMovementId === receiptMovementId)) return
+    setSupplierReturnDraft({
+      purchaseOrderId,
+      receiptMovementId,
+      internalReturnReference: uid('RET'),
+    })
+    setNotice(`Review the ${receipt.rejectedQuantity.toLocaleString()} rejected unit return claim. This records internal evidence only; it does not contact the supplier or dispatch goods.`)
+  }
+
+  function reviewSupplierReturn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supplierReturnDraft || !supplierReturnDraftRow || !supplierReturnDraftReceipt || !supplierReturnDraftReady) {
+      setNotice('Choose one rejected receipt and enter a unique internal return reference.')
+      return
+    }
+    const purchaseOrder = supplierReturnDraftRow.purchaseOrder
+    const receipt = supplierReturnDraftReceipt
+    const internalReturnReference = supplierReturnDraft.internalReturnReference.trim()
+    const claimAmountMmk = (receipt.rejectedQuantity ?? 0) * (purchaseOrder.unitCostMmk ?? 0)
+    const input = { id: uid('SRET'), receiptMovementId: receipt.id, internalReturnReference }
+    queueAction({
+      kind: 'supplier_return_authorize',
+      subjectId: purchaseOrder.id,
+      summary: `Authorize supplier return claim ${internalReturnReference}`,
+      before: `${receipt.rejectedQuantity?.toLocaleString()} rejected unit${receipt.rejectedQuantity === 1 ? '' : 's'} on ${receipt.id} · no return claim`,
+      after: `${formatMoney(claimAmountMmk)} claim retained · physical return not dispatched · supplier not contacted · accounting not posted`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce('commerce.supplier_return.authorized', action.commandId, proof, (current) => {
+          const currentPurchaseOrder = commercePurchaseOrders(current).find((candidate) => candidate.id === purchaseOrder.id)
+          if (!currentPurchaseOrder || currentPurchaseOrder.supplierReturns?.some((claim) => claim.receiptMovementId === receipt.id)) return null
+          return authorizeCommerceSupplierReturn(current, purchaseOrder.id, input, proof)
+        })
+        setSupplierReturnDraft((current) => current?.receiptMovementId === receipt.id ? null : current)
+      },
+    }, purchaseOrderTriggerRefs.current.get(purchaseOrder.sku))
+  }
+
+  function openSupplierCredit(purchaseOrderId: string, claim: CommerceSupplierReturnClaim) {
+    const remainingMmk = commerceSupplierReturnClaimBalance(claim)
+    if (remainingMmk < 1) return
+    const issuedAtBasis = Math.max(purchaseOrderClock, Date.parse(claim.createdAt))
+    const issuedAt = new Date(Math.ceil(issuedAtBasis / 60_000) * 60_000)
+    setSupplierCreditDraft({
+      purchaseOrderId,
+      supplierReturnId: claim.id,
+      supplierReference: '',
+      issuedAt: localDateTimeInputValue(issuedAt),
+      amountMmk: String(remainingMmk),
+    })
+    setNotice(`Record supplier credit evidence up to ${formatMoney(remainingMmk)}. This does not post to accounting or initiate payment.`)
+  }
+
+  function reviewSupplierCredit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supplierCreditDraft || !supplierCreditDraftRow || !supplierCreditDraftClaim || !supplierCreditDraftReady) {
+      setNotice('Enter a unique supplier credit reference, valid issue time, and an amount within the outstanding claim.')
+      return
+    }
+    const purchaseOrder = supplierCreditDraftRow.purchaseOrder
+    const claim = supplierCreditDraftClaim
+    const supplierReference = supplierCreditDraft.supplierReference.trim()
+    const input = {
+      id: uid('SCN'),
+      supplierReference,
+      issuedAt: new Date(supplierCreditIssuedAt).toISOString(),
+      amountMmk: supplierCreditAmount,
+    }
+    const balanceAfter = commerceSupplierReturnClaimBalance(claim) - supplierCreditAmount
+    queueAction({
+      kind: 'supplier_credit_record',
+      subjectId: claim.id,
+      summary: `Record supplier credit ${supplierReference}`,
+      before: `${formatMoney(commerceSupplierReturnClaimBalance(claim))} outstanding on ${claim.internalReturnReference}`,
+      after: `${formatMoney(supplierCreditAmount)} credit evidence retained · ${formatMoney(balanceAfter)} outstanding · accounting not posted`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce('commerce.supplier_credit.recorded', action.commandId, proof, (current) => {
+          const currentPurchaseOrder = commercePurchaseOrders(current).find((candidate) => candidate.id === purchaseOrder.id)
+          const currentClaim = currentPurchaseOrder?.supplierReturns?.find((candidate) => candidate.id === claim.id)
+          if (!currentClaim || supplierCreditAmount > commerceSupplierReturnClaimBalance(currentClaim)) return null
+          return recordCommerceSupplierCreditNote(current, purchaseOrder.id, claim.id, input, proof)
+        })
+        setSupplierCreditDraft((current) => current?.supplierReturnId === claim.id ? null : current)
+      },
+    }, purchaseOrderTriggerRefs.current.get(purchaseOrder.sku))
+  }
+
   function reviewSupplierInvoice(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!supplierInvoiceDraft || !supplierInvoiceDraftRow || !supplierInvoiceDraftReady || supplierInvoiceTotal === null) {
@@ -5700,8 +5846,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       kind: 'purchase_order_receive',
       subjectId: purchaseOrderId,
       summary: `Mark supplier invoice ${invoice.supplierReference} payable-ready`,
-      before: `${match.orderedQuantity.toLocaleString()} ordered · ${match.acceptedQuantity.toLocaleString()} accepted · ${match.invoicedQuantity.toLocaleString()} invoiced · exact match pending review`,
-      after: `payable-ready evidence retained for accountant handoff · no ledger post, bank instruction, or supplier payment created`,
+      before: `${match.orderedQuantity.toLocaleString()} ordered · ${match.acceptedQuantity.toLocaleString()} accepted${match.rejectedQuantity ? ` · ${match.rejectedQuantity.toLocaleString()} rejected` : ''} · ${match.invoicedQuantity.toLocaleString()} invoiced${match.supplierCreditMmk ? ` · ${formatMoney(match.supplierCreditMmk)} supplier credit` : ''} · ${formatMoney(match.netInvoiceTotalMmk)} net · exact match pending review`,
+      after: `${formatMoney(match.netInvoiceTotalMmk)} payable-ready evidence retained for accountant handoff · no ledger post, bank instruction, or supplier payment created`,
       apply: async (action) => {
         const proof = commerceActionProof(action)
         await mutateCommerce('commerce.supplier_invoice.payable_ready', action.commandId, proof, (current) => {
@@ -6709,6 +6855,19 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             : `${purchaseOrderDraftItem.onHand.toLocaleString()} → ${(purchaseOrderDraftItem.onHand + purchaseOrderQuantityResult).toLocaleString()} accepted into stock${purchaseOrderRejectedResult ? ` · ${purchaseOrderRejectedResult.toLocaleString()} rejected / return to vendor` : ''}${purchaseReceiptLocation ? ` · ${purchaseReceiptLocation.name}` : ''}`}</strong></div>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelPurchaseOrderEditor} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || purchaseOrderQuantityResult === null || !purchaseReceiptAllocationReady || !purchaseReceiptDiscrepancyReady || (purchaseOrderDraft.mode === 'create' && (!purchaseOrderDraft.supplier.trim() || purchaseOrderExpectedAtResult === null || purchaseOrderUnitCostResult === null || purchaseOrderDraftTotal === null))} type="submit">{purchaseOrderDraft.mode === 'create' ? purchaseOrderDraft.requisitionId ? 'Review second approval' : 'Review requisition' : 'Review receipt'}</button></div>
       </form> : null}
+      {supplierReturnDraft && supplierReturnDraftRow && supplierReturnDraftReceipt ? <form aria-label="Supplier return review" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierReturn}>
+        <div className="stock-receipt-copy"><span className="core-eyebrow">Rejected supplier units</span><h3>{supplierReturnDraftRow.purchaseOrder.supplier}</h3><small>{supplierReturnDraftReceipt.rejectedQuantity} rejected · {supplierReturnDraftReceipt.discrepancyCode?.replaceAll('_', ' ')} · internal claim only</small></div>
+        <label>Internal return reference<input autoFocus disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setSupplierReturnDraft((current) => current ? { ...current, internalReturnReference: event.target.value } : current)} required value={supplierReturnDraft.internalReturnReference} /></label>
+        <div className="stock-receipt-preview"><small>Claim value</small><strong>{formatMoney((supplierReturnDraftReceipt.rejectedQuantity ?? 0) * (supplierReturnDraftRow.purchaseOrder.unitCostMmk ?? 0))}</strong><small>Not dispatched · supplier not contacted · accounting not posted</small></div>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierReturnDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || !supplierReturnDraftReady} type="submit">Review return claim</button></div>
+      </form> : null}
+      {supplierCreditDraft && supplierCreditDraftRow && supplierCreditDraftClaim ? <form aria-label="Supplier credit review" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierCredit}>
+        <div className="stock-receipt-copy"><span className="core-eyebrow">Supplier credit evidence</span><h3>{supplierCreditDraftRow.purchaseOrder.supplier}</h3><small>{supplierCreditDraftClaim.internalReturnReference} · {formatMoney(commerceSupplierReturnClaimBalance(supplierCreditDraftClaim))} outstanding</small></div>
+        <label>Supplier credit reference<input autoFocus disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setSupplierCreditDraft((current) => current ? { ...current, supplierReference: event.target.value } : current)} placeholder="Supplier credit note number" required value={supplierCreditDraft.supplierReference} /></label>
+        <div className="form-row"><label>Credit issued<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(supplierCreditDraftClaim.createdAt))} onChange={(event) => setSupplierCreditDraft((current) => current ? { ...current, issuedAt: event.target.value } : current)} required type="datetime-local" value={supplierCreditDraft.issuedAt} /></label><label>Amount (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" max={commerceSupplierReturnClaimBalance(supplierCreditDraftClaim)} min="1" onChange={(event) => setSupplierCreditDraft((current) => current ? { ...current, amountMmk: event.target.value } : current)} required step="1" type="number" value={supplierCreditDraft.amountMmk} /></label></div>
+        <div className="stock-receipt-preview"><small>Balance after</small><strong>{supplierCreditDraftReady ? formatMoney(commerceSupplierReturnClaimBalance(supplierCreditDraftClaim) - supplierCreditAmount) : 'Enter valid credit'}</strong><small>Evidence only · accounting not posted</small></div>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierCreditDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || !supplierCreditDraftReady} type="submit">Review supplier credit</button></div>
+      </form> : null}
       {supplierInvoiceDraft && supplierInvoiceDraftRow ? <form aria-label="Supplier invoice review" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierInvoice}>
         <div className="stock-receipt-copy"><span className="core-eyebrow">Supplier invoice</span><h3>{supplierInvoiceDraftRow.purchaseOrder.supplier}</h3><small>{supplierInvoiceDraftRow.purchaseOrder.id} · three-way review only</small></div>
         <label>Invoice reference<input autoFocus disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, supplierReference: event.target.value } : current)} placeholder="Supplier invoice number" required value={supplierInvoiceDraft.supplierReference} /></label>
@@ -6730,7 +6889,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         {purchaseOrderRows.length ? <div className="purchase-order-list">{purchaseOrderRows.map(({ purchaseOrder, progress, item }) => {
           const arrivalUrgency = commercePurchaseOrderArrivalUrgency(purchaseOrder, progress, purchaseOrderClock)
           const invoiceMatch = purchaseOrder.supplierInvoice ? commerceSupplierInvoiceMatch(commerce, purchaseOrder) : null
-          const nextControl = purchaseOrder.supplierInvoice
+          const unresolvedRejectedReceipt = commerce.movements.find((movement) => movement.kind === 'receipt'
+            && movement.purchaseOrderId === purchaseOrder.id && Boolean(movement.rejectedQuantity)
+            && !purchaseOrder.supplierReturns?.some((claim) => claim.receiptMovementId === movement.id))
+          const openReturnClaim = purchaseOrder.supplierReturns?.find((claim) => commerceSupplierReturnClaimBalance(claim) > 0)
+          const nextControl = unresolvedRejectedReceipt
+            ? <button aria-label={`Review rejected supplier units for ${purchaseOrder.id}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => openSupplierReturn(purchaseOrder.id, unresolvedRejectedReceipt.id)} type="button">Review return</button>
+            : openReturnClaim
+              ? <button aria-label={`Record supplier credit for ${openReturnClaim.internalReturnReference}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => openSupplierCredit(purchaseOrder.id, openReturnClaim)} type="button">Record credit</button>
+              : purchaseOrder.supplierInvoice
             ? purchaseOrder.supplierInvoice.payableReview
               ? <small className="purchase-order-closed">Payable ready</small>
               : invoiceMatch?.status === 'matched'
@@ -6740,9 +6907,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
               ? <button aria-label={`Record supplier invoice for ${purchaseOrder.id}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => openSupplierInvoice(purchaseOrder.id)} type="button">Record invoice</button>
               : progress.remaining > 0 && progress.status !== 'cancelled'
                 ? <button aria-label={`Cancel remainder for ${purchaseOrder.id}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => reviewPurchaseOrderCancellation(purchaseOrder.id)} type="button">Cancel remainder</button>
-                : <small className="purchase-order-closed">{progress.status === 'received' ? 'Complete' : progress.status === 'received_with_discrepancy' ? 'Return due' : 'Closed'}</small>
+                : <small className="purchase-order-closed">{progress.status === 'received' ? 'Complete' : progress.status === 'received_with_discrepancy' ? 'Return resolved' : 'Closed'}</small>
+          const returnSummary = purchaseOrder.supplierReturns?.length
+            ? purchaseOrder.supplierReturns.map((claim) => `${claim.internalReturnReference}: ${commerceSupplierReturnClaimStatus(claim).replaceAll('_', ' ')}`).join(' · ')
+            : null
           return <article key={purchaseOrder.id}>
-            <div><strong>{item?.name ?? purchaseOrder.sku}</strong><small>{purchaseOrder.supplier} · {purchaseOrder.id}</small><small>{purchaseOrder.unitCostMmk === undefined ? 'Legacy PO · commercial terms not retained' : `${formatMoney(purchaseOrder.unitCostMmk)} each · ${formatMoney(purchaseOrder.unitCostMmk * purchaseOrder.quantityOrdered)}`}</small><small data-arrival-risk={arrivalUrgency}>{purchaseOrder.expectedAt
+            <div><strong>{item?.name ?? purchaseOrder.sku}</strong><small>{purchaseOrder.supplier} · {purchaseOrder.id}</small><small>{purchaseOrder.unitCostMmk === undefined ? 'Legacy PO · commercial terms not retained' : `${formatMoney(purchaseOrder.unitCostMmk)} each · ${formatMoney(purchaseOrder.unitCostMmk * purchaseOrder.quantityOrdered)}`}</small>{returnSummary ? <small>Returns · {returnSummary}</small> : null}<small data-arrival-risk={arrivalUrgency}>{purchaseOrder.expectedAt
               ? `Expected ${formatIssueDue(purchaseOrder.expectedAt)}${arrivalUrgency === 'late' ? ' · Late' : arrivalUrgency === 'due_soon' ? ' · Due soon' : ''}`
               : 'Arrival not recorded · legacy order'}</small></div>
             <span><strong>{progress.received} accepted{progress.rejected ? ` · ${progress.rejected} rejected` : ''}/{purchaseOrder.quantityOrdered}</strong><small>{invoiceMatch ? `Invoice · ${invoiceMatch.status.replaceAll('_', ' ')}` : progress.status.replaceAll('_', ' ')}</small></span>

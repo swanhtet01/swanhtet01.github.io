@@ -4282,7 +4282,7 @@ if (!commerceSource.includes('export type CommerceSupplierInvoice')
   || !commerceSource.includes('export function commerceSupplierInvoiceMatch')
   || !commerceSource.includes('export function recordCommerceSupplierInvoice')
   || !commerceSource.includes('export function markCommerceSupplierInvoicePayableReady')
-  || !commerceSource.includes("'awaiting_receipt' | 'quantity_variance' | 'price_variance' | 'matched'")
+  || !commerceSource.includes("'awaiting_receipt' | 'supplier_credit_pending' | 'quantity_variance' | 'price_variance' | 'matched'")
   || !commercePageContract.includes('Supplier invoice review')
   || !commercePageContract.includes("'commerce.supplier_invoice.recorded'")
   || !commercePageContract.includes("'commerce.supplier_invoice.payable_ready'")
@@ -4294,6 +4294,28 @@ if (!commerceSource.includes('export type CommerceSupplierInvoice')
   || !managedCommerceRuntime.includes('def _validate_supplier_invoice_payable_ready(')
   || !managedTrialStoreRuntime.includes('"commerce.supplier_invoice.recorded"')
   || !managedTrialStoreRuntime.includes('"commerce.supplier_invoice.payable_ready"')) fail('commerce_supplier_invoice_three_way_match_missing')
+if (!commerceSource.includes('export type CommerceSupplierReturnClaim')
+  || !commerceSource.includes('export type CommerceSupplierCreditNote')
+  || !commerceSource.includes('export function authorizeCommerceSupplierReturn')
+  || !commerceSource.includes('export function recordCommerceSupplierCreditNote')
+  || !commerceSource.includes('export function commerceSupplierReturnClaimBalance')
+  || !commerceSource.includes("physicalReturnStatus: 'not_dispatched'")
+  || !commerceSource.includes('supplierContacted: false')
+  || !commerceSource.includes('accountingPosted: false')
+  || !commercePageContract.includes('Supplier return review')
+  || !commercePageContract.includes('Supplier credit review')
+  || !commercePageContract.includes("'commerce.supplier_return.authorized'")
+  || !commercePageContract.includes("'commerce.supplier_credit.recorded'")
+  || !commercePageContract.includes('Review return')
+  || !commercePageContract.includes('Record credit')
+  || !commercePageContract.includes('physical return not dispatched')
+  || !commercePageContract.includes('accounting not posted')
+  || !workspaceRuntimeSource.includes("'supplier_return_authorize'")
+  || !workspaceRuntimeSource.includes("'supplier_credit_record'")
+  || !managedCommerceRuntime.includes('def _validate_supplier_return_authorized(')
+  || !managedCommerceRuntime.includes('def _validate_supplier_credit_recorded(')
+  || !managedTrialStoreRuntime.includes('if event_type == "commerce.supplier_return.authorized":')
+  || !managedTrialStoreRuntime.includes('if event_type == "commerce.supplier_credit.recorded":')) fail('commerce_supplier_return_credit_contract_missing')
 const commerceOrdersContract = commercePageContract.slice(commercePageContract.indexOf("if (tab === 'orders')"), commercePageContract.indexOf("if (tab === 'inventory')"))
 if (!commerceOrdersContract.includes('order-daily-controls') || !commerceOrdersContract.includes('Review and save close') || !commerceOrdersContract.includes('Close and exceptions')) fail('commerce_daily_controls_not_inside_orders')
 if (!coreSource.includes('data-close-settlement=')
@@ -10859,6 +10881,109 @@ async function verifyCommerceRuntime() {
       ...purchaseDiscrepant,
       movements: [{ ...purchaseDiscrepant.movements[0], discrepancyCode: undefined }, ...purchaseDiscrepant.movements.slice(1)],
     }), 'incomplete_purchase_receipt_discrepancy_succeeded')
+    const supplierReturnProof = proof('ACT-SUPPLIER-RETURN-AUTHORIZE', 180_000)
+    const supplierReturnInput = {
+      id: 'SRET-00000000-0000-4000-8000-000000000031',
+      receiptMovementId: purchaseDiscrepant.movements[0].id,
+      internalReturnReference: 'RET-YS-2026-0031',
+    }
+    const supplierReturned = model.authorizeCommerceSupplierReturn(
+      purchaseDiscrepant, purchaseOrderId, supplierReturnInput, supplierReturnProof,
+    )
+    const supplierReturnClaim = supplierReturned?.purchaseOrders[0].supplierReturns?.[0]
+    assert(supplierReturned
+      && supplierReturnClaim?.quantityRejected === 4
+      && supplierReturnClaim.reasonCode === 'quality_failed'
+      && supplierReturnClaim.claimAmountMmk === 300
+      && supplierReturnClaim.physicalReturnStatus === 'not_dispatched'
+      && supplierReturnClaim.supplierContacted === false
+      && supplierReturnClaim.accountingPosted === false
+      && supplierReturnClaim.creditNotes.length === 0
+      && supplierReturned.items === purchaseDiscrepant.items
+      && supplierReturned.movements === purchaseDiscrepant.movements,
+    'supplier_return_claim_not_exact_or_mutated_operations')
+    assert(model.authorizeCommerceSupplierReturn(
+      supplierReturned, purchaseOrderId, supplierReturnInput, supplierReturnProof,
+    ) === supplierReturned, 'supplier_return_claim_retry_not_idempotent')
+    assert(model.authorizeCommerceSupplierReturn(
+      supplierReturned,
+      purchaseOrderId,
+      { ...supplierReturnInput, id: 'SRET-00000000-0000-4000-8000-000000000034', internalReturnReference: 'RET-DUPLICATE' },
+      proof('ACT-SUPPLIER-RETURN-DUPLICATE', 240_000),
+    ) === null, 'supplier_return_duplicate_receipt_succeeded')
+    assertThrows(() => model.validateCommerceState({
+      ...supplierReturned,
+      purchaseOrders: [{
+        ...supplierReturned.purchaseOrders[0],
+        supplierReturns: [{ ...supplierReturnClaim, physicalReturnStatus: 'dispatched' }],
+      }],
+    }), 'supplier_return_false_dispatch_succeeded')
+    const discrepantInvoiceInput = {
+      id: 'PINV-00000000-0000-4000-8000-000000000035',
+      supplierReference: 'YS-INV-2026-0035',
+      issuedAt: purchaseDiscrepant.movements[0].createdAt,
+      dueAt: '2026-08-23T09:00:00.000Z',
+      quantityInvoiced: 10,
+      unitCostMmk: 75,
+    }
+    const supplierReturnedInvoiced = model.recordCommerceSupplierInvoice(
+      supplierReturned, purchaseOrderId, discrepantInvoiceInput, proof('ACT-SUPPLIER-INVOICE-DISCREPANCY', 180_000),
+    )
+    assert(supplierReturnedInvoiced
+      && model.commerceSupplierInvoiceMatch(supplierReturnedInvoiced, supplierReturnedInvoiced.purchaseOrders[0]).status === 'supplier_credit_pending',
+    'supplier_return_missing_credit_was_not_blocked')
+    const partialCreditProof = proof('ACT-SUPPLIER-CREDIT-PARTIAL', 240_000)
+    const partialCreditInput = {
+      id: 'SCN-00000000-0000-4000-8000-000000000032',
+      supplierReference: 'YS-CN-2026-0032',
+      issuedAt: partialCreditProof.capturedAt,
+      amountMmk: 150,
+    }
+    const partiallyCredited = model.recordCommerceSupplierCreditNote(
+      supplierReturnedInvoiced, purchaseOrderId, supplierReturnInput.id, partialCreditInput, partialCreditProof,
+    )
+    const partialCreditMatch = partiallyCredited
+      && model.commerceSupplierInvoiceMatch(partiallyCredited, partiallyCredited.purchaseOrders[0])
+    assert(partiallyCredited
+      && partialCreditMatch?.status === 'supplier_credit_pending'
+      && partialCreditMatch.supplierClaimMmk === 300
+      && partialCreditMatch.supplierCreditMmk === 150
+      && partialCreditMatch.supplierReturnBalanceMmk === 150
+      && model.commerceSupplierReturnClaimStatus(partiallyCredited.purchaseOrders[0].supplierReturns[0]) === 'partially_credited',
+    'supplier_return_partial_credit_not_exact')
+    assert(model.recordCommerceSupplierCreditNote(
+      supplierReturnedInvoiced,
+      purchaseOrderId,
+      supplierReturnInput.id,
+      { ...partialCreditInput, id: 'SCN-00000000-0000-4000-8000-000000000036', supplierReference: 'YS-CN-OVER', amountMmk: 301 },
+      proof('ACT-SUPPLIER-CREDIT-OVER', 300_000),
+    ) === null, 'supplier_return_overcredit_succeeded')
+    const finalCreditProof = proof('ACT-SUPPLIER-CREDIT-FINAL', 300_000)
+    const fullyCredited = model.recordCommerceSupplierCreditNote(
+      partiallyCredited,
+      purchaseOrderId,
+      supplierReturnInput.id,
+      {
+        id: 'SCN-00000000-0000-4000-8000-000000000033',
+        supplierReference: 'YS-CN-2026-0033',
+        issuedAt: finalCreditProof.capturedAt,
+        amountMmk: 150,
+      },
+      finalCreditProof,
+    )
+    const fullCreditMatch = fullyCredited
+      && model.commerceSupplierInvoiceMatch(fullyCredited, fullyCredited.purchaseOrders[0])
+    assert(fullyCredited
+      && fullCreditMatch?.status === 'matched'
+      && fullCreditMatch.supplierCreditMmk === 300
+      && fullCreditMatch.supplierReturnBalanceMmk === 0
+      && fullCreditMatch.netInvoiceTotalMmk === 450
+      && fullCreditMatch.acceptedTotalMmk === 450
+      && model.commerceSupplierReturnClaimStatus(fullyCredited.purchaseOrders[0].supplierReturns[0]) === 'credited',
+    'supplier_return_full_credit_did_not_resolve_invoice')
+    assert(model.markCommerceSupplierInvoicePayableReady(
+      fullyCredited, purchaseOrderId, proof('ACT-SUPPLIER-INVOICE-DISCREPANCY-PAYABLE', 360_000),
+    ), 'fully_credited_supplier_invoice_not_payable_ready')
     assert(model.cancelCommercePurchaseOrder(
       purchasePartial,
       purchaseOrderId,
@@ -15514,8 +15639,8 @@ await verifyCommerceRuntime()
 await verifyProductionRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded allowance for purchase budgets plus immutable supplier quote comparison and award controls.
-if (bytes > 2_566_000) fail(`artifact_budget:${bytes}`)
+// Bounded allowance for supplier return claims, credit evidence, and credit-adjusted invoice matching.
+if (bytes > 2_590_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const largestJavascriptBytes = Math.max(...await Promise.all(javascriptFiles.map(async (path) => (await stat(path)).size)))
 const operationsArtifactPath = javascriptFiles.find((path) => /[\\/]core-app-[^\\/]+\.js$/.test(path))
@@ -15531,7 +15656,7 @@ if (!javascriptFiles.some((path) => /[\\/]router-[^\\/]+\.js$/.test(path))) fail
 if (!javascriptFiles.some((path) => /[\\/]ClientDataOnboarding-[^\\/]+\.js$/.test(path))) fail('client_onboarding_chunk_artifact_missing')
 if (!javascriptFiles.some((path) => /[\\/]local-client-import-[^\\/]+\.js$/.test(path))) fail('local_client_import_chunk_artifact_missing')
 if (!javascriptFiles.some((path) => /[\\/]ShopServiceSchedule-[^\\/]+\.js$/.test(path))) fail('shop_service_schedule_chunk_artifact_missing')
-if (largestJavascriptBytes > 488_000) fail(`javascript_headroom_budget:${largestJavascriptBytes}`)
+if (largestJavascriptBytes > 497_000) fail(`javascript_headroom_budget:${largestJavascriptBytes}`)
 
 if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))

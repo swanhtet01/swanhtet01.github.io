@@ -67,6 +67,14 @@ const managedPurchaseCancellationAuthority = trialStore.slice(
   trialStore.indexOf('if event_type == "commerce.purchase_order.cancelled":'),
   trialStore.indexOf('if event_type == "commerce.payment.reconciled":'),
 )
+const managedSupplierReturnAuthority = trialStore.slice(
+  trialStore.indexOf('if event_type == "commerce.supplier_return.authorized":'),
+  trialStore.indexOf('if event_type == "commerce.supplier_credit.recorded":'),
+)
+const managedSupplierCreditAuthority = trialStore.slice(
+  trialStore.indexOf('if event_type == "commerce.supplier_credit.recorded":'),
+  trialStore.indexOf('if event_type == "commerce.payment.reconciled":'),
+)
 const apiSourceEntries = (await readdir(resolve(root, 'api'), { withFileTypes: true }))
   .filter((entry) => entry.isFile() && /\.(?:py|js|mjs|cjs)$/.test(entry.name))
   .map((entry) => entry.name)
@@ -304,8 +312,10 @@ const expectedHumanCommerceEvents = [
   'commerce.stock.received',
   'commerce.storefront.configuration.saved',
   'commerce.storefront.merchandising.imported',
+  'commerce.supplier_credit.recorded',
   'commerce.supplier_invoice.payable_ready',
   'commerce.supplier_invoice.recorded',
+  'commerce.supplier_return.authorized',
   'commerce.supplier_sourcing.approved',
   'commerce.tax_configuration.saved',
   'commerce.website_intake.converted',
@@ -544,6 +554,22 @@ requireContract('managed Shop purchase cancellations are server attributable and
   && /authoritative_evidence\["actor"\] = principal\.actor_id/.test(managedPurchaseCancellationAuthority)
   && /authoritative_evidence\["capturedAt"\] = effective_captured_at/.test(managedPurchaseCancellationAuthority)
   && /authoritative_purchase_order\["cancellation"\] = deepcopy\(/.test(managedPurchaseCancellationAuthority))
+requireContract('managed supplier return claims are server attributable and remain internal-only',
+  /supplier_return\.get\("receiptMovementId"\)/.test(managedSupplierReturnAuthority)
+  && /effective_captured_at = _not_before\(/.test(managedSupplierReturnAuthority)
+  && /"actor": principal\.actor_id/.test(managedSupplierReturnAuthority)
+  && /"createdAt": effective_captured_at/.test(managedSupplierReturnAuthority)
+  && /"authorization": deepcopy\(authoritative_evidence\)/.test(managedSupplierReturnAuthority)
+  && /physicalReturnStatus/.test(commerceRuntime)
+  && /not_dispatched/.test(commerceRuntime)
+  && /supplierContacted/.test(commerceRuntime)
+  && /accountingPosted/.test(commerceRuntime))
+requireContract('managed supplier credits are server attributable and do not imply accounting posting',
+  /credit_note\.get\("issuedAt"\)/.test(managedSupplierCreditAuthority)
+  && /effective_captured_at = _not_before\(/.test(managedSupplierCreditAuthority)
+  && /"actor": principal\.actor_id/.test(managedSupplierCreditAuthority)
+  && /"recording": deepcopy\(authoritative_evidence\)/.test(managedSupplierCreditAuthority)
+  && /accountingPosted/.test(commerceRuntime))
 requireContract('Shop return and completion attribution is server authoritative and monotonic',
   /commerce\.order\.return_recorded/.test(trialStore)
   && /authoritative_return\["actor"\] = principal\.actor_id/.test(trialStore)

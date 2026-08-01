@@ -956,6 +956,7 @@ export type CommercePurchaseOrder = {
   creation: CommerceActionProof
   cancellation?: CommerceActionProof
   supplierInvoice?: CommerceSupplierInvoice
+  supplierReturns?: CommerceSupplierReturnClaim[]
 }
 
 export type CommercePurchaseBudgetEnvelope = {
@@ -1019,7 +1020,33 @@ export type CommerceSupplierInvoice = {
   payableReview?: CommerceActionProof
 }
 
-export type CommerceSupplierInvoiceMatchStatus = 'awaiting_receipt' | 'quantity_variance' | 'price_variance' | 'matched'
+export type CommerceSupplierCreditNote = {
+  id: string
+  supplierReference: string
+  issuedAt: string
+  amountMmk: number
+  accountingPosted: false
+  recording: CommerceActionProof
+}
+
+export type CommerceSupplierReturnClaim = {
+  id: string
+  createdAt: string
+  receiptMovementId: string
+  quantityRejected: number
+  reasonCode: CommercePurchaseOrderDiscrepancyCode
+  claimAmountMmk: number
+  internalReturnReference: string
+  physicalReturnStatus: 'not_dispatched'
+  supplierContacted: false
+  accountingPosted: false
+  authorization: CommerceActionProof
+  creditNotes: CommerceSupplierCreditNote[]
+}
+
+export type CommerceSupplierReturnClaimStatus = 'awaiting_credit' | 'partially_credited' | 'credited'
+
+export type CommerceSupplierInvoiceMatchStatus = 'awaiting_receipt' | 'supplier_credit_pending' | 'quantity_variance' | 'price_variance' | 'matched'
 
 export type CommerceSupplierInvoiceMatch = {
   status: CommerceSupplierInvoiceMatchStatus
@@ -1031,6 +1058,11 @@ export type CommerceSupplierInvoiceMatch = {
   invoicedUnitCostMmk: number
   orderedTotalMmk: number
   invoicedTotalMmk: number
+  supplierClaimMmk: number
+  supplierCreditMmk: number
+  supplierReturnBalanceMmk: number
+  netInvoiceTotalMmk: number
+  acceptedTotalMmk: number
   payableReady: boolean
 }
 
@@ -1288,6 +1320,19 @@ export type CommerceSupplierInvoiceInput = {
   unitCostMmk: number
 }
 
+export type CommerceSupplierReturnClaimInput = {
+  id: string
+  receiptMovementId: string
+  internalReturnReference: string
+}
+
+export type CommerceSupplierCreditNoteInput = {
+  id: string
+  supplierReference: string
+  issuedAt: string
+  amountMmk: number
+}
+
 export type CommercePurchaseOrderLocationReceipt = {
   receiptId: string
   stockUnitId: string
@@ -1396,6 +1441,8 @@ const maxShippingPolicies = 200
 const maxPaymentPolicies = 200
 const maxPurchaseBudgetEnvelopes = 200
 const maxSupplierSourcingDecisions = 200
+const maxSupplierReturnsPerPurchaseOrder = 50
+const maxSupplierCreditsPerReturn = 50
 const customerCreditTerms = new Set([0, 7, 30])
 const maxOrderLines = 20
 const maxReturnsPerOrder = 100
@@ -1412,6 +1459,8 @@ const purchaseBudgetEnvelopeIdPattern = /^PBE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{
 const supplierSourcingDecisionIdPattern = /^SSD-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const purchaseBudgetCodePattern = /^[A-Z0-9][A-Z0-9_-]{2,39}$/
 const supplierInvoiceIdPattern = /^PINV-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
+const supplierReturnIdPattern = /^SRET-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
+const supplierCreditIdPattern = /^SCN-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const taxCodePattern = /^[A-Z0-9][A-Z0-9_-]{0,11}$/
 const taxJurisdictionCodePattern = /^[A-Z0-9][A-Z0-9_-]{1,15}$/
 const externalAccountCodePattern = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,39}$/
@@ -2290,6 +2339,11 @@ export function validateCommerceState(value: unknown): CommerceState {
   const shippingPolicyActionIds: string[] = []
   const paymentPolicyActionIds: string[] = []
   const purchaseOrderActionIds: string[] = []
+  const supplierReturnIds: string[] = []
+  const supplierReturnReceiptIds: string[] = []
+  const supplierReturnReferences: string[] = []
+  const supplierCreditIds: string[] = []
+  const supplierCreditReferences: string[] = []
   const purchaseBudgetEnvelopeActionIds: string[] = []
   const purchaseBudgetEnvelopeIds: string[] = []
   const purchaseBudgetEnvelopeById = new Map<string, CommercePurchaseBudgetEnvelope>()
@@ -2793,7 +2847,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!isRecord(candidate) || !hasExactKeys(
       candidate,
       ['id', 'createdAt', 'supplier', 'sku', 'quantityOrdered', 'creation'],
-      ['requisitionId', 'expectedAt', 'unitCostMmk', 'cancellation', 'supplierInvoice'],
+      ['requisitionId', 'expectedAt', 'unitCostMmk', 'cancellation', 'supplierInvoice', 'supplierReturns'],
     )) throw new Error(`purchaseOrders[${index}] is invalid.`)
     const id = canonicalText(candidate.id, `purchaseOrders[${index}].id`, 80)
     if (!purchaseOrderIdPattern.test(id)) throw new Error(`purchaseOrders[${index}].id is invalid.`)
@@ -2895,6 +2949,68 @@ export function validateCommerceState(value: unknown): CommerceState {
       supplierInvoiceIds.push(invoiceId)
       supplierInvoiceReferences.push(`${String(candidate.supplier)}\u0000${supplierReference}`)
     }
+    if (candidate.supplierReturns !== undefined) {
+      if (candidate.unitCostMmk === undefined || !Array.isArray(candidate.supplierReturns)
+        || candidate.supplierReturns.length < 1 || candidate.supplierReturns.length > maxSupplierReturnsPerPurchaseOrder) {
+        throw new Error(`purchaseOrders[${index}].supplierReturns is invalid.`)
+      }
+      let newerReturnAt: bigint | null = null
+      for (const [returnIndex, returnCandidate] of candidate.supplierReturns.entries()) {
+        const field = `purchaseOrders[${index}].supplierReturns[${returnIndex}]`
+        if (!isRecord(returnCandidate) || !hasExactKeys(returnCandidate, [
+          'id', 'createdAt', 'receiptMovementId', 'quantityRejected', 'reasonCode', 'claimAmountMmk',
+          'internalReturnReference', 'physicalReturnStatus', 'supplierContacted', 'accountingPosted',
+          'authorization', 'creditNotes',
+        ]) || !Array.isArray(returnCandidate.creditNotes)
+          || returnCandidate.creditNotes.length > maxSupplierCreditsPerReturn) throw new Error(`${field} is invalid.`)
+        const returnId = canonicalText(returnCandidate.id, `${field}.id`, 80)
+        if (!supplierReturnIdPattern.test(returnId)) throw new Error(`${field}.id is invalid.`)
+        const createdAt = timestampMicros(returnCandidate.createdAt)
+        if (createdAt === null || createdAt < (timestampMicros(candidate.createdAt) as bigint)
+          || (newerReturnAt !== null && createdAt > newerReturnAt)) throw new Error(`${field}.createdAt is outside the purchase chronology.`)
+        newerReturnAt = createdAt
+        const receiptMovementId = canonicalText(returnCandidate.receiptMovementId, `${field}.receiptMovementId`, 2_000)
+        assertSafeInteger(returnCandidate.quantityRejected, `${field}.quantityRejected`, 1)
+        if (!purchaseOrderDiscrepancyCodes.has(returnCandidate.reasonCode as CommercePurchaseOrderDiscrepancyCode)) throw new Error(`${field}.reasonCode is invalid.`)
+        assertSafeInteger(returnCandidate.claimAmountMmk, `${field}.claimAmountMmk`, 1)
+        const internalReference = canonicalText(returnCandidate.internalReturnReference, `${field}.internalReturnReference`, 80)
+        if (returnCandidate.physicalReturnStatus !== 'not_dispatched'
+          || returnCandidate.supplierContacted !== false || returnCandidate.accountingPosted !== false
+          || !isRecord(returnCandidate.authorization)
+          || !hasExactKeys(returnCandidate.authorization, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+          || !validProof(returnCandidate.authorization as CommerceActionProof)
+          || returnCandidate.authorization.capturedAt !== returnCandidate.createdAt) throw new Error(`${field} overclaims return execution or has invalid authorization.`)
+        purchaseOrderActionIds.push(returnCandidate.authorization.actionId as string)
+        let creditedMmk = 0
+        let newerCreditAt: bigint | null = null
+        for (const [creditIndex, creditCandidate] of returnCandidate.creditNotes.entries()) {
+          const creditField = `${field}.creditNotes[${creditIndex}]`
+          if (!isRecord(creditCandidate) || !hasExactKeys(creditCandidate, [
+            'id', 'supplierReference', 'issuedAt', 'amountMmk', 'accountingPosted', 'recording',
+          ])) throw new Error(`${creditField} is invalid.`)
+          const creditId = canonicalText(creditCandidate.id, `${creditField}.id`, 80)
+          if (!supplierCreditIdPattern.test(creditId)) throw new Error(`${creditField}.id is invalid.`)
+          const supplierReference = canonicalText(creditCandidate.supplierReference, `${creditField}.supplierReference`, 80)
+          const issuedAt = timestampMicros(creditCandidate.issuedAt)
+          assertSafeInteger(creditCandidate.amountMmk, `${creditField}.amountMmk`, 1)
+          if (issuedAt === null || issuedAt < createdAt || creditCandidate.accountingPosted !== false
+            || !isRecord(creditCandidate.recording)
+            || !hasExactKeys(creditCandidate.recording, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+            || !validProof(creditCandidate.recording as CommerceActionProof)
+            || (timestampMicros(creditCandidate.recording.capturedAt) as bigint) < issuedAt
+            || (newerCreditAt !== null && (timestampMicros(creditCandidate.recording.capturedAt) as bigint) > newerCreditAt)) throw new Error(`${creditField} is outside the claim chronology or overclaims posting.`)
+          newerCreditAt = timestampMicros(creditCandidate.recording.capturedAt) as bigint
+          creditedMmk += Number(creditCandidate.amountMmk)
+          if (!Number.isSafeInteger(creditedMmk) || creditedMmk > Number(returnCandidate.claimAmountMmk)) throw new Error(`${field} supplier credits exceed the authorized claim.`)
+          purchaseOrderActionIds.push(creditCandidate.recording.actionId as string)
+          supplierCreditIds.push(creditId)
+          supplierCreditReferences.push(`${String(candidate.supplier)}\u0000${supplierReference}`)
+        }
+        supplierReturnIds.push(returnId)
+        supplierReturnReceiptIds.push(receiptMovementId)
+        supplierReturnReferences.push(`${String(candidate.supplier)}\u0000${internalReference}`)
+      }
+    }
     purchaseOrderIds.push(id)
     purchaseOrderById.set(id, candidate as unknown as CommercePurchaseOrder)
   }
@@ -2916,6 +3032,11 @@ export function validateCommerceState(value: unknown): CommerceState {
   }
   assertUnique(supplierInvoiceIds, 'Supplier invoice ID')
   assertUnique(supplierInvoiceReferences, 'Supplier invoice reference')
+  assertUnique(supplierReturnIds, 'Supplier return ID')
+  assertUnique(supplierReturnReceiptIds, 'Supplier return receipt movement ID')
+  assertUnique(supplierReturnReferences, 'Supplier return reference')
+  assertUnique(supplierCreditIds, 'Supplier credit note ID')
+  assertUnique(supplierCreditReferences, 'Supplier credit note reference')
 
   if (storefrontConfiguration !== undefined) {
     if (!hasExactKeys(
@@ -3852,6 +3973,18 @@ export function validateCommerceState(value: unknown): CommerceState {
     const received = receiptQuantityByPurchaseOrder.get(purchaseOrder.id) ?? 0
     const rejected = rejectedQuantityByPurchaseOrder.get(purchaseOrder.id) ?? 0
     const delivered = received + rejected
+    for (const claim of purchaseOrder.supplierReturns ?? []) {
+      const receipt = (movements as CommerceStockMovement[]).find((movement) => movement.id === claim.receiptMovementId)
+      if (!receipt || receipt.kind !== 'receipt' || receipt.purchaseOrderId !== purchaseOrder.id
+        || !receipt.rejectedQuantity || receipt.rejectedQuantity !== claim.quantityRejected
+        || receipt.discrepancyCode !== claim.reasonCode || receipt.discrepancyDisposition !== 'return_to_vendor'
+        || purchaseOrder.unitCostMmk === undefined
+        || !Number.isSafeInteger(claim.quantityRejected * purchaseOrder.unitCostMmk)
+        || claim.claimAmountMmk !== claim.quantityRejected * purchaseOrder.unitCostMmk
+        || (timestampMicros(claim.createdAt) as bigint) < (timestampMicros(receipt.createdAt) as bigint)) {
+        throw new Error(`${claim.id} does not bind one exact rejected supplier receipt.`)
+      }
+    }
     if (purchaseOrder.cancellation) {
       if (purchaseOrder.supplierInvoice
         || delivered >= purchaseOrder.quantityOrdered
@@ -4445,7 +4578,9 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || commercePurchaseOrders(state).some((purchaseOrder) => purchaseOrder.creation.actionId === actionId
       || purchaseOrder.cancellation?.actionId === actionId
       || purchaseOrder.supplierInvoice?.recording.actionId === actionId
-      || purchaseOrder.supplierInvoice?.payableReview?.actionId === actionId)
+      || purchaseOrder.supplierInvoice?.payableReview?.actionId === actionId
+      || purchaseOrder.supplierReturns?.some((claim) => claim.authorization.actionId === actionId
+        || claim.creditNotes.some((credit) => credit.recording.actionId === actionId)))
     || state.storefrontConfiguration?.saved.actionId === actionId
     || state.inventoryFoundation?.commands.some((command) => command.payload.proof.actionId === actionId)
 }
@@ -5379,6 +5514,19 @@ export function commercePurchaseOrders(state: CommerceState) {
   return state.purchaseOrders ?? []
 }
 
+export function commerceSupplierReturnClaims(purchaseOrder: CommercePurchaseOrder) {
+  return purchaseOrder.supplierReturns ?? []
+}
+
+export function commerceSupplierReturnClaimStatus(claim: CommerceSupplierReturnClaim): CommerceSupplierReturnClaimStatus {
+  const creditedMmk = claim.creditNotes.reduce((total, credit) => total + credit.amountMmk, 0)
+  return creditedMmk === 0 ? 'awaiting_credit' : creditedMmk === claim.claimAmountMmk ? 'credited' : 'partially_credited'
+}
+
+export function commerceSupplierReturnClaimBalance(claim: CommerceSupplierReturnClaim) {
+  return claim.claimAmountMmk - claim.creditNotes.reduce((total, credit) => total + credit.amountMmk, 0)
+}
+
 export function commercePurchaseRequisitions(state: CommerceState) {
   return state.purchaseRequisitions ?? []
 }
@@ -5457,13 +5605,24 @@ export function commerceSupplierInvoiceMatch(state: CommerceState, purchaseOrder
   const progress = commercePurchaseOrderProgress(state, purchaseOrder)
   const orderedTotalMmk = purchaseOrder.quantityOrdered * purchaseOrder.unitCostMmk
   if (!Number.isSafeInteger(orderedTotalMmk)) throw new Error('Purchase order total exceeds the supported safe integer range.')
-  const status: CommerceSupplierInvoiceMatchStatus = progress.received < invoice.quantityInvoiced
+  const supplierClaimMmk = commerceSupplierReturnClaims(purchaseOrder).reduce((total, claim) => total + claim.claimAmountMmk, 0)
+  const supplierCreditMmk = commerceSupplierReturnClaims(purchaseOrder).reduce((total, claim) => total
+    + claim.creditNotes.reduce((claimTotal, credit) => claimTotal + credit.amountMmk, 0), 0)
+  const expectedSupplierReturnMmk = progress.rejected * purchaseOrder.unitCostMmk
+  const supplierReturnBalanceMmk = expectedSupplierReturnMmk - supplierCreditMmk
+  const netInvoiceTotalMmk = invoice.totalMmk - supplierCreditMmk
+  const acceptedTotalMmk = progress.received * purchaseOrder.unitCostMmk
+  if (![supplierClaimMmk, supplierCreditMmk, expectedSupplierReturnMmk, supplierReturnBalanceMmk, netInvoiceTotalMmk, acceptedTotalMmk].every(Number.isSafeInteger)) {
+    throw new Error('Supplier invoice and return totals exceed the supported safe integer range.')
+  }
+  const status: CommerceSupplierInvoiceMatchStatus = progress.delivered < invoice.quantityInvoiced
     ? 'awaiting_receipt'
+    : progress.rejected > 0 && (supplierClaimMmk !== expectedSupplierReturnMmk || supplierReturnBalanceMmk > 0)
+      ? 'supplier_credit_pending'
     : invoice.quantityInvoiced !== purchaseOrder.quantityOrdered
-      || progress.received !== invoice.quantityInvoiced
-      || progress.rejected > 0
       ? 'quantity_variance'
-      : invoice.unitCostMmk !== purchaseOrder.unitCostMmk
+    : invoice.unitCostMmk !== purchaseOrder.unitCostMmk
+      || netInvoiceTotalMmk !== acceptedTotalMmk
         ? 'price_variance'
         : 'matched'
   return {
@@ -5476,6 +5635,11 @@ export function commerceSupplierInvoiceMatch(state: CommerceState, purchaseOrder
     invoicedUnitCostMmk: invoice.unitCostMmk,
     orderedTotalMmk,
     invoicedTotalMmk: invoice.totalMmk,
+    supplierClaimMmk,
+    supplierCreditMmk,
+    supplierReturnBalanceMmk,
+    netInvoiceTotalMmk,
+    acceptedTotalMmk,
     payableReady: status === 'matched' && Boolean(invoice.payableReview),
   }
 }
@@ -7225,6 +7389,113 @@ export function markCommerceSupplierInvoicePayableReady(
     ...current,
     purchaseOrders: commercePurchaseOrders(current).map((candidate) => candidate.id === purchaseOrderId
       ? { ...candidate, supplierInvoice: { ...invoice, payableReview: { ...proof } } }
+      : candidate),
+  })
+}
+
+export function authorizeCommerceSupplierReturn(
+  state: CommerceState,
+  purchaseOrderId: string,
+  input: CommerceSupplierReturnClaimInput,
+  proof: CommerceActionProof,
+) {
+  let internalReturnReference: string
+  let receiptMovementId: string
+  try {
+    internalReturnReference = canonicalText(input.internalReturnReference, 'supplier return reference', 80)
+    receiptMovementId = canonicalText(input.receiptMovementId, 'supplier return receipt movement ID', 2_000)
+  } catch {
+    return null
+  }
+  if (!validProof(proof) || !supplierReturnIdPattern.test(input.id)) return null
+  const current = validateCommerceState(state)
+  const purchaseOrder = commercePurchaseOrders(current).find((candidate) => candidate.id === purchaseOrderId)
+  const receipt = current.movements.find((movement) => movement.id === receiptMovementId)
+  if (!purchaseOrder || purchaseOrder.unitCostMmk === undefined || !receipt
+    || receipt.kind !== 'receipt' || receipt.purchaseOrderId !== purchaseOrderId
+    || !receipt.rejectedQuantity || !receipt.discrepancyCode || receipt.discrepancyDisposition !== 'return_to_vendor') return null
+  const claimAmountMmk = receipt.rejectedQuantity * purchaseOrder.unitCostMmk
+  if (!Number.isSafeInteger(claimAmountMmk)
+    || (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(receipt.createdAt) as bigint)) return null
+  const allClaims = commercePurchaseOrders(current).flatMap((order) => commerceSupplierReturnClaims(order).map((claim) => ({ order, claim })))
+  const existing = allClaims.find(({ claim }) => claim.id === input.id || claim.authorization.actionId === proof.actionId)
+  if (existing) return existing.order.id === purchaseOrderId
+    && existing.claim.id === input.id
+    && existing.claim.receiptMovementId === receiptMovementId
+    && existing.claim.internalReturnReference === internalReturnReference
+    && sameActionProof(existing.claim.authorization, proof) ? current : null
+  if (actionIdIsUsed(current, proof.actionId)
+    || commerceSupplierReturnClaims(purchaseOrder).length >= maxSupplierReturnsPerPurchaseOrder
+    || allClaims.some(({ order, claim }) => claim.receiptMovementId === receiptMovementId
+      || order.supplier === purchaseOrder.supplier && claim.internalReturnReference === internalReturnReference)) return null
+  const claim: CommerceSupplierReturnClaim = {
+    id: input.id,
+    createdAt: proof.capturedAt,
+    receiptMovementId,
+    quantityRejected: receipt.rejectedQuantity,
+    reasonCode: receipt.discrepancyCode,
+    claimAmountMmk,
+    internalReturnReference,
+    physicalReturnStatus: 'not_dispatched',
+    supplierContacted: false,
+    accountingPosted: false,
+    authorization: { ...proof },
+    creditNotes: [],
+  }
+  return validateCommerceState({
+    ...current,
+    purchaseOrders: commercePurchaseOrders(current).map((candidate) => candidate.id === purchaseOrderId
+      ? { ...candidate, supplierReturns: [claim, ...commerceSupplierReturnClaims(candidate)] }
+      : candidate),
+  })
+}
+
+export function recordCommerceSupplierCreditNote(
+  state: CommerceState,
+  purchaseOrderId: string,
+  supplierReturnId: string,
+  input: CommerceSupplierCreditNoteInput,
+  proof: CommerceActionProof,
+) {
+  let supplierReference: string
+  try {
+    supplierReference = canonicalText(input.supplierReference, 'supplier credit reference', 80)
+  } catch {
+    return null
+  }
+  if (!validProof(proof) || !supplierReturnIdPattern.test(supplierReturnId)
+    || !supplierCreditIdPattern.test(input.id) || !validTimestamp(input.issuedAt)
+    || !Number.isSafeInteger(input.amountMmk) || input.amountMmk < 1
+    || (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(input.issuedAt) as bigint)) return null
+  const current = validateCommerceState(state)
+  const purchaseOrder = commercePurchaseOrders(current).find((candidate) => candidate.id === purchaseOrderId)
+  const claim = purchaseOrder?.supplierReturns?.find((candidate) => candidate.id === supplierReturnId)
+  if (!purchaseOrder || !claim
+    || (timestampMicros(input.issuedAt) as bigint) < (timestampMicros(claim.createdAt) as bigint)) return null
+  const allCredits = commercePurchaseOrders(current).flatMap((order) => commerceSupplierReturnClaims(order)
+    .flatMap((returnClaim) => returnClaim.creditNotes.map((credit) => ({ order, returnClaim, credit }))))
+  const existing = allCredits.find(({ credit }) => credit.id === input.id || credit.recording.actionId === proof.actionId)
+  if (existing) return existing.order.id === purchaseOrderId && existing.returnClaim.id === supplierReturnId
+    && existing.credit.id === input.id && existing.credit.supplierReference === supplierReference
+    && existing.credit.issuedAt === input.issuedAt && existing.credit.amountMmk === input.amountMmk
+    && sameActionProof(existing.credit.recording, proof) ? current : null
+  if (actionIdIsUsed(current, proof.actionId)
+    || claim.creditNotes.length >= maxSupplierCreditsPerReturn
+    || input.amountMmk > commerceSupplierReturnClaimBalance(claim)
+    || allCredits.some(({ order, credit }) => credit.id === input.id
+      || order.supplier === purchaseOrder.supplier && credit.supplierReference === supplierReference)) return null
+  const credit: CommerceSupplierCreditNote = {
+    ...input,
+    supplierReference,
+    accountingPosted: false,
+    recording: { ...proof },
+  }
+  return validateCommerceState({
+    ...current,
+    purchaseOrders: commercePurchaseOrders(current).map((candidate) => candidate.id === purchaseOrderId
+      ? { ...candidate, supplierReturns: commerceSupplierReturnClaims(candidate).map((returnClaim) => returnClaim.id === supplierReturnId
+        ? { ...returnClaim, creditNotes: [credit, ...returnClaim.creditNotes] }
+        : returnClaim) }
       : candidate),
   })
 }

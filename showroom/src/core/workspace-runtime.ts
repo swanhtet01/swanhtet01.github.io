@@ -134,6 +134,8 @@ export type ActionKind =
   | 'purchase_requisition_approve'
   | 'purchase_order_receive'
   | 'purchase_order_cancel'
+  | 'supplier_return_authorize'
+  | 'supplier_credit_record'
   | 'daily_close'
   | 'tax_configuration'
   | 'account_mapping'

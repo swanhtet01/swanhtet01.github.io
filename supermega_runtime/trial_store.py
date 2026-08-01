@@ -59,6 +59,8 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.purchase_order.cancelled",
         "commerce.supplier_invoice.recorded",
         "commerce.supplier_invoice.payable_ready",
+        "commerce.supplier_return.authorized",
+        "commerce.supplier_credit.recorded",
         "commerce.close.saved",
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
@@ -1579,6 +1581,169 @@ def _authoritative_command_payload(
         authoritative_purchase_order = {
             **dict(purchase_order),
             "supplierInvoice": authoritative_invoice,
+        }
+        authoritative_purchase_orders = deepcopy(purchase_orders)
+        authoritative_purchase_orders[purchase_order_index] = authoritative_purchase_order
+        authoritative_state = dict(state)
+        authoritative_state["purchaseOrders"] = authoritative_purchase_orders
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.supplier_return.authorized":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        purchase_orders = (
+            state.get("purchaseOrders") if isinstance(state, Mapping) else None
+        )
+        matches: list[tuple[int, Mapping[str, Any], int, Mapping[str, Any]]] = []
+        if isinstance(purchase_orders, list) and isinstance(evidence, Mapping):
+            for purchase_order_index, purchase_order in enumerate(purchase_orders):
+                supplier_returns = (
+                    purchase_order.get("supplierReturns", [])
+                    if isinstance(purchase_order, Mapping)
+                    else []
+                )
+                if not isinstance(supplier_returns, list):
+                    continue
+                for return_index, supplier_return in enumerate(supplier_returns):
+                    authorization = (
+                        supplier_return.get("authorization")
+                        if isinstance(supplier_return, Mapping)
+                        else None
+                    )
+                    if (
+                        isinstance(authorization, Mapping)
+                        and authorization.get("actionId") == evidence.get("actionId")
+                    ):
+                        matches.append(
+                            (
+                                purchase_order_index,
+                                purchase_order,
+                                return_index,
+                                supplier_return,
+                            )
+                        )
+        if len(matches) != 1 or not isinstance(state, Mapping):
+            return authoritative
+        purchase_order_index, purchase_order, return_index, supplier_return = matches[0]
+        receipt = next(
+            (
+                movement
+                for movement in state.get("movements", [])
+                if isinstance(movement, Mapping)
+                and movement.get("id") == supplier_return.get("receiptMovementId")
+            ),
+            None,
+        )
+        effective_captured_at = _not_before(
+            captured_at,
+            purchase_order.get("createdAt"),
+            receipt.get("createdAt") if isinstance(receipt, Mapping) else None,
+        )
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": effective_captured_at,
+        }
+        authoritative_return = {
+            **dict(supplier_return),
+            "createdAt": effective_captured_at,
+            "authorization": deepcopy(authoritative_evidence),
+        }
+        authoritative_returns = deepcopy(purchase_order.get("supplierReturns", []))
+        authoritative_returns[return_index] = authoritative_return
+        authoritative_purchase_order = {
+            **dict(purchase_order),
+            "supplierReturns": authoritative_returns,
+        }
+        authoritative_purchase_orders = deepcopy(purchase_orders)
+        authoritative_purchase_orders[purchase_order_index] = authoritative_purchase_order
+        authoritative_state = dict(state)
+        authoritative_state["purchaseOrders"] = authoritative_purchase_orders
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.supplier_credit.recorded":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        purchase_orders = (
+            state.get("purchaseOrders") if isinstance(state, Mapping) else None
+        )
+        matches: list[
+            tuple[int, Mapping[str, Any], int, Mapping[str, Any], int, Mapping[str, Any]]
+        ] = []
+        if isinstance(purchase_orders, list) and isinstance(evidence, Mapping):
+            for purchase_order_index, purchase_order in enumerate(purchase_orders):
+                supplier_returns = (
+                    purchase_order.get("supplierReturns", [])
+                    if isinstance(purchase_order, Mapping)
+                    else []
+                )
+                if not isinstance(supplier_returns, list):
+                    continue
+                for return_index, supplier_return in enumerate(supplier_returns):
+                    credit_notes = (
+                        supplier_return.get("creditNotes", [])
+                        if isinstance(supplier_return, Mapping)
+                        else []
+                    )
+                    if not isinstance(credit_notes, list):
+                        continue
+                    for credit_index, credit_note in enumerate(credit_notes):
+                        recording = (
+                            credit_note.get("recording")
+                            if isinstance(credit_note, Mapping)
+                            else None
+                        )
+                        if (
+                            isinstance(recording, Mapping)
+                            and recording.get("actionId") == evidence.get("actionId")
+                        ):
+                            matches.append(
+                                (
+                                    purchase_order_index,
+                                    purchase_order,
+                                    return_index,
+                                    supplier_return,
+                                    credit_index,
+                                    credit_note,
+                                )
+                            )
+        if len(matches) != 1 or not isinstance(state, Mapping):
+            return authoritative
+        (
+            purchase_order_index,
+            purchase_order,
+            return_index,
+            supplier_return,
+            credit_index,
+            credit_note,
+        ) = matches[0]
+        effective_captured_at = _not_before(
+            captured_at,
+            supplier_return.get("createdAt"),
+            credit_note.get("issuedAt"),
+        )
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": effective_captured_at,
+        }
+        authoritative_credit = {
+            **dict(credit_note),
+            "recording": deepcopy(authoritative_evidence),
+        }
+        authoritative_credits = deepcopy(supplier_return.get("creditNotes", []))
+        authoritative_credits[credit_index] = authoritative_credit
+        authoritative_return = {
+            **dict(supplier_return),
+            "creditNotes": authoritative_credits,
+        }
+        authoritative_returns = deepcopy(purchase_order.get("supplierReturns", []))
+        authoritative_returns[return_index] = authoritative_return
+        authoritative_purchase_order = {
+            **dict(purchase_order),
+            "supplierReturns": authoritative_returns,
         }
         authoritative_purchase_orders = deepcopy(purchase_orders)
         authoritative_purchase_orders[purchase_order_index] = authoritative_purchase_order

@@ -105,6 +105,8 @@ export type ManagedCommerceEvent =
   | 'commerce.purchase_order.cancelled'
   | 'commerce.supplier_invoice.recorded'
   | 'commerce.supplier_invoice.payable_ready'
+  | 'commerce.supplier_return.authorized'
+  | 'commerce.supplier_credit.recorded'
   | 'commerce.close.saved'
 
 export type ManagedWebsiteEvent =
