@@ -374,10 +374,10 @@ export function CoreLayout() {
 }
 
 const customerTracks = [
-  ['Shop', 'Retail, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/'],
-  ['Plant', 'Factory, workshop, service floor.', 'Plan, record, hand off shifts.', '/plant/'],
-  ['Website', 'Company site and proof catalog.', 'Create pages, offers, leads.', '/website/'],
-  ['Ecommerce', 'Online ordering and delivery.', 'Build storefronts and Shop handoff.', '/ecommerce/'],
+  ['Shop', 'Sales and inventory', 'Sell, track stock, fulfil orders, and close the day.', '/shop/'],
+  ['Plant', 'Production and quality', 'Plan jobs, record output, trace materials, and handle problems.', '/plant/'],
+  ['Website', 'Pages and inquiries', 'Edit a real site preview, collect leads, and prepare launch.', '/website/'],
+  ['Ecommerce', 'Storefront and checkout', 'Run online orders, delivery, and Shop handoff.', '/ecommerce/'],
 ] as const
 
 export function ProductHomePage() {
@@ -387,8 +387,7 @@ export function ProductHomePage() {
   const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Managed activation proof is still required.'
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Four products, one operating system. Start with the most important work." eyebrow="SuperMega" title="What needs attention?" />
-      <Suspense fallback={<section aria-label="Today across SuperMega" className="product-home-today"><p className="form-notice" role="status">Preparing today view...</p></section>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense>
+      <PageHeading copy="Open a working sample and do one useful task. Setup and advanced controls stay out of the way until you need them." eyebrow="SuperMega" title="Choose what you want to run." />
       <nav aria-label="Business tracks" className="product-track-grid">
         {customerTracks.map(([name, fit, outcome, path]) => (
           <article className="product-track-card" key={name}>
@@ -404,8 +403,9 @@ export function ProductHomePage() {
         ))}
       </nav>
       <details className="product-home-setup">
-        <summary><span><strong>Setup and activation</strong><small>Imports, evidence, roles, and managed readiness</small></span><b>Open when needed</b></summary>
+        <summary><span><strong>Business overview and setup</strong><small>Attention, imports, access, and managed activation</small></span><b>Open when needed</b></summary>
         <div>
+          <Suspense fallback={<section aria-label="Today across SuperMega" className="product-home-today"><p className="form-notice" role="status">Preparing business overview...</p></section>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense>
           <section className="product-home-operating-model" aria-label="SuperMega operating model">
             <div><span className="core-eyebrow">Local workspace</span><strong>Sample data, imports, review, and evidence.</strong></div>
             <div><span className="core-eyebrow">Managed activation</span><strong>Tenant data, AI context, roles, audit, and controlled writes.</strong></div>
