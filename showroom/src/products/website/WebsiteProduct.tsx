@@ -1008,6 +1008,16 @@ export function WebsiteProduct() {
             </div>
           ) : null}
 
+          <header className="website-heading" data-view={view}>
+            <div>
+              <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
+              <p>{activeViewCopy.copy}</p>
+            </div>
+            {view === 'publish' ? (
+              <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
+            ) : null}
+          </header>
+
           {view === 'content' ? (
             <section
               aria-label="Website actions"
@@ -1157,16 +1167,6 @@ export function WebsiteProduct() {
               ) : null}
             </section>
           ) : null}
-
-          <header className="website-heading" data-view={view}>
-            <div>
-              <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
-              <p>{activeViewCopy.copy}</p>
-            </div>
-            {view === 'publish' ? (
-              <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
-            ) : null}
-          </header>
 
           {websiteTodayState !== 'ready' ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState}>
             <div className="website-today-priority">
