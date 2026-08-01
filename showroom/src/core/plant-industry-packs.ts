@@ -112,6 +112,8 @@ export function plantIndustryPackSetup(id: PlantIndustryPackId, job?: { id: stri
     materialUnit: pack.setup.materialUnit,
     quantityPerUnit: '1',
     standardCostPerUnitMmk: '',
+    shopSku: '',
+    materialQuantityPerStockUnit: '',
     additionalMaterials: '',
     workCentreId: `${pack.setup.workCentrePrefix}-${lineSegment}`.slice(0, 80),
     workCentreName: job?.line || pack.setup.workCentreName,

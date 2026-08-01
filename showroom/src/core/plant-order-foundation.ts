@@ -30,6 +30,7 @@ export type PlantOrderMaterial = {
   unit: 'kg' | 'g' | 'l' | 'ml' | 'pcs' | 'pack' | 'bag' | 'roll' | 'sheet' | 'm' | 'cm'
   quantityPerUnitMilli: number
   standardCostPerUnitMmk?: number
+  shopSupply?: { sku: string; materialQuantityMilliPerStockUnit: number }
 }
 
 export type PlantOrderWorkCentre = { workCentreId: string; name: string }
@@ -369,23 +370,26 @@ export function parsePlantOrderMaterialPaste(value: string) {
   const lines = value.replace(/^\uFEFF/, '').split(/\r?\n/)
     .map((line, index) => ({ line: index + 1, value: line.trim() }))
     .filter((line) => line.value)
-  if (['material_id|material_name|unit|quantity_per_unit', 'material_id|material_name|unit|quantity_per_unit|mmk_per_material_unit'].includes(lines[0]?.value.toLowerCase().replaceAll(' ', '') ?? '')) lines.shift()
+  if (['material_id|material_name|unit|quantity_per_unit', 'material_id|material_name|unit|quantity_per_unit|mmk_per_material_unit', 'material_id|material_name|unit|quantity_per_unit|mmk_per_material_unit|shop_sku|material_quantity_per_stock_unit'].includes(lines[0]?.value.toLowerCase().replaceAll(' ', '') ?? '')) lines.shift()
   if (lines.length > PLANT_ORDER_ADDITIONAL_MATERIAL_MAX) throw new Error(`Add at most ${PLANT_ORDER_ADDITIONAL_MATERIAL_MAX} additional BOM materials.`)
   const materials = lines.map(({ line, value: row }) => {
     const columns = row.split('|').map((column) => column.trim())
-    if (columns.length !== 4 && columns.length !== 5) throw new Error(`Additional BOM material line ${line} must contain material ID | name | unit | quantity per output unit | optional MMK per material unit.`)
+    if (![4, 5, 7].includes(columns.length)) throw new Error(`Additional BOM material line ${line} must contain material ID | name | unit | quantity per output unit | optional MMK per material unit | optional Shop SKU | material quantity per stock unit.`)
     const unit = columns[2].toLowerCase()
     if (!materialUnits.has(unit)) throw new Error(`Additional BOM material line ${line} has an unsupported unit.`)
     const quantityPerUnitMilli = parsePlantOrderQuantityMilli(columns[3])
     if (!quantityPerUnitMilli) throw new Error(`Additional BOM material line ${line} needs a positive quantity with up to three decimals.`)
     const standardCostPerUnitMmk = columns[4] === undefined ? null : parsePlantOrderMmkRate(columns[4])
     if (columns[4] !== undefined && !standardCostPerUnitMmk) throw new Error(`Additional BOM material line ${line} needs a positive whole-MMK standard cost.`)
+    const materialQuantityMilliPerStockUnit = columns.length === 7 ? parsePlantOrderQuantityMilli(columns[6]) : null
+    if (columns.length === 7 && (!columns[5] || !materialQuantityMilliPerStockUnit)) throw new Error(`Additional BOM material line ${line} needs a Shop SKU and positive material quantity per stock unit.`)
     return {
       materialId: identifier(columns[0].toUpperCase(), `Additional BOM material line ${line} ID`, 'MAT'),
       name: text(columns[1], `Additional BOM material line ${line} name`),
       unit: unit as PlantOrderMaterial['unit'],
       quantityPerUnitMilli,
       ...(standardCostPerUnitMmk ? { standardCostPerUnitMmk } : {}),
+      ...(materialQuantityMilliPerStockUnit ? { shopSupply: { sku: text(columns[5], `Additional BOM material line ${line} Shop SKU`, 80), materialQuantityMilliPerStockUnit } } : {}),
     }
   })
   unique(materials.map((material) => material.materialId), 'Additional BOM material IDs')
@@ -553,10 +557,12 @@ function validateMaterials(value: unknown, field: string): PlantOrderMaterial[] 
   const rows = array(value, field, 1, 100).map((candidate, index): PlantOrderMaterial => {
     const rowField = `${field}[${index}]`
     const hasCost = isRecord(candidate) && candidate.standardCostPerUnitMmk !== undefined
-    const row = exact(candidate, rowField, ['materialId', 'name', 'unit', 'quantityPerUnitMilli', ...(hasCost ? ['standardCostPerUnitMmk'] : [])])
+    const hasShopSupply = isRecord(candidate) && candidate.shopSupply !== undefined
+    const row = exact(candidate, rowField, ['materialId', 'name', 'unit', 'quantityPerUnitMilli', ...(hasCost ? ['standardCostPerUnitMmk'] : []), ...(hasShopSupply ? ['shopSupply'] : [])])
     const unit = text(row.unit, `${rowField}.unit`, 10)
     if (!materialUnits.has(unit)) throw new Error(`${rowField}.unit is unsupported.`)
-    return { materialId: identifier(row.materialId, `${rowField}.materialId`, 'MAT'), name: text(row.name, `${rowField}.name`), unit: unit as PlantOrderMaterial['unit'], quantityPerUnitMilli: integer(row.quantityPerUnitMilli, `${rowField}.quantityPerUnitMilli`, 1), ...(hasCost ? { standardCostPerUnitMmk: integer(row.standardCostPerUnitMmk, `${rowField}.standardCostPerUnitMmk`, 1) } : {}) }
+    const shopSupply = hasShopSupply ? exact(row.shopSupply, `${rowField}.shopSupply`, ['sku', 'materialQuantityMilliPerStockUnit']) : null
+    return { materialId: identifier(row.materialId, `${rowField}.materialId`, 'MAT'), name: text(row.name, `${rowField}.name`), unit: unit as PlantOrderMaterial['unit'], quantityPerUnitMilli: integer(row.quantityPerUnitMilli, `${rowField}.quantityPerUnitMilli`, 1), ...(hasCost ? { standardCostPerUnitMmk: integer(row.standardCostPerUnitMmk, `${rowField}.standardCostPerUnitMmk`, 1) } : {}), ...(shopSupply ? { shopSupply: { sku: text(shopSupply.sku, `${rowField}.shopSupply.sku`, 80), materialQuantityMilliPerStockUnit: integer(shopSupply.materialQuantityMilliPerStockUnit, `${rowField}.shopSupply.materialQuantityMilliPerStockUnit`, 1) } } : {}) }
   })
   unique(rows.map((row) => row.materialId), `${field} material IDs`); sorted(rows.map((row) => row.materialId), `${field} material IDs`)
   return rows

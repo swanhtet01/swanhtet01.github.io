@@ -237,6 +237,7 @@ def _materials(value: object, field: str) -> list[dict[str, Any]]:
     for index, candidate in enumerate(rows):
         row_field = f"{field}[{index}]"
         has_cost = isinstance(candidate, Mapping) and "standardCostPerUnitMmk" in candidate
+        has_shop_supply = isinstance(candidate, Mapping) and "shopSupply" in candidate
         source = _object(
             candidate,
             row_field,
@@ -246,11 +247,21 @@ def _materials(value: object, field: str) -> list[dict[str, Any]]:
                 "unit",
                 "quantityPerUnitMilli",
                 *(("standardCostPerUnitMmk",) if has_cost else ()),
+                *(("shopSupply",) if has_shop_supply else ()),
             ),
         )
         unit = source["unit"]
         if not isinstance(unit, str) or unit not in _MATERIAL_UNITS:
             raise _fail(f"{row_field}.unit is unsupported.")
+        shop_supply = (
+            _object(
+                source["shopSupply"],
+                f"{row_field}.shopSupply",
+                ("sku", "materialQuantityMilliPerStockUnit"),
+            )
+            if has_shop_supply
+            else None
+        )
         result.append(
             {
                 "materialId": _identifier(
@@ -272,6 +283,24 @@ def _materials(value: object, field: str) -> list[dict[str, Any]]:
                         )
                     }
                     if has_cost
+                    else {}
+                ),
+                **(
+                    {
+                        "shopSupply": {
+                            "sku": _text(
+                                shop_supply["sku"],
+                                f"{row_field}.shopSupply.sku",
+                                maximum=80,
+                            ),
+                            "materialQuantityMilliPerStockUnit": _integer(
+                                shop_supply["materialQuantityMilliPerStockUnit"],
+                                f"{row_field}.shopSupply.materialQuantityMilliPerStockUnit",
+                                minimum=1,
+                            ),
+                        }
+                    }
+                    if shop_supply is not None
                     else {}
                 ),
             }

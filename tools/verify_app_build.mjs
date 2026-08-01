@@ -1450,9 +1450,12 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !coreSource.includes('const plantMrpRows = [')
   || !coreSource.includes('const plantMrpNext =')
   || !coreSource.includes('projectPlantOrder(production.orderExecution)')
-  || !coreSource.includes("['Demand', activeJobs.length ? `${activeJobs.length} active jobs` : 'No active job']")
-  || !coreSource.includes("['BOM', orderExecutionProjection?.plan ? `${orderExecutionProjection.materials.length} materials` : 'Use order plan']")
-  || !coreSource.includes("['Shop supply', shopLowStock.length ? `${shopLowStock.length} low SKU` : 'Clear']")
+  || !coreSource.includes('projectProductionMaterialRequirements(production.orderExecution, relatedCommerce)')
+  || !coreSource.includes("materialRequirements.status === 'mapping_required'")
+  || !coreSource.includes("materialRequirements.status === 'supply_at_risk'")
+  || !coreSource.includes("materialRequirements.status === 'covered_by_open_po'")
+  || !coreSource.includes("['Shop mapping', materialRequirements?.summary.mappingRequired")
+  || !coreSource.includes("['Supply', materialRequirements?.summary.shortages")
   || !coreSource.includes("['Issue gate', openMaterialIssues.length ? `${openMaterialIssues.length} open` : 'Clear']")
   || !coreSource.includes('aria-label="Plant MRP readiness"')
   || !coreSource.includes('MRP readiness')
@@ -3416,6 +3419,11 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || !coreSource.includes('Loading batch execution')
   || !plantOrderUiSource.includes('Run one controlled batch')
   || !plantOrderUiSource.includes('Additional BOM materials (optional)')
+  || !plantOrderUiSource.includes('Shop supply SKU')
+  || !plantOrderUiSource.includes('Material per Shop stock unit')
+  || !plantOrderUiSource.includes('Download material requirements')
+  || !plantOrderUiSource.includes('Late or undated purchase orders are flagged as supply at risk.')
+  || !plantOrderUiSource.includes('No purchase order, supplier message, stock issue, production change, or provider call occurs.')
   || !plantOrderUiSource.includes('Additional routing operations (optional)')
   || !plantOrderUiSource.includes('details?: Array<{ label: string; value: string }>')
   || !plantOrderUiSource.includes("{ label: 'Output batch'")
@@ -3502,7 +3510,16 @@ if (!commerceSource.includes("'production_issue'")
   || !shopInventorySource.includes("kind: 'production_issue'")
   || !shopInventoryPythonSource.includes('production issue allocations do not match deterministic available location stock')
   || !productionMaterialHandoffSource.includes('pendingProductionMaterialHandoffs')
+  || !productionMaterialHandoffSource.includes("PRODUCTION_MATERIAL_REQUIREMENTS_CONTRACT = 'supermega.production.material_requirements.v1'")
+  || !productionMaterialHandoffSource.includes('projectProductionMaterialRequirements')
+  || !productionMaterialHandoffSource.includes('suggestedOrderStockUnits')
+  || !productionMaterialHandoffSource.includes('suggestedExpediteStockUnits')
+  || !productionMaterialHandoffSource.includes("supplyAtRisk: rows.filter((row) => row.status === 'supply_at_risk').length")
+  || !productionMaterialHandoffSource.includes('purchaseCreated: false')
   || !productionMaterialHandoffSource.includes("movement.kind === 'production_issue'")
+  || !productionMaterialHandoffPython.includes('PRODUCTION_MATERIAL_REQUIREMENTS_CONTRACT')
+  || !productionMaterialHandoffPython.includes('project_production_material_requirements')
+  || !productionMaterialHandoffPython.includes('validate_production_material_requirements')
   || !productionMaterialHandoffPython.includes('require_shop_issue_matches_plant')
   || !productionMaterialHandoffPython.includes('require_shop_issue_before_plant_progress')
   || !managedTrialRuntimeSource.includes('related_surfaces = ("production",)')
@@ -5607,6 +5624,8 @@ async function verifyPlantOrderRuntime() {
   }
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts')).href}?plant-order-verify=${Date.now()}`)
+    const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?plant-mrp-commerce-verify=${Date.now()}`)
+    const materialHandoff = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-material-handoff.ts')).href}?plant-mrp-verify=${Date.now()}`)
     const proof = (sequence, label) => ({
       actionId: `ACT-20260726-${String(sequence).padStart(3, '0')}`,
       capturedAt: `2026-07-26T09:${String(Math.floor(sequence / 60)).padStart(2, '0')}:${String(sequence % 60).padStart(2, '0')}+06:30`,
@@ -5696,6 +5715,78 @@ async function verifyPlantOrderRuntime() {
     tamperedCostReviewPacket.financialCost.planned.totalMmk += 1
     assertThrows(() => model.validatePlantOrderCostReviewPacket(tamperedCostReviewPacket), 'tampered_plant_order_cost_review_packet_succeeded')
     assert(model.buildPlantOrderCostReviewPacket(model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), executionPlan, proof(1, 'unpriced execution plan'), model.EMPTY_PLANT_ORDER_DIGEST).state) === null, 'unpriced_plant_order_cost_review_packet_invented_cost')
+    const mrpPlan = model.buildPlantOrderEffectivePlan({
+      ...planInput,
+      planId: 'PLN-20260726-MRP',
+      effectiveFrom: '2026-07-27T09:00:00.000Z',
+      effectiveUntil: '2026-08-27T09:00:00.000Z',
+      materials: [{
+        ...planInput.materials[0],
+        shopSupply: { sku: 'SKU-RM-BAG', materialQuantityMilliPerStockUnit: 5_000 },
+      }],
+    })
+    const mrpState = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), mrpPlan, proof(2, 'reviewed material supply mapping'), model.EMPTY_PLANT_ORDER_DIGEST).state
+    const mrpBaseCommerce = commerce.validateCommerceState({
+      ...commerce.createEmptyCommerce(),
+      items: [{ sku: 'SKU-RM-BAG', name: 'Filter media 5 kg bag', onHand: 2, reorderAt: 1, price: 5_000 }],
+    })
+    const mrpPurchaseOrder = commerce.createCommercePurchaseOrder(mrpBaseCommerce, {
+      id: 'PO-00000000-0000-4000-8000-000000000402',
+      expectedAt: '2026-07-28T09:00:00.000Z',
+      supplier: 'Reviewed material supplier',
+      sku: 'SKU-RM-BAG',
+      quantityOrdered: 1,
+      unitCostMmk: 5_000,
+    }, {
+      actionId: 'ACT-MRP-PO-001',
+      capturedAt: '2026-07-26T09:00:00.000Z',
+      actor: 'Plant planner',
+      reason: 'Reviewed open supply for the production requirement.',
+      evidenceReference: 'MRP-PO-001',
+    })
+    assert(mrpPurchaseOrder, 'plant_mrp_purchase_order_fixture_failed')
+    const shortageRequirements = materialHandoff.projectProductionMaterialRequirements(mrpState, mrpBaseCommerce)
+    assert(shortageRequirements?.status === 'shortage'
+      && shortageRequirements.rows[0].shopSupply.suggestedOrderStockUnits === 1,
+    'plant_mrp_shortage_recommendation_wrong')
+    const materialRequirements = materialHandoff.projectProductionMaterialRequirements(mrpState, mrpPurchaseOrder)
+    assert(materialRequirements?.contract === 'supermega.production.material_requirements.v1'
+      && materialRequirements.status === 'covered_by_open_po'
+      && materialRequirements.rows[0].requiredQuantityMilli === 15_000
+      && materialRequirements.rows[0].shopSupply.onHandQuantityMilli === 10_000
+      && materialRequirements.rows[0].shopSupply.openPurchaseOrderQuantityMilli === 5_000
+      && materialRequirements.rows[0].shopSupply.suggestedOrderStockUnits === 0,
+    'plant_mrp_did_not_bind_bom_shop_and_open_po_supply')
+    const mrpLatePurchaseOrder = commerce.createCommercePurchaseOrder(mrpBaseCommerce, {
+      id: 'PO-00000000-0000-4000-8000-000000000403',
+      expectedAt: '2026-07-25T09:00:00.000Z',
+      supplier: 'Late material supplier',
+      sku: 'SKU-RM-BAG',
+      quantityOrdered: 1,
+      unitCostMmk: 5_000,
+    }, {
+      actionId: 'ACT-MRP-PO-002',
+      capturedAt: '2026-07-24T09:00:00.000Z',
+      actor: 'Plant planner',
+      reason: 'Reviewed late supply for the production requirement.',
+      evidenceReference: 'MRP-PO-002',
+    })
+    const atRiskRequirements = materialHandoff.projectProductionMaterialRequirements(mrpState, mrpLatePurchaseOrder)
+    assert(atRiskRequirements?.status === 'supply_at_risk'
+      && atRiskRequirements.summary.supplyAtRisk === 1
+      && atRiskRequirements.rows[0].shopSupply.atRiskPurchaseOrderStockUnits === 1
+      && atRiskRequirements.rows[0].shopSupply.suggestedExpediteStockUnits === 1
+      && atRiskRequirements.rows[0].shopSupply.suggestedOrderStockUnits === 0
+      && atRiskRequirements.rows[0].shopSupply.nextExpectedAt === null,
+    'plant_mrp_late_or_undated_supply_was_presented_as_safe_coverage')
+    assert(materialHandoff.validateProductionMaterialRequirements(materialRequirements, mrpState, mrpPurchaseOrder).digest === materialRequirements.digest
+      && Object.values(materialRequirements.authority).every((allowed) => allowed === false),
+    'plant_mrp_review_packet_not_evidence_bound_or_side_effect_free')
+    const tamperedMaterialRequirements = structuredClone(materialRequirements)
+    tamperedMaterialRequirements.rows[0].shopSupply.onHandStockUnits += 1
+    assertThrows(() => materialHandoff.validateProductionMaterialRequirements(tamperedMaterialRequirements, mrpState, mrpPurchaseOrder), 'tampered_plant_mrp_packet_succeeded')
+    const unmappedRequirements = materialHandoff.projectProductionMaterialRequirements(pricedPlanState, mrpBaseCommerce)
+    assert(unmappedRequirements?.status === 'mapping_required' && unmappedRequirements.summary.mappingRequired === 2, 'plant_mrp_invented_supply_mapping')
     assert(plan.sourceDigest === 'sha256:9415e4d6d6dda852c2014d611c1f93e385d31c40df2b4ec30d293b12991ba519'
       && plan.packageDigest === 'sha256:4f34743417e89e3ffcfa6c889fe2b55c14fd48f51926f4f198913cf4ec3d0a5b',
     'plant_order_python_browser_plan_digest_drifted')

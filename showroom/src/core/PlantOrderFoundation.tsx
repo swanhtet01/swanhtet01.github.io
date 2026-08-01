@@ -46,7 +46,7 @@ import {
   type PlantOrderTransitionResult,
 } from './plant-order-foundation'
 import type { CommerceState } from './commerce-workspace'
-import { pendingProductionMaterialHandoffs } from './production-material-handoff'
+import { pendingProductionMaterialHandoffs, projectProductionMaterialRequirements } from './production-material-handoff'
 import { validateProductionState, type ProductionJob, type ProductionState } from './production-workspace'
 import { plantIndustryPack, plantIndustryPackSetup, type PlantIndustryPackId } from './plant-industry-packs'
 
@@ -88,6 +88,8 @@ type SetupDraft = {
   materialUnit: PlantOrderMaterial['unit']
   quantityPerUnit: string
   standardCostPerUnitMmk: string
+  shopSku: string
+  materialQuantityPerStockUnit: string
   additionalMaterials: string
   workCentreId: string
   workCentreName: string
@@ -229,7 +231,9 @@ function revisionSetup(plan: PlantOrderPlan, job: ProductionJob | undefined, ind
     materialUnit: primaryMaterial.unit,
     quantityPerUnit: milliInputValue(primaryMaterial.quantityPerUnitMilli),
     standardCostPerUnitMmk: primaryMaterial.standardCostPerUnitMmk ? String(primaryMaterial.standardCostPerUnitMmk) : '',
-    additionalMaterials: plan.materials.slice(1).map((material) => `${material.materialId} | ${material.name} | ${material.unit} | ${milliInputValue(material.quantityPerUnitMilli)} | ${material.standardCostPerUnitMmk ?? ''}`).join('\n'),
+    shopSku: primaryMaterial.shopSupply?.sku ?? '',
+    materialQuantityPerStockUnit: primaryMaterial.shopSupply ? milliInputValue(primaryMaterial.shopSupply.materialQuantityMilliPerStockUnit) : '',
+    additionalMaterials: plan.materials.slice(1).map((material) => `${material.materialId} | ${material.name} | ${material.unit} | ${milliInputValue(material.quantityPerUnitMilli)} | ${material.standardCostPerUnitMmk ?? ''}${material.shopSupply ? ` | ${material.shopSupply.sku} | ${milliInputValue(material.shopSupply.materialQuantityMilliPerStockUnit)}` : ''}`).join('\n'),
     workCentreId: primaryOperation.workCentreId,
     workCentreName: centreNames.get(primaryOperation.workCentreId) ?? primaryOperation.workCentreId,
     minutesPerUnit: milliInputValue(primaryOperation.minutesPerUnitMilli),
@@ -323,10 +327,15 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   const costDrivers = useMemo(() => projectPlantOrderCostDrivers(projection), [projection])
   const financialCost = useMemo(() => projectPlantOrderFinancialCost(projection), [projection])
   const costReviewPacket = useMemo(() => buildPlantOrderCostReviewPacket(state), [state])
+  const materialRequirements = useMemo(() => projectProductionMaterialRequirements(state, commerceState), [commerceState, state])
   const costReviewDownload = useMemo(() => costReviewPacket ? {
     filename: `${costReviewPacket.plan.job.jobId.toLowerCase()}-cost-review.json`,
     href: `data:application/json;charset=utf-8,${encodeURIComponent(`${JSON.stringify(costReviewPacket, null, 2)}\n`)}`,
   } : null, [costReviewPacket])
+  const materialRequirementsDownload = useMemo(() => materialRequirements ? {
+    filename: `${materialRequirements.job.jobId.toLowerCase()}-material-requirements.json`,
+    href: `data:application/json;charset=utf-8,${encodeURIComponent(`${JSON.stringify(materialRequirements, null, 2)}\n`)}`,
+  } : null, [materialRequirements])
   const pendingWarehouseIssues = useMemo(
     () => pendingProductionMaterialHandoffs(state, commerceState),
     [commerceState, state],
@@ -522,14 +531,17 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
     try {
       const quantityPerUnitMilli = parsePlantOrderQuantityMilli(setupDraft.quantityPerUnit); const minutesPerUnitMilli = parsePlantOrderQuantityMilli(setupDraft.minutesPerUnit)
       const standardCostPerUnitMmk = parsePlantOrderMmkRate(setupDraft.standardCostPerUnitMmk); const standardCostPerMinuteMmk = parsePlantOrderMmkRate(setupDraft.standardCostPerMinuteMmk)
+      const shopSku = setupDraft.shopSku.trim(); const materialQuantityMilliPerStockUnit = parsePlantOrderQuantityMilli(setupDraft.materialQuantityPerStockUnit)
       if (!quantityPerUnitMilli || !minutesPerUnitMilli) throw new Error('Material and work-centre quantities must be positive numbers with up to three decimals.')
       if (!standardCostPerUnitMmk || !standardCostPerMinuteMmk) throw new Error('Reviewed standard rates must be positive whole-MMK amounts.')
+      if (Boolean(shopSku) !== Boolean(materialQuantityMilliPerStockUnit)) throw new Error('Choose both the Shop supply SKU and its material quantity per stock unit, or leave both blank.')
       const primaryMaterial: PlantOrderMaterial = {
         materialId: setupDraft.materialId.trim().toUpperCase(),
         name: setupDraft.materialName.trim(),
         unit: setupDraft.materialUnit,
         quantityPerUnitMilli,
         standardCostPerUnitMmk,
+        ...(shopSku && materialQuantityMilliPerStockUnit ? { shopSupply: { sku: shopSku, materialQuantityMilliPerStockUnit } } : {}),
       }
       const materials = [primaryMaterial, ...parsePlantOrderMaterialPaste(setupDraft.additionalMaterials)]
         .sort((left, right) => left.materialId < right.materialId ? -1 : left.materialId > right.materialId ? 1 : 0)
@@ -907,6 +919,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
       })}</div><p className="panel-copy">Certificate evidence is immutable and attributable. It gates release and each routed operation but never claims SuperMega calibrated the equipment.</p></details> : null}
       {projection.qualityReworks.length ? <details className="compact-disclosure production-history"><summary>Quality rework <span>{projection.qualityReworks.length}</span></summary><div className="issue-list">{projection.qualityReworks.map((rework) => <article key={rework.id}><span aria-hidden="true" className="issue-mark resolved">RWK</span><div><strong>{rework.quantity} units · {rework.operationId}</strong><small>{formatMilli(rework.actualMinutesMilli)} minutes · owner {rework.owner} · {rework.cause} → {rework.correctiveAction}</small></div></article>)}</div><p className="panel-copy">Rework time is included in actual conversion cost and variance. Only a later full passing inspection clears the hold.</p></details> : null}
       {requiresOperationEvidence ? <details className="compact-disclosure production-history"><summary>Routing progress <span>{projection.metrics.completedOperationCount}/{projection.operations.length}</span></summary><div className="issue-list">{projection.operations.map((operation) => <article key={operation.operationId}><span aria-hidden="true" className={`issue-mark ${operation.status === 'complete' ? 'resolved' : ''}`}>{operation.sequence}</span><div><strong>{operation.name}</strong><small>{operation.completedQuantity.toLocaleString()} / {projection.metrics.targetQuantity.toLocaleString()} units · {formatMilli(operation.actualMinutesMilli)} actual / {formatMilli(operation.plannedMinutesMilli)} planned minutes · {operation.status.replace('_', ' ')}</small></div></article>)}</div></details> : null}
+      {materialRequirements ? <details className="compact-disclosure production-history" open><summary>Material requirements <span>{materialRequirements.status.replaceAll('_', ' ')}</span></summary><div className="issue-list">{materialRequirements.rows.map((row) => <article key={row.materialId}><span aria-hidden="true" className={`issue-mark ${row.status === 'fulfilled' || row.status === 'ready_to_issue' ? 'resolved' : ''}`}>MRP</span><div><strong>{row.materialName} · {row.status.replaceAll('_', ' ')}</strong><small>{formatMilli(row.remainingQuantityMilli)} {row.unit} remaining{row.shopSupply ? ` · ${row.shopSupply.sku}: ${row.shopSupply.onHandStockUnits} on hand + ${row.shopSupply.openPurchaseOrderStockUnits} open PO${row.shopSupply.atRiskPurchaseOrderStockUnits ? ` (${row.shopSupply.atRiskPurchaseOrderStockUnits} late or undated)` : ''} · issue ${row.shopSupply.suggestedIssueStockUnits} / expedite ${row.shopSupply.suggestedExpediteStockUnits} / order ${row.shopSupply.suggestedOrderStockUnits} stock units${row.shopSupply.nextExpectedAt ? ` · next confirmed ${new Date(row.shopSupply.nextExpectedAt).toLocaleDateString()}` : ''}` : ' · bind one Shop SKU and conversion in the reviewed BOM'}</small></div></article>)}</div>{materialRequirementsDownload ? <><a className="core-button" download={materialRequirementsDownload.filename} href={materialRequirementsDownload.href}>Download material requirements</a><p className="panel-copy">Evidence-bound planning only. Late or undated purchase orders are flagged as supply at risk. No purchase order, supplier message, stock issue, production change, or provider call occurs.</p></> : null}</details> : null}
       {projection.plan ? <details className="compact-disclosure production-history"><summary>Standard vs actual <span>{financialCost.status === 'setup_required' ? 'Rates required' : formatMmk(financialCost.varianceMmk ?? 0)}</span></summary>{financialCost.status !== 'setup_required' ? <div className="form-row"><span className="status-pill">Planned {formatMmk(financialCost.planned.totalMmk)}</span><span className="status-pill">Earned {formatMmk(financialCost.earned.totalMmk)}</span><span className="status-pill">Actual {formatMmk(financialCost.actual.totalMmk)}</span><span className={`status-pill ${(financialCost.varianceMmk ?? 0) <= 0 ? 'bounded' : 'pending'}`}>Variance {formatMmk(financialCost.varianceMmk ?? 0)}</span><span className={`status-pill ${(financialCost.qualityLossMmk ?? 0) === 0 ? 'bounded' : 'pending'}`}>Quality loss {formatMmk(financialCost.qualityLossMmk ?? 0)}</span></div> : null}<div className="issue-list">
         {costDrivers.materials.map((material) => <article key={material.materialId}><span aria-hidden="true" className={`issue-mark ${material.varianceQuantityMilli <= 0 ? 'resolved' : ''}`}>MAT</span><div><strong>{material.name}</strong><small>{formatMilli(material.actualQuantityMilli)} actual / {formatMilli(material.standardQuantityMilli)} standard {material.unit} · {formatMilli(material.varianceQuantityMilli)} variance</small></div></article>)}
         {costDrivers.operations.map((operation) => <article key={operation.operationId}><span aria-hidden="true" className={`issue-mark ${operation.varianceMinutesMilli <= 0 ? 'resolved' : ''}`}>MIN</span><div><strong>{operation.name}</strong><small>{formatMilli(operation.actualMinutesMilli)} actual / {formatMilli(operation.standardMinutesMilli)} standard minutes · {formatMilli(operation.varianceMinutesMilli)} variance</small></div></article>)}
@@ -942,7 +955,9 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
             <div className="form-row"><label>Material ID<input disabled={disabled || Boolean(review)} maxLength={80} onChange={(event) => setSetupDraft((current) => ({ ...current, materialId: event.target.value }))} required value={setupDraft.materialId} /></label><label>Material name<input disabled={disabled || Boolean(review)} maxLength={180} onChange={(event) => setSetupDraft((current) => ({ ...current, materialName: event.target.value }))} required value={setupDraft.materialName} /></label></div>
             <div className="form-row"><label>Material unit<select disabled={disabled || Boolean(review)} onChange={(event) => setSetupDraft((current) => ({ ...current, materialUnit: event.target.value as PlantOrderMaterial['unit'] }))} value={setupDraft.materialUnit}>{setupMaterialUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></label><label>Per output unit<input disabled={disabled || Boolean(review)} inputMode="decimal" min="0.001" onChange={(event) => setSetupDraft((current) => ({ ...current, quantityPerUnit: event.target.value }))} required step="0.001" type="number" value={setupDraft.quantityPerUnit} /></label></div>
             <label>Standard material cost (MMK per material unit)<input disabled={disabled || Boolean(review)} inputMode="numeric" min="1" onChange={(event) => setSetupDraft((current) => ({ ...current, standardCostPerUnitMmk: event.target.value }))} placeholder="Enter reviewed rate" required step="1" type="number" value={setupDraft.standardCostPerUnitMmk} /></label>
-            <label>Additional BOM materials (optional)<textarea disabled={disabled || Boolean(review)} maxLength={16_000} onChange={(event) => setSetupDraft((current) => ({ ...current, additionalMaterials: event.target.value }))} placeholder="MAT-RUBBER-01 | Natural rubber | kg | 1.5 | 4200" rows={4} value={setupDraft.additionalMaterials} /><small>One row: material ID | name | unit | quantity per output unit | MMK per material unit. Add up to {PLANT_ORDER_ADDITIONAL_MATERIAL_MAX}.</small></label>
+            <div className="form-row"><label>Shop supply SKU<select disabled={disabled || Boolean(review)} onChange={(event) => setSetupDraft((current) => ({ ...current, shopSku: event.target.value }))} value={setupDraft.shopSku}><option value="">Map later</option>{commerceState.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.sku} · {item.onHand} available</option>)}</select></label><label>Material per Shop stock unit<input disabled={disabled || Boolean(review) || !setupDraft.shopSku} inputMode="decimal" min="0.001" onChange={(event) => setSetupDraft((current) => ({ ...current, materialQuantityPerStockUnit: event.target.value }))} placeholder="25 for one 25 kg bag" required={Boolean(setupDraft.shopSku)} step="0.001" type="number" value={setupDraft.materialQuantityPerStockUnit} /></label></div>
+            <small>Explicit conversion powers MRP. Example: one Shop bag supplies 25.000 kg. No name matching is used.</small>
+            <label>Additional BOM materials (optional)<textarea disabled={disabled || Boolean(review)} maxLength={16_000} onChange={(event) => setSetupDraft((current) => ({ ...current, additionalMaterials: event.target.value }))} placeholder="MAT-RUBBER-01 | Natural rubber | kg | 1.5 | 4200 | SKU-RUBBER-BAG | 25" rows={4} value={setupDraft.additionalMaterials} /><small>One row: material ID | name | unit | quantity per output unit | MMK per material unit | optional Shop SKU | material quantity per stock unit. Add up to {PLANT_ORDER_ADDITIONAL_MATERIAL_MAX}.</small></label>
             <div className="form-row"><label>Work centre ID<input disabled={disabled || Boolean(review)} maxLength={80} onChange={(event) => setSetupDraft((current) => ({ ...current, workCentreId: event.target.value }))} required value={setupDraft.workCentreId} /></label><label>Work centre name<input disabled={disabled || Boolean(review)} maxLength={180} onChange={(event) => setSetupDraft((current) => ({ ...current, workCentreName: event.target.value }))} required value={setupDraft.workCentreName} /></label></div>
             <div className="form-row"><label>Minutes per output unit<input disabled={disabled || Boolean(review)} inputMode="decimal" min="0.001" onChange={(event) => setSetupDraft((current) => ({ ...current, minutesPerUnit: event.target.value }))} required step="0.001" type="number" value={setupDraft.minutesPerUnit} /></label><label>Standard conversion cost (MMK per minute)<input disabled={disabled || Boolean(review)} inputMode="numeric" min="1" onChange={(event) => setSetupDraft((current) => ({ ...current, standardCostPerMinuteMmk: event.target.value }))} placeholder="Enter reviewed rate" required step="1" type="number" value={setupDraft.standardCostPerMinuteMmk} /></label></div>
             <label>Additional routing operations (optional)<textarea disabled={disabled || Boolean(review)} maxLength={16_000} onChange={(event) => setSetupDraft((current) => ({ ...current, additionalOperations: event.target.value }))} placeholder="OP-TEST-20 | Pressure test | WC-TEST-01 | Test bench | 1.5 | 600" rows={4} value={setupDraft.additionalOperations} /><small>One row: operation ID | name | work centre ID | work centre name | minutes per output unit | MMK per minute. Sequence follows row order.</small></label>

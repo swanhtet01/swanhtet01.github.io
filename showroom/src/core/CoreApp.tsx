@@ -152,6 +152,7 @@ import {
   type CommerceWebsiteOrderInput,
 } from './commerce-workspace'
 import { projectShopInventory } from './shop-inventory-foundation'
+import { projectProductionMaterialRequirements } from './production-material-handoff'
 import { channelOrderDraftIsReady, type ChannelOrderDraft } from './channel-order-intake'
 import type {
   CommerceOrderDraft,
@@ -7271,26 +7272,32 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Boundary', 'No equipment write'],
   ] as const
   const openMaterialIssues = openIssues.filter((issue) => issue.kind === 'materials')
-  const shopLowStock = relatedCommerce.items.filter((item) => item.onHand <= item.reorderAt)
   const orderExecutionProjection = production.orderExecution ? projectPlantOrder(production.orderExecution) : null
+  const materialRequirements = production.orderExecution ? projectProductionMaterialRequirements(production.orderExecution, relatedCommerce) : null
   const plantMrpNext = !productionCanWrite
     ? 'Restore Plant readiness'
     : openMaterialIssues.length
       ? 'Resolve material blockers'
-      : orderExecutionProjection?.latestAvailability?.shortfalls.length
-        ? 'Check BOM shortfalls'
-        : shopLowStock.length
-          ? 'Review Shop supply'
-          : activeJobs.length && !materialEntries.length
-            ? 'Record first material use'
-            : 'Materials ready for review'
+      : !materialRequirements
+        ? 'Set up the reviewed BOM'
+        : materialRequirements.status === 'mapping_required'
+          ? 'Map BOM materials to Shop stock'
+          : materialRequirements.status === 'shortage'
+            ? 'Review purchase quantities'
+            : materialRequirements.status === 'supply_at_risk'
+              ? 'Expedite or re-date incoming supply'
+            : materialRequirements.status === 'covered_by_open_po'
+              ? 'Monitor incoming purchase orders'
+              : materialRequirements.status === 'ready_to_issue'
+                ? 'Issue reviewed Shop stock'
+                : 'Material supply fulfilled'
   const plantMrpRows = [
-    ['Demand', activeJobs.length ? `${activeJobs.length} active jobs` : 'No active job'],
-    ['BOM', orderExecutionProjection?.plan ? `${orderExecutionProjection.materials.length} materials` : 'Use order plan'],
+    ['Demand', materialRequirements ? `${materialRequirements.job.targetQuantity} ${materialRequirements.job.product}` : activeJobs.length ? `${activeJobs.length} active jobs` : 'No active job'],
+    ['BOM', materialRequirements ? `${materialRequirements.summary.materials} materials` : orderExecutionProjection?.plan ? `${orderExecutionProjection.materials.length} materials` : 'Use order plan'],
     ['Availability', orderExecutionProjection?.latestAvailability ? orderExecutionProjection.latestAvailability.passed ? 'Checked clear' : `${orderExecutionProjection.latestAvailability.shortfalls.length} short` : 'Needs check'],
-    ['Shop supply', shopLowStock.length ? `${shopLowStock.length} low SKU` : 'Clear'],
+    ['Shop mapping', materialRequirements?.summary.mappingRequired ? `${materialRequirements.summary.mappingRequired} required` : materialRequirements ? 'Complete' : 'Not planned'],
+    ['Supply', materialRequirements?.summary.shortages ? `${materialRequirements.summary.shortages} shortage` : materialRequirements?.summary.supplyAtRisk ? `${materialRequirements.summary.supplyAtRisk} at risk` : materialRequirements?.summary.coveredByOpenPo ? `${materialRequirements.summary.coveredByOpenPo} on PO` : materialRequirements?.summary.readyToIssue ? `${materialRequirements.summary.readyToIssue} ready` : materialRequirements?.summary.fulfilled ? 'Fulfilled' : 'Not planned'],
     ['Issue gate', openMaterialIssues.length ? `${openMaterialIssues.length} open` : 'Clear'],
-    ['Trace', materialEntries.length ? `${materialEntries.length} consumed` : 'Not started'],
   ] as const
   const openQualityIssues = openIssues.filter((issue) => issue.kind === 'quality')
   const productionGoodUnits = production.jobs.reduce((total, job) => total + job.output, 0)

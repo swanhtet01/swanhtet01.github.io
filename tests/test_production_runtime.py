@@ -13,6 +13,7 @@ from supermega_runtime.plant_order_foundation import (
     PlantOrderValidationError,
     apply_plant_order_plan,
     build_plant_order_cost_review_packet,
+    build_plant_order_effective_plan,
     build_plant_order_execution_plan,
     check_plant_order_availability,
     create_empty_plant_order_state,
@@ -29,6 +30,10 @@ from supermega_runtime.production_runtime import (
     PRODUCTION_EVENTS,
     PRODUCTION_HUMAN_EVENTS,
     validate_production_state,
+)
+from supermega_runtime.production_material_handoff import (
+    project_production_material_requirements,
+    validate_production_material_requirements,
 )
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_runtime import create_trial_router
@@ -641,6 +646,111 @@ def apply_event(
 
 
 class ProductionRuntimeTests(unittest.TestCase):
+    def test_material_requirements_bind_bom_shop_stock_and_open_purchase_orders(self) -> None:
+        current = starting_workspace(target=10)
+        evidence = action_evidence("ACT-MRP-PLAN-001")
+        plan = build_plant_order_effective_plan(
+            plan_id="PLN-MRP-001",
+            source_digest=plant_order_evidence_digest({"job": current["jobs"][0]}),  # type: ignore[index]
+            effective_from="2026-08-01T09:00:00.000Z",
+            effective_until="2026-08-31T09:00:00.000Z",
+            job={
+                "jobId": "JOB-REAL-001",
+                "product": "Customer batch 001",
+                "targetQuantity": 10,
+                "outputBatchId": "BATCH-MRP-001",
+            },
+            materials=[{
+                "materialId": "MAT-FILTER-001",
+                "name": "Filter media",
+                "unit": "kg",
+                "quantityPerUnitMilli": 1_500,
+                "standardCostPerUnitMmk": 1_000,
+                "shopSupply": {
+                    "sku": "SKU-RM-BAG",
+                    "materialQuantityMilliPerStockUnit": 5_000,
+                },
+            }],
+            work_centres=[{"workCentreId": "WC-MRP-001", "name": "MRP line"}],
+            routing=[{
+                "operationId": "OP-MRP-10",
+                "sequence": 1,
+                "name": "Process",
+                "workCentreId": "WC-MRP-001",
+                "minutesPerUnitMilli": 1_000,
+                "standardCostPerMinuteMmk": 500,
+            }],
+        )
+        empty = create_empty_plant_order_state()
+        execution = apply_plant_order_plan(
+            empty, plan, evidence, expected_head_digest=empty["headDigest"]
+        )["state"]
+        proposed = deepcopy(current)
+        proposed["orderExecution"] = execution
+        production = apply_event(
+            current,
+            "production.order_execution.recorded",
+            proposed,
+            evidence,
+        )
+        commerce = {
+            "schema": "supermega.commerce.workspace.v2",
+            "items": [{
+                "sku": "SKU-RM-BAG",
+                "name": "Filter media 5 kg bag",
+                "onHand": 2,
+                "reorderAt": 1,
+                "price": 5_000,
+            }],
+            "orders": [],
+            "movements": [],
+            "closes": [],
+            "purchaseOrders": [{
+                "id": "PO-00000000-0000-4000-8000-000000000402",
+                "createdAt": "2026-07-24T09:00:00.000Z",
+                "expectedAt": "2026-08-02T09:00:00.000Z",
+                "supplier": "Reviewed material supplier",
+                "sku": "SKU-RM-BAG",
+                "quantityOrdered": 1,
+                "unitCostMmk": 5_000,
+                "creation": action_evidence("ACT-MRP-PO-001"),
+            }],
+        }
+        requirements = project_production_material_requirements(production, commerce)
+        self.assertIsNotNone(requirements)
+        assert requirements is not None
+        self.assertEqual(requirements["status"], "covered_by_open_po")
+        self.assertEqual(requirements["rows"][0]["requiredQuantityMilli"], 15_000)
+        self.assertEqual(requirements["rows"][0]["shopSupply"]["onHandQuantityMilli"], 10_000)
+        self.assertEqual(requirements["rows"][0]["shopSupply"]["openPurchaseOrderQuantityMilli"], 5_000)
+        self.assertEqual(requirements["rows"][0]["shopSupply"]["suggestedOrderStockUnits"], 0)
+        self.assertEqual(requirements["rows"][0]["shopSupply"]["atRiskPurchaseOrderStockUnits"], 0)
+        self.assertTrue(all(value is False for value in requirements["authority"].values()))
+        self.assertEqual(
+            validate_production_material_requirements(
+                requirements, production, commerce
+            )["digest"],
+            requirements["digest"],
+        )
+        tampered = deepcopy(requirements)
+        tampered["rows"][0]["shopSupply"]["onHandStockUnits"] += 1
+        with self.assertRaisesRegex(
+            TrialValidationError,
+            "do not match their current Plant and Shop evidence",
+        ):
+            validate_production_material_requirements(tampered, production, commerce)
+
+        late_commerce = deepcopy(commerce)
+        late_commerce["purchaseOrders"][0]["expectedAt"] = "2026-07-28T09:00:00.000Z"
+        at_risk = project_production_material_requirements(production, late_commerce)
+        assert at_risk is not None
+        self.assertEqual(at_risk["status"], "supply_at_risk")
+        self.assertEqual(at_risk["summary"]["supplyAtRisk"], 1)
+        self.assertEqual(at_risk["rows"][0]["shopSupply"]["atRiskPurchaseOrderStockUnits"], 1)
+        self.assertEqual(at_risk["rows"][0]["shopSupply"]["suggestedExpediteStockUnits"], 1)
+        self.assertEqual(at_risk["rows"][0]["shopSupply"]["suggestedOrderStockUnits"], 0)
+        self.assertIsNone(at_risk["rows"][0]["shopSupply"]["nextExpectedAt"])
+
     def test_plant_cost_packet_has_python_browser_parity_and_rejects_tamper(self) -> None:
         plan_input = {
             "plan_id": "PLN-20260726-402",
