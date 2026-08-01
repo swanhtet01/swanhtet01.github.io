@@ -899,6 +899,12 @@ if (shellProductRoutes.join(',') !== 'shop,plant,website,ecommerce') fail('shell
 if (shellNavigationContract.includes("{ to: '/settings/', label: 'Settings' }")) fail('internal_setup_exposed_in_primary_navigation')
 if (!coreShellSource.includes("location.pathname.startsWith('/settings/')\n        ? 'Client setup'")
   || !coreCssSource.includes('grid-template-columns: repeat(4,minmax(64px,1fr))')) fail('client_setup_navigation_separation_missing')
+if (!coreShellSource.includes("theme-${theme}${routeProduct === 'commerce' ? ' shop-product-shell' : ''}")
+  || coreShellSource.includes("theme === 'dark' ? ' shop-shell'")
+  || !coreCssSource.includes('.theme-dark {')
+  || !coreCssSource.includes('.theme-dark .core-topbar {')
+  || !coreCssSource.includes('.shop-product-shell .core-main { padding-bottom: calc(154px + env(safe-area-inset-bottom)); }')
+  || coreCssSource.includes('.shop-shell')) fail('theme_and_shop_route_styling_not_separated')
 const productHomeStart = coreShellSource.indexOf('const customerTracks')
 const productHomeEnd = coreShellSource.indexOf('] as const', productHomeStart) + '] as const'.length
 const productHomePageContract = coreShellSource.slice(productHomeStart, coreShellSource.length)

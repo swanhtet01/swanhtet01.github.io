@@ -1584,8 +1584,8 @@ textarea { min-height: 72px; resize: vertical; }
 .ecommerce-request-receipt small { color: var(--core-quiet); font-size: 8px; }
 .ecommerce-request-body > .form-notice { grid-column: 1/-1; margin: 0; }
 
-/* Shop: direct, product-led counter experience. */
-.shop-shell {
+/* Shared dark theme for every product. */
+.theme-dark {
   color-scheme: dark;
   --core-bg: #05080d;
   --core-panel: #0d131b;
@@ -1605,22 +1605,22 @@ textarea { min-height: 72px; resize: vertical; }
   background: radial-gradient(circle at 72% -10%, rgba(42,120,133,.2), transparent 32%), #05080d;
   color: var(--core-ink);
 }
-.shop-shell .core-sidebar { border-color: var(--core-line); background: rgba(7,11,17,.96); }
-.shop-shell .core-topbar { border-color: var(--core-line); background: rgba(6,10,15,.9); }
-.shop-shell .core-main { background: transparent; }
-.shop-shell .core-nav a:hover { background: rgba(86,240,193,.07); }
-.shop-shell .core-nav a.active { border-color: rgba(86,240,193,.22); background: rgba(86,240,193,.1); }
-.shop-shell .core-button { border-color: var(--core-line-strong); background: #121a23; color: var(--core-ink); }
-.shop-shell .core-button:hover { border-color: var(--core-green); background: rgba(86,240,193,.1); }
-.shop-shell .core-button.primary { border-color: var(--core-green); background: var(--core-green); color: #02120d; }
-.shop-shell input, .shop-shell select, .shop-shell textarea { border-color: var(--core-line-strong); background: #090f16; color: var(--core-ink); }
-.shop-shell input::placeholder, .shop-shell textarea::placeholder { color: #657386; }
-.shop-shell .core-panel, .shop-shell .production-mode-banner, .shop-shell .accountable-action-gate { border-color: var(--core-line); background: var(--core-panel); box-shadow: 0 18px 48px rgba(0,0,0,.22); }
-.shop-shell .runtime-badge.demo, .shop-shell .runtime-badge.enterprise { border-color: rgba(86,240,193,.22); color: var(--core-green); }
-.shop-shell .mobile-nav { border-color: var(--core-line); background: rgba(7,11,17,.97); box-shadow: 0 -12px 34px rgba(0,0,0,.28); }
-.shop-shell .mobile-nav a.active { border-color: var(--core-green); color: var(--core-green); }
-.shop-shell .accountable-action-gate::backdrop { background: rgba(0,3,7,.76); }
-.shop-shell :focus-visible { outline-color: rgba(86,240,193,.48); }
+.theme-dark .core-sidebar { border-color: var(--core-line); background: rgba(7,11,17,.96); }
+.theme-dark .core-topbar { border-color: var(--core-line); background: rgba(6,10,15,.9); }
+.theme-dark .core-main { background: transparent; }
+.theme-dark .core-nav a:hover { background: rgba(86,240,193,.07); }
+.theme-dark .core-nav a.active { border-color: rgba(86,240,193,.22); background: rgba(86,240,193,.1); }
+.theme-dark .core-button { border-color: var(--core-line-strong); background: #121a23; color: var(--core-ink); }
+.theme-dark .core-button:hover { border-color: var(--core-green); background: rgba(86,240,193,.1); }
+.theme-dark .core-button.primary { border-color: var(--core-green); background: var(--core-green); color: #02120d; }
+.theme-dark input, .theme-dark select, .theme-dark textarea { border-color: var(--core-line-strong); background: #090f16; color: var(--core-ink); }
+.theme-dark input::placeholder, .theme-dark textarea::placeholder { color: #657386; }
+.theme-dark .core-panel, .theme-dark .production-mode-banner, .theme-dark .accountable-action-gate { border-color: var(--core-line); background: var(--core-panel); box-shadow: 0 18px 48px rgba(0,0,0,.22); }
+.theme-dark .runtime-badge.demo, .theme-dark .runtime-badge.enterprise { border-color: rgba(86,240,193,.22); color: var(--core-green); }
+.theme-dark .mobile-nav { border-color: var(--core-line); background: rgba(7,11,17,.97); box-shadow: 0 -12px 34px rgba(0,0,0,.28); }
+.theme-dark .mobile-nav a.active { border-color: var(--core-green); color: var(--core-green); }
+.theme-dark .accountable-action-gate::backdrop { background: rgba(0,3,7,.76); }
+.theme-dark :focus-visible { outline-color: rgba(86,240,193,.48); }
 
 .commerce-screen { gap: 10px; }
 .commerce-screen .page-heading { min-height: 54px; align-items: center; }
@@ -2220,7 +2220,7 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 @media (max-width: 840px) {
-  .shop-shell .core-main { padding-bottom: calc(154px + env(safe-area-inset-bottom)); }
+  .shop-product-shell .core-main { padding-bottom: calc(154px + env(safe-area-inset-bottom)); }
   .commerce-screen { min-height: calc(100svh - 210px); }
   .commerce-screen .page-heading { min-height: 0; }
   .shop-counter-surface, .shop-counter-grid { height: auto; }

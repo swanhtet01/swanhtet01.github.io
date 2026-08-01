@@ -351,7 +351,7 @@ export function CoreLayout() {
   const themeLabel = theme === 'dark' ? 'Use light theme' : 'Use dark theme'
 
   return (
-    <div className={`core-shell theme-${theme}${theme === 'dark' ? ' shop-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
+    <div className={`core-shell theme-${theme}${routeProduct === 'commerce' ? ' shop-product-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
       <a className="core-skip" href="#workspace-main" onClick={() => requestAnimationFrame(() => workspaceMainRef.current?.focus())}>Skip to workspace</a>
       <aside className="core-sidebar">
         <Brand />
