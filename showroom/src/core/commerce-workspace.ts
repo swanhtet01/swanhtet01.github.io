@@ -946,6 +946,7 @@ export type CommerceStorefrontConfiguration = {
 
 export type CommercePurchaseOrder = {
   id: string
+  requisitionId?: string
   createdAt: string
   expectedAt?: string
   supplier: string
@@ -955,6 +956,20 @@ export type CommercePurchaseOrder = {
   creation: CommerceActionProof
   cancellation?: CommerceActionProof
   supplierInvoice?: CommerceSupplierInvoice
+}
+
+export type CommercePurchaseRequisition = {
+  id: string
+  createdAt: string
+  expectedAt: string
+  supplier: string
+  sku: string
+  quantityRequested: number
+  unitCostMmk: number
+  totalMmk: number
+  sourceDecisionDigest: string
+  sourceReplenishmentDigest: string
+  approval: CommerceActionProof
 }
 
 export type CommerceSupplierInvoice = {
@@ -1056,6 +1071,7 @@ export type CommerceState = {
   websiteIntakes?: CommerceWebsiteIntake[]
   storefrontRequests?: CommerceStorefrontRequest[]
   storefrontConfiguration?: CommerceStorefrontConfiguration
+  purchaseRequisitions?: CommercePurchaseRequisition[]
   purchaseOrders?: CommercePurchaseOrder[]
   inventoryFoundation?: ShopInventoryState
 }
@@ -1193,11 +1209,23 @@ export type CommerceWebsiteOrderInput = {
 
 export type CommercePurchaseOrderInput = {
   id: string
+  requisitionId?: string
   expectedAt: string
   supplier: string
   sku: string
   quantityOrdered: number
   unitCostMmk?: number
+}
+
+export type CommercePurchaseRequisitionInput = {
+  id: string
+  expectedAt: string
+  supplier: string
+  sku: string
+  quantityRequested: number
+  unitCostMmk: number
+  sourceDecisionDigest: string
+  sourceReplenishmentDigest: string
 }
 
 export type CommerceSupplierInvoiceInput = {
@@ -1305,6 +1333,7 @@ const supportIntentIdPattern = /^ESR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB]
 const supportCaseIdPattern = /^CASE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const sha256DigestPattern = /^sha256:[a-f0-9]{64}$/
 const maxStorefrontRequests = 100
+const maxPurchaseRequisitions = 100
 const maxPurchaseOrders = 100
 const maxCatalogBaselines = 500
 const maxCatalogChanges = 500
@@ -1325,6 +1354,7 @@ const closeIdPattern = /^CLOSE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-
 const closeActionIdPattern = /^ACT-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const businessDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const purchaseOrderIdPattern = /^PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
+const purchaseRequisitionIdPattern = /^PR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const supplierInvoiceIdPattern = /^PINV-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const taxCodePattern = /^[A-Z0-9][A-Z0-9_-]{0,11}$/
 const taxJurisdictionCodePattern = /^[A-Z0-9][A-Z0-9_-]{1,15}$/
@@ -2099,6 +2129,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (value.websiteIntakes !== undefined && !Array.isArray(value.websiteIntakes)) throw new Error('Commerce Website intakes must be an array when present.')
   if (value.storefrontRequests !== undefined && !Array.isArray(value.storefrontRequests)) throw new Error('Commerce storefront requests must be an array when present.')
   if (value.storefrontConfiguration !== undefined && !isRecord(value.storefrontConfiguration)) throw new Error('Commerce storefront configuration must be an object when present.')
+  if (value.purchaseRequisitions !== undefined && !Array.isArray(value.purchaseRequisitions)) throw new Error('Commerce purchase requisitions must be an array when present.')
   if (value.purchaseOrders !== undefined && !Array.isArray(value.purchaseOrders)) throw new Error('Commerce purchase orders must be an array when present.')
   if (value.inventoryFoundation !== undefined) {
     const inventory = value.inventoryFoundation
@@ -2131,6 +2162,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const websiteIntakes = (value.websiteIntakes ?? []) as unknown[]
   const storefrontRequests = (value.storefrontRequests ?? []) as unknown[]
   const storefrontConfiguration = value.storefrontConfiguration
+  const purchaseRequisitions = (value.purchaseRequisitions ?? []) as unknown[]
   const purchaseOrders = (value.purchaseOrders ?? []) as unknown[]
   if (catalogBaselines.length > maxCatalogBaselines) throw new Error(`Commerce catalog baselines cannot exceed ${maxCatalogBaselines}.`)
   if (catalogChanges.length > maxCatalogChanges) throw new Error(`Commerce catalog changes cannot exceed ${maxCatalogChanges}.`)
@@ -2141,6 +2173,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (shippingPolicies.length > maxShippingPolicies) throw new Error(`Commerce shipping policies cannot exceed ${maxShippingPolicies}.`)
   if (paymentPolicies.length > maxPaymentPolicies) throw new Error(`Commerce payment policies cannot exceed ${maxPaymentPolicies}.`)
   if (storefrontRequests.length > maxStorefrontRequests) throw new Error(`Commerce storefront requests cannot exceed ${maxStorefrontRequests}.`)
+  if (purchaseRequisitions.length > maxPurchaseRequisitions) throw new Error(`Commerce purchase requisitions cannot exceed ${maxPurchaseRequisitions}.`)
   if (purchaseOrders.length > maxPurchaseOrders) throw new Error(`Commerce purchase orders cannot exceed ${maxPurchaseOrders}.`)
   const itemSkus: string[] = []
   const itemBySku = new Map<string, Record<string, unknown>>()
@@ -2173,6 +2206,9 @@ export function validateCommerceState(value: unknown): CommerceState {
   const shippingPolicyActionIds: string[] = []
   const paymentPolicyActionIds: string[] = []
   const purchaseOrderActionIds: string[] = []
+  const purchaseRequisitionActionIds: string[] = []
+  const purchaseRequisitionIds: string[] = []
+  const purchaseRequisitionById = new Map<string, CommercePurchaseRequisition>()
   const purchaseOrderIds: string[] = []
   const supplierInvoiceIds: string[] = []
   const supplierInvoiceReferences: string[] = []
@@ -2510,11 +2546,42 @@ export function validateCommerceState(value: unknown): CommerceState {
     paymentPolicyActionIds.push(policy.proof.actionId)
   }
 
+  for (const [index, candidate] of purchaseRequisitions.entries()) {
+    if (!isRecord(candidate) || !hasExactKeys(candidate, [
+      'id', 'createdAt', 'expectedAt', 'supplier', 'sku', 'quantityRequested',
+      'unitCostMmk', 'totalMmk', 'sourceDecisionDigest', 'sourceReplenishmentDigest', 'approval',
+    ])) throw new Error(`purchaseRequisitions[${index}] is invalid.`)
+    const field = `purchaseRequisitions[${index}]`
+    const id = canonicalText(candidate.id, `${field}.id`, 80)
+    if (!purchaseRequisitionIdPattern.test(id)) throw new Error(`${field}.id is invalid.`)
+    if (!validTimestamp(candidate.createdAt) || !validTimestamp(candidate.expectedAt)
+      || (timestampMicros(candidate.expectedAt) as bigint) <= (timestampMicros(candidate.createdAt) as bigint)) throw new Error(`${field} dates are invalid.`)
+    canonicalText(candidate.supplier, `${field}.supplier`, 120)
+    const sku = canonicalText(candidate.sku, `${field}.sku`, 80)
+    if (!itemSkus.includes(sku)) throw new Error(`${field}.sku is unknown.`)
+    assertSafeInteger(candidate.quantityRequested, `${field}.quantityRequested`, 1)
+    assertSafeInteger(candidate.unitCostMmk, `${field}.unitCostMmk`, 1)
+    assertSafeInteger(candidate.totalMmk, `${field}.totalMmk`, 1)
+    if (!Number.isSafeInteger(Number(candidate.quantityRequested) * Number(candidate.unitCostMmk))
+      || candidate.totalMmk !== Number(candidate.quantityRequested) * Number(candidate.unitCostMmk)) throw new Error(`${field}.totalMmk must equal quantity times unit cost.`)
+    if (typeof candidate.sourceDecisionDigest !== 'string' || !sha256DigestPattern.test(candidate.sourceDecisionDigest)
+      || typeof candidate.sourceReplenishmentDigest !== 'string' || !sha256DigestPattern.test(candidate.sourceReplenishmentDigest)) throw new Error(`${field} source evidence is invalid.`)
+    if (!isRecord(candidate.approval)
+      || !hasExactKeys(candidate.approval, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !validProof(candidate.approval as CommerceActionProof)
+      || candidate.approval.capturedAt !== candidate.createdAt) throw new Error(`${field}.approval is invalid.`)
+    purchaseRequisitionIds.push(id)
+    purchaseRequisitionActionIds.push(candidate.approval.actionId as string)
+    purchaseRequisitionById.set(id, candidate as unknown as CommercePurchaseRequisition)
+  }
+  assertUnique(purchaseRequisitionIds, 'Purchase requisition ID')
+
+  const convertedRequisitionIds: string[] = []
   for (const [index, candidate] of purchaseOrders.entries()) {
     if (!isRecord(candidate) || !hasExactKeys(
       candidate,
       ['id', 'createdAt', 'supplier', 'sku', 'quantityOrdered', 'creation'],
-      ['expectedAt', 'unitCostMmk', 'cancellation', 'supplierInvoice'],
+      ['requisitionId', 'expectedAt', 'unitCostMmk', 'cancellation', 'supplierInvoice'],
     )) throw new Error(`purchaseOrders[${index}] is invalid.`)
     const id = canonicalText(candidate.id, `purchaseOrders[${index}].id`, 80)
     if (!purchaseOrderIdPattern.test(id)) throw new Error(`purchaseOrders[${index}].id is invalid.`)
@@ -2529,6 +2596,17 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!itemSkus.includes(sku)) throw new Error(`purchaseOrders[${index}].sku is unknown.`)
     assertSafeInteger(candidate.quantityOrdered, `purchaseOrders[${index}].quantityOrdered`, 1)
     if (candidate.unitCostMmk !== undefined) assertSafeInteger(candidate.unitCostMmk, `purchaseOrders[${index}].unitCostMmk`, 1)
+    if (candidate.requisitionId !== undefined) {
+      const requisitionId = canonicalText(candidate.requisitionId, `purchaseOrders[${index}].requisitionId`, 80)
+      const requisition = purchaseRequisitionById.get(requisitionId)
+      if (!requisition
+        || requisition.sku !== sku
+        || requisition.supplier !== candidate.supplier
+        || requisition.expectedAt !== candidate.expectedAt
+        || requisition.quantityRequested !== candidate.quantityOrdered
+        || requisition.unitCostMmk !== candidate.unitCostMmk) throw new Error(`purchaseOrders[${index}] does not match its approved requisition.`)
+      convertedRequisitionIds.push(requisitionId)
+    }
     if (!isRecord(candidate.creation)
       || !hasExactKeys(candidate.creation, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
       || !validProof(candidate.creation as CommerceActionProof)
@@ -2602,6 +2680,8 @@ export function validateCommerceState(value: unknown): CommerceState {
     purchaseOrderById.set(id, candidate as unknown as CommercePurchaseOrder)
   }
   assertUnique(purchaseOrderIds, 'Purchase order ID')
+  assertUnique(convertedRequisitionIds, 'Converted purchase requisition ID')
+  assertUnique(purchaseRequisitionIds.filter((id) => !convertedRequisitionIds.includes(id)).map((id) => purchaseRequisitionById.get(id)!.sku), 'Open purchase requisition SKU')
   assertUnique(supplierInvoiceIds, 'Supplier invoice ID')
   assertUnique(supplierInvoiceReferences, 'Supplier invoice reference')
 
@@ -3883,6 +3963,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     ...paymentPolicyActionIds,
     ...websiteIntakeCreationActionIds,
     ...closeActionIds,
+    ...purchaseRequisitionActionIds,
     ...purchaseOrderActionIds,
     ...storefrontActionIds,
     ...(storefrontConfigurationActionId ? [storefrontConfigurationActionId] : []),
@@ -4114,6 +4195,7 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || commerceShippingPolicies(state).some((policy) => policy.proof.actionId === actionId)
     || commercePaymentPolicies(state).some((policy) => policy.proof.actionId === actionId)
     || commerceWebsiteIntakes(state).some((intake) => intake.creation.actionId === actionId || intake.conversion?.actionId === actionId)
+    || commercePurchaseRequisitions(state).some((requisition) => requisition.approval.actionId === actionId)
     || commercePurchaseOrders(state).some((purchaseOrder) => purchaseOrder.creation.actionId === actionId
       || purchaseOrder.cancellation?.actionId === actionId
       || purchaseOrder.supplierInvoice?.recording.actionId === actionId
@@ -5049,6 +5131,10 @@ export function commerceStorefrontConfiguration(state: CommerceState) {
 
 export function commercePurchaseOrders(state: CommerceState) {
   return state.purchaseOrders ?? []
+}
+
+export function commercePurchaseRequisitions(state: CommerceState) {
+  return state.purchaseRequisitions ?? []
 }
 
 export function commercePurchaseOrderProgress(state: CommerceState, purchaseOrder: CommercePurchaseOrder): CommercePurchaseOrderProgress {
@@ -6341,6 +6427,45 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
   })
 }
 
+export function approveCommercePurchaseRequisition(
+  state: CommerceState,
+  input: CommercePurchaseRequisitionInput,
+  proof: CommerceActionProof,
+) {
+  const supplier = optionalText(input.supplier)
+  const totalMmk = input.quantityRequested * input.unitCostMmk
+  if (!validProof(proof)
+    || !purchaseRequisitionIdPattern.test(input.id)
+    || !validTimestamp(input.expectedAt)
+    || (timestampMicros(input.expectedAt) as bigint) <= (timestampMicros(proof.capturedAt) as bigint)
+    || !supplier || supplier !== input.supplier || supplier.length > 120
+    || typeof input.sku !== 'string' || input.sku !== input.sku.trim() || input.sku.length > 80
+    || !Number.isSafeInteger(input.quantityRequested) || input.quantityRequested < 1
+    || !Number.isSafeInteger(input.unitCostMmk) || input.unitCostMmk < 1
+    || !Number.isSafeInteger(totalMmk)
+    || !sha256DigestPattern.test(input.sourceDecisionDigest)
+    || !sha256DigestPattern.test(input.sourceReplenishmentDigest)) return null
+  const current = validateCommerceState(state)
+  const existing = commercePurchaseRequisitions(current).find((requisition) => requisition.id === input.id)
+  if (existing) return existing.expectedAt === input.expectedAt
+    && existing.supplier === supplier && existing.sku === input.sku
+    && existing.quantityRequested === input.quantityRequested && existing.unitCostMmk === input.unitCostMmk
+    && existing.sourceDecisionDigest === input.sourceDecisionDigest
+    && existing.sourceReplenishmentDigest === input.sourceReplenishmentDigest
+    && sameActionProof(existing.approval, proof) ? current : null
+  if (actionIdIsUsed(current, proof.actionId)
+    || !current.items.some((item) => item.sku === input.sku)
+    || commercePurchaseOrders(current).some((order) => order.sku === input.sku && !order.cancellation && commercePurchaseOrderProgress(current, order).remaining > 0)
+    || commercePurchaseRequisitions(current).some((requisition) => requisition.sku === input.sku && !commercePurchaseOrders(current).some((order) => order.requisitionId === requisition.id))) return null
+  const requisition: CommercePurchaseRequisition = {
+    id: input.id, createdAt: proof.capturedAt, expectedAt: input.expectedAt, supplier,
+    sku: input.sku, quantityRequested: input.quantityRequested, unitCostMmk: input.unitCostMmk,
+    totalMmk, sourceDecisionDigest: input.sourceDecisionDigest,
+    sourceReplenishmentDigest: input.sourceReplenishmentDigest, approval: { ...proof },
+  }
+  return validateCommerceState({ ...current, purchaseRequisitions: [requisition, ...commercePurchaseRequisitions(current)] })
+}
+
 export function createCommercePurchaseOrder(
   state: CommerceState,
   input: CommercePurchaseOrderInput,
@@ -6366,13 +6491,19 @@ export function createCommercePurchaseOrder(
   const current = validateCommerceState(state)
   const existing = commercePurchaseOrders(current).find((purchaseOrder) => purchaseOrder.id === input.id)
   if (existing) {
-    return existing.expectedAt === input.expectedAt
+    return existing.requisitionId === input.requisitionId && existing.expectedAt === input.expectedAt
       && existing.supplier === input.supplier
       && existing.sku === input.sku
       && existing.quantityOrdered === input.quantityOrdered
       && existing.unitCostMmk === unitCostMmk
       && sameActionProof(existing.creation, proof) ? current : null
   }
+  const requisition = input.requisitionId ? commercePurchaseRequisitions(current).find((candidate) => candidate.id === input.requisitionId) : null
+  if (input.requisitionId && (!requisition
+    || commercePurchaseOrders(current).some((order) => order.requisitionId === input.requisitionId)
+    || requisition.expectedAt !== input.expectedAt || requisition.supplier !== supplier
+    || requisition.sku !== input.sku || requisition.quantityRequested !== input.quantityOrdered
+    || requisition.unitCostMmk !== unitCostMmk)) return null
   if (actionIdIsUsed(current, proof.actionId)) return null
   if (current.inventoryFoundation) {
     const inventory = projectShopInventory(
@@ -6390,6 +6521,7 @@ export function createCommercePurchaseOrder(
   ))) return null
   const purchaseOrder: CommercePurchaseOrder = {
     id: input.id,
+    ...(input.requisitionId ? { requisitionId: input.requisitionId } : {}),
     createdAt: proof.capturedAt,
     expectedAt: input.expectedAt,
     supplier,

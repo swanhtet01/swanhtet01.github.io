@@ -51,6 +51,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.inventory.master_created",
         "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
+        "commerce.purchase_requisition.approved",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
@@ -1151,6 +1152,36 @@ def _authoritative_command_payload(
             actor=principal.actor_id,
             captured_at=effective_captured_at,
         )
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.purchase_requisition.approved":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        requisitions = (
+            state.get("purchaseRequisitions") if isinstance(state, Mapping) else None
+        )
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(requisitions, list)
+            or not requisitions
+            or not isinstance(requisitions[0], Mapping)
+            or not isinstance(requisitions[0].get("approval"), Mapping)
+            or requisitions[0]["approval"].get("actionId") != evidence.get("actionId")
+        ):
+            return authoritative
+        authoritative_evidence = {**dict(evidence), "actor": principal.actor_id, "capturedAt": captured_at}
+        authoritative_requisition = {
+            **dict(requisitions[0]),
+            "createdAt": captured_at,
+            "approval": deepcopy(authoritative_evidence),
+        }
+        authoritative_state = dict(state)
+        authoritative_state["purchaseRequisitions"] = [
+            authoritative_requisition,
+            *deepcopy(requisitions[1:]),
+        ]
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative

@@ -204,6 +204,30 @@ def action_evidence(
     }
 
 
+def purchase_requisition_record(
+    *,
+    requisition_id: str = "PR-00000000-0000-4000-8000-000000000019",
+    action_id: str = "ACT-PURCHASE-REQUISITION-APPROVE",
+    captured_at: str = NOW,
+    expected_at: str = PURCHASE_ORDER_EXPECTED_AT,
+    quantity: int = 10,
+    unit_cost_mmk: int = 75,
+) -> dict[str, object]:
+    return {
+        "id": requisition_id,
+        "createdAt": captured_at,
+        "expectedAt": expected_at,
+        "supplier": "Yangon Supply",
+        "sku": "SKU-1",
+        "quantityRequested": quantity,
+        "unitCostMmk": unit_cost_mmk,
+        "totalMmk": quantity * unit_cost_mmk,
+        "sourceDecisionDigest": f"sha256:{'1' * 64}",
+        "sourceReplenishmentDigest": f"sha256:{'2' * 64}",
+        "approval": action_evidence(action_id, captured_at=captured_at),
+    }
+
+
 def supplier_invoice_record(
     *,
     action_id: str = "ACT-SUPPLIER-INVOICE-RECORD",
@@ -876,6 +900,8 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         return dict(next_state["catalogChanges"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.purchase_order.created":
         return dict(next_state["purchaseOrders"][0]["creation"])  # type: ignore[index, arg-type]
+    if event_type == "commerce.purchase_requisition.approved":
+        return dict(next_state["purchaseRequisitions"][0]["approval"])  # type: ignore[index, arg-type]
     if event_type == "commerce.purchase_order.cancelled":
         cancelled = next(
             purchase_order
@@ -2892,6 +2918,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.inventory.master_created",
                     "commerce.inventory.supplier_policy_saved",
                     "commerce.inventory.transferred",
+                    "commerce.purchase_requisition.approved",
                     "commerce.purchase_order.created",
                     "commerce.purchase_order.received",
                     "commerce.purchase_order.cancelled",
@@ -3985,6 +4012,110 @@ class CommerceRuntimeTests(unittest.TestCase):
         )
         with self.assertRaises(TrialValidationError):
             apply_event(invoiced, "commerce.purchase_order.cancelled", cancellation)
+
+    def test_purchase_requisition_is_immutable_and_exactly_converts_to_one_po(self) -> None:
+        current = catalog_state()
+        requisition = purchase_requisition_record()
+        requisition_state = deepcopy(current)
+        requisition_state["purchaseRequisitions"] = [requisition]
+        approved = apply_event(
+            current,
+            "commerce.purchase_requisition.approved",
+            requisition_state,
+        )
+        self.assertEqual(approved["purchaseRequisitions"][0]["totalMmk"], 750)  # type: ignore[index]
+        self.assertNotIn("purchaseOrders", approved)
+
+        purchase_order = purchase_order_record()
+        purchase_order["requisitionId"] = requisition["id"]
+        converted_state = deepcopy(approved)
+        converted_state["purchaseOrders"] = [purchase_order]
+        converted = apply_event(
+            approved,
+            "commerce.purchase_order.created",
+            converted_state,
+        )
+        self.assertEqual(converted["purchaseOrders"][0]["requisitionId"], requisition["id"])  # type: ignore[index]
+
+        mismatched = deepcopy(approved)
+        mismatched_order = deepcopy(purchase_order)
+        mismatched_order["unitCostMmk"] = 74
+        mismatched["purchaseOrders"] = [mismatched_order]
+        with self.assertRaisesRegex(TrialValidationError, "approved requisition"):
+            apply_event(approved, "commerce.purchase_order.created", mismatched)
+
+        duplicate = deepcopy(converted)
+        duplicate_order = purchase_order_record(
+            purchase_order_id="PO-00000000-0000-4000-8000-000000000022",
+            action_id="ACT-PURCHASE-CREATE-DUPLICATE",
+        )
+        duplicate_order["requisitionId"] = requisition["id"]
+        duplicate["purchaseOrders"] = [duplicate_order, *converted["purchaseOrders"]]  # type: ignore[misc]
+        with self.assertRaisesRegex(TrialValidationError, "Converted purchase requisition"):
+            apply_event(converted, "commerce.purchase_order.created", duplicate)
+
+    def test_store_restamps_and_idempotently_retains_human_requisition_approval(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-requisition", "shop-owner", "human")
+        agent = TrialPrincipal("workspace-requisition", "buying-agent", "agent")
+        for principal in (operator, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={"state": catalog_state(), "evidence": action_evidence("ACT-REQUISITION-INIT")},
+        )
+        requisition = purchase_requisition_record(captured_at="2099-01-01T00:00:00.000Z")
+        requisition["approval"]["actor"] = "Fabricated buying agent"  # type: ignore[index]
+        next_state = deepcopy(initialized.state)
+        next_state["purchaseRequisitions"] = [requisition]
+        command_id = str(uuid4())
+        payload = {
+            "state": next_state,
+            "evidence": dict(requisition["approval"]),  # type: ignore[arg-type]
+        }
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_requisition.approved",
+                expected_version=initialized.version,
+                payload=payload,
+            )
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:05:00.000+00:00",
+        ):
+            approved = store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.purchase_requisition.approved",
+                expected_version=initialized.version,
+                payload=payload,
+            )
+            replay = store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.purchase_requisition.approved",
+                expected_version=initialized.version,
+                payload=payload,
+            )
+        retained = approved.state["purchaseRequisitions"][0]  # type: ignore[index]
+        self.assertEqual(retained["approval"]["actor"], operator.actor_id)  # type: ignore[index]
+        self.assertEqual(retained["createdAt"], "2026-07-23T09:05:00.000+00:00")
+        self.assertNotIn("purchaseOrders", approved.state)
+        self.assertTrue(replay.idempotent_replay)
 
     def test_purchase_order_lifecycle_supports_partial_receipt_and_cancellation(self) -> None:
         current = catalog_state()

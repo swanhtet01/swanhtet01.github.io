@@ -77,6 +77,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.inventory.master_created",
         "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
+        "commerce.purchase_requisition.approved",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
@@ -124,6 +125,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.inventory.master_created",
         "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
+        "commerce.purchase_requisition.approved",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
@@ -189,6 +191,7 @@ _COMMAND_ID_PATTERN = re.compile(
 )
 _STOREFRONT_PREVIEW_SCHEMA = "supermega.ecommerce.storefront_preview.v1"
 _MAX_STOREFRONT_REQUESTS = 100
+_MAX_PURCHASE_REQUISITIONS = 100
 _MAX_PURCHASE_ORDERS = 100
 _MAX_CATALOG_BASELINES = 500
 _MAX_CATALOG_CHANGES = 500
@@ -221,6 +224,9 @@ _SERVICE_SCHEDULE_BOOKING_STATUSES = frozenset(
 )
 _PURCHASE_ORDER_ID_PATTERN = re.compile(
     r"PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_PURCHASE_REQUISITION_ID_PATTERN = re.compile(
+    r"PR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
 _SUPPLIER_INVOICE_ID_PATTERN = re.compile(
     r"PINV-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
@@ -497,7 +503,14 @@ _PURCHASE_ORDER_REQUIRED_FIELDS = frozenset(
     {"id", "createdAt", "supplier", "sku", "quantityOrdered", "creation"}
 )
 _PURCHASE_ORDER_OPTIONAL_FIELDS = frozenset(
-    {"expectedAt", "unitCostMmk", "cancellation", "supplierInvoice"}
+    {"requisitionId", "expectedAt", "unitCostMmk", "cancellation", "supplierInvoice"}
+)
+_PURCHASE_REQUISITION_FIELDS = frozenset(
+    {
+        "id", "createdAt", "expectedAt", "supplier", "sku", "quantityRequested",
+        "unitCostMmk", "totalMmk", "sourceDecisionDigest",
+        "sourceReplenishmentDigest", "approval",
+    }
 )
 _SUPPLIER_INVOICE_REQUIRED_FIELDS = frozenset(
     {
@@ -1070,6 +1083,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "websiteIntakes",
                 "storefrontRequests",
                 "storefrontConfiguration",
+                "purchaseRequisitions",
                 "purchaseOrders",
                 "catalogBaselines",
                 "catalogChanges",
@@ -1099,6 +1113,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     purchase_orders = _list(
         state.get("purchaseOrders", []),
         "commerce state.purchaseOrders",
+    )
+    purchase_requisitions = _list(
+        state.get("purchaseRequisitions", []),
+        "commerce state.purchaseRequisitions",
     )
     catalog_baselines = _list(
         state.get("catalogBaselines", []),
@@ -1154,6 +1172,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     if len(catalog_changes) > _MAX_CATALOG_CHANGES:
         raise TrialValidationError(
             f"commerce state.catalogChanges cannot exceed {_MAX_CATALOG_CHANGES}."
+        )
+    if len(purchase_requisitions) > _MAX_PURCHASE_REQUISITIONS:
+        raise TrialValidationError(
+            f"commerce state.purchaseRequisitions cannot exceed {_MAX_PURCHASE_REQUISITIONS}."
         )
     if len(tax_configurations) > _MAX_TAX_CONFIGURATIONS:
         raise TrialValidationError(
@@ -1572,11 +1594,47 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         validated_payment_policies.append(policy)
         payment_policy_action_ids.append(policy["proof"]["actionId"])
 
+    purchase_requisition_ids: list[str] = []
+    purchase_requisition_action_ids: list[str] = []
+    purchase_requisition_by_id: dict[str, dict[str, Any]] = {}
+    for index, candidate in enumerate(purchase_requisitions):
+        field = f"purchaseRequisitions[{index}]"
+        requisition = _object(candidate, field)
+        _exact_fields(requisition, field, required=_PURCHASE_REQUISITION_FIELDS)
+        requisition_id = _text(requisition["id"], f"{field}.id", maximum=80)
+        if _PURCHASE_REQUISITION_ID_PATTERN.fullmatch(requisition_id) is None:
+            raise TrialValidationError(f"{field}.id is invalid.")
+        created_at = _timestamp(requisition["createdAt"], f"{field}.createdAt")
+        expected_at = _timestamp(requisition["expectedAt"], f"{field}.expectedAt")
+        if datetime.fromisoformat(expected_at.replace("Z", "+00:00")) <= datetime.fromisoformat(created_at.replace("Z", "+00:00")):
+            raise TrialValidationError(f"{field}.expectedAt must be later than approval.")
+        _text(requisition["supplier"], f"{field}.supplier", maximum=120)
+        sku = _text(requisition["sku"], f"{field}.sku", maximum=80)
+        if sku not in item_by_sku:
+            raise TrialValidationError(f"{field}.sku is unknown.")
+        quantity = _integer(requisition["quantityRequested"], f"{field}.quantityRequested", minimum=1)
+        unit_cost = _integer(requisition["unitCostMmk"], f"{field}.unitCostMmk", minimum=1)
+        total = _integer(requisition["totalMmk"], f"{field}.totalMmk", minimum=1)
+        if quantity * unit_cost > _MAX_SAFE_INTEGER or total != quantity * unit_cost:
+            raise TrialValidationError(f"{field}.totalMmk must equal quantity times unit cost.")
+        for digest_field in ("sourceDecisionDigest", "sourceReplenishmentDigest"):
+            digest = _text(requisition[digest_field], f"{field}.{digest_field}", maximum=71)
+            if _SHA256_DIGEST_PATTERN.fullmatch(digest) is None:
+                raise TrialValidationError(f"{field}.{digest_field} is invalid.")
+        approval = _action_proof(requisition["approval"], f"{field}.approval")
+        if approval["capturedAt"] != created_at:
+            raise TrialValidationError(f"{field}.approval must be captured at creation.")
+        purchase_requisition_ids.append(requisition_id)
+        purchase_requisition_action_ids.append(approval["actionId"])
+        purchase_requisition_by_id[requisition_id] = requisition
+    _unique(purchase_requisition_ids, "Purchase requisition ID")
+
     purchase_order_ids: list[str] = []
     purchase_order_action_ids: list[str] = []
     supplier_invoice_ids: list[str] = []
     supplier_invoice_references: list[str] = []
     purchase_order_by_id: dict[str, dict[str, Any]] = {}
+    converted_requisition_ids: list[str] = []
     for index, candidate in enumerate(purchase_orders):
         field = f"purchaseOrders[{index}]"
         purchase_order = _object(candidate, field)
@@ -1622,6 +1680,19 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             )
             if purchase_order["quantityOrdered"] * unit_cost_mmk > _MAX_SAFE_INTEGER:
                 raise TrialValidationError(f"{field} total exceeds the safe integer range.")
+        if "requisitionId" in purchase_order:
+            requisition_id = _text(purchase_order["requisitionId"], f"{field}.requisitionId", maximum=80)
+            requisition = purchase_requisition_by_id.get(requisition_id)
+            if (
+                requisition is None
+                or requisition["sku"] != sku
+                or requisition["supplier"] != purchase_order["supplier"]
+                or requisition["expectedAt"] != purchase_order.get("expectedAt")
+                or requisition["quantityRequested"] != purchase_order["quantityOrdered"]
+                or requisition["unitCostMmk"] != purchase_order.get("unitCostMmk")
+            ):
+                raise TrialValidationError(f"{field} does not match its approved requisition.")
+            converted_requisition_ids.append(requisition_id)
         creation = _action_proof(purchase_order["creation"], f"{field}.creation")
         if creation["capturedAt"] != created_at:
             raise TrialValidationError(
@@ -1715,6 +1786,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         purchase_order_ids.append(purchase_order_id)
         purchase_order_by_id[purchase_order_id] = purchase_order
     _unique(purchase_order_ids, "Purchase order ID")
+    _unique(converted_requisition_ids, "Converted purchase requisition ID")
+    _unique(
+        [purchase_requisition_by_id[requisition_id]["sku"] for requisition_id in purchase_requisition_ids if requisition_id not in converted_requisition_ids],
+        "Open purchase requisition SKU",
+    )
     _unique(supplier_invoice_ids, "Supplier invoice ID")
     _unique(supplier_invoice_references, "Supplier invoice reference")
 
@@ -3912,6 +3988,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *collection_action_ids,
             *intake_action_ids,
             *close_action_ids,
+            *purchase_requisition_action_ids,
             *purchase_order_action_ids,
             *(
                 action_id
@@ -4205,6 +4282,12 @@ def _validate_event_evidence(
         ):
             raise TrialValidationError(
                 "command evidence must match the saved service schedule revision."
+            )
+    elif event_type == "commerce.purchase_requisition.approved":
+        approval = next_state["purchaseRequisitions"][0]["approval"]
+        if not _proof_matches_evidence(approval, evidence):
+            raise TrialValidationError(
+                "command evidence must match the purchase requisition approval proof."
             )
     elif event_type == "commerce.purchase_order.created":
         creation = next_state["purchaseOrders"][0]["creation"]
@@ -4621,6 +4704,10 @@ def _storefront_configuration(state: Mapping[str, Any]) -> Mapping[str, Any] | N
 
 def _purchase_orders(state: Mapping[str, Any]) -> list[Any]:
     return state.get("purchaseOrders", [])
+
+
+def _purchase_requisitions(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("purchaseRequisitions", [])
 
 
 def commerce_supplier_invoice_match(
@@ -6532,6 +6619,14 @@ def _require_purchase_orders_unchanged(
 ) -> None:
     if _purchase_orders(current) != _purchase_orders(next_state):
         raise TrialValidationError("event cannot change: purchaseOrders.")
+
+
+def _require_purchase_requisitions_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _purchase_requisitions(current) != _purchase_requisitions(next_state):
+        raise TrialValidationError("event cannot change: purchaseRequisitions.")
 
 
 def _require_catalog_changes_unchanged(
@@ -8538,6 +8633,39 @@ def _validate_production_batch_received(
         )
 
 
+def _validate_purchase_requisition_approved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    current_requisitions = _purchase_requisitions(current)
+    next_requisitions = _purchase_requisitions(next_state)
+    if len(next_requisitions) != len(current_requisitions) + 1 or next_requisitions[1:] != current_requisitions:
+        raise TrialValidationError(
+            "commerce.purchase_requisition.approved must prepend exactly one requisition."
+        )
+    requisition = next_requisitions[0]
+    if any(
+        purchase_order.get("sku") == requisition["sku"]
+        and "cancellation" not in purchase_order
+        and int(purchase_order["quantityOrdered"]) > sum(
+            int(movement["quantityDelta"]) + int(movement.get("rejectedQuantity", 0))
+            for movement in current["movements"]
+            if isinstance(movement, Mapping)
+            and movement.get("kind") == "receipt"
+            and movement.get("purchaseOrderId") == purchase_order.get("id")
+        )
+        for purchase_order in _purchase_orders(current)
+        if isinstance(purchase_order, Mapping)
+    ):
+        raise TrialValidationError(
+            "a purchase requisition cannot duplicate an active purchase order."
+        )
+
+
 def _validate_purchase_order_created(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -9499,6 +9627,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.inventory.master_created": _validate_inventory_master_created,
     "commerce.inventory.supplier_policy_saved": _validate_inventory_supplier_policy_saved,
     "commerce.inventory.transferred": _validate_inventory_transferred,
+    "commerce.purchase_requisition.approved": _validate_purchase_requisition_approved,
     "commerce.purchase_order.created": _validate_purchase_order_created,
     "commerce.purchase_order.received": _validate_purchase_order_received,
     "commerce.purchase_order.cancelled": _validate_purchase_order_cancelled,
@@ -9569,6 +9698,7 @@ def reduce_commerce_state(
             or _website_intakes(next_state)
             or _storefront_requests(next_state)
             or _storefront_configuration(next_state)
+            or _purchase_requisitions(next_state)
             or _purchase_orders(next_state)
             or _catalog_changes(next_state)
             or _tax_configurations(next_state)
@@ -9607,6 +9737,8 @@ def reduce_commerce_state(
         "commerce.service_schedule.saved",
     }:
         _require_service_schedule_unchanged(current_state, next_state)
+    if event_type != "commerce.purchase_requisition.approved":
+        _require_purchase_requisitions_unchanged(current_state, next_state)
     if event_type not in {
         "commerce.purchase_order.created",
         "commerce.purchase_order.cancelled",

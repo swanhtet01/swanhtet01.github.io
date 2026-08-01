@@ -1789,9 +1789,9 @@ if (!shopReplenishmentSource.includes("SHOP_REPLENISHMENT_PLAN_CONTRACT = 'super
   || !coreSource.includes('Source-bound ranking · owner approval required')
   || !coreSource.includes('function startSupplierRequest()')
   || !coreSource.includes('Review next requisition')
-  || !coreSource.includes("supplier: decision.recommendedSupplier ?? ''")
-  || !coreSource.includes("unitCostMmk: decision.recommendedUnitCostMmk ? String(decision.recommendedUnitCostMmk) : ''")
-  || !coreSource.includes('${decision.requisitionReference} prepared for owner review')
+  || !coreSource.includes('supplier: approved?.supplier ?? decision.recommendedSupplier ??')
+  || !coreSource.includes('unitCostMmk: String(approved?.unitCostMmk ?? decision.recommendedUnitCostMmk ??')
+  || !coreSource.includes('${decision.requisitionReference} prepared for owner approval')
   || !coreSource.includes('Shop stock, open purchase orders, and current Plant demand are covered.')
   || !coreSource.includes("'Restore purchasing readiness'")
   || !coreSource.includes("'Approve pending supplier action'")
@@ -4180,6 +4180,11 @@ if (!shopCounterContract.includes('Tap an item to add it')
 if (!shopCounterRouteContract.includes('<ShopCounter') || shopCounterRouteContract.includes('{shopGuidance}')) fail('shop_counter_first_action_not_focused')
 const commercePageContract = coreSource.slice(coreSource.indexOf('function CommercePage'), coreSource.indexOf('function OrderList'))
 if (!commercePageContract.includes('purchaseOrderDraft')
+  || !commercePageContract.includes("'commerce.purchase_requisition.approved'")
+  || !commercePageContract.includes('approveCommercePurchaseRequisition(')
+  || !commercePageContract.includes("kind: 'purchase_requisition_approve'")
+  || !commercePageContract.includes("purchaseOrderDraft.requisitionId ? 'Review order' : 'Review requisition'")
+  || !commercePageContract.includes('Create approved purchase order')
   || !commercePageContract.includes('Create an internal order')
   || !commercePageContract.includes('This does not contact a supplier or create a payment.')
   || !commercePageContract.includes('Expected arrival')
@@ -4208,6 +4213,15 @@ if (!commercePageContract.includes('purchaseOrderDraft')
   || !commercePageContract.includes('defect {formatTaxRate(supplier.defectRateBasisPoints)}')
   || !commerceSource.includes("discrepancyDisposition?: 'return_to_vendor'")
   || !commerceSource.includes("status: 'open' | 'partially_received' | 'received' | 'received_with_discrepancy' | 'cancelled'")
+  || !commerceSource.includes('export type CommercePurchaseRequisition =')
+  || !commerceSource.includes('export function approveCommercePurchaseRequisition(')
+  || !commerceSource.includes('export function commercePurchaseRequisitions(')
+  || !commerceSource.includes('does not match its approved requisition')
+  || !managedTrialSource.includes("'commerce.purchase_requisition.approved'")
+  || !managedCommerceRuntime.includes('"commerce.purchase_requisition.approved"')
+  || !managedCommerceRuntime.includes('def _validate_purchase_requisition_approved(')
+  || !managedTrialStoreRuntime.includes('if event_type == "commerce.purchase_requisition.approved":')
+  || !workspaceRuntimeSource.includes("'purchase_requisition_approve'")
   || !managedCommerceRuntime.includes('_PURCHASE_DISCREPANCY_FIELDS')
   || !commercePageContract.includes('Cancel remainder')
   || !commercePageContract.includes('id="purchase-orders"')
@@ -10533,6 +10547,50 @@ async function verifyCommerceRuntime() {
       && !settledCloseExpectation.paymentExceptionOrderIds.includes(paidOrder.id)
       && settledCloseExpectation.paymentExceptionOrderIds.includes(unrelatedOrder.id), 'settled_refund_left_as_due_only_exception')
 
+    const requisitionId = 'PR-00000000-0000-4000-8000-000000000019'
+    const requisitionProof = proof('ACT-PURCHASE-REQUISITION-APPROVE')
+    const requisitionInput = {
+      id: requisitionId,
+      expectedAt: '2026-07-25T09:00:00.000Z',
+      supplier: 'Yangon Supply',
+      sku: 'SKU-1',
+      quantityRequested: 10,
+      unitCostMmk: 75,
+      sourceDecisionDigest: `sha256:${'1'.repeat(64)}`,
+      sourceReplenishmentDigest: `sha256:${'2'.repeat(64)}`,
+    }
+    const requisitionApproved = model.approveCommercePurchaseRequisition(base, requisitionInput, requisitionProof)
+    assert(requisitionApproved
+      && requisitionApproved.purchaseRequisitions[0].id === requisitionId
+      && requisitionApproved.purchaseRequisitions[0].totalMmk === 750
+      && model.commercePurchaseRequisitions(requisitionApproved).length === 1
+      && !requisitionApproved.purchaseOrders?.length,
+    'purchase_requisition_approval_not_immutable_or_purchase_free')
+    assert(model.approveCommercePurchaseRequisition(requisitionApproved, requisitionInput, requisitionProof) === requisitionApproved,
+      'purchase_requisition_exact_retry_not_idempotent')
+    assert(model.approveCommercePurchaseRequisition(requisitionApproved, { ...requisitionInput, unitCostMmk: 74 }, requisitionProof) === null,
+      'changed_purchase_requisition_retry_succeeded')
+    const linkedPurchaseProof = proof('ACT-PURCHASE-CREATE-FROM-REQUISITION', 60_000)
+    const linkedPurchase = model.createCommercePurchaseOrder(requisitionApproved, {
+      id: 'PO-00000000-0000-4000-8000-000000000019',
+      requisitionId,
+      expectedAt: requisitionInput.expectedAt,
+      supplier: requisitionInput.supplier,
+      sku: requisitionInput.sku,
+      quantityOrdered: requisitionInput.quantityRequested,
+      unitCostMmk: requisitionInput.unitCostMmk,
+    }, linkedPurchaseProof)
+    assert(linkedPurchase?.purchaseOrders[0].requisitionId === requisitionId
+      && model.commercePurchaseRequisitions(linkedPurchase)[0].approval === requisitionApproved.purchaseRequisitions[0].approval,
+    'purchase_requisition_to_po_link_not_exact')
+    assert(model.createCommercePurchaseOrder(requisitionApproved, {
+      id: 'PO-00000000-0000-4000-8000-000000000018', requisitionId,
+      expectedAt: requisitionInput.expectedAt, supplier: requisitionInput.supplier,
+      sku: requisitionInput.sku, quantityOrdered: requisitionInput.quantityRequested,
+      unitCostMmk: 74,
+    }, proof('ACT-PURCHASE-CREATE-MISMATCH', 60_000)) === null,
+    'mismatched_requisition_to_po_conversion_succeeded')
+
     const purchaseOrderId = 'PO-00000000-0000-4000-8000-000000000020'
     const purchaseCreationProof = proof('ACT-PURCHASE-CREATE')
     const purchaseExpectedAt = '2026-07-25T09:00:00.000Z'
@@ -15321,7 +15379,7 @@ await verifyCommerceRuntime()
 await verifyProductionRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-if (bytes > 2_540_000) fail(`artifact_budget:${bytes}`)
+if (bytes > 2_548_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const largestJavascriptBytes = Math.max(...await Promise.all(javascriptFiles.map(async (path) => (await stat(path)).size)))
 const operationsArtifactPath = javascriptFiles.find((path) => /[\\/]core-app-[^\\/]+\.js$/.test(path))
