@@ -1110,7 +1110,7 @@ function useRuntimeHealth() {
 }
 
 export function RuntimeBadge({ status }: { status: RuntimeStatus }) {
-  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Managed' : 'Sample workspace'}</span>
+  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Company data' : 'Sample mode'}</span>
 }
 
 export function CoreLayout() {
@@ -3135,7 +3135,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         ? 'Writes paused: this browser could not confirm durable local storage and write locking.'
         : notice || (managedIdentity
           ? `Company records - revision ${managedVersion ?? 0}. Writes are confirmed by the tenant API.`
-          : 'Sample records saved only in this browser. Connect a managed workspace before using shared operational data.')}</p>
+          : 'Sample records stay on this device. Sign in to use real company data with your team.')}</p>
     {!commerceCanWrite ? <Link to="/settings/#controls">Open Settings</Link> : null}
   </div>
   const orderNotice = notice || commerceStorageError

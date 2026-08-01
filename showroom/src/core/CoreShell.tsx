@@ -277,7 +277,7 @@ function Brand() {
 }
 
 export function RuntimeBadge({ status }: { status: RuntimeStatus }) {
-  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Managed' : 'Sample workspace'}</span>
+  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Company data' : 'Sample mode'}</span>
 }
 
 export function PageHeading({ eyebrow, title, copy, actions }: { eyebrow?: string; title: string; copy: string; actions?: ReactNode }) {
@@ -402,12 +402,12 @@ export function ProductHomePage() {
         ))}
       </nav>
       <details className="product-home-setup">
-        <summary><span><strong>Business overview and setup</strong><small>Attention, imports, access, and managed activation</small></span><b>Open when needed</b></summary>
+        <summary><span><strong>Business overview and setup</strong><small>Attention, imports, access, and company data</small></span><b>Open when needed</b></summary>
         <div>
           <Suspense fallback={<section aria-label="Today across SuperMega" className="product-home-today"><p className="form-notice" role="status">Preparing business overview...</p></section>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense>
           <section className="product-home-operating-model" aria-label="SuperMega operating model">
-            <div><span className="core-eyebrow">Local workspace</span><strong>Sample data, imports, review, and evidence.</strong></div>
-            <div><span className="core-eyebrow">Managed activation</span><strong>Tenant data, AI context, roles, audit, and controlled writes.</strong></div>
+            <div><span className="core-eyebrow">This device</span><strong>Sample data, imports, review, and evidence.</strong></div>
+            <div><span className="core-eyebrow">Company data</span><strong>Team records, AI context, roles, audit, and controlled writes.</strong></div>
             <Link className="core-button primary" to="/settings/">Open setup</Link>
           </section>
           <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
