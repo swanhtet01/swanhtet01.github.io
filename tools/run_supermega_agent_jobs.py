@@ -30,6 +30,9 @@ DEFAULT_ALLOWED_REMOTE_HOSTS = frozenset(
     }
 )
 MAX_RESPONSE_BYTES = 262_144
+AGENT_RUNNER_CYCLE_CONTRACT = "supermega.agent-runner-cycle-budget.v1"
+MAX_PROCESSED_PER_CYCLE = 1
+MAX_JOB_TYPE_ARGUMENTS = 24
 
 
 class RejectRedirectHandler(HTTPRedirectHandler):
@@ -146,6 +149,40 @@ def request_json(
         return _read_json_response(response)
 
 
+def build_job_cycle_plan(requested_values: list[str] | None, *, durable_queue: bool) -> dict:
+    raw_values = list(DEFAULT_JOB_TYPES if requested_values is None else requested_values)
+    if not raw_values:
+        raise RuntimeError("job_types_required")
+    if len(raw_values) > MAX_JOB_TYPE_ARGUMENTS:
+        raise RuntimeError("job_type_argument_limit_exceeded")
+
+    requested: set[str] = set()
+    for value in raw_values:
+        job_type = str(value).strip().lower()
+        if not job_type:
+            raise RuntimeError("job_type_empty")
+        if job_type not in DEFAULT_JOB_TYPES:
+            raise RuntimeError("job_type_not_canonical")
+        requested.add(job_type)
+
+    job_types = [job_type for job_type in DEFAULT_JOB_TYPES if job_type in requested]
+    if not durable_queue:
+        if requested_values is None:
+            raise RuntimeError("workspace_login_requires_explicit_job_types")
+        if len(job_types) > MAX_PROCESSED_PER_CYCLE:
+            raise RuntimeError("workspace_login_job_limit_exceeded")
+
+    return {
+        "contract": AGENT_RUNNER_CYCLE_CONTRACT,
+        "mode": "durable_queue" if durable_queue else "workspace_login",
+        "job_types": job_types,
+        "requested_count": len(job_types),
+        "process_limit": min(len(job_types), MAX_PROCESSED_PER_CYCLE),
+        "max_processed_per_cycle": MAX_PROCESSED_PER_CYCLE,
+        "scale_to_zero": True,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the current durable SuperMega agent jobs.")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
@@ -154,10 +191,11 @@ def main() -> int:
     parser.add_argument("--as-json", action="store_true")
     args = parser.parse_args()
 
-    job_types = [str(item).strip().lower() for item in (args.job_types or DEFAULT_JOB_TYPES) if str(item).strip()]
+    cron_token = str(os.getenv("SUPERMEGA_INTERNAL_CRON_TOKEN", "")).strip()
+    cycle_plan = build_job_cycle_plan(args.job_types, durable_queue=bool(cron_token))
+    job_types = cycle_plan["job_types"]
     opener = build_opener(RejectRedirectHandler(), HTTPCookieProcessor(CookieJar()))
     base_url = validate_base_url(args.base_url)
-    cron_token = str(os.getenv("SUPERMEGA_INTERNAL_CRON_TOKEN", "")).strip()
 
     if cron_token:
         enqueue_payload = request_json(
@@ -178,7 +216,7 @@ def main() -> int:
             {
                 "source": "ops_worker",
                 "job_types": job_types,
-                "limit": max(len(job_types), 1),
+                "limit": cycle_plan["process_limit"],
             },
             timeout=120,
             extra_headers={"x-supermega-cron-token": cron_token},
@@ -200,6 +238,7 @@ def main() -> int:
             "queued_count": int(enqueue_payload.get("queued_count", 0) or 0),
             "results": results,
             "source": "internal_queue_worker",
+            "cycle": cycle_plan,
         }
         if args.as_json:
             print(json.dumps(report, indent=2))
@@ -272,6 +311,7 @@ def main() -> int:
         "count": len(results),
         "results": results,
         "source": "workspace_login",
+        "cycle": cycle_plan,
     }
     if args.as_json:
         print(json.dumps(report, indent=2))

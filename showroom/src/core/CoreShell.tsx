@@ -3,8 +3,11 @@ import { Link, NavLink, Outlet, useLocation, useOutletContext } from 'react-rout
 
 import './core-app.css'
 import { recordBehaviorSignal } from './behavior-trail'
+import type { ClientSolutionId } from './client-onboarding'
 
 const ProductHomeReadiness = lazy(() => import('./ProductHomeReadiness').then((module) => ({ default: module.ProductHomeReadiness })))
+const ProductHomeToday = lazy(() => import('./ProductHomeToday').then((module) => ({ default: module.ProductHomeToday })))
+const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
 
@@ -148,7 +151,7 @@ function initialInterfaceTheme(): InterfaceTheme {
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-function productFromPathname(pathname: string) {
+function productFromPathname(pathname: string): ClientSolutionId | null {
   if (pathname.startsWith('/shop/')) return 'commerce'
   if (pathname.startsWith('/plant/')) return 'production'
   if (pathname.startsWith('/website/')) return 'website'
@@ -302,6 +305,8 @@ export function CoreLayout() {
       ? 'Website'
       : location.pathname.startsWith('/ecommerce/')
       ? 'Ecommerce'
+      : location.pathname.startsWith('/vision/')
+        ? 'Vision'
       : location.pathname.startsWith('/settings/')
         ? 'Workspace'
         : location.pathname.startsWith('/shop/')
@@ -317,6 +322,7 @@ export function CoreLayout() {
   }, [location.pathname, location.search, routeName])
 
   useEffect(() => {
+    if (location.pathname.startsWith('/vision/')) return
     const route = sensitiveAccountRoute ? location.pathname : `${location.pathname}${location.search}`
     const product = routeProduct ?? settingsProduct ?? 'unknown'
     recordBehaviorSignal(window.localStorage, {
@@ -358,7 +364,8 @@ export function CoreLayout() {
       <div className="core-stage">
         <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Company sign in" className="account-shell-link mobile-account-link" to={companyLoginPath}>Sign in</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '*' : 'o'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
         <nav className="mobile-nav" aria-label="Mobile application">{navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={'end' in item ? item.end : undefined} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
-        <main id="workspace-main" className={`core-main${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
+        <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
+          {routeProduct ? <Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} product={routeProduct} /></Suspense> : null}
           <div className="core-route-content"><Outlet context={runtime} /></div>
         </main>
       </div>
@@ -367,58 +374,23 @@ export function CoreLayout() {
 }
 
 const customerTracks = [
-  ['Shop', 'Retail, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/?tab=counter', '/settings/?product=commerce'],
-  ['Plant', 'Factory, workshop, service floor.', 'Plan, record, hand off shifts.', '/plant/?tab=production', '/settings/?product=production'],
-  ['Website', 'Company site and proof catalog.', 'Create pages, offers, leads.', '/website/', '/settings/?product=website'],
-  ['Ecommerce', 'Online ordering and delivery.', 'Build storefronts and Shop handoff.', '/ecommerce/', '/settings/?product=ecommerce'],
+  ['Shop', 'Retail, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/'],
+  ['Plant', 'Factory, workshop, service floor.', 'Plan, record, hand off shifts.', '/plant/'],
+  ['Website', 'Company site and proof catalog.', 'Create pages, offers, leads.', '/website/'],
+  ['Ecommerce', 'Online ordering and delivery.', 'Build storefronts and Shop handoff.', '/ecommerce/'],
 ] as const
 
 export function ProductHomePage() {
   const runtime = useOutletContext<RuntimeHealth>()
-  const [setup] = useState(readLocalSetupReadiness)
   const activationCoverage = runtime.activationManifest?.ready_percent ?? runtime.coverageScore
   const hostedReady = runtime.operatingMode === 'managed_trial' && runtime.writesReady && runtime.requirements.length === 0
   const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Managed activation proof is still required.'
-  const setupProductName = productDisplayName(setup.product)
-  const autopilotRows = [
-    ['Track', setup.workspace ? setupProductName : 'Pick one product', setup.workspace || 'Shop, Plant, Website, or Ecommerce.'],
-    ['Data', setup.currentRecord ? 'First source named' : 'Local first', setup.currentRecord || 'Upload, paste, or describe one real record.'],
-    ['Proof', setup.acceptanceEvidence ? 'Acceptance proof named' : 'Evidence before premium', setup.acceptanceEvidence || 'Define what proves the workflow works.'],
-    ['AI context', setup.ready ? 'Ready for managed import' : 'Locked until approval', setup.ready ? 'Approved setup can now be exported for managed review.' : 'Premium can learn from approved data, roles, and audit.'],
-  ] as const
-
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Start from grounded local records. Managed data and AI activate only after approval." title="Company control" />
-      <Suspense fallback={<p className="form-notice" role="status">Loading company control...</p>}>
-        <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={setup.progress} ready={setup.ready} />
-      </Suspense>
-      <section className="product-home-operating-model" aria-label="SuperMega operating model">
-        <div>
-          <span className="core-eyebrow">Free workspace</span>
-          <strong>Sample data, imports, review, and evidence.</strong>
-        </div>
-        <div>
-          <span className="core-eyebrow">Premium activation</span>
-          <strong>Managed data, AI context, roles, audit, and writes.</strong>
-        </div>
-        <Link className="core-button primary" to="/settings/">Check readiness</Link>
-      </section>
-      <section className="product-home-autopilot" aria-label="AI operating plan">
-        <div className="product-home-autopilot-head">
-          <div>
-            <span className="core-eyebrow">AI operating plan</span>
-            <h2>Recommended next move</h2>
-            <p>Choose a product, bring in real records, then export evidence for managed activation. No external send, publish, payment, or production write runs from this screen.</p>
-          </div>
-          <Link className="core-button primary" to={setup.ready ? '/settings/#controls' : '/settings/'}>{setup.ready ? 'Export evidence' : 'Check readiness'}</Link>
-        </div>
-        <div className="product-home-autopilot-grid">
-          {autopilotRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}
-        </div>
-      </section>
+      <PageHeading copy="Four products, one operating system. Start with the most important work." eyebrow="SuperMega" title="What needs attention?" />
+      <Suspense fallback={<p className="form-notice" role="status">Loading today...</p>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense>
       <nav aria-label="Business tracks" className="product-track-grid">
-        {customerTracks.map(([name, fit, outcome, path, setupPath]) => (
+        {customerTracks.map(([name, fit, outcome, path]) => (
           <article className="product-track-card" key={name}>
             <div>
               <span className="core-eyebrow">{fit}</span>
@@ -426,12 +398,24 @@ export function ProductHomePage() {
               <p>{outcome}</p>
             </div>
             <div className="product-track-actions">
-              <Link to={path}>Open product</Link>
-              <Link to={setupPath}>Set up product</Link>
+              <Link aria-label={`Open ${name}`} to={path}>Open {name}</Link>
             </div>
           </article>
         ))}
       </nav>
+      <details className="product-home-setup">
+        <summary><span><strong>Setup and activation</strong><small>Imports, evidence, roles, and managed readiness</small></span><b>Open when needed</b></summary>
+        <div>
+          <section className="product-home-operating-model" aria-label="SuperMega operating model">
+            <div><span className="core-eyebrow">Local workspace</span><strong>Sample data, imports, review, and evidence.</strong></div>
+            <div><span className="core-eyebrow">Managed activation</span><strong>Tenant data, AI context, roles, audit, and controlled writes.</strong></div>
+            <Link className="core-button primary" to="/settings/">Open setup</Link>
+          </section>
+          <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
+            <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={hostedReady ? 100 : activationCoverage} ready={hostedReady} />
+          </Suspense>
+        </div>
+      </details>
     </div>
   )
 }

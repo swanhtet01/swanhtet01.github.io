@@ -1,23 +1,130 @@
 {
   "schemaVersion": "supermega.hq.portfolio.v3",
-  "updatedAt": "2026-07-27",
+  "updatedAt": "2026-07-31",
   "northStar": "One real workflow reaches a measurable outcome through an accountable operating record.",
   "productLifecycle": ["discover", "define", "build", "release", "learn"],
+  "completedLocalAutomations": [
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-today-surface",
+      "checkpoint": "ENG-130"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-promotion-review",
+      "checkpoint": "ENG-134"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-promotion-policy-setup",
+      "checkpoint": "ENG-135"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-shipping-policy-review",
+      "checkpoint": "ENG-136"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-payment-method-policy-review",
+      "checkpoint": "ENG-137"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-tax-policy-review",
+      "checkpoint": "ENG-138"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-order-acknowledgement",
+      "checkpoint": "ENG-139"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-cancellation-request",
+      "checkpoint": "ENG-140"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-order-amendment-request",
+      "checkpoint": "ENG-141"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-delivery-reschedule-request",
+      "checkpoint": "ENG-142"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-return-outcome-receipt",
+      "checkpoint": "ENG-143"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-support-outcome-receipt",
+      "checkpoint": "ENG-144"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-correction-request",
+      "checkpoint": "ENG-145"
+    },
+    {
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-contact-correction-request",
+      "checkpoint": "ENG-146"
+    }
+  ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",
     "manager": "CEO / Codex integrator",
     "buildTeams": ["product", "engineering", "growth", "finance-risk"],
     "registeredRoleLimit": 12,
-    "activeAssignmentLimit": 4,
-    "batchJobLimit": 4,
-    "maxAgentsPerCycle": 2,
+    "activeAssignmentLimit": 1,
+    "batchJobLimit": 1,
+    "maxAgentsPerCycle": 1,
+    "maxConcurrentCompanyCycles": 1,
     "validatedCrewCapabilities": 15,
-    "ceoOutcomeAuthority": "supermega.ceo-outcome-authority.v1",
-    "ceoOutcomeOperationsContract": "supermega.ceo-outcome-operation.v1",
-    "ceoOutcomeEvaluationContract": "supermega.ceo-outcome-evaluation.v1",
+    "ceoOutcomeAuthority": "supermega.ceo-outcome-authority.v2",
+    "ceoOutcomeOperationsContract": "supermega.ceo-outcome-operation.v2",
+    "ceoOutcomeEvaluationContract": "supermega.ceo-outcome-evaluation.v2",
+    "ceoOutcomeDeliveryContract": "supermega.ceo-outcome-delivery.v1",
+    "companyOperationsStatusContract": "supermega.company-operations-status.v1",
+    "companyOperationsWindowDays": 30,
+    "weeklyReadOnlyOutcomeCount": 5,
+    "allWeeklyOutcomesObserveCompanyOperations": true,
+    "dailyCompanyControlUsesFx": false,
+    "companyOperationsRawEvidenceReturned": false,
+    "companyOperationsDeliveryCoverage": true,
+    "deliveryAttentionMetadataOnly": true,
+    "ownerConsoleDeliveryCoverage": true,
+    "weeklyCycleDeliveryRequiredForComplete": true,
+    "ownerConsoleDeliveryPerOutcomeStatus": true,
+    "scheduledCycleDeliveryReads": false,
+    "scheduledFunctionFootprintContract": "supermega.kernel-function-footprint.v1",
+    "scheduledFunctionMaxEagerFiles": 30,
+    "scheduledFunctionMaxEagerBytes": 409600,
+    "scheduledFunctionCurrentEagerFiles": 13,
+    "scheduledFunctionCurrentEagerBytes": 251096,
+    "companyOperationsDeferredForStartup": true,
+    "optionalToolConnectorsDeferredForStartup": true,
+    "fullPlatformStatusTeams": ["engineering", "finance-risk"],
+    "connectorFleetDeferredForDailyProductGrowth": true,
     "maxOutcomesPerCeoCycle": 1,
+    "productControlFocusContract": "supermega.ally-ceo-product-focus.v3",
+    "productControlStrategy": "portfolio_priority_ready",
+    "productControlSpecialist": "delivery-planner",
+    "productControlAcceptanceDimensions": ["user_job", "state_transition", "data_contract", "failure_recovery", "mobile_acceptance", "import_reconciliation", "security_boundary", "automated_test"],
     "fixedReadOnlyEvidencePlan": true,
     "blockedOrDuplicateOutcomesConsumeModelCalls": false,
+    "ceoClientIdentityRequiredBeforeClaims": true,
+    "unavailableRequiredEvidenceConsumesModelCalls": false,
+    "fixedHqSynthesisIgnoresGeneratedAt": true,
+    "unchangedCeoEvidenceConsumesModelCalls": false,
+    "deliveryAttemptMetadataOnly": true,
+    "deliveryFailureAutomaticRetry": false,
+    "deliveryTransportUncertaintyExplicit": true,
+    "uncertainWorkcellDeliveryAutomaticRetry": false,
     "completionMustBeDurableBeforeNotification": true,
     "explicitOwnerOutcomeAcceptance": true,
     "acceptedOutcomeEfficiencyUnits": "bulk_equivalent_tokens",
@@ -35,6 +142,15 @@
     "hostedAiBudgetRequiresDurableStore": true,
     "scaleToZero": true,
     "idleCapabilitiesConsumeCompute": false,
+    "localInferenceProvider": "ollama-local",
+    "localInferenceDefaultEnabled": false,
+    "localInferenceExplicitModelRequired": true,
+    "localInferenceLoopbackOnly": true,
+    "localInferenceHostedAllowed": false,
+    "localInferenceMaxAttempts": 1,
+    "localInferenceResponseMaxBytes": 1048576,
+    "localInferenceUnloadAfterResponse": true,
+    "localInferenceUsesCompanyBudget": true,
     "dynamicDelegation": false,
     "recursiveDelegation": false,
     "consequentialAuthority": "founder"
@@ -48,9 +164,18 @@
       "path": "/shop/",
       "runtimeSurface": "commerce",
       "compatibilityPath": "/operations/commerce/",
-      "job": "Run orders, available-stock counts, purchasing and receipt, fulfilment, payment status, bounded returns, exceptions, and daily close from one accountable shop record.",
+      "job": "Run orders, available-stock counts, purchasing and receipt, fulfilment, payment status, bounded returns, exceptions, versioned per-order tax calculation, daily close, and a balanced review-only accounting handoff with correction settlement and source-document traceability from one accountable shop record.",
       "surfaces": ["Sell", "Orders", "Stock"],
       "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
+      "localAutomation": {
+        "contract": "supermega.product-work-authority.v2",
+        "productId": "shop",
+        "workOrderId": "shop-managed-order-close-pilot",
+        "priority": 80,
+        "status": "owner-gated",
+        "workOrder": "Shop: rehearse one authenticated order-to-close and return exception with a named operator on an isolated managed tenant.",
+        "reason": "The next Shop proof requires a founder-selected operator and approved isolated tenant, so local automation must not spend a model call pretending it can complete it."
+      },
       "nextGate": "Repeat one authenticated order-to-close and return-exception pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
     },
     {
@@ -64,7 +189,16 @@
       "job": "Run jobs, accountable short closes, output, job-linked material use, quality, equipment observations, maintenance, and shift exceptions from one plant record.",
       "surfaces": ["Jobs", "Problems"],
       "templateContract": { "file": "../site-manifest.json", "productId": "production" },
-      "nextGate": "Validate one line, maintenance, or quality workflow with an operator, supervisor review, and measured shift evidence."
+      "localAutomation": {
+        "contract": "supermega.product-work-authority.v2",
+        "productId": "plant",
+        "workOrderId": "plant-managed-oee-pilot",
+        "priority": 70,
+        "status": "owner-gated",
+        "workOrder": "Plant: validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant.",
+        "reason": "The Plant evidence gate needs named human timing evidence and an approved managed tenant; automation cannot manufacture either input."
+      },
+      "nextGate": "Validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant, reconcile the exact work-centre downtime source, and measure correction effort before adding costing or calibration adapters."
     },
     {
       "id": "website",
@@ -75,6 +209,15 @@
       "job": "Turn an approved business brief into a finite, reviewable website and one deterministic downloadable site file.",
       "surfaces": ["Preview", "Edit", "Download"],
       "templateContract": { "file": "../site-manifest.json", "productId": "website" },
+      "localAutomation": {
+        "contract": "supermega.product-work-authority.v2",
+        "productId": "website",
+        "workOrderId": "website-managed-brief-acceptance",
+        "priority": 60,
+        "status": "owner-gated",
+        "workOrder": "Website: run one named business brief through responsive review and retain the accepted managed artifact.",
+        "reason": "A real named business brief and accepted owner review are missing, so a generated sample cannot truthfully close the Website gate."
+      },
       "nextGate": "Complete one named-business brief through accepted responsive preview and retained managed artifact before connecting domain or publish authority."
     },
     {
@@ -83,10 +226,19 @@
       "kind": "maker-product",
       "status": "release-candidate-local",
       "path": "/ecommerce/",
-      "job": "Create a simple customer storefront from a read-only Shop catalogue, quote a recoverable cart, and send structured order intent into Shop without duplicating back-office records.",
+      "job": "Create a simple customer storefront from a read-only Shop catalogue, quote a recoverable cart, send structured order intent into Shop, and retain accountable post-order help, return, and balance-review outcomes while Shop remains the only order, stock, payment, refund, tax, and correction authority.",
       "surfaces": ["Store", "Edit store", "Cart", "Quote", "Shop review"],
       "templateContract": { "file": "../site-manifest.json", "productId": "ecommerce" },
-      "nextGate": "Prove the completed cart-to-Shop handoff on a protected preview and isolated managed tenant, then add real tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
+      "localAutomation": {
+        "contract": "supermega.product-work-authority.v2",
+        "productId": "ecommerce",
+        "workOrderId": "ecommerce-managed-order-exception-pilot",
+        "priority": 95,
+        "status": "owner-gated",
+        "workOrder": "Ecommerce: prove checkout, acknowledgement, contact or delivery correction, and Shop replacement review with a named operator on one isolated managed tenant.",
+        "reason": "ENG-146 completed the local correction boundary. The next proof needs a founder-selected operator and approved isolated managed tenant; automation cannot manufacture those inputs or claim hosted persistence."
+      },
+      "nextGate": "Prove the completed cart-to-Shop handoff and customer-safe acknowledgement on a protected preview and isolated managed tenant, then add tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }
   ],
   "sharedCapabilities": [

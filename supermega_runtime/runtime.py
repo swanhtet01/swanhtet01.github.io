@@ -12,11 +12,13 @@ from datetime import datetime
 from datetime import timezone
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import re
 import time
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,6 +51,11 @@ _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _MAX_IDENTITY_AGE_SECONDS = 300
 _MIN_IDENTITY_SECRET_BYTES = 32
 _MIN_IDENTITY_SECRET_DISTINCT_BYTES = 10
+_DEFAULT_CORS_ORIGINS = "https://app.supermega.dev,https://supermega.dev,https://www.supermega.dev"
+_MAX_CORS_ORIGINS = 16
+_MAX_CORS_CONFIGURATION_BYTES = 8 * 1024
+_MAX_CORS_ORIGIN_BYTES = 512
+_DNS_LABEL = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 _IDENTITY_SECRET_PLACEHOLDER_MARKERS = frozenset(
     {
         "change-me",
@@ -144,6 +151,70 @@ def _identity_secret_ready(value: object) -> bool:
         and len(set(encoded)) >= _MIN_IDENTITY_SECRET_DISTINCT_BYTES
         and not any(marker in lowered for marker in _IDENTITY_SECRET_PLACEHOLDER_MARKERS)
     )
+
+
+def _cors_origins(value: object) -> list[str]:
+    """Return exact credential-safe browser origins or fail application startup."""
+
+    raw = _text(value) or _DEFAULT_CORS_ORIGINS
+    if len(raw.encode("utf-8")) > _MAX_CORS_CONFIGURATION_BYTES:
+        raise ValueError("SUPERMEGA_CORS_ORIGINS exceeds the bounded configuration size.")
+    candidates = raw.split(",")
+    if not 1 <= len(candidates) <= _MAX_CORS_ORIGINS or any(not item.strip() for item in candidates):
+        raise ValueError("SUPERMEGA_CORS_ORIGINS must contain 1 to 16 non-empty exact origins.")
+
+    origins: list[str] = []
+    for index, candidate in enumerate(candidates):
+        origin = candidate.strip()
+        try:
+            parsed = urlsplit(origin)
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError(
+                f"SUPERMEGA_CORS_ORIGINS contains an invalid origin at position {index + 1}."
+            ) from exc
+        hostname = parsed.hostname or ""
+        loopback = hostname.casefold() in {"localhost", "127.0.0.1", "::1"}
+        try:
+            hostname.encode("ascii")
+        except UnicodeEncodeError as exc:
+            raise ValueError(
+                f"SUPERMEGA_CORS_ORIGINS contains an invalid origin at position {index + 1}."
+            ) from exc
+        if (
+            len(origin.encode("utf-8")) > _MAX_CORS_ORIGIN_BYTES
+            or origin == "null"
+            or "*" in origin
+            or parsed.scheme.casefold() not in {"http", "https"}
+            or (parsed.scheme.casefold() != "https" and not loopback)
+            or not parsed.netloc
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+            or hostname.endswith(".")
+        ):
+            raise ValueError(
+                f"SUPERMEGA_CORS_ORIGINS contains an invalid origin at position {index + 1}."
+            )
+        try:
+            ipaddress.ip_address(hostname)
+            host_valid = True
+        except ValueError:
+            host_valid = all(_DNS_LABEL.fullmatch(label) for label in hostname.split("."))
+        if not host_valid:
+            raise ValueError(
+                f"SUPERMEGA_CORS_ORIGINS contains an invalid origin at position {index + 1}."
+            )
+        canonical = f"{parsed.scheme.casefold()}://{parsed.netloc.casefold()}"
+        if port is not None and not 1 <= port <= 65535:
+            raise ValueError(
+                f"SUPERMEGA_CORS_ORIGINS contains an invalid origin at position {index + 1}."
+            )
+        if canonical not in origins:
+            origins.append(canonical)
+    return origins
 
 
 def _validate_state_shape(surface: str, state: Mapping[str, Any]) -> None:
@@ -909,8 +980,7 @@ def create_app() -> FastAPI:
         redoc_url=None,
         openapi_url=None,
     )
-    default_origins = "https://app.supermega.dev,https://supermega.dev,https://www.supermega.dev"
-    origins = [item.strip() for item in _text(os.getenv("SUPERMEGA_CORS_ORIGINS") or default_origins).split(",") if item.strip()]
+    origins = _cors_origins(os.getenv("SUPERMEGA_CORS_ORIGINS"))
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
@@ -998,6 +1068,12 @@ def create_app() -> FastAPI:
                 "supabase_user_tokens_ready": supabase_auth_ready,
                 "anonymous_users_allowed": False,
                 "client_asserted_roles_allowed": False,
+            },
+            "browser_origin_policy": {
+                "strict_exact_origins": True,
+                "configured_origin_count": len(origins),
+                "wildcards_allowed": False,
+                "insecure_remote_origins_allowed": False,
             },
             "coverage_score": coverage_score,
             "trial_backend": {

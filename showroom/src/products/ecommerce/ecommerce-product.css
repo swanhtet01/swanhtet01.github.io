@@ -15,47 +15,136 @@
   display: none;
 }
 
-.ecommerce-heading-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.ecommerce-command-strip {
+.ecommerce-today {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: minmax(260px, .8fr) minmax(0, 1.35fr);
+  gap: 14px;
   margin: 0 0 12px;
+  border: 1px solid rgba(31, 68, 51, .14);
+  border-radius: 14px;
+  padding: 16px;
+  background: linear-gradient(135deg, #fff 0%, #f3f8f4 100%);
+  box-shadow: 0 12px 32px rgba(25, 54, 42, .06);
 }
 
-.ecommerce-command-strip span {
-  min-height: 58px;
+.ecommerce-today[data-state="attention"] { border-color: rgba(183, 105, 27, .28); }
+.ecommerce-today[data-state="setup"] { border-color: rgba(54, 106, 184, .25); }
+
+.ecommerce-today-priority {
+  min-width: 0;
   display: grid;
   align-content: center;
-  gap: 3px;
-  border: 1px solid rgba(31, 68, 51, .12);
-  border-radius: 10px;
-  padding: 8px 10px;
-  background: #fff;
+  justify-items: start;
+  gap: 7px;
 }
 
-.ecommerce-command-strip small {
-  color: #66746b;
-  font-size: 10px;
-  font-weight: 780;
-  letter-spacing: .05em;
+.ecommerce-today-priority h2 {
+  max-width: 560px;
+  margin: 0;
+  color: #17231d;
+  font-size: clamp(22px, 2.4vw, 34px);
+  line-height: 1.04;
+  letter-spacing: -.035em;
+}
+
+.ecommerce-today-priority p {
+  max-width: 590px;
+  margin: 0 0 4px;
+  color: #5f6f66;
+  font-size: 13px;
+  line-height: 1.48;
+}
+
+.ecommerce-today-metrics {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid rgba(31, 68, 51, .12);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .78);
+}
+
+.ecommerce-today-metrics span {
+  min-width: 0;
+  min-height: 64px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  border-right: 1px solid rgba(31, 68, 51, .09);
+  border-bottom: 1px solid rgba(31, 68, 51, .09);
+  padding: 10px 12px;
+}
+
+.ecommerce-today-metrics span:nth-child(2n) { border-right: 0; }
+.ecommerce-today-metrics span:nth-last-child(-n+2) { border-bottom: 0; }
+.ecommerce-today-metrics span:last-child { grid-column: 1 / -1; border-right: 0; }
+
+.ecommerce-today-metrics small,
+.ecommerce-today-source small {
+  color: #6b786f;
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: .04em;
   text-transform: uppercase;
 }
 
-.ecommerce-command-strip strong {
-  min-width: 0;
-  color: #17231d;
-  font-size: 12px;
+.ecommerce-today-metrics strong {
   overflow: hidden;
+  color: #17231d;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.ecommerce-today-source {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px 16px;
+  border-top: 1px solid rgba(31, 68, 51, .1);
+  padding-top: 10px;
+}
+
+.ecommerce-today-source span {
+  color: #345444;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.ecommerce-today-source small {
+  margin-left: auto;
+  text-align: right;
+}
+
+.ecommerce-business-controls {
+  border: 1px solid var(--core-line);
+  border-radius: 10px;
+  background: var(--core-panel);
+}
+
+.ecommerce-business-controls > summary {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  padding: 9px 12px;
+  color: var(--core-ink);
+  list-style: none;
+}
+
+.ecommerce-business-controls > summary::-webkit-details-marker { display: none; }
+.ecommerce-business-controls > summary::after { content: '+'; flex: 0 0 auto; color: var(--core-green); font-family: var(--core-mono); font-size: 16px; }
+.ecommerce-business-controls[open] > summary { border-bottom: 1px solid var(--core-line); }
+.ecommerce-business-controls[open] > summary::after { content: '\2212'; }
+.ecommerce-business-controls > summary span { min-width: 0; display: grid; gap: 2px; }
+.ecommerce-business-controls > summary strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.ecommerce-business-controls > summary small { overflow: hidden; color: var(--core-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.ecommerce-business-controls > summary b { min-width: 0; margin-left: auto; overflow: hidden; color: var(--core-muted); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.ecommerce-business-controls-content { display: grid; gap: 10px; padding: 10px; }
+.ecommerce-business-controls-content > .ecommerce-ai-desk,
+.ecommerce-business-controls-content > .ecommerce-ops-cockpit { margin: 0; }
 
 .ecommerce-ai-desk {
   display: grid;
@@ -428,7 +517,7 @@
 }
 
 .ecommerce-request-filter button {
-  min-height: 34px;
+  min-height: 44px;
   border: 1px solid rgba(12, 106, 86, .18);
   border-radius: 999px;
   padding: 6px 10px;
@@ -886,6 +975,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
   padding: 11px;
+  color: #17231d;
 }
 
 .ecommerce-order-autopilot {
@@ -1015,6 +1105,7 @@
 }
 
 .ecommerce-cart-line > button {
+  min-width: 44px;
   min-height: 44px;
   border: 0;
   padding: 0 4px;
@@ -1132,7 +1223,7 @@
 .ecommerce-quote-boundaries {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 6px;
 }
 
@@ -1165,6 +1256,99 @@
 .ecommerce-buying-notice {
   grid-column: 1 / -1;
   margin: 0;
+}
+
+.ecommerce-order-tracking {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 9px;
+  border: 1px solid rgba(31, 68, 51, .12);
+  border-radius: 12px;
+  padding: 11px;
+  background: rgba(255, 255, 255, .7);
+}
+
+.ecommerce-order-tracking-head,
+.ecommerce-order-tracking-head > span,
+.ecommerce-order-history,
+.ecommerce-order-history article,
+.ecommerce-order-history article > span,
+.ecommerce-order-history article > div {
+  display: flex;
+}
+
+.ecommerce-order-tracking-head {
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ecommerce-order-tracking-head > span,
+.ecommerce-order-history,
+.ecommerce-order-history article > span {
+  flex-direction: column;
+}
+
+.ecommerce-order-tracking-head strong,
+.ecommerce-order-history article strong {
+  color: #17231d;
+  font-size: 12px;
+}
+
+.ecommerce-order-tracking-head small,
+.ecommerce-order-tracking > p,
+.ecommerce-order-history article small {
+  color: #66746b;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.ecommerce-order-tracking-head b {
+  color: #0b745e;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.ecommerce-order-tracking > p {
+  margin: 0;
+}
+
+.ecommerce-order-history {
+  gap: 7px;
+}
+
+.ecommerce-order-history article {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  border-top: 1px solid rgba(31, 68, 51, .1);
+  padding-top: 8px;
+}
+
+.ecommerce-order-history article > span {
+  min-width: 0;
+}
+
+.ecommerce-order-history article > span > small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ecommerce-order-history article > span > b {
+  color: #17231d;
+  font-size: 11px;
+}
+
+.ecommerce-order-history article > div {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+}
+
+.ecommerce-order-history article .core-button {
+  flex: 0 0 auto;
+  min-height: 44px;
 }
 
 .ecommerce-after-purchase {
@@ -1227,19 +1411,119 @@
   min-height: 44px;
 }
 
+.ecommerce-after-purchase > .ecommerce-return-workspace {
+  display: grid;
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 8px;
+}
+
+.ecommerce-return-workspace > p {
+  max-width: none;
+}
+
+.ecommerce-return-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(31, 68, 51, .12);
+  border-radius: 12px;
+  padding: 9px;
+  background: rgba(255, 255, 255, .68);
+}
+
+.ecommerce-return-status > span,
+.ecommerce-return-form > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ecommerce-return-status strong,
+.ecommerce-return-form strong {
+  color: #17231d;
+  font-size: 11px;
+}
+
+.ecommerce-return-status small,
+.ecommerce-return-form small {
+  color: #66746b;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.ecommerce-return-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(110px, .7fr) minmax(0, 1fr);
+  gap: 9px;
+  border: 1px solid rgba(11, 116, 94, .22);
+  border-radius: 12px;
+  padding: 11px;
+  background: rgba(225, 245, 238, .56);
+}
+
+.ecommerce-return-form > span,
+.ecommerce-return-reason,
+.ecommerce-return-actions {
+  grid-column: 1 / -1;
+}
+
+.ecommerce-return-form label {
+  display: grid;
+  gap: 5px;
+  color: #34443b;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.ecommerce-return-form input,
+.ecommerce-return-form select,
+.ecommerce-return-form textarea {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(31, 68, 51, .18);
+  border-radius: 9px;
+  padding: 9px 10px;
+  background: #fff;
+  color: #17231d;
+  font: inherit;
+}
+
+.ecommerce-return-form textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.ecommerce-return-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 @media (max-width: 560px) {
-  .ecommerce-heading-actions,
+  .ecommerce-business-controls > summary b { display: none; }
+  .ecommerce-business-controls > summary span { width: 100%; }
   .ecommerce-save-bar {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .ecommerce-heading-actions .text-link {
-    width: 100%;
+  .ecommerce-today {
+    grid-template-columns: 1fr;
+    padding: 13px;
   }
 
-  .ecommerce-command-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .ecommerce-today-priority .core-button { width: 100%; }
+
+  .ecommerce-today-source {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ecommerce-today-source small {
+    margin-left: 0;
+    text-align: left;
   }
 
   .ecommerce-ai-desk {
@@ -1363,6 +1647,31 @@
   .ecommerce-after-purchase > div {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .ecommerce-return-status {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ecommerce-return-form {
+    grid-template-columns: 1fr;
+  }
+
+  .ecommerce-return-form > span,
+  .ecommerce-return-reason,
+  .ecommerce-return-actions {
+    grid-column: auto;
+  }
+
+  .ecommerce-order-tracking-head,
+  .ecommerce-order-history article {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ecommerce-order-history article .core-button {
+    width: 100%;
   }
 
   .ecommerce-after-purchase .core-button {

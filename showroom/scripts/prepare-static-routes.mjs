@@ -1,7 +1,5 @@
-import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { readFile, realpath, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-
-const routePaths = ['work', 'operations', 'shop', 'plant', 'website', 'ecommerce', 'operations/commerce', 'operations/production', 'products/website', 'products/ecommerce', 'agents', 'settings']
 
 async function main() {
   const rootDir = await realpath(process.cwd())
@@ -9,11 +7,6 @@ async function main() {
   const indexHtml = await readFile(resolve(distDir, 'index.html'), 'utf8')
 
   await writeFile(resolve(distDir, '404.html'), indexHtml, 'utf8')
-  for (const routePath of routePaths) {
-    const routeDir = resolve(distDir, routePath)
-    await mkdir(routeDir, { recursive: true })
-    await writeFile(resolve(routeDir, 'index.html'), indexHtml, 'utf8')
-  }
 }
 
 main()

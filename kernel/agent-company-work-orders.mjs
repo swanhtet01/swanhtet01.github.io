@@ -3,7 +3,12 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto'
 
-import { planCompanyCycle, runCompanyCycle } from './agent-company.mjs'
+import {
+  MAX_ACTIVE_COMPANY_ASSIGNMENTS,
+  MAX_RUNNING_COMPANY_CYCLES,
+  planCompanyCycle,
+  runCompanyCycle,
+} from './agent-company.mjs'
 import {
   claimActivity,
   getCachedResponse,
@@ -277,12 +282,36 @@ function reviewConfirmation(decision, workOrderId, resultHash) {
   return `${command} ${workOrderId} ${resultHash}`
 }
 
+function hasExactRoleAuthorization(plan) {
+  if (!isRecord(plan) || !isRecord(plan.budget) || !Array.isArray(plan.assignments)) return false
+  const plannedRoles = Number(plan.budget.plannedRoles)
+  const roleLimit = Number(plan.budget.roleLimit)
+  const assignedRoles = plan.assignments.reduce((total, assignment) => total + Number(assignment?.roleCount || 0), 0)
+  return Number.isInteger(plannedRoles)
+    && plannedRoles > 0
+    && roleLimit === plannedRoles
+    && assignedRoles === plannedRoles
+    && Number(plan.budget.remainingRoles) === 0
+}
+
+function hasBoundedCapacityAuthorization(plan) {
+  return isRecord(plan?.controls)
+    && Number(plan.controls.maxConcurrentCycles) === MAX_RUNNING_COMPANY_CYCLES
+    && Number(plan.controls.maxActiveAssignments) === MAX_ACTIVE_COMPANY_ASSIGNMENTS
+}
+
 export async function createCompanyWorkOrder(input, options = {}) {
   const fields = onlyFields(input, CREATE_FIELDS)
   if (!fields.ok) return fields
   const planCycle = options.planCompanyCycle || planCompanyCycle
   const plan = await planCycle(input)
   if (!plan.ok) return plan
+  if (!hasExactRoleAuthorization(plan)) {
+    return failure('company_work_order_role_authority_mismatch', { status: 'blocked' })
+  }
+  if (!hasBoundedCapacityAuthorization(plan)) {
+    return failure('company_work_order_capacity_authority_mismatch', { status: 'blocked' })
+  }
 
   let storedInput
   try { storedInput = normalizeStoredInput(input, plan) }
@@ -404,6 +433,20 @@ export async function runCompanyWorkOrder(input, options = {}) {
   if (!record || record.clientId !== clientId) return failure('company_work_order_not_found')
   if (!sameHash(input.planHash, record.planHash)) {
     return failure('company_work_order_plan_mismatch', { status: 'conflict', workOrderId })
+  }
+  if (!hasExactRoleAuthorization(record.plan)) {
+    return failure('company_work_order_role_authority_mismatch', {
+      status: 'blocked',
+      workOrderId,
+      retry: { requiresNewCycleId: true },
+    })
+  }
+  if (!hasBoundedCapacityAuthorization(record.plan)) {
+    return failure('company_work_order_capacity_authority_mismatch', {
+      status: 'blocked',
+      workOrderId,
+      retry: { requiresNewCycleId: true },
+    })
   }
   if (String(input.confirmation || '') !== `RUN ${workOrderId}`) {
     return failure('company_work_order_confirmation_required', {

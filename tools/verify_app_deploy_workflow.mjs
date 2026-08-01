@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
+import { validateSchedulerExecutionBudget } from './scheduler_authority_contract.mjs'
+
 const normalizeSourceText = (value) => value.replace(/\r\n?/g, '\n')
 const readFile = async (...args) => {
   const value = await readRawFile(...args)
@@ -18,17 +20,22 @@ const publicHealthWorkflow = await readFile(resolve(root, '.github/workflows/sup
 const kernelWorkflow = await readFile(resolve(root, '.github/workflows/kernel-deploy.yml'), 'utf8')
 const generator = await readFile(resolve(root, 'tools/write_app_vercel_config.mjs'), 'utf8')
 const appVerifier = await readFile(resolve(root, 'tools/verify_app_release_live.mjs'), 'utf8')
+const publicVerifier = await readFile(resolve(root, 'tools/verify_public_release_live.mjs'), 'utf8')
+const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 const releaseBarrier = await readFile(resolve(root, 'tools/verify_coordinated_release_live.mjs'), 'utf8')
 const databaseValidator = await readFile(resolve(root, 'tools/validate_supermega_database_url.py'), 'utf8')
 const migrationVerifier = await readFile(resolve(root, 'tools/verify_private_trial_migrations.mjs'), 'utf8')
 const rollbackResolver = await readFile(resolve(root, 'tools/resolve_vercel_rollback_target.mjs'), 'utf8')
+const releaseHandoff = await readFile(resolve(root, 'tools/prepare_release_handoff.mjs'), 'utf8')
+const releaseIntegrationPlan = await readFile(resolve(root, 'tools/prepare_release_integration_plan.mjs'), 'utf8')
+const releaseIntegrationBatch = await readFile(resolve(root, 'tools/prepare_release_integration_batch.mjs'), 'utf8')
 const retiredAliasVerifier = await readFile(resolve(root, 'tools/verify_retired_vercel_alias_state.mjs'), 'utf8')
 const previewServer = await readFile(resolve(root, 'tools/serve_solution.py'), 'utf8')
 const previewLauncher = await readFile(resolve(root, 'tools/deploy_preview.sh'), 'utf8')
 const retiredClaimableLauncher = await readFile(resolve(root, 'tools/deploy_claimable_preview.sh'), 'utf8')
-const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 const config = JSON.parse(await readFile(resolve(root, 'vercel.json'), 'utf8'))
 const schedulerAuthority = JSON.parse(await readFile(resolve(root, 'tools/supermega_scheduler_authority.json'), 'utf8'))
+const schedulerExecutionBudget = validateSchedulerExecutionBudget(schedulerAuthority)
 const kernelConfig = JSON.parse(await readFile(resolve(root, 'kernel/vercel.json'), 'utf8'))
 const agentConnectorMap = previewServer.slice(
   previewServer.indexOf('AGENT_JOB_CONNECTOR_MAP:'),
@@ -44,6 +51,79 @@ function requireContract(name, condition) {
 
 requireContract('source line endings normalize across platforms',
   normalizeSourceText('line one\r\nline two\rline three') === 'line one\nline two\nline three')
+requireContract('release handoff is exact, review-only, and cannot deploy',
+  packageJson.scripts?.['release:handoff:prepare'] === 'node tools/prepare_release_handoff.mjs'
+  && packageJson.scripts?.['release:handoff:self-test'] === 'node --test tools/prepare_release_handoff.test.mjs'
+  && releaseHandoff.includes("export const RELEASE_HANDOFF_CONTRACT = 'supermega.release-handoff.v1'")
+  && releaseHandoff.includes("mode: 'owner_review_only'")
+  && releaseHandoff.includes('pushApproved: false')
+  && releaseHandoff.includes('mergeApproved: false')
+  && releaseHandoff.includes('workflowDispatchApproved: false')
+  && releaseHandoff.includes('deploymentApproved: false')
+  && releaseHandoff.includes('remoteWritesPerformed: false')
+  && releaseHandoff.includes("digestScope: 'utf8_compact_json_without_digest'")
+  && releaseHandoff.includes('digest: `sha256:${sha256(payload)}`')
+  && releaseHandoff.includes('packetDigest: packet.digest')
+  && releaseHandoff.includes("mode: 'owner_review_only'")
+  && releaseHandoff.includes('verifyCurrentReleaseHandoff')
+  && releaseHandoff.includes("fail('release_handoff_remote_state_changed')")
+  && releaseHandoff.includes("fail('release_handoff_live_state_changed')")
+  && releaseHandoff.includes("git('ls-remote', '--heads', 'origin', ref)")
+  && releaseHandoff.includes("args: ['/d', '/s', '/c', 'npm.cmd run app:verify']")
+  && releaseHandoff.includes("return { file: 'npm', args: ['run', 'app:verify'] }")
+  && !/\b(?:vercel|gh)\s+(?:deploy|promote|rollback|workflow|api)\b/i.test(releaseHandoff))
+requireContract('diverged release candidates produce one exact no-write integration plan',
+  packageJson.scripts?.['release:integration:prepare'] === 'node tools/prepare_release_integration_plan.mjs'
+  && packageJson.scripts?.['release:integration:self-test'] === 'node --test tools/prepare_release_integration_plan.test.mjs'
+  && releaseIntegrationPlan.includes("export const RELEASE_INTEGRATION_PLAN_CONTRACT = 'supermega.release-integration-plan.v1'")
+  && releaseIntegrationPlan.includes("mode: 'owner_review_only_no_git_mutation'")
+  && releaseIntegrationPlan.includes("strategy: 'new_owner_approved_integration_branch_from_origin_main'")
+  && releaseIntegrationPlan.includes("git('ls-remote', '--heads', 'origin', 'main')")
+  && releaseIntegrationPlan.includes("['merge-tree', '--write-tree', '--name-only', '--no-messages', mainCommit, candidateCommit]")
+  && releaseIntegrationPlan.includes('branchCreationApproved: false')
+  && releaseIntegrationPlan.includes('mergeApproved: false')
+  && releaseIntegrationPlan.includes('conflictResolutionApproved: false')
+  && releaseIntegrationPlan.includes('pushApproved: false')
+  && releaseIntegrationPlan.includes('deploymentApproved: false')
+  && releaseIntegrationPlan.includes('forcePushAllowed: false')
+  && releaseIntegrationPlan.includes("fail('release_integration_remote_tracking_stale')")
+  && releaseIntegrationPlan.includes("fail('release_integration_state_changed')")
+  && !/\b(?:merge|rebase|cherry-pick|push|reset|checkout|switch)\b/.test(releaseIntegrationPlan.match(/function git\([\s\S]+?function remoteMainHead/)?.[0] || '')
+  && !/\b(?:vercel|gh)\s+(?:deploy|promote|rollback|workflow|api)\b/i.test(releaseIntegrationPlan))
+requireContract('ordered integration batches preserve production safeguards and candidate product depth',
+  packageJson.scripts?.['release:integration:batch:prepare'] === 'node tools/prepare_release_integration_batch.mjs'
+  && packageJson.scripts?.['release:integration:batch:self-test'] === 'node --test tools/prepare_release_integration_batch.test.mjs'
+  && releaseIntegrationBatch.includes("export const RELEASE_INTEGRATION_BATCH_CONTRACT = 'supermega.release-integration-batch.v1'")
+  && releaseIntegrationBatch.includes("export const IDENTITY_DATA_BATCH = 'identity-data-onboarding'")
+  && releaseIntegrationBatch.includes("export const APP_SHELL_BATCH = 'app-shell'")
+  && releaseIntegrationBatch.includes("export const ECOMMERCE_BATCH = 'ecommerce'")
+  && releaseIntegrationBatch.includes("export const RELEASE_SECURITY_HQ_BATCH = 'release-security-hq'")
+  && releaseIntegrationBatch.includes('requestManagedPasswordRecovery')
+  && releaseIntegrationBatch.includes('test_browser_auth_and_write_enablement_are_complete_and_ordered')
+  && releaseIntegrationBatch.includes('validateManagedPlantEquipmentImport')
+  && releaseIntegrationBatch.includes('createClientDemoWorkspace')
+  && releaseIntegrationBatch.includes("file: 'showroom/src/core/client-onboarding.ts'")
+  && releaseIntegrationBatch.includes('function managedLoginPath(product: string | null)')
+  && releaseIntegrationBatch.includes('Browser-local sample only. Completing this records a sample order and sample stock change in this browser.')
+  && releaseIntegrationBatch.includes('loadManagedOwnerControlRun')
+  && releaseIntegrationBatch.includes('const ProductSystemNavigator = lazy(')
+  && releaseIntegrationBatch.includes('Four products, one operating system. Start with the most important work.')
+  && releaseIntegrationBatch.includes('aria-label="Enterprise autopilot contract"')
+  && releaseIntegrationBatch.includes('function ecommerceOrderAmendmentSummary')
+  && releaseIntegrationBatch.includes('Already saved for this company as revision')
+  && releaseIntegrationBatch.includes('<details aria-label="Enterprise order controls"')
+  && releaseIntegrationBatch.includes('function submitAmendmentRequest')
+  && releaseIntegrationBatch.includes('function submitCorrectionRequest')
+  && releaseIntegrationBatch.includes('commerce.storefront_request.received')
+  && releaseIntegrationBatch.includes('managed schema contract advances through additive v2 through v7 migrations')
+  && releaseIntegrationBatch.includes('release:integration:batch:prepare')
+  && releaseIntegrationBatch.includes('production Supabase target requires separately committed activation authority')
+  && releaseIntegrationBatch.includes("resolutionRule: 'preserve_all_upstream_and_candidate_requirements_in_one_tree'")
+  && releaseIntegrationBatch.includes('branchCreationApproved: false')
+  && releaseIntegrationBatch.includes('conflictResolutionApproved: false')
+  && releaseIntegrationBatch.includes('sourceFilesModified: false')
+  && releaseIntegrationBatch.includes("fail('release_integration_batch_state_changed')")
+  && !/\b(?:vercel|gh)\s+(?:deploy|promote|rollback|workflow|api)\b/i.test(releaseIntegrationBatch))
 
 function runRollbackResolver(args, payload) {
   return spawnSync(
@@ -140,7 +220,12 @@ requireContract('app build contract',
 requireContract('remote dependency install contract', config.installCommand === 'npm --prefix showroom ci' && generator.includes("installCommand: 'npm --prefix showroom ci'"))
 requireContract('remote security inputs are included', generator.includes("'!.env.app.example'"))
 requireContract('canonical output directory', config.outputDirectory === 'showroom/dist')
-requireContract('canonical API function', config.routes?.[0]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes("includeFiles: 'supermega_runtime/**'"))
+requireContract('canonical SPA routes use one filesystem-first fallback',
+  config.routes?.length === 3
+  && config.routes[0]?.src === '/api/(.*)' && config.routes[0]?.dest === '/api/app.py'
+  && config.routes[1]?.handle === 'filesystem'
+  && config.routes[2]?.src === '/(.*)' && config.routes[2]?.dest === '/index.html')
+requireContract('canonical API function', config.routes?.[0]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.maxDuration === 60 && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes('maxDuration: 60') && generator.includes("includeFiles: 'supermega_runtime/**'"))
 requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))
 requireContract('deployment control files trigger coordinated release', workflow.includes('- vercel.json') && workflow.includes('- .vercelignore'))
@@ -174,6 +259,14 @@ requireContract('real migration proof precedes every production candidate',
 requireContract('app guard remains non-mutating but runs API tests', appWorkflow.includes("- 'supermega_runtime/**'") && appWorkflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v") && !/vercel@56\.1\.0\s+(?:deploy|promote|rollback)\b/.test(appWorkflow) && !appWorkflow.includes('VERCEL_TOKEN') && !/environment:\s*production/.test(appWorkflow))
 requireContract('protected app candidate verification', workflow.includes("VERCEL_PROTECTED_PREVIEW: '1'") && appVerifier.includes("'curl', path, '--deployment'") && appVerifier.includes('deploymentFunctions') && appVerifier.includes("JSON.stringify(['api/app'])") && appVerifier.includes('hosted_agent_runtime_contract_wrong'))
 requireContract('app live identity validates brand context and catalog', appVerifier.includes('release.brandVersion !== manifest.brand.version') && appVerifier.includes('release.contextVersion !== manifest.contextVersion') && appVerifier.includes('release.catalogVersion !== manifest.catalogVersion'))
+requireContract('operators can verify the exact checked-out release',
+  packageJson.scripts['app:verify:live:current'] === 'node tools/verify_app_release_live.mjs --current-head'
+  && packageJson.scripts['public:verify:live:current'] === 'node tools/verify_public_release_live.mjs --current-head'
+  && appVerifier.includes("verificationScope = expectedCommit ? 'exact_release' : 'availability_and_contract'")
+  && publicVerifier.includes("verificationScope = expectedCommit ? 'exact_release' : 'availability_and_contract'")
+  && appVerifier.includes("reason: 'release_commit_mismatch'")
+  && appVerifier.includes("execFileSync('git', ['rev-parse', 'HEAD']")
+  && publicVerifier.includes("execFileSync('git', ['rev-parse', 'HEAD']"))
 requireContract('isolated candidates exist for both domains', (workflow.match(/deploy --prebuilt --prod --skip-domain --yes/g) || []).length === 2 && workflow.includes('Deploy isolated app production candidate') && workflow.includes('Deploy isolated production candidate'))
 requireContract('candidate identity barrier is protected', workflow.includes('Verify candidate release identity barrier') && workflow.includes('APP_BASE_URL: ${{ steps.deploy-app.outputs.url }}') && workflow.includes('PUBLIC_BASE_URL: ${{ steps.deploy.outputs.url }}') && releaseBarrier.includes('protected_preview_token_required'))
 requireContract('candidate identity barrier selects each Vercel project', releaseBarrier.includes('APP_VERCEL_PROJECT_ID') && releaseBarrier.includes('PUBLIC_VERCEL_PROJECT_ID') && releaseBarrier.includes('VERCEL_PROJECT_ID: projectId') && releaseBarrier.includes("'--deployment', baseUrl, '--yes'"))
@@ -320,6 +413,8 @@ requireContract('single production scheduler authority',
   && schedulerAuthority.activation?.required_evidence?.length === 5
   && schedulerAuthority.crons?.length === 0
   && schedulerAuthority.maximum_scheduler_invocations_per_day === 0
+  && schedulerExecutionBudget.maxClaimsPerInvocation === 1
+  && schedulerExecutionBudget.maximumActivationInvocationsPerDay === 25
   && schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day === 25
   && JSON.stringify(normalizeCrons(schedulerAuthority.activation_plan?.crons)) === JSON.stringify(normalizeCrons([
     { path: '/api/cron/supermega/agent-queue', schedule: '5 * * * *' },
@@ -345,9 +440,12 @@ requireContract('company automation events stay tenant-scoped and off YTF connec
   && previewServer.indexOf('connectors = _scope_connector_catalog(connectors, expected_tenant_key)') < previewServer.indexOf('connector_lookup = {'))
 requireContract('Vercel config is generated from scheduler authority',
   generator.includes("readFileSync('tools/supermega_scheduler_authority.json'")
+  && generator.includes('validateSchedulerExecutionBudget(schedulerAuthority)')
   && generator.includes('const canonicalCrons = schedulerAuthority.crons.map')
   && generator.includes("schedulerAuthority.activation?.state !== 'dormant'")
-  && generator.includes('schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day !== 25'))
+  && generator.includes('schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day !== 25')
+  && packageJson.scripts?.['vercel:contracts:test']?.includes('scheduler_authority_contract.test.mjs')
+  && packageJson.scripts?.['vercel:contracts:test']?.includes('write_app_vercel_config.test.mjs'))
 requireContract('public live health follows the canonical release workflow',
   publicHealthWorkflow.includes('SuperMega - Coordinated Verified Release')
   && !publicHealthWorkflow.includes('SuperMega Public - Verified Prebuilt Release'))

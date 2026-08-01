@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 import unittest
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ from supermega_runtime.commerce_runtime import (
     commerce_catalog_digest,
     commerce_storefront_preview_digest,
 )
+from supermega_runtime.plant_order_foundation import plant_order_evidence_digest
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal
@@ -399,16 +401,15 @@ class TrialRuntimeTests(unittest.TestCase):
             "line": {"sku": "SKU-1", "name": "Test item", "variant": None, "quantity": 2, "unitPriceMmk": 100},
             "totalMmk": 200,
         }
-        next_state = {
-            **configured_states["operator-session"],
-            "storefrontRequests": [request],
-        }
         command = {
             "command_id": request_uuid,
             "surface": "commerce",
             "event_type": "commerce.storefront_request.received",
             "expected_version": 2,
-            "payload": {"state": next_state, "evidence": evidence("actor-operator")},
+            "payload": {
+                "intent": {"request": request},
+                "evidence": evidence("actor-operator"),
+            },
         }
         first = client.post("/api/trial/v1/commands", headers=self._headers(), json=command)
         replay = client.post("/api/trial/v1/commands", headers=self._headers(), json=command)
@@ -427,9 +428,8 @@ class TrialRuntimeTests(unittest.TestCase):
             **command,
             "payload": {
                 **command["payload"],
-                "state": {
-                    **next_state,
-                    "storefrontRequests": [{**request, "customerReference": "Conflict"}],
+                "intent": {
+                    "request": {**request, "customerReference": "Conflict"},
                 },
             },
         }
@@ -444,6 +444,38 @@ class TrialRuntimeTests(unittest.TestCase):
         self.assertEqual(stale.status_code, 409)
         self.assertEqual(stale.json()["detail"]["code"], "trial_version_conflict")
 
+        future_uuid = str(uuid4()).upper()
+        future_request = {
+            **request,
+            "id": f"ECR-{future_uuid}",
+            "idempotencyKey": f"ECI-{future_uuid}",
+            "createdAt": "2099-01-01T00:00:00.000Z",
+        }
+        future = client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers("other-operator-session"),
+            json={
+                "command_id": str(uuid4()),
+                "surface": "commerce",
+                "event_type": "commerce.storefront_request.received",
+                "expected_version": 2,
+                "payload": {
+                    "intent": {"request": future_request},
+                    "evidence": {
+                        "actionId": f"ACT-{future_uuid}",
+                        "capturedAt": future_request["createdAt"],
+                        "actor": "actor-other",
+                        "reason": "Retain this customer request for human Shop review.",
+                        "evidenceReference": (
+                            f"ECOMMERCE:{future_request['id']}:{digest}"
+                        ),
+                    },
+                },
+            },
+        )
+        self.assertEqual(future.status_code, 422)
+        self.assertIn("cannot predate", future.text)
+
         other = client.get("/api/trial/v1/bootstrap", headers=self._headers("other-operator-session"))
         self.assertNotIn("storefrontRequests", other.json()["states"]["commerce"]["state"])
         client.close()
@@ -456,6 +488,159 @@ class TrialRuntimeTests(unittest.TestCase):
         recovered_replay = recovered_client.post("/api/trial/v1/commands", headers=self._headers(), json=command)
         self.assertTrue(recovered_replay.json()["result"]["idempotent_replay"])
         recovered_client.close()
+
+    def test_service_schedule_endpoint_is_scoped_human_versioned_and_replayable(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        self._provision(store)
+        client = self._client(store)
+        catalog = {
+            "schema": "supermega.commerce.workspace.v2",
+            "items": [{"sku": "SKU-1", "name": "Test item", "onHand": 10, "reorderAt": 2, "price": 100}],
+            "orders": [],
+            "movements": [],
+            "closes": [],
+        }
+        initialized = client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers(),
+            json={
+                "command_id": str(uuid4()),
+                "surface": "commerce",
+                "event_type": "commerce.workspace.initialized",
+                "expected_version": 0,
+                "payload": {
+                    "state": catalog,
+                    "evidence": {
+                        "actionId": f"ACT-{uuid4()}",
+                        "capturedAt": "2026-07-29T04:00:00.000Z",
+                        "actor": "actor-operator",
+                        "reason": "Initialize the current Shop catalog.",
+                        "evidenceReference": "catalog://opening/1",
+                    },
+                },
+            },
+        )
+        self.assertEqual(initialized.status_code, 200, initialized.text)
+        empty = client.get(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+        )
+        self.assertEqual(empty.status_code, 200, empty.text)
+        self.assertEqual(
+            empty.json(),
+            {"workspace_id": "workspace-a", "version": 1, "schedule": None},
+        )
+        schedule = {
+            "schema": "supermega.shop.service_schedule.v2",
+            "industryPackId": "spa",
+            "revision": 1,
+            "services": [
+                {
+                    "id": "service-consultation",
+                    "name": "Consultation",
+                    "durationMinutes": 30,
+                    "priceMmk": 20000,
+                    "active": True,
+                },
+                {
+                    "id": "service-session",
+                    "name": "Standard treatment",
+                    "durationMinutes": 60,
+                    "priceMmk": 45000,
+                    "active": True,
+                }
+            ],
+            "resources": [
+                {
+                    "id": "resource-room-1",
+                    "name": "Treatment room 1",
+                    "kind": "room",
+                    "active": True,
+                }
+            ],
+            "bookings": [],
+            "events": [
+                {
+                    "revision": 1,
+                    "type": "service_registered",
+                    "subjectId": "service-session",
+                    "actor": "fabricated-client-actor",
+                    "reason": "Added from Shop appointment setup.",
+                    "happenedAt": "2026-07-29T04:05:00.000Z",
+                }
+            ],
+        }
+        clean_schedule = {
+            **schedule,
+            "revision": 0,
+            "services": schedule["services"][:1],
+            "events": [],
+        }
+        initialize_command = {
+            "command_id": str(uuid4()),
+            "expected_version": 1,
+            "captured_at": "2026-07-29T04:00:00.000Z",
+            "schedule": clean_schedule,
+        }
+        initialized_schedule = client.post(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+            json=initialize_command,
+        )
+        initialize_replay = client.post(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+            json=initialize_command,
+        )
+        self.assertEqual(initialized_schedule.status_code, 200, initialized_schedule.text)
+        self.assertEqual(initialized_schedule.json()["result"]["version"], 2)
+        self.assertEqual(
+            initialized_schedule.json()["result"]["event_type"],
+            "commerce.service_schedule.initialized",
+        )
+        self.assertTrue(initialize_replay.json()["result"]["idempotent_replay"])
+        command = {
+            "command_id": str(uuid4()),
+            "expected_version": 2,
+            "captured_at": "2026-07-29T04:05:00.000Z",
+            "schedule": schedule,
+        }
+        first = client.post(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+            json=command,
+        )
+        replay = client.post(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+            json=command,
+        )
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(first.json()["result"]["version"], 3)
+        self.assertEqual(
+            first.json()["result"]["state"]["serviceSchedule"]["events"][-1]["actor"],
+            "actor-operator",
+        )
+        self.assertTrue(replay.json()["result"]["idempotent_replay"])
+        stale = client.post(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+            json={**command, "command_id": str(uuid4())},
+        )
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.json()["detail"]["code"], "trial_version_conflict")
+        forbidden_identity = client.post(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+            json={
+                **command,
+                "command_id": str(uuid4()),
+                "schedule": {**schedule, "workspace_id": "workspace-b"},
+            },
+        )
+        self.assertEqual(forbidden_identity.status_code, 422)
+        self.assertEqual(forbidden_identity.json()["detail"]["code"], "client_identity_forbidden")
+        client.close()
 
     def test_runtime_checks_membership_and_capability(self) -> None:
         missing = self.client.post(
@@ -524,6 +709,8 @@ class TrialRuntimeTests(unittest.TestCase):
             "commerce.stock.received",
             "commerce.close.saved",
             "commerce.website_intake.converted",
+            "commerce.service_schedule.initialized",
+            "commerce.service_schedule.saved",
         )
         for event_type in human_only_events:
             with self.subTest(event_type=event_type):
@@ -538,6 +725,377 @@ class TrialRuntimeTests(unittest.TestCase):
                 )
                 self.assertEqual(agent.status_code, 403)
                 self.assertEqual(agent.json()["detail"]["code"], "trial_human_approval_required")
+
+    def test_managed_shop_order_intent_is_server_priced_scoped_and_replay_safe(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        self._provision(store)
+        store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-agent-manager",
+            actor_kind="agent",
+            capabilities=("commerce.write",),
+        )
+        client = self._client(store)
+        try:
+            initialized = store.apply_command(
+                self.operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.workspace.initialized",
+                expected_version=0,
+                payload={
+                    "state": {
+                        "schema": "supermega.commerce.workspace.v2",
+                        "items": [
+                            {
+                                "sku": "SKU-1",
+                                "name": "Current catalog item",
+                                "onHand": 10,
+                                "reorderAt": 2,
+                                "price": 12_500,
+                            }
+                        ],
+                        "orders": [],
+                        "movements": [],
+                        "closes": [],
+                    },
+                    "evidence": {
+                        "actionId": "ACT-SHOP-INIT-001",
+                        "capturedAt": "2026-01-01T00:00:00.000Z",
+                        "actor": self.operator.actor_id,
+                        "reason": "Initialize the reviewed Shop catalog.",
+                        "evidenceReference": "SHOP-INIT-001",
+                    },
+                },
+            )
+            command_id = str(uuid4())
+            body = {
+                "command_id": command_id,
+                "surface": "commerce",
+                "event_type": "commerce.order.created",
+                "expected_version": initialized.version,
+                "payload": {
+                    "intent": {
+                        "orderId": "ORD-MANAGED-001",
+                        "customer": "Walk-in customer",
+                        "channel": "Counter",
+                        "payment": "Cash",
+                        "fulfilment": "pickup",
+                        "fulfilmentReference": "Counter ORD-MANAGED-001",
+                        "promisedAt": "2099-01-01T01:00:00.000Z",
+                        "paymentTermsDays": 0,
+                        "lines": [{"sku": "SKU-1", "quantity": 2}],
+                    },
+                    "evidence": {
+                        "actionId": "ACT-SHOP-ORDER-001",
+                        "capturedAt": "1970-01-01T00:00:00.000Z",
+                        "actor": self.operator.actor_id,
+                        "reason": "Counter sale reviewed by the operator.",
+                        "evidenceReference": "COUNTER-ORD-MANAGED-001",
+                    },
+                },
+            }
+            created = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=body,
+            )
+            self.assertEqual(created.status_code, 200, created.text)
+            result = created.json()["result"]
+            order = result["state"]["orders"][0]
+            self.assertEqual(order["owner"], self.operator.actor_id)
+            self.assertEqual(order["lines"][0]["name"], "Current catalog item")
+            self.assertEqual(order["lines"][0]["unitPriceMmk"], 12_500)
+            self.assertEqual(order["total"], 25_000)
+            self.assertEqual(result["state"]["items"][0]["onHand"], 8)
+            self.assertNotEqual(order["createdAt"], "1970-01-01T00:00:00.000Z")
+
+            replay = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=body,
+            )
+            self.assertEqual(replay.status_code, 200, replay.text)
+            self.assertTrue(replay.json()["result"]["idempotent_replay"])
+            self.assertEqual(replay.json()["result"]["version"], result["version"])
+
+            changed = deepcopy(body)
+            changed["payload"]["intent"]["lines"][0]["quantity"] = 3
+            conflict = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=changed,
+            )
+            self.assertEqual(conflict.status_code, 409)
+            self.assertEqual(conflict.json()["detail"]["code"], "trial_idempotency_conflict")
+
+            stale = deepcopy(body)
+            stale["command_id"] = str(uuid4())
+            stale["expected_version"] = initialized.version
+            stale["payload"]["evidence"]["actionId"] = "ACT-SHOP-ORDER-STALE"
+            stale["payload"]["evidence"]["evidenceReference"] = "COUNTER-STALE"
+            stale["payload"]["intent"]["orderId"] = "ORD-MANAGED-STALE"
+            version_conflict = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=stale,
+            )
+            self.assertEqual(version_conflict.status_code, 409)
+            self.assertEqual(version_conflict.json()["detail"]["code"], "trial_version_conflict")
+
+            agent = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers("agent-manager-session"),
+                json={**body, "command_id": str(uuid4())},
+            )
+            self.assertEqual(agent.status_code, 422)
+            self.assertEqual(agent.json()["detail"]["code"], "commerce_actor_evidence_required")
+
+            other = client.get(
+                "/api/trial/v1/bootstrap",
+                headers=self._headers("other-operator-session"),
+            )
+            self.assertEqual(other.status_code, 200)
+            self.assertEqual(other.json()["states"]["commerce"]["state"], {})
+        finally:
+            client.close()
+
+    def test_managed_plant_job_intent_is_server_owned_scoped_and_replay_safe(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        self._provision(store)
+        store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-operator",
+            actor_kind="human",
+            capabilities=("commerce.write", "production.write", "website.write", "approvals.request"),
+        )
+        store.provision_membership(
+            workspace_id="workspace-b",
+            actor_id="actor-other",
+            actor_kind="human",
+            capabilities=("commerce.write", "production.write", "approvals.request"),
+        )
+        client = self._client(store)
+        try:
+            store.apply_command(
+                self.operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.workspace.initialized",
+                expected_version=0,
+                payload={
+                    "state": {
+                        "schema": "supermega.commerce.workspace.v2",
+                        "items": [
+                            {
+                                "sku": "SKU-DEMAND",
+                                "name": "Demand item",
+                                "onHand": 10,
+                                "reorderAt": 15,
+                                "price": 5_000,
+                            }
+                        ],
+                        "orders": [],
+                        "movements": [],
+                        "closes": [],
+                    },
+                    "evidence": {
+                        "actionId": "ACT-SHOP-DEMAND-INIT",
+                        "capturedAt": "2026-01-01T00:00:00.000Z",
+                        "actor": self.operator.actor_id,
+                        "reason": "Initialize Shop demand authority.",
+                        "evidenceReference": "SHOP-DEMAND-INIT",
+                    },
+                },
+            )
+            initialized = store.apply_command(
+                self.operator,
+                command_id=str(uuid4()),
+                surface="production",
+                event_type="production.workspace.initialized",
+                expected_version=0,
+                payload={
+                    "state": {
+                        "schema": "supermega.production.workspace.v2",
+                        "revision": 0,
+                        "jobs": [
+                            {
+                                "id": "JOB-OPENING-001",
+                                "line": "Line 01",
+                                "product": "Opening batch",
+                                "target": 100,
+                                "output": 0,
+                                "owner": "Opening owner",
+                                "priority": "normal",
+                                "dueAt": "2098-01-01T00:00:00.000Z",
+                            }
+                        ],
+                        "issues": [],
+                        "machines": [
+                            {"id": "MC-01", "name": "Mixer 01", "state": "running"}
+                        ],
+                        "events": [],
+                    },
+                    "evidence": {
+                        "actionId": "ACT-PLANT-INIT-001",
+                        "capturedAt": "2026-01-01T00:00:00.000Z",
+                        "actor": self.operator.actor_id,
+                        "reason": "Initialize the reviewed Plant workspace.",
+                        "evidenceReference": "PLANT-INIT-001",
+                    },
+                },
+            )
+            command_id = str(uuid4())
+            body = {
+                "command_id": command_id,
+                "surface": "production",
+                "event_type": "production.job.created",
+                "expected_version": initialized.version,
+                "payload": {
+                    "intent": {
+                        "jobId": "JOB-MANAGED-001",
+                        "line": "Line 02",
+                        "product": "Premium batch",
+                        "target": 750,
+                        "owner": "Production lead",
+                        "priority": "urgent",
+                        "dueAt": "2099-01-01T00:00:00.000Z",
+                    },
+                    "evidence": {
+                        "actionId": "ACT-PLANT-JOB-001",
+                        "capturedAt": "1970-01-01T00:00:00.000Z",
+                        "actor": self.operator.actor_id,
+                        "reason": "Production plan reviewed by the operator.",
+                        "evidenceReference": "PLANT-JOB-MANAGED-001",
+                    },
+                },
+            }
+            created = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=body,
+            )
+            self.assertEqual(created.status_code, 200, created.text)
+            result = created.json()["result"]
+            job = result["state"]["jobs"][0]
+            event = result["state"]["events"][0]
+            self.assertEqual(job["id"], "JOB-MANAGED-001")
+            self.assertEqual(job["output"], 0)
+            self.assertEqual(job["target"], 750)
+            self.assertEqual(event["actor"], self.operator.actor_id)
+            self.assertEqual(event["jobOwner"], "Production lead")
+            self.assertNotEqual(event["createdAt"], "1970-01-01T00:00:00.000Z")
+
+            replay = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=body,
+            )
+            self.assertEqual(replay.status_code, 200, replay.text)
+            self.assertTrue(replay.json()["result"]["idempotent_replay"])
+
+            changed = deepcopy(body)
+            changed["payload"]["intent"]["target"] = 751
+            conflict = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=changed,
+            )
+            self.assertEqual(conflict.status_code, 409)
+            self.assertEqual(conflict.json()["detail"]["code"], "trial_idempotency_conflict")
+
+            stale_snapshot = {
+                "schema": "supermega.shop_production_demand.v1",
+                "operatingUnitLocationId": "LOC-MAIN",
+                "sku": "SKU-DEMAND",
+                "productName": "Demand item",
+                "sourceOrderIds": [],
+                "activeDemandUnits": 0,
+                "uncoveredDemandUnits": 0,
+                "availableToPromiseUnits": 9,
+                "reorderAtUnits": 15,
+                "replenishmentGapUnits": 6,
+                "recommendedBatchUnits": 6,
+            }
+
+            def demand_body(snapshot: dict[str, object], job_id: str) -> dict[str, object]:
+                source_digest = plant_order_evidence_digest(snapshot)
+                evidence_reference = f"SHOP-DEMAND:{source_digest}:LOC-MAIN"
+                return {
+                    "command_id": str(uuid4()),
+                    "surface": "production",
+                    "event_type": "production.job.created",
+                    "expected_version": result["version"],
+                    "payload": {
+                        "intent": {
+                            "jobId": job_id,
+                            "line": "Packing team",
+                            "product": "Demand item",
+                            "target": snapshot["recommendedBatchUnits"],
+                            "owner": "Packing lead",
+                            "priority": "urgent",
+                            "dueAt": "2099-02-01T00:00:00.000Z",
+                            "shopDemandSource": {
+                                "contract": "supermega.production.shop-demand-source.v1",
+                                "sourceDigest": source_digest,
+                                "evidenceReference": evidence_reference,
+                                "snapshot": snapshot,
+                            },
+                        },
+                        "evidence": {
+                            "actionId": f"ACT-{job_id}",
+                            "capturedAt": "1970-01-01T00:00:00.000Z",
+                            "actor": self.operator.actor_id,
+                            "reason": "Create a job from current Shop demand.",
+                            "evidenceReference": evidence_reference,
+                        },
+                    },
+                }
+
+            stale_demand = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=demand_body(stale_snapshot, "JOB-DEMAND-STALE"),
+            )
+            self.assertEqual(stale_demand.status_code, 422)
+            self.assertEqual(stale_demand.json()["detail"]["code"], "trial_validation_error")
+
+            current_snapshot = {
+                **stale_snapshot,
+                "availableToPromiseUnits": 10,
+                "replenishmentGapUnits": 5,
+                "recommendedBatchUnits": 5,
+            }
+            current_body = demand_body(current_snapshot, "JOB-DEMAND-CURRENT")
+            current_demand = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=current_body,
+            )
+            self.assertEqual(current_demand.status_code, 200, current_demand.text)
+            demand_result = current_demand.json()["result"]
+            retained_source = demand_result["state"]["jobs"][0]["shopDemandSource"]
+            self.assertEqual(retained_source["snapshot"], current_snapshot)
+            self.assertNotIn("customer", str(retained_source).lower())
+
+            duplicate_body = demand_body(current_snapshot, "JOB-DEMAND-DUPLICATE")
+            duplicate_body["expected_version"] = demand_result["version"]
+            duplicate_demand = client.post(
+                "/api/trial/v1/commands",
+                headers=self._headers(),
+                json=duplicate_body,
+            )
+            self.assertEqual(duplicate_demand.status_code, 422)
+            self.assertEqual(duplicate_demand.json()["detail"]["code"], "trial_validation_error")
+
+            other = client.get(
+                "/api/trial/v1/bootstrap",
+                headers=self._headers("other-operator-session"),
+            )
+            self.assertEqual(other.status_code, 200)
+            self.assertEqual(other.json()["states"]["production"]["state"], {})
+        finally:
+            client.close()
 
     def test_retained_website_source_preserves_exact_command_replay_only(self) -> None:
         source = {

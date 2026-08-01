@@ -7,6 +7,7 @@ param(
   [string]$ActivationPlanFile = '',
   [string]$ActivationReceiptFile = '',
   [string]$ExpectedProjectRef = '',
+  [string]$EvidenceOutputFile = '',
   [string]$ApprovalId = '',
   [switch]$ProductionHandoff,
   [switch]$Replace,
@@ -58,13 +59,20 @@ if ($packageState) {
 }
 $package = Get-Content -Raw -LiteralPath $PackagePath | ConvertFrom-Json
 $TrustedProductionProjectRef = [string]$package.supermega.productionSupabaseProjectRef
+$TrustedProductionTargetStatus = [string]$package.supermega.productionSupabaseTargetStatus
 if ($TrustedProductionProjectRef -notmatch $ProjectRefPattern) {
   throw 'Configure supermega.productionSupabaseProjectRef in package.json and commit the reviewed value first.'
+}
+if ($TrustedProductionTargetStatus -notin @('protected-unapproved', 'activation-approved')) {
+  throw 'Configure supermega.productionSupabaseTargetStatus as protected-unapproved or activation-approved and commit it first.'
 }
 
 if ($ProductionHandoff) {
   if ($ExpectedProjectRef -ne $TrustedProductionProjectRef) {
     throw 'ProductionHandoff requires the exact reviewed production Supabase project ref.'
+  }
+  if ($TrustedProductionTargetStatus -ne 'activation-approved') {
+    throw 'ProductionHandoff is blocked until the committed Supabase target status is activation-approved.'
   }
 }
 elseif ($ExpectedProjectRef -eq $TrustedProductionProjectRef) {
@@ -169,13 +177,18 @@ try {
   $env:VERCEL_PROJECT_ID = $AppVercelProjectId
   $env:VERCEL_ORG_ID = $VercelOrgId
   Write-Output '==> validate exact-project managed Postgres, private Storage, and SuperMega schema'
-  & uv run python $ValidatorPath `
-    --env-key SUPERMEGA_DATABASE_URL `
-    --storage-audit-env-key SUPERMEGA_STORAGE_AUDIT_DATABASE_URL `
-    --activation-target `
-    --expected-project-ref-env-key SUPERMEGA_ACTIVATION_PROJECT_REF `
-    --ensure-schema `
-    --require-ready
+  $validatorArguments = @(
+    '--env-key', 'SUPERMEGA_DATABASE_URL',
+    '--storage-audit-env-key', 'SUPERMEGA_STORAGE_AUDIT_DATABASE_URL',
+    '--activation-target',
+    '--expected-project-ref-env-key', 'SUPERMEGA_ACTIVATION_PROJECT_REF',
+    '--ensure-schema',
+    '--require-ready'
+  )
+  if ($EvidenceOutputFile.Trim()) {
+    $validatorArguments += @('--evidence-output', $EvidenceOutputFile)
+  }
+  & uv run python $ValidatorPath @validatorArguments
   if ($LASTEXITCODE -ne 0) {
     throw 'Database validation failed; Supabase and Vercel were not changed.'
   }

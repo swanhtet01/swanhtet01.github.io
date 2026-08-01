@@ -34,20 +34,45 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.order.advanced",
         "commerce.order.cancelled",
         "commerce.order.return_recorded",
+        "commerce.order.support_case_opened",
+        "commerce.order.support_case_reopened",
+        "commerce.order.support_case_service_recorded",
+        "commerce.order.support_case_resolved",
+        "commerce.order.correction_recorded",
         "commerce.payment.reconciled",
+        "commerce.collection_action.recorded",
         "commerce.refund.settled",
         "commerce.stock.received",
         "commerce.stock.counted",
         "commerce.production_material.issued",
+        "commerce.production_material.returned",
+        "commerce.production_batch.received",
         "commerce.inventory.initialized",
+        "commerce.inventory.master_created",
+        "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
+        "commerce.purchase_budget.approved",
+        "commerce.supplier_sourcing.approved",
+        "commerce.purchase_requisition.approved",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
+        "commerce.supplier_invoice.recorded",
+        "commerce.supplier_invoice.payable_ready",
+        "commerce.supplier_return.authorized",
+        "commerce.supplier_credit.recorded",
         "commerce.close.saved",
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
         "commerce.storefront.merchandising.imported",
+        "commerce.tax_configuration.saved",
+        "commerce.account_mapping.saved",
+        "commerce.customer_credit_policy.saved",
+        "commerce.promotion_policy.saved",
+        "commerce.shipping_policy.saved",
+        "commerce.payment_policy.saved",
+        "commerce.service_schedule.initialized",
+        "commerce.service_schedule.saved",
         "production.workspace.initialized",
         "production.job.created",
         "production.job.schedule_updated",
@@ -59,6 +84,9 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "production.quality_hold.placed",
         "production.quality_hold.released",
         "production.machine_state.changed",
+        "production.equipment_master.imported",
+        "production.equipment.commissioned",
+        "production.equipment_maintenance_strategy.saved",
         "production.order_execution.recorded",
         "production.downtime.started",
         "production.downtime.ended",
@@ -69,6 +97,8 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "website.revision.approved",
         "website.snapshot.recorded",
         "website.release.recorded",
+        "website.inquiry.received",
+        "website.inquiry.reviewed",
     }
 )
 SURFACE_WRITE_CAPABILITIES = {
@@ -638,7 +668,12 @@ def _authoritative_command_payload(
         evidence = authoritative.get("evidence")
         state = authoritative.get("state")
         pages = state.get("pages") if isinstance(state, Mapping) else None
-        if not isinstance(evidence, Mapping) or not isinstance(pages, list):
+        opening_plan = state.get("openingPlan") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(pages, list)
+            or not isinstance(opening_plan, Mapping)
+        ):
             return authoritative
         authoritative_state = dict(state)
         authoritative_pages: list[object] = []
@@ -647,6 +682,59 @@ def _authoritative_command_payload(
                 return authoritative
             authoritative_pages.append({**dict(page), "updatedAt": website_captured_at})
         authoritative_state["pages"] = authoritative_pages
+        authoritative_state["openingPlan"] = {
+            **dict(opening_plan),
+            "confirmedAt": website_captured_at,
+        }
+        authoritative["state"] = authoritative_state
+        authoritative["evidence"] = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": website_captured_at,
+        }
+        return authoritative
+    if surface == "website" and event_type in {
+        "website.inquiry.received",
+        "website.inquiry.reviewed",
+    }:
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        ledger = state.get("leadLedger") if isinstance(state, Mapping) else None
+        leads = ledger.get("leads") if isinstance(ledger, Mapping) else None
+        reference = evidence.get("evidenceReference") if isinstance(evidence, Mapping) else None
+        suffix = "received" if event_type == "website.inquiry.received" else "reviewed"
+        prefix = "website:inquiry:"
+        trailer = f":{suffix}"
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(ledger, Mapping)
+            or not isinstance(leads, list)
+            or not isinstance(reference, str)
+            or not reference.startswith(prefix)
+            or not reference.endswith(trailer)
+        ):
+            return authoritative
+        lead_id = reference[len(prefix):-len(trailer)]
+        indexes = [
+            index
+            for index, lead in enumerate(leads)
+            if isinstance(lead, Mapping) and lead.get("id") == lead_id
+        ]
+        if len(indexes) != 1:
+            return authoritative
+        website_captured_at = _canonical_millisecond_utc(captured_at)
+        authoritative_leads = deepcopy(leads)
+        authoritative_lead = dict(authoritative_leads[indexes[0]])
+        authoritative_lead["updatedAt"] = website_captured_at
+        if event_type == "website.inquiry.received":
+            authoritative_lead["createdAt"] = website_captured_at
+        authoritative_leads[indexes[0]] = authoritative_lead
+        authoritative_state = dict(state)
+        authoritative_state["leadLedger"] = {
+            **dict(ledger),
+            "leads": authoritative_leads,
+        }
         authoritative["state"] = authoritative_state
         authoritative["evidence"] = {
             **dict(evidence),
@@ -673,6 +761,34 @@ def _authoritative_command_payload(
             "capturedAt": production_captured_at,
         }
         return authoritative
+    if surface == "production" and event_type in {
+        "production.equipment_master.imported",
+        "production.equipment.commissioned",
+        "production.equipment_maintenance_strategy.saved",
+    }:
+        evidence = authoritative.get("evidence")
+        if not isinstance(evidence, Mapping):
+            return authoritative
+        authoritative["evidence"] = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": _canonical_millisecond_utc(captured_at),
+        }
+        return authoritative
+    if (
+        surface == "production"
+        and event_type == "production.job.created"
+        and isinstance(authoritative.get("intent"), Mapping)
+    ):
+        evidence = authoritative.get("evidence")
+        if not isinstance(evidence, Mapping):
+            return authoritative
+        authoritative["evidence"] = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": _canonical_millisecond_utc(captured_at),
+        }
+        return authoritative
     if surface != "commerce":
         return authoritative
     if event_type == "commerce.workspace.initialized":
@@ -687,6 +803,8 @@ def _authoritative_command_payload(
         return authoritative
     if event_type in {
         "commerce.inventory.initialized",
+        "commerce.inventory.master_created",
+        "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
     }:
         evidence = authoritative.get("evidence")
@@ -949,8 +1067,30 @@ def _authoritative_command_payload(
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative
+    if (
+        event_type == "commerce.storefront_request.received"
+        and isinstance(authoritative.get("intent"), Mapping)
+    ):
+        evidence = authoritative.get("evidence")
+        if not isinstance(evidence, Mapping):
+            return authoritative
+        authoritative["evidence"] = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": captured_at,
+        }
+        return authoritative
     if event_type == "commerce.order.created":
         evidence = authoritative.get("evidence")
+        if isinstance(authoritative.get("intent"), Mapping):
+            if not isinstance(evidence, Mapping):
+                return authoritative
+            authoritative["evidence"] = {
+                **dict(evidence),
+                "actor": principal.actor_id,
+                "capturedAt": captured_at,
+            }
+            return authoritative
         state = authoritative.get("state")
         orders = state.get("orders") if isinstance(state, Mapping) else None
         movements = state.get("movements") if isinstance(state, Mapping) else None
@@ -1076,6 +1216,105 @@ def _authoritative_command_payload(
             actor=principal.actor_id,
             captured_at=effective_captured_at,
         )
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.purchase_budget.approved":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        envelopes = (
+            state.get("purchaseBudgetEnvelopes") if isinstance(state, Mapping) else None
+        )
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(envelopes, list)
+            or not envelopes
+            or not isinstance(envelopes[0], Mapping)
+            or not isinstance(envelopes[0].get("approval"), Mapping)
+            or envelopes[0]["approval"].get("actionId") != evidence.get("actionId")
+        ):
+            return authoritative
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": captured_at,
+        }
+        authoritative_envelope = {
+            **dict(envelopes[0]),
+            "createdAt": captured_at,
+            "periodStart": captured_at,
+            "approval": deepcopy(authoritative_evidence),
+        }
+        authoritative_state = dict(state)
+        authoritative_state["purchaseBudgetEnvelopes"] = [
+            authoritative_envelope,
+            *deepcopy(envelopes[1:]),
+        ]
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.supplier_sourcing.approved":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        decisions = (
+            state.get("supplierSourcingDecisions") if isinstance(state, Mapping) else None
+        )
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(decisions, list)
+            or not decisions
+            or not isinstance(decisions[0], Mapping)
+            or not isinstance(decisions[0].get("approval"), Mapping)
+            or decisions[0]["approval"].get("actionId") != evidence.get("actionId")
+        ):
+            return authoritative
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": captured_at,
+        }
+        authoritative_decision = {
+            **dict(decisions[0]),
+            "createdAt": captured_at,
+            "approval": deepcopy(authoritative_evidence),
+        }
+        authoritative_state = dict(state)
+        authoritative_state["supplierSourcingDecisions"] = [
+            authoritative_decision,
+            *deepcopy(decisions[1:]),
+        ]
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.purchase_requisition.approved":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        requisitions = (
+            state.get("purchaseRequisitions") if isinstance(state, Mapping) else None
+        )
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(requisitions, list)
+            or not requisitions
+            or not isinstance(requisitions[0], Mapping)
+            or not isinstance(requisitions[0].get("approval"), Mapping)
+            or requisitions[0]["approval"].get("actionId") != evidence.get("actionId")
+        ):
+            return authoritative
+        authoritative_evidence = {**dict(evidence), "actor": principal.actor_id, "capturedAt": captured_at}
+        authoritative_requisition = {
+            **dict(requisitions[0]),
+            "createdAt": captured_at,
+            "approval": deepcopy(authoritative_evidence),
+        }
+        authoritative_state = dict(state)
+        authoritative_state["purchaseRequisitions"] = [
+            authoritative_requisition,
+            *deepcopy(requisitions[1:]),
+        ]
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative
@@ -1278,6 +1517,301 @@ def _authoritative_command_payload(
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative
+    if event_type == "commerce.collection_action.recorded":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        orders = state.get("orders") if isinstance(state, Mapping) else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(orders, list)
+        ):
+            return authoritative
+        contacted_order = next(
+            (
+                order
+                for order in orders
+                if isinstance(order, Mapping)
+                and isinstance(order.get("collectionActions"), list)
+                and order["collectionActions"]
+                and isinstance(order["collectionActions"][0], Mapping)
+                and isinstance(order["collectionActions"][0].get("proof"), Mapping)
+                and order["collectionActions"][0]["proof"].get("actionId")
+                == evidence.get("actionId")
+            ),
+            None,
+        )
+        effective_captured_at = captured_at
+        if contacted_order is not None:
+            prior_actions = contacted_order.get("collectionActions", [])[1:]
+            effective_captured_at = _not_before(
+                captured_at,
+                contacted_order.get("createdAt"),
+                *(
+                    action.get("proof", {}).get("capturedAt")
+                    for action in prior_actions
+                    if isinstance(action, Mapping)
+                    and isinstance(action.get("proof"), Mapping)
+                ),
+            )
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": effective_captured_at,
+        }
+        authoritative_orders = deepcopy(orders)
+        for order_index, order in enumerate(authoritative_orders):
+            actions = order.get("collectionActions") if isinstance(order, Mapping) else None
+            if (
+                not isinstance(actions, list)
+                or not actions
+                or not isinstance(actions[0], Mapping)
+                or not isinstance(actions[0].get("proof"), Mapping)
+                or actions[0]["proof"].get("actionId") != evidence.get("actionId")
+            ):
+                continue
+            authoritative_action = dict(actions[0])
+            authoritative_action["proof"] = deepcopy(authoritative_evidence)
+            authoritative_order = dict(order)
+            authoritative_order["collectionActions"] = [
+                authoritative_action,
+                *deepcopy(actions[1:]),
+            ]
+            authoritative_orders[order_index] = authoritative_order
+        authoritative_state = dict(state)
+        authoritative_state["orders"] = authoritative_orders
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type in {
+        "commerce.supplier_invoice.recorded",
+        "commerce.supplier_invoice.payable_ready",
+    }:
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        purchase_orders = (
+            state.get("purchaseOrders") if isinstance(state, Mapping) else None
+        )
+        proof_key = (
+            "recording"
+            if event_type == "commerce.supplier_invoice.recorded"
+            else "payableReview"
+        )
+        matches: list[tuple[int, Mapping[str, Any], Mapping[str, Any]]] = []
+        if isinstance(purchase_orders, list) and isinstance(evidence, Mapping):
+            for index, candidate in enumerate(purchase_orders):
+                invoice = (
+                    candidate.get("supplierInvoice")
+                    if isinstance(candidate, Mapping)
+                    else None
+                )
+                proof = invoice.get(proof_key) if isinstance(invoice, Mapping) else None
+                if (
+                    isinstance(proof, Mapping)
+                    and proof.get("actionId") == evidence.get("actionId")
+                ):
+                    matches.append((index, candidate, invoice))
+        if len(matches) != 1 or not isinstance(state, Mapping):
+            return authoritative
+        purchase_order_index, purchase_order, invoice = matches[0]
+        receipt_times = [
+            movement.get("createdAt")
+            for movement in state.get("movements", [])
+            if isinstance(movement, Mapping)
+            and movement.get("kind") == "receipt"
+            and movement.get("purchaseOrderId") == purchase_order.get("id")
+        ]
+        effective_captured_at = _not_before(
+            captured_at,
+            purchase_order.get("createdAt"),
+            invoice.get("issuedAt"),
+            invoice.get("recording", {}).get("capturedAt")
+            if event_type == "commerce.supplier_invoice.payable_ready"
+            and isinstance(invoice.get("recording"), Mapping)
+            else None,
+            *receipt_times,
+        )
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": effective_captured_at,
+        }
+        authoritative_invoice = dict(invoice)
+        authoritative_invoice[proof_key] = deepcopy(authoritative_evidence)
+        authoritative_purchase_order = {
+            **dict(purchase_order),
+            "supplierInvoice": authoritative_invoice,
+        }
+        authoritative_purchase_orders = deepcopy(purchase_orders)
+        authoritative_purchase_orders[purchase_order_index] = authoritative_purchase_order
+        authoritative_state = dict(state)
+        authoritative_state["purchaseOrders"] = authoritative_purchase_orders
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.supplier_return.authorized":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        purchase_orders = (
+            state.get("purchaseOrders") if isinstance(state, Mapping) else None
+        )
+        matches: list[tuple[int, Mapping[str, Any], int, Mapping[str, Any]]] = []
+        if isinstance(purchase_orders, list) and isinstance(evidence, Mapping):
+            for purchase_order_index, purchase_order in enumerate(purchase_orders):
+                supplier_returns = (
+                    purchase_order.get("supplierReturns", [])
+                    if isinstance(purchase_order, Mapping)
+                    else []
+                )
+                if not isinstance(supplier_returns, list):
+                    continue
+                for return_index, supplier_return in enumerate(supplier_returns):
+                    authorization = (
+                        supplier_return.get("authorization")
+                        if isinstance(supplier_return, Mapping)
+                        else None
+                    )
+                    if (
+                        isinstance(authorization, Mapping)
+                        and authorization.get("actionId") == evidence.get("actionId")
+                    ):
+                        matches.append(
+                            (
+                                purchase_order_index,
+                                purchase_order,
+                                return_index,
+                                supplier_return,
+                            )
+                        )
+        if len(matches) != 1 or not isinstance(state, Mapping):
+            return authoritative
+        purchase_order_index, purchase_order, return_index, supplier_return = matches[0]
+        receipt = next(
+            (
+                movement
+                for movement in state.get("movements", [])
+                if isinstance(movement, Mapping)
+                and movement.get("id") == supplier_return.get("receiptMovementId")
+            ),
+            None,
+        )
+        effective_captured_at = _not_before(
+            captured_at,
+            purchase_order.get("createdAt"),
+            receipt.get("createdAt") if isinstance(receipt, Mapping) else None,
+        )
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": effective_captured_at,
+        }
+        authoritative_return = {
+            **dict(supplier_return),
+            "createdAt": effective_captured_at,
+            "authorization": deepcopy(authoritative_evidence),
+        }
+        authoritative_returns = deepcopy(purchase_order.get("supplierReturns", []))
+        authoritative_returns[return_index] = authoritative_return
+        authoritative_purchase_order = {
+            **dict(purchase_order),
+            "supplierReturns": authoritative_returns,
+        }
+        authoritative_purchase_orders = deepcopy(purchase_orders)
+        authoritative_purchase_orders[purchase_order_index] = authoritative_purchase_order
+        authoritative_state = dict(state)
+        authoritative_state["purchaseOrders"] = authoritative_purchase_orders
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.supplier_credit.recorded":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        purchase_orders = (
+            state.get("purchaseOrders") if isinstance(state, Mapping) else None
+        )
+        matches: list[
+            tuple[int, Mapping[str, Any], int, Mapping[str, Any], int, Mapping[str, Any]]
+        ] = []
+        if isinstance(purchase_orders, list) and isinstance(evidence, Mapping):
+            for purchase_order_index, purchase_order in enumerate(purchase_orders):
+                supplier_returns = (
+                    purchase_order.get("supplierReturns", [])
+                    if isinstance(purchase_order, Mapping)
+                    else []
+                )
+                if not isinstance(supplier_returns, list):
+                    continue
+                for return_index, supplier_return in enumerate(supplier_returns):
+                    credit_notes = (
+                        supplier_return.get("creditNotes", [])
+                        if isinstance(supplier_return, Mapping)
+                        else []
+                    )
+                    if not isinstance(credit_notes, list):
+                        continue
+                    for credit_index, credit_note in enumerate(credit_notes):
+                        recording = (
+                            credit_note.get("recording")
+                            if isinstance(credit_note, Mapping)
+                            else None
+                        )
+                        if (
+                            isinstance(recording, Mapping)
+                            and recording.get("actionId") == evidence.get("actionId")
+                        ):
+                            matches.append(
+                                (
+                                    purchase_order_index,
+                                    purchase_order,
+                                    return_index,
+                                    supplier_return,
+                                    credit_index,
+                                    credit_note,
+                                )
+                            )
+        if len(matches) != 1 or not isinstance(state, Mapping):
+            return authoritative
+        (
+            purchase_order_index,
+            purchase_order,
+            return_index,
+            supplier_return,
+            credit_index,
+            credit_note,
+        ) = matches[0]
+        effective_captured_at = _not_before(
+            captured_at,
+            supplier_return.get("createdAt"),
+            credit_note.get("issuedAt"),
+        )
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": effective_captured_at,
+        }
+        authoritative_credit = {
+            **dict(credit_note),
+            "recording": deepcopy(authoritative_evidence),
+        }
+        authoritative_credits = deepcopy(supplier_return.get("creditNotes", []))
+        authoritative_credits[credit_index] = authoritative_credit
+        authoritative_return = {
+            **dict(supplier_return),
+            "creditNotes": authoritative_credits,
+        }
+        authoritative_returns = deepcopy(purchase_order.get("supplierReturns", []))
+        authoritative_returns[return_index] = authoritative_return
+        authoritative_purchase_order = {
+            **dict(purchase_order),
+            "supplierReturns": authoritative_returns,
+        }
+        authoritative_purchase_orders = deepcopy(purchase_orders)
+        authoritative_purchase_orders[purchase_order_index] = authoritative_purchase_order
+        authoritative_state = dict(state)
+        authoritative_state["purchaseOrders"] = authoritative_purchase_orders
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
     if event_type == "commerce.payment.reconciled":
         evidence = authoritative.get("evidence")
         state = authoritative.get("state")
@@ -1365,6 +1899,185 @@ def _authoritative_command_payload(
             actor=principal.actor_id,
             captured_at=effective_captured_at,
         )
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type in {
+        "commerce.order.support_case_opened",
+        "commerce.order.support_case_reopened",
+        "commerce.order.support_case_service_recorded",
+        "commerce.order.support_case_resolved",
+    }:
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        orders = state.get("orders") if isinstance(state, Mapping) else None
+        if not isinstance(evidence, Mapping) or not isinstance(state, Mapping) or not isinstance(orders, list):
+            return authoritative
+        target_order = None
+        target_case = None
+        for order in orders:
+            if not isinstance(order, Mapping):
+                continue
+            for support_case in order.get("supportCases", []):
+                if not isinstance(support_case, Mapping):
+                    continue
+                if event_type == "commerce.order.support_case_opened":
+                    proof = support_case.get("opening")
+                elif event_type == "commerce.order.support_case_reopened":
+                    reopen = support_case.get("reopen")
+                    proof = reopen.get("proof") if isinstance(reopen, Mapping) else None
+                elif event_type == "commerce.order.support_case_service_recorded":
+                    proof = next(
+                        (
+                            service_event.get("proof")
+                            for service_event in [
+                                *support_case.get("serviceEvents", []),
+                                *support_case.get("followUpServiceEvents", []),
+                            ]
+                            if isinstance(service_event, Mapping)
+                            and isinstance(service_event.get("proof"), Mapping)
+                            and service_event["proof"].get("actionId") == evidence.get("actionId")
+                        ),
+                        None,
+                    )
+                else:
+                    resolutions = [support_case.get("resolution"), support_case.get("followUpResolution")]
+                    proof = next(
+                        (
+                            resolution.get("proof")
+                            for resolution in resolutions
+                            if isinstance(resolution, Mapping)
+                            and isinstance(resolution.get("proof"), Mapping)
+                            and resolution["proof"].get("actionId") == evidence.get("actionId")
+                        ),
+                        None,
+                    )
+                if isinstance(proof, Mapping) and proof.get("actionId") == evidence.get("actionId"):
+                    target_order = order
+                    target_case = support_case
+                    break
+            if target_case is not None:
+                break
+        effective_captured_at = captured_at
+        if isinstance(target_order, Mapping) and isinstance(target_case, Mapping):
+            completion = target_order.get("completion")
+            opening = target_case.get("opening")
+            service_events = [
+                *target_case.get("serviceEvents", []),
+                *target_case.get("followUpServiceEvents", []),
+            ]
+            original_resolution = target_case.get("resolution")
+            reopen = target_case.get("reopen")
+            effective_captured_at = _not_before(
+                captured_at,
+                target_order.get("createdAt"),
+                completion.get("capturedAt") if isinstance(completion, Mapping) else None,
+                target_case.get("customerRequestedAt"),
+                opening.get("capturedAt") if isinstance(opening, Mapping) else None,
+                *(
+                    service_event.get("proof", {}).get("capturedAt")
+                    for service_event in service_events
+                    if isinstance(service_event, Mapping)
+                    and isinstance(service_event.get("proof"), Mapping)
+                ),
+                original_resolution.get("proof", {}).get("capturedAt")
+                if isinstance(original_resolution, Mapping)
+                and isinstance(original_resolution.get("proof"), Mapping)
+                else None,
+                reopen.get("proof", {}).get("capturedAt")
+                if isinstance(reopen, Mapping)
+                and isinstance(reopen.get("proof"), Mapping)
+                else None,
+            )
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = effective_captured_at
+        authoritative_orders = deepcopy(orders)
+        for order_index, order in enumerate(authoritative_orders):
+            if not isinstance(order, Mapping):
+                continue
+            cases = order.get("supportCases")
+            if not isinstance(cases, list):
+                continue
+            changed_cases = deepcopy(cases)
+            changed = False
+            for case_index, support_case in enumerate(changed_cases):
+                if not isinstance(support_case, Mapping):
+                    continue
+                changed_case = dict(support_case)
+                if event_type == "commerce.order.support_case_opened":
+                    proof = support_case.get("opening")
+                    if not isinstance(proof, Mapping) or proof.get("actionId") != evidence.get("actionId"):
+                        continue
+                    changed_proof = dict(proof)
+                    changed_proof["actor"] = principal.actor_id
+                    changed_proof["capturedAt"] = effective_captured_at
+                    changed_case["opening"] = changed_proof
+                elif event_type == "commerce.order.support_case_reopened":
+                    reopen = support_case.get("reopen")
+                    proof = reopen.get("proof") if isinstance(reopen, Mapping) else None
+                    if not isinstance(proof, Mapping) or proof.get("actionId") != evidence.get("actionId"):
+                        continue
+                    changed_proof = dict(proof)
+                    changed_proof["actor"] = principal.actor_id
+                    changed_proof["capturedAt"] = effective_captured_at
+                    changed_reopen = dict(reopen)
+                    changed_reopen["proof"] = changed_proof
+                    changed_case["reopen"] = changed_reopen
+                elif event_type == "commerce.order.support_case_service_recorded":
+                    event_field = (
+                        "followUpServiceEvents"
+                        if isinstance(support_case.get("reopen"), Mapping)
+                        else "serviceEvents"
+                    )
+                    service_events = support_case.get(event_field)
+                    if not isinstance(service_events, list):
+                        continue
+                    changed_events = deepcopy(service_events)
+                    event_changed = False
+                    for service_index, service_event in enumerate(changed_events):
+                        if not isinstance(service_event, Mapping):
+                            continue
+                        proof = service_event.get("proof")
+                        if not isinstance(proof, Mapping) or proof.get("actionId") != evidence.get("actionId"):
+                            continue
+                        changed_proof = dict(proof)
+                        changed_proof["actor"] = principal.actor_id
+                        changed_proof["capturedAt"] = effective_captured_at
+                        changed_event = dict(service_event)
+                        changed_event["proof"] = changed_proof
+                        changed_events[service_index] = changed_event
+                        event_changed = True
+                        break
+                    if not event_changed:
+                        continue
+                    changed_case[event_field] = changed_events
+                else:
+                    resolution_field = (
+                        "followUpResolution"
+                        if isinstance(support_case.get("reopen"), Mapping)
+                        else "resolution"
+                    )
+                    resolution = support_case.get(resolution_field)
+                    proof = resolution.get("proof") if isinstance(resolution, Mapping) else None
+                    if not isinstance(proof, Mapping) or proof.get("actionId") != evidence.get("actionId"):
+                        continue
+                    changed_proof = dict(proof)
+                    changed_proof["actor"] = principal.actor_id
+                    changed_proof["capturedAt"] = effective_captured_at
+                    changed_resolution = dict(resolution)
+                    changed_resolution["proof"] = changed_proof
+                    changed_case[resolution_field] = changed_resolution
+                changed_cases[case_index] = changed_case
+                changed = True
+                break
+            if changed:
+                changed_order = dict(order)
+                changed_order["supportCases"] = changed_cases
+                authoritative_orders[order_index] = changed_order
+                break
+        authoritative_state = dict(state)
+        authoritative_state["orders"] = authoritative_orders
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative
@@ -1478,6 +2191,8 @@ def _authoritative_command_payload(
     if event_type in {
         "commerce.stock.counted",
         "commerce.production_material.issued",
+        "commerce.production_material.returned",
+        "commerce.production_batch.received",
     }:
         evidence = authoritative.get("evidence")
         state = authoritative.get("state")
@@ -1494,6 +2209,8 @@ def _authoritative_command_payload(
         location_command_kind = {
             "commerce.stock.counted": "count",
             "commerce.production_material.issued": "production_issue",
+            "commerce.production_material.returned": "production_return",
+            "commerce.production_batch.received": "production_receipt",
         }[event_type]
         location_command_matches = False
         previous_inventory_captured_at = None
@@ -1592,6 +2309,164 @@ def _authoritative_command_payload(
             "capturedAt": _canonical_millisecond_utc(captured_at),
         }
         return authoritative
+    if event_type == "commerce.tax_configuration.saved":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        configurations = state.get("taxConfigurations") if isinstance(state, Mapping) else None
+        configuration = configurations[0] if isinstance(configurations, list) and configurations else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(configuration, Mapping)
+        ):
+            return authoritative
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": captured_at,
+        }
+        authoritative_configuration = {
+            **dict(configuration),
+            "proof": deepcopy(authoritative_evidence),
+        }
+        authoritative_state = dict(state)
+        authoritative_state["taxConfigurations"] = [
+            authoritative_configuration,
+            *deepcopy(configurations[1:]),
+        ]
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.order.correction_recorded":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        orders = state.get("orders") if isinstance(state, Mapping) else None
+        if not isinstance(evidence, Mapping) or not isinstance(state, Mapping) or not isinstance(orders, list):
+            return authoritative
+        corrected_order = next(
+            (
+                order
+                for order in orders
+                if isinstance(order, Mapping)
+                and isinstance(order.get("corrections"), list)
+                and order["corrections"]
+                and isinstance(order["corrections"][0], Mapping)
+                and order["corrections"][0].get("actionId") == evidence.get("actionId")
+            ),
+            None,
+        )
+        effective_captured_at = captured_at
+        if corrected_order is not None:
+            completion = corrected_order.get("completion")
+            prior_corrections = corrected_order.get("corrections", [])[1:]
+            effective_captured_at = _not_before(
+                captured_at,
+                corrected_order.get("createdAt"),
+                corrected_order.get("paymentReconciledAt"),
+                completion.get("capturedAt") if isinstance(completion, Mapping) else None,
+                *(
+                    record.get("createdAt")
+                    for record in prior_corrections
+                    if isinstance(record, Mapping)
+                ),
+            )
+        authoritative_evidence = dict(evidence)
+        authoritative_evidence["actor"] = principal.actor_id
+        authoritative_evidence["capturedAt"] = effective_captured_at
+        authoritative_orders = deepcopy(orders)
+        for order_index, order in enumerate(authoritative_orders):
+            corrections = order.get("corrections") if isinstance(order, Mapping) else None
+            if (
+                not isinstance(corrections, list)
+                or not corrections
+                or not isinstance(corrections[0], Mapping)
+                or corrections[0].get("actionId") != evidence.get("actionId")
+            ):
+                continue
+            authoritative_correction = dict(corrections[0])
+            authoritative_correction["actor"] = principal.actor_id
+            authoritative_correction["createdAt"] = effective_captured_at
+            authoritative_order = dict(order)
+            authoritative_order["corrections"] = [
+                authoritative_correction,
+                *deepcopy(corrections[1:]),
+            ]
+            authoritative_orders[order_index] = authoritative_order
+        authoritative_state = dict(state)
+        authoritative_state["orders"] = authoritative_orders
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.account_mapping.saved":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        configurations = state.get("accountMappingConfigurations") if isinstance(state, Mapping) else None
+        configuration = configurations[0] if isinstance(configurations, list) and configurations else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(configuration, Mapping)
+        ):
+            return authoritative
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": captured_at,
+        }
+        authoritative_configuration = {
+            **dict(configuration),
+            "proof": deepcopy(authoritative_evidence),
+        }
+        authoritative_state = dict(state)
+        authoritative_state["accountMappingConfigurations"] = [
+            authoritative_configuration,
+            *deepcopy(configurations[1:]),
+        ]
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type in {
+        "commerce.customer_credit_policy.saved",
+        "commerce.promotion_policy.saved",
+        "commerce.shipping_policy.saved",
+        "commerce.payment_policy.saved",
+    }:
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        policy_collection = (
+            "customerCreditPolicies"
+            if event_type == "commerce.customer_credit_policy.saved"
+            else "promotionPolicies"
+            if event_type == "commerce.promotion_policy.saved"
+            else "shippingPolicies"
+            if event_type == "commerce.shipping_policy.saved"
+            else "paymentPolicies"
+        )
+        policies = state.get(policy_collection) if isinstance(state, Mapping) else None
+        policy = policies[0] if isinstance(policies, list) and policies else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(policy, Mapping)
+        ):
+            return authoritative
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": captured_at,
+        }
+        authoritative_policy = {
+            **dict(policy),
+            "proof": deepcopy(authoritative_evidence),
+        }
+        authoritative_state = dict(state)
+        authoritative_state[policy_collection] = [
+            authoritative_policy,
+            *deepcopy(policies[1:]),
+        ]
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
     if event_type != "commerce.storefront.configuration.saved":
         return authoritative
     evidence = authoritative.get("evidence")
@@ -1618,7 +2493,18 @@ def _require_command_evidence_actor(
     surface: str,
     event_type: str,
 ) -> None:
-    if surface != "production" and not (surface == "website" and event_type in HUMAN_COMMAND_EVENTS):
+    if (
+        surface != "production"
+        and not (surface == "website" and event_type in HUMAN_COMMAND_EVENTS)
+        and not (
+            surface == "commerce"
+            and event_type
+            in {
+                "commerce.service_schedule.initialized",
+                "commerce.service_schedule.saved",
+            }
+        )
+    ):
         return
     evidence = payload.get("evidence")
     if not isinstance(evidence, Mapping) or evidence.get("actor") != principal.actor_id:

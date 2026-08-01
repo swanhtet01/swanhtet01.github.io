@@ -77,12 +77,12 @@ _SCHEDULER_ROUTES: dict[str, dict[str, object]] = {
     QUEUE_CRON_PATH: {
         "cycle": "queue",
         "job_types": AGENT_AUTOMATION_LANES["queue"],
-        "limit": len(AGENT_AUTOMATION_LANES["queue"]),
+        "limit": 1,
     },
     DAILY_CRON_PATH: {
         "cycle": "daily",
         "job_types": AGENT_AUTOMATION_LANES["daily"],
-        "limit": len(AGENT_AUTOMATION_LANES["daily"]),
+        "limit": 1,
     },
 }
 

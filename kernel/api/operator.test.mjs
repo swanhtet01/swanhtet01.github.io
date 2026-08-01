@@ -153,6 +153,54 @@ test('cached operator synthesis reports no new model work or provider identity',
   assert.equal(JSON.stringify(result.usage).includes('private-'), false)
 })
 
+test('unchanged fixed HQ operations evidence reuses synthesis despite a new report timestamp', async () => {
+  const cache = new Map()
+  const prompts = []
+  let report = 0
+  const input = {
+    goal: 'Prepare one checked owner decision',
+    approvedPlan: [{ tool: 'company_operations_status', args: {} }],
+  }
+  const options = {
+    complete: async (request) => {
+      const key = JSON.stringify(request)
+      prompts.push(request.messages[0].content)
+      if (cache.has(key)) return { ...cache.get(key), cached: true }
+      const response = {
+        text: 'Operations are ready',
+        tier: 'reason',
+        usage: { input_tokens: 12, output_tokens: 4 },
+      }
+      cache.set(key, response)
+      return response
+    },
+    runTool: async () => ({
+      ok: true,
+      data: {
+        status: 'ready',
+        generatedAt: report++ === 0 ? '2026-07-28T01:00:00.000Z' : '2026-07-28T02:00:00.000Z',
+        activeAssignments: 2,
+      },
+    }),
+    availableTools: () => [{
+      name: 'company_operations_status',
+      description: 'Operations',
+      input_schema: { type: 'object', properties: {} },
+    }],
+  }
+
+  const first = await runOperator(input, options)
+  const second = await runOperator(input, options)
+
+  assert.equal(prompts[0], prompts[1], 'volatile report timestamps must not change the fixed HQ cache key')
+  assert.doesNotMatch(prompts[0], /generatedAt|2026-07-28T0[12]:00/)
+  assert.notEqual(first.results[0].data.generatedAt, second.results[0].data.generatedAt)
+  assert.equal(first.usage.modelCalls, 1)
+  assert.equal(first.usage.cacheHits, 0)
+  assert.equal(second.usage.modelCalls, 0)
+  assert.equal(second.usage.cacheHits, 1)
+})
+
 test('invalid or unavailable HQ evidence plans fail before model or tool work', async () => {
   let modelCalls = 0
   let toolCalls = 0
@@ -173,4 +221,39 @@ test('invalid or unavailable HQ evidence plans fail before model or tool work', 
   assert.equal(smuggled.reason, 'approved_plan_invalid')
   assert.equal(modelCalls, 0)
   assert.equal(toolCalls, 0)
+})
+
+test('failed or unavailable fixed HQ evidence stops synthesis and redacts source details', async () => {
+  let modelCalls = 0
+  let toolCalls = 0
+  const tools = () => [
+    { name: 'company_operations_status', description: 'Operations', input_schema: { type: 'object', properties: {} } },
+    { name: 'pipeline_overview', description: 'Pipeline', input_schema: { type: 'object', properties: {} } },
+  ]
+  const input = {
+    goal: 'Prepare one checked owner decision',
+    approvedPlan: [
+      { tool: 'company_operations_status', args: {} },
+      { tool: 'pipeline_overview', args: {} },
+    ],
+  }
+
+  const failed = await runOperator(input, {
+    complete: async () => { modelCalls += 1; return { text: 'unused' } },
+    runTool: async () => { toolCalls += 1; return { ok: false, error: 'private database password' } },
+    availableTools: tools,
+  })
+  const unavailable = await runOperator(input, {
+    complete: async () => { modelCalls += 1; return { text: 'unused' } },
+    runTool: async () => { toolCalls += 1; return { ok: true, data: { status: 'unavailable', secret: 'private tenant row' } } },
+    availableTools: tools,
+  })
+
+  assert.equal(failed.reason, 'hq_evidence_unavailable')
+  assert.equal(unavailable.reason, 'hq_evidence_unavailable')
+  assert.equal(modelCalls, 0)
+  assert.equal(toolCalls, 2, 'each run must stop after its first unavailable required source')
+  assert.equal(failed.usage.modelCalls, 0)
+  assert.equal(unavailable.usage.modelCalls, 0)
+  assert.doesNotMatch(JSON.stringify({ failed, unavailable }), /password|tenant row/)
 })

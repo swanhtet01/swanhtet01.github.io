@@ -10,13 +10,13 @@ Registry size and execution capacity are separate:
 
 - registered specialists are reusable role definitions and consume no compute by themselves;
 - no queued work means zero active execution;
-- at most four unique job families may run concurrently by default;
+- one assignment may run inside the single admitted company cycle;
 - one job family may have only one in-flight reservation;
 - the queue, daily runs, daily work units, batch size, retries, and lease duration are bounded;
 - every worker claim receives a short-lived signed budget grant and one consumable reservation;
 - idempotency, lease expiry, audit records, and human approval boundaries fail closed.
 
-`agent_os/workforce/supermega_build_workforce.json` is the sole machine-readable company capacity contract. The default workspace links to it instead of repeating limits. The active ceiling is twelve registered roles, four active or batch jobs, and two Kernel agents per cycle; historical 175- or 256-role manifests are rejected rather than treated as a dormant company.
+`agent_os/workforce/supermega_build_workforce.json` is the sole machine-readable company capacity contract. The default workspace links to it instead of repeating limits. The ceiling is twelve dormant roles, one cycle with one active specialist, and one waiting batch job; historical 175- or 256-role manifests are rejected rather than treated as a dormant company.
 
 ## Small company model
 

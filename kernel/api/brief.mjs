@@ -4,11 +4,25 @@
 
 import crypto from 'node:crypto'
 import { runOperator } from './operator.mjs'
-import { notify } from '../alert.mjs'
+import { notifyDetailed } from '../alert.mjs'
 import { claimWorkcellDelivery, claimWorkcellExecution, formatWorkcellNotification, releaseWorkcellDelivery, runWorkcell } from '../workcell-run.mjs'
 import { resolveWorkcellConfig, scheduledWorkcellSlugs } from '../workcells.mjs'
 import { buildCeoOutcomeGoal, selectCeoOutcome } from '../supermega-hq-authority.mjs'
-import { recordCeoOutcomeCompletion } from '../agent-company-operations.mjs'
+
+const COMPANY_CLIENT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/
+const CEO_OUTCOME_CYCLE_STATE_CONTRACT = 'supermega.ceo-outcome-cycle-state.v1'
+let ceoOperationsModulePromise
+
+async function resolveCeoOperation(name, override) {
+  if (typeof override === 'function') return override
+  try {
+    ceoOperationsModulePromise ||= import('../agent-company-operations.mjs')
+    const operation = (await ceoOperationsModulePromise)?.[name]
+    return typeof operation === 'function' ? operation : null
+  } catch {
+    return null
+  }
+}
 
 function safeEq(a, b) {
   const left = crypto.createHash('sha256').update(String(a)).digest()
@@ -35,6 +49,7 @@ function ceoOutcomeView(selection) {
   return selected ? {
     authorityId: selection.authorityId,
     authorityDigest: selection.authorityDigest,
+    successMeasureDigest: selected.successMeasureDigest,
     id: selected.id,
     title: selected.title,
     team: selected.team,
@@ -42,10 +57,46 @@ function ceoOutcomeView(selection) {
   } : null
 }
 
+function normalizeDeliveryResult(value) {
+  if (typeof value === 'boolean') return { ok: value, status: value ? 'sent' : 'failed' }
+  if (value?.ok === true && value?.status === 'sent') return { ok: true, status: 'sent' }
+  if (value?.ok === false && ['failed', 'uncertain'].includes(value?.status)) {
+    return { ok: false, status: value.status }
+  }
+  return { ok: false, status: 'uncertain' }
+}
+
+async function deliverSafely(send, message) {
+  try { return normalizeDeliveryResult(await send(message)) }
+  catch { return { ok: false, status: 'uncertain' } }
+}
+
+function validCycleState(value, expected) {
+  if (!value?.ok
+    || value.contract !== CEO_OUTCOME_CYCLE_STATE_CONTRACT
+    || value.durable !== true
+    || value.clientId !== expected.clientId
+    || value.authorityDigest !== expected.authorityDigest
+    || !/^\d{4}-\d{2}-\d{2}$/.test(String(value.cycleId || ''))
+    || !Array.isArray(value.completedOutcomeIds)
+    || value.completedOutcomeIds.length > 12
+    || new Set(value.completedOutcomeIds).size !== value.completedOutcomeIds.length
+    || !value.completedOutcomeIds.every((id) => /^[a-z0-9][a-z0-9-]{0,79}$/.test(String(id)))
+    || value.completedCount !== value.completedOutcomeIds.length) return false
+  const startsAt = Date.parse(value.startsAt)
+  const endsAt = Date.parse(value.endsAt)
+  const asOf = expected.asOf.getTime()
+  return Number.isFinite(startsAt)
+    && Number.isFinite(endsAt)
+    && endsAt - startsAt === 7 * 24 * 60 * 60 * 1000
+    && asOf >= startsAt
+    && asOf < endsAt
+}
+
 export async function runScheduledBrief(options = {}) {
   const env = options.env || process.env
   const now = options.now || new Date()
-  const send = options.notify || notify
+  const send = options.notify || notifyDetailed
   const claimExecution = options.claimWorkcellExecution || claimWorkcellExecution
   const claimDelivery = options.claimWorkcellDelivery || claimWorkcellDelivery
   const releaseDelivery = options.releaseWorkcellDelivery || releaseWorkcellDelivery
@@ -82,10 +133,10 @@ export async function runScheduledBrief(options = {}) {
         results.push({ slug, ok: false, reason: deliveryClaim?.reason || 'durable_delivery_claim_unavailable', retryable })
         continue
       }
-      let sent = false
-      try { sent = await send(formatWorkcellNotification(workcell)) } catch { sent = false }
+      const delivery = await deliverSafely(send, formatWorkcellNotification(workcell))
+      const sent = delivery.ok
       let retryable
-      if (!sent) {
+      if (!sent && delivery.status === 'failed') {
         const deliveryReleased = await releaseClaimSafely(releaseDelivery, deliveryClaim)
         const executionReleased = await releaseClaimSafely(releaseDelivery, executionClaim)
         retryable = deliveryReleased && executionReleased
@@ -94,8 +145,9 @@ export async function runScheduledBrief(options = {}) {
         slug,
         ok: Boolean(sent),
         sent: Boolean(sent),
-        reason: sent ? undefined : 'owner_delivery_failed',
-        retryable,
+        reason: sent ? undefined : delivery.status === 'uncertain' ? 'owner_delivery_uncertain' : 'owner_delivery_failed',
+        retryable: sent ? undefined : delivery.status === 'uncertain' ? false : retryable,
+        deliveryStatus: delivery.status,
         sources: workcell.sources,
       })
     }
@@ -107,13 +159,62 @@ export async function runScheduledBrief(options = {}) {
     }
   }
 
+  const clientId = String(options.clientId ?? env.SUPERMEGA_CLIENT_ID ?? '').trim()
+  if (!clientId) {
+    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: 'company_client_id_missing' }
+  }
+  if (!COMPANY_CLIENT_ID_PATTERN.test(clientId)) {
+    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: 'company_client_id_invalid' }
+  }
+
   const select = options.selectCeoOutcome || selectCeoOutcome
-  const selection = select({
+  let selection = select({
     authority: options.ceoAuthority,
     completedOutcomeIds: options.completedOutcomeIds,
     inFlightOutcomeIds: options.inFlightOutcomeIds,
   })
   if (!selection?.ok) return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: selection?.reason || 'ceo_outcome_authority_invalid' }
+  let cycleState = null
+  if (options.completedOutcomeIds === undefined) {
+    const loadCycleState = await resolveCeoOperation('loadCeoOutcomeCycleState', options.loadCeoOutcomeCycleState)
+    if (!loadCycleState) {
+      cycleState = { ok: false, reason: 'ceo_outcome_cycle_store_unavailable' }
+    } else {
+      try {
+        cycleState = await loadCycleState({
+          clientId,
+          authorityDigest: selection.authorityDigest,
+          asOf: now.toISOString(),
+        })
+      } catch {
+        cycleState = { ok: false, reason: 'ceo_outcome_cycle_store_unavailable' }
+      }
+    }
+    if (!cycleState?.ok) {
+      return {
+        ok: false,
+        mode: 'legacy',
+        companyMode: 'supermega_hq',
+        reason: cycleState?.reason || 'ceo_outcome_cycle_store_unavailable',
+      }
+    }
+    if (!validCycleState(cycleState, { clientId, authorityDigest: selection.authorityDigest, asOf: now })) {
+      return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: 'ceo_outcome_cycle_state_invalid' }
+    }
+    selection = select({
+      authority: options.ceoAuthority,
+      completedOutcomeIds: cycleState.completedOutcomeIds,
+      inFlightOutcomeIds: options.inFlightOutcomeIds,
+    })
+    if (!selection?.ok) return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: selection?.reason || 'ceo_outcome_authority_invalid' }
+  }
+  const cycle = cycleState ? {
+    contract: cycleState.contract,
+    cycleId: cycleState.cycleId,
+    startsAt: cycleState.startsAt,
+    endsAt: cycleState.endsAt,
+    completedCount: cycleState.completedCount,
+  } : null
   if (selection.declined || !selection.selected) {
     return {
       ok: true,
@@ -124,6 +225,7 @@ export async function runScheduledBrief(options = {}) {
       reason: selection.reason || 'no_authorized_ceo_outcome',
       authorityId: selection.authorityId,
       authorityDigest: selection.authorityDigest,
+      cycle,
       skipped: selection.skipped,
     }
   }
@@ -142,10 +244,11 @@ export async function runScheduledBrief(options = {}) {
       sent: false,
       reason: 'ceo_outcome_duplicate',
       outcome,
+      cycle,
     }
   }
   if (!claimAccepted(executionClaim)) {
-    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: executionClaim?.reason || 'durable_execution_claim_unavailable', outcome }
+    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: executionClaim?.reason || 'durable_execution_claim_unavailable', outcome, cycle }
   }
   let result
   try {
@@ -157,25 +260,25 @@ export async function runScheduledBrief(options = {}) {
   catch { result = { ok: false, reason: 'brief_failed' } }
   if (!result.ok) {
     const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
-    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: result.reason || 'brief_failed', retryable, outcome }
+    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: result.reason || 'brief_failed', retryable, outcome, cycle }
   }
-  const clientId = String(options.clientId ?? env.SUPERMEGA_CLIENT_ID ?? '').trim()
-  if (!clientId) {
-    const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
-    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: 'company_client_id_missing', retryable, outcome }
-  }
-  const recordOutcome = options.recordCeoOutcomeCompletion || recordCeoOutcomeCompletion
+  const recordOutcome = await resolveCeoOperation('recordCeoOutcomeCompletion', options.recordCeoOutcomeCompletion)
   let recorded
-  try {
-    recorded = await recordOutcome({
-      clientId,
-      outcomeId: selection.selected.id,
-      authorityDigest: selection.authorityDigest,
-      completedAt: now.toISOString(),
-      usage: result.usage,
-    })
-  } catch {
+  if (!recordOutcome) {
     recorded = { ok: false, reason: 'ceo_outcome_store_unavailable' }
+  } else {
+    try {
+      recorded = await recordOutcome({
+        clientId,
+        outcomeId: selection.selected.id,
+        authorityDigest: selection.authorityDigest,
+        successMeasureDigest: selection.selected.successMeasureDigest,
+        completedAt: now.toISOString(),
+        usage: result.usage,
+      })
+    } catch {
+      recorded = { ok: false, reason: 'ceo_outcome_store_unavailable' }
+    }
   }
   if (!recorded?.ok) {
     const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
@@ -186,6 +289,7 @@ export async function runScheduledBrief(options = {}) {
       reason: recorded?.reason || 'ceo_outcome_store_unavailable',
       retryable,
       outcome,
+      cycle,
     }
   }
   const outcomeMetrics = {
@@ -197,28 +301,62 @@ export async function runScheduledBrief(options = {}) {
   }
   const deliveryClaim = await claimSafely(claimDelivery, claimSlug, { env, now }, 'durable_delivery_claim_unavailable')
   if (!deliveryClaim?.fresh && deliveryClaim?.durable) {
-    return { ok: true, mode: 'legacy', companyMode: 'supermega_hq', declined: true, duplicate: true, sent: false, reason: 'ceo_outcome_duplicate', outcome }
+    return { ok: true, mode: 'legacy', companyMode: 'supermega_hq', declined: true, duplicate: true, sent: false, reason: 'ceo_outcome_duplicate', outcome, cycle }
   }
   if (!claimAccepted(deliveryClaim)) {
     const retryable = await releaseClaimSafely(releaseDelivery, executionClaim)
-    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: deliveryClaim?.reason || 'durable_delivery_claim_unavailable', retryable, outcome }
+    return { ok: false, mode: 'legacy', companyMode: 'supermega_hq', reason: deliveryClaim?.reason || 'durable_delivery_claim_unavailable', retryable, outcome, cycle }
   }
-  let sent = false
-  try { sent = await send(`SuperMega | ${selection.selected.title}\n\n${result.answer}`) } catch { sent = false }
-  let retryable
-  if (!sent) {
-    const deliveryReleased = await releaseClaimSafely(releaseDelivery, deliveryClaim)
-    const executionReleased = await releaseClaimSafely(releaseDelivery, executionClaim)
-    retryable = deliveryReleased && executionReleased
+  const delivery = await deliverSafely(send, `SuperMega | ${selection.selected.title}\n\n${result.answer}`)
+  const recordDelivery = await resolveCeoOperation('recordCeoOutcomeDeliveryResult', options.recordCeoOutcomeDeliveryResult)
+  let deliveryRecord
+  if (!recordDelivery) {
+    deliveryRecord = { ok: false, reason: 'ceo_outcome_delivery_store_unavailable' }
+  } else {
+    try {
+      deliveryRecord = await recordDelivery({
+        clientId,
+        operationId: recorded.outcome?.operationId,
+        recordHash: recorded.outcome?.recordHash,
+        deliveryClaimId: deliveryClaim.claimId,
+        status: delivery.status,
+      })
+    } catch {
+      deliveryRecord = { ok: false, reason: 'ceo_outcome_delivery_store_unavailable' }
+    }
   }
+  if (!deliveryRecord?.ok) {
+    return {
+      ok: false,
+      mode: 'legacy',
+      companyMode: 'supermega_hq',
+      sent: delivery.ok,
+      reason: deliveryRecord?.reason || 'ceo_outcome_delivery_store_unavailable',
+      retryable: false,
+      deliveryStatus: 'uncertain',
+      outcome,
+      cycle,
+      outcomeMetrics,
+    }
+  }
+  outcomeMetrics.delivery = {
+    recorded: true,
+    deliveryId: deliveryRecord.delivery?.deliveryId,
+    status: deliveryRecord.delivery?.status,
+    deliveryHash: deliveryRecord.delivery?.deliveryHash,
+    replayed: deliveryRecord.replayed === true,
+  }
+  const sent = delivery.ok
   return {
     ok: Boolean(sent),
     mode: 'legacy',
     companyMode: 'supermega_hq',
     sent: Boolean(sent),
-    reason: sent ? undefined : 'owner_delivery_failed',
-    retryable,
+    reason: sent ? undefined : delivery.status === 'uncertain' ? 'owner_delivery_uncertain' : 'owner_delivery_failed',
+    retryable: false,
+    deliveryStatus: delivery.status,
     outcome,
+    cycle,
     planningMode: result.planningMode || null,
     toolsUsed: (result.results || []).map((item) => item.tool),
     outcomeMetrics,

@@ -6,7 +6,7 @@ const root = resolve(import.meta.dirname, '..')
 const normalizeSourceText = (value) => value.replace(/\r\n?/g, '\n')
 const read = async (path) => normalizeSourceText(await readRawFile(resolve(root, path), 'utf8'))
 const commerceWorkspace = await import(pathToFileURL(resolve(root, 'showroom/src/core/commerce-workspace.ts')).href)
-const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance, vercelEntry, portableEntry, trialRuntime, trialStore, commerceRuntime, productionRuntime, websiteRuntime, managedTrialClient, coreApp, settingsPage, websiteWorkspaceHook, rolePreflight, foundationMigration, decisionMigration, websiteMigration, hardeningMigration, readCapabilityMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment, storagePrivacyVerifier] = await Promise.all([
+const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance, vercelEntry, portableEntry, trialRuntime, trialStore, commerceRuntime, productionRuntime, websiteRuntime, managedTrialClient, coreApp, workspaceRuntime, settingsPage, websiteWorkspaceHook, rolePreflight, foundationMigration, decisionMigration, websiteMigration, hardeningMigration, readCapabilityMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment, storagePrivacyVerifier, appRouter, coreShell, visionProduct, visionStyles, visionProofRaw] = await Promise.all([
   read('supermega_runtime/runtime.py'),
   read('supermega_runtime/supabase_auth.py'),
   read('supermega_runtime/cloud_runtime.py'),
@@ -21,6 +21,7 @@ const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance
   read('supermega_runtime/website_runtime.py'),
   read('showroom/src/core/managed-trial.ts'),
   read('showroom/src/core/CoreApp.tsx'),
+  read('showroom/src/core/workspace-runtime.ts'),
   read('showroom/src/core/SettingsPage.tsx'),
   read('showroom/src/products/website/useWebsiteWorkspace.ts'),
   read('supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql'),
@@ -37,13 +38,18 @@ const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance
   read('Dockerfile'),
   read('.env.app.example'),
   read('tools/verify_private_storage_privacy.py'),
+  read('showroom/src/App.tsx'),
+  read('showroom/src/core/CoreShell.tsx'),
+  read('showroom/src/products/vision/VisionProduct.tsx'),
+  read('showroom/src/products/vision/vision-product.css'),
+  read('showroom/src/products/vision/vision-proof.json'),
 ])
 const activationMigration = await read('supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql')
 const workspaceDiscoveryMigration = await read('supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql')
 const managedActivation = await read('supermega_runtime/managed_activation.py')
 const managedEnvironmentValueVerifier = await read('tools/verify_managed_runtime_environment_values.mjs')
 const managedAccountPage = await read('showroom/src/core/ManagedAccountPage.tsx')
-const coreShell = await read('showroom/src/core/CoreShell.tsx')
+const visionProof = JSON.parse(visionProofRaw)
 const migration = `${rolePreflight}\n${foundationMigration}\n${decisionMigration}\n${websiteMigration}\n${hardeningMigration}\n${readCapabilityMigration}\n${activationMigration}\n${workspaceDiscoveryMigration}`
 const productionMaterialHandoff = await read('supermega_runtime/production_material_handoff.py')
 const managedContextRuntime = await read('supermega_runtime/managed_context.py')
@@ -57,8 +63,16 @@ const clientProvisioning = await read('supermega_runtime/client_provisioning.py'
 const siteManifest = await read('site-manifest.json')
 const shopInventoryRuntime = await read('supermega_runtime/shop_inventory_runtime.py')
 const orderIntakeProvider = await read('supermega_runtime/order_intake_provider.py')
+const clientImportRuntime = await read('supermega_runtime/client_import_runtime.py')
+const clientOnboardingUi = await read('showroom/src/core/ClientDataOnboarding.tsx')
+const clientOnboardingModel = await read('showroom/src/core/client-onboarding.ts')
+const plantIndustryPacks = await read('showroom/src/core/plant-industry-packs.ts')
 const orderIntakeRoute = trialRuntime.slice(
   trialRuntime.indexOf('@router.post("/commerce/order-intake/drafts")'),
+  trialRuntime.indexOf('@router.get("/commerce/service-schedule")'),
+)
+const serviceScheduleRoute = trialRuntime.slice(
+  trialRuntime.indexOf('@router.get("/commerce/service-schedule")'),
   trialRuntime.indexOf('@router.post("/imports/validate")'),
 )
 const managedPurchaseReceiptAuthority = trialStore.slice(
@@ -71,6 +85,14 @@ const managedOrderCalculationAuthority = trialStore.slice(
 )
 const managedPurchaseCancellationAuthority = trialStore.slice(
   trialStore.indexOf('if event_type == "commerce.purchase_order.cancelled":'),
+  trialStore.indexOf('if event_type == "commerce.payment.reconciled":'),
+)
+const managedSupplierReturnAuthority = trialStore.slice(
+  trialStore.indexOf('if event_type == "commerce.supplier_return.authorized":'),
+  trialStore.indexOf('if event_type == "commerce.supplier_credit.recorded":'),
+)
+const managedSupplierCreditAuthority = trialStore.slice(
+  trialStore.indexOf('if event_type == "commerce.supplier_credit.recorded":'),
   trialStore.indexOf('if event_type == "commerce.payment.reconciled":'),
 )
 const apiSourceEntries = (await readdir(resolve(root, 'api'), { withFileTypes: true }))
@@ -272,31 +294,59 @@ const requireContract = (name, condition) => {
 requireContract('source line endings normalize across platforms',
   normalizeSourceText('line one\r\nline two\rline three') === 'line one\nline two\nline three')
 const expectedHumanCommerceEvents = [
+  'commerce.account_mapping.saved',
   'commerce.close.saved',
+  'commerce.collection_action.recorded',
+  'commerce.customer_credit_policy.saved',
   'commerce.inventory.initialized',
+  'commerce.inventory.master_created',
+  'commerce.inventory.supplier_policy_saved',
   'commerce.inventory.transferred',
   'commerce.item.created',
   'commerce.item.updated',
   'commerce.order.advanced',
   'commerce.order.cancelled',
+  'commerce.order.correction_recorded',
   'commerce.order.created',
   'commerce.order.return_recorded',
+  'commerce.order.support_case_opened',
+  'commerce.order.support_case_reopened',
+  'commerce.order.support_case_resolved',
+  'commerce.order.support_case_service_recorded',
   'commerce.payment.reconciled',
+  'commerce.payment_policy.saved',
+  'commerce.production_batch.received',
   'commerce.production_material.issued',
+  'commerce.production_material.returned',
+  'commerce.promotion_policy.saved',
+  'commerce.purchase_budget.approved',
   'commerce.purchase_order.cancelled',
   'commerce.purchase_order.created',
   'commerce.purchase_order.received',
+  'commerce.purchase_requisition.approved',
   'commerce.refund.settled',
+  'commerce.service_schedule.initialized',
+  'commerce.service_schedule.saved',
+  'commerce.shipping_policy.saved',
   'commerce.stock.counted',
   'commerce.stock.received',
   'commerce.storefront.configuration.saved',
   'commerce.storefront.merchandising.imported',
+  'commerce.supplier_credit.recorded',
+  'commerce.supplier_invoice.payable_ready',
+  'commerce.supplier_invoice.recorded',
+  'commerce.supplier_return.authorized',
+  'commerce.supplier_sourcing.approved',
+  'commerce.tax_configuration.saved',
   'commerce.website_intake.converted',
   'commerce.workspace.initialized',
 ]
 const expectedHumanProductionEvents = [
   'production.downtime.ended',
   'production.downtime.started',
+  'production.equipment.commissioned',
+  'production.equipment_maintenance_strategy.saved',
+  'production.equipment_master.imported',
   'production.issue.opened',
   'production.issue.resolved',
   'production.job.closed',
@@ -315,6 +365,8 @@ const expectedHumanProductionEvents = [
 ]
 const expectedHumanWebsiteEvents = [
   'website.evidence.recorded',
+  'website.inquiry.received',
+  'website.inquiry.reviewed',
   'website.release.recorded',
   'website.revision.approved',
   'website.snapshot.recorded',
@@ -355,10 +407,33 @@ requireContract('AI order intake provider cannot use tools, store responses, red
   && /PostgresOrderIntakeBudget\(database_url, cap\)/.test(orderIntakeProvider)
   && /else UnavailableOrderIntakeBudget\(\)/.test(orderIntakeProvider)
   && /order_intake_provider_quota_exhausted/.test(orderIntakeProvider))
+requireContract('managed Shop appointments are tenant-scoped, human-only, identity-bound, and optimistic',
+  /_resolve_principal\(request, resolve_principal\)/.test(serviceScheduleRoute)
+  && /has_surface_read_capability\(readiness\.capabilities, "commerce"\)/.test(serviceScheduleRoute)
+  && /_require_write_ready\(readiness, "commerce\.write"\)/.test(serviceScheduleRoute)
+  && /principal\.actor_kind != "human"/.test(serviceScheduleRoute)
+  && /_reject_client_identity\(body\.schedule/.test(serviceScheduleRoute)
+  && /expected_version=body\.expected_version/.test(serviceScheduleRoute)
+  && /event_type\s*=\s*"commerce\.service_schedule\.initialized"/.test(serviceScheduleRoute)
+  && /event_type\s*=\s*"commerce\.service_schedule\.saved"/.test(serviceScheduleRoute)
+  && /event_type=event_type/.test(serviceScheduleRoute)
+  && /commerce\.service_schedule\.initialized/.test(trialStore)
+  && /commerce\.service_schedule\.saved/.test(trialStore)
+  && /_validate_service_schedule_initialized/.test(commerceRuntime)
+  && /service schedule evidence history is immutable/.test(commerceRuntime)
+  && /contains overlapping bookings/.test(commerceRuntime))
 requireContract('runtime exposes bounded health truth', /operating_mode = "managed_trial" if not requirements else "isolated_demo"/.test(runtime) && /"operating_mode": operating_mode/.test(runtime) && /"browser_service_role_exposed": False/.test(runtime))
 requireContract('managed browser auth is readiness gated and cannot accept a secret key', /runtime\.status === 'enterprise' && managedTrialAuthConfigured\(\)/.test(settingsPage) && /validPublishableKey/.test(managedTrialClient) && !/VITE_SUPABASE_(?:SERVICE_ROLE|SECRET)/.test(managedTrialClient))
-requireContract('managed approval evidence is never persisted in demo storage', /localApprovalsOnly/.test(coreApp) && /persist \? persist\(normalizedState\)/.test(coreApp) && /current\.filter\(\(approval\) => !approval\.managed\)/.test(settingsPage))
-requireContract('production CORS is bounded', /https:\/\/app\.supermega\.dev,https:\/\/supermega\.dev/.test(runtime) && !/allow_origins=\["\*"\]/.test(runtime))
+requireContract('managed approval evidence is never persisted in demo storage', /localApprovalsOnly/.test(workspaceRuntime) && /persist \? persist\(normalizedState\)/.test(workspaceRuntime) && /current\.filter\(\(approval\) => !approval\.managed\)/.test(settingsPage))
+requireContract('production CORS is bounded',
+  /https:\/\/app\.supermega\.dev,https:\/\/supermega\.dev/.test(runtime)
+  && /def _cors_origins\(value: object\)/.test(runtime)
+  && /origin == "null"/.test(runtime)
+  && /"\*" in origin/.test(runtime)
+  && /parsed\.username is not None/.test(runtime)
+  && /parsed\.scheme\.casefold\(\) != "https" and not loopback/.test(runtime)
+  && /"strict_exact_origins": True/.test(runtime)
+  && !/allow_origins=\["\*"\]/.test(runtime))
 requireContract('API documentation is not public', /docs_url=None/.test(runtime) && /openapi_url=None/.test(runtime))
 requireContract('surface commands use optimistic versions', /expected_version/.test(trialRuntime) && /TrialVersionConflict/.test(trialStore))
 requireContract('commands are idempotent', /TrialIdempotencyConflict/.test(trialStore) && /command_fingerprint/.test(migration))
@@ -403,11 +478,47 @@ requireContract('Plant material and Shop stock are cross-surface digest-bound be
   && /require_shop_issue_matches_plant/.test(productionMaterialHandoff)
   && /require_shop_issue_before_plant_progress/.test(productionMaterialHandoff)
   && /productionCommandDigest/.test(commerceRuntime))
+requireContract('Plant client packs are package-bound, tenant-retained, fail-closed, and require reviewed costs',
+  /PLANT_INDUSTRY_PACK_IDS/.test(clientImportRuntime)
+  && /package\["plantIndustryPackId"\]/.test(clientImportRuntime)
+  && /\{"plantIndustryPackId": plant_industry_pack_id\}/.test(clientImportRuntime)
+  && /"industryPackId": industry_pack_id/.test(trialRuntime)
+  && /_PLANT_INDUSTRY_PACK_IDS/.test(productionRuntime)
+  && /openingPlan\.industryPackId !== stagingPackage\.plantIndustryPackId/.test(managedTrialClient)
+  && /plantIndustryPackIdRef\.current !== expectedPlantIndustryPackId/.test(clientOnboardingUi)
+  && /standardCostPerUnitMmk: ''/.test(plantIndustryPacks)
+  && /standardCostPerMinuteMmk: ''/.test(plantIndustryPacks))
+requireContract('Website and Ecommerce client activation provenance is package-bound and server-stamped',
+  /supermega\.website\.opening-plan\.v1/.test(websiteRuntime)
+  && /Website opening plan is immutable after activation/.test(websiteRuntime)
+  && /"workflowTemplateId": package\["workflowTemplateId"\]/.test(trialRuntime)
+  && /authoritative_state\["openingPlan"\]/.test(trialStore)
+  && /openingPlan\.packageDigest !== expectedPackageDigest/.test(managedTrialClient)
+  && /supermega\.ecommerce\.activation\.v1/.test(commerceRuntime)
+  && /"packageDigest": validation\.package_digest/.test(commerceRuntime)
+  && /Ecommerce activation provenance is immutable while imported content is retained/.test(commerceRuntime)
+  && /Ecommerce activation provenance must be cleared when imported content changes/.test(commerceRuntime)
+  && /activation\.packageDigest !== expectedPackageDigest/.test(managedTrialClient)
+  && /activation\.skus/.test(managedTrialClient))
+requireContract('client demo setup kits are bounded, canonical, and explicitly data-free',
+  /CLIENT_DEMO_KIT_MAX_BYTES = 128 \* 1024/.test(clientOnboardingModel)
+  && /export function restoreClientDemoKit/.test(clientOnboardingModel)
+  && /!hasExactKeys\(value, \['schema', 'blueprint', 'exportedAt', 'controls'\]\)/.test(clientOnboardingModel)
+  && /canonicalClientDemoBlueprint\(source\.blueprint\)/.test(clientOnboardingModel)
+  && /source\.controls\.clientRecordsIncluded !== false/.test(clientOnboardingModel)
+  && /source\.controls\.productProgressIncluded !== false/.test(clientOnboardingModel)
+  && /source\.controls\.humanReviewRequired !== true/.test(clientOnboardingModel)
+  && /file\.size < 1 \|\| file\.size > CLIENT_DEMO_KIT_MAX_BYTES/.test(settingsPage)
+  && /origin === 'created' && blueprint\.products\.some/.test(settingsPage)
+  && /Client records, product packs, and progress were not changed/.test(settingsPage))
 requireContract('managed Shop location inventory and order allocation are human-only, server-stamped, and digest-chained',
   /commerce\.inventory\.initialized/.test(managedTrialClient)
+  && /commerce\.inventory\.master_created/.test(managedTrialClient)
   && /commerce\.inventory\.transferred/.test(managedTrialClient)
   && /_validate_inventory_initialized/.test(commerceRuntime)
+  && /_validate_inventory_master_created/.test(commerceRuntime)
   && /_validate_inventory_transferred/.test(commerceRuntime)
+  && /master_create/.test(shopInventoryRuntime)
   && /_order_inventory_transition/.test(commerceRuntime)
   && /order_reserve/.test(shopInventoryRuntime)
   && /order_release/.test(shopInventoryRuntime)
@@ -464,6 +575,22 @@ requireContract('managed Shop purchase cancellations are server attributable and
   && /authoritative_evidence\["actor"\] = principal\.actor_id/.test(managedPurchaseCancellationAuthority)
   && /authoritative_evidence\["capturedAt"\] = effective_captured_at/.test(managedPurchaseCancellationAuthority)
   && /authoritative_purchase_order\["cancellation"\] = deepcopy\(/.test(managedPurchaseCancellationAuthority))
+requireContract('managed supplier return claims are server attributable and remain internal-only',
+  /supplier_return\.get\("receiptMovementId"\)/.test(managedSupplierReturnAuthority)
+  && /effective_captured_at = _not_before\(/.test(managedSupplierReturnAuthority)
+  && /"actor": principal\.actor_id/.test(managedSupplierReturnAuthority)
+  && /"createdAt": effective_captured_at/.test(managedSupplierReturnAuthority)
+  && /"authorization": deepcopy\(authoritative_evidence\)/.test(managedSupplierReturnAuthority)
+  && /physicalReturnStatus/.test(commerceRuntime)
+  && /not_dispatched/.test(commerceRuntime)
+  && /supplierContacted/.test(commerceRuntime)
+  && /accountingPosted/.test(commerceRuntime))
+requireContract('managed supplier credits are server attributable and do not imply accounting posting',
+  /credit_note\.get\("issuedAt"\)/.test(managedSupplierCreditAuthority)
+  && /effective_captured_at = _not_before\(/.test(managedSupplierCreditAuthority)
+  && /"actor": principal\.actor_id/.test(managedSupplierCreditAuthority)
+  && /"recording": deepcopy\(authoritative_evidence\)/.test(managedSupplierCreditAuthority)
+  && /accountingPosted/.test(commerceRuntime))
 requireContract('Shop return and completion attribution is server authoritative and monotonic',
   /commerce\.order\.return_recorded/.test(trialStore)
   && /authoritative_return\["actor"\] = principal\.actor_id/.test(trialStore)
@@ -495,8 +622,8 @@ requireContract('managed activation requires durable named-owner authorization a
 requireContract('managed database role collision is rejected before foundation grants', /pre-existing supermega trial backend role attributes are unsafe/.test(rolePreflight) && /dependency\.refclassid = 'pg_authid'::regclass/.test(rolePreflight) && migration.indexOf('backend_role_preflight') < migration.indexOf('create schema if not exists app_private'))
 requireContract('managed database readiness validator targets exact PostgreSQL and schema contracts', /CONTRACT = "supermega_private_trial_database_v7"/.test(databaseValidator) && /EXPECTED_POSTGRES_MAJOR = 17/.test(databaseValidator) && /pg_db_role_setting/.test(databaseValidator) && /SCHEMA_VERSION = 7/.test(databaseValidator) && /complete v7 schema contract/.test(databaseValidator) && /workspace_access_controls/.test(databaseValidator) && /workspace_is_active/.test(databaseValidator) && /RESTRICTIVE/.test(databaseValidator) && /EXPECTED_POLICY_FINGERPRINTS/.test(databaseValidator) && /security_constraints_exact/.test(databaseValidator))
 requireContract('managed Vercel mode requires value-aware target, TLS, browser-auth, and write-flag proof', /managed_database_target_or_tls_invalid/.test(managedEnvironmentValueVerifier) && /managed_browser_auth_url_invalid/.test(managedEnvironmentValueVerifier) && /managed_browser_publishable_key_invalid/.test(managedEnvironmentValueVerifier) && /managed_writes_flag_not_enabled/.test(managedEnvironmentValueVerifier) && /parsed\.port === '6543'/.test(managedEnvironmentValueVerifier) && /queryKeys\.length === 1/.test(managedEnvironmentValueVerifier) && /secretValuesExposed: false/.test(managedEnvironmentValueVerifier))
-requireContract('managed clients treat capability-filtered product states as partial', /states: Partial<Record<ManagedSurface, ManagedStateRecord>>/.test(managedTrialClient) && /requireManagedSurfaceState/.test(managedTrialClient) && /trial_capability_required/.test(managedTrialClient) && /requireManagedSurfaceState\(bootstrap, 'commerce', 'Shop'\)/.test(coreApp) && /requireManagedSurfaceState\(bootstrap, 'production', 'Plant'\)/.test(coreApp))
-requireContract('managed bootstrap responses stay bound to the exact actor', /export function sameManagedIdentity/.test(managedTrialClient) && /loadManagedBootstrap\(managedIdentity\)/.test(coreApp) && /loadManagedBootstrap\(identity\)/.test(settingsPage) && !/loadManagedBootstrap\(\)/.test(`${coreApp}\n${settingsPage}`) && /sameManagedIdentity\(identityRef\.current, managedIdentity\)/.test(coreApp))
+requireContract('managed clients treat capability-filtered product states as partial', /states: Partial<Record<ManagedSurface, ManagedStateRecord>>/.test(managedTrialClient) && /requireManagedSurfaceState/.test(managedTrialClient) && /trial_capability_required/.test(managedTrialClient) && /requireManagedSurfaceState\(bootstrap, 'commerce', 'Shop'\)/.test(workspaceRuntime) && /requireManagedSurfaceState\(bootstrap, 'production', 'Plant'\)/.test(workspaceRuntime))
+requireContract('managed bootstrap responses stay bound to the exact actor', /export function sameManagedIdentity/.test(managedTrialClient) && /loadManagedBootstrap\(managedIdentity\)/.test(workspaceRuntime) && /loadManagedBootstrap\(identity\)/.test(settingsPage) && !/loadManagedBootstrap\(\)/.test(`${coreApp}\n${workspaceRuntime}\n${settingsPage}`) && /sameManagedIdentity\(identityRef\.current, managedIdentity\)/.test(workspaceRuntime))
 requireContract('Website hides browser-local records from managed roles without Website access', /error instanceof ManagedTrialError && error\.code === 'trial_capability_required'/.test(websiteWorkspaceHook) && /Browser-local Website content is hidden while this managed account is connected/.test(websiteWorkspaceHook) && /setWorkspace\(hiddenLocalWorkspace\)/.test(websiteWorkspaceHook))
 requireContract('in-memory idempotent replay is actor-bound', /stored_actor_id != actor_id/.test(trialStore) && /stored_actor_kind != actor_kind/.test(trialStore))
 requireContract('Python runtime dependencies are minimal', !/beautifulsoup|google-cloud|sentry|sqlmodel|python-dotenv/i.test(requirements))
@@ -507,6 +634,7 @@ requireContract('hosted agent scheduler has bounded jobs, explicit activation, a
 requireContract('hosted scheduler activation is signed, fresh, exact-project, and exact-release bound', /verify_scheduler_activation_evidence/.test(cloudRuntime) && /VERCEL_GIT_COMMIT_SHA/.test(cloudRuntime) && /VERCEL_PROJECT_ID/.test(cloudRuntime) && /VERCEL_ENV/.test(cloudRuntime) && /supermega\.scheduler-activation-evidence\.v1/.test(schedulerActivation) && /object_pairs_hook=_object_without_duplicate_keys/.test(schedulerActivation) && /hmac\.compare_digest/.test(schedulerActivation) && /CANONICAL_SCHEDULER_PROJECT_ID/.test(schedulerActivation) && /REQUIRED_SCHEDULER_ACTIVATION_EVIDENCE_IDS/.test(schedulerActivation) && /activation_evidence_expired/.test(schedulerActivation))
 requireContract('hosted agent scheduler reports side effects fail closed', /worker_side_effect_report_required/.test(cloudRuntime) && /worker_reported_unverified/.test(cloudRuntime) && /_MAX_WORKER_RESPONSE_BYTES/.test(cloudRuntime))
 requireContract('managed database activation audit is read-only and fail closed', /set transaction read only/i.test(databaseValidator) && /rolbypassrls/i.test(databaseValidator) && /relforcerowsecurity/i.test(databaseValidator) && /mutation_statements_executed": 0/.test(databaseValidator) && /database_connection_or_audit_failed/.test(databaseValidator))
+requireContract('production Supabase target requires separately committed activation authority', /productionSupabaseTargetStatus/.test(databaseActivator) && /protected-unapproved/.test(databaseActivator) && /activation-approved/.test(databaseActivator) && /ProductionHandoff is blocked until the committed Supabase target status is activation-approved/.test(databaseActivator))
 requireContract('managed activation evidence plan is bounded, explicit, and redacted', /def _activation_evidence_plan\(/.test(runtime) && /"id": "postgres17_rehearsal"/.test(runtime) && /"id": "runtime_role_audit"/.test(runtime) && /"id": "identity_gateway"/.test(runtime) && /"id": "storage_privacy"/.test(runtime) && /"id": "write_acceptance"/.test(runtime) && /"evidence_plan": evidence_plan/.test(runtime) && /"evidence_ready": all\(item\["ready"\] for item in evidence_plan\)/.test(runtime) && /secret_values_exposed": False/.test(runtime) && !/_activation_evidence_plan[\s\S]{0,3500}(password|token|secret|key)=/i.test(runtime))
 requireContract('managed activation manifest is bounded, explicit, and redacted', /def _activation_manifest\(/.test(runtime) && /"contract": "supermega\.activation_manifest\.v1"/.test(runtime) && /"blocked_gate_ids": blocked_steps/.test(runtime) && /"proof_commands": proof_commands/.test(runtime) && /"safe_enable": safe_enable/.test(runtime) && /customer writes, payments, messages, deployments, and production changes require managed controls plus human approval/.test(runtime) && /"manifest": activation_manifest/.test(runtime) && /"secret_values_exposed": False/.test(runtime) && !/_activation_manifest[\s\S]{0,2500}(password|token|key)=/i.test(runtime))
 requireContract('managed import provisioning readiness is bounded, explicit, and redacted', /def _import_provisioning_readiness\(/.test(runtime) && /"contract": "supermega\.import_provisioning_readiness\.v1"/.test(runtime) && /"id": "managed_identity_confirmed"/.test(runtime) && /"id": "private_workspace_schema"/.test(runtime) && /"id": "zero_write_validation_receipt"/.test(runtime) && /"id": "owner_import_approval"/.test(runtime) && /"id": "atomic_adapter_receipt"/.test(runtime) && /"id": "durable_revision_confirmation"/.test(runtime) && /"import_provisioning": import_provisioning/.test(runtime) && /"secret_values_exposed": False/.test(runtime) && !/_import_provisioning_readiness[\s\S]{0,4500}(password|token|secret|key)=/i.test(runtime))
@@ -622,6 +750,34 @@ requireContract('managed storage privacy proof is bounded, read-only, owner-conf
   && workflow.includes("- 'tools/verify_private_storage_privacy.py'")
   && workflow.includes("- 'tools/verify_app_security_contract.mjs'")
   && rootPackage.scripts?.['storage:privacy:self-test'] === 'node tools/run_python_tool.mjs tools/verify_private_storage_privacy.py --self-test')
+requireContract('Vision product preview is gated out of normal production routing',
+  /const visionPreviewEnabled = import\.meta\.env\.DEV \|\| import\.meta\.env\.VITE_SUPERMEGA_VISION_PREVIEW === '1'/.test(appRouter)
+  && /visionPreviewEnabled && VisionProduct \? <Route[\s\S]*path="vision\/\*"/.test(appRouter)
+  && /visionPreviewEnabled && \(demo === 'vision'/.test(appRouter)
+  && /location\.pathname\.startsWith\('\/vision\/'\)[\s\S]{0,80}\? 'Vision'/.test(coreShell)
+  && /if \(location\.pathname\.startsWith\('\/vision\/'\)\) return/.test(coreShell))
+requireContract('Vision preview is bound to the source-authenticated privacy-reduced proof',
+  visionProof.schema === 'supermega.vision.private-demo-proof.v1'
+  && visionProof.proof_id === '560aeb776a93f323f22cbbf6'
+  && visionProof.source_identity?.private_demo_package_id === 'dd5698ecd24dac2278e45cb2'
+  && visionProof.verified_evidence?.screens_processed_locally === 56
+  && visionProof.verified_evidence?.model_observations === 92
+  && visionProof.verified_evidence?.private_demo_files_verified === 239)
+requireContract('Vision preview retains publication and commercial authority boundaries',
+  visionProof.decision === 'not_approved_for_publication'
+  && visionProof.authority?.owner_review_required === true
+  && Object.entries(visionProof.authority).filter(([key]) => key !== 'owner_review_required').every(([, value]) => value === false)
+  && Object.values(visionProof.claims ?? {}).every((value) => value === false)
+  && Object.values(visionProof.effects ?? {}).every((value) => value === 0)
+  && /Not approved for publication, pricing, customer outreach, production sale, or payment requests/.test(visionProduct)
+  && /Engineering counts, not accuracy metrics/.test(visionProduct)
+  && !/<form|mailto:|https?:\/\/|checkout|price\s*[:=]/i.test(visionProduct))
+requireContract('Vision preview contains no private visual evidence or source locator',
+  visionProof.privacy?.screenshot_pixels_included === false
+  && visionProof.privacy?.source_filenames_included === false
+  && visionProof.privacy?.source_paths_included === false
+  && visionProof.privacy?.customer_labels_included === false
+  && !/data:image|[A-Z]:\\|OneDrive|\.png|\.jpe?g|\.webp|<script|https?:\/\//i.test(`${visionProofRaw}\n${visionProduct}\n${visionStyles}`))
 
 if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_security', failures }, null, 2))

@@ -25,9 +25,10 @@ const SELECTED_LAUNCH_PROFILES = Object.freeze({
   website: 'business-presence',
   ecommerce: 'social-storefront',
 })
+const REHEARSAL_PLANNING_DATE = '2026-07-30'
 const INVALID_SOURCE_REPLACEMENTS = Object.freeze({
   commerce: [',24,', ',-1,'],
-  production: [',2026-08-15,', ',2026-02-30,'],
+  production: [',2026-08-13,', ',2026-02-30,'],
   website: [',https://example.com/contact', ',javascript:alert(1)'],
   ecommerce: [',true,', ',yes,'],
 })
@@ -133,7 +134,7 @@ async function buildRehearsal() {
       `${PRODUCT_LABELS[product]} workflow profiles drifted from the manifest.`,
     )
     for (const profileId of profileIds) {
-      const source = model.clientImportTemplate(product, profileId)
+      const source = model.clientImportTemplate(product, profileId, { planningDate: REHEARSAL_PLANNING_DATE })
       const sourceName = `${profileId}.csv`
       const selected = SELECTED_LAUNCH_PROFILES[product] === profileId
       let preview
@@ -144,7 +145,7 @@ async function buildRehearsal() {
         const generic = genericSource(source, object.fields)
         const [validValue, invalidValue] = INVALID_SOURCE_REPLACEMENTS[product]
         const invalidSource = replaceFirst(generic.csv, validValue, invalidValue, `${product}/${profileId}`)
-        const unmapped = await model.createClientImportPreview(invalidSource, product, undefined, sourceName, profileId)
+        const unmapped = await model.createClientImportPreview(invalidSource, product, undefined, sourceName, profileId, REHEARSAL_PLANNING_DATE)
         invariant(!unmapped.readyForStaging && unmapped.fileIssues.length > 0, `${profileId} did not require source mapping recovery.`)
         detectedIssues += unmapped.fileIssues.length + unmapped.rows.flatMap((row) => row.issues).length
         deniedStagingAttempts += expectDenied(
@@ -152,7 +153,7 @@ async function buildRehearsal() {
           `${profileId} staged before its mapping was recovered.`,
         )
 
-        const invalidMapped = await model.createClientImportPreview(invalidSource, product, generic.mapping, sourceName, profileId)
+        const invalidMapped = await model.createClientImportPreview(invalidSource, product, generic.mapping, sourceName, profileId, REHEARSAL_PLANNING_DATE)
         invariant(!invalidMapped.readyForStaging && invalidMapped.totals.invalid > 0, `${profileId} did not surface its invalid source value.`)
         detectedIssues += invalidMapped.rows.flatMap((row) => row.issues).length
         deniedStagingAttempts += expectDenied(
@@ -160,13 +161,13 @@ async function buildRehearsal() {
           `${profileId} staged before its invalid value was corrected.`,
         )
 
-        preview = await model.createClientImportPreview(generic.csv, product, generic.mapping, sourceName, profileId)
+        preview = await model.createClientImportPreview(generic.csv, product, generic.mapping, sourceName, profileId, REHEARSAL_PLANNING_DATE)
         manualMappingDecisions += object.fields.length
         sourceValueCorrections += 1
         recoveredProfiles += 1
         correctionMode = 'manual_mapping_and_value_recovery'
       } else {
-        preview = await model.createClientImportPreview(source, product, undefined, sourceName, profileId)
+        preview = await model.createClientImportPreview(source, product, undefined, sourceName, profileId, REHEARSAL_PLANNING_DATE)
         exactFirstPassProfiles += 1
       }
 
@@ -196,7 +197,7 @@ async function buildRehearsal() {
     const selectedEvidence = profileEvidence.find((item) => (
       item.runtimeProduct === product && item.profileId === SELECTED_LAUNCH_PROFILES[product]
     ))
-    const selectedSource = model.clientImportTemplate(product, SELECTED_LAUNCH_PROFILES[product])
+    const selectedSource = model.clientImportTemplate(product, SELECTED_LAUNCH_PROFILES[product], { planningDate: REHEARSAL_PLANNING_DATE })
     const selectedObject = model.clientImportObject(product)
     const generic = genericSource(selectedSource, selectedObject.fields)
     const selectedPreview = await model.createClientImportPreview(
@@ -205,6 +206,7 @@ async function buildRehearsal() {
       generic.mapping,
       `${SELECTED_LAUNCH_PROFILES[product]}.csv`,
       SELECTED_LAUNCH_PROFILES[product],
+      REHEARSAL_PLANNING_DATE,
     )
     invariant(selectedEvidence && selectedPreview.previewDigest === selectedEvidence.previewDigest, `${PRODUCT_LABELS[product]} recovery was not deterministic.`)
     deniedStagingAttempts += expectDenied(

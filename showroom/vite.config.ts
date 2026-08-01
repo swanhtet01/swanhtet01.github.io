@@ -66,6 +66,7 @@ export default defineConfig({
   server: { proxy: apiProxy },
   preview: { proxy: apiProxy },
   build: {
+    target: 'es2022',
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -73,12 +74,23 @@ export default defineConfig({
             || id.includes('/node_modules/react-router-dom/')) {
             return 'router'
           }
-          if (id.includes('/src/core/commerce-workspace.ts')
-            || id.includes('/src/core/production-workspace.ts')
+          if (id.includes('/src/core/commerce-workspace.ts')) {
+            return 'commerce-model'
+          }
+          if (id.includes('/src/core/production-workspace.ts')
             || id.includes('/src/core/channel-order-intake.ts')
             || id.includes('/src/core/managed-trial.ts')
             || id.includes('/src/core/team-work.ts')) {
             return 'operating-models'
+          }
+          if (id.includes('/src/core/shop-production-demand.ts')
+            || id.includes('/src/core/shop-demand-intelligence.ts')
+            || id.includes('/src/core/shop-replenishment.ts')
+            || id.includes('/src/core/shop-procurement-decision.ts')) {
+            return 'shop-planning-models'
+          }
+          if (id.includes('/src/core/CoreApp.tsx')) {
+            return 'core-app'
           }
         },
       },

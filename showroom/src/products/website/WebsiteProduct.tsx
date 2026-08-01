@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useSearchParams } from 'react-router'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
@@ -9,6 +9,14 @@ import { SitePreview } from './SitePreview'
 import { WebsiteStarterSetup } from './WebsiteStarterSetup'
 import { useWebsiteWorkspace } from './useWebsiteWorkspace'
 import { createWebsiteHtmlDownload } from './website-export'
+import {
+  captureWebsiteLead,
+  emptyWebsiteLeadLedger,
+  readWebsiteLeadLedger,
+  reviewWebsiteLead,
+  websiteLeadCounts,
+  writeWebsiteLeadLedger,
+} from './website-leads'
 import type { WebsiteReleaseState } from './website-release-foundation'
 import {
   applyWebsiteStarterBrief,
@@ -106,7 +114,7 @@ function TrialReadyWorkspace({
         <ol className="website-trial-ready-steps">
           <li>
             <span aria-hidden="true">1</span>
-            <div><strong>Preview</strong><p>Use Back to edit to check desktop, tablet, or mobile again.</p></div>
+            <div><strong>Preview</strong><p>Go back, then Preview to check desktop, tablet, or mobile.</p></div>
           </li>
           <li>
             <span aria-hidden="true">2</span>
@@ -173,6 +181,16 @@ export function WebsiteProduct() {
   ))
   const [notice, setNotice] = useState(DEFAULT_NOTICE)
   const [deleteCandidateId, setDeleteCandidateId] = useState('')
+  const [localLeadLedger, setLocalLeadLedger] = useState(() => {
+    if (typeof window === 'undefined') return emptyWebsiteLeadLedger()
+    try { return readWebsiteLeadLedger(window.localStorage) } catch { return emptyWebsiteLeadLedger() }
+  })
+  const leadLedger = storageMode === 'managed'
+    ? workspace.leadLedger ?? emptyWebsiteLeadLedger()
+    : localLeadLedger
+  const [leadDraft, setLeadDraft] = useState({ name: '', contact: '', request: '', consentRecorded: false })
+  const [leadOwner, setLeadOwner] = useState('')
+  const [leadDecisionNote, setLeadDecisionNote] = useState('')
   const editSessionScope = storageMode === 'managed'
     ? managedActorId ? `managed:${managedActorId}` : ''
     : storageMode
@@ -204,7 +222,7 @@ export function WebsiteProduct() {
     : starterSetupActive
     ? {
         title: 'Start your website',
-        copy: 'Answer five short questions, then preview before anything is saved.',
+        copy: 'Choose a three-page layout, answer five short questions, then preview before anything is saved.',
       }
     : view === 'content' && surface === 'preview'
     ? {
@@ -212,7 +230,7 @@ export function WebsiteProduct() {
         copy: hasUnsavedChanges
           ? 'This preview is not saved yet. Return to edit, then save or discard it.'
           : selectedPage.stage === 'draft'
-            ? 'This page is saved as a draft. Return to edit and mark it ready.'
+            ? 'This page is saved as a draft. Select Edit site to update it and mark it ready.'
             : 'Check the selected page at desktop, tablet, or mobile size.',
       }
     : view === 'publish' && storageMode !== 'managed'
@@ -591,7 +609,7 @@ export function WebsiteProduct() {
       route: location.pathname + location.search,
       detail: `Website starter brief generated: ${brief.businessName}`,
     })
-    setNotice('Your one-page site is ready as an unsaved preview. Review it, then Save or Discard.')
+    setNotice('Your three-page site is ready as an unsaved preview. Review every page, then Save or Discard.')
   }
 
   function openStarterSetup() {
@@ -744,6 +762,12 @@ export function WebsiteProduct() {
   }
 
   const failingContentChecks = checks.filter((check) => !check.id.startsWith('evidence-') && !check.passed)
+  const readyBuyerCtaPages = workspace.pages.filter((page) => page.stage === 'ready'
+    && Boolean(page.hero.ctaLabel.trim())
+    && Boolean(page.hero.ctaHref.trim()))
+  const websiteLeads = leadLedger.leads.filter((lead) => lead.siteName === workspace.siteName)
+  const leadCounts = websiteLeadCounts(leadLedger, workspace.siteName)
+  const managedReleaseRequired = storageMode === 'managed'
   const websiteAgentJob = storageIssue || canRepairLocalStorage
     ? 'Recover Website workspace'
     : starterSetupActive
@@ -754,13 +778,15 @@ export function WebsiteProduct() {
           ? 'Review unsaved site edits'
           : failingContentChecks.length
             ? 'Fix content readiness'
-            : !approvalIsCurrent
-              ? 'Record owner approval'
-              : !publishIsCurrent
-                ? 'Record release snapshot'
-                : storageMode === 'managed'
-                  ? 'Prepare rollout plan'
-                  : 'Download site handoff'
+            : leadCounts.new
+              ? 'Review new inquiries'
+              : managedReleaseRequired && !approvalIsCurrent
+                ? 'Record owner approval'
+                : managedReleaseRequired && !publishIsCurrent
+                  ? 'Record release snapshot'
+                  : managedReleaseRequired
+                    ? 'Prepare rollout plan'
+                    : 'Download website'
   const websiteAgentReason = storageIssue || canRepairLocalStorage
     ? 'Saving or recovery needs attention before Website work can be trusted.'
     : starterSetupActive
@@ -771,13 +797,15 @@ export function WebsiteProduct() {
           ? 'The preview has edits that must be saved or discarded before approval or release review.'
           : failingContentChecks.length
             ? `${failingContentChecks.length} readiness check${failingContentChecks.length === 1 ? '' : 's'} must pass before owner approval.`
-            : !approvalIsCurrent
-              ? 'The current Website revision needs named owner review before a release snapshot is recorded.'
-              : !publishIsCurrent
-                ? 'The approved revision needs an immutable static site package for handoff.'
-                : storageMode === 'managed'
-                  ? 'The managed release can prepare a rollout plan, but provider deployment still requires owner execution.'
-                  : 'The approved static site package is ready to download; no domain or deployment changes happen here.'
+            : leadCounts.new
+              ? `${leadCounts.new} new inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} a named owner and a local decision before follow-up.`
+              : managedReleaseRequired && !approvalIsCurrent
+                ? 'The current Website revision needs named owner review before a release snapshot is recorded.'
+                : managedReleaseRequired && !publishIsCurrent
+                  ? 'The approved revision needs an immutable static site package for handoff.'
+                  : managedReleaseRequired
+                    ? 'The managed release can prepare a rollout plan, but provider deployment still requires owner execution.'
+                    : 'Your reviewed site is ready to download. Nothing is deployed here.'
   const websiteOwnerGate = storageIssue || canRepairLocalStorage
     ? 'Owner exports backup or confirms repair before continuing.'
     : starterSetupActive
@@ -788,134 +816,54 @@ export function WebsiteProduct() {
           ? 'Owner saves or discards the preview.'
           : failingContentChecks.length
             ? 'Owner fixes content, navigation, proof, and CTA readiness.'
-            : !approvalIsCurrent
-              ? 'Owner records approval with evidence.'
-              : !publishIsCurrent
-                ? 'Owner records the release snapshot.'
-                : storageMode === 'managed'
-                  ? 'Owner approves release manager and reviewer before deployment planning.'
-                  : 'Owner downloads the package and decides where it goes live.'
+            : leadCounts.new
+              ? 'Owner qualifies or closes each inquiry; no customer message is sent here.'
+              : managedReleaseRequired && !approvalIsCurrent
+                ? 'Owner records approval with evidence.'
+                : managedReleaseRequired && !publishIsCurrent
+                  ? 'Owner records the release snapshot.'
+                  : managedReleaseRequired
+                    ? 'Owner approves release manager and reviewer before deployment planning.'
+                    : 'Owner decides where it goes live.'
   const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
     ? 'Open recovery'
     : starterSetupActive || starterAvailable
       ? 'Open brief'
       : hasUnsavedChanges || failingContentChecks.length
         ? 'Open editor'
-        : !approvalIsCurrent || !publishIsCurrent || storageMode === 'managed'
+        : leadCounts.new
+          ? 'Review inquiries'
+        : managedReleaseRequired
           ? 'Open release'
           : 'Get website'
-  const websiteAgentRows = [
-    ['Agent job', websiteAgentJob],
-    ['Reason', websiteAgentReason],
-    ['Owner gate', websiteOwnerGate],
-  ]
-  const websiteAutopilotTrack = storageIssue || canRepairLocalStorage
-    ? 'Recovery'
-    : starterSetupActive || starterAvailable
-      ? 'Brief'
-      : hasUnsavedChanges || failingContentChecks.length
-        ? 'Content'
-        : !approvalIsCurrent || !publishIsCurrent
-          ? 'Release'
-          : storageMode === 'managed'
-            ? 'Rollout'
-            : 'Handoff'
-  const websiteAutopilotRows = [
-    ['Track', websiteAutopilotTrack],
-    ['Stage', websiteAgentJob],
-    ['Next', websiteAgentActionLabel],
-    ['Learning', 'Records behavior only'],
-    ['Boundary', 'No auto deploy'],
-  ]
-  const websiteGeneratorGuideRows = [
-    ['Inputs', 'Business facts, offers, proof, photos, links'],
-    ['AI creates', 'Pages, copy, CTAs, SEO basics, release checklist'],
-    ['Owner reviews', 'Brand, claims, contact route, pricing, proof'],
-    ['Handoff', 'Static package plus managed rollout plan'],
-  ]
-  const websiteLaunchPriority = storageIssue || canRepairLocalStorage
-    ? 'Recover workspace'
-    : hasUnsavedChanges
-      ? 'Save current edits'
-      : failingContentChecks.length
-        ? 'Clear readiness gaps'
-        : !approvalIsCurrent
-          ? 'Record owner approval'
-          : !publishIsCurrent
-            ? 'Package release'
-            : storageMode === 'managed'
-              ? 'Plan deployment'
-              : 'Download handoff'
-  const websiteLaunchRows = [
-    ['Priority', websiteLaunchPriority],
-    ['Readiness', failingContentChecks.length ? `${failingContentChecks.length} blocked` : 'Passed'],
-    ['Approval', approvalIsCurrent ? 'Recorded' : 'Needed'],
-    ['Package', publishIsCurrent ? 'Retained' : 'Needed'],
-    ['Publish gate', storageMode === 'managed' ? 'Owner-run rollout' : 'No deploy here'],
-  ]
-  const readyBuyerCtaPages = workspace.pages.filter((page) => page.stage === 'ready'
-    && Boolean(page.hero.ctaLabel.trim())
-    && Boolean(page.hero.ctaHref.trim()))
-  const websiteLeadCaptureNext = storageIssue || canRepairLocalStorage
-    ? 'Recover Website workspace'
-    : starterSetupActive || starterAvailable
-      ? 'Start business brief'
-      : hasUnsavedChanges
-        ? 'Save site edits'
-        : failingContentChecks.length
-          ? 'Fix capture blockers'
-          : !readyBuyerCtaPages.length
-            ? 'Add contact path'
-            : !approvalIsCurrent
-              ? 'Record owner approval'
-              : !publishIsCurrent
-                ? 'Build release package'
-                : 'Lead capture ready'
-  const websiteLeadCaptureRows = [
-    ['Brief', starterAvailable ? 'Sample only' : 'Saved'],
-    ['Contact', readyBuyerCtaPages.length ? `${readyBuyerCtaPages.length} CTA ready` : 'Missing'],
-    ['Content', failingContentChecks.length ? `${failingContentChecks.length} fixes` : 'Passed'],
-    ['Approval', approvalIsCurrent ? 'Recorded' : 'Needed'],
-    ['Handoff', publishIsCurrent ? 'Package ready' : 'No send here'],
-  ]
-  const managedRolloutNext = storageIssue || canRepairLocalStorage
-    ? 'Recover Website workspace'
-    : failingContentChecks.length
-      ? 'Fix rollout blockers'
-      : !approvalIsCurrent
-        ? 'Record approval evidence'
-        : !publishIsCurrent
-          ? 'Build static package'
-          : storageMode === 'managed'
-            ? 'Prepare managed rollout'
-            : 'Download activation packet'
-  const managedRolloutRows = [
-    ['Domain', storageMode === 'managed' ? 'Owner maps DNS' : 'Not connected'],
-    ['Forms', readyBuyerCtaPages.length ? 'Route planned' : 'Need CTA'],
-    ['Analytics', publishIsCurrent ? 'Plan ready' : 'Needs package'],
-    ['Content', failingContentChecks.length ? `${failingContentChecks.length} blocker` : 'Approved proof'],
-    ['Package', publishIsCurrent ? 'Static snapshot' : 'Needed'],
-    ['Gate', storageMode === 'managed' ? 'Owner rollout' : 'Free local only'],
-  ]
-  const websiteHandoffNext = storageIssue || canRepairLocalStorage
-    ? 'Recover Website workspace'
-    : failingContentChecks.length
-      ? 'Finish page readiness'
-      : !approvalIsCurrent
-        ? 'Record owner approval'
-        : !publishIsCurrent
-          ? 'Download static package'
-          : storageMode === 'managed'
-            ? 'Prepare managed handoff'
-            : 'Hand off website package'
-  const websiteHandoffRows = [
-    ['Pages', `${workspace.pages.filter((page) => page.stage === 'ready').length}/${workspace.pages.length} ready`],
-    ['Approval', approvalIsCurrent ? 'Recorded' : 'Needed'],
-    ['Package', publishIsCurrent ? 'Retained' : canReview ? 'Ready to build' : 'Needs review'],
-    ['Lead capture', websiteLeadCaptureNext],
-    ['Managed gate', storageMode === 'managed' ? 'Tenant review' : 'Free export'],
-    ['Boundary', 'No auto launch'],
+  const websiteTodayState = storageIssue || canRepairLocalStorage
+    ? 'blocked'
+    : starterAvailable || starterSetupActive
+      ? 'setup'
+      : hasUnsavedChanges || failingContentChecks.length || leadCounts.new
+        ? 'attention'
+        : 'ready'
+  const statusWorkspace = hasUnsavedChanges ? editorWorkspace : workspace
+  const websiteTodayMetrics = [
+    ['Pages', `${statusWorkspace.pages.filter((page) => page.stage === 'ready').length}/${statusWorkspace.pages.length} ready`],
+    ['Readiness', hasUnsavedChanges ? 'Review draft' : failingContentChecks.length ? `${failingContentChecks.length} to fix` : 'Clear'],
+    ['Inquiries', leadCounts.new ? `${leadCounts.new} new` : websiteLeads.length ? `${websiteLeads.length} total` : 'None yet'],
+    ['Approval', hasUnsavedChanges ? 'Blocked by draft' : managedReleaseRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required'],
+    ['Site package', hasUnsavedChanges ? 'Blocked by draft' : managedReleaseRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download'],
   ] as const
+  const websiteTodaySource = storageMode === 'managed'
+    ? `Managed Website · ${managedActorId || 'authenticated workspace'}`
+    : storageMode === 'browser-local'
+      ? 'Saved on this device'
+      : 'Available in this browser session'
+  const leadExportHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({
+    contract: 'supermega.website.lead-export.v1',
+    exportedAt: new Date().toISOString(),
+    siteName: workspace.siteName,
+    revision: leadLedger.revision,
+    leads: websiteLeads,
+    controls: { localOnly: true, externalWritesPerformed: false, humanReviewRequired: true },
+  }, null, 2))}`
   useEffect(() => {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_seen',
@@ -944,37 +892,92 @@ export function WebsiteProduct() {
       openContentSurface('work')
       return
     }
-    if (!approvalIsCurrent || !publishIsCurrent || storageMode === 'managed') {
-      openWorkspaceView('publish')
+    if (leadCounts.new) {
+      const controls = document.querySelector<HTMLDetailsElement>('.website-business-controls')
+      if (controls) controls.open = true
+      requestAnimationFrame(() => {
+        const inbox = document.getElementById('website-lead-inbox')
+        inbox?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        document.getElementById('website-lead-inbox-title')?.focus({ preventScroll: true })
+      })
       return
     }
-    downloadTrialSite()
+    openWorkspaceView('publish')
   }
 
-  function runWebsiteAgentJob() {
-    recordBehaviorSignal(window.localStorage, {
-      event: 'agent_job_chosen',
-      product: 'website',
-      route: location.pathname + location.search,
-      detail: websiteAgentJob,
-    })
-    if (storageIssue || canRepairLocalStorage) {
-      requestRecoveryFocus()
-      return
+  function saveLeadLedger(nextLedger: typeof leadLedger, success: string) {
+    try {
+      const confirmed = writeWebsiteLeadLedger(window.localStorage, nextLedger)
+      setLocalLeadLedger(confirmed)
+      setNotice(success)
+      return true
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The Website lead record could not be saved.')
+      return false
     }
-    if (starterAvailable || starterSetupActive) {
-      openStarterSetup()
-      return
+  }
+
+  async function captureDemoInquiry(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    try {
+      const next = captureWebsiteLead(leadLedger, {
+        siteName: workspace.siteName,
+        sourcePage: selectedPage.slug,
+        ...leadDraft,
+      }, { id: createId('lead'), now: new Date().toISOString() })
+      if (storageMode === 'managed') {
+        const result = await mutateWorkspace((current) => ({
+          ...current,
+          leadLedger: captureWebsiteLead(current.leadLedger ?? emptyWebsiteLeadLedger(), {
+            siteName: current.siteName,
+            sourcePage: selectedPage.slug,
+            ...leadDraft,
+          }, { id: next.leads[0].id, now: next.leads[0].createdAt }),
+        }), { durable: true })
+        if (!result.ok) throw new Error(result.error)
+        setLeadDraft({ name: '', contact: '', request: '', consentRecorded: false })
+        setNotice('Inquiry saved to the managed Website inbox for accountable review. No message, CRM write, or external send ran.')
+        return
+      }
+      if (saveLeadLedger(next, 'Demo inquiry saved to the local Website inbox. No message, CRM write, or external send ran.')) {
+        setLeadDraft({ name: '', contact: '', request: '', consentRecorded: false })
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The Website inquiry is invalid.')
     }
-    if (hasUnsavedChanges || failingContentChecks.length) {
-      openContentSurface('work')
-      return
+  }
+
+  async function decideLead(leadId: string, status: 'qualified' | 'closed') {
+    try {
+      const next = reviewWebsiteLead(leadLedger, leadId, {
+        status,
+        owner: leadOwner,
+        decisionNote: leadDecisionNote,
+      }, new Date().toISOString())
+      if (storageMode === 'managed') {
+        const reviewed = next.leads.find((lead) => lead.id === leadId)
+        if (!reviewed) throw new Error('The Website inquiry no longer exists.')
+        const result = await mutateWorkspace((current) => ({
+          ...current,
+          leadLedger: reviewWebsiteLead(current.leadLedger ?? emptyWebsiteLeadLedger(), leadId, {
+            status,
+            owner: leadOwner,
+            decisionNote: leadDecisionNote,
+          }, reviewed.updatedAt),
+        }), { durable: true })
+        if (!result.ok) throw new Error(result.error)
+        setLeadDecisionNote('')
+        setNotice(status === 'qualified'
+          ? 'Inquiry qualified and assigned in the managed Website workspace. No customer message was sent.'
+          : 'Inquiry closed in the managed Website workspace. No customer message was sent.')
+        return
+      }
+      if (saveLeadLedger(next, status === 'qualified'
+        ? 'Inquiry qualified and assigned locally. No customer message was sent.'
+        : 'Inquiry closed locally. No customer message was sent.')) setLeadDecisionNote('')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The Website inquiry decision is invalid.')
     }
-    if (!approvalIsCurrent || !publishIsCurrent || storageMode === 'managed') {
-      openWorkspaceView('publish')
-      return
-    }
-    downloadTrialSite()
   }
 
   return (
@@ -1118,8 +1121,7 @@ export function WebsiteProduct() {
                   </details>
                 ) : null}
                 <button
-                  aria-pressed={surface === 'preview'}
-                  className="website-button is-secondary"
+                  className={`website-button ${surface === 'preview' ? 'is-primary' : 'is-secondary'}`}
                   onClick={() => {
                     if (surface === 'preview') openContentSurface('work')
                     else previewPage()
@@ -1168,82 +1170,51 @@ export function WebsiteProduct() {
             ) : null}
           </header>
 
-          <section aria-label="Website Autopilot" className="website-autopilot">
-            <div>
-              <span className="website-kicker">Website Autopilot</span>
-              <h2>{websiteAgentJob}</h2>
-              <p>One button chooses the next safe owner action from recovery, business brief, content proof, lead capture, owner approval, release package, and rollout-readiness state. AI may prepare pages and packets; it does not publish, change DNS, send forms, install analytics, write CRM, write Shop, or deploy from here.</p>
+          {websiteTodayState !== 'ready' ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState}>
+            <div className="website-today-priority">
+              <span className="website-kicker">Today</span>
+              <h2 id="website-today-title">{websiteAgentJob}</h2>
+              <p>{websiteAgentReason}</p>
+              <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">{websiteAgentActionLabel}</button>
             </div>
-            <div className="website-autopilot-rows">
-              {websiteAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            <div aria-label="Website today status" className="website-today-metrics">
+              {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
             </div>
-            <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">Run next step</button>
-          </section>
+            <div className="website-today-source" role="status">
+              <span>{websiteTodaySource}</span>
+              <small>{websiteOwnerGate}</small>
+            </div>
+          </section> : null}
 
-          <section aria-label="Website generator guide" className="website-generator-guide">
-            <div>
-              <span className="website-kicker">Website generator guide</span>
-              <h2>Bring any business. Get a reviewed site package.</h2>
-              <p>AI turns a simple business brief into a complete website draft and launch packet. The owner still approves claims, proof, contact paths, release package, and rollout before anything goes public.</p>
-            </div>
-            <div className="website-generator-guide-rows">
-              {websiteGeneratorGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-            </div>
-          </section>
+          <details className="website-business-controls">
+            <summary><span><strong>Inquiry inbox</strong><small>Local capture, ownership, decisions, and export</small></span><b>{leadCounts.new} new</b></summary>
+            <div className="website-business-controls-content">
+              <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox" id="website-lead-inbox">
+                <header>
+                  <div><span className="website-kicker">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture and route inquiries</h2><p>{storageMode === 'managed' ? 'Inquiries stay in this managed workspace with ownership and decision history.' : 'Try the full workflow locally. Contact data stays in this browser.'} No message, CRM, or Shop write is sent.</p></div>
+                  <div className="website-lead-counts"><span><strong>{leadCounts.new}</strong><small>New</small></span><span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span><span><strong>{leadCounts.closed}</strong><small>Closed</small></span></div>
+                </header>
 
-          <section aria-label="Recommended Website agent job" className="website-agent-queue">
-            <div>
-              <span>Website agent queue</span>
-              <h2>{websiteAgentJob}</h2>
-              <p>AI prepares the next Website move. Owners approve every content, release, domain, and deployment step.</p>
-            </div>
-            <div>{websiteAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-            <button className="website-button is-primary is-compact" onClick={runWebsiteAgentJob} type="button">{websiteAgentActionLabel}</button>
-          </section>
+                <form className="website-lead-capture-form" onSubmit={captureDemoInquiry}>
+                  <label>Name<input autoComplete="name" maxLength={80} onChange={(event) => setLeadDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Customer name" required value={leadDraft.name} /></label>
+                  <label>Phone or email<input autoComplete="email" maxLength={120} onChange={(event) => setLeadDraft((current) => ({ ...current, contact: event.target.value }))} placeholder="09… or name@example.com" required value={leadDraft.contact} /></label>
+                  <label className="website-lead-request">What do they need?<textarea maxLength={500} onChange={(event) => setLeadDraft((current) => ({ ...current, request: event.target.value }))} placeholder="Product, service, quantity, timing, or question" required rows={3} value={leadDraft.request} /></label>
+                  <label className="website-lead-consent"><input checked={leadDraft.consentRecorded} onChange={(event) => setLeadDraft((current) => ({ ...current, consentRecorded: event.target.checked }))} required type="checkbox" /> Customer agreed to save these contact details for follow-up.</label>
+                  <button className="website-button is-primary is-compact" disabled={!readyBuyerCtaPages.length} type="submit">Add inquiry</button>
+                  {!readyBuyerCtaPages.length ? <small className="website-field-error">Add a ready page with a contact action before capturing inquiries.</small> : null}
+                </form>
 
-          <section aria-label="Website launch cockpit" className="website-launch-cockpit">
-            <div>
-              <span className="website-kicker">Website launch cockpit</span>
-              <h2>{websiteLaunchPriority}</h2>
-              <p>AI turns content checks, owner approval, static package, and rollout boundary into one launch queue. No domain, publish, or deployment action runs here.</p>
+                {websiteLeads.length ? <div className="website-lead-review-controls"><label>Responsible owner<input maxLength={120} onChange={(event) => setLeadOwner(event.target.value)} placeholder="Named person or role" value={leadOwner} /></label><label>Decision note <small>optional</small><input maxLength={500} onChange={(event) => setLeadDecisionNote(event.target.value)} placeholder="Need, budget, timing, or closure reason" value={leadDecisionNote} /></label></div> : null}
+                <div className="website-lead-list">
+                  {websiteLeads.length ? websiteLeads.slice(0, 8).map((lead) => <article data-status={lead.status} key={lead.id}>
+                    <div><span>{lead.status}</span><strong>{lead.name}</strong><small>{lead.contact} · {lead.sourcePage} · {formatRecoveryDate(lead.createdAt)}</small><p>{lead.request}</p>{lead.owner ? <small>Owner: {lead.owner}{lead.decisionNote ? ` · ${lead.decisionNote}` : ''}</small> : null}</div>
+                    {lead.status !== 'closed' ? <div><button className="website-button is-secondary is-compact" disabled={leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'qualified')} type="button">Qualify</button><button className="website-button is-quiet is-compact" disabled={leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'closed')} type="button">Close</button></div> : null}
+                  </article>) : <p className="website-lead-empty">No inquiry yet. Add one above to test capture, ownership, decision, persistence, and export.</p>}
+                </div>
+                {websiteLeads.length ? <a className="website-button is-secondary is-compact website-lead-export" download={`website-leads-${workspace.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.json`} href={leadExportHref}>Export lead record</a> : null}
+              </section>
             </div>
-            <div className="website-launch-cockpit-rows">
-              {websiteLaunchRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-            </div>
-          </section>
-
-          <section aria-label="Website lead capture readiness" className="website-lead-capture-cockpit">
-            <div>
-              <span className="website-kicker">Website lead capture readiness</span>
-              <h2>{websiteLeadCaptureNext}</h2>
-              <p>AI checks business brief, contact path, content proof, owner approval, and release package before the site can capture a real customer request. No form send, customer message, domain, publish, CRM, or Shop write runs from this panel.</p>
-            </div>
-            <div className="website-lead-capture-cockpit-rows">
-              {websiteLeadCaptureRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-            </div>
-          </section>
-
-          <section aria-label="Website managed rollout packet" className="website-rollout-packet">
-            <div>
-              <span className="website-kicker">Managed rollout packet</span>
-              <h2>{managedRolloutNext}</h2>
-              <p>AI packages domain setup, form routing, analytics plan, approved content, static snapshot, and owner rollout gate for managed activation. No DNS change, publish, form send, analytics install, CRM write, Shop write, or deployment action runs from this packet.</p>
-            </div>
-            <div className="website-rollout-packet-rows">
-              {managedRolloutRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-            </div>
-          </section>
-
-          <section aria-label="Website handoff packet" className="website-handoff-packet">
-            <div>
-              <span className="website-kicker">Website handoff packet</span>
-              <h2>{websiteHandoffNext}</h2>
-              <p>AI turns ready pages, owner approval, static package state, lead capture route, and managed gate into one handoff checklist. No DNS change, form send, analytics install, CRM write, Shop write, publish, or deployment action runs from this packet.</p>
-            </div>
-            <div className="website-handoff-packet-rows">
-              {websiteHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-            </div>
-          </section>
+          </details>
 
           <div
             aria-label={view === 'content' ? 'Edit' : 'Publish'}

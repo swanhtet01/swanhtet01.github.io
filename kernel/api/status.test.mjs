@@ -14,7 +14,7 @@ test('buildStatus returns a complete, secret-safe snapshot', async () => {
   assert.deepEqual(s.agentCompany, {
     plannerReady: true,
     actionMode: 'draft_only',
-    maxAgents: 2,
+    maxAgents: 1,
     maxRoleBudget: 8,
     probeMode: 'plan_only',
     modelRequest: false,
@@ -36,7 +36,7 @@ test('planner failure makes public health fail closed without leaking the reason
   assert.deepEqual(s.agentCompany, {
     plannerReady: false,
     actionMode: 'unavailable',
-    maxAgents: 2,
+    maxAgents: 1,
     maxRoleBudget: 8,
     probeMode: 'plan_only',
     modelRequest: false,

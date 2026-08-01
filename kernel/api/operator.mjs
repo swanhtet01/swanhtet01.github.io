@@ -108,6 +108,36 @@ function approvedToolPlan(value, tools) {
   return steps
 }
 
+function hqEvidenceReady(result) {
+  return result?.ok === true && String(result?.data?.status || '').toLowerCase() !== 'unavailable'
+}
+
+function hqEvidenceMetadata(results) {
+  return results.map((result) => ({
+    tool: result.tool,
+    ok: result.ok === true,
+    status: typeof result?.data?.status === 'string'
+      ? result.data.status.slice(0, 40)
+      : null,
+  }))
+}
+
+function synthesisEvidenceData(result, planningMode) {
+  const data = result?.data
+  if (
+    planningMode !== 'hq_authority_fixed' ||
+    result?.tool !== 'company_operations_status' ||
+    !data ||
+    typeof data !== 'object' ||
+    Array.isArray(data)
+  ) return data
+
+  // Keep response freshness metadata for callers, but exclude this volatile field from the
+  // fixed-plan synthesis prompt so unchanged operational evidence can reuse the gateway cache.
+  const { generatedAt: _generatedAt, ...stableData } = data
+  return stableData
+}
+
 export async function runOperator({ goal, approvedPlan }, options = {}) {
   const complete = options.complete || gateway.complete
   const executeTool = options.runTool || runTool
@@ -154,12 +184,23 @@ export async function runOperator({ goal, approvedPlan }, options = {}) {
     let result
     try { result = await executeTool(tool, args) }
     catch { result = { ok: false, error: 'tool_execution_failed' } }
-    results.push({ tool, args, ...result })
+    const evidence = { tool, args, ...result }
+    results.push(evidence)
+    if (planningMode === 'hq_authority_fixed' && !hqEvidenceReady(evidence)) {
+      return {
+        ok: false,
+        reason: 'hq_evidence_unavailable',
+        planningMode,
+        plan,
+        results: hqEvidenceMetadata(results),
+        usage,
+      }
+    }
   }
 
   // 3) SYNTHESIZE - provider rows are untrusted data and never enter the system prompt.
   const rawContext = results.length
-    ? results.map((r) => `[${r.tool}] ${r.ok ? safeJson(r.data).slice(0, 1500) : 'error: ' + r.error}`).join('\n')
+    ? results.map((r) => `[${r.tool}] ${r.ok ? safeJson(synthesisEvidenceData(r, planningMode)).slice(0, 1500) : 'error: ' + r.error}`).join('\n')
     : '(no tools were run)'
   const context = stripInjectionFrames(rawContext)
   let answer = ''

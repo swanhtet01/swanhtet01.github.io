@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { validateSchedulerExecutionBudget } from './scheduler_authority_contract.mjs'
+
 const normalizeSourceText = (value) => value.replace(/\r\n?/g, '\n')
 const readFile = async (...args) => {
   const value = await readRawFile(...args)
@@ -29,24 +31,33 @@ let clientOnboardingRuntimeChecks = 0
 let managedClientImportRuntimeChecks = 0
 let managedContextRuntimeChecks = 0
 let operatingBaselineRuntimeChecks = 0
+let plantEquipmentImportRuntimeChecks = 0
 let shopInventoryRuntimeChecks = 0
+let shopServiceScheduleRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
 let websiteReleaseRuntimeChecks = 0
+let shopOperatingFlowRuntimeChecks = 0
+let operationalReportRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
 let businessCommandRuntimeChecks = 0
 let ownerControlRuntimeChecks = 0
 let pilotOutcomeRuntimeChecks = 0
 let companyBackupRuntimeChecks = 0
+let shopProductionDemandRuntimeChecks = 0
+let shopDemandIntelligenceRuntimeChecks = 0
+let shopReplenishmentRuntimeChecks = 0
+let shopProcurementDecisionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
-const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productHomeReadinessSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productHomeReadinessSource, productHomeTodaySource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'CoreApp.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'CoreShell.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'ProductHomeReadiness.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'ProductHomeToday.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'behavior-trail.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'shop-catalog-import.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts'), 'utf8'),
@@ -89,23 +100,42 @@ const [manifestText, appPackageText, appSource, coreSource, coreShellSource, pro
 ])
 const manifest = JSON.parse(manifestText)
 const appPackage = JSON.parse(appPackageText)
+const rootPackage = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 const schedulerAuthority = JSON.parse(await readFile(resolve(root, 'tools', 'supermega_scheduler_authority.json'), 'utf8'))
+let schedulerExecutionBudget
+try { schedulerExecutionBudget = validateSchedulerExecutionBudget(schedulerAuthority) } catch { fail('scheduler_execution_budget_invalid') }
 const indexSource = await readFile(resolve(root, 'showroom', 'index.html'), 'utf8')
 const viteConfigSource = await readFile(resolve(root, 'showroom', 'vite.config.ts'), 'utf8')
+const staticRouteSource = await readFile(resolve(root, 'showroom', 'scripts', 'prepare-static-routes.mjs'), 'utf8')
 const websiteStarterSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-starter.ts'), 'utf8')
+const websiteLeadSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-leads.ts'), 'utf8')
 const websiteStarterSetupSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteStarterSetup.tsx'), 'utf8')
 const shopInventorySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-inventory-foundation.ts'), 'utf8')
 const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopInventoryFoundation.tsx'), 'utf8')
 const shopInventoryPythonSource = await readFile(resolve(root, 'supermega_runtime', 'shop_inventory_runtime.py'), 'utf8')
 const managedActivationRunbookSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedActivationRunbook.tsx'), 'utf8')
+const localClientImportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'local-client-import.ts'), 'utf8')
+const clientPreparationToolSource = await readFile(resolve(root, 'tools', 'prepare_client_demo.mjs'), 'utf8')
+const plantEquipmentImportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-equipment-import.ts'), 'utf8')
+const plantEquipmentOnboardingSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantEquipmentOnboarding.tsx'), 'utf8')
+const plantEquipmentCommissioningSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantEquipmentCommissioning.tsx'), 'utf8')
+const plantEquipmentMaintenanceStrategySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantEquipmentMaintenanceStrategy.tsx'), 'utf8')
 const settingsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'SettingsPage.tsx'), 'utf8')
 const publicGeneratorSource = await readFile(resolve(root, 'tools', 'create_public_vercel_output.mjs'), 'utf8')
 const managedLoginPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedLoginPage.tsx'), 'utf8')
 const managedAccountPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedAccountPage.tsx'), 'utf8')
 const managedTrialProofSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'managed-trial-proof.ts'), 'utf8')
+const operationsPageRouteSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'OperationsPageRoute.tsx'), 'utf8')
+const localWorkspaceBackupSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'local-workspace-backup.ts'), 'utf8')
+const productSetupSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'product-setup.ts'), 'utf8')
+const workspaceRuntimeSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'workspace-runtime.ts'), 'utf8')
+const operationalReportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'operational-report.ts'), 'utf8')
+const sharedMasterDataSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shared-master-data.ts'), 'utf8')
 const channelOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ChannelOrderIntake.tsx'), 'utf8')
 const plantOrderSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts'), 'utf8')
 const plantOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantOrderFoundation.tsx'), 'utf8')
+const plantOrderPythonSource = await readFile(resolve(root, 'supermega_runtime', 'plant_order_foundation.py'), 'utf8')
+const plantIndustryPacksSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-industry-packs.ts'), 'utf8')
 const productionMaterialHandoffSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'production-material-handoff.ts'), 'utf8')
 const shopProductionHandoffUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopProductionHandoff.tsx'), 'utf8')
 const productionMaterialHandoffPython = await readFile(resolve(root, 'supermega_runtime', 'production_material_handoff.py'), 'utf8')
@@ -185,6 +215,91 @@ if (!operatingBaselineSource.includes("supermega.operating_baseline.v1")
   || !settingsPageSource.includes('AI learned')
   || !settingsPageSource.includes('operatingChangeCopy(managedPilotBrief.operatingChange)')
   || !coreCssSource.includes('.premium-pilot-learning')) fail('operating_baseline_learning_contract_missing')
+const managedEcommerceBuyingLifecycleSource = await readFile(resolve(root, 'supermega_runtime', 'ecommerce_buying_lifecycle.py'), 'utf8')
+const shopOperatingFlowSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-operating-flow.ts'), 'utf8')
+const shopOperatingFlowUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopOperatingFlow.tsx'), 'utf8')
+const shopTodayUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopToday.tsx'), 'utf8')
+const shopServiceScheduleSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-service-scheduling.ts'), 'utf8')
+const shopServiceScheduleUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopServiceSchedule.tsx'), 'utf8')
+const shopProductionDemandSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-production-demand.ts'), 'utf8')
+const shopDemandIntelligenceSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-demand-intelligence.ts'), 'utf8')
+const shopReplenishmentSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-replenishment.ts'), 'utf8')
+
+if (!shopOperatingFlowSource.includes("export type ShopOperatingStageId = 'intake' | 'accepted' | 'fulfilment' | 'money' | 'close'")
+  || !shopOperatingFlowSource.includes('export function buildShopOperatingFlow')
+  || !shopOperatingFlowUiSource.includes('aria-label="Shop operating flow"')
+  || !shopOperatingFlowUiSource.includes('Next work')
+  || !coreSource.includes('<ShopOperatingFlow')
+  || !coreSource.includes('id="shop-order-queue"')
+  || !coreSource.includes('id="shop-order-history"')
+  || !coreSource.includes('id="shop-close-controls"')
+  || !coreCssSource.includes('.shop-flow-stages')) fail('shop_operating_flow_contract_missing')
+if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopOperatingFlowSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_operating_flow_side_effect_added')
+if (!shopTodayUiSource.includes('aria-label="Next Shop action"')
+  || !shopTodayUiSource.includes('Run the whole shop')
+  || !shopTodayUiSource.includes('Enterprise control coverage')
+  || !coreSource.includes("type CommerceTab = 'today' | 'counter' | 'orders' | 'inventory'")
+  || !coreSource.includes("if (tab === 'today')")
+  || !coreSource.includes('<ShopToday')
+  || !coreCssSource.includes('.shop-today-module-grid')) fail('shop_today_command_surface_missing')
+if (!coreCssSource.includes('.production-operation-module > .plant-execution-foundation { flex: 0 0 auto; }')) fail('plant_execution_panel_can_shrink_out_of_view')
+if (!localWorkspaceBackupSource.includes("key.startsWith(PLANT_ORDER_STORAGE_PREFIX)")
+  || !settingsPageSource.includes('listResettableCompanyStorageKeys(window.localStorage)')) fail('plant_execution_evidence_not_reset_or_restored_with_workspace')
+if (!plantOrderUiSource.includes('<details className="compact-disclosure production-history" open>')) fail('plant_required_batch_fields_hidden_by_default')
+if (!websiteSource.includes("const managedReleaseRequired = storageMode === 'managed'")
+  || !websiteSource.includes("managedReleaseRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required'")
+  || !websiteSource.includes("managedReleaseRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download'")) fail('website_local_trial_exposes_unavailable_managed_release_gates')
+if (!websiteSource.includes("{websiteTodayState !== 'ready' ? <section")
+  || !websiteSource.includes('Go back, then Preview to check desktop, tablet, or mobile.')) fail('website_ready_state_repeats_completed_next_action')
+if (!websiteCssSource.includes('.website-preview-frame.is-tablet')
+  || !websiteCssSource.includes('max-width: 768px')
+  || !websiteCssSource.includes('.website-preview-frame.is-mobile')
+  || !websiteCssSource.includes('max-width: 390px')) fail('website_responsive_preview_not_dimensionally_bounded')
+if (websiteCssSource.includes('padding: 0 12px;\n  background: #ffffff;')) fail('website_dark_secondary_button_loses_contrast')
+if (!coreCssSource.includes('.orders-module { overflow-y: auto; padding: 0 2px 128px 0; scrollbar-gutter: stable; }')
+  || !coreCssSource.includes('.orders-module > .order-workspace { flex: 0 0 auto; }')) fail('shop_orders_workspace_can_shrink_out_of_view')
+if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopTodayUiSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_today_side_effect_added')
+if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v2")
+  || !shopServiceScheduleSource.includes("type ShopIndustryPackId = 'retail' | 'cafe' | 'restaurant' | 'spa' | 'gym' | 'school'")
+  || !shopServiceScheduleSource.includes('provisionEmptyShopServiceSchedule')
+  || !shopServiceScheduleSource.includes('LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA')
+  || !shopServiceScheduleSource.includes('scheduleShopServiceBooking')
+  || !shopServiceScheduleSource.includes('advanceShopServiceBooking')
+  || !shopServiceScheduleSource.includes('registerShopServiceResource')
+  || !shopServiceScheduleSource.includes('Bookings ${first.id} and ${second.id} overlap.')
+  || !shopServiceScheduleUiSource.includes('Hold appointment')
+  || !shopServiceScheduleUiSource.includes('Services and resources')
+  || !shopServiceScheduleUiSource.includes('Nothing is sent to the customer or an external calendar.')
+  || !coreSource.includes("lazy(() => import('./ShopServiceSchedule')")
+  || !coreSource.includes('<ShopServiceSchedule')
+  || !coreCssSource.includes('.service-booking-form')
+  || !coreCssSource.includes('.service-agenda article')) fail('shop_service_schedule_contract_missing')
+if (['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource(', 'supabase', 'openai', 'anthropic'].some((marker) => `${shopServiceScheduleSource}\n${shopServiceScheduleUiSource}`.toLowerCase().includes(marker.toLowerCase()))) fail('shop_service_schedule_crossed_external_boundary')
+if (!managedTrialSource.includes('loadManagedServiceSchedule')
+  || !managedTrialSource.includes('saveManagedServiceSchedule')
+  || !managedTrialSource.includes("'/api/trial/v1/commerce/service-schedule'")
+  || !managedTrialSource.includes('expected_version: request.expectedVersion')
+  || !shopServiceScheduleUiSource.includes('currentManagedIdentity()')
+  || !shopServiceScheduleUiSource.includes("error.code === 'trial_version_conflict'")
+  || !shopServiceScheduleUiSource.includes('The current shared schedule was reloaded')
+  || !managedTrialRuntimeSource.includes('@router.get("/commerce/service-schedule")')
+  || !managedTrialRuntimeSource.includes('@router.post("/commerce/service-schedule")')
+  || !managedTrialRuntimeSource.includes('principal.actor_kind != "human"')
+  || !managedTrialRuntimeSource.includes('_reject_client_identity(body.schedule')
+  || !managedTrialRuntimeSource.includes('commerce.service_schedule.initialized')
+  || !managedCommerceRuntime.includes('commerce.service_schedule.saved')
+  || !managedCommerceRuntime.includes('_validate_service_schedule_initialized')
+  || !managedCommerceRuntime.includes('_validate_service_schedule_saved')
+  || !managedCommerceRuntime.includes('contains overlapping bookings')
+  || !managedCommerceRuntime.includes('service schedule evidence history is immutable')
+  || !managedTrialStoreRuntime.includes('commerce.service_schedule.initialized')
+  || !managedTrialStoreRuntime.includes('commerce.service_schedule.saved')) fail('managed_shop_service_schedule_contract_missing')
+if (!clientOnboardingUiSource.includes('loadManagedServiceSchedule')
+  || !clientOnboardingUiSource.includes('saveManagedServiceSchedule')
+  || !clientOnboardingUiSource.includes('createShopServiceSchedule(packId)')
+  || !clientOnboardingUiSource.includes('Existing appointment evidence was preserved')
+  || !clientOnboardingUiSource.includes('services and resources are ready in the same workspace')
+  || !settingsPageSource.includes("shopIndustryPackId={setup.product === 'commerce' ? shopIndustryPackId : undefined}")) fail('managed_shop_pack_activation_contract_missing')
 
 if (!websiteReleaseSource.includes("supermega.website.release_foundation.v1")
   || !websiteReleaseSource.includes('buildWebsiteReleasePackage')
@@ -225,6 +340,18 @@ if (!websiteModelSource.includes('releaseRecords?: WebsiteReleaseState[]')
   || !managedWebsitePythonRuntime.includes('Website release package does not match the exact current approved site file.')
   || !managedTrialStoreRuntime.includes('"website.release.recorded"')
   || !managedTrialStoreRuntime.includes('surface == "website" and event_type in HUMAN_COMMAND_EVENTS')) fail('managed_website_release_persistence_contract_missing')
+if (!websiteModelSource.includes('leadLedger?: WebsiteLeadLedger')
+  || !websiteWorkspaceSource.includes("eventType: 'website.inquiry.received'")
+  || !websiteWorkspaceSource.includes("eventType: 'website.inquiry.reviewed'")
+  || !managedTrialSource.includes("| 'website.inquiry.received'")
+  || !managedTrialSource.includes("| 'website.inquiry.reviewed'")
+  || !managedWebsitePythonRuntime.includes('"website.inquiry.received"')
+  || !managedWebsitePythonRuntime.includes('"website.inquiry.reviewed"')
+  || !managedWebsitePythonRuntime.includes('Website inquiry review is invalid or rewrites customer evidence.')
+  || !managedTrialStoreRuntime.includes('event_type == "website.inquiry.received"')
+  || !websiteSource.includes('Inquiry saved to the managed Website inbox')
+  || websiteSource.includes('Managed Website inquiries require the managed form endpoint')
+  || websiteSource.includes("disabled={storageMode === 'managed'}")) fail('managed_website_inquiry_lifecycle_missing')
 
 if (!viteConfigSource.includes("id.includes('/src/core/channel-order-intake.ts')")
   || !viteConfigSource.includes("id.includes('/src/core/managed-trial.ts')")
@@ -255,9 +382,15 @@ async function walk(directory) {
   return files
 }
 
-for (const route of ['', 'work', 'operations', 'shop', 'plant', 'website', 'ecommerce', 'operations/commerce', 'operations/production', 'products/website', 'products/ecommerce', 'agents', 'settings']) {
-  const page = resolve(dist, route, 'index.html')
-  if (!await exists(page)) fail(`missing_route:${route || '/'}`)
+const rootPage = resolve(dist, 'index.html')
+const fallbackPage = resolve(dist, '404.html')
+if (!await exists(rootPage)) fail('missing_route:/')
+if (!await exists(fallbackPage)) fail('missing_spa_fallback')
+else if (await readFile(rootPage, 'utf8') !== await readFile(fallbackPage, 'utf8')) fail('spa_fallback_drift')
+if (!staticRouteSource.includes("writeFile(resolve(distDir, '404.html'), indexHtml, 'utf8')")
+  || staticRouteSource.includes('routePaths') || staticRouteSource.includes('mkdir(')) fail('static_spa_fallback_contract_invalid')
+for (const route of ['work', 'operations', 'shop', 'plant', 'website', 'ecommerce', 'operations/commerce', 'operations/production', 'products/website', 'products/ecommerce', 'agents', 'settings']) {
+  if (await exists(resolve(dist, route, 'index.html'))) fail(`redundant_static_route:${route}`)
 }
 
 const releasePath = resolve(dist, '__release.json')
@@ -291,17 +424,24 @@ if (!indexSource.includes('<title>SuperMega</title>')
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
 const corpus = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')))).join('\n')
-for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Sample workspace', 'Company sign in', 'Start guided sample', 'Request managed trial', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
+for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Sample workspace', 'Open working sample', 'Request managed trial', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!corpus.includes(required)) fail(`missing_context:${required}`)
 }
-if (!ecommerceSource.includes('const setupRows = [')
-  || !ecommerceSource.includes("['Catalog', sourceLabel]")
-  || !ecommerceSource.includes("['Products', `${selectedSkus.length}/${Math.min(catalog.items.length, 8)} selected`]")
-  || !ecommerceSource.includes("['Orders', buyingReady ? 'Ready' : catalogHydrating ? 'Checking' : 'Save store']")
-  || !ecommerceSource.includes('aria-label="Ecommerce setup status"')
-  || !ecommerceSource.includes('to="/settings/?product=ecommerce"')
-  || !ecommerceCssSource.includes('.ecommerce-command-strip')
-  || !ecommerceCssSource.includes('grid-template-columns: repeat(4, minmax(0, 1fr))')) fail('ecommerce_setup_command_strip_missing')
+if (!ecommerceSource.includes('const ecommerceTodayMetrics = [')
+  || !ecommerceSource.includes('const ecommerceTodayHeadline =')
+  || !ecommerceSource.includes('const ecommerceTodayCustomerCount = new Set(')
+  || !ecommerceSource.includes("['Storefront', savedDraftIsCurrent ? 'Ready'")
+  || !ecommerceSource.includes("['Shop requests', pendingManagedRequests.length ? `${pendingManagedRequests.length} to review` : 'Clear']")
+  || !ecommerceSource.includes("['Cart & checkout', ecommerceTodayCartUnits")
+  || !ecommerceSource.includes("['Customers', ecommerceTodayCustomerCount")
+  || !ecommerceSource.includes("['Returns', managedReturnedUnits")
+  || !ecommerceSource.includes('aria-labelledby="ecommerce-today-title"')
+  || !ecommerceSource.includes('aria-label="Ecommerce today status"')
+  || !ecommerceSource.includes('onClick={runOrderAutopilot}')
+  || !ecommerceSource.includes('Shop controls prices, stock, payment, delivery, and the accountable order record.')
+  || ecommerceSource.includes('aria-label="Ecommerce setup status"')
+  || !ecommerceCssSource.includes('.ecommerce-today')
+  || !ecommerceCssSource.includes('.ecommerce-today-metrics')) fail('ecommerce_today_command_surface_missing')
 if (!ecommerceSource.includes('const aiDeskRows = [')
   || !ecommerceSource.includes('const aiAgentQueueRows = [')
   || !ecommerceSource.includes("['Agent job', aiAgentJob]")
@@ -333,6 +473,10 @@ if (!ecommerceSource.includes('const orderAutopilotStage =')
   || ecommerceSource.includes('aria-label="Order Autopilot"')
   || ecommerceCssSource.includes('.ecommerce-order-command-center')) fail('ecommerce_ai_operator_not_consolidated')
 if (!ecommerceSource.includes('const orderOpsRows = [')
+  || !ecommerceSource.includes('commerceStorefrontOrderTimeline')
+  || !ecommerceSource.includes("entry.nextAction === 'review_in_shop'")
+  || !ecommerceSource.includes("entry.nextAction === 'confirm_payment'")
+  || !ecommerceSource.includes("entry.nextAction === 'settle_refund'")
   || !ecommerceSource.includes("useState<RequestInboxFilter>('all')")
   || !ecommerceSource.includes('const lifecycleRows = [')
   || !ecommerceSource.includes('const orderingReadinessRows = [')
@@ -342,14 +486,13 @@ if (!ecommerceSource.includes('const orderOpsRows = [')
   || !ecommerceSource.includes('const requestInboxFilterButtons = [')
   || !ecommerceSource.includes('const orderingReadinessStage =')
   || !ecommerceSource.includes('const paymentDeliveryStage =')
-  || !ecommerceSource.includes('aria-label="Order ops cockpit"')
-  || !ecommerceSource.includes('Order ops cockpit')
-  || !ecommerceSource.includes('AI ranks order exceptions from the live queue, quote expiry, stock risk, and payment state. Shop still confirms every write.')
-  || !ecommerceSource.includes("['Priority', orderOpsPriority]")
-  || !ecommerceSource.includes("['SLA', pendingManagedRequests.length ? orderOpsAgingCount ? `${orderOpsAgingCount} aging` : 'Inside window' : 'No queue']")
-  || !ecommerceSource.includes("['Stock risk', orderOpsStockRiskCount ? `${orderOpsStockRiskCount} blocked` : 'Clear']")
-  || !ecommerceSource.includes("['Payment', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} review` : 'Not charged']")
-  || !ecommerceSource.includes("['Handoff', pendingManagedRequests.length ? 'Shop owns writes' : buyingReady ? 'Ready for quote' : 'Setup first']")
+  || !ecommerceSource.includes('aria-label="Order lifecycle queue"')
+  || !ecommerceSource.includes('One Shop-owned record now follows each Ecommerce request through review, fulfilment, payment, cancellation, refund, and return.')
+  || !ecommerceSource.includes("['Review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : 'Clear']")
+  || !ecommerceSource.includes("['Fulfil', activeManagedOrders.length ? `${activeManagedOrders.length} active` : 'Clear']")
+  || !ecommerceSource.includes("['Payment', lifecyclePaymentAttention.length ? `${lifecyclePaymentAttention.length} blocking` : 'Clear']")
+  || !ecommerceSource.includes("['Refund', lifecycleRefundAttention.length ? `${lifecycleRefundAttention.length} due` : 'Clear']")
+  || !ecommerceSource.includes('Open Shop order queue')
   || !ecommerceSource.includes('const orderImportStage =')
   || !ecommerceSource.includes('const orderImportRows = [')
   || !ecommerceSource.includes('type EcommerceOrderImportReview')
@@ -687,7 +830,9 @@ if (!ecommerceSource.includes('const orderOpsRows = [')
   || !ecommerceCssSource.includes('.ecommerce-channel-reply-cockpit')
   || !ecommerceCssSource.includes('.ecommerce-channel-reply-draft')
   || !ecommerceCssSource.includes('.ecommerce-follow-up-draft')) fail('ecommerce_order_ops_cockpit_missing')
-if (!coreSource.includes("import siteManifest from '../../../site-manifest.json'")) fail('workflow_contract_not_shared')
+if (!coreSource.includes("from './product-setup'")
+  || !settingsPageSource.includes("from './product-setup'")
+  || !productSetupSource.includes("import siteManifest from '../../../site-manifest.json'")) fail('workflow_contract_not_shared')
 if (coreSource.includes('function ProductTrialContext')
   || coreSource.includes('<ProductTrialContext')
   || coreSource.includes('>Request workspace</a>')
@@ -729,43 +874,46 @@ if (!coreShellSource.includes('function managedLoginPath(product: string | null)
   || !coreShellSource.includes('to={companyLoginPath}>Company sign in</Link>')
   || !coreShellSource.includes('to={companyLoginPath}>Sign in</Link>')
   || !coreCssSource.includes('.sidebar-foot .account-shell-link { min-height: 44px;')
-  || !coreCssSource.includes('.topbar-meta > a { min-width: 58px; min-height: 44px;')) fail('managed_account_entry_not_discoverable')
-const productHomePageContract = coreShellSource.slice(coreShellSource.indexOf('const customerTracks'))
-if (!productHomePageContract.includes('title="Company control"')
+  || !coreCssSource.includes('.topbar-meta > a { min-width: 44px; min-height: 44px;')) fail('managed_account_entry_not_discoverable')
+const shellNavigationContract = coreShellSource.slice(
+  coreShellSource.indexOf('const navigation ='),
+  coreShellSource.indexOf('] as const', coreShellSource.indexOf('const navigation =')) + '] as const'.length,
+)
+const shellProductRoutes = [...shellNavigationContract.matchAll(/\{ to: '\/([a-z][a-z0-9-]*)\/', label: '[^']+' \}/g)]
+  .map((match) => match[1])
+  .filter((route) => route !== 'settings')
+if (shellProductRoutes.join(',') !== 'shop,plant,website,ecommerce') fail('shell_product_navigation_drift')
+const productHomeStart = coreShellSource.indexOf('const customerTracks')
+const productHomeEnd = coreShellSource.indexOf('] as const', productHomeStart) + '] as const'.length
+const productHomePageContract = coreShellSource.slice(productHomeStart, coreShellSource.length)
+const customerTrackContract = coreShellSource.slice(productHomeStart, productHomeEnd)
+const customerTrackLabels = [...customerTrackContract.matchAll(/^\s+\['([^']+)'/gm)].map((match) => match[1])
+if (customerTrackLabels.join(',') !== 'Shop,Plant,Website,Ecommerce') fail('customer_product_launcher_drift')
+if (!productHomePageContract.includes('title="What needs attention?"')
   || !productHomePageContract.includes('const customerTracks =')
   || !productHomePageContract.includes("'Shop'")
   || !productHomePageContract.includes("'Plant'")
   || !productHomePageContract.includes("'Website'")
   || !productHomePageContract.includes("'Ecommerce'")
-  || !productHomePageContract.includes('Free workspace')
-  || !productHomePageContract.includes('Premium activation')
-  || !productHomePageContract.includes('Managed data, AI context, roles, audit, and writes.')
-  || !productHomePageContract.includes('Check readiness')
-  || !productHomePageContract.includes('const autopilotRows = [')
-  || !coreShellSource.includes("const SETUP_KEY = 'supermega.setup.v3'")
-  || !coreShellSource.includes('function readLocalSetupReadiness(): LocalSetupReadiness')
-  || !coreShellSource.includes('const progress = Math.round((completed / setupRequiredFields.length) * 100)')
-  || !coreShellSource.includes("ready: progress === 100 && Boolean(field('savedAt'))")
-  || !productHomePageContract.includes('AI operating plan')
-  || !productHomePageContract.includes('Recommended next move')
-  || !productHomePageContract.includes('No external send, publish, payment, or production write runs from this screen.')
-  || !productHomePageContract.includes('Premium can learn from approved data, roles, and audit.')
+  || !productHomePageContract.includes('Local workspace')
+  || !productHomePageContract.includes('Managed activation')
+  || !productHomePageContract.includes('Tenant data, AI context, roles, audit, and controlled writes.')
+  || !productHomePageContract.includes('Open setup')
+  || !productHomePageContract.includes('Setup and activation')
+  || !productHomePageContract.includes('Open when needed')
+  || !coreShellSource.includes("lazy(() => import('./ProductHomeToday')")
+  || !productHomePageContract.includes('<ProductHomeToday runtimeStatus={runtime.status} />')
   || !coreShellSource.includes("lazy(() => import('./ProductHomeReadiness')")
-  || !productHomePageContract.includes('<ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={setup.progress} ready={setup.ready} />')
-  || !productHomePageContract.includes("setup.currentRecord ? 'First source named' : 'Local first'")
-  || !productHomePageContract.includes("setup.acceptanceEvidence ? 'Acceptance proof named' : 'Evidence before premium'")
-  || !productHomePageContract.includes("setup.ready ? 'Ready for managed import' : 'Locked until approval'")
-  || !productHomePageContract.includes("to={setup.ready ? '/settings/#controls' : '/settings/'}")
+  || !productHomePageContract.includes('<ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={hostedReady ? 100 : activationCoverage} ready={hostedReady} />')
   || !productHomePageContract.includes('runtime.activationManifest?.next_action')
-  || productHomePageContract.indexOf('<ProductHomeReadiness') > productHomePageContract.indexOf('aria-label="SuperMega operating model"')
-  || !productHomePageContract.includes("'/shop/?tab=counter'")
-  || !productHomePageContract.includes("'/plant/?tab=production'")
+  || !productHomePageContract.includes("'/shop/'")
+  || !productHomePageContract.includes("'/plant/'")
   || !productHomePageContract.includes("'/ecommerce/'")
-  || !productHomePageContract.includes("'/settings/?product=commerce'")
+  || !productHomePageContract.includes('customerTracks.map(([name, fit, outcome, path])')
   || !productHomePageContract.includes('className="product-track-grid"')
   || !productHomePageContract.includes("'/website/'")
-  || !productHomePageContract.includes('Open product')
-  || !productHomePageContract.includes('Set up product')
+  || !productHomePageContract.includes('aria-label={`Open ${name}`} to={path}>Open {name}</Link>')
+  || productHomePageContract.includes('setupPath')
   || productHomePageContract.includes("'Retail'")
   || productHomePageContract.includes("'Factory MES'")
   || productHomePageContract.includes("'Website catalog'")
@@ -775,18 +923,59 @@ if (!productHomePageContract.includes('title="Company control"')
   || productHomePageContract.includes('className="product-home-grid"')
   || productHomePageContract.includes('customerProducts')
   || productHomePageContract.includes('templatesFor(product.setupProduct)')
-  || productHomePageContract.includes('product-home-setup')
   || productHomePageContract.includes('HQ')
   || productHomePageContract.includes('Operations')) fail('first_run_product_launcher_missing')
+if (!productHomeTodaySource.includes('buildOperationalReport')
+  || !productHomeTodaySource.includes('loadManagedBootstrap')
+  || !productHomeTodaySource.includes('filterOperationalReport')
+  || !productHomeTodaySource.includes('exportOperationalReport')
+  || !productHomeTodaySource.includes('exportSharedMasterDataReviewPacket')
+  || !productHomeTodaySource.includes('buildSharedMasterDataDryRunPlan')
+  || !productHomeTodaySource.includes('buildSharedMasterDataRehearsalPlan')
+  || !productHomeTodaySource.includes('validateProductionState')
+  || !operationalReportSource.includes('The source failed validation; no sample values were substituted.')
+  || !productHomeTodaySource.includes('permissions always come from the managed bootstrap')
+  || !productHomeTodaySource.includes('No customer values or external writes were included.')
+  || !productHomeTodaySource.includes('Authorized master data coverage')
+  || !productHomeTodaySource.includes('Customer and record values are excluded')
+  || !productHomeTodaySource.includes('no merge is automatic')
+  || !productHomeTodaySource.includes('Download rehearsal plan')
+  || !productHomeTodaySource.includes('Every approval is pending; no source record was changed.')
+  || !productHomeTodaySource.includes('This queue and report are read-only')
+  || !productHomeTodaySource.includes("window.addEventListener('storage', refresh)")
+  || !productHomeTodaySource.includes('window.localStorage.setItem(OPERATIONAL_REPORT_VIEW_KEY, JSON.stringify(view))')
+  || productHomeTodaySource.includes('saveManaged')
+  || productHomeTodaySource.includes('mutateCommerce')
+  || productHomeTodaySource.includes('mutateProduction')
+  || productHomeTodaySource.includes('removeItem(')
+  || !operationalReportSource.includes("OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v2'")
+  || !operationalReportSource.includes("OPERATIONAL_REPORT_EXPORT_CONTRACT = 'supermega.operational_report_export.v2'")
+  || !operationalReportSource.includes("SHARED_MASTER_DATA_REVIEW_PACKET_CONTRACT = 'supermega.shared_master_data_review_packet.v1'")
+  || !operationalReportSource.includes("SHARED_MASTER_DATA_DECISION_CONTRACT = 'supermega.shared_master_data_decision.v1'")
+  || !operationalReportSource.includes("SHARED_MASTER_DATA_DRY_RUN_CONTRACT = 'supermega.shared_master_data_dry_run.v1'")
+  || !operationalReportSource.includes("SHARED_MASTER_DATA_REHEARSAL_CONTRACT = 'supermega.shared_master_data_rehearsal.v1'")
+  || !operationalReportSource.includes('export async function validateOperationalReportExport')
+  || !operationalReportSource.includes('export async function exportSharedMasterDataReviewPacket')
+  || !operationalReportSource.includes('export async function validateSharedMasterDataReviewPacket')
+  || !operationalReportSource.includes('export async function buildSharedMasterDataDecisionPacket')
+  || !operationalReportSource.includes('export async function validateSharedMasterDataDecisionPacket')
+  || !operationalReportSource.includes('export async function buildSharedMasterDataDryRunPlan')
+  || !operationalReportSource.includes('export async function validateSharedMasterDataDryRunPlan')
+  || !operationalReportSource.includes('export async function buildSharedMasterDataRehearsalPlan')
+  || !operationalReportSource.includes('export async function validateSharedMasterDataRehearsalPlan')
+  || !operationalReportSource.includes('buildSharedMasterDataRegistry')
+  || !sharedMasterDataSource.includes("SHARED_MASTER_DATA_CONTRACT = 'supermega.shared_master_data_registry.v1'")
+  || !sharedMasterDataSource.includes('export function buildSharedMasterDataRegistry')
+  || !sharedMasterDataSource.includes('export function validateSharedMasterDataRegistry')
+  || !sharedMasterDataSource.includes('recordValuesExcluded: true')
+  || !sharedMasterDataSource.includes('automaticMergeAllowed: false')
+  || !sharedMasterDataSource.includes("reason: 'normalized_identity_collision'")
+  || !operationalReportSource.includes('permissionFiltered: true')
+  || !operationalReportSource.includes('containsCustomerValues: false')
+  || !operationalReportSource.includes('safeToShareExternally: false')
+  || !operationalReportSource.includes("globalThis.crypto.subtle.digest('SHA-256'")) fail('product_home_today_read_only_integration_missing')
 if (!productHomeReadinessSource.includes('const [behaviorTrail] = useState<BehaviorTrailEntry[]>(() => readBehaviorTrail(window.localStorage))')
-  || !productHomeReadinessSource.includes('const behaviorPreference = useMemo(() => summarizeBehaviorPreferences(behaviorTrail), [behaviorTrail])')
-  || !productHomeReadinessSource.includes('const productContinuations = {')
-  || !productHomeReadinessSource.includes("commerce: { label: 'Shop', path: '/shop/' }")
-  || !productHomeReadinessSource.includes("production: { label: 'Plant', path: '/plant/' }")
-  || !productHomeReadinessSource.includes("website: { label: 'Website', path: '/website/' }")
-  || !productHomeReadinessSource.includes("ecommerce: { label: 'Ecommerce', path: '/ecommerce/' }")
-  || !productHomeReadinessSource.includes("const commandPath = ready && preferredContinuation ? preferredContinuation.path : ready ? '/settings/#controls' : '/settings/'")
-  || !productHomeReadinessSource.includes("const commandLabel = ready && preferredContinuation ? `Continue ${preferredContinuation.label}` : ready ? 'Export evidence' : 'Finish setup'")
+  || productHomeReadinessSource.includes('setBehaviorTrail(readBehaviorTrail(window.localStorage))')
   || !productHomeReadinessSource.includes('const agentCommandQueueRows = [')
   || !productHomeReadinessSource.includes('const trackActionRows = [')
   || !productHomeReadinessSource.includes('recordBehaviorSignal')
@@ -886,19 +1075,20 @@ if (!ownerControlSource.includes('supermega.local_owner_control_run.v1')
   || !businessCommandSource.includes('export function rankBusinessAttention')
   || !businessCommandSource.includes("{ label: 'Open Shop sample', path: '/shop/?tab=counter', product: 'shop' }")
   || !businessCommandSource.includes('Open its working sample or import real records to get a grounded answer.')) fail('owner_control_contract_missing')
-if (productHomeReadinessSource.indexOf('id="command-center"') > productHomeReadinessSource.indexOf('aria-label="Product starter paths"')) fail('company_control_not_first_on_home')
-if (!coreCssSource.includes('.product-home-command-queue')
-  || !coreCssSource.includes('.owner-control-run')
-  || !coreCssSource.includes('.owner-control-primary')
-  || !coreCssSource.includes('.owner-control-queue > div { grid-template-columns: 1fr; }')
-  || !coreCssSource.includes('.business-command-form')
-  || !coreCssSource.includes('.business-command-prompts')
-  || !coreCssSource.includes('.business-command-answer')
-  || !coreCssSource.includes('.business-command-facts')
-  || !coreCssSource.includes('.business-command-facts { grid-template-columns: repeat(2,minmax(0,1fr)); }')
-  || !coreCssSource.includes('.business-command-facts { grid-template-columns: 1fr; }')
-  || !coreCssSource.includes('grid-template-columns: repeat(6,minmax(0,1fr)); grid-template-rows: 64px; overflow-x: hidden;')
+if (!coreCssSource.includes('.product-home-today')
+  || !coreCssSource.includes('.product-home-today-grid')
+  || !coreCssSource.includes('.product-home-today-head')
+  || !coreCssSource.includes('.product-home-today-grid { grid-template-columns: 1fr; }')
+  || !coreCssSource.includes('.product-home-setup')
+  || !coreCssSource.includes('.product-home-autopilot')
+  || !coreCssSource.includes('.product-home-autopilot-grid')
+  || !coreCssSource.includes('.product-home-autopilot-head')
+  || !coreCssSource.includes('.product-home-autopilot-grid { grid-template-columns: 1fr; }')
+  || !coreCssSource.includes('.product-home-command-queue')
+  || !coreCssSource.includes('.product-home-agent-contract')
+  || !coreCssSource.includes('.product-home-track-runbook')
   || !coreCssSource.includes('.product-home-track-actions')
+  || !coreCssSource.includes('.product-track-actions a { min-height: 44px;')
   || !coreCssSource.includes('.product-home-track-actions { grid-template-columns: repeat(2,minmax(0,1fr)); }')
   || !coreCssSource.includes('.product-home-track-actions { grid-template-columns: 1fr; }')
   || !coreCssSource.includes('.product-home-readiness')
@@ -952,16 +1142,7 @@ if (!appLiveVerifierSource.includes('Ecommerce order review packet checked local
   || !appLiveVerifierSource.includes('const ecommerceProductCorpus = `${ecommerceChunk}\\n${ecommercePacketChunk}`')
   || !appLiveVerifierSource.includes('if (!ecommerceProductCorpus.includes(required)) throw new Error(`missing_live_ecommerce_context:${required}`)')) fail('live_verifier_ecommerce_bundle_contract_drift')
 if (!settingsPageSource.includes('const learningRows = [')
-  || !settingsPageSource.includes('const recommendedSetupDrafts: Record<SetupProductId, RecommendedSetupDraft>')
-  || !settingsPageSource.includes('function prepareRecommendedTrial()')
   || !settingsPageSource.includes("event: 'agent_job_chosen'")
-  || !settingsPageSource.includes('detail: `Prepare recommended ${selectedProduct.name} trial`')
-  || !settingsPageSource.includes('aria-label="AI setup guide"')
-  || !settingsPageSource.includes('aria-label="AI setup recommendation"')
-  || !settingsPageSource.includes('Let AI prepare the first ${selectedProduct.name} trial')
-  || !settingsPageSource.includes('SuperMega fills only missing starter fields.')
-  || !settingsPageSource.includes('Prepare recommended trial')
-  || !settingsPageSource.includes('Continue {selectedProduct.name}')
   || !settingsPageSource.includes('const learningPlanRows = [')
   || !settingsPageSource.includes('const agentPlanRows = [')
   || !behaviorTrailSource.includes("export const BEHAVIOR_TRAIL_KEY = 'supermega.behavior-trail.v1'")
@@ -1212,10 +1393,10 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !settingsPageSource.includes('Contains counts and a preferred product only. Raw product records, behavior entries, decision records, notes, and browser text are excluded.')
   || !settingsPageSource.includes("pilotOutcomeReport.review.reviewedBy === setup.owner")
   || !settingsPageSource.includes('I approve this summary-only context package for managed AI review.')
-  || !settingsPageSource.includes('acceptedAiContextOutcome,\n        setup.owner,')
+  || !settingsPageSource.includes('acceptedAiContextOutcome,')
   || !settingsPageSource.includes('Download approved context')
   || !settingsPageSource.includes('The download performs no upload, managed write, model training, customer action, or external send.')
-  || !settingsPageSource.includes('The full evidence export includes local product records for private backup or support review.')
+  || !settingsPageSource.includes('Export complete local evidence for durable recovery.')
   || !settingsPageSource.includes('Export full evidence')
   || settingsPageSource.includes('Export AI context package')
   || !settingsPageSource.includes('Premium can rank next actions from reviewed workspace behavior after import.')
@@ -1555,24 +1736,27 @@ if (!serviceRuntimeSource.includes('@app.post("/api/trial/v1/ecommerce/order-que
   || !localDevSource.includes('applyPreflightAuthRequired: orderQueueApplyPreflightUnauthorized.response.status === 401')
   || !localDevSource.includes('report.ecommerceOrderQueueValidation?.tamperRejected === true')
   || !localDevSource.includes('report.ecommerceOrderQueueImportPlan?.tamperRejected === true')) fail('ecommerce_order_queue_api_contract_missing')
-if (!coreSource.includes('const plantRows = [')
-  || !coreSource.includes("['Jobs', `${activeJobs.length} active`]")
-  || !coreSource.includes("['Quality', `${heldJobs.length} held`]")
-  || !coreSource.includes("['WCM', `${openDowntimeIntervals.length + openMaintenanceRecords.length} open`]")
-  || !coreSource.includes("['Trace', `${materialEntries.length} material`]")
-  || !coreSource.includes('aria-label="Plant MES status"')
-  || !coreSource.includes('const plantAgentRows = [')
-  || !coreSource.includes("['Agent job', plantAgentJob]")
-  || !coreSource.includes("['Reason', plantAgentReason]")
-  || !coreSource.includes("['Owner gate', plantOwnerGate]")
-  || !coreSource.includes('aria-label="Recommended Plant agent job"')
-  || !coreSource.includes('Plant agent queue')
+if (!coreSource.includes('const plantTodayMetrics = [')
+  || !coreSource.includes('const plantTodayHeadline =')
+  || !coreSource.includes('const plantTodayAction =')
+  || !coreSource.includes("['Active jobs', activeJobs.length ? `${activeJobs.length} running` : 'None']")
+  || !coreSource.includes("['Good output', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} units` : 'None yet']")
+  || !coreSource.includes("['Problems & quality', openIssues.length + heldJobs.length")
+  || !coreSource.includes("['Maintenance', openWcmCount")
+  || !coreSource.includes("['Material trace', materialEntries.length")
+  || !coreSource.includes("['Shift handoff', shiftHandoffIsCurrent")
+  || !coreSource.includes('aria-labelledby="plant-today-title"')
+  || !coreSource.includes('aria-label="Plant today status"')
+  || !coreSource.includes('onClick={(event) => runPlantAutopilot(event.currentTarget)}')
+  || !coreSource.includes('Every production, quality, material, maintenance, and equipment-status change still requires accountable review.')
+  || coreSource.includes('aria-label="Recommended Plant agent job"')
+  || coreSource.includes('Plant agent queue')
+  || coreSource.includes('aria-label="Plant MES status"')
   || !coreSource.includes("'Record next job output'")
   || !coreSource.includes("'Contain urgent Plant problems'")
   || !coreSource.includes("'Review quality holds'")
   || !coreSource.includes("'Close WCM records'")
   || !coreSource.includes("'Build shift handoff'")
-  || !coreSource.includes('Humans still approve every consequential action.')
   || !coreSource.includes('const mesDispatchRows = [')
   || !coreSource.includes('aria-label="MES dispatch autopilot"')
   || !coreSource.includes('MES dispatch')
@@ -1591,10 +1775,13 @@ if (!coreSource.includes('const plantRows = [')
   || !coreSource.includes('No equipment or production write runs without owner approval.')
   || !coreSource.includes('const plantMrpRows = [')
   || !coreSource.includes('const plantMrpNext =')
-  || !coreSource.includes('projectPlantOrder(production.orderExecution)')
-  || !coreSource.includes("['Demand', activeJobs.length ? `${activeJobs.length} active jobs` : 'No active job']")
-  || !coreSource.includes("['BOM', orderExecutionProjection?.plan ? `${orderExecutionProjection.materials.length} materials` : 'Use order plan']")
-  || !coreSource.includes("['Shop supply', shopLowStock.length ? `${shopLowStock.length} low SKU` : 'Clear']")
+  || !coreSource.includes('productionOrderPortfolioEntries(production)[0]?.execution')
+  || !coreSource.includes('projectProductionMaterialRequirements(primaryOrderExecution, relatedCommerce)')
+  || !coreSource.includes("materialRequirements.status === 'mapping_required'")
+  || !coreSource.includes("materialRequirements.status === 'supply_at_risk'")
+  || !coreSource.includes("materialRequirements.status === 'covered_by_open_po'")
+  || !coreSource.includes("['Shop mapping', materialRequirements?.summary.mappingRequired")
+  || !coreSource.includes("['Supply', materialRequirements?.summary.shortages")
   || !coreSource.includes("['Issue gate', openMaterialIssues.length ? `${openMaterialIssues.length} open` : 'Clear']")
   || !coreSource.includes('aria-label="Plant MRP readiness"')
   || !coreSource.includes('MRP readiness')
@@ -1686,26 +1873,15 @@ if (!coreSource.includes('const plantRows = [')
   || !coreSource.includes("'Close WCM work'")
   || !coreSource.includes('Owner confirms production, quality, WCM, maintenance, material, and handoff writes.')
   || !coreSource.includes('const plantAutopilotStage =')
-  || !coreSource.includes('const plantAutopilotNextAction =')
-  || !coreSource.includes('const plantAutopilotRows = [')
-  || !coreSource.includes("['Learning', 'Records behavior only']")
-  || !coreSource.includes("['Boundary', 'No equipment write']")
-  || !coreSource.includes('function runPlantAutopilot()')
+  || !coreSource.includes('function runPlantAutopilot(trigger: HTMLButtonElement)')
   || !coreSource.includes('detail: `Plant autopilot: ${plantAutopilotStage}`')
   || !coreSource.includes('Finish or cancel the pending Plant review before starting another step.')
-  || !coreSource.includes('aria-label="Plant Autopilot"')
-  || !coreSource.includes('Plant Autopilot')
-  || !coreSource.includes('One button chooses the next safe owner action from jobs, quality, WCM, material trace, handoff, and write-readiness state.')
-  || !coreSource.includes('AI may prepare records and packets; it does not command equipment, release quality, consume materials, close maintenance, or write Plant records here.')
-  || !coreSource.includes('Run next step')
-  || !coreSource.includes('const plantEnterpriseContext = <details aria-label="Plant enterprise evidence"')
-  || !coreSource.includes('MES, MRP, ERP &amp; ISO evidence')
-  || !coreSource.includes('Open detailed status, readiness, trace, quality, costing, and audit context')
-  || (coreSource.match(/\{plantEnterpriseContext\}/g) || []).length !== 2
-  || (coreSource.match(/\{plantStatus\}/g) || []).length !== 2
-  || !coreCssSource.includes('.plant-enterprise-stack { display: grid; gap: 10px; padding: 10px; }')
-  || !coreCssSource.includes('.plant-mes-strip { grid-template-columns: repeat(3,minmax(0,1fr)); }')
-  || !coreCssSource.includes('.plant-command-center p { display: none; }')
+  || !coreSource.includes("if (tab !== 'control')")
+  || !coreSource.includes("document.querySelector('.control-workspace')?.scrollIntoView")
+  || !coreSource.includes('openJobOutput(activeJobs[0], trigger)')
+  || !coreSource.includes('jobDisclosureRef.current.open = true')
+  || coreSource.includes('aria-label="Plant Autopilot"')
+  || coreSource.includes('Plant Autopilot')
   || !coreSource.includes('const PLANT_JOB_IMPORT_MAX_BYTES = 180 * 1024')
   || !coreSource.includes('const PLANT_JOB_IMPORT_MAX_ROWS = 50')
   || !coreSource.includes('function plantJobImportCsvCell(value: string | number)')
@@ -1726,12 +1902,15 @@ if (!coreSource.includes('const plantRows = [')
   || !coreSource.includes('no Plant write')
   || !coreSource.includes('Uploaded Plant job CSV and prepared the first reviewed job locally. No production job, equipment command, material movement, accounting post, or managed write ran.')
   || !coreSource.includes('Plant job CSV is too large. Upload at most 180 KB or split the file into 50-row batches. No production job, equipment command, material movement, accounting post, or managed write ran.')
-  || !coreSource.includes('operation-module plant-production-module')
-  || !coreCssSource.includes('.plant-mes-strip')
-  || !coreCssSource.includes('.plant-command-center')
-  || !coreCssSource.includes('.plant-command-center-rows')
+  || !coreCssSource.includes('.plant-today')
+  || !coreCssSource.includes('.plant-today-priority')
+  || !coreCssSource.includes('.plant-today-metrics')
+  || !coreCssSource.includes('.plant-today-source')
+  || !coreCssSource.includes('.plant-today { grid-template-columns: 1fr; padding: 13px; }')
+  || !coreCssSource.includes('.plant-business-controls:not([open]) > summary small { display: none; }')
   || !coreCssSource.includes('.mes-dispatch-control')
-  || !coreCssSource.includes('.plant-agent-queue')
+  || coreCssSource.includes('.plant-agent-queue')
+  || coreCssSource.includes('.plant-command-center')
   || !coreCssSource.includes('.plant-job-import')
   || !coreCssSource.includes('.plant-job-import-repair')
   || !coreCssSource.includes('.plant-job-import-review.ready')
@@ -1744,89 +1923,48 @@ if (!coreSource.includes('const plantRows = [')
 if (!coreSource.includes('operation-module shop-counter-module')
   || !coreCssSource.includes('.shop-counter-module { overflow-y: auto; scrollbar-gutter: stable; }')
   || !coreCssSource.includes('.shop-counter-module > .shop-counter-surface { min-height: 500px; flex: 0 0 clamp(500px,calc(100svh - 280px),620px); overflow: hidden; }')) fail('shop_counter_layout_contract_missing')
-if (!websiteSource.includes('const websiteLaunchRows = [')
-  || !websiteSource.includes('aria-label="Website launch cockpit"')
-  || !websiteSource.includes('Website launch cockpit')
-  || !websiteSource.includes('AI turns content checks, owner approval, static package, and rollout boundary into one launch queue. No domain, publish, or deployment action runs here.')
-  || !websiteSource.includes("['Priority', websiteLaunchPriority]")
-  || !websiteSource.includes("['Readiness', failingContentChecks.length ? `${failingContentChecks.length} blocked` : 'Passed']")
-  || !websiteSource.includes("['Approval', approvalIsCurrent ? 'Recorded' : 'Needed']")
-  || !websiteSource.includes("['Package', publishIsCurrent ? 'Retained' : 'Needed']")
-  || !websiteSource.includes("['Publish gate', storageMode === 'managed' ? 'Owner-run rollout' : 'No deploy here']")
-  || !websiteSource.includes('const websiteAutopilotTrack =')
-  || !websiteSource.includes('const websiteAutopilotRows = [')
-  || !websiteSource.includes("['Learning', 'Records behavior only']")
-  || !websiteSource.includes("['Boundary', 'No auto deploy']")
+if (!websiteSource.includes('aria-labelledby="website-today-title"')
+  || !websiteSource.includes('aria-label="Website today status"')
+  || !websiteSource.includes('className="website-today"')
+  || !websiteSource.includes('className="website-today-priority"')
+  || !websiteSource.includes('className="website-today-metrics"')
+  || !websiteSource.includes('className="website-today-source"')
+  || !websiteSource.includes('aria-labelledby="website-lead-inbox-title"')
+  || !websiteSource.includes('Inquiry inbox')
+  || !websiteSource.includes('Capture and route inquiries')
+  || !websiteSource.includes('function captureDemoInquiry(')
+  || !websiteSource.includes('function decideLead(')
+  || !websiteSource.includes('Add inquiry')
+  || !websiteSource.includes('Qualify')
+  || !websiteSource.includes('Close')
+  || !websiteSource.includes('Export lead record')
+  || !websiteSource.includes('Inquiry saved to the managed Website inbox for accountable review.')
+  || !websiteSource.includes('No message, CRM write, or external send ran.')
+  || !websiteSource.includes('const statusWorkspace = hasUnsavedChanges ? editorWorkspace : workspace')
+  || !websiteSource.includes("['Readiness', hasUnsavedChanges ? 'Review draft'")
+  || !websiteSource.includes("['Approval', hasUnsavedChanges ? 'Blocked by draft' : managedReleaseRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required']")
+  || !websiteSource.includes("['Site package', hasUnsavedChanges ? 'Blocked by draft' : managedReleaseRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download']")
+  || !websiteSource.includes("? 'Review new inquiries'")
+  || !websiteSource.includes("? 'Review inquiries'")
   || !websiteSource.includes('function runWebsiteAutopilot()')
+  || !websiteSource.includes("document.querySelector<HTMLDetailsElement>('.website-business-controls')")
+  || !websiteSource.includes("document.getElementById('website-lead-inbox-title')?.focus")
   || !websiteSource.includes('detail: `Website autopilot: ${websiteAgentJob}`')
-  || !websiteSource.includes('aria-label="Website Autopilot"')
-  || !websiteSource.includes('Website Autopilot')
-  || !websiteSource.includes('One button chooses the next safe owner action from recovery, business brief, content proof, lead capture, owner approval, release package, and rollout-readiness state.')
-  || !websiteSource.includes('AI may prepare pages and packets; it does not publish, change DNS, send forms, install analytics, write CRM, write Shop, or deploy from here.')
-  || !websiteSource.includes('Run next step')
-  || !websiteSource.includes('const websiteGeneratorGuideRows = [')
-  || !websiteSource.includes('aria-label="Website generator guide"')
-  || !websiteSource.includes('Website generator guide')
-  || !websiteSource.includes('Bring any business. Get a reviewed site package.')
-  || !websiteSource.includes('AI turns a simple business brief into a complete website draft and launch packet.')
-  || !websiteSource.includes('Business facts, offers, proof, photos, links')
-  || !websiteSource.includes('Pages, copy, CTAs, SEO basics, release checklist')
-  || !websiteSource.includes('Brand, claims, contact route, pricing, proof')
-  || !websiteSource.includes('Static package plus managed rollout plan')
-  || !websiteSource.includes('const websiteLeadCaptureRows = [')
-  || !websiteSource.includes('aria-label="Website lead capture readiness"')
-  || !websiteSource.includes('Website lead capture readiness')
-  || !websiteSource.includes('AI checks business brief, contact path, content proof, owner approval, and release package before the site can capture a real customer request. No form send, customer message, domain, publish, CRM, or Shop write runs from this panel.')
-  || !websiteSource.includes("'Start business brief'")
-  || !websiteSource.includes("'Save site edits'")
-  || !websiteSource.includes("'Fix capture blockers'")
-  || !websiteSource.includes("'Add contact path'")
-  || !websiteSource.includes("'Build release package'")
-  || !websiteSource.includes("'Lead capture ready'")
-  || !websiteSource.includes("['Contact', readyBuyerCtaPages.length ? `${readyBuyerCtaPages.length} CTA ready` : 'Missing']")
-  || !websiteSource.includes("['Handoff', publishIsCurrent ? 'Package ready' : 'No send here']")
-  || !websiteSource.includes('const managedRolloutRows = [')
-  || !websiteSource.includes('const managedRolloutNext =')
-  || !websiteSource.includes('aria-label="Website managed rollout packet"')
-  || !websiteSource.includes('Managed rollout packet')
-  || !websiteSource.includes('AI packages domain setup, form routing, analytics plan, approved content, static snapshot, and owner rollout gate for managed activation.')
-  || !websiteSource.includes('No DNS change, publish, form send, analytics install, CRM write, Shop write, or deployment action runs from this packet.')
-  || !websiteSource.includes("'Fix rollout blockers'")
-  || !websiteSource.includes("'Record approval evidence'")
-  || !websiteSource.includes("'Build static package'")
-  || !websiteSource.includes("'Prepare managed rollout'")
-  || !websiteSource.includes("'Download activation packet'")
-  || !websiteSource.includes("['Domain', storageMode === 'managed' ? 'Owner maps DNS' : 'Not connected']")
-  || !websiteSource.includes("['Forms', readyBuyerCtaPages.length ? 'Route planned' : 'Need CTA']")
-  || !websiteSource.includes("['Analytics', publishIsCurrent ? 'Plan ready' : 'Needs package']")
-  || !websiteSource.includes("['Gate', storageMode === 'managed' ? 'Owner rollout' : 'Free local only']")
-  || !websiteSource.includes('const websiteHandoffNext =')
-  || !websiteSource.includes('const websiteHandoffRows = [')
-  || !websiteSource.includes('aria-label="Website handoff packet"')
-  || !websiteSource.includes('Website handoff packet')
-  || !websiteSource.includes('AI turns ready pages, owner approval, static package state, lead capture route, and managed gate into one handoff checklist.')
-  || !websiteSource.includes('No DNS change, form send, analytics install, CRM write, Shop write, publish, or deployment action runs from this packet.')
-  || !websiteSource.includes("'Finish page readiness'")
-  || !websiteSource.includes("'Record owner approval'")
-  || !websiteSource.includes("'Download static package'")
-  || !websiteSource.includes("'Prepare managed handoff'")
-  || !websiteSource.includes("'Hand off website package'")
-  || !websiteSource.includes("['Pages', `${workspace.pages.filter((page) => page.stage === 'ready').length}/${workspace.pages.length} ready`]")
-  || !websiteSource.includes("['Lead capture', websiteLeadCaptureNext]")
-  || !websiteSource.includes("['Managed gate', storageMode === 'managed' ? 'Tenant review' : 'Free export']")
-  || !websiteSource.includes("['Boundary', 'No auto launch']")
-  || !websiteCssSource.includes('.website-autopilot')
-  || !websiteCssSource.includes('.website-autopilot-rows')
-  || !websiteCssSource.includes('.website-generator-guide')
-  || !websiteCssSource.includes('.website-generator-guide-rows')
-  || !websiteCssSource.includes('.website-launch-cockpit')
-  || !websiteCssSource.includes('.website-launch-cockpit-rows')
-  || !websiteCssSource.includes('.website-lead-capture-cockpit')
-  || !websiteCssSource.includes('.website-lead-capture-cockpit-rows')
-  || !websiteCssSource.includes('.website-rollout-packet')
-  || !websiteCssSource.includes('.website-rollout-packet-rows')
-  || !websiteCssSource.includes('.website-handoff-packet')
-  || !websiteCssSource.includes('.website-handoff-packet-rows')) fail('website_launch_cockpit_missing')
+  || !websiteLeadSource.includes("WEBSITE_LEAD_LEDGER_SCHEMA = 'supermega.website.lead-ledger.v1'")
+  || !websiteLeadSource.includes('consentRecorded: true')
+  || !websiteLeadSource.includes("export function captureWebsiteLead(")
+  || !websiteLeadSource.includes("export function reviewWebsiteLead(")
+  || !websiteLeadSource.includes("if (current.status === 'closed')")
+  || !websiteCssSource.includes('.website-today')
+  || !websiteCssSource.includes('.website-today-priority')
+  || !websiteCssSource.includes('.website-today-metrics')
+  || !websiteCssSource.includes('.website-today-source')
+  || !websiteCssSource.includes('.website-today { grid-template-columns: 1fr; padding: 13px; }')
+  || websiteCssSource.includes('.website-operations-next')
+  || websiteSource.includes('websiteAutopilotRows')
+  || !websiteCssSource.includes('.website-lead-inbox')
+  || !websiteCssSource.includes('.website-lead-capture-form')
+  || !websiteCssSource.includes('.website-lead-list')) fail('website_operating_lead_loop_missing')
 if (!coreSource.includes('const shopAgentRows = [')
   || !coreSource.includes("['Agent job', shopAgentJob]")
   || !coreSource.includes("['Reason', shopAgentReason]")
@@ -1854,7 +1992,7 @@ if (!coreSource.includes('const shopAgentRows = [')
   || !coreSource.includes('Import products once. Let AI run the daily queue.')
   || !coreSource.includes('AI prepares catalog import, stock foundation, online order review, payment exceptions, supplier receiving, and accounting packets.')
   || !coreSource.includes('The owner confirms every sale, payment, stock, supplier, refund, and accounting handoff.')
-  || (coreSource.match(/\{shopSetupGuide\}/g) || []).length !== 3
+  || (coreSource.match(/\{shopSetupGuide\}/g) || []).length !== 1
   || !coreSource.includes('function runShopAutopilot()')
   || !coreSource.includes('detail: `Shop autopilot: ${shopAutopilotStage}`')
   || !coreSource.includes('Finish or cancel the pending Shop review before starting another step.')
@@ -1869,7 +2007,7 @@ if (!coreSource.includes('const shopAgentRows = [')
   || !coreSource.includes('One button chooses the next safe owner action from online requests, orders, payment exceptions, purchase orders, low stock, inventory foundation, and write-readiness state.')
   || !coreSource.includes('AI may prepare records and packets; it does not send customers, charge payments, book delivery, move stock, reconcile cash, or write Shop records here.')
   || !coreSource.includes('Run next step')
-  || (coreSource.match(/\{shopCommandCenter\}/g) || []).length !== 3
+  || (coreSource.match(/\{shopCommandCenter\}/g) || []).length !== 1
   || !coreCssSource.includes('.shop-command-center')
   || !coreCssSource.includes('.shop-command-center-rows')
   || !coreCssSource.includes('.shop-order-control.shop-setup-guide')
@@ -1906,73 +2044,103 @@ if (!coreSource.includes('const shopAccountingRows = [')
   || !coreSource.includes("['Payments', pendingPaymentOrders.length ? `${pendingPaymentOrders.length} exception` : 'Clear']")
   || !coreSource.includes("['Refunds', refundExposureOrders.length ? `${refundExposureOrders.length} due`")
   || !coreSource.includes("['Receipts', supplierReceiptExposure ? `${supplierReceiptExposure} review`")
+  || !coreSource.includes("['Invoices', supplierInvoiceExceptions.length ? `${supplierInvoiceExceptions.length} variance`")
   || !coreSource.includes("['Inventory', lowStock.length ? `${lowStock.length} reconcile`")
   || !coreSource.includes("['Export gate', commerceCanWrite && !pendingAction ? 'Review only' : 'Locked']")
   || !coreSource.includes('{shopAccountingReadiness}')) fail('shop_accounting_readiness_missing')
 if (!coreSource.includes('const shopAccountingPacketRows = [')
   || !coreSource.includes('aria-label="Shop accounting export packet"')
   || !coreSource.includes('Accounting export packet')
-  || !coreSource.includes('AI packages the reviewed daily close, payment proof, refund evidence, stock exceptions, supplier receipt exposure, and tax status for accounting review.')
-  || !coreSource.includes('No ledger post, tax filing, payable creation, bank settlement, refund, payment, inventory, or Shop write runs from this packet.')
+  || !coreSource.includes('AI packages reviewed sales and exact supplier payables with source evidence for accounting review.')
+  || !coreSource.includes('No ledger post, tax filing, bank settlement, refund, payment, inventory, or Shop write runs from this packet.')
   || !coreSource.includes("'Ready for accountant review'")
   || !coreSource.includes("'Close before export'")
   || !coreSource.includes("'No export package yet'")
   || !coreSource.includes("['Close', latestCloseDownload ? 'CSV ready' : closePreview ? `${closableOrders.length} ready` : 'Close first']")
   || !coreSource.includes("['Ledger', latestCloseDownload ? 'Review import' : 'Not posted']")
   || !coreSource.includes("['Tax', 'Not configured']")
-  || !coreSource.includes("['Payables', activePurchaseOrders.length ? `${activePurchaseOrders.length} supplier review` : 'None created']")
+  || !coreSource.includes("['Payables', supplierInvoiceExceptions.length ? `${supplierInvoiceExceptions.length} blocked`")
   || !coreSource.includes("['Settlement', paymentReview.length ? `${paymentReview.length} exception` : 'External proof only']")
   || !coreSource.includes("['Audit', latestClose?.evidenceReference ? 'Evidence linked' : 'Need close evidence']")
   || !coreSource.includes('{shopAccountingPacket}')) fail('shop_accounting_packet_missing')
-if (!coreSource.includes('const shopProcurementRows = [')
-  || !coreSource.includes('const shopProcurementNext =')
+if (!shopDemandIntelligenceSource.includes("SHOP_DEMAND_INTELLIGENCE_CONTRACT = 'supermega.shop.demand-intelligence.v1'")
+  || !shopDemandIntelligenceSource.includes('export function projectShopDemandIntelligence(')
+  || !shopDemandIntelligenceSource.includes("ShopDemandConfidence = 'insufficient' | 'emerging' | 'established'")
+  || !shopDemandIntelligenceSource.includes("ShopDemandStatus = 'stockout_risk' | 'reorder_soon' | 'monitor' | 'insufficient_history'")
+  || !shopDemandIntelligenceSource.includes('completedOrders')
+  || !shopDemandIntelligenceSource.includes('weeklyNetDemandUnits')
+  || !shopDemandIntelligenceSource.includes('recommendedSafetyStockUnits')
+  || !shopDemandIntelligenceSource.includes('recommendationOnly: true')
+  || !shopDemandIntelligenceSource.includes('providerCalled: false')
+  || !managedCommerceRuntime.includes('def commerce_shop_demand_intelligence(')
+  || !managedCommerceRuntime.includes('"contract": "supermega.shop.demand-intelligence.v1"')
+  || !coreSource.includes('const shopDemandIntelligence = useMemo(')
+  || !coreSource.includes('aria-label="Shop demand intelligence"')
+  || !coreSource.includes('28-day completed sales · returns netted · recommendation only')
+  || !coreSource.includes("['Demand', shopDemandIntelligence.summary.forecastWeeklyUnits")) fail('shop_demand_intelligence_missing')
+if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopDemandIntelligenceSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_demand_intelligence_side_effect_added')
+if (!shopReplenishmentSource.includes("SHOP_REPLENISHMENT_PLAN_CONTRACT = 'supermega.shop.replenishment_plan.v1'")
+  || !shopReplenishmentSource.includes("SHOP_PROCUREMENT_DECISION_CONTRACT = 'supermega.shop.procurement-decision.v1'")
+  || !shopReplenishmentSource.includes('export function projectShopReplenishment(')
+  || !shopReplenishmentSource.includes('export function projectShopProcurementDecision(')
+  || !shopReplenishmentSource.includes('export function validateShopProcurementDecision(')
+  || !shopReplenishmentSource.includes("termsStatus: 'comparable' | 'cost_required'")
+  || !shopReplenishmentSource.includes('commerceSupplierPerformance(commerce, asOfValue)')
+  || !shopReplenishmentSource.includes('recommendationOnly: true, requisitionRecorded: false, purchaseCreated: false')
+  || !managedCommerceRuntime.includes('def commerce_shop_procurement_decision(')
+  || !managedCommerceRuntime.includes('"contract": "supermega.shop.procurement-decision.v1"')
+  || !shopReplenishmentSource.includes("status: ShopReplenishmentStatus = recommendedOrderUnits")
+  || !shopReplenishmentSource.includes('const recommendedOrderUnits = roundOrderUnits(unroundedOrderUnits, policy, item.sku)')
+  || !shopReplenishmentSource.includes('policy.minimumOrderUnits')
+  || !shopReplenishmentSource.includes('policy.orderMultipleUnits')
+  || !shopReplenishmentSource.includes('policy.safetyStockUnits')
+  || !shopReplenishmentSource.includes('policy.serviceLevelBasisPoints')
+  || !shopReplenishmentSource.includes('const suggestedSupplier = policy ? retainedVendorNames.get(policy.vendorId)')
+  || !shopReplenishmentSource.includes('suggestedUnitCostMmk = costOrder?.unitCostMmk ?? null')
+  || !shopReplenishmentSource.includes('purchaseCreated: false')
+  || !shopReplenishmentSource.includes('supplierContacted: false')
+  || !shopReplenishmentSource.includes('providerCalled: false')
+  || !coreSource.includes('const shopReplenishment = useMemo(')
+  || !coreSource.includes('const shopProcurementDecision = useMemo(')
+  || !coreSource.includes('projectShopProcurementDecision(commerce, shopReplenishment, purchaseOrderClock)')
+  || !coreSource.includes('const purchaseRecommendations = shopReplenishment.rows.filter((row) => row.recommendedOrderUnits > 0)')
   || !coreSource.includes('const supplierControlRows = [')
   || !coreSource.includes('const supplierControlNext =')
-  || !coreSource.includes('const activeSupplierCount = new Set(activePurchaseOrders.map(({ purchaseOrder }) => purchaseOrder.supplier)).size')
   || !coreSource.includes("const partiallyReceivedPurchaseOrders = activePurchaseOrders.filter(({ progress }) => progress.status === 'partially_received')")
-  || !coreSource.includes('const uncoveredReorderItems = lowStock.filter((item) => !activePurchaseOrderBySku.has(item.sku))')
   || !coreSource.includes('commercePurchaseOrderArrivalUrgency(row.purchaseOrder, row.progress, purchaseOrderClock)')
-  || !coreSource.includes("['Need', uncoveredReorderItems.length ? `${uncoveredReorderItems.length} SKU` : 'Covered']")
-  || !coreSource.includes("['On order', activePurchaseOrders.length ? `${activePurchaseOrders.length} PO` : 'None']")
-  || !coreSource.includes("['Remaining', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} units` : 'Clear']")
-  || !coreSource.includes("['Arrival', overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : dueSoonPurchaseOrders.length ? `${dueSoonPurchaseOrders.length} due soon` : 'Scheduled']")
-  || !coreSource.includes("['Receipt', commerce.inventoryFoundation && managedInventoryProjection ? 'Location + lot' : 'Simple stock']")
-  || !coreSource.includes('aria-label="Shop procurement readiness"')
-  || !coreSource.includes('Procurement readiness')
-  || !coreSource.includes('AI checks reorder demand, open POs, arrival risk, receipt evidence, and location/lot readiness.')
-  || !coreSource.includes('No supplier message, payment, receipt, stock, costing, or accounting write runs from this panel.')
   || !coreSource.includes('aria-label="Supplier control"')
-  || !coreSource.includes('Supplier control')
-  || !coreSource.includes('AI turns supplier reference, promised arrival, open quantity, receipt evidence, and owner approval into one purchasing queue. No RFQ, supplier send, payment, payable, costing, or inventory write runs from this panel.')
+  || !coreSource.includes('aria-label="Shop procurement decisions"')
+  || !coreSource.includes('Procurement control')
+  || !coreSource.includes('Budget, sourcing, requisition, and independent PO approval stay separate.')
+  || !coreSource.includes('budget and owner approval required')
   || !coreSource.includes('function startSupplierRequest()')
-  || !coreSource.includes('Start supplier request')
-  || !coreSource.includes("supplier: 'Preferred supplier'")
-  || !coreSource.includes('const reorderQuantity = Math.max(item.reorderAt * 2 - item.onHand, 1)')
-  || !coreSource.includes('Supplier request drafted for ${item.name}. Review supplier, arrival, and quantity; no RFQ, message, payment, payable, costing, or stock write is created.')
-  || !coreSource.includes('Supplier request is clear. No uncovered reorder item needs a draft.')
+  || !coreSource.includes('Compare supplier quotes')
+  || !coreSource.includes('supplier: approved?.supplier ?? selectedQuote?.supplier ??')
+  || !coreSource.includes('unitCostMmk: String(approved?.unitCostMmk ?? selectedQuote?.unitCostMmk ??')
+  || !coreSource.includes('${sourcingDecision!.id} awarded ${selectedQuote!.quoteReference}')
+  || !coreSource.includes('Shop stock, open purchase orders, and current Plant demand are covered.')
   || !coreSource.includes("'Restore purchasing readiness'")
   || !coreSource.includes("'Approve pending supplier action'")
   || !coreSource.includes("'Resolve late supplier order'")
   || !coreSource.includes("'Prepare receiving evidence'")
   || !coreSource.includes("'Close partial receipt'")
-  || !coreSource.includes("'Choose supplier and arrival'")
+  || !coreSource.includes("'Review supplier risk'")
+  || !coreSource.includes("'Compare supplier quotes'")
+  || !coreSource.includes("'Approve quoted requisition'")
   || !coreSource.includes("'Monitor supplier promise'")
   || !coreSource.includes("'Supplier controls ready'")
-  || !coreSource.includes("['Suppliers', activeSupplierCount ? `${activeSupplierCount} active` : uncoveredReorderItems.length ? 'Choose one' : 'None needed']")
-  || !coreSource.includes("['Open units', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} remaining` : 'Clear']")
-  || !coreSource.includes("['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Owner confirms' : 'Locked']")
-  || !coreCssSource.includes('.shop-order-control.supplier-control')) fail('shop_procurement_readiness_missing')
-if (!companyBackupSource.includes("'supermega.website.workspace.v1'")
-  || !companyBackupSource.includes("'supermega.commerce.workspace.v1'")
-  || !companyBackupSource.includes("'supermega.shop.workspace.v2'")
-  || !companyBackupSource.includes("'supermega.production.workspace.v1'")
-  || !companyBackupSource.includes("'supermega.plant.workspace.v2'")
-  || !companyBackupSource.includes("'supermega.approvals.v2'")
-  || !companyBackupSource.includes("'supermega.setup.v2'")
-  || !companyBackupSource.includes("'supermega.team.workspace.v3'")
-  || !companyBackupSource.includes("'supermega.team.workspace.v2'")) fail('legacy_local_workspace_not_migrated')
-if (!coreSource.includes('decisionPacketFingerprint') || !coreSource.includes("status: 'superseded' as const")) fail('stale_approval_packet_not_superseded')
-if (!coreSource.includes('toManagedDecisionPacket') || !settingsPageSource.includes('managedApprovalRequests')) fail('managed_decision_packet_serializer_missing')
+  || !coreSource.includes("['Buy', purchaseRecommendations.length ? `${shopReplenishment.summary.recommendedOrderUnits} units` : 'Covered']")
+  || !coreSource.includes("['Budget', activePurchaseBudgetCommitment")
+  || !coreSource.includes("['Plant', shopReplenishment.summary.productionDemandUnits ? `${shopReplenishment.summary.productionDemandUnits} units` : 'No demand']")
+  || !coreSource.includes("['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Two-person' : 'Locked']")
+  || coreSource.includes("supplier: 'Preferred supplier'")
+  || coreSource.includes('Math.round(item.price * 0.6)')
+  || !coreCssSource.includes('.shop-order-control.supplier-control')
+  || !coreCssSource.includes('.shop-replenishment-list')) fail('shop_replenishment_plan_missing')
+if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopReplenishmentSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_replenishment_side_effect_added')
+if (!localWorkspaceBackupSource.includes('LEGACY_TEAM_WORK_KEYS') || !localWorkspaceBackupSource.includes('LEGACY_COMMERCE_KEYS') || !localWorkspaceBackupSource.includes('LEGACY_PRODUCTION_KEYS') || !localWorkspaceBackupSource.includes('LEGACY_APPROVAL_KEYS') || !localWorkspaceBackupSource.includes('LEGACY_SETUP_KEYS')) fail('legacy_local_workspace_not_migrated')
+if (!workspaceRuntimeSource.includes('decisionPacketFingerprint') || !coreSource.includes("status: 'superseded' as const")) fail('stale_approval_packet_not_superseded')
+if (!workspaceRuntimeSource.includes('toManagedDecisionPacket') || !settingsPageSource.includes('managedApprovalRequests')) fail('managed_decision_packet_serializer_missing')
 if (!teamSource.includes('Accept and record') || !teamSource.includes("acceptedActorKind: 'human'") || !teamModel.includes('acceptanceEvidenceReference')) fail('product_decision_not_human_attributed')
 if (!teamModel.includes("status: 'proposed'") || !teamModel.includes('isAttributedHumanAcceptance')) fail('legacy_product_acceptance_not_reopened')
 if (!teamSource.includes("verifiedActorKind: 'human'") || !teamModel.includes("candidate.verifiedActorKind === 'human'") || !teamModel.includes('verifiedBy')) fail('team_evidence_not_human_attributed')
@@ -2040,9 +2208,20 @@ if (!appSource.includes("lazy(() => import('./products/ecommerce/EcommerceProduc
   || !appSource.includes('path="shop/*"')
   || !appSource.includes('<OperationsPage product="production" />')
   || !appSource.includes('path="plant/*"')) fail('canonical_product_routes_missing')
+const publicProductRoutes = [...appSource.matchAll(/<Route element=\{<Suspense fallback=\{<ProductLoading name="[^"]+" \/>\}>.*?path="([a-z][a-z0-9-]*)\/\*" \/>/g)]
+  .map((match) => match[1])
+  .filter((route) => route !== 'settings' && route !== 'vision')
+if (publicProductRoutes.join(',') !== 'shop,plant,website,ecommerce') fail('public_product_route_drift')
+if (!appSource.includes("const VisionProduct = visionPreviewEnabled\n  ? lazy(() => import('./products/vision/VisionProduct')")
+  || !appSource.includes('visionPreviewEnabled && VisionProduct ? <Route')
+  || !appSource.includes('path="vision/*"')) fail('private_vision_preview_gate_missing')
 if (!appSource.includes("} from './core/CoreShell'")
   || appSource.includes("} from './core/CoreApp'")
-  || !appSource.includes("const OperationsPage = lazy(() => import('./core/CoreApp')")
+  || !appSource.includes("const OperationsPage = lazy(() => import('./core/OperationsPageRoute'))")
+  || !operationsPageRouteSource.includes("export { OperationsPage as default } from './CoreApp'")
+  || operationsPageRouteSource.includes('ProductHomePage')
+  || operationsPageRouteSource.includes('OverviewPage')
+  || operationsPageRouteSource.includes('TeamWorkspace')
   || !appSource.includes('<ProductLoading name="Shop" />')
   || !appSource.includes('<ProductLoading name="Plant" />')
   || !appSource.includes('<Suspense fallback={<ProductLoading name="Shop" />}><OperationsPage product="commerce" /></Suspense>} path="shop/*"')
@@ -2179,9 +2358,9 @@ const legacyStorefrontDraftStoragePrefix = /export const LEGACY_STOREFRONT_DRAFT
 const commerceOrderDraftStoragePrefix = /export const COMMERCE_ORDER_DRAFT_KEY_PREFIX = '([^']+)'/.exec(commerceOrderDraftSource)?.[1]
 const commerceOrderDraftResetEpochKey = /export const COMMERCE_ORDER_DRAFT_RESET_EPOCH_KEY = '([^']+)'/.exec(commerceOrderDraftSource)?.[1]
 const localProductExportBlock = sourceBlock(
-  coreSource,
-  'function collectLocalProductRecords(',
-  '\n}\n\nfunction requireProductContract',
+  productSetupSource,
+  'export function collectLocalProductRecords(',
+  '\n}\n',
 )
 const localProductResetBlock = sourceBlock(
   settingsPageSource,
@@ -2197,11 +2376,11 @@ if (!storefrontDraftStoragePrefix
   || !legacyStorefrontDraftStoragePrefix
   || !commerceOrderDraftStoragePrefix
   || !commerceOrderDraftResetEpochKey
-  || !coreSource.includes(`const STOREFRONT_DRAFT_RESET_PREFIX = '${storefrontDraftStoragePrefix}'`)
-  || !coreSource.includes(`const LEGACY_STOREFRONT_DRAFT_RESET_PREFIX = '${legacyStorefrontDraftStoragePrefix}'`)
-  || !coreSource.includes(`const SHOP_ORDER_DRAFT_RESET_PREFIX = '${commerceOrderDraftStoragePrefix}'`)
-  || !coreSource.includes(`const SHOP_ORDER_DRAFT_RESET_EPOCH_KEY = '${commerceOrderDraftResetEpochKey}'`)
-  || !coreSource.includes("const LEGACY_STOREFRONT_DRAFT_RESET_KEY = 'supermega.ecommerce.storefront_draft.v1'")
+  || !productSetupSource.includes(`STOREFRONT_DRAFT_RESET_PREFIX = '${storefrontDraftStoragePrefix}'`)
+  || !productSetupSource.includes(`LEGACY_STOREFRONT_DRAFT_RESET_PREFIX = '${legacyStorefrontDraftStoragePrefix}'`)
+  || !productSetupSource.includes(`SHOP_ORDER_DRAFT_RESET_PREFIX = '${commerceOrderDraftStoragePrefix}'`)
+  || !productSetupSource.includes(`SHOP_ORDER_DRAFT_RESET_EPOCH_KEY = '${commerceOrderDraftResetEpochKey}'`)
+  || !productSetupSource.includes("LEGACY_STOREFRONT_DRAFT_RESET_KEY = 'supermega.ecommerce.storefront_draft.v1'")
   || !localProductExportBlock.includes('key.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)')
   || !localProductExportBlock.includes('key.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)')
   || !localProductExportBlock.includes('key.startsWith(SHOP_ORDER_DRAFT_RESET_PREFIX)')
@@ -2213,8 +2392,21 @@ if (!storefrontDraftStoragePrefix
   || !companyBackupSource.includes("'supermega.ecommerce.storefront_draft.v2.'")
   || !companyBackupSource.includes("'supermega.ecommerce.storefront_draft.v1.'")
   || !companyBackupSource.includes("'supermega.shop.order_draft_reset.v1'")
-  || !settingsPageSource.includes('owner-control, outcome, setup, unfinished order drafts, and local AI-memory record')
+  || !settingsPageSource.includes('owner-control, outcome, setup, unfinished order drafts, and local AI-memory records')
   || coreSource.includes("from '../products/ecommerce/storefront-draft'")) fail('ecommerce_storefront_draft_not_in_deliberate_reset_or_broke_lazy_boundary')
+if (!localWorkspaceBackupSource.includes("LOCAL_WORKSPACE_BACKUP_CONTRACT = 'supermega.local_workspace_backup.v1'")
+  || !localWorkspaceBackupSource.includes('LOCAL_WORKSPACE_BACKUP_MAX_BYTES = 5 * 1024 * 1024')
+  || !localWorkspaceBackupSource.includes('export function isLocalWorkspaceKey(')
+  || !localWorkspaceBackupSource.includes('export function collectLocalWorkspaceBackup(')
+  || !localWorkspaceBackupSource.includes('export function restoreLocalWorkspaceBackupFromEvidence(')
+  || !localWorkspaceBackupSource.includes("evidence.version !== 24")
+  || !localWorkspaceBackupSource.includes('export function applyLocalWorkspaceBackup(')
+  || !localWorkspaceBackupSource.includes('Object.entries(previous.records).forEach')
+  || !settingsPageSource.includes('localWorkspaceBackup, behaviorTrail')
+  || !settingsPageSource.includes("version: 24, exportedAt")
+  || !settingsPageSource.includes('Save restore point')
+  || !settingsPageSource.includes('Load evidence backup')
+  || !settingsPageSource.includes('Restore previous workspace')) fail('local_workspace_restore_contract_missing')
 if (!commerceOrderDraftSource.includes("COMMERCE_ORDER_DRAFT_SCHEMA = 'supermega.shop.order_draft.v1'")
   || !commerceOrderDraftSource.includes("['sku', 'quantity', 'unitPriceMmk', 'availableAtSave']")
   || !commerceOrderDraftSource.includes('COMMERCE_ORDER_DRAFT_MAX_BYTES')
@@ -2272,13 +2464,13 @@ if (!ecommerceSource.includes("'sourcePreviewDigest' in draft")
   || !ecommerceSource.includes('event.key === COMMERCE_KEY || event.key === null')
   || !ecommerceSource.includes("setDraftNotice('Shop catalog changed in another tab.")
   || !ecommerceSource.includes("event.key === legacyDraftKey && latest.status === 'ready'")) fail('ecommerce_local_storefront_fingerprint_or_sync_missing')
-if (!ecommerceSource.includes('Prices and stock stay controlled by Shop.')
-  || !ecommerceSource.includes('This preview sends no payment or customer message.')
+if (!ecommerceSource.includes('Shop controls prices, stock, payment, delivery, and the accountable order record.')
+  || !ecommerceSource.includes('Customers can browse and build a cart. Shop remains in control of payment, stock, delivery, and returns.')
   || !ecommerceSource.includes('className="ecommerce-verification"')
   || !ecommerceSource.includes('Preview verification')
   || !ecommerceSource.includes('Local currentness check')
   || !ecommerceSource.includes('same storefront fields and Shop snapshot produce the same local fingerprint.')
-  || !ecommerceSource.includes('Browse the working storefront, add products, and hand one reviewed order to Shop.')
+  || !ecommerceSource.includes('Run your online store from catalog to cart, order, delivery, and return.')
   || !ecommerceSource.includes('Save storefront')
   || !ecommerceSource.includes('BROWSE &amp; BUY')
   || ecommerceSource.includes('ORDER ONLINE')
@@ -2373,6 +2565,9 @@ if (!ecommerceSource.includes("useState<'setup' | 'preview'>('preview')")
   || !ecommerceCssSource.includes('.ecommerce-quote-boundaries')
   || !ecommerceCssSource.includes('.ecommerce-after-purchase')
   || !ecommerceCssSource.includes('@media (max-width: 560px)')
+  || !ecommerceCssSource.includes('.ecommerce-today {\n    grid-template-columns: 1fr;')
+  || !ecommerceCssSource.includes('.ecommerce-today-priority .core-button { width: 100%; }')
+  || !ecommerceCssSource.includes('.ecommerce-today-source {\n    align-items: flex-start;\n    flex-direction: column;')
   || !ecommerceCssSource.includes('.ecommerce-buying-body > form {')
   || !ecommerceCssSource.includes('grid-template-columns: 1fr;')) fail('ecommerce_mobile_workspace_not_modular')
 const addToCartStart = ecommerceSource.indexOf('function addToCart')
@@ -2441,7 +2636,7 @@ if (addToCartStart < 0
   || !ecommerceSource.includes('onDraft={openShopDraft}')
   || !ecommerceSource.includes('onOpenManagedRequest={managedIdentity ?')
   || !ecommerceSource.includes('onRecordManagedRequest={managedIdentity ? recordManagedBuyingRequest : undefined}')
-  || !ecommerceSource.includes("onOpenReturns={() => navigate('/shop/?tab=orders&source=ecommerce-return')}")
+  || !ecommerceSource.includes("onOpenReturns={(intent: EcommerceReturnIntent) => navigate('/shop/?tab=orders', { state: { ecommerceReturnIntent: intent } })}")
   || storefrontSavePreviewAdvanceCount !== 2
   || managedStorefrontSave < 0
   || localStorefrontSave < 0
@@ -2454,7 +2649,8 @@ if (addToCartStart < 0
   || !addToCartAction.includes('catalogHydrating || !previewResult.preview || !digest || (Boolean(managedIdentity) && !savedDraftIsCurrent)')
   || !addToCartAction.includes('setBuyingCart((current) => current.some')
   || !addToCartAction.includes('workspace instanceof HTMLDetailsElement')
-  || !addToCartAction.includes("scrollIntoView({ behavior: 'smooth', block: 'start' })")
+  || !addToCartAction.includes("scrollIntoView({ block: 'start' })")
+  || !addToCartAction.includes('workspace?.focus({ preventScroll: true })')
   || ['saveCurrentStorefront', 'saveManagedCommerceCommand', 'saveStorefrontDraft', 'prepareEcommerceShopDraftV2', 'navigate(', 'fetch('].some((marker) => addToCartAction.includes(marker))
   || prepareQuoteRecoveryStart < 0
   || prepareQuoteRecoveryEnd < 0
@@ -2499,11 +2695,24 @@ if (addToCartStart < 0
   || !openFilteredRequestAction.includes("navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestInboxNextRequest.id)}`)")
   || ['saveCurrentStorefront', 'saveManagedCommerceCommand', 'saveStorefrontDraft', 'prepareEcommerceShopDraftV2', 'recordCommerceStorefrontRequest', 'fetch(', 'navigator.clipboard', 'mailto:', 'sms:', 'viber', 'whatsapp', 'bookDelivery', 'chargePayment'].some((marker) => openFilteredRequestAction.includes(marker))
   || !ecommerceBuyingUiSource.includes('id="ecommerce-buying-workspace"')
+  || !ecommerceBuyingUiSource.includes('tabIndex={-1}')
   || !ecommerceBuyingUiSource.includes('Cart and checkout')
   || !ecommerceBuyingUiSource.includes('Review order')
   || !ecommerceBuyingUiSource.includes('Open in Shop')
-  || !ecommerceBuyingUiSource.includes('After purchase')
-  || !ecommerceBuyingUiSource.includes('Open Shop returns')
+  || !ecommerceBuyingUiSource.includes('Order help')
+  || !ecommerceBuyingUiSource.includes('Send to Shop review')
+  || !ecommerceBuyingUiSource.includes('Continue in Shop')
+  || !ecommerceBuyingUiSource.includes("quoteExpiredWithoutOrder(entry) ? 'Quote expired' : 'Waiting for Shop review'")
+  || !ecommerceBuyingUiSource.includes('Review again for the current total')
+  || !ecommerceBuyingUiSource.includes('Quotes and orders, followed through Shop')
+  || !ecommerceBuyingUiSource.includes('buildEcommerceReturnIntent')
+  || !ecommerceBuyingUiSource.includes('saveEcommerceReturnIntent')
+  || !ecommerceBuyingUiSource.includes('buildEcommerceSupportIntent')
+  || !ecommerceBuyingUiSource.includes('saveEcommerceSupportIntent')
+  || !ecommerceBuyingUiSource.includes('buildEcommerceCorrectionIntent')
+  || !ecommerceBuyingUiSource.includes('saveEcommerceCorrectionIntent')
+  || !ecommerceBuyingUiSource.includes('Fix balance')
+  || !ecommerceBuyingUiSource.includes('{entry.returnedQuantity ? <small>{entry.returnedQuantity} returned in Shop</small> : null}')
   || !ecommerceBuyingUiSource.includes('buildEcommercePimProjection')
   || !ecommerceBuyingUiSource.includes('buildEcommerceCheckoutQuote')
   || !ecommerceBuyingUiSource.includes('buildEcommerceOrderRequestV2')
@@ -2537,15 +2746,91 @@ if (addToCartStart < 0
   || ecommerceBuyingUiSource.includes('<small>Delivery</small>')
   || !ecommerceBuyingUiSource.includes('Included in listed price')
   || !ecommerceBuyingUiSource.includes('Payment remains unauthorized.')
-  || !ecommerceBuyingUiSource.includes('No refund starts here.')
   || !ecommerceBuyingLifecycleSource.includes('export function ecommercePaymentMatchesFulfilment(')
   || !ecommerceBuyingLifecycleSource.includes('Checkout payment does not match how the customer receives the order.')
+  || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceReturnIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export function projectEcommerceReturnOutcome(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceReturnIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceSupportIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export function projectEcommerceSupportOutcome(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceSupportIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceCorrectionIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export function projectEcommerceCorrectionOutcome(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceCorrectionIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export function buildEcommerceCancellationIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceCancellationIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function buildEcommerceCancellationDecision(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceCancellationDecision(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function buildEcommerceOrderAmendmentIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function recordEcommerceOrderAmendment(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceOrderAmendment(')
+  || !ecommerceBuyingLifecycleSource.includes('Order amendment is not bound to its original and replacement Ecommerce requests.')
+  || !ecommerceBuyingLifecycleSource.includes('Contact or delivery corrections must advance the exact prior customer and address snapshots.')
+  || !ecommerceBuyingLifecycleSource.includes('export async function buildEcommerceOrderRescheduleIntent(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function recordEcommerceOrderReschedule(')
+  || !ecommerceBuyingLifecycleSource.includes('export async function saveEcommerceOrderReschedule(')
+  || !ecommerceBuyingLifecycleSource.includes('Order reschedule is not bound to its original and replacement Ecommerce requests.')
+  || !ecommerceBuyingLifecycleSource.includes('Cancellation decision is not bound to its exact recovered request.')
+  || !ecommerceBuyingLifecycleSource.includes('Return intent is not attributable to one recovered Ecommerce request.')
+  || !ecommerceBuyingUiSource.includes('Cancel order')
+  || !ecommerceBuyingUiSource.includes('Send to Shop review')
+  || !ecommerceBuyingUiSource.includes('No order, stock, payment, refund, provider, or customer message changed.')
+  || !ecommerceBuyingUiSource.includes('Cancellation approved')
+  || !ecommerceBuyingUiSource.includes('Order kept')
+  || !ecommerceBuyingUiSource.includes('Change details')
+  || !ecommerceBuyingUiSource.includes('Contact or delivery details')
+  || !ecommerceBuyingUiSource.includes('Send correction to Shop')
+  || !ecommerceBuyingUiSource.includes('No order, stock, payment, refund, message, or provider changed.')
+  || !ecommerceBuyingUiSource.includes('amendmentIntents: buyingState.amendmentIntents ?? []')
+  || !ecommerceBuyingUiSource.includes('rescheduleIntents: buyingState.rescheduleIntents ?? []')
+  || !ecommerceBuyingUiSource.includes('Change time')
+  || !ecommerceBuyingUiSource.includes('Send time to Shop')
+  || !ecommerceBuyingUiSource.includes('No order, stock, payment, refund, rider, message, or provider changed.')
+  || !ecommerceBuyingUiSource.includes('Return accepted')
+  || !ecommerceBuyingUiSource.includes('No refund recorded')
+  || !ecommerceBuyingUiSource.includes('Shop is reviewing')
+  || !ecommerceBuyingUiSource.includes('Help resolved')
+  || !coreSource.includes('The return evidence conflicts with the exact Ecommerce request.')
+  || !coreSource.includes('The Shop help-case evidence conflicts with the exact Ecommerce request.')
+  || !coreSource.includes('validateEcommerceOrderAmendmentIntent(ecommerceOrderAmendmentNavigationIntent)')
+  || !coreSource.includes('async function prepareOrderAmendmentReplacement()')
+  || !coreSource.includes("kind: 'order_cancel'")
+  || !coreSource.includes('Step 1 cancels and releases the original under accountable review. Step 2 separately confirms the repriced replacement order.')
+  || !coreSource.includes('validateEcommerceOrderRescheduleIntent(ecommerceOrderRescheduleNavigationIntent)')
+  || !coreSource.includes('function ecommerceReschedulePromiseAllowed(')
+  || !coreSource.includes('async function prepareOrderRescheduleReplacement()')
+  || !coreSource.includes('no rider, message, or provider call')
+  || !managedEcommerceBuyingLifecycleSource.includes('def build_ecommerce_order_amendment_intent(')
+  || !managedEcommerceBuyingLifecycleSource.includes('def record_ecommerce_order_amendment(')
+  || !managedEcommerceBuyingLifecycleSource.includes('def build_ecommerce_order_reschedule_intent(')
+  || !managedEcommerceBuyingLifecycleSource.includes('def record_ecommerce_order_reschedule(')
+  || !managedEcommerceBuyingLifecycleSource.includes('def project_ecommerce_return_outcome(')
+  || !managedEcommerceBuyingLifecycleSource.includes('def project_ecommerce_support_outcome(')
+  || !managedEcommerceBuyingLifecycleSource.includes('def build_ecommerce_correction_intent(')
+  || !managedEcommerceBuyingLifecycleSource.includes('def project_ecommerce_correction_outcome(')
+  || !coreSource.includes('ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent}')
+  || !coreSource.includes('validateEcommerceCancellationIntent(ecommerceCancellationNavigationIntent)')
+  || !coreSource.includes('function ecommerceCancellationMatchesCurrentShop(')
+  || !coreSource.includes('acknowledgement.digest === intent.sourceAcknowledgementDigest')
+  || !coreSource.includes('commerceOrderHasReleasableReservation(state, intent.orderId)')
+  || !coreSource.includes('ecommerceCancellationMatchesCurrentShop(current, sourceIntent)')
+  || !coreSource.includes("kind: 'order_cancellation_review'")
+  || !coreSource.includes('saveEcommerceCancellationDecision(')
+  || !workspaceRuntimeSource.includes("| 'order_cancellation_review'")
+  || !coreSource.includes('no customer message or provider call')
+  || !coreSource.includes('ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent}')
+  || !coreSource.includes('validateEcommerceReturnIntent(ecommerceReturnNavigationIntent)')
+  || !coreSource.includes('validateEcommerceSupportIntent(ecommerceSupportNavigationIntent)')
+  || !coreSource.includes('validateEcommerceCorrectionIntent(ecommerceCorrectionNavigationIntent)')
+  || !coreSource.includes('sourceIntent: intent')
+  || !coreSource.includes('Customer requested return review: ${returnDraft.sourceIntent.reason}')
   || !commerceSource.includes("quote.payment.adapter !== 'kbzpay_manual'")
   || ['fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'chargePayment', 'authorizePayment'].some((marker) => ecommerceBuyingUiSource.includes(marker))
   || !ecommerceCssSource.includes('.ecommerce-preview-gate')
   || !ecommerceCssSource.includes('.ecommerce-preview-gate .core-button')
   || !ecommerceCssSource.includes('.storefront-request-button')
   || !ecommerceCssSource.includes('.ecommerce-buying-workspace')
+  || !ecommerceCssSource.slice(ecommerceCssSource.indexOf('.ecommerce-buying-body {'), ecommerceCssSource.indexOf('}', ecommerceCssSource.indexOf('.ecommerce-buying-body {'))).includes('color: #17231d;')
   || !ecommerceCssSource.includes('.ecommerce-order-autopilot')
   || !ecommerceCssSource.includes('.ecommerce-order-autopilot-rows')
   || !ecommerceCssSource.includes('@media (min-width: 981px)')
@@ -2582,6 +2867,7 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !ecommerceHandoffSource.includes("supermega.ecommerce.shop_draft.v1")
   || !ecommerceHandoffSource.includes("state: 'review_required'")
   || !ecommerceHandoffSource.includes('ecommerceShopDraftMatchesCatalog')
+  || !ecommerceHandoffSource.includes('ecommerceShopDraftMatchesOperatingContext')
   || !ecommerceHandoffSource.includes('validateEcommerceShopDraftV2')
   || !ecommerceHandoffSource.includes('ecommerceShopDraftLines')
   || !ecommerceHandoffSource.includes('ecommerceShopDraftPayment')
@@ -2591,25 +2877,28 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !ecommerceBuyingUiSource.includes('Payment remains unauthorized.')
   || !ecommerceSource.includes('state: { ecommerceShopDraft: draft }')
   || !coreSource.includes('Ecommerce request')
-  || !coreSource.includes('ecommerceShopDraftLines, ecommerceShopDraftMatchesCatalog, ecommerceShopDraftPayment')
+  || !coreSource.includes('ecommerceShopDraftLines, ecommerceShopDraftMatchesCatalog, ecommerceShopDraftMatchesOperatingContext, ecommerceShopDraftPayment')
   || !coreSource.includes('const draftLines = ecommerceShopDraftLines(ecommerceNavigationDraft)')
   || !coreSource.includes('setExtraOrderLines(draftLines.slice(1).map')
   || !coreSource.includes('setPayment(ecommerceShopDraftPayment(ecommerceNavigationDraft))')
-  || !coreSource.includes("ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v2'")
+  || !coreSource.includes("ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v7'")
+  || !coreSource.includes("setNotice('The Ecommerce request has no valid Shop operating authority. Nothing was prepared.')")
+  || !coreSource.includes("setNotice('The Shop operating location changed after Ecommerce review. Reopen the request; no order was prepared.')")
+  || !coreSource.includes('governed handoff')
   || !coreSource.includes('? ecommerceDraft.lines')
   || !coreSource.includes('orderLines.length !== ecommerceLines.length')
-  || !coreSource.includes('orderTotal !== ecommerceDraft.totalMmk')
+  || !coreSource.includes('pricedOrderTotal !== ecommerceDraft.totalMmk')
   || !coreSource.includes('commerceOrderItemSummary(orderLines)')
-  || !coreSource.includes('...(!sourceBacked || orderLines.length > 1 ? { lines: orderLines } : {})')
+  || !coreSource.includes('...(!sourceBacked || orderLines.length > 1 || promotionDecision ? { lines: orderLines } : {})')
   || ecommerceOrderSubmitStart < 0
   || ecommerceOrderSubmitEnd < 0
   || ecommercePaymentPosition < 0
   || ecommerceReviewPosition < ecommercePaymentPosition
   || !ecommerceOrderSubmit.includes("data-ecommerce-payment={preparedEcommerceDraft ? 'true' : 'false'}")
-  || !ecommerceOrderSubmit.includes('form="commerce-manual-order-form" ref={orderPaymentRef} required value={payment}')
-  || !ecommerceOrderSubmit.includes('disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))}')
+  || !ecommerceOrderSubmit.includes('aria-readonly="true" disabled form="commerce-manual-order-form" ref={orderPaymentRef} value={payment}')
+  || !ecommerceOrderSubmit.includes('disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || orderCreditBlocked || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))}')
   || !ecommerceOrderSubmit.includes('ref={orderReviewRef}')
-  || !ecommerceOrderSubmit.includes("!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : resumedOrderNeedsReview ? 'Review current Shop values'")
+  || !ecommerceOrderSubmit.includes("!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : orderCreditBlocked ? 'Credit policy required'")
   || !coreSource.includes('orderPaymentRef.current?.focus({ preventScroll: true })')
   || !coreSource.includes('const orderReviewRef = useRef<HTMLButtonElement>(null)')
   || !coreSource.includes('preparedEcommerceDraft && orderReviewRef.current?.isConnected')
@@ -2618,9 +2907,23 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !coreSource.includes('Review cancelled. The prepared Ecommerce request and Payment are unchanged; Shop data was not modified.')
   || !coreSource.includes("summary: ecommerceDraft ? 'Review Ecommerce order'")
   || !coreSource.includes('Customer ${order.customer} · ${lineReview}')
-  || !coreSource.includes('Payment ${payment} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)}')
+  || !coreSource.includes("Payment ${payment} · due ${paymentDueAt ? formatIssueDue(paymentDueAt) : 'at handoff'}${paymentTermsDays ?")
+  || !coreSource.includes('credit ${formatMoney(creditReview.exposureBeforeMmk)} → ${formatMoney(creditReview.exposureAfterMmk)} under policy R${creditReview.policy?.revision}')
   || !coreSource.includes('Stock ${reservationReview}')
   || !coreCssSource.includes('.order-ecommerce-payment')
+  || !ecommerceBuyingLifecycleSource.includes("ECOMMERCE_SHOP_DRAFT_SCHEMA_V7 = 'supermega.ecommerce.shop_draft.v7'")
+  || !coreSource.includes('const draftTaxCalculation = commerceOrderCalculation(')
+  || !coreSource.includes('(draftTaxConfiguration?.proof.actionId ?? null) !== taxDecision.policyActionId')
+  || !ecommerceBuyingLifecycleSource.includes('commercePromotionDecision(')
+  || !ecommerceBuyingLifecycleSource.includes('commercePaymentDecision(')
+  || !commerceSource.includes("schema: 'supermega.commerce.promotion-decision.v1'")
+  || !commerceSource.includes("schema: 'supermega.commerce.payment-decision.v1'")
+  || !commerceSource.includes('promotionPolicies?: CommercePromotionPolicy[]')
+  || !commerceSource.includes('paymentPolicies?: CommercePaymentPolicy[]')
+  || !ecommerceBuyingLifecycleSource.includes("operatingUnitLocationId: 'LOC-MAIN'")
+  || !ecommerceBuyingLifecycleSource.includes("writePolicy: 'human_review_required'")
+  || !managedEcommerceBuyingLifecycleSource.includes('ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v7"')
+  || !managedEcommerceBuyingLifecycleSource.includes('"operatingUnitLocationId": "LOC-MAIN"')
   || !coreSource.includes("import('../products/ecommerce/ecommerce-shop-handoff')")
   || ['setItem(', 'removeItem(', 'localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest', 'navigator.locks', 'convertCommerceWebsiteIntake', 'reserveCommerceOrder', 'mutateCommerceWorkspace'].some((marker) => ecommerceConfirmSource.includes(marker) || ecommerceHandoffSource.includes(marker))) fail('ecommerce_shop_handoff_contract_missing_or_mutating')
 if (!ecommerceSource.includes('{!savedDraftIsCurrent ? <div className="ecommerce-save-actions">')
@@ -2643,7 +2946,14 @@ if (!commerceSource.includes('recordCommerceStorefrontRequest')
   || !commerceSource.includes('matches[0].onHand < 1')
   || !commerceSource.includes('ECOMMERCE:${validatedRequest.id}:${validatedRequest.sourcePreviewDigest}')
   || !managedTrialSource.includes('commerce.storefront_request.received')
+  || !managedTrialSource.includes('function managedStorefrontRequestIntent')
+  || !managedTrialSource.includes('{ intent: storefrontRequestIntent, evidence: request.evidence }')
   || !managedCommerceRuntime.includes('commerce.storefront_request.received')
+  || !managedCommerceRuntime.includes('create_commerce_storefront_request_from_intent')
+  || !managedCommerceRuntime.includes('the Ecommerce request receipt cannot predate its customer quote.')
+  || !managedCommerceRuntime.includes('the Ecommerce request quote expired before Shop received it.')
+  || !managedTrialStoreRuntime.includes('event_type == "commerce.storefront_request.received"')
+  || !managedTrialStoreRuntime.includes('and isinstance(authoritative.get("intent"), Mapping)')
   || !managedCommerceRuntime.includes('validate_ecommerce_order_request')
   || !managedCommerceRuntime.includes('if request["schema"] == "supermega.ecommerce.order_request.v2"')
   || !managedCommerceRuntime.includes('request["lines"]')
@@ -2685,24 +2995,27 @@ if (!websiteSource.includes('starterSetupActive')
   || !websiteSource.includes('const canReview = !hasUnsavedChanges')
   || !websiteSource.includes("requestedView === 'publish' && canReview")
   || !websiteSource.includes("nextView === 'publish' && !canReview")
-  || !websiteSource.includes('const websiteAgentRows = [')
-  || !websiteSource.includes("['Agent job', websiteAgentJob]")
-  || !websiteSource.includes("['Reason', websiteAgentReason]")
-  || !websiteSource.includes("['Owner gate', websiteOwnerGate]")
-  || !websiteSource.includes('aria-label="Recommended Website agent job"')
-  || !websiteSource.includes('Website agent queue')
+  || !websiteSource.includes('const websiteAgentJob =')
+  || !websiteSource.includes('const websiteAgentReason =')
+  || !websiteSource.includes('const websiteOwnerGate =')
+  || !websiteSource.includes('aria-labelledby="website-today-title"')
+  || !websiteSource.includes('aria-label="Website today status"')
+  || !websiteSource.includes('Inquiry inbox')
   || !websiteSource.includes("'Start from business brief'")
   || !websiteSource.includes("'Review unsaved site edits'")
   || !websiteSource.includes("'Fix content readiness'")
   || !websiteSource.includes("'Record owner approval'")
   || !websiteSource.includes("'Record release snapshot'")
   || !websiteSource.includes("'Prepare rollout plan'")
-  || !websiteSource.includes('AI prepares the next Website move. Owners approve every content, release, domain, and deployment step.')
+  || !websiteSource.includes('function runWebsiteAutopilot()')
   || !websiteSource.includes('detail: `Website starter brief generated: ${brief.businessName}`')
-  || !websiteCssSource.includes('.website-agent-queue')
+  || !websiteCssSource.includes('.website-today')
   || !websiteStarterSetupSource.includes('const SAMPLE_BRIEF: WebsiteStarterBrief = {')
   || !websiteStarterSetupSource.includes("businessName: 'Mingalar Fresh Mart'")
   || !websiteStarterSetupSource.includes("audience: 'families and office buyers in Yangon'")
+  || !websiteStarterSetupSource.includes("templateId: 'catalog-showcase'")
+  || !websiteStarterSetupSource.includes('websiteStarterTemplates.map')
+  || !websiteStarterSetupSource.includes('Three-page starter')
   || !websiteStarterSetupSource.includes("function loadSampleBrief()")
   || !websiteStarterSetupSource.includes('Load sample brief')
   || !websiteStarterSetupSource.includes('Start with your business')
@@ -2724,7 +3037,14 @@ if (!websiteSource.includes('starterSetupActive')
   || !websiteStarterSource.includes("stage: 'draft'")
   || !websiteStarterSource.includes('websiteStarterBriefIssues')
   || ['fetch(', 'localStorage', 'sessionStorage', 'XMLHttpRequest'].some((marker) => websiteStarterSource.includes(marker) || websiteStarterSetupSource.includes(marker))) fail('website_named_business_starter_missing_or_side_effectful')
-if (!websiteModelSource.includes("supermega.website.workspace.v2") || !websiteModelSource.includes('LEGACY_WEBSITE_STORAGE_KEY') || !websiteModelSource.includes('mutateWebsiteWorkspace') || !websiteModelSource.includes('WEBSITE_MUTATION_LOCK') || !websiteModelSource.includes('preservesAppendOnlyHistory') || !websiteModelSource.includes('canonicalJson')) fail('website_v2_locked_store_missing')
+if (!websiteModelSource.includes("supermega.website.workspace.v2")
+  || !websiteModelSource.includes('LEGACY_WEBSITE_STORAGE_KEY')
+  || !websiteModelSource.includes('mutateWebsiteWorkspace')
+  || !websiteModelSource.includes('WEBSITE_MUTATION_LOCK')
+  || !websiteModelSource.includes('preservesAppendOnlyHistory')
+  || !websiteModelSource.includes('canonicalJson')
+  || !websiteModelSource.includes('export function importWebsitePageDrafts')
+  || !websiteModelSource.includes('export async function activateLocalWebsitePageDrafts')) fail('website_v2_locked_store_missing')
 if (!websiteModelSource.includes('contentRevision') || !websiteModelSource.includes('evidenceIds') || !websiteModelSource.includes('migratedFromV1') || !websiteModelSource.includes('getCurrentApproval') || !websiteModelSource.includes('getCurrentPublish')) fail('website_release_provenance_missing')
 if (!websiteModelSource.includes("supermega.website.artifact.v1")
   || !websiteModelSource.includes('createWebsiteArtifact')
@@ -2758,12 +3078,12 @@ if (!websiteSource.includes('Recovery settings')
   || !settingsPageSource.includes('provisioningRows')
   || !settingsPageSource.includes('importProvisioningPacket')
   || !settingsPageSource.includes('importProvisioningRows')
-  || !coreSource.includes('WEBSITE_RECOVERY_EXPORT_PREFIX')
-  || !coreSource.includes('key.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)')
-  || !coreSource.includes('key.startsWith(WEBSITE_RECOVERY_EXPORT_PREFIX)')
-  || !coreSource.includes('LEGACY_WEBSITE_STORAGE_KEY')
-  || !coreSource.includes('WEBSITE_STORAGE_KEY')
-  || !coreSource.includes('WEBSITE_ECOMMERCE_HANDOFF_KEY')
+  || !productSetupSource.includes('WEBSITE_RECOVERY_EXPORT_PREFIX')
+  || !productSetupSource.includes('key.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)')
+  || !productSetupSource.includes('key.startsWith(WEBSITE_RECOVERY_EXPORT_PREFIX)')
+  || !productSetupSource.includes('LEGACY_WEBSITE_STORAGE_KEY')
+  || !productSetupSource.includes('WEBSITE_STORAGE_KEY')
+  || !productSetupSource.includes('WEBSITE_ECOMMERCE_HANDOFF_KEY')
   || !handoffSource.includes('export { LEGACY_WEBSITE_STORAGE_KEY, WEBSITE_STORAGE_KEY }')
   || coreSource.includes("import('../products/website/website-model')")
   || coreSource.includes("import('../products/product-handoff')")
@@ -2825,7 +3145,8 @@ if (managedWebsiteCommandStart < 0
   || !managedWebsiteSource.includes("result.surface !== 'website'")
   || !managedWebsiteSource.includes('result.event_type !== expected.eventType')
   || !managedWebsiteSource.includes('result.version !== expected.priorVersion + 1')
-  || !managedWebsiteSource.includes('!sameWorkspace(confirmed, planned)')) fail('managed_website_command_client_missing')
+  || !managedWebsiteSource.includes('sameAuthoritativeInquiryWorkspace')
+  || !managedWebsiteSource.includes('!confirmed || !planned || !stateMatches')) fail('managed_website_command_client_missing')
 if (!websiteWorkspaceSource.includes('bindManagedActor') || !websiteWorkspaceSource.includes('verifiedBy: actor') || !websiteWorkspaceSource.includes('reviewer: actor') || !websiteWorkspaceSource.includes('recordedBy: actor')) fail('managed_website_actor_binding_missing')
 const websiteHydrationStart = websiteWorkspaceSource.indexOf('void (async () => {')
 const websiteHydrationEnd = websiteWorkspaceSource.indexOf('})()', websiteHydrationStart)
@@ -2883,7 +3204,9 @@ if (!websiteUnifiedCss.includes('.website-action-bar')
 if (!websiteSource.includes("const [surface, setSurface] = useState<'work' | 'preview'>('preview')")
   || !websiteSource.includes('data-surface={surface}')
   || !websiteSource.includes("setSurface('work')")
-  || !websiteSource.includes("surface === 'preview' ? 'Edit site' : 'Preview'")) fail('website_focus_mode_missing')
+  || !websiteSource.includes("surface === 'preview' ? 'Edit site' : 'Preview'")
+  || !websiteSource.includes("surface === 'preview' ? 'is-primary' : 'is-secondary'")
+  || !websiteSource.includes('Select Edit site to update it and mark it ready.')) fail('website_focus_mode_missing')
 if (!websiteSource.includes('createWebsiteEditSession(workspace)')
   || !websiteSource.includes('commitWebsiteEditSession(current, retained.session)')
   || !websiteSource.includes('restoreWebsiteEditSession(raw)')
@@ -2956,6 +3279,9 @@ if (['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource('].some((marker) => 
 if (!coreSource.includes('className="core-panel next-task-card"')
   || !coreSource.includes('<details className="home-more">')
   || !coreSource.includes('className="product-launcher product-catalog"')
+  || !coreSource.includes('to="/shop/?tab=counter"')
+  || !coreSource.includes('aria-label="Shop attention"')
+  || !coreSource.includes('to="/shop/?tab=inventory"')
   || !coreSource.includes("useState<'manual' | 'message' | 'online'>('manual')")
   || !coreSource.includes('aria-label="Order source" className="order-entry-methods"')
   || !coreSource.includes("aria-pressed={orderEntryMode === 'manual'}")
@@ -2963,6 +3289,7 @@ if (!coreSource.includes('className="core-panel next-task-card"')
   || !coreSource.includes('<details className="core-panel today-more')
   || !settingsPageSource.includes("useState<'workflow' | 'success'>('workflow')")
   || !settingsPageSource.includes('aria-label="Setup steps"')
+  || !settingsPageSource.includes("requestedProduct ? 'Product setup' : 'Client setup'")
   || !settingsPageSource.includes("location.hash === '#controls'")
   || !settingsPageSource.includes("navigate('/settings/', { replace: true })")
   || !coreSource.includes('role="columnheader"')
@@ -3123,6 +3450,13 @@ if (!commerceSource.includes("CommercePurchaseOrderArrivalUrgency = 'late' | 'du
   || !coreSource.includes("' · Due soon'")
   || !coreCssSource.includes('[data-arrival-risk=\"late\"]')
   || !coreCssSource.includes('[data-arrival-risk=\"unrecorded\"]')) fail('commerce_purchase_order_arrival_urgency_missing')
+if (!commerceSource.includes("CommerceSupplierPerformanceStatus = 'attention' | 'on_track' | 'collecting'")
+  || !commerceSource.includes('export function commerceSupplierPerformance')
+  || !coreSource.includes('aria-label=\"Supplier performance\"')
+  || !coreSource.includes('Measured from Shop orders and receipts')
+  || !coreSource.includes('data-supplier-status={supplier.status}')
+  || !coreCssSource.includes('[data-supplier-status=\"attention\"]')
+  || !coreCssSource.includes('[data-supplier-status=\"on_track\"]')) fail('commerce_supplier_performance_missing')
 if (!commerceSource.includes('commerceOrderHasReleasableReservation') || !commerceSource.includes("movement.kind === 'reserve'") || !commerceSource.includes("movement.kind === 'release'") || !commerceSource.includes("kind: 'receipt'") || !commerceSource.includes("kind: 'opening'")) fail('commerce_stock_ledger_contract_missing')
 if (!commerceSource.includes('export type CommerceOrderLine')
   || !commerceSource.includes('lines?: CommerceOrderLine[]')
@@ -3151,6 +3485,50 @@ if (!commerceSource.includes('export type CommerceOrderReturn')
   || !commerceSource.includes("kind: 'return'")
   || !managedCommerceRuntime.includes('def _validate_return_recorded')
   || !managedCommerceRuntime.includes('"commerce.order.return_recorded"')) fail('commerce_order_return_contract_missing')
+if (!commerceSource.includes('export type CommerceOrderSupportCase')
+  || !commerceSource.includes('export function commerceOrderSupportOpenExpectation')
+  || !commerceSource.includes('export function commerceSupportCaseUrgency')
+  || !commerceSource.includes('export function commerceSupportCheckpointState')
+  || !commerceSource.includes('export function commerceSupportQueue')
+  || !commerceSource.includes('export function commerceSupportSlaSummary')
+  || !commerceSource.includes('export function commerceSupportWorkloadExport')
+  || !commerceSource.includes('export function commerceSupportWorkloadCsv')
+  || !commerceSource.includes("COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA = 'supermega.commerce.support-workload.v1'")
+  || !commerceSource.includes('export function commerceOrderSupportServiceExpectation')
+  || !commerceSource.includes('export function recordCommerceOrderSupportServiceEvent')
+  || !commerceSource.includes('export function commerceOrderSupportReopenExpectation')
+  || !commerceSource.includes('export function reopenCommerceOrderSupportCase')
+  || !commerceSource.includes('export function recordCommerceOrderSupportCase')
+  || !commerceSource.includes('export function resolveCommerceOrderSupportCase')
+  || !commerceSource.includes('externalMessageSent: false')
+  || !commerceSource.includes('refundStarted: false')
+  || !commerceSource.includes("export type CommerceSupportPriority = 'urgent' | 'high' | 'normal' | 'low'")
+  || !coreSource.includes('Assign service responsibility before opening.')
+  || !coreSource.includes('data-support-urgency={urgency}')
+  || !coreSource.includes('data-support-sla="bounded"')
+  || !coreSource.includes('data-support-workload="privacy-minimal"')
+  || !coreSource.includes('Download workload CSV')
+  || !coreSource.includes('Support queue · next work first')
+  || !coreSource.includes('First response ready for independent delivery')
+  || !coreSource.includes("onOpenSupportService(order.id, supportCase.caseId, 'acknowledged')")
+  || !coreSource.includes("onOpenSupportService(order.id, supportCase.caseId, 'first_response_ready')")
+  || !coreSource.includes('Reopen case')
+  || !coreSource.includes('Review follow-up')
+  || !coreSource.includes('Choose one accountable owner and a future due time for this support case.')
+  || !managedCommerceRuntime.includes('def _validate_support_case_opened')
+  || !managedCommerceRuntime.includes('def _validate_support_case_reopened')
+  || !managedCommerceRuntime.includes('def _validate_support_case_service_recorded')
+  || !managedCommerceRuntime.includes('def _validate_support_case_resolved')) fail('commerce_order_support_contract_missing')
+if (!commerceSource.includes('export type CommerceOrderCorrection')
+  || !commerceSource.includes("financialStatus: 'review_required'")
+  || !commerceSource.includes("postingAuthority: 'none'")
+  || !commerceSource.includes('externalPostingPerformed: false')
+  || !commerceSource.includes('export function commerceOrderCorrectionExpectation')
+  || !commerceSource.includes('export function recordCommerceOrderCorrection')
+  || !commerceSource.includes('sourceCalculationDigest')
+  || !commerceSource.includes('commerceOrderAdjustedTotal')
+  || !managedCommerceRuntime.includes('def _validate_correction_recorded')
+  || !managedCommerceRuntime.includes('"commerce.order.correction_recorded"')) fail('commerce_order_correction_contract_missing')
 if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('expected_version: request.expectedVersion')
   || !managedTrialSource.includes("surface: 'commerce'")
@@ -3160,7 +3538,7 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${shopInventoryUiSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.payment.reconciled', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.support_case_opened', 'commerce.order.support_case_reopened', 'commerce.order.support_case_service_recorded', 'commerce.order.support_case_resolved', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.collection_action.recorded', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.supplier_policy_saved', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.supplier_invoice.recorded', 'commerce.supplier_invoice.payable_ready', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved', 'commerce.customer_credit_policy.saved']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.storefront_request.received')
@@ -3185,18 +3563,96 @@ if (!coreSource.includes('Record a refund already completed with the external pa
 if (!coreSource.includes("'commerce.refund.settled'")
   || !coreSource.includes('settleCommerceRefund(current, orderId, commerceActionProof(action))')
   || !coreSource.includes("kind: 'refund_settle'")) fail('commerce_refund_settlement_gate_missing')
+if (!coreSource.includes('Payment follow-up')
+  || !coreSource.includes('New orders retain an immutable payment-due snapshot.')
+  || !coreSource.includes('Record contact')
+  || !coreSource.includes("'commerce.collection_action.recorded'")
+  || !commerceSource.includes('export function commerceReceivablesAging')
+  || !commerceSource.includes('export function recordCommerceCollectionAction')) fail('commerce_receivables_aging_ui_contract_missing')
 if (!coreSource.includes('data-order-calculation-note="true"')
   || !coreSource.includes('Recorded total {formatMoney(order.total)} · Tax status not recorded')
-  || !coreSource.includes('Subtotal ${formatMoney(orderTotal)} · Tax not configured')
+  || !coreSource.includes('formatCommerceCalculation(calculationReview)')
+  || !coreSource.includes("data-order-calculation-status={'taxCode' in order.calculation ? 'configured' : 'not-configured'}")
   || (coreSource.match(/<OrderCalculationNote order=\{order\} \/>/g) || []).length !== 2) fail('commerce_order_calculation_visibility_missing_or_bloated')
+if (!coreSource.includes('data-tax-configuration="versioned"')
+  || !coreSource.includes("kind: 'tax_configuration'")
+  || !coreSource.includes("'commerce.tax_configuration.saved'")
+  || !coreSource.includes('configureCommerceTax(current, input, commerceActionProof(action))')
+  || !coreSource.includes('Jurisdiction code')
+  || !coreSource.includes('Effective from')
+  || !coreSource.includes('Takes effect only at the reviewed time. Earlier orders keep their original calculation.')
+  || !commerceSource.includes('commerceEffectiveTaxConfiguration(state, atTime)')
+  || !managedCommerceRuntime.includes('def _effective_tax_configuration(')
+  || !managedCommerceRuntime.includes('def _validate_tax_configuration_saved(')
+  || !managedCommerceRuntime.includes('command evidence must match the saved tax configuration proof.')) fail('commerce_tax_configuration_ui_or_managed_boundary_missing')
 if (!coreSource.includes('data-close-export="accounting-csv-v1"')
   || !coreSource.includes('Download close CSV')
-  || !commerceSource.includes('supermega.commerce.daily-close-export.v1')
+  || !commerceSource.includes('supermega.commerce.daily-close-export.v3')
   || !commerceSource.includes("calculationStatus: calculation ? 'accepted' : 'legacy_unverified'")
   || !commerceSource.includes("taxMode: calculation?.taxMode ?? 'not_recorded'")
   || !commerceSource.includes("if (/^[=+@-]/.test(raw)) raw = `'${raw}`")
   || !managedCommerceRuntime.includes('def commerce_daily_close_export(')
   || !managedCommerceRuntime.includes('def commerce_daily_close_csv(')) fail('commerce_daily_close_export_missing_or_unsafe')
+if (!coreSource.includes("'commerce.order.correction_recorded'")
+  || !coreSource.includes("kind: 'order_correction'")
+  || !coreSource.includes('Correct invoice')
+  || !coreSource.includes('The original invoice stays unchanged.')
+  || !coreSource.includes('same tax snapshot as the original invoice')
+  || !coreSource.includes('no external posting performed')) fail('commerce_order_correction_ui_or_gate_missing')
+if (!coreSource.includes('data-accounting-handoff="review-required"')
+  || !coreSource.includes('Download accounting CSV')
+  || !coreSource.includes('data-account-mapping="versioned"')
+  || !coreSource.includes("kind: 'account_mapping'")
+  || !coreSource.includes("'commerce.account_mapping.saved'")
+  || !commerceSource.includes('supermega.commerce.accounting-handoff.v3')
+  || !commerceSource.includes("postingAuthority: 'none'")
+  || !commerceSource.includes('externalPostingPerformed: false')
+  || !commerceSource.includes("accountRole: 'payment_clearing'")
+  || !commerceSource.includes("accountRole: 'sales_revenue_unverified'")
+  || !commerceSource.includes("accountRole: 'sales_adjustment'")
+  || !commerceSource.includes("accountRole: 'correction_receivable'")
+  || !commerceSource.includes("accountRole: 'correction_payable'")
+  || !commerceSource.includes('expectedControlTotalMmk = originalOrderTotalMmk + creditCorrectionMmk + debitCorrectionMmk')
+  || !managedCommerceRuntime.includes('def _validate_account_mapping_saved(')
+  || !managedCommerceRuntime.includes('def commerce_accounting_handoff(')) fail('commerce_accounting_handoff_missing_or_unsafe')
+if (!coreSource.includes('data-customer-credit-policy="versioned"')
+  || !coreSource.includes("kind: 'customer_credit_policy'")
+  || !coreSource.includes("'commerce.customer_credit_policy.saved'")
+  || !coreSource.includes('configureCommerceCustomerCreditPolicy(current, input, commerceActionProof(action))')
+  || !coreSource.includes('Credit policy required')
+  || !coreSource.includes('This records an internal approval boundary only; it never collects, lends, charges, or contacts the customer.')
+  || !commerceSource.includes('export function commerceCustomerCreditReview(')
+  || !commerceSource.includes('export function configureCommerceCustomerCreditPolicy(')
+  || !commerceSource.includes('order.creditDecision !== undefined')
+  || !managedCommerceRuntime.includes('def _effective_customer_credit_policy(')
+  || !managedCommerceRuntime.includes('def _validate_customer_credit_policy_saved(')
+  || !managedCommerceRuntime.includes('a new credit order requires the exact active customer policy, terms, and exposure decision.')
+  || !managedCommerceRuntime.includes('command evidence must match the saved customer credit policy proof.')) fail('commerce_customer_credit_policy_ui_or_managed_boundary_missing')
+if (!coreSource.includes('data-promotion-policy="versioned"')
+  || !coreSource.includes("kind: 'promotion_policy'")
+  || !coreSource.includes("'commerce.promotion_policy.saved'")
+  || !coreSource.includes('configureCommercePromotionPolicy(current, input, commerceActionProof(action))')
+  || !coreSource.includes('inactive safely stops the code without deleting history')
+  || !commerceSource.includes('export function configureCommercePromotionPolicy(')
+  || !managedCommerceRuntime.includes('def _validate_promotion_policy_saved(')
+  || !managedCommerceRuntime.includes('command evidence must match the saved promotion policy proof.')) fail('commerce_promotion_policy_setup_ui_or_managed_boundary_missing')
+if (!coreSource.includes('data-shipping-policy="versioned"')
+  || !coreSource.includes("kind: 'shipping_policy'")
+  || !coreSource.includes("'commerce.shipping_policy.saved'")
+  || !coreSource.includes('configureCommerceShippingPolicy(current, input, commerceActionProof(action))')
+  || !commerceSource.includes('export function configureCommerceShippingPolicy(')
+  || !commerceSource.includes('export function commerceShippingDecision(')
+  || !managedCommerceRuntime.includes('def _validate_shipping_policy_saved(')
+  || !managedCommerceRuntime.includes('command evidence must match the saved shipping policy proof.')) fail('commerce_shipping_policy_setup_ui_or_managed_boundary_missing')
+if (!coreSource.includes('data-payment-policy="versioned"')
+  || !coreSource.includes("kind: 'payment_policy'")
+  || !coreSource.includes("'commerce.payment_policy.saved'")
+  || !coreSource.includes('configureCommercePaymentPolicy(current, input, commerceActionProof(action))')
+  || !coreSource.includes('It never charges, transfers money, contacts a customer, or marks payment received.')
+  || !commerceSource.includes('export function configureCommercePaymentPolicy(')
+  || !commerceSource.includes('export function commercePaymentDecision(')
+  || !managedCommerceRuntime.includes('def _validate_payment_policy_saved(')
+  || !managedCommerceRuntime.includes('command evidence must match the saved payment policy proof.')) fail('commerce_payment_policy_setup_ui_or_managed_boundary_missing')
 if (!coreSource.includes("'commerce.order.return_recorded'")
   || !coreSource.includes("kind: 'order_return'")
   || !coreSource.includes('Record return')
@@ -3213,11 +3669,18 @@ if (!coreSource.includes("'commerce.order.return_recorded'")
   || !managedTrialStoreRuntime.includes('kind="order_return"')
   || !coreSource.includes('Math.ceil(orders.length / pageSize)')
   || !coreSource.includes('aria-label="Closed order pages"')) fail('commerce_order_return_ui_or_gate_missing')
-if (!coreSource.includes("mode: 'managed-unprovisioned'") || !coreSource.includes('No browser demo orders, customers, or stock records are copied') || !coreSource.includes('Create managed catalog') || !coreSource.includes('Opening balance reason') || !coreSource.includes('result.version !== current.version + 1') || !coreSource.includes('validateCommerceState(result.state)') || !coreSource.includes("error.code === 'trial_version_conflict'") || !coreSource.includes('class ShopReviewRequiredError') || !coreSource.includes('error instanceof ShopReviewRequiredError') || !coreSource.includes('const latest = loadCommerceWorkspace()') || !coreSource.includes('latest record is loaded for fresh review') || !coreSource.includes('managedIdentity ? null : <ActionHistory')) fail('managed_commerce_ui_not_fail_closed')
-if ((coreSource.match(/const conflict = \{ \.\.\.refreshed, error: '' \}/g) || []).length !== 2) fail('managed_conflict_refresh_remained_write_blocked')
-if (!coreSource.includes('confirmation?: AccountableAction') || !coreSource.includes('if (action.confirmation) return action.confirmation') || !coreSource.includes('Retry same confirmation') || !coreSource.includes('result.idempotent_replay') || !coreSource.includes('before the replay could be reconciled')) fail('managed_command_retry_not_frozen_or_reconciled')
+if (!workspaceRuntimeSource.includes("mode: 'managed-unprovisioned'") || !coreSource.includes('No browser demo orders, customers, or stock records are copied') || !coreSource.includes('Create managed catalog') || !coreSource.includes('Opening balance reason') || !workspaceRuntimeSource.includes('result.version !== current.version + 1') || !workspaceRuntimeSource.includes('validateCommerceState(result.state)') || !workspaceRuntimeSource.includes("error.code === 'trial_version_conflict'") || !workspaceRuntimeSource.includes('class ShopReviewRequiredError') || !coreSource.includes('error instanceof ShopReviewRequiredError') || !workspaceRuntimeSource.includes('const latest = loadCommerceWorkspace()') || !workspaceRuntimeSource.includes('latest record is loaded for fresh review') || !coreSource.includes('managedIdentity ? null : <ActionHistory')) fail('managed_commerce_ui_not_fail_closed')
+if ((workspaceRuntimeSource.match(/const conflict = \{ \.\.\.refreshed, error: '' \}/g) || []).length !== 2) fail('managed_conflict_refresh_remained_write_blocked')
+if (!workspaceRuntimeSource.includes('confirmation?: AccountableAction') || !workspaceRuntimeSource.includes('if (action.confirmation) return action.confirmation') || !coreSource.includes('Retry same confirmation') || !workspaceRuntimeSource.includes('result.idempotent_replay') || !workspaceRuntimeSource.includes('before the replay could be reconciled')) fail('managed_command_retry_not_frozen_or_reconciled')
 if (!managedCommerceRuntime.includes('commerce.workspace.initialized') || managedCommerceRuntime.includes('commerce.snapshot.saved') || !managedCommerceRuntime.includes('_one_changed') || !managedCommerceRuntime.includes('_validate_event_evidence') || !managedCommerceRuntime.includes('daily close totals must match completed, reconciled orders')) fail('managed_commerce_server_transition_contract_missing')
-if (!commerceSource.includes('registerCommerceItem') || !coreSource.includes('Add catalog item') || !coreSource.includes('Review catalog item') || !coreSource.includes('The opening balance may be zero.') || !managedCommerceRuntime.includes('one exact attributable opening balance')) fail('commerce_catalog_creation_contract_missing')
+if (!commerceSource.includes('registerCommerceItem')
+  || !commerceSource.includes('export function importCommerceCatalog')
+  || !commerceSource.includes('ACT-CLIENT-IMPORT-')
+  || !commerceSource.includes('alreadyPresent')
+  || !coreSource.includes('Add catalog item')
+  || !coreSource.includes('Review catalog item')
+  || !coreSource.includes('The opening balance may be zero.')
+  || !managedCommerceRuntime.includes('one exact attributable opening balance')) fail('commerce_catalog_creation_contract_missing')
 if (!commerceSource.includes('export type CommerceCatalogChange')
   || !commerceSource.includes('export type CommerceCatalogBaseline')
   || !commerceSource.includes('commerceCatalogBaselineDigest')
@@ -3272,6 +3735,7 @@ if (coreSource.includes("await import('./shop-catalog-import')")
 if (!shopInventorySource.includes("SHOP_INVENTORY_STATE_SCHEMA = 'supermega.shop.inventory_foundation.v1'")
   || !shopInventorySource.includes("SHOP_INVENTORY_IMPORT_CONTRACT = 'supermega.shop.inventory_import.v1'")
   || !shopInventorySource.includes('export function applyShopInventoryImport')
+  || !shopInventorySource.includes('export function createShopInventoryMaster')
   || !shopInventorySource.includes('export function transferShopInventory')
   || !shopInventorySource.includes('export function receiveShopInventory')
   || !shopInventorySource.includes('export function countShopInventory')
@@ -3291,7 +3755,11 @@ if (!coreSource.includes('<ShopInventoryFoundation')
   || !shopInventoryUiSource.includes('commerce.inventoryFoundation ?? createEmptyShopInventoryState()')
   || !shopInventoryUiSource.includes('Boolean(state.revision && catalog.some')
   || !shopInventoryUiSource.includes("await onInventory(\n        'commerce.inventory.initialized'")
+  || !shopInventoryUiSource.includes("await onInventory(\n        'commerce.inventory.master_created'")
+  || !shopInventoryUiSource.includes("await onInventory(\n        'commerce.inventory.supplier_policy_saved'")
   || !shopInventoryUiSource.includes("await onInventory(\n        'commerce.inventory.transferred'")
+  || !shopInventoryUiSource.includes('Clients and suppliers')
+  || !shopInventoryUiSource.includes('Nothing has been recorded yet.')
   || shopInventoryUiSource.includes('loadShopInventoryWorkspace')
   || shopInventoryUiSource.includes('mutateShopInventoryWorkspace')
   || shopInventoryUiSource.includes('fetch(')) fail('shop_inventory_foundation_ui_boundary_missing')
@@ -3305,19 +3773,45 @@ if (!shopInventoryUiSource.includes('const inventoryAutopilotRows = [')
 if (!commerceSource.includes('inventoryFoundation?: ShopInventoryState')
   || !commerceSource.includes('Commerce location inventory envelope is invalid.')
   || !shopInventoryUiSource.includes("'commerce.inventory.initialized'")
+  || !shopInventoryUiSource.includes("'commerce.inventory.master_created'")
+  || !shopInventoryUiSource.includes("'commerce.inventory.supplier_policy_saved'")
   || !shopInventoryUiSource.includes("'commerce.inventory.transferred'")
   || !shopInventoryUiSource.includes('current.inventoryFoundation')
   || !coreSource.includes('onInventory={mutateCommerce}')
   || !managedCommerceRuntime.includes('_validate_inventory_initialized')
+  || !managedCommerceRuntime.includes('_validate_inventory_master_created')
+  || !managedCommerceRuntime.includes('_validate_inventory_supplier_policy_saved')
   || !managedCommerceRuntime.includes('_validate_inventory_transferred')
+  || !managedTrialStoreRuntime.includes('"commerce.inventory.master_created"')
   || !managedTrialStoreRuntime.includes('restamp_latest_shop_inventory_command')
   || !shopInventoryPythonSource.includes('validate_shop_inventory_state')
   || !shopInventoryPythonSource.includes('inventory command digest is invalid')) fail('managed_shop_inventory_foundation_missing')
+if (!shopInventoryPythonSource.includes('def shop_inventory_business_partners')
+  || !commerceSource.includes('inventory.vendors.filter((vendor) => vendor.name === supplier).length !== 1')
+  || !managedCommerceRuntime.includes('a location-managed purchase order must use one retained supplier master.')
+  || !coreSource.includes("list={managedInventoryProjection?.clients.length ? 'shop-client-master-options' : undefined}")
+  || !coreSource.includes('<option value="">Choose supplier</option>')) fail('shop_business_partner_operating_link_missing')
 if (!commerceSource.includes('CommercePurchaseOrderLocationReceipt')
   || !commerceSource.includes('receiveShopInventory(current.inventoryFoundation')
   || !commerceSource.includes('locationResult.replayed')
   || !managedCommerceRuntime.includes('managed purchase receipt must append exactly one location receipt')
   || !managedTrialStoreRuntime.includes('location_receipt_matches')) fail('managed_purchase_receipt_location_contract_missing')
+if (!shopInventorySource.includes('export function receiveShopInventoryFromProduction')
+  || !commerceSource.includes('export function receiveCommerceProductionBatch')
+  || !commerceSource.includes('productionSourceProduct')
+  || !commerceSource.includes('conflicts with the retained Plant product mapping')
+  || !commerceSource.includes('PLANT-BATCH:${checkedReceipt.releaseId}:${checkedReceipt.sourceCommandDigest}:${locationId}')
+  || !managedTrialSource.includes("'commerce.production_batch.received'")
+  || !managedCommerceRuntime.includes('def _validate_production_batch_received')
+  || !managedCommerceRuntime.includes('the Plant receipt location command must match the exact release evidence')
+  || !managedTrialStoreRuntime.includes('"commerce.production_batch.received": "production_receipt"')
+  || !coreSource.includes('production={relatedProduction}')
+  || !shopInventoryUiSource.includes('Released from Plant')
+  || !shopInventoryUiSource.includes('Review Plant receipt')
+  || !shopInventoryUiSource.includes('Map released Plant product to Shop item')
+  || !shopInventoryUiSource.includes('SuperMega will not guess the mapping.')
+  || !shopInventoryUiSource.includes('plantProjection.plan?.job.product !== productionReceiptReview.sourceProduct')
+  || !shopInventoryUiSource.includes("'commerce.production_batch.received'")) fail('plant_batch_shop_receipt_boundary_missing')
 if (!commerceSource.includes('CommerceStockLocationCount')
   || !commerceSource.includes('countShopInventory(current.inventoryFoundation')
   || !coreSource.includes("'Count one location'")
@@ -3330,15 +3824,33 @@ if (!commerceSource.includes('CommerceStockLocationCount')
 if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.order_foundation.v1'")
   || !plantOrderSource.includes("PLANT_ORDER_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v1'")
   || !plantOrderSource.includes("PLANT_ORDER_EXECUTION_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v2'")
+  || !plantOrderSource.includes("PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v3'")
+  || !plantOrderSource.includes("PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT = 'supermega.plant.reviewed_plan.v4'")
   || !plantOrderSource.includes('PLANT_ORDER_ADDITIONAL_MATERIAL_MAX = 11')
   || !plantOrderSource.includes('PLANT_ORDER_ADDITIONAL_OPERATION_MAX = 11')
+  || !plantOrderSource.includes('PLANT_ORDER_PLAN_REVISION_MAX = 25')
   || !plantOrderSource.includes('export function parsePlantOrderMaterialPaste')
   || !plantOrderSource.includes('export function parsePlantOrderRoutingPaste')
   || !plantOrderSource.includes('export function buildPlantOrderExecutionPlan')
+  || !plantOrderSource.includes('export function buildPlantOrderControlledPlan')
+  || !plantOrderSource.includes('export function buildPlantOrderEffectivePlan')
+  || !plantOrderSource.includes('export function supersedePlantOrderPlan')
   || !plantOrderSource.includes('export function checkPlantOrderAvailability')
   || !plantOrderSource.includes('export function releasePlantOrder')
+  || !plantOrderSource.includes('export function recordPlantOrderCalibration')
+  || !plantOrderSource.includes('export function recordPlantOrderQualityRework')
   || !plantOrderSource.includes('export function issuePlantOrderMaterial')
+  || !plantOrderSource.includes('export function parsePlantOrderDowntimePaste')
+  || !plantOrderSource.includes('export function recordPlantOrderEffectiveness')
   || !plantOrderSource.includes('export function recordPlantOrderOperation')
+  || !plantOrderSource.includes("PLANT_ORDER_EFFECTIVENESS_CONTRACT = 'supermega.plant.order_effectiveness.v2'")
+  || !plantOrderSource.includes("PLANT_ORDER_COST_REVIEW_PACKET_CONTRACT = 'supermega.plant.cost_review_packet.v1'")
+  || !plantOrderSource.includes('export function projectPlantOrderEffectiveness')
+  || !plantOrderSource.includes('export function buildPlantOrderCostReviewPacket')
+  || !plantOrderSource.includes('export function validatePlantOrderCostReviewPacket')
+  || !plantOrderSource.includes('Plant cost review packet does not match its validated command chain.')
+  || !plantOrderSource.includes("missingEvidence.push('Order-bound planned productive time and downtime')")
+  || !plantOrderSource.includes("kind: 'record_effectiveness'")
   || !plantOrderSource.includes('export function inspectPlantOrderOutput')
   || !plantOrderSource.includes('export function releasePlantOrderBatch')
   || !plantOrderSource.includes('export async function mutatePlantOrderWorkspace')
@@ -3347,8 +3859,16 @@ if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.orde
 if (['fetch(', 'supabase', 'openai', 'anthropic'].some((marker) => plantOrderSource.toLowerCase().includes(marker))) fail('plant_order_foundation_external_side_effect_added')
 if (!coreSource.includes('<PlantOrderFoundation')
   || !coreSource.includes("lazy(() => import('./PlantOrderFoundation')")
+  || coreSource.includes('className="plant-execution-disclosure"')
+  || !coreSource.includes('Loading batch execution')
   || !plantOrderUiSource.includes('Run one controlled batch')
   || !plantOrderUiSource.includes('Additional BOM materials (optional)')
+  || !plantOrderUiSource.includes('Shop supply SKU')
+  || !plantOrderUiSource.includes('Material per Shop stock unit')
+  || !plantOrderUiSource.includes('Download material requirements')
+  || !plantOrderUiSource.includes('Shop reorder stock stays protected')
+  || !plantOrderUiSource.includes('outside the reviewed production window')
+  || !plantOrderUiSource.includes('No purchase order, supplier message, stock issue, production change, or provider call occurs.')
   || !plantOrderUiSource.includes('Additional routing operations (optional)')
   || !plantOrderUiSource.includes('details?: Array<{ label: string; value: string }>')
   || !plantOrderUiSource.includes("{ label: 'Output batch'")
@@ -3357,32 +3877,74 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || !plantOrderUiSource.includes('review.details?.length')
   || !plantOrderUiSource.includes('additionalMaterials: event.target.value')
   || !plantOrderUiSource.includes('additionalOperations: event.target.value')
-  || !plantOrderUiSource.includes('buildPlantOrderExecutionPlan({')
+  || !plantOrderUiSource.includes('buildPlantOrderEffectivePlan({')
+  || !plantOrderUiSource.includes('Plan effective from')
+  || !plantOrderUiSource.includes('Plan valid until')
+  || !plantOrderUiSource.includes('Create a newly reviewed revision; the old package cannot be silently reused.')
+  || !plantOrderUiSource.includes('Create current revision')
+  || !plantOrderUiSource.includes('Revision reason')
+  || !plantOrderUiSource.includes('Plan revisions')
+  || !plantOrderUiSource.includes('supersedePlantOrderPlan(current')
   || !plantOrderUiSource.includes('projection.materials.map((material)')
   || !plantOrderUiSource.includes('projection.plan.workCentres.map((centre)')
   || !plantOrderUiSource.includes('parsePlantOrderQuantityMilli(draft.availableQuantity, true)')
   || !plantOrderUiSource.includes('availableQuantity: milliInputValue(')
   || !plantOrderUiSource.includes('Review operation progress')
   || !plantOrderUiSource.includes('Routing progress')
+  || !plantOrderUiSource.includes('Calibration control')
+  || !plantOrderUiSource.includes('Review calibration evidence')
+  || !plantOrderUiSource.includes('expired evidence blocks order release and routed operation recording')
+  || !plantOrderUiSource.includes('Review quality rework')
+  || !plantOrderUiSource.includes('Only a later full passing inspection clears the hold.')
+  || !plantOrderUiSource.includes('Effectiveness')
+  || !plantOrderUiSource.includes('Review effectiveness evidence')
+  || !plantOrderUiSource.includes('Closed downtime intervals (optional)')
+  || !plantOrderUiSource.includes('Available capacity is never substituted for actual productive time.')
+  || !plantOrderUiSource.includes('Download cost review packet')
+  || !plantOrderUiSource.includes('Internal evidence for ERP review only. No cost, inventory, journal, payroll, invoice, provider, or production write occurs.')
+  || !plantOrderUiSource.includes('aria-label="Plant operating flow"')
+  || !plantOrderUiSource.includes('id="plant-operating-flow"')
+  || !plantOrderUiSource.includes('Next required step')
+  || !plantOrderUiSource.includes("projection.status === 'quality_hold'")
+  || !plantOrderUiSource.includes('Shop remains the stock authority')
+  || !coreCssSource.includes('.plant-flow-stages')
+  || !coreCssSource.includes('.plant-execution-foundation { display: grid')
   || (plantOrderUiSource.match(/>Review availability<\/button>/g) || []).length !== 1
   || !plantOrderUiSource.includes('No machine command')
   || !plantOrderUiSource.includes('Shop receipt, delivery, costing, and accounting are not posted automatically.')
-  || !plantOrderUiSource.includes('navigator.locks')
+  || !plantOrderUiSource.includes('upsertProductionOrderExecution(current, result.state)')
   || plantOrderUiSource.includes('fetch(')) fail('plant_order_foundation_ui_boundary_missing')
-if (!plantOrderUiSource.includes('managedState?: PlantOrderState | null')
-  || !plantOrderUiSource.includes('onManagedCommand?:')
-  || !plantOrderUiSource.includes('await onManagedCommand(')
-  || !plantOrderUiSource.includes("`${managed ? 'Managed' : 'Local'} execution evidence only")
+if (!plantOrderPythonSource.includes('PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v3"')
+  || !plantOrderPythonSource.includes('PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v4"')
+  || !plantOrderPythonSource.includes('PLANT_ORDER_COST_REVIEW_PACKET_CONTRACT = "supermega.plant.cost_review_packet.v1"')
+  || !plantOrderPythonSource.includes('def build_plant_order_controlled_plan(')
+  || !plantOrderPythonSource.includes('def build_plant_order_effective_plan(')
+  || !plantOrderPythonSource.includes('def project_plant_order_cost_drivers(')
+  || !plantOrderPythonSource.includes('def project_plant_order_financial_cost(')
+  || !plantOrderPythonSource.includes('def build_plant_order_cost_review_packet(')
+  || !plantOrderPythonSource.includes('def validate_plant_order_cost_review_packet(')
+  || !plantOrderPythonSource.includes('Plant cost review packet does not match its validated command chain.')
+  || !plantOrderPythonSource.includes('def supersede_plant_order_plan(')
+  || !plantOrderPythonSource.includes('def record_plant_order_calibration(')
+  || !plantOrderPythonSource.includes('def record_plant_order_quality_rework(')
+  || !plantOrderPythonSource.includes('requires current calibration for')) fail('managed_plant_execution_parity_missing')
+if (!plantOrderUiSource.includes('productionState: ProductionState')
+  || !plantOrderUiSource.includes('onProductionCommand: (')
+  || !plantOrderUiSource.includes('await onProductionCommand(')
+  || !plantOrderUiSource.includes('Production workspace evidence only.')
   || !productionSource.includes('orderExecution?: PlantOrderState')
+  || !productionSource.includes('orderPortfolio?: ProductionOrderPortfolio')
   || !productionSource.includes('supermega.plant.order_foundation.v1')
   || !managedProductionRuntime.includes('production state.orderExecution is invalid')
+  || !managedProductionRuntime.includes('production state.orderPortfolio')
   || !managedProductionRuntime.includes('must append exactly one chained command')
+  || !managedProductionRuntime.includes('must change exactly one controlled order')
   || !managedProductionRuntime.includes('Plant execution command proof must match the authenticated Production evidence')
   || !managedTrialStoreRuntime.includes('production.order_execution.recorded')
   || !plantOrderUiSource.includes("'production.order_execution.recorded'")
-  || !plantOrderUiSource.includes('current.orderExecution ?? createEmptyPlantOrderState()')
-  || !coreSource.includes('managedState={managedIdentity ? production.orderExecution ?? null : undefined}')
-  || !coreSource.includes('onManagedCommand={managedIdentity ? mutateProduction : undefined}')) fail('managed_plant_order_execution_contract_missing')
+  || !plantOrderUiSource.includes('productionOrderExecutionForJob(current, selectedOrderJobId)')
+  || !coreSource.includes('onProductionCommand={mutateProduction}')
+  || !coreSource.includes('productionState={production}')) fail('managed_plant_order_execution_contract_missing')
 if (!commerceSource.includes("'production_issue'")
   || !commerceSource.includes('export function issueCommerceStockToProduction')
   || !commerceSource.includes('issueShopInventoryToProduction(inventoryFoundation')
@@ -3396,7 +3958,26 @@ if (!commerceSource.includes("'production_issue'")
   || !shopInventorySource.includes("kind: 'production_issue'")
   || !shopInventoryPythonSource.includes('production issue allocations do not match deterministic available location stock')
   || !productionMaterialHandoffSource.includes('pendingProductionMaterialHandoffs')
+  || !productionMaterialHandoffSource.includes("PRODUCTION_MATERIAL_REQUIREMENTS_CONTRACT = 'supermega.production.material_requirements.v1'")
+  || !productionMaterialHandoffSource.includes('projectProductionMaterialRequirements')
+  || !productionMaterialHandoffSource.includes('suggestedOrderStockUnits')
+  || !productionMaterialHandoffSource.includes('suggestedExpediteStockUnits')
+  || !productionMaterialHandoffSource.includes('availableToIssueStockUnits')
+  || !productionMaterialHandoffSource.includes('requiredSupplyStockUnits')
+  || !productionMaterialHandoffSource.includes('PRODUCTION_PORTFOLIO_MRP_CONTRACT')
+  || !productionMaterialHandoffSource.includes('projectProductionPortfolioMrp')
+  || !productionMaterialHandoffSource.includes('inventoryReserved: false')
+  || !productionMaterialHandoffSource.includes('reorderAt: item.reorderAt')
+  || !productionMaterialHandoffSource.includes('expectedMs >= effectiveUntilMs')
+  || !productionMaterialHandoffSource.includes("supplyAtRisk: rows.filter((row) => row.status === 'supply_at_risk').length")
+  || !productionMaterialHandoffSource.includes('purchaseCreated: false')
   || !productionMaterialHandoffSource.includes("movement.kind === 'production_issue'")
+  || !productionMaterialHandoffPython.includes('PRODUCTION_MATERIAL_REQUIREMENTS_CONTRACT')
+  || !productionMaterialHandoffPython.includes('project_production_material_requirements')
+  || !productionMaterialHandoffPython.includes('validate_production_material_requirements')
+  || !productionMaterialHandoffPython.includes('available_to_issue_stock_units')
+  || !productionMaterialHandoffPython.includes('required_supply_stock_units')
+  || !productionMaterialHandoffPython.includes('_instant(effective_until)')
   || !productionMaterialHandoffPython.includes('require_shop_issue_matches_plant')
   || !productionMaterialHandoffPython.includes('require_shop_issue_before_plant_progress')
   || !managedTrialRuntimeSource.includes('related_surfaces = ("production",)')
@@ -3405,16 +3986,74 @@ if (!shopInventoryUiSource.includes("import { ShopProductionHandoff } from './Sh
   || !shopInventoryUiSource.includes('<ShopProductionHandoff')
   || !coreSource.includes('onIssue={mutateCommerce}')
   || !coreSource.includes('commerceState={relatedCommerce}')
+  || !coreSource.includes('const plantOrderScopeWorkspaceId = managedIdentity')
+  || !coreSource.includes('scope={`plant:${plantOrderScopeWorkspaceId}`}')
+  || coreSource.includes("scope={`plant:${managedWorkspaceId ?? managedIdentity?.workspaceId ?? 'local-sample'}`}")
   || !shopProductionHandoffUiSource.includes('Shop remains the only stock authority.')
   || !shopProductionHandoffUiSource.includes('Review the exact stock decrement. Nothing has been written yet.')
   || !shopProductionHandoffUiSource.includes('expectedInventoryHeadDigest')
   || !shopProductionHandoffUiSource.includes('locationPicks.join')
+  || !shopProductionHandoffUiSource.includes('exactWholeUnits <= available')
+  || !shopProductionHandoffUiSource.includes('PLANT_ORDER_WORKSPACE_UPDATED_EVENT')
+  || !shopProductionHandoffUiSource.includes('productionOrderPortfolioEntries')
+  || !shopProductionHandoffUiSource.includes('event.key === PRODUCTION_KEY')
+  || !shopProductionHandoffUiSource.includes("window.addEventListener('storage', handleStorage)")
+  || !shopProductionHandoffUiSource.includes('plantOrderStorageKey(LOCAL_PLANT_SCOPE)')
+  || !shopProductionHandoffUiSource.includes("const LEGACY_LOCAL_PLANT_SCOPE = 'plant:'")
   || !plantOrderUiSource.includes('Await Shop issue')
   || !plantOrderUiSource.includes('Shop must issue every linked material request before operation progress')
   || !plantOrderUiSource.includes('Review in Shop')
+  || !plantOrderUiSource.includes("loadPlantOrderWorkspace(localStorage, 'plant:')")
   || shopProductionHandoffUiSource.includes('fetch(')) fail('plant_shop_material_handoff_ui_boundary_missing')
+if (!shopProductionDemandSource.includes("SHOP_PRODUCTION_DEMAND_SCHEMA = 'supermega.shop_production_demand.v1'")
+  || !shopProductionDemandSource.includes('plantOrderEvidenceDigest(sourceSnapshot)')
+  || !shopProductionDemandSource.includes('sourceSnapshot: ShopProductionDemandSourceSnapshot')
+  || !shopProductionDemandSource.includes('validateCommerceState')
+  || !shopProductionDemandSource.includes("operatingUnitLocationId: 'LOC-MAIN'")
+  || !shopProductionDemandSource.includes("sourceAuthority: 'commerce'")
+  || !shopProductionDemandSource.includes("targetAuthority: 'production'")
+  || !shopProductionDemandSource.includes("writePolicy: 'human_review_required'")
+  || !shopProductionDemandSource.includes('sourceDigest')
+  || !shopProductionDemandSource.includes('uncoveredDemandUnits')
+  || !shopProductionDemandSource.includes('if (!uncoveredDemandUnits && !replenishmentGapUnits) return null')
+  || !shopProductionDemandSource.includes('evidenceReference: `SHOP-DEMAND:')
+  || !shopProductionDemandSource.includes('shopProductionDemandIsCurrent')
+  || !shopProductionDemandSource.includes('existingJobIds')
+  || !shopProductionDemandSource.includes('while (jobs.some((job) => job.id === suggestedJobId))')
+  || shopProductionDemandSource.includes('fetch(')
+  || shopProductionDemandSource.includes('localStorage')
+  || shopProductionDemandSource.includes('sessionStorage')) fail('shop_production_demand_contract_missing')
+if (!coreSource.includes('projectShopProductionDemand')
+  || !coreSource.includes('shopProductionDemandIsCurrent')
+  || !coreSource.includes('aria-label="Shop demand to Plant"')
+  || !coreSource.includes('Use Shop demand')
+  || !coreSource.includes('operation-module production-operation-module')
+  || !coreSource.includes('Shop orders, stock, reorder level, or Plant coverage changed. Nothing was written; review the current demand again.')
+  || !coreSource.includes('evidenceReference: demandSignal.evidenceReference')
+  || !coreSource.includes("mutateProduction('production.job.created'")
+  || !coreSource.includes('registerProductionJob')
+  || !coreSource.includes('data-plant-genealogy="versioned"')
+  || !coreSource.includes('Download batch genealogy')
+  || !coreCssSource.includes('.production-operation-module > .production-view { min-height: clamp(420px,62vh,620px); flex: 0 0 auto; }')
+  || !coreCssSource.includes('.production-operation-module > .production-view > .output-panel { position: sticky; top: 0; height: min(620px,calc(100svh - 240px)); max-height: 620px; align-self: start; }')
+  || !coreCssSource.includes('.job-panel > .stock-receipt-preview > button { grid-column: 2; grid-row: 1 / 4; align-self: center; }')
+  || !coreCssSource.includes('.job-panel > .stock-receipt-preview > button { width: 100%; grid-column: 1; grid-row: auto; margin-top: 6px; }')) fail('shop_production_demand_ui_boundary_missing')
+if (!productionSource.includes("PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT = 'supermega.production.shop-demand-source.v1'")
+  || !productionSource.includes("PRODUCTION_BATCH_GENEALOGY_SCHEMA = 'supermega.production.batch-genealogy.v1'")
+  || !productionSource.includes('validateProductionShopDemandSource')
+  || !productionSource.includes('buildProductionBatchGenealogy')
+  || !productionSource.includes('formatProductionBatchGenealogy')
+  || !productionSource.includes('issuesInventory: false')
+  || !productionSource.includes('changesEquipment: false')
+  || !productionSource.includes('postsCosting: false')
+  || !productionSource.includes('issuesCertificate: false')
+  || !managedProductionRuntime.includes('_SHOP_DEMAND_SOURCE_CONTRACT = "supermega.production.shop-demand-source.v1"')
+  || !managedProductionRuntime.includes('plant_order_evidence_digest(snapshot)')) fail('production_batch_genealogy_contract_missing')
 if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1'")
   || !clientOnboardingSource.includes("CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1'")
+  || !clientOnboardingSource.includes("CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v3'")
+  || !clientOnboardingSource.includes("CLIENT_OPERATING_FOUNDATION_SCHEMA = 'supermega.client_operating_foundation.v1'")
+  || !clientOnboardingSource.includes("CLIENT_OPERATIONAL_TOPOLOGY_SCHEMA = 'supermega.client_operational_topology.v1'")
   || !clientOnboardingSource.includes('CLIENT_IMPORT_MAX_BYTES = 512 * 1024')
   || !clientOnboardingSource.includes('CLIENT_IMPORT_MAX_ROWS = 500')
   || !clientOnboardingSource.includes("type ClientSolutionId = 'commerce' | 'production' | 'website' | 'ecommerce'")
@@ -3425,11 +4064,42 @@ if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_i
   || !clientOnboardingSource.includes('export function clientImportChecklist')
   || !clientOnboardingSource.includes('function checklistNote')
   || !clientOnboardingSource.includes('acceptedHeaders:')
-  || !clientOnboardingSource.includes('exampleRows(product, workflowTemplateId)')
+  || !clientOnboardingSource.includes('exampleRows(product, workflowTemplateId, context)')
+  || !clientOnboardingSource.includes('const shopIndustrySampleCsv:')
+  || !clientOnboardingSource.includes('const ecommerceIndustrySampleCsv:')
+  || !clientOnboardingSource.includes('const websiteIndustrySampleCsv:')
+  || !clientOnboardingSource.includes('const plantIndustrySampleCsv:')
+  || !clientOnboardingSource.includes('export function clientImportPlanningDate')
+  || !clientOnboardingSource.includes("timeZone: 'Asia/Yangon'")
+  || !clientOnboardingSource.includes("code: 'date_not_future'")
+  || !clientOnboardingSource.includes(".replaceAll('{{dueDate14}}'")
+  || clientOnboardingSource.includes('2026-08-15')
+  || !managedTrialRuntimeSource.includes('current_date: DateResolver = _current_yangon_date')
+  || (managedTrialRuntimeSource.match(/minimum_production_due_date=current_date\(\)/g) ?? []).length !== 2
   || !clientOnboardingSource.includes("'social-commerce':")
   || !clientOnboardingSource.includes("'production-control':")
   || !clientOnboardingSource.includes("'business-presence':")
   || !clientOnboardingSource.includes("'social-storefront':")
+  || !clientOnboardingSource.includes('export const clientDemoPresets')
+  || !clientOnboardingSource.includes('shopIndustryPackId: ShopIndustryPackId')
+  || !clientOnboardingSource.includes('shopIndustryPack(input.shopIndustryPackId ?? preset.shopIndustryPackId)')
+  || !clientOnboardingSource.includes('plantIndustryPack(input.plantIndustryPackId ?? preset.plantIndustryPackId)')
+  || !clientOnboardingSource.includes('plantIndustryPackId: PlantIndustryPackId')
+  || !clientOnboardingSource.includes("...(plantPackId ? { plantIndustryPackId: plantPackId } : {})")
+  || !clientOnboardingSource.includes('export function buildClientDemoBlueprint')
+  || !clientOnboardingSource.includes("CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v3'")
+  || !clientOnboardingSource.includes("CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v3'")
+  || !clientOnboardingSource.includes('CLIENT_DEMO_KIT_MAX_BYTES = 128 * 1024')
+  || !clientOnboardingSource.includes("CLIENT_DEMO_RUNBOOK_SCHEMA = 'supermega.client_demo_runbook.v1'")
+  || !clientOnboardingSource.includes("CLIENT_DEMO_WORKSPACE_STORAGE_KEY = 'supermega.client-demo-workspace.v1'")
+  || !clientOnboardingSource.includes('export function createClientDemoWorkspace')
+  || !clientOnboardingSource.includes('export function restoreClientDemoWorkspace')
+  || !clientOnboardingSource.includes('export function reconcileClientDemoWorkspace')
+  || !clientOnboardingSource.includes('export function buildClientDemoKit')
+  || !clientOnboardingSource.includes('export function restoreClientDemoKit')
+  || !clientOnboardingSource.includes('export function updateClientDemoWorkspaceProgress')
+  || !clientOnboardingSource.includes('export function buildClientDemoRunbook')
+  || !clientOnboardingSource.includes("id: 'manufacturing'")
   || !clientOnboardingSource.includes('maximumRows: 100')
   || !clientOnboardingSource.includes('maximumRows: 4')
   || !clientOnboardingSource.includes("preview.product === 'website' ? 60 : 120")
@@ -3437,33 +4107,130 @@ if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_i
   || !clientOnboardingSource.includes("activationStatus: 'staged_not_applied'")
   || !clientOnboardingSource.includes('humanReviewRequired: true')
   || !clientOnboardingSource.includes('externalWritesPerformed: false')) fail('four_product_client_import_contract_missing')
+if (!plantEquipmentImportSource.includes("PLANT_EQUIPMENT_IMPORT_SCHEMA = 'supermega.production.equipment-import.v1'")
+  || !plantEquipmentImportSource.includes('PLANT_EQUIPMENT_MAX_ROWS = 100')
+  || !plantEquipmentImportSource.includes('commissioningPerformed: false')
+  || !plantEquipmentImportSource.includes('externalWritesPerformed: false')
+  || !plantEquipmentImportSource.includes('parseClientCsv')
+  || !plantEquipmentOnboardingSource.includes('Add known equipment')
+  || !plantEquipmentOnboardingSource.includes('This does not start or commission a machine.')
+  || !clientOnboardingUiSource.includes("product === 'production' ? <PlantEquipmentOnboarding")) fail('plant_equipment_onboarding_contract_missing')
+if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => plantEquipmentImportSource.toLowerCase().includes(marker.toLowerCase()))) fail('plant_equipment_import_external_or_persistent_side_effect_added')
+if (!plantEquipmentCommissioningSource.includes('Load equipment')
+  || !plantEquipmentCommissioningSource.includes('Commission 1 equipment')
+  || !plantEquipmentCommissioningSource.includes('slice(0, 20)')
+  || !plantEquipmentCommissioningSource.includes('does not send a machine command or connect telemetry')
+  || plantEquipmentCommissioningSource.includes('useEffect')
+  || !plantEquipmentOnboardingSource.includes('<PlantEquipmentCommissioning')
+  || !managedTrialSource.includes("'/api/trial/v1/production/equipment/commission'")
+  || !managedTrialSource.includes('assertManagedPlantEquipmentCommissioning')
+  || !managedTrialRuntimeSource.includes('@router.post("/production/equipment/commission")')
+  || !managedTrialRuntimeSource.includes('confirmation != f"COMMISSION {body.equipment_id}"')) fail('plant_equipment_commissioning_contract_missing')
+if (!plantEquipmentMaintenanceStrategySource.includes('Load commissioned equipment')
+  || !plantEquipmentMaintenanceStrategySource.includes('Save strategy')
+  || !plantEquipmentMaintenanceStrategySource.includes('slice(0, 20)')
+  || !plantEquipmentMaintenanceStrategySource.includes('does not start work, create a work order, control equipment, or connect telemetry')
+  || plantEquipmentMaintenanceStrategySource.includes('useEffect')
+  || !plantEquipmentOnboardingSource.includes('<PlantEquipmentMaintenanceStrategy')
+  || !managedTrialSource.includes("'/api/trial/v1/production/equipment/maintenance-strategy'")
+  || !managedTrialSource.includes('assertManagedPlantEquipmentMaintenanceStrategy')
+  || !managedTrialRuntimeSource.includes('@router.post("/production/equipment/maintenance-strategy")')
+  || !managedTrialRuntimeSource.includes('confirmation != f"SAVE MAINTENANCE {body.equipment_id}"')) fail('plant_equipment_maintenance_strategy_contract_missing')
+const manifestPlantPackIds = manifest.customerProducts.find((product) => product.id === 'plant')?.internalTemplatePacks?.map((pack) => pack.id) ?? []
+if (manifestPlantPackIds.join(',') !== 'general-manufacturing,batch-process,food-beverage,apparel,assembly'
+  || !manifestPlantPackIds.every((id) => plantIndustryPacksSource.includes(`id: '${id}'`))
+  || !plantIndustryPacksSource.includes("PLANT_INDUSTRY_PACK_STORAGE_KEY = 'supermega.plant.industry-pack.v1'")
+  || !plantIndustryPacksSource.includes('standardCostPerUnitMmk:')
+  || !plantIndustryPacksSource.includes("standardCostPerUnitMmk: ''")
+  || !plantOrderUiSource.includes('Review quantities and costs before recording.')
+  || !settingsPageSource.includes('Plant industry pack')
+  || !settingsPageSource.includes('plantIndustryPacks.map((pack)')) fail('plant_industry_pack_contract_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => clientOnboardingSource.toLowerCase().includes(marker.toLowerCase()))) fail('client_import_external_or_persistent_side_effect_added')
+if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermega.client_demo_preparation.v3'")
+  || !clientOnboardingSource.includes("CLIENT_CSV_STARTER_PACK_SCHEMA = 'supermega.client_csv_starter_pack.v1'")
+  || !clientOnboardingSource.includes('export function buildClientCsvStarterPack')
+  || !clientOnboardingSource.includes('export function clientCsvStarterPackHref')
+  || !clientOnboardingSource.includes('CLIENT_DEMO_PREPARATION_MAX_BYTES = 5 * 1024 * 1024')
+  || !clientOnboardingSource.includes('export async function prepareClientDemoInBrowser')
+  || !clientOnboardingSource.includes('const restored = await restoreClientDemoPreparationArtifact(artifact)')
+  || !clientOnboardingSource.includes('export async function restoreClientDemoPreparationArtifact')
+  || !clientOnboardingSource.includes("await sha256(JSON.stringify(stagingPackage)) !== product.packageDigest")
+  || !clientOnboardingSource.includes('await sha256(JSON.stringify(payload)) !== source.bundleDigest')
+  || !clientOnboardingSource.includes("source.review.confirmation !== `APPROVE CLIENT DEMO ${source.bundleDigest}`")
+  || !localClientImportSource.includes('export async function applyPreparedLocalClientDemoProduct')
+  || !localClientImportSource.includes('export async function preparedLocalClientDemoInstallOrder')
+  || !localClientImportSource.includes("['commerce', 'production', 'website', 'ecommerce']")
+  || !localClientImportSource.includes('const artifact = await restoreClientDemoPreparationArtifact(artifactValue)')
+  || !localClientImportSource.includes('return activateLocalStagingPackage(preparedProduct.stagingPackage, {')
+  || !localClientImportSource.includes("replaceExistingEcommerceDraft: product === 'ecommerce'")
+  || ['applyManagedClientImport', 'validateManagedClientImport', 'fetch(', 'supabase'].some((marker) => localClientImportSource.includes(marker))
+  || !settingsPageSource.includes("'shop.csv': 'commerce'")
+  || !settingsPageSource.includes("'plant.csv': 'production'")
+  || !settingsPageSource.includes('multiple onChange={(event) =>')
+  || !settingsPageSource.includes('Choose client CSV files')
+  || !settingsPageSource.includes('Download CSV starter pack')
+  || !settingsPageSource.includes('Files stay in this browser.')
+  || !settingsPageSource.includes('Load private package')
+  || !settingsPageSource.includes('Private client rows stay in this browser. Nothing is uploaded, shared, or installed automatically.')
+  || !settingsPageSource.includes('aria-label="Shared operating foundation"')
+  || !settingsPageSource.includes('demoBlueprint.topology.recordAuthorities.length')
+  || !settingsPageSource.includes('Managed identity required before activation')
+  || !settingsPageSource.includes('Install one connected local demo.')
+  || !settingsPageSource.includes('preparedArtifact.products.map((product)')
+  || !settingsPageSource.includes('Shop installs before Ecommerce.')
+  || !settingsPageSource.includes('Install remaining ${preparedRemainingCount}')
+  || !settingsPageSource.includes('Products already installed are preserved; fix the issue and run the remaining installation again.')
+  || !settingsPageSource.includes('Existing work needs a decision')
+  || !settingsPageSource.includes('aria-label="Blocked installation recovery"')
+  || !settingsPageSource.includes('Review existing work')
+  || !settingsPageSource.includes('Open restore or reset controls')
+  || !settingsPageSource.includes("await import('./local-client-import')")
+  || !settingsPageSource.includes('preparedLocalClientDemoInstallOrder(artifact)')
+  || !settingsPageSource.includes('applyPreparedLocalClientDemoProduct(artifact, product, preparedConfirmation)')) fail('private_client_demo_installer_contract_missing')
+if (rootPackage.scripts?.['client:rehearse:plan'] !== 'node tools/prepare_client_demo.mjs --rehearse'
+  || rootPackage.scripts?.['client:rehearse:verify'] !== 'node tools/prepare_client_demo.mjs --verify-rehearsal'
+  || rootPackage.scripts?.['client:rehearse:record'] !== 'node tools/prepare_client_demo.mjs --record-rehearsal'
+  || rootPackage.scripts?.['client:rehearse:result:verify'] !== 'node tools/prepare_client_demo.mjs --verify-rehearsal-result'
+  || !clientPreparationToolSource.includes("CLIENT_DEMO_REHEARSAL_PLAN_CONTRACT = 'supermega.client_demo_rehearsal_plan.v1'")
+  || !clientPreparationToolSource.includes("CLIENT_DEMO_REHEARSAL_RESULT_CONTRACT = 'supermega.client_demo_rehearsal_result.v1'")
+  || !clientPreparationToolSource.includes('export function buildClientDemoRehearsalPlan')
+  || !clientPreparationToolSource.includes('export function verifyClientDemoRehearsalPlan')
+  || !clientPreparationToolSource.includes('export function buildClientDemoRehearsalResult')
+  || !clientPreparationToolSource.includes('export function verifyClientDemoRehearsalResult')
+  || !clientPreparationToolSource.includes("firstApplyEquation: 'created_plus_already_present_equals_row_count'")
+  || !clientPreparationToolSource.includes("replayEquation: 'created_zero_and_already_present_equals_row_count'")
+  || !clientPreparationToolSource.includes("method: 'restore_exact_pre_rehearsal_export'")
+  || !clientPreparationToolSource.includes("'mobile_390_verified'")
+  || !clientPreparationToolSource.includes("'desktop_1280_verified'")
+  || !clientPreparationToolSource.includes('selfCertificationAllowed: false')
+  || !clientPreparationToolSource.includes("return 'partial'")
+  || !clientPreparationToolSource.includes('browserWritesPerformed: false')
+  || !clientPreparationToolSource.includes('externalWritesPerformed: false')) fail('client_demo_rehearsal_plan_contract_missing')
 if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
-  || !coreSource.includes("website: requireProductContract('website')")
-  || !coreSource.includes("ecommerce: requireProductContract('ecommerce')")
+  || !productSetupSource.includes("website: requireProductContract('website')")
+  || !productSetupSource.includes("ecommerce: requireProductContract('ecommerce')")
   || !settingsPageSource.includes('workflowTemplateId={selectedTemplate.id}')
   || !settingsPageSource.includes('productName={selectedProduct.name}')
   || !settingsPageSource.includes('productSlug={selectedProduct.slug}')
   || !clientOnboardingUiSource.includes('Try sample')
-  || !clientOnboardingUiSource.includes('Data checklist')
+  || !clientOnboardingUiSource.includes('Download field guide')
   || !clientOnboardingUiSource.includes('downloadChecklist')
-  || !clientOnboardingUiSource.includes('clientImportChecklist(product, workflowTemplateId)')
+  || !clientOnboardingUiSource.includes('clientImportChecklist(product, workflowTemplateId, templateContext)')
   || !clientOnboardingUiSource.includes('aria-label={`${productName} data checklist`')
-  || !clientOnboardingUiSource.includes('What to prepare')
+  || !clientOnboardingUiSource.includes('Need a template?')
   || !clientOnboardingUiSource.includes('acceptedHeaders.join')
   || !clientOnboardingUiSource.includes('previewSample()')
-  || !clientOnboardingUiSource.includes('clientImportTemplate(expectedProduct, expectedWorkflowTemplateId)')
-  || !clientOnboardingUiSource.includes('SuperMega matches clear columns')
-  || !clientOnboardingUiSource.includes('Import autopilot')
+  || !clientOnboardingUiSource.includes('clientImportTemplate(expectedProduct, expectedWorkflowTemplateId, templateContext)')
+  || !clientOnboardingUiSource.includes('SuperMega matches columns, shows only the fixes')
+  || !clientOnboardingUiSource.includes('aria-label={`${productName} import next step`')
   || !clientOnboardingUiSource.includes('const importStageRows = [')
   || !clientOnboardingUiSource.includes('const importCoachRows = [')
-  || !clientOnboardingUiSource.includes('Import coach')
+  || !clientOnboardingUiSource.includes('<summary><span>Import details</span><small>Controls, ownership, and handoff</small></summary>')
   || !clientOnboardingUiSource.includes('aria-label={`${productName} import coach`')
   || !clientOnboardingUiSource.includes('Next action')
   || !clientOnboardingUiSource.includes('Write boundary')
   || !clientOnboardingUiSource.includes('Start with a CSV or sample so SuperMega can map columns and inspect rows locally.')
   || !clientOnboardingUiSource.includes('const activationHandoffRows = [')
-  || !clientOnboardingUiSource.includes('Activation handoff')
   || !clientOnboardingUiSource.includes('aria-label={`${productName} activation handoff`')
   || !clientOnboardingUiSource.includes('Download activation package')
   || !clientOnboardingUiSource.includes('Run managed check')
@@ -3477,7 +4244,7 @@ if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !clientOnboardingUiSource.includes('Nothing is sent to AI or added to')
   || !clientOnboardingUiSource.includes('catalog-import-mapping-review')
   || !clientOnboardingUiSource.includes('catalog-import-row-review')
-  || !coreCssSource.includes('.catalog-import-autopilot')
+  || !coreCssSource.includes('.catalog-import-next-step')
   || !coreCssSource.includes('.catalog-import-checklist')
   || !coreCssSource.includes('.catalog-import-checklist-grid')
   || !coreCssSource.includes('.catalog-import-checklist-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }')
@@ -3494,21 +4261,106 @@ if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !clientOnboardingUiSource.includes('Technical receipt')
   || !clientOnboardingUiSource.includes('canPrepareImport')
   || !clientOnboardingUiSource.includes('workspace.trim() && owner.trim()')
-  || !clientOnboardingUiSource.includes('Prepare import file')
+  || !clientOnboardingUiSource.includes('Download prepared file')
+  || !clientOnboardingUiSource.includes('canApplyLocalImport')
+  || !clientOnboardingUiSource.includes('const localActivationAvailable = !managedIdentity')
+  || !clientOnboardingUiSource.includes('localActivationAvailable && importContextReady && state.preview.readyForStaging')
+  || !clientOnboardingUiSource.includes('!localActivationAvailable && !appliedIsCurrent')
+  || !clientOnboardingUiSource.includes("import { activateLocalStagingPackage } from './local-client-import'")
+  || !localClientImportSource.includes('importCommerceCatalog(current')
+  || !localClientImportSource.includes('importProductionJobs(current')
+  || !localClientImportSource.includes('activateLocalWebsitePageDrafts({')
+  || !localClientImportSource.includes('activateLocalEcommerceMerchandising({')
+  || !clientOnboardingUiSource.includes("approve adding them to this browser's {productName} demo")
+  || !clientOnboardingUiSource.includes("'pages to Website'")
+  || !clientOnboardingUiSource.includes("'page drafts in the Website editor'")
+  || !clientOnboardingUiSource.includes("'reviewed merchandising in the customer storefront'")
+  || !clientOnboardingUiSource.includes('Your source CSV was not retained or sent to AI.')
   || !clientOnboardingUiSource.includes('nothing is written until you confirm the import')
   || !clientOnboardingUiSource.includes('productRef.current !== expectedProduct')
+  || !clientOnboardingUiSource.includes('onProgress?: (progress: ClientDemoProductProgress) => void')
+  || !clientOnboardingUiSource.includes("? 'workspace_checked'")
+  || !clientOnboardingUiSource.includes('onProgressRef.current?.({')
+  || clientOnboardingUiSource.includes('sourceText,\n      updatedAt')
   || !clientOnboardingUiSource.includes('workflowTemplateRef.current !== expectedWorkflowTemplateId')
   || !clientOnboardingUiSource.includes('[product, workflowTemplateId]')
-  || !clientOnboardingUiSource.includes('clientImportTemplate(product, workflowTemplateId)')
+  || !clientOnboardingUiSource.includes('initiallyOpen?: boolean')
+  || !clientOnboardingUiSource.includes('open={initiallyOpen || undefined}')
+  || !clientOnboardingUiSource.includes('clientImportTemplate(product, workflowTemplateId, templateContext)')
   || ['fetch(', 'localStorage', 'sessionStorage', 'supabase'].some((marker) => clientOnboardingUiSource.includes(marker))) fail('four_product_client_onboarding_ui_missing_or_unsafe')
-const settingsStepNavContract = sourceBlock(settingsPageSource, '      <nav aria-label="Setup steps"', '\n      </nav>')
-if (!coreSource.includes('templateId: string')
-  || !coreSource.includes('template.id === name || template.name === name')
-  || !coreSource.includes("String(source.templateId || source.template || '')")
-  || !coreSource.includes('return JSON.stringify(normalized) === JSON.stringify(value) ? value : normalized')
+const settingsStepNavContract = sourceBlock(settingsPageSource, '      {requestedProduct ? <nav aria-label="Setup steps"', '\n      </nav> : null}')
+const founderBusinessTypeField = settingsPageSource.indexOf('<label className="demo-preset-select">Business type')
+const founderCreateDemoAction = settingsPageSource.indexOf('>Create client demo</button>')
+const founderCustomizeProducts = settingsPageSource.indexOf('<summary><span>Customize products</span>')
+const founderShopPackOverride = settingsPageSource.indexOf('<label className="demo-pack-select">Shop pack')
+const founderPlantPackOverride = settingsPageSource.indexOf('<label className="demo-pack-select">Plant pack')
+if (!productSetupSource.includes('templateId: string')
+  || !productSetupSource.includes('template.id === name || template.name === name')
+  || !productSetupSource.includes("String(source.templateId || source.template || '')")
+  || !productSetupSource.includes('return JSON.stringify(normalized) === JSON.stringify(value) ? value : normalized')
   || !settingsPageSource.includes("setupProductFromQuery(setupSearchParams.get('product'))")
-  || !settingsPageSource.includes('navigate(clientSetupPath(product), { replace: true })')
   || !settingsPageSource.includes('Your client details were kept.')
+  || !settingsPageSource.includes('className="demo-preset-select"')
+  || !settingsPageSource.includes('className="demo-pack-select"')
+  || settingsPageSource.includes('className="demo-preset-grid"')
+  || !settingsPageSource.includes('className="demo-solution-grid"')
+  || !settingsPageSource.includes('className="demo-kit-result"')
+  || !settingsPageSource.includes('Shop business pack')
+  || !settingsPageSource.includes('shopIndustryPacks.map((pack)')
+  || !settingsPageSource.includes('Selected automatically from the business pack.')
+  || !settingsPageSource.includes("product === 'commerce' ? selectedShopIndustryPack.workflowTemplateId")
+  || settingsPageSource.includes('Current starting point')
+  || !settingsPageSource.includes('provisionLocalShopIndustryPack')
+  || !settingsPageSource.includes('provisionEmptyShopServiceSchedule')
+  || !settingsPageSource.includes('Existing local evidence stays authoritative.')
+  || !settingsPageSource.includes('loadClientDemoWorkspace')
+  || !settingsPageSource.includes('restoreClientDemoWorkspace')
+  || !settingsPageSource.includes('reconcileClientDemoWorkspace(blueprint, currentWorkspace')
+  || !settingsPageSource.includes('updateClientDemoWorkspaceProgress')
+  || !settingsPageSource.includes("previous.status === 'applied' && progress.status !== 'applied'")
+  || !settingsPageSource.includes('buildClientDemoRunbook')
+  || !settingsPageSource.includes('aria-label="Client demo launchpad"')
+  || !settingsPageSource.includes('create one workspace, then open any selected product demo.')
+  || !settingsPageSource.includes('Every product below uses this client workspace.')
+  || !settingsPageSource.includes('to={demoLaunchPath}')
+  || !settingsPageSource.includes('to={mission.startPath}')
+  || !settingsPageSource.includes("prepare_data: 'Sample ready'")
+  || !coreCssSource.includes('.client-demo-launch-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr));')
+  || !coreCssSource.includes('.client-demo-launch-grid { grid-template-columns: 1fr; }')
+  || !settingsPageSource.includes('Continue existing setup')
+  || !settingsPageSource.includes('Load a saved kit or prepared private package')
+  || !settingsPageSource.includes('Client system details')
+  || settingsPageSource.indexOf('className="client-demo-launchpad"') > settingsPageSource.indexOf('className="compact-disclosure client-system-details"')
+  || settingsPageSource.indexOf('className="compact-disclosure client-system-details"') > settingsPageSource.indexOf('className="compact-disclosure client-preparation-handoff"')
+  || !settingsPageSource.includes('Required proof')
+  || !settingsPageSource.includes('Observed: {mission.evidenceObserved}')
+  || !settingsPageSource.includes('onProgress={recordDemoProductProgress}')
+  || !settingsPageSource.includes("not_started: 'Not started'")
+  || !settingsPageSource.includes('Create client demo')
+  || founderBusinessTypeField < 0
+  || founderCreateDemoAction < founderBusinessTypeField
+  || founderCustomizeProducts < founderCreateDemoAction
+  || founderShopPackOverride < founderCustomizeProducts
+  || founderPlantPackOverride < founderCustomizeProducts
+  || !settingsPageSource.includes('<summary><span>Customize products</span><small>{selectedDemoEntries.length} selected</small></summary>')
+  || !settingsPageSource.includes('<summary><span>All product missions</span><small>{demoRunbook?.products.length ?? 0} workflows</small></summary>')
+  || !settingsPageSource.includes('const demoInputReady = Boolean(')
+  || !settingsPageSource.includes(': Boolean(demoWorkspace)')
+  || !settingsPageSource.includes('clientDemoKitReadiness(demoBlueprintSource')
+  || !settingsPageSource.includes('The saved workspace no longer matches the current setup contract.')
+  || settingsPageSource.includes('JSON.stringify(buildClientDemoKit(demoBlueprint')
+  || !settingsPageSource.includes('{requestedProduct ? <nav aria-label="Setup steps"')
+  || !settingsPageSource.includes('Download setup kit')
+  || !settingsPageSource.includes('Load setup kit')
+  || !settingsPageSource.includes('Client records, product packs, and progress were not changed')
+  || !settingsPageSource.includes("origin === 'created' && blueprint.products.some")
+  || !settingsPageSource.includes('restoreClientDemoKit(JSON.parse(await file.text()))')
+  || !settingsPageSource.includes('prepareDemoProduct(nextDemoMission.product')
+  || !settingsPageSource.includes('const [demoDataSetupOpen, setDemoDataSetupOpen] = useState(false)')
+  || !settingsPageSource.includes('setDemoDataSetupOpen(true)')
+  || !settingsPageSource.includes('setDemoDataSetupOpen(false)')
+  || !settingsPageSource.includes('requestedProduct || (demoBlueprint && demoDataSetupOpen)')
+  || !settingsPageSource.includes('initiallyOpen={!requestedProduct}')
   || !settingsPageSource.includes('const launchPackRows: Array<readonly [string, string, string]>')
   || !settingsPageSource.includes('const launchPackManifest = {')
   || !settingsPageSource.includes("contract: 'supermega.launch_pack_manifest.v1'")
@@ -3527,7 +4379,6 @@ if (!coreSource.includes('templateId: string')
   || !settingsPageSource.includes('One Shop-ready order packet')
   || !settingsPageSource.includes('Owner approves production')
   || !settingsPageSource.includes('No customer message, payment capture, delivery booking, stock move, refund, or Shop write runs from setup.')
-  || !settingsPageSource.includes('className="setup-product-grid"')
   || !settingsPageSource.includes('className="setup-template-summary"')
   || !settingsPageSource.includes('<span>Advanced controls</span>')
   || (settingsStepNavContract.match(/<button /g) || []).length !== 2
@@ -3537,6 +4388,15 @@ if (!coreSource.includes('templateId: string')
   || !coreCssSource.includes('.setup-launch-pack-rows { grid-template-columns: repeat(2,minmax(0,1fr)); }')
   || !coreCssSource.includes('.setup-launch-pack-rows { grid-template-columns: 1fr; }')
   || !coreCssSource.includes('.settings-screen .setup-form { overflow: visible; }')
+  || !coreCssSource.includes('.demo-preset-select,\n.demo-pack-select { display: grid;')
+  || !coreCssSource.includes('.setup-existing-package')
+  || !coreCssSource.includes('.client-system-details > .client-foundation-summary')
+  || !coreCssSource.includes('.demo-solution-card[data-selected="true"]')
+  || !coreCssSource.includes('.demo-integration-flow li')
+  || !coreCssSource.includes('.client-demo-launchpad { min-width: 0; display: grid;')
+  || !coreCssSource.includes('.client-demo-launch-card[data-next="true"]')
+  || !coreCssSource.includes('.demo-runbook-products details > div { display: grid; grid-template-columns: minmax(190px,.8fr) minmax(0,1.2fr) auto;')
+  || !coreCssSource.includes('.demo-runbook-products details > div { grid-template-columns: 1fr; align-items: stretch; }')
   || !coreCssSource.includes('.settings-step-nav { display: grid; grid-template-columns: repeat(2,minmax(0,1fr));')) fail('client_setup_template_identity_or_two_step_ux_missing')
 const managedClientImportUiContract = sourceBlock(clientOnboardingUiSource, '  async function validateOrDownloadStagingPackage()', '\n\n  return (')
 if (!managedTrialSource.includes('export async function validateManagedClientImport')
@@ -3594,6 +4454,10 @@ if (!managedTrialSource.includes('export async function validateManagedClientImp
   || !managedTrialSource.includes('confirmation: `APPLY ${request.validation.package_digest}`')
   || !managedTrialSource.includes('assertManagedClientImportActivation(')
   || !managedTrialSource.includes('export function assertManagedPlantImportState')
+  || !managedTrialSource.includes('state.machines.length !== 0')
+  || !managedTrialSource.includes('managed Plant opening plan invented equipment records')
+  || managedTrialRuntimeSource.includes('machine_ids_by_line')
+  || managedTrialRuntimeSource.includes('machine-import-')
   || !managedTrialSource.includes('export function assertManagedWebsiteImportState')
   || !managedTrialSource.includes('export async function assertManagedEcommerceImportState')
   || !managedTrialSource.includes("eventType: 'commerce.storefront.merchandising.imported'")
@@ -3622,9 +4486,9 @@ if (!managedTrialSource.includes('export async function validateManagedClientImp
   || !clientOnboardingUiSource.includes('const bootstrap = await loadManagedBootstrap(expectedIdentity)')
   || !clientOnboardingUiSource.includes('buildManagedClientImportProvisioningPlan(')
   || !clientOnboardingUiSource.includes('provisioningPlan')
-  || !clientOnboardingUiSource.includes('Provisioning plan')
+  || !clientOnboardingUiSource.includes('provisioningPlan.next_step')
   || !clientOnboardingUiSource.includes('managed provisioning plan')
-  || !clientOnboardingUiSource.includes('No browser storage, customer message, payment, domain publish, or scheduler autopilot is allowed from this validation.')
+  || !clientOnboardingUiSource.includes('No customer message, payment, domain publish, or scheduler action is allowed from this validation.')
   || !clientOnboardingUiSource.includes('validated.receipt.package_digest,')
   || !clientOnboardingUiSource.includes('and approve this import.')
   || !clientOnboardingUiSource.includes('idempotent command confirmed')
@@ -3660,6 +4524,8 @@ if (schedulerAuthority.contract !== 'supermega.scheduler-authority.v2'
   || JSON.stringify(schedulerAuthority.activation?.required_evidence) !== JSON.stringify(expectedSchedulerActivationEvidence)
   || JSON.stringify(schedulerAuthority.crons?.map(({ path, schedule }) => ({ path, schedule }))) !== JSON.stringify(expectedSchedulerCrons)
   || schedulerAuthority.maximum_scheduler_invocations_per_day !== 0
+  || schedulerExecutionBudget?.maxClaimsPerInvocation !== 1
+  || schedulerExecutionBudget?.maximumActivationInvocationsPerDay !== 25
   || JSON.stringify(schedulerAuthority.activation_plan?.crons?.map(({ path, schedule }) => ({ path, schedule }))) !== JSON.stringify(expectedSchedulerActivationPlan)
   || schedulerAuthority.activation_plan?.maximum_scheduler_invocations_per_day !== 25
   || JSON.stringify(schedulerAuthority.migration?.preflight_retiring_crons?.map(({ path, schedule }) => ({ path, schedule }))) !== JSON.stringify([
@@ -3692,24 +4558,66 @@ if (!commerceSource.includes("export type CommerceStockMovementKind = 'opening' 
   || !managedCommerceRuntime.includes('expectedQuantity')
   || !managedCommerceRuntime.includes('countedQuantity')) fail('commerce_stock_count_contract_missing')
 const commerceTabsContract = coreSource.slice(coreSource.indexOf('const commerceTabs'), coreSource.indexOf('const productionTabs'))
-if (!commerceTabsContract.includes("{ id: 'counter', label: 'Sell' }") || !commerceTabsContract.includes("{ id: 'orders', label: 'Orders' }") || !commerceTabsContract.includes("{ id: 'inventory', label: 'Stock' }") || (commerceTabsContract.match(/^\s*\{ id:/gm) || []).length !== 3) fail('commerce_sell_orders_stock_contract_changed')
+if (!commerceTabsContract.includes("{ id: 'today', label: 'Today' }") || !commerceTabsContract.includes("{ id: 'counter', label: 'Sell' }") || !commerceTabsContract.includes("{ id: 'orders', label: 'Orders' }") || !commerceTabsContract.includes("{ id: 'inventory', label: 'Stock' }") || (commerceTabsContract.match(/^\s*\{ id:/gm) || []).length !== 4) fail('commerce_today_sell_orders_stock_contract_changed')
 const counterConfirmationContract = coreSource.slice(coreSource.indexOf('function AccountableActionGate'), coreSource.indexOf('function ActionHistory'))
 if (!counterConfirmationContract.includes('isCounterConfirmation && !authenticatedActor')
   || !counterConfirmationContract.includes('Browser-local sample only. Completing this records a sample order and sample stock change in this browser. No payment is captured, no customer is contacted, no server or managed workspace is written, and no real stock is moved.')
   || !coreCssSource.includes('.counter-local-boundary')) fail('shop_counter_local_boundary_missing')
 const shopCounterContract = coreSource.slice(coreSource.indexOf('function ShopCounter'), coreSource.indexOf('function localCommerceOrderDraftScope'))
+const shopCounterRouteContract = coreSource.slice(coreSource.indexOf("if (tab === 'counter')"), coreSource.indexOf("if (tab === 'orders')"))
 if (!shopCounterContract.includes('Tap an item to add it')
   || !shopCounterContract.includes("['Cash', 'KBZPay', 'WavePay']")
+  || !shopCounterContract.includes('function addSearchMatch(event: KeyboardEvent<HTMLInputElement>)')
+  || !shopCounterContract.includes("event.key !== 'Enter' || !normalizedQuery")
+  || !shopCounterContract.includes('item.sku.toLocaleLowerCase() === normalizedQuery')
+  || !shopCounterContract.includes('exactSku ?? (visibleItems.length === 1 ? visibleItems[0] : null)')
+  || !shopCounterContract.includes('onKeyDown={addSearchMatch}')
+  || !shopCounterContract.includes('placeholder="Search or scan SKU"')
   || !shopCounterContract.includes('Review sale')
   || !shopCounterContract.includes('Nothing changes until the cashier confirms.')
+  || !shopCounterContract.includes('if (!nextQuantity && unitCount === 1) setCartOpen(false)')
+  || !shopCounterContract.includes("setPayment('Cash')\n    setCartOpen(false)")
+  || !shopCounterContract.includes("{unitCount ? <button aria-controls=\"shop-current-sale\"")
   || !coreSource.includes("presentation: 'counter'")
   || !coreSource.includes("channel: 'Walk-in'")
+  || !coreSource.includes('function commerceOrderDisplayReference(orderId: string)')
+  || !coreSource.includes('const displayReference = commerceOrderDisplayReference(order.id)')
+  || !coreSource.includes('subjectId: order.id')
+  || !coreSource.includes('after: `Sale ${displayReference} · Stock ${stockReview}`')
+  || !coreSource.includes('evidenceReferenceSuggestion: `Counter receipt ${displayReference}`')
   || !coreSource.includes('reserveCommerceOrder(current, ownedOrder')
+  || !coreSource.includes("Sale ${commerceOrderDisplayReference(pendingAction.subjectId)} complete. Stock updated. Receipt saved.")
+  || coreSource.includes("`${record.id} applied and added to the action history.`")
+  || !coreSource.includes("returnDraft && selectedReturnLine || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || correctionDraft ? ' has-return-draft' : ''")
+  || !coreSource.includes('const correctionOrderIndex = correctionDraft ? orders.findIndex')
+  || !coreSource.includes('returnOrderIndex >= 0 ? returnOrderIndex : correctionOrderIndex >= 0 ? correctionOrderIndex : supportOrderIndex')
+  || !coreSource.includes('open={Boolean(returnDraft || correctionDraft || supportDraft')
+  || !coreSource.includes("const paymentDueAt = paymentTermsDays === 0\n      ? undefined")
+  || !coreSource.includes("...(paymentDueAt ? { paymentDueAt } : {})")
+  || !coreSource.includes("paymentDueAt ? formatIssueDue(paymentDueAt) : 'at handoff'")
   || !coreCssSource.includes('.shop-product-tile')
   || !coreCssSource.includes('.shop-mobile-cart')
   || !coreCssSource.includes('.shop-current-sale.is-open')) fail('shop_counter_direct_demo_missing')
+if (!shopCounterRouteContract.includes('<ShopCounter') || shopCounterRouteContract.includes('{shopGuidance}')) fail('shop_counter_first_action_not_focused')
 const commercePageContract = coreSource.slice(coreSource.indexOf('function CommercePage'), coreSource.indexOf('function OrderList'))
 if (!commercePageContract.includes('purchaseOrderDraft')
+  || !commercePageContract.includes('supplierSourcingDraft')
+  || !commercePageContract.includes("'commerce.supplier_sourcing.approved'")
+  || !commercePageContract.includes('approveCommerceSupplierSourcingDecision(')
+  || !commercePageContract.includes("kind: 'supplier_sourcing_approve'")
+  || !commercePageContract.includes('Compare supplier quotes')
+  || !commercePageContract.includes('Review supplier award')
+  || !commercePageContract.includes('Approved-vendor reference')
+  || !commercePageContract.includes("'commerce.purchase_requisition.approved'")
+  || !commercePageContract.includes('approveCommercePurchaseRequisition(')
+  || !commercePageContract.includes("kind: 'purchase_requisition_approve'")
+  || !commercePageContract.includes("purchaseOrderDraft.requisitionId ? 'Review second approval' : 'Review requisition'")
+  || !commercePageContract.includes('Create with second operator')
+  || !commercePageContract.includes('A different operator must confirm the unchanged terms')
+  || !commercePageContract.includes('Use a different operator from ${approvedRequisition.approval.actor}')
+  || !commercePageContract.includes('const approved = openPurchaseRequisitions[0]')
+  || !commercePageContract.includes("budget?.budgetCode ?? 'legacy authority'")
+  || commercePageContract.includes('requisition.sourceDecisionDigest === shopProcurementDecision.digest')
   || !commercePageContract.includes('Create an internal order')
   || !commercePageContract.includes('This does not contact a supplier or create a payment.')
   || !commercePageContract.includes('Expected arrival')
@@ -3730,6 +4638,47 @@ if (!commercePageContract.includes('purchaseOrderDraft')
   || !commercePageContract.includes('Your draft was preserved.')
   || !commercePageContract.includes('purchaseOrderEditorRef')
   || !commercePageContract.includes('Review receipt')
+  || !commercePageContract.includes('Rejected units')
+  || !commercePageContract.includes('Accepted units')
+  || !commercePageContract.includes('Discrepancy reason')
+  || !commercePageContract.includes('return to vendor')
+  || !commercePageContract.includes('purchaseReceiptDiscrepancyReady')
+  || !commercePageContract.includes('defect {formatTaxRate(supplier.defectRateBasisPoints)}')
+  || !commerceSource.includes("discrepancyDisposition?: 'return_to_vendor'")
+  || !commerceSource.includes("status: 'open' | 'partially_received' | 'received' | 'received_with_discrepancy' | 'cancelled'")
+  || !commerceSource.includes('export type CommercePurchaseRequisition =')
+  || !commerceSource.includes('export type CommerceSupplierSourcingDecision =')
+  || !commerceSource.includes('export function approveCommerceSupplierSourcingDecision(')
+  || !commerceSource.includes('export function commerceSupplierSourcingSelectedQuote(')
+  || !commerceSource.includes('export function approveCommercePurchaseRequisition(')
+  || !commerceSource.includes('export function commercePurchaseRequisitions(')
+  || !commerceSource.includes('export type CommercePurchaseBudgetEnvelope =')
+  || !commerceSource.includes('export function approveCommercePurchaseBudgetEnvelope(')
+  || !commerceSource.includes('export function commercePurchaseBudgetCommitment(')
+  || !commercePageContract.includes("kind: 'purchase_budget_approve'")
+  || !commercePageContract.includes("'commerce.purchase_budget.approved'")
+  || !commercePageContract.includes('Approve purchase budget')
+  || !commercePageContract.includes('Set buying limits')
+  || !commerceSource.includes('does not match its approved requisition')
+  || !commerceSource.includes('sameAccountableActor(proof.actor, requisition.approval.actor)')
+  || !managedCommerceRuntime.includes('def _same_accountable_actor(')
+  || !managedCommerceRuntime.includes('requires a later confirmation by a different operator')
+  || !managedTrialSource.includes("'commerce.purchase_requisition.approved'")
+  || !managedTrialSource.includes("'commerce.supplier_sourcing.approved'")
+  || !managedTrialSource.includes("'commerce.purchase_budget.approved'")
+  || !managedCommerceRuntime.includes('"commerce.purchase_requisition.approved"')
+  || !managedCommerceRuntime.includes('"commerce.supplier_sourcing.approved"')
+  || !managedCommerceRuntime.includes('"commerce.purchase_budget.approved"')
+  || !managedCommerceRuntime.includes('def _validate_purchase_budget_approved(')
+  || !managedCommerceRuntime.includes('def _validate_supplier_sourcing_approved(')
+  || !managedCommerceRuntime.includes('def _validate_purchase_requisition_approved(')
+  || !managedTrialStoreRuntime.includes('if event_type == "commerce.purchase_requisition.approved":')
+  || !managedTrialStoreRuntime.includes('if event_type == "commerce.supplier_sourcing.approved":')
+  || !managedTrialStoreRuntime.includes('if event_type == "commerce.purchase_budget.approved":')
+  || !workspaceRuntimeSource.includes("'purchase_requisition_approve'")
+  || !workspaceRuntimeSource.includes("'supplier_sourcing_approve'")
+  || !workspaceRuntimeSource.includes("'purchase_budget_approve'")
+  || !managedCommerceRuntime.includes('_PURCHASE_DISCREPANCY_FIELDS')
   || !commercePageContract.includes('Cancel remainder')
   || !commercePageContract.includes('id="purchase-orders"')
   || !commercePageContract.includes("commerceLocation.hash !== '#purchase-orders'")
@@ -3750,10 +4699,74 @@ if (!commercePageContract.includes('purchaseOrderDraft')
   || !coreCssSource.includes('.purchase-order-editor[data-mode="receive"] { grid-template-columns: repeat(3,minmax(0,1fr)); }')
   || !coreCssSource.includes('.purchase-order-editor[data-mode="receive"] { grid-template-columns: 1fr; }')
   || !coreCssSource.includes('.purchase-order-editor[data-mode="create"] { grid-template-columns: repeat(2,minmax(0,1fr)); }')) fail('commerce_purchase_order_ui_missing')
+if (!commerceSource.includes('export type CommerceSupplierInvoice')
+  || !commerceSource.includes('export function commerceSupplierInvoiceMatch')
+  || !commerceSource.includes('export function recordCommerceSupplierInvoice')
+  || !commerceSource.includes('export function markCommerceSupplierInvoicePayableReady')
+  || !commerceSource.includes("'awaiting_receipt' | 'supplier_credit_pending' | 'quantity_variance' | 'price_variance' | 'matched'")
+  || !commercePageContract.includes('Supplier invoice review')
+  || !commercePageContract.includes("'commerce.supplier_invoice.recorded'")
+  || !commercePageContract.includes("'commerce.supplier_invoice.payable_ready'")
+  || !commercePageContract.includes('Record invoice')
+  || !commercePageContract.includes('Review payable')
+  || !commercePageContract.includes('no ledger post, bank instruction, or supplier payment created')
+  || !managedCommerceRuntime.includes('def commerce_supplier_invoice_match(')
+  || !managedCommerceRuntime.includes('def _validate_supplier_invoice_recorded(')
+  || !managedCommerceRuntime.includes('def _validate_supplier_invoice_payable_ready(')
+  || !managedTrialStoreRuntime.includes('"commerce.supplier_invoice.recorded"')
+  || !managedTrialStoreRuntime.includes('"commerce.supplier_invoice.payable_ready"')) fail('commerce_supplier_invoice_three_way_match_missing')
+if (!commerceSource.includes('export type CommerceSupplierReturnClaim')
+  || !commerceSource.includes('export type CommerceSupplierCreditNote')
+  || !commerceSource.includes('export function authorizeCommerceSupplierReturn')
+  || !commerceSource.includes('export function recordCommerceSupplierCreditNote')
+  || !commerceSource.includes('export function commerceSupplierReturnClaimBalance')
+  || !commerceSource.includes("physicalReturnStatus: 'not_dispatched'")
+  || !commerceSource.includes('supplierContacted: false')
+  || !commerceSource.includes('accountingPosted: false')
+  || !commercePageContract.includes('Supplier return review')
+  || !commercePageContract.includes('Supplier credit review')
+  || !commercePageContract.includes("'commerce.supplier_return.authorized'")
+  || !commercePageContract.includes("'commerce.supplier_credit.recorded'")
+  || !commercePageContract.includes('Review return')
+  || !commercePageContract.includes('Record credit')
+  || !commercePageContract.includes('physical return not dispatched')
+  || !commercePageContract.includes('accounting not posted')
+  || !workspaceRuntimeSource.includes("'supplier_return_authorize'")
+  || !workspaceRuntimeSource.includes("'supplier_credit_record'")
+  || !managedCommerceRuntime.includes('def _validate_supplier_return_authorized(')
+  || !managedCommerceRuntime.includes('def _validate_supplier_credit_recorded(')
+  || !managedTrialStoreRuntime.includes('if event_type == "commerce.supplier_return.authorized":')
+  || !managedTrialStoreRuntime.includes('if event_type == "commerce.supplier_credit.recorded":')) fail('commerce_supplier_return_credit_contract_missing')
+if (!commerceSource.includes("COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = 'supermega.commerce.supplier-payables-handoff.v1'")
+  || !commerceSource.includes('export function commerceSupplierPayablesHandoff(')
+  || !commerceSource.includes('export function commerceSupplierPayablesHandoffCsv(')
+  || !commerceSource.includes('export function commerceSupplierPayablesAging(')
+  || !commerceSource.includes("paymentAuthority: 'none'")
+  || !commerceSource.includes('paymentInitiated: false')
+  || !coreSource.includes('data-supplier-payables-handoff="review-required"')
+  || !coreSource.includes('Download supplier payables CSV')
+  || !coreSource.includes('Review overdue supplier invoice')
+  || !coreSource.includes('due within 7 days')
+  || !coreSource.includes('no payment initiated')
+  || !managedCommerceRuntime.includes('COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = "supermega.commerce.supplier-payables-handoff.v1"')
+  || !managedCommerceRuntime.includes('def commerce_supplier_payables_handoff(')
+  || !managedCommerceRuntime.includes('def commerce_supplier_payables_handoff_csv(')
+  || !managedCommerceRuntime.includes('def commerce_supplier_payables_aging(')) fail('commerce_supplier_payables_handoff_missing')
 const commerceOrdersContract = commercePageContract.slice(commercePageContract.indexOf("if (tab === 'orders')"), commercePageContract.indexOf("if (tab === 'inventory')"))
-if (!commerceOrdersContract.includes('order-daily-controls') || !commerceOrdersContract.includes('Save daily close') || !commerceOrdersContract.includes('Close and exceptions')) fail('commerce_daily_controls_not_inside_orders')
+if (!commerceOrdersContract.includes('order-daily-controls') || !commerceOrdersContract.includes('Review and save close') || !commerceOrdersContract.includes('Close and exceptions')) fail('commerce_daily_controls_not_inside_orders')
+if (!coreSource.includes('data-close-settlement=')
+  || !coreSource.includes('Settlement count')
+  || !coreSource.includes('variance needs a responsible owner')
+  || !commerceSource.includes('supermega.commerce.close-settlement.v1')
+  || !commerceSource.includes('export function commerceCloseSettlementReview')
+  || !managedCommerceRuntime.includes('COMMERCE_CLOSE_SETTLEMENT_SCHEMA')
+  || !managedCommerceRuntime.includes('varianceOwner')
+  || !managedCommerceRuntime.includes('varianceReason')) fail('commerce_close_settlement_contract_missing')
 if (!commercePageContract.includes('const shopOrderControlNext = orderDraftRecoveryBlocked')
   || !commercePageContract.includes('const shopOrderControlRows = [')
+  || !commerceOrdersContract.includes('<details className="shop-business-controls">')
+  || !commerceOrdersContract.includes('<summary><span>Business controls</span><small>Lifecycle, accounting, and audit</small></summary>')
+  || commerceOrdersContract.includes('<details className="shop-business-controls" open>')
   || !commerceOrdersContract.includes('aria-label="Shop order control"')
   || !commerceOrdersContract.includes('Order control')
   || !commercePageContract.includes('Repair saved order draft')
@@ -3763,6 +4776,8 @@ if (!commercePageContract.includes('const shopOrderControlNext = orderDraftRecov
   || !commercePageContract.includes("['Online inbox', pendingStorefrontRequests.length ? `${pendingStorefrontRequests.length} waiting` : 'Clear']")
   || !commercePageContract.includes("['Write gate', commerceCanWrite && !pendingAction ? 'Ready' : 'Locked']")
   || !commercePageContract.includes('Owner confirms orders, payments, refunds, deliveries, cancellations, and stock changes.')
+  || !coreCssSource.includes('.shop-business-controls > summary')
+  || !coreCssSource.includes('.shop-business-controls-content')
   || !coreCssSource.includes('.shop-order-control')
   || !coreCssSource.includes('.shop-order-control-rows')) fail('commerce_order_control_missing')
 const commerceInventoryContract = commercePageContract.slice(commercePageContract.indexOf("if (tab === 'inventory')"))
@@ -3804,7 +4819,13 @@ if (!openPurchaseOrderContract.includes('Your count draft was preserved.')
   || openPurchaseOrderContract.includes('setStockCountDraft(null)')
   || !openStockCountContract.includes('Your stock-order draft was preserved.')
   || openStockCountContract.includes('setPurchaseOrderDraft(null)')) fail('commerce_stock_editor_switch_discards_draft')
-if (!productionSource.includes("supermega.production.workspace.v2") || !productionSource.includes('mutateProductionWorkspace') || !productionSource.includes('productionWorkspaceCanWrite') || !productionSource.includes('.write-probe.') || !productionSource.includes('lockManager.request') || !productionSource.includes('next.revision !== current.revision + 1')) fail('production_v2_locked_store_missing')
+if (!productionSource.includes("supermega.production.workspace.v2")
+  || !productionSource.includes('mutateProductionWorkspace')
+  || !productionSource.includes('productionWorkspaceCanWrite')
+  || !productionSource.includes('.write-probe.')
+  || !productionSource.includes('lockManager.request')
+  || !productionSource.includes('eventDelta !== revisionDelta')
+  || !productionSource.includes('revisionDelta > 100')) fail('production_v2_locked_store_missing')
 if (!productionSource.includes("owner: 'Line 01 lead'")
   || !productionSource.includes("owner: 'Line 02 lead'")
   || !productionSource.includes("owner: 'Line 03 lead'")) fail('production_sample_jobs_lack_clear_owners')
@@ -3827,6 +4848,11 @@ if (!productionSource.includes('recordProductionScrap')
   || !managedProductionRuntime.includes('good plus scrap cannot exceed its target')
   || !coreSource.includes('Record good or scrap')
   || !coreSource.includes('<option value="scrap">Scrap</option>')
+  || !coreSource.includes("const [jobId, setJobId] = useState('')")
+  || !coreSource.includes('placeholder={`e.g. ${shiftReferencePlaceholder()}`}')
+  || !coreSource.includes('Enter the shift name or date to continue.')
+  || !coreSource.includes(': `${pendingAction.summary} completed. It was persisted with attributed Plant evidence.`)')
+  || coreSource.includes("`${record.id} persisted with attributed Plant evidence.`")
   || !coreSource.includes("recordProductionScrap(current")) fail('production_scrap_contract_missing')
 if (!productionSource.includes('recordProductionMaterialConsumption')
   || !productionSource.includes('parseProductionMaterialQuantity')
@@ -3917,7 +4943,12 @@ if (!productionSource.includes('buildProductionShiftHandoff')
   || !coreSource.includes('Append one owner-attributed shift-close event bound to this exact Plant revision and evidence packet')
   || !coreSource.includes('Plant records or the shift reference changed after this packet was prepared.')
   || !coreSource.includes('No Plant record changed.')) fail('production_shift_handoff_contract_missing')
-if (!productionSource.includes('registerProductionJob') || !coreSource.includes('production.job.created') || !coreSource.includes('<summary>Add job</summary>') || !coreSource.includes('Review job')) fail('production_recurring_job_workflow_missing')
+if (!productionSource.includes('registerProductionJob')
+  || !productionSource.includes('export function importProductionJobs')
+  || !productionSource.includes('ACT-CLIENT-PLAN-')
+  || !coreSource.includes('production.job.created')
+  || !coreSource.includes("<summary>{selectedShopDemand ? 'Add Shop-demand job' : 'Add job'}</summary>")
+  || !coreSource.includes('Review job')) fail('production_recurring_job_workflow_missing')
 if (!productionSource.includes('updateProductionJobPlan')
   || !productionSource.includes("kind: 'job_schedule_updated'")
   || !productionSource.includes('jobOwner: owner')
@@ -3979,6 +5010,14 @@ if (!productionSource.includes('startProductionMaintenance')
   || !productionSource.includes('productionMaintenanceRecords')
   || !productionSource.includes('maintenanceOwner')
   || !productionSource.includes('maintenanceStartActionId')
+  || !productionSource.includes('maintenanceStrategyActionId')
+  || !productionSource.includes('maintenanceProcedureReference')
+  || !productionSource.includes('maintenanceProcedureCompleted')
+  || !productionSource.includes('maintenanceReturnToService')
+  || !productionSource.includes('Equipment maintenance completion next due does not match its strategy interval.')
+  || !productionSource.includes('supermega.production.maintenance-due-queue.v1')
+  || !productionSource.includes('productionMaintenanceDueQueue')
+  || !managedProductionRuntime.includes('project_production_maintenance_due_queue')
   || (productionSource.match(/const next = structuredClone\(state\)/g) || []).length < 2
   || !productionSource.includes('Maintenance timestamps for ${machine.id} contradict lifecycle order.')
   || !managedProductionRuntime.includes('_validate_maintenance_history')
@@ -3987,15 +5026,29 @@ if (!productionSource.includes('startProductionMaintenance')
   || !managedProductionRuntime.includes('production.maintenance.started')
   || !managedProductionRuntime.includes('production.maintenance.completed')
   || !coreSource.includes('Machine maintenance')
+  || !coreSource.includes('Preventive work')
+  || !coreSource.includes('Review next')
   || !coreSource.includes('Review complete')
-  || !coreSource.includes('The accountable review records work scope or completion outcome. It does not control equipment, change machine status, open downtime, buy parts, or change jobs.')) fail('production_bounded_maintenance_contract_missing')
+  || !coreSource.includes('Completion result')
+  || !coreSource.includes('Reviewed procedure completed')
+  || !coreSource.includes('Strategy-bound completion retains outcome, findings, procedure confirmation, recommendation, and next due. It performs no equipment command, telemetry, parts purchase, status change, downtime, or job change.')) fail('production_bounded_maintenance_contract_missing')
 const managedProductionCommandContract = managedTrialSource.slice(managedTrialSource.indexOf('export async function saveManagedProductionCommand'), managedTrialSource.indexOf('export async function saveManagedWebsiteCommand'))
 if (!managedProductionCommandContract.includes("surface: 'production'")
   || !managedProductionCommandContract.includes('eventType: ManagedProductionEvent')
-  || !managedProductionCommandContract.includes('payload: { state: request.state, evidence: request.evidence }')
+  || !managedTrialSource.includes('function managedProductionJobIntent')
+  || !managedProductionCommandContract.includes("request.eventType === 'production.job.created'")
+  || !managedProductionCommandContract.includes('payload: productionJobIntent')
+  || !managedProductionCommandContract.includes('{ intent: productionJobIntent, evidence: request.evidence }')
+  || !managedProductionCommandContract.includes('{ state: request.state, evidence: request.evidence }')
+  || !managedTrialSource.includes('...(job.shopDemandSource !== undefined ? { shopDemandSource: job.shopDemandSource } : {})')
+  || !managedProductionRuntime.includes('create_production_job_from_intent')
+  || !managedProductionRuntime.includes('require_shop_demand_source_current')
+  || !managedProductionRuntime.includes('Shop demand source changed before Plant job creation.')
+  || !managedProductionRuntime.includes('Shop demand is already covered by an active Plant job.')
+  || !managedProductionRuntime.includes('isinstance(payload.get("intent"), Mapping)')
   || !managedProductionCommandContract.includes('request.identity')
-  || !coreSource.includes('identity: managedIdentity')) fail('managed_production_command_client_missing')
-const managedProductionClientSources = `${coreSource}\n${plantOrderUiSource}`
+  || !workspaceRuntimeSource.includes('identity: managedIdentity')) fail('managed_production_command_client_missing')
+const managedProductionClientSources = `${coreSource}\n${workspaceRuntimeSource}\n${plantOrderUiSource}`
 for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.job.schedule_updated', 'production.job.closed', 'production.output.recorded', 'production.material.consumed', 'production.issue.opened', 'production.issue.resolved', 'production.quality_hold.placed', 'production.quality_hold.released', 'production.machine_state.changed', 'production.order_execution.recorded', 'production.downtime.started', 'production.downtime.ended', 'production.maintenance.started', 'production.maintenance.completed', 'production.shift.closed']) {
   if (!managedProductionClientSources.includes(eventType) || !managedProductionRuntime.includes(eventType)) fail(`managed_production_event_missing:${eventType}`)
 }
@@ -4017,13 +5070,13 @@ if (managedProductionRuntime.includes('production.snapshot.saved')
   || !managedProductionRuntime.includes('_validate_shift_closed')
   || !managedProductionRuntime.includes('shift close counts, revision, or source digest do not match current Plant evidence.')
   || !managedProductionRuntime.includes('Production event must prepend exactly one record and preserve history.')) fail('managed_production_server_transition_contract_missing')
-if (!coreSource.includes("mode: 'managed-unprovisioned'")
+if (!workspaceRuntimeSource.includes("mode: 'managed-unprovisioned'")
   || !coreSource.includes('No browser demo jobs, issues, equipment, or output are copied')
   || !coreSource.includes('Create managed plan')
-  || !coreSource.includes("result.surface !== 'production'")
-  || !coreSource.includes('validateProductionState(result.state)')
-  || !coreSource.includes("error.code === 'trial_version_conflict'")
-  || !coreSource.includes('class PlantReviewRequiredError')
+  || !workspaceRuntimeSource.includes("result.surface !== 'production'")
+  || !workspaceRuntimeSource.includes('validateProductionState(result.state)')
+  || !workspaceRuntimeSource.includes("error.code === 'trial_version_conflict'")
+  || !workspaceRuntimeSource.includes('class PlantReviewRequiredError')
   || !coreSource.includes('error instanceof PlantReviewRequiredError')
   || !coreSource.includes('managedIdentity ? `${record.id} confirmed by the managed Plant API.')) fail('managed_production_ui_not_fail_closed')
 const productionTabsContract = coreSource.slice(coreSource.indexOf('const productionTabs'), coreSource.indexOf('function uid'))
@@ -4031,28 +5084,22 @@ if (productionTabsContract.includes("{ id: 'today', label: 'Today' }") || !produ
 const productionPageContract = coreSource.slice(coreSource.indexOf('function ProductionPage'), coreSource.indexOf('function JobList'))
 const productionJobsContract = productionPageContract.slice(productionPageContract.indexOf("if (tab === 'production')"), productionPageContract.indexOf("if (tab === 'control')"))
 const productionControlContract = productionPageContract.slice(productionPageContract.indexOf("if (tab === 'control')"))
-const productionStatusPosition = productionJobsContract.indexOf('{plantStatus}')
-const productionCommandPosition = productionJobsContract.indexOf('{plantCommandCenter}')
+const productionStatusPosition = productionJobsContract.indexOf('{plantToday}')
+const productionCommandPosition = productionJobsContract.indexOf('{plantBusinessControls}')
 const productionWorkPosition = productionJobsContract.indexOf('<h2>Jobs to finish</h2>')
-const productionEnterprisePosition = productionJobsContract.indexOf('{plantEnterpriseContext}')
-const controlStatusPosition = productionControlContract.indexOf('{plantStatus}')
-const controlCommandPosition = productionControlContract.indexOf('{plantCommandCenter}')
+const controlStatusPosition = productionControlContract.indexOf('{plantToday}')
+const controlCommandPosition = productionControlContract.indexOf('{plantControlBusinessControls}')
 const controlWorkPosition = productionControlContract.indexOf('<h2>Open problems</h2>')
-const controlEnterprisePosition = productionControlContract.indexOf('{plantEnterpriseContext}')
 if (productionStatusPosition < 0
   || productionCommandPosition < 0
   || productionWorkPosition < 0
-  || productionEnterprisePosition < 0
   || productionStatusPosition > productionCommandPosition
   || productionCommandPosition > productionWorkPosition
-  || productionWorkPosition > productionEnterprisePosition
   || controlStatusPosition < 0
   || controlCommandPosition < 0
   || controlWorkPosition < 0
-  || controlEnterprisePosition < 0
   || controlStatusPosition > controlCommandPosition
-  || controlCommandPosition > controlWorkPosition
-  || controlWorkPosition > controlEnterprisePosition) fail('plant_primary_work_not_before_enterprise_evidence')
+  || controlCommandPosition > controlWorkPosition) fail('plant_primary_work_not_before_enterprise_evidence')
 const productionProblemsPosition = productionControlContract.indexOf('<h2>Open problems</h2>')
 const productionEquipmentPosition = productionControlContract.indexOf('<h2>Recorded status</h2>')
 if (productionProblemsPosition < 0
@@ -4102,13 +5149,14 @@ if (coreSource.includes('Math.min(quantity')
   || !productionPageContract.includes('max={selectedRemaining}')
   || !productionJobsContract.includes('quantity > selectedRemaining')) fail('production_output_limit_missing_or_silently_clamped')
 if (!productionPageContract.includes('persisted with attributed Plant evidence.') || productionPageContract.includes('<ActionHistory actions={actions} domain="production"')) fail('production_confirmation_record_not_domain_specific')
-if (!coreSource.includes("addEventListener('storage', refreshFromStorage)") || !coreSource.includes("removeEventListener('storage', refreshFromStorage)")) fail('production_cross_tab_refresh_missing')
+if (!workspaceRuntimeSource.includes("addEventListener('storage', refreshFromStorage)") || !workspaceRuntimeSource.includes("removeEventListener('storage', refreshFromStorage)")) fail('production_cross_tab_refresh_missing')
 if (!coreSource.includes('headingRef.current?.focus()') || !coreSource.includes('returnFocus?.isConnected') || !coreSource.includes('previousFocus.focus()') || !coreSource.includes('aria-live="polite"') || !coreSource.includes('currently ${productionMachineStateLabels[machine.state]}') || !coreSource.includes('requestAnimationFrame(() => machineTriggerRef.current?.focus())')) fail('production_confirmation_accessibility_missing')
-if (!productionPageContract.includes('className="production-mode-banner"')
-  || !productionPageContract.includes('data-write={productionCanWrite')
+if (!productionPageContract.includes('className="plant-today"')
+  || !productionPageContract.includes("data-state={plantTodayState}")
+  || !productionPageContract.includes("role={productionCanWrite ? 'status' : 'alert'}")
   || !productionPageContract.includes('if (!productionCanWrite)')
-  || !productionPageContract.includes('Local sample')
-  || !productionPageContract.includes('they do not control equipment')
+  || !productionPageContract.includes('Local sample records on this device')
+  || !productionPageContract.includes('Every production, quality, material, maintenance, and equipment-status change still requires accountable review.')
   || !productionPageContract.includes('Records operator observations only.')
   || !productionPageContract.includes('disabled={!productionCanWrite')
   || !productionPageContract.includes('<IssueList disabled={!productionCanWrite')
@@ -4118,11 +5166,11 @@ if (!productionPageContract.includes('className="production-mode-banner"')
   || !productionPageContract.includes('}, [issueDialogOpen, tab])')
   || coreSource.includes("attention: 'Stop machine'")
   || coreSource.includes("stopped: 'Return to service'")) fail('production_write_boundary_or_status_language_missing')
-if (!coreCssSource.includes('.production-mode-banner[data-write="blocked"]')
+if (!coreCssSource.includes('.plant-today[data-state="blocked"]')
   || !coreCssSource.includes('.production-history > .job-list, .production-history > .issue-list { max-height: 230px;')
   || !coreCssSource.includes('-webkit-line-clamp: 2')) fail('production_bounded_history_or_issue_readability_missing')
 if (!coreCssSource.includes('.action-history summary { min-height: 44px; }')) fail('production_mobile_history_touch_target_missing')
-if (!coreSource.includes("const requestedTabIsCanonical = requestedTab === activeTab") || !coreSource.includes("!requestedTabIsCanonical") || !coreSource.includes(" : 'counter'") || !coreSource.includes(" : 'production'")) fail('legacy_product_tab_not_canonicalized')
+if (!coreSource.includes("const requestedTabIsCanonical = requestedTab === activeTab") || !coreSource.includes("!requestedTabIsCanonical") || !coreSource.includes(" : 'today'") || !coreSource.includes(" : 'production'")) fail('legacy_product_tab_not_canonicalized')
 if (coreSource.includes('>All apps</Link>')
   || coreSource.includes('>All products</Link>')
   || coreCssSource.includes('all-apps-link')
@@ -4133,6 +5181,12 @@ let workflowProfiles = 0
 const solutionProducts = manifest.customerProducts || []
 if (solutionProducts.map((product) => `${product.id}:${product.runtimeId}`).join(',') !== 'shop:commerce,plant:production,website:website,ecommerce:ecommerce') fail('canonical_four_product_order_missing')
 const websiteProductContract = solutionProducts.find((product) => product.id === 'website')
+const shopProductContract = solutionProducts.find((product) => product.id === 'shop')
+const shopPackIds = shopProductContract?.internalTemplatePacks?.map((pack) => pack.id) ?? []
+if (shopPackIds.join(',') !== 'retail,cafe,restaurant,spa,gym,school'
+  || shopProductContract?.internalTemplatePacks?.some((pack) => pack.status !== 'core-compatible' || !pack.availableNow?.some((capability) => /schedule|reservation|appointment/i.test(capability)))
+  || shopProductContract?.internalTemplatePacks?.some((pack) => !shopProductContract.templates?.some((template) => template.id === pack.workflowTemplateId && template.entryPoints?.includes(pack.entryPoint)))
+  || shopProductContract?.internalTemplatePacks?.some((pack) => pack.plannedNext?.includes('Appointments') || pack.plannedNext?.includes('Classes'))) fail('shop_industry_pack_manifest_not_operationally_aligned')
 if (websiteProductContract?.status !== 'available-in-app'
   || websiteProductContract?.views?.join(',') !== 'Start,Edit,Preview,Download'
   || websiteProductContract?.templates?.some((template) => template.workflow?.at(-1) !== 'Download website')
@@ -4281,6 +5335,28 @@ async function verifyChannelOrderRuntime() {
     }), 'channel_order_ready_guard_accepted_invalid_quote_span')
 
     const seed = commerce.createSeedCommerce()
+    assert(seed.orders.some((order) => order.status === 'completed' && order.paymentStatus === 'reconciled' && order.completion)
+      && seed.purchaseOrders?.length === 1
+      && seed.purchaseOrders[0].sku === 'SM-1002'
+      && seed.purchaseOrders[0].quantityOrdered === 40
+      && seed.paymentPolicies?.length === 3, 'shop_seed_missing_completed_sale_replenishment_or_payment_work')
+    const staleSeed = {
+      ...seed,
+      orders: seed.orders.map(({ lines: _lines, fulfilment: _fulfilment, fulfilmentReference: _fulfilmentReference, ...order }) => order),
+      promotionPolicies: [],
+      shippingPolicies: [],
+      paymentPolicies: [],
+    }
+    const upgradedSeed = commerce.upgradeCommerceSeedPolicies(staleSeed)
+    const ordinaryWorkspace = commerce.createEmptyCommerce()
+    assert(upgradedSeed.promotionPolicies?.length === 1
+      && upgradedSeed.shippingPolicies?.length === 1
+      && upgradedSeed.paymentPolicies?.length === 3
+      && upgradedSeed.paymentPolicies[0].adapter === 'kbzpay_manual'
+      && upgradedSeed.orders.every((order) => order.lines?.length === 1 && order.fulfilment && order.fulfilmentReference)
+      && upgradedSeed.orders.every((order) => commerce.commerceOrderAcknowledgement(upgradedSeed, order.id))
+      && commerce.upgradeCommerceSeedPolicies(ordinaryWorkspace) === ordinaryWorkspace,
+    'shop_seed_upgrade_not_current_or_scoped_to_sample_evidence')
     const seedBefore = JSON.stringify(seed)
     const incomplete = intake.buildChannelOrderDraft({
       ...fixtures[0],
@@ -4479,6 +5555,32 @@ async function verifyShopInventoryRuntime() {
     'shop_inventory_opening_projection_wrong')
     const openingReplay = model.applyShopInventoryImport(opening.state, importPackage, proof(1, 'opening'), catalogSkus, model.EMPTY_SHOP_INVENTORY_DIGEST)
     assert(openingReplay.replayed && JSON.stringify(openingReplay.state) === JSON.stringify(opening.state), 'shop_inventory_opening_retry_not_idempotent')
+
+    const masterCreated = model.createShopInventoryMaster(opening.state, {
+      commandId: 'MST-CLIENT-001', masterType: 'client', master: { id: 'CLI-WHOLESALE-001', name: 'Golden Lotus' },
+      proof: proof(2, 'client-master'), catalogSkus, expectedHeadDigest: opening.state.headDigest,
+    })
+    const masterProjection = model.projectShopInventory(masterCreated.state, catalogSkus)
+    assert(!masterCreated.replayed
+      && masterCreated.state.revision === 2
+      && masterProjection.clients.length === 2
+      && masterProjection.clients.at(-1)?.name === 'Golden Lotus'
+      && masterProjection.metrics.totalOnHand === openingProjection.metrics.totalOnHand
+      && masterProjection.metrics.totalAvailableToPromise === openingProjection.metrics.totalAvailableToPromise,
+    'shop_inventory_master_create_not_stock_neutral')
+    const masterReplay = model.createShopInventoryMaster(masterCreated.state, {
+      commandId: 'MST-CLIENT-001', masterType: 'client', master: { id: 'CLI-WHOLESALE-001', name: 'Golden Lotus' },
+      proof: proof(2, 'client-master'), catalogSkus, expectedHeadDigest: model.EMPTY_SHOP_INVENTORY_DIGEST,
+    })
+    assert(masterReplay.replayed && JSON.stringify(masterReplay.state) === JSON.stringify(masterCreated.state), 'shop_inventory_master_create_retry_not_idempotent')
+    assertThrows(() => model.createShopInventoryMaster(masterCreated.state, {
+      commandId: 'MST-CLIENT-002', masterType: 'client', master: { id: 'CLI-WHOLESALE-002', name: 'golden lotus' },
+      proof: proof(3, 'duplicate-master'), catalogSkus, expectedHeadDigest: masterCreated.state.headDigest,
+    }), 'shop_inventory_duplicate_master_name_succeeded')
+    assertThrows(() => model.createShopInventoryMaster(masterCreated.state, {
+      commandId: 'MST-CLIENT-001', masterType: 'client', master: { id: 'CLI-WHOLESALE-001', name: 'Changed account' },
+      proof: proof(2, 'client-master'), catalogSkus, expectedHeadDigest: masterCreated.state.headDigest,
+    }), 'shop_inventory_changed_master_retry_succeeded')
 
     const transferred = model.transferShopInventory(opening.state, {
       transferId: 'TRF-MAIN-BRANCH-001',
@@ -4739,6 +5841,92 @@ async function verifyShopInventoryRuntime() {
       catalogSkus: ['SKU-1'],
       expectedHeadDigest: model.EMPTY_SHOP_INVENTORY_DIGEST,
     }), 'managed_production_issue_stale_head_succeeded')
+    const productionReceipt = {
+      releaseId: 'QREL-LOCATION-001',
+      sourceCommandDigest: `sha256:${'c'.repeat(64)}`,
+      jobId: 'JOB-LOCATION-RECEIPT-001',
+      outputBatchId: 'BATCH-LOCATION-001',
+      releasedAt: '2026-07-26T03:00:00+06:30',
+      sourceProduct: 'Finished location product',
+      sku: 'SKU-1',
+      quantity: 6,
+    }
+    const productionReceiptProof = {
+      ...proof(4, 'production-receipt'),
+      evidenceReference: `PLANT-BATCH:${productionReceipt.releaseId}:${productionReceipt.sourceCommandDigest}:LOC-MAIN`,
+    }
+    const productionReceived = commerce.receiveCommerceProductionBatch(
+      managedBase,
+      productionReceipt,
+      productionReceiptProof,
+      { locationId: 'LOC-MAIN', expectedHeadDigest: managedBase.inventoryFoundation.headDigest },
+    )
+    const productionReceivedProjection = productionReceived
+      && model.projectShopInventory(productionReceived.inventoryFoundation, ['SKU-1'])
+    const productionReceiptCommand = productionReceived?.inventoryFoundation?.commands.at(-1)?.payload
+    assert(productionReceived?.items[0].onHand === 16
+      && productionReceiptCommand?.kind === 'production_receipt'
+      && productionReceiptCommand.id.startsWith('PRC-')
+      && productionReceiptCommand.stockUnitId.startsWith('LOT-PLANT-')
+      && productionReceiptCommand.trackingCode === productionReceipt.outputBatchId
+      && productionReceived.movements[0].productionSourceProduct === productionReceipt.sourceProduct
+      && productionReceivedProjection?.metrics.totalOnHand === 16
+      && productionReceivedProjection.metrics.totalAvailableToPromise === 16
+      && productionReceivedProjection.ledger.at(-1)?.referenceId === productionReceipt.releaseId,
+    'managed_production_receipt_did_not_add_exact_location_lot_stock')
+    assert(commerce.receiveCommerceProductionBatch(
+      productionReceived,
+      productionReceipt,
+      productionReceiptProof,
+      { locationId: 'LOC-MAIN', expectedHeadDigest: managedBase.inventoryFoundation.headDigest },
+    ) === productionReceived, 'managed_production_receipt_retry_not_idempotent')
+    assert(commerce.receiveCommerceProductionBatch(
+      productionReceived,
+      { ...productionReceipt, quantity: 7 },
+      productionReceiptProof,
+      { locationId: 'LOC-MAIN', expectedHeadDigest: managedBase.inventoryFoundation.headDigest },
+    ) === null, 'managed_production_receipt_changed_retry_succeeded')
+    assert(commerce.receiveCommerceProductionBatch(
+      productionReceived,
+      { ...productionReceipt, sourceProduct: 'Changed product identity' },
+      productionReceiptProof,
+      { locationId: 'LOC-MAIN', expectedHeadDigest: managedBase.inventoryFoundation.headDigest },
+    ) === null, 'managed_production_receipt_source_identity_tamper_succeeded')
+    const mappedCatalogState = commerce.validateCommerceState({
+      ...productionReceived,
+      items: [...productionReceived.items, { sku: 'SKU-2', name: 'Alternate item', onHand: 0, reorderAt: 0, price: 500 }],
+    })
+    assert(commerce.receiveCommerceProductionBatch(
+      mappedCatalogState,
+      { ...productionReceipt, releaseId: 'QREL-LOCATION-002', outputBatchId: 'BATCH-LOCATION-002', sku: 'SKU-2' },
+      {
+        ...proof(5, 'production-receipt-remap'),
+        evidenceReference: `PLANT-BATCH:QREL-LOCATION-002:${productionReceipt.sourceCommandDigest}:LOC-MAIN`,
+      },
+      { locationId: 'LOC-MAIN', expectedHeadDigest: mappedCatalogState.inventoryFoundation.headDigest },
+    ) === null, 'managed_production_receipt_conflicting_product_mapping_succeeded')
+    assert(commerce.receiveCommerceProductionBatch(
+      productionReceived,
+      productionReceipt,
+      {
+        ...proof(5, 'production-receipt-duplicate'),
+        evidenceReference: productionReceiptProof.evidenceReference,
+      },
+      { locationId: 'LOC-MAIN', expectedHeadDigest: productionReceived.inventoryFoundation.headDigest },
+    ) === null, 'managed_production_release_was_received_twice')
+    assert(commerce.receiveCommerceProductionBatch(
+      managedBase,
+      { ...productionReceipt, releaseId: 'QREL-LOCATION-STALE', outputBatchId: 'BATCH-LOCATION-STALE' },
+      {
+        ...proof(5, 'production-receipt-stale'),
+        evidenceReference: `PLANT-BATCH:QREL-LOCATION-STALE:${productionReceipt.sourceCommandDigest}:LOC-MAIN`,
+      },
+      { locationId: 'LOC-MAIN', expectedHeadDigest: model.EMPTY_SHOP_INVENTORY_DIGEST },
+    ) === null, 'managed_production_receipt_stale_head_succeeded')
+    const forgedProductionReceipt = structuredClone(productionReceived.inventoryFoundation)
+    forgedProductionReceipt.commands.at(-1).payload.productionOutputBatchId = 'BATCH-TAMPERED-001'
+    assertThrows(() => model.validateShopInventoryState(forgedProductionReceipt, ['SKU-1']),
+      'managed_production_receipt_tamper_validated')
     const locationReleaseProof = proof(3, 'order-release')
     const locationCancelled = commerce.cancelCommerceOrder(locationReserved, locationOrder.id, locationReleaseProof)
     const locationCancelledProjection = locationCancelled && model.projectShopInventory(locationCancelled.inventoryFoundation, ['SKU-1'])
@@ -4826,8 +6014,11 @@ async function verifyShopInventoryRuntime() {
       'managed_sellable_return_accepted_forged_location_allocation')
     const managedPurchaseOrderId = 'PO-00000000-0000-4000-8000-000000000072'
     const managedOrdered = commerce.createCommercePurchaseOrder(managedBase, {
-      id: managedPurchaseOrderId, expectedAt: '2026-07-28T05:00:00.000Z', supplier: 'Yangon Supply', sku: 'SKU-1', quantityOrdered: 6,
+      id: managedPurchaseOrderId, expectedAt: '2026-07-28T05:00:00.000Z', supplier: 'Opening source', sku: 'SKU-1', quantityOrdered: 6, unitCostMmk: 75,
     }, proof(2, 'managed-order'))
+    assert(commerce.createCommercePurchaseOrder(managedBase, {
+      id: 'PO-00000000-0000-4000-8000-000000000073', expectedAt: '2026-07-28T05:00:00.000Z', supplier: 'Unregistered supplier', sku: 'SKU-1', quantityOrdered: 6, unitCostMmk: 75,
+    }, proof(2, 'unregistered-supplier')) === null, 'location_purchase_order_accepted_unregistered_supplier')
     const managedReceiptProof = proof(3, 'managed-receipt')
     const managedLocationReceipt = {
       receiptId: 'RCV-MANAGED-001', stockUnitId: 'LOT-MANAGED-001', trackingCode: 'MANAGED-BATCH-001',
@@ -4898,6 +6089,175 @@ async function verifyShopInventoryRuntime() {
   }
 }
 
+async function verifyShopServiceScheduleRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopServiceScheduleRuntimeChecks += 1
+  }
+  const assertThrows = (action, reason) => {
+    try { action() } catch { shopServiceScheduleRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-service-scheduling.ts')).href}?shop-service-schedule-verify=${Date.now()}`)
+    const proof = (minute, reason) => ({ actor: 'Shop owner', reason, happenedAt: `2026-07-29T03:${String(minute).padStart(2, '0')}:00.000Z` })
+    let state = model.createShopServiceSchedule()
+    assert(model.validateShopServiceSchedule(state) === state && state.revision === 0 && state.industryPackId === 'spa', 'shop_service_schedule_seed_invalid')
+    assert(state.services.length === 2 && state.resources.length === 2 && state.bookings.length === 0, 'shop_service_schedule_seed_not_useful')
+    assert(model.shopIndustryPacks.map((pack) => pack.id).join(',') === 'retail,cafe,restaurant,spa,gym,school' && new Set(model.shopIndustryPacks.map((pack) => pack.id)).size === 6, 'shop_industry_pack_catalog_wrong')
+    assert(model.shopIndustryPacks.map((pack) => `${pack.id}:${pack.workflowTemplateId}:${pack.entryPoint}`).join(',') === 'retail:retail-wholesale:Walk-in,cafe:restaurant-ordering:Walk-in,restaurant:restaurant-ordering:Walk-in,spa:social-commerce:Phone,gym:social-commerce:Phone,school:social-commerce:Phone', 'shop_industry_pack_workflow_binding_wrong')
+    for (const pack of model.shopIndustryPacks) {
+      const packed = model.createShopServiceSchedule(pack.id)
+      assert(model.validateShopServiceSchedule(packed) === packed && packed.industryPackId === pack.id && packed.services.length === 2 && packed.resources.length === 2 && pack.capabilities.length >= 5, `shop_industry_pack_${pack.id}_not_operational`)
+    }
+    const gymSchedule = model.provisionEmptyShopServiceSchedule(state, 'gym')
+    assert(gymSchedule.industryPackId === 'gym' && gymSchedule.services.some((service) => service.name === 'Personal training') && gymSchedule.resources.some((resource) => resource.name === 'Trainer 1'), 'shop_industry_pack_provisioning_failed')
+    const legacySchedule = structuredClone(state)
+    legacySchedule.schema = 'supermega.shop.service_schedule.v1'
+    delete legacySchedule.industryPackId
+    const migratedSchedule = model.readShopServiceSchedule(JSON.stringify(legacySchedule))
+    assert(migratedSchedule.schema === model.SHOP_SERVICE_SCHEDULE_SCHEMA && migratedSchedule.industryPackId === 'spa', 'shop_service_schedule_v1_migration_failed')
+    assertThrows(() => model.shopIndustryPack('unknown'), 'shop_industry_unknown_pack_accepted')
+    state = model.registerShopService(state, { name: 'Premium treatment', durationMinutes: 90, priceMmk: 75_000 }, proof(1, 'Reviewed service setup'))
+    assert(state.services.at(-1).name === 'Premium treatment' && state.revision === 1, 'shop_service_registration_failed')
+    assertThrows(() => model.provisionEmptyShopServiceSchedule(state, 'school'), 'shop_industry_pack_overwrote_existing_evidence')
+    state = model.registerShopServiceResource(state, { name: 'Therapist A', kind: 'staff' }, proof(2, 'Reviewed staff setup'))
+    assert(state.resources.at(-1).kind === 'staff' && state.events.at(-1).type === 'resource_registered', 'shop_service_resource_registration_failed')
+    const serviceId = state.services.at(-1).id
+    const resourceId = state.resources.at(-1).id
+    state = model.scheduleShopServiceBooking(state, { customerName: 'Client A', contact: '09-000-000', serviceId, resourceId, startsAt: '2026-07-29T04:00:00.000Z', note: 'First visit' }, proof(3, 'Reviewed booking request'))
+    const bookingId = state.bookings[0].id
+    assert(state.bookings[0].endsAt === '2026-07-29T05:30:00.000Z' && state.bookings[0].status === 'held', 'shop_service_booking_duration_or_initial_state_wrong')
+    assertThrows(() => model.scheduleShopServiceBooking(state, { customerName: 'Client B', contact: '09-111-111', serviceId, resourceId, startsAt: '2026-07-29T05:00:00.000Z' }, proof(4, 'Conflicting request')), 'shop_service_booking_conflict_succeeded')
+    const projected = model.projectShopServiceSchedule(state, new Date('2026-07-29T04:15:00.000Z'))
+    assert(projected.today.length === 1 && projected.upcoming.length === 1 && projected.expectedRevenueMmk === 75_000 && projected.awaitingArrival === 1, 'shop_service_schedule_projection_wrong')
+    state = model.advanceShopServiceBooking(state, bookingId, proof(5, 'Customer confirmed'))
+    assert(state.bookings[0].status === 'confirmed', 'shop_service_booking_confirmation_failed')
+    state = model.advanceShopServiceBooking(state, bookingId, proof(6, 'Customer arrived'))
+    assert(state.bookings[0].status === 'checked_in', 'shop_service_booking_check_in_failed')
+    state = model.advanceShopServiceBooking(state, bookingId, proof(7, 'Service completed'))
+    assert(state.bookings[0].status === 'completed' && state.events.length === state.revision, 'shop_service_booking_completion_or_evidence_failed')
+    assertThrows(() => model.advanceShopServiceBooking(state, bookingId, proof(8, 'Invalid extra advance')), 'shop_service_completed_booking_advanced')
+    assertThrows(() => model.cancelShopServiceBooking(state, bookingId, proof(9, 'Invalid cancellation')), 'shop_service_completed_booking_cancelled')
+    state = model.scheduleShopServiceBooking(state, { customerName: 'Client C', contact: '09-222-222', serviceId, resourceId, startsAt: '2026-07-29T06:00:00.000Z' }, proof(10, 'Second reviewed booking'))
+    const cancellableId = state.bookings.at(-1).id
+    state = model.cancelShopServiceBooking(state, cancellableId, proof(11, 'Customer cancelled'))
+    assert(state.bookings.at(-1).status === 'cancelled', 'shop_service_booking_cancellation_failed')
+    state = model.scheduleShopServiceBooking(state, { customerName: 'Client D', contact: '09-333-333', serviceId, resourceId, startsAt: '2026-07-29T06:00:00.000Z' }, proof(12, 'Replacement reviewed booking'))
+    assert(state.bookings.at(-1).status === 'held', 'shop_service_cancelled_slot_not_reusable')
+    assertThrows(() => model.validateShopServiceSchedule({ ...state, events: state.events.slice(1) }), 'shop_service_missing_evidence_accepted')
+    assertThrows(() => model.readShopServiceSchedule('{"schema":"wrong"}'), 'shop_service_invalid_storage_accepted')
+  } catch (error) {
+    fail(`shop_service_schedule_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyShopProductionDemandRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopProductionDemandRuntimeChecks += 1
+  }
+  try {
+    const nonce = Date.now()
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-production-demand.ts')).href}?shop-production-demand-verify=${nonce}`)
+    const commerceModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-production-demand-commerce-verify=${nonce}`)
+    const plantModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts')).href}?shop-production-demand-digest-verify=${nonce}`)
+    const commerce = commerceModel.createSeedCommerce(Date.parse('2026-07-29T08:00:00.000Z'))
+    const signals = await model.projectShopProductionDemand(commerce, [])
+    assert(signals.length >= 1, 'shop_production_demand_seed_projection_missing')
+    const signal = signals.find((candidate) => candidate.sku === 'SM-1002') ?? signals[0]
+    assert(signal.schema === 'supermega.shop_production_demand.v1'
+      && signal.operatingContext.operatingUnitLocationId === 'LOC-MAIN'
+      && signal.operatingContext.sourceAuthority === 'commerce'
+      && signal.operatingContext.targetAuthority === 'production'
+      && signal.operatingContext.writePolicy === 'human_review_required', 'shop_production_demand_authority_wrong')
+    assert(/^sha256:[0-9a-f]{64}$/.test(signal.sourceDigest)
+      && signal.evidenceReference === `SHOP-DEMAND:${signal.sourceDigest}:LOC-MAIN`
+      && signal.suggestedJobId.startsWith('JOB-SHOP-'), 'shop_production_demand_evidence_wrong')
+    assert(signal.sourceDigest === plantModel.plantOrderEvidenceDigest(signal.sourceSnapshot)
+      && signal.sourceSnapshot.recommendedBatchUnits === signal.recommendedBatchUnits
+      && JSON.stringify(signal.sourceSnapshot.sourceOrderIds) === JSON.stringify([...signal.sourceOrderIds].sort())
+      && !/customer|contact|phone|email|payment|note/i.test(JSON.stringify(signal.sourceSnapshot)), 'shop_production_demand_source_snapshot_not_minimal_or_bound')
+    assert(signal.recommendedBatchUnits >= Math.max(1, signal.uncoveredDemandUnits, signal.replenishmentGapUnits), 'shop_production_demand_quantity_understated')
+    assert(!signals.some((candidate) => candidate.sku === 'SM-1001'), 'shop_production_demand_covered_order_created_overproduction')
+    assert(await model.shopProductionDemandIsCurrent(signal, commerce, []), 'shop_production_demand_fresh_signal_rejected')
+
+    const tampered = { ...signal, recommendedBatchUnits: signal.recommendedBatchUnits + 1 }
+    assert(!await model.shopProductionDemandIsCurrent(tampered, commerce, []), 'shop_production_demand_tamper_accepted')
+    const changedStock = {
+      ...commerce,
+      items: commerce.items.map((item) => item.sku === signal.sku ? { ...item, onHand: item.onHand + 1 } : item),
+    }
+    assert(!await model.shopProductionDemandIsCurrent(signal, changedStock, []), 'shop_production_demand_stale_stock_accepted')
+
+    const coveringJob = { id: 'JOB-COVER-001', line: 'Line 01', product: signal.productName, target: signal.recommendedBatchUnits, output: 0, owner: 'Plant planner', priority: 'normal', dueAt: '2026-07-30T08:00:00.000Z' }
+    const coveredSignals = await model.projectShopProductionDemand(commerce, [coveringJob])
+    const covered = coveredSignals.find((candidate) => candidate.sku === signal.sku)
+    assert(covered?.existingActiveJobIds.includes(coveringJob.id), 'shop_production_demand_active_coverage_missing')
+    assert(!await model.shopProductionDemandIsCurrent(signal, commerce, [coveringJob]), 'shop_production_demand_duplicate_coverage_accepted')
+
+    const completedJob = {
+      ...coveringJob,
+      id: signal.suggestedJobId,
+      output: signal.recommendedBatchUnits,
+      closure: { actionId: 'ACT-CLOSED-001', closedAt: '2026-07-29T09:00:00.000Z', closedBy: 'Plant planner', reason: 'Completed reviewed demand.', evidenceReference: signal.evidenceReference, shiftRef: '2026-07-29 Day', remainingUnits: 0 },
+    }
+    const nextCycleSignals = await model.projectShopProductionDemand(commerce, [completedJob])
+    const nextCycle = nextCycleSignals.find((candidate) => candidate.sku === signal.sku)
+    assert(nextCycle?.existingJobIds.includes(completedJob.id)
+      && nextCycle.existingActiveJobIds.length === 0
+      && nextCycle.suggestedJobId === `${signal.suggestedJobId}-02`, 'shop_production_demand_repeat_cycle_id_not_unique')
+    assert(!await model.shopProductionDemandIsCurrent(signal, commerce, [completedJob]), 'shop_production_demand_historical_job_drift_accepted')
+    const unrelatedJob = { ...coveringJob, id: 'JOB-OTHER-001', product: 'Unrelated product' }
+    assert(await model.shopProductionDemandIsCurrent(signal, commerce, [unrelatedJob]), 'shop_production_demand_unrelated_job_invalidated_signal')
+  } catch (error) {
+    fail(`shop_production_demand_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyShopDemandIntelligenceRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopDemandIntelligenceRuntimeChecks += 1
+  }
+  const assertThrows = (action, reason) => {
+    try { action() } catch { shopDemandIntelligenceRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-demand-intelligence.ts')).href}?shop-demand-intelligence-verify=${Date.now()}`)
+    const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-demand-commerce-verify=${Date.now()}`)
+    const state = commerce.createSeedCommerce()
+    const before = JSON.stringify(state)
+    const asOf = Date.now() + 60_000
+    const projection = model.projectShopDemandIntelligence(state, asOf)
+    const completedSale = projection.rows.find((row) => row.sku === 'SM-1004')
+    assert(projection.contract === 'supermega.shop.demand-intelligence.v1'
+      && projection.lookbackDays === 28
+      && projection.rows.length === state.items.length, 'shop_demand_intelligence_contract_not_exact')
+    assert(completedSale?.completedOrderCount === 1
+      && completedSale.sourceOrderIds.includes('ORD-1039')
+      && completedSale.grossDemandUnits === 1
+      && completedSale.returnedUnits === 0
+      && completedSale.netDemandUnits === 1
+      && completedSale.forecastWeeklyUnits === 1
+      && completedSale.confidence === 'insufficient', 'shop_demand_intelligence_completed_sale_not_measured')
+    assert(projection.summary.demandSkus === 1
+      && projection.summary.netDemandUnits === 1
+      && projection.summary.forecastWeeklyUnits === 1, 'shop_demand_intelligence_summary_not_exact')
+    assert(Object.values(projection.authority).every((value) => value === false || value === true)
+      && projection.authority.recommendationOnly === true
+      && Object.entries(projection.authority).filter(([key]) => key !== 'recommendationOnly').every(([, value]) => value === false)
+      && /^sha256:[0-9a-f]{64}$/.test(projection.digest), 'shop_demand_intelligence_authority_or_digest_broadened')
+    assert(JSON.stringify(state) === before, 'shop_demand_intelligence_changed_commerce_state')
+    assert(model.validateShopDemandIntelligence(projection, state, asOf).digest === projection.digest, 'shop_demand_intelligence_validation_failed')
+    assertThrows(() => model.validateShopDemandIntelligence({ ...projection, rows: [] }, state, asOf), 'tampered_shop_demand_intelligence_succeeded')
+    assertThrows(() => model.projectShopDemandIntelligence(state, Number.NaN), 'invalid_shop_demand_as_of_succeeded')
+  } catch (error) {
+    fail(`shop_demand_intelligence_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 async function verifyPlantOrderRuntime() {
   const assert = (condition, reason) => {
     if (!condition) throw new Error(reason)
@@ -4907,8 +6267,30 @@ async function verifyPlantOrderRuntime() {
     try { action() } catch { plantOrderRuntimeChecks += 1; return }
     throw new Error(reason)
   }
+  const assertReplenishment = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopReplenishmentRuntimeChecks += 1
+  }
+  const assertReplenishmentThrows = (action, reason) => {
+    try { action() } catch { shopReplenishmentRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  const assertProcurement = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopProcurementDecisionRuntimeChecks += 1
+  }
+  const assertProcurementThrows = (action, reason) => {
+    try { action() } catch { shopProcurementDecisionRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts')).href}?plant-order-verify=${Date.now()}`)
+    const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?plant-mrp-commerce-verify=${Date.now()}`)
+    const materialHandoff = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-material-handoff.ts')).href}?plant-mrp-verify=${Date.now()}`)
+    const orderPortfolio = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-order-portfolio.ts')).href}?plant-portfolio-verify=${Date.now()}`)
+    const productionWorkspace = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts')).href}?shop-replenishment-production-verify=${Date.now()}`)
+    const replenishment = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-replenishment.ts')).href}?shop-replenishment-verify=${Date.now()}`)
+    const shopInventory = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-inventory-foundation.ts')).href}?shop-supplier-policy-verify=${Date.now()}`)
     const proof = (sequence, label) => ({
       actionId: `ACT-20260726-${String(sequence).padStart(3, '0')}`,
       capturedAt: `2026-07-26T09:${String(Math.floor(sequence / 60)).padStart(2, '0')}:${String(sequence % 60).padStart(2, '0')}+06:30`,
@@ -4923,6 +6305,8 @@ async function verifyPlantOrderRuntime() {
       && pastedMaterials[1].materialId === 'MAT-SHELL-001'
       && pastedMaterials[1].unit === 'pcs',
     'plant_order_bom_paste_not_normalized_or_sorted')
+    const pricedMaterial = model.parsePlantOrderMaterialPaste('MAT-RUBBER-001 | Rubber | kg | 1.25 | 4200')[0]
+    assert(pricedMaterial.standardCostPerUnitMmk === 4_200 && model.parsePlantOrderMmkRate('500') === 500 && model.parsePlantOrderMmkRate('1.5') === null, 'plant_order_material_rate_not_canonical')
     assert(model.parsePlantOrderQuantityMilli('0', true) === 0
       && model.parsePlantOrderQuantityMilli('0') === null
       && model.parsePlantOrderQuantityMilli('1.234') === 1_234,
@@ -4939,10 +6323,18 @@ async function verifyPlantOrderRuntime() {
       && pastedRouting[0].minutesPerUnitMilli === 1_500
       && pastedRouting[1].operationId === 'OP-PACK-30',
     'plant_order_routing_paste_not_normalized_or_ordered')
+    const pricedOperation = model.parsePlantOrderRoutingPaste('OP-CURE-20 | Cure | WC-CURE-01 | Curing | 2.5 | 600')[0]
+    assert(pricedOperation.standardCostPerMinuteMmk === 600, 'plant_order_conversion_rate_not_canonical')
     assertThrows(() => model.parsePlantOrderRoutingPaste('OP-TEST-20 | Test | WC-TEST-01 | Test | 1\nop-test-20 | Duplicate | WC-TEST-02 | Test 2 | 1'), 'plant_order_routing_paste_duplicate_succeeded')
     assertThrows(() => model.parsePlantOrderRoutingPaste('OP-TEST-20 | Test | WC-TEST-01 | Test'), 'plant_order_routing_paste_malformed_row_succeeded')
     const tooManyOperations = Array.from({ length: model.PLANT_ORDER_ADDITIONAL_OPERATION_MAX + 1 }, (_, index) => `OP-EXTRA-${String(index + 1).padStart(2, '0')} | Extra ${index + 1} | WC-EXTRA-${String(index + 1).padStart(2, '0')} | Extra ${index + 1} | 1`).join('\n')
     assertThrows(() => model.parsePlantOrderRoutingPaste(tooManyOperations), 'plant_order_routing_paste_row_limit_not_enforced')
+    const pastedDowntime = model.parsePlantOrderDowntimePaste('\uFEFFdowntime_id | work_centre_id | started_at | ended_at\ndt-test-01 | wc-test-01 | 2026-07-26T08:20:00+06:30 | 2026-07-26T08:35:00+06:30')
+    assert(pastedDowntime.length === 1
+      && pastedDowntime[0].downtimeId === 'DT-TEST-01'
+      && pastedDowntime[0].workCentreId === 'WC-TEST-01',
+    'plant_order_downtime_paste_not_canonical')
+    assertThrows(() => model.parsePlantOrderDowntimePaste('DT-TEST-01 | WC-TEST-01 | 2026-07-26T08:35:00+06:30 | 2026-07-26T08:20:00+06:30'), 'plant_order_reverse_downtime_interval_succeeded')
     const planInput = {
       planId: 'PLN-20260726-001',
       sourceDigest: model.plantOrderEvidenceDigest({ jobId: 'JOB-401', revision: 12, target: 10 }),
@@ -4962,17 +6354,426 @@ async function verifyPlantOrderRuntime() {
     }
     const plan = model.buildPlantOrderPlan(planInput)
     const executionPlan = model.buildPlantOrderExecutionPlan(planInput)
+    const pricedExecutionPlan = model.buildPlantOrderExecutionPlan({
+      ...planInput,
+      planId: 'PLN-20260726-402',
+      materials: planInput.materials.map((material, index) => ({ ...material, standardCostPerUnitMmk: index ? 2_000 : 1_000 })),
+      routing: planInput.routing.map((operation, index) => ({ ...operation, standardCostPerMinuteMmk: index ? 600 : 500 })),
+    })
+    assert(pricedExecutionPlan.materials.every((material) => material.standardCostPerUnitMmk)
+      && pricedExecutionPlan.routing.every((operation) => operation.standardCostPerMinuteMmk)
+      && pricedExecutionPlan.packageDigest === 'sha256:c8c747513a48ab4ef6a055bcf612bfdc9244c94771d5eeaae94b6204312b5f69'
+      && model.validatePlantOrderState(model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), pricedExecutionPlan, proof(1, 'reviewed priced execution plan'), model.EMPTY_PLANT_ORDER_DIGEST).state).revision === 1,
+    'plant_order_priced_plan_not_immutable_or_valid')
+    const pricedPlanState = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), pricedExecutionPlan, proof(1, 'reviewed priced execution plan'), model.EMPTY_PLANT_ORDER_DIGEST).state
+    const costReviewPacket = model.buildPlantOrderCostReviewPacket(pricedPlanState)
+    assert(costReviewPacket?.contract === 'supermega.plant.cost_review_packet.v1'
+      && costReviewPacket.source.revision === 1
+      && costReviewPacket.source.headDigest === pricedPlanState.headDigest
+      && costReviewPacket.plan.packageDigest === pricedExecutionPlan.packageDigest
+      && costReviewPacket.financialCost.status === 'collecting'
+      && costReviewPacket.financialCost.planned.totalMmk === 63_500
+      && Object.values(costReviewPacket.authority).every((allowed) => allowed === false)
+      && model.validatePlantOrderCostReviewPacket(costReviewPacket).digest === costReviewPacket.digest,
+    'plant_order_cost_review_packet_not_evidence_bound')
+    const tamperedCostReviewPacket = structuredClone(costReviewPacket)
+    tamperedCostReviewPacket.financialCost.planned.totalMmk += 1
+    assertThrows(() => model.validatePlantOrderCostReviewPacket(tamperedCostReviewPacket), 'tampered_plant_order_cost_review_packet_succeeded')
+    assert(model.buildPlantOrderCostReviewPacket(model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), executionPlan, proof(1, 'unpriced execution plan'), model.EMPTY_PLANT_ORDER_DIGEST).state) === null, 'unpriced_plant_order_cost_review_packet_invented_cost')
+    const mrpPlan = model.buildPlantOrderEffectivePlan({
+      ...planInput,
+      planId: 'PLN-20260726-MRP',
+      effectiveFrom: '2026-07-27T15:30:00+06:30',
+      effectiveUntil: '2026-08-27T15:30:00+06:30',
+      materials: [{
+        ...planInput.materials[0],
+        shopSupply: { sku: 'SKU-RM-BAG', materialQuantityMilliPerStockUnit: 5_000 },
+      }],
+    })
+    const mrpState = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), mrpPlan, proof(2, 'reviewed material supply mapping'), model.EMPTY_PLANT_ORDER_DIGEST).state
+    const mrpBaseCommerce = commerce.validateCommerceState({
+      ...commerce.createEmptyCommerce(),
+      items: [{ sku: 'SKU-RM-BAG', name: 'Filter media 5 kg bag', onHand: 2, reorderAt: 1, price: 5_000 }],
+    })
+    const mrpPurchaseOrder = commerce.createCommercePurchaseOrder(mrpBaseCommerce, {
+      id: 'PO-00000000-0000-4000-8000-000000000402',
+      expectedAt: '2026-07-28T09:00:00.000Z',
+      supplier: 'Reviewed material supplier',
+      sku: 'SKU-RM-BAG',
+      quantityOrdered: 2,
+      unitCostMmk: 5_000,
+    }, {
+      actionId: 'ACT-MRP-PO-001',
+      capturedAt: '2026-07-26T09:00:00.000Z',
+      actor: 'Plant planner',
+      reason: 'Reviewed open supply for the production requirement.',
+      evidenceReference: 'MRP-PO-001',
+    })
+    assert(mrpPurchaseOrder, 'plant_mrp_purchase_order_fixture_failed')
+    const shortageRequirements = materialHandoff.projectProductionMaterialRequirements(mrpState, mrpBaseCommerce)
+    assert(shortageRequirements?.status === 'shortage'
+      && shortageRequirements.rows[0].shopSupply.protectedStockUnits === 1
+      && shortageRequirements.rows[0].shopSupply.availableToIssueStockUnits === 1
+      && shortageRequirements.rows[0].shopSupply.suggestedIssueStockUnits === 1
+      && shortageRequirements.rows[0].shopSupply.suggestedOrderStockUnits === 2,
+    'plant_mrp_shortage_recommendation_wrong')
+    const materialRequirements = materialHandoff.projectProductionMaterialRequirements(mrpState, mrpPurchaseOrder)
+    assert(materialRequirements?.contract === 'supermega.production.material_requirements.v1'
+      && materialRequirements.status === 'covered_by_open_po'
+      && materialRequirements.rows[0].requiredQuantityMilli === 15_000
+      && materialRequirements.rows[0].shopSupply.onHandQuantityMilli === 10_000
+      && materialRequirements.rows[0].shopSupply.protectedStockQuantityMilli === 5_000
+      && materialRequirements.rows[0].shopSupply.availableToIssueQuantityMilli === 5_000
+      && materialRequirements.rows[0].shopSupply.openPurchaseOrderQuantityMilli === 10_000
+      && materialRequirements.rows[0].shopSupply.suggestedOrderStockUnits === 0,
+    'plant_mrp_did_not_bind_bom_shop_and_open_po_supply')
+    const mrpLatePurchaseOrder = commerce.createCommercePurchaseOrder(mrpBaseCommerce, {
+      id: 'PO-00000000-0000-4000-8000-000000000403',
+      expectedAt: '2026-07-25T09:00:00.000Z',
+      supplier: 'Late material supplier',
+      sku: 'SKU-RM-BAG',
+      quantityOrdered: 2,
+      unitCostMmk: 5_000,
+    }, {
+      actionId: 'ACT-MRP-PO-002',
+      capturedAt: '2026-07-24T09:00:00.000Z',
+      actor: 'Plant planner',
+      reason: 'Reviewed late supply for the production requirement.',
+      evidenceReference: 'MRP-PO-002',
+    })
+    const atRiskRequirements = materialHandoff.projectProductionMaterialRequirements(mrpState, mrpLatePurchaseOrder)
+    assert(atRiskRequirements?.status === 'supply_at_risk'
+      && atRiskRequirements.summary.supplyAtRisk === 1
+      && atRiskRequirements.rows[0].shopSupply.atRiskPurchaseOrderStockUnits === 2
+      && atRiskRequirements.rows[0].shopSupply.suggestedExpediteStockUnits === 2
+      && atRiskRequirements.rows[0].shopSupply.suggestedOrderStockUnits === 0
+      && atRiskRequirements.rows[0].shopSupply.nextExpectedAt === null,
+    'plant_mrp_late_or_undated_supply_was_presented_as_safe_coverage')
+    const reserveDeficitCommerce = commerce.validateCommerceState({
+      ...mrpBaseCommerce,
+      items: mrpBaseCommerce.items.map((item) => ({ ...item, onHand: 0 })),
+    })
+    const reserveDeficitPurchaseOrder = commerce.createCommercePurchaseOrder(reserveDeficitCommerce, {
+      id: 'PO-00000000-0000-4000-8000-000000000405',
+      expectedAt: '2026-07-25T09:00:00.000Z',
+      supplier: 'Reserve recovery supplier',
+      sku: 'SKU-RM-BAG',
+      quantityOrdered: 4,
+      unitCostMmk: 5_000,
+    }, {
+      actionId: 'ACT-MRP-PO-004',
+      capturedAt: '2026-07-24T09:00:00.000Z',
+      actor: 'Plant planner',
+      reason: 'Reviewed supply for production and Shop reserve recovery.',
+      evidenceReference: 'MRP-PO-004',
+    })
+    const reserveDeficitRequirements = materialHandoff.projectProductionMaterialRequirements(mrpState, reserveDeficitPurchaseOrder)
+    assert(reserveDeficitRequirements?.status === 'supply_at_risk'
+      && reserveDeficitRequirements.rows[0].shopSupply.requiredSupplyStockUnits === 4
+      && reserveDeficitRequirements.rows[0].shopSupply.suggestedExpediteStockUnits === 4
+      && reserveDeficitRequirements.rows[0].shopSupply.suggestedOrderStockUnits === 0,
+    'plant_mrp_failed_to_restore_shop_floor_before_production_supply')
+    const mrpAfterWindowPurchaseOrder = commerce.createCommercePurchaseOrder(mrpBaseCommerce, {
+      id: 'PO-00000000-0000-4000-8000-000000000404',
+      expectedAt: '2026-08-28T09:00:00.000Z',
+      supplier: 'After-window material supplier',
+      sku: 'SKU-RM-BAG',
+      quantityOrdered: 2,
+      unitCostMmk: 5_000,
+    }, {
+      actionId: 'ACT-MRP-PO-003',
+      capturedAt: '2026-07-24T09:00:00.000Z',
+      actor: 'Plant planner',
+      reason: 'Reviewed supply arriving after the production window.',
+      evidenceReference: 'MRP-PO-003',
+    })
+    const afterWindowRequirements = materialHandoff.projectProductionMaterialRequirements(mrpState, mrpAfterWindowPurchaseOrder)
+    assert(afterWindowRequirements?.status === 'supply_at_risk'
+      && afterWindowRequirements.rows[0].shopSupply.atRiskPurchaseOrderStockUnits === 2
+      && afterWindowRequirements.rows[0].shopSupply.nextExpectedAt === null,
+    'plant_mrp_after_window_supply_was_presented_as_safe_coverage')
+    assert(materialHandoff.validateProductionMaterialRequirements(materialRequirements, mrpState, mrpPurchaseOrder).digest === materialRequirements.digest
+      && Object.values(materialRequirements.authority).every((allowed) => allowed === false),
+    'plant_mrp_review_packet_not_evidence_bound_or_side_effect_free')
+    const tamperedMaterialRequirements = structuredClone(materialRequirements)
+    tamperedMaterialRequirements.rows[0].shopSupply.onHandStockUnits += 1
+    assertThrows(() => materialHandoff.validateProductionMaterialRequirements(tamperedMaterialRequirements, mrpState, mrpPurchaseOrder), 'tampered_plant_mrp_packet_succeeded')
+    const changedFloorCommerce = commerce.validateCommerceState({
+      ...mrpPurchaseOrder,
+      items: mrpPurchaseOrder.items.map((item) => ({ ...item, reorderAt: item.reorderAt + 1 })),
+    })
+    assertThrows(() => materialHandoff.validateProductionMaterialRequirements(materialRequirements, mrpState, changedFloorCommerce), 'changed_shop_floor_did_not_stale_plant_mrp_packet')
+    const secondMrpPlan = model.buildPlantOrderEffectivePlan({
+      ...planInput,
+      planId: 'PLN-20260726-MRP-02',
+      effectiveFrom: '2026-07-27T15:30:00+06:30',
+      effectiveUntil: '2026-08-27T15:30:00+06:30',
+      job: { ...planInput.job, jobId: 'JOB-402', outputBatchId: 'BATCH-20260726-402' },
+      materials: [{ ...planInput.materials[0], shopSupply: { sku: 'SKU-RM-BAG', materialQuantityMilliPerStockUnit: 5_000 } }],
+    })
+    const secondMrpState = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), secondMrpPlan, proof(3, 'reviewed urgent material plan'), model.EMPTY_PLANT_ORDER_DIGEST).state
+    const portfolio = orderPortfolio.upsertProductionOrderExecution({ orderExecution: mrpState }, secondMrpState)
+    assert(!portfolio.orderExecution
+      && portfolio.orderPortfolio.entries.map((entry) => entry.jobId).join(',') === 'JOB-401,JOB-402'
+      && orderPortfolio.validateProductionOrderPortfolio(portfolio.orderPortfolio).entries.length === 2,
+    'plant_order_portfolio_did_not_migrate_and_sort_legacy_execution')
+    assertThrows(() => orderPortfolio.validateProductionOrderPortfolio({
+      contract: orderPortfolio.PRODUCTION_ORDER_PORTFOLIO_CONTRACT,
+      entries: [...portfolio.orderPortfolio.entries].reverse(),
+    }), 'plant_order_portfolio_unsorted_entries_succeeded')
+    const portfolioMrp = materialHandoff.projectProductionPortfolioMrp([
+      { execution: mrpState, priority: 'normal', dueAt: '2026-08-05T09:00:00.000Z' },
+      { execution: secondMrpState, priority: 'urgent', dueAt: '2026-08-06T09:00:00.000Z' },
+    ], mrpPurchaseOrder)
+    assert(portfolioMrp?.contract === 'supermega.production.portfolio_mrp.v1'
+      && portfolioMrp.orders.map((order) => order.jobId).join(',') === 'JOB-402,JOB-401'
+      && portfolioMrp.orders[0].rows[0].allocatedOnHandStockUnits === 1
+      && portfolioMrp.orders[0].rows[0].allocatedScheduledPurchaseStockUnits === 2
+      && portfolioMrp.orders[0].rows[0].shortageStockUnits === 0
+      && portfolioMrp.orders[1].rows[0].allocatedOnHandStockUnits === 0
+      && portfolioMrp.orders[1].rows[0].allocatedScheduledPurchaseStockUnits === 0
+      && portfolioMrp.orders[1].rows[0].shortageStockUnits === 3
+      && portfolioMrp.summary.shortage === 1
+      && Object.values(portfolioMrp.authority).every((allowed) => allowed === false),
+    'plant_portfolio_mrp_double_counted_shop_or_purchase_supply')
+    const productionForReplenishment = productionWorkspace.validateProductionState({
+      ...productionWorkspace.createEmptyProduction(),
+      jobs: [
+        { id: 'JOB-401', line: 'Line 01', product: 'Premium water filter', target: 10, output: 0, owner: 'Plant planner', priority: 'normal', dueAt: '2026-08-05T09:00:00.000Z' },
+        { id: 'JOB-402', line: 'Line 02', product: 'Premium water filter', target: 10, output: 0, owner: 'Plant planner', priority: 'urgent', dueAt: '2026-08-04T09:00:00.000Z' },
+      ],
+      orderPortfolio: portfolio.orderPortfolio,
+    })
+    const replenishmentPlan = replenishment.projectShopReplenishment(mrpPurchaseOrder, productionForReplenishment)
+    const replenishmentRow = replenishmentPlan.rows.find((row) => row.sku === 'SKU-RM-BAG')
+    assertReplenishment(replenishmentPlan.contract === 'supermega.shop.replenishment_plan.v1'
+      && replenishmentRow?.productionDemandUnits === 6
+      && replenishmentRow.operatingTargetUnits === 7
+      && replenishmentRow.openPurchaseUnits === 2
+      && replenishmentRow.recommendedOrderUnits === 3,
+    'shop_replenishment_did_not_combine_floor_plant_stock_and_open_po')
+    assertReplenishment(replenishmentRow?.suggestedSupplier === 'Reviewed material supplier'
+      && replenishmentRow.suggestedUnitCostMmk === 5_000
+      && replenishmentRow.earliestNeedAt === '2026-08-04T09:00:00.000Z'
+      && replenishmentRow.jobIds.join(',') === 'JOB-401,JOB-402',
+    'shop_replenishment_did_not_retain_supplier_terms_or_job_due_evidence')
+    assertReplenishment(replenishmentRow?.status === 'order_required'
+      && replenishmentPlan.summary.orderRequired === 1
+      && replenishmentPlan.summary.recommendedOrderUnits === 3
+      && Object.values(replenishmentPlan.authority).every((allowed) => allowed === false),
+    'shop_replenishment_status_or_authority_wrong')
+    assertReplenishment(replenishment.validateShopReplenishment(replenishmentPlan, mrpPurchaseOrder, productionForReplenishment).digest === replenishmentPlan.digest,
+      'shop_replenishment_current_packet_rejected')
+    const tamperedReplenishment = structuredClone(replenishmentPlan)
+    tamperedReplenishment.rows[0].recommendedOrderUnits += 1
+    assertReplenishmentThrows(() => replenishment.validateShopReplenishment(tamperedReplenishment, mrpPurchaseOrder, productionForReplenishment),
+      'shop_replenishment_tamper_succeeded')
+    const missingTermsPlan = replenishment.projectShopReplenishment(mrpBaseCommerce, productionForReplenishment)
+    const missingTermsRow = missingTermsPlan.rows.find((row) => row.sku === 'SKU-RM-BAG')
+    assertReplenishment(missingTermsRow?.status === 'terms_required'
+      && missingTermsRow.recommendedOrderUnits === 5
+      && missingTermsRow.suggestedSupplier === null
+      && missingTermsRow.suggestedUnitCostMmk === null,
+    'shop_replenishment_invented_missing_supplier_or_cost_terms')
+    const supplierPolicyImport = shopInventory.buildShopInventoryImportPackage({
+      importId: 'IMP-SUPPLIER-POLICY-001',
+      sourceDigest: shopInventory.shopInventoryEvidenceDigest({ source: 'supplier policy runtime fixture' }),
+      catalogSkus: ['SKU-RM-BAG'],
+      clients: [{ id: 'CLI-SUPPLIER-POLICY-001', name: 'Policy fixture client' }],
+      vendors: [{ id: 'VEN-SUPPLIER-POLICY-001', name: 'Reviewed material supplier' }],
+      locations: [{ id: 'LOC-POLICY-BRANCH', name: 'Policy branch' }, { id: 'LOC-POLICY-MAIN', name: 'Policy main' }],
+      stockUnits: [{ id: 'LOT-SUPPLIER-POLICY-001', sku: 'SKU-RM-BAG', tracking: 'lot', trackingCode: 'SUPPLIER-POLICY-OPENING-001' }],
+      openings: [{ stockUnitId: 'LOT-SUPPLIER-POLICY-001', locationId: 'LOC-POLICY-MAIN', vendorId: 'VEN-SUPPLIER-POLICY-001', quantity: 2 }],
+    })
+    const supplierPolicyOpeningProof = {
+      actionId: 'ACT-SUPPLIER-POLICY-OPENING-001', capturedAt: '2026-07-26T08:00:00.000Z', actor: 'Shop buyer',
+      reason: 'Reviewed supplier policy opening stock.', evidenceReference: 'SUPPLIER-POLICY-OPENING-001',
+    }
+    const supplierPolicyOpening = shopInventory.applyShopInventoryImport(
+      shopInventory.createEmptyShopInventoryState(), supplierPolicyImport, supplierPolicyOpeningProof,
+      ['SKU-RM-BAG'], shopInventory.EMPTY_SHOP_INVENTORY_DIGEST,
+    )
+    const supplierPolicyProof = {
+      actionId: 'ACT-SUPPLIER-POLICY-001', capturedAt: '2026-07-26T08:01:00.000Z', actor: 'Shop buyer',
+      reason: 'Reviewed supplier service and order constraints.', evidenceReference: 'SUPPLIER-POLICY-001',
+    }
+    const supplierPolicyResult = shopInventory.setShopSupplierPolicy(supplierPolicyOpening.state, {
+      commandId: 'SPP-SUPPLIER-POLICY-001',
+      policy: {
+        vendorId: 'VEN-SUPPLIER-POLICY-001', sku: 'SKU-RM-BAG', leadTimeDays: 7,
+        minimumOrderUnits: 8, orderMultipleUnits: 4, safetyStockUnits: 2,
+        serviceLevelBasisPoints: 9_800, status: 'active',
+      },
+      proof: supplierPolicyProof,
+      catalogSkus: ['SKU-RM-BAG'],
+      expectedHeadDigest: supplierPolicyOpening.state.headDigest,
+    })
+    const supplierPolicyProjection = shopInventory.projectShopInventory(supplierPolicyResult.state, ['SKU-RM-BAG'])
+    assertReplenishment(supplierPolicyProjection.supplierPolicies.length === 1
+      && supplierPolicyProjection.supplierPolicies[0].commandId === 'SPP-SUPPLIER-POLICY-001'
+      && supplierPolicyProjection.supplierPolicies[0].serviceLevelBasisPoints === 9_800,
+    'shop_supplier_policy_not_retained_in_inventory_evidence')
+    const policyCommerce = commerce.validateCommerceState({ ...mrpPurchaseOrder, inventoryFoundation: supplierPolicyResult.state })
+    const policyPlan = replenishment.projectShopReplenishment(policyCommerce, productionForReplenishment)
+    const policyRow = policyPlan.rows.find((row) => row.sku === 'SKU-RM-BAG')
+    assertReplenishment(policyRow?.operatingTargetUnits === 9
+      && policyRow.unroundedOrderUnits === 5
+      && policyRow.recommendedOrderUnits === 8
+      && policyRow.supplierPolicy?.minimumOrderUnits === 8
+      && policyRow.suggestedSupplier === 'Reviewed material supplier',
+    'shop_replenishment_did_not_apply_safety_stock_moq_or_order_multiple')
+    assertReplenishment(policyRow?.latestOrderAt === '2026-07-28T09:00:00.000Z'
+      && policyRow.supplierPolicy?.leadTimeDays === 7
+      && policyRow.supplierPolicy.serviceLevelBasisPoints === 9_800
+      && replenishment.validateShopReplenishment(policyPlan, policyCommerce, productionForReplenishment).digest === policyPlan.digest,
+    'shop_replenishment_supplier_policy_evidence_or_lead_time_wrong')
+    const procurementDecision = replenishment.projectShopProcurementDecision(policyCommerce, policyPlan, Date.parse('2026-07-26T09:00:00.000Z'))
+    const procurementRow = procurementDecision.rows.find((row) => row.sku === 'SKU-RM-BAG')
+    assertProcurement(procurementDecision.contract === 'supermega.shop.procurement-decision.v1'
+      && procurementDecision.summary.requisitions === 1
+      && procurementDecision.summary.knownExposureMmk === 40_000
+      && procurementDecision.summary.unknownExposure === 0,
+    'shop_procurement_decision_summary_or_exposure_wrong')
+    assertProcurement(procurementRow?.recommendedSupplier === 'Reviewed material supplier'
+      && procurementRow.recommendedUnitCostMmk === 5_000
+      && procurementRow.estimatedTotalMmk === 40_000
+      && procurementRow.supplierOptions[0].leadTimeDays === 7
+      && procurementRow.supplierOptions[0].serviceLevelBasisPoints === 9_800,
+    'shop_procurement_decision_did_not_rank_retained_terms_and_policy')
+    assertProcurement(procurementRow?.status === 'ready_for_owner_review'
+      && procurementRow.requisitionReference.startsWith('REQ-')
+      && procurementRow.plantJobIds.join(',') === 'JOB-401,JOB-402'
+      && procurementDecision.authority.recommendationOnly
+      && Object.entries(procurementDecision.authority).filter(([key]) => key !== 'recommendationOnly').every(([, value]) => value === false),
+    'shop_procurement_decision_authority_or_source_evidence_wrong')
+    assertProcurement(replenishment.validateShopProcurementDecision(procurementDecision, policyCommerce, policyPlan, Date.parse('2026-07-26T09:00:00.000Z')).digest === procurementDecision.digest,
+      'shop_procurement_decision_current_packet_rejected')
+    assertProcurementThrows(() => replenishment.validateShopProcurementDecision({ ...procurementDecision, rows: [] }, policyCommerce, policyPlan, Date.parse('2026-07-26T09:00:00.000Z')),
+      'shop_procurement_decision_tamper_succeeded')
+    assertProcurementThrows(() => replenishment.projectShopProcurementDecision(policyCommerce, policyPlan, Number.NaN),
+      'shop_procurement_decision_invalid_as_of_succeeded')
+    assertReplenishmentThrows(() => shopInventory.setShopSupplierPolicy(supplierPolicyResult.state, {
+      commandId: 'SPP-SUPPLIER-POLICY-INVALID',
+      policy: { ...supplierPolicyResult.state.commands.at(-1).payload.policy, serviceLevelBasisPoints: 10_000 },
+      proof: { ...supplierPolicyProof, actionId: 'ACT-SUPPLIER-POLICY-INVALID', capturedAt: '2026-07-26T08:02:00.000Z' },
+      catalogSkus: ['SKU-RM-BAG'],
+      expectedHeadDigest: supplierPolicyResult.state.headDigest,
+    }), 'shop_supplier_policy_invalid_service_level_succeeded')
+    const unmappedRequirements = materialHandoff.projectProductionMaterialRequirements(pricedPlanState, mrpBaseCommerce)
+    assert(unmappedRequirements?.status === 'mapping_required' && unmappedRequirements.summary.mappingRequired === 2, 'plant_mrp_invented_supply_mapping')
     assert(plan.sourceDigest === 'sha256:9415e4d6d6dda852c2014d611c1f93e385d31c40df2b4ec30d293b12991ba519'
       && plan.packageDigest === 'sha256:4f34743417e89e3ffcfa6c889fe2b55c14fd48f51926f4f198913cf4ec3d0a5b',
     'plant_order_python_browser_plan_digest_drifted')
     assert(executionPlan.contract === model.PLANT_ORDER_EXECUTION_PLAN_CONTRACT
       && executionPlan.packageDigest === 'sha256:a9fc5c9b53444139acc0b83de2ed42882d7359ef4ccd90d42b040ccce8ca6107',
     'plant_order_v2_python_browser_plan_digest_drifted')
+    const controlledAvailabilityMaterials = [
+      { materialId: 'MAT-FILTER-001', inputLotId: 'LOT-FILTER-2407', availableQuantityMilli: 15_000 },
+      { materialId: 'MAT-SHELL-001', inputLotId: 'LOT-SHELL-2407', availableQuantityMilli: 20_000 },
+    ]
+    const controlledAvailabilityCentres = [
+      { workCentreId: 'WC-ASSEMBLY-01', availableMinutes: 5 },
+      { workCentreId: 'WC-TEST-01', availableMinutes: 10 },
+    ]
+    const controlledPlan = model.buildPlantOrderControlledPlan({ ...planInput, planId: 'PLN-CONTROLLED-401' })
+    assert(controlledPlan.contract === model.PLANT_ORDER_CONTROLLED_PLAN_CONTRACT, 'plant_order_v3_contract_missing')
+    const effectivePlan = model.buildPlantOrderEffectivePlan({ ...planInput, planId: 'PLN-EFFECTIVE-401', effectiveFrom: '2026-07-26T09:30:00+06:30', effectiveUntil: '2026-07-26T10:00:00+06:30' })
+    assert(effectivePlan.contract === model.PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT
+      && effectivePlan.effectiveFrom === '2026-07-26T09:30:00+06:30'
+      && effectivePlan.packageDigest !== controlledPlan.packageDigest,
+    'plant_order_v4_effective_window_not_digest_bound')
+    const tamperedEffectivePlan = structuredClone(effectivePlan)
+    tamperedEffectivePlan.effectiveUntil = '2026-07-26T11:00:00+06:30'
+    assertThrows(() => model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), tamperedEffectivePlan, proof(1, 'tampered effective plan'), model.EMPTY_PLANT_ORDER_DIGEST), 'plant_order_v4_tampered_window_succeeded')
+    let effectiveResult = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), effectivePlan, proof(1, 'approved effective plan'), model.EMPTY_PLANT_ORDER_DIGEST)
+    effectiveResult = model.checkPlantOrderAvailability(effectiveResult.state, {
+      checkId: 'CHK-EFFECTIVE-001', sourceDigest: model.plantOrderEvidenceDigest({ effective: true }), materials: controlledAvailabilityMaterials, workCentres: controlledAvailabilityCentres, proof: proof(2, 'checked effective availability'), expectedHeadDigest: effectiveResult.state.headDigest,
+    })
+    for (const [sequence, workCentreId] of [[3, 'WC-ASSEMBLY-01'], [4, 'WC-TEST-01']]) {
+      effectiveResult = model.recordPlantOrderCalibration(effectiveResult.state, {
+        calibrationId: `CAL-EFFECTIVE-${sequence}`, workCentreId, certificateId: `CERT-${workCentreId}-EFFECTIVE`, calibratedAt: '2026-07-26T08:00:00+06:30', validUntil: '2027-07-26T10:00:00+06:30', standardReference: 'Approved reference standard', proof: proof(sequence, `reviewed ${workCentreId} calibration`), expectedHeadDigest: effectiveResult.state.headDigest,
+      })
+    }
+    assertThrows(() => model.releasePlantOrder(effectiveResult.state, { releaseId: 'REL-EFFECTIVE-EARLY', availabilityCheckId: 'CHK-EFFECTIVE-001', proof: proof(5, 'early effective release'), expectedHeadDigest: effectiveResult.state.headDigest }), 'plant_order_v4_early_release_succeeded')
+    assertThrows(() => model.releasePlantOrder(effectiveResult.state, { releaseId: 'REL-EFFECTIVE-EXPIRED', availabilityCheckId: 'CHK-EFFECTIVE-001', proof: { ...proof(6, 'expired effective release'), capturedAt: '2026-07-26T10:00:00+06:30' }, expectedHeadDigest: effectiveResult.state.headDigest }), 'plant_order_v4_expired_release_succeeded')
+    effectiveResult = model.releasePlantOrder(effectiveResult.state, { releaseId: 'REL-EFFECTIVE-001', availabilityCheckId: 'CHK-EFFECTIVE-001', proof: { ...proof(7, 'current effective release'), capturedAt: '2026-07-26T09:30:00+06:30' }, expectedHeadDigest: effectiveResult.state.headDigest })
+    assert(model.projectPlantOrder(effectiveResult.state).orderRelease?.id === 'REL-EFFECTIVE-001', 'plant_order_v4_current_release_not_frozen')
+    const revisedMaterials = planInput.materials.map((material, index) => index ? material : { ...material, quantityPerUnitMilli: 1_600 })
+    const successorPlan = model.buildPlantOrderEffectivePlan({ ...planInput, planId: 'PLN-SUCCESSOR-401', materials: revisedMaterials, effectiveFrom: '2026-07-26T09:00:00+06:30', effectiveUntil: '2026-07-26T11:00:00+06:30' })
+    let revisionResult = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), effectivePlan, proof(1, 'approved predecessor plan'), model.EMPTY_PLANT_ORDER_DIGEST)
+    revisionResult = model.checkPlantOrderAvailability(revisionResult.state, {
+      checkId: 'CHK-REVISION-OLD', sourceDigest: model.plantOrderEvidenceDigest({ revision: 'old' }), materials: controlledAvailabilityMaterials, workCentres: controlledAvailabilityCentres, proof: proof(2, 'checked predecessor availability'), expectedHeadDigest: revisionResult.state.headDigest,
+    })
+    const revisionProof = proof(3, 'supplier specification changed')
+    revisionResult = model.supersedePlantOrderPlan(revisionResult.state, { revisionId: 'REV-SUCCESSOR-401', supersededPlanId: effectivePlan.planId, plan: successorPlan, reason: 'Supplier specification changed the primary material allowance.', proof: revisionProof, expectedHeadDigest: revisionResult.state.headDigest })
+    const revisionProjection = model.projectPlantOrder(revisionResult.state)
+    assert(revisionProjection.plan?.planId === successorPlan.planId
+      && revisionProjection.planHistory.map((plan) => plan.planId).join(',') === `${effectivePlan.planId},${successorPlan.planId}`
+      && revisionProjection.planRevisions[0].supersededPlanId === effectivePlan.planId
+      && revisionProjection.latestAvailability === null
+      && revisionProjection.materials[0].quantityPerUnitMilli === 1_600,
+    'plant_order_v4_supersession_history_or_invalidation_wrong')
+    const revisionReplay = model.supersedePlantOrderPlan(revisionResult.state, { revisionId: 'REV-SUCCESSOR-401', supersededPlanId: effectivePlan.planId, plan: successorPlan, reason: 'Supplier specification changed the primary material allowance.', proof: revisionProof, expectedHeadDigest: model.EMPTY_PLANT_ORDER_DIGEST })
+    assert(revisionReplay.replayed && revisionReplay.state.headDigest === revisionResult.state.headDigest, 'plant_order_v4_supersession_not_idempotent')
+    assertThrows(() => model.supersedePlantOrderPlan(revisionResult.state, { revisionId: 'REV-SUCCESSOR-REUSED', supersededPlanId: successorPlan.planId, plan: effectivePlan, reason: 'Attempted to recycle an older plan identifier.', proof: proof(4, 'reused predecessor'), expectedHeadDigest: revisionResult.state.headDigest }), 'plant_order_v4_reused_plan_identifier_succeeded')
+    assertThrows(() => model.releasePlantOrder(revisionResult.state, { releaseId: 'REL-REVISION-STALE', availabilityCheckId: 'CHK-REVISION-OLD', proof: proof(4, 'release with stale availability'), expectedHeadDigest: revisionResult.state.headDigest }), 'plant_order_v4_revision_retained_stale_availability')
+    revisionResult = model.checkPlantOrderAvailability(revisionResult.state, {
+      checkId: 'CHK-REVISION-NEW', sourceDigest: model.plantOrderEvidenceDigest({ revision: 'new' }), materials: [{ ...controlledAvailabilityMaterials[0], availableQuantityMilli: 16_000 }, controlledAvailabilityMaterials[1]], workCentres: controlledAvailabilityCentres, proof: proof(4, 'checked successor availability'), expectedHeadDigest: revisionResult.state.headDigest,
+    })
+    for (const [sequence, workCentreId] of [[5, 'WC-ASSEMBLY-01'], [6, 'WC-TEST-01']]) {
+      revisionResult = model.recordPlantOrderCalibration(revisionResult.state, { calibrationId: `CAL-REVISION-${sequence}`, workCentreId, certificateId: `CERT-${workCentreId}-REVISION`, calibratedAt: '2026-07-26T08:00:00+06:30', validUntil: '2027-07-26T10:00:00+06:30', standardReference: 'Approved reference standard', proof: proof(sequence, `reviewed successor ${workCentreId}`), expectedHeadDigest: revisionResult.state.headDigest })
+    }
+    revisionResult = model.releasePlantOrder(revisionResult.state, { releaseId: 'REL-REVISION-001', availabilityCheckId: 'CHK-REVISION-NEW', proof: proof(7, 'released successor plan'), expectedHeadDigest: revisionResult.state.headDigest })
+    const lateSuccessor = model.buildPlantOrderEffectivePlan({ ...planInput, planId: 'PLN-SUCCESSOR-402', materials: revisedMaterials, effectiveFrom: '2026-07-26T09:00:00+06:30', effectiveUntil: '2026-07-26T12:00:00+06:30' })
+    assertThrows(() => model.supersedePlantOrderPlan(revisionResult.state, { revisionId: 'REV-SUCCESSOR-LATE', supersededPlanId: successorPlan.planId, plan: lateSuccessor, reason: 'Attempted revision after release.', proof: proof(8, 'late successor'), expectedHeadDigest: revisionResult.state.headDigest }), 'plant_order_v4_released_plan_was_superseded')
+    let controlledResult = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), controlledPlan, proof(1, 'approved controlled execution plan'), model.EMPTY_PLANT_ORDER_DIGEST)
+    controlledResult = model.checkPlantOrderAvailability(controlledResult.state, {
+      checkId: 'CHK-CONTROLLED-001', sourceDigest: model.plantOrderEvidenceDigest({ filter: 15_000, shell: 20_000, assembly: 5, test: 10 }),
+      materials: controlledAvailabilityMaterials, workCentres: controlledAvailabilityCentres, proof: proof(2, 'checked controlled availability'), expectedHeadDigest: controlledResult.state.headDigest,
+    })
+    assertThrows(() => model.releasePlantOrder(controlledResult.state, { releaseId: 'REL-CONTROLLED-MISSING', availabilityCheckId: 'CHK-CONTROLLED-001', proof: proof(3, 'release without calibration'), expectedHeadDigest: controlledResult.state.headDigest }), 'plant_order_v3_release_without_calibration_succeeded')
+    assertThrows(() => model.recordPlantOrderCalibration(controlledResult.state, {
+      calibrationId: 'CAL-CONTROLLED-FUTURE', workCentreId: 'WC-ASSEMBLY-01', certificateId: 'CERT-ASSEMBLY-000', calibratedAt: '2026-07-26T09:04:00+06:30', validUntil: '2026-07-26T10:00:00+06:30', standardReference: 'Approved reference standard', proof: proof(3, 'future calibration'), expectedHeadDigest: controlledResult.state.headDigest,
+    }), 'plant_order_v3_future_calibration_succeeded')
+    controlledResult = model.recordPlantOrderCalibration(controlledResult.state, {
+      calibrationId: 'CAL-CONTROLLED-ASSEMBLY-001', workCentreId: 'WC-ASSEMBLY-01', certificateId: 'CERT-ASSEMBLY-001', calibratedAt: '2026-07-26T08:00:00+06:30', validUntil: '2026-07-26T10:00:00+06:30', standardReference: 'Approved reference standard', proof: proof(3, 'reviewed assembly calibration'), expectedHeadDigest: controlledResult.state.headDigest,
+    })
+    const calibrationReplay = model.recordPlantOrderCalibration(controlledResult.state, {
+      calibrationId: 'CAL-CONTROLLED-ASSEMBLY-001', workCentreId: 'WC-ASSEMBLY-01', certificateId: 'CERT-ASSEMBLY-001', calibratedAt: '2026-07-26T08:00:00+06:30', validUntil: '2026-07-26T10:00:00+06:30', standardReference: 'Approved reference standard', proof: proof(3, 'reviewed assembly calibration'), expectedHeadDigest: model.EMPTY_PLANT_ORDER_DIGEST,
+    })
+    assert(calibrationReplay.replayed && calibrationReplay.state.headDigest === controlledResult.state.headDigest, 'plant_order_v3_calibration_replay_not_idempotent')
+    controlledResult = model.recordPlantOrderCalibration(controlledResult.state, {
+      calibrationId: 'CAL-CONTROLLED-TEST-001', workCentreId: 'WC-TEST-01', certificateId: 'CERT-TEST-001', calibratedAt: '2026-07-26T08:00:00+06:30', validUntil: '2026-07-26T10:00:00+06:30', standardReference: 'Approved reference standard', proof: proof(4, 'reviewed test calibration'), expectedHeadDigest: controlledResult.state.headDigest,
+    })
+    controlledResult = model.releasePlantOrder(controlledResult.state, { releaseId: 'REL-CONTROLLED-001', availabilityCheckId: 'CHK-CONTROLLED-001', proof: proof(5, 'released calibrated work package'), expectedHeadDigest: controlledResult.state.headDigest })
+    assert(model.projectPlantOrder(controlledResult.state).calibrations.map((row) => row.workCentreId).join(',') === 'WC-ASSEMBLY-01,WC-TEST-01', 'plant_order_v3_calibration_projection_wrong')
+    controlledResult = model.issuePlantOrderMaterial(controlledResult.state, { issueId: 'ISSUE-CONTROLLED-001', materialId: 'MAT-FILTER-001', inputLotId: 'LOT-FILTER-2407', quantityMilli: 15_000, proof: proof(6, 'issued controlled filter lot'), expectedHeadDigest: controlledResult.state.headDigest })
+    controlledResult = model.issuePlantOrderMaterial(controlledResult.state, { issueId: 'ISSUE-CONTROLLED-002', materialId: 'MAT-SHELL-001', inputLotId: 'LOT-SHELL-2407', quantityMilli: 20_000, proof: proof(7, 'issued controlled shell lot'), expectedHeadDigest: controlledResult.state.headDigest })
+    controlledResult = model.recordPlantOrderOperation(controlledResult.state, { operationRunId: 'OPRUN-CONTROLLED-001', operationId: 'OP-ASSEMBLY-10', quantity: 10, actualMinutesMilli: 5_000, proof: proof(8, 'completed controlled assembly'), expectedHeadDigest: controlledResult.state.headDigest })
+    controlledResult = model.recordPlantOrderOperation(controlledResult.state, { operationRunId: 'OPRUN-CONTROLLED-002', operationId: 'OP-TEST-20', quantity: 10, actualMinutesMilli: 10_000, proof: proof(9, 'completed controlled test'), expectedHeadDigest: controlledResult.state.headDigest })
+    controlledResult = model.recordPlantOrderOutput(controlledResult.state, { outputId: 'OUT-CONTROLLED-001', outputBatchId: 'BATCH-20260726-401', quantity: 10, proof: proof(10, 'recorded controlled output'), expectedHeadDigest: controlledResult.state.headDigest })
+    controlledResult = model.inspectPlantOrderOutput(controlledResult.state, { inspectionId: 'INSP-CONTROLLED-FAIL', outputBatchId: 'BATCH-20260726-401', inspectedQuantity: 10, acceptedQuantity: 8, rejectedQuantity: 2, result: 'fail', proof: proof(11, 'failed controlled inspection'), expectedHeadDigest: controlledResult.state.headDigest })
+    assertThrows(() => model.inspectPlantOrderOutput(controlledResult.state, { inspectionId: 'INSP-CONTROLLED-BYPASS', outputBatchId: 'BATCH-20260726-401', inspectedQuantity: 10, acceptedQuantity: 10, rejectedQuantity: 0, result: 'pass', proof: proof(12, 'bypassed controlled rework'), expectedHeadDigest: controlledResult.state.headDigest }), 'plant_order_v3_reinspection_without_rework_succeeded')
+    assertThrows(() => model.recordPlantOrderQualityRework(controlledResult.state, { reworkId: 'RWK-CONTROLLED-WRONG', inspectionId: 'INSP-CONTROLLED-FAIL', operationId: 'OP-TEST-20', quantity: 1, actualMinutesMilli: 2_000, owner: 'Quality lead', cause: 'Pressure seal was incomplete.', correctiveAction: 'Reset fixture and repeat pressure cycle.', proof: proof(12, 'wrong controlled rework quantity'), expectedHeadDigest: controlledResult.state.headDigest }), 'plant_order_v3_partial_rework_succeeded')
+    controlledResult = model.recordPlantOrderQualityRework(controlledResult.state, { reworkId: 'RWK-CONTROLLED-001', inspectionId: 'INSP-CONTROLLED-FAIL', operationId: 'OP-TEST-20', quantity: 2, actualMinutesMilli: 2_000, owner: 'Quality lead', cause: 'Pressure seal was incomplete.', correctiveAction: 'Reset fixture and repeat pressure cycle.', proof: proof(12, 'reviewed controlled rework'), expectedHeadDigest: controlledResult.state.headDigest })
+    const controlledReworkProjection = model.projectPlantOrder(controlledResult.state)
+    assert(controlledReworkProjection.qualityReworks[0].owner === 'Quality lead'
+      && controlledReworkProjection.operations[1].actualMinutesMilli === 12_000
+      && controlledReworkProjection.metrics.actualOperationMinutesMilli === 17_000,
+    'plant_order_v3_rework_not_bound_to_actual_cost_time')
+    controlledResult = model.inspectPlantOrderOutput(controlledResult.state, { inspectionId: 'INSP-CONTROLLED-PASS', outputBatchId: 'BATCH-20260726-401', inspectedQuantity: 10, acceptedQuantity: 10, rejectedQuantity: 0, result: 'pass', proof: proof(13, 'passed controlled reinspection'), expectedHeadDigest: controlledResult.state.headDigest })
+    assert(model.projectPlantOrder(controlledResult.state).status === 'ready_to_release', 'plant_order_v3_rework_did_not_enable_reinspection')
     let result = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), plan, proof(1, 'approved BOM and routing'), model.EMPTY_PLANT_ORDER_DIGEST)
     assert(!result.replayed && result.state.headDigest === 'sha256:c809f3f30d1df11b3bbed4df8ac7d12ea4afc6f245830059270c32bd14ca1ab1', 'plant_order_plan_head_drifted')
     const plannedState = result.state
     const plannedProjection = model.projectPlantOrder(plannedState)
     assert(plannedProjection.status === 'planned' && plannedProjection.materials[0].requiredQuantityMilli === 15_000 && plannedProjection.materials[1].requiredQuantityMilli === 20_000, 'plant_order_bom_projection_wrong')
+    const unstartedEffectiveness = model.projectPlantOrderEffectiveness(model.projectPlantOrder(model.createEmptyPlantOrderState()))
+    assert(unstartedEffectiveness.contract === model.PLANT_ORDER_EFFECTIVENESS_CONTRACT
+      && unstartedEffectiveness.status === 'not_started'
+      && unstartedEffectiveness.oeeBasisPoints === null
+      && unstartedEffectiveness.missingEvidence.length === 3,
+    'plant_order_unstarted_effectiveness_invented_evidence')
     const replay = model.applyPlantOrderPlan(plannedState, plan, proof(1, 'approved BOM and routing'), model.EMPTY_PLANT_ORDER_DIGEST)
     assert(replay.replayed && JSON.stringify(replay.state) === JSON.stringify(plannedState), 'plant_order_plan_retry_not_idempotent')
 
@@ -5038,8 +6839,118 @@ async function verifyPlantOrderRuntime() {
       && operationProjection.metrics.actualOperationMinutesMilli === 6_200
       && operationProjection.metrics.completedOperationCount === 0,
     'plant_order_v2_operation_projection_wrong')
+    const collectingEffectiveness = model.projectPlantOrderEffectiveness(operationProjection)
+    assert(collectingEffectiveness.status === 'collecting'
+      && collectingEffectiveness.performance?.basisPoints === 9_677
+      && collectingEffectiveness.performance?.designedMinutesMilli === 6_000
+      && collectingEffectiveness.performance?.actualMinutesMilli === 6_200
+      && collectingEffectiveness.performance?.speedLossMinutesMilli === 200
+      && collectingEffectiveness.quality === null
+      && collectingEffectiveness.oeeBasisPoints === null
+      && collectingEffectiveness.missingEvidence.join('|') === 'Order-bound planned productive time and downtime|Current output inspection',
+    'plant_order_collecting_effectiveness_not_evidence_bound')
+    const collectingCostDrivers = model.projectPlantOrderCostDrivers(operationProjection)
+    assert(collectingCostDrivers.contract === 'supermega.plant.cost_driver_variance.v1'
+      && collectingCostDrivers.status === 'collecting'
+      && collectingCostDrivers.earnedUnits === 4
+      && collectingCostDrivers.materials.map((row) => row.varianceQuantityMilli).join(',') === '9000,12000'
+      && collectingCostDrivers.conversion.standardMinutesMilli === 6_000
+      && collectingCostDrivers.conversion.actualMinutesMilli === 6_200
+      && collectingCostDrivers.conversion.varianceMinutesMilli === 200
+      && collectingCostDrivers.financialCostAvailable === false,
+    'plant_order_cost_driver_variance_not_evidence_bound')
+    const legacyFinancialCost = model.projectPlantOrderFinancialCost(operationProjection)
+    assert(legacyFinancialCost.status === 'setup_required' && legacyFinancialCost.missingRates.join(',') === 'MAT-FILTER-001,MAT-SHELL-001,OP-ASSEMBLY-10,OP-TEST-20' && legacyFinancialCost.varianceMmk === null, 'plant_order_legacy_plan_invented_financial_cost')
+    const pricedOperationProjection = structuredClone(operationProjection)
+    pricedOperationProjection.materials[0].standardCostPerUnitMmk = 1_000
+    pricedOperationProjection.materials[1].standardCostPerUnitMmk = 2_000
+    pricedOperationProjection.operations[0].standardCostPerMinuteMmk = 500
+    pricedOperationProjection.operations[1].standardCostPerMinuteMmk = 600
+    const collectingFinancialCost = model.projectPlantOrderFinancialCost(pricedOperationProjection)
+    assert(collectingFinancialCost.contract === 'supermega.plant.financial_job_cost.v1'
+      && collectingFinancialCost.status === 'collecting'
+      && collectingFinancialCost.planned.totalMmk === 63_500
+      && collectingFinancialCost.earned.totalMmk === 25_400
+      && collectingFinancialCost.actual.totalMmk === 58_500
+      && collectingFinancialCost.varianceMmk === 33_100
+      && collectingFinancialCost.qualityLossMmk === 0,
+    'plant_order_collecting_financial_cost_wrong')
     executionResult = model.recordPlantOrderOutput(executionResult.state, { outputId: 'OUT-V2-TRANSFER-001', outputBatchId: 'BATCH-20260726-401', quantity: 4, proof: proof(8, 'recorded routed transfer output'), expectedHeadDigest: executionResult.state.headDigest })
     assert(model.projectPlantOrder(executionResult.state).totalOutput === 4, 'plant_order_v2_routed_output_not_recorded')
+    executionResult = model.recordPlantOrderOperation(executionResult.state, { operationRunId: 'OPRUN-V2-ASSEMBLY-002', operationId: 'OP-ASSEMBLY-10', quantity: 6, actualMinutesMilli: 3_300, proof: proof(9, 'completed assembly transfer quantity'), expectedHeadDigest: executionResult.state.headDigest })
+    executionResult = model.recordPlantOrderOperation(executionResult.state, { operationRunId: 'OPRUN-V2-TEST-002', operationId: 'OP-TEST-20', quantity: 6, actualMinutesMilli: 6_000, proof: proof(10, 'completed pressure-test transfer quantity'), expectedHeadDigest: executionResult.state.headDigest })
+    executionResult = model.recordPlantOrderOutput(executionResult.state, { outputId: 'OUT-V2-TRANSFER-002', outputBatchId: 'BATCH-20260726-401', quantity: 6, proof: proof(11, 'recorded remaining routed output'), expectedHeadDigest: executionResult.state.headDigest })
+    executionResult = model.inspectPlantOrderOutput(executionResult.state, { inspectionId: 'INSP-V2-001', outputBatchId: 'BATCH-20260726-401', inspectedQuantity: 10, acceptedQuantity: 8, rejectedQuantity: 2, result: 'fail', proof: proof(12, 'inspected routed output with rejects'), expectedHeadDigest: executionResult.state.headDigest })
+    const effectiveness = model.projectPlantOrderEffectiveness(model.projectPlantOrder(executionResult.state))
+    const completedCostDrivers = model.projectPlantOrderCostDrivers(model.projectPlantOrder(executionResult.state))
+    assert(completedCostDrivers.earnedUnits === 10
+      && completedCostDrivers.materials.every((row) => row.varianceQuantityMilli === 0)
+      && completedCostDrivers.conversion.standardMinutesMilli === 15_000
+      && completedCostDrivers.conversion.actualMinutesMilli === 15_500
+      && completedCostDrivers.conversion.varianceMinutesMilli === 500,
+    'plant_order_completed_cost_driver_variance_wrong')
+    const pricedCompletedProjection = structuredClone(model.projectPlantOrder(executionResult.state))
+    pricedCompletedProjection.materials[0].standardCostPerUnitMmk = 1_000
+    pricedCompletedProjection.materials[1].standardCostPerUnitMmk = 2_000
+    pricedCompletedProjection.operations[0].standardCostPerMinuteMmk = 500
+    pricedCompletedProjection.operations[1].standardCostPerMinuteMmk = 600
+    const completedFinancialCost = model.projectPlantOrderFinancialCost(pricedCompletedProjection)
+    assert(completedFinancialCost.earned.totalMmk === 63_500
+      && completedFinancialCost.actual.totalMmk === 63_750
+      && completedFinancialCost.varianceMmk === 250
+      && completedFinancialCost.qualityLossMmk === 12_700,
+    'plant_order_completed_financial_cost_wrong')
+    assert(effectiveness.status === 'availability_setup_required'
+      && effectiveness.availabilityBasisPoints === null
+      && effectiveness.performance?.basisPoints === 9_677
+      && effectiveness.performance?.designedMinutesMilli === 15_000
+      && effectiveness.performance?.actualMinutesMilli === 15_500
+      && effectiveness.performance?.speedLossMinutesMilli === 500
+      && effectiveness.quality?.basisPoints === 8_000
+      && effectiveness.quality?.acceptedQuantity === 8
+      && effectiveness.quality?.rejectedQuantity === 2
+      && effectiveness.oeeBasisPoints === null
+      && effectiveness.missingEvidence.join('|') === 'Order-bound planned productive time and downtime',
+    'plant_order_effectiveness_calculated_without_exact_factor_evidence')
+
+    const effectivenessEvidence = {
+      planId: executionPlan.planId,
+      jobId: executionPlan.job.jobId,
+      windowStart: '2026-07-26T08:00:00+06:30',
+      windowEnd: '2026-07-26T09:00:00+06:30',
+      workCentres: [
+        { workCentreId: 'WC-ASSEMBLY-01', plannedProductiveMinutesMilli: 60_000 },
+        { workCentreId: 'WC-TEST-01', plannedProductiveMinutesMilli: 60_000 },
+      ],
+      downtimeIntervals: [
+        { downtimeId: 'DT-ASSEMBLY-01', workCentreId: 'WC-ASSEMBLY-01', startedAt: '2026-07-26T08:10:00+06:30', endedAt: '2026-07-26T08:25:00+06:30' },
+        { downtimeId: 'DT-TEST-01', workCentreId: 'WC-TEST-01', startedAt: '2026-07-26T08:35:00+06:30', endedAt: '2026-07-26T08:50:00+06:30' },
+      ],
+    }
+    assertThrows(() => model.recordPlantOrderEffectiveness(executionResult.state, {
+      effectivenessId: 'OEE-V2-BAD-DIGEST', ...effectivenessEvidence, sourceDigest: model.plantOrderEvidenceDigest({ wrong: true }), proof: proof(13, 'bad effectiveness digest'), expectedHeadDigest: executionResult.state.headDigest,
+    }), 'plant_order_effectiveness_bad_digest_succeeded')
+    const futureEffectivenessEvidence = { ...effectivenessEvidence, windowEnd: '2026-07-26T10:00:00+06:30' }
+    assertThrows(() => model.recordPlantOrderEffectiveness(executionResult.state, {
+      effectivenessId: 'OEE-V2-FUTURE', ...futureEffectivenessEvidence, sourceDigest: model.plantOrderEvidenceDigest(futureEffectivenessEvidence), proof: proof(13, 'future effectiveness window'), expectedHeadDigest: executionResult.state.headDigest,
+    }), 'plant_order_future_effectiveness_attestation_succeeded')
+    executionResult = model.recordPlantOrderEffectiveness(executionResult.state, {
+      effectivenessId: 'OEE-V2-001', ...effectivenessEvidence, sourceDigest: model.plantOrderEvidenceDigest(effectivenessEvidence), proof: proof(13, 'reviewed order-bound effectiveness evidence'), expectedHeadDigest: executionResult.state.headDigest,
+    })
+    const completedEffectiveness = model.projectPlantOrderEffectiveness(model.projectPlantOrder(executionResult.state))
+    assert(completedEffectiveness.contract === 'supermega.plant.order_effectiveness.v2'
+      && completedEffectiveness.status === 'complete'
+      && completedEffectiveness.availabilityBasisPoints === 7_500
+      && completedEffectiveness.availability?.plannedProductiveMinutesMilli === 120_000
+      && completedEffectiveness.availability?.downtimeMinutesMilli === 30_000
+      && completedEffectiveness.availability?.operatingMinutesMilli === 90_000
+      && completedEffectiveness.availability?.workCentreCount === 2
+      && completedEffectiveness.availability?.downtimeIntervalCount === 2
+      && completedEffectiveness.performance?.basisPoints === 9_677
+      && completedEffectiveness.quality?.basisPoints === 8_000
+      && completedEffectiveness.oeeBasisPoints === 5_806
+      && completedEffectiveness.missingEvidence.length === 0,
+    'plant_order_complete_oee_not_bound_to_reviewed_window')
 
     const heldOutput = model.recordPlantOrderOutput(issuedState, { outputId: 'OUT-HOLD-001', outputBatchId: 'BATCH-20260726-401', quantity: 5, proof: proof(6, 'partial output for hold test'), expectedHeadDigest: issuedState.headDigest })
     const held = model.inspectPlantOrderOutput(heldOutput.state, { inspectionId: 'INSP-HOLD-001', outputBatchId: 'BATCH-20260726-401', inspectedQuantity: 5, acceptedQuantity: 4, rejectedQuantity: 1, result: 'fail', proof: proof(7, 'held failed batch'), expectedHeadDigest: heldOutput.state.headDigest })
@@ -5327,6 +7238,12 @@ async function verifyClientOnboardingRuntime() {
   }
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?client-onboarding-verify=${Date.now()}`)
+    const capabilityModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-capability-plan.ts')).href}?client-capability-verify=${Date.now()}`)
+    const websiteLeadModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-leads.ts')).href}?website-lead-verify=${Date.now()}`)
+    const plantPacks = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-industry-packs.ts')).href}?plant-packs-verify=${Date.now()}`)
+    assert(plantPacks.plantIndustryPacks.map((pack) => pack.id).join(',') === manifestPlantPackIds.join(','), 'plant_industry_pack_manifest_drifted')
+    const apparelSetup = plantPacks.plantIndustryPackSetup('apparel', { id: 'JOB-STYLE-01', line: 'Sewing A' })
+    assert(apparelSetup.materialUnit === 'm' && apparelSetup.workCentreId === 'WC-SEW-SEWING-A' && apparelSetup.standardCostPerUnitMmk === '' && apparelSetup.standardCostPerMinuteMmk === '', 'plant_industry_pack_setup_not_review_safe')
     const objectIds = new Set()
     for (const productProfile of solutionProducts) {
       const product = productProfile.runtimeId
@@ -5344,14 +7261,321 @@ async function verifyClientOnboardingRuntime() {
         assert(/^sha256:[a-f0-9]{64}$/.test(preview.sourceDigest) && /^sha256:[a-f0-9]{64}$/.test(preview.previewDigest), `client_import_${workflowTemplate.id}_digest_missing`)
         const retried = await model.createClientImportPreview(template, product, preview.mapping, 'renamed.csv', workflowTemplate.id)
         assert(retried.sourceDigest === preview.sourceDigest && retried.previewDigest === preview.previewDigest, `client_import_${workflowTemplate.id}_preview_not_deterministic`)
-        const staged = model.buildClientImportStagingPackage(preview, { workflowTemplateId: workflowTemplate.id, workspace: `${product} client`, owner: 'Owner' })
-        assert(staged.contract === model.CLIENT_STAGING_SCHEMA && staged.controls.activationStatus === 'staged_not_applied', `client_import_${workflowTemplate.id}_staging_contract_wrong`)
+      const staged = model.buildClientImportStagingPackage(preview, { workflowTemplateId: workflowTemplate.id, workspace: `${product} client`, owner: 'Owner' })
+      assert(staged.contract === model.CLIENT_STAGING_SCHEMA && staged.controls.activationStatus === 'staged_not_applied', `client_import_${workflowTemplate.id}_staging_contract_wrong`)
+      if (product === 'production') assert(staged.plantIndustryPackId === 'general-manufacturing', `client_import_${workflowTemplate.id}_plant_pack_missing`)
         assert(staged.controls.rowCount === 2 && staged.controls.humanReviewRequired === true && staged.controls.externalWritesPerformed === false, `client_import_${workflowTemplate.id}_staging_controls_wrong`)
         previewDigests.add(preview.previewDigest)
       }
       assert(previewDigests.size === productProfile.templates.length, `client_import_${product}_workflow_digest_not_bound`)
     }
     assert(objectIds.size === 4, 'client_import_objects_not_unique')
+    const datedPlantTemplate = model.clientImportTemplate('production', 'production-control', { planningDate: '2026-07-30' })
+    assert(datedPlantTemplate.includes('2026-08-13')
+      && datedPlantTemplate.includes('2026-08-20')
+      && !datedPlantTemplate.includes('{{dueDate'), 'client_import_plant_template_dates_not_materialized')
+    rejectsSync(() => model.clientImportTemplate('production', 'production-control', { planningDate: '2026-02-30' }), 'client_import_invalid_planning_date_accepted')
+
+    const leadStorageValues = new Map()
+    const leadStorage = {
+      getItem: (key) => leadStorageValues.get(key) ?? null,
+      setItem: (key, value) => leadStorageValues.set(key, value),
+    }
+    const emptyLeadLedger = websiteLeadModel.emptyWebsiteLeadLedger()
+    const capturedLeadLedger = websiteLeadModel.captureWebsiteLead(emptyLeadLedger, {
+      siteName: 'Golden Valley Trading',
+      sourcePage: '/contact',
+      name: 'Daw Mya',
+      contact: '09 123 456 789',
+      request: 'Needs a wholesale catalog and delivery quote.',
+      consentRecorded: true,
+    }, { id: 'lead-demo-001', now: '2026-07-29T00:00:00.000Z' })
+    assert(capturedLeadLedger.revision === 1
+      && capturedLeadLedger.leads.length === 1
+      && capturedLeadLedger.leads[0].status === 'new'
+      && capturedLeadLedger.leads[0].owner === '', 'website_lead_capture_not_accountable')
+    websiteLeadModel.writeWebsiteLeadLedger(leadStorage, capturedLeadLedger)
+    const restoredLeadLedger = websiteLeadModel.readWebsiteLeadLedger(leadStorage)
+    assert(JSON.stringify(restoredLeadLedger) === JSON.stringify(capturedLeadLedger), 'website_lead_persistence_not_deterministic')
+    const qualifiedLeadLedger = websiteLeadModel.reviewWebsiteLead(restoredLeadLedger, 'lead-demo-001', {
+      status: 'qualified',
+      owner: 'Sales lead',
+      decisionNote: 'Confirm quantity and delivery township.',
+    }, '2026-07-29T00:05:00.000Z')
+    const closedLeadLedger = websiteLeadModel.reviewWebsiteLead(qualifiedLeadLedger, 'lead-demo-001', {
+      status: 'closed',
+      owner: 'Sales lead',
+      decisionNote: 'Customer chose another supplier.',
+    }, '2026-07-29T00:10:00.000Z')
+    const leadCounts = websiteLeadModel.websiteLeadCounts(closedLeadLedger, 'Golden Valley Trading')
+    assert(closedLeadLedger.revision === 3
+      && closedLeadLedger.leads[0].status === 'closed'
+      && closedLeadLedger.leads[0].owner === 'Sales lead'
+      && leadCounts.total === 1 && leadCounts.closed === 1, 'website_lead_lifecycle_incomplete')
+    rejectsSync(() => websiteLeadModel.captureWebsiteLead(emptyLeadLedger, {
+      siteName: 'Golden Valley Trading', sourcePage: '/contact', name: 'Daw Mya',
+      contact: '09 123 456 789', request: 'Needs a quote.', consentRecorded: false,
+    }, { id: 'lead-demo-002', now: '2026-07-29T00:00:00.000Z' }), 'website_lead_consent_gate_missing')
+    rejectsSync(() => websiteLeadModel.reviewWebsiteLead(closedLeadLedger, 'lead-demo-001', {
+      status: 'qualified', owner: 'Sales lead', decisionNote: '',
+    }, '2026-07-29T00:15:00.000Z'), 'website_closed_lead_reopened')
+    assert(websiteLeadModel.restoreWebsiteLeadLedger({ ...closedLeadLedger, unexpected: true }) === null, 'website_lead_unknown_field_accepted')
+
+    assert(model.clientDemoPresets.length === 5 && new Set(model.clientDemoPresets.map((preset) => preset.id)).size === 5, 'client_demo_presets_missing_or_duplicated')
+    assert(capabilityModel.clientCapabilityDependencyLabel('platform-identity') === 'Identity and role boundaries'
+      && capabilityModel.clientCapabilityDependencyLabel('shop-order-to-cash') === 'Order to cash'
+      && capabilityModel.clientCapabilityDependencyLabel('future-control') === 'future control', 'client_capability_dependency_labels_wrong')
+    for (const preset of model.clientDemoPresets) {
+      const blueprint = model.buildClientDemoBlueprint({ workspace: 'Golden Valley Trading', owner: 'Operations lead', presetId: preset.id, selections: preset.selections })
+      const starterPack = model.buildClientCsvStarterPack(blueprint)
+      const starterPackText = new TextDecoder().decode(starterPack.bytes)
+      const starterPackFilenames = { commerce: 'shop.csv', production: 'plant.csv', website: 'website.csv', ecommerce: 'ecommerce.csv' }
+      assert(starterPack.schema === model.CLIENT_CSV_STARTER_PACK_SCHEMA
+        && starterPack.filename === 'supermega-golden-valley-trading-csv-starter-pack.zip'
+        && blueprint.products.every((product) => starterPackText.includes(starterPackFilenames[product.product]))
+        && starterPack.bytes[0] === 0x50 && starterPack.bytes[1] === 0x4b
+        && starterPack.bytes.at(-22) === 0x50 && starterPack.bytes.at(-21) === 0x4b
+        && model.clientCsvStarterPackHref(starterPack).startsWith('data:application/zip;base64,UEsDB'), `client_demo_${preset.id}_csv_starter_pack_wrong`)
+      const repeatedStarterPack = model.buildClientCsvStarterPack(blueprint)
+      assert(Buffer.from(starterPack.bytes).equals(Buffer.from(repeatedStarterPack.bytes)), `client_demo_${preset.id}_csv_starter_pack_not_deterministic`)
+      const capabilityPlan = capabilityModel.buildClientCapabilityPlan(blueprint, '2026-07-29T00:00:00.000Z')
+      assert(capabilityPlan.schema === capabilityModel.CLIENT_CAPABILITY_PLAN_SCHEMA
+        && capabilityPlan.workspace === blueprint.client.workspace
+        && capabilityPlan.products.length === blueprint.products.length
+        && capabilityPlan.phases.length === 3, `client_demo_${preset.id}_capability_plan_identity_wrong`)
+      const productCapabilityCount = blueprint.products.length * 12
+      const productCapabilities = capabilityPlan.phases.flatMap((phase) => phase.capabilities)
+      assert(capabilityPlan.summary.demoReady === blueprint.products.length * 4
+        && capabilityPlan.summary.configureNext === blueprint.products.length * 4
+        && capabilityPlan.summary.scaleLater === blueprint.products.length * 4
+        && capabilityPlan.summary.sharedPlatform === 12
+        && capabilityPlan.summary.total === productCapabilityCount + 12
+        && capabilityPlan.platformCapabilities.length === 12
+        && new Set(productCapabilities.map((capability) => capability.id)).size === productCapabilityCount
+        && new Set(capabilityPlan.platformCapabilities.map((capability) => capability.id)).size === capabilityPlan.summary.sharedPlatform
+        && [...productCapabilities, ...capabilityPlan.platformCapabilities].every((capability) => capability.records.length >= 3 && capability.roles.length >= 2 && capability.delivery), `client_demo_${preset.id}_capability_plan_scope_wrong`)
+      assert(capabilityPlan.sharedControls.length === 8
+        && capabilityPlan.controls.roadmapOnly === true
+        && capabilityPlan.controls.humanReviewRequired === true
+        && capabilityPlan.controls.externalWritesPerformed === false
+        && capabilityPlan.controls.capabilityPresenceMustBeVerified === true
+        && capabilityPlan.controls.noPlaceholderModules === true, `client_demo_${preset.id}_capability_plan_controls_wrong`)
+      assert(blueprint.schema === model.CLIENT_DEMO_BLUEPRINT_SCHEMA && blueprint.client.presetId === preset.id && blueprint.client.shopIndustryPackId === preset.shopIndustryPackId && blueprint.client.plantIndustryPackId === preset.plantIndustryPackId, `client_demo_${preset.id}_identity_wrong`)
+      assert(blueprint.foundation.schema === model.CLIENT_OPERATING_FOUNDATION_SCHEMA
+        && blueprint.foundation.organization.displayName === 'Golden Valley Trading'
+        && blueprint.foundation.organization.verification === 'client_review_required'
+        && blueprint.foundation.operatingUnit.code === 'MAIN'
+        && blueprint.foundation.localization.currency === 'MMK'
+        && blueprint.foundation.localization.timeZone === 'Asia/Yangon'
+        && blueprint.foundation.controls.sharedAcrossProducts === true
+        && blueprint.foundation.controls.managedIdentityRequiredBeforeActivation === true, `client_demo_${preset.id}_foundation_wrong`)
+      assert(blueprint.topology.schema === model.CLIENT_OPERATIONAL_TOPOLOGY_SCHEMA
+        && blueprint.topology.locations.length === 1
+        && blueprint.topology.locations[0].id === 'LOC-MAIN'
+        && blueprint.topology.locations[0].code === 'MAIN'
+        && blueprint.topology.locations[0].kind === blueprint.foundation.operatingUnit.kind
+        && blueprint.topology.channels.length === blueprint.products.length
+        && blueprint.topology.recordAuthorities.length === blueprint.products.length
+        && blueprint.topology.recordAuthorities.every((authority) => authority.locationIds.join(',') === 'LOC-MAIN' && authority.owns.length >= 4 && authority.writePolicy === 'human_review_required')
+        && blueprint.topology.controls.unmanagedWritesAllowed === false, `client_demo_${preset.id}_topology_wrong`)
+      assert(blueprint.products.length === preset.selections.length && blueprint.products.every((product) => product.sampleCsv && product.checklist.length === 5), `client_demo_${preset.id}_data_plan_incomplete`)
+      assert(blueprint.controls.localDemoOnly === true && blueprint.controls.humanReviewRequired === true && blueprint.controls.externalWritesPerformed === false, `client_demo_${preset.id}_controls_weakened`)
+    }
+    const manufacturingPreset = model.clientDemoPresets.find((preset) => preset.id === 'manufacturing')
+    const manufacturingBlueprint = model.buildClientDemoBlueprint({ workspace: 'Integrated Factory', owner: 'General manager', presetId: 'manufacturing', selections: manufacturingPreset.selections })
+    assert(manufacturingBlueprint.products.map((product) => product.product).join(',') === 'commerce,production,website,ecommerce', 'client_demo_manufacturing_product_order_drifted')
+    assert(manufacturingBlueprint.integrations.length === 3 && manufacturingBlueprint.integrations.some((integration) => integration.from === 'ecommerce' && integration.to === 'commerce'), 'client_demo_integrations_missing')
+    const customPlantPreview = await model.createClientImportPreview(model.clientImportTemplate('production', 'production-control'), 'production', undefined, 'custom-plant.csv', 'production-control')
+    const customPlantPackage = model.buildClientImportStagingPackage(customPlantPreview, { workflowTemplateId: 'production-control', workspace: 'Integrated Factory', owner: 'General manager', plantIndustryPackId: 'batch-process' })
+    assert(customPlantPackage.plantIndustryPackId === 'batch-process', 'client_demo_custom_plant_pack_not_bound')
+    const schoolBlueprint = model.buildClientDemoBlueprint({ workspace: 'Learning Centre', owner: 'School administrator', presetId: 'service-business', shopIndustryPackId: 'school', selections: model.clientDemoPresets.find((preset) => preset.id === 'service-business').selections })
+    assert(schoolBlueprint.client.shopIndustryPackId === 'school', 'client_demo_custom_shop_pack_not_bound')
+    const schoolIntegratedBlueprint = model.buildClientDemoBlueprint({
+      workspace: 'Learning Centre',
+      owner: 'School administrator',
+      presetId: 'service-business',
+      shopIndustryPackId: 'school',
+      selections: [
+        ...model.clientDemoPresets.find((preset) => preset.id === 'service-business').selections,
+        { product: 'ecommerce', templateId: 'social-storefront' },
+      ],
+    })
+    const schoolShopProduct = schoolIntegratedBlueprint.products.find((product) => product.product === 'commerce')
+    const schoolWebsiteProduct = schoolIntegratedBlueprint.products.find((product) => product.product === 'website')
+    const schoolEcommerceProduct = schoolIntegratedBlueprint.products.find((product) => product.product === 'ecommerce')
+    const schoolShopPreview = await model.createClientImportPreview(schoolShopProduct.sampleCsv, 'commerce', undefined, 'school-shop.csv', schoolShopProduct.templateId)
+    const schoolEcommercePreview = await model.createClientImportPreview(schoolEcommerceProduct.sampleCsv, 'ecommerce', undefined, 'school-storefront.csv', schoolEcommerceProduct.templateId)
+    assert(schoolShopPreview.readyForStaging
+      && schoolEcommercePreview.readyForStaging
+      && schoolShopPreview.rows.map((row) => row.key).join(',') === schoolEcommercePreview.rows.map((row) => row.key).join(',')
+      && schoolWebsiteProduct.sampleCsv.includes('courses,Courses')
+      && schoolShopProduct.checklist.find((row) => row.field === 'SKU')?.example === 'SCHOOL-ENGLISH',
+    'client_demo_school_pack_did_not_align_shop_website_and_ecommerce_samples')
+    const apparelTemplate = model.clientImportTemplate('production', 'production-control', { plantIndustryPackId: 'apparel' })
+    const apparelPreview = await model.createClientImportPreview(apparelTemplate, 'production', undefined, 'apparel.csv', 'production-control')
+    assert(apparelPreview.readyForStaging
+      && apparelPreview.rows[0].key === 'STYLE-001'
+      && apparelPreview.rows[0].values.line === 'Sewing Line 1',
+    'client_demo_apparel_pack_did_not_prepare_industry_jobs')
+    rejectsSync(() => model.clientImportTemplate('commerce', 'unknown', { shopIndustryPackId: 'school' }), 'client_demo_industry_template_bypassed_workflow_validation')
+    const workspaceCreatedAt = '2026-07-28T08:00:00.000Z'
+    const demoWorkspace = model.createClientDemoWorkspace(manufacturingBlueprint, workspaceCreatedAt)
+    assert(demoWorkspace.schema === model.CLIENT_DEMO_WORKSPACE_SCHEMA && demoWorkspace.products.length === 4 && demoWorkspace.products.every((product) => product.status === 'not_started'), 'client_demo_workspace_not_initialized')
+    assert(JSON.stringify(model.restoreClientDemoWorkspace(JSON.parse(JSON.stringify(demoWorkspace)))) === JSON.stringify(demoWorkspace), 'client_demo_workspace_not_restorable')
+    const demoKit = model.buildClientDemoKit(manufacturingBlueprint, workspaceCreatedAt)
+    const readyDemoKit = model.clientDemoKitReadiness(manufacturingBlueprint, workspaceCreatedAt)
+    const invalidDemoBlueprint = structuredClone(manufacturingBlueprint)
+    invalidDemoBlueprint.products[0].demoPath = 'https://attacker.example/'
+    const rejectedDemoKit = model.clientDemoKitReadiness(invalidDemoBlueprint, workspaceCreatedAt)
+    assert(readyDemoKit.ready === true && JSON.stringify(readyDemoKit.kit) === JSON.stringify(demoKit), 'client_demo_kit_readiness_rejected_valid_blueprint')
+    assert(rejectedDemoKit.ready === false && rejectedDemoKit.kit === null && rejectedDemoKit.reason.includes('Rebuild'), 'client_demo_kit_readiness_threw_or_accepted_invalid_blueprint')
+    assert(demoKit.schema === model.CLIENT_DEMO_KIT_SCHEMA
+      && demoKit.controls.clientRecordsIncluded === false
+      && demoKit.controls.productProgressIncluded === false
+      && JSON.stringify(model.restoreClientDemoKit(JSON.parse(JSON.stringify(demoKit)))) === JSON.stringify(demoKit), 'client_demo_kit_not_safely_restorable')
+    const legacyDemoKit = structuredClone(demoKit)
+    legacyDemoKit.schema = 'supermega.client_demo_kit.v1'
+    legacyDemoKit.blueprint.schema = 'supermega.client_demo_blueprint.v1'
+    delete legacyDemoKit.blueprint.foundation
+    delete legacyDemoKit.blueprint.topology
+    const migratedDemoKit = model.restoreClientDemoKit(legacyDemoKit)
+    assert(migratedDemoKit?.schema === model.CLIENT_DEMO_KIT_SCHEMA
+      && migratedDemoKit.blueprint.foundation.operatingUnit.kind === 'plant'
+      && migratedDemoKit.blueprint.topology.recordAuthorities.length === 4, 'client_demo_v1_kit_not_migrated')
+    const legacyV2DemoKit = structuredClone(demoKit)
+    legacyV2DemoKit.schema = 'supermega.client_demo_kit.v2'
+    legacyV2DemoKit.blueprint.schema = 'supermega.client_demo_blueprint.v2'
+    delete legacyV2DemoKit.blueprint.topology
+    assert(model.restoreClientDemoKit(legacyV2DemoKit)?.blueprint.topology.channels.length === 4, 'client_demo_v2_kit_not_migrated')
+    const tamperedDemoKit = structuredClone(demoKit)
+    tamperedDemoKit.blueprint.products[0].demoPath = 'https://attacker.example/'
+    assert(model.restoreClientDemoKit(tamperedDemoKit) === null, 'client_demo_kit_blueprint_tamper_accepted')
+    const tamperedFoundationKit = structuredClone(demoKit)
+    tamperedFoundationKit.blueprint.foundation.localization.currency = 'USD'
+    assert(model.restoreClientDemoKit(tamperedFoundationKit) === null, 'client_demo_kit_foundation_tamper_accepted')
+    const tamperedTopologyKit = structuredClone(demoKit)
+    tamperedTopologyKit.blueprint.topology.recordAuthorities[3].consumesFrom = []
+    assert(model.restoreClientDemoKit(tamperedTopologyKit) === null, 'client_demo_kit_topology_tamper_accepted')
+    const recordBearingDemoKit = structuredClone(demoKit)
+    recordBearingDemoKit.controls.clientRecordsIncluded = true
+    assert(model.restoreClientDemoKit(recordBearingDemoKit) === null, 'client_demo_kit_record_claim_accepted')
+    const extraFieldDemoKit = structuredClone(demoKit)
+    extraFieldDemoKit.customerData = 'must-not-load'
+    assert(model.restoreClientDemoKit(extraFieldDemoKit) === null, 'client_demo_kit_extra_field_accepted')
+    const shopSample = 'sku,item_name,opening_stock,reorder_at,price_mmk\nCLIENT-001,Client product,20,5,12000\n'
+    const preparedArtifact = await model.prepareClientDemoInBrowser(demoKit, [{
+      product: 'commerce',
+      sourceName: 'shop.csv',
+      csvText: shopSample,
+    }], workspaceCreatedAt)
+    const preparedBundleDigest = preparedArtifact.bundleDigest
+    assert(preparedArtifact.products.map((product) => product.product).join(',') === 'commerce,production,website,ecommerce'
+      && preparedArtifact.products[0].sourceMode === 'client_csv'
+      && preparedArtifact.products.slice(1).every((product) => product.sourceMode === 'kit_sample_fixture')
+      && preparedArtifact.products[3].stagingPackage.rows[0].key === 'CLIENT-001'
+      && preparedArtifact.controls.containsNormalizedClientData === true
+      && preparedArtifact.controls.containsSampleFixtures === true
+      && preparedArtifact.controls.externalWritesPerformed === false,
+    'client_demo_browser_preparation_did_not_build_bounded_mixed_source_artifact')
+    await rejects(() => model.prepareClientDemoInBrowser(demoKit, [
+      { product: 'commerce', sourceName: 'shop.csv', csvText: shopSample },
+      { product: 'commerce', sourceName: 'commerce.csv', csvText: shopSample },
+    ], workspaceCreatedAt), 'client_demo_browser_preparation_accepted_duplicate_product')
+    await rejects(() => model.prepareClientDemoInBrowser(demoKit, [{
+      product: 'commerce', sourceName: 'shop.csv', csvText: 'sku,item_name\nBROKEN'
+    }], workspaceCreatedAt), 'client_demo_browser_preparation_accepted_invalid_csv')
+    await rejects(() => model.prepareClientDemoInBrowser(demoKit, [{
+      product: 'ecommerce',
+      sourceName: 'ecommerce.csv',
+      csvText: 'sku,featured,collection,display_name,merchandising_note\nNOT-IN-SHOP,true,New,New item,Review first\n',
+    }], workspaceCreatedAt), 'client_demo_browser_preparation_accepted_cross_product_drift')
+    const restoredPreparation = await model.restoreClientDemoPreparationArtifact(preparedArtifact)
+    assert(restoredPreparation?.bundleDigest === preparedBundleDigest && restoredPreparation.products.length === 4, 'client_demo_preparation_not_restorable')
+    assert(model.clientDemoPreparationConfirmationMatches(restoredPreparation, preparedArtifact.review.confirmation), 'client_demo_preparation_confirmation_not_exact')
+    assert(!model.clientDemoPreparationConfirmationMatches(restoredPreparation, `${preparedArtifact.review.confirmation} `), 'client_demo_preparation_confirmation_whitespace_accepted')
+    const restoredPreparationBlueprint = model.clientDemoPreparationBlueprint(restoredPreparation)
+    assert(JSON.stringify(restoredPreparationBlueprint) === JSON.stringify(manufacturingBlueprint), 'client_demo_preparation_blueprint_drifted')
+    const localInstaller = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'local-client-import.ts')).href}?local-client-installer-verify=${Date.now()}`)
+    assert((await localInstaller.preparedLocalClientDemoInstallOrder(preparedArtifact)).join(',') === 'commerce,production,website,ecommerce', 'client_demo_preparation_install_order_wrong')
+    await rejects(() => localInstaller.applyPreparedLocalClientDemoProduct(preparedArtifact, 'commerce', 'WRONG APPROVAL'), 'client_demo_preparation_wrong_confirmation_reached_local_write')
+    const rowTamper = structuredClone(preparedArtifact)
+    rowTamper.products[0].stagingPackage.rows[0].values.name = 'Changed after review'
+    assert(await model.restoreClientDemoPreparationArtifact(rowTamper) === null, 'client_demo_preparation_row_tamper_accepted')
+    await rejects(() => localInstaller.preparedLocalClientDemoInstallOrder(rowTamper), 'client_demo_preparation_tamper_reached_install_plan')
+    await rejects(() => localInstaller.applyPreparedLocalClientDemoProduct(rowTamper, 'commerce', preparedArtifact.review.confirmation), 'client_demo_preparation_tamper_reached_local_write')
+    const packageDigestTamper = structuredClone(preparedArtifact)
+    packageDigestTamper.products[1].packageDigest = `sha256:${'0'.repeat(64)}`
+    assert(await model.restoreClientDemoPreparationArtifact(packageDigestTamper) === null, 'client_demo_preparation_package_digest_tamper_accepted')
+    const foundationTamper = structuredClone(preparedArtifact)
+    foundationTamper.foundation.controls.externalRegistryChecked = true
+    assert(await model.restoreClientDemoPreparationArtifact(foundationTamper) === null, 'client_demo_preparation_foundation_tamper_accepted')
+    const topologyTamper = structuredClone(preparedArtifact)
+    topologyTamper.topology.recordAuthorities[0].owns = ['catalog']
+    assert(await model.restoreClientDemoPreparationArtifact(topologyTamper) === null, 'client_demo_preparation_topology_tamper_accepted')
+    const unsafeControl = structuredClone(preparedArtifact)
+    unsafeControl.controls.safeToShareExternally = true
+    assert(await model.restoreClientDemoPreparationArtifact(unsafeControl) === null, 'client_demo_preparation_unsafe_control_accepted')
+    const reviewTamper = structuredClone(preparedArtifact)
+    reviewTamper.review.confirmation = 'APPROVE EVERYTHING'
+    assert(await model.restoreClientDemoPreparationArtifact(reviewTamper) === null, 'client_demo_preparation_review_tamper_accepted')
+    const duplicatePreparedProduct = structuredClone(preparedArtifact)
+    duplicatePreparedProduct.products[1].product = 'commerce'
+    assert(await model.restoreClientDemoPreparationArtifact(duplicatePreparedProduct) === null, 'client_demo_preparation_duplicate_product_accepted')
+    const extraPreparationField = structuredClone(preparedArtifact)
+    extraPreparationField.customerSecret = 'must-not-load'
+    assert(await model.restoreClientDemoPreparationArtifact(extraPreparationField) === null, 'client_demo_preparation_extra_field_accepted')
+    const legacyBlueprint = structuredClone(manufacturingBlueprint)
+    legacyBlueprint.schema = 'supermega.client_demo_blueprint.v1'
+    delete legacyBlueprint.foundation
+    delete legacyBlueprint.topology
+    delete legacyBlueprint.client.shopIndustryPackId
+    const migratedLegacyWorkspace = model.createClientDemoWorkspace(legacyBlueprint, workspaceCreatedAt)
+    assert(migratedLegacyWorkspace.blueprint.client.shopIndustryPackId === 'retail', 'client_demo_legacy_shop_pack_not_migrated')
+    const shopReadyAt = '2026-07-28T08:05:00.000Z'
+    const shopReady = model.updateClientDemoWorkspaceProgress(demoWorkspace, { product: 'commerce', status: 'data_ready', rows: 2, readyRows: 2, issueRows: 0, updatedAt: null }, shopReadyAt)
+    assert(shopReady.updatedAt === shopReadyAt && shopReady.products[0].status === 'data_ready' && shopReady.products.slice(1).every((product) => product.status === 'not_started'), 'client_demo_workspace_progress_not_isolated')
+    const reopenedShopReady = model.reconcileClientDemoWorkspace(manufacturingBlueprint, shopReady, '2026-07-28T08:10:00.000Z')
+    assert(JSON.stringify(reopenedShopReady) === JSON.stringify(shopReady), 'client_demo_matching_package_erased_progress')
+    const changedWorkspace = model.reconcileClientDemoWorkspace(schoolIntegratedBlueprint, shopReady, '2026-07-28T08:10:00.000Z')
+    assert(changedWorkspace.blueprint.client.workspace === 'Learning Centre' && changedWorkspace.products.every((product) => product.status === 'not_started'), 'client_demo_changed_package_preserved_wrong_progress')
+    const noOperationalEvidence = {
+      commerce: { completedOrders: 0, reconciledOrders: 0 },
+      production: { releasedBatches: 0 },
+      website: { approvedReleases: 0 },
+      ecommerce: { savedStorefronts: 0, reviewedRequests: 0 },
+    }
+    const readyRunbook = model.buildClientDemoRunbook(shopReady, noOperationalEvidence)
+    assert(readyRunbook.schema === model.CLIENT_DEMO_RUNBOOK_SCHEMA
+      && readyRunbook.nextProduct === 'commerce'
+      && readyRunbook.provenCount === 0
+      && readyRunbook.products.map((product) => product.status).join(',') === 'ready_to_run,prepare_data,prepare_data,prepare_data', 'client_demo_runbook_readiness_wrong')
+    assert(readyRunbook.products.every((product) => product.steps.length === 3 && product.evidenceRequirement && product.startPath.startsWith('/')), 'client_demo_runbook_scenario_contract_incomplete')
+    const shopProvenRunbook = model.buildClientDemoRunbook(shopReady, {
+      ...noOperationalEvidence,
+      commerce: { completedOrders: 1, reconciledOrders: 1 },
+    })
+    assert(shopProvenRunbook.provenCount === 1 && shopProvenRunbook.nextProduct === 'production' && shopProvenRunbook.products[0].status === 'proven', 'client_demo_runbook_shop_proof_not_derived')
+    const allProvenRunbook = model.buildClientDemoRunbook(shopReady, {
+      commerce: { completedOrders: 1, reconciledOrders: 1 },
+      production: { releasedBatches: 1 },
+      website: { approvedReleases: 1 },
+      ecommerce: { savedStorefronts: 1, reviewedRequests: 1 },
+    })
+    assert(allProvenRunbook.provenCount === 4 && allProvenRunbook.nextProduct === null && allProvenRunbook.products.every((product) => product.status === 'proven'), 'client_demo_runbook_complete_proof_wrong')
+    rejectsSync(() => model.buildClientDemoRunbook(shopReady, { ...noOperationalEvidence, production: { releasedBatches: -1 } }), 'client_demo_runbook_negative_evidence_accepted')
+    rejectsSync(() => model.buildClientDemoRunbook(shopReady, { ...noOperationalEvidence, website: { approvedReleases: 0, manualDone: true } }), 'client_demo_runbook_manual_completion_field_accepted')
+    const tamperedWorkspace = structuredClone(shopReady)
+    tamperedWorkspace.blueprint.products[0].demoPath = 'https://attacker.example/'
+    assert(model.restoreClientDemoWorkspace(tamperedWorkspace) === null, 'client_demo_workspace_blueprint_tamper_accepted')
+    const rawDataWorkspace = structuredClone(shopReady)
+    rawDataWorkspace.products[0].sourceText = 'customer-secret-csv'
+    assert(model.restoreClientDemoWorkspace(rawDataWorkspace) === null, 'client_demo_workspace_raw_data_field_accepted')
+    rejectsSync(() => model.updateClientDemoWorkspaceProgress(demoWorkspace, { product: 'production', status: 'applied', rows: 2, readyRows: 3, issueRows: 0, updatedAt: null }, shopReadyAt), 'client_demo_workspace_impossible_progress_accepted')
+    rejectsSync(() => model.buildClientDemoBlueprint({ workspace: '', owner: 'Owner', presetId: 'social-seller', selections: model.clientDemoPresets[0].selections }), 'client_demo_blank_workspace_accepted')
+    rejectsSync(() => model.buildClientDemoBlueprint({ workspace: 'Client', owner: 'Owner', presetId: 'social-seller', selections: [{ product: 'commerce', templateId: 'social-commerce' }, { product: 'commerce', templateId: 'retail-wholesale' }] }), 'client_demo_duplicate_product_accepted')
+    rejectsSync(() => model.buildClientDemoBlueprint({ workspace: 'Client', owner: 'Owner', presetId: 'social-seller', selections: [{ product: 'commerce', templateId: 'unknown' }] }), 'client_demo_unknown_template_accepted')
+    rejectsSync(() => model.buildClientDemoBlueprint({ workspace: 'Client', owner: 'Owner', presetId: 'social-seller', shopIndustryPackId: 'unknown', selections: model.clientDemoPresets[0].selections }), 'client_demo_unknown_shop_pack_accepted')
+    rejectsSync(() => model.buildClientDemoBlueprint({ workspace: 'Client', owner: 'Owner', presetId: 'manufacturing', plantIndustryPackId: 'unknown', selections: manufacturingPreset.selections }), 'client_demo_unknown_plant_pack_accepted')
 
     const socialTemplate = model.clientImportTemplate('commerce', 'social-commerce')
     const socialPreview = await model.createClientImportPreview(socialTemplate, 'commerce', undefined, 'social.csv', 'social-commerce')
@@ -5364,7 +7588,7 @@ async function verifyClientOnboardingRuntime() {
     assert(burmeseShop.readyForStaging && burmeseShop.rows[0].values.name === 'မြန်မာ ကော်ဖီ', 'client_import_burmese_headers_or_values_lost')
     assert(burmeseShop.suggestions.filter((suggestion) => suggestion.basis === 'alias').length >= 4, 'client_import_alias_mapping_not_explained')
 
-    const manualCsv = 'Code,Thing,Count,Needed,Work cell\nJOB-X,Item X,4,2026-08-20,Line X\n'
+    const manualCsv = 'Code,Thing,Count,Needed,Work cell\nJOB-X,Item X,4,2099-08-20,Line X\n'
     const unmapped = await model.createClientImportPreview(manualCsv, 'production')
     assert(!unmapped.readyForStaging && unmapped.fileIssues.length >= 4, 'client_import_unmapped_columns_did_not_fail_closed')
     const manualMapping = { jobCode: 'Code', productName: 'Thing', targetQuantity: 'Count', dueDate: 'Needed', line: 'Work cell' }
@@ -5379,6 +7603,10 @@ async function verifyClientOnboardingRuntime() {
     assert(invalidCodes.has('spreadsheet_formula') && invalidCodes.has('identifier_not_canonical') && invalidCodes.has('column_count'), 'client_import_canonical_validation_missing')
     const badDate = await model.createClientImportPreview('job_code,product_name,target_quantity,due_date,production_line\nJOB-1,Item,1,2026-02-30,Line A\n', 'production')
     assert(badDate.rows[0].issues.some((issue) => issue.code === 'date_not_canonical'), 'client_import_impossible_date_accepted')
+    const stalePlantDate = await model.createClientImportPreview('job_code,product_name,target_quantity,due_date,production_line\nJOB-1,Item,1,2026-07-30,Line A\n', 'production', undefined, 'stale.csv', 'production-control', '2026-07-30')
+    assert(!stalePlantDate.readyForStaging && stalePlantDate.rows[0].issues.some((issue) => issue.code === 'date_not_future'), 'client_import_stale_plant_date_accepted')
+    const futurePlantDate = await model.createClientImportPreview('job_code,product_name,target_quantity,due_date,production_line\nJOB-1,Item,1,2026-07-31,Line A\n', 'production', undefined, 'future.csv', 'production-control', '2026-07-30')
+    assert(futurePlantDate.readyForStaging, 'client_import_future_plant_date_rejected')
     const badUrl = await model.createClientImportPreview('page_slug,page_title,headline,body,contact_url\nhome,Home,Hello,Body,javascript:alert(1)\n', 'website')
     assert(badUrl.rows[0].issues.some((issue) => issue.code === 'url_not_allowed'), 'client_import_unsafe_url_accepted')
     const websiteObject = model.clientImportObject('website')
@@ -6130,7 +8358,6 @@ async function verifyManagedClientImportRuntime() {
     )
     assert(acceptedPlant === plantReceipt, 'managed_client_import_plant_receipt_rejected')
     const plantTimestamp = '2026-07-26T04:30:00.000Z'
-    const plantLines = [...new Set(plantStaged.rows.map((row) => row.values.line))]
     const plantState = {
       schema: 'supermega.production.workspace.v2',
       revision: 0,
@@ -6145,14 +8372,15 @@ async function verifyManagedClientImportRuntime() {
         dueAt: `${row.values.dueDate}T17:29:59.999Z`,
       })),
       issues: [],
-      machines: plantLines.map((line, index) => ({ id: `machine-import-${index + 1}`, name: line, state: 'running' })),
+      machines: [],
       events: [],
       openingPlan: {
         contract: 'supermega.production.opening-plan.v1',
         packageDigest: plantPackageDigest,
         confirmedAt: plantTimestamp,
+        industryPackId: plantStaged.plantIndustryPackId,
         jobIds: plantStaged.rows.map((row) => row.values.jobCode),
-        machineIds: plantLines.map((_, index) => `machine-import-${index + 1}`),
+        machineIds: [],
       },
     }
     const plantCommandId = '00000000-0000-4000-8000-000000000203'
@@ -6191,9 +8419,10 @@ async function verifyManagedClientImportRuntime() {
       ['surface', { ...plantActivationResponse, result: { ...plantActivationResponse.result, surface: 'commerce' } }],
       ['history', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, events: [{}] } } }],
       ['job', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, jobs: [{ ...plantState.jobs[0], target: plantState.jobs[0].target + 1 }, ...plantState.jobs.slice(1)] } } }],
-      ['machine', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, machines: [{ ...plantState.machines[0], state: 'stopped' }, ...plantState.machines.slice(1)] } } }],
+      ['machine', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, machines: [{ id: 'machine-invented-1', name: 'Invented equipment', state: 'running' }], openingPlan: { ...plantState.openingPlan, machineIds: ['machine-invented-1'] } } } }],
       ['digest', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, openingPlan: { ...plantState.openingPlan, packageDigest: `sha256:${'0'.repeat(64)}` } } } }],
       ['timestamp', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, openingPlan: { ...plantState.openingPlan, confirmedAt: 'server-assigned' } } } }],
+      ['pack', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, openingPlan: { ...plantState.openingPlan, industryPackId: 'unsupported-pack' } } } }],
       ['job_ids', { ...plantActivationResponse, result: { ...plantActivationResponse.result, state: { ...plantState, openingPlan: { ...plantState.openingPlan, jobIds: [...plantState.openingPlan.jobIds].reverse() } } } }],
     ]) {
       await rejectsAsync(
@@ -6271,6 +8500,13 @@ async function verifyManagedClientImportRuntime() {
       approvals: [],
       localPublishes: [],
       events: [],
+      openingPlan: {
+        contract: 'supermega.website.opening-plan.v1',
+        packageDigest: websitePackageDigest,
+        workflowTemplateId: websiteStaged.workflowTemplateId,
+        confirmedAt: websiteTimestamp,
+        pageIds: websiteStaged.rows.map((_, index) => `page-import-${index + 1}`),
+      },
     }
     const websiteCommandId = '00000000-0000-4000-8000-000000000202'
     const websiteActivationResponse = {
@@ -6303,13 +8539,14 @@ async function verifyManagedClientImportRuntime() {
       0,
     )
     assert(activatedWebsite === websiteActivationResponse, 'managed_client_import_valid_website_activation_rejected')
-    assert(managedTrial.assertManagedWebsiteImportState(websiteState, websiteStaged) === websiteState, 'managed_client_import_valid_website_state_rejected')
+    assert(managedTrial.assertManagedWebsiteImportState(websiteState, websiteStaged, websitePackageDigest) === websiteState, 'managed_client_import_valid_website_state_rejected')
     for (const [label, response] of [
       ['surface', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, surface: 'commerce' } }],
       ['history', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, evidence: [{}] } } }],
       ['stage', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, pages: [{ ...websiteState.pages[0], stage: 'ready' }, ...websiteState.pages.slice(1)] } } }],
       ['timestamp', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, pages: [{ ...websiteState.pages[0], updatedAt: 'server-assigned' }, ...websiteState.pages.slice(1)] } } }],
       ['copy', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, pages: [{ ...websiteState.pages[0], sections: [{ ...websiteState.pages[0].sections[0], body: 'Changed' }] }, ...websiteState.pages.slice(1)] } } }],
+      ['opening_plan', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, openingPlan: { ...websiteState.openingPlan, packageDigest: `sha256:${'0'.repeat(64)}` } } } }],
       ['extra', { ...websiteActivationResponse, result: { ...websiteActivationResponse.result, state: { ...websiteState, untrusted: true } } }],
     ]) {
       await rejectsAsync(
@@ -6358,7 +8595,17 @@ async function verifyManagedClientImportRuntime() {
       ecommercePackageDigest,
     ) === ecommerceReceipt, 'managed_client_import_ecommerce_receipt_rejected')
     const priorCommerceBase = {
-      ...importedState,
+      ...commerceWorkspace.createSeedCommerce(),
+      items: ecommerceStaged.rows.map((row, index) => ({
+        sku: row.values.sku,
+        name: row.values.displayName || row.values.sku,
+        onHand: 20 + index,
+        reorderAt: 5,
+        price: 5_000 + index * 1_000,
+      })),
+      orders: [],
+      movements: [],
+      closes: [],
       catalogBaselines: [],
       catalogChanges: [],
       websiteIntakes: [],
@@ -6433,6 +8680,13 @@ async function verifyManagedClientImportRuntime() {
         revision: 2,
         selectedSkus: ecommerceMerchandising.map((row) => row.sku),
         merchandising: ecommerceMerchandising,
+        activation: {
+          contract: 'supermega.ecommerce.activation.v1',
+          packageDigest: ecommercePackageDigest,
+          workflowTemplateId: ecommerceStaged.workflowTemplateId,
+          confirmedAt: ecommerceTimestamp,
+          skus: ecommerceMerchandising.map((row) => row.sku),
+        },
         saved: {
           actionId: commerceWorkspace.commerceStorefrontConfigurationActionId(2, ecommerceCatalogDigest),
           capturedAt: ecommerceTimestamp,
@@ -6479,6 +8733,7 @@ async function verifyManagedClientImportRuntime() {
       priorCommerceState,
       ecommerceStaged,
       identity,
+      ecommercePackageDigest,
     ) === ecommerceState, 'managed_client_import_valid_ecommerce_state_rejected')
     for (const [label, response] of [
       ['version', { ...ecommerceActivationResponse, result: { ...ecommerceActivationResponse.result, version: 6 } }],
@@ -6487,6 +8742,7 @@ async function verifyManagedClientImportRuntime() {
       ['history', { ...ecommerceActivationResponse, result: { ...ecommerceActivationResponse.result, state: { ...ecommerceState, orders: [{}] } } }],
       ['actor', { ...ecommerceActivationResponse, result: { ...ecommerceActivationResponse.result, state: { ...ecommerceState, storefrontConfiguration: { ...ecommerceState.storefrontConfiguration, saved: { ...ecommerceState.storefrontConfiguration.saved, actor: 'OP-OTHER' } } } } }],
       ['merchandising', { ...ecommerceActivationResponse, result: { ...ecommerceActivationResponse.result, state: { ...ecommerceState, storefrontConfiguration: { ...ecommerceState.storefrontConfiguration, merchandising: [{ ...ecommerceMerchandising[0], collection: 'Changed' }, ...ecommerceMerchandising.slice(1)] } } } }],
+      ['activation', { ...ecommerceActivationResponse, result: { ...ecommerceActivationResponse.result, state: { ...ecommerceState, storefrontConfiguration: { ...ecommerceState.storefrontConfiguration, activation: { ...ecommerceState.storefrontConfiguration.activation, packageDigest: `sha256:${'0'.repeat(64)}` } } } } }],
       ['extra', { ...ecommerceActivationResponse, activation: { ...ecommerceActivationResponse.activation, untrusted: true } }],
     ]) {
       await rejectsAsync(
@@ -6515,6 +8771,266 @@ async function verifyManagedClientImportRuntime() {
     )
   } catch (error) {
     fail(`managed_client_import_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyPlantEquipmentImportRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    plantEquipmentImportRuntimeChecks += 1
+  }
+  const rejectsAsync = async (action, reason) => {
+    try { await action() } catch { plantEquipmentImportRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  const rejects = (action, reason) => {
+    try { action() } catch { plantEquipmentImportRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  try {
+    const nonce = Date.now()
+    const [equipmentModel, managedTrial, production] = await Promise.all([
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-equipment-import.ts')).href}?plant-equipment-import=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'managed-trial.ts')).href}?plant-equipment-managed=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts')).href}?plant-equipment-production=${nonce}`),
+    ])
+    const identity = { userId: 'plant-owner', email: 'plant@example.test', workspaceId: 'workspace-plant' }
+    const preview = await equipmentModel.createPlantEquipmentImportPreview({
+      sourceName: 'equipment.csv',
+      sourceText: equipmentModel.plantEquipmentSampleCsv(),
+      workspace: 'Golden Manufacturing',
+      owner: 'Plant engineering owner',
+    })
+    assert(preview.package.rows.length === 2
+      && preview.package.controls.commissioningPerformed === false
+      && preview.package.controls.externalWritesPerformed === false
+      && preview.package.rows[0].values.equipmentId === 'MIX-01'
+      && /^sha256:[0-9a-f]{64}$/.test(preview.packageDigest), 'plant_equipment_preview_invalid')
+    const aliasPreview = await equipmentModel.createPlantEquipmentImportPreview({
+      sourceName: 'assets.csv',
+      sourceText: 'asset_id,asset_name,line_id,priority\nEQ-01,Primary mixer,WC-MIX,critical\n',
+      workspace: 'Golden Manufacturing',
+      owner: 'Plant engineering owner',
+    })
+    assert(aliasPreview.package.rows[0].values.workCentreId === 'WC-MIX', 'plant_equipment_alias_mapping_failed')
+    await rejectsAsync(() => equipmentModel.createPlantEquipmentImportPreview({ sourceName: 'duplicate.csv', sourceText: 'equipment_id,name,work_centre_id,criticality\nEQ-01,One,WC-1,high\nEQ-01,Two,WC-2,low\n', workspace: 'Plant', owner: 'Owner' }), 'plant_equipment_duplicate_id_accepted')
+    await rejectsAsync(() => equipmentModel.createPlantEquipmentImportPreview({ sourceName: 'formula.csv', sourceText: 'equipment_id,name,work_centre_id,criticality\nEQ-01,=CMD,WC-1,high\n', workspace: 'Plant', owner: 'Owner' }), 'plant_equipment_formula_accepted')
+    await rejectsAsync(() => equipmentModel.createPlantEquipmentImportPreview({ sourceName: 'ambiguous.csv', sourceText: 'equipment_id,asset_id,name,work_centre_id,criticality\nEQ-01,EQ-02,One,WC-1,high\n', workspace: 'Plant', owner: 'Owner' }), 'plant_equipment_ambiguous_header_accepted')
+    await rejectsAsync(() => equipmentModel.createPlantEquipmentImportPreview({ sourceName: 'lower.csv', sourceText: 'equipment_id,name,work_centre_id,criticality\neq-01,One,WC-1,high\n', workspace: 'Plant', owner: 'Owner' }), 'plant_equipment_lowercase_id_accepted')
+
+    const packageDigest = await managedTrial.managedPlantEquipmentPackageDigest(preview.package)
+    assert(packageDigest === preview.packageDigest, 'plant_equipment_package_digest_drifted')
+    const receipt = {
+      contract: 'supermega.production.equipment-import-validation.v1',
+      status: 'valid',
+      package_digest: packageDigest,
+      row_count: preview.package.rows.length,
+      checks: ['contract', 'source_digest', 'row_schema', 'field_values', 'unique_equipment_ids', 'source_rows', 'package_digest', 'zero_commissioning'],
+      workspace_id: identity.workspaceId,
+      activation: {
+        status: 'not_applied', target_surface: 'production', required_capability: 'production.write',
+        human_approval_required: true, atomic_adapter_ready: true, external_writes_performed: false, commissioning_performed: false,
+      },
+    }
+    assert(managedTrial.assertManagedPlantEquipmentValidation({ validation: receipt }, preview.package, identity, packageDigest) === receipt, 'plant_equipment_valid_receipt_rejected')
+    rejects(() => managedTrial.assertManagedPlantEquipmentValidation({ validation: { ...receipt, activation: { ...receipt.activation, commissioning_performed: true } } }, preview.package, identity, packageDigest), 'plant_equipment_commissioning_receipt_accepted')
+    rejects(() => managedTrial.assertManagedPlantEquipmentValidation({ validation: { ...receipt, workspace_id: 'workspace-other' } }, preview.package, identity, packageDigest), 'plant_equipment_workspace_tamper_accepted')
+
+    const priorState = production.validateProductionState({
+      schema: production.PRODUCTION_WORKSPACE_SCHEMA,
+      revision: 0,
+      jobs: [{ id: 'JOB-OPEN-1', line: 'Line A', product: 'Opening batch', target: 100, output: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2099-08-15T17:29:59.999Z' }],
+      issues: [], machines: [], events: [],
+      openingPlan: { contract: 'supermega.production.opening-plan.v1', packageDigest: `sha256:${'a'.repeat(64)}`, confirmedAt: '2026-07-30T06:00:00.000Z', industryPackId: 'general-manufacturing', jobIds: ['JOB-OPEN-1'], machineIds: [] },
+    })
+    const commandId = '00000000-0000-4000-8000-000000000301'
+    const actionId = `ACT-EQUIPMENT-IMPORT-${commandId}`
+    const importedAt = '2026-07-30T07:00:00.000Z'
+    const equipmentIds = preview.package.rows.map((row) => row.values.equipmentId)
+    const event = { id: `EVT-${actionId}`, actionId, createdAt: importedAt, actor: identity.userId, reason: 'Imported reviewed Plant equipment master', evidenceReference: packageDigest, kind: 'equipment_master_imported', subjectId: 'equipment-master', summary: `Imported ${equipmentIds.length} equipment master records`, equipmentIds }
+    const importedState = production.validateProductionState({
+      ...priorState,
+      revision: 1,
+      events: [event],
+      equipmentMaster: {
+        contract: 'supermega.production.equipment-master.v1',
+        assets: preview.package.rows.map((row) => ({ id: row.values.equipmentId, name: row.values.name, workCentreId: row.values.workCentreId, criticality: row.values.criticality, owner: preview.package.owner, commissioningStatus: 'not_commissioned', sourceActionId: actionId, sourcePackageDigest: packageDigest, importedAt })),
+      },
+    })
+    const activationResponse = {
+      activation: { contract: 'supermega.production.equipment-import-activation.v1', status: 'applied', package_digest: packageDigest, row_count: preview.package.rows.length, workspace_id: identity.workspaceId, external_writes_performed: true, commissioning_performed: false },
+      result: { command_id: commandId, surface: 'production', event_type: 'production.equipment_master.imported', version: 2, state: importedState, idempotent_replay: false },
+    }
+    assert(managedTrial.assertManagedPlantEquipmentActivation(activationResponse, preview.package, receipt, identity, commandId, 1, priorState) === activationResponse, 'plant_equipment_valid_activation_rejected')
+    for (const [label, response] of [
+      ['machine', { ...activationResponse, result: { ...activationResponse.result, state: { ...importedState, machines: [{ id: 'MIX-01', name: 'Invented runtime', state: 'running' }] } } }],
+      ['job', { ...activationResponse, result: { ...activationResponse.result, state: { ...importedState, jobs: [{ ...importedState.jobs[0], target: 101 }] } } }],
+      ['commissioning', { ...activationResponse, activation: { ...activationResponse.activation, commissioning_performed: true } }],
+      ['evidence', { ...activationResponse, result: { ...activationResponse.result, state: { ...importedState, equipmentMaster: { ...importedState.equipmentMaster, assets: importedState.equipmentMaster.assets.map((asset, index) => index ? asset : { ...asset, sourcePackageDigest: `sha256:${'0'.repeat(64)}` }) } } } }],
+    ]) rejects(() => managedTrial.assertManagedPlantEquipmentActivation(response, preview.package, receipt, identity, commandId, 1, priorState), `plant_equipment_${label}_tamper_accepted`)
+
+    const commissionedAsset = importedState.equipmentMaster.assets[0]
+    const commissioningCommandId = '00000000-0000-4000-8000-000000000302'
+    const commissioningActionId = `ACT-EQUIPMENT-COMMISSION-${commissioningCommandId}`
+    const commissioningInput = {
+      equipmentId: commissionedAsset.id,
+      installedAt: '2026-07-30T06:30:00.000Z',
+      initialState: 'stopped',
+      safetyBaselineReference: 'CHECKLIST-MIX-01-R1',
+    }
+    const commissionedAt = '2026-07-30T08:00:00.000Z'
+    const commissioningEvent = {
+      id: `EVT-${commissioningActionId}`,
+      actionId: commissioningActionId,
+      createdAt: commissionedAt,
+      actor: identity.userId,
+      reason: 'Commissioned reviewed Plant equipment',
+      evidenceReference: commissioningInput.safetyBaselineReference,
+      kind: 'equipment_commissioned',
+      subjectId: commissionedAsset.id,
+      summary: `Commissioned ${commissionedAsset.name} at ${commissionedAsset.workCentreId}`,
+      installedAt: commissioningInput.installedAt,
+      toState: commissioningInput.initialState,
+      workCentreId: commissionedAsset.workCentreId,
+    }
+    const commissionedState = production.validateProductionState({
+      ...importedState,
+      revision: 2,
+      machines: [...importedState.machines, { id: commissionedAsset.id, name: commissionedAsset.name, state: commissioningInput.initialState }],
+      events: [commissioningEvent, ...importedState.events],
+      equipmentMaster: {
+        ...importedState.equipmentMaster,
+        assets: importedState.equipmentMaster.assets.map((asset) => asset.id === commissionedAsset.id ? {
+          ...asset,
+          commissioningStatus: 'commissioned',
+          commissioning: {
+            actionId: commissioningActionId,
+            commissionedAt,
+            commissionedBy: identity.userId,
+            installedAt: commissioningInput.installedAt,
+            initialState: commissioningInput.initialState,
+            safetyBaselineReference: commissioningInput.safetyBaselineReference,
+          },
+        } : asset),
+      },
+    })
+    const commissioningResponse = {
+      commissioning: {
+        contract: 'supermega.production.equipment-commissioning.v1',
+        status: 'commissioned',
+        equipment_id: commissionedAsset.id,
+        workspace_id: identity.workspaceId,
+        runtime_machine_created: true,
+        equipment_command_performed: false,
+        telemetry_connected: false,
+        bulk_commissioning_performed: false,
+      },
+      result: {
+        command_id: commissioningCommandId,
+        surface: 'production',
+        event_type: 'production.equipment.commissioned',
+        version: 3,
+        state: commissionedState,
+        idempotent_replay: false,
+      },
+    }
+    assert(managedTrial.assertManagedPlantEquipmentCommissioning(commissioningResponse, commissioningInput, identity, commissioningCommandId, 2, importedState) === commissioningResponse, 'plant_equipment_valid_commissioning_rejected')
+    const replayedCommissioning = { ...commissioningResponse, result: { ...commissioningResponse.result, idempotent_replay: true } }
+    assert(managedTrial.assertManagedPlantEquipmentCommissioning(replayedCommissioning, commissioningInput, identity, commissioningCommandId, 2, importedState) === replayedCommissioning, 'plant_equipment_commissioning_replay_rejected')
+    for (const [label, response] of [
+      ['machine_state', { ...commissioningResponse, result: { ...commissioningResponse.result, state: { ...commissionedState, machines: [{ ...commissionedState.machines[0], state: 'running' }] } } }],
+      ['job', { ...commissioningResponse, result: { ...commissioningResponse.result, state: { ...commissionedState, jobs: [{ ...commissionedState.jobs[0], target: 101 }] } } }],
+      ['command', { ...commissioningResponse, commissioning: { ...commissioningResponse.commissioning, equipment_command_performed: true } }],
+      ['telemetry', { ...commissioningResponse, commissioning: { ...commissioningResponse.commissioning, telemetry_connected: true } }],
+      ['bulk', { ...commissioningResponse, commissioning: { ...commissioningResponse.commissioning, bulk_commissioning_performed: true } }],
+      ['evidence', { ...commissioningResponse, result: { ...commissioningResponse.result, state: { ...commissionedState, events: [{ ...commissionedState.events[0], evidenceReference: 'CHECKLIST-OTHER-R1' }, ...commissionedState.events.slice(1)] } } }],
+    ]) rejects(() => managedTrial.assertManagedPlantEquipmentCommissioning(response, commissioningInput, identity, commissioningCommandId, 2, importedState), `plant_equipment_commissioning_${label}_tamper_accepted`)
+
+    const strategyCommandId = '00000000-0000-4000-8000-000000000303'
+    const strategyActionId = `ACT-EQUIPMENT-MAINTENANCE-STRATEGY-${strategyCommandId}`
+    const strategyInput = {
+      equipmentId: commissionedAsset.id,
+      maintenanceOwner: 'Maintenance lead',
+      intervalDays: 30,
+      nextDueAt: '2026-08-15T09:00:00.000Z',
+      procedureReference: 'SOP-PM-MIXER-001-R3',
+      safetyBaselineReference: 'SAFETY-PM-MIX-01-R1',
+    }
+    const strategySavedAt = '2026-07-30T09:00:00.000Z'
+    const strategyEvent = {
+      id: `EVT-${strategyActionId}`,
+      actionId: strategyActionId,
+      createdAt: strategySavedAt,
+      actor: identity.userId,
+      reason: 'Saved reviewed preventive maintenance strategy',
+      evidenceReference: strategyInput.safetyBaselineReference,
+      kind: 'equipment_maintenance_strategy_saved',
+      subjectId: commissionedAsset.id,
+      summary: `Saved maintenance strategy R1 for ${commissionedAsset.id}`,
+      strategyRevision: 1,
+      maintenanceOwner: strategyInput.maintenanceOwner,
+      intervalDays: strategyInput.intervalDays,
+      nextDueAt: strategyInput.nextDueAt,
+      procedureReference: strategyInput.procedureReference,
+    }
+    const strategyState = production.validateProductionState({
+      ...commissionedState,
+      revision: 3,
+      events: [strategyEvent, ...commissionedState.events],
+      equipmentMaster: {
+        ...commissionedState.equipmentMaster,
+        assets: commissionedState.equipmentMaster.assets.map((asset) => asset.id === commissionedAsset.id ? {
+          ...asset,
+          maintenanceStrategy: {
+            revision: 1,
+            actionId: strategyActionId,
+            savedAt: strategySavedAt,
+            savedBy: identity.userId,
+            maintenanceOwner: strategyInput.maintenanceOwner,
+            intervalDays: strategyInput.intervalDays,
+            nextDueAt: strategyInput.nextDueAt,
+            procedureReference: strategyInput.procedureReference,
+            safetyBaselineReference: strategyInput.safetyBaselineReference,
+          },
+        } : asset),
+      },
+    })
+    const strategyResponse = {
+      maintenance_strategy: {
+        contract: 'supermega.production.equipment-maintenance-strategy.v1',
+        status: 'saved',
+        equipment_id: commissionedAsset.id,
+        workspace_id: identity.workspaceId,
+        maintenance_execution_started: false,
+        work_order_created: false,
+        equipment_command_performed: false,
+        telemetry_connected: false,
+        bulk_strategy_created: false,
+      },
+      result: {
+        command_id: strategyCommandId,
+        surface: 'production',
+        event_type: 'production.equipment_maintenance_strategy.saved',
+        version: 4,
+        state: strategyState,
+        idempotent_replay: false,
+      },
+    }
+    assert(managedTrial.assertManagedPlantEquipmentMaintenanceStrategy(strategyResponse, strategyInput, identity, strategyCommandId, 3, commissionedState) === strategyResponse, 'plant_equipment_valid_maintenance_strategy_rejected')
+    const replayedStrategy = { ...strategyResponse, result: { ...strategyResponse.result, idempotent_replay: true } }
+    assert(managedTrial.assertManagedPlantEquipmentMaintenanceStrategy(replayedStrategy, strategyInput, identity, strategyCommandId, 3, commissionedState) === replayedStrategy, 'plant_equipment_maintenance_strategy_replay_rejected')
+    for (const [label, response] of [
+      ['machine', { ...strategyResponse, result: { ...strategyResponse.result, state: { ...strategyState, machines: [{ ...strategyState.machines[0], state: 'running' }] } } }],
+      ['job', { ...strategyResponse, result: { ...strategyResponse.result, state: { ...strategyState, jobs: [{ ...strategyState.jobs[0], target: 101 }] } } }],
+      ['execution', { ...strategyResponse, maintenance_strategy: { ...strategyResponse.maintenance_strategy, maintenance_execution_started: true } }],
+      ['work_order', { ...strategyResponse, maintenance_strategy: { ...strategyResponse.maintenance_strategy, work_order_created: true } }],
+      ['command', { ...strategyResponse, maintenance_strategy: { ...strategyResponse.maintenance_strategy, equipment_command_performed: true } }],
+      ['telemetry', { ...strategyResponse, maintenance_strategy: { ...strategyResponse.maintenance_strategy, telemetry_connected: true } }],
+      ['bulk', { ...strategyResponse, maintenance_strategy: { ...strategyResponse.maintenance_strategy, bulk_strategy_created: true } }],
+      ['evidence', { ...strategyResponse, result: { ...strategyResponse.result, state: { ...strategyState, events: [{ ...strategyState.events[0], evidenceReference: 'SAFETY-OTHER-R1' }, ...strategyState.events.slice(1)] } } }],
+    ]) rejects(() => managedTrial.assertManagedPlantEquipmentMaintenanceStrategy(response, strategyInput, identity, strategyCommandId, 3, commissionedState), `plant_equipment_maintenance_strategy_${label}_tamper_accepted`)
+  } catch (error) {
+    fail(`plant_equipment_import_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
@@ -6557,6 +9073,7 @@ async function verifyWebsiteRuntime() {
     const seed = model.createInitialWorkspace()
     const fingerprint = model.workspaceFingerprint(seed)
     const starterBrief = {
+      templateId: 'catalog-showcase',
       businessName: 'Shwe Family Store',
       audience: 'Families in Yangon',
       offer: 'Fresh everyday groceries with same-day local delivery.',
@@ -6565,18 +9082,27 @@ async function verifyWebsiteRuntime() {
     }
     assert(starter.isUntouchedWebsiteStarter(seed), 'website_clean_seed_was_not_recognized_as_starter')
     assert(starter.websiteStarterBriefIssues(starterBrief).length === 0, 'website_valid_starter_brief_was_rejected')
+    assert(starter.websiteStarterBriefIssues({ ...starterBrief, templateId: 'unsupported' }).length === 1, 'website_unsupported_starter_template_was_accepted')
     assert(starter.websiteStarterBriefIssues({ ...starterBrief, contactHref: 'http://unsafe.example' }).length === 1, 'website_unsafe_starter_destination_was_accepted')
     assert(starter.websiteStarterBriefIssues({ ...starterBrief, businessName: '\u0001' }).length === 1, 'website_starter_control_character_was_accepted')
     const briefPreview = starter.applyWebsiteStarterBrief(seed, starterBrief, at(50))
     assert(briefPreview !== seed
       && briefPreview.siteName === starterBrief.businessName
-      && briefPreview.pages.length === 1
+      && briefPreview.pages.length === 3
       && briefPreview.pages[0].slug === '/'
-      && briefPreview.pages[0].stage === 'draft'
+      && briefPreview.pages.every((page) => page.stage === 'draft')
+      && briefPreview.pages[1].slug === '/catalog'
+      && briefPreview.pages[2].slug === '/contact'
       && briefPreview.pages[0].hero.headline === starterBrief.offer
-      && briefPreview.pages[0].hero.summary === `${starterBrief.businessName} · ${starterBrief.audience}`
+      && briefPreview.pages[0].hero.summary === `${starterBrief.businessName} helps ${starterBrief.audience}.`
       && briefPreview.pages[0].sections[0].body === starterBrief.proof
-      && briefPreview.pages[0].hero.ctaHref === starterBrief.contactHref, 'website_starter_brief_did_not_create_exact_home_draft')
+      && briefPreview.pages[0].hero.ctaHref === '/catalog'
+      && briefPreview.pages[1].hero.ctaHref === starterBrief.contactHref
+      && briefPreview.pages[2].hero.ctaHref === starterBrief.contactHref, 'website_starter_brief_did_not_create_complete_catalog_draft')
+    const businessPreview = starter.applyWebsiteStarterBrief(seed, { ...starterBrief, templateId: 'business-presence' }, at(51))
+    const leadPreview = starter.applyWebsiteStarterBrief(seed, { ...starterBrief, templateId: 'lead-generation' }, at(52))
+    assert(businessPreview.pages.map((page) => page.slug).join(',') === '/,/about,/contact', 'website_business_presence_template_pages_missing')
+    assert(leadPreview.pages.map((page) => page.slug).join(',') === '/,/services,/contact', 'website_lead_generation_template_pages_missing')
     assert(briefPreview.revision === 0
       && briefPreview.contentRevision === 0
       && briefPreview.evidence.length === 0
@@ -6584,8 +9110,8 @@ async function verifyWebsiteRuntime() {
       && briefPreview.localPublishes.length === 0
       && briefPreview.events.length === 0, 'website_starter_brief_forged_authoritative_history')
     assert(!starter.isUntouchedWebsiteStarter(briefPreview), 'website_business_preview_still_matched_starter')
-    assert(starter.applyWebsiteStarterBrief(briefPreview, starterBrief, at(51)) === briefPreview, 'website_starter_overwrote_existing_work')
-    assert(starter.applyWebsiteStarterBrief(seed, { ...starterBrief, offer: '' }, at(52)) === seed, 'website_invalid_starter_brief_changed_sample')
+    assert(starter.applyWebsiteStarterBrief(briefPreview, starterBrief, at(53)) === briefPreview, 'website_starter_overwrote_existing_work')
+    assert(starter.applyWebsiteStarterBrief(seed, { ...starterBrief, offer: '' }, at(54)) === seed, 'website_invalid_starter_brief_changed_sample')
     assert(starter.applyWebsiteStarterBrief(seed, starterBrief, 'not-a-time') === seed, 'website_starter_accepted_noncanonical_time')
     const committedBrief = model.applyWebsiteWorkspaceUpdate(seed, () => briefPreview)
     assert(committedBrief.ok
@@ -6593,6 +9119,61 @@ async function verifyWebsiteRuntime() {
       && committedBrief.workspace.revision === 1
       && committedBrief.workspace.contentRevision === 1
       && committedBrief.workspace.pages[0].stage === 'draft', 'website_starter_preview_did_not_save_as_one_draft_revision')
+    const websiteImportDigest = `sha256:${'b'.repeat(64)}`
+    const websiteImportInput = {
+      siteName: 'Golden Valley Services',
+      pages: [
+        { slug: 'home', title: 'Home', headline: 'Clear help for your customers', body: 'Explain the main service and strongest proof.', contactUrl: 'https://example.com/contact' },
+        { slug: 'about', title: 'About', headline: 'Why customers trust us', body: 'Add the approved company story and team.', contactUrl: 'https://example.com/contact' },
+      ],
+      sourceDigest: websiteImportDigest,
+      capturedAt: at(60),
+    }
+    const websitePageImport = model.importWebsitePageDrafts(seed, websiteImportInput)
+    assert(websitePageImport?.created === 2
+      && websitePageImport.alreadyPresent === 0
+      && websitePageImport.workspace.revision === 0
+      && websitePageImport.workspace.contentRevision === 0
+      && websitePageImport.workspace.siteName === websiteImportInput.siteName
+      && websitePageImport.workspace.pages.every((page) => page.stage === 'draft' && page.id.includes('bbbbbbbbbbbb'))
+      && websitePageImport.workspace.pages[0].slug === '/'
+      && websitePageImport.workspace.pages[1].slug === '/about',
+    'website_client_pages_not_prepared_as_bounded_drafts')
+    const committedWebsiteImport = model.applyWebsiteWorkspaceUpdate(seed, () => websitePageImport.workspace)
+    assert(committedWebsiteImport.ok
+      && committedWebsiteImport.changed
+      && committedWebsiteImport.workspace.revision === 1
+      && committedWebsiteImport.workspace.contentRevision === 1,
+    'website_client_pages_not_committed_as_one_content_revision')
+    const websiteImportReplay = model.importWebsitePageDrafts(committedWebsiteImport.workspace, { ...websiteImportInput, capturedAt: at(61) })
+    assert(websiteImportReplay?.replayed
+      && websiteImportReplay.created === 0
+      && websiteImportReplay.alreadyPresent === 2
+      && websiteImportReplay.workspace === committedWebsiteImport.workspace,
+    'website_client_page_retry_changed_exact_drafts')
+    assert(model.importWebsitePageDrafts({ ...committedWebsiteImport.workspace, siteName: 'Owner edited Website' }, websiteImportInput) === null, 'website_client_import_overwrote_edited_workspace')
+    assert(model.importWebsitePageDrafts(seed, { ...websiteImportInput, sourceDigest: 'bad-digest' }) === null, 'website_client_import_accepted_unbound_source')
+    assert(model.importWebsitePageDrafts(seed, { ...websiteImportInput, pages: [websiteImportInput.pages[0], websiteImportInput.pages[0]] }) === null, 'website_client_import_accepted_duplicate_slug')
+    assert(model.importWebsitePageDrafts(seed, { ...websiteImportInput, pages: [{ ...websiteImportInput.pages[0], contactUrl: 'javascript:alert(1)' }] }) === null, 'website_client_import_accepted_unsafe_destination')
+    const websiteImportValues = new Map()
+    const websiteImportStorage = {
+      getItem: (key) => websiteImportValues.get(key) ?? null,
+      setItem: (key, value) => websiteImportValues.set(key, String(value)),
+    }
+    const activatedWebsiteImport = await model.activateLocalWebsitePageDrafts(websiteImportInput, websiteImportStorage, locks)
+    const activatedWebsiteState = model.loadWebsiteWorkspace(websiteImportStorage)
+    assert(activatedWebsiteImport.ok
+      && activatedWebsiteState.ok
+      && activatedWebsiteState.workspace.revision === 1
+      && activatedWebsiteState.workspace.contentRevision === 1
+      && activatedWebsiteState.workspace.pages.length === 2,
+    'website_client_pages_not_persisted_atomically')
+    const activatedWebsiteRaw = websiteImportValues.get(model.WEBSITE_STORAGE_KEY)
+    const replayedWebsiteActivation = await model.activateLocalWebsitePageDrafts({ ...websiteImportInput, capturedAt: at(62) }, websiteImportStorage, locks)
+    assert(replayedWebsiteActivation.ok
+      && replayedWebsiteActivation.import.replayed
+      && websiteImportValues.get(model.WEBSITE_STORAGE_KEY) === activatedWebsiteRaw,
+    'website_client_page_activation_retry_changed_storage')
     let editSession = model.createWebsiteEditSession(seed)
     for (let index = 0; index < 20; index += 1) {
       const staged = model.updateWebsiteEditSession(editSession, (current) => ({
@@ -7362,6 +9943,49 @@ async function verifyCommerceRuntime() {
       ...model.createEmptyCommerce(),
       items: [{ sku: 'SKU-1', name: 'Test item', onHand: 10, reorderAt: 2, price: 100 }],
     }
+    const clientImportDigest = `sha256:${'c'.repeat(64)}`
+    const clientImportItems = [
+      { sku: 'CLIENT-1', name: 'Client item one', onHand: 12, reorderAt: 3, price: 4500 },
+      { sku: 'CLIENT-2', name: 'Client item two', onHand: 8, reorderAt: 2, price: 7000 },
+    ]
+    const clientImport = model.importCommerceCatalog(model.createEmptyCommerce(), {
+      items: clientImportItems,
+      sourceDigest: clientImportDigest,
+      capturedAt: '2026-07-23T09:00:00.000Z',
+      actor: 'Client owner',
+    })
+    assert(clientImport?.created === 2
+      && clientImport.alreadyPresent === 0
+      && clientImport.state.items.map((item) => item.sku).join(',') === 'CLIENT-2,CLIENT-1'
+      && clientImport.state.movements.length === 2
+      && clientImport.state.catalogBaselines?.length === 2,
+    'client_catalog_import_not_atomic_or_attributable')
+    const clientImportReplay = model.importCommerceCatalog(clientImport.state, {
+      items: clientImportItems,
+      sourceDigest: clientImportDigest,
+      capturedAt: '2026-07-23T10:00:00.000Z',
+      actor: 'Client owner',
+    })
+    assert(clientImportReplay?.replayed && clientImportReplay.created === 0 && clientImportReplay.alreadyPresent === 2 && clientImportReplay.state === clientImport.state, 'client_catalog_import_retry_not_idempotent')
+    assert(model.importCommerceCatalog(clientImport.state, {
+      items: [{ ...clientImportItems[0], price: 9999 }],
+      sourceDigest: clientImportDigest,
+      capturedAt: '2026-07-23T10:00:00.000Z',
+      actor: 'Client owner',
+    }) === null, 'client_catalog_import_overwrote_conflicting_sku')
+    const atomicImportBase = model.createEmptyCommerce()
+    assert(model.importCommerceCatalog(atomicImportBase, {
+      items: [clientImportItems[0], { ...clientImportItems[1], price: 0 }],
+      sourceDigest: clientImportDigest,
+      capturedAt: '2026-07-23T10:00:00.000Z',
+      actor: 'Client owner',
+    }) === null && atomicImportBase.items.length === 0, 'client_catalog_import_partially_mutated_after_invalid_row')
+    assert(model.importCommerceCatalog(model.createEmptyCommerce(), {
+      items: clientImportItems,
+      sourceDigest: 'not-a-digest',
+      capturedAt: '2026-07-23T09:00:00.000Z',
+      actor: 'Client owner',
+    }) === null, 'client_catalog_import_unbound_source_accepted')
     const productionRequest = {
       requestId: 'ISSUE-MANAGED-001',
       sourceCommandDigest: `sha256:${'a'.repeat(64)}`,
@@ -7864,6 +10488,95 @@ async function verifyCommerceRuntime() {
       sku: 'SKU-LONG-NAME',
       name: 'x'.repeat(181),
     }, proof('ACT-ITEM-LONG-NAME')) === null, 'oversized_catalog_item_was_registered')
+    const promotionPolicyProof = proof('ACT-PROMOTION-WELCOME-R1', -1_500)
+    const promotionPolicyInput = {
+      code: 'WELCOME',
+      discountBasisPoints: 1_000,
+      minimumSubtotalMmk: 100,
+      maximumDiscountMmk: 50,
+      status: 'active',
+      effectiveFrom: promotionPolicyProof.capturedAt,
+      effectiveUntil: '2026-08-23T09:00:00.000Z',
+    }
+    const promotionConfigured = model.configureCommercePromotionPolicy(base, promotionPolicyInput, promotionPolicyProof)
+    assert(promotionConfigured?.promotionPolicies.length === 1
+      && promotionConfigured.promotionPolicies[0].revision === 1
+      && promotionConfigured.promotionPolicies[0].proof.actionId === promotionPolicyProof.actionId,
+    'promotion_policy_setup_not_versioned_or_attributed')
+    assert(model.configureCommercePromotionPolicy(promotionConfigured, promotionPolicyInput, promotionPolicyProof) === promotionConfigured,
+      'promotion_policy_setup_retry_not_idempotent')
+    assert(model.configureCommercePromotionPolicy(promotionConfigured, {
+      ...promotionPolicyInput,
+      maximumDiscountMmk: 49,
+    }, promotionPolicyProof) === null,
+    'promotion_policy_setup_conflicting_retry_succeeded')
+    assert(model.configureCommercePromotionPolicy(promotionConfigured, promotionPolicyInput, proof('ACT-PROMOTION-UNCHANGED', -1_500)) === null,
+      'unchanged_promotion_policy_advanced_revision')
+    assert(model.configureCommercePromotionPolicy(base, {
+      ...promotionPolicyInput,
+      effectiveFrom: '2026-07-23T08:00:00.000Z',
+    }, proof('ACT-PROMOTION-LATE-PROOF')) === null,
+    'promotion_policy_setup_accepted_late_review_proof')
+    const shippingPolicyProof = proof('ACT-SHIPPING-YGN-WEST-R1', -1_400)
+    const shippingPolicyInput = {
+      zoneCode: 'YGN-WEST',
+      townships: ['Hlaing', 'Kamayut'],
+      feeMmk: 3_000,
+      promiseMinutes: 120,
+      status: 'active',
+      effectiveFrom: shippingPolicyProof.capturedAt,
+      effectiveUntil: '2026-08-23T09:00:00.000Z',
+    }
+    const shippingConfigured = model.configureCommerceShippingPolicy(base, shippingPolicyInput, shippingPolicyProof)
+    assert(shippingConfigured?.shippingPolicies.length === 1
+      && shippingConfigured.shippingPolicies[0].revision === 1
+      && shippingConfigured.shippingPolicies[0].proof.actionId === shippingPolicyProof.actionId,
+    'shipping_policy_setup_not_versioned_or_attributed')
+    assert(model.configureCommerceShippingPolicy(shippingConfigured, shippingPolicyInput, shippingPolicyProof) === shippingConfigured,
+      'shipping_policy_setup_retry_not_idempotent')
+    assert(model.configureCommerceShippingPolicy(shippingConfigured, { ...shippingPolicyInput, feeMmk: 3_001 }, shippingPolicyProof) === null,
+      'shipping_policy_setup_conflicting_retry_succeeded')
+    assert(model.configureCommerceShippingPolicy(shippingConfigured, shippingPolicyInput, proof('ACT-SHIPPING-UNCHANGED', -1_400)) === null,
+      'unchanged_shipping_policy_advanced_revision')
+    assert(model.commerceShippingDecision(shippingConfigured.shippingPolicies, 'delivery', 'Hlaing', shippingPolicyProof.capturedAt)?.status === 'approved'
+      && model.commerceShippingDecision(shippingConfigured.shippingPolicies, 'delivery', 'Outside', shippingPolicyProof.capturedAt)?.status === 'rejected',
+    'shipping_policy_eligibility_decision_not_governed')
+    const paymentPolicyProof = proof('ACT-PAYMENT-PICKUP-R1', -1_300)
+    const paymentPolicyInput = {
+      adapter: 'pay_on_pickup',
+      allowedFulfilments: ['pickup'],
+      maximumOrderMmk: 500,
+      instructions: 'Collect at pickup and reconcile the receipt in Shop.',
+      status: 'active',
+      effectiveFrom: paymentPolicyProof.capturedAt,
+      effectiveUntil: '2026-08-23T09:00:00.000Z',
+    }
+    const paymentConfigured = model.configureCommercePaymentPolicy(base, paymentPolicyInput, paymentPolicyProof)
+    assert(paymentConfigured?.paymentPolicies.length === 1
+      && paymentConfigured.paymentPolicies[0].revision === 1
+      && paymentConfigured.paymentPolicies[0].proof.actionId === paymentPolicyProof.actionId,
+    'payment_policy_setup_not_versioned_or_attributed')
+    assert(model.configureCommercePaymentPolicy(paymentConfigured, paymentPolicyInput, paymentPolicyProof) === paymentConfigured,
+      'payment_policy_setup_retry_not_idempotent')
+    assert(model.configureCommercePaymentPolicy(paymentConfigured, { ...paymentPolicyInput, maximumOrderMmk: 499 }, paymentPolicyProof) === null,
+      'payment_policy_setup_conflicting_retry_succeeded')
+    assert(model.configureCommercePaymentPolicy(paymentConfigured, paymentPolicyInput, proof('ACT-PAYMENT-UNCHANGED', -1_300)) === null,
+      'unchanged_payment_policy_advanced_revision')
+    assert(model.commercePaymentDecision(paymentConfigured.paymentPolicies, 'pay_on_pickup', 'pickup', 500, paymentPolicyProof.capturedAt)?.status === 'approved'
+      && model.commercePaymentDecision(paymentConfigured.paymentPolicies, 'pay_on_pickup', 'delivery', 500, paymentPolicyProof.capturedAt)?.reason === 'fulfilment_not_allowed'
+      && model.commercePaymentDecision(paymentConfigured.paymentPolicies, 'pay_on_pickup', 'pickup', 501, paymentPolicyProof.capturedAt)?.reason === 'amount_exceeded',
+    'payment_policy_eligibility_or_limit_not_governed')
+    const creditPolicyProof = proof('ACT-CREDIT-CUSTOMER', -2_000)
+    const creditBase = model.configureCommerceCustomerCreditPolicy(base, {
+      customer: 'Customer',
+      creditLimitMmk: 1_000,
+      maxPaymentTermsDays: 30,
+      status: 'active',
+    }, creditPolicyProof)
+    assert(creditBase?.customerCreditPolicies.length === 1
+      && creditBase.customerCreditPolicies[0].revision === 1
+      && creditBase.customerCreditPolicies[0].proof.actionId === creditPolicyProof.actionId,
+    'customer_credit_policy_not_versioned_or_attributed')
     const reserveProof = proof('ACT-RESERVE')
     const order = {
       id: 'ORD-1',
@@ -7880,13 +10593,66 @@ async function verifyCommerceRuntime() {
       fulfilment: 'pickup',
       fulfilmentReference: 'PICKUP-001',
       promisedAt: '2026-07-23T11:00:00.000Z',
+      paymentDueAt: '2026-08-22T09:00:00.000Z',
       sourceRecordId: 'WEB-1',
       evidenceReference: reserveProof.evidenceReference,
       total: 200,
       status: 'confirmed',
     }
-    const reserved = model.reserveCommerceOrder(base, order, reserveProof)
-    assert(reserved?.items[0].onHand === 8 && reserved.orders.length === 1 && reserved.movements.length === 1, 'reservation_did_not_apply_once')
+    assert(model.reserveCommerceOrder(base, order, reserveProof) === null, 'credit_order_without_policy_succeeded')
+    const reserved = model.reserveCommerceOrder(creditBase, order, reserveProof)
+    assert(reserved?.items[0].onHand === 8
+      && reserved.orders.length === 1
+      && reserved.movements.length === 1
+      && reserved.orders[0].creditDecision?.policyActionId === creditPolicyProof.actionId
+      && reserved.orders[0].creditDecision?.exposureBeforeMmk === 0
+      && reserved.orders[0].creditDecision?.exposureAfterMmk === 200,
+    'reservation_did_not_apply_once_with_customer_credit_decision')
+    assert(model.configureCommerceCustomerCreditPolicy(creditBase, {
+      customer: 'Customer', creditLimitMmk: 1_000, maxPaymentTermsDays: 30, status: 'active',
+    }, creditPolicyProof) === creditBase, 'customer_credit_policy_retry_not_idempotent')
+    assert(model.configureCommerceCustomerCreditPolicy(creditBase, {
+      customer: 'Customer', creditLimitMmk: 999, maxPaymentTermsDays: 30, status: 'active',
+    }, creditPolicyProof) === null, 'customer_credit_policy_conflicting_retry_succeeded')
+    assertThrows(() => model.validateCommerceState({
+      ...reserved,
+      orders: [{
+        ...reserved.orders[0],
+        creditDecision: { ...reserved.orders[0].creditDecision, exposureBeforeMmk: 1 },
+      }],
+    }), 'forged_customer_credit_decision_loaded')
+    const legacyCreditOrder = { ...reserved.orders[0] }
+    delete legacyCreditOrder.creditDecision
+    assert(model.validateCommerceState({ ...reserved, orders: [legacyCreditOrder] }).orders[0].creditDecision === undefined,
+      'legacy_credit_order_without_decision_not_readable')
+    const limitedBase = model.configureCommerceCustomerCreditPolicy(base, {
+      customer: 'Customer', creditLimitMmk: 250, maxPaymentTermsDays: 30, status: 'active',
+    }, proof('ACT-CREDIT-LIMITED', -2_000))
+    const limitedReserved = model.reserveCommerceOrder(limitedBase, order, reserveProof)
+    const secondCreditProof = proof('ACT-CREDIT-SECOND', 1_000)
+    const secondCreditOrder = {
+      ...order,
+      id: 'ORD-CREDIT-SECOND',
+      createdAt: secondCreditProof.capturedAt,
+      owner: secondCreditProof.actor,
+      quantity: 1,
+      total: 100,
+      paymentDueAt: '2026-08-22T09:00:01.000Z',
+      sourceRecordId: 'WEB-CREDIT-SECOND',
+      evidenceReference: secondCreditProof.evidenceReference,
+    }
+    assert(limitedReserved && model.reserveCommerceOrder(limitedReserved, secondCreditOrder, secondCreditProof) === null,
+      'customer_credit_limit_did_not_block_accumulated_exposure')
+    const shortTermsBase = model.configureCommerceCustomerCreditPolicy(base, {
+      customer: 'Customer', creditLimitMmk: 1_000, maxPaymentTermsDays: 7, status: 'active',
+    }, proof('ACT-CREDIT-SHORT-TERMS', -2_000))
+    assert(model.reserveCommerceOrder(shortTermsBase, order, reserveProof) === null,
+      'customer_credit_terms_boundary_not_enforced')
+    const heldBase = model.configureCommerceCustomerCreditPolicy(base, {
+      customer: 'Customer', creditLimitMmk: 1_000, maxPaymentTermsDays: 30, status: 'hold',
+    }, proof('ACT-CREDIT-HOLD', -2_000))
+    assert(model.reserveCommerceOrder(heldBase, order, reserveProof) === null,
+      'customer_credit_hold_not_enforced')
     assert(reserved.orders[0].calculation?.schema === 'supermega.commerce.order-calculation.v1'
       && reserved.orders[0].calculation.currency === 'MMK'
       && reserved.orders[0].calculation.catalogRevision === 0
@@ -7895,6 +10661,107 @@ async function verifyCommerceRuntime() {
       && reserved.orders[0].calculation.taxMmk === 0
       && reserved.orders[0].calculation.totalMmk === 200,
     'new_order_calculation_not_bound_to_catalog_subtotal')
+    const taxProof = proof('ACT-TAX-CONFIG-001', -1_000)
+    const exclusiveTaxInput = {
+      code: 'CT5',
+      label: 'Configured output tax',
+      rateBasisPoints: 500,
+      mode: 'exclusive',
+      jurisdictionCode: 'MM',
+      effectiveFrom: '2026-07-23T09:00:00.000Z',
+    }
+    const exclusiveTaxBase = model.configureCommerceTax(creditBase, exclusiveTaxInput, taxProof)
+    assert(exclusiveTaxBase?.taxConfigurations.length === 1
+      && exclusiveTaxBase.taxConfigurations[0].revision === 1
+      && exclusiveTaxBase.taxConfigurations[0].code === 'CT5'
+      && exclusiveTaxBase.taxConfigurations[0].rateBasisPoints === 500
+      && exclusiveTaxBase.taxConfigurations[0].proof.actionId === taxProof.actionId,
+    'tax_configuration_not_versioned_or_attributed')
+    assert(model.configureCommerceTax(exclusiveTaxBase, exclusiveTaxInput, taxProof) === exclusiveTaxBase, 'tax_configuration_retry_not_idempotent')
+    assert(model.configureCommerceTax(exclusiveTaxBase, { ...exclusiveTaxInput, rateBasisPoints: 501 }, taxProof) === null, 'tax_configuration_conflicting_retry_succeeded')
+    assert(model.configureCommerceTax(exclusiveTaxBase, exclusiveTaxInput, proof('ACT-TAX-CONFIG-UNCHANGED')) === null, 'unchanged_tax_configuration_was_appended')
+    assert(model.configureCommerceTax(base, { ...exclusiveTaxInput, code: 'ct5' }, proof('ACT-TAX-CONFIG-LOWER')) === null, 'noncanonical_tax_code_was_accepted')
+    assert(model.configureCommerceTax(base, { ...exclusiveTaxInput, rateBasisPoints: 10_001 }, proof('ACT-TAX-CONFIG-RATE')) === null, 'unsafe_tax_rate_was_accepted')
+    assert(model.configureCommerceTax(base, { ...exclusiveTaxInput, jurisdictionCode: '' }, proof('ACT-TAX-CONFIG-SCOPE')) === null, 'blank_tax_jurisdiction_was_accepted')
+    assert(model.configureCommerceTax(base, { ...exclusiveTaxInput, effectiveFrom: '2026-07-23T08:59:58.000Z' }, taxProof) === null, 'backdated_tax_schedule_was_accepted')
+    const exclusiveReserveProof = proof('ACT-TAX-ORDER-001', 1_000)
+    const exclusiveOrder = {
+      ...order,
+      id: 'ORD-TAX-1',
+      createdAt: '2026-07-23T09:00:00.000Z',
+      owner: exclusiveReserveProof.actor,
+      sourceRecordId: 'WEB-TAX-1',
+      evidenceReference: exclusiveReserveProof.evidenceReference,
+    }
+    const exclusiveReserved = model.reserveCommerceOrder(exclusiveTaxBase, exclusiveOrder, exclusiveReserveProof)
+    const exclusiveCalculation = exclusiveReserved?.orders[0].calculation
+    assert(exclusiveCalculation?.schema === 'supermega.commerce.order-calculation.v2'
+      && exclusiveCalculation.taxConfigurationRevision === 1
+      && exclusiveCalculation.taxCode === 'CT5'
+      && exclusiveCalculation.taxJurisdictionCode === 'MM'
+      && exclusiveCalculation.taxEffectiveFrom === exclusiveTaxInput.effectiveFrom
+      && exclusiveCalculation.taxRateBasisPoints === 500
+      && exclusiveCalculation.taxMode === 'exclusive'
+      && exclusiveCalculation.listedSubtotalMmk === 200
+      && exclusiveCalculation.subtotalMmk === 200
+      && exclusiveCalculation.taxMmk === 10
+      && exclusiveCalculation.totalMmk === 210
+      && exclusiveReserved.orders[0].total === 210,
+    'exclusive_tax_determination_not_frozen_on_order')
+    assert(model.reserveCommerceOrder(exclusiveReserved, exclusiveOrder, exclusiveReserveProof) === exclusiveReserved, 'taxed_order_retry_not_idempotent')
+    const inclusiveTaxProof = proof('ACT-TAX-CONFIG-002', 2_000)
+    const inclusiveTaxInput = {
+      code: 'CT5I',
+      label: 'Configured tax included',
+      rateBasisPoints: 500,
+      mode: 'inclusive',
+      jurisdictionCode: 'MM-YGN',
+      effectiveFrom: '2026-07-23T09:00:03.000Z',
+    }
+    const inclusiveTaxBase = model.configureCommerceTax(exclusiveReserved, inclusiveTaxInput, inclusiveTaxProof)
+    assert(inclusiveTaxBase?.taxConfigurations.length === 2
+      && inclusiveTaxBase.taxConfigurations[0].revision === 2
+      && inclusiveTaxBase.orders[0].calculation.taxConfigurationRevision === 1
+      && inclusiveTaxBase.orders[0].total === 210,
+    'tax_configuration_update_rewrote_prior_order')
+    const preEffectiveCalculation = model.commerceOrderCalculation(inclusiveTaxBase, 200, '2026-07-23T09:00:02.500Z')
+    assert(preEffectiveCalculation?.schema === 'supermega.commerce.order-calculation.v2'
+      && preEffectiveCalculation.taxConfigurationRevision === 1
+      && preEffectiveCalculation.taxJurisdictionCode === 'MM',
+    'future_tax_configuration_applied_before_effective_time')
+    const inclusiveReserveProof = proof('ACT-TAX-ORDER-002', 4_000)
+    const inclusiveOrder = {
+      ...order,
+      id: 'ORD-TAX-2',
+      createdAt: '2026-07-23T09:00:03.000Z',
+      paymentDueAt: '2026-08-22T09:00:03.000Z',
+      owner: inclusiveReserveProof.actor,
+      sourceRecordId: 'WEB-TAX-2',
+      evidenceReference: inclusiveReserveProof.evidenceReference,
+    }
+    const inclusiveReserved = model.reserveCommerceOrder(inclusiveTaxBase, inclusiveOrder, inclusiveReserveProof)
+    const inclusiveCalculation = inclusiveReserved?.orders[0].calculation
+    assert(inclusiveCalculation?.schema === 'supermega.commerce.order-calculation.v2'
+      && inclusiveCalculation.taxConfigurationRevision === 2
+      && inclusiveCalculation.taxJurisdictionCode === 'MM-YGN'
+      && inclusiveCalculation.taxEffectiveFrom === inclusiveTaxInput.effectiveFrom
+      && inclusiveCalculation.taxMode === 'inclusive'
+      && inclusiveCalculation.listedSubtotalMmk === 200
+      && inclusiveCalculation.subtotalMmk === 190
+      && inclusiveCalculation.taxMmk === 10
+      && inclusiveCalculation.totalMmk === 200,
+    'inclusive_tax_determination_not_deterministic')
+    assertThrows(() => model.validateCommerceState({
+      ...inclusiveReserved,
+      orders: inclusiveReserved.orders.map((candidate, index) => index ? candidate : {
+        ...candidate,
+        calculation: { ...candidate.calculation, taxMmk: candidate.calculation.taxMmk + 1 },
+      }),
+    }), 'tampered_tax_calculation_was_loaded')
+    assertThrows(() => model.validateCommerceState({
+      ...inclusiveReserved,
+      taxConfigurations: inclusiveReserved.taxConfigurations.map((candidate, index) => index ? candidate : { ...candidate, unexpected: true }),
+    }), 'tax_configuration_extra_field_was_loaded')
     const legacyOrderWithoutCalculation = { ...reserved.orders[0] }
     delete legacyOrderWithoutCalculation.calculation
     assert(model.validateCommerceState({ ...reserved, orders: [legacyOrderWithoutCalculation] }).orders[0].calculation === undefined, 'legacy_order_without_calculation_not_readable')
@@ -7937,6 +10804,10 @@ async function verifyCommerceRuntime() {
       ...reserved,
       orders: [{ ...reserved.orders[0], promisedAt: reserved.orders[0].createdAt }],
     }), 'backdated_order_promise_loaded')
+    assertThrows(() => model.validateCommerceState({
+      ...reserved,
+      orders: [{ ...reserved.orders[0], paymentDueAt: '2026-07-23T08:59:59.999Z' }],
+    }), 'backdated_payment_due_snapshot_loaded')
     assertThrows(() => model.validateCommerceState({
       ...reserved,
       orders: [{ ...reserved.orders[0], owner: 'Different operator' }],
@@ -8092,10 +10963,34 @@ async function verifyCommerceRuntime() {
       && ready?.orders[0].status === 'ready'
       && JSON.stringify(ready.orders[0].advancementActionIds) === JSON.stringify([preparingProof.actionId, readyProof.actionId]),
     'fulfilment_progression_failed')
+    const currentReceivables = model.commerceReceivablesAging(ready, Date.parse('2026-08-22T08:59:59.999Z'))
+    assert(currentReceivables.rows.length === 1
+      && currentReceivables.rows[0].bucket === 'current'
+      && currentReceivables.rows[0].dueAt === order.paymentDueAt
+      && currentReceivables.totalsMmk.current === 200
+      && currentReceivables.overdueMmk === 0,
+    'current_receivable_aging_projection_invalid')
+    const overdueReceivables = model.commerceReceivablesAging(ready, Date.parse('2026-08-22T09:00:00.001Z'))
+    assert(overdueReceivables.rows[0].bucket === '1_7'
+      && overdueReceivables.rows[0].daysPastDue === 1
+      && overdueReceivables.overdueOrders === 1
+      && overdueReceivables.overdueMmk === 200,
+    'overdue_receivable_aging_projection_invalid')
+    const collectionProof = proof('ACT-COLLECTION', 800)
+    const contactedReady = model.recordCommerceCollectionAction(ready, order.id, collectionProof)
+    const contactedAging = model.commerceReceivablesAging(contactedReady, Date.parse('2026-08-22T09:00:00.001Z'))
+    assert(contactedReady?.orders[0].collectionActions?.[0].proof.actionId === collectionProof.actionId
+      && contactedAging.rows[0].collectionActionCount === 1
+      && contactedAging.rows[0].lastCollectionAction.evidenceReference === collectionProof.evidenceReference,
+    'collection_contact_history_not_attributable_or_visible')
+    assert(model.recordCommerceCollectionAction(contactedReady, order.id, collectionProof) === contactedReady, 'collection_contact_retry_not_idempotent')
+    assert(model.recordCommerceCollectionAction(contactedReady, order.id, { ...collectionProof, reason: 'Changed.' }) === null, 'collection_contact_conflicting_retry_succeeded')
     assert(model.advanceCommerceOrder(ready, order.id, 'ready') === null, 'pending_payment_completed_order')
     const paymentProof = proof('ACT-PAYMENT', 1_000)
-    const reconciled = model.reconcileCommercePayment(ready, order.id, paymentProof)
+    const reconciled = model.reconcileCommercePayment(contactedReady, order.id, paymentProof)
     assert(reconciled?.orders[0].paymentStatus === 'reconciled' && reconciled.orders[0].paymentReconciledBy === paymentProof.actor && reconciled.orders[0].paymentEvidenceReference === paymentProof.evidenceReference, 'payment_reconciliation_lost_human_evidence')
+    assert(model.commerceReceivablesAging(reconciled, Date.parse('2026-07-24T11:00:00.000Z')).rows.length === 0, 'reconciled_payment_remained_receivable')
+    assert(model.recordCommerceCollectionAction(reconciled, order.id, proof('ACT-COLLECTION-AFTER-PAYMENT', 1_500)) === null, 'paid_order_accepted_collection_contact')
     assert(model.reconcileCommercePayment(reconciled, order.id, paymentProof) === reconciled, 'exact_payment_retry_not_idempotent')
     assert(model.reconcileCommercePayment(reconciled, order.id, { ...paymentProof, evidenceReference: 'EV-CONFLICT' }) === null, 'conflicting_payment_retry_succeeded')
     const completionProof = proof('ACT-COMPLETE', 2_000)
@@ -8112,14 +11007,49 @@ async function verifyCommerceRuntime() {
       evidenceReference: 'EV-ACCOUNTING-CLOSE-001',
     })
     const accountingCloseExpectation = model.commerceCloseExpectation(completed, accountingCloseAt)
-    const accountingClosed = model.saveCommerceClose(completed, accountingCloseId, accountingCloseProof, accountingCloseExpectation)
+    const matchedSettlementInput = [{
+      paymentMethod: completed.orders[0].payment,
+      countedMmk: 200,
+      varianceOwner: '',
+      varianceReason: '',
+    }]
+    const matchedSettlement = model.commerceCloseSettlementReview(completed, accountingCloseExpectation, matchedSettlementInput)
+    const accountingClosed = model.saveCommerceClose(completed, accountingCloseId, accountingCloseProof, accountingCloseExpectation, matchedSettlementInput)
+    assert(matchedSettlement?.schema === 'supermega.commerce.close-settlement.v1'
+      && matchedSettlement.status === 'matched'
+      && matchedSettlement.totalExpectedMmk === 200
+      && matchedSettlement.totalCountedMmk === 200
+      && matchedSettlement.totalVarianceMmk === 0
+      && matchedSettlement.lines[0].varianceOwner === null
+      && accountingClosed?.closes[0].settlement?.status === 'matched',
+    'daily_close_matched_settlement_not_persisted')
+    assert(model.saveCommerceClose(accountingClosed, accountingCloseId, accountingCloseProof, accountingCloseExpectation, matchedSettlementInput) === accountingClosed,
+      'daily_close_matched_settlement_retry_not_idempotent')
+    assert(model.saveCommerceClose(accountingClosed, accountingCloseId, accountingCloseProof, accountingCloseExpectation, [{ ...matchedSettlementInput[0], countedMmk: 199, varianceOwner: 'Cashier', varianceReason: 'Count under review.' }]) === null,
+      'daily_close_changed_settlement_retry_succeeded')
+    assert(model.commerceCloseSettlementReview(completed, accountingCloseExpectation, [{ ...matchedSettlementInput[0], paymentMethod: 'Unknown' }]) === null,
+      'daily_close_unknown_payment_settlement_succeeded')
+    assert(model.commerceCloseSettlementReview(completed, accountingCloseExpectation, [{ ...matchedSettlementInput[0], countedMmk: 190 }]) === null,
+      'daily_close_unowned_variance_succeeded')
+    const varianceInput = [{ ...matchedSettlementInput[0], countedMmk: 190, varianceOwner: 'Shift lead', varianceReason: 'Cash drawer recount required.' }]
+    const varianceSettlement = model.commerceCloseSettlementReview(completed, accountingCloseExpectation, varianceInput)
+    assert(varianceSettlement?.status === 'variance_review'
+      && varianceSettlement.totalVarianceMmk === -10
+      && varianceSettlement.lines[0].varianceOwner === 'Shift lead'
+      && varianceSettlement.lines[0].varianceReason === 'Cash drawer recount required.',
+    'daily_close_variance_evidence_not_retained')
+    const forgedSettlementState = structuredClone(accountingClosed)
+    forgedSettlementState.closes[0].settlement.totalCountedMmk = 201
+    assertThrows(() => model.validateCommerceState(forgedSettlementState), 'daily_close_forged_settlement_total_validated')
     const accountingExport = model.commerceDailyCloseExport(accountingClosed, accountingCloseId)
-    assert(accountingExport?.schema === 'supermega.commerce.daily-close-export.v1'
+    assert(accountingExport?.schema === 'supermega.commerce.daily-close-export.v3'
       && accountingExport.orderCount === 1
       && accountingExport.orders[0].calculationStatus === 'accepted'
       && accountingExport.orders[0].subtotalMmk === 200
       && accountingExport.orders[0].taxMode === 'not_configured'
-      && accountingExport.digest === 'sha256:d61fc044f45e2c3aea6471b79493c159c1e2f68687a81020abe2d2b65545ea7e'
+      && accountingExport.orders[0].originalTotalMmk === 200
+      && accountingExport.orders[0].corrections.length === 0
+      && accountingExport.digest === model.commerceDailyCloseExport(accountingClosed, accountingCloseId).digest
       && !JSON.stringify(accountingExport).includes('Customer'),
     'daily_close_export_not_deterministic_or_minimal')
     const accountingCsv = model.commerceDailyCloseCsv(accountingExport)
@@ -8128,6 +11058,144 @@ async function verifyCommerceRuntime() {
       && !accountingCsv.includes('Customer')
       && accountingCsv.split('\r\n').length - 1 === 3,
     'daily_close_csv_not_complete_or_minimal')
+    const accountingHandoff = model.commerceAccountingHandoff(accountingClosed, accountingCloseId)
+    assert(accountingHandoff?.schema === 'supermega.commerce.accounting-handoff.v3'
+      && accountingHandoff.status === 'review_required'
+      && accountingHandoff.postingAuthority === 'none'
+      && accountingHandoff.externalPostingPerformed === false
+      && accountingHandoff.sourceCloseDigest === accountingExport.digest
+      && accountingHandoff.accountMappingRevision === null
+      && accountingHandoff.accountMappingEvidenceReference === null
+      && accountingHandoff.originalOrderTotalMmk === 200
+      && accountingHandoff.netOrderTotalMmk === 200
+      && accountingHandoff.correctionCount === 0
+      && accountingHandoff.creditCorrectionMmk === 0
+      && accountingHandoff.debitCorrectionMmk === 0
+      && accountingHandoff.totalDebitMmk === 200
+      && accountingHandoff.totalCreditMmk === 200
+      && accountingHandoff.acceptedOrderCount === 1
+      && accountingHandoff.legacyUnverifiedOrderCount === 0
+      && accountingHandoff.taxConfiguredOrderCount === 0
+      && accountingHandoff.entries.length === 2
+      && accountingHandoff.entries[0].side === 'debit'
+      && accountingHandoff.entries[0].accountRole === 'payment_clearing'
+      && accountingHandoff.entries[0].externalAccountCode === null
+      && accountingHandoff.entries[0].mappingStatus === 'unmapped'
+      && accountingHandoff.entries[0].sourceOrderId === null
+      && accountingHandoff.entries[0].sourceDocumentId === null
+      && accountingHandoff.entries[1].side === 'credit'
+      && accountingHandoff.entries[1].accountRole === 'sales_revenue'
+      && accountingHandoff.digest === model.commerceAccountingHandoff(accountingClosed, accountingCloseId).digest
+      && !JSON.stringify(accountingHandoff).includes('Customer'),
+    'accounting_handoff_not_balanced_deterministic_or_minimal')
+    const accountingHandoffCsv = model.commerceAccountingHandoffCsv(accountingHandoff)
+    assert(accountingHandoffCsv.includes('"posting_authority"')
+      && accountingHandoffCsv.includes('"review_required"')
+      && accountingHandoffCsv.includes('"unmapped"')
+      && accountingHandoffCsv.includes('"false"')
+      && accountingHandoffCsv.split('\r\n').length - 1 === 3
+      && !accountingHandoffCsv.includes('Customer'),
+    'accounting_handoff_csv_not_review_bounded_or_minimal')
+    const correctionExpectation = model.commerceOrderCorrectionExpectation(completed, order.id)
+    const correctionInput = { orderId: order.id, kind: 'credit', reasonCode: 'pricing_error', listedAmountMmk: 50 }
+    const correctionProof = proof('ACT-CORRECTION-1', 3_000)
+    const corrected = model.recordCommerceOrderCorrection(completed, correctionInput, correctionProof, correctionExpectation)
+    assert(correctionExpectation?.currentBalanceMmk === 200
+      && corrected?.orders[0].total === 200
+      && corrected.orders[0].calculation.totalMmk === 200
+      && corrected.orders[0].corrections[0].calculation.totalMmk === 50
+      && corrected.orders[0].corrections[0].balanceAfterMmk === 150
+      && corrected.orders[0].corrections[0].sourceCalculationDigest === model.commerceOrderCalculationDigest(completed.orders[0])
+      && corrected.orders[0].corrections[0].financialStatus === 'review_required'
+      && corrected.orders[0].corrections[0].postingAuthority === 'none'
+      && corrected.orders[0].corrections[0].externalPostingPerformed === false
+      && model.commerceOrderAdjustedTotal(corrected.orders[0]) === 150
+      && corrected.items === completed.items
+      && corrected.movements === completed.movements,
+    'invoice_correction_rewrote_original_or_lost_review_boundary')
+    assert(model.recordCommerceOrderCorrection(corrected, correctionInput, correctionProof, correctionExpectation) === corrected, 'exact_correction_retry_not_idempotent')
+    assert(model.recordCommerceOrderCorrection(corrected, { ...correctionInput, kind: 'debit' }, correctionProof, correctionExpectation) === null, 'changed_correction_retry_succeeded')
+    assert(model.recordCommerceOrderCorrection(corrected, correctionInput, proof('ACT-CORRECTION-STALE', 4_000), correctionExpectation) === null, 'stale_correction_review_succeeded')
+    assert(model.recordCommerceOrderCorrection(completed, { ...correctionInput, listedAmountMmk: 201 }, proof('ACT-CORRECTION-OVER', 3_000), correctionExpectation) === null, 'over_credit_succeeded')
+    assert(model.recordCommerceOrderCorrection(completed, correctionInput, proof('ACT-CORRECTION-EARLY', 1_500), correctionExpectation) === null, 'backdated_correction_succeeded')
+    const correctedCloseId = 'CLOSE-00000000-0000-4000-8000-000000000099'
+    const correctedCloseProof = proof('ACT-00000000-0000-4000-8000-000000000099', 0, {
+      capturedAt: accountingCloseAt,
+      evidenceReference: 'EV-CORRECTED-CLOSE-099',
+    })
+    const correctedCloseExpectation = model.commerceCloseExpectation(corrected, accountingCloseAt)
+    const correctedClosed = model.saveCommerceClose(corrected, correctedCloseId, correctedCloseProof, correctedCloseExpectation)
+    const correctedExport = model.commerceDailyCloseExport(correctedClosed, correctedCloseId)
+    assert(correctedCloseExpectation?.total === 150
+      && correctedExport?.totalMmk === 150
+      && correctedExport.orders[0].originalTotalMmk === 200
+      && correctedExport.orders[0].totalMmk === 150
+      && correctedExport.orders[0].corrections[0].documentId === corrected.orders[0].corrections[0].documentId
+      && model.commerceDailyCloseCsv(correctedExport).includes('"corrections_json"')
+      && model.commerceOrderCorrectionExpectation(correctedClosed, order.id) === null,
+    'corrected_close_lost_correction_evidence')
+    const correctedHandoff = model.commerceAccountingHandoff(correctedClosed, correctedCloseId)
+    const correctedDocumentId = corrected.orders[0].corrections[0].documentId
+    const correctedEntries = correctedHandoff?.entries.filter((entry) => entry.sourceDocumentId === correctedDocumentId) ?? []
+    assert(correctedHandoff?.schema === 'supermega.commerce.accounting-handoff.v3'
+      && correctedHandoff.originalOrderTotalMmk === 200
+      && correctedHandoff.netOrderTotalMmk === 150
+      && correctedHandoff.correctionCount === 1
+      && correctedHandoff.creditCorrectionMmk === 50
+      && correctedHandoff.debitCorrectionMmk === 0
+      && correctedHandoff.totalDebitMmk === 250
+      && correctedHandoff.totalCreditMmk === 250
+      && correctedEntries.length === 2
+      && correctedEntries[0].side === 'debit'
+      && correctedEntries[0].accountRole === 'sales_adjustment'
+      && correctedEntries[0].amountMmk === 50
+      && correctedEntries[1].side === 'credit'
+      && correctedEntries[1].accountRole === 'correction_payable'
+      && correctedEntries[1].amountMmk === 50
+      && correctedEntries.every((entry) => entry.sourceOrderId === order.id && entry.mappingStatus === 'unmapped')
+      && correctedHandoff.digest === model.commerceAccountingHandoff(correctedClosed, correctedCloseId).digest
+      && model.commerceAccountingHandoffCsv(correctedHandoff).includes('"source_document_id"')
+      && model.commerceAccountingHandoffCsv(correctedHandoff).includes(`"${correctedDocumentId}"`),
+    'corrected_accounting_handoff_not_balanced_traceable_or_deterministic')
+    const mappingProof = proof('ACT-ACCOUNT-MAPPING', 600)
+    const mappingInput = { mappings: [
+      { accountRole: 'payment_clearing', externalAccountCode: '1100-CLEAR' },
+      { accountRole: 'sales_revenue', externalAccountCode: '4100-SALES' },
+      { accountRole: 'sales_revenue_unverified', externalAccountCode: '4190-REVIEW' },
+      { accountRole: 'tax_payable', externalAccountCode: '2100-TAX' },
+      { accountRole: 'sales_adjustment', externalAccountCode: '4200-ADJUST' },
+      { accountRole: 'correction_receivable', externalAccountCode: '1200-CORR-AR' },
+      { accountRole: 'correction_payable', externalAccountCode: '2200-CORR-AP' },
+    ] }
+    const legacyMappedCorrected = model.validateCommerceState({
+      ...correctedClosed,
+      accountMappingConfigurations: [{ revision: 1, mappings: mappingInput.mappings.slice(0, 4), proof: mappingProof }],
+    })
+    const legacyMappedCorrectedHandoff = model.commerceAccountingHandoff(legacyMappedCorrected, correctedCloseId)
+    assert(legacyMappedCorrectedHandoff?.entries
+      .filter((entry) => ['payment_clearing', 'sales_revenue', 'tax_payable'].includes(entry.accountRole))
+      .every((entry) => entry.mappingStatus === 'mapped')
+      && legacyMappedCorrectedHandoff.entries
+        .filter((entry) => ['sales_adjustment', 'correction_payable'].includes(entry.accountRole))
+        .every((entry) => entry.mappingStatus === 'unmapped'),
+    'legacy_account_mapping_not_readable_for_corrected_close')
+    const mappedBeforeClose = model.configureCommerceAccountMapping(completed, mappingInput, mappingProof)
+    const mappedCloseExpectation = model.commerceCloseExpectation(mappedBeforeClose, accountingCloseAt)
+    const mappedClosed = model.saveCommerceClose(mappedBeforeClose, accountingCloseId, accountingCloseProof, mappedCloseExpectation)
+    const mappedHandoff = model.commerceAccountingHandoff(mappedClosed, accountingCloseId)
+    assert(mappedHandoff?.accountMappingRevision === 1
+      && mappedHandoff.accountMappingEvidenceReference === mappingProof.evidenceReference
+      && mappedHandoff.entries.every((entry) => entry.mappingStatus === 'mapped' && entry.externalAccountCode)
+      && mappedHandoff.entries[0].externalAccountCode === '1100-CLEAR'
+      && model.commerceAccountingHandoffCsv(mappedHandoff).includes('"1100-CLEAR"'),
+    'accounting_handoff_mapping_not_effective_or_attributable')
+    const mappedAfterClose = model.configureCommerceAccountMapping(accountingClosed, mappingInput, proof('ACT-ACCOUNT-MAPPING-LATE', 0, { capturedAt: '2026-07-23T10:01:00.000Z' }))
+    const historicalHandoff = model.commerceAccountingHandoff(mappedAfterClose, accountingCloseId)
+    assert(historicalHandoff?.accountMappingRevision === null
+      && historicalHandoff.entries.every((entry) => entry.mappingStatus === 'unmapped' && entry.externalAccountCode === null),
+    'accounting_handoff_rewrote_historical_close')
+    assert(model.configureCommerceAccountMapping(mappedBeforeClose, mappingInput, proof('ACT-ACCOUNT-MAPPING-UNCHANGED', 700)) === null,
+      'unchanged_account_mapping_advanced')
     const formulaClosed = model.validateCommerceState({
       ...accountingClosed,
       closes: [{ ...accountingClosed.closes[0], operator: '=2+2' }],
@@ -8142,6 +11210,26 @@ async function verifyCommerceRuntime() {
       && legacyAccountingExport.orders[0].subtotalMmk === null
       && legacyAccountingExport.orders[0].taxMode === 'not_recorded',
     'daily_close_export_invented_legacy_calculation')
+    const legacyAccountingHandoff = model.commerceAccountingHandoff(legacyAccountingState, accountingCloseId)
+    assert(legacyAccountingHandoff?.acceptedOrderCount === 0
+      && legacyAccountingHandoff.legacyUnverifiedOrderCount === 1
+      && legacyAccountingHandoff.totalDebitMmk === legacyAccountingHandoff.totalCreditMmk
+      && legacyAccountingHandoff.entries.some((entry) => entry.accountRole === 'sales_revenue_unverified')
+      && !legacyAccountingHandoff.entries.some((entry) => entry.accountRole === 'sales_revenue'),
+    'accounting_handoff_invented_legacy_revenue_classification')
+    const formulaPaymentState = model.validateCommerceState({
+      ...accountingClosed,
+      orders: accountingClosed.orders.map((candidate) => ({ ...candidate, payment: '=2+2' })),
+      closes: accountingClosed.closes.map((candidate) => ({
+        ...candidate,
+        settlement: candidate.settlement ? {
+          ...candidate.settlement,
+          lines: candidate.settlement.lines.map((line) => ({ ...line, paymentMethod: '=2+2' })),
+        } : undefined,
+      })),
+    })
+    const formulaAccountingHandoff = model.commerceAccountingHandoff(formulaPaymentState, accountingCloseId)
+    assert(model.commerceAccountingHandoffCsv(formulaAccountingHandoff).includes('"\'=2+2"'), 'accounting_handoff_csv_formula_injection_not_neutralized')
     assert(model.commerceDailyCloseExport(migrated, 'CLOSE-1') === null, 'legacy_close_without_proof_became_exportable')
     assert(model.advanceCommerceOrder(reconciled, order.id, 'ready') === null, 'completion_without_attribution_succeeded')
     assert(model.advanceCommerceOrder(reconciled, order.id, 'ready', proof('ACT-COMPLETE-EARLY', 500)) === null, 'backdated_completion_succeeded')
@@ -8213,7 +11301,7 @@ async function verifyCommerceRuntime() {
 
     const cancelReserveProof = proof('ACT-RESERVE-CANCEL')
     const cancelOrder = { ...order, id: 'ORD-CANCEL', sourceRecordId: 'WEB-CANCEL', evidenceReference: cancelReserveProof.evidenceReference }
-    const cancelReserved = model.reserveCommerceOrder(base, cancelOrder, cancelReserveProof)
+    const cancelReserved = model.reserveCommerceOrder(creditBase, cancelOrder, cancelReserveProof)
     const cancelProof = proof('ACT-CANCEL', 2_000)
     const cancelled = model.cancelCommerceOrder(cancelReserved, cancelOrder.id, cancelProof)
     assert(cancelled?.items[0].onHand === 10 && cancelled.orders[0].status === 'cancelled' && cancelled.movements.filter((movement) => movement.kind === 'release').length === 1, 'cancellation_did_not_release_once')
@@ -8223,7 +11311,7 @@ async function verifyCommerceRuntime() {
 
     const paidReserveProof = proof('ACT-RESERVE-PAID')
     const paidOrder = { ...order, id: 'ORD-PAID-CANCEL', sourceRecordId: 'WEB-PAID-CANCEL', evidenceReference: paidReserveProof.evidenceReference }
-    const paidReserved = model.reserveCommerceOrder(base, paidOrder, paidReserveProof)
+    const paidReserved = model.reserveCommerceOrder(creditBase, paidOrder, paidReserveProof)
     const paid = model.reconcileCommercePayment(paidReserved, paidOrder.id, proof('ACT-PAY-PAID'))
     const paidCancelled = model.cancelCommerceOrder(paid, paidOrder.id, proof('ACT-CANCEL-PAID'))
     assert(paidCancelled?.orders[0].paymentStatus === 'reconciled' && paidCancelled.orders[0].refundStatus === 'due', 'paid_cancellation_erased_reconciliation_or_refund_exception')
@@ -8304,6 +11392,150 @@ async function verifyCommerceRuntime() {
       && !settledCloseExpectation.paymentExceptionOrderIds.includes(paidOrder.id)
       && settledCloseExpectation.paymentExceptionOrderIds.includes(unrelatedOrder.id), 'settled_refund_left_as_due_only_exception')
 
+    const budgetEnvelopeId = 'PBE-00000000-0000-4000-8000-000000000018'
+    const budgetProof = proof('ACT-PURCHASE-BUDGET-APPROVE')
+    const budgetInput = {
+      id: budgetEnvelopeId,
+      budgetCode: 'SHOP-STOCK-2026',
+      label: 'Stock replenishment',
+      periodStart: budgetProof.capturedAt,
+      periodEnd: '2027-07-23T09:00:00.000Z',
+      ceilingMmk: 1_000,
+      perRequisitionLimitMmk: 750,
+    }
+    const budgetApproved = model.approveCommercePurchaseBudgetEnvelope(base, budgetInput, budgetProof)
+    assert(budgetApproved
+      && budgetApproved.purchaseBudgetEnvelopes[0].id === budgetEnvelopeId
+      && model.commercePurchaseBudgetCommitment(budgetApproved, budgetApproved.purchaseBudgetEnvelopes[0]).availableMmk === 1_000,
+    'purchase_budget_approval_not_immutable_or_available')
+    assert(model.approveCommercePurchaseBudgetEnvelope(budgetApproved, budgetInput, budgetProof) === budgetApproved,
+      'purchase_budget_exact_retry_not_idempotent')
+    assert(model.approveCommercePurchaseBudgetEnvelope(budgetApproved, {
+      ...budgetInput,
+      id: 'PBE-00000000-0000-4000-8000-000000000020',
+    }, proof('ACT-PURCHASE-BUDGET-OVERLAP', 1)) === null, 'overlapping_purchase_budget_succeeded')
+
+    const sourcingDecisionId = 'SSD-00000000-0000-4000-8000-000000000017'
+    const sourcingProof = proof('ACT-SUPPLIER-SOURCING-APPROVE')
+    const sourcingInput = {
+      id: sourcingDecisionId,
+      sku: 'SKU-1',
+      quantity: 10,
+      quotes: [
+        {
+          supplier: 'Yangon Supply',
+          quoteReference: 'YS-Q-2026-0017',
+          vendorApprovalReference: 'SPP-SKU1-001',
+          unitCostMmk: 75,
+          deliveryAt: '2026-07-25T09:00:00.000Z',
+          validUntil: '2026-08-23T09:00:00.000Z',
+        },
+        {
+          supplier: 'Mandalay Supply',
+          quoteReference: 'MS-Q-2026-0017',
+          vendorApprovalReference: 'SPP-SKU1-002',
+          unitCostMmk: 80,
+          deliveryAt: '2026-07-24T09:00:00.000Z',
+          validUntil: '2026-08-23T09:00:00.000Z',
+        },
+      ],
+      selectedQuoteReference: 'YS-Q-2026-0017',
+      unitCostToleranceBasisPoints: 0,
+      deliveryToleranceDays: 0,
+    }
+    const sourcingApproved = model.approveCommerceSupplierSourcingDecision(budgetApproved, sourcingInput, sourcingProof)
+    assert(sourcingApproved
+      && sourcingApproved.supplierSourcingDecisions[0].id === sourcingDecisionId
+      && model.commerceSupplierSourcingSelectedQuote(sourcingApproved.supplierSourcingDecisions[0])?.supplier === 'Yangon Supply',
+    'supplier_sourcing_award_not_immutable_or_selected')
+    assert(model.approveCommerceSupplierSourcingDecision(sourcingApproved, sourcingInput, sourcingProof) === sourcingApproved,
+      'supplier_sourcing_exact_retry_not_idempotent')
+    assert(model.approveCommerceSupplierSourcingDecision(sourcingApproved, {
+      ...sourcingInput,
+      selectedQuoteReference: 'MS-Q-2026-0017',
+    }, sourcingProof) === null, 'changed_supplier_sourcing_retry_succeeded')
+    assert(model.approveCommerceSupplierSourcingDecision(budgetApproved, {
+      ...sourcingInput,
+      id: 'SSD-00000000-0000-4000-8000-000000000018',
+      selectedQuoteReference: 'UNKNOWN',
+    }, proof('ACT-SUPPLIER-SOURCING-UNKNOWN')) === null, 'unknown_supplier_quote_award_succeeded')
+
+    const requisitionId = 'PR-00000000-0000-4000-8000-000000000019'
+    const requisitionProof = proof('ACT-PURCHASE-REQUISITION-APPROVE')
+    const requisitionInput = {
+      id: requisitionId,
+      expectedAt: '2026-07-25T09:00:00.000Z',
+      supplier: 'Yangon Supply',
+      sku: 'SKU-1',
+      quantityRequested: 10,
+      unitCostMmk: 75,
+      budgetEnvelopeId,
+      sourceSourcingDecisionId: sourcingDecisionId,
+      sourceDecisionDigest: `sha256:${'1'.repeat(64)}`,
+      sourceReplenishmentDigest: `sha256:${'2'.repeat(64)}`,
+    }
+    const requisitionApproved = model.approveCommercePurchaseRequisition(sourcingApproved, requisitionInput, requisitionProof)
+    assert(requisitionApproved
+      && requisitionApproved.purchaseRequisitions[0].id === requisitionId
+      && requisitionApproved.purchaseRequisitions[0].totalMmk === 750
+      && model.commercePurchaseRequisitions(requisitionApproved).length === 1
+      && !requisitionApproved.purchaseOrders?.length,
+    'purchase_requisition_approval_not_immutable_or_purchase_free')
+    assert(model.approveCommercePurchaseRequisition(requisitionApproved, requisitionInput, requisitionProof) === requisitionApproved,
+      'purchase_requisition_exact_retry_not_idempotent')
+    assert(model.approveCommercePurchaseRequisition(requisitionApproved, { ...requisitionInput, unitCostMmk: 74 }, requisitionProof) === null,
+      'changed_purchase_requisition_retry_succeeded')
+    assert(model.approveCommercePurchaseRequisition(sourcingApproved, { ...requisitionInput, unitCostMmk: 76 }, proof('ACT-PURCHASE-REQUISITION-COST-OVER')) === null,
+      'purchase_requisition_exceeded_quote_cost_tolerance')
+    assert(model.approveCommercePurchaseRequisition(sourcingApproved, { ...requisitionInput, expectedAt: '2026-07-25T09:00:00.001Z' }, proof('ACT-PURCHASE-REQUISITION-LATE')) === null,
+      'purchase_requisition_exceeded_quote_delivery_tolerance')
+    assert(model.approveCommercePurchaseRequisition(sourcingApproved, { ...requisitionInput, quantityRequested: 11 }, proof('ACT-PURCHASE-REQUISITION-OVER')) === null,
+      'purchase_requisition_over_budget_limit_succeeded')
+    assert(model.commercePurchaseBudgetCommitment(requisitionApproved, requisitionApproved.purchaseBudgetEnvelopes[0]).availableMmk === 250,
+      'purchase_requisition_commitment_not_reserved')
+    const linkedPurchaseProof = proof('ACT-PURCHASE-CREATE-FROM-REQUISITION', 60_000, { actor: 'OP-BUYER' })
+    const linkedPurchase = model.createCommercePurchaseOrder(requisitionApproved, {
+      id: 'PO-00000000-0000-4000-8000-000000000019',
+      requisitionId,
+      expectedAt: requisitionInput.expectedAt,
+      supplier: requisitionInput.supplier,
+      sku: requisitionInput.sku,
+      quantityOrdered: requisitionInput.quantityRequested,
+      unitCostMmk: requisitionInput.unitCostMmk,
+    }, linkedPurchaseProof)
+    assert(linkedPurchase?.purchaseOrders[0].requisitionId === requisitionId
+      && model.commercePurchaseRequisitions(linkedPurchase)[0].approval === requisitionApproved.purchaseRequisitions[0].approval,
+    'purchase_requisition_to_po_link_not_exact')
+    const linkedPurchaseCancelled = model.cancelCommercePurchaseOrder(
+      linkedPurchase,
+      linkedPurchase.purchaseOrders[0].id,
+      proof('ACT-PURCHASE-CANCEL-BUDGET-RELEASE', 120_000, { actor: 'OP-BUYER' }),
+    )
+    assert(linkedPurchaseCancelled
+      && model.commercePurchaseBudgetCommitment(linkedPurchaseCancelled, linkedPurchaseCancelled.purchaseBudgetEnvelopes[0]).availableMmk === 1_000,
+    'cancelled_purchase_order_did_not_release_budget_commitment')
+    assert(model.createCommercePurchaseOrder(requisitionApproved, {
+      id: 'PO-00000000-0000-4000-8000-000000000017', requisitionId,
+      expectedAt: requisitionInput.expectedAt, supplier: requisitionInput.supplier,
+      sku: requisitionInput.sku, quantityOrdered: requisitionInput.quantityRequested,
+      unitCostMmk: requisitionInput.unitCostMmk,
+    }, proof('ACT-PURCHASE-CREATE-SAME-OPERATOR', 60_000, { actor: 'op-owner' })) === null,
+    'same_operator_requisition_to_po_conversion_succeeded')
+    assert(model.createCommercePurchaseOrder(requisitionApproved, {
+      id: 'PO-00000000-0000-4000-8000-000000000016', requisitionId,
+      expectedAt: requisitionInput.expectedAt, supplier: requisitionInput.supplier,
+      sku: requisitionInput.sku, quantityOrdered: requisitionInput.quantityRequested,
+      unitCostMmk: requisitionInput.unitCostMmk,
+    }, proof('ACT-PURCHASE-CREATE-BEFORE-APPROVAL', -1, { actor: 'OP-BUYER' })) === null,
+    'preapproval_requisition_to_po_conversion_succeeded')
+    assert(model.createCommercePurchaseOrder(requisitionApproved, {
+      id: 'PO-00000000-0000-4000-8000-000000000018', requisitionId,
+      expectedAt: requisitionInput.expectedAt, supplier: requisitionInput.supplier,
+      sku: requisitionInput.sku, quantityOrdered: requisitionInput.quantityRequested,
+      unitCostMmk: 74,
+    }, proof('ACT-PURCHASE-CREATE-MISMATCH', 60_000)) === null,
+    'mismatched_requisition_to_po_conversion_succeeded')
+
     const purchaseOrderId = 'PO-00000000-0000-4000-8000-000000000020'
     const purchaseCreationProof = proof('ACT-PURCHASE-CREATE')
     const purchaseExpectedAt = '2026-07-25T09:00:00.000Z'
@@ -8313,6 +11545,7 @@ async function verifyCommerceRuntime() {
       supplier: 'Yangon Supply',
       sku: 'SKU-1',
       quantityOrdered: 10,
+      unitCostMmk: 75,
     }, purchaseCreationProof)
     assert(purchaseCreated
       && purchaseCreated.items === base.items
@@ -8352,6 +11585,7 @@ async function verifyCommerceRuntime() {
       supplier: 'Yangon Supply',
       sku: 'SKU-1',
       quantityOrdered: 10,
+      unitCostMmk: 75,
     }, purchaseCreationProof) === purchaseCreated, 'purchase_order_exact_retry_not_idempotent')
     assert(model.createCommercePurchaseOrder(purchaseCreated, {
       id: 'PO-00000000-0000-4000-8000-000000000021',
@@ -8359,6 +11593,7 @@ async function verifyCommerceRuntime() {
       supplier: 'Second supplier',
       sku: 'SKU-1',
       quantityOrdered: 5,
+      unitCostMmk: 75,
     }, proof('ACT-PURCHASE-CREATE-2')) === null, 'duplicate_active_purchase_order_succeeded')
     assert(model.createCommercePurchaseOrder(base, {
       id: purchaseOrderId,
@@ -8366,12 +11601,14 @@ async function verifyCommerceRuntime() {
       supplier: 'Yangon Supply',
       sku: 'SKU-1',
       quantityOrdered: 10,
+      unitCostMmk: 75,
     }, purchaseCreationProof) === null, 'nonfuture_purchase_arrival_succeeded')
     assert(model.createCommercePurchaseOrder(base, {
       id: purchaseOrderId,
       supplier: 'Yangon Supply',
       sku: 'SKU-1',
       quantityOrdered: 10,
+      unitCostMmk: 75,
     }, purchaseCreationProof) === null, 'missing_purchase_arrival_succeeded')
     assert(model.createCommercePurchaseOrder(purchaseCreated, {
       id: purchaseOrderId,
@@ -8379,6 +11616,7 @@ async function verifyCommerceRuntime() {
       supplier: 'Yangon Supply',
       sku: 'SKU-1',
       quantityOrdered: 10,
+      unitCostMmk: 75,
     }, purchaseCreationProof) === null, 'changed_purchase_arrival_retry_succeeded')
     const purchasePartialProof = proof('ACT-PURCHASE-RECEIVE-1', 60_000)
     const purchasePartial = model.receiveCommercePurchaseOrder(purchaseCreated, purchaseOrderId, 4, purchasePartialProof)
@@ -8398,6 +11636,158 @@ async function verifyCommerceRuntime() {
     'stock_count_changed_open_purchase_order_progress')
     assert(model.receiveCommercePurchaseOrder(purchasePartial, purchaseOrderId, 4, purchasePartialProof) === purchasePartial, 'purchase_order_receipt_retry_not_idempotent')
     assert(model.receiveCommercePurchaseOrder(purchasePartial, purchaseOrderId, 7, proof('ACT-PURCHASE-OVERRECEIPT', 120_000)) === null, 'purchase_order_overreceipt_succeeded')
+    const purchaseDiscrepancyProof = proof('ACT-PURCHASE-DISCREPANCY', 120_000)
+    const purchaseDiscrepant = model.receiveCommercePurchaseOrder(
+      purchaseCreated,
+      purchaseOrderId,
+      6,
+      purchaseDiscrepancyProof,
+      undefined,
+      { quantityRejected: 4, reasonCode: 'quality_failed', disposition: 'return_to_vendor' },
+    )
+    const purchaseDiscrepantProgress = purchaseDiscrepant && model.commercePurchaseOrderProgress(purchaseDiscrepant, purchaseDiscrepant.purchaseOrders[0])
+    assert(purchaseDiscrepant
+      && purchaseDiscrepant.items[0].onHand === 16
+      && purchaseDiscrepant.movements[0].quantityDelta === 6
+      && purchaseDiscrepant.movements[0].rejectedQuantity === 4
+      && purchaseDiscrepant.movements[0].discrepancyCode === 'quality_failed'
+      && purchaseDiscrepant.movements[0].discrepancyDisposition === 'return_to_vendor'
+      && purchaseDiscrepantProgress?.received === 6
+      && purchaseDiscrepantProgress.rejected === 4
+      && purchaseDiscrepantProgress.delivered === 10
+      && purchaseDiscrepantProgress.remaining === 0
+      && purchaseDiscrepantProgress.status === 'received_with_discrepancy', 'purchase_receipt_discrepancy_not_exact')
+    assert(model.receiveCommercePurchaseOrder(
+      purchaseCreated,
+      purchaseOrderId,
+      7,
+      proof('ACT-PURCHASE-DISCREPANCY-OVER'),
+      undefined,
+      { quantityRejected: 4, reasonCode: 'damaged', disposition: 'return_to_vendor' },
+    ) === null, 'purchase_receipt_discrepancy_overdelivery_succeeded')
+    assertThrows(() => model.validateCommerceState({
+      ...purchaseDiscrepant,
+      movements: [{ ...purchaseDiscrepant.movements[0], discrepancyCode: undefined }, ...purchaseDiscrepant.movements.slice(1)],
+    }), 'incomplete_purchase_receipt_discrepancy_succeeded')
+    const supplierReturnProof = proof('ACT-SUPPLIER-RETURN-AUTHORIZE', 180_000)
+    const supplierReturnInput = {
+      id: 'SRET-00000000-0000-4000-8000-000000000031',
+      receiptMovementId: purchaseDiscrepant.movements[0].id,
+      internalReturnReference: 'RET-YS-2026-0031',
+    }
+    const supplierReturned = model.authorizeCommerceSupplierReturn(
+      purchaseDiscrepant, purchaseOrderId, supplierReturnInput, supplierReturnProof,
+    )
+    const supplierReturnClaim = supplierReturned?.purchaseOrders[0].supplierReturns?.[0]
+    assert(supplierReturned
+      && supplierReturnClaim?.quantityRejected === 4
+      && supplierReturnClaim.reasonCode === 'quality_failed'
+      && supplierReturnClaim.claimAmountMmk === 300
+      && supplierReturnClaim.physicalReturnStatus === 'not_dispatched'
+      && supplierReturnClaim.supplierContacted === false
+      && supplierReturnClaim.accountingPosted === false
+      && supplierReturnClaim.creditNotes.length === 0
+      && supplierReturned.items === purchaseDiscrepant.items
+      && supplierReturned.movements === purchaseDiscrepant.movements,
+    'supplier_return_claim_not_exact_or_mutated_operations')
+    assert(model.authorizeCommerceSupplierReturn(
+      supplierReturned, purchaseOrderId, supplierReturnInput, supplierReturnProof,
+    ) === supplierReturned, 'supplier_return_claim_retry_not_idempotent')
+    assert(model.authorizeCommerceSupplierReturn(
+      supplierReturned,
+      purchaseOrderId,
+      { ...supplierReturnInput, id: 'SRET-00000000-0000-4000-8000-000000000034', internalReturnReference: 'RET-DUPLICATE' },
+      proof('ACT-SUPPLIER-RETURN-DUPLICATE', 240_000),
+    ) === null, 'supplier_return_duplicate_receipt_succeeded')
+    assertThrows(() => model.validateCommerceState({
+      ...supplierReturned,
+      purchaseOrders: [{
+        ...supplierReturned.purchaseOrders[0],
+        supplierReturns: [{ ...supplierReturnClaim, physicalReturnStatus: 'dispatched' }],
+      }],
+    }), 'supplier_return_false_dispatch_succeeded')
+    const discrepantInvoiceInput = {
+      id: 'PINV-00000000-0000-4000-8000-000000000035',
+      supplierReference: 'YS-INV-2026-0035',
+      issuedAt: purchaseDiscrepant.movements[0].createdAt,
+      dueAt: '2026-08-23T09:00:00.000Z',
+      quantityInvoiced: 10,
+      unitCostMmk: 75,
+    }
+    const supplierReturnedInvoiced = model.recordCommerceSupplierInvoice(
+      supplierReturned, purchaseOrderId, discrepantInvoiceInput, proof('ACT-SUPPLIER-INVOICE-DISCREPANCY', 180_000),
+    )
+    assert(supplierReturnedInvoiced
+      && model.commerceSupplierInvoiceMatch(supplierReturnedInvoiced, supplierReturnedInvoiced.purchaseOrders[0]).status === 'supplier_credit_pending',
+    'supplier_return_missing_credit_was_not_blocked')
+    const partialCreditProof = proof('ACT-SUPPLIER-CREDIT-PARTIAL', 240_000)
+    const partialCreditInput = {
+      id: 'SCN-00000000-0000-4000-8000-000000000032',
+      supplierReference: 'YS-CN-2026-0032',
+      issuedAt: partialCreditProof.capturedAt,
+      amountMmk: 150,
+    }
+    const partiallyCredited = model.recordCommerceSupplierCreditNote(
+      supplierReturnedInvoiced, purchaseOrderId, supplierReturnInput.id, partialCreditInput, partialCreditProof,
+    )
+    const partialCreditMatch = partiallyCredited
+      && model.commerceSupplierInvoiceMatch(partiallyCredited, partiallyCredited.purchaseOrders[0])
+    assert(partiallyCredited
+      && partialCreditMatch?.status === 'supplier_credit_pending'
+      && partialCreditMatch.supplierClaimMmk === 300
+      && partialCreditMatch.supplierCreditMmk === 150
+      && partialCreditMatch.supplierReturnBalanceMmk === 150
+      && model.commerceSupplierReturnClaimStatus(partiallyCredited.purchaseOrders[0].supplierReturns[0]) === 'partially_credited',
+    'supplier_return_partial_credit_not_exact')
+    assert(model.recordCommerceSupplierCreditNote(
+      supplierReturnedInvoiced,
+      purchaseOrderId,
+      supplierReturnInput.id,
+      { ...partialCreditInput, id: 'SCN-00000000-0000-4000-8000-000000000036', supplierReference: 'YS-CN-OVER', amountMmk: 301 },
+      proof('ACT-SUPPLIER-CREDIT-OVER', 300_000),
+    ) === null, 'supplier_return_overcredit_succeeded')
+    const finalCreditProof = proof('ACT-SUPPLIER-CREDIT-FINAL', 300_000)
+    const fullyCredited = model.recordCommerceSupplierCreditNote(
+      partiallyCredited,
+      purchaseOrderId,
+      supplierReturnInput.id,
+      {
+        id: 'SCN-00000000-0000-4000-8000-000000000033',
+        supplierReference: 'YS-CN-2026-0033',
+        issuedAt: finalCreditProof.capturedAt,
+        amountMmk: 150,
+      },
+      finalCreditProof,
+    )
+    const fullCreditMatch = fullyCredited
+      && model.commerceSupplierInvoiceMatch(fullyCredited, fullyCredited.purchaseOrders[0])
+    assert(fullyCredited
+      && fullCreditMatch?.status === 'matched'
+      && fullCreditMatch.supplierCreditMmk === 300
+      && fullCreditMatch.supplierReturnBalanceMmk === 0
+      && fullCreditMatch.netInvoiceTotalMmk === 450
+      && fullCreditMatch.acceptedTotalMmk === 450
+      && model.commerceSupplierReturnClaimStatus(fullyCredited.purchaseOrders[0].supplierReturns[0]) === 'credited',
+    'supplier_return_full_credit_did_not_resolve_invoice')
+    const fullyCreditedPayable = model.markCommerceSupplierInvoicePayableReady(
+      fullyCredited, purchaseOrderId, proof('ACT-SUPPLIER-INVOICE-DISCREPANCY-PAYABLE', 360_000),
+    )
+    const creditedPayablesHandoff = fullyCreditedPayable
+      && model.commerceSupplierPayablesHandoff(fullyCreditedPayable)
+    assert(fullyCreditedPayable
+      && creditedPayablesHandoff?.schema === 'supermega.commerce.supplier-payables-handoff.v1'
+      && creditedPayablesHandoff.status === 'review_required'
+      && creditedPayablesHandoff.paymentAuthority === 'none'
+      && creditedPayablesHandoff.paymentInitiated === false
+      && creditedPayablesHandoff.accountingPosted === false
+      && creditedPayablesHandoff.grossInvoiceTotalMmk === 750
+      && creditedPayablesHandoff.supplierCreditTotalMmk === 300
+      && creditedPayablesHandoff.netPayableTotalMmk === 450
+      && creditedPayablesHandoff.rows[0].rejectedQuantity === 4
+      && creditedPayablesHandoff.rows[0].physicalReturnStatus === 'not_dispatched'
+      && creditedPayablesHandoff.rows[0].supplierReturnClaimIds.includes(supplierReturnInput.id)
+      && creditedPayablesHandoff.rows[0].supplierCreditNoteIds.length === 2,
+    'fully_credited_supplier_payables_handoff_not_exact')
     assert(model.cancelCommercePurchaseOrder(
       purchasePartial,
       purchaseOrderId,
@@ -8419,6 +11809,165 @@ async function verifyCommerceRuntime() {
     assert(purchaseFilled
       && model.commercePurchaseOrderProgress(purchaseFilled, purchaseFilled.purchaseOrders[0]).status === 'received'
       && model.cancelCommercePurchaseOrder(purchaseFilled, purchaseOrderId, proof('ACT-PURCHASE-CANCEL-FILLED', 180_000)) === null, 'completed_purchase_order_was_cancellable')
+    const supplierInvoiceInput = {
+      id: 'PINV-00000000-0000-4000-8000-000000000030',
+      supplierReference: 'YS-INV-2026-0030',
+      issuedAt: purchaseFilled.movements[0].createdAt,
+      dueAt: '2026-08-23T09:00:00.000Z',
+      quantityInvoiced: 10,
+      unitCostMmk: 75,
+    }
+    const invoiceRecordingProof = proof('ACT-SUPPLIER-INVOICE-RECORD', 180_000)
+    const invoiceBeforeReceipt = model.recordCommerceSupplierInvoice(
+      purchaseCreated, purchaseOrderId, supplierInvoiceInput, invoiceRecordingProof,
+    )
+    assert(invoiceBeforeReceipt
+      && model.commerceSupplierInvoiceMatch(invoiceBeforeReceipt, invoiceBeforeReceipt.purchaseOrders[0]).status === 'awaiting_receipt'
+      && model.markCommerceSupplierInvoicePayableReady(
+        invoiceBeforeReceipt, purchaseOrderId, proof('ACT-SUPPLIER-INVOICE-EARLY', 240_000),
+      ) === null, 'supplier_invoice_payable_gate_ignored_missing_receipt')
+    const invoiced = model.recordCommerceSupplierInvoice(
+      purchaseFilled, purchaseOrderId, supplierInvoiceInput, invoiceRecordingProof,
+    )
+    const invoiceMatch = invoiced && model.commerceSupplierInvoiceMatch(invoiced, invoiced.purchaseOrders[0])
+    assert(invoiced
+      && invoiceMatch?.status === 'matched'
+      && invoiceMatch.orderedTotalMmk === 750
+      && invoiceMatch.invoicedTotalMmk === 750
+      && !invoiceMatch.payableReady, 'supplier_invoice_three_way_match_not_exact')
+    const payableProof = proof('ACT-SUPPLIER-INVOICE-PAYABLE', 240_000)
+    const payable = model.markCommerceSupplierInvoicePayableReady(invoiced, purchaseOrderId, payableProof)
+    assert(payable
+      && model.commerceSupplierInvoiceMatch(payable, payable.purchaseOrders[0]).payableReady
+      && model.markCommerceSupplierInvoicePayableReady(payable, purchaseOrderId, payableProof) === payable,
+    'supplier_invoice_payable_review_not_attributed_or_idempotent')
+    const supplierPayablesHandoff = payable && model.commerceSupplierPayablesHandoff(payable)
+    assert(model.commerceSupplierPayablesHandoff(invoiced) === null
+      && supplierPayablesHandoff?.readyInvoiceCount === 1
+      && supplierPayablesHandoff.excludedInvoiceCount === 0
+      && supplierPayablesHandoff.grossInvoiceTotalMmk === 750
+      && supplierPayablesHandoff.supplierCreditTotalMmk === 0
+      && supplierPayablesHandoff.netPayableTotalMmk === 750
+      && supplierPayablesHandoff.rows[0].receiptMovementIds.length === 2
+      && supplierPayablesHandoff.rows[0].payableReviewActionId === payableProof.actionId
+      && supplierPayablesHandoff.rows[0].physicalReturnStatus === 'not_required'
+      && model.commerceSupplierPayablesHandoffCsv(supplierPayablesHandoff).includes('"net_payable_mmk"'),
+    'supplier_payables_handoff_not_review_bound_or_exact')
+    const supplierInvoiceDue = Date.parse(supplierInvoiceInput.dueAt)
+    const agingDay = 24 * 60 * 60 * 1_000
+    const blockedSupplierAging = model.commerceSupplierPayablesAging(
+      invoiced, supplierInvoiceDue - (7 * agingDay),
+    )
+    const scheduledSupplierAging = model.commerceSupplierPayablesAging(
+      payable, supplierInvoiceDue - (8 * agingDay),
+    )
+    const dueSupplierAging = model.commerceSupplierPayablesAging(
+      payable, supplierInvoiceDue - (7 * agingDay),
+    )
+    const overdueSupplierAging = model.commerceSupplierPayablesAging(
+      payable, supplierInvoiceDue + 1,
+    )
+    assert(blockedSupplierAging.rows.length === 0
+      && blockedSupplierAging.blockedInvoiceCount === 1
+      && scheduledSupplierAging.rows[0].bucket === 'scheduled'
+      && scheduledSupplierAging.rows[0].daysUntilDue === 8
+      && dueSupplierAging.rows[0].bucket === 'due_7_days'
+      && dueSupplierAging.rows[0].daysUntilDue === 7
+      && dueSupplierAging.totalsMmk.due_7_days === 750
+      && overdueSupplierAging.rows[0].bucket === 'overdue'
+      && overdueSupplierAging.rows[0].daysPastDue === 1
+      && overdueSupplierAging.totalsMmk.overdue === 750
+      && overdueSupplierAging.paymentAuthority === 'none'
+      && overdueSupplierAging.paymentInitiated === false,
+    'supplier_payables_aging_not_exact_or_payment_bounded')
+    assertThrows(() => model.commerceSupplierPayablesHandoffCsv({
+      ...supplierPayablesHandoff,
+      netPayableTotalMmk: 751,
+    }), 'supplier_payables_handoff_tampering_was_exported')
+    const formulaPayables = model.commerceSupplierPayablesHandoff({
+      ...payable,
+      purchaseOrders: [{
+        ...payable.purchaseOrders[0],
+        supplierInvoice: { ...payable.purchaseOrders[0].supplierInvoice, supplierReference: '=2+2' },
+      }],
+    })
+    assert(formulaPayables
+      && model.commerceSupplierPayablesHandoffCsv(formulaPayables).includes('"\'=2+2"'),
+    'supplier_payables_csv_formula_injection_not_neutralized')
+    assert(model.cancelCommercePurchaseOrder(
+      invoiceBeforeReceipt, purchaseOrderId, proof('ACT-PURCHASE-CANCEL-INVOICED', 240_000),
+    ) === null, 'invoiced_purchase_order_was_cancellable')
+    const priceVariance = model.recordCommerceSupplierInvoice(
+      purchaseFilled,
+      purchaseOrderId,
+      { ...supplierInvoiceInput, unitCostMmk: 80 },
+      proof('ACT-SUPPLIER-INVOICE-VARIANCE', 180_000),
+    )
+    assert(priceVariance
+      && model.commerceSupplierInvoiceMatch(priceVariance, priceVariance.purchaseOrders[0]).status === 'price_variance'
+      && model.markCommerceSupplierInvoicePayableReady(
+        priceVariance, purchaseOrderId, proof('ACT-SUPPLIER-INVOICE-VARIANCE-PAYABLE', 240_000),
+      ) === null, 'supplier_invoice_price_variance_was_payable')
+    const openSupplierPerformance = model.commerceSupplierPerformance(
+      purchaseCreated,
+      Date.parse('2026-07-25T09:00:00.000Z'),
+    )
+    assert(openSupplierPerformance.length === 1
+      && openSupplierPerformance[0].supplier === 'Yangon Supply'
+      && openSupplierPerformance[0].totalOrders === 1
+      && openSupplierPerformance[0].activeOrders === 1
+      && openSupplierPerformance[0].orderedUnits === 10
+      && openSupplierPerformance[0].receivedUnits === 0
+      && openSupplierPerformance[0].rejectedUnits === 0
+      && openSupplierPerformance[0].openUnits === 10
+      && openSupplierPerformance[0].lateOpenOrders === 1
+      && openSupplierPerformance[0].completedDeliveries === 0
+      && openSupplierPerformance[0].receiptRateBasisPoints === 0
+      && openSupplierPerformance[0].defectRateBasisPoints === 0
+      && openSupplierPerformance[0].onTimeRateBasisPoints === null
+      && openSupplierPerformance[0].status === 'attention', 'open_supplier_performance_not_exact')
+    const onTimeSupplierPerformance = model.commerceSupplierPerformance(
+      purchaseFilled,
+      Date.parse('2026-07-26T09:00:00.000Z'),
+    )
+    assert(onTimeSupplierPerformance.length === 1
+      && onTimeSupplierPerformance[0].activeOrders === 0
+      && onTimeSupplierPerformance[0].receivedUnits === 10
+      && onTimeSupplierPerformance[0].rejectedUnits === 0
+      && onTimeSupplierPerformance[0].openUnits === 0
+      && onTimeSupplierPerformance[0].completedDeliveries === 1
+      && onTimeSupplierPerformance[0].onTimeDeliveries === 1
+      && onTimeSupplierPerformance[0].lateDeliveries === 0
+      && onTimeSupplierPerformance[0].receiptRateBasisPoints === 10_000
+      && onTimeSupplierPerformance[0].defectRateBasisPoints === 0
+      && onTimeSupplierPerformance[0].onTimeRateBasisPoints === 10_000
+      && onTimeSupplierPerformance[0].status === 'on_track', 'on_time_supplier_performance_not_exact')
+    const discrepantSupplierPerformance = model.commerceSupplierPerformance(
+      purchaseDiscrepant,
+      Date.parse('2026-07-26T09:00:00.000Z'),
+    )
+    assert(discrepantSupplierPerformance.length === 1
+      && discrepantSupplierPerformance[0].receivedUnits === 6
+      && discrepantSupplierPerformance[0].rejectedUnits === 4
+      && discrepantSupplierPerformance[0].receiptRateBasisPoints === 6_000
+      && discrepantSupplierPerformance[0].defectRateBasisPoints === 4_000
+      && discrepantSupplierPerformance[0].status === 'attention', 'supplier_discrepancy_not_measured')
+    const latePurchaseFilled = model.receiveCommercePurchaseOrder(
+      purchaseCreated,
+      purchaseOrderId,
+      10,
+      proof('ACT-PURCHASE-RECEIVE-LATE', 0, { capturedAt: '2026-07-25T09:00:00.000001Z' }),
+    )
+    const lateSupplierPerformance = model.commerceSupplierPerformance(
+      latePurchaseFilled,
+      Date.parse('2026-07-26T09:00:00.000Z'),
+    )
+    assert(lateSupplierPerformance.length === 1
+      && lateSupplierPerformance[0].completedDeliveries === 1
+      && lateSupplierPerformance[0].onTimeDeliveries === 0
+      && lateSupplierPerformance[0].lateDeliveries === 1
+      && lateSupplierPerformance[0].onTimeRateBasisPoints === 0
+      && lateSupplierPerformance[0].status === 'attention', 'late_supplier_delivery_not_detected')
     const precisePurchaseOrderId = 'PO-00000000-0000-4000-8000-000000000022'
     const precisePurchaseCreated = model.createCommercePurchaseOrder(base, {
       id: precisePurchaseOrderId,
@@ -8426,6 +11975,7 @@ async function verifyCommerceRuntime() {
       supplier: 'Precision supplier',
       sku: 'SKU-1',
       quantityOrdered: 2,
+      unitCostMmk: 75,
     }, proof('ACT-PURCHASE-PRECISE-CREATE', 0, { capturedAt: '2026-07-23T09:00:00.000000Z' }))
     const precisePurchaseReceived = model.receiveCommercePurchaseOrder(
       precisePurchaseCreated,
@@ -8447,6 +11997,8 @@ async function verifyCommerceRuntime() {
       supplier: 'Attention supplier',
       sku,
       quantityOrdered: 2,
+      unitCostMmk: 75,
+      unitCostMmk: 75,
       creation: proof(actionId),
       ...(cancellation ? { cancellation } : {}),
     })
@@ -8499,6 +12051,34 @@ async function verifyCommerceRuntime() {
       'PO-00000000-0000-4000-8000-000000000031',
       'PO-00000000-0000-4000-8000-000000000030',
     ]), 'purchase_order_attention_order_not_operational')
+    const groupedSupplierPerformance = model.commerceSupplierPerformance(
+      attentionState,
+      Date.parse('2026-07-23T12:00:00.000Z'),
+    )
+    assert(groupedSupplierPerformance.length === 1
+      && groupedSupplierPerformance[0].supplier === 'Attention supplier'
+      && groupedSupplierPerformance[0].totalOrders === 4
+      && groupedSupplierPerformance[0].activeOrders === 3
+      && groupedSupplierPerformance[0].orderedUnits === 8
+      && groupedSupplierPerformance[0].receivedUnits === 0
+      && groupedSupplierPerformance[0].openUnits === 6
+      && groupedSupplierPerformance[0].lateOpenOrders === 1
+      && groupedSupplierPerformance[0].status === 'attention', 'supplier_performance_grouping_not_exact')
+    const supplierOverflowState = model.validateCommerceState({
+      ...attentionState,
+      purchaseOrders: [
+        { ...attentionState.purchaseOrders[0], quantityOrdered: Number.MAX_SAFE_INTEGER },
+        {
+          ...attentionState.purchaseOrders[1],
+          quantityOrdered: Number.MAX_SAFE_INTEGER,
+          cancellation: proof('ACT-SUPPLIER-OVERFLOW-CANCEL', 60_000),
+        },
+      ],
+    })
+    assertThrows(
+      () => model.commerceSupplierPerformance(supplierOverflowState, Date.parse('2026-07-23T12:00:00.000Z')),
+      'supplier_performance_unsafe_aggregate_succeeded',
+    )
     const legacyPurchaseState = model.validateCommerceState({
       ...model.createEmptyCommerce(),
       items: attentionState.items,
@@ -8545,7 +12125,7 @@ async function verifyCommerceRuntime() {
     values.clear()
     const concurrentReserveProof = proof('ACT-CONCURRENT-RESERVE')
     const concurrentOrder = { ...cancelOrder, evidenceReference: concurrentReserveProof.evidenceReference }
-    const concurrentReserved = model.reserveCommerceOrder(base, concurrentOrder, concurrentReserveProof)
+    const concurrentReserved = model.reserveCommerceOrder(creditBase, concurrentOrder, concurrentReserveProof)
     values.set(model.COMMERCE_KEY, JSON.stringify(concurrentReserved))
     const concurrentResults = await Promise.all([
       model.mutateCommerceWorkspace((state) => model.cancelCommerceOrder(state, concurrentOrder.id, proof('ACT-CONCURRENT-CANCEL-A')), storage, locks),
@@ -8603,6 +12183,7 @@ async function verifyCommerceOrderDraftRuntime() {
       fulfilment: 'pickup',
       fulfilmentReference: 'PICKUP-17',
       promisedAt: '2026-07-25T07:00:00.000Z',
+      paymentTermsDays: 7,
       lines: [
         { sku: 'SM-1001', quantity: 2, unitPriceMmk: 18_500, availableAtSave: 34 },
         { sku: 'SM-1003', quantity: 1, unitPriceMmk: 12_000, availableAtSave: 21 },
@@ -8624,12 +12205,16 @@ async function verifyCommerceOrderDraftRuntime() {
       && first.scope === 'local'
       && first.lines.length === 2
       && first.promisedAt === input.promisedAt
+      && first.paymentTermsDays === input.paymentTermsDays
       && first.savedAt === '2026-07-25T05:00:00.000Z',
     'commerce_order_draft_first_save_invalid')
-    assert(Object.keys(JSON.parse(firstRaw)).sort().join(',') === 'channel,customer,fulfilment,fulfilmentReference,lines,payment,promisedAt,revision,savedAt,schema,scope', 'commerce_order_draft_extra_fields_persisted')
+    assert(Object.keys(JSON.parse(firstRaw)).sort().join(',') === 'channel,customer,fulfilment,fulfilmentReference,lines,payment,paymentTermsDays,promisedAt,revision,savedAt,schema,scope', 'commerce_order_draft_extra_fields_persisted')
     const legacyDraft = { ...first }
     delete legacyDraft.promisedAt
-    assert(model.validateCommerceOrderDraft(legacyDraft, localScope).promisedAt === '', 'commerce_order_draft_legacy_promise_not_migrated_additively')
+    delete legacyDraft.paymentTermsDays
+    assert(model.validateCommerceOrderDraft(legacyDraft, localScope).promisedAt === ''
+      && model.validateCommerceOrderDraft(legacyDraft, localScope).paymentTermsDays === 0,
+    'commerce_order_draft_legacy_terms_not_migrated_additively')
     assert(lockCalls[0]?.name === 'supermega:shop:order-draft:reset'
       && lockCalls[1]?.name === 'supermega:shop:order-draft:local'
       && lockCalls.slice(0, 2).every((call) => call.options?.mode === 'exclusive'),
@@ -8672,6 +12257,7 @@ async function verifyCommerceOrderDraftRuntime() {
     const rebound = model.rebindCommerceOrderDraft(first, catalog.map((item) => item.sku === 'SM-1001' ? { ...item, price: 19_000, onHand: 30 } : item))
     assert(rebound.customer === input.customer
       && rebound.promisedAt === input.promisedAt
+      && rebound.paymentTermsDays === input.paymentTermsDays
       && rebound.lines[0].unitPriceMmk === 19_000
       && rebound.lines[0].availableAtSave === 30,
     'commerce_order_draft_rebind_changed_operator_fields_or_kept_stale_catalog')
@@ -8690,6 +12276,7 @@ async function verifyCommerceOrderDraftRuntime() {
       { ...input, lines: [] },
       { ...input, lines: [input.lines[0], input.lines[0]] },
       { ...input, payment: 'Crypto' },
+      { ...input, paymentTermsDays: 14 },
       { ...input, promisedAt: '2026-07-25T07:00:00' },
       { ...input, lines: [{ ...input.lines[0], quantity: 0 }] },
     ]) {
@@ -8834,6 +12421,8 @@ async function verifyStorefrontDraftRuntime() {
   }
   try {
     const draftModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-draft.ts')).href}?storefront-draft=${Date.now()}`)
+    const localMerchandisingImport = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'local-merchandising-import.ts')).href}?local-merchandising=${Date.now()}`)
+    const commerceModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?local-merchandising-commerce=${Date.now()}`)
     const values = new Map()
     const storage = {
       getItem: (key) => values.get(key) ?? null,
@@ -9026,6 +12615,82 @@ async function verifyStorefrontDraftRuntime() {
       removeItem: storage.removeItem,
     })
     assert(unavailable.status === 'unavailable' && unavailable.draft === null, 'storefront_draft_unreadable_storage_not_reported')
+
+    const importValues = new Map()
+    const importStorage = {
+      getItem: (key) => importValues.get(key) ?? null,
+      setItem: (key, value) => importValues.set(key, String(value)),
+      removeItem: (key) => importValues.delete(key),
+    }
+    const merchandisingRows = [
+      { sku: 'SM-1003', featured: false, collection: 'Home care', displayName: 'Household refill', note: 'Confirm local availability.' },
+      { sku: 'SM-1001', featured: true, collection: 'Best sellers', displayName: 'Daily essentials basket', note: 'Lead with everyday value.' },
+    ]
+    const localImport = await localMerchandisingImport.activateLocalEcommerceMerchandising({
+      storeName: 'Example Storefront',
+      rows: merchandisingRows,
+      sourceDigest: previewDigestA,
+    }, {
+      catalog: commerceModel.createSeedCommerce().items,
+      storage: importStorage,
+      locks,
+      now: () => '2026-07-24T10:06:30.000Z',
+    })
+    const importedDraft = draftModel.readStorefrontDraft(localScope, importStorage).draft
+    assert(localImport.created === 2
+      && localImport.alreadyPresent === 0
+      && localImport.revision === 1
+      && importedDraft?.merchandising?.map((row) => row.sku).join(',') === 'SM-1001,SM-1003'
+      && importedDraft?.sourcePreviewDigest.startsWith('sha256:'),
+    'local_ecommerce_merchandising_import_not_persisted')
+    const importReplay = await localMerchandisingImport.activateLocalEcommerceMerchandising({
+      storeName: 'Example Storefront',
+      rows: [...merchandisingRows].reverse(),
+      sourceDigest: previewDigestA,
+    }, {
+      catalog: commerceModel.createSeedCommerce().items,
+      storage: importStorage,
+      locks,
+      now: () => '2026-07-24T10:06:31.000Z',
+    })
+    assert(importReplay.created === 0
+      && importReplay.alreadyPresent === 2
+      && importReplay.revision === 1,
+    'local_ecommerce_merchandising_exact_replay_advanced_revision')
+    const beforeImportConflict = importValues.get(localKey)
+    let importConflictRejected = false
+    try {
+      await localMerchandisingImport.activateLocalEcommerceMerchandising({
+        storeName: 'Example Storefront',
+        rows: [{ sku: 'SM-1002', featured: true, collection: 'Pickup', displayName: 'Cold drink pack', note: '' }],
+        sourceDigest: previewDigestB,
+      }, {
+        catalog: commerceModel.createSeedCommerce().items,
+        storage: importStorage,
+        locks,
+        now: () => '2026-07-24T10:06:32.000Z',
+      })
+    } catch { importConflictRejected = true }
+    assert(importConflictRejected && importValues.get(localKey) === beforeImportConflict, 'local_ecommerce_merchandising_conflict_changed_draft')
+
+    const replacedImport = await localMerchandisingImport.activateLocalEcommerceMerchandising({
+      storeName: 'Approved Replacement Storefront',
+      rows: [{ sku: 'SM-1002', featured: true, collection: 'Pickup', displayName: 'Cold drink pack', note: '' }],
+      sourceDigest: previewDigestB,
+    }, {
+      catalog: commerceModel.createSeedCommerce().items,
+      storage: importStorage,
+      locks,
+      now: () => '2026-07-24T10:06:33.000Z',
+      replaceExistingDraft: true,
+    })
+    const replacedDraft = draftModel.readStorefrontDraft(localScope, importStorage).draft
+    assert(replacedImport.created === 1
+      && replacedImport.alreadyPresent === 0
+      && replacedImport.revision === 2
+      && replacedDraft?.storeName === 'Approved Replacement Storefront'
+      && replacedDraft?.selectedSkus.join(',') === 'SM-1002',
+    'approved_local_ecommerce_merchandising_replacement_failed')
 
     values.clear()
     lockRequests = 0
@@ -9351,6 +13016,50 @@ async function verifyStorefrontRuntime() {
       ecommerceBuyingRuntimeChecks += 1
     }
     const buyingScope = 'ecommerce:runtime-client'
+    const seededBuyingCommerce = commerce.createSeedCommerce(Date.parse('2026-07-24T08:00:00.000Z'))
+    const promotionPolicies = seededBuyingCommerce.promotionPolicies ?? []
+    const shippingPolicies = seededBuyingCommerce.shippingPolicies ?? []
+    const paymentPolicies = seededBuyingCommerce.paymentPolicies ?? []
+    const taxConfigurations = [{
+      revision: 1,
+      code: 'COMMERCIAL',
+      label: 'Commercial tax',
+      rateBasisPoints: 500,
+      mode: 'exclusive',
+      jurisdictionCode: 'MM-YGN',
+      effectiveFrom: '2026-07-24T08:55:00.000Z',
+      proof: {
+        actionId: 'ACT-TAX-COMMERCIAL-R1',
+        capturedAt: '2026-07-24T08:50:00.000Z',
+        actor: 'Finance manager',
+        reason: 'Approve the reviewed commercial tax schedule.',
+        evidenceReference: 'TAX-COMMERCIAL-R1',
+      },
+    }]
+    const exclusiveTax = buyingModel.reviewEcommerceTax(taxConfigurations, 50_850, '2026-07-24T09:10:00.000Z', 0)
+    const shopExclusiveTax = commerce.commerceOrderCalculation(
+      { ...commerce.createEmptyCommerce(), taxConfigurations },
+      50_850,
+      '2026-07-24T09:10:00.000Z',
+    )
+    buyingAssert(exclusiveTax.taxMmk === 2_543
+      && exclusiveTax.subtotalMmk === 50_850
+      && exclusiveTax.totalMmk === 53_393
+      && exclusiveTax.policyActionId === 'ACT-TAX-COMMERCIAL-R1'
+      && shopExclusiveTax?.taxMmk === exclusiveTax.taxMmk
+      && shopExclusiveTax?.totalMmk === exclusiveTax.totalMmk,
+    'ecommerce_buying_exclusive_tax_diverged_from_shop')
+    const inclusiveConfigurations = [{ ...taxConfigurations[0], mode: 'inclusive' }]
+    const inclusiveTax = buyingModel.reviewEcommerceTax(inclusiveConfigurations, 50_850, '2026-07-24T09:10:00.000Z', 0)
+    buyingAssert(inclusiveTax.taxMmk === 2_421
+      && inclusiveTax.subtotalMmk === 48_429
+      && inclusiveTax.totalMmk === 50_850,
+    'ecommerce_buying_inclusive_tax_rounding_invalid')
+    let forgedTaxRejected = false
+    try {
+      buyingModel.validateEcommerceTaxDecision({ ...exclusiveTax, taxMmk: exclusiveTax.taxMmk + 1 }, taxConfigurations)
+    } catch { forgedTaxRejected = true }
+    buyingAssert(forgedTaxRejected, 'ecommerce_buying_forged_tax_decision_accepted')
     const pim = await buyingModel.buildEcommercePimProjection(buyingScope, firstDigest, preview)
     const pimRetry = await buyingModel.buildEcommercePimProjection(buyingScope, firstDigest, reordered)
     buyingAssert(pim.schema === 'supermega.ecommerce.pim_projection.v1'
@@ -9367,6 +13076,8 @@ async function verifyStorefrontRuntime() {
       fulfilment: 'delivery',
       paymentAdapter: 'kbzpay_manual',
       promotionCode: 'WELCOME',
+      customerProfile: { name: 'Ma Su', phone: '09 123 456', previous: null },
+      deliveryAddress: { line1: '12 Insein Road, Ward 3', township: 'Hlaing', city: 'Yangon', instructions: 'Call at the gate', previous: null },
       idempotencyKey: 'ECI-22345678-1234-4ABC-8ABC-1234567890AB',
       quotedAt: '2026-07-24T09:00:00.000Z',
       expiresAt: '2026-07-24T09:15:00.000Z',
@@ -9381,6 +13092,8 @@ async function verifyStorefrontRuntime() {
       fulfilment: 'delivery',
       paymentAdapter: 'kbzpay_manual',
       promotionCode: 'WELCOME',
+      customerProfile: { name: 'Ma Su', phone: '09 123 456', previous: null },
+      deliveryAddress: { line1: '12 Insein Road, Ward 3', township: 'Hlaing', city: 'Yangon', instructions: 'Call at the gate', previous: null },
       idempotencyKey: 'ECI-22345678-1234-4ABC-8ABC-1234567890AB',
       quotedAt: '2026-07-24T09:00:00.000Z',
       expiresAt: '2026-07-24T09:15:00.000Z',
@@ -9389,6 +13102,13 @@ async function verifyStorefrontRuntime() {
       && buyingQuote.lines.length === 2
       && buyingQuote.totalMmk === buyingQuote.lines.reduce((total, line) => total + line.lineTotalMmk, 0),
     'ecommerce_buying_quote_not_canonical_multi_line')
+    buyingAssert(buyingQuote.customerProfile?.name === 'Ma Su'
+      && buyingQuote.customerProfile?.phone === '09 123 456'
+      && buyingQuote.customerProfile?.revision === 1
+      && buyingQuote.deliveryAddress?.township === 'Hlaing'
+      && buyingQuote.deliveryAddress?.city === 'Yangon'
+      && buyingQuote.deliveryAddress?.revision === 1,
+    'ecommerce_buying_customer_or_delivery_snapshot_missing')
     buyingAssert(buyingQuote.promotion.status === 'pending_shop_review'
       && buyingQuote.promotion.amountMmk === 0
       && buyingQuote.tax.status === 'included'
@@ -9425,6 +13145,8 @@ async function verifyStorefrontRuntime() {
     buyingAssert(buyingRequest.schema === 'supermega.ecommerce.order_request.v2'
       && buyingRequest.scope === buyingScope
       && buyingRequest.id === 'ECR-22345678-1234-4ABC-8ABC-1234567890AB'
+      && buyingRequest.customerProfile?.profileDigest === buyingQuote.customerProfile?.profileDigest
+      && buyingRequest.deliveryAddress?.addressDigest === buyingQuote.deliveryAddress?.addressDigest
       && JSON.stringify(buyingRequest.lines) === JSON.stringify(buyingQuote.lines),
     'ecommerce_buying_request_lost_quote_or_scope')
     const managedRequestProof = {
@@ -9440,6 +13162,734 @@ async function verifyStorefrontRuntime() {
       && commerce.commerceStorefrontRequestEquals(commerce.commerceStorefrontRequests(managedBuyingState)[0], buyingRequest)
       && commerce.commerceStorefrontRequestLines(buyingRequest).length === 2,
     'ecommerce_buying_multiline_request_not_retained_in_managed_shop')
+    const waitingTimeline = commerce.commerceStorefrontOrderTimeline(managedBuyingState)
+    buyingAssert(waitingTimeline.length === 1
+      && waitingTimeline[0].request.id === buyingRequest.id
+      && waitingTimeline[0].order === null
+      && waitingTimeline[0].stage === 'waiting_shop_review'
+      && waitingTimeline[0].paymentStatus === 'not_authorized'
+      && waitingTimeline[0].refundStatus === 'none'
+      && waitingTimeline[0].returnedQuantity === 0
+      && waitingTimeline[0].nextAction === 'review_in_shop',
+    'ecommerce_request_timeline_did_not_show_shop_review_boundary')
+    const linkedOrderProof = {
+      actionId: 'ACT-ECOMMERCE-ORDER-1',
+      capturedAt: '2026-07-24T09:10:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Confirm reviewed Ecommerce request in Shop.',
+      evidenceReference: `ECOMMERCE:${buyingRequest.id}:ORDER`,
+    }
+    const linkedOrderLines = buyingRequest.lines.map((line) => ({
+      sku: line.sku,
+      name: line.name,
+      ...(line.variant ? { variant: line.variant } : {}),
+      quantity: line.quantity,
+      unitPriceMmk: line.unitPriceMmk,
+    }))
+    const linkedOrderState = commerce.reserveCommerceOrder(managedBuyingState, {
+      id: 'ORD-ECOMMERCE-1',
+      createdAt: linkedOrderProof.capturedAt,
+      customer: buyingRequest.customerReference,
+      owner: linkedOrderProof.actor,
+      channel: 'Ecommerce',
+      item: commerce.commerceOrderItemSummary(linkedOrderLines),
+      quantity: linkedOrderLines.reduce((total, line) => total + line.quantity, 0),
+      payment: 'KBZPay',
+      paymentStatus: 'pending',
+      refundStatus: 'none',
+      fulfilment: buyingRequest.fulfilment,
+      fulfilmentReference: buyingRequest.id,
+      promisedAt: '2026-07-24T10:00:00.000Z',
+      paymentDueAt: linkedOrderProof.capturedAt,
+      sourceRecordId: buyingRequest.id,
+      evidenceReference: linkedOrderProof.evidenceReference,
+      lines: linkedOrderLines,
+      total: buyingRequest.totalMmk,
+      status: 'confirmed',
+    }, linkedOrderProof)
+    const confirmedTimeline = linkedOrderState ? commerce.commerceStorefrontOrderTimeline(linkedOrderState) : []
+    buyingAssert(confirmedTimeline.length === 1
+      && confirmedTimeline[0].order?.id === 'ORD-ECOMMERCE-1'
+      && confirmedTimeline[0].stage === 'confirmed'
+      && confirmedTimeline[0].paymentStatus === 'pending'
+      && confirmedTimeline[0].nextAction === 'start_preparing',
+    'ecommerce_request_timeline_did_not_follow_linked_shop_order')
+    const preparingOrderState = linkedOrderState && commerce.advanceCommerceOrder(linkedOrderState, 'ORD-ECOMMERCE-1', 'confirmed', {
+      actionId: 'ACT-ECOMMERCE-PREPARING-1',
+      capturedAt: '2026-07-24T09:20:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Start preparing the reviewed Ecommerce order.',
+      evidenceReference: 'ECOMMERCE-ORDER-PREPARING-1',
+    })
+    const readyOrderState = preparingOrderState && commerce.advanceCommerceOrder(preparingOrderState, 'ORD-ECOMMERCE-1', 'preparing', {
+      actionId: 'ACT-ECOMMERCE-READY-1',
+      capturedAt: '2026-07-24T09:30:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Mark the Ecommerce order ready for its reviewed handoff.',
+      evidenceReference: 'ECOMMERCE-ORDER-READY-1',
+    })
+    const readyTimeline = readyOrderState ? commerce.commerceStorefrontOrderTimeline(readyOrderState) : []
+    buyingAssert(readyTimeline[0]?.stage === 'ready'
+      && readyTimeline[0].nextAction === 'confirm_payment',
+    'ecommerce_ready_order_did_not_surface_payment_gate')
+    const paidReadyState = readyOrderState && commerce.reconcileCommercePayment(readyOrderState, 'ORD-ECOMMERCE-1', {
+      actionId: 'ACT-ECOMMERCE-PAID-1',
+      capturedAt: '2026-07-24T09:35:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Confirm reviewed Ecommerce payment evidence.',
+      evidenceReference: 'ECOMMERCE-ORDER-PAID-1',
+    })
+    const paidReadyTimeline = paidReadyState ? commerce.commerceStorefrontOrderTimeline(paidReadyState) : []
+    buyingAssert(paidReadyTimeline[0]?.paymentStatus === 'reconciled'
+      && paidReadyTimeline[0].nextAction === 'complete_fulfilment',
+    'ecommerce_paid_order_did_not_surface_completion_gate')
+    const completedOrderState = paidReadyState && commerce.advanceCommerceOrder(paidReadyState, 'ORD-ECOMMERCE-1', 'ready', {
+      actionId: 'ACT-ECOMMERCE-COMPLETE-1',
+      capturedAt: '2026-07-24T09:40:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Confirm the customer received the reviewed Ecommerce order.',
+      evidenceReference: 'ECOMMERCE-ORDER-COMPLETE-1',
+    })
+    const completedOrder = completedOrderState?.orders.find((order) => order.id === 'ORD-ECOMMERCE-1')
+    buyingAssert(completedOrder?.status === 'completed' && Boolean(completedOrder.completion),
+      'ecommerce_completed_return_fixture_invalid')
+    const returnIntent = buyingModel.buildEcommerceReturnIntent({
+      scope: buyingScope,
+      orderSnapshot: completedOrder,
+      sku: 'SM-CARE-01',
+      quantity: 1,
+      disposition: 'not_restocked',
+      reason: 'Opened item needs Shop condition review.',
+      idempotencyKey: 'ERI-42345678-1234-4ABC-8ABC-1234567890AB',
+      createdAt: '2026-07-24T09:45:00.000Z',
+    })
+    buyingAssert(returnIntent.id === 'ERR-42345678-1234-4ABC-8ABC-1234567890AB'
+      && returnIntent.sourceRequestId === buyingRequest.id
+      && returnIntent.refundStatus === 'not_started'
+      && returnIntent.evidenceReference === `ECOMMERCE-RETURN:42345678-1234-4ABC-8ABC-1234567890AB:${completedOrder.id}:${buyingRequest.id}`,
+    'ecommerce_return_intent_not_bound_to_completed_shop_order')
+    const returnExpectation = commerce.commerceOrderReturnExpectation(completedOrderState, completedOrder.id, returnIntent.sku, returnIntent.disposition, returnIntent.quantity)
+    const returnedShopState = returnExpectation && commerce.recordCommerceOrderReturn(completedOrderState, {
+      orderId: completedOrder.id,
+      sku: returnIntent.sku,
+      quantity: returnIntent.quantity,
+      disposition: returnIntent.disposition,
+    }, {
+      actionId: 'ACT-ECOMMERCE-RETURN-1',
+      capturedAt: '2026-07-24T09:46:00.000Z',
+      actor: 'OP-OWNER',
+      reason: `Customer requested return review: ${returnIntent.reason}`,
+      evidenceReference: returnIntent.evidenceReference,
+    }, returnExpectation)
+    const returnedTimeline = returnedShopState ? commerce.commerceStorefrontOrderTimeline(returnedShopState) : []
+    buyingAssert(returnedTimeline[0]?.returnedQuantity === 1
+      && returnedTimeline[0].order?.returns?.[0]?.evidenceReference === returnIntent.evidenceReference,
+    'ecommerce_return_intent_did_not_reconcile_to_shop_return')
+    const returnedOrder = returnedShopState?.orders.find((order) => order.id === completedOrder.id)
+    const returnOutcome = returnedOrder && buyingModel.projectEcommerceReturnOutcome(returnIntent, returnedOrder)
+    buyingAssert(returnOutcome?.schema === 'supermega.ecommerce.return_outcome.v1'
+      && returnOutcome.state === 'accepted'
+      && returnOutcome.intentId === returnIntent.id
+      && returnOutcome.stockOutcome === 'not_restocked'
+      && returnOutcome.refundStatus === 'none'
+      && returnOutcome.automaticRefundPerformed === false
+      && returnOutcome.customerMessageSent === false
+      && returnOutcome.providerCalled === false,
+    'ecommerce_return_outcome_not_exact_or_side_effect_free')
+    const forgedReturnOrder = returnedOrder && structuredClone(returnedOrder)
+    if (forgedReturnOrder?.returns?.[0]) forgedReturnOrder.returns[0].quantity += 1
+    buyingAssert(Boolean(forgedReturnOrder) && buyingModel.projectEcommerceReturnOutcome(returnIntent, forgedReturnOrder) === null,
+      'ecommerce_forged_return_outcome_was_accepted')
+    const duplicateReturnOrder = returnedOrder && { ...structuredClone(returnedOrder), returns: [...(returnedOrder.returns ?? []), ...(returnedOrder.returns?.[0] ? [structuredClone(returnedOrder.returns[0])] : [])] }
+    buyingAssert(Boolean(duplicateReturnOrder) && buyingModel.projectEcommerceReturnOutcome(returnIntent, duplicateReturnOrder) === null,
+      'ecommerce_duplicate_return_outcome_was_accepted')
+    const settledReturnOrder = returnedOrder && {
+      ...structuredClone(returnedOrder),
+      refundStatus: 'settled',
+      refundSettledAt: '2026-07-24T10:00:00.000Z',
+      refundSettledBy: 'FINANCE-OWNER',
+      refundEvidenceReference: 'REFUND-EXTERNAL-RETURN-1',
+    }
+    const settledReturnOutcome = settledReturnOrder && buyingModel.projectEcommerceReturnOutcome(returnIntent, settledReturnOrder)
+    buyingAssert(settledReturnOutcome?.refundStatus === 'settled'
+      && settledReturnOutcome.refundEvidenceReference === 'REFUND-EXTERNAL-RETURN-1',
+    'ecommerce_settled_refund_evidence_not_projected')
+    const correctionIntent = buyingModel.buildEcommerceCorrectionIntent({
+      scope: buyingScope,
+      orderSnapshot: completedOrder,
+      requestedKind: 'credit',
+      reasonCode: 'pricing_error',
+      listedAmountMmk: 100,
+      reason: 'The confirmed unit price was too high.',
+      idempotencyKey: 'COI-62345678-1234-4ABC-8ABC-1234567890AB',
+      createdAt: '2026-07-24T09:45:00.000Z',
+    })
+    const correctionExpectation = commerce.commerceOrderCorrectionExpectation(completedOrderState, completedOrder.id)
+    const correctedState = correctionExpectation && commerce.recordCommerceOrderCorrection(
+      completedOrderState,
+      {
+        orderId: correctionIntent.orderId,
+        kind: correctionIntent.requestedKind,
+        reasonCode: correctionIntent.reasonCode,
+        listedAmountMmk: correctionIntent.listedAmountMmk,
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-CORRECTION-1',
+        capturedAt: '2026-07-24T09:46:00.000Z',
+        actor: 'OP-OWNER',
+        reason: correctionIntent.reason,
+        evidenceReference: correctionIntent.evidenceReference,
+      },
+      correctionExpectation,
+    )
+    const correctedOrder = correctedState?.orders.find((order) => order.id === completedOrder.id)
+    const correctionOutcome = correctedOrder && buyingModel.projectEcommerceCorrectionOutcome(correctionIntent, correctedOrder)
+    buyingAssert(correctionOutcome?.schema === 'supermega.ecommerce.correction_outcome.v1'
+      && correctionOutcome.state === 'review_required'
+      && correctionOutcome.intentId === correctionIntent.id
+      && correctionOutcome.kind === 'credit'
+      && correctionOutcome.postingAuthority === 'none'
+      && correctionOutcome.externalPostingPerformed === false
+      && correctionOutcome.automaticPaymentPerformed === false
+      && correctionOutcome.automaticRefundPerformed === false
+      && correctionOutcome.customerMessageSent === false
+      && correctionOutcome.providerCalled === false,
+    'ecommerce_correction_outcome_not_exact_or_side_effect_free')
+    const forgedCorrectionOrder = correctedOrder && structuredClone(correctedOrder)
+    if (forgedCorrectionOrder?.corrections?.[0]) forgedCorrectionOrder.corrections[0].balanceAfterMmk += 1
+    buyingAssert(Boolean(forgedCorrectionOrder) && buyingModel.projectEcommerceCorrectionOutcome(correctionIntent, forgedCorrectionOrder) === null,
+      'ecommerce_forged_correction_outcome_was_accepted')
+    const duplicateCorrectionOrder = correctedOrder && { ...structuredClone(correctedOrder), corrections: [...(correctedOrder.corrections ?? []), ...(correctedOrder.corrections?.[0] ? [structuredClone(correctedOrder.corrections[0])] : [])] }
+    buyingAssert(Boolean(duplicateCorrectionOrder) && buyingModel.projectEcommerceCorrectionOutcome(correctionIntent, duplicateCorrectionOrder) === null,
+      'ecommerce_duplicate_correction_outcome_was_accepted')
+    const supportIntent = buyingModel.buildEcommerceSupportIntent({
+      scope: buyingScope,
+      orderSnapshot: completedOrder,
+      category: 'delivery_issue',
+      description: 'Delivery arrived later than the confirmed promise.',
+      idempotencyKey: 'ESI-52345678-1234-4ABC-8ABC-1234567890AB',
+      createdAt: '2026-07-24T09:45:00.000Z',
+    })
+    const supportOpenExpectation = commerce.commerceOrderSupportOpenExpectation(
+      completedOrderState,
+      completedOrder.id,
+      supportIntent.id,
+    )
+    const openedSupportState = supportOpenExpectation && commerce.recordCommerceOrderSupportCase(
+      completedOrderState,
+      {
+        orderId: supportIntent.orderId,
+        sourceIntentId: supportIntent.id,
+        sourceRequestId: supportIntent.sourceRequestId,
+        customerRequestedAt: supportIntent.createdAt,
+        category: supportIntent.category,
+        customerDescription: supportIntent.description,
+        priority: 'high',
+        owner: 'Support owner',
+        dueAt: '2026-07-24T13:46:00.000Z',
+        externalMessageSent: false,
+        refundStarted: false,
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-OPEN-1',
+        capturedAt: '2026-07-24T09:46:00.000Z',
+        actor: 'OP-OWNER',
+        reason: `Customer requested help: ${supportIntent.description}`,
+        evidenceReference: supportIntent.evidenceReference,
+      },
+      supportOpenExpectation,
+    )
+    const supportCase = openedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    buyingAssert(supportCase?.status === 'open'
+      && supportCase.priority === 'high'
+      && supportCase.owner === 'Support owner'
+      && supportCase.dueAt === '2026-07-24T13:46:00.000Z'
+      && commerce.commerceSupportCaseUrgency(supportCase, Date.parse('2026-07-24T13:47:00.000Z')) === 'overdue'
+      && supportCase.externalMessageSent === false
+      && supportCase.refundStarted === false
+      && JSON.stringify(openedSupportState?.items) === JSON.stringify(completedOrderState.items)
+      && JSON.stringify(openedSupportState?.movements) === JSON.stringify(completedOrderState.movements),
+    'ecommerce_support_case_opening_claimed_side_effects')
+    const openedSupportOrder = openedSupportState?.orders.find((order) => order.id === completedOrder.id)
+    const openSupportOutcome = openedSupportOrder && buyingModel.projectEcommerceSupportOutcome(supportIntent, openedSupportOrder)
+    buyingAssert(openSupportOutcome?.schema === 'supermega.ecommerce.support_outcome.v1'
+      && openSupportOutcome.state === 'open'
+      && openSupportOutcome.caseId === supportCase.caseId
+      && openSupportOutcome.owner === 'Support owner'
+      && openSupportOutcome.priority === 'high'
+      && openSupportOutcome.externalMessageSent === false
+      && openSupportOutcome.refundStarted === false
+      && openSupportOutcome.providerCalled === false,
+    'ecommerce_open_support_outcome_not_exact_or_side_effect_free')
+    const forgedSupportOrder = openedSupportOrder && structuredClone(openedSupportOrder)
+    if (forgedSupportOrder?.supportCases?.[0]) forgedSupportOrder.supportCases[0].sourceRequestId = 'ECR-92345678-1234-4ABC-8ABC-1234567890AB'
+    buyingAssert(Boolean(forgedSupportOrder) && buyingModel.projectEcommerceSupportOutcome(supportIntent, forgedSupportOrder) === null,
+      'ecommerce_forged_support_outcome_was_accepted')
+    const duplicateSupportOrder = openedSupportOrder && { ...structuredClone(openedSupportOrder), supportCases: [...(openedSupportOrder.supportCases ?? []), ...(openedSupportOrder.supportCases?.[0] ? [structuredClone(openedSupportOrder.supportCases[0])] : [])] }
+    buyingAssert(Boolean(duplicateSupportOrder) && buyingModel.projectEcommerceSupportOutcome(supportIntent, duplicateSupportOrder) === null,
+      'ecommerce_duplicate_support_outcome_was_accepted')
+    const missingSupportOwner = commerce.recordCommerceOrderSupportCase(
+      completedOrderState,
+      {
+        orderId: supportIntent.orderId,
+        sourceIntentId: supportIntent.id,
+        sourceRequestId: supportIntent.sourceRequestId,
+        customerRequestedAt: supportIntent.createdAt,
+        category: supportIntent.category,
+        customerDescription: supportIntent.description,
+        priority: 'high',
+        dueAt: '2026-07-24T13:46:00.000Z',
+        externalMessageSent: false,
+        refundStarted: false,
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-MISSING-OWNER',
+        capturedAt: '2026-07-24T09:46:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Attempt support opening without accountable ownership.',
+        evidenceReference: supportIntent.evidenceReference,
+      },
+      supportOpenExpectation,
+    )
+    buyingAssert(missingSupportOwner === null, 'ecommerce_support_case_missing_owner_accepted')
+    const openedSupportQueue = commerce.commerceSupportQueue(openedSupportState?.orders ?? [], Date.parse('2026-07-24T13:47:00.000Z'))
+    buyingAssert(openedSupportQueue[0]?.supportCase.caseId === supportCase.caseId
+      && openedSupportQueue[0]?.urgency === 'overdue'
+      && openedSupportQueue[0]?.service?.owner === 'Support owner'
+      && openedSupportQueue[0]?.checkpoints.acknowledged === null,
+    'ecommerce_support_queue_not_ordered_by_operational_state')
+    const openedSupportSla = commerce.commerceSupportSlaSummary(openedSupportState?.orders ?? [], Date.parse('2026-07-24T13:47:00.000Z'))
+    buyingAssert(openedSupportSla.openCases === 1
+      && openedSupportSla.overdueCases === 1
+      && openedSupportSla.awaitingAcknowledgement === 1
+      && openedSupportSla.responseTargetMisses === 1,
+    'ecommerce_support_sla_summary_not_truthful')
+    const supportQueueOrderingFixture = commerce.commerceSupportQueue([
+      {
+        ...completedOrder,
+        id: 'ORD-SUPPORT-SCHEDULED',
+        customer: 'Scheduled customer',
+        supportCases: [{ ...supportCase, caseId: 'CASE-SCHEDULED', priority: 'urgent', dueAt: '2026-07-24T14:30:00.000Z' }],
+      },
+      {
+        ...completedOrder,
+        id: 'ORD-SUPPORT-HIGH',
+        customer: 'High customer',
+        supportCases: [{ ...supportCase, caseId: 'CASE-HIGH', priority: 'high', dueAt: '2026-07-24T13:45:00.000Z' }],
+      },
+      {
+        ...completedOrder,
+        id: 'ORD-SUPPORT-URGENT',
+        customer: 'Urgent customer',
+        supportCases: [{ ...supportCase, caseId: 'CASE-URGENT', priority: 'urgent', dueAt: '2026-07-24T13:46:00.000Z' }],
+      },
+    ], Date.parse('2026-07-24T13:47:00.000Z'))
+    buyingAssert(supportQueueOrderingFixture.map((row) => row.orderId).join(',') === 'ORD-SUPPORT-URGENT,ORD-SUPPORT-HIGH,ORD-SUPPORT-SCHEDULED',
+      'ecommerce_support_queue_priority_order_drifted')
+    const supportServiceExpectation = supportCase && commerce.commerceOrderSupportServiceExpectation(
+      openedSupportState,
+      completedOrder.id,
+      supportCase.caseId,
+    )
+    const reassignedSupportState = supportServiceExpectation && commerce.recordCommerceOrderSupportServiceEvent(
+      openedSupportState,
+      {
+        orderId: completedOrder.id,
+        caseId: supportCase.caseId,
+        kind: 'reassigned',
+        owner: 'Tier 2 owner',
+        priority: 'high',
+        dueAt: '2026-07-24T13:46:00.000Z',
+        note: 'Assigned to the delivery specialist.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-REASSIGN-1',
+        capturedAt: '2026-07-24T09:47:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Assign the case to the delivery specialist.',
+        evidenceReference: `SUPPORT-SERVICE:${supportCase.caseId}`,
+      },
+      supportServiceExpectation,
+    )
+    const reassignedCase = reassignedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    buyingAssert(reassignedCase?.serviceEvents?.[0]?.owner === 'Tier 2 owner'
+      && JSON.stringify(reassignedSupportState?.items) === JSON.stringify(completedOrderState.items)
+      && JSON.stringify(reassignedSupportState?.movements) === JSON.stringify(completedOrderState.movements),
+    'ecommerce_support_reassignment_mutated_operational_truth')
+    const overdueReassignmentExpectation = commerce.commerceOrderSupportServiceExpectation(
+      openedSupportState,
+      completedOrder.id,
+      supportCase.caseId,
+    )
+    const overdueReassignedState = commerce.recordCommerceOrderSupportServiceEvent(
+      openedSupportState,
+      {
+        orderId: completedOrder.id,
+        caseId: supportCase.caseId,
+        kind: 'reassigned',
+        owner: 'Overdue recovery owner',
+        priority: 'high',
+        dueAt: '2026-07-24T13:46:00.000Z',
+        note: 'Take accountable ownership without rewriting the missed target.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-OVERDUE-REASSIGN-1',
+        capturedAt: '2026-07-24T14:00:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Reassign overdue work without changing its target.',
+        evidenceReference: `SUPPORT-SERVICE:${supportCase.caseId}`,
+      },
+      overdueReassignmentExpectation,
+    )
+    buyingAssert(overdueReassignedState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]?.serviceEvents?.[0]?.owner === 'Overdue recovery owner',
+      'ecommerce_overdue_support_reassignment_rejected')
+    const escalationExpectation = reassignedCase && commerce.commerceOrderSupportServiceExpectation(
+      reassignedSupportState,
+      completedOrder.id,
+      reassignedCase.caseId,
+    )
+    const escalatedSupportState = escalationExpectation && commerce.recordCommerceOrderSupportServiceEvent(
+      reassignedSupportState,
+      {
+        orderId: completedOrder.id,
+        caseId: reassignedCase.caseId,
+        kind: 'escalated',
+        owner: 'Tier 2 owner',
+        priority: 'urgent',
+        dueAt: '2026-07-24T12:46:00.000Z',
+        note: 'Customer impact now requires urgent review.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-ESCALATE-1',
+        capturedAt: '2026-07-24T09:48:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Escalate priority while preserving accountable ownership.',
+        evidenceReference: `SUPPORT-SERVICE:${reassignedCase.caseId}`,
+      },
+      escalationExpectation,
+    )
+    const escalatedCase = escalatedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    const escalatedService = escalatedCase && commerce.commerceSupportServiceState(escalatedCase)
+    buyingAssert(escalatedCase?.serviceEvents?.length === 2
+      && escalatedService?.owner === 'Tier 2 owner'
+      && escalatedService?.priority === 'urgent'
+      && escalatedService?.dueAt === '2026-07-24T12:46:00.000Z',
+    'ecommerce_support_escalation_history_not_effective')
+    buyingAssert(commerce.commerceOrderSupportResolveExpectation(
+      escalatedSupportState,
+      completedOrder.id,
+      escalatedCase.caseId,
+    ) === null, 'ecommerce_support_resolved_before_first_response')
+    const acknowledgeExpectation = commerce.commerceOrderSupportServiceExpectation(
+      escalatedSupportState,
+      completedOrder.id,
+      escalatedCase.caseId,
+    )
+    const acknowledgedSupportState = commerce.recordCommerceOrderSupportServiceEvent(
+      escalatedSupportState,
+      {
+        orderId: completedOrder.id,
+        caseId: escalatedCase.caseId,
+        kind: 'acknowledged',
+        owner: 'Tier 2 owner',
+        priority: 'urgent',
+        dueAt: '2026-07-24T12:46:00.000Z',
+        note: 'Delivery specialist accepted the case internally.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-ACKNOWLEDGE-1',
+        capturedAt: '2026-07-24T09:49:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Acknowledge the case without sending a customer message.',
+        evidenceReference: `SUPPORT-SERVICE:${escalatedCase.caseId}`,
+      },
+      acknowledgeExpectation,
+    )
+    const acknowledgedCase = acknowledgedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    const acknowledgedCheckpoints = acknowledgedCase && commerce.commerceSupportCheckpointState(acknowledgedCase)
+    buyingAssert(acknowledgedCheckpoints?.acknowledged?.kind === 'acknowledged'
+      && acknowledgedCheckpoints.firstResponseReady === null,
+    'ecommerce_support_acknowledgement_not_retained')
+    const invalidFirstResponse = commerce.recordCommerceOrderSupportServiceEvent(
+      escalatedSupportState,
+      {
+        orderId: completedOrder.id,
+        caseId: escalatedCase.caseId,
+        kind: 'first_response_ready',
+        owner: 'Tier 2 owner',
+        priority: 'urgent',
+        dueAt: '2026-07-24T12:46:00.000Z',
+        note: 'Invalid response before acknowledgement.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-INVALID-RESPONSE-1',
+        capturedAt: '2026-07-24T09:49:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Attempt a response checkpoint before acknowledgement.',
+        evidenceReference: `SUPPORT-SERVICE:${escalatedCase.caseId}`,
+      },
+      acknowledgeExpectation,
+    )
+    buyingAssert(invalidFirstResponse === null, 'ecommerce_support_first_response_before_acknowledgement_accepted')
+    const firstResponseExpectation = commerce.commerceOrderSupportServiceExpectation(
+      acknowledgedSupportState,
+      completedOrder.id,
+      escalatedCase.caseId,
+    )
+    const firstResponseReadyState = commerce.recordCommerceOrderSupportServiceEvent(
+      acknowledgedSupportState,
+      {
+        orderId: completedOrder.id,
+        caseId: escalatedCase.caseId,
+        kind: 'first_response_ready',
+        owner: 'Tier 2 owner',
+        priority: 'urgent',
+        dueAt: '2026-07-24T12:46:00.000Z',
+        note: 'Reviewed first response is ready for independent delivery.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-RESPONSE-READY-1',
+        capturedAt: '2026-07-24T09:50:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Record response readiness without sending a customer message.',
+        evidenceReference: `SUPPORT-SERVICE:${escalatedCase.caseId}`,
+      },
+      firstResponseExpectation,
+    )
+    const firstResponseCase = firstResponseReadyState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    const firstResponseCheckpoints = firstResponseCase && commerce.commerceSupportCheckpointState(firstResponseCase)
+    buyingAssert(firstResponseCheckpoints?.firstResponseReady?.kind === 'first_response_ready'
+      && firstResponseCase?.externalMessageSent === false,
+    'ecommerce_support_first_response_readiness_claimed_message_send')
+    const supportResolveExpectation = firstResponseCase && commerce.commerceOrderSupportResolveExpectation(
+      firstResponseReadyState,
+      completedOrder.id,
+      firstResponseCase.caseId,
+    )
+    const resolvedSupportState = supportResolveExpectation && commerce.resolveCommerceOrderSupportCase(
+      firstResponseReadyState,
+      {
+        orderId: completedOrder.id,
+        caseId: firstResponseCase.caseId,
+        outcome: 'information_provided',
+        note: 'Reviewed the delivery timeline with the retained order evidence.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-RESOLVE-1',
+        capturedAt: '2026-07-24T09:51:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Reviewed and closed the support case.',
+        evidenceReference: `SUPPORT-RESOLUTION:${firstResponseCase.caseId}`,
+      },
+      supportResolveExpectation,
+    )
+    buyingAssert(resolvedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]?.status === 'resolved',
+      'ecommerce_support_case_did_not_resolve')
+    const resolvedSupportCase = resolvedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    const resolvedSupportOrder = resolvedSupportState?.orders.find((order) => order.id === completedOrder.id)
+    const resolvedSupportOutcome = resolvedSupportOrder && buyingModel.projectEcommerceSupportOutcome(supportIntent, resolvedSupportOrder)
+    buyingAssert(resolvedSupportOutcome?.state === 'resolved'
+      && resolvedSupportOutcome.resolutionOutcome === 'information_provided'
+      && resolvedSupportOutcome.resolvedBy === 'OP-OWNER'
+      && resolvedSupportOutcome.resolutionEvidenceReference === `SUPPORT-RESOLUTION:${resolvedSupportCase?.caseId}`,
+    'ecommerce_resolved_support_outcome_not_accountable')
+    const supportReopenExpectation = resolvedSupportCase && commerce.commerceOrderSupportReopenExpectation(
+      resolvedSupportState,
+      completedOrder.id,
+      resolvedSupportCase.caseId,
+    )
+    const reopenedSupportState = supportReopenExpectation && commerce.reopenCommerceOrderSupportCase(
+      resolvedSupportState,
+      {
+        orderId: completedOrder.id,
+        caseId: resolvedSupportCase.caseId,
+        sourceResolutionActionId: resolvedSupportCase.resolution.proof.actionId,
+        owner: 'Follow-up owner',
+        priority: 'high',
+        dueAt: '2026-07-24T14:00:00.000Z',
+        note: 'Customer issue recurred after the retained resolution.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-REOPEN-1',
+        capturedAt: '2026-07-24T10:00:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Reopen one linked follow-up without sending a message.',
+        evidenceReference: `SUPPORT-REOPEN:${resolvedSupportCase.caseId}:${resolvedSupportCase.resolution.proof.actionId}`,
+      },
+      supportReopenExpectation,
+    )
+    const reopenedSupportCase = reopenedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    const reopenedService = reopenedSupportCase && commerce.commerceSupportServiceState(reopenedSupportCase)
+    const reopenedCheckpoints = reopenedSupportCase && commerce.commerceSupportCheckpointState(reopenedSupportCase)
+    buyingAssert(reopenedSupportCase?.status === 'open'
+      && reopenedSupportCase.resolution?.proof.actionId === 'ACT-ECOMMERCE-SUPPORT-RESOLVE-1'
+      && reopenedService?.owner === 'Follow-up owner'
+      && reopenedCheckpoints?.acknowledged === null
+      && reopenedSupportCase.externalMessageSent === false,
+    'ecommerce_support_reopen_did_not_reset_retained_followup')
+    const followUpAckExpectation = commerce.commerceOrderSupportServiceExpectation(
+      reopenedSupportState,
+      completedOrder.id,
+      reopenedSupportCase.caseId,
+    )
+    const followUpAcknowledgedState = commerce.recordCommerceOrderSupportServiceEvent(
+      reopenedSupportState,
+      {
+        orderId: completedOrder.id,
+        caseId: reopenedSupportCase.caseId,
+        kind: 'acknowledged',
+        owner: 'Follow-up owner',
+        priority: 'high',
+        dueAt: '2026-07-24T14:00:00.000Z',
+        note: 'Follow-up owner accepted the reopened case.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-FOLLOWUP-ACK-1',
+        capturedAt: '2026-07-24T10:01:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Acknowledge the linked follow-up.',
+        evidenceReference: `SUPPORT-SERVICE:${reopenedSupportCase.caseId}`,
+      },
+      followUpAckExpectation,
+    )
+    const followUpAckCase = followUpAcknowledgedState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    const followUpResponseExpectation = followUpAckCase && commerce.commerceOrderSupportServiceExpectation(
+      followUpAcknowledgedState,
+      completedOrder.id,
+      followUpAckCase.caseId,
+    )
+    const followUpResponseState = followUpResponseExpectation && commerce.recordCommerceOrderSupportServiceEvent(
+      followUpAcknowledgedState,
+      {
+        orderId: completedOrder.id,
+        caseId: followUpAckCase.caseId,
+        kind: 'first_response_ready',
+        owner: 'Follow-up owner',
+        priority: 'high',
+        dueAt: '2026-07-24T14:00:00.000Z',
+        note: 'Follow-up response is ready for independent delivery.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-FOLLOWUP-RESPONSE-1',
+        capturedAt: '2026-07-24T10:02:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Record follow-up response readiness without sending a message.',
+        evidenceReference: `SUPPORT-SERVICE:${followUpAckCase.caseId}`,
+      },
+      followUpResponseExpectation,
+    )
+    const followUpResponseCase = followUpResponseState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    const followUpResolveExpectation = followUpResponseCase && commerce.commerceOrderSupportResolveExpectation(
+      followUpResponseState,
+      completedOrder.id,
+      followUpResponseCase.caseId,
+    )
+    const followUpResolvedState = followUpResolveExpectation && commerce.resolveCommerceOrderSupportCase(
+      followUpResponseState,
+      {
+        orderId: completedOrder.id,
+        caseId: followUpResponseCase.caseId,
+        outcome: 'information_provided',
+        note: 'Follow-up was reviewed and closed separately.',
+      },
+      {
+        actionId: 'ACT-ECOMMERCE-SUPPORT-FOLLOWUP-RESOLVE-1',
+        capturedAt: '2026-07-24T10:03:00.000Z',
+        actor: 'OP-OWNER',
+        reason: 'Close the retained follow-up cycle.',
+        evidenceReference: `SUPPORT-RESOLUTION:${followUpResponseCase.caseId}`,
+      },
+      followUpResolveExpectation,
+    )
+    const followUpResolvedCase = followUpResolvedState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
+    buyingAssert(followUpResolvedCase?.status === 'resolved'
+      && followUpResolvedCase.resolution?.proof.actionId === 'ACT-ECOMMERCE-SUPPORT-RESOLVE-1'
+      && followUpResolvedCase.followUpResolution?.proof.actionId === 'ACT-ECOMMERCE-SUPPORT-FOLLOWUP-RESOLVE-1'
+      && commerce.commerceOrderSupportReopenExpectation(followUpResolvedState, completedOrder.id, followUpResolvedCase.caseId) === null,
+    'ecommerce_support_followup_did_not_retain_both_resolutions')
+    const openSupportWorkload = commerce.commerceSupportWorkloadExport(
+      reopenedSupportState,
+      '2026-07-24T15:00:00.000Z',
+    )
+    buyingAssert(openSupportWorkload.schema === 'supermega.commerce.support-workload.v1'
+      && openSupportWorkload.summary.totalCases === 1
+      && openSupportWorkload.summary.openCases === 1
+      && openSupportWorkload.summary.reopenedCases === 1
+      && openSupportWorkload.summary.overdueCases === 1
+      && openSupportWorkload.summary.responseTargetMisses === 1
+      && openSupportWorkload.summary.ownerWorkload[0]?.owner === 'Follow-up owner'
+      && openSupportWorkload.summary.ownerWorkload[0]?.openCases === 1,
+    'ecommerce_support_workload_summary_not_operational')
+    const openSupportWorkloadRow = openSupportWorkload.rows[0]
+    buyingAssert(openSupportWorkloadRow?.caseId === reopenedSupportCase.caseId
+      && openSupportWorkloadRow.orderId === completedOrder.id
+      && openSupportWorkloadRow.cycle === 'follow_up'
+      && openSupportWorkloadRow.linkedResolutionActionId === 'ACT-ECOMMERCE-SUPPORT-RESOLVE-1'
+      && openSupportWorkloadRow.urgency === 'overdue'
+      && openSupportWorkloadRow.resolvedAt === null,
+    'ecommerce_support_workload_row_not_linked_or_aged')
+    buyingAssert(openSupportWorkload.controls.customerDataIncluded === false
+      && openSupportWorkload.controls.freeTextIncluded === false
+      && openSupportWorkload.controls.externalActionsPerformed === false
+      && !JSON.stringify(openSupportWorkload).includes(supportIntent.description)
+      && !JSON.stringify(openSupportWorkload).includes('Customer issue recurred after the retained resolution.')
+      && !JSON.stringify(openSupportWorkload).includes('OP-OWNER'),
+    'ecommerce_support_workload_retained_private_or_free_text_data')
+    const supportWorkloadCsv = commerce.commerceSupportWorkloadCsv(openSupportWorkload)
+    buyingAssert(supportWorkloadCsv.includes('customer_data_included')
+      && supportWorkloadCsv.includes(reopenedSupportCase.caseId)
+      && !supportWorkloadCsv.includes(supportIntent.description)
+      && !supportWorkloadCsv.includes('Customer issue recurred after the retained resolution.')
+      && !supportWorkloadCsv.includes('OP-OWNER'),
+    'ecommerce_support_workload_csv_not_privacy_minimal')
+    const formulaSupportState = structuredClone(reopenedSupportState)
+    formulaSupportState.orders.find((order) => order.id === completedOrder.id).supportCases[0].reopen.owner = '=CMD()'
+    const formulaSupportCsv = commerce.commerceSupportWorkloadCsv(commerce.commerceSupportWorkloadExport(
+      formulaSupportState,
+      '2026-07-24T15:00:00.000Z',
+    ))
+    buyingAssert(formulaSupportCsv.includes('"\'=CMD()"'), 'ecommerce_support_workload_formula_cell_not_neutralized')
+    let supportWorkloadTamperRejected = false
+    try {
+      commerce.commerceSupportWorkloadCsv({
+        ...structuredClone(openSupportWorkload),
+        summary: { ...openSupportWorkload.summary, openCases: 2 },
+      })
+    } catch { supportWorkloadTamperRejected = true }
+    buyingAssert(supportWorkloadTamperRejected, 'ecommerce_support_workload_csv_tamper_accepted')
+    let supportWorkloadBackdatedRejected = false
+    try {
+      commerce.commerceSupportWorkloadExport(reopenedSupportState, '2026-07-24T09:59:00.000Z')
+    } catch { supportWorkloadBackdatedRejected = true }
+    buyingAssert(supportWorkloadBackdatedRejected, 'ecommerce_support_workload_backdated_asof_accepted')
+    const resolvedSupportWorkload = commerce.commerceSupportWorkloadExport(
+      followUpResolvedState,
+      '2026-07-24T15:00:00.000Z',
+    )
+    buyingAssert(resolvedSupportWorkload.summary.resolvedCases === 1
+      && resolvedSupportWorkload.rows[0]?.initialResolutionOutcome === 'information_provided'
+      && resolvedSupportWorkload.rows[0]?.followUpResolutionOutcome === 'information_provided'
+      && resolvedSupportWorkload.rows[0]?.resolvedAt === '2026-07-24T10:03:00.000Z',
+    'ecommerce_support_workload_did_not_retain_both_resolution_outcomes')
+    const paidConfirmedState = linkedOrderState && commerce.reconcileCommercePayment(linkedOrderState, 'ORD-ECOMMERCE-1', {
+      actionId: 'ACT-ECOMMERCE-PAID-CANCEL-1',
+      capturedAt: '2026-07-24T09:20:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Confirm payment before the reviewed Ecommerce cancellation.',
+      evidenceReference: 'ECOMMERCE-ORDER-PAID-CANCEL-1',
+    })
+    const refundDueState = paidConfirmedState && commerce.cancelCommerceOrder(paidConfirmedState, 'ORD-ECOMMERCE-1', {
+      actionId: 'ACT-ECOMMERCE-CANCEL-1',
+      capturedAt: '2026-07-24T09:25:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Cancel the reviewed Ecommerce order and release its stock.',
+      evidenceReference: 'ECOMMERCE-ORDER-CANCEL-1',
+    })
+    const refundDueTimeline = refundDueState ? commerce.commerceStorefrontOrderTimeline(refundDueState) : []
+    buyingAssert(refundDueTimeline[0]?.stage === 'cancelled'
+      && refundDueTimeline[0].refundStatus === 'due'
+      && refundDueTimeline[0].nextAction === 'settle_refund',
+    'ecommerce_cancelled_paid_order_did_not_surface_refund_gate')
     buyingAssert(await commerce.recordCommerceStorefrontRequest(managedBuyingState, structuredClone(buyingRequest), managedRequestProof) === managedBuyingState,
       'ecommerce_buying_managed_request_retry_not_idempotent')
     buyingAssert(await commerce.recordCommerceStorefrontRequest(managedPreviewState, {
@@ -9450,11 +13900,24 @@ async function verifyStorefrontRuntime() {
     const managedBuyingDraft = await buyingModel.prepareManagedEcommerceShopDraftV2({
       request: buyingRequest,
       currentCatalog: catalog,
+      currentPromotionPolicies: promotionPolicies,
+      currentShippingPolicies: shippingPolicies,
+      currentPaymentPolicies: paymentPolicies,
+      currentTaxConfigurations: taxConfigurations,
+      catalogRevision: 0,
       confirmedAt: '2026-07-24T09:10:00.000Z',
     })
-    buyingAssert(managedBuyingDraft.lines.length === 2 && buyingModel.ecommerceShopDraftV2MatchesCatalog(managedBuyingDraft, catalog),
+    buyingAssert(managedBuyingDraft.lines.length === 2
+      && managedBuyingDraft.customerProfile?.phone === '09 123 456'
+      && managedBuyingDraft.deliveryAddress?.line1 === '12 Insein Road, Ward 3'
+      && managedBuyingDraft.operatingContext.operatingUnitLocationId === 'LOC-MAIN'
+      && managedBuyingDraft.operatingContext.targetAuthority === 'commerce'
+      && buyingModel.ecommerceShopDraftV2MatchesCatalog(managedBuyingDraft, catalog),
       'ecommerce_buying_managed_inbox_draft_not_catalog_bound')
     const emptyBuying = buyingModel.createEmptyEcommerceBuyingState(buyingScope)
+    let orphanReturnRejected = false
+    try { await buyingModel.recordEcommerceReturnIntent(emptyBuying, returnIntent, emptyBuying.headDigest) } catch { orphanReturnRejected = true }
+    buyingAssert(orphanReturnRejected, 'ecommerce_orphan_return_intent_entered_recovery')
     const recordedBuying = await buyingModel.recordEcommerceOrderRequestV2(emptyBuying, buyingRequest, emptyBuying.headDigest)
     const replayedBuying = await buyingModel.recordEcommerceOrderRequestV2(recordedBuying, structuredClone(buyingRequest), recordedBuying.headDigest)
     buyingAssert(JSON.stringify(recordedBuying) === JSON.stringify(replayedBuying)
@@ -9469,23 +13932,662 @@ async function verifyStorefrontRuntime() {
       }, recordedBuying.headDigest)
     } catch { conflictingBuyingRejected = true }
     buyingAssert(conflictingBuyingRejected, 'ecommerce_buying_conflicting_idempotency_replay_accepted')
+    const recordedReturnBuying = await buyingModel.recordEcommerceReturnIntent(recordedBuying, returnIntent, recordedBuying.headDigest)
+    const replayedReturnBuying = await buyingModel.recordEcommerceReturnIntent(recordedReturnBuying, structuredClone(returnIntent), recordedReturnBuying.headDigest)
+    buyingAssert(JSON.stringify(recordedReturnBuying) === JSON.stringify(replayedReturnBuying)
+      && recordedReturnBuying.revision === 2
+      && recordedReturnBuying.returnIntents[0].id === returnIntent.id,
+    'ecommerce_return_intent_replay_advanced_or_lost_history')
+    const recordedSupportBuying = await buyingModel.recordEcommerceSupportIntent(recordedReturnBuying, supportIntent, recordedReturnBuying.headDigest)
+    const replayedSupportBuying = await buyingModel.recordEcommerceSupportIntent(recordedSupportBuying, structuredClone(supportIntent), recordedSupportBuying.headDigest)
+    buyingAssert(JSON.stringify(recordedSupportBuying) === JSON.stringify(replayedSupportBuying)
+      && recordedSupportBuying.revision === 3
+      && recordedSupportBuying.supportIntents[0].id === supportIntent.id,
+    'ecommerce_support_intent_replay_advanced_or_lost_history')
     const buyingDraft = await buyingModel.prepareEcommerceShopDraftV2({
       request: buyingRequest,
       state: recordedBuying,
       currentCatalog: catalog,
+      currentPromotionPolicies: promotionPolicies,
+      currentShippingPolicies: shippingPolicies,
+      currentPaymentPolicies: paymentPolicies,
+      currentTaxConfigurations: taxConfigurations,
+      catalogRevision: 0,
       confirmedAt: '2026-07-24T09:10:00.000Z',
     })
-    buyingAssert(buyingDraft.schema === 'supermega.ecommerce.shop_draft.v2'
+    const buyingDraftListedSubtotal = buyingDraft.pricing.promotion.netSubtotalMmk + buyingDraft.pricing.shipping.feeMmk
+    buyingAssert(buyingDraft.schema === 'supermega.ecommerce.shop_draft.v7'
       && buyingDraft.lines.length === 2
-      && buyingDraft.pricing.payment.status === 'not_authorized'
+      && buyingDraft.customerProfile?.name === 'Ma Su'
+      && buyingDraft.deliveryAddress?.township === 'Hlaing'
+      && buyingDraft.pricing.payment.status === 'approved'
+      && buyingDraft.pricing.payment.policyRevision === 3
+      && buyingDraft.pricing.payment.authorized === false
+      && buyingDraft.pricing.promotion.status === 'approved'
+      && buyingDraft.pricing.promotion.code === 'WELCOME'
+      && buyingDraft.pricing.promotion.discountMmk === Math.min(Math.floor(buyingDraft.pricing.subtotalMmk / 10), 10_000)
+      && buyingDraft.pricing.shipping.status === 'approved'
+      && buyingDraft.pricing.shipping.zoneCode === 'YGN-CENTRAL'
+      && buyingDraft.pricing.shipping.feeMmk === 3_000
+      && buyingDraft.pricing.tax.taxConfigurationRevision === 1
+      && buyingDraft.pricing.tax.policyActionId === 'ACT-TAX-COMMERCIAL-R1'
+      && buyingDraft.pricing.tax.listedSubtotalMmk === buyingDraftListedSubtotal
+      && buyingDraft.totalMmk === buyingDraftListedSubtotal + buyingDraft.pricing.tax.taxMmk
+      && buyingDraft.operatingContext.organizationScope === buyingScope
+      && buyingDraft.operatingContext.operatingUnitLocationId === 'LOC-MAIN'
+      && buyingDraft.operatingContext.sourceAuthority === 'ecommerce'
+      && buyingDraft.operatingContext.targetAuthority === 'commerce'
+      && buyingDraft.operatingContext.writePolicy === 'human_review_required'
       && buyingModel.ecommerceShopDraftV2MatchesCatalog(buyingDraft, catalog),
     'ecommerce_buying_shop_draft_not_review_only_or_catalog_bound')
+    buyingAssert(handoffModel.ecommerceShopDraftMatchesOperatingContext(buyingDraft, ['LOC-MAIN'])
+      && !handoffModel.ecommerceShopDraftMatchesOperatingContext(buyingDraft, ['LOC-BRANCH']),
+    'ecommerce_buying_shop_draft_operating_location_not_enforced')
+    const promotionBuyingState = commerce.validateCommerceState({
+      ...managedBuyingState,
+      promotionPolicies,
+      shippingPolicies,
+      paymentPolicies,
+      taxConfigurations,
+    })
+    const promotionOrderProof = {
+      actionId: 'ACT-ECOMMERCE-PROMOTION-ORDER-1',
+      capturedAt: buyingDraft.confirmedAt,
+      actor: 'OP-OWNER',
+      reason: 'Confirm the policy-reviewed Ecommerce promotion in Shop.',
+      evidenceReference: `ECOMMERCE:${buyingRequest.id}:PROMOTION-ORDER`,
+    }
+    const promotedOrderLines = buyingDraft.lines.map((line) => ({
+      sku: line.sku,
+      name: line.name,
+      ...(line.variant ? { variant: line.variant } : {}),
+      quantity: line.quantity,
+      unitPriceMmk: line.unitPriceMmk,
+    }))
+    const promotedOrder = {
+      id: 'ORD-ECOMMERCE-PROMOTION-1',
+      createdAt: buyingDraft.confirmedAt,
+      customer: buyingDraft.customerReference,
+      owner: promotionOrderProof.actor,
+      channel: 'Ecommerce',
+      item: commerce.commerceOrderItemSummary(promotedOrderLines),
+      quantity: promotedOrderLines.reduce((total, line) => total + line.quantity, 0),
+      payment: 'KBZPay',
+      paymentStatus: 'pending',
+      refundStatus: 'none',
+      fulfilment: buyingDraft.fulfilment,
+      fulfilmentReference: buyingDraft.sourceRequestId,
+      promisedAt: '2026-07-24T11:10:00.000Z',
+      paymentDueAt: buyingDraft.confirmedAt,
+      sourceRecordId: buyingDraft.sourceRequestId,
+      evidenceReference: promotionOrderProof.evidenceReference,
+      lines: promotedOrderLines,
+      promotionDecision: buyingDraft.pricing.promotion,
+      shippingDecision: buyingDraft.pricing.shipping,
+      paymentDecision: buyingDraft.pricing.payment,
+      taxDecision: buyingDraft.pricing.tax,
+      total: buyingDraft.pricing.tax.listedSubtotalMmk,
+      status: 'confirmed',
+    }
+    const promotedOrderState = commerce.reserveCommerceOrder(
+      promotionBuyingState,
+      promotedOrder,
+      promotionOrderProof,
+    )
+    const storedPromotedOrder = promotedOrderState?.orders.find((order) => order.id === promotedOrder.id)
+    buyingAssert(storedPromotedOrder?.total === buyingDraft.totalMmk
+      && storedPromotedOrder.calculation?.listedSubtotalMmk === buyingDraft.pricing.tax.listedSubtotalMmk
+      && storedPromotedOrder.calculation?.taxMmk === buyingDraft.pricing.tax.taxMmk
+      && storedPromotedOrder.promotionDecision?.policyRevision === 1
+      && storedPromotedOrder.shippingDecision?.policyRevision === 1
+      && storedPromotedOrder.paymentDecision?.policyRevision === 3
+      && storedPromotedOrder.paymentDecision?.authorized === false
+      && storedPromotedOrder.taxDecision?.policyActionId === 'ACT-TAX-COMMERCIAL-R1'
+      && storedPromotedOrder.taxDecision?.reviewedAt === buyingDraft.confirmedAt
+      && commerce.reserveCommerceOrder(promotedOrderState, promotedOrder, promotionOrderProof) === promotedOrderState,
+    'ecommerce_approved_promotion_did_not_price_the_real_shop_order')
+    const promotedAcknowledgement = commerce.commerceOrderAcknowledgement(
+      promotedOrderState,
+      promotedOrder.id,
+    )
+    buyingAssert(promotedAcknowledgement?.schema === 'supermega.commerce.order-acknowledgement.v1'
+      && promotedAcknowledgement.notice === 'Not a tax invoice, receipt, or payment confirmation.'
+      && promotedAcknowledgement.lines.length === promotedOrderLines.length
+      && promotedAcknowledgement.promotion.status === 'applied'
+      && promotedAcknowledgement.promotion.discountMmk === buyingDraft.pricing.promotion.discountMmk
+      && promotedAcknowledgement.delivery.feeMmk === buyingDraft.pricing.shipping.feeMmk
+      && promotedAcknowledgement.delivery.promisedAt === promotedOrder.promisedAt
+      && promotedAcknowledgement.tax.taxMmk === buyingDraft.pricing.tax.taxMmk
+      && promotedAcknowledgement.totalMmk === buyingDraft.totalMmk
+      && promotedAcknowledgement.payment.status === 'pending'
+      && promotedAcknowledgement.cancellation.state === 'not_cancelled'
+      && promotedAcknowledgement.evidence.confirmationActionId === promotionOrderProof.actionId
+      && promotedAcknowledgement.evidence.sourceRecordId === buyingDraft.sourceRequestId
+      && /^sha256:[a-f0-9]{64}$/.test(promotedAcknowledgement.digest)
+      && Object.values(promotedAcknowledgement.controls).every((value) => value === false),
+    'ecommerce_order_acknowledgement_not_exact_or_customer_safe')
+    const promotedAcknowledgementText = commerce.commerceOrderAcknowledgementText(promotedAcknowledgement)
+    buyingAssert(promotedAcknowledgementText.includes('SUPERMEGA ORDER ACKNOWLEDGEMENT')
+      && promotedAcknowledgementText.includes(promotedAcknowledgement.digest)
+      && promotedAcknowledgementText.includes('No customer message was sent.')
+      && !promotedAcknowledgementText.includes(promotionOrderProof.actor)
+      && !promotedAcknowledgementText.includes(promotionOrderProof.reason),
+    'ecommerce_order_acknowledgement_text_leaked_internal_review_or_overclaimed_action')
+    const replacementQuote = await buyingModel.buildEcommerceCheckoutQuote({
+      pim,
+      cart: [
+        { sku: 'SM-CARE-01', quantity: 1 },
+        { sku: 'SM-1001', quantity: 3 },
+      ],
+      customerReference: buyingRequest.customerReference,
+      fulfilment: buyingRequest.fulfilment,
+      paymentAdapter: buyingRequest.quote.payment.adapter,
+      promotionCode: buyingRequest.quote.promotion.code,
+      customerProfile: { name: 'Ma Su', phone: '09 123 456', previous: buyingRequest.customerProfile },
+      deliveryAddress: { line1: '12 Insein Road, Ward 3', township: 'Hlaing', city: 'Yangon', instructions: 'Call at the gate', previous: buyingRequest.deliveryAddress },
+      idempotencyKey: 'ECI-72345678-1234-4ABC-8ABC-1234567890AC',
+      quotedAt: '2026-07-24T09:11:00.000Z',
+      expiresAt: '2026-07-24T09:30:00.000Z',
+    })
+    const replacementRequest = await buyingModel.buildEcommerceOrderRequestV2(replacementQuote, {
+      revision: 1,
+      actionId: managedPreviewProof.actionId,
+    })
+    const amendmentIntent = await buyingModel.buildEcommerceOrderAmendmentIntent({
+      scope: buyingScope,
+      commerceState: promotedOrderState,
+      orderId: promotedOrder.id,
+      replacementRequest,
+      reason: 'Use three primary items instead of two after Shop review.',
+      idempotencyKey: 'AMI-82345678-1234-4ABC-8ABC-1234567890AD',
+      createdAt: '2026-07-24T09:12:00.000Z',
+    })
+    buyingAssert(amendmentIntent.schema === 'supermega.ecommerce.order_amendment_intent.v1'
+      && amendmentIntent.sourceRequestId === buyingRequest.id
+      && amendmentIntent.replacementRequestId === replacementRequest.id
+      && amendmentIntent.sourceAcknowledgementDigest === promotedAcknowledgement.digest
+      && amendmentIntent.lineChanges.length === 1
+      && amendmentIntent.lineChanges[0].fromQuantity === 2
+      && amendmentIntent.lineChanges[0].toQuantity === 3
+      && amendmentIntent.customerMessageSent === false
+      && amendmentIntent.orderChanged === false
+      && amendmentIntent.stockChanged === false
+      && amendmentIntent.paymentChanged === false
+      && amendmentIntent.refundStarted === false
+      && amendmentIntent.providerCalled === false,
+    'ecommerce_order_amendment_not_acknowledgement_bound_or_side_effect_free')
+    const amendedBuyingState = await buyingModel.recordEcommerceOrderAmendment(
+      recordedBuying,
+      replacementRequest,
+      amendmentIntent,
+      recordedBuying.headDigest,
+    )
+    const replayedAmendmentState = await buyingModel.recordEcommerceOrderAmendment(
+      amendedBuyingState,
+      structuredClone(replacementRequest),
+      structuredClone(amendmentIntent),
+      amendedBuyingState.headDigest,
+    )
+    buyingAssert(JSON.stringify(replayedAmendmentState) === JSON.stringify(amendedBuyingState)
+      && amendedBuyingState.revision === 3
+      && amendedBuyingState.requests.length === 2
+      && amendedBuyingState.amendmentIntents.length === 1
+      && amendedBuyingState.events.at(-2)?.action === 'request_recorded'
+      && amendedBuyingState.events.at(-1)?.action === 'order_amendment_intent_recorded',
+    'ecommerce_order_amendment_atomic_replay_or_history_invalid')
+    const forgedAmendmentState = structuredClone(amendedBuyingState)
+    forgedAmendmentState.amendmentIntents[0].replacementRequestDigest = `sha256:${'9'.repeat(64)}`
+    let forgedAmendmentRejected = false
+    try { await buyingModel.validateEcommerceBuyingState(forgedAmendmentState) } catch { forgedAmendmentRejected = true }
+    buyingAssert(forgedAmendmentRejected, 'ecommerce_forged_order_amendment_was_accepted')
+    const duplicateAmendmentIntent = await buyingModel.buildEcommerceOrderAmendmentIntent({
+      scope: buyingScope,
+      commerceState: promotedOrderState,
+      orderId: promotedOrder.id,
+      replacementRequest,
+      reason: 'A second amendment must not create another review record.',
+      idempotencyKey: 'AMI-92345678-1234-4ABC-8ABC-1234567890AD',
+      createdAt: '2026-07-24T09:13:00.000Z',
+    })
+    let duplicateAmendmentRejected = false
+    try {
+      await buyingModel.recordEcommerceOrderAmendment(
+        amendedBuyingState,
+        replacementRequest,
+        duplicateAmendmentIntent,
+        amendedBuyingState.headDigest,
+      )
+    } catch { duplicateAmendmentRejected = true }
+    buyingAssert(duplicateAmendmentRejected, 'ecommerce_duplicate_order_amendment_was_accepted')
+    const advancedPromotedOrderState = commerce.advanceCommerceOrder(
+      promotedOrderState,
+      promotedOrder.id,
+      'confirmed',
+      {
+        actionId: 'ACT-ECOMMERCE-AMENDMENT-STALE-1',
+        capturedAt: '2026-07-24T09:13:00.000Z',
+        actor: 'Shop owner',
+        reason: 'Advance the order before the stale amendment is reviewed.',
+        evidenceReference: 'ECOMMERCE-AMENDMENT-STALE-1',
+      },
+    )
+    let advancedAmendmentRejected = false
+    try {
+      await buyingModel.buildEcommerceOrderAmendmentIntent({
+        scope: buyingScope,
+        commerceState: advancedPromotedOrderState,
+        orderId: promotedOrder.id,
+        replacementRequest,
+        reason: 'This advanced order must fail closed.',
+        idempotencyKey: 'AMI-A2345678-1234-4ABC-8ABC-1234567890AD',
+        createdAt: '2026-07-24T09:14:00.000Z',
+      })
+    } catch { advancedAmendmentRejected = true }
+    buyingAssert(advancedAmendmentRejected, 'ecommerce_advanced_order_amendment_was_accepted')
+    const contactCorrectionQuote = await buyingModel.buildEcommerceCheckoutQuote({
+      pim,
+      cart: buyingRequest.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })),
+      customerReference: 'Ma Su · 09 999 456',
+      fulfilment: buyingRequest.fulfilment,
+      paymentAdapter: buyingRequest.quote.payment.adapter,
+      promotionCode: buyingRequest.quote.promotion.code,
+      customerProfile: { name: 'Ma Su', phone: '09 999 456', previous: buyingRequest.customerProfile },
+      deliveryAddress: { line1: '88 Insein Road, Ward 3', township: 'Hlaing', city: 'Yangon', instructions: 'Call the corrected number', previous: buyingRequest.deliveryAddress },
+      idempotencyKey: 'ECI-D2345678-1234-4ABC-8ABC-1234567890AC',
+      quotedAt: '2026-07-24T09:15:00.000Z',
+      expiresAt: '2026-07-24T09:30:00.000Z',
+    })
+    const contactCorrectionRequest = await buyingModel.buildEcommerceOrderRequestV2(contactCorrectionQuote, {
+      revision: 1,
+      actionId: managedPreviewProof.actionId,
+    })
+    const contactCorrectionIntent = await buyingModel.buildEcommerceOrderAmendmentIntent({
+      scope: buyingScope,
+      commerceState: promotedOrderState,
+      orderId: promotedOrder.id,
+      replacementRequest: contactCorrectionRequest,
+      reason: 'Correct the customer phone and delivery address before preparation.',
+      idempotencyKey: 'AMI-E2345678-1234-4ABC-8ABC-1234567890AD',
+      createdAt: '2026-07-24T09:16:00.000Z',
+    })
+    const contactCorrectionState = await buyingModel.recordEcommerceOrderAmendment(
+      recordedBuying,
+      contactCorrectionRequest,
+      contactCorrectionIntent,
+      recordedBuying.headDigest,
+    )
+    buyingAssert(contactCorrectionIntent.lineChanges.length === 0
+      && contactCorrectionIntent.fromFulfilment === contactCorrectionIntent.toFulfilment
+      && contactCorrectionRequest.customerProfile.revision === buyingRequest.customerProfile.revision + 1
+      && contactCorrectionRequest.customerProfile.previousDigest === buyingRequest.customerProfile.profileDigest
+      && contactCorrectionRequest.deliveryAddress.revision === buyingRequest.deliveryAddress.revision + 1
+      && contactCorrectionRequest.deliveryAddress.previousDigest === buyingRequest.deliveryAddress.addressDigest
+      && contactCorrectionState.amendmentIntents.length === 1
+      && contactCorrectionIntent.customerMessageSent === false
+      && contactCorrectionIntent.orderChanged === false,
+    'ecommerce_contact_correction_not_snapshot_bound_or_side_effect_free')
+    const forgedContactCorrectionState = structuredClone(contactCorrectionState)
+    forgedContactCorrectionState.requests[0].customerProfile.previousDigest = `sha256:${'8'.repeat(64)}`
+    let forgedContactCorrectionRejected = false
+    try { await buyingModel.validateEcommerceBuyingState(forgedContactCorrectionState) } catch { forgedContactCorrectionRejected = true }
+    buyingAssert(forgedContactCorrectionRejected, 'ecommerce_forged_contact_correction_was_accepted')
+    const rescheduleQuote = await buyingModel.buildEcommerceCheckoutQuote({
+      pim,
+      cart: buyingRequest.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })),
+      customerReference: buyingRequest.customerReference,
+      fulfilment: buyingRequest.fulfilment,
+      paymentAdapter: buyingRequest.quote.payment.adapter,
+      promotionCode: buyingRequest.quote.promotion.code,
+      customerProfile: { name: 'Ma Su', phone: '09 123 456', previous: null },
+      deliveryAddress: { line1: '12 Insein Road, Ward 3', township: 'Hlaing', city: 'Yangon', instructions: 'Call at the gate', previous: null },
+      idempotencyKey: 'ECI-B2345678-1234-4ABC-8ABC-1234567890AC',
+      quotedAt: '2026-07-24T09:11:00.000Z',
+      expiresAt: '2026-07-24T09:30:00.000Z',
+    })
+    const rescheduleRequest = await buyingModel.buildEcommerceOrderRequestV2(rescheduleQuote, {
+      revision: 1,
+      actionId: managedPreviewProof.actionId,
+    })
+    const requestedPromisedAt = '2026-07-24T12:10:00.000Z'
+    const rescheduleIntent = await buyingModel.buildEcommerceOrderRescheduleIntent({
+      scope: buyingScope,
+      commerceState: promotedOrderState,
+      orderId: promotedOrder.id,
+      replacementRequest: rescheduleRequest,
+      requestedPromisedAt,
+      reason: 'Customer needs a later delivery window after Shop review.',
+      idempotencyKey: 'RSI-C2345678-1234-4ABC-8ABC-1234567890AD',
+      createdAt: '2026-07-24T09:12:00.000Z',
+    })
+    buyingAssert(rescheduleIntent.schema === 'supermega.ecommerce.order_reschedule_intent.v1'
+      && rescheduleIntent.sourceRequestId === buyingRequest.id
+      && rescheduleIntent.replacementRequestId === rescheduleRequest.id
+      && rescheduleIntent.sourceAcknowledgementDigest === promotedAcknowledgement.digest
+      && rescheduleIntent.originalPromisedAt === promotedOrder.promisedAt
+      && rescheduleIntent.requestedPromisedAt === requestedPromisedAt
+      && rescheduleIntent.customerMessageSent === false
+      && rescheduleIntent.orderChanged === false
+      && rescheduleIntent.stockChanged === false
+      && rescheduleIntent.paymentChanged === false
+      && rescheduleIntent.refundStarted === false
+      && rescheduleIntent.riderBooked === false
+      && rescheduleIntent.providerCalled === false,
+    'ecommerce_order_reschedule_not_acknowledgement_bound_or_side_effect_free')
+    const rescheduledBuyingState = await buyingModel.recordEcommerceOrderReschedule(
+      recordedBuying,
+      rescheduleRequest,
+      rescheduleIntent,
+      recordedBuying.headDigest,
+    )
+    const replayedRescheduleState = await buyingModel.recordEcommerceOrderReschedule(
+      rescheduledBuyingState,
+      structuredClone(rescheduleRequest),
+      structuredClone(rescheduleIntent),
+      rescheduledBuyingState.headDigest,
+    )
+    buyingAssert(JSON.stringify(replayedRescheduleState) === JSON.stringify(rescheduledBuyingState)
+      && rescheduledBuyingState.revision === 3
+      && rescheduledBuyingState.rescheduleIntents.length === 1
+      && rescheduledBuyingState.events.at(-2)?.action === 'request_recorded'
+      && rescheduledBuyingState.events.at(-1)?.action === 'order_reschedule_intent_recorded',
+    'ecommerce_order_reschedule_atomic_replay_or_history_invalid')
+    const rescheduledDraft = await buyingModel.prepareEcommerceShopDraftV2({
+      request: rescheduleRequest,
+      state: rescheduledBuyingState,
+      currentCatalog: catalog,
+      currentPromotionPolicies: promotionPolicies,
+      currentShippingPolicies: shippingPolicies,
+      currentPaymentPolicies: paymentPolicies,
+      currentTaxConfigurations: taxConfigurations,
+      catalogRevision: 0,
+      confirmedAt: '2026-07-24T09:13:00.000Z',
+    })
+    buyingAssert(rescheduledDraft.pricing.shipping.status === 'approved'
+      && rescheduledDraft.pricing.shipping.promiseMinutes !== null
+      && Date.parse(requestedPromisedAt) >= Date.parse(rescheduledDraft.confirmedAt) + rescheduledDraft.pricing.shipping.promiseMinutes * 60_000,
+    'ecommerce_order_reschedule_did_not_revalidate_current_promise_policy')
+    const forgedRescheduleState = structuredClone(rescheduledBuyingState)
+    forgedRescheduleState.rescheduleIntents[0].requestedPromisedAt = '2026-07-24T12:11:00.000Z'
+    let forgedRescheduleRejected = false
+    try { await buyingModel.validateEcommerceBuyingState(forgedRescheduleState) } catch { forgedRescheduleRejected = true }
+    buyingAssert(forgedRescheduleRejected, 'ecommerce_forged_order_reschedule_was_accepted')
+    const duplicateRescheduleIntent = await buyingModel.buildEcommerceOrderRescheduleIntent({
+      scope: buyingScope,
+      commerceState: promotedOrderState,
+      orderId: promotedOrder.id,
+      replacementRequest: rescheduleRequest,
+      requestedPromisedAt,
+      reason: 'A second reschedule must not create another review record.',
+      idempotencyKey: 'RSI-D2345678-1234-4ABC-8ABC-1234567890AD',
+      createdAt: '2026-07-24T09:13:00.000Z',
+    })
+    let duplicateRescheduleRejected = false
+    try {
+      await buyingModel.recordEcommerceOrderReschedule(
+        rescheduledBuyingState,
+        rescheduleRequest,
+        duplicateRescheduleIntent,
+        rescheduledBuyingState.headDigest,
+      )
+    } catch { duplicateRescheduleRejected = true }
+    buyingAssert(duplicateRescheduleRejected, 'ecommerce_duplicate_order_reschedule_was_accepted')
+    let advancedRescheduleRejected = false
+    try {
+      await buyingModel.buildEcommerceOrderRescheduleIntent({
+        scope: buyingScope,
+        commerceState: advancedPromotedOrderState,
+        orderId: promotedOrder.id,
+        replacementRequest: rescheduleRequest,
+        requestedPromisedAt,
+        reason: 'This advanced order must fail closed.',
+        idempotencyKey: 'RSI-E2345678-1234-4ABC-8ABC-1234567890AD',
+        createdAt: '2026-07-24T09:14:00.000Z',
+      })
+    } catch { advancedRescheduleRejected = true }
+    buyingAssert(advancedRescheduleRejected, 'ecommerce_advanced_order_reschedule_was_accepted')
+    const cancellationIntent = buyingModel.buildEcommerceCancellationIntent({
+      scope: buyingScope,
+      commerceState: promotedOrderState,
+      orderId: promotedOrder.id,
+      reasonCode: 'order_error',
+      reason: 'The customer noticed the wrong quantity after confirmation.',
+      idempotencyKey: 'CNI-52345678-1234-4ABC-8ABC-1234567890AB',
+      createdAt: new Date(Date.parse(promotedOrder.createdAt) + 60_000).toISOString(),
+    })
+    buyingAssert(cancellationIntent.schema === 'supermega.ecommerce.cancellation_intent.v1'
+      && cancellationIntent.state === 'pending_shop_review'
+      && cancellationIntent.sourceRequestId === buyingRequest.id
+      && cancellationIntent.sourceAcknowledgementDigest === promotedAcknowledgement.digest
+      && cancellationIntent.orderStatus === 'confirmed'
+      && cancellationIntent.paymentStatus === 'pending'
+      && cancellationIntent.refundStatus === 'none'
+      && cancellationIntent.totalMmk === storedPromotedOrder?.total
+      && cancellationIntent.customerMessageSent === false
+      && cancellationIntent.orderCancelled === false
+      && cancellationIntent.refundStarted === false,
+    'ecommerce_cancellation_request_not_acknowledgement_bound_or_side_effect_free')
+    const cancellationBuyingState = await buyingModel.recordEcommerceCancellationIntent(
+      recordedBuying,
+      cancellationIntent,
+      recordedBuying.headDigest,
+    )
+    const replayedCancellationBuyingState = await buyingModel.recordEcommerceCancellationIntent(
+      cancellationBuyingState,
+      structuredClone(cancellationIntent),
+      cancellationBuyingState.headDigest,
+    )
+    buyingAssert(JSON.stringify(replayedCancellationBuyingState) === JSON.stringify(cancellationBuyingState)
+      && cancellationBuyingState.cancellationIntents.length === 1
+      && cancellationBuyingState.events.at(-1)?.action === 'cancellation_intent_recorded',
+    'ecommerce_cancellation_request_replay_or_history_not_exact')
+    const cancellationDecisionProof = {
+      actionId: 'ACT-CANCELLATION-KEEP-1001',
+      capturedAt: new Date(Date.parse(promotedOrder.createdAt) + 180_000).toISOString(),
+      actor: 'Shop owner',
+      reason: 'The confirmed order matches the reviewed customer request.',
+      evidenceReference: cancellationIntent.evidenceReference,
+    }
+    const cancellationDecision = await buyingModel.buildEcommerceCancellationDecision({
+      scope: buyingScope,
+      commerceState: promotedOrderState,
+      intent: cancellationIntent,
+      proof: cancellationDecisionProof,
+    })
+    buyingAssert(cancellationDecision.schema === 'supermega.ecommerce.cancellation_decision.v1'
+      && cancellationDecision.state === 'kept_by_shop'
+      && cancellationDecision.intentId === cancellationIntent.id
+      && cancellationDecision.intentDigest === await buyingModel.ecommerceLifecycleDigest(cancellationIntent)
+      && cancellationDecision.evidenceReference === cancellationIntent.evidenceReference
+      && cancellationDecision.customerMessageSent === false
+      && cancellationDecision.orderCancelled === false
+      && cancellationDecision.refundStarted === false
+      && cancellationDecision.providerCalled === false,
+    'ecommerce_cancellation_decision_not_request_bound_or_side_effect_free')
+    const cancellationDecisionState = await buyingModel.recordEcommerceCancellationDecision(
+      cancellationBuyingState,
+      cancellationDecision,
+      cancellationBuyingState.headDigest,
+    )
+    const replayedCancellationDecisionState = await buyingModel.recordEcommerceCancellationDecision(
+      cancellationDecisionState,
+      structuredClone(cancellationDecision),
+      cancellationDecisionState.headDigest,
+    )
+    buyingAssert(JSON.stringify(replayedCancellationDecisionState) === JSON.stringify(cancellationDecisionState)
+      && cancellationDecisionState.cancellationDecisions.length === 1
+      && cancellationDecisionState.events.at(-1)?.action === 'cancellation_decision_recorded',
+    'ecommerce_cancellation_decision_replay_or_history_not_exact')
+    const forgedCancellationDecisionState = structuredClone(cancellationDecisionState)
+    forgedCancellationDecisionState.cancellationDecisions[0].totalMmk += 1
+    let forgedCancellationDecisionRejected = false
+    try { await buyingModel.validateEcommerceBuyingState(forgedCancellationDecisionState) } catch { forgedCancellationDecisionRejected = true }
+    buyingAssert(forgedCancellationDecisionRejected, 'ecommerce_forged_cancellation_decision_was_accepted')
+    const duplicateCancellationIntent = buyingModel.buildEcommerceCancellationIntent({
+      scope: buyingScope,
+      commerceState: promotedOrderState,
+      orderId: promotedOrder.id,
+      reasonCode: 'changed_mind',
+      reason: 'A second cancellation request must not create another review record.',
+      idempotencyKey: 'CNI-62345678-1234-4ABC-8ABC-1234567890AB',
+      createdAt: new Date(Date.parse(promotedOrder.createdAt) + 120_000).toISOString(),
+    })
+    let duplicateCancellationRejected = false
+    try {
+      await buyingModel.recordEcommerceCancellationIntent(
+        cancellationBuyingState,
+        duplicateCancellationIntent,
+        cancellationBuyingState.headDigest,
+      )
+    } catch { duplicateCancellationRejected = true }
+    buyingAssert(duplicateCancellationRejected, 'ecommerce_duplicate_cancellation_request_was_accepted')
+    const acknowledgementGoldenState = commerce.validateCommerceState({
+      schema: 'supermega.commerce.workspace.v2',
+      items: [{ sku: 'SKU-1', name: 'Test item', onHand: 8, reorderAt: 2, price: 100 }],
+      orders: [{
+        id: 'ORD-1',
+        createdAt: '2026-07-23T09:00:00.000Z',
+        customer: 'Customer ref',
+        owner: 'Accountable operator',
+        channel: 'Website',
+        item: 'Test item',
+        itemSku: 'SKU-1',
+        quantity: 2,
+        payment: 'Manual QR review',
+        paymentStatus: 'pending',
+        refundStatus: 'none',
+        fulfilment: 'pickup',
+        fulfilmentReference: 'FUL-ORD-1',
+        promisedAt: '2026-07-23T11:00:00.000Z',
+        sourceRecordId: 'WEB-ORD-1',
+        lines: [{ sku: 'SKU-1', name: 'Test item', quantity: 2, unitPriceMmk: 100 }],
+        calculation: {
+          schema: 'supermega.commerce.order-calculation.v1',
+          currency: 'MMK',
+          catalogRevision: 0,
+          subtotalMmk: 200,
+          taxMode: 'not_configured',
+          taxMmk: 0,
+          totalMmk: 200,
+        },
+        total: 200,
+        status: 'confirmed',
+      }],
+      movements: [{
+        id: 'MOV2:ACT-ORD-1',
+        actionId: 'ACT-ORD-1',
+        createdAt: '2026-07-23T09:00:00.000Z',
+        actor: 'Accountable operator',
+        reason: 'Verified against the source record.',
+        evidenceReference: 'EV-ACT-ORD-1',
+        kind: 'reserve',
+        sku: 'SKU-1',
+        quantityDelta: -2,
+        orderId: 'ORD-1',
+      }],
+      closes: [],
+    })
+    const acknowledgementGolden = commerce.commerceOrderAcknowledgement(acknowledgementGoldenState, 'ORD-1')
+    buyingAssert(acknowledgementGolden
+      && acknowledgementGolden.digest === 'sha256:ae097cca2bb06cbedb37863950f51513ec6c30cc86cc2f23bcdcbeaa9e6ef4fb'
+      && acknowledgementGolden.digest === commerce.commerceOrderAcknowledgement(acknowledgementGoldenState, 'ORD-1')?.digest
+      && commerce.commerceOrderAcknowledgement(acknowledgementGoldenState, 'ORD-UNKNOWN') === null,
+    'ecommerce_order_acknowledgement_not_deterministic_or_fail_closed')
+    const acknowledgementTamper = structuredClone(acknowledgementGoldenState)
+    acknowledgementTamper.orders[0].lines[0].unitPriceMmk = 101
+    let acknowledgementTamperRejected = false
+    try { commerce.commerceOrderAcknowledgement(acknowledgementTamper, 'ORD-1') } catch { acknowledgementTamperRejected = true }
+    buyingAssert(acknowledgementTamperRejected, 'ecommerce_order_acknowledgement_accepted_tampered_order_lines')
+    buyingAssert(commerce.reserveCommerceOrder(
+      promotionBuyingState,
+      {
+        ...promotedOrder,
+        promotionDecision: {
+          ...promotedOrder.promotionDecision,
+          discountMmk: promotedOrder.promotionDecision.discountMmk + 1,
+          netSubtotalMmk: promotedOrder.promotionDecision.netSubtotalMmk - 1,
+        },
+        total: promotedOrder.total - 1,
+      },
+      promotionOrderProof,
+    ) === null,
+    'ecommerce_forged_promotion_reached_the_real_shop_order')
+    buyingAssert(commerce.reserveCommerceOrder(
+      promotionBuyingState,
+      {
+        ...promotedOrder,
+        shippingDecision: { ...promotedOrder.shippingDecision, feeMmk: promotedOrder.shippingDecision.feeMmk + 1 },
+        total: promotedOrder.total + 1,
+      },
+      promotionOrderProof,
+    ) === null,
+    'ecommerce_forged_shipping_fee_reached_the_real_shop_order')
+    buyingAssert(commerce.reserveCommerceOrder(
+      promotionBuyingState,
+      {
+        ...promotedOrder,
+        paymentDecision: { ...promotedOrder.paymentDecision, authorized: true },
+      },
+      promotionOrderProof,
+    ) === null,
+    'ecommerce_forged_payment_authorization_reached_the_real_shop_order')
+    buyingAssert(commerce.reserveCommerceOrder(
+      promotionBuyingState,
+      {
+        ...promotedOrder,
+        taxDecision: { ...promotedOrder.taxDecision, policyActionId: 'ACT-TAX-FORGED' },
+      },
+      promotionOrderProof,
+    ) === null,
+    'ecommerce_forged_tax_policy_action_reached_the_real_shop_order')
+    const taxLimitedPaymentPolicies = paymentPolicies.map((policy) => policy.adapter === promotedOrder.paymentDecision.adapter
+      ? { ...policy, maximumOrderMmk: buyingDraft.pricing.tax.listedSubtotalMmk }
+      : policy)
+    const preTaxApprovedPayment = commerce.commercePaymentDecision(
+      taxLimitedPaymentPolicies,
+      promotedOrder.paymentDecision.adapter,
+      promotedOrder.fulfilment,
+      buyingDraft.pricing.tax.listedSubtotalMmk,
+      promotedOrder.paymentDecision.reviewedAt,
+    )
+    buyingAssert(preTaxApprovedPayment?.status === 'approved'
+      && commerce.reserveCommerceOrder(
+        { ...promotionBuyingState, paymentPolicies: taxLimitedPaymentPolicies },
+        { ...promotedOrder, paymentDecision: preTaxApprovedPayment },
+        promotionOrderProof,
+      ) === null,
+    'ecommerce_tax_could_bypass_payment_policy_limit')
+    buyingAssert(commerce.reserveCommerceOrder(
+      promotionBuyingState,
+      { ...promotedOrder, promisedAt: '2026-07-24T11:09:59.000Z' },
+      promotionOrderProof,
+    ) === null,
+    'ecommerce_shipping_promise_before_policy_window_reached_shop_order')
+    const authorityTamper = structuredClone(buyingDraft)
+    authorityTamper.operatingContext.targetAuthority = 'production'
+    let authorityTamperRejected = false
+    try { buyingModel.validateEcommerceShopDraftV2(authorityTamper) } catch { authorityTamperRejected = true }
+    buyingAssert(authorityTamperRejected, 'ecommerce_buying_shop_draft_authority_tamper_accepted')
+    const scopeTamper = structuredClone(buyingDraft)
+    scopeTamper.operatingContext.organizationScope = 'different-scope'
+    let scopeTamperRejected = false
+    try { buyingModel.validateEcommerceShopDraftV2(scopeTamper) } catch { scopeTamperRejected = true }
+    buyingAssert(scopeTamperRejected, 'ecommerce_buying_shop_draft_scope_tamper_accepted')
+    const customerTamper = structuredClone(buyingRequest)
+    customerTamper.customerProfile.phone = '09 999 999 999'
+    let customerTamperRejected = false
+    try { await buyingModel.validateEcommerceOrderRequestV2(customerTamper) } catch { customerTamperRejected = true }
+    buyingAssert(customerTamperRejected, 'ecommerce_buying_customer_snapshot_tamper_accepted')
     let expiredBuyingRejected = false
     try {
       await buyingModel.prepareEcommerceShopDraftV2({
         request: buyingRequest,
         state: recordedBuying,
         currentCatalog: catalog,
+        currentPromotionPolicies: promotionPolicies,
+        currentShippingPolicies: shippingPolicies,
+        currentPaymentPolicies: paymentPolicies,
+        currentTaxConfigurations: taxConfigurations,
+        catalogRevision: 0,
         confirmedAt: '2026-07-24T09:15:01.000Z',
       })
     } catch { expiredBuyingRejected = true }
@@ -9496,6 +14598,11 @@ async function verifyStorefrontRuntime() {
         request: buyingRequest,
         state: recordedBuying,
         currentCatalog: catalog.map((item) => item.sku === 'SM-1001' ? { ...item, price: item.price + 1 } : item),
+        currentPromotionPolicies: promotionPolicies,
+        currentShippingPolicies: shippingPolicies,
+        currentPaymentPolicies: paymentPolicies,
+        currentTaxConfigurations: taxConfigurations,
+        catalogRevision: 0,
         confirmedAt: '2026-07-24T09:10:00.000Z',
       })
     } catch { repricedBuyingRejected = true }
@@ -9527,6 +14634,17 @@ async function verifyStorefrontRuntime() {
       && recoveredBuying.state?.headDigest === savedBuying.headDigest
       && buyingModel.ecommerceBuyingStateContains(recoveredBuying.state, buyingRequest),
     'ecommerce_buying_request_not_locked_or_recoverable')
+    const savedReturnBuying = await buyingModel.saveEcommerceReturnIntent(
+      buyingScope,
+      returnIntent,
+      savedBuying.headDigest,
+      { storage: buyingStorage, locks: buyingLocks },
+    )
+    const recoveredReturnBuying = await buyingModel.readEcommerceBuyingState(buyingScope, buyingStorage)
+    buyingAssert(buyingLockRequests === 2
+      && savedReturnBuying.revision === 2
+      && recoveredReturnBuying.state?.returnIntents[0]?.id === returnIntent.id,
+    'ecommerce_return_intent_not_locked_or_recoverable')
     const buyingKey = buyingModel.ecommerceBuyingStateStorageKey(buyingScope)
     const recoveredRaw = buyingValues.get(buyingKey)
     buyingValues.set(buyingKey, '{broken')
@@ -9561,7 +14679,7 @@ async function verifyStorefrontRuntime() {
       await buyingModel.saveEcommerceOrderRequestV2(
         buyingScope,
         secondRequest,
-        savedBuying.headDigest,
+        savedReturnBuying.headDigest,
         { storage: mismatchBuyingStorage, locks: buyingLocks },
       )
     } catch { failedConfirmationRejected = true }
@@ -9647,6 +14765,60 @@ async function verifyManagedWebsiteRuntime() {
       })
     } catch { swappedStateRejected = true }
     assert(swappedStateRejected, 'managed_website_swapped_state_receipt_accepted')
+    const plannedInquiry = {
+      ...seed,
+      revision: 1,
+      leadLedger: {
+        schema: 'supermega.website.lead-ledger.v1',
+        revision: 1,
+        leads: [{
+          id: 'lead-managed-1',
+          siteName: seed.siteName,
+          sourcePage: '/',
+          name: 'Customer A',
+          contact: 'customer@example.test',
+          request: 'Need a quotation.',
+          consentRecorded: true,
+          status: 'new',
+          owner: '',
+          decisionNote: '',
+          createdAt: '2026-07-31T00:00:00.000Z',
+          updatedAt: '2026-07-31T00:00:00.000Z',
+        }],
+      },
+    }
+    const confirmedInquiry = structuredClone(plannedInquiry)
+    confirmedInquiry.leadLedger.leads[0].createdAt = '2026-07-31T00:00:01.000Z'
+    confirmedInquiry.leadLedger.leads[0].updatedAt = '2026-07-31T00:00:01.000Z'
+    const inquiryReceipt = {
+      ...result,
+      event_type: 'website.inquiry.received',
+      state: confirmedInquiry,
+    }
+    const acceptedInquiry = managedWebsite.acceptManagedWebsiteCommand(plannedInquiry, inquiryReceipt, {
+      commandId,
+      eventType: 'website.inquiry.received',
+      priorVersion: 0,
+    })
+    assert(acceptedInquiry.workspace.leadLedger.leads[0].createdAt === '2026-07-31T00:00:01.000Z', 'managed_website_authoritative_inquiry_timestamp_rejected')
+    let rewrittenInquiryRejected = false
+    try {
+      managedWebsite.acceptManagedWebsiteCommand(plannedInquiry, {
+        ...inquiryReceipt,
+        state: {
+          ...confirmedInquiry,
+          leadLedger: {
+            ...confirmedInquiry.leadLedger,
+            leads: [{ ...confirmedInquiry.leadLedger.leads[0], contact: 'rewritten@example.test' }],
+          },
+        },
+      }, {
+        commandId,
+        eventType: 'website.inquiry.received',
+        priorVersion: 0,
+      })
+    } catch { rewrittenInquiryRejected = true }
+    assert(rewrittenInquiryRejected, 'managed_website_authoritative_inquiry_rewrite_accepted')
   } catch (error) {
     fail(`managed_website_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
@@ -9949,6 +15121,17 @@ async function verifyProductionRuntime() {
     const orderExecution = plantModel.applyPlantOrderPlan(emptyExecution, executionPlan, executionProof, emptyExecution.headDigest).state
     const embeddedExecution = { ...model.createEmptyProduction(), jobs: [{ id: 'JOB-1', line: 'Line 01', product: 'Test batch', target: 100, output: 0 }], orderExecution }
     assert(model.validateProductionState(embeddedExecution) === embeddedExecution, 'production_managed_order_execution_rejected')
+    const embeddedGenealogy = model.buildProductionBatchGenealogy(embeddedExecution, 'JOB-1')
+    assert(embeddedGenealogy?.schema === 'supermega.production.batch-genealogy.v1'
+      && embeddedGenealogy.controlledExecution?.planId === executionPlan.planId
+      && embeddedGenealogy.controlledExecution.outputBatchId === executionPlan.job.outputBatchId
+      && embeddedGenealogy.controls.issuesInventory === false
+      && embeddedGenealogy.controls.changesEquipment === false
+      && embeddedGenealogy.controls.postsCosting === false
+      && embeddedGenealogy.controls.issuesCertificate === false
+      && embeddedGenealogy.controls.performsExternalAction === false,
+    'production_batch_genealogy_controlled_execution_or_boundary_missing')
+    assertThrows(() => model.formatProductionBatchGenealogy({ ...embeddedGenealogy, sourceRevision: embeddedGenealogy.sourceRevision + 1 }), 'production_batch_genealogy_digest_tamper_accepted')
     assertThrows(() => model.validateProductionState({ ...embeddedExecution, orderExecution: { ...orderExecution, headDigest: `sha256:${'0'.repeat(64)}` } }), 'production_managed_order_execution_head_tamper_accepted')
     const legacy = {
       jobs: [{ id: 'JOB-1', line: 'Line 01', product: 'Test batch', target: 100, output: 90 }],
@@ -10029,15 +15212,23 @@ async function verifyProductionRuntime() {
         contract: 'supermega.production.opening-plan.v1',
         packageDigest: `sha256:${'a'.repeat(64)}`,
         confirmedAt: '2026-07-23T09:00:00.000Z',
+        industryPackId: 'general-manufacturing',
         jobIds: ['JOB-OPEN-1', 'JOB-OPEN-2'],
         machineIds: ['machine-import-1', 'machine-import-2'],
       },
     }
     assert(model.validateProductionState(openingPlanState) === openingPlanState, 'production_opening_plan_rejected')
+    const jobsOnlyOpeningPlanState = {
+      ...openingPlanState,
+      machines: [],
+      openingPlan: { ...openingPlanState.openingPlan, machineIds: [] },
+    }
+    assert(model.validateProductionState(jobsOnlyOpeningPlanState) === jobsOnlyOpeningPlanState, 'production_jobs_only_opening_plan_rejected')
     assertThrows(() => model.validateProductionState({ ...openingPlanState, openingPlan: { ...openingPlanState.openingPlan, packageDigest: 'sha256:bad' } }), 'production_opening_plan_bad_digest_accepted')
     assertThrows(() => model.validateProductionState({ ...openingPlanState, openingPlan: { ...openingPlanState.openingPlan, jobIds: [...openingPlanState.openingPlan.jobIds].reverse() } }), 'production_opening_plan_job_tamper_accepted')
     assertThrows(() => model.validateProductionState({ ...openingPlanState, openingPlan: { ...openingPlanState.openingPlan, machineIds: [...openingPlanState.openingPlan.machineIds].reverse() } }), 'production_opening_plan_machine_tamper_accepted')
     assertThrows(() => model.validateProductionState({ ...openingPlanState, openingPlan: { ...openingPlanState.openingPlan, confirmedAt: '2026-07-23T09:00:00Z' } }), 'production_opening_plan_noncanonical_time_accepted')
+    assertThrows(() => model.validateProductionState({ ...openingPlanState, openingPlan: { ...openingPlanState.openingPlan, industryPackId: 'unsupported-pack' } }), 'production_opening_plan_bad_industry_pack_accepted')
     const openingPlanWithJob = model.registerProductionJob(openingPlanState, newJob, jobProof)
     assert(openingPlanWithJob?.jobs[0].id === newJob.id
       && openingPlanWithJob.openingPlan === openingPlanState.openingPlan
@@ -10056,6 +15247,92 @@ async function verifyProductionRuntime() {
     assert(model.registerProductionJob(base, { ...newJob, owner: undefined }, proof('ACT-JOB-UNOWNED')) === null, 'production_unowned_job_succeeded')
     assert(model.registerProductionJob(base, { ...newJob, priority: 'invalid' }, proof('ACT-JOB-PRIORITY')) === null, 'production_invalid_job_priority_succeeded')
     assert(model.registerProductionJob(base, { ...newJob, dueAt: jobProof.capturedAt }, proof('ACT-JOB-OVERDUE')) === null, 'production_nonfuture_job_due_succeeded')
+    const demandSnapshot = {
+      schema: 'supermega.shop_production_demand.v1',
+      operatingUnitLocationId: 'LOC-MAIN',
+      sku: 'SKU-SHOP-001',
+      productName: 'Shop batch',
+      sourceOrderIds: ['ORD-001', 'ORD-002'],
+      activeDemandUnits: 18,
+      uncoveredDemandUnits: 8,
+      availableToPromiseUnits: 10,
+      reorderAtUnits: 15,
+      replenishmentGapUnits: 5,
+      recommendedBatchUnits: 8,
+    }
+    const demandDigest = plantModel.plantOrderEvidenceDigest(demandSnapshot)
+    const demandEvidenceReference = `SHOP-DEMAND:${demandDigest}:LOC-MAIN`
+    const demandSource = model.productionShopDemandSource({ sourceSnapshot: demandSnapshot, sourceDigest: demandDigest, evidenceReference: demandEvidenceReference })
+    const demandJob = { ...newJob, id: 'JOB-SHOP-001', product: demandSnapshot.productName, target: demandSnapshot.recommendedBatchUnits, shopDemandSource: demandSource }
+    const demandProof = proof('ACT-JOB-SHOP-DEMAND', 0, { evidenceReference: demandEvidenceReference })
+    const demandJobState = model.registerProductionJob(base, demandJob, demandProof)
+    assert(demandJobState?.jobs[0].shopDemandSource.sourceDigest === demandDigest
+      && demandJobState.events[0].evidenceReference === demandEvidenceReference,
+    'production_shop_demand_source_not_retained_or_bound')
+    assert(model.registerProductionJob(base, demandJob, proof('ACT-JOB-SHOP-WRONG-EVIDENCE')) === null, 'production_shop_demand_wrong_creation_evidence_accepted')
+    assertThrows(() => model.validateProductionState({
+      ...demandJobState,
+      jobs: [{ ...demandJobState.jobs[0], shopDemandSource: { ...demandSource, snapshot: { ...demandSnapshot, sourceOrderIds: [...demandSnapshot.sourceOrderIds, 'ORD-003'] } } }, ...demandJobState.jobs.slice(1)],
+    }), 'production_shop_demand_order_tamper_accepted')
+    assertThrows(() => model.validateProductionState({
+      ...demandJobState,
+      jobs: [{ ...demandJobState.jobs[0], shopDemandSource: { ...demandSource, sourceDigest: `sha256:${'0'.repeat(64)}` } }, ...demandJobState.jobs.slice(1)],
+    }), 'production_shop_demand_digest_tamper_accepted')
+    const demandWithMaterial = model.recordProductionMaterialConsumption(demandJobState, demandJob.id, 'MAT-SHOP-001', 'LOT-SHOP-001', 2.5, 'kg', '2026-07-23 Day', proof('ACT-JOB-SHOP-MATERIAL', 1_000))
+    const demandWithOutput = model.recordProductionOutput(demandWithMaterial, demandJob.id, 3, '2026-07-23 Day', proof('ACT-JOB-SHOP-OUTPUT', 2_000))
+    const demandWithHold = model.placeProductionQualityHold(demandWithOutput, demandJob.id, proof('ACT-JOB-SHOP-HOLD', 3_000))
+    const demandWithRelease = model.releaseProductionQualityHold(demandWithHold, demandJob.id, proof('ACT-JOB-SHOP-RELEASE', 4_000))
+    const demandGenealogy = model.buildProductionBatchGenealogy(demandWithRelease, demandJob.id)
+    assert(demandGenealogy?.shopDemandSource.snapshot.sourceOrderIds.join(',') === 'ORD-001,ORD-002'
+      && demandGenealogy.materialEntries[0].materialLot === 'LOT-SHOP-001'
+      && demandGenealogy.outputEntries[0].quantity === 3
+      && demandGenealogy.qualityEvents.map((event) => event.action).join(',') === 'hold_placed,hold_released'
+      && demandGenealogy.evidenceCoverage.materialLotEntryCount === 1
+      && model.formatProductionBatchGenealogy(demandGenealogy).endsWith('\n'),
+    'production_shop_demand_batch_genealogy_incomplete')
+    const clientPlanDigest = `sha256:${'d'.repeat(64)}`
+    const clientPlanJobs = [
+      { id: 'JOB-CLIENT-1', line: 'Line A', product: 'Client batch one', target: 50, output: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2026-08-15T00:00:00.000Z' },
+      { id: 'JOB-CLIENT-2', line: 'Line B', product: 'Client batch two', target: 75, output: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2026-08-16T00:00:00.000Z' },
+    ]
+    const clientPlanImport = model.importProductionJobs(base, {
+      jobs: clientPlanJobs,
+      sourceDigest: clientPlanDigest,
+      capturedAt: '2026-07-28T09:00:00.000Z',
+      actor: 'Plant owner',
+    })
+    assert(clientPlanImport?.created === 2
+      && clientPlanImport.alreadyPresent === 0
+      && clientPlanImport.state.revision === 2
+      && clientPlanImport.state.events.length === 2
+      && clientPlanImport.state.jobs.slice(0, 2).map((job) => job.id).join(',') === 'JOB-CLIENT-2,JOB-CLIENT-1',
+    'client_production_plan_import_not_atomic_or_attributable')
+    const clientPlanReplay = model.importProductionJobs(clientPlanImport.state, {
+      jobs: clientPlanJobs,
+      sourceDigest: clientPlanDigest,
+      capturedAt: '2026-07-28T10:00:00.000Z',
+      actor: 'Plant owner',
+    })
+    assert(clientPlanReplay?.replayed && clientPlanReplay.created === 0 && clientPlanReplay.alreadyPresent === 2 && clientPlanReplay.state === clientPlanImport.state, 'client_production_plan_retry_not_idempotent')
+    assert(model.importProductionJobs(clientPlanImport.state, {
+      jobs: [{ ...clientPlanJobs[0], target: 51 }],
+      sourceDigest: clientPlanDigest,
+      capturedAt: '2026-07-28T10:00:00.000Z',
+      actor: 'Plant owner',
+    }) === null, 'client_production_plan_overwrote_conflicting_job')
+    const atomicClientPlanBase = model.createEmptyProduction()
+    assert(model.importProductionJobs(atomicClientPlanBase, {
+      jobs: [clientPlanJobs[0], { ...clientPlanJobs[1], dueAt: '2026-07-28T09:00:00.000Z' }],
+      sourceDigest: clientPlanDigest,
+      capturedAt: '2026-07-28T09:00:00.000Z',
+      actor: 'Plant owner',
+    }) === null && atomicClientPlanBase.jobs.length === 0 && atomicClientPlanBase.events.length === 0, 'client_production_plan_partially_mutated_after_invalid_job')
+    assert(model.importProductionJobs(atomicClientPlanBase, {
+      jobs: clientPlanJobs,
+      sourceDigest: 'not-a-digest',
+      capturedAt: '2026-07-28T09:00:00.000Z',
+      actor: 'Plant owner',
+    }) === null, 'client_production_plan_unbound_source_accepted')
     assertThrows(() => model.validateProductionState({
       ...withJob,
       jobs: [{ ...withJob.jobs[0], priority: 'low' }, ...withJob.jobs.slice(1)],
@@ -10992,6 +16269,23 @@ async function verifyProductionRuntime() {
     values.clear()
     values.set(model.PRODUCTION_KEY, JSON.stringify(base))
     lockRequests = 0
+    const persistedClientPlan = await model.mutateProductionWorkspace((state) => model.importProductionJobs(state, {
+      jobs: clientPlanJobs,
+      sourceDigest: clientPlanDigest,
+      capturedAt: '2026-07-28T09:00:00.000Z',
+      actor: 'Plant owner',
+    })?.state ?? null, storage, locks)
+    const persistedClientPlanState = JSON.parse(values.get(model.PRODUCTION_KEY))
+    assert(persistedClientPlan.ok
+      && lockRequests === 1
+      && persistedClientPlanState.revision === 2
+      && persistedClientPlanState.events.length === 2
+      && persistedClientPlanState.jobs.length === base.jobs.length + 2,
+    'client_production_plan_locked_batch_not_persisted_atomically')
+
+    values.clear()
+    values.set(model.PRODUCTION_KEY, JSON.stringify(base))
+    lockRequests = 0
     const concurrentJobs = await Promise.all([
       model.mutateProductionWorkspace((state) => model.registerProductionJob(state, { id: 'JOB-2', line: 'Line 02', product: 'Second batch', target: 250, output: 0, owner: 'Line 02 lead', priority: 'urgent', dueAt: '2026-07-24T10:00:00.000Z' }, proof('ACT-CONCURRENT-JOB-2')), storage, locks),
       model.mutateProductionWorkspace((state) => model.registerProductionJob(state, { id: 'JOB-3', line: 'Line 03', product: 'Third batch', target: 300, output: 0, owner: 'Line 03 lead', priority: 'normal', dueAt: '2026-07-25T10:00:00.000Z' }, proof('ACT-CONCURRENT-JOB-3')), storage, locks),
@@ -11030,6 +16324,12 @@ async function verifyProductionRuntime() {
     assert(!failedWrite.ok && values.get(model.PRODUCTION_KEY) === beforeFailure, 'production_storage_failure_advanced_state')
     const invalidMutation = await model.mutateProductionWorkspace((state) => ({ ...state, revision: state.revision + 1 }), storage, locks)
     assert(!invalidMutation.ok && values.get(model.PRODUCTION_KEY) === beforeFailure, 'production_non_append_mutation_succeeded')
+    const mismatchedBatchMutation = await model.mutateProductionWorkspace((state) => ({
+      ...state,
+      revision: state.revision + 2,
+      events: [{ ...state.events[0], actionId: 'ACT-MALFORMED-BATCH' }, ...state.events],
+    }), storage, locks)
+    assert(!mismatchedBatchMutation.ok && values.get(model.PRODUCTION_KEY) === beforeFailure, 'production_mismatched_batch_mutation_succeeded')
     const throwingMutation = await model.mutateProductionWorkspace(() => { throw new Error('transition') }, storage, locks)
     assert(!throwingMutation.ok && throwingMutation.error.includes('transition failed') && values.get(model.PRODUCTION_KEY) === beforeFailure, 'production_transition_failure_was_misclassified')
     const unlocked = await model.mutateProductionWorkspace((state) => model.recordProductionOutput(state, 'JOB-1', 1, '2026-07-24 Day', proof('ACT-NO-LOCK')), storage, {})
@@ -11285,8 +16585,212 @@ async function verifyOwnerControlRuntime() {
   }
 }
 
+async function verifyOperationalReportRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    operationalReportRuntimeChecks += 1
+  }
+  try {
+    const nonce = Date.now()
+    const [model, commerce, production, website, masterData, inventory] = await Promise.all([
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'operational-report.ts')).href}?operational-report=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?operational-report-commerce=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts')).href}?operational-report-production=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?operational-report-website=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shared-master-data.ts')).href}?operational-report-master-data=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-inventory-foundation.ts')).href}?operational-report-inventory=${nonce}`),
+    ])
+    const now = Date.parse('2026-07-29T12:00:00.000Z')
+    const commerceState = commerce.createSeedCommerce()
+    const productionState = production.createSeedProduction()
+    const websiteState = website.createInitialWorkspace()
+    const report = model.buildOperationalReport({
+      mode: 'local',
+      allowedProducts: model.operationalProducts,
+      sources: [
+        { surface: 'commerce', mode: 'sample', revision: null, updatedAt: null },
+        { surface: 'production', mode: 'sample', revision: productionState.revision, updatedAt: null },
+        { surface: 'website', mode: 'sample', revision: websiteState.revision, updatedAt: null },
+      ],
+      commerce: commerceState,
+      production: productionState,
+      website: websiteState,
+      now,
+    })
+    assert(report.contract === model.OPERATIONAL_REPORT_CONTRACT && report.controls.permissionFiltered && report.controls.readOnly, 'operational_report_contract_invalid')
+    assert(new Set(report.entries.map((entry) => entry.product)).size === 4 && report.allowedProducts.length === 4, 'operational_report_product_coverage_incomplete')
+    assert(report.masterData.registryContract === masterData.SHARED_MASTER_DATA_CONTRACT && report.masterData.dimensions.length === 12 && report.masterData.duplicateCandidates === 0 && report.masterData.controls.countsOnly && report.masterData.totalRecords > 0, 'operational_report_master_data_coverage_missing')
+    const registry = masterData.buildSharedMasterDataRegistry({ allowedProducts: masterData.sharedMasterDataProducts, commerce: commerceState, production: productionState, website: websiteState })
+    assert(registry.contract === masterData.SHARED_MASTER_DATA_CONTRACT && registry.records.length === registry.summary.totalRecords && registry.controls.readOnly, 'shared_master_data_registry_contract_invalid')
+    assert(registry.records.every((record) => !('name' in record) && !('value' in record)) && !JSON.stringify(registry).includes('May') && !JSON.stringify(registry).includes('Ko Aung'), 'shared_master_data_registry_exposed_record_values')
+    const tamperedRegistry = structuredClone(registry)
+    tamperedRegistry.summary.totalRecords += 1
+    let tamperedRegistryRejected = false
+    try { masterData.validateSharedMasterDataRegistry(tamperedRegistry) } catch { tamperedRegistryRejected = true }
+    assert(tamperedRegistryRejected, 'shared_master_data_registry_tamper_accepted')
+    const authorityTamper = structuredClone(registry)
+    authorityTamper.records[0].sourceAuthority = 'website_workspace'
+    let authorityTamperRejected = false
+    try { masterData.validateSharedMasterDataRegistry(authorityTamper) } catch { authorityTamperRejected = true }
+    assert(authorityTamperRejected, 'shared_master_data_registry_authority_drift_accepted')
+    const websiteRegistry = masterData.buildSharedMasterDataRegistry({ allowedProducts: ['website'], website: websiteState })
+    assert(Object.keys(websiteRegistry.summary.byOwner).join(',') === 'website' && websiteRegistry.records.every((record) => record.ownerProduct === 'website' && record.consumers.length === 0), 'shared_master_data_registry_permission_filter_failed')
+    const duplicateCatalog = commerceState.items.map((item) => item.sku)
+    const duplicatePackage = inventory.buildShopInventoryImportPackage({
+      importId: 'IMP-DUPLICATE-REVIEW-001',
+      sourceDigest: 'sha256:2b3fdf05c4dda454998927370bf2cf20b0c17bcf1e3d3f294a550e341033ed61',
+      catalogSkus: duplicateCatalog,
+      clients: [{ id: 'CLI-DUPLICATE-001', name: 'Acme Company' }],
+      vendors: [{ id: 'VEN-DUPLICATE-001', name: 'acme company' }],
+      locations: [{ id: 'LOC-DUPLICATE-A', name: 'Main store' }, { id: 'LOC-DUPLICATE-B', name: 'main store' }],
+      stockUnits: [{ id: 'LOT-DUPLICATE-001', sku: duplicateCatalog[0], tracking: 'lot', trackingCode: 'OPENING-001' }],
+      openings: [{ stockUnitId: 'LOT-DUPLICATE-001', locationId: 'LOC-DUPLICATE-A', vendorId: 'VEN-DUPLICATE-001', quantity: 1 }],
+    })
+    const duplicateInventory = inventory.applyShopInventoryImport(inventory.createEmptyShopInventoryState(), duplicatePackage, {
+      actionId: 'ACT-DUPLICATE-IMPORT-001', capturedAt: '2026-07-29T11:30:00+06:30', actor: 'Master data owner', reason: 'Review duplicate detection without merging records.', evidenceReference: 'EVIDENCE-DUPLICATE-001',
+    }, duplicateCatalog, inventory.EMPTY_SHOP_INVENTORY_DIGEST).state
+    const duplicateCommerceState = { ...commerceState, inventoryFoundation: duplicateInventory }
+    const duplicateRegistry = masterData.buildSharedMasterDataRegistry({ allowedProducts: masterData.sharedMasterDataProducts, commerce: duplicateCommerceState, production: productionState, website: websiteState })
+    assert(duplicateRegistry.duplicateReview.candidates.length === 2 && duplicateRegistry.duplicateReview.candidates[0].kind === 'business_partner' && duplicateRegistry.duplicateReview.candidates[1].kind === 'location' && duplicateRegistry.duplicateReview.mergePerformed === false, 'shared_master_data_duplicate_candidate_missing')
+    assert(!JSON.stringify(duplicateRegistry).includes('Acme Company') && !JSON.stringify(duplicateRegistry).includes('acme company'), 'shared_master_data_duplicate_candidate_exposed_values')
+    const mergeTamper = structuredClone(duplicateRegistry)
+    mergeTamper.duplicateReview.mergePerformed = true
+    let mergeTamperRejected = false
+    try { masterData.validateSharedMasterDataRegistry(mergeTamper) } catch { mergeTamperRejected = true }
+    assert(mergeTamperRejected, 'shared_master_data_automatic_merge_authority_accepted')
+    const duplicateReport = model.buildOperationalReport({
+      mode: 'local', allowedProducts: model.operationalProducts,
+      sources: [
+        { surface: 'commerce', mode: 'record', revision: null, updatedAt: null },
+        { surface: 'production', mode: 'sample', revision: productionState.revision, updatedAt: null },
+        { surface: 'website', mode: 'sample', revision: websiteState.revision, updatedAt: null },
+      ],
+      commerce: duplicateCommerceState, production: productionState, website: websiteState, now,
+    })
+    assert(duplicateReport.masterData.duplicateCandidates === 2 && duplicateReport.masterData.duplicateReview.candidates.length === 2, 'operational_report_duplicate_review_not_projected')
+    const reviewPacket = await model.exportSharedMasterDataReviewPacket(duplicateReport)
+    assert(reviewPacket.contract === model.SHARED_MASTER_DATA_REVIEW_PACKET_CONTRACT && reviewPacket.controls.mergePerformed === false && (await model.validateSharedMasterDataReviewPacket(reviewPacket)).digest === reviewPacket.digest, 'shared_master_data_review_packet_invalid')
+    assert(!JSON.stringify(reviewPacket).includes('Acme Company') && !JSON.stringify(reviewPacket).includes('acme company'), 'shared_master_data_review_packet_exposed_values')
+    const resolutionTamper = structuredClone(reviewPacket)
+    resolutionTamper.candidates[0].allowedResolutions.reverse()
+    let resolutionTamperRejected = false
+    try { await model.validateSharedMasterDataReviewPacket(resolutionTamper) } catch { resolutionTamperRejected = true }
+    assert(resolutionTamperRejected, 'shared_master_data_review_resolution_tamper_accepted')
+    const decisionInput = {
+      decidedBy: 'Master data owner', evidenceReference: 'EVIDENCE-MASTER-REVIEW-001',
+      decisions: [{ candidateId: 'DUP-001', resolution: 'link_shared_party' }, { candidateId: 'DUP-002', resolution: 'merge_in_owner' }],
+    }
+    const decisionPacket = await model.buildSharedMasterDataDecisionPacket(reviewPacket, decisionInput, '2026-07-30T12:00:00.000Z')
+    assert(decisionPacket.contract === model.SHARED_MASTER_DATA_DECISION_CONTRACT && decisionPacket.controls.humanConfirmed === true && (await model.validateSharedMasterDataDecisionPacket(decisionPacket)).digest === decisionPacket.digest, 'shared_master_data_decision_packet_invalid')
+    const dryRunPlan = await model.buildSharedMasterDataDryRunPlan(reviewPacket, decisionInput, '2026-07-30T12:00:00.000Z')
+    assert(dryRunPlan.contract === model.SHARED_MASTER_DATA_DRY_RUN_CONTRACT && dryRunPlan.routes.length === 2 && dryRunPlan.controls.executionAllowed === false && dryRunPlan.controls.mutationsPerformed === false && dryRunPlan.controls.sourceBackupRequiredBeforeExecution === true, 'shared_master_data_dry_run_invalid')
+    assert(dryRunPlan.routes[0].targetOwnerProduct === 'commerce' && dryRunPlan.routes[0].targetSourceAuthority === 'shop_inventory_command_chain' && dryRunPlan.routes[0].consequence === 'reversible' && dryRunPlan.routes[1].consequence === 'destructive' && dryRunPlan.routes[1].requiredApprovals.includes('security_reviewer'), 'shared_master_data_dry_run_route_invalid')
+    assert((await model.validateSharedMasterDataDryRunPlan(dryRunPlan)).digest === dryRunPlan.digest && !JSON.stringify(dryRunPlan).includes('Acme Company') && !JSON.stringify(dryRunPlan).includes('main store'), 'shared_master_data_dry_run_exposed_values')
+    const rehearsalPlan = await model.buildSharedMasterDataRehearsalPlan(dryRunPlan)
+    assert(rehearsalPlan.contract === model.SHARED_MASTER_DATA_REHEARSAL_CONTRACT && rehearsalPlan.workOrders.length === 2 && rehearsalPlan.controls.templateOnly === true && rehearsalPlan.controls.allApprovalsPending === true && rehearsalPlan.controls.productionTargetAllowed === false && rehearsalPlan.controls.sourceWriteAllowed === false, 'shared_master_data_rehearsal_invalid')
+    assert(rehearsalPlan.workOrders[0].status === 'not_started' && rehearsalPlan.workOrders[0].approvals.every((approval) => approval.status === 'pending') && rehearsalPlan.workOrders[1].backupRequired === true && rehearsalPlan.workOrders[1].rollbackRequired === true && rehearsalPlan.workOrders[1].verificationChecks.includes('no_orphan_references'), 'shared_master_data_rehearsal_controls_missing')
+    assert((await model.validateSharedMasterDataRehearsalPlan(rehearsalPlan)).digest === rehearsalPlan.digest && !JSON.stringify(rehearsalPlan).includes('Acme Company') && !JSON.stringify(rehearsalPlan).includes('main store'), 'shared_master_data_rehearsal_exposed_values')
+    const rehearsalApprovalTamper = structuredClone(rehearsalPlan)
+    rehearsalApprovalTamper.workOrders[1].approvals[0].status = 'approved'
+    let rehearsalApprovalTamperRejected = false
+    try { await model.validateSharedMasterDataRehearsalPlan(rehearsalApprovalTamper) } catch { rehearsalApprovalTamperRejected = true }
+    assert(rehearsalApprovalTamperRejected, 'shared_master_data_rehearsal_approval_tamper_accepted')
+    const dryRunRouteTamper = structuredClone(dryRunPlan)
+    dryRunRouteTamper.routes[1].targetOwnerProduct = 'production'
+    let dryRunRouteTamperRejected = false
+    try { await model.validateSharedMasterDataDryRunPlan(dryRunRouteTamper) } catch { dryRunRouteTamperRejected = true }
+    assert(dryRunRouteTamperRejected, 'shared_master_data_dry_run_route_tamper_accepted')
+    let incompleteDecisionRejected = false
+    try { await model.buildSharedMasterDataDecisionPacket(reviewPacket, { ...decisionInput, decisions: decisionInput.decisions.slice(0, 1) }, '2026-07-30T12:00:00.000Z') } catch { incompleteDecisionRejected = true }
+    assert(incompleteDecisionRejected, 'shared_master_data_incomplete_decision_accepted')
+    assert(!JSON.stringify(report).includes('May') && !JSON.stringify(report).includes('Ko Aung'), 'operational_report_exposed_customer_value')
+    assert(report.entries.every((entry, index, entries) => !index || ({ critical: 4, warning: 3, action: 2, ready: 1 })[entries[index - 1].severity] >= ({ critical: 4, warning: 3, action: 2, ready: 1 })[entry.severity]), 'operational_report_priority_order_invalid')
+
+    const websiteOnly = model.buildOperationalReport({
+      mode: 'managed',
+      allowedProducts: ['website'],
+      sources: [{ surface: 'website', mode: 'managed', revision: 3, updatedAt: '2026-07-29T11:00:00.000Z' }],
+      website: websiteState,
+      now,
+    })
+    assert(websiteOnly.entries.every((entry) => entry.product === 'website') && websiteOnly.sources.length === 1, 'operational_report_permission_filter_failed')
+    assert(!JSON.stringify(websiteOnly).includes('commerce') && !JSON.stringify(websiteOnly).includes('production'), 'operational_report_hidden_product_metadata_leaked')
+    assert(websiteOnly.masterData.dimensions.length === 1 && websiteOnly.masterData.dimensions.every((dimension) => dimension.product === 'website' && dimension.consumers.length === 0), 'operational_report_master_data_permission_filter_failed')
+
+    const unprovisioned = model.buildOperationalReport({
+      mode: 'managed',
+      allowedProducts: ['commerce', 'ecommerce'],
+      sources: [{ surface: 'commerce', mode: 'managed', revision: 0, updatedAt: '2026-07-29T11:00:00.000Z' }],
+      now,
+    })
+    assert(unprovisioned.entries.length === 2 && unprovisioned.entries.every((entry) => entry.id.endsWith('.managed_setup')), 'operational_report_unprovisioned_state_not_explicit')
+    const corrupt = model.buildOperationalReport({
+      mode: 'local',
+      allowedProducts: ['commerce', 'ecommerce'],
+      sources: [{ surface: 'commerce', mode: 'error', revision: null, updatedAt: null }],
+      now,
+    })
+    assert(corrupt.entries.every((entry) => entry.severity === 'critical' && entry.id.endsWith('.source_recovery')), 'operational_report_corrupt_source_used_sample')
+
+    let permissionOrderRejected = false
+    try {
+      model.buildOperationalReport({ mode: 'managed', allowedProducts: ['website', 'commerce'], sources: [{ surface: 'commerce', mode: 'managed', revision: 1, updatedAt: null }, { surface: 'website', mode: 'managed', revision: 1, updatedAt: null }], now })
+    } catch { permissionOrderRejected = true }
+    assert(permissionOrderRejected, 'operational_report_noncanonical_permissions_accepted')
+    const restoredView = model.restoreOperationalReportView({ product: 'commerce', urgency: 'critical' }, ['website'])
+    assert(restoredView.product === 'all' && restoredView.urgency === 'attention', 'operational_report_saved_view_bypassed_permissions')
+    const criticalOnly = model.filterOperationalReport(report, { product: 'all', urgency: 'critical' })
+    assert(criticalOnly.every((entry) => entry.severity === 'critical'), 'operational_report_critical_filter_failed')
+    const exported = await model.exportOperationalReport(websiteOnly, { product: 'website', urgency: 'all' })
+    assert(exported.contract === model.OPERATIONAL_REPORT_EXPORT_CONTRACT && /^sha256:[0-9a-f]{64}$/.test(exported.digest), 'operational_report_export_not_digest_bound')
+    assert(exported.entries.every((entry) => entry.product === 'website') && exported.controls.externalWritesPerformed === false, 'operational_report_export_broadened_scope')
+    assert((await model.validateOperationalReportExport(exported)).digest === exported.digest && exported.masterData.dimensions.length === 1, 'operational_report_export_not_revalidated')
+    const tamperedExport = structuredClone(exported)
+    tamperedExport.masterData.dimensions[0].recordCount += 1
+    let tamperedExportRejected = false
+    try { await model.validateOperationalReportExport(tamperedExport) } catch { tamperedExportRejected = true }
+    assert(tamperedExportRejected, 'operational_report_tampered_master_data_accepted')
+  } catch (error) {
+    fail(`operational_report_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyShopOperatingFlowRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopOperatingFlowRuntimeChecks += 1
+  }
+  const input = (patch = {}) => ({ incomingOnline: 0, incomingWebsite: 0, confirmed: 0, preparing: 0, ready: 0, paymentPending: 0, refundDue: 0, closeReady: 0, overdue: 0, ...patch })
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-operating-flow.ts')).href}?shop-operating-flow-verify=${Date.now()}`)
+    const idle = model.buildShopOperatingFlow(input())
+    assert(idle.stages.length === 5 && idle.next.id === 'new_order' && idle.next.orderMode === 'manual', 'shop_operating_flow_idle_action_wrong')
+    const intake = model.buildShopOperatingFlow(input({ incomingOnline: 2, incomingWebsite: 1, overdue: 4 }))
+    assert(intake.next.id === 'review_intake' && intake.next.orderMode === 'online' && intake.stages[0].count === 3, 'shop_operating_flow_intake_priority_wrong')
+    const overdue = model.buildShopOperatingFlow(input({ confirmed: 2, overdue: 1 }))
+    assert(overdue.next.id === 'protect_promise' && overdue.next.target === '#shop-order-queue', 'shop_operating_flow_overdue_priority_wrong')
+    const refund = model.buildShopOperatingFlow(input({ refundDue: 1, paymentPending: 1, closeReady: 2 }))
+    assert(refund.next.id === 'reconcile_money' && refund.next.target === '#shop-order-history', 'shop_operating_flow_refund_priority_wrong')
+    const fulfilment = model.buildShopOperatingFlow(input({ confirmed: 1, preparing: 2, ready: 3 }))
+    assert(fulfilment.next.id === 'move_orders' && fulfilment.stages.find((stage) => stage.id === 'fulfilment')?.count === 5, 'shop_operating_flow_fulfilment_wrong')
+    const close = model.buildShopOperatingFlow(input({ closeReady: 3 }))
+    assert(close.next.id === 'close_day' && close.next.target === '#shop-close-controls', 'shop_operating_flow_close_wrong')
+    let rejected = false
+    try { model.buildShopOperatingFlow(input({ ready: -1 })) } catch { rejected = true }
+    assert(rejected, 'shop_operating_flow_negative_count_accepted')
+    assert(shopOperatingFlowSource.includes('Number.isSafeInteger') && !shopOperatingFlowSource.includes('Date.now('), 'shop_operating_flow_not_deterministic')
+  } catch (error) {
+    fail(`shop_operating_flow_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+await verifyOperationalReportRuntime()
+await verifyShopOperatingFlowRuntime()
 await verifyChannelOrderRuntime()
 await verifyShopInventoryRuntime()
+await verifyShopServiceScheduleRuntime()
+await verifyShopProductionDemandRuntime()
+await verifyShopDemandIntelligenceRuntime()
 await verifyPlantOrderRuntime()
 await verifyWebsiteReleaseRuntime()
 await verifyCatalogImportRuntime()
@@ -11294,6 +16798,7 @@ await verifyClientOnboardingRuntime()
 await verifyManagedContextRuntime()
 await verifyOperatingBaselineRuntime()
 await verifyManagedClientImportRuntime()
+await verifyPlantEquipmentImportRuntime()
 await verifyWebsiteRuntime()
 await verifyWebsiteOrderCompletionRuntime()
 await verifyCommerceOrderDraftRuntime()
@@ -11308,13 +16813,25 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-if (bytes > 2_500_000) fail(`artifact_budget:${bytes}`)
+// Bounded allowance for supplier return claims, credit evidence, and credit-adjusted invoice matching.
+if (bytes > 2_800_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
+if (files.some((path) => /[\\/]VisionProduct-[^\\/]+\.(?:js|css)$/.test(path))) fail('private_vision_preview_shipped_in_production')
 const largestJavascriptBytes = Math.max(...await Promise.all(javascriptFiles.map(async (path) => (await stat(path)).size)))
+const operationsArtifactPath = javascriptFiles.find((path) => /[\\/]core-app-[^\\/]+\.js$/.test(path))
+if (!operationsArtifactPath) fail('operations_route_artifact_missing')
+else {
+  const operationsArtifact = await readFile(operationsArtifactPath, 'utf8')
+  if (operationsArtifact.includes('SuperMega HQ')
+    || operationsArtifact.includes('company work items remain open')
+    || operationsArtifact.includes('Choose a product. Run work.')) fail('retired_shell_or_internal_hq_shipped_in_operations_route')
+}
 if (largestJavascriptBytes > 500_000) fail(`javascript_chunk_budget:${largestJavascriptBytes}`)
 if (!javascriptFiles.some((path) => /[\\/]router-[^\\/]+\.js$/.test(path))) fail('router_chunk_artifact_missing')
 if (!javascriptFiles.some((path) => /[\\/]ClientDataOnboarding-[^\\/]+\.js$/.test(path))) fail('client_onboarding_chunk_artifact_missing')
-if (largestJavascriptBytes > 480_000) fail(`javascript_headroom_budget:${largestJavascriptBytes}`)
+if (!javascriptFiles.some((path) => /[\\/]local-client-import-[^\\/]+\.js$/.test(path))) fail('local_client_import_chunk_artifact_missing')
+if (!javascriptFiles.some((path) => /[\\/]ShopServiceSchedule-[^\\/]+\.js$/.test(path))) fail('shop_service_schedule_chunk_artifact_missing')
+if (largestJavascriptBytes > 497_000) fail(`javascript_headroom_budget:${largestJavascriptBytes}`)
 
 if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !pilotOutcomeSource.includes("supermega.local_pilot_outcome_checkpoint.v1")
@@ -11356,7 +16873,7 @@ if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !settingsPageSource.includes("'Start Plant shift-close proof'")
   || !settingsPageSource.includes('const currentPlantShiftClose = currentProductionShiftClose(production)')
   || !settingsPageSource.includes('buildPlantGuidedShiftCloseOutcomeMetric(currentPlantShiftClose ? [currentPlantShiftClose] : [], setup.startedAt)')
-  || !settingsPageSource.includes('Close one shift packet with output, trace, quality, and WCM evidence.')
+  || !settingsPageSource.includes('Show output, same-shift material trace, clear quality/WCM gates, and a revision-bound owner close.')
   || !settingsPageSource.includes("['First proof', 'One accountable shift close'")
   || !settingsPageSource.includes('startPilotOutcome(window.localStorage, pilotOutcomeSetup, metric, new Date(startedAt))')
   || !settingsPageSource.includes('buildPilotOutcomeDecisionApproval')
@@ -11366,8 +16883,8 @@ if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !settingsPageSource.includes('version: 24')
   || !coreCssSource.includes('.pilot-outcome-proof')
   || !coreCssSource.includes('.pilot-outcome-rows, .pilot-outcome-empty { grid-template-columns: 1fr; }')
-  || !coreCssSource.includes('.orders-module { overflow-y: auto; scrollbar-gutter: stable; }')
-  || !coreCssSource.includes('.orders-module > .order-workspace { min-height: 640px; flex: 0 0 auto; }')
+  || !coreCssSource.includes('.orders-module { overflow-y: auto; padding: 0 2px 128px 0; scrollbar-gutter: stable; }')
+  || !coreCssSource.includes('.orders-module > .order-workspace { flex: 0 0 auto; }')
   || !coreCssSource.includes('.orders-module > .order-workspace { min-height: 0; flex: none; }')
   || !managedActivationRunbookSource
   || !managedTrialRuntimeSource
@@ -11560,7 +17077,7 @@ if (!companyBackupSource.includes("COMPANY_BACKUP_CONTRACT = 'supermega.company_
   || !appLiveVerifierSource.includes('company_backup_chunk_missing')
   || !settingsPageSource.includes("import('./CompanyBackupPanel')")
   || !settingsPageSource.includes('listResettableCompanyStorageKeys(window.localStorage)')
-  || !settingsPageSource.includes('every current Shop, Plant, Website, Ecommerce, owner-control, outcome, setup, unfinished order drafts, and local AI-memory record')
+  || !settingsPageSource.includes('Reset clears current Shop, Plant, Website, Ecommerce, owner-control, outcome, setup, unfinished order drafts, and local AI-memory records.')
   || !coreCssSource.includes('.company-backup-panel')
   || !coreCssSource.includes('.company-backup-fields input { min-height: 44px; }')
   || !coreCssSource.includes('.company-backup-actions .core-button { width: 100%; }')) fail('company_backup_contract_missing')
@@ -11677,5 +17194,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

@@ -12,19 +12,30 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from supermega_runtime.plant_order_foundation import (
+    PlantOrderValidationError,
     apply_plant_order_plan,
+    build_plant_order_cost_review_packet,
+    build_plant_order_effective_plan,
     build_plant_order_execution_plan,
     check_plant_order_availability,
     create_empty_plant_order_state,
     issue_plant_order_material,
     plant_order_evidence_digest,
+    project_plant_order,
+    project_plant_order_cost_drivers,
+    project_plant_order_financial_cost,
     record_plant_order_operation,
     release_plant_order,
+    validate_plant_order_cost_review_packet,
 )
 from supermega_runtime.production_runtime import (
     PRODUCTION_EVENTS,
     PRODUCTION_HUMAN_EVENTS,
     validate_production_state,
+)
+from supermega_runtime.production_material_handoff import (
+    project_production_material_requirements,
+    validate_production_material_requirements,
 )
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_runtime import create_trial_router
@@ -49,13 +60,14 @@ def action_evidence(
     *,
     actor: str = ACTOR,
     captured_at: str = NOW,
+    evidence_reference: str | None = None,
 ) -> dict[str, str]:
     return {
         "actionId": action_id,
         "capturedAt": captured_at,
         "actor": actor,
         "reason": "Verified against the accountable operating record.",
-        "evidenceReference": f"evidence://production/{action_id}",
+        "evidenceReference": evidence_reference or f"evidence://production/{action_id}",
     }
 
 
@@ -179,6 +191,7 @@ def opening_plan_workspace(
             "contract": "supermega.production.opening-plan.v1",
             "packageDigest": digest,
             "confirmedAt": confirmed_at,
+            "industryPackId": "general-manufacturing",
             "jobIds": ["JOB-OPENING-001", "JOB-OPENING-002"],
             "machineIds": ["MACHINE-OPENING-001", "MACHINE-OPENING-002"],
         },
@@ -696,6 +709,262 @@ def apply_event(
 
 
 class ProductionRuntimeTests(unittest.TestCase):
+    def test_material_requirements_bind_bom_shop_stock_and_open_purchase_orders(self) -> None:
+        current = starting_workspace(target=10)
+        evidence = action_evidence("ACT-MRP-PLAN-001")
+        plan = build_plant_order_effective_plan(
+            plan_id="PLN-MRP-001",
+            source_digest=plant_order_evidence_digest({"job": current["jobs"][0]}),  # type: ignore[index]
+            effective_from="2026-08-01T15:30:00+06:30",
+            effective_until="2026-08-31T15:30:00+06:30",
+            job={
+                "jobId": "JOB-REAL-001",
+                "product": "Customer batch 001",
+                "targetQuantity": 10,
+                "outputBatchId": "BATCH-MRP-001",
+            },
+            materials=[{
+                "materialId": "MAT-FILTER-001",
+                "name": "Filter media",
+                "unit": "kg",
+                "quantityPerUnitMilli": 1_500,
+                "standardCostPerUnitMmk": 1_000,
+                "shopSupply": {
+                    "sku": "SKU-RM-BAG",
+                    "materialQuantityMilliPerStockUnit": 5_000,
+                },
+            }],
+            work_centres=[{"workCentreId": "WC-MRP-001", "name": "MRP line"}],
+            routing=[{
+                "operationId": "OP-MRP-10",
+                "sequence": 1,
+                "name": "Process",
+                "workCentreId": "WC-MRP-001",
+                "minutesPerUnitMilli": 1_000,
+                "standardCostPerMinuteMmk": 500,
+            }],
+        )
+        empty = create_empty_plant_order_state()
+        execution = apply_plant_order_plan(
+            empty, plan, evidence, expected_head_digest=empty["headDigest"]
+        )["state"]
+        proposed = deepcopy(current)
+        proposed["orderExecution"] = execution
+        production = apply_event(
+            current,
+            "production.order_execution.recorded",
+            proposed,
+            evidence,
+        )
+        commerce = {
+            "schema": "supermega.commerce.workspace.v2",
+            "items": [{
+                "sku": "SKU-RM-BAG",
+                "name": "Filter media 5 kg bag",
+                "onHand": 2,
+                "reorderAt": 1,
+                "price": 5_000,
+            }],
+            "orders": [],
+            "movements": [],
+            "closes": [],
+            "purchaseOrders": [{
+                "id": "PO-00000000-0000-4000-8000-000000000402",
+                "createdAt": "2026-07-24T09:00:00.000Z",
+                "expectedAt": "2026-08-02T09:00:00.000Z",
+                "supplier": "Reviewed material supplier",
+                "sku": "SKU-RM-BAG",
+                "quantityOrdered": 2,
+                "unitCostMmk": 5_000,
+                "creation": action_evidence("ACT-MRP-PO-001"),
+            }],
+        }
+        commerce_without_purchase = deepcopy(commerce)
+        commerce_without_purchase["purchaseOrders"] = []
+        protected_shortage = project_production_material_requirements(
+            production, commerce_without_purchase
+        )
+        assert protected_shortage is not None
+        self.assertEqual(protected_shortage["status"], "shortage")
+        self.assertEqual(
+            protected_shortage["rows"][0]["shopSupply"]["suggestedOrderStockUnits"],
+            2,
+        )
+        requirements = project_production_material_requirements(production, commerce)
+        self.assertIsNotNone(requirements)
+        assert requirements is not None
+        self.assertEqual(requirements["status"], "covered_by_open_po")
+        self.assertEqual(requirements["rows"][0]["requiredQuantityMilli"], 15_000)
+        self.assertEqual(requirements["rows"][0]["shopSupply"]["onHandQuantityMilli"], 10_000)
+        self.assertEqual(requirements["rows"][0]["shopSupply"]["protectedStockUnits"], 1)
+        self.assertEqual(requirements["rows"][0]["shopSupply"]["availableToIssueStockUnits"], 1)
+        self.assertEqual(requirements["rows"][0]["shopSupply"]["suggestedIssueStockUnits"], 1)
+        self.assertEqual(requirements["rows"][0]["shopSupply"]["openPurchaseOrderQuantityMilli"], 10_000)
+        self.assertEqual(requirements["rows"][0]["shopSupply"]["suggestedOrderStockUnits"], 0)
+        self.assertEqual(requirements["rows"][0]["shopSupply"]["atRiskPurchaseOrderStockUnits"], 0)
+        self.assertTrue(all(value is False for value in requirements["authority"].values()))
+        self.assertEqual(
+            validate_production_material_requirements(
+                requirements, production, commerce
+            )["digest"],
+            requirements["digest"],
+        )
+        tampered = deepcopy(requirements)
+        tampered["rows"][0]["shopSupply"]["onHandStockUnits"] += 1
+        with self.assertRaisesRegex(
+            TrialValidationError,
+            "do not match their current Plant and Shop evidence",
+        ):
+            validate_production_material_requirements(tampered, production, commerce)
+        changed_floor_commerce = deepcopy(commerce)
+        changed_floor_commerce["items"][0]["reorderAt"] = 2
+        with self.assertRaisesRegex(
+            TrialValidationError,
+            "do not match their current Plant and Shop evidence",
+        ):
+            validate_production_material_requirements(
+                requirements, production, changed_floor_commerce
+            )
+
+        late_commerce = deepcopy(commerce)
+        late_commerce["purchaseOrders"][0]["expectedAt"] = "2026-07-28T09:00:00.000Z"
+        at_risk = project_production_material_requirements(production, late_commerce)
+        assert at_risk is not None
+        self.assertEqual(at_risk["status"], "supply_at_risk")
+        self.assertEqual(at_risk["summary"]["supplyAtRisk"], 1)
+        self.assertEqual(at_risk["rows"][0]["shopSupply"]["atRiskPurchaseOrderStockUnits"], 2)
+        self.assertEqual(at_risk["rows"][0]["shopSupply"]["suggestedExpediteStockUnits"], 2)
+        self.assertEqual(at_risk["rows"][0]["shopSupply"]["suggestedOrderStockUnits"], 0)
+        self.assertIsNone(at_risk["rows"][0]["shopSupply"]["nextExpectedAt"])
+
+        reserve_deficit_commerce = deepcopy(late_commerce)
+        reserve_deficit_commerce["items"][0]["onHand"] = 0
+        reserve_deficit_commerce["purchaseOrders"][0]["quantityOrdered"] = 4
+        reserve_deficit = project_production_material_requirements(
+            production, reserve_deficit_commerce
+        )
+        assert reserve_deficit is not None
+        self.assertEqual(reserve_deficit["status"], "supply_at_risk")
+        self.assertEqual(
+            reserve_deficit["rows"][0]["shopSupply"]["requiredSupplyStockUnits"],
+            4,
+        )
+        self.assertEqual(
+            reserve_deficit["rows"][0]["shopSupply"]["suggestedExpediteStockUnits"],
+            4,
+        )
+
+        after_window_commerce = deepcopy(commerce)
+        after_window_commerce["purchaseOrders"][0]["expectedAt"] = "2026-09-01T09:00:00.000Z"
+        after_window = project_production_material_requirements(
+            production, after_window_commerce
+        )
+        assert after_window is not None
+        self.assertEqual(after_window["status"], "supply_at_risk")
+        self.assertEqual(
+            after_window["rows"][0]["shopSupply"]["atRiskPurchaseOrderStockUnits"],
+            2,
+        )
+
+    def test_plant_cost_packet_has_python_browser_parity_and_rejects_tamper(self) -> None:
+        plan_input = {
+            "plan_id": "PLN-20260726-402",
+            "source_digest": plant_order_evidence_digest(
+                {"jobId": "JOB-401", "revision": 12, "target": 10}
+            ),
+            "job": {
+                "jobId": "JOB-401",
+                "product": "Premium water filter",
+                "targetQuantity": 10,
+                "outputBatchId": "BATCH-20260726-401",
+            },
+            "materials": [
+                {
+                    "materialId": "MAT-FILTER-001",
+                    "name": "Filter media",
+                    "unit": "kg",
+                    "quantityPerUnitMilli": 1_500,
+                    "standardCostPerUnitMmk": 1_000,
+                },
+                {
+                    "materialId": "MAT-SHELL-001",
+                    "name": "Outer shell",
+                    "unit": "pcs",
+                    "quantityPerUnitMilli": 2_000,
+                    "standardCostPerUnitMmk": 2_000,
+                },
+            ],
+            "work_centres": [
+                {"workCentreId": "WC-ASSEMBLY-01", "name": "Assembly bench"},
+                {"workCentreId": "WC-TEST-01", "name": "Pressure test"},
+            ],
+            "routing": [
+                {
+                    "operationId": "OP-ASSEMBLY-10",
+                    "sequence": 1,
+                    "name": "Assemble",
+                    "workCentreId": "WC-ASSEMBLY-01",
+                    "minutesPerUnitMilli": 500,
+                    "standardCostPerMinuteMmk": 500,
+                },
+                {
+                    "operationId": "OP-TEST-20",
+                    "sequence": 2,
+                    "name": "Pressure test",
+                    "workCentreId": "WC-TEST-01",
+                    "minutesPerUnitMilli": 1_000,
+                    "standardCostPerMinuteMmk": 600,
+                },
+            ],
+        }
+        plan = build_plant_order_execution_plan(**plan_input)
+        empty = create_empty_plant_order_state()
+        state = apply_plant_order_plan(
+            empty,
+            plan,
+            action_evidence("ACT-20260726-001"),
+            expected_head_digest=empty["headDigest"],
+        )["state"]
+
+        projection = project_plant_order(state)
+        drivers = project_plant_order_cost_drivers(projection)
+        financial_cost = project_plant_order_financial_cost(projection)
+        packet = build_plant_order_cost_review_packet(state)
+
+        self.assertEqual(plan["packageDigest"], "sha256:c8c747513a48ab4ef6a055bcf612bfdc9244c94771d5eeaae94b6204312b5f69")
+        self.assertEqual(drivers["status"], "not_started")
+        self.assertEqual(financial_cost["planned"]["totalMmk"], 63_500)
+        self.assertEqual(financial_cost["varianceMmk"], 0)
+        self.assertIsNotNone(packet)
+        assert packet is not None
+        self.assertTrue(all(value is False for value in packet["authority"].values()))
+        self.assertEqual(
+            validate_plant_order_cost_review_packet(packet)["digest"], packet["digest"]
+        )
+
+        tampered = deepcopy(packet)
+        tampered["financialCost"]["planned"]["totalMmk"] += 1
+        with self.assertRaisesRegex(
+            PlantOrderValidationError,
+            "does not match its validated command chain",
+        ):
+            validate_plant_order_cost_review_packet(tampered)
+
+        unpriced_input = deepcopy(plan_input)
+        unpriced_input["plan_id"] = "PLN-20260726-403"
+        for material in unpriced_input["materials"]:
+            material.pop("standardCostPerUnitMmk")
+        for operation in unpriced_input["routing"]:
+            operation.pop("standardCostPerMinuteMmk")
+        unpriced_plan = build_plant_order_execution_plan(**unpriced_input)
+        unpriced = apply_plant_order_plan(
+            empty,
+            unpriced_plan,
+            action_evidence("ACT-20260726-002", captured_at=LATER),
+            expected_head_digest=empty["headDigest"],
+        )["state"]
+        self.assertIsNone(build_plant_order_cost_review_packet(unpriced))
+
     def test_event_contract_and_real_workspace_initialization(self) -> None:
         expected_events = {
             "production.workspace.initialized",
@@ -709,6 +978,9 @@ class ProductionRuntimeTests(unittest.TestCase):
             "production.quality_hold.placed",
             "production.quality_hold.released",
             "production.machine_state.changed",
+            "production.equipment_master.imported",
+            "production.equipment.commissioned",
+            "production.equipment_maintenance_strategy.saved",
             "production.order_execution.recorded",
             "production.downtime.started",
             "production.downtime.ended",
@@ -847,6 +1119,79 @@ class ProductionRuntimeTests(unittest.TestCase):
             renewed["events"][0]["sourceDigest"],
             renewed["events"][1]["sourceDigest"],
         )
+    def test_shop_demand_job_retains_digest_bound_customer_free_source(self) -> None:
+        current = starting_workspace()
+        snapshot = {
+            "schema": "supermega.shop_production_demand.v1",
+            "operatingUnitLocationId": "LOC-MAIN",
+            "sku": "SKU-SHOP-001",
+            "productName": "Shop replenishment batch",
+            "sourceOrderIds": ["ORD-001", "ORD-002"],
+            "activeDemandUnits": 18,
+            "uncoveredDemandUnits": 8,
+            "availableToPromiseUnits": 10,
+            "reorderAtUnits": 15,
+            "replenishmentGapUnits": 5,
+            "recommendedBatchUnits": 8,
+        }
+        source_digest = plant_order_evidence_digest(snapshot)
+        evidence_reference = f"SHOP-DEMAND:{source_digest}:LOC-MAIN"
+        evidence = action_evidence(
+            "ACT-SHOP-DEMAND-JOB",
+            captured_at=LATER,
+            evidence_reference=evidence_reference,
+        )
+        job = {
+            "id": "JOB-SHOP-001",
+            "line": "Packing team",
+            "product": snapshot["productName"],
+            "target": snapshot["recommendedBatchUnits"],
+            "output": 0,
+            "owner": "Packing lead",
+            "priority": "urgent",
+            "dueAt": "2026-07-25T09:00:00.000Z",
+            "shopDemandSource": {
+                "contract": "supermega.production.shop-demand-source.v1",
+                "sourceDigest": source_digest,
+                "evidenceReference": evidence_reference,
+                "snapshot": snapshot,
+            },
+        }
+        next_state = deepcopy(current)
+        next_state["revision"] = 1
+        next_state["jobs"] = [job, *next_state["jobs"]]
+        next_state["events"] = [
+            production_event(
+                evidence,
+                kind="job_created",
+                subject_id=job["id"],
+                summary="Created Shop replenishment batch job for Packing team",
+                jobPriority=job["priority"],
+                jobDueAt=job["dueAt"],
+                jobOwner=job["owner"],
+            )
+        ]
+
+        accepted = apply_event(
+            current,
+            "production.job.created",
+            next_state,
+            evidence,
+        )
+        retained = accepted["jobs"][0]["shopDemandSource"]
+        self.assertEqual(retained["snapshot"]["sourceOrderIds"], ["ORD-001", "ORD-002"])
+        self.assertNotIn("customer", str(retained).lower())
+
+        for mutate in (
+            lambda state: state["jobs"][0]["shopDemandSource"]["snapshot"]["sourceOrderIds"].append("ORD-003"),
+            lambda state: state["jobs"][0]["shopDemandSource"].__setitem__("sourceDigest", f"sha256:{'0' * 64}"),
+            lambda state: state["events"][0].__setitem__("evidenceReference", "evidence://forged"),
+            lambda state: state["jobs"][0].__setitem__("target", 9),
+        ):
+            forged = deepcopy(next_state)
+            mutate(forged)
+            with self.assertRaises(TrialValidationError):
+                validate_production_state(forged)
 
     def test_managed_order_execution_appends_one_bound_command(self) -> None:
         current = starting_workspace(target=10)
@@ -1049,6 +1394,99 @@ class ProductionRuntimeTests(unittest.TestCase):
             501,
         )
 
+    def test_managed_order_portfolio_appends_one_job_at_a_time(self) -> None:
+        current = opening_plan_workspace()
+        first_evidence = action_evidence("ACT-PORTFOLIO-001")
+        first_execution = planned_order_execution(current, first_evidence)
+        first = deepcopy(current)
+        first["orderPortfolio"] = {
+            "contract": "supermega.production.order_portfolio.v1",
+            "entries": [{"jobId": "JOB-OPENING-001", "execution": first_execution}],
+        }
+        accepted_first = apply_event(
+            current,
+            "production.order_execution.recorded",
+            first,
+            first_evidence,
+        )
+
+        second_evidence = action_evidence("ACT-PORTFOLIO-002", captured_at=LATER)
+        second_job = current["jobs"][1]  # type: ignore[index]
+        second_plan = build_plant_order_execution_plan(
+            plan_id="PLN-MANAGED-002",
+            source_digest=plant_order_evidence_digest({"job": second_job}),
+            job={
+                "jobId": second_job["id"],
+                "product": second_job["product"],
+                "targetQuantity": second_job["target"],
+                "outputBatchId": "BATCH-MANAGED-002",
+            },
+            materials=[{
+                "materialId": "MAT-MANAGED-002",
+                "name": "Second managed material",
+                "unit": "kg",
+                "quantityPerUnitMilli": 1_000,
+            }],
+            work_centres=[{"workCentreId": "WC-MANAGED-002", "name": "Second line"}],
+            routing=[{
+                "operationId": "OP-MANAGED-20",
+                "sequence": 1,
+                "name": "Second managed operation",
+                "workCentreId": "WC-MANAGED-002",
+                "minutesPerUnitMilli": 1_000,
+            }],
+        )
+        empty = create_empty_plant_order_state()
+        second_execution = apply_plant_order_plan(
+            empty,
+            second_plan,
+            second_evidence,
+            expected_head_digest=empty["headDigest"],
+        )["state"]
+        second = deepcopy(accepted_first)
+        second["orderPortfolio"]["entries"].append({  # type: ignore[index]
+            "jobId": "JOB-OPENING-002",
+            "execution": second_execution,
+        })
+        accepted_second = apply_event(
+            accepted_first,
+            "production.order_execution.recorded",
+            second,
+            second_evidence,
+        )
+        self.assertEqual(
+            [entry["jobId"] for entry in accepted_second["orderPortfolio"]["entries"]],  # type: ignore[index]
+            ["JOB-OPENING-001", "JOB-OPENING-002"],
+        )
+
+        changed_two = deepcopy(accepted_second)
+        for index, action_id in enumerate(("ACT-PORTFOLIO-003", "ACT-PORTFOLIO-004")):
+            evidence = action_evidence(action_id, captured_at=LATEST)
+            execution = changed_two["orderPortfolio"]["entries"][index]["execution"]  # type: ignore[index]
+            changed_two["orderPortfolio"]["entries"][index]["execution"] = check_plant_order_availability(  # type: ignore[index]
+                execution,
+                check_id=f"CHK-PORTFOLIO-{index + 1:03d}",
+                source_digest=plant_order_evidence_digest({"portfolio": index}),
+                materials=[{
+                    "materialId": f"MAT-MANAGED-{index + 1:03d}",
+                    "inputLotId": f"LOT-MANAGED-{index + 1:03d}",
+                    "availableQuantityMilli": (100 if index else 10) * 1_000,
+                }],
+                work_centres=[{
+                    "workCentreId": f"WC-MANAGED-{index + 1:03d}",
+                    "availableMinutes": 100 if index else 10,
+                }],
+                proof=evidence,
+                expected_head_digest=execution["headDigest"],
+            )["state"]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                accepted_second,
+                "production.order_execution.recorded",
+                changed_two,
+                action_evidence("ACT-PORTFOLIO-003", captured_at=LATEST),
+            )
+
     def test_opening_plan_is_atomic_multi_record_and_immutable(self) -> None:
         initial = opening_plan_workspace()
         evidence = action_evidence("ACT-INIT-OPENING-PLAN")
@@ -1126,6 +1564,10 @@ class ProductionRuntimeTests(unittest.TestCase):
         bad_contract = opening_plan_workspace()
         bad_contract["openingPlan"]["contract"] = "supermega.production.opening-plan.v0"
         invalid_states.append(("bad contract", bad_contract))
+
+        bad_pack = opening_plan_workspace()
+        bad_pack["openingPlan"]["industryPackId"] = "unsupported-pack"
+        invalid_states.append(("bad industry pack", bad_pack))
 
         bad_digest = opening_plan_workspace(digest="sha256:not-a-digest")
         invalid_states.append(("bad digest", bad_digest))

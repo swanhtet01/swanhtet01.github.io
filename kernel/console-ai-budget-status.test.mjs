@@ -4,7 +4,8 @@ import assert from 'node:assert/strict'
 
 const ENV_KEYS = [
   'SUPERMEGA_OPS_KEY', 'SUPERMEGA_COMPANY_DAILY_AI_BUDGET_UNITS',
-  'ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'OPENROUTER_API_KEY',
+  'ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'OPENROUTER_API_KEY', 'SUPERMEGA_OLLAMA_ENABLED', 'SUPERMEGA_OLLAMA_MODEL',
+  'VERCEL',
   'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY',
   'POSTGRES_URL_NON_POOLING', 'POSTGRES_URL', 'DATABASE_URL_UNPOOLED', 'POSTGRES_PRISMA_URL',
   'SUPERMEGA_DATABASE_URL', 'DATABASE_URL',
@@ -81,6 +82,16 @@ test('protected state exposes only truthful aggregate daily AI-budget metadata',
     for (const privateMarker of ['tenant-private-marker', 'deep-private-marker', 'provider-private-marker', 'status-consumed']) {
       assert.doesNotMatch(publicShape, new RegExp(privateMarker))
     }
+
+    delete process.env.OPENROUTER_API_KEY
+    process.env.SUPERMEGA_OLLAMA_ENABLED = '1'
+    process.env.SUPERMEGA_OLLAMA_MODEL = 'qwen3.5:0.8b'
+    const localResponse = await handle({ method: 'GET', path: '/api/state', headers: { 'x-ops-key': 'owner-budget-key' } })
+    assert.equal(localResponse.json.aiConfigured, true, 'explicit local Ollama configuration is reported truthfully')
+    process.env.VERCEL = '1'
+    const hostedResponse = await handle({ method: 'GET', path: '/api/state', headers: { 'x-ops-key': 'owner-budget-key' } })
+    assert.equal(hostedResponse.json.aiConfigured, false, 'loopback Ollama is never reported as available in hosted runtime')
+    delete process.env.VERCEL
 
     process.env.SUPABASE_URL = 'https://project.supabase.co'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role'

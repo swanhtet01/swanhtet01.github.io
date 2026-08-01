@@ -1,11 +1,16 @@
 import { createHash } from 'node:crypto'
 
-export const CEO_OUTCOME_AUTHORITY_CONTRACT = 'supermega.ceo-outcome-authority.v1'
+export const CEO_OUTCOME_AUTHORITY_CONTRACT = 'supermega.ceo-outcome-authority.v2'
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,79}$/
 const OUTCOME_STATES = new Set(['ready', 'blocked', 'done'])
 const ACTION_MODES = new Set(['read_only_brief', 'credentialed_provider_read', 'protected_preview', 'managed_pilot'])
-const SAFE_EVIDENCE_TOOLS = new Set(['platform_status', 'leads_overview', 'pipeline_overview', 'fx_rate'])
+const SAFE_EVIDENCE_TOOLS = new Set(['platform_status', 'company_operations_status', 'leads_overview', 'pipeline_overview', 'fx_rate'])
+const NON_AUTHORITATIVE_SOCIAL_DOMAINS = Object.freeze([
+  'instagram.com',
+  'linkedin.com',
+  'lnkd.in',
+])
 const AUTHORITY_FIELDS = new Set([
   'contract',
   'authorityId',
@@ -32,6 +37,7 @@ const OUTCOME_FIELDS = new Set([
   'actionMode',
   'deliverable',
   'objective',
+  'successMeasure',
   'blockers',
   'evidencePlan',
   'sourceRefs',
@@ -53,6 +59,15 @@ function unknownFields(value, allowed) {
 function boundedText(value, max) {
   const text = typeof value === 'string' ? value.trim() : ''
   return text && text.length <= max && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(text) ? text : ''
+}
+
+function isNonAuthoritativeSocialRef(value) {
+  if (!/^https:\/\//i.test(value)) return false
+  try {
+    const host = new URL(value).hostname.toLowerCase()
+    return NON_AUTHORITATIVE_SOCIAL_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`))
+  }
+  catch { return false }
 }
 
 function normalizedIds(value) {
@@ -108,7 +123,8 @@ function normalizeAuthority(value) {
     const actionMode = boundedText(candidate.actionMode, 40)
     const deliverable = boundedText(candidate.deliverable, 400)
     const objective = boundedText(candidate.objective, 1_200)
-    if (!ID_RE.test(id) || !ID_RE.test(team) || !title || !deliverable || !objective) return null
+    const successMeasure = boundedText(candidate.successMeasure, 400)
+    if (!ID_RE.test(id) || !ID_RE.test(team) || !title || !deliverable || !objective || !successMeasure) return null
     if (!Number.isInteger(candidate.priority) || candidate.priority < 0 || candidate.priority > 100) return null
     if (!OUTCOME_STATES.has(state) || !ACTION_MODES.has(actionMode)) return null
 
@@ -121,7 +137,7 @@ function normalizeAuthority(value) {
 
     if (!Array.isArray(candidate.sourceRefs) || candidate.sourceRefs.length < 1 || candidate.sourceRefs.length > 4) return null
     const sourceRefs = candidate.sourceRefs.map((item) => boundedText(item, 240))
-    if (sourceRefs.some((item) => !item) || new Set(sourceRefs).size !== sourceRefs.length) return null
+    if (sourceRefs.some((item) => !item || isNonAuthoritativeSocialRef(item)) || new Set(sourceRefs).size !== sourceRefs.length) return null
     outcomes.push({
       id,
       title,
@@ -131,6 +147,7 @@ function normalizeAuthority(value) {
       actionMode,
       deliverable,
       objective,
+      successMeasure,
       blockers: [...blockers],
       evidencePlan,
       sourceRefs,
@@ -157,7 +174,7 @@ function normalizeAuthority(value) {
 
 export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
   contract: CEO_OUTCOME_AUTHORITY_CONTRACT,
-  authorityId: 'supermega-hq-2026-07-27',
+  authorityId: 'supermega-hq-2026-07-28',
   company: 'supermega',
   northStar: 'One real workflow reaches a measurable outcome through an accountable operating record.',
   selectionPolicy: 'priority_then_id',
@@ -179,12 +196,13 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
       actionMode: 'credentialed_provider_read',
       deliverable: 'Bucket inventory plus anonymous-list, cross-tenant-list, and short-lived authorized-object evidence.',
       objective: 'Verify that a stranger cannot enumerate or read another tenant\'s uploads even when individual object links look private.',
+      successMeasure: 'All six bounded Storage requests produce the expected access classes with zero anonymous or cross-tenant visibility and one authorized short-lived positive control.',
       blockers: Object.freeze(['isolated-tenant-missing', 'owner-provider-approval-required']),
       evidencePlan: Object.freeze([]),
       sourceRefs: Object.freeze([
         'hq/NOW.md',
         'hq/research/agent-operations-security-2026-07-26.md',
-        'https://www.instagram.com/p/Da-NXcnkz8p/?img_index=8',
+        'tools/verify_private_storage_privacy.py',
       ]),
     }),
     Object.freeze({
@@ -196,6 +214,7 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
       actionMode: 'protected_preview',
       deliverable: 'One exact-commit preview with desktop, mobile, persistence, security, observability, and rollback evidence.',
       objective: 'Prove the clean candidate on the canonical project without changing production aliases.',
+      successMeasure: 'The protected preview serves the reviewed commit, passes every required contract and viewport, and retains a verified exact rollback target without production alias mutation.',
       blockers: Object.freeze(['canonical-project-link-missing', 'owner-release-approval-required']),
       evidencePlan: Object.freeze([]),
       sourceRefs: Object.freeze(['hq/NOW.md', 'hq/WORKBOARD.md']),
@@ -209,25 +228,99 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
       actionMode: 'managed_pilot',
       deliverable: 'A named operator, baseline, isolated tenant, five-day evidence plan, and measured workflow outcome.',
       objective: 'Move one Shop, Plant, Website, or Ecommerce workflow from local release candidate to measured customer proof.',
+      successMeasure: 'One named operator completes the agreed workflow for five days with retained baseline, completion, correction, recovery, and acceptance evidence on an isolated tenant.',
       blockers: Object.freeze(['named-pilot-missing', 'isolated-tenant-missing']),
       evidencePlan: Object.freeze([]),
       sourceRefs: Object.freeze(['hq/portfolio.json', 'hq/NOW.md']),
     }),
     Object.freeze({
-      id: 'daily-company-control',
-      title: 'Prepare one evidence-backed owner decision',
-      team: 'product',
-      priority: 70,
+      id: 'engineering-release-control',
+      title: 'Review engineering and release health',
+      team: 'engineering',
+      priority: 74,
       state: 'ready',
       actionMode: 'read_only_brief',
-      deliverable: 'At most six short lines with real leads, pipeline, USD/MMK, platform status, missing evidence, and one owner decision.',
-      objective: 'Use only the fixed read-only evidence plan. State exact values, distinguish missing evidence, and identify one decision for the owner. Do not send, deploy, pay, modify records, or imply that a blocked outcome is executable.',
+      deliverable: 'One exact release-health brief with current platform state, the highest verified delivery risk, and one bounded engineering next action.',
+      objective: 'Inspect only the fixed platform evidence. Separate live facts from missing proof, identify the most important quality, security, reliability, or rollback gap, and propose one reversible next action. Do not deploy, modify infrastructure, or invent incident evidence.',
+      successMeasure: 'The brief names one evidence-linked highest risk, distinguishes missing proof, and gives one reversible action with a concrete acceptance check and no infrastructure mutation.',
+      blockers: Object.freeze([]),
+      evidencePlan: Object.freeze([
+        Object.freeze({ tool: 'platform_status', args: Object.freeze({}) }),
+        Object.freeze({ tool: 'company_operations_status', args: Object.freeze({ window_days: 30 }) }),
+      ]),
+      sourceRefs: Object.freeze(['hq/NOW.md', 'hq/WORKBOARD.md']),
+    }),
+    Object.freeze({
+      id: 'product-portfolio-control',
+      title: 'Prepare one product delivery work order',
+      team: 'product',
+      priority: 73,
+      state: 'ready',
+      actionMode: 'read_only_brief',
+      deliverable: 'One build-ready work order for the deterministic daily focus product with one user job, state transition, data contract, recovery path, mobile and import acceptance, security boundary, and automated test.',
+      objective: 'Use the fixed product focus and evidence to define the highest-value complete workflow slice for exactly one of Shop, Plant, Website, or Ecommerce. Prefer operating depth over more pages, identify missing customer proof, and keep every managed or consequential action gated. Do not change the roadmap or customer records.',
+      successMeasure: 'The work order names exactly one focus product and one observable workflow outcome, covers all eight acceptance dimensions, identifies missing proof, and remains executable by one bounded delivery team without record mutation.',
+      blockers: Object.freeze([]),
+      evidencePlan: Object.freeze([
+        Object.freeze({ tool: 'leads_overview', args: Object.freeze({ limit: 5 }) }),
+        Object.freeze({ tool: 'pipeline_overview', args: Object.freeze({}) }),
+        Object.freeze({ tool: 'company_operations_status', args: Object.freeze({ window_days: 30 }) }),
+      ]),
+      sourceRefs: Object.freeze(['hq/portfolio.json', 'hq/NOW.md']),
+    }),
+    Object.freeze({
+      id: 'growth-pipeline-control',
+      title: 'Review growth and onboarding evidence',
+      team: 'growth',
+      priority: 72,
+      state: 'ready',
+      actionMode: 'read_only_brief',
+      deliverable: 'One supportable growth brief with the best qualified conversation, the next onboarding proof, and one owner-approved communication decision.',
+      objective: 'Use only fixed lead, pipeline, and exchange-rate evidence. Rank one qualified conversation and one proof that could reduce onboarding friction for Myanmar customers. Draft no unsupported claim and do not send or modify any communication.',
+      successMeasure: 'The brief ranks one evidence-backed conversation, defines one onboarding proof with a measurable completion signal, and asks for one owner communication decision without sending it.',
       blockers: Object.freeze([]),
       evidencePlan: Object.freeze([
         Object.freeze({ tool: 'leads_overview', args: Object.freeze({ limit: 5 }) }),
         Object.freeze({ tool: 'pipeline_overview', args: Object.freeze({}) }),
         Object.freeze({ tool: 'fx_rate', args: Object.freeze({}) }),
+        Object.freeze({ tool: 'company_operations_status', args: Object.freeze({ window_days: 30 }) }),
+      ]),
+      sourceRefs: Object.freeze(['hq/portfolio.json', 'hq/NOW.md']),
+    }),
+    Object.freeze({
+      id: 'finance-risk-control',
+      title: 'Review finance, security, and operating risk',
+      team: 'finance-risk',
+      priority: 71,
+      state: 'ready',
+      actionMode: 'read_only_brief',
+      deliverable: 'One risk-control brief with the largest evidenced exposure, missing control proof, and one owner decision that preserves cash, privacy, or release safety.',
+      objective: 'Inspect only fixed pipeline, exchange-rate, and platform evidence. Distinguish measured exposure from missing evidence, retain every production and security gate, and propose one owner decision. Do not pay, approve, change access, or weaken a release gate.',
+      successMeasure: 'The brief quantifies one evidenced exposure or labels it unavailable, identifies one missing control proof, and requests one owner decision without weakening a gate or changing access.',
+      blockers: Object.freeze([]),
+      evidencePlan: Object.freeze([
+        Object.freeze({ tool: 'pipeline_overview', args: Object.freeze({}) }),
+        Object.freeze({ tool: 'fx_rate', args: Object.freeze({}) }),
         Object.freeze({ tool: 'platform_status', args: Object.freeze({}) }),
+        Object.freeze({ tool: 'company_operations_status', args: Object.freeze({ window_days: 30 }) }),
+      ]),
+      sourceRefs: Object.freeze(['hq/NOW.md', 'hq/research/agent-operations-security-2026-07-26.md']),
+    }),
+    Object.freeze({
+      id: 'daily-company-control',
+      title: 'Prepare one evidence-backed owner decision',
+      team: 'product',
+      priority: 75,
+      state: 'ready',
+      actionMode: 'read_only_brief',
+      deliverable: 'At most six short lines with real leads, pipeline, company-operation status, missing evidence, and one owner decision.',
+      objective: 'Use only the fixed read-only evidence plan. State exact values, distinguish missing evidence, and identify one decision for the owner. Do not send, deploy, pay, modify records, or imply that a blocked outcome is executable.',
+      successMeasure: 'The output stays within six short lines, traces every stated value to fixed evidence, labels unavailable facts, and ends with exactly one owner decision.',
+      blockers: Object.freeze([]),
+      evidencePlan: Object.freeze([
+        Object.freeze({ tool: 'leads_overview', args: Object.freeze({ limit: 5 }) }),
+        Object.freeze({ tool: 'pipeline_overview', args: Object.freeze({}) }),
+        Object.freeze({ tool: 'company_operations_status', args: Object.freeze({ window_days: 30 }) }),
       ]),
       sourceRefs: Object.freeze(['hq/portfolio.json', 'hq/NOW.md']),
     }),
@@ -275,7 +368,10 @@ export function selectCeoOutcome(options = {}) {
       authorityId: authority.authorityId,
       authorityDigest,
       northStar: authority.northStar,
-      selected: outcome,
+      selected: {
+        ...outcome,
+        successMeasureDigest: createHash('sha256').update(outcome.successMeasure).digest('hex'),
+      },
       skipped,
       declined: false,
       controls: authority.controls,
@@ -295,6 +391,47 @@ export function selectCeoOutcome(options = {}) {
   }
 }
 
+export function resolveCeoOutcomeActionAuthority(input = {}, options = {}) {
+  const authority = normalizeAuthority(options.authority ?? SUPERMEGA_HQ_AUTHORITY)
+  if (!authority) return { ok: false, reason: 'ceo_outcome_authority_invalid' }
+  const outcomeId = boundedText(input.outcomeId, 80)
+  const authorityDigest = boundedText(input.authorityDigest, 64)
+  const successMeasureDigest = boundedText(input.successMeasureDigest, 64)
+  if (!ID_RE.test(outcomeId)
+    || !/^[a-f0-9]{64}$/.test(authorityDigest)
+    || !/^[a-f0-9]{64}$/.test(successMeasureDigest)) {
+    return { ok: false, reason: 'ceo_outcome_action_authority_invalid' }
+  }
+  const currentAuthorityDigest = createHash('sha256').update(stableStringify(authority)).digest('hex')
+  if (authorityDigest !== currentAuthorityDigest) {
+    return { ok: false, reason: 'ceo_outcome_action_authority_stale' }
+  }
+  const outcome = authority.outcomes.find((candidate) => candidate.id === outcomeId)
+  if (!outcome || outcome.state !== 'ready' || outcome.actionMode !== 'read_only_brief') {
+    return { ok: false, reason: 'ceo_outcome_action_not_authorized' }
+  }
+  const currentSuccessMeasureDigest = createHash('sha256').update(outcome.successMeasure).digest('hex')
+  if (successMeasureDigest !== currentSuccessMeasureDigest) {
+    return { ok: false, reason: 'ceo_outcome_action_success_measure_stale' }
+  }
+  return {
+    ok: true,
+    authorityDigest: currentAuthorityDigest,
+    outcome: {
+      id: outcome.id,
+      title: outcome.title,
+      team: outcome.team,
+      successMeasureDigest: currentSuccessMeasureDigest,
+    },
+    controls: {
+      externalWrites: false,
+      dynamicDelegation: false,
+      recursiveDelegation: false,
+      humanApprovalForConsequentialActions: true,
+    },
+  }
+}
+
 export function buildCeoOutcomeGoal(selection) {
   if (!selection?.ok || !selection.selected || selection.declined) return ''
   const blocked = selection.skipped
@@ -307,8 +444,14 @@ export function buildCeoOutcomeGoal(selection) {
     `Selected outcome: ${selection.selected.title}`,
     `Deliverable: ${selection.selected.deliverable}`,
     `Objective: ${selection.selected.objective}`,
+    `Success measure: ${selection.selected.successMeasure}`,
     `Blocked context only - never execute or present as ready: ${blocked || 'none'}`,
   ].join('\n')
 }
 
-export default { SUPERMEGA_HQ_AUTHORITY, selectCeoOutcome, buildCeoOutcomeGoal }
+export default {
+  SUPERMEGA_HQ_AUTHORITY,
+  selectCeoOutcome,
+  resolveCeoOutcomeActionAuthority,
+  buildCeoOutcomeGoal,
+}

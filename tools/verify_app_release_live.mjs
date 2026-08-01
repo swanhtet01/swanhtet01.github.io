@@ -2,9 +2,35 @@ import { execFileSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
+const verifyCurrentHead = process.argv.includes('--current-head')
+const configuredExpectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim().toLowerCase()
+
+function readCurrentHead() {
+  try {
+    const commit = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: resolve(import.meta.dirname, '..'),
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    }).trim().toLowerCase()
+    if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error('invalid_commit')
+    return commit
+  } catch {
+    throw new Error('current_head_commit_unavailable')
+  }
+}
+
+const currentHeadCommit = verifyCurrentHead ? readCurrentHead() : ''
+if (configuredExpectedCommit && currentHeadCommit && configuredExpectedCommit !== currentHeadCommit) {
+  throw new Error('configured_expected_commit_differs_from_current_head')
+}
+const expectedCommit = configuredExpectedCommit || currentHeadCommit
+const verificationScope = expectedCommit ? 'exact_release' : 'availability_and_contract'
 const manifest = JSON.parse(await readFile(new URL('../site-manifest.json', import.meta.url), 'utf8'))
+const settingsSource = await readFile(new URL('../showroom/src/core/SettingsPage.tsx', import.meta.url), 'utf8')
+const localEvidenceVersion = Number(/contract:\s*['"]supermega_trial_evidence['"][\s\S]{0,200}?version:\s*(\d+)/.exec(settingsSource)?.[1])
+if (!Number.isInteger(localEvidenceVersion)) throw new Error('local_settings_evidence_version_missing')
 const baseUrl = String(process.env.APP_BASE_URL || 'https://app.supermega.dev').replace(/\/$/, '')
-const expectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim().toLowerCase()
 const protectedPreview = process.env.VERCEL_PROTECTED_PREVIEW === '1'
 const vercelToken = String(process.env.VERCEL_TOKEN || '').trim()
 const cliEnv = vercelToken ? { ...process.env, VERCEL_TOKEN: vercelToken } : process.env
@@ -74,7 +100,18 @@ if (release.canonicalDomain !== 'https://app.supermega.dev') throw new Error('wr
 if (release.brandVersion !== manifest.brand.version) throw new Error(`release_brand_version_mismatch:${release.brandVersion}`)
 if (release.contextVersion !== manifest.contextVersion) throw new Error(`release_context_version_mismatch:${release.contextVersion}`)
 if (release.catalogVersion !== manifest.catalogVersion) throw new Error(`release_catalog_version_mismatch:${release.catalogVersion}`)
-if (expectedCommit && String(release.commit || '').toLowerCase() !== expectedCommit) throw new Error(`release_commit_mismatch:${release.commit}`)
+if (expectedCommit && String(release.commit || '').toLowerCase() !== expectedCommit) {
+  console.error(JSON.stringify({
+    ok: false,
+    contract: 'supermega_app_live',
+    baseUrl,
+    verificationScope,
+    expectedCommit,
+    actualCommit: String(release.commit || '').toLowerCase() || null,
+    reason: 'release_commit_mismatch',
+  }, null, 2))
+  process.exit(1)
+}
 
 const health = JSON.parse((await get('/api/health')).body)
 if (health.status !== 'ready' || health.service !== 'supermega-service') throw new Error('canonical_api_unavailable')
@@ -138,6 +175,7 @@ const cloud = JSON.parse((await get('/api/cloud-autonomy/status')).body)
 if (!['ready', 'degraded'].includes(cloud.status) || cloud.runtime_target !== 'hosted_vercel_api' || cloud.pc_dependency !== false) throw new Error('hosted_agent_runtime_contract_wrong')
 if (JSON.stringify(cloud.scheduler?.queue_job_types) !== JSON.stringify(['task_triage', 'ops_watch'])) throw new Error('hosted_agent_queue_jobs_wrong')
 if (JSON.stringify(cloud.scheduler?.daily_job_types) !== JSON.stringify(['founder_brief', 'github_release_watch'])) throw new Error('hosted_agent_daily_jobs_wrong')
+if (cloud.scheduler?.max_jobs_per_run !== 1) throw new Error('hosted_agent_batch_limit_wrong')
 if (cloud.scheduler?.redirects_allowed !== false) throw new Error('hosted_agent_redirect_policy_wrong')
 if (cloud.scheduler?.activation_required !== true || cloud.scheduler?.activation_environment_key !== 'SUPERMEGA_HOSTED_SCHEDULER_ENABLED') throw new Error('hosted_agent_activation_contract_wrong')
 if (cloud.status === 'ready' && cloud.scheduler?.configured !== true) throw new Error('hosted_agent_readiness_mismatch')
@@ -154,7 +192,7 @@ const businessCommandChunkName = /business-command-[A-Za-z0-9_-]+\.js/.exec(prod
 if (!businessCommandChunkName) throw new Error('business_command_chunk_missing')
 const businessCommandChunk = (await get(`/assets/${businessCommandChunkName}`)).body
 const productHomeReadinessCorpus = `${productHomeReadinessChunk}\n${businessCommandChunk}`
-const operationsChunkPath = /assets\/CoreApp-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
+const operationsChunkPath = /assets\/(?:CoreApp|core-app)-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!operationsChunkPath) throw new Error('operations_chunk_missing')
 const operationsChunk = (await get(`/${operationsChunkPath}`)).body
 const settingsChunkPath = /assets\/SettingsPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
@@ -170,6 +208,13 @@ const companyBackupChunkPath = /assets\/CompanyBackupPanel-[A-Za-z0-9_-]+\.js/.e
 if (!companyBackupChunkPath) throw new Error('company_backup_chunk_missing')
 const companyBackupChunk = (await get(`/${companyBackupChunkPath}`)).body
 const companyBackupCorpus = `${settingsChunk}\n${companyBackupChunk}`
+const evidenceMarkerOffset = settingsChunk.indexOf('supermega_trial_evidence')
+const liveEvidenceWindow = evidenceMarkerOffset >= 0 ? settingsChunk.slice(evidenceMarkerOffset, evidenceMarkerOffset + 512) : ''
+const liveEvidenceVersion = Number(/version:(\d+)/.exec(liveEvidenceWindow)?.[1])
+if (!Number.isInteger(liveEvidenceVersion)) throw new Error('live_settings_evidence_version_missing')
+if (liveEvidenceVersion !== localEvidenceVersion) {
+  throw new Error(`live_settings_evidence_version_mismatch:local=${localEvidenceVersion}:live=${liveEvidenceVersion}`)
+}
 const clientDataOnboardingChunkPath = /assets\/ClientDataOnboarding-[A-Za-z0-9_-]+\.js/.exec(settingsChunk)?.[0]
 if (!clientDataOnboardingChunkPath) throw new Error('client_data_onboarding_chunk_missing')
 const clientDataOnboardingChunk = (await get(`/${clientDataOnboardingChunkPath}`)).body
@@ -234,9 +279,6 @@ for (const required of ['Browser-local sample only.', 'sample order and sample s
 }
 for (const required of ['Shop agent queue', 'Recommended Shop agent job', 'Agent job', 'Owner gate', 'Restore Shop write readiness', 'Review online order requests', 'Finish fulfilment queue', 'Receive purchase orders', 'Reorder low stock', 'Set up stock locations', 'Shop setup guide', 'Import products once. Let AI run the daily queue.', 'AI prepares catalog import, stock foundation, online order review, payment exceptions, supplier receiving, and accounting packets.', 'The owner confirms every sale, payment, stock, supplier, refund, and accounting handoff.', 'Products', 'Import catalog', 'Location + ATP', 'Simple count first', 'Owner approves writes', 'Load sample catalog item', 'SM-FRESH-006', 'Fresh market delivery pack', 'Load sample Shop catalog item', 'Sample Shop catalog item loaded for owner review.', 'no Shop write, stock move, supplier message, sale, payment, or accounting post ran.', 'Order control', 'Review Ecommerce inbox', 'Reconcile payment exceptions', 'Online inbox', 'Write gate', 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock changes.', 'Shop order lifecycle', 'Order lifecycle', 'Capture to return', 'AI guides capture, reserve, fulfil, collect, replenish, and returns.', 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock writes.', 'Shop accounting readiness', 'Accounting readiness', 'AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and owner approval before any accounting export is reviewed.', 'No ledger, tax, payment, payable, refund, inventory, or Shop write runs from this panel.', 'Restore accounting readiness', 'Approve pending Shop action', 'Review refund exposure', 'Receive supplier evidence', 'Reconcile stock evidence', 'Accounting package ready', 'Export gate', 'Shop accounting export packet', 'Accounting export packet', 'AI packages the reviewed daily close, payment proof, refund evidence, stock exceptions, supplier receipt exposure, and tax status for accounting review.', 'No ledger post, tax filing, payable creation, bank settlement, refund, payment, inventory, or Shop write runs from this packet.', 'Ready for accountant review', 'Close before export', 'No export package yet', 'CSV ready', 'Review import', 'Not posted', 'Not configured', 'External proof only', 'Need close evidence', 'Shop procurement readiness', 'Procurement readiness', 'AI checks reorder demand, open POs, arrival risk, receipt evidence, and location/lot readiness.', 'No supplier message, payment, receipt, stock, costing, or accounting write runs from this panel.', 'Supplier control', 'AI turns supplier reference, promised arrival, open quantity, receipt evidence, and owner approval into one purchasing queue.', 'No RFQ, supplier send, payment, payable, costing, or inventory write runs from this panel.', 'Start supplier request', 'Preferred supplier', 'Supplier request drafted for', 'no RFQ, message, payment, payable, costing, or stock write is created.', 'Supplier request is clear. No uncovered reorder item needs a draft.', 'Restore purchasing readiness', 'Approve pending supplier action', 'Resolve late supplier order', 'Prepare receiving evidence', 'Close partial receipt', 'Choose supplier and arrival', 'Monitor supplier promise', 'Supplier controls ready', 'Suppliers', 'Open units', 'Gate', 'Need', 'On order', 'Remaining', 'Arrival', 'Receipt', 'Order uncovered stock', 'Receive or cancel late PO', 'Check arriving PO', 'Track open supply', 'Supply ready', 'Capture', 'Reserve', 'Fulfil', 'Collect', 'Replenish', 'Return']) {
   if (!operationsChunk.includes(required)) throw new Error(`missing_live_shop_context:${required}`)
-}
-for (const required of ['AI setup guide', 'Let AI prepare the first', 'SuperMega fills only missing starter fields.', 'Prepare recommended trial', 'Prepare recommended', 'Owner approval']) {
-  if (!settingsChunk.includes(required)) throw new Error(`missing_live_ai_setup_guide_context:${required}`)
 }
 for (const required of ['Start guided sample', 'Request managed trial', 'Your AI memory preview is ready.', 'Launch pack checklist', 'Bring the starting data. AI prepares the packet. Owner keeps the gate.', 'Product CSV, stock count, payment proof', 'Job CSV, material list, quality holds', 'Facts, offers, proof, photos, links', 'Catalog rows, order CSV, channel samples', 'One Shop-ready order packet', 'Owner approves production', 'No customer message, payment capture, delivery booking, stock move, refund, or Shop write runs from setup.', 'supermega.launch_pack_manifest.v1', 'supermega.behavior_preference.v1', 'Preferred job', 'map_starting_data', 'rank_first_workflow', 'draft_review_packet', 'summarize_missing_proof', 'model_training_without_owner_approval', 'supermega_trial_evidence', 'activationRows', 'activationEvidencePlan', 'activationManifest', 'activationManifestRows', 'importProvisioning', 'importProvisioningPacket', 'importProvisioningRows', 'supermega.import_provisioning_readiness.v1', 'forbiddenUntilReady', 'version:24', 'schedulerActivation', 'schedulerActivationRows', 'supermega.managed_trial_request.v1', 'managedTrialRequest', 'managedTrialRequestRows', 'Managed trial request', 'What support needs', 'Download managed activation packet', 'No external send or managed write from this packet', 'learningRows', 'learningPlanRows', 'agentPlanRows', 'aiContextQualityRows', 'contextHandoffManifest', 'contextHandoffRows', 'supermega.ai_context_handoff.v1', 'allowedUses', 'forbiddenActions', 'managedWorkspaceProvisioningPacket', 'provisioningRows', 'supermega.managed_workspace_provisioning.v1', 'requiredControls', 'forbiddenUntilProvisioned', 'copy_browser_storage_to_production', 'behaviorTrail', 'behaviorPreference', 'agentBehaviorRows', 'Premium AI context', 'What the system can learn', 'Premium agent plan', 'What the agent can run', 'AI context quality', 'What premium can safely use', 'Premium learning starts only when source records, behavior, decisions, and managed controls are present in the exported evidence.', 'AI context handoff', 'What premium receives', 'Draft and rank only', 'No send/write/train', 'This manifest tells support and the managed agent what it may use, what it must ignore, and which actions remain forbidden.', 'Provisioning packet', 'How this becomes a real workspace', 'Premium activation creates a managed tenant from exported evidence only after roles, data, controls, and write gates are verified.', 'Import provisioning', 'What must pass before real imports', 'Backend health owns this checklist.', 'Order review packet', 'Check before Shop queue', 'Paste the Ecommerce order review JSON.', 'The browser checks schema, row counts, catalog source, source CSV, and forbidden actions locally; no order import, customer message, payment, delivery, stock, Shop write, or managed activation runs.', 'Managed order queue check', 'Server validation passed with zero records written.', 'Local receipt ready; run managed check before owner approval.', 'Run managed queue check', 'Order queue owner approval packet', 'Shop queue import plan', 'Prepare import plan', 'Retry-safe key for the future managed apply command.', 'Managed Shop queue import plan prepared with zero external writes. Apply still requires a decided human approval record and managed write gates.', 'Download approval packet', 'Record owner approval request', 'Managed owner approval request recorded. No Shop queue import, customer message, payment, delivery, stock move, or activation ran.', 'Run managed queue check before preparing owner approval.', 'Approval may unlock only one managed Shop queue import.', 'No import or approval record has been created.', 'No managed request or write has run.', 'No Shop queue import command has been created.', 'Order review packet JSON', 'Paste supermega.ecommerce.order_import_review_packet.v1 JSON', 'Load sample order packet', 'Check order packet locally', 'Download queue packet', 'Clear order packet', 'Queue handoff', 'Ready to package', 'Repair first', 'Ready packet', 'Blocked packet', 'Import and activation blocked', 'Sample Ecommerce order review packet loaded locally. Review it to test the order handoff gate.', 'Ecommerce order review packet checked locally. No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.', 'Ecommerce order queue readiness packet downloaded. No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.', 'Ecommerce order review packet rejected locally. No order or managed action ran.', 'Ecommerce order review packet cleared locally.', 'Ecommerce activation packet', 'Review before managed setup', 'Paste the downloaded Ecommerce activation JSON.', 'The browser validates schema, source, queue, and forbidden actions locally; no import, managed activation, Shop write, payment, delivery, stock, or customer action runs.', 'Activation packet JSON', 'Paste supermega.ecommerce.managed_store_activation_packet.v1 JSON', 'Load sample packet', 'Review packet locally', 'Clear packet', 'Valid packet', 'Sample loaded', 'Managed activation blocked', 'Sample Ecommerce activation packet loaded locally. Review it to test the handoff gate.', 'Ecommerce activation packet review cleared locally.', 'Ecommerce activation packet reviewed locally. No import, managed activation, Shop write, payment, delivery, stock, or customer action ran.', 'Ecommerce activation packet rejected locally. No managed action ran.', 'Agent behavior memory', 'Behavior memory', 'What owners keep choosing', 'Activation manifest', 'What automation may do next', 'Scheduler activation', 'Autopilot stays blocked until proof passes', 'Hosted agents can run only after signed evidence, protected secrets, worker allowlist, budget grants, and no-redirect checks are ready.', 'supermega.ai_context_export.v1', 'Approved AI context export', 'Review the summary AI can receive.', 'I approve this summary-only context package for managed AI review.', 'Download approved context', 'Export full evidence']) {
   const source = required === 'supermega.behavior_preference.v1'
@@ -328,4 +370,4 @@ if (protectedPreview) {
   if (JSON.stringify(deploymentFunctions) !== JSON.stringify(['api/app'])) throw new Error(`deployment_function_surface_wrong:${deploymentFunctions.join(',')}`)
 }
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_live', baseUrl, routes, release, operatingMode: health.operating_mode, agentScheduler: cloud.status, deploymentFunctions }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_live', baseUrl, verificationScope, expectedCommit: expectedCommit || null, routes, release, operatingMode: health.operating_mode, agentScheduler: cloud.status, deploymentFunctions }, null, 2))

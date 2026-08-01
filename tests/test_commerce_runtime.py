@@ -14,9 +14,20 @@ from supermega_runtime.commerce_runtime import (
     COMMERCE_HUMAN_EVENTS,
     commerce_catalog_baseline_digest,
     commerce_catalog_digest,
+    commerce_accounting_handoff,
+    commerce_accounting_handoff_csv,
     commerce_daily_close_csv,
     commerce_daily_close_export,
+    commerce_order_acknowledgement,
+    commerce_order_acknowledgement_text,
+    commerce_order_calculation_digest,
+    commerce_shop_demand_intelligence,
+    commerce_shop_procurement_decision,
     commerce_storefront_preview_digest,
+    commerce_supplier_invoice_match,
+    commerce_supplier_payables_handoff,
+    commerce_supplier_payables_handoff_csv,
+    commerce_supplier_payables_aging,
     commerce_website_intake_snapshot_digest,
     validate_commerce_state,
 )
@@ -48,6 +59,7 @@ PAYMENT_AT = "2026-07-23T09:10:00.000Z"
 COMPLETED_AT = "2026-07-23T09:20:00.000Z"
 RETURN_AT = "2026-07-23T09:30:00.000Z"
 RETURN_AT_2 = "2026-07-23T09:40:00.000Z"
+CORRECTION_AT = "2026-07-23T09:35:00.000Z"
 WEBSITE_INTAKE_ID = "WINT-12345678"
 CLOSE_ACTION_ID = "ACT-00000000-0000-4000-8000-000000000001"
 CLOSE_ID = "CLOSE-00000000-0000-4000-8000-000000000001"
@@ -127,6 +139,8 @@ def movement(
     purchase_order_id: str | None = None,
     expected_quantity: int | None = None,
     counted_quantity: int | None = None,
+    rejected_quantity: int | None = None,
+    discrepancy_code: str | None = None,
 ) -> dict[str, object]:
     encoded_action_id = quote(action_id, safe="-_.!~*'()")
     record: dict[str, object] = {
@@ -148,6 +162,10 @@ def movement(
         record["expectedQuantity"] = expected_quantity
     if counted_quantity is not None:
         record["countedQuantity"] = counted_quantity
+    if rejected_quantity is not None:
+        record["rejectedQuantity"] = rejected_quantity
+        record["discrepancyCode"] = discrepancy_code or "damaged"
+        record["discrepancyDisposition"] = "return_to_vendor"
     return record
 
 
@@ -158,6 +176,8 @@ def purchase_order_record(
     quantity: int = 10,
     captured_at: str = NOW,
     expected_at: str = PURCHASE_ORDER_EXPECTED_AT,
+    unit_cost_mmk: int = 75,
+    actor: str = "Accountable operator",
 ) -> dict[str, object]:
     return {
         "id": purchase_order_id,
@@ -166,7 +186,8 @@ def purchase_order_record(
         "supplier": "Yangon Supply",
         "sku": "SKU-1",
         "quantityOrdered": quantity,
-        "creation": action_evidence(action_id, captured_at=captured_at),
+        "unitCostMmk": unit_cost_mmk,
+        "creation": action_evidence(action_id, captured_at=captured_at, actor=actor),
     }
 
 
@@ -184,6 +205,224 @@ def action_evidence(
         "actor": actor,
         "reason": reason,
         "evidenceReference": evidence_reference or f"EV-{action_id}",
+    }
+
+
+def purchase_requisition_record(
+    *,
+    requisition_id: str = "PR-00000000-0000-4000-8000-000000000019",
+    action_id: str = "ACT-PURCHASE-REQUISITION-APPROVE",
+    captured_at: str = NOW,
+    expected_at: str = PURCHASE_ORDER_EXPECTED_AT,
+    quantity: int = 10,
+    unit_cost_mmk: int = 75,
+    actor: str = "Accountable operator",
+    budget_envelope_id: str | None = None,
+    source_sourcing_decision_id: str | None = None,
+) -> dict[str, object]:
+    requisition: dict[str, object] = {
+        "id": requisition_id,
+        "createdAt": captured_at,
+        "expectedAt": expected_at,
+        "supplier": "Yangon Supply",
+        "sku": "SKU-1",
+        "quantityRequested": quantity,
+        "unitCostMmk": unit_cost_mmk,
+        "totalMmk": quantity * unit_cost_mmk,
+        "sourceDecisionDigest": f"sha256:{'1' * 64}",
+        "sourceReplenishmentDigest": f"sha256:{'2' * 64}",
+        "approval": action_evidence(action_id, captured_at=captured_at, actor=actor),
+    }
+    if budget_envelope_id:
+        requisition["budgetEnvelopeId"] = budget_envelope_id
+    if source_sourcing_decision_id:
+        requisition["sourceSourcingDecisionId"] = source_sourcing_decision_id
+    return requisition
+
+
+def supplier_sourcing_decision_record(
+    *,
+    decision_id: str = "SSD-00000000-0000-4000-8000-000000000017",
+    action_id: str = "ACT-SUPPLIER-SOURCING-APPROVE",
+    captured_at: str = NOW,
+    quantity: int = 10,
+    selected_quote_reference: str = "YS-Q-2026-0017",
+    unit_cost_tolerance_basis_points: int = 0,
+    delivery_tolerance_days: int = 0,
+    actor: str = "Accountable operator",
+) -> dict[str, object]:
+    return {
+        "id": decision_id,
+        "createdAt": captured_at,
+        "sku": "SKU-1",
+        "quantity": quantity,
+        "quotes": [
+            {
+                "supplier": "Yangon Supply",
+                "quoteReference": "YS-Q-2026-0017",
+                "vendorApprovalReference": "SPP-SKU1-001",
+                "unitCostMmk": 75,
+                "deliveryAt": PURCHASE_ORDER_EXPECTED_AT,
+                "validUntil": "2026-08-23T09:00:00.000Z",
+            },
+            {
+                "supplier": "Mandalay Supply",
+                "quoteReference": "MS-Q-2026-0017",
+                "vendorApprovalReference": "SPP-SKU1-002",
+                "unitCostMmk": 80,
+                "deliveryAt": "2026-07-24T09:00:00.000Z",
+                "validUntil": "2026-08-23T09:00:00.000Z",
+            },
+        ],
+        "selectedQuoteReference": selected_quote_reference,
+        "unitCostToleranceBasisPoints": unit_cost_tolerance_basis_points,
+        "deliveryToleranceDays": delivery_tolerance_days,
+        "approval": action_evidence(action_id, captured_at=captured_at, actor=actor),
+    }
+
+
+def purchase_budget_envelope_record(
+    *,
+    envelope_id: str = "PBE-00000000-0000-4000-8000-000000000018",
+    action_id: str = "ACT-PURCHASE-BUDGET-APPROVE",
+    captured_at: str = NOW,
+    period_end: str = "2027-07-23T09:00:00.000Z",
+    ceiling_mmk: int = 5_000,
+    per_requisition_limit_mmk: int = 1_000,
+    actor: str = "Accountable operator",
+) -> dict[str, object]:
+    return {
+        "id": envelope_id,
+        "createdAt": captured_at,
+        "budgetCode": "SHOP-STOCK-2026",
+        "label": "Stock replenishment",
+        "periodStart": captured_at,
+        "periodEnd": period_end,
+        "ceilingMmk": ceiling_mmk,
+        "perRequisitionLimitMmk": per_requisition_limit_mmk,
+        "approval": action_evidence(action_id, captured_at=captured_at, actor=actor),
+    }
+
+
+def supplier_invoice_record(
+    *,
+    action_id: str = "ACT-SUPPLIER-INVOICE-RECORD",
+    captured_at: str = "2026-07-23T09:30:00.000Z",
+    quantity: int = 10,
+    unit_cost_mmk: int = 75,
+) -> dict[str, object]:
+    return {
+        "id": "PINV-00000000-0000-4000-8000-000000000030",
+        "supplierReference": "YS-INV-2026-0030",
+        "issuedAt": "2026-07-23T09:20:00.000Z",
+        "dueAt": "2026-08-22T09:20:00.000Z",
+        "quantityInvoiced": quantity,
+        "unitCostMmk": unit_cost_mmk,
+        "totalMmk": quantity * unit_cost_mmk,
+        "recording": action_evidence(action_id, captured_at=captured_at),
+    }
+
+
+def supplier_return_claim_record(
+    receipt_movement_id: str,
+    *,
+    action_id: str = "ACT-SUPPLIER-RETURN-AUTHORIZE",
+    captured_at: str = "2026-07-23T09:50:00.000Z",
+    rejected_quantity: int = 2,
+    unit_cost_mmk: int = 75,
+) -> dict[str, object]:
+    return {
+        "id": "SRET-00000000-0000-4000-8000-000000000031",
+        "createdAt": captured_at,
+        "receiptMovementId": receipt_movement_id,
+        "quantityRejected": rejected_quantity,
+        "reasonCode": "damaged",
+        "claimAmountMmk": rejected_quantity * unit_cost_mmk,
+        "internalReturnReference": "RET-YS-2026-0031",
+        "physicalReturnStatus": "not_dispatched",
+        "supplierContacted": False,
+        "accountingPosted": False,
+        "authorization": action_evidence(action_id, captured_at=captured_at),
+        "creditNotes": [],
+    }
+
+
+def supplier_credit_note_record(
+    *,
+    action_id: str = "ACT-SUPPLIER-CREDIT-RECORD",
+    captured_at: str = "2026-07-23T10:00:00.000Z",
+    issued_at: str = "2026-07-23T09:55:00.000Z",
+    amount_mmk: int = 150,
+) -> dict[str, object]:
+    return {
+        "id": "SCN-00000000-0000-4000-8000-000000000032",
+        "supplierReference": "YS-CN-2026-0032",
+        "issuedAt": issued_at,
+        "amountMmk": amount_mmk,
+        "accountingPosted": False,
+        "recording": action_evidence(action_id, captured_at=captured_at),
+    }
+
+
+def tax_configuration(
+    revision: int,
+    *,
+    code: str = "CT5",
+    label: str = "Commercial tax 5%",
+    rate_basis_points: int = 500,
+    mode: str = "exclusive",
+    action_id: str | None = None,
+    captured_at: str = NOW,
+    jurisdiction_code: str = "MM",
+    effective_from: str | None = None,
+) -> dict[str, object]:
+    return {
+        "revision": revision,
+        "code": code,
+        "label": label,
+        "rateBasisPoints": rate_basis_points,
+        "mode": mode,
+        "jurisdictionCode": jurisdiction_code,
+        "effectiveFrom": effective_from or captured_at,
+        "proof": action_evidence(
+            action_id or f"ACT-TAX-R{revision}",
+            captured_at=captured_at,
+            reason="Reviewed the Shop tax setup for future orders.",
+        ),
+    }
+
+
+def account_mapping_configuration(
+    revision: int,
+    *,
+    action_id: str | None = None,
+    captured_at: str = NOW,
+    payment_clearing: str = "1100-CLEAR",
+    sales_revenue: str = "4100-SALES",
+    legacy_revenue: str = "4190-REVIEW",
+    tax_payable: str = "2100-TAX",
+    sales_adjustment: str = "4200-ADJUST",
+    correction_receivable: str = "1200-CORR-AR",
+    correction_payable: str = "2200-CORR-AP",
+    legacy: bool = False,
+) -> dict[str, object]:
+    mappings = [
+        {"accountRole": "payment_clearing", "externalAccountCode": payment_clearing},
+        {"accountRole": "sales_revenue", "externalAccountCode": sales_revenue},
+        {"accountRole": "sales_revenue_unverified", "externalAccountCode": legacy_revenue},
+        {"accountRole": "tax_payable", "externalAccountCode": tax_payable},
+        {"accountRole": "sales_adjustment", "externalAccountCode": sales_adjustment},
+        {"accountRole": "correction_receivable", "externalAccountCode": correction_receivable},
+        {"accountRole": "correction_payable", "externalAccountCode": correction_payable},
+    ]
+    return {
+        "revision": revision,
+        "mappings": mappings[:4] if legacy else mappings,
+        "proof": action_evidence(
+            action_id or f"ACT-ACCOUNT-MAPPING-R{revision}",
+            captured_at=captured_at,
+            reason="Reviewed the Shop account mapping for future closes.",
+        ),
     }
 
 
@@ -282,7 +521,12 @@ def close_record(
     return {
         "id": close_id or f"CLOSE-{action_id.removeprefix('ACT-')}",
         "createdAt": evidence["capturedAt"],
-        "total": sum(order["total"] for order in eligible),
+        "total": sum(
+            order.get("corrections", [{}])[0].get("balanceAfterMmk", order["total"])
+            if order.get("corrections")
+            else order["total"]
+            for order in eligible
+        ),
         "orders": len(eligible),
         "businessDate": myanmar_business_date(evidence["capturedAt"]),
         "orderIds": [order["id"] for order in eligible],
@@ -401,6 +645,18 @@ def storefront_request_v2(state: dict[str, object]) -> dict[str, object]:
         idempotency_key=f"ECI-{STOREFRONT_REQUEST_UUID}",
         quoted_at=NOW,
         expires_at="2026-07-23T09:15:00.000Z",
+        customer_profile_input={
+            "name": "Customer A",
+            "phone": "09 123 456 789",
+            "previous": None,
+        },
+        delivery_address_input={
+            "line1": "12 Insein Road, Ward 3",
+            "township": "Hlaing",
+            "city": "Yangon",
+            "instructions": "Call at the gate",
+            "previous": None,
+        },
     )
     return build_ecommerce_order_request(
         quote_value,
@@ -641,6 +897,58 @@ def returned_state(
     return state
 
 
+def corrected_state(
+    current: dict[str, object],
+    *,
+    kind: str = "credit",
+    reason_code: str = "pricing_error",
+    listed_amount_mmk: int = 50,
+    action_id: str = "ACT-CORRECTION-1",
+    captured_at: str = CORRECTION_AT,
+) -> dict[str, object]:
+    state = deepcopy(current)
+    order = state["orders"][0]  # type: ignore[index]
+    evidence = action_evidence(
+        action_id,
+        captured_at=captured_at,
+        reason="Approved the invoice correction against source evidence.",
+    )
+    calculation = {
+        "currency": "MMK",
+        "taxConfigurationRevision": None,
+        "taxCode": None,
+        "taxRateBasisPoints": None,
+        "taxMode": "not_configured",
+        "listedAmountMmk": listed_amount_mmk,
+        "subtotalMmk": listed_amount_mmk,
+        "taxMmk": 0,
+        "totalMmk": listed_amount_mmk,
+    }
+    current_balance = (
+        order.get("corrections", [{}])[0].get("balanceAfterMmk", order["total"])
+        if order.get("corrections")
+        else order["total"]
+    )
+    record = {
+        "documentId": "COR2:" + quote(action_id, safe="-_.!~*'()"),
+        "actionId": action_id,
+        "createdAt": captured_at,
+        "actor": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "kind": kind,
+        "reasonCode": reason_code,
+        "sourceCalculationDigest": commerce_order_calculation_digest(order),
+        "calculation": calculation,
+        "balanceAfterMmk": current_balance + (listed_amount_mmk if kind == "debit" else -listed_amount_mmk),
+        "financialStatus": "review_required",
+        "postingAuthority": "none",
+        "externalPostingPerformed": False,
+    }
+    order["corrections"] = [record, *order.get("corrections", [])]
+    return state
+
+
 def cancelled_due_state(
     order_ids: tuple[str, ...] = ("ORD-REFUND",),
 ) -> dict[str, object]:
@@ -709,6 +1017,12 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         return dict(next_state["catalogChanges"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.purchase_order.created":
         return dict(next_state["purchaseOrders"][0]["creation"])  # type: ignore[index, arg-type]
+    if event_type == "commerce.purchase_budget.approved":
+        return dict(next_state["purchaseBudgetEnvelopes"][0]["approval"])  # type: ignore[index, arg-type]
+    if event_type == "commerce.supplier_sourcing.approved":
+        return dict(next_state["supplierSourcingDecisions"][0]["approval"])  # type: ignore[index, arg-type]
+    if event_type == "commerce.purchase_requisition.approved":
+        return dict(next_state["purchaseRequisitions"][0]["approval"])  # type: ignore[index, arg-type]
     if event_type == "commerce.purchase_order.cancelled":
         cancelled = next(
             purchase_order
@@ -716,6 +1030,39 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
             if "cancellation" in purchase_order
         )
         return dict(cancelled["cancellation"])
+    if event_type in {
+        "commerce.supplier_invoice.recorded",
+        "commerce.supplier_invoice.payable_ready",
+    }:
+        proof_key = (
+            "recording"
+            if event_type == "commerce.supplier_invoice.recorded"
+            else "payableReview"
+        )
+        invoice = next(
+            purchase_order["supplierInvoice"]
+            for purchase_order in next_state["purchaseOrders"]  # type: ignore[union-attr]
+            if "supplierInvoice" in purchase_order
+            and proof_key in purchase_order["supplierInvoice"]
+        )
+        return dict(invoice[proof_key])
+    if event_type == "commerce.supplier_return.authorized":
+        claim = next(
+            claim
+            for purchase_order in next_state["purchaseOrders"]  # type: ignore[union-attr]
+            for claim in purchase_order.get("supplierReturns", [])
+            if "authorization" in claim
+        )
+        return dict(claim["authorization"])
+    if event_type == "commerce.supplier_credit.recorded":
+        credit = next(
+            credit
+            for purchase_order in next_state["purchaseOrders"]  # type: ignore[union-attr]
+            for claim in purchase_order.get("supplierReturns", [])
+            for credit in claim.get("creditNotes", [])
+            if "recording" in credit
+        )
+        return dict(credit["recording"])
     if event_type == "commerce.website_intake.created":
         return dict(next_state["websiteIntakes"][0]["creation"])  # type: ignore[index, arg-type]
     if event_type == "commerce.website_intake.converted":
@@ -726,6 +1073,18 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         return storefront_evidence(next_state["storefrontRequests"][0])  # type: ignore[index,arg-type]
     if event_type == "commerce.storefront.configuration.saved":
         return dict(next_state["storefrontConfiguration"]["saved"])  # type: ignore[index,arg-type]
+    if event_type == "commerce.tax_configuration.saved":
+        return dict(next_state["taxConfigurations"][0]["proof"])  # type: ignore[index,arg-type]
+    if event_type == "commerce.account_mapping.saved":
+        return dict(next_state["accountMappingConfigurations"][0]["proof"])  # type: ignore[index,arg-type]
+    if event_type == "commerce.customer_credit_policy.saved":
+        return dict(next_state["customerCreditPolicies"][0]["proof"])  # type: ignore[index,arg-type]
+    if event_type == "commerce.promotion_policy.saved":
+        return dict(next_state["promotionPolicies"][0]["proof"])  # type: ignore[index,arg-type]
+    if event_type == "commerce.shipping_policy.saved":
+        return dict(next_state["shippingPolicies"][0]["proof"])  # type: ignore[index,arg-type]
+    if event_type == "commerce.payment_policy.saved":
+        return dict(next_state["paymentPolicies"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.order.advanced":
         completed_orders = [
             order
@@ -757,6 +1116,58 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
             "reason": record["reason"],
             "evidenceReference": record["evidenceReference"],
         }
+    if event_type == "commerce.order.support_case_opened":
+        support_order = next(
+            order for order in next_state["orders"] if order.get("supportCases")  # type: ignore[union-attr]
+        )
+        return dict(support_order["supportCases"][0]["opening"])
+    if event_type == "commerce.order.support_case_reopened":
+        support_order = next(
+            order for order in next_state["orders"] if order.get("supportCases")  # type: ignore[union-attr]
+        )
+        support_case = next(case for case in support_order["supportCases"] if case.get("reopen"))
+        return dict(support_case["reopen"]["proof"])
+    if event_type == "commerce.order.support_case_service_recorded":
+        support_order = next(
+            order for order in next_state["orders"] if order.get("supportCases")  # type: ignore[union-attr]
+        )
+        support_case = next(
+            case for case in support_order["supportCases"]
+            if case.get("followUpServiceEvents") or case.get("serviceEvents")
+        )
+        events = support_case.get("followUpServiceEvents") or support_case["serviceEvents"]
+        return dict(events[0]["proof"])
+    if event_type == "commerce.order.support_case_resolved":
+        support_order = next(
+            order for order in next_state["orders"] if order.get("supportCases")  # type: ignore[union-attr]
+        )
+        support_case = next(
+            case for case in support_order["supportCases"]
+            if case.get("followUpResolution") or case.get("resolution")
+        )
+        resolution = support_case.get("followUpResolution") or support_case["resolution"]
+        return dict(resolution["proof"])
+    if event_type == "commerce.order.correction_recorded":
+        corrected_orders = [
+            order
+            for order in next_state["orders"]  # type: ignore[union-attr]
+            if order.get("corrections")
+        ]
+        record = corrected_orders[0]["corrections"][0]
+        return {
+            "actionId": record["actionId"],
+            "capturedAt": record["createdAt"],
+            "actor": record["actor"],
+            "reason": record["reason"],
+            "evidenceReference": record["evidenceReference"],
+        }
+    if event_type == "commerce.collection_action.recorded":
+        contacted_orders = [
+            order
+            for order in next_state["orders"]  # type: ignore[union-attr]
+            if order.get("collectionActions")
+        ]
+        return dict(contacted_orders[0]["collectionActions"][0]["proof"])
     if event_type in {
         "commerce.item.created",
         "commerce.order.created",
@@ -878,6 +1289,421 @@ def apply_event(
 
 
 class CommerceRuntimeTests(unittest.TestCase):
+    def test_shop_demand_intelligence_nets_returns_and_preserves_authority(self) -> None:
+        first = completed_state("ORD-DEMAND-1")
+        second = completed_state("ORD-DEMAND-2")
+        current = deepcopy(first)
+        current["items"][0]["onHand"] = 6  # type: ignore[index]
+        current["orders"] = [first["orders"][0], second["orders"][0]]  # type: ignore[index]
+        current["movements"] = [first["movements"][0], second["movements"][0]]  # type: ignore[index]
+        current = returned_state(
+            current,
+            action_id="ACT-DEMAND-RETURN",
+            captured_at=RETURN_AT,
+        )
+
+        projection = commerce_shop_demand_intelligence(
+            current,
+            "2026-07-24T09:00:00.000Z",
+        )
+
+        self.assertEqual(projection["contract"], "supermega.shop.demand-intelligence.v1")
+        self.assertEqual(projection["lookbackDays"], 28)
+        self.assertEqual(projection["summary"]["netDemandUnits"], 3)
+        self.assertEqual(projection["summary"]["forecastWeeklyUnits"], 1)
+        self.assertEqual(len(projection["rows"]), 1)
+        row = projection["rows"][0]
+        self.assertEqual(row["completedOrderCount"], 2)
+        self.assertEqual(row["sourceOrderIds"], ["ORD-DEMAND-1", "ORD-DEMAND-2"])
+        self.assertEqual(row["sourceReturnActionIds"], ["ACT-DEMAND-RETURN"])
+        self.assertEqual(row["grossDemandUnits"], 4)
+        self.assertEqual(row["returnedUnits"], 1)
+        self.assertEqual(row["netDemandUnits"], 3)
+        self.assertEqual(row["weeklyNetDemandUnits"], [3, 0, 0, 0])
+        self.assertEqual(row["forecastWeeklyUnits"], 1)
+        self.assertEqual(row["recommendedSafetyStockUnits"], 2)
+        self.assertEqual(row["confidence"], "emerging")
+        self.assertEqual(row["planningHorizonSource"], "planning_default")
+        self.assertEqual(row["status"], "monitor")
+        self.assertEqual(
+            projection["authority"],
+            {
+                "recommendationOnly": True,
+                "purchaseCreated": False,
+                "supplierContacted": False,
+                "inventoryChanged": False,
+                "policyChanged": False,
+                "providerCalled": False,
+            },
+        )
+        self.assertRegex(projection["digest"], r"^sha256:[0-9a-f]{64}$")
+        self.assertEqual(
+            projection,
+            commerce_shop_demand_intelligence(current, "2026-07-24T09:00:00.000Z"),
+        )
+
+    def test_shop_demand_intelligence_rejects_invalid_as_of(self) -> None:
+        with self.assertRaises(TrialValidationError):
+            commerce_shop_demand_intelligence(completed_state(), "not-a-time")
+
+    def test_shop_procurement_decision_ranks_evidence_and_preserves_authority(self) -> None:
+        current = catalog_state()
+        first_order = purchase_order_record(
+            captured_at="2026-07-20T09:00:00.000Z",
+            expected_at="2026-07-22T09:00:00.000Z",
+            unit_cost_mmk=75,
+        )
+        second_order = purchase_order_record(
+            purchase_order_id="PO-00000000-0000-4000-8000-000000000021",
+            action_id="ACT-PURCHASE-CREATE-2",
+            captured_at="2026-07-20T10:00:00.000Z",
+            expected_at="2026-07-22T10:00:00.000Z",
+            unit_cost_mmk=70,
+        )
+        second_order["supplier"] = "Mandalay Trade"
+        current["items"][0]["onHand"] = 30  # type: ignore[index]
+        current["purchaseOrders"] = [second_order, first_order]
+        current["movements"] = [
+            movement("receipt", "ACT-PURCHASE-RECEIVE-2", 10, created_at="2026-07-23T10:00:00.000Z", purchase_order_id=str(second_order["id"])),
+            movement("receipt", "ACT-PURCHASE-RECEIVE-1", 10, created_at="2026-07-22T08:00:00.000Z", purchase_order_id=str(first_order["id"])),
+        ]
+        plan_body = {
+            "contract": "supermega.shop.replenishment_plan.v1",
+            "source": {"commerceDigest": f"sha256:{'1' * 64}", "productionOrders": []},
+            "rows": [{
+                "sku": "SKU-1", "itemName": "Test item", "recommendedOrderUnits": 8,
+                "suggestedSupplier": "Yangon Supply", "earliestNeedAt": "2026-07-30T09:00:00.000Z",
+                "jobIds": ["JOB-1"],
+            }],
+            "summary": {"recommendedOrderUnits": 8},
+            "authority": {"purchaseCreated": False, "supplierContacted": False},
+        }
+        plan = {
+            **plan_body,
+            "digest": f"sha256:{sha256(json.dumps(plan_body, ensure_ascii=False, separators=(',', ':'), sort_keys=True).encode('utf-8')).hexdigest()}",
+        }
+
+        decision = commerce_shop_procurement_decision(current, plan, "2026-07-24T09:00:00.000Z")
+
+        self.assertEqual(decision["contract"], "supermega.shop.procurement-decision.v1")
+        self.assertEqual(decision["summary"], {
+            "requisitions": 1, "readyForReview": 1, "riskReviews": 0,
+            "termsRequired": 0, "comparedSuppliers": 2,
+            "knownExposureMmk": 600, "unknownExposure": 0,
+        })
+        row = decision["rows"][0]
+        self.assertEqual(row["recommendedSupplier"], "Yangon Supply")
+        self.assertEqual(row["recommendedUnitCostMmk"], 75)
+        self.assertEqual(row["estimatedTotalMmk"], 600)
+        self.assertEqual(row["status"], "ready_for_owner_review")
+        self.assertEqual(row["supplierOptions"][0]["performanceStatus"], "on_track")
+        self.assertEqual(row["supplierOptions"][1]["performanceStatus"], "attention")
+        self.assertEqual(row["plantJobIds"], ["JOB-1"])
+        self.assertTrue(decision["authority"]["recommendationOnly"])
+        self.assertFalse(any(value for key, value in decision["authority"].items() if key != "recommendationOnly"))
+        self.assertRegex(decision["digest"], r"^sha256:[0-9a-f]{64}$")
+
+    def test_shop_procurement_decision_rejects_tampered_plan(self) -> None:
+        plan = {
+            "contract": "supermega.shop.replenishment_plan.v1",
+            "source": {"commerceDigest": f"sha256:{'1' * 64}"},
+            "rows": [],
+            "digest": f"sha256:{'0' * 64}",
+        }
+        with self.assertRaisesRegex(TrialValidationError, "untampered"):
+            commerce_shop_procurement_decision(catalog_state(), plan, NOW)
+
+    def test_ecommerce_payment_is_policy_bound_limited_and_never_authorized(self) -> None:
+        current = created_state("ORD-PAYMENT-POLICY-1")
+        configured = deepcopy(current)
+        configured["paymentPolicies"] = [{
+            "revision": 1,
+            "adapter": "pay_on_pickup",
+            "allowedFulfilments": ["pickup"],
+            "maximumOrderMmk": 250,
+            "instructions": "Collect at the counter and reconcile the receipt in Shop.",
+            "status": "active",
+            "effectiveFrom": "2026-07-23T08:00:00.000Z",
+            "effectiveUntil": None,
+            "proof": action_evidence(
+                "ACT-PAYMENT-PICKUP-R1",
+                captured_at="2026-07-23T08:00:00.000Z",
+                reason="Approved the pickup payment boundary.",
+            ),
+        }]
+        state = apply_event(current, "commerce.payment_policy.saved", configured)
+        self.assertEqual(apply_event(current, "commerce.payment_policy.saved", configured), state)
+
+        order = state["orders"][0]  # type: ignore[index]
+        order.update({
+            "sourceRecordId": "ECR-00000000-0000-4000-8000-000000000097",
+            "lines": [{"sku": "SKU-1", "name": "Test item", "quantity": 2, "unitPriceMmk": 100}],
+            "payment": "Cash",
+            "paymentDecision": {
+                "schema": "supermega.commerce.payment-decision.v1",
+                "status": "approved",
+                "reason": "approved",
+                "adapter": "pay_on_pickup",
+                "policyRevision": 1,
+                "policyActionId": "ACT-PAYMENT-PICKUP-R1",
+                "maximumOrderMmk": 250,
+                "instructions": "Collect at the counter and reconcile the receipt in Shop.",
+                "reviewedAt": NOW,
+                "authorized": False,
+            },
+        })
+        self.assertEqual(validate_commerce_state(state)["orders"][0]["payment"], "Cash")  # type: ignore[index]
+
+        for field, value in (("authorized", True), ("maximumOrderMmk", 500), ("policyRevision", 2)):
+            tampered = deepcopy(state)
+            tampered["orders"][0]["paymentDecision"][field] = value  # type: ignore[index]
+            with self.assertRaisesRegex(TrialValidationError, "versioned Shop policy"):
+                validate_commerce_state(tampered)
+        over_limit = deepcopy(state)
+        over_limit["paymentPolicies"][0]["maximumOrderMmk"] = 199  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "versioned Shop policy"):
+            validate_commerce_state(over_limit)
+        tax_inclusive_limit = deepcopy(state)
+        tax_inclusive_limit["taxConfigurations"] = [tax_configuration(1)]
+        tax_inclusive_limit["paymentPolicies"][0]["maximumOrderMmk"] = 205  # type: ignore[index]
+        tax_inclusive_limit["orders"][0]["paymentDecision"]["maximumOrderMmk"] = 205  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "versioned Shop policy"):
+            validate_commerce_state(tax_inclusive_limit)
+        tax_inclusive_limit["paymentPolicies"][0]["maximumOrderMmk"] = 210  # type: ignore[index]
+        tax_inclusive_limit["orders"][0]["paymentDecision"]["maximumOrderMmk"] = 210  # type: ignore[index]
+        tax_inclusive_limit["orders"][0]["taxDecision"] = {  # type: ignore[index]
+            "schema": "supermega.ecommerce.tax-decision.v1",
+            "status": "configured",
+            "catalogRevision": 0,
+            "taxConfigurationRevision": 1,
+            "taxCode": "CT5",
+            "taxJurisdictionCode": "MM",
+            "taxEffectiveFrom": NOW,
+            "taxRateBasisPoints": 500,
+            "taxMode": "exclusive",
+            "listedSubtotalMmk": 200,
+            "subtotalMmk": 200,
+            "taxMmk": 10,
+            "totalMmk": 210,
+            "policyActionId": "ACT-TAX-R1",
+            "reviewedAt": NOW,
+        }
+        self.assertEqual(
+            validate_commerce_state(tax_inclusive_limit)["orders"][0]["taxDecision"]["policyActionId"],  # type: ignore[index]
+            "ACT-TAX-R1",
+        )
+        forged_tax = deepcopy(tax_inclusive_limit)
+        forged_tax["orders"][0]["taxDecision"]["policyActionId"] = "ACT-TAX-FORGED"  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "taxDecision"):
+            validate_commerce_state(forged_tax)
+        wrong_evidence = action_evidence("ACT-PAYMENT-WRONG-EVIDENCE")
+        with self.assertRaisesRegex(TrialValidationError, "payment policy proof"):
+            apply_event(current, "commerce.payment_policy.saved", configured, wrong_evidence)
+
+    def test_ecommerce_shipping_is_policy_bound_and_prices_the_shop_order(self) -> None:
+        current = created_state("ORD-SHIPPING-1")
+        configured = deepcopy(current)
+        configured["shippingPolicies"] = [{
+            "revision": 1,
+            "zoneCode": "YGN-WEST",
+            "townships": ["Hlaing", "Kamayut"],
+            "feeMmk": 3_000,
+            "promiseMinutes": 120,
+            "status": "active",
+            "effectiveFrom": "2026-07-23T08:00:00.000Z",
+            "effectiveUntil": None,
+            "proof": action_evidence(
+                "ACT-SHIPPING-YGN-WEST-R1",
+                captured_at="2026-07-23T08:00:00.000Z",
+                reason="Approved the Yangon west shipping policy.",
+            ),
+        }]
+        state = apply_event(current, "commerce.shipping_policy.saved", configured)
+        self.assertEqual(apply_event(current, "commerce.shipping_policy.saved", configured), state)
+        with self.assertRaisesRegex(TrialValidationError, "shipping policy proof"):
+            apply_event(
+                current,
+                "commerce.shipping_policy.saved",
+                configured,
+                action_evidence("ACT-SHIPPING-WRONG-EVIDENCE"),
+            )
+
+        order = state["orders"][0]  # type: ignore[index]
+        order.update({
+            "sourceRecordId": "ECR-00000000-0000-4000-8000-000000000098",
+            "lines": [{"sku": "SKU-1", "name": "Test item", "quantity": 2, "unitPriceMmk": 100}],
+            "fulfilment": "delivery",
+            "shippingDecision": {
+                "schema": "supermega.commerce.shipping-decision.v1",
+                "status": "approved",
+                "reason": "approved",
+                "township": "Hlaing",
+                "zoneCode": "YGN-WEST",
+                "policyRevision": 1,
+                "policyActionId": "ACT-SHIPPING-YGN-WEST-R1",
+                "feeMmk": 3_000,
+                "promiseMinutes": 120,
+                "reviewedAt": NOW,
+            },
+            "total": 3_200,
+        })
+        accepted = validate_commerce_state(state)
+        self.assertEqual(accepted["orders"][0]["total"], 3_200)  # type: ignore[index]
+
+        for field, value in (("feeMmk", 2_999), ("policyRevision", 2), ("promiseMinutes", 90)):
+            tampered = deepcopy(state)
+            tampered["orders"][0]["shippingDecision"][field] = value  # type: ignore[index]
+            with self.assertRaisesRegex(TrialValidationError, "versioned Shop policy"):
+                validate_commerce_state(tampered)
+        early = deepcopy(state)
+        early["orders"][0]["promisedAt"] = "2026-07-23T10:59:59.000Z"  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "promise is earlier"):
+            validate_commerce_state(early)
+        ungoverned = deepcopy(state)
+        ungoverned["shippingPolicies"] = []
+        with self.assertRaisesRegex(TrialValidationError, "versioned Shop policy"):
+            validate_commerce_state(ungoverned)
+
+    def test_ecommerce_promotion_is_policy_bound_and_prices_the_shop_order(self) -> None:
+        current = created_state("ORD-PROMO-1")
+        configured_state = deepcopy(current)
+        configured_state["promotionPolicies"] = [
+            {
+                "revision": 1,
+                "code": "WELCOME",
+                "discountBasisPoints": 1_000,
+                "minimumSubtotalMmk": 100,
+                "maximumDiscountMmk": 50,
+                "status": "active",
+                "effectiveFrom": "2026-07-23T08:00:00.000Z",
+                "effectiveUntil": None,
+                "proof": action_evidence(
+                    "ACT-PROMOTION-WELCOME-R1",
+                    captured_at="2026-07-23T08:00:00.000Z",
+                    reason="Approved the launch promotion policy.",
+                ),
+            }
+        ]
+        state = apply_event(
+            current,
+            "commerce.promotion_policy.saved",
+            configured_state,
+        )
+        self.assertEqual(state["promotionPolicies"], configured_state["promotionPolicies"])
+        self.assertEqual(
+            apply_event(
+                current,
+                "commerce.promotion_policy.saved",
+                configured_state,
+            ),
+            state,
+        )
+        with self.assertRaisesRegex(TrialValidationError, "promotion policy proof"):
+            apply_event(
+                current,
+                "commerce.promotion_policy.saved",
+                configured_state,
+                action_evidence("ACT-PROMOTION-WRONG-EVIDENCE"),
+            )
+
+        order = state["orders"][0]  # type: ignore[index]
+        order["sourceRecordId"] = "ECR-00000000-0000-4000-8000-000000000099"
+        order["lines"] = [
+            {
+                "sku": "SKU-1",
+                "name": "Test item",
+                "quantity": 2,
+                "unitPriceMmk": 100,
+            }
+        ]
+        order["promotionDecision"] = {
+            "schema": "supermega.commerce.promotion-decision.v1",
+            "status": "approved",
+            "code": "WELCOME",
+            "policyRevision": 1,
+            "policyActionId": "ACT-PROMOTION-WELCOME-R1",
+            "discountBasisPoints": 1_000,
+            "grossSubtotalMmk": 200,
+            "discountMmk": 20,
+            "netSubtotalMmk": 180,
+            "reviewedAt": NOW,
+            "reason": "approved",
+        }
+        order["total"] = 180
+
+        accepted = validate_commerce_state(state)
+        self.assertEqual(accepted["orders"][0]["total"], 180)  # type: ignore[index]
+
+        for field, value in (
+            ("discountMmk", 19),
+            ("policyActionId", "ACT-PROMOTION-FORGED"),
+            ("netSubtotalMmk", 181),
+        ):
+            tampered = deepcopy(state)
+            tampered["orders"][0]["promotionDecision"][field] = value  # type: ignore[index]
+            with self.assertRaisesRegex(TrialValidationError, "versioned Shop policy"):
+                validate_commerce_state(tampered)
+
+        ungoverned = deepcopy(state)
+        ungoverned["promotionPolicies"] = []
+        with self.assertRaisesRegex(TrialValidationError, "versioned Shop policy"):
+            validate_commerce_state(ungoverned)
+
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-promotion", "operator-promotion", "human")
+        agent = TrialPrincipal("workspace-promotion", "promotion-agent", "agent")
+        for principal in (operator, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={
+                "state": catalog_state(),
+                "evidence": action_evidence("ACT-INIT-PROMOTION"),
+            },
+        )
+        future_policy = deepcopy(configured_state["promotionPolicies"][0])  # type: ignore[index]
+        future_policy["effectiveFrom"] = "2099-02-01T00:00:00.000Z"
+        future_policy["proof"] = action_evidence(
+            "ACT-PROMOTION-SERVER",
+            captured_at="2099-01-01T00:00:00.000Z",
+            actor="forged-actor",
+        )
+        managed_state = deepcopy(initialized.state)
+        managed_state["promotionPolicies"] = [future_policy]
+        payload = {
+            "state": managed_state,
+            "evidence": dict(future_policy["proof"]),
+        }
+        saved = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.promotion_policy.saved",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        saved_proof = saved.state["promotionPolicies"][0]["proof"]  # type: ignore[index]
+        self.assertEqual(saved_proof["actor"], operator.actor_id)
+        self.assertNotEqual(saved_proof["capturedAt"], "2099-01-01T00:00:00.000Z")
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.promotion_policy.saved",
+                expected_version=saved.version,
+                payload=payload,
+            )
+
     def test_production_material_issue_decrements_one_item_with_linked_evidence(self) -> None:
         current = catalog_state()
         issue = movement(
@@ -1537,6 +2363,8 @@ class CommerceRuntimeTests(unittest.TestCase):
 
         self.assertEqual(accepted["storefrontRequests"], [request])
         self.assertEqual(len(request["lines"]), 2)  # type: ignore[arg-type]
+        self.assertEqual(request["customerProfile"]["phone"], "09 123 456 789")  # type: ignore[index]
+        self.assertEqual(request["deliveryAddress"]["township"], "Hlaing")  # type: ignore[index]
         for field in ("items", "orders", "movements", "closes"):
             self.assertEqual(accepted[field], current[field])
 
@@ -1547,6 +2375,16 @@ class CommerceRuntimeTests(unittest.TestCase):
                 current,
                 "commerce.storefront_request.received",
                 tampered_quote,
+                storefront_evidence(request),
+            )
+
+        tampered_profile = deepcopy(next_state)
+        tampered_profile["storefrontRequests"][0]["customerProfile"]["phone"] = "09 999 999 999"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.storefront_request.received",
+                tampered_profile,
                 storefront_evidence(request),
             )
 
@@ -2201,25 +3039,58 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.order.advanced",
                     "commerce.order.cancelled",
                     "commerce.order.return_recorded",
+                    "commerce.order.support_case_opened",
+                    "commerce.order.support_case_reopened",
+                    "commerce.order.support_case_service_recorded",
+                    "commerce.order.support_case_resolved",
+                    "commerce.order.correction_recorded",
                     "commerce.payment.reconciled",
+                    "commerce.collection_action.recorded",
                     "commerce.refund.settled",
                     "commerce.stock.received",
                     "commerce.stock.counted",
                     "commerce.production_material.issued",
+                    "commerce.production_material.returned",
+                    "commerce.production_batch.received",
                     "commerce.inventory.initialized",
+                    "commerce.inventory.master_created",
+                    "commerce.inventory.supplier_policy_saved",
                     "commerce.inventory.transferred",
+                    "commerce.purchase_budget.approved",
+                    "commerce.supplier_sourcing.approved",
+                    "commerce.purchase_requisition.approved",
                     "commerce.purchase_order.created",
                     "commerce.purchase_order.received",
                     "commerce.purchase_order.cancelled",
+                    "commerce.supplier_invoice.recorded",
+                    "commerce.supplier_invoice.payable_ready",
+                    "commerce.supplier_return.authorized",
+                    "commerce.supplier_credit.recorded",
                     "commerce.close.saved",
                     "commerce.website_intake.converted",
                     "commerce.storefront.configuration.saved",
                     "commerce.storefront.merchandising.imported",
+                    "commerce.tax_configuration.saved",
+                    "commerce.account_mapping.saved",
+                    "commerce.customer_credit_policy.saved",
+                    "commerce.promotion_policy.saved",
+                    "commerce.shipping_policy.saved",
+                    "commerce.payment_policy.saved",
+                    "commerce.service_schedule.initialized",
+                    "commerce.service_schedule.saved",
                 }
             ),
         )
         self.assertIn("commerce.item.updated", COMMERCE_EVENTS)
         self.assertIn("commerce.storefront.merchandising.imported", COMMERCE_EVENTS)
+        self.assertIn("commerce.tax_configuration.saved", COMMERCE_EVENTS)
+        self.assertIn("commerce.account_mapping.saved", COMMERCE_EVENTS)
+        self.assertIn("commerce.customer_credit_policy.saved", COMMERCE_EVENTS)
+        self.assertIn("commerce.promotion_policy.saved", COMMERCE_EVENTS)
+        self.assertIn("commerce.shipping_policy.saved", COMMERCE_EVENTS)
+        self.assertIn("commerce.payment_policy.saved", COMMERCE_EVENTS)
+        self.assertIn("commerce.service_schedule.initialized", COMMERCE_EVENTS)
+        self.assertIn("commerce.service_schedule.saved", COMMERCE_EVENTS)
 
     def test_website_intake_creation_records_no_order_or_stock_movement(self) -> None:
         current = catalog_state()
@@ -3175,6 +4046,689 @@ class CommerceRuntimeTests(unittest.TestCase):
                 },
             )
 
+    def test_supplier_invoice_three_way_match_gates_payable_handoff(self) -> None:
+        current = catalog_state()
+        created_state = deepcopy(current)
+        created_state["purchaseOrders"] = [purchase_order_record()]
+        created = apply_event(current, "commerce.purchase_order.created", created_state)
+
+        invoice = supplier_invoice_record()
+        invoiced_state = deepcopy(created)
+        invoiced_state["purchaseOrders"][0]["supplierInvoice"] = invoice  # type: ignore[index]
+        invoiced = apply_event(
+            created,
+            "commerce.supplier_invoice.recorded",
+            invoiced_state,
+        )
+        match = commerce_supplier_invoice_match(
+            invoiced,
+            invoiced["purchaseOrders"][0],  # type: ignore[index,arg-type]
+        )
+        self.assertEqual(match["status"], "awaiting_receipt")
+        self.assertFalse(match["payableReady"])
+
+        forged_payable = deepcopy(invoiced)
+        forged_payable["purchaseOrders"][0]["supplierInvoice"]["payableReview"] = (  # type: ignore[index]
+            action_evidence(
+                "ACT-SUPPLIER-INVOICE-PAYABLE-EARLY",
+                captured_at="2026-07-23T09:31:00.000Z",
+            )
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                invoiced,
+                "commerce.supplier_invoice.payable_ready",
+                forged_payable,
+            )
+
+        received_state = deepcopy(invoiced)
+        received_state["items"][0]["onHand"] = 20  # type: ignore[index]
+        received_state["movements"] = [
+            movement(
+                "receipt",
+                "ACT-PURCHASE-RECEIVE-FULL",
+                10,
+                created_at="2026-07-23T09:40:00.000Z",
+                purchase_order_id=PURCHASE_ORDER_ID,
+            )
+        ]
+        received = apply_event(
+            invoiced,
+            "commerce.purchase_order.received",
+            received_state,
+        )
+        matched = commerce_supplier_invoice_match(
+            received,
+            received["purchaseOrders"][0],  # type: ignore[index,arg-type]
+        )
+        self.assertEqual(matched["status"], "matched")
+        self.assertEqual(matched["orderedTotalMmk"], 750)
+        self.assertEqual(matched["invoicedTotalMmk"], 750)
+
+        review = action_evidence(
+            "ACT-SUPPLIER-INVOICE-PAYABLE",
+            captured_at="2026-07-23T09:50:00.000Z",
+        )
+        payable_state = deepcopy(received)
+        payable_state["purchaseOrders"][0]["supplierInvoice"]["payableReview"] = review  # type: ignore[index]
+        payable = apply_event(
+            received,
+            "commerce.supplier_invoice.payable_ready",
+            payable_state,
+        )
+        payable_match = commerce_supplier_invoice_match(
+            payable,
+            payable["purchaseOrders"][0],  # type: ignore[index,arg-type]
+        )
+        self.assertTrue(payable_match["payableReady"])
+        handoff = commerce_supplier_payables_handoff(payable)
+        self.assertIsNotNone(handoff)
+        assert handoff is not None
+        self.assertEqual(handoff["schema"], "supermega.commerce.supplier-payables-handoff.v1")
+        self.assertEqual(handoff["status"], "review_required")
+        self.assertEqual(handoff["paymentAuthority"], "none")
+        self.assertFalse(handoff["paymentInitiated"])
+        self.assertFalse(handoff["accountingPosted"])
+        self.assertEqual(handoff["readyInvoiceCount"], 1)
+        self.assertEqual(handoff["excludedInvoiceCount"], 0)
+        self.assertEqual(handoff["grossInvoiceTotalMmk"], 750)
+        self.assertEqual(handoff["supplierCreditTotalMmk"], 0)
+        self.assertEqual(handoff["netPayableTotalMmk"], 750)
+        self.assertEqual(handoff["rows"][0]["receiptMovementIds"], [received_state["movements"][0]["id"]])  # type: ignore[index]
+        self.assertEqual(handoff["rows"][0]["physicalReturnStatus"], "not_required")
+        self.assertEqual(handoff["rows"][0]["payableReviewActionId"], review["actionId"])
+        self.assertIn('"net_payable_mmk"', commerce_supplier_payables_handoff_csv(handoff))
+
+        blocked_aging = commerce_supplier_payables_aging(
+            invoiced,
+            "2026-08-15T09:20:00.000Z",
+        )
+        self.assertEqual(blocked_aging["rows"], [])
+        self.assertEqual(blocked_aging["blockedInvoiceCount"], 1)
+
+        scheduled_aging = commerce_supplier_payables_aging(
+            payable,
+            "2026-08-14T09:20:00.000Z",
+        )
+        self.assertEqual(scheduled_aging["rows"][0]["bucket"], "scheduled")
+        self.assertEqual(scheduled_aging["rows"][0]["daysUntilDue"], 8)
+        due_aging = commerce_supplier_payables_aging(
+            payable,
+            "2026-08-15T09:20:00.000Z",
+        )
+        self.assertEqual(due_aging["rows"][0]["bucket"], "due_7_days")
+        self.assertEqual(due_aging["rows"][0]["daysUntilDue"], 7)
+        self.assertEqual(due_aging["totalsMmk"]["due_7_days"], 750)
+        self.assertEqual(due_aging["dueWithin7DaysInvoiceCount"], 1)
+        self.assertEqual(due_aging["paymentAuthority"], "none")
+        self.assertFalse(due_aging["paymentInitiated"])
+        overdue_aging = commerce_supplier_payables_aging(
+            payable,
+            "2026-08-22T09:20:00.001Z",
+        )
+        self.assertEqual(overdue_aging["rows"][0]["bucket"], "overdue")
+        self.assertEqual(overdue_aging["rows"][0]["daysPastDue"], 1)
+        self.assertEqual(overdue_aging["overdueInvoiceCount"], 1)
+        self.assertEqual(overdue_aging["totalsMmk"]["overdue"], 750)
+        with self.assertRaises(TrialValidationError):
+            commerce_supplier_payables_aging(payable, "not-a-timestamp")
+
+        tampered_handoff = deepcopy(handoff)
+        tampered_handoff["netPayableTotalMmk"] = 751
+        with self.assertRaisesRegex(TrialValidationError, "integrity check failed"):
+            commerce_supplier_payables_handoff_csv(tampered_handoff)
+
+        formula_state = deepcopy(payable)
+        formula_state["purchaseOrders"][0]["supplierInvoice"]["supplierReference"] = "=2+2"  # type: ignore[index]
+        formula_handoff = commerce_supplier_payables_handoff(formula_state)
+        assert formula_handoff is not None
+        self.assertIn('"\'=2+2"', commerce_supplier_payables_handoff_csv(formula_handoff))
+
+        price_variance_state = deepcopy(created)
+        price_variance_state["purchaseOrders"][0]["supplierInvoice"] = (  # type: ignore[index]
+            supplier_invoice_record(unit_cost_mmk=80)
+        )
+        price_variance = apply_event(
+            created,
+            "commerce.supplier_invoice.recorded",
+            price_variance_state,
+        )
+        price_variance_received = deepcopy(price_variance)
+        price_variance_received["items"][0]["onHand"] = 20  # type: ignore[index]
+        price_variance_received["movements"] = received_state["movements"]
+        price_variance_received = apply_event(
+            price_variance,
+            "commerce.purchase_order.received",
+            price_variance_received,
+        )
+        self.assertEqual(
+            commerce_supplier_invoice_match(
+                price_variance_received,
+                price_variance_received["purchaseOrders"][0],  # type: ignore[index,arg-type]
+            )["status"],
+            "price_variance",
+        )
+
+        cancellation = deepcopy(invoiced)
+        cancellation["purchaseOrders"][0]["cancellation"] = action_evidence(  # type: ignore[index]
+            "ACT-PURCHASE-CANCEL-INVOICED",
+            captured_at="2026-07-23T09:35:00.000Z",
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(invoiced, "commerce.purchase_order.cancelled", cancellation)
+
+    def test_rejected_supplier_units_require_immutable_return_and_exact_credit(self) -> None:
+        current = catalog_state()
+        created_state = deepcopy(current)
+        created_state["purchaseOrders"] = [purchase_order_record()]
+        created = apply_event(current, "commerce.purchase_order.created", created_state)
+
+        receipt = movement(
+            "receipt",
+            "ACT-PURCHASE-RECEIVE-REJECTED",
+            8,
+            created_at="2026-07-23T09:40:00.000Z",
+            purchase_order_id=PURCHASE_ORDER_ID,
+            rejected_quantity=2,
+            discrepancy_code="damaged",
+        )
+        received_state = deepcopy(created)
+        received_state["items"][0]["onHand"] = 18  # type: ignore[index]
+        received_state["movements"] = [receipt]
+        received = apply_event(
+            created,
+            "commerce.purchase_order.received",
+            received_state,
+        )
+
+        invoiced_state = deepcopy(received)
+        invoiced_state["purchaseOrders"][0]["supplierInvoice"] = supplier_invoice_record()  # type: ignore[index]
+        invoiced = apply_event(
+            received,
+            "commerce.supplier_invoice.recorded",
+            invoiced_state,
+        )
+        self.assertEqual(
+            commerce_supplier_invoice_match(
+                invoiced,
+                invoiced["purchaseOrders"][0],  # type: ignore[index,arg-type]
+            )["status"],
+            "supplier_credit_pending",
+        )
+
+        claim = supplier_return_claim_record(str(receipt["id"]))
+        claimed_state = deepcopy(invoiced)
+        claimed_state["purchaseOrders"][0]["supplierReturns"] = [claim]  # type: ignore[index]
+        claimed = apply_event(
+            invoiced,
+            "commerce.supplier_return.authorized",
+            claimed_state,
+        )
+        self.assertEqual(claimed["items"], invoiced["items"])
+        self.assertEqual(claimed["movements"], invoiced["movements"])
+        retained_claim = claimed["purchaseOrders"][0]["supplierReturns"][0]  # type: ignore[index]
+        self.assertEqual(retained_claim["claimAmountMmk"], 150)
+        self.assertEqual(retained_claim["physicalReturnStatus"], "not_dispatched")
+        self.assertFalse(retained_claim["supplierContacted"])
+        self.assertFalse(retained_claim["accountingPosted"])
+
+        partial_credit = supplier_credit_note_record(amount_mmk=75)
+        partial_state = deepcopy(claimed)
+        partial_state["purchaseOrders"][0]["supplierReturns"][0]["creditNotes"] = [partial_credit]  # type: ignore[index]
+        partial = apply_event(
+            claimed,
+            "commerce.supplier_credit.recorded",
+            partial_state,
+        )
+        partial_match = commerce_supplier_invoice_match(
+            partial,
+            partial["purchaseOrders"][0],  # type: ignore[index,arg-type]
+        )
+        self.assertEqual(partial_match["status"], "supplier_credit_pending")
+        self.assertEqual(partial_match["supplierReturnBalanceMmk"], 75)
+
+        final_credit = supplier_credit_note_record(
+            action_id="ACT-SUPPLIER-CREDIT-RECORD-FINAL",
+            captured_at="2026-07-23T10:10:00.000Z",
+            issued_at="2026-07-23T10:05:00.000Z",
+            amount_mmk=75,
+        )
+        final_credit["id"] = "SCN-00000000-0000-4000-8000-000000000033"
+        final_credit["supplierReference"] = "YS-CN-2026-0033"
+        credited_state = deepcopy(partial)
+        credited_state["purchaseOrders"][0]["supplierReturns"][0]["creditNotes"] = [  # type: ignore[index]
+            final_credit,
+            partial_credit,
+        ]
+        credited = apply_event(
+            partial,
+            "commerce.supplier_credit.recorded",
+            credited_state,
+        )
+        credited_match = commerce_supplier_invoice_match(
+            credited,
+            credited["purchaseOrders"][0],  # type: ignore[index,arg-type]
+        )
+        self.assertEqual(credited_match["status"], "matched")
+        self.assertEqual(credited_match["supplierClaimMmk"], 150)
+        self.assertEqual(credited_match["supplierCreditMmk"], 150)
+        self.assertEqual(credited_match["netInvoiceTotalMmk"], 600)
+        self.assertEqual(credited_match["acceptedTotalMmk"], 600)
+
+        credited_payable_state = deepcopy(credited)
+        credited_payable_state["purchaseOrders"][0]["supplierInvoice"]["payableReview"] = action_evidence(  # type: ignore[index]
+            "ACT-SUPPLIER-INVOICE-CREDITED-PAYABLE",
+            captured_at="2026-07-23T10:20:00.000Z",
+        )
+        credited_payable = apply_event(
+            credited,
+            "commerce.supplier_invoice.payable_ready",
+            credited_payable_state,
+        )
+        credited_handoff = commerce_supplier_payables_handoff(credited_payable)
+        self.assertIsNotNone(credited_handoff)
+        assert credited_handoff is not None
+        self.assertEqual(credited_handoff["grossInvoiceTotalMmk"], 750)
+        self.assertEqual(credited_handoff["supplierCreditTotalMmk"], 150)
+        self.assertEqual(credited_handoff["netPayableTotalMmk"], 600)
+        self.assertEqual(credited_handoff["rows"][0]["rejectedQuantity"], 2)
+        self.assertEqual(credited_handoff["rows"][0]["supplierReturnClaimIds"], [claim["id"]])
+        self.assertEqual(credited_handoff["rows"][0]["supplierCreditNoteIds"], [partial_credit["id"], final_credit["id"]])
+        self.assertEqual(credited_handoff["rows"][0]["physicalReturnStatus"], "not_dispatched")
+
+        unsafe_claim = deepcopy(claimed_state)
+        unsafe_claim["purchaseOrders"][0]["supplierReturns"][0]["physicalReturnStatus"] = "dispatched"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(invoiced, "commerce.supplier_return.authorized", unsafe_claim)
+
+        overcredit = supplier_credit_note_record(amount_mmk=151)
+        overcredit_state = deepcopy(claimed)
+        overcredit_state["purchaseOrders"][0]["supplierReturns"][0]["creditNotes"] = [overcredit]  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(claimed, "commerce.supplier_credit.recorded", overcredit_state)
+
+        posted_credit = supplier_credit_note_record()
+        posted_credit["accountingPosted"] = True
+        posted_state = deepcopy(claimed)
+        posted_state["purchaseOrders"][0]["supplierReturns"][0]["creditNotes"] = [posted_credit]  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(claimed, "commerce.supplier_credit.recorded", posted_state)
+
+    def test_purchase_budget_caps_commitment_and_cancelled_po_releases_it(self) -> None:
+        envelope = purchase_budget_envelope_record(ceiling_mmk=1_000)
+        first = purchase_requisition_record(budget_envelope_id=envelope["id"])  # type: ignore[arg-type]
+        second = purchase_requisition_record(
+            requisition_id="PR-00000000-0000-4000-8000-000000000020",
+            action_id="ACT-PURCHASE-REQUISITION-SECOND",
+            quantity=5,
+            budget_envelope_id=envelope["id"],  # type: ignore[arg-type]
+        )
+        state = catalog_state()
+        state["purchaseBudgetEnvelopes"] = [envelope]
+        state["purchaseRequisitions"] = [second, first]
+        first_po = purchase_order_record(actor="Procurement operator")
+        first_po["requisitionId"] = first["id"]
+        second_po = purchase_order_record(
+            purchase_order_id="PO-00000000-0000-4000-8000-000000000022",
+            action_id="ACT-PURCHASE-CREATE-SECOND",
+            quantity=5,
+            actor="Procurement operator",
+        )
+        second_po["requisitionId"] = second["id"]
+        state["purchaseOrders"] = [second_po, first_po]
+        with self.assertRaisesRegex(TrialValidationError, "approved ceiling"):
+            validate_commerce_state(state)
+
+        first_po["cancellation"] = action_evidence(
+            "ACT-PURCHASE-CANCEL-BUDGET-RELEASE",
+            captured_at="2026-07-23T09:10:00.000Z",
+            actor="Procurement operator",
+        )
+        validated = validate_commerce_state(state)
+        self.assertEqual(len(validated["purchaseRequisitions"]), 2)
+
+        over_limit = deepcopy(validated)
+        over_limit["purchaseRequisitions"][0]["quantityRequested"] = 14  # type: ignore[index]
+        over_limit["purchaseRequisitions"][0]["totalMmk"] = 1_050  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "per-requisition"):
+            validate_commerce_state(over_limit)
+
+        legacy = catalog_state()
+        legacy["purchaseRequisitions"] = [purchase_requisition_record()]
+        self.assertEqual(len(validate_commerce_state(legacy)["purchaseRequisitions"]), 1)
+        with self.assertRaisesRegex(TrialValidationError, "budget envelope"):
+            apply_event(catalog_state(), "commerce.purchase_requisition.approved", legacy)
+
+    def test_purchase_requisition_is_immutable_and_exactly_converts_to_one_po(self) -> None:
+        current = catalog_state()
+        envelope = purchase_budget_envelope_record()
+        budget_state = deepcopy(current)
+        budget_state["purchaseBudgetEnvelopes"] = [envelope]
+        budgeted = apply_event(current, "commerce.purchase_budget.approved", budget_state)
+        sourcing = supplier_sourcing_decision_record()
+        sourcing_state = deepcopy(budgeted)
+        sourcing_state["supplierSourcingDecisions"] = [sourcing]
+        sourced = apply_event(budgeted, "commerce.supplier_sourcing.approved", sourcing_state)
+        requisition = purchase_requisition_record(
+            budget_envelope_id=envelope["id"],  # type: ignore[arg-type]
+            source_sourcing_decision_id=sourcing["id"],  # type: ignore[arg-type]
+        )
+        requisition_state = deepcopy(sourced)
+        requisition_state["purchaseRequisitions"] = [requisition]
+        approved = apply_event(
+            sourced,
+            "commerce.purchase_requisition.approved",
+            requisition_state,
+        )
+        self.assertEqual(approved["purchaseRequisitions"][0]["totalMmk"], 750)  # type: ignore[index]
+        self.assertNotIn("purchaseOrders", approved)
+
+        purchase_order = purchase_order_record(actor="Procurement operator")
+        purchase_order["requisitionId"] = requisition["id"]
+        converted_state = deepcopy(approved)
+        converted_state["purchaseOrders"] = [purchase_order]
+        converted = apply_event(
+            approved,
+            "commerce.purchase_order.created",
+            converted_state,
+        )
+        self.assertEqual(converted["purchaseOrders"][0]["requisitionId"], requisition["id"])  # type: ignore[index]
+
+        same_operator = deepcopy(approved)
+        same_operator_order = purchase_order_record(
+            purchase_order_id="PO-00000000-0000-4000-8000-000000000021",
+            action_id="ACT-PURCHASE-CREATE-SAME-OPERATOR",
+            actor="accountable OPERATOR",
+        )
+        same_operator_order["requisitionId"] = requisition["id"]
+        same_operator["purchaseOrders"] = [same_operator_order]
+        with self.assertRaisesRegex(TrialValidationError, "different operator"):
+            apply_event(approved, "commerce.purchase_order.created", same_operator)
+
+        stale_confirmation = deepcopy(approved)
+        stale_order = purchase_order_record(
+            purchase_order_id="PO-00000000-0000-4000-8000-000000000023",
+            action_id="ACT-PURCHASE-CREATE-STALE",
+            captured_at="2026-07-23T08:59:59.999Z",
+            actor="Procurement operator",
+        )
+        stale_order["requisitionId"] = requisition["id"]
+        stale_confirmation["purchaseOrders"] = [stale_order]
+        with self.assertRaisesRegex(TrialValidationError, "later confirmation"):
+            apply_event(approved, "commerce.purchase_order.created", stale_confirmation)
+
+        mismatched = deepcopy(approved)
+        mismatched_order = deepcopy(purchase_order)
+        mismatched_order["unitCostMmk"] = 74
+        mismatched["purchaseOrders"] = [mismatched_order]
+        with self.assertRaisesRegex(TrialValidationError, "approved requisition"):
+            apply_event(approved, "commerce.purchase_order.created", mismatched)
+
+        duplicate = deepcopy(converted)
+        duplicate_order = purchase_order_record(
+            purchase_order_id="PO-00000000-0000-4000-8000-000000000022",
+            action_id="ACT-PURCHASE-CREATE-DUPLICATE",
+            actor="Procurement operator",
+        )
+        duplicate_order["requisitionId"] = requisition["id"]
+        duplicate["purchaseOrders"] = [duplicate_order, *converted["purchaseOrders"]]  # type: ignore[misc]
+        with self.assertRaisesRegex(TrialValidationError, "Converted purchase requisition"):
+            apply_event(converted, "commerce.purchase_order.created", duplicate)
+
+    def test_store_restamps_and_idempotently_retains_human_requisition_approval(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-requisition", "shop-owner", "human")
+        buyer = TrialPrincipal("workspace-requisition", "procurement-operator", "human")
+        agent = TrialPrincipal("workspace-requisition", "buying-agent", "agent")
+        for principal in (operator, buyer, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={"state": catalog_state(), "evidence": action_evidence("ACT-REQUISITION-INIT")},
+        )
+        envelope = purchase_budget_envelope_record(captured_at="2099-01-01T00:00:00.000Z", period_end="2099-12-31T00:00:00.000Z")
+        envelope["approval"]["actor"] = "Fabricated buying agent"  # type: ignore[index]
+        budget_state = deepcopy(initialized.state)
+        budget_state["purchaseBudgetEnvelopes"] = [envelope]
+        budget_payload = {"state": budget_state, "evidence": dict(envelope["approval"])}  # type: ignore[arg-type]
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_budget.approved",
+                expected_version=initialized.version,
+                payload=budget_payload,
+            )
+        budget_command_id = str(uuid4())
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:04:00.000+00:00",
+        ):
+            budgeted = store.apply_command(
+                operator,
+                command_id=budget_command_id,
+                surface="commerce",
+                event_type="commerce.purchase_budget.approved",
+                expected_version=initialized.version,
+                payload=budget_payload,
+            )
+            budget_replay = store.apply_command(
+                operator,
+                command_id=budget_command_id,
+                surface="commerce",
+                event_type="commerce.purchase_budget.approved",
+                expected_version=initialized.version,
+                payload=budget_payload,
+            )
+        retained_envelope = budgeted.state["purchaseBudgetEnvelopes"][0]  # type: ignore[index]
+        self.assertEqual(retained_envelope["approval"]["actor"], operator.actor_id)  # type: ignore[index]
+        self.assertEqual(retained_envelope["periodStart"], "2026-07-23T09:04:00.000+00:00")
+        self.assertTrue(budget_replay.idempotent_replay)
+
+        sourcing = supplier_sourcing_decision_record(
+            captured_at="2099-01-01T00:00:00.000Z",
+        )
+        sourcing["approval"]["actor"] = "Fabricated buying agent"  # type: ignore[index]
+        sourcing_state = deepcopy(budgeted.state)
+        sourcing_state["supplierSourcingDecisions"] = [sourcing]
+        sourcing_payload = {
+            "state": sourcing_state,
+            "evidence": dict(sourcing["approval"]),  # type: ignore[arg-type]
+        }
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.supplier_sourcing.approved",
+                expected_version=budgeted.version,
+                payload=sourcing_payload,
+            )
+        sourcing_command_id = str(uuid4())
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:04:30.000+00:00",
+        ):
+            sourced = store.apply_command(
+                operator,
+                command_id=sourcing_command_id,
+                surface="commerce",
+                event_type="commerce.supplier_sourcing.approved",
+                expected_version=budgeted.version,
+                payload=sourcing_payload,
+            )
+            sourcing_replay = store.apply_command(
+                operator,
+                command_id=sourcing_command_id,
+                surface="commerce",
+                event_type="commerce.supplier_sourcing.approved",
+                expected_version=budgeted.version,
+                payload=sourcing_payload,
+            )
+        retained_sourcing = sourced.state["supplierSourcingDecisions"][0]  # type: ignore[index]
+        self.assertEqual(retained_sourcing["approval"]["actor"], operator.actor_id)  # type: ignore[index]
+        self.assertEqual(retained_sourcing["createdAt"], "2026-07-23T09:04:30.000+00:00")
+        self.assertTrue(sourcing_replay.idempotent_replay)
+
+        requisition = purchase_requisition_record(
+            captured_at="2099-01-01T00:00:00.000Z",
+            budget_envelope_id=retained_envelope["id"],  # type: ignore[arg-type]
+            source_sourcing_decision_id=retained_sourcing["id"],  # type: ignore[arg-type]
+        )
+        requisition["approval"]["actor"] = "Fabricated buying agent"  # type: ignore[index]
+        next_state = deepcopy(sourced.state)
+        next_state["purchaseRequisitions"] = [requisition]
+        command_id = str(uuid4())
+        payload = {
+            "state": next_state,
+            "evidence": dict(requisition["approval"]),  # type: ignore[arg-type]
+        }
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_requisition.approved",
+                expected_version=sourced.version,
+                payload=payload,
+            )
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:05:00.000+00:00",
+        ):
+            approved = store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.purchase_requisition.approved",
+                expected_version=sourced.version,
+                payload=payload,
+            )
+            replay = store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.purchase_requisition.approved",
+                expected_version=sourced.version,
+                payload=payload,
+            )
+        retained = approved.state["purchaseRequisitions"][0]  # type: ignore[index]
+        self.assertEqual(retained["approval"]["actor"], operator.actor_id)  # type: ignore[index]
+        self.assertEqual(retained["createdAt"], "2026-07-23T09:05:00.000+00:00")
+        self.assertNotIn("purchaseOrders", approved.state)
+        self.assertTrue(replay.idempotent_replay)
+
+        purchase_order = purchase_order_record(
+            captured_at="2099-01-01T00:00:00.000Z",
+            actor="Fabricated second operator",
+        )
+        purchase_order["requisitionId"] = retained["id"]  # type: ignore[index]
+        purchase_state = deepcopy(approved.state)
+        purchase_state["purchaseOrders"] = [purchase_order]
+        purchase_payload = {
+            "state": purchase_state,
+            "evidence": dict(purchase_order["creation"]),  # type: ignore[arg-type]
+        }
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:06:00.000+00:00",
+        ):
+            with self.assertRaisesRegex(TrialValidationError, "different operator"):
+                store.apply_command(
+                    operator,
+                    command_id=str(uuid4()),
+                    surface="commerce",
+                    event_type="commerce.purchase_order.created",
+                    expected_version=approved.version,
+                    payload=purchase_payload,
+                )
+            converted = store.apply_command(
+                buyer,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.created",
+                expected_version=approved.version,
+                payload=purchase_payload,
+            )
+        retained_order = converted.state["purchaseOrders"][0]  # type: ignore[index]
+        self.assertEqual(retained_order["creation"]["actor"], buyer.actor_id)  # type: ignore[index]
+        self.assertNotEqual(retained_order["creation"]["actor"], retained["approval"]["actor"])  # type: ignore[index]
+
+    def test_supplier_sourcing_award_is_immutable_tolerance_bound_and_single_use(self) -> None:
+        current = catalog_state()
+        envelope = purchase_budget_envelope_record()
+        budget_state = deepcopy(current)
+        budget_state["purchaseBudgetEnvelopes"] = [envelope]
+        budgeted = apply_event(current, "commerce.purchase_budget.approved", budget_state)
+        decision = supplier_sourcing_decision_record(
+            unit_cost_tolerance_basis_points=1_000,
+            delivery_tolerance_days=2,
+        )
+        sourcing_state = deepcopy(budgeted)
+        sourcing_state["supplierSourcingDecisions"] = [decision]
+        sourced = apply_event(
+            budgeted,
+            "commerce.supplier_sourcing.approved",
+            sourcing_state,
+        )
+        self.assertEqual(sourced["supplierSourcingDecisions"], [decision])
+        self.assertEqual(sourced["items"], budgeted["items"])
+
+        unknown_award = deepcopy(sourced)
+        unknown_award["supplierSourcingDecisions"][0]["selectedQuoteReference"] = "UNKNOWN"  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "selectedQuoteReference"):
+            validate_commerce_state(unknown_award)
+
+        requisition = purchase_requisition_record(
+            unit_cost_mmk=82,
+            expected_at="2026-07-27T09:00:00.000Z",
+            budget_envelope_id=envelope["id"],  # type: ignore[arg-type]
+            source_sourcing_decision_id=decision["id"],  # type: ignore[arg-type]
+        )
+        approved_state = deepcopy(sourced)
+        approved_state["purchaseRequisitions"] = [requisition]
+        approved = apply_event(
+            sourced,
+            "commerce.purchase_requisition.approved",
+            approved_state,
+        )
+        self.assertEqual(
+            approved["purchaseRequisitions"][0]["sourceSourcingDecisionId"],  # type: ignore[index]
+            decision["id"],
+        )
+
+        excessive_cost = deepcopy(approved_state)
+        excessive_cost["purchaseRequisitions"][0]["unitCostMmk"] = 83  # type: ignore[index]
+        excessive_cost["purchaseRequisitions"][0]["totalMmk"] = 830  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "approved sourcing decision"):
+            validate_commerce_state(excessive_cost)
+
+        late_delivery = deepcopy(approved_state)
+        late_delivery["purchaseRequisitions"][0]["expectedAt"] = "2026-07-27T09:00:00.001Z"  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "approved sourcing decision"):
+            validate_commerce_state(late_delivery)
+
+        reused = deepcopy(approved)
+        second = purchase_requisition_record(
+            requisition_id="PR-00000000-0000-4000-8000-000000000020",
+            action_id="ACT-PURCHASE-REQUISITION-SECOND",
+            budget_envelope_id=envelope["id"],  # type: ignore[arg-type]
+            source_sourcing_decision_id=decision["id"],  # type: ignore[arg-type]
+        )
+        reused["purchaseRequisitions"] = [second, *approved["purchaseRequisitions"]]  # type: ignore[misc]
+        with self.assertRaisesRegex(TrialValidationError, "Consumed supplier sourcing decision"):
+            validate_commerce_state(reused)
+
     def test_purchase_order_lifecycle_supports_partial_receipt_and_cancellation(self) -> None:
         current = catalog_state()
         purchase_order = purchase_order_record()
@@ -3294,6 +4848,270 @@ class CommerceRuntimeTests(unittest.TestCase):
                 cancellation,
             )
 
+    def test_store_stamps_supplier_invoice_and_payable_review(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-invoice", "shop-finance-owner", "human")
+        store.provision_membership(
+            workspace_id=operator.workspace_id,
+            actor_id=operator.actor_id,
+            actor_kind=operator.actor_kind,
+            capabilities=("commerce.write",),
+        )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={"state": catalog_state(), "evidence": action_evidence("ACT-INVOICE-INIT")},
+        )
+        created_state = deepcopy(initialized.state)
+        created_state["purchaseOrders"] = [purchase_order_record()]
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:00:00.000+00:00",
+        ):
+            created = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.created",
+                expected_version=initialized.version,
+                payload={
+                    "state": created_state,
+                    "evidence": evidence_for("commerce.purchase_order.created", created_state),
+                },
+            )
+
+        received_state = deepcopy(created.state)
+        received_state["items"][0]["onHand"] = 20  # type: ignore[index]
+        received_state["movements"] = [
+            movement(
+                "receipt",
+                "ACT-INVOICE-RECEIPT",
+                10,
+                created_at="2099-01-01T00:00:00.000Z",
+                purchase_order_id=PURCHASE_ORDER_ID,
+            )
+        ]
+        received_state["movements"][0]["actor"] = "Fabricated receiver"  # type: ignore[index]
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:10:00.000+00:00",
+        ):
+            received = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.received",
+                expected_version=created.version,
+                payload={
+                    "state": received_state,
+                    "evidence": action_evidence(
+                        "ACT-INVOICE-RECEIPT",
+                        captured_at="2099-01-01T00:00:00.000Z",
+                        actor="Fabricated receiver",
+                    ),
+                },
+            )
+
+        invoiced_state = deepcopy(received.state)
+        invoice = supplier_invoice_record(
+            captured_at="2099-01-01T00:00:00.000Z",
+        )
+        invoice["recording"]["actor"] = "Fabricated accounts bot"  # type: ignore[index]
+        invoiced_state["purchaseOrders"][0]["supplierInvoice"] = invoice  # type: ignore[index]
+        invoice_command_id = str(uuid4())
+        invoice_payload = {
+            "state": invoiced_state,
+            "evidence": dict(invoice["recording"]),  # type: ignore[arg-type]
+        }
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:20:00.000+00:00",
+        ):
+            invoiced = store.apply_command(
+                operator,
+                command_id=invoice_command_id,
+                surface="commerce",
+                event_type="commerce.supplier_invoice.recorded",
+                expected_version=received.version,
+                payload=invoice_payload,
+            )
+            invoice_replay = store.apply_command(
+                operator,
+                command_id=invoice_command_id,
+                surface="commerce",
+                event_type="commerce.supplier_invoice.recorded",
+                expected_version=received.version,
+                payload=invoice_payload,
+            )
+        retained_invoice = invoiced.state["purchaseOrders"][0]["supplierInvoice"]  # type: ignore[index]
+        self.assertEqual(retained_invoice["recording"]["actor"], operator.actor_id)  # type: ignore[index]
+        self.assertEqual(
+            datetime.fromisoformat(retained_invoice["recording"]["capturedAt"]),  # type: ignore[index]
+            datetime.fromisoformat("2026-07-23T09:20:00.000+00:00"),
+        )
+        self.assertTrue(invoice_replay.idempotent_replay)
+
+        payable_state = deepcopy(invoiced.state)
+        payable_state["purchaseOrders"][0]["supplierInvoice"]["payableReview"] = (  # type: ignore[index]
+            action_evidence(
+                "ACT-INVOICE-PAYABLE-MANAGED",
+                captured_at="2099-01-01T00:00:00.000Z",
+                actor="Fabricated payable bot",
+            )
+        )
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:30:00.000+00:00",
+        ):
+            payable = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.supplier_invoice.payable_ready",
+                expected_version=invoiced.version,
+                payload={
+                    "state": payable_state,
+                    "evidence": evidence_for(
+                        "commerce.supplier_invoice.payable_ready", payable_state
+                    ),
+                },
+            )
+        review = payable.state["purchaseOrders"][0]["supplierInvoice"]["payableReview"]  # type: ignore[index]
+        self.assertEqual(review["actor"], operator.actor_id)
+        self.assertEqual(
+            datetime.fromisoformat(review["capturedAt"]),
+            datetime.fromisoformat("2026-07-23T09:30:00.000+00:00"),
+        )
+        self.assertTrue(
+            commerce_supplier_invoice_match(
+                payable.state,
+                payable.state["purchaseOrders"][0],  # type: ignore[index,arg-type]
+            )["payableReady"]
+        )
+
+    def test_store_stamps_supplier_return_and_credit_evidence(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-supplier-return", "shop-procurement-owner", "human")
+        store.provision_membership(
+            workspace_id=operator.workspace_id,
+            actor_id=operator.actor_id,
+            actor_kind=operator.actor_kind,
+            capabilities=("commerce.write",),
+        )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={"state": catalog_state(), "evidence": action_evidence("ACT-RETURN-INIT")},
+        )
+        created_state = deepcopy(initialized.state)
+        created_state["purchaseOrders"] = [purchase_order_record()]
+        with patch("supermega_runtime.trial_store._utc_now", return_value="2026-07-23T09:00:00.000+00:00"):
+            created = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.created",
+                expected_version=initialized.version,
+                payload={
+                    "state": created_state,
+                    "evidence": evidence_for("commerce.purchase_order.created", created_state),
+                },
+            )
+        receipt = movement(
+            "receipt",
+            "ACT-RETURN-RECEIPT",
+            8,
+            created_at="2099-01-01T00:00:00.000Z",
+            purchase_order_id=PURCHASE_ORDER_ID,
+            rejected_quantity=2,
+        )
+        received_state = deepcopy(created.state)
+        received_state["items"][0]["onHand"] = 18  # type: ignore[index]
+        received_state["movements"] = [receipt]
+        with patch("supermega_runtime.trial_store._utc_now", return_value="2026-07-23T09:40:00.000+00:00"):
+            received = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.received",
+                expected_version=created.version,
+                payload={
+                    "state": received_state,
+                    "evidence": action_evidence(
+                        "ACT-RETURN-RECEIPT",
+                        captured_at="2099-01-01T00:00:00.000Z",
+                        actor="Fabricated receiver",
+                    ),
+                },
+            )
+        receipt_id = received.state["movements"][0]["id"]  # type: ignore[index]
+        claim = supplier_return_claim_record(
+            str(receipt_id),
+            captured_at="2099-01-01T00:00:00.000Z",
+        )
+        claim["authorization"]["actor"] = "Fabricated returns bot"  # type: ignore[index]
+        claimed_state = deepcopy(received.state)
+        claimed_state["purchaseOrders"][0]["supplierReturns"] = [claim]  # type: ignore[index]
+        claim_command_id = str(uuid4())
+        claim_payload = {
+            "state": claimed_state,
+            "evidence": evidence_for("commerce.supplier_return.authorized", claimed_state),
+        }
+        with patch("supermega_runtime.trial_store._utc_now", return_value="2026-07-23T09:50:00.000+00:00"):
+            claimed = store.apply_command(
+                operator,
+                command_id=claim_command_id,
+                surface="commerce",
+                event_type="commerce.supplier_return.authorized",
+                expected_version=received.version,
+                payload=claim_payload,
+            )
+            replay = store.apply_command(
+                operator,
+                command_id=claim_command_id,
+                surface="commerce",
+                event_type="commerce.supplier_return.authorized",
+                expected_version=received.version,
+                payload=claim_payload,
+            )
+        retained_claim = claimed.state["purchaseOrders"][0]["supplierReturns"][0]  # type: ignore[index]
+        self.assertEqual(retained_claim["authorization"]["actor"], operator.actor_id)
+        self.assertEqual(
+            datetime.fromisoformat(retained_claim["createdAt"]),
+            datetime.fromisoformat("2026-07-23T09:50:00.000+00:00"),
+        )
+        self.assertTrue(replay.idempotent_replay)
+
+        credit = supplier_credit_note_record(captured_at="2099-01-01T00:00:00.000Z")
+        credit["recording"]["actor"] = "Fabricated accounts bot"  # type: ignore[index]
+        credited_state = deepcopy(claimed.state)
+        credited_state["purchaseOrders"][0]["supplierReturns"][0]["creditNotes"] = [credit]  # type: ignore[index]
+        with patch("supermega_runtime.trial_store._utc_now", return_value="2026-07-23T10:00:00.000+00:00"):
+            credited = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.supplier_credit.recorded",
+                expected_version=claimed.version,
+                payload={
+                    "state": credited_state,
+                    "evidence": evidence_for("commerce.supplier_credit.recorded", credited_state),
+                },
+            )
+        retained_credit = credited.state["purchaseOrders"][0]["supplierReturns"][0]["creditNotes"][0]  # type: ignore[index]
+        self.assertEqual(retained_credit["recording"]["actor"], operator.actor_id)
+        self.assertEqual(
+            datetime.fromisoformat(retained_credit["recording"]["capturedAt"]),
+            datetime.fromisoformat("2026-07-23T10:00:00.000+00:00"),
+        )
+        self.assertFalse(retained_credit["accountingPosted"])
+
     def test_purchase_order_creation_requires_future_arrival_but_legacy_records_remain_readable(self) -> None:
         current = catalog_state()
         legacy_purchase_order = purchase_order_record()
@@ -3314,6 +5132,17 @@ class CommerceRuntimeTests(unittest.TestCase):
                 legacy,
             )
 
+        missing_terms = deepcopy(current)
+        purchase_order_without_terms = purchase_order_record()
+        purchase_order_without_terms.pop("unitCostMmk")
+        missing_terms["purchaseOrders"] = [purchase_order_without_terms]
+        self.assertEqual(
+            validate_commerce_state(missing_terms)["purchaseOrders"],
+            [purchase_order_without_terms],
+        )
+        with self.assertRaisesRegex(TrialValidationError, "requires retained whole-MMK unit cost"):
+            apply_event(current, "commerce.purchase_order.created", missing_terms)
+
         for expected_at in (
             NOW,
             "2026-07-23T08:59:59.999Z",
@@ -3328,6 +5157,44 @@ class CommerceRuntimeTests(unittest.TestCase):
                 TrialValidationError
             ):
                 validate_commerce_state(invalid)
+
+    def test_purchase_receipt_retains_rejected_units_without_adding_them_to_stock(self) -> None:
+        current = catalog_state()
+        current["purchaseOrders"] = [purchase_order_record()]
+        accepted_state = deepcopy(current)
+        accepted_state["items"][0]["onHand"] = 16  # type: ignore[index]
+        accepted_state["movements"] = [
+            movement(
+                "receipt",
+                "ACT-PURCHASE-DISCREPANCY",
+                6,
+                created_at="2026-07-23T09:10:00.000Z",
+                purchase_order_id=PURCHASE_ORDER_ID,
+                rejected_quantity=4,
+                discrepancy_code="quality_failed",
+            )
+        ]
+        accepted = apply_event(
+            current,
+            "commerce.purchase_order.received",
+            accepted_state,
+        )
+        receipt = accepted["movements"][0]  # type: ignore[index]
+        self.assertEqual(accepted["items"][0]["onHand"], 16)  # type: ignore[index]
+        self.assertEqual(receipt["quantityDelta"], 6)  # type: ignore[index]
+        self.assertEqual(receipt["rejectedQuantity"], 4)  # type: ignore[index]
+        self.assertEqual(receipt["discrepancyDisposition"], "return_to_vendor")  # type: ignore[index]
+
+        incomplete = deepcopy(accepted_state)
+        del incomplete["movements"][0]["discrepancyCode"]  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "discrepancy fields are incomplete"):
+            apply_event(current, "commerce.purchase_order.received", incomplete)
+
+        over_delivery = deepcopy(accepted_state)
+        over_delivery["items"][0]["onHand"] = 17  # type: ignore[index]
+        over_delivery["movements"][0]["quantityDelta"] = 7  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "outstanding quantity|exceeds its purchase order"):
+            apply_event(current, "commerce.purchase_order.received", over_delivery)
 
     def test_store_stamps_purchase_order_creation_and_rejects_expired_arrival(self) -> None:
         store = InMemoryTrialStore(reducer=reduce_trial_state)
@@ -4018,6 +5885,44 @@ class CommerceRuntimeTests(unittest.TestCase):
 
     def test_order_progress_payment_and_close_are_server_checked(self) -> None:
         current = created_state()
+        current["orders"][0]["paymentDueAt"] = "2026-08-22T09:00:00.000Z"  # type: ignore[index]
+        current = validate_commerce_state(current)
+        contact_proof = action_evidence(
+            "ACT-COLLECTION-1",
+            captured_at="2026-07-23T09:05:00.000Z",
+            reason="Recorded a customer payment follow-up.",
+        )
+        contacted = deepcopy(current)
+        contacted["orders"][0]["collectionActions"] = [  # type: ignore[index]
+            {"kind": "customer_contact", "proof": contact_proof}
+        ]
+        current = apply_event(
+            current,
+            "commerce.collection_action.recorded",
+            contacted,
+        )
+        self.assertEqual(
+            current["orders"][0]["collectionActions"][0]["proof"],  # type: ignore[index]
+            contact_proof,
+        )
+        rewritten_due = deepcopy(current)
+        rewritten_due["orders"][0]["paymentDueAt"] = "2026-08-23T09:00:00.000Z"  # type: ignore[index]
+        rewritten_due["orders"][0]["collectionActions"] = [  # type: ignore[index]
+            {
+                "kind": "customer_contact",
+                "proof": action_evidence(
+                    "ACT-COLLECTION-2",
+                    captured_at="2026-07-23T09:06:00.000Z",
+                ),
+            },
+            *current["orders"][0]["collectionActions"],  # type: ignore[index]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.collection_action.recorded",
+                rewritten_due,
+            )
         preparing = deepcopy(current)
         preparing["orders"][0].update(  # type: ignore[index]
             {
@@ -4160,6 +6065,365 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertEqual(accepted_next_day["closes"][0]["orders"], 0)  # type: ignore[index]
         self.assertEqual(accepted_next_day["closes"][1]["orderIds"], ["ORD-1"])  # type: ignore[index]
 
+    def test_order_support_case_opens_and_resolves_without_external_side_effects(self) -> None:
+        request_uuid = "12345678-1234-4123-8123-123456789ABC"
+        request_id = f"ECR-{request_uuid}"
+        intent_id = f"ESR-{request_uuid}"
+        case_id = f"CASE-{request_uuid}"
+        requested_at = "2026-07-23T09:25:00.000Z"
+        opening_at = "2026-07-23T09:30:00.000Z"
+        resolution_at = "2026-07-23T09:40:00.000Z"
+        evidence_reference = f"ECOMMERCE-SUPPORT:{request_uuid}:ORD-1:{request_id}"
+        current = completed_state()
+        current["orders"][0]["sourceRecordId"] = request_id  # type: ignore[index]
+        current = validate_commerce_state(current)
+
+        opening = action_evidence(
+            "ACT-SUPPORT-OPEN",
+            captured_at=opening_at,
+            reason="Reviewed the customer help request.",
+            evidence_reference=evidence_reference,
+        )
+        opened_candidate = deepcopy(current)
+        opened_candidate["orders"][0]["supportCases"] = [{  # type: ignore[index]
+            "caseId": case_id,
+            "sourceIntentId": intent_id,
+            "sourceRequestId": request_id,
+            "customerRequestedAt": requested_at,
+            "category": "delivery_issue",
+            "customerDescription": "Delivery arrived later than the promised time.",
+            "priority": "high",
+            "owner": "Support owner",
+            "dueAt": "2026-07-23T13:30:00.000Z",
+            "status": "open",
+            "opening": opening,
+            "externalMessageSent": False,
+            "refundStarted": False,
+        }]
+        opened = apply_event(
+            current,
+            "commerce.order.support_case_opened",
+            opened_candidate,
+        )
+        support_case = opened["orders"][0]["supportCases"][0]  # type: ignore[index]
+        self.assertEqual(support_case["status"], "open")
+        self.assertEqual(support_case["priority"], "high")
+        self.assertEqual(support_case["owner"], "Support owner")
+        self.assertFalse(support_case["externalMessageSent"])
+        self.assertFalse(support_case["refundStarted"])
+        self.assertEqual(opened["items"], current["items"])
+        self.assertEqual(opened["movements"], current["movements"])
+
+        reassigned_candidate = deepcopy(opened)
+        reassigned_candidate["orders"][0]["supportCases"][0]["serviceEvents"] = [{  # type: ignore[index]
+            "kind": "reassigned",
+            "owner": "Tier 2 owner",
+            "priority": "high",
+            "dueAt": "2026-07-23T13:30:00.000Z",
+            "note": "Assigned to the delivery specialist.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-REASSIGN",
+                captured_at="2026-07-23T09:35:00.000Z",
+                reason="Assign the case to the delivery specialist.",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }]
+        reassigned = apply_event(
+            opened,
+            "commerce.order.support_case_service_recorded",
+            reassigned_candidate,
+        )
+        self.assertEqual(
+            reassigned["orders"][0]["supportCases"][0]["serviceEvents"][0]["owner"],  # type: ignore[index]
+            "Tier 2 owner",
+        )
+
+        escalated_candidate = deepcopy(reassigned)
+        escalated_case = escalated_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        escalated_case["serviceEvents"] = [{
+            "kind": "escalated",
+            "owner": "Tier 2 owner",
+            "priority": "urgent",
+            "dueAt": "2026-07-23T12:30:00.000Z",
+            "note": "Customer delivery impact now requires urgent review.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-ESCALATE",
+                captured_at="2026-07-23T09:36:00.000Z",
+                reason="Escalate the delivery case without changing its owner.",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }, *escalated_case["serviceEvents"]]
+        escalated = apply_event(
+            reassigned,
+            "commerce.order.support_case_service_recorded",
+            escalated_candidate,
+        )
+        self.assertEqual(
+            escalated["orders"][0]["supportCases"][0]["serviceEvents"][0]["priority"],  # type: ignore[index]
+            "urgent",
+        )
+        self.assertEqual(escalated["items"], current["items"])
+        self.assertEqual(escalated["movements"], current["movements"])
+
+        overdue_reassignment_candidate = deepcopy(opened)
+        overdue_case = overdue_reassignment_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        overdue_case["serviceEvents"] = [{
+            "kind": "reassigned",
+            "owner": "Overdue recovery owner",
+            "priority": "high",
+            "dueAt": "2026-07-23T13:30:00.000Z",
+            "note": "Take accountable ownership of the overdue case.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-OVERDUE-REASSIGN",
+                captured_at="2026-07-23T14:00:00.000Z",
+                reason="Reassign overdue work without rewriting its target.",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }]
+        overdue_reassignment = apply_event(
+            opened,
+            "commerce.order.support_case_service_recorded",
+            overdue_reassignment_candidate,
+        )
+        self.assertEqual(
+            overdue_reassignment["orders"][0]["supportCases"][0]["serviceEvents"][0]["owner"],  # type: ignore[index]
+            "Overdue recovery owner",
+        )
+
+        unresolved_candidate = deepcopy(escalated)
+        unresolved_case = unresolved_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        unresolved_case["status"] = "resolved"
+        unresolved_case["resolution"] = {
+            "outcome": "no_action",
+            "note": "Invalid close before response readiness.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-EARLY-RESOLVE",
+                captured_at="2026-07-23T09:37:00.000Z",
+                evidence_reference=f"SUPPORT-RESOLUTION:{case_id}",
+            ),
+        }
+        with self.assertRaises(TrialValidationError):
+            apply_event(escalated, "commerce.order.support_case_resolved", unresolved_candidate)
+
+        response_before_ack_candidate = deepcopy(escalated)
+        response_before_ack_case = response_before_ack_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        response_before_ack_case["serviceEvents"] = [{
+            "kind": "first_response_ready",
+            "owner": "Tier 2 owner",
+            "priority": "urgent",
+            "dueAt": "2026-07-23T12:30:00.000Z",
+            "note": "Invalid response readiness before acknowledgement.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-EARLY-RESPONSE",
+                captured_at="2026-07-23T09:37:00.000Z",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }, *response_before_ack_case["serviceEvents"]]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                escalated,
+                "commerce.order.support_case_service_recorded",
+                response_before_ack_candidate,
+            )
+
+        acknowledged_candidate = deepcopy(escalated)
+        acknowledged_case = acknowledged_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        acknowledged_case["serviceEvents"] = [{
+            "kind": "acknowledged",
+            "owner": "Tier 2 owner",
+            "priority": "urgent",
+            "dueAt": "2026-07-23T12:30:00.000Z",
+            "note": "Delivery specialist accepted the case internally.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-ACKNOWLEDGE",
+                captured_at="2026-07-23T09:37:00.000Z",
+                reason="Acknowledge accountable ownership without sending a message.",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }, *acknowledged_case["serviceEvents"]]
+        acknowledged = apply_event(
+            escalated,
+            "commerce.order.support_case_service_recorded",
+            acknowledged_candidate,
+        )
+
+        response_candidate = deepcopy(acknowledged)
+        response_case = response_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        response_case["serviceEvents"] = [{
+            "kind": "first_response_ready",
+            "owner": "Tier 2 owner",
+            "priority": "urgent",
+            "dueAt": "2026-07-23T12:30:00.000Z",
+            "note": "Reviewed first response is ready for independent delivery.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-RESPONSE-READY",
+                captured_at="2026-07-23T09:38:00.000Z",
+                reason="Record response readiness without sending a customer message.",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }, *response_case["serviceEvents"]]
+        response_ready = apply_event(
+            acknowledged,
+            "commerce.order.support_case_service_recorded",
+            response_candidate,
+        )
+        self.assertEqual(
+            response_ready["orders"][0]["supportCases"][0]["serviceEvents"][0]["kind"],  # type: ignore[index]
+            "first_response_ready",
+        )
+
+        resolution = {
+            "outcome": "information_provided",
+            "note": "Reviewed the delivery timeline with the customer record.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-RESOLVE",
+                captured_at=resolution_at,
+                reason="Reviewed and closed the support case.",
+                evidence_reference=f"SUPPORT-RESOLUTION:{case_id}",
+            ),
+        }
+        resolved_candidate = deepcopy(response_ready)
+        resolved_case = resolved_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        resolved_case["status"] = "resolved"
+        resolved_case["resolution"] = resolution
+        resolved = apply_event(
+            response_ready,
+            "commerce.order.support_case_resolved",
+            resolved_candidate,
+        )
+        self.assertEqual(
+            resolved["orders"][0]["supportCases"][0]["resolution"]["outcome"],  # type: ignore[index]
+            "information_provided",
+        )
+        self.assertEqual(resolved["items"], current["items"])
+        self.assertEqual(resolved["movements"], current["movements"])
+
+        reopened_candidate = deepcopy(resolved)
+        reopened_case = reopened_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        reopened_case["status"] = "open"
+        reopened_case["reopen"] = {
+            "sourceResolutionActionId": "ACT-SUPPORT-RESOLVE",
+            "owner": "Follow-up owner",
+            "priority": "high",
+            "dueAt": "2026-07-23T14:00:00.000Z",
+            "note": "Customer issue recurred after the retained resolution.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-REOPEN",
+                captured_at="2026-07-23T10:00:00.000Z",
+                reason="Reopen one linked follow-up without sending a message.",
+                evidence_reference=f"SUPPORT-REOPEN:{case_id}:ACT-SUPPORT-RESOLVE",
+            ),
+        }
+        reopened = apply_event(
+            resolved,
+            "commerce.order.support_case_reopened",
+            reopened_candidate,
+        )
+        active_reopen = reopened["orders"][0]["supportCases"][0]  # type: ignore[index]
+        self.assertEqual(active_reopen["status"], "open")
+        self.assertEqual(active_reopen["resolution"], resolution)
+        self.assertEqual(active_reopen["reopen"]["owner"], "Follow-up owner")
+
+        follow_up_ack_candidate = deepcopy(reopened)
+        follow_up_ack_case = follow_up_ack_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        follow_up_ack_case["followUpServiceEvents"] = [{
+            "kind": "acknowledged",
+            "owner": "Follow-up owner",
+            "priority": "high",
+            "dueAt": "2026-07-23T14:00:00.000Z",
+            "note": "Follow-up owner accepted the reopened case.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-FOLLOWUP-ACK",
+                captured_at="2026-07-23T10:01:00.000Z",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }]
+        follow_up_acknowledged = apply_event(
+            reopened,
+            "commerce.order.support_case_service_recorded",
+            follow_up_ack_candidate,
+        )
+
+        follow_up_response_candidate = deepcopy(follow_up_acknowledged)
+        follow_up_response_case = follow_up_response_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        follow_up_response_case["followUpServiceEvents"] = [{
+            "kind": "first_response_ready",
+            "owner": "Follow-up owner",
+            "priority": "high",
+            "dueAt": "2026-07-23T14:00:00.000Z",
+            "note": "Follow-up response is ready for independent delivery.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-FOLLOWUP-RESPONSE",
+                captured_at="2026-07-23T10:02:00.000Z",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }, *follow_up_response_case["followUpServiceEvents"]]
+        follow_up_response_ready = apply_event(
+            follow_up_acknowledged,
+            "commerce.order.support_case_service_recorded",
+            follow_up_response_candidate,
+        )
+
+        follow_up_resolved_candidate = deepcopy(follow_up_response_ready)
+        follow_up_resolved_case = follow_up_resolved_candidate["orders"][0]["supportCases"][0]  # type: ignore[index]
+        follow_up_resolved_case["status"] = "resolved"
+        follow_up_resolved_case["followUpResolution"] = {
+            "outcome": "information_provided",
+            "note": "Follow-up was reviewed and closed separately.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-FOLLOWUP-RESOLVE",
+                captured_at="2026-07-23T10:03:00.000Z",
+                evidence_reference=f"SUPPORT-RESOLUTION:{case_id}",
+            ),
+        }
+        follow_up_resolved = apply_event(
+            follow_up_response_ready,
+            "commerce.order.support_case_resolved",
+            follow_up_resolved_candidate,
+        )
+        retained_case = follow_up_resolved["orders"][0]["supportCases"][0]  # type: ignore[index]
+        self.assertEqual(retained_case["resolution"], resolution)
+        self.assertEqual(retained_case["followUpResolution"]["proof"]["actionId"], "ACT-SUPPORT-FOLLOWUP-RESOLVE")
+        self.assertFalse(retained_case["externalMessageSent"])
+
+        forged_reopen = deepcopy(resolved)
+        forged_case = forged_reopen["orders"][0]["supportCases"][0]  # type: ignore[index]
+        forged_case["status"] = "open"
+        forged_case["reopen"] = {**reopened_case["reopen"], "sourceResolutionActionId": "ACT-WRONG"}
+        with self.assertRaises(TrialValidationError):
+            apply_event(resolved, "commerce.order.support_case_reopened", forged_reopen)
+
+        forged = deepcopy(opened_candidate)
+        forged["orders"][0]["supportCases"][0]["refundStarted"] = True  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(forged)
+
+        missing_triage = deepcopy(opened_candidate)
+        del missing_triage["orders"][0]["supportCases"][0]["owner"]  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.order.support_case_opened", missing_triage)
+
+        invalid_escalation = deepcopy(reassigned)
+        invalid_case = invalid_escalation["orders"][0]["supportCases"][0]  # type: ignore[index]
+        invalid_case["serviceEvents"] = [{
+            "kind": "escalated",
+            "owner": "Different owner",
+            "priority": "urgent",
+            "dueAt": "2026-07-23T12:30:00.000Z",
+            "note": "Invalid combined escalation and reassignment.",
+            "proof": action_evidence(
+                "ACT-SUPPORT-INVALID-ESCALATE",
+                captured_at="2026-07-23T09:36:00.000Z",
+                evidence_reference=f"SUPPORT-SERVICE:{case_id}",
+            ),
+        }, *invalid_case["serviceEvents"]]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                reassigned,
+                "commerce.order.support_case_service_recorded",
+                invalid_escalation,
+            )
+
     def test_completed_order_accepts_multiple_partial_returns_with_explicit_stock_disposition(self) -> None:
         current = validate_commerce_state(completed_state())
         original_order = deepcopy(current["orders"][0])
@@ -4291,6 +6555,189 @@ class CommerceRuntimeTests(unittest.TestCase):
         with self.assertRaises(TrialValidationError):
             validate_commerce_state(reused_completion_action)
 
+    def test_invoice_correction_is_immutable_tax_bound_and_close_integrated(self) -> None:
+        current = completed_state()
+        current["orders"][0]["calculation"] = {  # type: ignore[index]
+            "schema": "supermega.commerce.order-calculation.v1",
+            "currency": "MMK",
+            "catalogRevision": 0,
+            "subtotalMmk": 200,
+            "taxMode": "not_configured",
+            "taxMmk": 0,
+            "totalMmk": 200,
+        }
+        current = validate_commerce_state(current)
+        original_order = deepcopy(current["orders"][0])
+
+        corrected = apply_event(
+            current,
+            "commerce.order.correction_recorded",
+            corrected_state(current),
+        )
+        record = corrected["orders"][0]["corrections"][0]  # type: ignore[index]
+        self.assertEqual(record["kind"], "credit")
+        self.assertEqual(record["balanceAfterMmk"], 150)
+        self.assertEqual(record["financialStatus"], "review_required")
+        self.assertEqual(record["postingAuthority"], "none")
+        self.assertFalse(record["externalPostingPerformed"])
+        for field in ("total", "calculation", "paymentStatus", "completion"):
+            self.assertEqual(corrected["orders"][0][field], original_order[field])  # type: ignore[index]
+        self.assertEqual(corrected["items"], current["items"])
+        self.assertEqual(corrected["movements"], current["movements"])
+
+        close = close_record(
+            corrected,
+            CLOSE_ACTION_ID_2,
+            close_id=CLOSE_ID_2,
+            captured_at="2026-07-23T10:00:00.000Z",
+        )
+        self.assertEqual(close["total"], 150)
+        closed = deepcopy(corrected)
+        closed["closes"] = [close]
+        accepted_close = apply_event(corrected, "commerce.close.saved", closed)
+        export = commerce_daily_close_export(accepted_close, CLOSE_ID_2)
+        self.assertIsNotNone(export)
+        assert export is not None
+        self.assertEqual(export["schema"], "supermega.commerce.daily-close-export.v3")
+        self.assertEqual(export["totalMmk"], 150)
+        self.assertEqual(export["orders"][0]["originalTotalMmk"], 200)
+        self.assertEqual(export["orders"][0]["totalMmk"], 150)
+        self.assertEqual(export["orders"][0]["corrections"][0]["documentId"], record["documentId"])
+        handoff = commerce_accounting_handoff(accepted_close, CLOSE_ID_2)
+        self.assertIsNotNone(handoff)
+        assert handoff is not None
+        self.assertEqual(handoff["schema"], "supermega.commerce.accounting-handoff.v3")
+        self.assertEqual(handoff["originalOrderTotalMmk"], 200)
+        self.assertEqual(handoff["netOrderTotalMmk"], 150)
+        self.assertEqual(handoff["correctionCount"], 1)
+        self.assertEqual(handoff["creditCorrectionMmk"], 50)
+        self.assertEqual(handoff["debitCorrectionMmk"], 0)
+        self.assertEqual(handoff["totalDebitMmk"], 250)
+        self.assertEqual(handoff["totalCreditMmk"], 250)
+        correction_entries = [
+            entry for entry in handoff["entries"]
+            if entry["sourceDocumentId"] == record["documentId"]
+        ]
+        self.assertEqual(
+            [(entry["side"], entry["accountRole"], entry["amountMmk"]) for entry in correction_entries],
+            [("debit", "sales_adjustment", 50), ("credit", "correction_payable", 50)],
+        )
+        self.assertTrue(
+            all(entry["sourceOrderId"] == current["orders"][0]["id"] for entry in correction_entries)  # type: ignore[index]
+        )
+        self.assertTrue(all(entry["mappingStatus"] == "unmapped" for entry in correction_entries))
+        correction_csv = commerce_accounting_handoff_csv(handoff)
+        self.assertIn('"source_document_id"', correction_csv)
+        self.assertIn(f'"{record["documentId"]}"', correction_csv)
+        self.assertEqual(handoff, commerce_accounting_handoff(accepted_close, CLOSE_ID_2))
+        legacy_mapped_close = deepcopy(accepted_close)
+        legacy_mapped_close["accountMappingConfigurations"] = [
+            account_mapping_configuration(1, legacy=True)
+        ]
+        legacy_mapped_handoff = commerce_accounting_handoff(
+            validate_commerce_state(legacy_mapped_close), CLOSE_ID_2
+        )
+        self.assertIsNotNone(legacy_mapped_handoff)
+        assert legacy_mapped_handoff is not None
+        self.assertTrue(
+            all(
+                entry["mappingStatus"] == "mapped"
+                for entry in legacy_mapped_handoff["entries"]
+                if entry["accountRole"] in {
+                    "payment_clearing", "sales_revenue", "tax_payable"
+                }
+            )
+        )
+        self.assertTrue(
+            all(
+                entry["mappingStatus"] == "unmapped"
+                for entry in legacy_mapped_handoff["entries"]
+                if entry["accountRole"] in {"sales_adjustment", "correction_payable"}
+            )
+        )
+
+        forged_total = corrected_state(current)
+        forged_total["orders"][0]["total"] = 150  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.order.correction_recorded", forged_total)
+
+        over_credit = corrected_state(current, listed_amount_mmk=201)
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(over_credit)
+
+        backdated = corrected_state(current, captured_at=PAYMENT_AT)
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(backdated)
+
+        after_close = corrected_state(accepted_close, action_id="ACT-CORRECTION-2")
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                accepted_close,
+                "commerce.order.correction_recorded",
+                after_close,
+            )
+
+    def test_daily_close_settlement_matches_payment_totals_and_retains_owned_variance(self) -> None:
+        current = completed_state("ORD-SETTLEMENT")
+        close = close_record(current, CLOSE_ACTION_ID_2, close_id=CLOSE_ID_2, captured_at="2026-07-23T10:00:00.000Z")
+        payment_method = current["orders"][0]["payment"]  # type: ignore[index]
+        close["settlement"] = {
+            "schema": "supermega.commerce.close-settlement.v1",
+            "status": "matched",
+            "totalExpectedMmk": 200,
+            "totalCountedMmk": 200,
+            "totalVarianceMmk": 0,
+            "lines": [{
+                "paymentMethod": payment_method,
+                "expectedMmk": 200,
+                "countedMmk": 200,
+                "varianceMmk": 0,
+                "status": "matched",
+                "varianceOwner": None,
+                "varianceReason": None,
+            }],
+        }
+        matched_state = deepcopy(current)
+        matched_state["closes"] = [close]
+        accepted = apply_event(current, "commerce.close.saved", matched_state)
+        self.assertEqual(accepted["closes"][0]["settlement"]["status"], "matched")  # type: ignore[index]
+
+        variance_state = deepcopy(current)
+        variance_close = close_record(current, CLOSE_ACTION_ID_3, close_id=CLOSE_ID_3, captured_at="2026-07-23T10:00:00.000Z")
+        variance_close["settlement"] = {
+            **deepcopy(close["settlement"]),
+            "status": "variance_review",
+            "totalCountedMmk": 190,
+            "totalVarianceMmk": -10,
+            "lines": [{
+                "paymentMethod": payment_method,
+                "expectedMmk": 200,
+                "countedMmk": 190,
+                "varianceMmk": -10,
+                "status": "variance_review",
+                "varianceOwner": "Shift lead",
+                "varianceReason": "Cash drawer recount required.",
+            }],
+        }
+        variance_state["closes"] = [variance_close]
+        variance_accepted = apply_event(current, "commerce.close.saved", variance_state)
+        self.assertEqual(variance_accepted["closes"][0]["settlement"]["totalVarianceMmk"], -10)  # type: ignore[index]
+
+        forged_total = deepcopy(matched_state)
+        forged_total["closes"][0]["settlement"]["totalCountedMmk"] = 201  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(forged_total)
+
+        unowned_variance = deepcopy(variance_state)
+        unowned_variance["closes"][0]["settlement"]["lines"][0]["varianceOwner"] = None  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(unowned_variance)
+
+        wrong_payment = deepcopy(matched_state)
+        wrong_payment["closes"][0]["settlement"]["lines"][0]["paymentMethod"] = "Unknown"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(wrong_payment)
+
     def test_daily_close_snapshots_exact_exceptions_and_legacy_records_still_load(self) -> None:
         current = created_state("ORD-EXCEPTION")
         current["items"][0]["reorderAt"] = 8  # type: ignore[index]
@@ -4387,6 +6834,644 @@ class CommerceRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(accepted_boundary["closes"][0]["businessDate"], "2026-07-24")  # type: ignore[index]
 
+    def test_customer_credit_policy_is_versioned_and_gates_new_credit_orders(self) -> None:
+        current = catalog_state()
+        policy = {
+            "revision": 1,
+            "customer": "Customer ref",
+            "creditLimitMmk": 250,
+            "maxPaymentTermsDays": 30,
+            "status": "active",
+            "proof": action_evidence(
+                "ACT-CREDIT-R1",
+                reason="Reviewed the customer credit boundary for future Shop orders.",
+            ),
+        }
+        configured_state = deepcopy(current)
+        configured_state["customerCreditPolicies"] = [policy]
+        configured = apply_event(
+            current,
+            "commerce.customer_credit_policy.saved",
+            configured_state,
+        )
+        self.assertEqual(configured["customerCreditPolicies"], [policy])
+        self.assertEqual(
+            apply_event(
+                current,
+                "commerce.customer_credit_policy.saved",
+                configured_state,
+            ),
+            configured,
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.customer_credit_policy.saved",
+                configured_state,
+                action_evidence("ACT-WRONG-CREDIT-EVIDENCE"),
+            )
+
+        unchanged = deepcopy(configured)
+        unchanged["customerCreditPolicies"] = [  # type: ignore[index]
+            {
+                **policy,
+                "revision": 2,
+                "proof": action_evidence("ACT-CREDIT-R2"),
+            },
+            policy,
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                configured,
+                "commerce.customer_credit_policy.saved",
+                unchanged,
+            )
+
+        order = order_record("ORD-CREDIT-1")
+        order["paymentDueAt"] = "2026-08-22T09:00:00.000Z"
+        order["lines"] = [
+            {
+                "sku": "SKU-1",
+                "name": "Test item",
+                "quantity": 2,
+                "unitPriceMmk": 100,
+            }
+        ]
+        order["creditDecision"] = {
+            "policyRevision": 1,
+            "policyActionId": "ACT-CREDIT-R1",
+            "creditLimitMmk": 250,
+            "exposureBeforeMmk": 0,
+            "orderAmountMmk": 200,
+            "exposureAfterMmk": 200,
+            "maxPaymentTermsDays": 30,
+            "paymentTermsDays": 30,
+            "status": "approved",
+        }
+        ordered_state = deepcopy(configured)
+        ordered_state["items"][0]["onHand"] = 8  # type: ignore[index]
+        ordered_state["orders"] = [order]
+        ordered_state["movements"] = [
+            movement("reserve", "ACT-CREDIT-ORDER-1", -2, order_id="ORD-CREDIT-1")
+        ]
+        accepted = apply_event(
+            configured,
+            "commerce.order.created",
+            ordered_state,
+        )
+        self.assertEqual(
+            accepted["orders"][0]["creditDecision"]["exposureAfterMmk"],  # type: ignore[index]
+            200,
+        )
+
+        missing_decision = deepcopy(ordered_state)
+        missing_decision["orders"][0].pop("creditDecision")  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                configured,
+                "commerce.order.created",
+                missing_decision,
+            )
+
+        forged_decision = deepcopy(ordered_state)
+        forged_decision["orders"][0]["creditDecision"]["exposureBeforeMmk"] = 1  # type: ignore[index]
+        forged_decision["orders"][0]["creditDecision"]["exposureAfterMmk"] = 201  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                configured,
+                "commerce.order.created",
+                forged_decision,
+            )
+
+        legacy_credit = deepcopy(accepted)
+        legacy_credit["orders"][0].pop("creditDecision")  # type: ignore[index]
+        self.assertNotIn(
+            "creditDecision",
+            validate_commerce_state(legacy_credit)["orders"][0],
+        )
+
+        over_limit = deepcopy(accepted)
+        second_order = order_record("ORD-CREDIT-2")
+        second_order.update(
+            {
+                "quantity": 1,
+                "total": 100,
+                "paymentDueAt": "2026-08-22T09:00:00.000Z",
+                "lines": [
+                    {
+                        "sku": "SKU-1",
+                        "name": "Test item",
+                        "quantity": 1,
+                        "unitPriceMmk": 100,
+                    }
+                ],
+                "creditDecision": {
+                    "policyRevision": 1,
+                    "policyActionId": "ACT-CREDIT-R1",
+                    "creditLimitMmk": 250,
+                    "exposureBeforeMmk": 200,
+                    "orderAmountMmk": 100,
+                    "exposureAfterMmk": 300,
+                    "maxPaymentTermsDays": 30,
+                    "paymentTermsDays": 30,
+                    "status": "approved",
+                },
+            }
+        )
+        over_limit["items"][0]["onHand"] = 7  # type: ignore[index]
+        over_limit["orders"] = [second_order, *accepted["orders"]]  # type: ignore[index]
+        over_limit["movements"] = [  # type: ignore[index]
+            movement("reserve", "ACT-CREDIT-ORDER-2", -1, order_id="ORD-CREDIT-2"),
+            *accepted["movements"],  # type: ignore[index]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(accepted, "commerce.order.created", over_limit)
+
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-credit", "operator-credit", "human")
+        agent = TrialPrincipal("workspace-credit", "credit-agent", "agent")
+        for principal in (operator, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={
+                "state": catalog_state(),
+                "evidence": action_evidence("ACT-INIT-CREDIT"),
+            },
+        )
+        forged_policy = {
+            **policy,
+            "proof": action_evidence(
+                "ACT-CREDIT-SERVER",
+                captured_at="2099-01-01T00:00:00.000Z",
+                actor="forged-actor",
+            ),
+        }
+        forged_state = deepcopy(initialized.state)
+        forged_state["customerCreditPolicies"] = [forged_policy]
+        payload = {
+            "state": forged_state,
+            "evidence": dict(forged_policy["proof"]),
+        }
+        command_id = str(uuid4())
+        saved = store.apply_command(
+            operator,
+            command_id=command_id,
+            surface="commerce",
+            event_type="commerce.customer_credit_policy.saved",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        replay = store.apply_command(
+            operator,
+            command_id=command_id,
+            surface="commerce",
+            event_type="commerce.customer_credit_policy.saved",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        saved_proof = saved.state["customerCreditPolicies"][0]["proof"]  # type: ignore[index]
+        self.assertEqual(saved_proof["actor"], operator.actor_id)
+        self.assertNotEqual(saved_proof["capturedAt"], "2099-01-01T00:00:00.000Z")
+        self.assertTrue(replay.idempotent_replay)
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.customer_credit_policy.saved",
+                expected_version=saved.version,
+                payload=payload,
+            )
+
+    def test_tax_configuration_is_versioned_bound_and_freezes_order_calculation(self) -> None:
+        current = catalog_state()
+        legacy_configuration = tax_configuration(1)
+        legacy_configuration.pop("jurisdictionCode")
+        legacy_configuration.pop("effectiveFrom")
+        legacy_state = deepcopy(current)
+        legacy_state["taxConfigurations"] = [legacy_configuration]
+        self.assertEqual(
+            validate_commerce_state(legacy_state)["taxConfigurations"],
+            [legacy_configuration],
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.tax_configuration.saved", legacy_state)
+
+        incomplete_schedule = deepcopy(current)
+        incomplete_schedule["taxConfigurations"] = [tax_configuration(1)]
+        incomplete_schedule["taxConfigurations"][0].pop("effectiveFrom")  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(incomplete_schedule)
+
+        backdated_schedule = deepcopy(current)
+        backdated_schedule["taxConfigurations"] = [
+            tax_configuration(
+                1,
+                captured_at="2026-07-23T09:05:00.000Z",
+                effective_from=NOW,
+            )
+        ]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(backdated_schedule)
+
+        configured_state = deepcopy(current)
+        configured_state["taxConfigurations"] = [tax_configuration(1)]
+        configured = apply_event(
+            current,
+            "commerce.tax_configuration.saved",
+            configured_state,
+        )
+        self.assertEqual(configured["taxConfigurations"][0]["revision"], 1)  # type: ignore[index]
+
+        replay = apply_event(
+            current,
+            "commerce.tax_configuration.saved",
+            configured_state,
+        )
+        self.assertEqual(replay, configured)
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                current,
+                "commerce.tax_configuration.saved",
+                configured_state,
+                action_evidence("ACT-WRONG-EVIDENCE"),
+            )
+
+        unchanged = deepcopy(configured)
+        unchanged["taxConfigurations"] = [  # type: ignore[index]
+            tax_configuration(2, action_id="ACT-TAX-UNCHANGED"),
+            *configured["taxConfigurations"],  # type: ignore[index]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(configured, "commerce.tax_configuration.saved", unchanged)
+
+        unrelated_mutation = deepcopy(configured)
+        unrelated_mutation["items"][0]["price"] = 101  # type: ignore[index]
+        unrelated_mutation["taxConfigurations"] = [  # type: ignore[index]
+            tax_configuration(2, code="CT5I", mode="inclusive"),
+            *configured["taxConfigurations"],  # type: ignore[index]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                configured,
+                "commerce.tax_configuration.saved",
+                unrelated_mutation,
+            )
+
+        def order_state(
+            basis: dict[str, object],
+            order_id: str,
+            calculation: dict[str, object],
+            *,
+            created_at: str = NOW,
+        ) -> dict[str, object]:
+            state = deepcopy(basis)
+            state["items"][0]["onHand"] -= 2  # type: ignore[index,operator]
+            order = order_record(order_id)
+            order["createdAt"] = created_at
+            order["lines"] = [
+                {
+                    "sku": "SKU-1",
+                    "name": "Test item",
+                    "quantity": 2,
+                    "unitPriceMmk": 100,
+                }
+            ]
+            order["total"] = calculation["totalMmk"]
+            order["calculation"] = calculation
+            state["orders"] = [order, *basis["orders"]]  # type: ignore[index]
+            state["movements"] = [
+                movement(
+                    "reserve",
+                    f"ACT-{order_id}",
+                    -2,
+                    order_id=order_id,
+                    created_at=created_at,
+                ),
+                *basis["movements"],  # type: ignore[index]
+            ]
+            return state
+
+        exclusive_calculation: dict[str, object] = {
+            "schema": "supermega.commerce.order-calculation.v2",
+            "currency": "MMK",
+            "catalogRevision": 0,
+            "taxConfigurationRevision": 1,
+            "taxCode": "CT5",
+            "taxJurisdictionCode": "MM",
+            "taxEffectiveFrom": NOW,
+            "taxRateBasisPoints": 500,
+            "taxMode": "exclusive",
+            "listedSubtotalMmk": 200,
+            "subtotalMmk": 200,
+            "taxMmk": 10,
+            "totalMmk": 210,
+        }
+        first_order = apply_event(
+            configured,
+            "commerce.order.created",
+            order_state(configured, "ORD-TAX-1", exclusive_calculation),
+        )
+
+        revision_two_state = deepcopy(first_order)
+        revision_two_state["taxConfigurations"] = [  # type: ignore[index]
+            tax_configuration(
+                2,
+                code="CT5I",
+                label="Commercial tax included",
+                mode="inclusive",
+                jurisdiction_code="MM-YGN",
+                effective_from="2026-07-23T10:00:00.000Z",
+            ),
+            *first_order["taxConfigurations"],  # type: ignore[index]
+        ]
+        revision_two = apply_event(
+            first_order,
+            "commerce.tax_configuration.saved",
+            revision_two_state,
+        )
+        self.assertEqual(
+            revision_two["orders"][0]["calculation"]["taxConfigurationRevision"],  # type: ignore[index]
+            1,
+        )
+
+        pre_effective_order = order_state(
+            revision_two,
+            "ORD-TAX-PRE-EFFECTIVE",
+            exclusive_calculation,
+        )
+        pre_effective = apply_event(
+            revision_two,
+            "commerce.order.created",
+            pre_effective_order,
+        )
+        self.assertEqual(
+            pre_effective["orders"][0]["calculation"]["taxConfigurationRevision"],  # type: ignore[index]
+            1,
+        )
+
+        inclusive_calculation: dict[str, object] = {
+            "schema": "supermega.commerce.order-calculation.v2",
+            "currency": "MMK",
+            "catalogRevision": 0,
+            "taxConfigurationRevision": 2,
+            "taxCode": "CT5I",
+            "taxJurisdictionCode": "MM-YGN",
+            "taxEffectiveFrom": "2026-07-23T10:00:00.000Z",
+            "taxRateBasisPoints": 500,
+            "taxMode": "inclusive",
+            "listedSubtotalMmk": 200,
+            "subtotalMmk": 190,
+            "taxMmk": 10,
+            "totalMmk": 200,
+        }
+        second_order = apply_event(
+            pre_effective,
+            "commerce.order.created",
+            order_state(
+                pre_effective,
+                "ORD-TAX-2",
+                inclusive_calculation,
+                created_at="2026-07-23T10:30:00.000Z",
+            ),
+        )
+        self.assertEqual(second_order["orders"][0]["calculation"], inclusive_calculation)  # type: ignore[index]
+        self.assertEqual(
+            second_order["orders"][2]["calculation"]["taxConfigurationRevision"],  # type: ignore[index]
+            1,
+        )
+
+        tampered = deepcopy(second_order)
+        tampered["orders"][0]["calculation"]["taxMmk"] = 11  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(tampered)
+
+    def test_tax_configuration_store_is_human_only_and_server_attributed(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-tax", "operator-tax", "human")
+        agent = TrialPrincipal("workspace-tax", "tax-agent", "agent")
+        for principal in (operator, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={"state": catalog_state(), "evidence": action_evidence("ACT-INIT-TAX")},
+        )
+        configured_state = deepcopy(initialized.state)
+        configured_state["taxConfigurations"] = [
+            tax_configuration(
+                1,
+                action_id="ACT-TAX-SERVER",
+                captured_at="2099-01-01T00:00:00.000Z",
+            )
+        ]
+        configured_state["taxConfigurations"][0]["proof"]["actor"] = "forged-actor"  # type: ignore[index]
+        payload = {
+            "state": configured_state,
+            "evidence": dict(configured_state["taxConfigurations"][0]["proof"]),  # type: ignore[index,arg-type]
+        }
+        command_id = str(uuid4())
+        saved = store.apply_command(
+            operator,
+            command_id=command_id,
+            surface="commerce",
+            event_type="commerce.tax_configuration.saved",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        replay = store.apply_command(
+            operator,
+            command_id=command_id,
+            surface="commerce",
+            event_type="commerce.tax_configuration.saved",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        proof = saved.state["taxConfigurations"][0]["proof"]  # type: ignore[index]
+        self.assertEqual(proof["actor"], operator.actor_id)
+        self.assertNotEqual(proof["capturedAt"], "2099-01-01T00:00:00.000Z")
+        self.assertTrue(replay.idempotent_replay)
+        self.assertEqual(replay.state, saved.state)
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.tax_configuration.saved",
+                expected_version=saved.version,
+                payload=payload,
+            )
+
+    def test_account_mapping_is_versioned_human_only_and_server_attributed(self) -> None:
+        current = catalog_state()
+        next_state = deepcopy(current)
+        next_state["accountMappingConfigurations"] = [account_mapping_configuration(1)]
+        configured = apply_event(current, "commerce.account_mapping.saved", next_state)
+        self.assertEqual(configured["accountMappingConfigurations"][0]["revision"], 1)  # type: ignore[index]
+
+        unchanged = deepcopy(configured)
+        unchanged["accountMappingConfigurations"] = [  # type: ignore[index]
+            account_mapping_configuration(2, action_id="ACT-ACCOUNT-MAPPING-UNCHANGED"),
+            *configured["accountMappingConfigurations"],  # type: ignore[index]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(configured, "commerce.account_mapping.saved", unchanged)
+
+        malformed = deepcopy(configured)
+        malformed["accountMappingConfigurations"] = [  # type: ignore[index]
+            account_mapping_configuration(
+                2,
+                action_id="ACT-ACCOUNT-MAPPING-MALFORMED",
+                sales_revenue="=FORMULA",
+            ),
+            *configured["accountMappingConfigurations"],  # type: ignore[index]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(configured, "commerce.account_mapping.saved", malformed)
+
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-accounts", "operator-accounts", "human")
+        agent = TrialPrincipal("workspace-accounts", "account-agent", "agent")
+        for principal in (operator, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={"state": current, "evidence": action_evidence("ACT-INIT-ACCOUNTS")},
+        )
+        forged = deepcopy(initialized.state)
+        forged["accountMappingConfigurations"] = [
+            account_mapping_configuration(
+                1,
+                action_id="ACT-ACCOUNT-MAPPING-SERVER",
+                captured_at="2099-01-01T00:00:00.000Z",
+            )
+        ]
+        forged["accountMappingConfigurations"][0]["proof"]["actor"] = "forged-actor"  # type: ignore[index]
+        payload = {
+            "state": forged,
+            "evidence": dict(forged["accountMappingConfigurations"][0]["proof"]),  # type: ignore[index,arg-type]
+        }
+        saved = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.account_mapping.saved",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        proof = saved.state["accountMappingConfigurations"][0]["proof"]  # type: ignore[index]
+        self.assertEqual(proof["actor"], operator.actor_id)
+        self.assertNotEqual(proof["capturedAt"], "2099-01-01T00:00:00.000Z")
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.account_mapping.saved",
+                expected_version=saved.version,
+                payload=payload,
+            )
+
+    def test_order_acknowledgement_is_deterministic_customer_safe_and_fail_closed(self) -> None:
+        current = created_state()
+        current["orders"][0]["lines"] = [  # type: ignore[index]
+            {
+                "sku": "SKU-1",
+                "name": "Test item",
+                "quantity": 2,
+                "unitPriceMmk": 100,
+            }
+        ]
+        current["orders"][0]["calculation"] = {  # type: ignore[index]
+            "schema": "supermega.commerce.order-calculation.v1",
+            "currency": "MMK",
+            "catalogRevision": 0,
+            "subtotalMmk": 200,
+            "taxMode": "not_configured",
+            "taxMmk": 0,
+            "totalMmk": 200,
+        }
+        current = validate_commerce_state(current)
+
+        artifact = commerce_order_acknowledgement(current, "ORD-1")
+        self.assertIsNotNone(artifact)
+        assert artifact is not None
+        self.assertEqual(artifact, commerce_order_acknowledgement(current, "ORD-1"))
+        self.assertEqual(artifact["schema"], "supermega.commerce.order-acknowledgement.v1")
+        self.assertEqual(artifact["lines"][0]["lineTotalMmk"], 200)
+        self.assertEqual(artifact["promotion"]["status"], "not_recorded")
+        self.assertEqual(artifact["tax"]["status"], "not_configured")
+        self.assertEqual(artifact["payment"]["status"], "pending")
+        self.assertEqual(artifact["cancellation"]["state"], "not_cancelled")
+        self.assertEqual(artifact["evidence"]["confirmationActionId"], "ACT-ORD-1")
+        self.assertEqual(
+            artifact["controls"],
+            {
+                "customerMessageSent": False,
+                "taxInvoiceIssued": False,
+                "paymentProviderCalled": False,
+                "externalWritePerformed": False,
+            },
+        )
+        self.assertEqual(
+            artifact["digest"],
+            "sha256:ae097cca2bb06cbedb37863950f51513ec6c30cc86cc2f23bcdcbeaa9e6ef4fb",
+        )
+        text = commerce_order_acknowledgement_text(artifact)
+        self.assertIn("Not a tax invoice, receipt, or payment confirmation.", text)
+        self.assertIn("Document digest: sha256:", text)
+        self.assertNotIn("Accountable operator", text)
+        self.assertNotIn("Verified against the source record", text)
+
+        legacy = created_state("ORD-LEGACY")
+        self.assertIsNone(commerce_order_acknowledgement(legacy, "ORD-LEGACY"))
+        self.assertIsNone(commerce_order_acknowledgement(current, "ORD-UNKNOWN"))
+
+        tampered = deepcopy(current)
+        tampered["orders"][0]["lines"][0]["unitPriceMmk"] = 101  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            commerce_order_acknowledgement(tampered, "ORD-1")
+
+        cancelled = cancelled_due_state()
+        cancelled["orders"][0]["lines"] = deepcopy(current["orders"][0]["lines"])  # type: ignore[index]
+        cancelled["orders"][0]["calculation"] = deepcopy(current["orders"][0]["calculation"])  # type: ignore[index]
+        cancelled_artifact = commerce_order_acknowledgement(
+            validate_commerce_state(cancelled),
+            "ORD-REFUND",
+        )
+        self.assertIsNotNone(cancelled_artifact)
+        assert cancelled_artifact is not None
+        self.assertEqual(cancelled_artifact["cancellation"]["state"], "cancelled")
+        self.assertEqual(cancelled_artifact["cancellation"]["actionId"], "ACT-CANCEL-ORD-REFUND")
+        self.assertEqual(cancelled_artifact["payment"]["refundStatus"], "due")
+
     def test_daily_close_export_is_deterministic_minimal_and_formula_safe(self) -> None:
         current = completed_state()
         current["orders"][0]["calculation"] = {  # type: ignore[index]
@@ -4438,7 +7523,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIsNotNone(artifact)
         assert artifact is not None
         self.assertEqual(artifact, commerce_daily_close_export(closed, CLOSE_ID))
-        self.assertEqual(artifact["schema"], "supermega.commerce.daily-close-export.v1")
+        self.assertEqual(artifact["schema"], "supermega.commerce.daily-close-export.v3")
         self.assertEqual(artifact["orderCount"], 1)
         self.assertEqual(artifact["orders"][0]["calculationStatus"], "accepted")
         self.assertEqual(artifact["orders"][0]["subtotalMmk"], 200)
@@ -4446,7 +7531,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertNotIn("customer", json.dumps(artifact))
         self.assertEqual(
             artifact["digest"],
-            "sha256:d61fc044f45e2c3aea6471b79493c159c1e2f68687a81020abe2d2b65545ea7e",
+            "sha256:7365e864485958b4fa104d3d73f31102a4a4814d64d820afdafb28eb801dc8ce",
         )
 
         csv_text = commerce_daily_close_csv(closed, CLOSE_ID)
@@ -4456,6 +7541,95 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIn('"accepted"', csv_text)
         self.assertNotIn("Customer ref", csv_text)
         self.assertEqual(csv_text.count("\r\n"), 3)
+
+        unmapped_handoff = commerce_accounting_handoff(closed, CLOSE_ID)
+        self.assertIsNotNone(unmapped_handoff)
+        assert unmapped_handoff is not None
+        self.assertEqual(unmapped_handoff["schema"], "supermega.commerce.accounting-handoff.v3")
+        self.assertEqual(unmapped_handoff["originalOrderTotalMmk"], 200)
+        self.assertEqual(unmapped_handoff["netOrderTotalMmk"], 200)
+        self.assertEqual(unmapped_handoff["correctionCount"], 0)
+        self.assertEqual(unmapped_handoff["creditCorrectionMmk"], 0)
+        self.assertEqual(unmapped_handoff["debitCorrectionMmk"], 0)
+        self.assertIsNone(unmapped_handoff["accountMappingRevision"])
+        self.assertTrue(
+            all(
+                entry["mappingStatus"] == "unmapped"
+                and entry["externalAccountCode"] is None
+                for entry in unmapped_handoff["entries"]
+            )
+        )
+        self.assertEqual(unmapped_handoff["totalDebitMmk"], unmapped_handoff["totalCreditMmk"])
+        self.assertTrue(
+            all(
+                entry["sourceOrderId"] is None and entry["sourceDocumentId"] is None
+                for entry in unmapped_handoff["entries"]
+            )
+        )
+
+        legacy_mapping = deepcopy(current)
+        legacy_mapping["accountMappingConfigurations"] = [
+            account_mapping_configuration(1, legacy=True)
+        ]
+        legacy_mapping = validate_commerce_state(legacy_mapping)
+        self.assertEqual(len(legacy_mapping["accountMappingConfigurations"][0]["mappings"]), 4)  # type: ignore[index]
+
+        late_mapping = deepcopy(closed)
+        late_mapping["accountMappingConfigurations"] = [
+            account_mapping_configuration(
+                1,
+                action_id="ACT-ACCOUNT-MAPPING-LATE",
+                captured_at="2026-07-23T10:01:00.000Z",
+            )
+        ]
+        late_mapping = validate_commerce_state(late_mapping)
+        historical_handoff = commerce_accounting_handoff(late_mapping, CLOSE_ID)
+        self.assertIsNotNone(historical_handoff)
+        assert historical_handoff is not None
+        self.assertIsNone(historical_handoff["accountMappingRevision"])
+
+        mapped_current = deepcopy(current)
+        mapped_current["accountMappingConfigurations"] = [
+            account_mapping_configuration(
+                1,
+                captured_at="2026-07-23T09:30:00.000Z",
+            )
+        ]
+        mapped_current = apply_event(
+            current,
+            "commerce.account_mapping.saved",
+            mapped_current,
+        )
+        mapped_next = deepcopy(mapped_current)
+        mapped_next["closes"] = [close]
+        mapped_closed = apply_event(
+            mapped_current,
+            "commerce.close.saved",
+            mapped_next,
+            action_evidence(
+                CLOSE_ACTION_ID,
+                captured_at="2026-07-23T10:00:00.000Z",
+                actor="OP-OWNER",
+                evidence_reference="EV-ACCOUNTING-CLOSE-001",
+            ),
+        )
+        mapped_handoff = commerce_accounting_handoff(mapped_closed, CLOSE_ID)
+        self.assertIsNotNone(mapped_handoff)
+        assert mapped_handoff is not None
+        self.assertEqual(mapped_handoff["accountMappingRevision"], 1)
+        self.assertEqual(mapped_handoff["accountMappingEvidenceReference"], "EV-ACT-ACCOUNT-MAPPING-R1")
+        self.assertTrue(
+            all(
+                entry["mappingStatus"] == "mapped"
+                and entry["externalAccountCode"]
+                for entry in mapped_handoff["entries"]
+            )
+        )
+        self.assertEqual(mapped_handoff, commerce_accounting_handoff(mapped_closed, CLOSE_ID))
+        mapped_csv = commerce_accounting_handoff_csv(mapped_handoff)
+        self.assertIn('"1100-CLEAR"', mapped_csv)
+        self.assertIn('"false"', mapped_csv)
+        self.assertNotIn("Customer ref", mapped_csv)
 
         formula_state = deepcopy(closed)
         formula_state["closes"][0]["operator"] = "=2+2"  # type: ignore[index]
@@ -4981,7 +8155,34 @@ class CommerceRuntimeTests(unittest.TestCase):
                 "evidence": action_evidence("ACT-STORE-PREPARING"),
             },
         )
-        reconciled_state = deepcopy(preparing.state)
+        collection_state = deepcopy(preparing.state)
+        forged_collection_proof = action_evidence(
+            "ACT-STORE-COLLECTION",
+            captured_at="2099-01-01T00:00:00.000Z",
+            actor="Fabricated Collection Bot",
+            reason="Recorded a customer payment follow-up.",
+        )
+        collection_state["orders"][0]["collectionActions"] = [  # type: ignore[index]
+            {"kind": "customer_contact", "proof": forged_collection_proof}
+        ]
+        contacted = store.apply_command(
+            principal,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.collection_action.recorded",
+            expected_version=preparing.version,
+            payload={
+                "state": collection_state,
+                "evidence": forged_collection_proof,
+            },
+        )
+        authoritative_contact = contacted.state["orders"][0]["collectionActions"][0]["proof"]  # type: ignore[index]
+        self.assertEqual(authoritative_contact["actor"], principal.actor_id)
+        self.assertNotEqual(
+            authoritative_contact["capturedAt"],
+            forged_collection_proof["capturedAt"],
+        )
+        reconciled_state = deepcopy(contacted.state)
         reconciled_state["orders"][0].update(  # type: ignore[index]
             {
                 "paymentStatus": "reconciled",
@@ -4997,7 +8198,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             command_id=str(uuid4()),
             surface="commerce",
             event_type="commerce.payment.reconciled",
-            expected_version=preparing.version,
+            expected_version=contacted.version,
             payload={
                 "state": reconciled_state,
                 "evidence": evidence_for(
@@ -5113,9 +8314,50 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertTrue(return_replay.idempotent_replay)
         self.assertEqual(return_replay.version, returned.version)
 
-        forged_close_state = deepcopy(returned.state)
-        forged_close = close_record(
+        forged_correction_state = corrected_state(
             returned.state,
+            action_id="ACT-STORE-CORRECTION",
+            captured_at="2099-01-01T00:00:00.000Z",
+        )
+        forged_correction = forged_correction_state["orders"][0]["corrections"][0]  # type: ignore[index]
+        forged_correction["actor"] = "Fabricated Finance Bot"
+        correction_payload = {
+            "state": forged_correction_state,
+            "evidence": evidence_for(
+                "commerce.order.correction_recorded",
+                forged_correction_state,
+            ),
+        }
+        correction_command_id = str(uuid4())
+        corrected = store.apply_command(
+            principal,
+            command_id=correction_command_id,
+            surface="commerce",
+            event_type="commerce.order.correction_recorded",
+            expected_version=returned.version,
+            payload=correction_payload,
+        )
+        correction_replay = store.apply_command(
+            principal,
+            command_id=correction_command_id,
+            surface="commerce",
+            event_type="commerce.order.correction_recorded",
+            expected_version=returned.version,
+            payload=correction_payload,
+        )
+        authoritative_correction = corrected.state["orders"][0]["corrections"][0]  # type: ignore[index]
+        self.assertEqual(authoritative_correction["actor"], principal.actor_id)
+        self.assertNotEqual(
+            authoritative_correction["createdAt"],
+            "2099-01-01T00:00:00.000Z",
+        )
+        self.assertEqual(authoritative_correction["balanceAfterMmk"], 150)
+        self.assertTrue(correction_replay.idempotent_replay)
+        self.assertEqual(correction_replay.version, corrected.version)
+
+        forged_close_state = deepcopy(corrected.state)
+        forged_close = close_record(
+            corrected.state,
             CLOSE_ACTION_ID,
             close_id=CLOSE_ID,
             captured_at="2099-01-01T00:00:00.000Z",
@@ -5132,7 +8374,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             command_id=close_command_id,
             surface="commerce",
             event_type="commerce.close.saved",
-            expected_version=returned.version,
+            expected_version=corrected.version,
             payload=forged_payload,
         )
         close_replay = store.apply_command(
@@ -5140,7 +8382,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             command_id=close_command_id,
             surface="commerce",
             event_type="commerce.close.saved",
-            expected_version=returned.version,
+            expected_version=corrected.version,
             payload=forged_payload,
         )
         authoritative_close = closed.state["closes"][0]  # type: ignore[index]
@@ -5151,6 +8393,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             myanmar_business_date(authoritative_close["createdAt"]),
         )
         self.assertEqual(authoritative_close["orderIds"], ["ORD-1"])
+        self.assertEqual(authoritative_close["total"], 150)
         self.assertTrue(close_replay.idempotent_replay)
         self.assertEqual(close_replay.state, closed.state)
 
@@ -5161,6 +8404,167 @@ class CommerceRuntimeTests(unittest.TestCase):
             apply_event({}, "commerce.workspace.initialized", invalid)
         with self.assertRaises(TrialValidationError):
             apply_event({}, "commerce.snapshot.saved", catalog_state())
+
+    def test_service_schedule_is_versioned_inside_commerce_and_fails_closed(self) -> None:
+        current = catalog_state()
+        schedule = {
+            "schema": "supermega.shop.service_schedule.v2",
+            "industryPackId": "spa",
+            "revision": 1,
+            "services": [
+                {
+                    "id": "service-session",
+                    "name": "Standard treatment",
+                    "durationMinutes": 60,
+                    "priceMmk": 45000,
+                    "active": True,
+                }
+            ],
+            "resources": [
+                {
+                    "id": "resource-room-1",
+                    "name": "Treatment room 1",
+                    "kind": "room",
+                    "active": True,
+                }
+            ],
+            "bookings": [
+                {
+                    "id": "booking-0001",
+                    "customerName": "Client A",
+                    "contact": "09-111-111",
+                    "serviceId": "service-session",
+                    "resourceId": "resource-room-1",
+                    "startsAt": "2026-07-29T04:30:00.000Z",
+                    "endsAt": "2026-07-29T05:30:00.000Z",
+                    "status": "held",
+                    "note": "",
+                    "createdAt": "2026-07-29T04:00:00.000Z",
+                    "updatedAt": "2026-07-29T04:00:00.000Z",
+                }
+            ],
+            "events": [
+                {
+                    "revision": 1,
+                    "type": "booking_scheduled",
+                    "subjectId": "booking-0001",
+                    "actor": "operator-1",
+                    "reason": "Scheduled from the Shop appointment workspace.",
+                    "happenedAt": "2026-07-29T04:00:00.000Z",
+                }
+            ],
+        }
+        clean_schedule = deepcopy(schedule)
+        clean_schedule["revision"] = 0
+        clean_schedule["bookings"] = []
+        clean_schedule["events"] = []
+        initialized = apply_event(
+            current,
+            "commerce.service_schedule.initialized",
+            {**current, "serviceSchedule": clean_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-INIT-SPA",
+                "capturedAt": "2026-07-29T03:59:00.000Z",
+                "actor": "operator-1",
+                "reason": "Initialize the reviewed spa Shop industry pack.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:spa:R0",
+            },
+        )
+        self.assertEqual(initialized["serviceSchedule"], clean_schedule)
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                initialized,
+                "commerce.service_schedule.initialized",
+                initialized,
+                {
+                    "actionId": "ACT-SERVICE-SCHEDULE-INIT-SPA",
+                    "capturedAt": "2026-07-29T03:59:00.000Z",
+                    "actor": "operator-1",
+                    "reason": "Initialize the reviewed spa Shop industry pack.",
+                    "evidenceReference": "SHOP-SERVICE-SCHEDULE:spa:R0",
+                },
+            )
+
+        first = {**initialized, "serviceSchedule": schedule}
+        first_evidence = {
+            "actionId": "ACT-SERVICE-SCHEDULE-R1",
+            "capturedAt": "2026-07-29T04:00:00.000Z",
+            "actor": "operator-1",
+            "reason": "Scheduled from the Shop appointment workspace.",
+            "evidenceReference": "SHOP-SERVICE-SCHEDULE:R1",
+        }
+        accepted = apply_event(
+            initialized,
+            "commerce.service_schedule.saved",
+            first,
+            first_evidence,
+        )
+        self.assertEqual(accepted["serviceSchedule"], schedule)
+
+        confirmed_schedule = deepcopy(schedule)
+        confirmed_schedule["revision"] = 2
+        confirmed_schedule["bookings"][0]["status"] = "confirmed"
+        confirmed_schedule["bookings"][0]["updatedAt"] = "2026-07-29T04:05:00.000Z"
+        confirmed_schedule["events"].append(
+            {
+                "revision": 2,
+                "type": "booking_advanced",
+                "subjectId": "booking-0001",
+                "actor": "operator-1",
+                "reason": "Advanced by the responsible Shop operator.",
+                "happenedAt": "2026-07-29T04:05:00.000Z",
+            }
+        )
+        confirmed = apply_event(
+            accepted,
+            "commerce.service_schedule.saved",
+            {**accepted, "serviceSchedule": confirmed_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-R2",
+                "capturedAt": "2026-07-29T04:05:00.000Z",
+                "actor": "operator-1",
+                "reason": "Advanced by the responsible Shop operator.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:R2",
+            },
+        )
+        self.assertEqual(confirmed["serviceSchedule"]["bookings"][0]["status"], "confirmed")
+
+        tampered = deepcopy(confirmed_schedule)
+        tampered["bookings"][0]["customerName"] = "Rewritten history"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                accepted,
+                "commerce.service_schedule.saved",
+                {**accepted, "serviceSchedule": tampered},
+                {
+                    "actionId": "ACT-SERVICE-SCHEDULE-R2",
+                    "capturedAt": "2026-07-29T04:05:00.000Z",
+                    "actor": "operator-1",
+                    "reason": "Advanced by the responsible Shop operator.",
+                    "evidenceReference": "SHOP-SERVICE-SCHEDULE:R2",
+                },
+            )
+
+        overlap = deepcopy(schedule)
+        overlap["revision"] = 2
+        overlap["bookings"].append({**overlap["bookings"][0], "id": "booking-0002"})
+        overlap["events"].append(
+            {
+                "revision": 2,
+                "type": "booking_scheduled",
+                "subjectId": "booking-0002",
+                "actor": "operator-1",
+                "reason": "Conflicting booking.",
+                "happenedAt": "2026-07-29T04:06:00.000Z",
+            }
+        )
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state({**current, "serviceSchedule": overlap})
+
+        wrong_duration = deepcopy(schedule)
+        wrong_duration["bookings"][0]["endsAt"] = "2026-07-29T05:00:00.000Z"
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state({**current, "serviceSchedule": wrong_duration})
 
 
 if __name__ == "__main__":

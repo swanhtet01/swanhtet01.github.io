@@ -20,8 +20,12 @@ assert(manifest.schemaVersion === 'supermega.site-context.v2', 'unsupported_site
 assert(manifest.brand?.version && manifest.contextVersion && manifest.catalogVersion, 'site_manifest_versions_missing')
 assert(manifest.customerProducts?.map((product) => product.id).join(',') === 'shop,plant,website,ecommerce', 'site_manifest_customer_product_order_changed')
 assert(manifest.customerProducts?.map((product) => product.runtimeId).join(',') === 'commerce,production,website,ecommerce', 'site_manifest_runtime_identity_changed')
+assert(manifest.serviceProducts?.map((product) => product.id).join(',') === 'vision', 'site_manifest_service_product_changed')
+assert(manifest.serviceProducts[0].publicRoute === '/vision/' && manifest.serviceProducts[0].salesRoute === '/contact/?product=vision&template=release-qa' && !manifest.serviceProducts[0].appRoute, 'vision_service_sales_route_changed')
 assert(manifest.sharedCapabilities?.map((capability) => capability.id).join(',') === 'ai-assistance', 'site_manifest_shared_capability_missing')
 assert(manifest.company?.publicPricing === false, 'public_pricing_must_remain_hidden')
+
+const publicProducts = [...manifest.customerProducts, ...manifest.serviceProducts]
 
 const brand = manifest.brand
 
@@ -333,31 +337,34 @@ function documentHtml({ route, title, description, content, robots = 'index,foll
 
 function productCardHtml(product, index) {
   const capabilities = (product.modules?.length ? product.modules : product.workflow).slice(0, 3)
+  const service = product.kind === 'service-product'
+  const destination = service ? product.publicRoute : product.appRoute
   return `<article class="compact-solution" id="${escapeHtml(product.id)}">
     <span class="card-index">0${index + 1} / ${escapeHtml(product.eyebrow)}</span>
     <h3>${escapeHtml(product.name)}</h3>
     <p>${escapeHtml(product.headline)}</p>
     <div class="module-tags" aria-label="Core capabilities">${capabilities.map((capability) => `<span>${escapeHtml(capability)}</span>`).join('')}</div>
-    <a class="card-link" href="${escapeHtml(product.appRoute)}">Open product</a>
+    <a class="card-link" href="${escapeHtml(destination)}">${service ? 'Explore founding pilot' : 'Open product'}</a>
   </article>`
 }
 
 const homeHtml = documentHtml({
   route: '/',
-  title: 'SuperMega | Four focused business products',
+  title: 'SuperMega | Four products and Vision',
   description: manifest.company.statement,
   content: `<main>
-    <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="#products">Choose a product</a></div><div class="hero-note"><span>Four separate products</span><span>One secure foundation</span><span>Mobile-ready workflows</span></div></div></section>
-    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">SuperMega products</span><h2>Open a working product.</h2><p>Each product starts with a usable sample. Explore the main job first; configuration and data import stay out of the way until you need them.</p></div><div class="compact-solutions">${manifest.customerProducts.map(productCardHtml).join('')}</div><div class="closing-strip"><div><h2>Need a workspace for your company?</h2><p>Tell us the product, existing data, and first workflow. We will define the implementation and acceptance test.</p></div><a class="button primary" href="/contact/">Contact SuperMega</a></div></section>
+    <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="hero-note"><span>Four managed products</span><span>One Vision founding service</span><span>Mobile-ready workflows</span></div></div></section>
+    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products and services</span><h2>Open a product or request a focused pilot.</h2><p>Shop, Plant, Website, and Ecommerce open working samples. Vision starts with a qualified four-week founding pilot request.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div><div class="closing-strip"><div><h2>Need a workspace for your company?</h2><p>Tell us the product, existing data, and first workflow. We will define the implementation and acceptance test.</p></div><a class="button primary" href="/contact/">Contact SuperMega</a></div></section>
     <section class="frame trust-strip" id="trust" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>AI may prepare drafts from approved records. Sends, payments, publishing, access changes, and production writes require explicit authority and verified server-side controls.</p></div></section>
   </main>`,
 })
 
 const contactScript = `<script>(function(){
   var form=document.querySelector('[data-contact-form]');if(!form)return;
-  var query=new URLSearchParams(location.search),handoff=new URLSearchParams(location.hash.slice(1)),status=form.querySelector('[data-form-status]'),submit=form.querySelector('button[type="submit"]'),product=form.querySelector('[name="product"]'),template=form.querySelector('[name="template"]'),company=form.querySelector('[name="company"]'),goal=form.querySelector('[name="goal"]'),heading=document.querySelector('[data-contact-heading]'),lede=document.querySelector('[data-contact-lede]'),copyHeading=document.querySelector('[data-contact-copy-heading]'),copy=document.querySelector('[data-contact-copy]'),requestKey=form.querySelector('[name="idempotency_key"]'),source=form.querySelector('[name="source_url"]'),referrer=form.querySelector('[name="referrer"]'),proofSummary=document.querySelector('[data-trial-proof]');
+  var query=new URLSearchParams(location.search),handoff=new URLSearchParams(location.hash.slice(1)),status=form.querySelector('[data-form-status]'),submit=form.querySelector('button[type="submit"]'),product=form.querySelector('[name="product"]'),template=form.querySelector('[name="template"]'),company=form.querySelector('[name="company"]'),goal=form.querySelector('[name="goal"]'),heading=document.querySelector('[data-contact-heading]'),lede=document.querySelector('[data-contact-lede]'),copyHeading=document.querySelector('[data-contact-copy-heading]'),copy=document.querySelector('[data-contact-copy]'),visionFields=form.querySelector('[data-vision-fields]'),requestKey=form.querySelector('[name="idempotency_key"]'),source=form.querySelector('[name="source_url"]'),referrer=form.querySelector('[name="referrer"]'),proofSummary=document.querySelector('[data-trial-proof]');
   var contextProofNames=['proof_context_contract','proof_context_digest','proof_context_outcome_digest','proof_context_approved','proof_context_raw_records'],proofNames=['proof_contract','proof_version','proof_digest','proof_product','proof_template','proof_readiness','proof_sources','proof_behavior','proof_decisions','proof_outcome','proof_outcome_digest','proof_outcome_accepted','proof_raw_records'].concat(contextProofNames);
   function newKey(){if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();var bytes=new Uint8Array(24);crypto.getRandomValues(bytes);return Array.from(bytes,function(value){return value.toString(16).padStart(2,'0')}).join('')}
+  function syncVision(){var active=product&&product.value==='vision';if(!visionFields)return;visionFields.hidden=!active;visionFields.querySelectorAll('[data-vision-required]').forEach(function(field){field.required=active})}
   function boundedInteger(value,max){return /^(?:0|[1-9][0-9]{0,6})$/.test(value)&&Number(value)<=max}
   function readProof(){
     var values=Object.fromEntries(proofNames.map(function(name){return [name,handoff.get(name)||'']}));
@@ -370,6 +377,7 @@ const contactScript = `<script>(function(){
   }
   if(query.get('product')&&product)product.value=query.get('product');
   if(query.get('template')&&template)template.value=query.get('template');
+  if(product)product.addEventListener('change',syncVision);syncVision();
   if(handoff.get('company')&&company)company.value=handoff.get('company').slice(0,180);
   if(handoff.get('goal')&&goal)goal.value=handoff.get('goal').slice(0,4000);
   var proofResult=readProof(),proof=proofResult.proof;
@@ -399,7 +407,7 @@ const contactScript = `<script>(function(){
     var payload=Object.fromEntries(new FormData(form).entries());
     try{
       var response=await fetch('/api/contact-submissions',{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-idempotency-key':requestKey.value},body:JSON.stringify(payload)});
-      var body=await response.json().catch(function(){return {}});if(!response.ok)throw new Error(body.reason||'send_failed');form.reset();requestKey.value='';status.textContent='Request received: '+(body.request_id||'confirmed')+'. Keep this ID for follow-up.';
+      var body=await response.json().catch(function(){return {}});if(!response.ok)throw new Error(body.reason||'send_failed');form.reset();syncVision();requestKey.value='';status.textContent='Request received: '+(body.request_id||'confirmed')+'. Keep this ID for follow-up.';
     }catch(error){status.textContent=error&&error.message==='rate_limited'?'Too many requests from this connection. Please wait ten minutes and try again.':error&&error.message==='trial_proof_invalid'?'The attached trial summary changed or does not match this request. Open the request again from SuperMega.':'Could not route the request here. Please wait and try again.';}finally{submit.disabled=false;}
   });
 })();</script>`
@@ -415,20 +423,41 @@ const publicSecurityHeaders = {
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',
 }
+const vision = manifest.serviceProducts[0]
+const visionTemplateCards = vision.templates.map((template) => `<article class="template-card"><span class="card-index">${escapeHtml(template.name)}</span><h3>${escapeHtml(template.outcome)}</h3><p>${escapeHtml(template.metric)}</p><a class="card-link" href="${escapeHtml(vision.salesRoute.replace('release-qa', template.id))}">Discuss this workflow</a></article>`).join('')
+const visionWorkflowCards = vision.workflow.map((step, index) => `<article class="module-card"><span>0${index + 1}</span><strong>${escapeHtml(step)}</strong></article>`).join('')
+const visionBoundaryCards = vision.boundaries.map((boundary) => `<article class="principle-card"><h3>Boundary</h3><p>${escapeHtml(boundary)}</p></article>`).join('')
+const visionHtml = documentHtml({
+  route: vision.publicRoute,
+  title: 'Vision founding pilot | SuperMega',
+  description: vision.description,
+  content: `<main><section class="frame page-hero"><span class="eyebrow">${escapeHtml(vision.eyebrow)}</span><h1>${escapeHtml(vision.headline)}</h1><p class="lede">${escapeHtml(vision.description)}</p><div class="actions"><a class="button primary" href="${escapeHtml(vision.salesRoute)}">Request founding pilot</a><a class="button secondary" href="#workflows">See workflow fits</a></div></section><section class="frame section" id="workflows"><div class="section-head"><span class="eyebrow">Good first workflows</span><h2>Start with one repetitive screen decision.</h2><p>Choose a narrow workflow with owned screenshots, stable visible states, and a person who can review uncertain results.</p></div><div class="template-grid">${visionTemplateCards}</div></section><section class="frame section"><div class="section-head"><span class="eyebrow">Four-week founding pilot</span><h2>From approved screens to measured evidence.</h2><p>The pilot stays local, reports held-out results, and begins observation-only. It does not quietly become production automation.</p></div><div class="module-grid">${visionWorkflowCards}</div></section><section class="frame section"><div class="section-head"><span class="eyebrow">What you receive</span><h2>Portable evidence, not a hidden demo.</h2><p>${escapeHtml(vision.proof.join(' · '))}</p><p>Native packages are built and sealed for the agreed pilot. Physical Android performance remains unproven until the buyer's approved device passes its device gate.</p></div><div class="principle-grid">${visionBoundaryCards}</div></section><section class="frame section"><div class="callout"><div><h2>Have one workflow worth measuring?</h2><p>The intake asks about device, visual states, frequency, screenshot rights, and human fallback. It does not upload screenshots or start work.</p></div><a class="button primary" href="${escapeHtml(vision.salesRoute)}">Qualify the pilot</a></div></section></main>`,
+})
+
+const visionContactScript = `<script>(function(){var form=document.querySelector('[data-contact-form]');if(!form)return;var query=new URLSearchParams(location.search),status=form.querySelector('[data-form-status]'),submit=form.querySelector('button[type="submit"]'),product=form.querySelector('[name="product"]'),template=form.querySelector('[name="template"]'),visionFields=form.querySelector('[data-vision-fields]'),requestKey=form.querySelector('[name="idempotency_key"]'),source=form.querySelector('[name="source_url"]'),referrer=form.querySelector('[name="referrer"]');function newKey(){if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();var bytes=new Uint8Array(24);crypto.getRandomValues(bytes);return Array.from(bytes,function(value){return value.toString(16).padStart(2,'0')}).join('')}function syncVision(){var active=product&&product.value==='vision';if(!visionFields)return;visionFields.hidden=!active;visionFields.querySelectorAll('[data-vision-required]').forEach(function(field){field.required=active})}if(query.get('product')&&product)product.value=query.get('product');if(query.get('template')&&template)template.value=query.get('template');if(product)product.addEventListener('change',syncVision);syncVision();form.addEventListener('submit',async function(event){event.preventDefault();status.textContent='Sending...';submit.disabled=true;if(!requestKey.value)requestKey.value=newKey();source.value=location.href;referrer.value=document.referrer||'';var payload=Object.fromEntries(new FormData(form).entries());try{var response=await fetch('/api/contact-submissions',{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-idempotency-key':requestKey.value},body:JSON.stringify(payload)});var body=await response.json().catch(function(){return {};});if(!response.ok)throw new Error(body.reason||'send_failed');form.reset();syncVision();requestKey.value='';status.textContent='Request received. We will reply with the clearest next step.';}catch(error){status.textContent=error&&error.message==='rate_limited'?'Too many requests from this connection. Please wait ten minutes or email swanhtet@supermega.dev.':'Could not route the request here. Email swanhtet@supermega.dev.';}finally{submit.disabled=false;}});})();</script>`
 
 const contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
   description: 'Tell SuperMega which company workflow should run better.',
   content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Start a system</span><h1 data-contact-heading>What should run better?</h1><p class="lede" data-contact-lede>Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share. We will reply with the smallest useful system step.</p></section><section class="contact-layout"><div class="contact-copy"><h2 data-contact-copy-heading>Start with the work.</h2><p data-contact-copy>No account, data connection, automation, or external action begins from this form. We first identify the operating records, owner, acceptance test, and authority boundary.</p><section class="trial-proof-summary" data-trial-proof hidden><span class="eyebrow">Client-provided trial proof</span><h3>Reviewed setup summary</h3><p>Attached from this browser. SuperMega checks that the summary belongs to this request after you send; it does not verify a managed account.</p><dl class="trial-proof-metrics"><div><dt>Readiness</dt><dd data-proof-readiness>0%</dd></div><div><dt>Sources</dt><dd data-proof-sources>0</dd></div><div><dt>Behavior</dt><dd data-proof-behavior>0</dd></div><div><dt>Decisions</dt><dd data-proof-decisions>0</dd></div></dl></section></div><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Send the workflow</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Reply email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label>Starting point<select name="product"><option value="guide">Help me choose</option><option value="shop">Shop</option><option value="plant">Plant</option><option value="website">Website</option><option value="ecommerce">Ecommerce</option></select></label><label>Template, if known<input name="template" maxlength="120" /></label><label class="wide">What happens now, and what should be better?<textarea name="goal" required maxlength="4000"></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send workflow</button><p class="form-note">Your note is used only to respond and prepare the agreed next step.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
-})
+}).replace('<option value="ecommerce">Ecommerce</option></select>', '<option value="ecommerce">Ecommerce</option><option value="vision">Vision</option></select>')
+  .replace('</textarea></label></div><input type="hidden" name="source_url"', '</textarea></label><fieldset class="wide" data-vision-fields hidden><legend>Vision pilot fit</legend><p>These answers prepare a local four-week pilot proposal. They do not upload screenshots or start work.</p><label>Target device<select name="vision_platform" data-vision-required><option value="">Choose one</option><option value="windows">Windows</option><option value="android">Android</option><option value="both">Windows and Android</option></select></label><label>Visual states to recognize<input name="vision_state_count" type="number" min="1" max="12" step="1" data-vision-required /></label><label>Runs each week<input name="vision_weekly_runs" type="number" min="1" max="10000" step="1" data-vision-required /></label><label>Minutes per run<input name="vision_minutes_per_run" type="number" min="1" max="1440" step="1" data-vision-required /></label><label>Estimated labor cost per hour in US dollars<input name="vision_labor_hourly_usd" type="number" min="0" max="10000" step="0.01" /></label><label><input name="vision_screenshot_rights" type="checkbox" value="yes" /> We have or can obtain rights to use these screenshots.</label><label><input name="vision_human_fallback" type="checkbox" value="yes" /> A person can review uncertain results.</label><label><input name="vision_observation_only" type="checkbox" value="yes" /> The first pilot may observe without clicking or acting.</label></fieldset></div><input type="hidden" name="source_url"')
+/*
+  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Start a system</span><h1>What should run better?</h1><p class="lede">Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share. We will reply with the smallest useful system step.</p></section><section class="contact-layout"><div class="contact-copy"><h2>Start with the work.</h2><p>No account, data connection, automation, or external action begins from this form. We first identify the operating records, owner, acceptance test, and authority boundary.</p><div class="direct-links"><a href="mailto:swanhtet@supermega.dev"><span>Email</span><strong>swanhtet@supermega.dev &gt;</strong></a><a href="tel:+9595000721"><span>Phone</span><strong>+95 9 500 0721 &gt;</strong></a></div></div><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Send the workflow</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Work email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label>Starting point<select name="product"><option value="guide">Help me choose</option><option value="shop">Shop</option><option value="plant">Plant</option><option value="website">Website</option><option value="ecommerce">Ecommerce</option><option value="vision">Vision</option></select></label><label>Template, if known<input name="template" maxlength="120" /></label><label class="wide">What happens now, and what should be better?<textarea name="goal" required maxlength="4000"></textarea></label><fieldset class="wide" data-vision-fields hidden><legend>Vision pilot fit</legend><p>These answers prepare a local four-week pilot proposal. They do not upload screenshots or start work.</p><label>Target device<select name="vision_platform" data-vision-required><option value="">Choose one</option><option value="windows">Windows</option><option value="android">Android</option><option value="both">Windows and Android</option></select></label><label>Visual states to recognize<input name="vision_state_count" type="number" min="1" max="12" step="1" data-vision-required /></label><label>Runs each week<input name="vision_weekly_runs" type="number" min="1" max="10000" step="1" data-vision-required /></label><label>Minutes per run<input name="vision_minutes_per_run" type="number" min="1" max="1440" step="1" data-vision-required /></label><label>Estimated labor cost per hour, USD<input name="vision_labor_hourly_usd" type="number" min="0" max="10000" step="0.01" /></label><label><input name="vision_screenshot_rights" type="checkbox" value="yes" /> We have or can obtain rights to use these screenshots.</label><label><input name="vision_human_fallback" type="checkbox" value="yes" /> A person can review uncertain results.</label><label><input name="vision_observation_only" type="checkbox" value="yes" /> The first pilot may observe without clicking or acting.</label></fieldset></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert style="position:absolute;left:-9999px" /><button class="button primary" type="submit">Send workflow</button><p class="form-note">Your note is used only to respond and prepare the agreed next step.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
+}).replace('Estimated labor cost per hour, USD', 'Estimated labor cost per hour in US dollars')
+*/
 
 const privacyHtml = documentHtml({
   route: '/privacy/',
   title: 'Privacy | SuperMega',
   description: 'How SuperMega handles public contact requests and product implementation data.',
   content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional trial proof summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>Trial proof includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
-})
+}).replace('</div></main>', '<section><h3>Vision qualification</h3><p>If you choose Vision, we also receive the target device, number of visual states, weekly frequency, minutes per run, optional labor estimate, and your confirmations about screenshot rights, human fallback, and an observation-only first pilot. We use these answers only to qualify the request and prepare a local proposal draft. This form does not upload screenshots or capture your screen.</p></section></div></main>')
+/*
+  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, and referrer. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>Sending a request does not create an account or connect a source. Product access, imports, retention, roles, and integrations are agreed separately before implementation.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
+}).replace('</div></main>', '<section><h3>Vision qualification</h3><p>If you choose Vision, we also receive the target device, number of visual states, weekly frequency, minutes per run, optional labor estimate, and your confirmations about screenshot rights, human fallback, and an observation-only first pilot. We use these answers only to qualify the request and prepare a local proposal draft. This form does not upload screenshots or capture your screen.</p></section></div></main>')
+*/
 
 const notFoundHtml = documentHtml({
   route: '/404',
@@ -605,15 +634,31 @@ function normalizePayload(payload) {
   const requestedProduct = text(payload.product, 40).toLowerCase()
   const product = requestedProduct === 'shop' ? 'commerce' : requestedProduct === 'plant' ? 'production' : requestedProduct
   const template = text(payload.template, 120)
+  const safeProduct = ['commerce', 'production', 'website', 'ecommerce', 'vision', 'guide'].includes(product) ? product : 'guide'
+  const boundedNumber = (value, minimum, maximum, integer = false) => {
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed) || parsed < minimum || parsed > maximum) return 0
+    return integer ? Math.ceil(parsed) : Math.round(parsed * 100) / 100
+  }
   const safe = {
     name: text(payload.name, 120),
     email: text(payload.email, 180).toLowerCase(),
     company: text(payload.company, 180),
-    product: ['commerce', 'production', 'website', 'ecommerce', 'guide'].includes(product) ? product : 'guide',
+    product: safeProduct,
     template,
     goal: text(payload.goal, 4000),
     source_url: privacyUrl(payload.source_url, 700),
     referrer: privacyUrl(payload.referrer, 700),
+    vision: safeProduct === 'vision' ? {
+      platform: ['windows', 'android', 'both'].includes(text(payload.vision_platform, 20).toLowerCase()) ? text(payload.vision_platform, 20).toLowerCase() : '',
+      state_count: boundedNumber(payload.vision_state_count, 1, 12, true),
+      weekly_runs: boundedNumber(payload.vision_weekly_runs, 1, 10_000, true),
+      minutes_per_run: boundedNumber(payload.vision_minutes_per_run, 1, 1_440),
+      labor_hourly_usd: boundedNumber(payload.vision_labor_hourly_usd, 0, 10_000),
+      screenshot_rights: payload.vision_screenshot_rights === true || payload.vision_screenshot_rights === 'yes',
+      human_fallback: payload.vision_human_fallback === true || payload.vision_human_fallback === 'yes',
+      observation_only: payload.vision_observation_only === true || payload.vision_observation_only === 'yes',
+    } : null,
   }
   return { ...safe, trial_proof: normalizeTrialProof(payload, safe.product, template) }
 }
@@ -865,6 +910,7 @@ module.exports = async function handler(req, res) {
     return
   }
   if (!safe.name || !safe.company || !safe.goal || !emailOk(safe.email)) { send(res, 400, { status: 'error', reason: 'required_fields_missing' }); return }
+  if (safe.product === 'vision' && (!safe.vision.platform || !safe.vision.state_count || !safe.vision.weekly_runs || !safe.vision.minutes_per_run)) { send(res, 400, { status: 'error', reason: 'vision_fields_missing' }); return }
   if (!idempotencySecret()) { send(res, 503, { status: 'error', reason: 'contact_controls_unavailable', fallback_email: 'swanhtet@supermega.dev' }); return }
   const idempotencyKey = idempotencyKeyFrom(payload, req)
   if (!idempotencyKey) { send(res, 400, { status: 'error', reason: 'idempotency_key_required' }); return }
@@ -907,6 +953,7 @@ module.exports = async function handler(req, res) {
 
 const pageFiles = new Map([
   ['index.html', homeHtml],
+  ['vision/index.html', visionHtml],
   ['contact/index.html', contactHtml],
   ['privacy/index.html', privacyHtml],
   ['404.html', notFoundHtml],

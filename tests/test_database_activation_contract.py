@@ -428,15 +428,19 @@ class ActivationWrapperContractTests(unittest.TestCase):
         self.assertLess(isolated_vercel_check_position, authorization_position)
         self.assertLess(authorization_position, vercel_stage_position)
         self.assertLess(vercel_stage_position, workspace_apply_position)
-        self.assertIn("--env-key SUPERMEGA_DATABASE_URL", source)
-        self.assertIn("--storage-audit-env-key SUPERMEGA_STORAGE_AUDIT_DATABASE_URL", source)
-        self.assertIn("--activation-target", source)
+        self.assertIn("'--env-key', 'SUPERMEGA_DATABASE_URL'", source)
         self.assertIn(
-            "--expected-project-ref-env-key SUPERMEGA_ACTIVATION_PROJECT_REF",
+            "'--storage-audit-env-key', 'SUPERMEGA_STORAGE_AUDIT_DATABASE_URL'",
             source,
         )
-        self.assertIn("--ensure-schema", source)
-        self.assertIn("--require-ready", source)
+        self.assertIn("'--activation-target'", source)
+        self.assertIn(
+            "'--expected-project-ref-env-key', 'SUPERMEGA_ACTIVATION_PROJECT_REF'",
+            source,
+        )
+        self.assertIn("'--ensure-schema'", source)
+        self.assertIn("'--require-ready'", source)
+        self.assertIn("& uv run python $ValidatorPath @validatorArguments", source)
         self.assertIn("Supabase and Vercel were not changed", source)
 
     def test_wrapper_does_not_forward_or_print_the_database_url(self) -> None:
@@ -2323,7 +2327,14 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         evidence = payload.get("evidence")
         self.assertIsInstance(evidence, dict)
         assert isinstance(evidence, dict)
-        self.assertEqual(evidence.get("engine"), {"postgres_major": 17})
+        self.assertEqual(
+            evidence.get("engine"),
+            {
+                "postgres_major": 17,
+                "installed_extensions": [],
+                "unsupported_extensions": [],
+            },
+        )
         self.assertEqual(
             evidence.get("schema"),
             {

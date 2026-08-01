@@ -1,7 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
+import { validateSchedulerExecutionBudget } from './scheduler_authority_contract.mjs'
+
 const schedulerAuthority = JSON.parse(readFileSync('tools/supermega_scheduler_authority.json', 'utf8'))
-const activationPlanCrons = schedulerAuthority.activation_plan?.crons?.map(({ path, schedule }) => ({ path, schedule })) || []
+const schedulerExecutionBudget = validateSchedulerExecutionBudget(schedulerAuthority)
+const activationPlanCrons = schedulerExecutionBudget.activationCrons
 const retiringCrons = schedulerAuthority.migration?.preflight_retiring_crons?.map(({ path, schedule }) => ({ path, schedule })) || []
 if (
   schedulerAuthority.contract !== 'supermega.scheduler-authority.v2'
@@ -64,6 +67,7 @@ const appConfig = {
   },
   functions: {
     'api/app.py': {
+      maxDuration: 60,
       includeFiles: 'supermega_runtime/**',
       excludeFiles: '{tests/**,showroom/**,api-static/**,tools/**,mark1_pilot/**,pilot-data/**,node_modules/**,assets/**,supabase/**,ytf-dqms/**,hyper_unicorn/**,venv/**,**/__pycache__/**,**/*.pyc}',
     },

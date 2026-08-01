@@ -27,6 +27,9 @@ CLIENT_IMPORT_PROFILE_IDS: dict[str, tuple[str, ...]] = {
     "website": ("business-presence", "lead-generation", "catalog-showcase"),
     "ecommerce": ("social-storefront", "pickup-preorder", "wholesale-request"),
 }
+PLANT_INDUSTRY_PACK_IDS = frozenset(
+    {"general-manufacturing", "batch-process", "food-beverage", "apparel", "assembly"}
+)
 
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _SKU = re.compile(r"^[A-Z0-9][A-Z0-9._/-]{0,79}$")
@@ -325,24 +328,37 @@ def _package_digest(value: Mapping[str, Any]) -> str:
     return f"sha256:{sha256(canonical).hexdigest()}"
 
 
-def validate_client_import_staging_package(value: object) -> ClientImportValidationResult:
+def validate_client_import_staging_package(
+    value: object,
+    *,
+    minimum_production_due_date: date | None = None,
+) -> ClientImportValidationResult:
     """Validate a complete import package without retaining or applying it."""
 
+    if (
+        minimum_production_due_date is not None
+        and type(minimum_production_due_date) is not date
+    ):
+        raise TypeError("minimum_production_due_date must be a date.")
+
+    raw_product = value.get("product") if isinstance(value, Mapping) else None
+    package_fields = (
+        "contract",
+        "product",
+        "object",
+        "workflowTemplateId",
+        *(('plantIndustryPackId',) if raw_product == "production" else ()),
+        "workspace",
+        "owner",
+        "source",
+        "mapping",
+        "rows",
+        "controls",
+    )
     package = _exact_object(
         value,
         "package",
-        (
-            "contract",
-            "product",
-            "object",
-            "workflowTemplateId",
-            "workspace",
-            "owner",
-            "source",
-            "mapping",
-            "rows",
-            "controls",
-        ),
+        package_fields,
     )
     if _package_size(package) > CLIENT_IMPORT_MAX_PACKAGE_BYTES:
         raise _fail("The staging package exceeds the server validation limit.")
@@ -362,6 +378,15 @@ def validate_client_import_staging_package(value: object) -> ClientImportValidat
     )
     if workflow_template_id not in CLIENT_IMPORT_PROFILE_IDS[product]:
         raise _fail("package.workflowTemplateId is not valid for the selected product.")
+    plant_industry_pack_id: str | None = None
+    if product == "production":
+        plant_industry_pack_id = _text(
+            package["plantIndustryPackId"],
+            "package.plantIndustryPackId",
+            maximum=80,
+        )
+        if plant_industry_pack_id not in PLANT_INDUSTRY_PACK_IDS:
+            raise _fail("package.plantIndustryPackId is not supported.")
     workspace = _text(
         package["workspace"],
         "package.workspace",
@@ -431,6 +456,16 @@ def validate_client_import_staging_package(value: object) -> ClientImportValidat
                 field,
                 f"{row_path}.values.{field.identifier}",
             )
+            if (
+                product == "production"
+                and field.identifier == "dueDate"
+                and minimum_production_due_date is not None
+                and date.fromisoformat(field_value) <= minimum_production_due_date
+            ):
+                raise _fail(
+                    f"{row_path}.values.dueDate must be after "
+                    f"{minimum_production_due_date.isoformat()} in Asia/Yangon."
+                )
             if not mapping[field.identifier] and field_value:
                 raise _fail(f"{row_path}.values.{field.identifier} has no source mapping.")
             values[field.identifier] = field_value
@@ -478,6 +513,11 @@ def validate_client_import_staging_package(value: object) -> ClientImportValidat
             "product": product,
             "object": spec.identifier,
             "workflowTemplateId": workflow_template_id,
+            **(
+                {"plantIndustryPackId": plant_industry_pack_id}
+                if plant_industry_pack_id is not None
+                else {}
+            ),
             "workspace": workspace,
             "owner": owner,
             "source": {
@@ -513,6 +553,7 @@ __all__ = [
     "CLIENT_IMPORT_MAX_ROWS",
     "CLIENT_IMPORT_OBJECTS",
     "CLIENT_IMPORT_PROFILE_IDS",
+    "PLANT_INDUSTRY_PACK_IDS",
     "CLIENT_IMPORT_STAGING_SCHEMA",
     "CLIENT_IMPORT_VALIDATION_SCHEMA",
     "ClientImportValidationError",

@@ -206,6 +206,11 @@ allowed source.
 ## Core Environment
 
 - `ANTHROPIC_API_KEY` or another configured gateway provider.
+- On the Ally only, set `SUPERMEGA_OLLAMA_ENABLED=1` and an installed model name in
+  `SUPERMEGA_OLLAMA_MODEL` to use local inference before paid providers. The gateway fixes this lane
+  to `127.0.0.1:11434`, ignores it in hosted/production runtimes, makes one bounded attempt, applies
+  the same company AI budget, and sends `keep_alive: 0` so the model unloads after every response.
+  Never set these as Vercel production configuration.
 - `SUPERMEGA_OPS_KEY` for protected APIs and the console.
 - `CRON_SECRET` for Vercel cron authentication.
 - `SUPABASE_URL` plus `SUPABASE_SERVICE_ROLE_KEY`, or a supported Postgres URL.
@@ -230,7 +235,7 @@ in recovery instead of being retried blindly.
 - The token cap can modestly overshoot under highly concurrent calls because storage updates are not
   a database-side atomic increment in every store mode.
 - The default cron is one daily UTC schedule. Each isolated client deployment sets its own UTC time.
-- Agent Company cycles are synchronous waves capped at two specialists and eight planned role calls.
+- Agent Company cycles admit one specialist and at most eight planned role calls.
   Failed or partial waves require a new explicit cycle id; there is no automatic retry or hidden loop.
 - Durable missions remain operator-staged. The server verifies stage eligibility, but no mission
   automatically queues or dispatches work and no stage receives raw prior output automatically.

@@ -1,4 +1,5 @@
 import type { WebsiteReleaseState } from './website-release-foundation'
+import { restoreWebsiteLeadLedger, type WebsiteLeadLedger } from './website-leads.ts'
 
 export const WEBSITE_SCHEMA = 'supermega.website.workspace.v2'
 export const WEBSITE_STORAGE_KEY = 'supermega.website.workspace.v2'
@@ -148,6 +149,14 @@ export type WebsiteWorkflowEvent = {
   source: WebsiteSourceRef
 }
 
+export type WebsiteOpeningPlan = {
+  contract: 'supermega.website.opening-plan.v1'
+  packageDigest: string
+  workflowTemplateId: 'business-presence' | 'lead-generation' | 'catalog-showcase'
+  confirmedAt: string
+  pageIds: string[]
+}
+
 export type WebsiteWorkspace = {
   schema: typeof WEBSITE_SCHEMA
   version: 2
@@ -160,7 +169,9 @@ export type WebsiteWorkspace = {
   approvals: PublishApproval[]
   localPublishes: LocalPublishRecord[]
   events: WebsiteWorkflowEvent[]
+  openingPlan?: WebsiteOpeningPlan
   releaseRecords?: WebsiteReleaseState[]
+  leadLedger?: WebsiteLeadLedger
 }
 
 export type WebsiteEditSession = {
@@ -375,6 +386,129 @@ export function createInitialWorkspace(): WebsiteWorkspace {
       },
     ],
   }
+}
+
+export type WebsitePageImportDraft = {
+  slug: string
+  title: string
+  headline: string
+  body: string
+  contactUrl: string
+}
+
+export type WebsitePageDraftsImportResult = {
+  workspace: WebsiteWorkspace
+  created: number
+  alreadyPresent: number
+  replayed: boolean
+}
+
+export type WebsitePageDraftsActivationResult =
+  | { ok: true; import: WebsitePageDraftsImportResult }
+  | { ok: false; error: string }
+
+function canonicalImportText(value: unknown, maximum: number, allowBlank = false): value is string {
+  return typeof value === 'string'
+    && value.length <= maximum
+    && value === value.trim()
+    && value === value.normalize('NFC')
+    && Array.from(value).every((character) => {
+      const codePoint = character.codePointAt(0) ?? 0
+      return codePoint > 31 && codePoint !== 127
+    })
+    && (allowBlank || value.length > 0)
+}
+
+function websiteImportPage(input: WebsitePageImportDraft, sourceId: string, index: number, capturedAt: string): WebsitePage {
+  const sequence = index + 1
+  const pageId = `page-client-${sourceId}-${sequence}`
+  return {
+    id: pageId,
+    internalName: input.title,
+    slug: input.slug === 'home' ? '/' : `/${input.slug}`,
+    stage: 'draft',
+    navigation: { label: input.title, visible: false },
+    hero: {
+      eyebrow: '',
+      headline: input.headline,
+      summary: '',
+      ctaLabel: input.contactUrl ? 'Contact' : '',
+      ctaHref: input.contactUrl,
+    },
+    sections: [{
+      id: `section-client-${sourceId}-${sequence}`,
+      eyebrow: '',
+      title: input.title,
+      body: input.body,
+    }],
+    seo: { title: input.title, description: '' },
+    updatedAt: capturedAt,
+  }
+}
+
+function websiteImportContent(workspace: WebsiteWorkspace) {
+  return {
+    siteName: workspace.siteName,
+    selectedPageId: workspace.selectedPageId,
+    pages: workspace.pages.map((page) => Object.fromEntries(Object.entries(page).filter(([key]) => key !== 'updatedAt'))),
+  }
+}
+
+export function importWebsitePageDrafts(current: WebsiteWorkspace, input: {
+  siteName: string
+  pages: WebsitePageImportDraft[]
+  sourceDigest: string
+  capturedAt: string
+}): WebsitePageDraftsImportResult | null {
+  if (!isWebsiteWorkspace(current)
+    || !canonicalImportText(input?.siteName, 60)
+    || !Array.isArray(input?.pages)
+    || input.pages.length < 1
+    || input.pages.length > MAX_WEBSITE_PAGES
+    || typeof input.sourceDigest !== 'string'
+    || !/^sha256:[0-9a-f]{64}$/.test(input.sourceDigest)
+    || !isIsoTimestamp(input.capturedAt)) return null
+  const validPages = input.pages.every((page) => canonicalImportText(page?.slug, 80)
+    && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(page.slug)
+    && canonicalImportText(page.title, 40)
+    && canonicalImportText(page.headline, 140)
+    && canonicalImportText(page.body, 360)
+    && canonicalImportText(page.contactUrl, 160, true)
+    && (!page.contactUrl || isValidDestination(page.contactUrl)))
+  if (!validPages || new Set(input.pages.map((page) => page.slug)).size !== input.pages.length) return null
+  const sourceId = input.sourceDigest.slice(7, 19)
+  const pages = input.pages.map((page, index) => websiteImportPage(page, sourceId, index, input.capturedAt))
+  const imported: WebsiteWorkspace = {
+    ...current,
+    siteName: input.siteName,
+    pages,
+    selectedPageId: pages[0].id,
+  }
+  if (serialize(websiteImportContent(current)) === serialize(websiteImportContent(imported))) {
+    return { workspace: current, created: 0, alreadyPresent: pages.length, replayed: true }
+  }
+  if (serialize(current) !== serialize(createInitialWorkspace()) || !isWebsiteWorkspace(imported)) return null
+  return { workspace: imported, created: pages.length, alreadyPresent: 0, replayed: false }
+}
+
+export async function activateLocalWebsitePageDrafts(input: {
+  siteName: string
+  pages: WebsitePageImportDraft[]
+  sourceDigest: string
+  capturedAt: string
+}, storage: WebsiteStorage | undefined = globalThis.localStorage, locks: WebsiteLockManager | undefined = globalThis.navigator?.locks as WebsiteLockManager | undefined): Promise<WebsitePageDraftsActivationResult> {
+  if (!storage) return { ok: false, error: 'Browser storage is unavailable.' }
+  const loaded = loadWebsiteWorkspace(storage)
+  if (!loaded.ok) return loaded
+  let imported: WebsitePageDraftsImportResult | null = null
+  const mutation = await mutateWebsiteWorkspace((current) => {
+    imported = importWebsitePageDrafts(current, input)
+    if (!imported) throw new Error('The Website sample already contains edited work. Reset it before initializing another client draft.')
+    return imported.workspace
+  }, loaded.workspace.revision, loaded.workspace.contentRevision, storage, locks)
+  if (!mutation.ok) return mutation
+  if (!imported) return { ok: false, error: 'The Website import could not be confirmed.' }
+  return { ok: true, import: imported }
 }
 
 export function createBlankPage(sequence: number): WebsitePage {
@@ -1237,7 +1371,9 @@ function isWebsiteWorkspace(value: unknown, pendingReleaseRecords = 0): value is
     'schema', 'version', 'revision', 'contentRevision', 'siteName', 'pages', 'selectedPageId',
     'evidence', 'approvals', 'localPublishes', 'events',
   ]
+  if (Object.hasOwn(value, 'openingPlan')) workspaceKeys.push('openingPlan')
   if (Object.hasOwn(value, 'releaseRecords')) workspaceKeys.push('releaseRecords')
+  if (Object.hasOwn(value, 'leadLedger')) workspaceKeys.push('leadLedger')
   if (!hasExactKeys(value, workspaceKeys)) return false
   if (value.schema !== WEBSITE_SCHEMA || value.version !== 2) return false
   const revision = value.revision
@@ -1249,12 +1385,27 @@ function isWebsiteWorkspace(value: unknown, pendingReleaseRecords = 0): value is
   if (!Array.isArray(value.evidence) || !value.evidence.every(isPublishEvidence) || !hasUniqueIds(value.evidence)) return false
   if (!Array.isArray(value.approvals) || !value.approvals.every(isPublishApproval) || !hasUniqueIds(value.approvals)) return false
   if (!Array.isArray(value.localPublishes) || !value.localPublishes.every(isLocalPublishRecord) || !hasUniqueIds(value.localPublishes)) return false
+  if (Object.hasOwn(value, 'openingPlan')) {
+    if (!isRecord(value.openingPlan)
+      || !hasExactKeys(value.openingPlan, ['contract', 'packageDigest', 'workflowTemplateId', 'confirmedAt', 'pageIds'])
+      || value.openingPlan.contract !== 'supermega.website.opening-plan.v1'
+      || typeof value.openingPlan.packageDigest !== 'string'
+      || !/^sha256:[0-9a-f]{64}$/.test(value.openingPlan.packageDigest)
+      || !['business-presence', 'lead-generation', 'catalog-showcase'].includes(String(value.openingPlan.workflowTemplateId))
+      || !isIsoTimestamp(value.openingPlan.confirmedAt)
+      || !Array.isArray(value.openingPlan.pageIds)
+      || value.openingPlan.pageIds.length < 1
+      || value.openingPlan.pageIds.length > MAX_WEBSITE_PAGES
+      || !value.openingPlan.pageIds.every((pageId) => isText(pageId, 80))
+      || !hasUniqueStrings(value.openingPlan.pageIds)) return false
+  }
   if (Object.hasOwn(value, 'releaseRecords')) {
     if (!Array.isArray(value.releaseRecords)
       || value.releaseRecords.length > MAX_WEBSITE_RELEASE_RECORDS
       || !value.releaseRecords.every(isWebsiteReleaseStateEnvelope)
       || !hasUniqueStrings(value.releaseRecords.map((record) => record.scope))) return false
   }
+  if (Object.hasOwn(value, 'leadLedger') && restoreWebsiteLeadLedger(value.leadLedger) === null) return false
   const releaseRecords = [...value.evidence, ...value.approvals, ...value.localPublishes]
   if (releaseRecords.some((record) => record.migratedFromV1)) return false
   const releaseRecordCount = releaseRecords.length
