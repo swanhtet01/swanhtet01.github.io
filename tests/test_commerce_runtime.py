@@ -25,6 +25,8 @@ from supermega_runtime.commerce_runtime import (
     commerce_shop_procurement_decision,
     commerce_storefront_preview_digest,
     commerce_supplier_invoice_match,
+    commerce_supplier_payables_handoff,
+    commerce_supplier_payables_handoff_csv,
     commerce_website_intake_snapshot_digest,
     validate_commerce_state,
 )
@@ -4118,6 +4120,34 @@ class CommerceRuntimeTests(unittest.TestCase):
             payable["purchaseOrders"][0],  # type: ignore[index,arg-type]
         )
         self.assertTrue(payable_match["payableReady"])
+        handoff = commerce_supplier_payables_handoff(payable)
+        self.assertIsNotNone(handoff)
+        assert handoff is not None
+        self.assertEqual(handoff["schema"], "supermega.commerce.supplier-payables-handoff.v1")
+        self.assertEqual(handoff["status"], "review_required")
+        self.assertEqual(handoff["paymentAuthority"], "none")
+        self.assertFalse(handoff["paymentInitiated"])
+        self.assertFalse(handoff["accountingPosted"])
+        self.assertEqual(handoff["readyInvoiceCount"], 1)
+        self.assertEqual(handoff["excludedInvoiceCount"], 0)
+        self.assertEqual(handoff["grossInvoiceTotalMmk"], 750)
+        self.assertEqual(handoff["supplierCreditTotalMmk"], 0)
+        self.assertEqual(handoff["netPayableTotalMmk"], 750)
+        self.assertEqual(handoff["rows"][0]["receiptMovementIds"], [received_state["movements"][0]["id"]])  # type: ignore[index]
+        self.assertEqual(handoff["rows"][0]["physicalReturnStatus"], "not_required")
+        self.assertEqual(handoff["rows"][0]["payableReviewActionId"], review["actionId"])
+        self.assertIn('"net_payable_mmk"', commerce_supplier_payables_handoff_csv(handoff))
+
+        tampered_handoff = deepcopy(handoff)
+        tampered_handoff["netPayableTotalMmk"] = 751
+        with self.assertRaisesRegex(TrialValidationError, "integrity check failed"):
+            commerce_supplier_payables_handoff_csv(tampered_handoff)
+
+        formula_state = deepcopy(payable)
+        formula_state["purchaseOrders"][0]["supplierInvoice"]["supplierReference"] = "=2+2"  # type: ignore[index]
+        formula_handoff = commerce_supplier_payables_handoff(formula_state)
+        assert formula_handoff is not None
+        self.assertIn('"\'=2+2"', commerce_supplier_payables_handoff_csv(formula_handoff))
 
         price_variance_state = deepcopy(created)
         price_variance_state["purchaseOrders"][0]["supplierInvoice"] = (  # type: ignore[index]
@@ -4249,6 +4279,27 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertEqual(credited_match["supplierCreditMmk"], 150)
         self.assertEqual(credited_match["netInvoiceTotalMmk"], 600)
         self.assertEqual(credited_match["acceptedTotalMmk"], 600)
+
+        credited_payable_state = deepcopy(credited)
+        credited_payable_state["purchaseOrders"][0]["supplierInvoice"]["payableReview"] = action_evidence(  # type: ignore[index]
+            "ACT-SUPPLIER-INVOICE-CREDITED-PAYABLE",
+            captured_at="2026-07-23T10:20:00.000Z",
+        )
+        credited_payable = apply_event(
+            credited,
+            "commerce.supplier_invoice.payable_ready",
+            credited_payable_state,
+        )
+        credited_handoff = commerce_supplier_payables_handoff(credited_payable)
+        self.assertIsNotNone(credited_handoff)
+        assert credited_handoff is not None
+        self.assertEqual(credited_handoff["grossInvoiceTotalMmk"], 750)
+        self.assertEqual(credited_handoff["supplierCreditTotalMmk"], 150)
+        self.assertEqual(credited_handoff["netPayableTotalMmk"], 600)
+        self.assertEqual(credited_handoff["rows"][0]["rejectedQuantity"], 2)
+        self.assertEqual(credited_handoff["rows"][0]["supplierReturnClaimIds"], [claim["id"]])
+        self.assertEqual(credited_handoff["rows"][0]["supplierCreditNoteIds"], [partial_credit["id"], final_credit["id"]])
+        self.assertEqual(credited_handoff["rows"][0]["physicalReturnStatus"], "not_dispatched")
 
         unsafe_claim = deepcopy(claimed_state)
         unsafe_claim["purchaseOrders"][0]["supplierReturns"][0]["physicalReturnStatus"] = "dispatched"  # type: ignore[index]

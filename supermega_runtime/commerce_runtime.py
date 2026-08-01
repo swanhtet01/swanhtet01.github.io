@@ -43,6 +43,7 @@ from supermega_runtime.trial_store import TrialValidationError
 COMMERCE_SCHEMA = "supermega.commerce.workspace.v2"
 COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v3"
 COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v3"
+COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = "supermega.commerce.supplier-payables-handoff.v1"
 COMMERCE_CLOSE_SETTLEMENT_SCHEMA = "supermega.commerce.close-settlement.v1"
 COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA = "supermega.commerce.order-acknowledgement.v1"
 COMMERCE_EVENTS = frozenset(
@@ -7027,6 +7028,169 @@ def commerce_accounting_handoff_csv(artifact: Mapping[str, Any]) -> str:
     ) + "\r\n"
 
 
+def _supplier_payables_handoff_projection(artifact: Mapping[str, Any]) -> list[Any]:
+    return [
+        artifact["schema"], artifact["status"], artifact["paymentAuthority"],
+        artifact["paymentInitiated"], artifact["accountingPosted"], artifact["currency"],
+        artifact["generatedAt"], artifact["readyInvoiceCount"], artifact["excludedInvoiceCount"],
+        artifact["excludedInvoiceIds"], artifact["grossInvoiceTotalMmk"],
+        artifact["supplierCreditTotalMmk"], artifact["netPayableTotalMmk"],
+        [[
+            row["purchaseOrderId"], row["requisitionId"], row["supplier"], row["sku"],
+            row["invoiceId"], row["supplierInvoiceReference"], row["invoiceIssuedAt"],
+            row["dueAt"], row["orderedQuantity"], row["acceptedQuantity"],
+            row["rejectedQuantity"], row["invoicedQuantity"], row["unitCostMmk"],
+            row["grossInvoiceMmk"], row["supplierClaimMmk"], row["supplierCreditMmk"],
+            row["netPayableMmk"], row["payableReviewActionId"], row["payableReviewedAt"],
+            row["payableReviewedBy"], row["payableEvidenceReference"],
+            row["receiptMovementIds"], row["supplierReturnClaimIds"],
+            row["supplierCreditNoteIds"], row["physicalReturnStatus"],
+            row["supplierContacted"], row["accountingPosted"], row["paymentInitiated"],
+        ] for row in artifact["rows"]],
+    ]
+
+
+def commerce_supplier_payables_handoff(
+    state: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Create a deterministic AP review packet without posting or initiating payment."""
+
+    current = validate_commerce_state(state)
+    invoiced_orders = sorted(
+        (
+            purchase_order for purchase_order in _purchase_orders(current)
+            if isinstance(purchase_order.get("supplierInvoice"), Mapping)
+        ),
+        key=lambda purchase_order: (
+            purchase_order["supplierInvoice"]["dueAt"],
+            purchase_order["supplier"],
+            purchase_order["supplierInvoice"]["id"],
+        ),
+    )
+    excluded_invoice_ids: list[str] = []
+    rows: list[dict[str, Any]] = []
+    for purchase_order in invoiced_orders:
+        invoice = purchase_order["supplierInvoice"]
+        match = commerce_supplier_invoice_match(current, purchase_order)
+        payable_review = invoice.get("payableReview")
+        if not match["payableReady"] or not isinstance(payable_review, Mapping):
+            excluded_invoice_ids.append(invoice["id"])
+            continue
+        claims = purchase_order.get("supplierReturns", [])
+        rows.append({
+            "purchaseOrderId": purchase_order["id"],
+            "requisitionId": purchase_order.get("requisitionId"),
+            "supplier": purchase_order["supplier"],
+            "sku": purchase_order["sku"],
+            "invoiceId": invoice["id"],
+            "supplierInvoiceReference": invoice["supplierReference"],
+            "invoiceIssuedAt": invoice["issuedAt"],
+            "dueAt": invoice["dueAt"],
+            "orderedQuantity": match["orderedQuantity"],
+            "acceptedQuantity": match["acceptedQuantity"],
+            "rejectedQuantity": match["rejectedQuantity"],
+            "invoicedQuantity": match["invoicedQuantity"],
+            "unitCostMmk": match["invoicedUnitCostMmk"],
+            "grossInvoiceMmk": match["invoicedTotalMmk"],
+            "supplierClaimMmk": match["supplierClaimMmk"],
+            "supplierCreditMmk": match["supplierCreditMmk"],
+            "netPayableMmk": match["netInvoiceTotalMmk"],
+            "payableReviewActionId": payable_review["actionId"],
+            "payableReviewedAt": payable_review["capturedAt"],
+            "payableReviewedBy": payable_review["actor"],
+            "payableEvidenceReference": payable_review["evidenceReference"],
+            "receiptMovementIds": sorted(
+                movement["id"] for movement in current["movements"]
+                if movement.get("kind") == "receipt"
+                and movement.get("purchaseOrderId") == purchase_order["id"]
+            ),
+            "supplierReturnClaimIds": sorted(claim["id"] for claim in claims),
+            "supplierCreditNoteIds": sorted(
+                credit["id"] for claim in claims for credit in claim["creditNotes"]
+            ),
+            "physicalReturnStatus": "not_dispatched" if match["rejectedQuantity"] else "not_required",
+            "supplierContacted": False,
+            "accountingPosted": False,
+            "paymentInitiated": False,
+        })
+    if not rows:
+        return None
+    gross_invoice_total_mmk = sum(row["grossInvoiceMmk"] for row in rows)
+    supplier_credit_total_mmk = sum(row["supplierCreditMmk"] for row in rows)
+    net_payable_total_mmk = sum(row["netPayableMmk"] for row in rows)
+    if (
+        any(abs(total) > _MAX_SAFE_INTEGER for total in (
+            gross_invoice_total_mmk, supplier_credit_total_mmk, net_payable_total_mmk
+        ))
+        or gross_invoice_total_mmk - supplier_credit_total_mmk != net_payable_total_mmk
+    ):
+        raise TrialValidationError(
+            "Supplier payables handoff totals exceed the supported safe integer range or do not balance."
+        )
+    artifact: dict[str, Any] = {
+        "schema": COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA,
+        "status": "review_required",
+        "paymentAuthority": "none",
+        "paymentInitiated": False,
+        "accountingPosted": False,
+        "currency": "MMK",
+        "generatedAt": max(row["payableReviewedAt"] for row in rows),
+        "readyInvoiceCount": len(rows),
+        "excludedInvoiceCount": len(excluded_invoice_ids),
+        "excludedInvoiceIds": excluded_invoice_ids,
+        "grossInvoiceTotalMmk": gross_invoice_total_mmk,
+        "supplierCreditTotalMmk": supplier_credit_total_mmk,
+        "netPayableTotalMmk": net_payable_total_mmk,
+        "rows": rows,
+    }
+    artifact["digest"] = _projection_digest(_supplier_payables_handoff_projection(artifact))
+    return artifact
+
+
+def commerce_supplier_payables_handoff_csv(artifact: Mapping[str, Any]) -> str:
+    """Render a formula-safe supplier-payables packet after verifying its digest."""
+
+    if (
+        artifact.get("schema") != COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA
+        or artifact.get("digest") != _projection_digest(_supplier_payables_handoff_projection(artifact))
+    ):
+        raise TrialValidationError("Supplier payables handoff integrity check failed.")
+    header = [
+        "schema", "status", "payment_authority", "payment_initiated", "accounting_posted",
+        "currency", "generated_at", "ready_invoice_count", "excluded_invoice_count",
+        "excluded_invoice_ids", "gross_invoice_total_mmk", "supplier_credit_total_mmk",
+        "net_payable_total_mmk", "purchase_order_id", "requisition_id", "supplier", "sku",
+        "invoice_id", "supplier_invoice_reference", "invoice_issued_at", "due_at",
+        "ordered_quantity", "accepted_quantity", "rejected_quantity", "invoiced_quantity",
+        "unit_cost_mmk", "gross_invoice_mmk", "supplier_claim_mmk", "supplier_credit_mmk",
+        "net_payable_mmk", "payable_review_action_id", "payable_reviewed_at",
+        "payable_reviewed_by", "payable_evidence_reference", "receipt_movement_ids",
+        "supplier_return_claim_ids", "supplier_credit_note_ids", "physical_return_status",
+        "supplier_contacted", "row_accounting_posted", "row_payment_initiated", "artifact_digest",
+    ]
+    rows = [[
+        artifact["schema"], artifact["status"], artifact["paymentAuthority"],
+        str(artifact["paymentInitiated"]).lower(), str(artifact["accountingPosted"]).lower(),
+        artifact["currency"], artifact["generatedAt"], artifact["readyInvoiceCount"],
+        artifact["excludedInvoiceCount"], artifact["excludedInvoiceIds"],
+        artifact["grossInvoiceTotalMmk"], artifact["supplierCreditTotalMmk"],
+        artifact["netPayableTotalMmk"], row["purchaseOrderId"], row["requisitionId"],
+        row["supplier"], row["sku"], row["invoiceId"], row["supplierInvoiceReference"],
+        row["invoiceIssuedAt"], row["dueAt"], row["orderedQuantity"], row["acceptedQuantity"],
+        row["rejectedQuantity"], row["invoicedQuantity"], row["unitCostMmk"],
+        row["grossInvoiceMmk"], row["supplierClaimMmk"], row["supplierCreditMmk"],
+        row["netPayableMmk"], row["payableReviewActionId"], row["payableReviewedAt"],
+        row["payableReviewedBy"], row["payableEvidenceReference"], row["receiptMovementIds"],
+        row["supplierReturnClaimIds"], row["supplierCreditNoteIds"], row["physicalReturnStatus"],
+        str(row["supplierContacted"]).lower(), str(row["accountingPosted"]).lower(),
+        str(row["paymentInitiated"]).lower(), artifact["digest"],
+    ] for row in artifact["rows"]]
+    return "\r\n".join(
+        ",".join(_commerce_csv_cell(cell) for cell in row)
+        for row in [header, *rows]
+    ) + "\r\n"
+
+
 def _configured_storefront_preview_digest(
     state: Mapping[str, Any],
     configuration: Mapping[str, Any],
@@ -10426,6 +10590,7 @@ def reduce_commerce_state(
 
 __all__ = [
     "COMMERCE_ACCOUNTING_HANDOFF_SCHEMA",
+    "COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA",
     "COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA",
     "COMMERCE_EVENTS",
     "COMMERCE_HUMAN_EVENTS",
@@ -10444,6 +10609,8 @@ __all__ = [
     "commerce_daily_close_export",
     "commerce_storefront_preview_digest",
     "commerce_supplier_invoice_match",
+    "commerce_supplier_payables_handoff",
+    "commerce_supplier_payables_handoff_csv",
     "commerce_website_intake_snapshot_digest",
     "reduce_commerce_state",
     "validate_commerce_state",

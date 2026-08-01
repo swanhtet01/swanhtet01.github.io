@@ -21,6 +21,7 @@ export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calcu
 export const COMMERCE_ORDER_CALCULATION_V2_SCHEMA = 'supermega.commerce.order-calculation.v2' as const
 export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v3' as const
 export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v3' as const
+export const COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = 'supermega.commerce.supplier-payables-handoff.v1' as const
 export const COMMERCE_CLOSE_SETTLEMENT_SCHEMA = 'supermega.commerce.close-settlement.v1' as const
 export const COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA = 'supermega.commerce.support-workload.v1' as const
 export const COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA = 'supermega.commerce.order-acknowledgement.v1' as const
@@ -763,6 +764,55 @@ export type CommerceAccountingHandoff = {
   paymentExceptionOrderIds: string[]
   stockExceptionSkus: string[]
   entries: CommerceAccountingHandoffEntry[]
+  digest: string
+}
+
+export type CommerceSupplierPayablesHandoffRow = {
+  purchaseOrderId: string
+  requisitionId: string | null
+  supplier: string
+  sku: string
+  invoiceId: string
+  supplierInvoiceReference: string
+  invoiceIssuedAt: string
+  dueAt: string
+  orderedQuantity: number
+  acceptedQuantity: number
+  rejectedQuantity: number
+  invoicedQuantity: number
+  unitCostMmk: number
+  grossInvoiceMmk: number
+  supplierClaimMmk: number
+  supplierCreditMmk: number
+  netPayableMmk: number
+  payableReviewActionId: string
+  payableReviewedAt: string
+  payableReviewedBy: string
+  payableEvidenceReference: string
+  receiptMovementIds: string[]
+  supplierReturnClaimIds: string[]
+  supplierCreditNoteIds: string[]
+  physicalReturnStatus: 'not_required' | 'not_dispatched'
+  supplierContacted: false
+  accountingPosted: false
+  paymentInitiated: false
+}
+
+export type CommerceSupplierPayablesHandoff = {
+  schema: typeof COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA
+  status: 'review_required'
+  paymentAuthority: 'none'
+  paymentInitiated: false
+  accountingPosted: false
+  currency: 'MMK'
+  generatedAt: string
+  readyInvoiceCount: number
+  excludedInvoiceCount: number
+  excludedInvoiceIds: string[]
+  grossInvoiceTotalMmk: number
+  supplierCreditTotalMmk: number
+  netPayableTotalMmk: number
+  rows: CommerceSupplierPayablesHandoffRow[]
   digest: string
 }
 
@@ -9764,6 +9814,172 @@ export function commerceAccountingHandoffCsv(artifact: CommerceAccountingHandoff
     artifact.paymentExceptionOrderIds,
     artifact.stockExceptionSkus,
     artifact.digest,
+  ])
+  return [header, ...rows].map((row) => row.map(commerceCsvCell).join(',')).join('\r\n') + '\r\n'
+}
+
+function commerceSupplierPayablesHandoffProjection(artifact: Omit<CommerceSupplierPayablesHandoff, 'digest'>) {
+  return [
+    artifact.schema,
+    artifact.status,
+    artifact.paymentAuthority,
+    artifact.paymentInitiated,
+    artifact.accountingPosted,
+    artifact.currency,
+    artifact.generatedAt,
+    artifact.readyInvoiceCount,
+    artifact.excludedInvoiceCount,
+    artifact.excludedInvoiceIds,
+    artifact.grossInvoiceTotalMmk,
+    artifact.supplierCreditTotalMmk,
+    artifact.netPayableTotalMmk,
+    artifact.rows.map((row) => [
+      row.purchaseOrderId,
+      row.requisitionId,
+      row.supplier,
+      row.sku,
+      row.invoiceId,
+      row.supplierInvoiceReference,
+      row.invoiceIssuedAt,
+      row.dueAt,
+      row.orderedQuantity,
+      row.acceptedQuantity,
+      row.rejectedQuantity,
+      row.invoicedQuantity,
+      row.unitCostMmk,
+      row.grossInvoiceMmk,
+      row.supplierClaimMmk,
+      row.supplierCreditMmk,
+      row.netPayableMmk,
+      row.payableReviewActionId,
+      row.payableReviewedAt,
+      row.payableReviewedBy,
+      row.payableEvidenceReference,
+      row.receiptMovementIds,
+      row.supplierReturnClaimIds,
+      row.supplierCreditNoteIds,
+      row.physicalReturnStatus,
+      row.supplierContacted,
+      row.accountingPosted,
+      row.paymentInitiated,
+    ]),
+  ]
+}
+
+function commerceSupplierPayablesHandoffDigest(artifact: Omit<CommerceSupplierPayablesHandoff, 'digest'>) {
+  return `sha256:${sha256Hex(JSON.stringify(commerceSupplierPayablesHandoffProjection(artifact)))}`
+}
+
+export function commerceSupplierPayablesHandoff(state: CommerceState): CommerceSupplierPayablesHandoff | null {
+  const current = validateCommerceState(state)
+  const invoicedOrders = commercePurchaseOrders(current)
+    .filter((purchaseOrder) => Boolean(purchaseOrder.supplierInvoice))
+    .sort((left, right) => (left.supplierInvoice?.dueAt ?? '').localeCompare(right.supplierInvoice?.dueAt ?? '')
+      || left.supplier.localeCompare(right.supplier)
+      || (left.supplierInvoice?.id ?? '').localeCompare(right.supplierInvoice?.id ?? ''))
+  const excludedInvoiceIds: string[] = []
+  const rows: CommerceSupplierPayablesHandoffRow[] = []
+  for (const purchaseOrder of invoicedOrders) {
+    const invoice = purchaseOrder.supplierInvoice as CommerceSupplierInvoice
+    const match = commerceSupplierInvoiceMatch(current, purchaseOrder)
+    if (!match.payableReady || !invoice.payableReview) {
+      excludedInvoiceIds.push(invoice.id)
+      continue
+    }
+    const claims = commerceSupplierReturnClaims(purchaseOrder)
+    const receiptMovementIds = current.movements
+      .filter((movement) => movement.kind === 'receipt' && movement.purchaseOrderId === purchaseOrder.id)
+      .map((movement) => movement.id)
+      .sort()
+    const supplierReturnClaimIds = claims.map((claim) => claim.id).sort()
+    const supplierCreditNoteIds = claims.flatMap((claim) => claim.creditNotes.map((credit) => credit.id)).sort()
+    rows.push({
+      purchaseOrderId: purchaseOrder.id,
+      requisitionId: purchaseOrder.requisitionId ?? null,
+      supplier: purchaseOrder.supplier,
+      sku: purchaseOrder.sku,
+      invoiceId: invoice.id,
+      supplierInvoiceReference: invoice.supplierReference,
+      invoiceIssuedAt: invoice.issuedAt,
+      dueAt: invoice.dueAt,
+      orderedQuantity: match.orderedQuantity,
+      acceptedQuantity: match.acceptedQuantity,
+      rejectedQuantity: match.rejectedQuantity,
+      invoicedQuantity: match.invoicedQuantity,
+      unitCostMmk: match.invoicedUnitCostMmk,
+      grossInvoiceMmk: match.invoicedTotalMmk,
+      supplierClaimMmk: match.supplierClaimMmk,
+      supplierCreditMmk: match.supplierCreditMmk,
+      netPayableMmk: match.netInvoiceTotalMmk,
+      payableReviewActionId: invoice.payableReview.actionId,
+      payableReviewedAt: invoice.payableReview.capturedAt,
+      payableReviewedBy: invoice.payableReview.actor,
+      payableEvidenceReference: invoice.payableReview.evidenceReference,
+      receiptMovementIds,
+      supplierReturnClaimIds,
+      supplierCreditNoteIds,
+      physicalReturnStatus: match.rejectedQuantity ? 'not_dispatched' : 'not_required',
+      supplierContacted: false,
+      accountingPosted: false,
+      paymentInitiated: false,
+    })
+  }
+  if (!rows.length) return null
+  const grossInvoiceTotalMmk = rows.reduce((total, row) => total + row.grossInvoiceMmk, 0)
+  const supplierCreditTotalMmk = rows.reduce((total, row) => total + row.supplierCreditMmk, 0)
+  const netPayableTotalMmk = rows.reduce((total, row) => total + row.netPayableMmk, 0)
+  if (![grossInvoiceTotalMmk, supplierCreditTotalMmk, netPayableTotalMmk].every(Number.isSafeInteger)
+    || grossInvoiceTotalMmk - supplierCreditTotalMmk !== netPayableTotalMmk) {
+    throw new Error('Supplier payables handoff totals exceed the supported safe integer range or do not balance.')
+  }
+  const artifact: Omit<CommerceSupplierPayablesHandoff, 'digest'> = {
+    schema: COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA,
+    status: 'review_required',
+    paymentAuthority: 'none',
+    paymentInitiated: false,
+    accountingPosted: false,
+    currency: 'MMK',
+    generatedAt: rows.map((row) => row.payableReviewedAt).sort().at(-1) as string,
+    readyInvoiceCount: rows.length,
+    excludedInvoiceCount: excludedInvoiceIds.length,
+    excludedInvoiceIds,
+    grossInvoiceTotalMmk,
+    supplierCreditTotalMmk,
+    netPayableTotalMmk,
+    rows,
+  }
+  return { ...artifact, digest: commerceSupplierPayablesHandoffDigest(artifact) }
+}
+
+export function commerceSupplierPayablesHandoffCsv(artifact: CommerceSupplierPayablesHandoff) {
+  const { digest, ...unsigned } = artifact
+  if (artifact.schema !== COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA
+    || digest !== commerceSupplierPayablesHandoffDigest(unsigned)) {
+    throw new Error('Supplier payables handoff integrity check failed.')
+  }
+  const header = [
+    'schema', 'status', 'payment_authority', 'payment_initiated', 'accounting_posted', 'currency',
+    'generated_at', 'ready_invoice_count', 'excluded_invoice_count', 'excluded_invoice_ids',
+    'gross_invoice_total_mmk', 'supplier_credit_total_mmk', 'net_payable_total_mmk',
+    'purchase_order_id', 'requisition_id', 'supplier', 'sku', 'invoice_id', 'supplier_invoice_reference',
+    'invoice_issued_at', 'due_at', 'ordered_quantity', 'accepted_quantity', 'rejected_quantity',
+    'invoiced_quantity', 'unit_cost_mmk', 'gross_invoice_mmk', 'supplier_claim_mmk',
+    'supplier_credit_mmk', 'net_payable_mmk', 'payable_review_action_id', 'payable_reviewed_at',
+    'payable_reviewed_by', 'payable_evidence_reference', 'receipt_movement_ids',
+    'supplier_return_claim_ids', 'supplier_credit_note_ids', 'physical_return_status',
+    'supplier_contacted', 'row_accounting_posted', 'row_payment_initiated', 'artifact_digest',
+  ]
+  const rows = artifact.rows.map((row): Array<string | number | null | string[]> => [
+    artifact.schema, artifact.status, artifact.paymentAuthority, String(artifact.paymentInitiated),
+    String(artifact.accountingPosted), artifact.currency, artifact.generatedAt, artifact.readyInvoiceCount,
+    artifact.excludedInvoiceCount, artifact.excludedInvoiceIds, artifact.grossInvoiceTotalMmk,
+    artifact.supplierCreditTotalMmk, artifact.netPayableTotalMmk, row.purchaseOrderId, row.requisitionId,
+    row.supplier, row.sku, row.invoiceId, row.supplierInvoiceReference, row.invoiceIssuedAt, row.dueAt,
+    row.orderedQuantity, row.acceptedQuantity, row.rejectedQuantity, row.invoicedQuantity, row.unitCostMmk,
+    row.grossInvoiceMmk, row.supplierClaimMmk, row.supplierCreditMmk, row.netPayableMmk,
+    row.payableReviewActionId, row.payableReviewedAt, row.payableReviewedBy, row.payableEvidenceReference,
+    row.receiptMovementIds, row.supplierReturnClaimIds, row.supplierCreditNoteIds, row.physicalReturnStatus,
+    String(row.supplierContacted), String(row.accountingPosted), String(row.paymentInitiated), artifact.digest,
   ])
   return [header, ...rows].map((row) => row.map(commerceCsvCell).join(',')).join('\r\n') + '\r\n'
 }

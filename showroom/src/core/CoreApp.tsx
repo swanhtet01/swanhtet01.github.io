@@ -109,6 +109,8 @@ import {
   commerceSupplierSourcingDecisions,
   commerceSupplierSourcingSelectedQuote,
   commerceSupplierInvoiceMatch,
+  commerceSupplierPayablesHandoff,
+  commerceSupplierPayablesHandoffCsv,
   commerceSupplierReturnClaimBalance,
   commerceSupplierReturnClaimStatus,
   commerceSupplierPerformance,
@@ -2057,6 +2059,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       artifact,
     }
   }, [commerce, latestClose])
+  const supplierPayablesDownload = useMemo(() => {
+    const artifact = commerceSupplierPayablesHandoff(commerce)
+    if (!artifact) return null
+    return {
+      filename: `supermega-shop-payables-${artifact.generatedAt.slice(0, 10)}-${artifact.digest.slice(7, 15)}.csv`,
+      href: `data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${commerceSupplierPayablesHandoffCsv(artifact)}`)}`,
+      artifact,
+    }
+  }, [commerce])
   const supportWorkloadDownload = useMemo(() => {
     try {
       const artifact = commerceSupportWorkloadExport(commerce, new Date(purchaseOrderClock).toISOString())
@@ -6278,12 +6289,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Close', latestCloseDownload ? 'CSV ready' : closePreview ? `${closableOrders.length} ready` : 'Close first'],
     ['Ledger', latestCloseDownload ? 'Review import' : 'Not posted'],
     ['Tax', 'Not configured'],
-    ['Payables', supplierInvoiceExceptions.length ? `${supplierInvoiceExceptions.length} blocked` : supplierInvoicesPendingReview.length ? `${supplierInvoicesPendingReview.length} match review` : supplierInvoicesPayableReady.length ? `${supplierInvoicesPayableReady.length} ready` : 'None created'],
+    ['Payables', supplierInvoiceExceptions.length ? `${supplierInvoiceExceptions.length} blocked` : supplierInvoicesPendingReview.length ? `${supplierInvoicesPendingReview.length} match review` : supplierPayablesDownload ? `${supplierPayablesDownload.artifact.readyInvoiceCount} CSV ready` : 'None created'],
     ['Settlement', paymentReview.length ? `${paymentReview.length} exception` : 'External proof only'],
     ['Audit', latestClose?.evidenceReference ? 'Evidence linked' : 'Need close evidence'],
   ] as const
   const shopAccountingPacket = <section className="shop-order-control" aria-label="Shop accounting export packet">
-    <div><span className="core-eyebrow">Accounting export packet</span><strong>{latestCloseDownload ? 'Ready for accountant review' : closePreview ? 'Close before export' : 'No export package yet'}</strong><small>AI packages the reviewed daily close, payment proof, refund evidence, stock exceptions, supplier receipt exposure, and tax status for accounting review. No ledger post, tax filing, payable creation, bank settlement, refund, payment, inventory, or Shop write runs from this packet.</small></div>
+    <div><span className="core-eyebrow">Accounting export packet</span><strong>{latestCloseDownload || supplierPayablesDownload ? 'Ready for accountant review' : closePreview ? 'Close before export' : 'No export package yet'}</strong><small>AI packages reviewed sales and exact supplier payables with source evidence for accounting review. No ledger post, tax filing, bank settlement, refund, payment, inventory, or Shop write runs from this packet.</small>{supplierPayablesDownload ? <small><a className="text-link" data-supplier-payables-handoff="review-required" download={supplierPayablesDownload.filename} href={supplierPayablesDownload.href}>Download supplier payables CSV</a> · {formatMoney(supplierPayablesDownload.artifact.netPayableTotalMmk)} net · {formatMoney(supplierPayablesDownload.artifact.supplierCreditTotalMmk)} supplier credit · no payment initiated</small> : null}</div>
     <div className="shop-order-control-rows">{shopAccountingPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
 

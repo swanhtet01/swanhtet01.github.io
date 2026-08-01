@@ -1725,8 +1725,8 @@ if (!coreSource.includes('const shopAccountingRows = [')
 if (!coreSource.includes('const shopAccountingPacketRows = [')
   || !coreSource.includes('aria-label="Shop accounting export packet"')
   || !coreSource.includes('Accounting export packet')
-  || !coreSource.includes('AI packages the reviewed daily close, payment proof, refund evidence, stock exceptions, supplier receipt exposure, and tax status for accounting review.')
-  || !coreSource.includes('No ledger post, tax filing, payable creation, bank settlement, refund, payment, inventory, or Shop write runs from this packet.')
+  || !coreSource.includes('AI packages reviewed sales and exact supplier payables with source evidence for accounting review.')
+  || !coreSource.includes('No ledger post, tax filing, bank settlement, refund, payment, inventory, or Shop write runs from this packet.')
   || !coreSource.includes("'Ready for accountant review'")
   || !coreSource.includes("'Close before export'")
   || !coreSource.includes("'No export package yet'")
@@ -4316,6 +4316,17 @@ if (!commerceSource.includes('export type CommerceSupplierReturnClaim')
   || !managedCommerceRuntime.includes('def _validate_supplier_credit_recorded(')
   || !managedTrialStoreRuntime.includes('if event_type == "commerce.supplier_return.authorized":')
   || !managedTrialStoreRuntime.includes('if event_type == "commerce.supplier_credit.recorded":')) fail('commerce_supplier_return_credit_contract_missing')
+if (!commerceSource.includes("COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = 'supermega.commerce.supplier-payables-handoff.v1'")
+  || !commerceSource.includes('export function commerceSupplierPayablesHandoff(')
+  || !commerceSource.includes('export function commerceSupplierPayablesHandoffCsv(')
+  || !commerceSource.includes("paymentAuthority: 'none'")
+  || !commerceSource.includes('paymentInitiated: false')
+  || !coreSource.includes('data-supplier-payables-handoff="review-required"')
+  || !coreSource.includes('Download supplier payables CSV')
+  || !coreSource.includes('no payment initiated')
+  || !managedCommerceRuntime.includes('COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = "supermega.commerce.supplier-payables-handoff.v1"')
+  || !managedCommerceRuntime.includes('def commerce_supplier_payables_handoff(')
+  || !managedCommerceRuntime.includes('def commerce_supplier_payables_handoff_csv(')) fail('commerce_supplier_payables_handoff_missing')
 const commerceOrdersContract = commercePageContract.slice(commercePageContract.indexOf("if (tab === 'orders')"), commercePageContract.indexOf("if (tab === 'inventory')"))
 if (!commerceOrdersContract.includes('order-daily-controls') || !commerceOrdersContract.includes('Review and save close') || !commerceOrdersContract.includes('Close and exceptions')) fail('commerce_daily_controls_not_inside_orders')
 if (!coreSource.includes('data-close-settlement=')
@@ -10981,9 +10992,25 @@ async function verifyCommerceRuntime() {
       && fullCreditMatch.acceptedTotalMmk === 450
       && model.commerceSupplierReturnClaimStatus(fullyCredited.purchaseOrders[0].supplierReturns[0]) === 'credited',
     'supplier_return_full_credit_did_not_resolve_invoice')
-    assert(model.markCommerceSupplierInvoicePayableReady(
+    const fullyCreditedPayable = model.markCommerceSupplierInvoicePayableReady(
       fullyCredited, purchaseOrderId, proof('ACT-SUPPLIER-INVOICE-DISCREPANCY-PAYABLE', 360_000),
-    ), 'fully_credited_supplier_invoice_not_payable_ready')
+    )
+    const creditedPayablesHandoff = fullyCreditedPayable
+      && model.commerceSupplierPayablesHandoff(fullyCreditedPayable)
+    assert(fullyCreditedPayable
+      && creditedPayablesHandoff?.schema === 'supermega.commerce.supplier-payables-handoff.v1'
+      && creditedPayablesHandoff.status === 'review_required'
+      && creditedPayablesHandoff.paymentAuthority === 'none'
+      && creditedPayablesHandoff.paymentInitiated === false
+      && creditedPayablesHandoff.accountingPosted === false
+      && creditedPayablesHandoff.grossInvoiceTotalMmk === 750
+      && creditedPayablesHandoff.supplierCreditTotalMmk === 300
+      && creditedPayablesHandoff.netPayableTotalMmk === 450
+      && creditedPayablesHandoff.rows[0].rejectedQuantity === 4
+      && creditedPayablesHandoff.rows[0].physicalReturnStatus === 'not_dispatched'
+      && creditedPayablesHandoff.rows[0].supplierReturnClaimIds.includes(supplierReturnInput.id)
+      && creditedPayablesHandoff.rows[0].supplierCreditNoteIds.length === 2,
+    'fully_credited_supplier_payables_handoff_not_exact')
     assert(model.cancelCommercePurchaseOrder(
       purchasePartial,
       purchaseOrderId,
@@ -11037,6 +11064,32 @@ async function verifyCommerceRuntime() {
       && model.commerceSupplierInvoiceMatch(payable, payable.purchaseOrders[0]).payableReady
       && model.markCommerceSupplierInvoicePayableReady(payable, purchaseOrderId, payableProof) === payable,
     'supplier_invoice_payable_review_not_attributed_or_idempotent')
+    const supplierPayablesHandoff = payable && model.commerceSupplierPayablesHandoff(payable)
+    assert(model.commerceSupplierPayablesHandoff(invoiced) === null
+      && supplierPayablesHandoff?.readyInvoiceCount === 1
+      && supplierPayablesHandoff.excludedInvoiceCount === 0
+      && supplierPayablesHandoff.grossInvoiceTotalMmk === 750
+      && supplierPayablesHandoff.supplierCreditTotalMmk === 0
+      && supplierPayablesHandoff.netPayableTotalMmk === 750
+      && supplierPayablesHandoff.rows[0].receiptMovementIds.length === 2
+      && supplierPayablesHandoff.rows[0].payableReviewActionId === payableProof.actionId
+      && supplierPayablesHandoff.rows[0].physicalReturnStatus === 'not_required'
+      && model.commerceSupplierPayablesHandoffCsv(supplierPayablesHandoff).includes('"net_payable_mmk"'),
+    'supplier_payables_handoff_not_review_bound_or_exact')
+    assertThrows(() => model.commerceSupplierPayablesHandoffCsv({
+      ...supplierPayablesHandoff,
+      netPayableTotalMmk: 751,
+    }), 'supplier_payables_handoff_tampering_was_exported')
+    const formulaPayables = model.commerceSupplierPayablesHandoff({
+      ...payable,
+      purchaseOrders: [{
+        ...payable.purchaseOrders[0],
+        supplierInvoice: { ...payable.purchaseOrders[0].supplierInvoice, supplierReference: '=2+2' },
+      }],
+    })
+    assert(formulaPayables
+      && model.commerceSupplierPayablesHandoffCsv(formulaPayables).includes('"\'=2+2"'),
+    'supplier_payables_csv_formula_injection_not_neutralized')
     assert(model.cancelCommercePurchaseOrder(
       invoiceBeforeReceipt, purchaseOrderId, proof('ACT-PURCHASE-CANCEL-INVOICED', 240_000),
     ) === null, 'invoiced_purchase_order_was_cancellable')
