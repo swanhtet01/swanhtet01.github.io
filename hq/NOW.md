@@ -40,7 +40,6 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancel releases, complete consumes, and sellable returns restore the exact fulfilled location/lot (`3cd4825`).
 - Shop Sell hides the empty mobile cart, closes it after last-item removal or completion, and confirms with a receipt reference instead of an internal action UUID (`7e321378`).
 - Shop keeps a balanced accounting-review CSV grouped by payment method and a human-approved versioned tax code, rate, and inclusive/exclusive treatment. Receiving separates accepted stock from rejected supplier units and measures defects; no posting occurs (`d47f5d9`, `39b7fc2`, `a37c933c`, `552ed20a`).
-- Ecommerce return intent opens the exact completed Shop order; Shop alone records return and refund evidence.
 - Ecommerce carries versioned contact/address snapshots through recovery and Shop handoff; hosted identity and provider execution remain absent.
 - Shop owns versioned delivery zones, fee, promise, tax schedule, and payment-method eligibility/limits. Ecommerce draft v7 and the Shop order retain the exact tax decision; Shop rechecks authority and tax-inclusive payment limits before reserving stock (`ENG-136`, `ENG-137`, `ENG-138`, `9ff26ba3`).
 - Shop Orders downloads digest-bound acknowledgements from exact evidence; no invoice, receipt, message, or provider action (`ENG-139`, `263434db`).
@@ -57,6 +56,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 - Current local checkpoints: Ecommerce tax authority `b70d3412`, governed v7 Shop handoff `1975c550`, tax-inclusive limits `0eb180f9`, and order proof `9ff26ba3`; all gates pass.
 - Checks pass: 105 Ecommerce, 310 Commerce, 274 Production including 93 Plant-order checks, 64 managed Commerce, 77 security, 233 onboarding, and 82 managed import.
+- First-action QA routes Shop, Plant, and Website blockers to the next task.
 - Both domains serve deployed `7c76b810d5eb466f3917e785ff1be6db4c9d8007`; paired brand, context, and catalog identities match, but local context drift and the deployed two-job scheduler ceiling block release readiness.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating; audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
