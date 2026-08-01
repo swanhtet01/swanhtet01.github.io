@@ -1671,6 +1671,9 @@ export function EcommerceProduct() {
         </div>
       </header>
 
+      <details className="ecommerce-business-controls">
+        <summary><span><strong>Setup and order controls</strong><small>Store readiness, inbox, imports, payment, and delivery</small></span><b>Open when needed</b></summary>
+        <div className="ecommerce-business-controls-content">
       <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-state={ecommerceTodayState}>
         <div className="ecommerce-today-priority">
           <span className="core-eyebrow">Today</span>
@@ -1686,10 +1689,6 @@ export function EcommerceProduct() {
           <small>Shop controls prices, stock, payment, delivery, and the accountable order record.</small>
         </div>
       </section>
-
-      <details className="ecommerce-business-controls">
-        <summary><span><strong>Advanced order controls</strong><small>Inbox, imports, payments, delivery, recovery, and activation</small></span><b>Next: {aiAgentJob}</b></summary>
-        <div className="ecommerce-business-controls-content">
       <section aria-label="AI order desk" className="ecommerce-ai-desk">
         <div>
           <span className="core-eyebrow">AI order desk</span>
@@ -1705,7 +1704,7 @@ export function EcommerceProduct() {
         <div className="ecommerce-ai-desk-queue">
           {aiDeskRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
-        <div className="ecommerce-ai-agent-queue" aria-label="Recommended Ecommerce agent job">
+        <div className="ecommerce-ai-agent-queue" aria-label="Recommended Ecommerce agent job" role="group">
           {aiAgentQueueRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
         <button className="core-button primary compact" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">Run next step</button>
@@ -1948,7 +1947,7 @@ export function EcommerceProduct() {
             <strong>Shop products</strong>
             <small>Select 1–8. Price and availability stay locked.</small>
           </div>
-          <div aria-label="Product autopilot" className="ecommerce-product-autopilot">
+          <div aria-label="Product autopilot" className="ecommerce-product-autopilot" role="group">
             <div>
               <strong>Product autopilot</strong>
               <small>AI prepares the simplest sellable set from in-stock Shop items. You only save after review.</small>
