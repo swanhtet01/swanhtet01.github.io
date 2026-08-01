@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import test from 'node:test'
 
-import { buildShopPilotHandoff, renderShopPilotHandoff } from './create_shop_pilot_handoff.mjs'
+import { buildShopPilotHandoff, renderShopPilotHandoff, shopPilotInputFromContactEvent } from './create_shop_pilot_handoff.mjs'
 
 const readyInput = {
   company: 'Test Shop',
@@ -21,6 +21,34 @@ const readyInput = {
   namedOperatorAuthorized: true,
   pilotDataHandlingApproved: true,
   ownerReviewedCommercialDraft: true,
+}
+
+const shopContactEvent = {
+  event: 'supermega.contact.created',
+  record: {
+    lead_id: 'LEAD-0123456789ABCDEF',
+    workflow: 'shop',
+    company: 'Test Shop',
+    name: 'Test Operator',
+    email: 'private@example.com',
+    goal: 'Reduce manual order re-entry and make close exceptions reviewable.',
+    source_url: 'https://supermega.dev/contact/?private=1',
+    raw: { private_note: 'must not leave the contact event' },
+  },
+}
+
+const ownerInput = {
+  operatorRole: readyInput.operatorRole,
+  tenantLabel: readyInput.tenantLabel,
+  startDate: readyInput.startDate,
+  reviewDate: readyInput.reviewDate,
+  baseline: readyInput.baseline,
+  fixedPilotFeeUsd: readyInput.fixedPilotFeeUsd,
+  isolatedNonProductionTenantApproved: true,
+  namedOperatorAuthorized: true,
+  pilotDataHandlingApproved: true,
+  ownerReviewedCommercialDraft: true,
+  contactIsNamedOperator: true,
 }
 
 test('builds the exact five-day named-operator handoff required by PILOT-001', () => {
@@ -66,6 +94,24 @@ test('renders a commercial draft without claiming payment, deployment, or improv
   assert.doesNotMatch(markdown, /guaranteed|production ready|payment accepted/i)
 })
 
+test('converts a Shop contact event through a separate owner overlay without retaining contact data', () => {
+  const input = shopPilotInputFromContactEvent(shopContactEvent, ownerInput)
+  const handoff = buildShopPilotHandoff(input)
+  const serialized = JSON.stringify(handoff)
+  assert.equal(handoff.status, 'ready-for-private-pilot')
+  assert.equal(handoff.source.contactEventBound, true)
+  assert.match(handoff.source.leadDigest, /^[0-9a-f]{64}$/)
+  assert.equal(handoff.source.contactEmailRetained, false)
+  assert.equal(handoff.source.rawContactDataRetained, false)
+  assert.doesNotMatch(serialized, /private@example\.com|private_note|source_url|LEAD-0123456789ABCDEF/)
+})
+
+test('rejects non-Shop events and refuses to infer that a contact is the pilot operator', () => {
+  assert.throws(() => shopPilotInputFromContactEvent({ ...shopContactEvent, record: { ...shopContactEvent.record, workflow: 'website' } }, ownerInput), /shop_contact_event_required/)
+  assert.throws(() => shopPilotInputFromContactEvent(shopContactEvent, { ...ownerInput, contactIsNamedOperator: false }), /shop_contact_operator_confirmation_required/)
+  assert.throws(() => shopPilotInputFromContactEvent({ ...shopContactEvent, record: { ...shopContactEvent.record, lead_id: '' } }, ownerInput), /contact_lead_id_required/)
+})
+
 test('CLI writes and verifies one private artifact exclusively while reporting metadata only', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'supermega-shop-handoff-'))
   const inputPath = join(directory, 'private-input.json')
@@ -105,4 +151,34 @@ test('escapes Markdown control text from private input', () => {
   const markdown = renderShopPilotHandoff({ ...readyInput, company: '[Fake](https://example.invalid)' })
   assert.match(markdown, /\\\[Fake\\\]\\\(https:\/\/example\\\.invalid\\\)/)
   assert.doesNotMatch(markdown, /\[Fake\]\(https:\/\/example\.invalid\)/)
+})
+
+test('CLI creates and verifies a contact-bound handoff from separate event and owner files', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'supermega-shop-contact-handoff-'))
+  const eventPath = join(directory, 'contact-event.json')
+  const ownerPath = join(directory, 'owner-input.json')
+  const outputPath = join(directory, 'private-handoff.md')
+  try {
+    await writeFile(eventPath, JSON.stringify(shopContactEvent))
+    await writeFile(ownerPath, JSON.stringify(ownerInput))
+    const command = [
+      resolve('tools/create_shop_pilot_handoff.mjs'),
+      '--contact-event', eventPath,
+      '--owner-input', ownerPath,
+      '--output', outputPath,
+    ]
+    const created = spawnSync(process.execPath, command, { encoding: 'utf8' })
+    assert.equal(created.status, 0, created.stderr)
+    assert.equal(JSON.parse(created.stdout).status, 'ready-for-private-pilot')
+    assert.doesNotMatch(created.stdout, /Test Shop|Test Operator|private@example\.com/)
+    const artifact = await readFile(outputPath, 'utf8')
+    assert.match(artifact, /Source lead digest: `[0-9a-f]{64}`/)
+    assert.doesNotMatch(artifact, /private@example\.com|private_note|source_url|LEAD-0123456789ABCDEF/)
+
+    const verified = spawnSync(process.execPath, [command[0], '--verify', ...command.slice(1)], { encoding: 'utf8' })
+    assert.equal(verified.status, 0, verified.stderr)
+    assert.equal(JSON.parse(verified.stdout).mode, 'verify')
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 })

@@ -42,6 +42,29 @@ function sha256(value) {
   return createHash('sha256').update(value).digest('hex')
 }
 
+function optionalLeadDigest(value) {
+  if (value === undefined) return null
+  if (typeof value !== 'string' || !/^[0-9a-f]{64}$/.test(value)) throw new Error('source_lead_digest_invalid')
+  return value
+}
+
+export function shopPilotInputFromContactEvent(event, ownerInput) {
+  if (!event || event.event !== 'supermega.contact.created' || !event.record || event.record.workflow !== 'shop') {
+    throw new Error('shop_contact_event_required')
+  }
+  if (!ownerInput || typeof ownerInput !== 'object' || Array.isArray(ownerInput)) throw new Error('shop_owner_input_required')
+  if (ownerInput.contactIsNamedOperator !== true) throw new Error('shop_contact_operator_confirmation_required')
+  const leadId = boundedText(event.record.lead_id, 'contact_lead_id', 80)
+
+  return {
+    ...ownerInput,
+    company: boundedText(event.record.company, 'company'),
+    operatorName: boundedText(event.record.name, 'operator_name'),
+    operationalProblem: boundedText(event.record.goal, 'operational_problem', 500),
+    sourceLeadDigest: sha256(leadId),
+  }
+}
+
 export function buildShopPilotHandoff(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('shop_pilot_input_required')
 
@@ -83,6 +106,12 @@ export function buildShopPilotHandoff(input) {
       fixedPilotFeeUsd: boundedNumber(input.fixedPilotFeeUsd, 'fixed_pilot_fee_usd', { min: 1, max: 100_000, integer: true }),
       paymentAccepted: false,
       taxAndPaymentTermsApproved: false,
+    },
+    source: {
+      contactEventBound: input.sourceLeadDigest !== undefined,
+      leadDigest: optionalLeadDigest(input.sourceLeadDigest),
+      contactEmailRetained: false,
+      rawContactDataRetained: false,
     },
     gates,
     blockers,
@@ -146,6 +175,7 @@ This private artifact contains operator and company information. Do not commit, 
 - Isolated tenant label: ${markdownText(handoff.pilot.tenantLabel)}
 - Operational problem: ${markdownText(handoff.pilot.operationalProblem)}
 - Pilot window: ${handoff.pilot.startDate} through ${handoff.pilot.reviewDate}
+${handoff.source.contactEventBound ? `- Source lead digest: \`${handoff.source.leadDigest}\` (email and raw contact data excluded)` : '- Source: direct private owner intake'}
 
 ## Recorded baseline
 
@@ -201,14 +231,27 @@ async function main() {
   }
 
   const inputIndex = args.indexOf('--input')
+  const contactEventIndex = args.indexOf('--contact-event')
+  const ownerInputIndex = args.indexOf('--owner-input')
   const outputIndex = args.indexOf('--output')
   const verifyOnly = args.includes('--verify')
-  if ((verifyOnly ? args.length !== 5 : args.length !== 4) || inputIndex < 0 || outputIndex < 0 || !args[inputIndex + 1] || !args[outputIndex + 1]) {
-    throw new Error('usage: node tools/create_shop_pilot_handoff.mjs [--verify] --input private-pilot.json --output private-handoff.md')
+  const directMode = inputIndex >= 0 && contactEventIndex < 0 && ownerInputIndex < 0
+  const contactMode = inputIndex < 0 && contactEventIndex >= 0 && ownerInputIndex >= 0
+  const expectedLength = (verifyOnly ? 1 : 0) + (directMode ? 4 : 6)
+  if (
+    (!directMode && !contactMode) || args.length !== expectedLength || outputIndex < 0 || !args[outputIndex + 1]
+    || (directMode && !args[inputIndex + 1])
+    || (contactMode && (!args[contactEventIndex + 1] || !args[ownerInputIndex + 1]))
+  ) {
+    throw new Error('usage: node tools/create_shop_pilot_handoff.mjs [--verify] (--input private-pilot.json | --contact-event event.json --owner-input owner.json) --output private-handoff.md')
   }
-  const inputPath = resolve(args[inputIndex + 1])
   const outputPath = resolve(args[outputIndex + 1])
-  const input = JSON.parse(await readFile(inputPath, 'utf8'))
+  const input = directMode
+    ? JSON.parse(await readFile(resolve(args[inputIndex + 1]), 'utf8'))
+    : shopPilotInputFromContactEvent(
+        JSON.parse(await readFile(resolve(args[contactEventIndex + 1]), 'utf8')),
+        JSON.parse(await readFile(resolve(args[ownerInputIndex + 1]), 'utf8')),
+      )
   const handoff = buildShopPilotHandoff(input)
   const rendered = renderShopPilotHandoff(input)
   if (verifyOnly) {
