@@ -5,7 +5,12 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import test from 'node:test'
 
-import { buildShopPilotHandoff, renderShopPilotHandoff, shopPilotInputFromContactEvent } from './create_shop_pilot_handoff.mjs'
+import {
+  buildShopPilotHandoff,
+  renderShopPilotHandoff,
+  renderShopPilotReplyDraft,
+  shopPilotInputFromContactEvent,
+} from './create_shop_pilot_handoff.mjs'
 
 const readyInput = {
   company: 'Test Shop',
@@ -191,6 +196,72 @@ test('CLI creates and verifies a contact-bound handoff from separate event and o
     const verified = spawnSync(process.execPath, [command[0], '--verify', ...command.slice(1)], { encoding: 'utf8' })
     assert.equal(verified.status, 0, verified.stderr)
     assert.equal(JSON.parse(verified.stdout).mode, 'verify')
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('renders a handoff-bound private reply without sending or overclaiming', () => {
+  const input = shopPilotInputFromContactEvent(shopContactEvent, ownerInput)
+  const handoff = renderShopPilotHandoff(input)
+  const draft = renderShopPilotReplyDraft(shopContactEvent, ownerInput, handoff)
+  assert.match(draft, /^DRAFT — OWNER REVIEW REQUIRED — NOT SENT/)
+  assert.match(draft, /To: private@example\.com/)
+  assert.match(draft, /fixed pilot-fee draft is \$500/)
+  assert.match(draft, /Verified handoff SHA-256: [0-9a-f]{64}/)
+  assert.match(draft, /performs no external action/)
+  assert.doesNotMatch(draft, /private_note|source_url|LEAD-0123456789ABCDEF|guaranteed improvement/i)
+})
+
+test('refuses reply drafting for closed gates, malformed email, or a changed handoff', () => {
+  const input = shopPilotInputFromContactEvent(shopContactEvent, ownerInput)
+  const handoff = renderShopPilotHandoff(input)
+  assert.throws(
+    () => renderShopPilotReplyDraft(shopContactEvent, { ...ownerInput, ownerReviewedCommercialDraft: false }, handoff),
+    /shop_pilot_not_ready_for_outreach/,
+  )
+  assert.throws(
+    () => renderShopPilotReplyDraft({ ...shopContactEvent, record: { ...shopContactEvent.record, email: 'invalid' } }, ownerInput, handoff),
+    /contact_email_invalid/,
+  )
+  assert.throws(() => renderShopPilotReplyDraft(shopContactEvent, ownerInput, `${handoff}\nchanged`), /shop_pilot_handoff_stale_or_tampered/)
+})
+
+test('CLI creates and verifies one private reply draft with metadata-only stdout', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'supermega-shop-reply-draft-'))
+  const eventPath = join(directory, 'contact-event.json')
+  const ownerPath = join(directory, 'owner-input.json')
+  const handoffPath = join(directory, 'private-handoff.md')
+  const replyPath = join(directory, 'private-reply.txt')
+  try {
+    await writeFile(eventPath, JSON.stringify(shopContactEvent))
+    await writeFile(ownerPath, JSON.stringify(ownerInput))
+    await writeFile(handoffPath, renderShopPilotHandoff(shopPilotInputFromContactEvent(shopContactEvent, ownerInput)))
+    const command = [
+      resolve('tools/create_shop_pilot_handoff.mjs'),
+      '--draft-reply',
+      '--contact-event', eventPath,
+      '--owner-input', ownerPath,
+      '--handoff', handoffPath,
+      '--output', replyPath,
+    ]
+    const created = spawnSync(process.execPath, command, { encoding: 'utf8' })
+    assert.equal(created.status, 0, created.stderr)
+    const receipt = JSON.parse(created.stdout)
+    assert.equal(receipt.contract, 'supermega.shop.pilot_reply_draft.v1')
+    assert.equal(receipt.customerContactPerformed, false)
+    assert.match(receipt.handoffSha256, /^[0-9a-f]{64}$/)
+    assert.doesNotMatch(created.stdout, /Test Shop|Test Operator|private@example\.com/)
+    assert.match(await readFile(replyPath, 'utf8'), /OWNER REVIEW REQUIRED — NOT SENT/)
+
+    const verified = spawnSync(process.execPath, [command[0], '--verify', ...command.slice(1)], { encoding: 'utf8' })
+    assert.equal(verified.status, 0, verified.stderr)
+    assert.equal(JSON.parse(verified.stdout).mode, 'verify')
+
+    await writeFile(replyPath, `${await readFile(replyPath, 'utf8')}\nchanged\n`)
+    const tampered = spawnSync(process.execPath, [command[0], '--verify', ...command.slice(1)], { encoding: 'utf8' })
+    assert.notEqual(tampered.status, 0)
+    assert.match(tampered.stderr, /shop_pilot_reply_draft_stale_or_tampered/)
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const SHOP_PILOT_HANDOFF_CONTRACT = 'supermega.shop.pilot_handoff.v1'
+export const SHOP_PILOT_REPLY_DRAFT_CONTRACT = 'supermega.shop.pilot_reply_draft.v1'
 
 const MAX_TEXT = 180
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -46,6 +47,12 @@ function optionalLeadDigest(value) {
   if (value === undefined) return null
   if (typeof value !== 'string' || !/^[0-9a-f]{64}$/.test(value)) throw new Error('source_lead_digest_invalid')
   return value
+}
+
+function privateEmail(value) {
+  const email = boundedText(value, 'contact_email', 180)
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('contact_email_invalid')
+  return email
 }
 
 export function shopPilotInputFromContactEvent(event, ownerInput) {
@@ -209,6 +216,46 @@ Contract: \`${handoff.contract}\`
 `
 }
 
+export function renderShopPilotReplyDraft(event, ownerInput, verifiedHandoff) {
+  const input = shopPilotInputFromContactEvent(event, ownerInput)
+  const handoff = buildShopPilotHandoff(input)
+  if (handoff.status !== 'ready-for-private-pilot') throw new Error('shop_pilot_not_ready_for_outreach')
+  const expectedHandoff = renderShopPilotHandoff(input)
+  if (verifiedHandoff !== expectedHandoff) throw new Error('shop_pilot_handoff_stale_or_tampered')
+  const email = privateEmail(event.record.email)
+  const handoffDigest = sha256(verifiedHandoff)
+
+  return `DRAFT — OWNER REVIEW REQUIRED — NOT SENT
+To: ${email}
+Subject: SuperMega Shop five-day pilot for ${handoff.company}
+
+Hi ${handoff.operator.name},
+
+Thanks for describing the workflow at ${handoff.company}. We have prepared a private five-day Shop pilot draft for ${handoff.pilot.startDate} through ${handoff.pilot.reviewDate}.
+
+The proposed pilot covers:
+- reviewed Shop order entry and confirmation;
+- one daily close and controlled exception;
+- one return, reload, and safe-retry rehearsal; and
+- a final evidence export and operator acceptance review.
+
+The fixed pilot-fee draft is ${usd(handoff.commercialDraft.fixedPilotFeeUsd)}. Payment and tax terms still require separate confirmation before any payment is accepted.
+
+This pilot does not include automatic customer messages, provider payment, accounting posting, deployment, or production activation. Results will be compared with the recorded baseline; no improvement is guaranteed before the final review.
+
+If this scope matches the workflow you want to test, please confirm the pilot dates, named operator role, and isolated non-production workspace with SuperMega's owner.
+
+Regards,
+SuperMega
+
+Private evidence binding:
+- Source lead digest: ${handoff.source.leadDigest}
+- Verified handoff SHA-256: ${handoffDigest}
+
+This file is a local draft. It has not been sent and performs no external action.
+`
+}
+
 async function main() {
   const args = process.argv.slice(2)
   if (args.length === 1 && args[0] === '--owner-example') {
@@ -243,6 +290,41 @@ async function main() {
       pilotDataHandlingApproved: false,
       ownerReviewedCommercialDraft: false,
     }, null, 2)}\n`)
+    return
+  }
+
+  if (args.includes('--draft-reply')) {
+    const contactEventIndex = args.indexOf('--contact-event')
+    const ownerInputIndex = args.indexOf('--owner-input')
+    const handoffIndex = args.indexOf('--handoff')
+    const outputIndex = args.indexOf('--output')
+    const verifyOnly = args.includes('--verify')
+    const expectedLength = verifyOnly ? 10 : 9
+    if (
+      args.length !== expectedLength || contactEventIndex < 0 || ownerInputIndex < 0 || handoffIndex < 0 || outputIndex < 0
+      || !args[contactEventIndex + 1] || !args[ownerInputIndex + 1] || !args[handoffIndex + 1] || !args[outputIndex + 1]
+    ) {
+      throw new Error('usage: node tools/create_shop_pilot_handoff.mjs --draft-reply [--verify] --contact-event event.json --owner-input owner.json --handoff private-handoff.md --output private-reply.txt')
+    }
+    const event = JSON.parse(await readFile(resolve(args[contactEventIndex + 1]), 'utf8'))
+    const ownerInput = JSON.parse(await readFile(resolve(args[ownerInputIndex + 1]), 'utf8'))
+    const verifiedHandoff = await readFile(resolve(args[handoffIndex + 1]), 'utf8')
+    const outputPath = resolve(args[outputIndex + 1])
+    const draft = renderShopPilotReplyDraft(event, ownerInput, verifiedHandoff)
+    if (verifyOnly) {
+      if (await readFile(outputPath, 'utf8') !== draft) throw new Error('shop_pilot_reply_draft_stale_or_tampered')
+    } else {
+      await writeFile(outputPath, draft, { encoding: 'utf8', flag: 'wx' })
+    }
+    process.stdout.write(`${JSON.stringify({
+      ok: true,
+      contract: SHOP_PILOT_REPLY_DRAFT_CONTRACT,
+      mode: verifyOnly ? 'verify' : 'create',
+      artifactSha256: sha256(draft),
+      handoffSha256: sha256(verifiedHandoff),
+      externalWritesPerformed: false,
+      customerContactPerformed: false,
+    })}\n`)
     return
   }
 
