@@ -5662,11 +5662,26 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice('Finish or cancel the catalog edit before starting a count. Your catalog draft was preserved.')
       return
     }
-    setStockCountDraft({ sku: '', stockUnitId: '', locationId: '', quantity: '' })
+    const suggestedItem = lowStock[0] ?? commerce.items[0]
+    const suggestedBalance = commerce.inventoryFoundation
+      ? managedInventoryProjection?.balances.find((balance) => balance.sku === suggestedItem?.sku)
+        ?? managedInventoryProjection?.balances[0]
+      : undefined
+    const suggestedDraft: StockCountDraft = {
+      sku: suggestedBalance?.sku ?? suggestedItem?.sku ?? '',
+      stockUnitId: suggestedBalance?.stockUnitId ?? '',
+      locationId: suggestedBalance?.locationId ?? '',
+      quantity: '',
+    }
+    setStockCountDraft(suggestedDraft)
     setNotice(commerce.inventoryFoundation
-      ? 'Choose one location and lot, then count every physical unit there. Nothing changes until confirmation.'
-      : 'Count sellable units after excluding anything already set aside for open orders. Nothing changes until confirmation.')
-    requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLSelectElement>('#stock-count-sku')?.focus())
+      ? suggestedBalance
+        ? 'Enter the physical count for the suggested location and lot. Choose another target if needed; nothing changes until confirmation.'
+        : 'Choose one location and lot, then count every physical unit there. Nothing changes until confirmation.'
+      : suggestedItem
+        ? `Enter counted sellable units for ${suggestedItem.name}. Choose another item if needed; nothing changes until confirmation.`
+        : 'Choose one item, then enter counted sellable units. Nothing changes until confirmation.')
+    requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(suggestedDraft.sku ? '#stock-count-quantity' : '#stock-count-sku')?.focus())
   }
 
   function cancelStockCount() {
@@ -6861,7 +6876,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     {shopGuidance}
     <section className="core-panel inventory-panel">
       <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : 'Count stock'}</button></div></div>
-      {supplierControl}
       {stockCountDraft ? <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">Stock check</span>
@@ -6891,7 +6905,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <label>{commerce.inventoryFoundation ? 'Counted physical units' : 'Counted available units'}<input aria-describedby="stock-count-help stock-count-preview" aria-invalid={Boolean(stockCountQuantityText) && stockCountQuantityResult === null} disabled={commerceControlsDisabled || !stockCountItem || Boolean(commerce.inventoryFoundation && !stockCountBalance)} id="stock-count-quantity" inputMode="numeric" max={stockCountBalance?.tracking === 'serial' ? 1 : Number.MAX_SAFE_INTEGER} min={stockCountBalance?.reserved ?? 0} onChange={(event) => setStockCountDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="0" required step="1" type="number" value={stockCountDraft.quantity} /></label>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockCount} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || stockCountQuantityResult === null || Boolean(commerce.inventoryFoundation && !stockCountBalance)} type="submit">Review count</button></div>
       </form> : null}
-      <Suspense fallback={null}><ShopInventoryFoundation actor={managedIdentity?.userId ?? 'Local Shop operator'} commerce={commerce} disabled={commerceControlsDisabled} identity={managedIdentity} key={`${orderDraftScope}:${commerce.items.map((item) => item.sku).sort().join('|')}`} onInventory={mutateCommerce} onIssue={mutateCommerce} production={relatedProduction} scope={orderDraftScope} /></Suspense>
       <div className="data-table" role="table" aria-label="Shop stock">
         <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
         {stockRows.map(({ item }) => {
@@ -6928,6 +6941,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <label>Reorder at<input aria-invalid={Boolean(catalogEditReorderText) && catalogEditReorderResult === null} disabled={commerceControlsDisabled || catalogEditStale} inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="0" onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, reorderAt: event.target.value } : current)} required step="1" type="number" value={catalogEditDraft.reorderAt} /></label>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelCatalogItemEditor} type="button">Cancel</button><button className="core-button primary" disabled={catalogEditStale ? Boolean(pendingAction) || !commerceCanWrite : commerceControlsDisabled || !catalogEditChanged} onClick={catalogEditStale ? () => openCatalogItemEditor(catalogEditItem.sku) : undefined} type={catalogEditStale ? 'button' : 'submit'}>{catalogEditStale ? 'Reload values' : 'Review changes'}</button></div>
       </form> : null}
+      <details className="inventory-tools-disclosure">
+        <summary><span><strong>Purchasing &amp; locations</strong><small>Supplier planning, location stock, and available-to-promise</small></span><b>Open when needed</b></summary>
+        <div className="inventory-tools-content">
+          {supplierControl}
+          <Suspense fallback={null}><ShopInventoryFoundation actor={managedIdentity?.userId ?? 'Local Shop operator'} commerce={commerce} disabled={commerceControlsDisabled} identity={managedIdentity} key={`${orderDraftScope}:${commerce.items.map((item) => item.sku).sort().join('|')}`} onInventory={mutateCommerce} onIssue={mutateCommerce} production={relatedProduction} scope={orderDraftScope} /></Suspense>
+        </div>
+      </details>
       {supplierSourcingDraft ? <form aria-labelledby="supplier-sourcing-title" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierSourcing}>
         <div className="stock-receipt-copy"><span className="core-eyebrow">Supplier sourcing</span><h3 id="supplier-sourcing-title">Compare quotes for {supplierSourcingDraft.itemName}</h3><small>{supplierSourcingDraft.quantity.toLocaleString()} units · immutable award evidence · no supplier contact</small></div>
         {supplierSourcingDraft.quotes.map((quote, index) => <fieldset className="form-row" key={index}><legend><label><input checked={supplierSourcingDraft.selectedIndex === index} disabled={commerceControlsDisabled || (index === 1 && !quote.supplier.trim())} name="selected-supplier-quote" onChange={() => setSupplierSourcingDraft((current) => current ? { ...current, selectedIndex: index as 0 | 1 } : current)} type="radio" /> {index === 0 ? 'Primary quote' : 'Alternate quote (optional)'}</label></legend><label>Supplier<input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'supplier', event.target.value)} required={index === 0} value={quote.supplier} /></label><label>Quote reference<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'quoteReference', event.target.value)} required={index === 0} value={quote.quoteReference} /></label><label>Approved-vendor reference<input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'vendorApprovalReference', event.target.value)} required={index === 0} value={quote.vendorApprovalReference} /></label><label>Unit cost (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => updateSupplierQuote(index as 0 | 1, 'unitCostMmk', event.target.value)} required={index === 0} step="1" type="number" value={quote.unitCostMmk} /></label><label>Delivery<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'deliveryAt', event.target.value)} required={index === 0} type="datetime-local" value={quote.deliveryAt} /></label></fieldset>)}

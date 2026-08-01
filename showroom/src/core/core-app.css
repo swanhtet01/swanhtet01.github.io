@@ -752,6 +752,15 @@ textarea { min-height: 72px; resize: vertical; }
 .boundary-list strong { font-size: 12px; }
 .boundary-list small { color: var(--core-warn); font-size: 11px; }
 .inventory-panel { height: 100%; overflow: auto; }
+.inventory-tools-disclosure { border: 1px solid var(--core-line); border-radius: 8px; background: var(--core-panel-raised); }
+.inventory-tools-disclosure > summary { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 14px; cursor: pointer; list-style: none; }
+.inventory-tools-disclosure > summary::-webkit-details-marker { display: none; }
+.inventory-tools-disclosure > summary > span { min-width: 0; display: grid; gap: 3px; }
+.inventory-tools-disclosure > summary strong { color: var(--core-ink); font-size: 11px; }
+.inventory-tools-disclosure > summary small { color: var(--core-quiet); font-size: 9px; }
+.inventory-tools-disclosure > summary b { flex: 0 0 auto; color: var(--core-green); font-family: var(--core-mono); font-size: 9px; text-transform: uppercase; }
+.inventory-tools-disclosure[open] > summary { border-bottom: 1px solid var(--core-line); }
+.inventory-tools-content { display: grid; gap: 12px; padding: 12px; }
 .data-table { min-width: 680px; }
 .data-row { min-height: 50px; display: grid; grid-template-columns: minmax(180px,1.5fr) repeat(3,minmax(85px,.7fr)) minmax(90px,.7fr); gap: 10px; align-items: center; border-bottom: 1px solid var(--core-line); color: var(--core-muted); font-size: 10px; }
 .data-row > span:first-child { display: grid; gap: 2px; }
