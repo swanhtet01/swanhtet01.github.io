@@ -22,7 +22,7 @@ const input = {
   databaseEvidence: {
     schemaVersion: 'supermega.hq.database-rehearsal.v2',
     recordedAt: '2026-07-31T10:00:00.000Z',
-    checks: Object.fromEntries(Array.from({ length: 37 }, (_, index) => [`check${index}`, true])),
+    checks: Object.fromEntries(Array.from({ length: 52 }, (_, index) => [`check${index}`, true])),
     storage: { hostedStoragePrivacyProofRequired: true },
     localVerification: { externallyHosted: false },
   },

@@ -1,7 +1,7 @@
 {
   "contract": "supermega.managed-pilot-readiness.v1",
-  "asOf": "2026-08-01T15:13:07.274Z",
-  "sourceDigest": "sha256:b39fb3e2aeb23d3ec342af9bd98d2a2c86dad473d1ab59208c77d371852c5eee",
+  "asOf": "2026-08-01T16:32:59.047Z",
+  "sourceDigest": "sha256:a27fbcf13e43eb722ccb06cb102786bbea3621e20ffa56d8c43c51874a666978",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -13,7 +13,7 @@
     {
       "id": "local_postgres17",
       "status": "ready-local",
-      "evidence": "37 checks, TLS, RLS, tenant isolation, approval, backup and restore.",
+      "evidence": "52 checks, TLS, RLS, tenant isolation, durable owner control, backup and restore.",
       "nextAction": "Keep the digest-bound rehearsal current."
     },
     {
@@ -128,7 +128,7 @@
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:24841dbb5e4c3cfe73968947fcada7b7a5ce4b8c9d449308c5ada552ed14015a"
+      "digest": "sha256:5622ce22d6662f05a3e2fd6101b005b945b0e0965ee401ae705bd1dcceaac9e4"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -136,15 +136,15 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:682f4cccb9685ac1433607ee3a2bd18a99431fede301efb8ef03b8b08cf86fe0"
+      "digest": "sha256:4f85e0ab819ffee169624eeda33b92a18fc90de9e44b3d5909f70b8f8a3492e6"
     },
     {
       "path": "package.json",
-      "digest": "sha256:34a43c39b601a805849e8eb3dedcfccf95269d3f9ec8a9efdbe1bf70694b445e"
+      "digest": "sha256:48c6af532959ca88e9009c8a1d3219deb5eb792186cf50680e492f608474b629"
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:a3172138de377c46f8e7c549f0db0c9366d161f06f26214670182170ecc4cc05"
+      "digest": "sha256:0b4c26c1670dfc44181e6c884287d8ac393f9a2992bbbe32bd708c606db66ca3"
     }
   ]
 }

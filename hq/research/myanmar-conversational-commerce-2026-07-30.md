@@ -1,7 +1,7 @@
 # Myanmar conversational commerce product note
 
-Date: 2026-07-30  
-Decision owner: CEO / Product  
+Date: 2026-07-30
+Decision owner: CEO / Product
 Status: source-reviewed local direction; no external action
 
 ## Verified signal

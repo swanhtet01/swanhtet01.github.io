@@ -644,6 +644,7 @@ class ClientImportRouteTests(unittest.TestCase):
             json={
                 "command_id": "00000000-0000-4000-8000-000000000099",
                 "expected_version": 0,
+                "preflight_digest": "sha256:" + "0" * 64,
                 "confirmation": f"APPLY {pure_validation.package_digest}",
                 "package": stale_package,
             },

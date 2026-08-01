@@ -49,7 +49,7 @@ export function buildManagedPilotReadiness(input = {}) {
   const packageManifest = input.packageManifest
   const sourceReceipts = input.sourceReceipts
   if (!isRecord(portfolio) || portfolio.schemaVersion !== 'supermega.hq.portfolio.v3' || !Array.isArray(portfolio.products)) fail('managed_pilot_readiness_portfolio_invalid')
-  if (!isRecord(database) || database.schemaVersion !== 'supermega.hq.database-rehearsal.v2' || Object.keys(database.checks || {}).length !== 37 || Object.values(database.checks || {}).some((value) => value !== true)) fail('managed_pilot_readiness_database_evidence_invalid')
+  if (!isRecord(database) || database.schemaVersion !== 'supermega.hq.database-rehearsal.v2' || Object.keys(database.checks || {}).length !== 52 || Object.values(database.checks || {}).some((value) => value !== true)) fail('managed_pilot_readiness_database_evidence_invalid')
   if (database.storage?.hostedStoragePrivacyProofRequired !== true || database.localVerification?.externallyHosted !== false) fail('managed_pilot_readiness_database_scope_invalid')
   if (!storage.includes('Status: local verifier ready; hosted proof blocked')) fail('managed_pilot_readiness_storage_evidence_invalid')
   if (!isRecord(packageManifest?.supermega) || packageManifest.supermega.productionSupabaseTargetStatus !== 'protected-unapproved') fail('managed_pilot_readiness_production_boundary_invalid')
@@ -84,7 +84,7 @@ export function buildManagedPilotReadiness(input = {}) {
   if (products.map((product) => product.productId).join(',') !== PRODUCT_IDS.join(',')) fail('managed_pilot_readiness_product_order_invalid')
 
   const gates = [
-    gate('local_postgres17', 'ready-local', '37 checks, TLS, RLS, tenant isolation, approval, backup and restore.', 'Keep the digest-bound rehearsal current.'),
+    gate('local_postgres17', 'ready-local', '52 checks, TLS, RLS, tenant isolation, durable owner control, backup and restore.', 'Keep the digest-bound rehearsal current.'),
     gate('hosted_postgres17', 'blocked', 'Local evidence explicitly does not prove hosted activation.', 'Run the approved isolated Supabase rehearsal and validator.'),
     gate('hosted_storage_privacy', 'blocked', 'The six-request verifier is ready, but hosted proof is absent.', 'Run the verifier against an owner-approved isolated private bucket.'),
     gate('live_product_contract', 'blocked', 'HQ records app_product_contract_drift.', 'Reconcile and verify the exact paired release before any pilot claim.'),
