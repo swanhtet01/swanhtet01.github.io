@@ -655,6 +655,7 @@ def purchase_order(proof: dict[str, str] | None = None) -> dict[str, object]:
         "supplier": "Opening source",
         "sku": "SKU-1",
         "quantityOrdered": 4,
+        "unitCostMmk": 2500,
         "creation": creation,
     }
 
