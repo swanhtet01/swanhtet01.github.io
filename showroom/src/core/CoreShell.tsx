@@ -93,7 +93,6 @@ const navigation = [
   { to: '/plant/', label: 'Plant' },
   { to: '/website/', label: 'Website' },
   { to: '/ecommerce/', label: 'Ecommerce' },
-  { to: '/settings/', label: 'Settings' },
 ] as const
 
 const THEME_KEY = 'supermega-interface-theme'
@@ -308,7 +307,7 @@ export function CoreLayout() {
       : location.pathname.startsWith('/vision/')
         ? 'Vision'
       : location.pathname.startsWith('/settings/')
-        ? 'Workspace'
+        ? 'Client setup'
         : location.pathname.startsWith('/shop/')
           ? 'Shop'
           : location.pathname.startsWith('/plant/')

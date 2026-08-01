@@ -62,7 +62,7 @@ export default function App() {
           <Route element={<Navigate replace to="/" />} path="work/*" />
           <Route element={<Navigate replace to="/website/" />} path="products/website/*" />
           <Route element={<Navigate replace to="/ecommerce/" />} path="products/ecommerce/*" />
-          <Route element={<Suspense fallback={<ProductLoading name="Settings" />}><SettingsPage /></Suspense>} path="settings/*" />
+          <Route element={<Suspense fallback={<ProductLoading name="client setup" />}><SettingsPage /></Suspense>} path="settings/*" />
           <Route element={<LegacyEntryRedirect />} path="legacy-entry" />
           <Route element={<Navigate replace to="/#command-center" />} path="agents/*" />
           <Route element={<Navigate replace to="/#command-center" />} path="assist/*" />
