@@ -1023,6 +1023,21 @@ export function WebsiteProduct() {
             ) : null}
           </header>
 
+          {view === 'content' && !starterSetupActive ? (
+            <section className="website-start-guide" aria-label="Website guided jobs">
+              <header>
+                <span className="website-kicker">Start here</span>
+                <h2>Three jobs launch the website.</h2>
+                <p>Preview the real demo, edit only what matters, then review release evidence before any handoff.</p>
+              </header>
+              <div>
+                <button onClick={() => previewPage()} type="button"><b>1</b><span><strong>Preview site</strong><small>Check desktop, tablet, or mobile before editing.</small></span></button>
+                <button onClick={() => openContentSurface('work')} type="button"><b>2</b><span><strong>Edit site</strong><small>Update pages, navigation, copy, and lead capture.</small></span></button>
+                <button onClick={() => openWorkspaceView('publish')} type="button"><b>3</b><span><strong>Review release</strong><small>Verify readiness, export evidence, then hand off safely.</small></span></button>
+              </div>
+            </section>
+          ) : null}
+
           {view === 'content' ? (
             <section
               aria-label="Website actions"
