@@ -3371,6 +3371,23 @@ if (inventoryTabStart < 0
   || !inventoryTabContract.includes('<ShopInventoryFoundation')
   || !coreCssSource.includes('.inventory-tools-disclosure {')
   || !coreCssSource.includes('.inventory-tools-content { display: grid;')) fail('shop_inventory_task_first_layout_missing')
+const ordersTabStart = coreSource.indexOf("if (tab === 'orders')")
+const ordersTabEnd = coreSource.indexOf("if (tab === 'inventory')", ordersTabStart)
+const ordersTabContract = coreSource.slice(ordersTabStart, ordersTabEnd)
+const orderQueueIndex = ordersTabContract.indexOf('id="shop-order-queue"')
+const orderListIndex = ordersTabContract.indexOf('<OrderList')
+const orderWorkflowIndex = ordersTabContract.indexOf('className="core-panel today-more order-workflow-controls"')
+const serviceScheduleIndex = ordersTabContract.indexOf('<ShopServiceSchedule')
+if (ordersTabStart < 0
+  || ordersTabEnd < 0
+  || orderQueueIndex < 0
+  || orderListIndex < orderQueueIndex
+  || orderWorkflowIndex < orderListIndex
+  || serviceScheduleIndex < orderWorkflowIndex
+  || !ordersTabContract.includes('<summary><span>Workflow &amp; reports</span><small>Setup, accounting, and audit</small></summary>')
+  || !ordersTabContract.includes('<summary><span>Order overview</span>')
+  || !coreSource.includes('className="order-record-details"')
+  || !coreCssSource.includes('.order-record-details > summary {')) fail('shop_orders_task_first_layout_missing')
 if (!coreSource.includes('id="commerce-manual-order-form"')
   || !coreSource.includes('form="commerce-manual-order-form"')
   || !coreSource.includes('className="order-submit-bar"')
@@ -4814,7 +4831,7 @@ if (!coreSource.includes('data-close-settlement=')
 if (!commercePageContract.includes('const shopOrderControlNext = orderDraftRecoveryBlocked')
   || !commercePageContract.includes('const shopOrderControlRows = [')
   || !commerceOrdersContract.includes('<details className="shop-business-controls">')
-  || !commerceOrdersContract.includes('<summary><span>Business controls</span><small>Lifecycle, accounting, and audit</small></summary>')
+  || !commerceOrdersContract.includes('<summary><span>Workflow &amp; reports</span><small>Setup, accounting, and audit</small></summary>')
   || commerceOrdersContract.includes('<details className="shop-business-controls" open>')
   || !commerceOrdersContract.includes('aria-label="Shop order control"')
   || !commerceOrdersContract.includes('Order control')

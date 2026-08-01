@@ -741,6 +741,13 @@ textarea { min-height: 72px; resize: vertical; }
 .order-row-actions { justify-content: flex-end; }
 .order-row-actions .text-link { min-width: 44px; justify-content: center; }
 .order-row-actions .subtle { color: var(--core-quiet); }
+.order-record-details { min-width: 0; }
+.order-record-details > summary { display: flex; align-items: center; gap: 8px; width: fit-content; cursor: pointer; color: var(--core-quiet); list-style: none; }
+.order-record-details > summary::-webkit-details-marker { display: none; }
+.order-record-details > summary::after { content: '+'; color: var(--core-green); font-family: var(--core-mono); font-size: 12px; }
+.order-record-details[open] > summary::after { content: '\2212'; }
+.order-record-details > summary small { color: var(--core-green); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.order-record-details > div { display: grid; gap: 3px; margin-top: 4px; }
 .stock-movement-history .empty-state { padding: 12px 13px; }
 .exception-summary { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); border: 1px solid var(--core-line); border-radius: 5px; }
 .exception-summary span { display: grid; gap: 3px; padding: 10px; border-right: 1px solid var(--core-line); }

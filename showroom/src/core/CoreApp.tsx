@@ -6445,40 +6445,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || correctionDraft ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
     {shopGuidance}
-    <Suspense fallback={null}><ShopOperatingFlow
-      closeReady={closableOrders.length}
-      confirmed={commerce.orders.filter((order) => order.status === 'confirmed').length}
-      disabled={commerceControlsDisabled || !orderDraftInitialized || orderDraftRecoveryBlocked}
-      incomingOnline={pendingStorefrontRequests.length}
-      incomingWebsite={managedIdentity ? websiteIntakes.filter((intake) => intake.status === 'pending_confirmation').length : Number(legacyWebsiteWorkWaiting)}
-      onOpenOrder={openOrderComposer}
-      overdue={actionOrders.filter((order) => commerceOrderPromiseUrgency(order, purchaseOrderClock) === 'late').length}
-      paymentPending={commerce.orders.filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending').length}
-      preparing={commerce.orders.filter((order) => order.status === 'preparing').length}
-      ready={commerce.orders.filter((order) => order.status === 'ready').length}
-      refundDue={commerce.orders.filter((order) => order.refundStatus === 'due').length}
-    /></Suspense>
-    <ReceivablesAging aging={receivablesAging} disabled={commerceControlsDisabled} onRecordContact={recordCollectionContact} />
     <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
       <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span>{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
-      <details className="shop-business-controls">
-        <summary><span>Business controls</span><small>Lifecycle, accounting, and audit</small></summary>
-        <div className="shop-business-controls-content">
-          {shopCommandCenter}
-          {shopSetupGuide}
-          {shopAgentQueue}
-          <section className="shop-order-control" aria-label="Shop order control">
-            <div><span className="core-eyebrow">Order control</span><strong>{shopOrderControlNext}</strong><small>{shopOrderControlBoundary}</small></div>
-            <div className="shop-order-control-rows">{shopOrderControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
-          </section>
-          <section className="shop-order-control" aria-label="Shop order lifecycle">
-            <div><span className="core-eyebrow">Order lifecycle</span><strong>Capture to return</strong><small>AI guides capture, reserve, fulfil, collect, replenish, and returns. Owner confirms orders, payments, refunds, deliveries, cancellations, and stock writes.</small></div>
-            <div className="shop-order-control-rows">{shopOrderLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
-          </section>
-          {shopAccountingReadiness}
-          {shopAccountingPacket}
-        </div>
-      </details>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftRecoveryWarning
@@ -6537,7 +6505,44 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         </div>
       </section> : null}
       <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />
+      <details className="shop-business-controls">
+        <summary><span>Workflow &amp; reports</span><small>Setup, accounting, and audit</small></summary>
+        <div className="shop-business-controls-content">
+          {shopCommandCenter}
+          {shopSetupGuide}
+          {shopAgentQueue}
+          <section className="shop-order-control" aria-label="Shop order control">
+            <div><span className="core-eyebrow">Order control</span><strong>{shopOrderControlNext}</strong><small>{shopOrderControlBoundary}</small></div>
+            <div className="shop-order-control-rows">{shopOrderControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+          </section>
+          <section className="shop-order-control" aria-label="Shop order lifecycle">
+            <div><span className="core-eyebrow">Order lifecycle</span><strong>Capture to return</strong><small>AI guides capture, reserve, fulfil, collect, replenish, and returns. Owner confirms orders, payments, refunds, deliveries, cancellations, and stock writes.</small></div>
+            <div className="shop-order-control-rows">{shopOrderLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+          </section>
+          {shopAccountingReadiness}
+          {shopAccountingPacket}
+        </div>
+      </details>
     </section>
+    <details className="core-panel today-more order-workflow-controls">
+      <summary><span>Order overview</span><small>{actionOrders.length} active · {receivablesAging.overdueOrders} payment overdue</small></summary>
+      <div className="today-more-content">
+        <Suspense fallback={null}><ShopOperatingFlow
+          closeReady={closableOrders.length}
+          confirmed={commerce.orders.filter((order) => order.status === 'confirmed').length}
+          disabled={commerceControlsDisabled || !orderDraftInitialized || orderDraftRecoveryBlocked}
+          incomingOnline={pendingStorefrontRequests.length}
+          incomingWebsite={managedIdentity ? websiteIntakes.filter((intake) => intake.status === 'pending_confirmation').length : Number(legacyWebsiteWorkWaiting)}
+          onOpenOrder={openOrderComposer}
+          overdue={actionOrders.filter((order) => commerceOrderPromiseUrgency(order, purchaseOrderClock) === 'late').length}
+          paymentPending={commerce.orders.filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending').length}
+          preparing={commerce.orders.filter((order) => order.status === 'preparing').length}
+          ready={commerce.orders.filter((order) => order.status === 'ready').length}
+          refundDue={commerce.orders.filter((order) => order.refundStatus === 'due').length}
+        /></Suspense>
+        <ReceivablesAging aging={receivablesAging} disabled={commerceControlsDisabled} onRecordContact={recordCollectionContact} />
+      </div>
+    </details>
     <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={commerceControlsDisabled} /></Suspense>
     <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
       setOrderDraftActive(false)
@@ -7175,9 +7180,14 @@ function OrderList({
             ? `${order.lines[0].name} × ${order.quantity}`
             : `${order.lines.length} items · ${order.quantity} units`
           : `${order.item} × ${order.quantity}`}</strong>
-        {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
-        <OrderCalculationNote order={order} />
-        <small>{order.id} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.channel} · {order.payment}{order.paymentDueAt ? ` · payment due ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
+        <details className="order-record-details">
+          <summary><span>{order.id} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise missing'}</span><small>Details</small></summary>
+          <div>
+            {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
+            <OrderCalculationNote order={order} />
+            <small>{order.id} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.channel} · {order.payment}{order.paymentDueAt ? ` · payment due ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
+          </div>
+        </details>
         {order.refundStatus === 'due' ? <small role="note">Record a refund already completed with the external payment provider. This does not send money.</small> : null}
       </div>
       <div className="order-row-actions">
