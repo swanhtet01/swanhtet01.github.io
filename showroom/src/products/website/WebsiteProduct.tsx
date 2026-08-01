@@ -457,12 +457,10 @@ export function WebsiteProduct() {
     if (!activeEditSession || savingDraft) return
     clearEditSession()
     setDeleteCandidateId('')
-    if (isUntouchedWebsiteStarter(workspace)) {
-      setStarterDismissed(false)
-      setSurface('work')
-      setSiteSettingsOpen(false)
-      requestHeadingFocus()
-    }
+    setStarterDismissed(true)
+    setSurface('preview')
+    setSiteSettingsOpen(false)
+    requestHeadingFocus()
     setNotice('Unsaved Website changes discarded. The saved workspace was not changed.')
   }
 
