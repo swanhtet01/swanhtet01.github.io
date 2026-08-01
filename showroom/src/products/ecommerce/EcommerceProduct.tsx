@@ -1624,6 +1624,11 @@ export function EcommerceProduct() {
     ['Customers', ecommerceTodayCustomerCount ? `${ecommerceTodayCustomerCount} known` : 'No orders yet'],
     ['Returns', managedReturnedUnits ? `${managedReturnedUnits} unit${managedReturnedUnits === 1 ? '' : 's'}` : 'Clear'],
   ] as const
+  const ecommerceGuidedJobs = [
+    ['1', 'Shop the sample', 'Open the customer view, add items, and create one reviewable request.', '#ecommerce-preview-panel'],
+    ['2', 'Edit store', 'Choose products, copy, and display details from the Shop-controlled catalog.', '#ecommerce-setup-panel'],
+    ['3', 'Review orders', 'Send accepted customer requests to the Shop queue for payment and fulfilment.', '/shop/?tab=orders&source=ecommerce'],
+  ] as const
 
   function runOrderAutopilot() {
     recordBehaviorSignal(window.localStorage, {
@@ -1669,6 +1674,31 @@ export function EcommerceProduct() {
           <p>Run your online store from catalog to cart, order, delivery, and return.</p>
         </div>
       </header>
+
+      <section className="ecommerce-start-guide" aria-label="Ecommerce guided jobs">
+        <header>
+          <span className="core-eyebrow">Start here</span>
+          <h2>Three jobs run online orders.</h2>
+          <p>Use the storefront like a customer, set up what they see, then confirm real orders in Shop.</p>
+        </header>
+        <div>
+          {ecommerceGuidedJobs.map(([step, label, detail, to]) => to.startsWith('#') ? (
+            <button key={label} onClick={() => {
+              if (to === '#ecommerce-setup-panel') showWorkspace('setup')
+              else showWorkspace('preview')
+              window.requestAnimationFrame(() => document.querySelector(to)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+            }} type="button">
+              <b>{step}</b>
+              <span><strong>{label}</strong><small>{detail}</small></span>
+            </button>
+          ) : (
+            <Link key={label} to={to}>
+              <b>{step}</b>
+              <span><strong>{label}</strong><small>{detail}</small></span>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <details className="ecommerce-business-controls">
         <summary><span><strong>Setup and order controls</strong><small>Store readiness, inbox, imports, payment, and delivery</small></span><b>Open when needed</b></summary>
