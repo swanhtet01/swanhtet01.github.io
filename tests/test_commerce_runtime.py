@@ -174,6 +174,7 @@ def purchase_order_record(
     captured_at: str = NOW,
     expected_at: str = PURCHASE_ORDER_EXPECTED_AT,
     unit_cost_mmk: int = 75,
+    actor: str = "Accountable operator",
 ) -> dict[str, object]:
     return {
         "id": purchase_order_id,
@@ -183,7 +184,7 @@ def purchase_order_record(
         "sku": "SKU-1",
         "quantityOrdered": quantity,
         "unitCostMmk": unit_cost_mmk,
-        "creation": action_evidence(action_id, captured_at=captured_at),
+        "creation": action_evidence(action_id, captured_at=captured_at, actor=actor),
     }
 
 
@@ -212,6 +213,7 @@ def purchase_requisition_record(
     expected_at: str = PURCHASE_ORDER_EXPECTED_AT,
     quantity: int = 10,
     unit_cost_mmk: int = 75,
+    actor: str = "Accountable operator",
 ) -> dict[str, object]:
     return {
         "id": requisition_id,
@@ -224,7 +226,7 @@ def purchase_requisition_record(
         "totalMmk": quantity * unit_cost_mmk,
         "sourceDecisionDigest": f"sha256:{'1' * 64}",
         "sourceReplenishmentDigest": f"sha256:{'2' * 64}",
-        "approval": action_evidence(action_id, captured_at=captured_at),
+        "approval": action_evidence(action_id, captured_at=captured_at, actor=actor),
     }
 
 
@@ -4026,7 +4028,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertEqual(approved["purchaseRequisitions"][0]["totalMmk"], 750)  # type: ignore[index]
         self.assertNotIn("purchaseOrders", approved)
 
-        purchase_order = purchase_order_record()
+        purchase_order = purchase_order_record(actor="Procurement operator")
         purchase_order["requisitionId"] = requisition["id"]
         converted_state = deepcopy(approved)
         converted_state["purchaseOrders"] = [purchase_order]
@@ -4036,6 +4038,29 @@ class CommerceRuntimeTests(unittest.TestCase):
             converted_state,
         )
         self.assertEqual(converted["purchaseOrders"][0]["requisitionId"], requisition["id"])  # type: ignore[index]
+
+        same_operator = deepcopy(approved)
+        same_operator_order = purchase_order_record(
+            purchase_order_id="PO-00000000-0000-4000-8000-000000000021",
+            action_id="ACT-PURCHASE-CREATE-SAME-OPERATOR",
+            actor="accountable OPERATOR",
+        )
+        same_operator_order["requisitionId"] = requisition["id"]
+        same_operator["purchaseOrders"] = [same_operator_order]
+        with self.assertRaisesRegex(TrialValidationError, "different operator"):
+            apply_event(approved, "commerce.purchase_order.created", same_operator)
+
+        stale_confirmation = deepcopy(approved)
+        stale_order = purchase_order_record(
+            purchase_order_id="PO-00000000-0000-4000-8000-000000000023",
+            action_id="ACT-PURCHASE-CREATE-STALE",
+            captured_at="2026-07-23T08:59:59.999Z",
+            actor="Procurement operator",
+        )
+        stale_order["requisitionId"] = requisition["id"]
+        stale_confirmation["purchaseOrders"] = [stale_order]
+        with self.assertRaisesRegex(TrialValidationError, "later confirmation"):
+            apply_event(approved, "commerce.purchase_order.created", stale_confirmation)
 
         mismatched = deepcopy(approved)
         mismatched_order = deepcopy(purchase_order)
@@ -4048,6 +4073,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         duplicate_order = purchase_order_record(
             purchase_order_id="PO-00000000-0000-4000-8000-000000000022",
             action_id="ACT-PURCHASE-CREATE-DUPLICATE",
+            actor="Procurement operator",
         )
         duplicate_order["requisitionId"] = requisition["id"]
         duplicate["purchaseOrders"] = [duplicate_order, *converted["purchaseOrders"]]  # type: ignore[misc]
@@ -4057,8 +4083,9 @@ class CommerceRuntimeTests(unittest.TestCase):
     def test_store_restamps_and_idempotently_retains_human_requisition_approval(self) -> None:
         store = InMemoryTrialStore(reducer=reduce_trial_state)
         operator = TrialPrincipal("workspace-requisition", "shop-owner", "human")
+        buyer = TrialPrincipal("workspace-requisition", "procurement-operator", "human")
         agent = TrialPrincipal("workspace-requisition", "buying-agent", "agent")
-        for principal in (operator, agent):
+        for principal in (operator, buyer, agent):
             store.provision_membership(
                 workspace_id=principal.workspace_id,
                 actor_id=principal.actor_id,
@@ -4116,6 +4143,42 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertEqual(retained["createdAt"], "2026-07-23T09:05:00.000+00:00")
         self.assertNotIn("purchaseOrders", approved.state)
         self.assertTrue(replay.idempotent_replay)
+
+        purchase_order = purchase_order_record(
+            captured_at="2099-01-01T00:00:00.000Z",
+            actor="Fabricated second operator",
+        )
+        purchase_order["requisitionId"] = retained["id"]  # type: ignore[index]
+        purchase_state = deepcopy(approved.state)
+        purchase_state["purchaseOrders"] = [purchase_order]
+        purchase_payload = {
+            "state": purchase_state,
+            "evidence": dict(purchase_order["creation"]),  # type: ignore[arg-type]
+        }
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:06:00.000+00:00",
+        ):
+            with self.assertRaisesRegex(TrialValidationError, "different operator"):
+                store.apply_command(
+                    operator,
+                    command_id=str(uuid4()),
+                    surface="commerce",
+                    event_type="commerce.purchase_order.created",
+                    expected_version=approved.version,
+                    payload=purchase_payload,
+                )
+            converted = store.apply_command(
+                buyer,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_order.created",
+                expected_version=approved.version,
+                payload=purchase_payload,
+            )
+        retained_order = converted.state["purchaseOrders"][0]  # type: ignore[index]
+        self.assertEqual(retained_order["creation"]["actor"], buyer.actor_id)  # type: ignore[index]
+        self.assertNotEqual(retained_order["creation"]["actor"], retained["approval"]["actor"])  # type: ignore[index]
 
     def test_purchase_order_lifecycle_supports_partial_receipt_and_cancellation(self) -> None:
         current = catalog_state()

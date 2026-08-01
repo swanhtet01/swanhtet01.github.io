@@ -2070,6 +2070,10 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
   }
 }
 
+function sameAccountableActor(left: string, right: string) {
+  return left.trim().toLowerCase() === right.trim().toLowerCase()
+}
+
 export function upgradeCommerceSeedPolicies(stateValue: CommerceState) {
   const state = validateCommerceState(stateValue)
   const baseline = state.catalogBaselines?.find((candidate) => candidate.proof.actionId === 'ACT-DEMO-CATALOG-BASELINE')
@@ -2596,6 +2600,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!itemSkus.includes(sku)) throw new Error(`purchaseOrders[${index}].sku is unknown.`)
     assertSafeInteger(candidate.quantityOrdered, `purchaseOrders[${index}].quantityOrdered`, 1)
     if (candidate.unitCostMmk !== undefined) assertSafeInteger(candidate.unitCostMmk, `purchaseOrders[${index}].unitCostMmk`, 1)
+    let linkedRequisition: CommercePurchaseRequisition | null = null
     if (candidate.requisitionId !== undefined) {
       const requisitionId = canonicalText(candidate.requisitionId, `purchaseOrders[${index}].requisitionId`, 80)
       const requisition = purchaseRequisitionById.get(requisitionId)
@@ -2605,6 +2610,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         || requisition.expectedAt !== candidate.expectedAt
         || requisition.quantityRequested !== candidate.quantityOrdered
         || requisition.unitCostMmk !== candidate.unitCostMmk) throw new Error(`purchaseOrders[${index}] does not match its approved requisition.`)
+      linkedRequisition = requisition
       convertedRequisitionIds.push(requisitionId)
     }
     if (!isRecord(candidate.creation)
@@ -2612,6 +2618,11 @@ export function validateCommerceState(value: unknown): CommerceState {
       || !validProof(candidate.creation as CommerceActionProof)
       || candidate.creation.capturedAt !== candidate.createdAt) {
       throw new Error(`purchaseOrders[${index}].creation is invalid.`)
+    }
+    if (linkedRequisition
+      && ((timestampMicros(candidate.creation.capturedAt as string) as bigint) < (timestampMicros(linkedRequisition.createdAt) as bigint)
+        || sameAccountableActor(candidate.creation.actor as string, linkedRequisition.approval.actor))) {
+      throw new Error(`purchaseOrders[${index}] requires a later confirmation by a different operator.`)
     }
     for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
       canonicalText(candidate.creation[field], `purchaseOrders[${index}].creation.${field}`, field === 'actionId' ? 160 : 180)
@@ -6503,7 +6514,9 @@ export function createCommercePurchaseOrder(
     || commercePurchaseOrders(current).some((order) => order.requisitionId === input.requisitionId)
     || requisition.expectedAt !== input.expectedAt || requisition.supplier !== supplier
     || requisition.sku !== input.sku || requisition.quantityRequested !== input.quantityOrdered
-    || requisition.unitCostMmk !== unitCostMmk)) return null
+    || requisition.unitCostMmk !== unitCostMmk
+    || (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(requisition.createdAt) as bigint)
+    || sameAccountableActor(proof.actor, requisition.approval.actor))) return null
   if (actionIdIsUsed(current, proof.actionId)) return null
   if (current.inventoryFoundation) {
     const inventory = projectShopInventory(

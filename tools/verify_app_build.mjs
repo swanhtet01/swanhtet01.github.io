@@ -1789,9 +1789,9 @@ if (!shopReplenishmentSource.includes("SHOP_REPLENISHMENT_PLAN_CONTRACT = 'super
   || !coreSource.includes('Source-bound ranking · owner approval required')
   || !coreSource.includes('function startSupplierRequest()')
   || !coreSource.includes('Review next requisition')
-  || !coreSource.includes('supplier: approved?.supplier ?? decision.recommendedSupplier ??')
-  || !coreSource.includes('unitCostMmk: String(approved?.unitCostMmk ?? decision.recommendedUnitCostMmk ??')
-  || !coreSource.includes('${decision.requisitionReference} prepared for owner approval')
+  || !coreSource.includes('supplier: approved?.supplier ?? decision?.recommendedSupplier ??')
+  || !coreSource.includes('unitCostMmk: String(approved?.unitCostMmk ?? decision?.recommendedUnitCostMmk ??')
+  || !coreSource.includes('${decision!.requisitionReference} prepared for owner approval')
   || !coreSource.includes('Shop stock, open purchase orders, and current Plant demand are covered.')
   || !coreSource.includes("'Restore purchasing readiness'")
   || !coreSource.includes("'Approve pending supplier action'")
@@ -4183,8 +4183,13 @@ if (!commercePageContract.includes('purchaseOrderDraft')
   || !commercePageContract.includes("'commerce.purchase_requisition.approved'")
   || !commercePageContract.includes('approveCommercePurchaseRequisition(')
   || !commercePageContract.includes("kind: 'purchase_requisition_approve'")
-  || !commercePageContract.includes("purchaseOrderDraft.requisitionId ? 'Review order' : 'Review requisition'")
-  || !commercePageContract.includes('Create approved purchase order')
+  || !commercePageContract.includes("purchaseOrderDraft.requisitionId ? 'Review second approval' : 'Review requisition'")
+  || !commercePageContract.includes('Create with second operator')
+  || !commercePageContract.includes('different operator must create its exact purchase order')
+  || !commercePageContract.includes('Use a different operator from ${approvedRequisition.approval.actor}')
+  || !commercePageContract.includes('const approved = openPurchaseRequisitions[0]')
+  || !commercePageContract.includes('source snapshot locked · second operator next')
+  || commercePageContract.includes('requisition.sourceDecisionDigest === shopProcurementDecision.digest')
   || !commercePageContract.includes('Create an internal order')
   || !commercePageContract.includes('This does not contact a supplier or create a payment.')
   || !commercePageContract.includes('Expected arrival')
@@ -4217,6 +4222,9 @@ if (!commercePageContract.includes('purchaseOrderDraft')
   || !commerceSource.includes('export function approveCommercePurchaseRequisition(')
   || !commerceSource.includes('export function commercePurchaseRequisitions(')
   || !commerceSource.includes('does not match its approved requisition')
+  || !commerceSource.includes('sameAccountableActor(proof.actor, requisition.approval.actor)')
+  || !managedCommerceRuntime.includes('def _same_accountable_actor(')
+  || !managedCommerceRuntime.includes('requires a later confirmation by a different operator')
   || !managedTrialSource.includes("'commerce.purchase_requisition.approved'")
   || !managedCommerceRuntime.includes('"commerce.purchase_requisition.approved"')
   || !managedCommerceRuntime.includes('def _validate_purchase_requisition_approved(')
@@ -10570,7 +10578,7 @@ async function verifyCommerceRuntime() {
       'purchase_requisition_exact_retry_not_idempotent')
     assert(model.approveCommercePurchaseRequisition(requisitionApproved, { ...requisitionInput, unitCostMmk: 74 }, requisitionProof) === null,
       'changed_purchase_requisition_retry_succeeded')
-    const linkedPurchaseProof = proof('ACT-PURCHASE-CREATE-FROM-REQUISITION', 60_000)
+    const linkedPurchaseProof = proof('ACT-PURCHASE-CREATE-FROM-REQUISITION', 60_000, { actor: 'OP-BUYER' })
     const linkedPurchase = model.createCommercePurchaseOrder(requisitionApproved, {
       id: 'PO-00000000-0000-4000-8000-000000000019',
       requisitionId,
@@ -10583,6 +10591,20 @@ async function verifyCommerceRuntime() {
     assert(linkedPurchase?.purchaseOrders[0].requisitionId === requisitionId
       && model.commercePurchaseRequisitions(linkedPurchase)[0].approval === requisitionApproved.purchaseRequisitions[0].approval,
     'purchase_requisition_to_po_link_not_exact')
+    assert(model.createCommercePurchaseOrder(requisitionApproved, {
+      id: 'PO-00000000-0000-4000-8000-000000000017', requisitionId,
+      expectedAt: requisitionInput.expectedAt, supplier: requisitionInput.supplier,
+      sku: requisitionInput.sku, quantityOrdered: requisitionInput.quantityRequested,
+      unitCostMmk: requisitionInput.unitCostMmk,
+    }, proof('ACT-PURCHASE-CREATE-SAME-OPERATOR', 60_000, { actor: 'op-owner' })) === null,
+    'same_operator_requisition_to_po_conversion_succeeded')
+    assert(model.createCommercePurchaseOrder(requisitionApproved, {
+      id: 'PO-00000000-0000-4000-8000-000000000016', requisitionId,
+      expectedAt: requisitionInput.expectedAt, supplier: requisitionInput.supplier,
+      sku: requisitionInput.sku, quantityOrdered: requisitionInput.quantityRequested,
+      unitCostMmk: requisitionInput.unitCostMmk,
+    }, proof('ACT-PURCHASE-CREATE-BEFORE-APPROVAL', -1, { actor: 'OP-BUYER' })) === null,
+    'preapproval_requisition_to_po_conversion_succeeded')
     assert(model.createCommercePurchaseOrder(requisitionApproved, {
       id: 'PO-00000000-0000-4000-8000-000000000018', requisitionId,
       expectedAt: requisitionInput.expectedAt, supplier: requisitionInput.supplier,

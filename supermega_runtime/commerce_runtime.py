@@ -754,6 +754,10 @@ def _action_proof(value: object, field: str, *, with_order_id: bool = False) -> 
     return proof
 
 
+def _same_accountable_actor(left: str, right: str) -> bool:
+    return left.strip().casefold() == right.strip().casefold()
+
+
 def _validate_support_service_timeline(
     value: object,
     field: str,
@@ -1680,6 +1684,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             )
             if purchase_order["quantityOrdered"] * unit_cost_mmk > _MAX_SAFE_INTEGER:
                 raise TrialValidationError(f"{field} total exceeds the safe integer range.")
+        linked_requisition: dict[str, Any] | None = None
         if "requisitionId" in purchase_order:
             requisition_id = _text(purchase_order["requisitionId"], f"{field}.requisitionId", maximum=80)
             requisition = purchase_requisition_by_id.get(requisition_id)
@@ -1692,11 +1697,23 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 or requisition["unitCostMmk"] != purchase_order.get("unitCostMmk")
             ):
                 raise TrialValidationError(f"{field} does not match its approved requisition.")
+            linked_requisition = requisition
             converted_requisition_ids.append(requisition_id)
         creation = _action_proof(purchase_order["creation"], f"{field}.creation")
         if creation["capturedAt"] != created_at:
             raise TrialValidationError(
                 f"{field}.creation must be captured when the purchase order was created."
+            )
+        if linked_requisition is not None and (
+            datetime.fromisoformat(creation["capturedAt"].replace("Z", "+00:00"))
+            < datetime.fromisoformat(str(linked_requisition["createdAt"]).replace("Z", "+00:00"))
+            or _same_accountable_actor(
+                str(creation["actor"]),
+                str(linked_requisition["approval"]["actor"]),
+            )
+        ):
+            raise TrialValidationError(
+                f"{field} requires a later confirmation by a different operator."
             )
         purchase_order_action_ids.append(creation["actionId"])
         if "cancellation" in purchase_order:
@@ -8680,16 +8697,34 @@ def _validate_purchase_order_created(
         raise TrialValidationError(
             "commerce.purchase_order.created must prepend exactly one purchase order."
         )
-    if "expectedAt" not in next_orders[0]:
+    purchase_order = next_orders[0]
+    if "expectedAt" not in purchase_order:
         raise TrialValidationError(
             "a new purchase order requires an expected arrival."
         )
-    if "unitCostMmk" not in next_orders[0]:
+    if "unitCostMmk" not in purchase_order:
         raise TrialValidationError(
             "a new purchase order requires retained whole-MMK unit cost terms."
         )
-    if "cancellation" in next_orders[0]:
+    if "cancellation" in purchase_order:
         raise TrialValidationError("a new purchase order cannot start cancelled.")
+    requisition_id = purchase_order.get("requisitionId")
+    if requisition_id is not None:
+        requisition = next(
+            (
+                candidate
+                for candidate in _purchase_requisitions(current)
+                if candidate.get("id") == requisition_id
+            ),
+            None,
+        )
+        if requisition is None or _same_accountable_actor(
+            str(purchase_order["creation"]["actor"]),
+            str(requisition["approval"]["actor"]),
+        ):
+            raise TrialValidationError(
+                "a requisition-backed purchase order requires a different operator."
+            )
     foundation = _inventory_foundation(current)
     if foundation is not None:
         catalog_skus = [str(item["sku"]) for item in current["items"]]
