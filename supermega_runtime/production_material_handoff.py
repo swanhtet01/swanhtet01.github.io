@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Any
 
 from supermega_runtime.commerce_runtime import validate_commerce_state
@@ -189,6 +190,10 @@ def _stock_units_for(quantity_milli: int, material_per_stock_unit: int) -> int:
     return (quantity_milli + material_per_stock_unit - 1) // material_per_stock_unit
 
 
+def _instant(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
 def _purchase_order_progress(
     commerce: Mapping[str, Any], purchase_order: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -255,7 +260,12 @@ def project_production_material_requirements(
         {
             "items": sorted(
                 [
-                    {"sku": item["sku"], "name": item["name"], "onHand": item["onHand"]}
+                    {
+                        "sku": item["sku"],
+                        "name": item["name"],
+                        "onHand": item["onHand"],
+                        "reorderAt": item["reorderAt"],
+                    }
                     for item in commerce["items"]
                     if item["sku"] in relevant_skus
                 ],
@@ -330,11 +340,26 @@ def project_production_material_requirements(
                         mapping["materialQuantityMilliPerStockUnit"],
                         f"on-hand supply for {material['materialId']}",
                     ),
+                    "protectedStockUnits": item["reorderAt"],
+                    "protectedStockQuantityMilli": _safe_product(
+                        item["reorderAt"],
+                        mapping["materialQuantityMilliPerStockUnit"],
+                        f"protected stock for {material['materialId']}",
+                    ),
+                    "availableToIssueStockUnits": max(
+                        item["onHand"] - item["reorderAt"], 0
+                    ),
+                    "availableToIssueQuantityMilli": _safe_product(
+                        max(item["onHand"] - item["reorderAt"], 0),
+                        mapping["materialQuantityMilliPerStockUnit"],
+                        f"available stock for {material['materialId']}",
+                    ),
                     "openPurchaseOrderStockUnits": 0,
                     "openPurchaseOrderQuantityMilli": 0,
                     "atRiskPurchaseOrderStockUnits": 0,
                     "atRiskPurchaseOrderQuantityMilli": 0,
                     "requiredStockUnits": 0,
+                    "requiredSupplyStockUnits": 0,
                     "suggestedIssueStockUnits": 0,
                     "suggestedExpediteStockUnits": 0,
                     "suggestedOrderStockUnits": 0,
@@ -356,21 +381,43 @@ def project_production_material_requirements(
             and order["status"] != "cancelled"
         ]
         effective_from = plan.get("effectiveFrom")
+        effective_until = plan.get("effectiveUntil")
         at_risk_orders = [
             order
             for order in open_orders
             if order["expectedAt"] is None
-            or (effective_from is not None and order["expectedAt"] < effective_from)
+            or (
+                effective_from is not None
+                and _instant(order["expectedAt"]) < _instant(effective_from)
+            )
+            or (
+                effective_until is not None
+                and _instant(order["expectedAt"]) >= _instant(effective_until)
+            )
         ]
         scheduled_orders = [order for order in open_orders if order not in at_risk_orders]
         open_po_stock_units = sum(order["remaining"] for order in open_orders)
         at_risk_po_stock_units = sum(order["remaining"] for order in at_risk_orders)
         scheduled_po_stock_units = open_po_stock_units - at_risk_po_stock_units
         material_per_stock_unit = mapping["materialQuantityMilliPerStockUnit"]
+        protected_stock_units = item["reorderAt"]
+        available_to_issue_stock_units = max(
+            item["onHand"] - protected_stock_units, 0
+        )
         on_hand_quantity_milli = _safe_product(
             item["onHand"],
             material_per_stock_unit,
             f"on-hand supply for {material['materialId']}",
+        )
+        protected_stock_quantity_milli = _safe_product(
+            protected_stock_units,
+            material_per_stock_unit,
+            f"protected stock for {material['materialId']}",
+        )
+        available_to_issue_quantity_milli = _safe_product(
+            available_to_issue_stock_units,
+            material_per_stock_unit,
+            f"available stock for {material['materialId']}",
         )
         open_po_quantity_milli = _safe_product(
             open_po_stock_units,
@@ -382,31 +429,28 @@ def project_production_material_requirements(
             material_per_stock_unit,
             f"at-risk purchase-order supply for {material['materialId']}",
         )
-        scheduled_po_quantity_milli = _safe_product(
-            scheduled_po_stock_units,
-            material_per_stock_unit,
-            f"scheduled purchase-order supply for {material['materialId']}",
+        required_stock_units = _stock_units_for(
+            remaining_quantity_milli, material_per_stock_unit
         )
-        dependable_shortage_quantity_milli = max(
-            remaining_quantity_milli
-            - on_hand_quantity_milli
-            - scheduled_po_quantity_milli,
-            0,
+        required_supply_stock_units = protected_stock_units + required_stock_units
+        dependable_supply_stock_units = item["onHand"] + scheduled_po_stock_units
+        total_supply_stock_units = (
+            dependable_supply_stock_units + at_risk_po_stock_units
         )
-        total_shortage_quantity_milli = max(
-            dependable_shortage_quantity_milli - at_risk_po_quantity_milli, 0
+        dependable_gap_stock_units = max(
+            required_supply_stock_units - dependable_supply_stock_units, 0
+        )
+        total_gap_stock_units = max(
+            required_supply_stock_units - total_supply_stock_units, 0
         )
         status = (
             "ready_to_issue"
-            if on_hand_quantity_milli >= remaining_quantity_milli
+            if available_to_issue_stock_units >= required_stock_units
             else "covered_by_open_po"
-            if dependable_shortage_quantity_milli == 0
+            if dependable_gap_stock_units == 0
             else "supply_at_risk"
-            if total_shortage_quantity_milli == 0
+            if total_gap_stock_units == 0
             else "shortage"
-        )
-        required_stock_units = _stock_units_for(
-            remaining_quantity_milli, material_per_stock_unit
         )
         rows.append(
             {
@@ -418,24 +462,24 @@ def project_production_material_requirements(
                     "materialQuantityMilliPerStockUnit": material_per_stock_unit,
                     "onHandStockUnits": item["onHand"],
                     "onHandQuantityMilli": on_hand_quantity_milli,
+                    "protectedStockUnits": protected_stock_units,
+                    "protectedStockQuantityMilli": protected_stock_quantity_milli,
+                    "availableToIssueStockUnits": available_to_issue_stock_units,
+                    "availableToIssueQuantityMilli": available_to_issue_quantity_milli,
                     "openPurchaseOrderStockUnits": open_po_stock_units,
                     "openPurchaseOrderQuantityMilli": open_po_quantity_milli,
                     "atRiskPurchaseOrderStockUnits": at_risk_po_stock_units,
                     "atRiskPurchaseOrderQuantityMilli": at_risk_po_quantity_milli,
                     "requiredStockUnits": required_stock_units,
+                    "requiredSupplyStockUnits": required_supply_stock_units,
                     "suggestedIssueStockUnits": min(
-                        item["onHand"], required_stock_units
+                        available_to_issue_stock_units, required_stock_units
                     ),
                     "suggestedExpediteStockUnits": min(
                         at_risk_po_stock_units,
-                        _stock_units_for(
-                            dependable_shortage_quantity_milli,
-                            material_per_stock_unit,
-                        ),
+                        dependable_gap_stock_units,
                     ),
-                    "suggestedOrderStockUnits": _stock_units_for(
-                        total_shortage_quantity_milli, material_per_stock_unit
-                    ),
+                    "suggestedOrderStockUnits": total_gap_stock_units,
                     "nextExpectedAt": next(
                         iter(
                             sorted(
@@ -483,6 +527,7 @@ def project_production_material_requirements(
             "product": plan["job"]["product"],
             "targetQuantity": plan["job"]["targetQuantity"],
             "effectiveFrom": plan.get("effectiveFrom"),
+            "effectiveUntil": plan.get("effectiveUntil"),
         },
         "status": status,
         "rows": rows,

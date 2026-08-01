@@ -3422,7 +3422,8 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || !plantOrderUiSource.includes('Shop supply SKU')
   || !plantOrderUiSource.includes('Material per Shop stock unit')
   || !plantOrderUiSource.includes('Download material requirements')
-  || !plantOrderUiSource.includes('Late or undated purchase orders are flagged as supply at risk.')
+  || !plantOrderUiSource.includes('Shop reorder stock stays protected')
+  || !plantOrderUiSource.includes('outside the reviewed production window')
   || !plantOrderUiSource.includes('No purchase order, supplier message, stock issue, production change, or provider call occurs.')
   || !plantOrderUiSource.includes('Additional routing operations (optional)')
   || !plantOrderUiSource.includes('details?: Array<{ label: string; value: string }>')
@@ -3514,12 +3515,19 @@ if (!commerceSource.includes("'production_issue'")
   || !productionMaterialHandoffSource.includes('projectProductionMaterialRequirements')
   || !productionMaterialHandoffSource.includes('suggestedOrderStockUnits')
   || !productionMaterialHandoffSource.includes('suggestedExpediteStockUnits')
+  || !productionMaterialHandoffSource.includes('availableToIssueStockUnits')
+  || !productionMaterialHandoffSource.includes('requiredSupplyStockUnits')
+  || !productionMaterialHandoffSource.includes('reorderAt: item.reorderAt')
+  || !productionMaterialHandoffSource.includes('expectedMs >= effectiveUntilMs')
   || !productionMaterialHandoffSource.includes("supplyAtRisk: rows.filter((row) => row.status === 'supply_at_risk').length")
   || !productionMaterialHandoffSource.includes('purchaseCreated: false')
   || !productionMaterialHandoffSource.includes("movement.kind === 'production_issue'")
   || !productionMaterialHandoffPython.includes('PRODUCTION_MATERIAL_REQUIREMENTS_CONTRACT')
   || !productionMaterialHandoffPython.includes('project_production_material_requirements')
   || !productionMaterialHandoffPython.includes('validate_production_material_requirements')
+  || !productionMaterialHandoffPython.includes('available_to_issue_stock_units')
+  || !productionMaterialHandoffPython.includes('required_supply_stock_units')
+  || !productionMaterialHandoffPython.includes('_instant(effective_until)')
   || !productionMaterialHandoffPython.includes('require_shop_issue_matches_plant')
   || !productionMaterialHandoffPython.includes('require_shop_issue_before_plant_progress')
   || !managedTrialRuntimeSource.includes('related_surfaces = ("production",)')
@@ -5718,8 +5726,8 @@ async function verifyPlantOrderRuntime() {
     const mrpPlan = model.buildPlantOrderEffectivePlan({
       ...planInput,
       planId: 'PLN-20260726-MRP',
-      effectiveFrom: '2026-07-27T09:00:00.000Z',
-      effectiveUntil: '2026-08-27T09:00:00.000Z',
+      effectiveFrom: '2026-07-27T15:30:00+06:30',
+      effectiveUntil: '2026-08-27T15:30:00+06:30',
       materials: [{
         ...planInput.materials[0],
         shopSupply: { sku: 'SKU-RM-BAG', materialQuantityMilliPerStockUnit: 5_000 },
@@ -5735,7 +5743,7 @@ async function verifyPlantOrderRuntime() {
       expectedAt: '2026-07-28T09:00:00.000Z',
       supplier: 'Reviewed material supplier',
       sku: 'SKU-RM-BAG',
-      quantityOrdered: 1,
+      quantityOrdered: 2,
       unitCostMmk: 5_000,
     }, {
       actionId: 'ACT-MRP-PO-001',
@@ -5747,14 +5755,19 @@ async function verifyPlantOrderRuntime() {
     assert(mrpPurchaseOrder, 'plant_mrp_purchase_order_fixture_failed')
     const shortageRequirements = materialHandoff.projectProductionMaterialRequirements(mrpState, mrpBaseCommerce)
     assert(shortageRequirements?.status === 'shortage'
-      && shortageRequirements.rows[0].shopSupply.suggestedOrderStockUnits === 1,
+      && shortageRequirements.rows[0].shopSupply.protectedStockUnits === 1
+      && shortageRequirements.rows[0].shopSupply.availableToIssueStockUnits === 1
+      && shortageRequirements.rows[0].shopSupply.suggestedIssueStockUnits === 1
+      && shortageRequirements.rows[0].shopSupply.suggestedOrderStockUnits === 2,
     'plant_mrp_shortage_recommendation_wrong')
     const materialRequirements = materialHandoff.projectProductionMaterialRequirements(mrpState, mrpPurchaseOrder)
     assert(materialRequirements?.contract === 'supermega.production.material_requirements.v1'
       && materialRequirements.status === 'covered_by_open_po'
       && materialRequirements.rows[0].requiredQuantityMilli === 15_000
       && materialRequirements.rows[0].shopSupply.onHandQuantityMilli === 10_000
-      && materialRequirements.rows[0].shopSupply.openPurchaseOrderQuantityMilli === 5_000
+      && materialRequirements.rows[0].shopSupply.protectedStockQuantityMilli === 5_000
+      && materialRequirements.rows[0].shopSupply.availableToIssueQuantityMilli === 5_000
+      && materialRequirements.rows[0].shopSupply.openPurchaseOrderQuantityMilli === 10_000
       && materialRequirements.rows[0].shopSupply.suggestedOrderStockUnits === 0,
     'plant_mrp_did_not_bind_bom_shop_and_open_po_supply')
     const mrpLatePurchaseOrder = commerce.createCommercePurchaseOrder(mrpBaseCommerce, {
@@ -5762,7 +5775,7 @@ async function verifyPlantOrderRuntime() {
       expectedAt: '2026-07-25T09:00:00.000Z',
       supplier: 'Late material supplier',
       sku: 'SKU-RM-BAG',
-      quantityOrdered: 1,
+      quantityOrdered: 2,
       unitCostMmk: 5_000,
     }, {
       actionId: 'ACT-MRP-PO-002',
@@ -5774,17 +5787,65 @@ async function verifyPlantOrderRuntime() {
     const atRiskRequirements = materialHandoff.projectProductionMaterialRequirements(mrpState, mrpLatePurchaseOrder)
     assert(atRiskRequirements?.status === 'supply_at_risk'
       && atRiskRequirements.summary.supplyAtRisk === 1
-      && atRiskRequirements.rows[0].shopSupply.atRiskPurchaseOrderStockUnits === 1
-      && atRiskRequirements.rows[0].shopSupply.suggestedExpediteStockUnits === 1
+      && atRiskRequirements.rows[0].shopSupply.atRiskPurchaseOrderStockUnits === 2
+      && atRiskRequirements.rows[0].shopSupply.suggestedExpediteStockUnits === 2
       && atRiskRequirements.rows[0].shopSupply.suggestedOrderStockUnits === 0
       && atRiskRequirements.rows[0].shopSupply.nextExpectedAt === null,
     'plant_mrp_late_or_undated_supply_was_presented_as_safe_coverage')
+    const reserveDeficitCommerce = commerce.validateCommerceState({
+      ...mrpBaseCommerce,
+      items: mrpBaseCommerce.items.map((item) => ({ ...item, onHand: 0 })),
+    })
+    const reserveDeficitPurchaseOrder = commerce.createCommercePurchaseOrder(reserveDeficitCommerce, {
+      id: 'PO-00000000-0000-4000-8000-000000000405',
+      expectedAt: '2026-07-25T09:00:00.000Z',
+      supplier: 'Reserve recovery supplier',
+      sku: 'SKU-RM-BAG',
+      quantityOrdered: 4,
+      unitCostMmk: 5_000,
+    }, {
+      actionId: 'ACT-MRP-PO-004',
+      capturedAt: '2026-07-24T09:00:00.000Z',
+      actor: 'Plant planner',
+      reason: 'Reviewed supply for production and Shop reserve recovery.',
+      evidenceReference: 'MRP-PO-004',
+    })
+    const reserveDeficitRequirements = materialHandoff.projectProductionMaterialRequirements(mrpState, reserveDeficitPurchaseOrder)
+    assert(reserveDeficitRequirements?.status === 'supply_at_risk'
+      && reserveDeficitRequirements.rows[0].shopSupply.requiredSupplyStockUnits === 4
+      && reserveDeficitRequirements.rows[0].shopSupply.suggestedExpediteStockUnits === 4
+      && reserveDeficitRequirements.rows[0].shopSupply.suggestedOrderStockUnits === 0,
+    'plant_mrp_failed_to_restore_shop_floor_before_production_supply')
+    const mrpAfterWindowPurchaseOrder = commerce.createCommercePurchaseOrder(mrpBaseCommerce, {
+      id: 'PO-00000000-0000-4000-8000-000000000404',
+      expectedAt: '2026-08-28T09:00:00.000Z',
+      supplier: 'After-window material supplier',
+      sku: 'SKU-RM-BAG',
+      quantityOrdered: 2,
+      unitCostMmk: 5_000,
+    }, {
+      actionId: 'ACT-MRP-PO-003',
+      capturedAt: '2026-07-24T09:00:00.000Z',
+      actor: 'Plant planner',
+      reason: 'Reviewed supply arriving after the production window.',
+      evidenceReference: 'MRP-PO-003',
+    })
+    const afterWindowRequirements = materialHandoff.projectProductionMaterialRequirements(mrpState, mrpAfterWindowPurchaseOrder)
+    assert(afterWindowRequirements?.status === 'supply_at_risk'
+      && afterWindowRequirements.rows[0].shopSupply.atRiskPurchaseOrderStockUnits === 2
+      && afterWindowRequirements.rows[0].shopSupply.nextExpectedAt === null,
+    'plant_mrp_after_window_supply_was_presented_as_safe_coverage')
     assert(materialHandoff.validateProductionMaterialRequirements(materialRequirements, mrpState, mrpPurchaseOrder).digest === materialRequirements.digest
       && Object.values(materialRequirements.authority).every((allowed) => allowed === false),
     'plant_mrp_review_packet_not_evidence_bound_or_side_effect_free')
     const tamperedMaterialRequirements = structuredClone(materialRequirements)
     tamperedMaterialRequirements.rows[0].shopSupply.onHandStockUnits += 1
     assertThrows(() => materialHandoff.validateProductionMaterialRequirements(tamperedMaterialRequirements, mrpState, mrpPurchaseOrder), 'tampered_plant_mrp_packet_succeeded')
+    const changedFloorCommerce = commerce.validateCommerceState({
+      ...mrpPurchaseOrder,
+      items: mrpPurchaseOrder.items.map((item) => ({ ...item, reorderAt: item.reorderAt + 1 })),
+    })
+    assertThrows(() => materialHandoff.validateProductionMaterialRequirements(materialRequirements, mrpState, changedFloorCommerce), 'changed_shop_floor_did_not_stale_plant_mrp_packet')
     const unmappedRequirements = materialHandoff.projectProductionMaterialRequirements(pricedPlanState, mrpBaseCommerce)
     assert(unmappedRequirements?.status === 'mapping_required' && unmappedRequirements.summary.mappingRequired === 2, 'plant_mrp_invented_supply_mapping')
     assert(plan.sourceDigest === 'sha256:9415e4d6d6dda852c2014d611c1f93e385d31c40df2b4ec30d293b12991ba519'

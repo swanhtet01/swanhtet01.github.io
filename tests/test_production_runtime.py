@@ -652,8 +652,8 @@ class ProductionRuntimeTests(unittest.TestCase):
         plan = build_plant_order_effective_plan(
             plan_id="PLN-MRP-001",
             source_digest=plant_order_evidence_digest({"job": current["jobs"][0]}),  # type: ignore[index]
-            effective_from="2026-08-01T09:00:00.000Z",
-            effective_until="2026-08-31T09:00:00.000Z",
+            effective_from="2026-08-01T15:30:00+06:30",
+            effective_until="2026-08-31T15:30:00+06:30",
             job={
                 "jobId": "JOB-REAL-001",
                 "product": "Customer batch 001",
@@ -711,18 +711,32 @@ class ProductionRuntimeTests(unittest.TestCase):
                 "expectedAt": "2026-08-02T09:00:00.000Z",
                 "supplier": "Reviewed material supplier",
                 "sku": "SKU-RM-BAG",
-                "quantityOrdered": 1,
+                "quantityOrdered": 2,
                 "unitCostMmk": 5_000,
                 "creation": action_evidence("ACT-MRP-PO-001"),
             }],
         }
+        commerce_without_purchase = deepcopy(commerce)
+        commerce_without_purchase["purchaseOrders"] = []
+        protected_shortage = project_production_material_requirements(
+            production, commerce_without_purchase
+        )
+        assert protected_shortage is not None
+        self.assertEqual(protected_shortage["status"], "shortage")
+        self.assertEqual(
+            protected_shortage["rows"][0]["shopSupply"]["suggestedOrderStockUnits"],
+            2,
+        )
         requirements = project_production_material_requirements(production, commerce)
         self.assertIsNotNone(requirements)
         assert requirements is not None
         self.assertEqual(requirements["status"], "covered_by_open_po")
         self.assertEqual(requirements["rows"][0]["requiredQuantityMilli"], 15_000)
         self.assertEqual(requirements["rows"][0]["shopSupply"]["onHandQuantityMilli"], 10_000)
-        self.assertEqual(requirements["rows"][0]["shopSupply"]["openPurchaseOrderQuantityMilli"], 5_000)
+        self.assertEqual(requirements["rows"][0]["shopSupply"]["protectedStockUnits"], 1)
+        self.assertEqual(requirements["rows"][0]["shopSupply"]["availableToIssueStockUnits"], 1)
+        self.assertEqual(requirements["rows"][0]["shopSupply"]["suggestedIssueStockUnits"], 1)
+        self.assertEqual(requirements["rows"][0]["shopSupply"]["openPurchaseOrderQuantityMilli"], 10_000)
         self.assertEqual(requirements["rows"][0]["shopSupply"]["suggestedOrderStockUnits"], 0)
         self.assertEqual(requirements["rows"][0]["shopSupply"]["atRiskPurchaseOrderStockUnits"], 0)
         self.assertTrue(all(value is False for value in requirements["authority"].values()))
@@ -739,6 +753,15 @@ class ProductionRuntimeTests(unittest.TestCase):
             "do not match their current Plant and Shop evidence",
         ):
             validate_production_material_requirements(tampered, production, commerce)
+        changed_floor_commerce = deepcopy(commerce)
+        changed_floor_commerce["items"][0]["reorderAt"] = 2
+        with self.assertRaisesRegex(
+            TrialValidationError,
+            "do not match their current Plant and Shop evidence",
+        ):
+            validate_production_material_requirements(
+                requirements, production, changed_floor_commerce
+            )
 
         late_commerce = deepcopy(commerce)
         late_commerce["purchaseOrders"][0]["expectedAt"] = "2026-07-28T09:00:00.000Z"
@@ -746,10 +769,39 @@ class ProductionRuntimeTests(unittest.TestCase):
         assert at_risk is not None
         self.assertEqual(at_risk["status"], "supply_at_risk")
         self.assertEqual(at_risk["summary"]["supplyAtRisk"], 1)
-        self.assertEqual(at_risk["rows"][0]["shopSupply"]["atRiskPurchaseOrderStockUnits"], 1)
-        self.assertEqual(at_risk["rows"][0]["shopSupply"]["suggestedExpediteStockUnits"], 1)
+        self.assertEqual(at_risk["rows"][0]["shopSupply"]["atRiskPurchaseOrderStockUnits"], 2)
+        self.assertEqual(at_risk["rows"][0]["shopSupply"]["suggestedExpediteStockUnits"], 2)
         self.assertEqual(at_risk["rows"][0]["shopSupply"]["suggestedOrderStockUnits"], 0)
         self.assertIsNone(at_risk["rows"][0]["shopSupply"]["nextExpectedAt"])
+
+        reserve_deficit_commerce = deepcopy(late_commerce)
+        reserve_deficit_commerce["items"][0]["onHand"] = 0
+        reserve_deficit_commerce["purchaseOrders"][0]["quantityOrdered"] = 4
+        reserve_deficit = project_production_material_requirements(
+            production, reserve_deficit_commerce
+        )
+        assert reserve_deficit is not None
+        self.assertEqual(reserve_deficit["status"], "supply_at_risk")
+        self.assertEqual(
+            reserve_deficit["rows"][0]["shopSupply"]["requiredSupplyStockUnits"],
+            4,
+        )
+        self.assertEqual(
+            reserve_deficit["rows"][0]["shopSupply"]["suggestedExpediteStockUnits"],
+            4,
+        )
+
+        after_window_commerce = deepcopy(commerce)
+        after_window_commerce["purchaseOrders"][0]["expectedAt"] = "2026-09-01T09:00:00.000Z"
+        after_window = project_production_material_requirements(
+            production, after_window_commerce
+        )
+        assert after_window is not None
+        self.assertEqual(after_window["status"], "supply_at_risk")
+        self.assertEqual(
+            after_window["rows"][0]["shopSupply"]["atRiskPurchaseOrderStockUnits"],
+            2,
+        )
 
     def test_plant_cost_packet_has_python_browser_parity_and_rejects_tamper(self) -> None:
         plan_input = {

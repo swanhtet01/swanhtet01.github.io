@@ -30,11 +30,16 @@ export type ProductionMaterialRequirement = {
     materialQuantityMilliPerStockUnit: number
     onHandStockUnits: number
     onHandQuantityMilli: number
+    protectedStockUnits: number
+    protectedStockQuantityMilli: number
+    availableToIssueStockUnits: number
+    availableToIssueQuantityMilli: number
     openPurchaseOrderStockUnits: number
     openPurchaseOrderQuantityMilli: number
     atRiskPurchaseOrderStockUnits: number
     atRiskPurchaseOrderQuantityMilli: number
     requiredStockUnits: number
+    requiredSupplyStockUnits: number
     suggestedIssueStockUnits: number
     suggestedExpediteStockUnits: number
     suggestedOrderStockUnits: number
@@ -45,7 +50,7 @@ export type ProductionMaterialRequirement = {
 export type ProductionMaterialRequirements = {
   contract: typeof PRODUCTION_MATERIAL_REQUIREMENTS_CONTRACT
   source: { plantRevision: number; plantHeadDigest: string; commerceSupplyDigest: string }
-  job: { jobId: string; product: string; targetQuantity: number; effectiveFrom: string | null }
+  job: { jobId: string; product: string; targetQuantity: number; effectiveFrom: string | null; effectiveUntil: string | null }
   status: 'not_planned' | 'mapping_required' | 'shortage' | 'supply_at_risk' | 'covered_by_open_po' | 'ready_to_issue' | 'fulfilled'
   rows: ProductionMaterialRequirement[]
   summary: { materials: number; mappingRequired: number; shortages: number; supplyAtRisk: number; coveredByOpenPo: number; readyToIssue: number; fulfilled: number }
@@ -164,7 +169,7 @@ export function projectProductionMaterialRequirements(
     return { id: order.id, sku: order.sku, remaining: progress.remaining, status: progress.status, expectedAt: order.expectedAt ?? null }
   }).sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
   const commerceSupplyDigest = plantOrderEvidenceDigest({
-    items: commerce.items.filter((item) => relevantSkus.has(item.sku)).map((item) => ({ sku: item.sku, name: item.name, onHand: item.onHand })).sort((left, right) => left.sku < right.sku ? -1 : left.sku > right.sku ? 1 : 0),
+    items: commerce.items.filter((item) => relevantSkus.has(item.sku)).map((item) => ({ sku: item.sku, name: item.name, onHand: item.onHand, reorderAt: item.reorderAt })).sort((left, right) => left.sku < right.sku ? -1 : left.sku > right.sku ? 1 : 0),
     purchaseOrders,
     productionIssues: commerce.movements.filter((movement) => movement.kind === 'production_issue' && movement.productionJobId === projection.plan?.job.jobId).map((movement) => ({ actionId: movement.actionId, productionRequestId: movement.productionRequestId, productionCommandDigest: movement.productionCommandDigest, productionQuantityMilli: movement.productionQuantityMilli })).sort((left, right) => (left.productionRequestId ?? '') < (right.productionRequestId ?? '') ? -1 : 1),
   })
@@ -173,33 +178,48 @@ export function projectProductionMaterialRequirements(
     const remainingQuantityMilli = Math.max(material.requiredQuantityMilli - fulfilledQuantityMilli, 0)
     const mapping = material.shopSupply
     const matchingItems = mapping ? commerce.items.filter((item) => item.sku === mapping.sku) : []
-    if (!remainingQuantityMilli) return { materialId: material.materialId, materialName: material.name, unit: material.unit, requiredQuantityMilli: material.requiredQuantityMilli, fulfilledQuantityMilli, remainingQuantityMilli, status: 'fulfilled', shopSupply: mapping && matchingItems.length === 1 ? { sku: mapping.sku, itemName: matchingItems[0].name, materialQuantityMilliPerStockUnit: mapping.materialQuantityMilliPerStockUnit, onHandStockUnits: matchingItems[0].onHand, onHandQuantityMilli: safeProduct(matchingItems[0].onHand, mapping.materialQuantityMilliPerStockUnit, `on-hand supply for ${material.materialId}`), openPurchaseOrderStockUnits: 0, openPurchaseOrderQuantityMilli: 0, atRiskPurchaseOrderStockUnits: 0, atRiskPurchaseOrderQuantityMilli: 0, requiredStockUnits: 0, suggestedIssueStockUnits: 0, suggestedExpediteStockUnits: 0, suggestedOrderStockUnits: 0, nextExpectedAt: null } : null }
+    if (!remainingQuantityMilli) return { materialId: material.materialId, materialName: material.name, unit: material.unit, requiredQuantityMilli: material.requiredQuantityMilli, fulfilledQuantityMilli, remainingQuantityMilli, status: 'fulfilled', shopSupply: mapping && matchingItems.length === 1 ? { sku: mapping.sku, itemName: matchingItems[0].name, materialQuantityMilliPerStockUnit: mapping.materialQuantityMilliPerStockUnit, onHandStockUnits: matchingItems[0].onHand, onHandQuantityMilli: safeProduct(matchingItems[0].onHand, mapping.materialQuantityMilliPerStockUnit, `on-hand supply for ${material.materialId}`), protectedStockUnits: matchingItems[0].reorderAt, protectedStockQuantityMilli: safeProduct(matchingItems[0].reorderAt, mapping.materialQuantityMilliPerStockUnit, `protected stock for ${material.materialId}`), availableToIssueStockUnits: Math.max(matchingItems[0].onHand - matchingItems[0].reorderAt, 0), availableToIssueQuantityMilli: safeProduct(Math.max(matchingItems[0].onHand - matchingItems[0].reorderAt, 0), mapping.materialQuantityMilliPerStockUnit, `available stock for ${material.materialId}`), openPurchaseOrderStockUnits: 0, openPurchaseOrderQuantityMilli: 0, atRiskPurchaseOrderStockUnits: 0, atRiskPurchaseOrderQuantityMilli: 0, requiredStockUnits: 0, requiredSupplyStockUnits: 0, suggestedIssueStockUnits: 0, suggestedExpediteStockUnits: 0, suggestedOrderStockUnits: 0, nextExpectedAt: null } : null }
     if (!mapping || matchingItems.length !== 1) return { materialId: material.materialId, materialName: material.name, unit: material.unit, requiredQuantityMilli: material.requiredQuantityMilli, fulfilledQuantityMilli, remainingQuantityMilli, status: 'mapping_required', shopSupply: null }
     const item = matchingItems[0]
     const openOrders = purchaseOrders.filter((order) => order.sku === mapping.sku && order.remaining > 0 && order.status !== 'cancelled')
-    const atRiskOrders = openOrders.filter((order) => !order.expectedAt || (projection.plan!.effectiveFrom && order.expectedAt < projection.plan!.effectiveFrom))
+    const effectiveFromMs = projection.plan.effectiveFrom ? Date.parse(projection.plan.effectiveFrom) : null
+    const effectiveUntilMs = projection.plan.effectiveUntil ? Date.parse(projection.plan.effectiveUntil) : null
+    const atRiskOrders = openOrders.filter((order) => {
+      if (!order.expectedAt) return true
+      const expectedMs = Date.parse(order.expectedAt)
+      return (effectiveFromMs !== null && expectedMs < effectiveFromMs)
+        || (effectiveUntilMs !== null && expectedMs >= effectiveUntilMs)
+    })
     const scheduledOrders = openOrders.filter((order) => !atRiskOrders.includes(order))
     const openPurchaseOrderStockUnits = openOrders.reduce((total, order) => total + order.remaining, 0)
     const atRiskPurchaseOrderStockUnits = atRiskOrders.reduce((total, order) => total + order.remaining, 0)
     const scheduledPurchaseOrderStockUnits = openPurchaseOrderStockUnits - atRiskPurchaseOrderStockUnits
+    const protectedStockUnits = item.reorderAt
+    const availableToIssueStockUnits = Math.max(item.onHand - protectedStockUnits, 0)
     const onHandQuantityMilli = safeProduct(item.onHand, mapping.materialQuantityMilliPerStockUnit, `on-hand supply for ${material.materialId}`)
+    const protectedStockQuantityMilli = safeProduct(protectedStockUnits, mapping.materialQuantityMilliPerStockUnit, `protected stock for ${material.materialId}`)
+    const availableToIssueQuantityMilli = safeProduct(availableToIssueStockUnits, mapping.materialQuantityMilliPerStockUnit, `available stock for ${material.materialId}`)
     const openPurchaseOrderQuantityMilli = safeProduct(openPurchaseOrderStockUnits, mapping.materialQuantityMilliPerStockUnit, `open purchase-order supply for ${material.materialId}`)
     const atRiskPurchaseOrderQuantityMilli = safeProduct(atRiskPurchaseOrderStockUnits, mapping.materialQuantityMilliPerStockUnit, `at-risk purchase-order supply for ${material.materialId}`)
-    const scheduledPurchaseOrderQuantityMilli = safeProduct(scheduledPurchaseOrderStockUnits, mapping.materialQuantityMilliPerStockUnit, `scheduled purchase-order supply for ${material.materialId}`)
-    const dependableShortageQuantityMilli = Math.max(remainingQuantityMilli - onHandQuantityMilli - scheduledPurchaseOrderQuantityMilli, 0)
-    const totalShortageQuantityMilli = Math.max(dependableShortageQuantityMilli - atRiskPurchaseOrderQuantityMilli, 0)
-    const status: ProductionMaterialRequirement['status'] = onHandQuantityMilli >= remainingQuantityMilli ? 'ready_to_issue' : !dependableShortageQuantityMilli ? 'covered_by_open_po' : !totalShortageQuantityMilli ? 'supply_at_risk' : 'shortage'
+    const requiredStockUnits = stockUnitsFor(remainingQuantityMilli, mapping.materialQuantityMilliPerStockUnit)
+    const requiredSupplyStockUnits = protectedStockUnits + requiredStockUnits
+    const dependableSupplyStockUnits = item.onHand + scheduledPurchaseOrderStockUnits
+    const totalSupplyStockUnits = dependableSupplyStockUnits + atRiskPurchaseOrderStockUnits
+    const dependableGapStockUnits = Math.max(requiredSupplyStockUnits - dependableSupplyStockUnits, 0)
+    const totalGapStockUnits = Math.max(requiredSupplyStockUnits - totalSupplyStockUnits, 0)
+    const status: ProductionMaterialRequirement['status'] = availableToIssueStockUnits >= requiredStockUnits ? 'ready_to_issue' : !dependableGapStockUnits ? 'covered_by_open_po' : !totalGapStockUnits ? 'supply_at_risk' : 'shortage'
     return {
       materialId: material.materialId, materialName: material.name, unit: material.unit,
       requiredQuantityMilli: material.requiredQuantityMilli, fulfilledQuantityMilli, remainingQuantityMilli, status,
       shopSupply: {
         sku: mapping.sku, itemName: item.name, materialQuantityMilliPerStockUnit: mapping.materialQuantityMilliPerStockUnit,
-        onHandStockUnits: item.onHand, onHandQuantityMilli, openPurchaseOrderStockUnits, openPurchaseOrderQuantityMilli,
+        onHandStockUnits: item.onHand, onHandQuantityMilli, protectedStockUnits, protectedStockQuantityMilli,
+        availableToIssueStockUnits, availableToIssueQuantityMilli, openPurchaseOrderStockUnits, openPurchaseOrderQuantityMilli,
         atRiskPurchaseOrderStockUnits, atRiskPurchaseOrderQuantityMilli,
-        requiredStockUnits: stockUnitsFor(remainingQuantityMilli, mapping.materialQuantityMilliPerStockUnit),
-        suggestedIssueStockUnits: Math.min(item.onHand, stockUnitsFor(remainingQuantityMilli, mapping.materialQuantityMilliPerStockUnit)),
-        suggestedExpediteStockUnits: Math.min(atRiskPurchaseOrderStockUnits, stockUnitsFor(dependableShortageQuantityMilli, mapping.materialQuantityMilliPerStockUnit)),
-        suggestedOrderStockUnits: stockUnitsFor(totalShortageQuantityMilli, mapping.materialQuantityMilliPerStockUnit),
+        requiredStockUnits, requiredSupplyStockUnits,
+        suggestedIssueStockUnits: Math.min(availableToIssueStockUnits, requiredStockUnits),
+        suggestedExpediteStockUnits: Math.min(atRiskPurchaseOrderStockUnits, dependableGapStockUnits),
+        suggestedOrderStockUnits: totalGapStockUnits,
         nextExpectedAt: scheduledOrders.map((order) => order.expectedAt).filter((value): value is string => Boolean(value)).sort()[0] ?? null,
       },
     }
@@ -217,7 +237,7 @@ export function projectProductionMaterialRequirements(
   const body = {
     contract: PRODUCTION_MATERIAL_REQUIREMENTS_CONTRACT,
     source: { plantRevision: projection.revision, plantHeadDigest: projection.headDigest, commerceSupplyDigest },
-    job: { jobId: projection.plan.job.jobId, product: projection.plan.job.product, targetQuantity: projection.plan.job.targetQuantity, effectiveFrom: projection.plan.effectiveFrom ?? null },
+    job: { jobId: projection.plan.job.jobId, product: projection.plan.job.product, targetQuantity: projection.plan.job.targetQuantity, effectiveFrom: projection.plan.effectiveFrom ?? null, effectiveUntil: projection.plan.effectiveUntil ?? null },
     status, rows, summary,
     authority: { purchaseCreated: false, supplierContacted: false, inventoryIssued: false, productionChanged: false, providerCalled: false } as const,
   }
