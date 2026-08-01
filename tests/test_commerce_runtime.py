@@ -214,8 +214,9 @@ def purchase_requisition_record(
     quantity: int = 10,
     unit_cost_mmk: int = 75,
     actor: str = "Accountable operator",
+    budget_envelope_id: str | None = None,
 ) -> dict[str, object]:
-    return {
+    requisition: dict[str, object] = {
         "id": requisition_id,
         "createdAt": captured_at,
         "expectedAt": expected_at,
@@ -226,6 +227,32 @@ def purchase_requisition_record(
         "totalMmk": quantity * unit_cost_mmk,
         "sourceDecisionDigest": f"sha256:{'1' * 64}",
         "sourceReplenishmentDigest": f"sha256:{'2' * 64}",
+        "approval": action_evidence(action_id, captured_at=captured_at, actor=actor),
+    }
+    if budget_envelope_id:
+        requisition["budgetEnvelopeId"] = budget_envelope_id
+    return requisition
+
+
+def purchase_budget_envelope_record(
+    *,
+    envelope_id: str = "PBE-00000000-0000-4000-8000-000000000018",
+    action_id: str = "ACT-PURCHASE-BUDGET-APPROVE",
+    captured_at: str = NOW,
+    period_end: str = "2027-07-23T09:00:00.000Z",
+    ceiling_mmk: int = 5_000,
+    per_requisition_limit_mmk: int = 1_000,
+    actor: str = "Accountable operator",
+) -> dict[str, object]:
+    return {
+        "id": envelope_id,
+        "createdAt": captured_at,
+        "budgetCode": "SHOP-STOCK-2026",
+        "label": "Stock replenishment",
+        "periodStart": captured_at,
+        "periodEnd": period_end,
+        "ceilingMmk": ceiling_mmk,
+        "perRequisitionLimitMmk": per_requisition_limit_mmk,
         "approval": action_evidence(action_id, captured_at=captured_at, actor=actor),
     }
 
@@ -902,6 +929,8 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         return dict(next_state["catalogChanges"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.purchase_order.created":
         return dict(next_state["purchaseOrders"][0]["creation"])  # type: ignore[index, arg-type]
+    if event_type == "commerce.purchase_budget.approved":
+        return dict(next_state["purchaseBudgetEnvelopes"][0]["approval"])  # type: ignore[index, arg-type]
     if event_type == "commerce.purchase_requisition.approved":
         return dict(next_state["purchaseRequisitions"][0]["approval"])  # type: ignore[index, arg-type]
     if event_type == "commerce.purchase_order.cancelled":
@@ -2920,6 +2949,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.inventory.master_created",
                     "commerce.inventory.supplier_policy_saved",
                     "commerce.inventory.transferred",
+                    "commerce.purchase_budget.approved",
                     "commerce.purchase_requisition.approved",
                     "commerce.purchase_order.created",
                     "commerce.purchase_order.received",
@@ -4015,13 +4045,62 @@ class CommerceRuntimeTests(unittest.TestCase):
         with self.assertRaises(TrialValidationError):
             apply_event(invoiced, "commerce.purchase_order.cancelled", cancellation)
 
+    def test_purchase_budget_caps_commitment_and_cancelled_po_releases_it(self) -> None:
+        envelope = purchase_budget_envelope_record(ceiling_mmk=1_000)
+        first = purchase_requisition_record(budget_envelope_id=envelope["id"])  # type: ignore[arg-type]
+        second = purchase_requisition_record(
+            requisition_id="PR-00000000-0000-4000-8000-000000000020",
+            action_id="ACT-PURCHASE-REQUISITION-SECOND",
+            quantity=5,
+            budget_envelope_id=envelope["id"],  # type: ignore[arg-type]
+        )
+        state = catalog_state()
+        state["purchaseBudgetEnvelopes"] = [envelope]
+        state["purchaseRequisitions"] = [second, first]
+        first_po = purchase_order_record(actor="Procurement operator")
+        first_po["requisitionId"] = first["id"]
+        second_po = purchase_order_record(
+            purchase_order_id="PO-00000000-0000-4000-8000-000000000022",
+            action_id="ACT-PURCHASE-CREATE-SECOND",
+            quantity=5,
+            actor="Procurement operator",
+        )
+        second_po["requisitionId"] = second["id"]
+        state["purchaseOrders"] = [second_po, first_po]
+        with self.assertRaisesRegex(TrialValidationError, "approved ceiling"):
+            validate_commerce_state(state)
+
+        first_po["cancellation"] = action_evidence(
+            "ACT-PURCHASE-CANCEL-BUDGET-RELEASE",
+            captured_at="2026-07-23T09:10:00.000Z",
+            actor="Procurement operator",
+        )
+        validated = validate_commerce_state(state)
+        self.assertEqual(len(validated["purchaseRequisitions"]), 2)
+
+        over_limit = deepcopy(validated)
+        over_limit["purchaseRequisitions"][0]["quantityRequested"] = 14  # type: ignore[index]
+        over_limit["purchaseRequisitions"][0]["totalMmk"] = 1_050  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "per-requisition"):
+            validate_commerce_state(over_limit)
+
+        legacy = catalog_state()
+        legacy["purchaseRequisitions"] = [purchase_requisition_record()]
+        self.assertEqual(len(validate_commerce_state(legacy)["purchaseRequisitions"]), 1)
+        with self.assertRaisesRegex(TrialValidationError, "budget envelope"):
+            apply_event(catalog_state(), "commerce.purchase_requisition.approved", legacy)
+
     def test_purchase_requisition_is_immutable_and_exactly_converts_to_one_po(self) -> None:
         current = catalog_state()
-        requisition = purchase_requisition_record()
-        requisition_state = deepcopy(current)
+        envelope = purchase_budget_envelope_record()
+        budget_state = deepcopy(current)
+        budget_state["purchaseBudgetEnvelopes"] = [envelope]
+        budgeted = apply_event(current, "commerce.purchase_budget.approved", budget_state)
+        requisition = purchase_requisition_record(budget_envelope_id=envelope["id"])  # type: ignore[arg-type]
+        requisition_state = deepcopy(budgeted)
         requisition_state["purchaseRequisitions"] = [requisition]
         approved = apply_event(
-            current,
+            budgeted,
             "commerce.purchase_requisition.approved",
             requisition_state,
         )
@@ -4100,9 +4179,52 @@ class CommerceRuntimeTests(unittest.TestCase):
             expected_version=0,
             payload={"state": catalog_state(), "evidence": action_evidence("ACT-REQUISITION-INIT")},
         )
-        requisition = purchase_requisition_record(captured_at="2099-01-01T00:00:00.000Z")
+        envelope = purchase_budget_envelope_record(captured_at="2099-01-01T00:00:00.000Z", period_end="2099-12-31T00:00:00.000Z")
+        envelope["approval"]["actor"] = "Fabricated buying agent"  # type: ignore[index]
+        budget_state = deepcopy(initialized.state)
+        budget_state["purchaseBudgetEnvelopes"] = [envelope]
+        budget_payload = {"state": budget_state, "evidence": dict(envelope["approval"])}  # type: ignore[arg-type]
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.purchase_budget.approved",
+                expected_version=initialized.version,
+                payload=budget_payload,
+            )
+        budget_command_id = str(uuid4())
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:04:00.000+00:00",
+        ):
+            budgeted = store.apply_command(
+                operator,
+                command_id=budget_command_id,
+                surface="commerce",
+                event_type="commerce.purchase_budget.approved",
+                expected_version=initialized.version,
+                payload=budget_payload,
+            )
+            budget_replay = store.apply_command(
+                operator,
+                command_id=budget_command_id,
+                surface="commerce",
+                event_type="commerce.purchase_budget.approved",
+                expected_version=initialized.version,
+                payload=budget_payload,
+            )
+        retained_envelope = budgeted.state["purchaseBudgetEnvelopes"][0]  # type: ignore[index]
+        self.assertEqual(retained_envelope["approval"]["actor"], operator.actor_id)  # type: ignore[index]
+        self.assertEqual(retained_envelope["periodStart"], "2026-07-23T09:04:00.000+00:00")
+        self.assertTrue(budget_replay.idempotent_replay)
+
+        requisition = purchase_requisition_record(
+            captured_at="2099-01-01T00:00:00.000Z",
+            budget_envelope_id=retained_envelope["id"],  # type: ignore[arg-type]
+        )
         requisition["approval"]["actor"] = "Fabricated buying agent"  # type: ignore[index]
-        next_state = deepcopy(initialized.state)
+        next_state = deepcopy(budgeted.state)
         next_state["purchaseRequisitions"] = [requisition]
         command_id = str(uuid4())
         payload = {
@@ -4115,7 +4237,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                 command_id=str(uuid4()),
                 surface="commerce",
                 event_type="commerce.purchase_requisition.approved",
-                expected_version=initialized.version,
+                expected_version=budgeted.version,
                 payload=payload,
             )
         with patch(
@@ -4127,7 +4249,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                 command_id=command_id,
                 surface="commerce",
                 event_type="commerce.purchase_requisition.approved",
-                expected_version=initialized.version,
+                expected_version=budgeted.version,
                 payload=payload,
             )
             replay = store.apply_command(
@@ -4135,7 +4257,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                 command_id=command_id,
                 surface="commerce",
                 event_type="commerce.purchase_requisition.approved",
-                expected_version=initialized.version,
+                expected_version=budgeted.version,
                 payload=payload,
             )
         retained = approved.state["purchaseRequisitions"][0]  # type: ignore[index]

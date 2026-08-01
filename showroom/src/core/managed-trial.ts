@@ -97,6 +97,7 @@ export type ManagedCommerceEvent =
   | 'commerce.inventory.master_created'
   | 'commerce.inventory.supplier_policy_saved'
   | 'commerce.inventory.transferred'
+  | 'commerce.purchase_budget.approved'
   | 'commerce.purchase_requisition.approved'
   | 'commerce.purchase_order.created'
   | 'commerce.purchase_order.received'

@@ -51,6 +51,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.inventory.master_created",
         "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
+        "commerce.purchase_budget.approved",
         "commerce.purchase_requisition.approved",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
@@ -1152,6 +1153,41 @@ def _authoritative_command_payload(
             actor=principal.actor_id,
             captured_at=effective_captured_at,
         )
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.purchase_budget.approved":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        envelopes = (
+            state.get("purchaseBudgetEnvelopes") if isinstance(state, Mapping) else None
+        )
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(envelopes, list)
+            or not envelopes
+            or not isinstance(envelopes[0], Mapping)
+            or not isinstance(envelopes[0].get("approval"), Mapping)
+            or envelopes[0]["approval"].get("actionId") != evidence.get("actionId")
+        ):
+            return authoritative
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": captured_at,
+        }
+        authoritative_envelope = {
+            **dict(envelopes[0]),
+            "createdAt": captured_at,
+            "periodStart": captured_at,
+            "approval": deepcopy(authoritative_evidence),
+        }
+        authoritative_state = dict(state)
+        authoritative_state["purchaseBudgetEnvelopes"] = [
+            authoritative_envelope,
+            *deepcopy(envelopes[1:]),
+        ]
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative

@@ -77,6 +77,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.inventory.master_created",
         "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
+        "commerce.purchase_budget.approved",
         "commerce.purchase_requisition.approved",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
@@ -125,6 +126,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.inventory.master_created",
         "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
+        "commerce.purchase_budget.approved",
         "commerce.purchase_requisition.approved",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
@@ -191,6 +193,7 @@ _COMMAND_ID_PATTERN = re.compile(
 )
 _STOREFRONT_PREVIEW_SCHEMA = "supermega.ecommerce.storefront_preview.v1"
 _MAX_STOREFRONT_REQUESTS = 100
+_MAX_PURCHASE_BUDGET_ENVELOPES = 200
 _MAX_PURCHASE_REQUISITIONS = 100
 _MAX_PURCHASE_ORDERS = 100
 _MAX_CATALOG_BASELINES = 500
@@ -228,6 +231,10 @@ _PURCHASE_ORDER_ID_PATTERN = re.compile(
 _PURCHASE_REQUISITION_ID_PATTERN = re.compile(
     r"PR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
+_PURCHASE_BUDGET_ENVELOPE_ID_PATTERN = re.compile(
+    r"PBE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_PURCHASE_BUDGET_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{2,39}")
 _SUPPLIER_INVOICE_ID_PATTERN = re.compile(
     r"PINV-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
@@ -505,11 +512,18 @@ _PURCHASE_ORDER_REQUIRED_FIELDS = frozenset(
 _PURCHASE_ORDER_OPTIONAL_FIELDS = frozenset(
     {"requisitionId", "expectedAt", "unitCostMmk", "cancellation", "supplierInvoice"}
 )
-_PURCHASE_REQUISITION_FIELDS = frozenset(
+_PURCHASE_REQUISITION_REQUIRED_FIELDS = frozenset(
     {
         "id", "createdAt", "expectedAt", "supplier", "sku", "quantityRequested",
         "unitCostMmk", "totalMmk", "sourceDecisionDigest",
         "sourceReplenishmentDigest", "approval",
+    }
+)
+_PURCHASE_REQUISITION_OPTIONAL_FIELDS = frozenset({"budgetEnvelopeId"})
+_PURCHASE_BUDGET_ENVELOPE_FIELDS = frozenset(
+    {
+        "id", "createdAt", "budgetCode", "label", "periodStart", "periodEnd",
+        "ceilingMmk", "perRequisitionLimitMmk", "approval",
     }
 )
 _SUPPLIER_INVOICE_REQUIRED_FIELDS = frozenset(
@@ -1087,6 +1101,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "websiteIntakes",
                 "storefrontRequests",
                 "storefrontConfiguration",
+                "purchaseBudgetEnvelopes",
                 "purchaseRequisitions",
                 "purchaseOrders",
                 "catalogBaselines",
@@ -1117,6 +1132,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     purchase_orders = _list(
         state.get("purchaseOrders", []),
         "commerce state.purchaseOrders",
+    )
+    purchase_budget_envelopes = _list(
+        state.get("purchaseBudgetEnvelopes", []),
+        "commerce state.purchaseBudgetEnvelopes",
     )
     purchase_requisitions = _list(
         state.get("purchaseRequisitions", []),
@@ -1176,6 +1195,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     if len(catalog_changes) > _MAX_CATALOG_CHANGES:
         raise TrialValidationError(
             f"commerce state.catalogChanges cannot exceed {_MAX_CATALOG_CHANGES}."
+        )
+    if len(purchase_budget_envelopes) > _MAX_PURCHASE_BUDGET_ENVELOPES:
+        raise TrialValidationError(
+            "commerce state.purchaseBudgetEnvelopes cannot exceed "
+            f"{_MAX_PURCHASE_BUDGET_ENVELOPES}."
         )
     if len(purchase_requisitions) > _MAX_PURCHASE_REQUISITIONS:
         raise TrialValidationError(
@@ -1598,13 +1622,69 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         validated_payment_policies.append(policy)
         payment_policy_action_ids.append(policy["proof"]["actionId"])
 
+    purchase_budget_envelope_ids: list[str] = []
+    purchase_budget_action_ids: list[str] = []
+    purchase_budget_by_id: dict[str, dict[str, Any]] = {}
+    newer_purchase_budget: dict[str, Any] | None = None
+    for index, candidate in enumerate(purchase_budget_envelopes):
+        field = f"purchaseBudgetEnvelopes[{index}]"
+        envelope = _object(candidate, field)
+        _exact_fields(envelope, field, required=_PURCHASE_BUDGET_ENVELOPE_FIELDS)
+        envelope_id = _text(envelope["id"], f"{field}.id", maximum=80)
+        if _PURCHASE_BUDGET_ENVELOPE_ID_PATTERN.fullmatch(envelope_id) is None:
+            raise TrialValidationError(f"{field}.id is invalid.")
+        created_at = _timestamp(envelope["createdAt"], f"{field}.createdAt")
+        budget_code = _text(envelope["budgetCode"], f"{field}.budgetCode", maximum=40)
+        if _PURCHASE_BUDGET_CODE_PATTERN.fullmatch(budget_code) is None:
+            raise TrialValidationError(f"{field}.budgetCode is invalid.")
+        _text(envelope["label"], f"{field}.label", maximum=120)
+        period_start = _timestamp(envelope["periodStart"], f"{field}.periodStart")
+        period_end = _timestamp(envelope["periodEnd"], f"{field}.periodEnd")
+        created_time = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        start_time = datetime.fromisoformat(period_start.replace("Z", "+00:00"))
+        end_time = datetime.fromisoformat(period_end.replace("Z", "+00:00"))
+        if start_time > created_time or end_time <= created_time:
+            raise TrialValidationError(f"{field} period must contain its approval time.")
+        ceiling = _integer(envelope["ceilingMmk"], f"{field}.ceilingMmk", minimum=1)
+        per_requisition = _integer(
+            envelope["perRequisitionLimitMmk"],
+            f"{field}.perRequisitionLimitMmk",
+            minimum=1,
+        )
+        if per_requisition > ceiling:
+            raise TrialValidationError(f"{field} per-requisition limit exceeds its ceiling.")
+        approval = _action_proof(envelope["approval"], f"{field}.approval")
+        if approval["capturedAt"] != created_at:
+            raise TrialValidationError(f"{field}.approval must be captured at creation.")
+        if newer_purchase_budget is not None and datetime.fromisoformat(
+            str(newer_purchase_budget["createdAt"]).replace("Z", "+00:00")
+        ) < created_time:
+            raise TrialValidationError("purchase budget envelopes must be newest first.")
+        for existing in purchase_budget_by_id.values():
+            if existing["budgetCode"] != budget_code:
+                continue
+            existing_start = datetime.fromisoformat(str(existing["periodStart"]).replace("Z", "+00:00"))
+            existing_end = datetime.fromisoformat(str(existing["periodEnd"]).replace("Z", "+00:00"))
+            if start_time < existing_end and existing_start < end_time:
+                raise TrialValidationError(f"{field} overlaps another {budget_code} envelope.")
+        purchase_budget_envelope_ids.append(envelope_id)
+        purchase_budget_action_ids.append(approval["actionId"])
+        purchase_budget_by_id[envelope_id] = envelope
+        newer_purchase_budget = envelope
+    _unique(purchase_budget_envelope_ids, "Purchase budget envelope ID")
+
     purchase_requisition_ids: list[str] = []
     purchase_requisition_action_ids: list[str] = []
     purchase_requisition_by_id: dict[str, dict[str, Any]] = {}
     for index, candidate in enumerate(purchase_requisitions):
         field = f"purchaseRequisitions[{index}]"
         requisition = _object(candidate, field)
-        _exact_fields(requisition, field, required=_PURCHASE_REQUISITION_FIELDS)
+        _exact_fields(
+            requisition,
+            field,
+            required=_PURCHASE_REQUISITION_REQUIRED_FIELDS,
+            optional=_PURCHASE_REQUISITION_OPTIONAL_FIELDS,
+        )
         requisition_id = _text(requisition["id"], f"{field}.id", maximum=80)
         if _PURCHASE_REQUISITION_ID_PATTERN.fullmatch(requisition_id) is None:
             raise TrialValidationError(f"{field}.id is invalid.")
@@ -1621,6 +1701,24 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         total = _integer(requisition["totalMmk"], f"{field}.totalMmk", minimum=1)
         if quantity * unit_cost > _MAX_SAFE_INTEGER or total != quantity * unit_cost:
             raise TrialValidationError(f"{field}.totalMmk must equal quantity times unit cost.")
+        if "budgetEnvelopeId" in requisition:
+            budget_envelope_id = _text(
+                requisition["budgetEnvelopeId"],
+                f"{field}.budgetEnvelopeId",
+                maximum=80,
+            )
+            envelope = purchase_budget_by_id.get(budget_envelope_id)
+            if envelope is None:
+                raise TrialValidationError(f"{field}.budgetEnvelopeId is unknown.")
+            approval_time = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            if not (
+                datetime.fromisoformat(str(envelope["periodStart"]).replace("Z", "+00:00"))
+                <= approval_time
+                < datetime.fromisoformat(str(envelope["periodEnd"]).replace("Z", "+00:00"))
+            ):
+                raise TrialValidationError(f"{field} approval is outside its budget period.")
+            if total > int(envelope["perRequisitionLimitMmk"]):
+                raise TrialValidationError(f"{field} exceeds its per-requisition budget limit.")
         for digest_field in ("sourceDecisionDigest", "sourceReplenishmentDigest"):
             digest = _text(requisition[digest_field], f"{field}.{digest_field}", maximum=71)
             if _SHA256_DIGEST_PATTERN.fullmatch(digest) is None:
@@ -1810,6 +1908,22 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     )
     _unique(supplier_invoice_ids, "Supplier invoice ID")
     _unique(supplier_invoice_references, "Supplier invoice reference")
+    for envelope_id, envelope in purchase_budget_by_id.items():
+        committed = sum(
+            int(requisition["totalMmk"])
+            for requisition in purchase_requisition_by_id.values()
+            if requisition.get("budgetEnvelopeId") == envelope_id
+            and not any(
+                purchase_order.get("requisitionId") == requisition["id"]
+                and "cancellation" in purchase_order
+                for purchase_order in purchase_orders
+                if isinstance(purchase_order, Mapping)
+            )
+        )
+        if committed > int(envelope["ceilingMmk"]):
+            raise TrialValidationError(
+                f"Purchase budget {envelope['budgetCode']} exceeds its approved ceiling."
+            )
 
     storefront_configuration_action_id = ""
     if storefront_configuration is not None:
@@ -4005,6 +4119,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *collection_action_ids,
             *intake_action_ids,
             *close_action_ids,
+            *purchase_budget_action_ids,
             *purchase_requisition_action_ids,
             *purchase_order_action_ids,
             *(
@@ -4299,6 +4414,12 @@ def _validate_event_evidence(
         ):
             raise TrialValidationError(
                 "command evidence must match the saved service schedule revision."
+            )
+    elif event_type == "commerce.purchase_budget.approved":
+        approval = next_state["purchaseBudgetEnvelopes"][0]["approval"]
+        if not _proof_matches_evidence(approval, evidence):
+            raise TrialValidationError(
+                "command evidence must match the purchase budget approval proof."
             )
     elif event_type == "commerce.purchase_requisition.approved":
         approval = next_state["purchaseRequisitions"][0]["approval"]
@@ -4721,6 +4842,10 @@ def _storefront_configuration(state: Mapping[str, Any]) -> Mapping[str, Any] | N
 
 def _purchase_orders(state: Mapping[str, Any]) -> list[Any]:
     return state.get("purchaseOrders", [])
+
+
+def _purchase_budget_envelopes(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("purchaseBudgetEnvelopes", [])
 
 
 def _purchase_requisitions(state: Mapping[str, Any]) -> list[Any]:
@@ -6636,6 +6761,14 @@ def _require_purchase_orders_unchanged(
 ) -> None:
     if _purchase_orders(current) != _purchase_orders(next_state):
         raise TrialValidationError("event cannot change: purchaseOrders.")
+
+
+def _require_purchase_budget_envelopes_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _purchase_budget_envelopes(current) != _purchase_budget_envelopes(next_state):
+        raise TrialValidationError("event cannot change: purchaseBudgetEnvelopes.")
 
 
 def _require_purchase_requisitions_unchanged(
@@ -8665,6 +8798,10 @@ def _validate_purchase_requisition_approved(
             "commerce.purchase_requisition.approved must prepend exactly one requisition."
         )
     requisition = next_requisitions[0]
+    if "budgetEnvelopeId" not in requisition:
+        raise TrialValidationError(
+            "a new purchase requisition requires an active purchase budget envelope."
+        )
     if any(
         purchase_order.get("sku") == requisition["sku"]
         and "cancellation" not in purchase_order
@@ -8680,6 +8817,27 @@ def _validate_purchase_requisition_approved(
     ):
         raise TrialValidationError(
             "a purchase requisition cannot duplicate an active purchase order."
+        )
+
+
+def _validate_purchase_budget_approved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_requisitions_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    current_envelopes = _purchase_budget_envelopes(current)
+    next_envelopes = _purchase_budget_envelopes(next_state)
+    if (
+        len(next_envelopes) != len(current_envelopes) + 1
+        or next_envelopes[1:] != current_envelopes
+    ):
+        raise TrialValidationError(
+            "commerce.purchase_budget.approved must prepend exactly one budget envelope."
         )
 
 
@@ -9662,6 +9820,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.inventory.master_created": _validate_inventory_master_created,
     "commerce.inventory.supplier_policy_saved": _validate_inventory_supplier_policy_saved,
     "commerce.inventory.transferred": _validate_inventory_transferred,
+    "commerce.purchase_budget.approved": _validate_purchase_budget_approved,
     "commerce.purchase_requisition.approved": _validate_purchase_requisition_approved,
     "commerce.purchase_order.created": _validate_purchase_order_created,
     "commerce.purchase_order.received": _validate_purchase_order_received,
@@ -9733,6 +9892,7 @@ def reduce_commerce_state(
             or _website_intakes(next_state)
             or _storefront_requests(next_state)
             or _storefront_configuration(next_state)
+            or _purchase_budget_envelopes(next_state)
             or _purchase_requisitions(next_state)
             or _purchase_orders(next_state)
             or _catalog_changes(next_state)
@@ -9772,6 +9932,8 @@ def reduce_commerce_state(
         "commerce.service_schedule.saved",
     }:
         _require_service_schedule_unchanged(current_state, next_state)
+    if event_type != "commerce.purchase_budget.approved":
+        _require_purchase_budget_envelopes_unchanged(current_state, next_state)
     if event_type != "commerce.purchase_requisition.approved":
         _require_purchase_requisitions_unchanged(current_state, next_state)
     if event_type not in {

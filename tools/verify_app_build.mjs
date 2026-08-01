@@ -1785,8 +1785,8 @@ if (!shopReplenishmentSource.includes("SHOP_REPLENISHMENT_PLAN_CONTRACT = 'super
   || !coreSource.includes('aria-label="Supplier control"')
   || !coreSource.includes('aria-label="Shop procurement decisions"')
   || !coreSource.includes('Procurement control')
-  || !coreSource.includes('AI combines demand, Shop stock, Plant materials, open orders, retained supplier terms, delivery evidence, quality, and exposure.')
-  || !coreSource.includes('Source-bound ranking · owner approval required')
+  || !coreSource.includes('An approved budget caps commitment')
+  || !coreSource.includes('budget and owner approval required')
   || !coreSource.includes('function startSupplierRequest()')
   || !coreSource.includes('Review next requisition')
   || !coreSource.includes('supplier: approved?.supplier ?? decision?.recommendedSupplier ??')
@@ -1804,9 +1804,9 @@ if (!shopReplenishmentSource.includes("SHOP_REPLENISHMENT_PLAN_CONTRACT = 'super
   || !coreSource.includes("'Monitor supplier promise'")
   || !coreSource.includes("'Supplier controls ready'")
   || !coreSource.includes("['Buy', purchaseRecommendations.length ? `${shopReplenishment.summary.recommendedOrderUnits} units` : 'Covered']")
-  || !coreSource.includes("['Budget', shopProcurementDecision.summary.unknownExposure")
+  || !coreSource.includes("['Budget', activePurchaseBudgetCommitment")
   || !coreSource.includes("['Plant', shopReplenishment.summary.productionDemandUnits ? `${shopReplenishment.summary.productionDemandUnits} units` : 'No demand']")
-  || !coreSource.includes("['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Owner confirms' : 'Locked']")
+  || !coreSource.includes("['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Two-person' : 'Locked']")
   || coreSource.includes("supplier: 'Preferred supplier'")
   || coreSource.includes('Math.round(item.price * 0.6)')
   || !coreCssSource.includes('.shop-order-control.supplier-control')
@@ -4185,10 +4185,10 @@ if (!commercePageContract.includes('purchaseOrderDraft')
   || !commercePageContract.includes("kind: 'purchase_requisition_approve'")
   || !commercePageContract.includes("purchaseOrderDraft.requisitionId ? 'Review second approval' : 'Review requisition'")
   || !commercePageContract.includes('Create with second operator')
-  || !commercePageContract.includes('different operator must create its exact purchase order')
+  || !commercePageContract.includes('different operator creates its exact purchase order')
   || !commercePageContract.includes('Use a different operator from ${approvedRequisition.approval.actor}')
   || !commercePageContract.includes('const approved = openPurchaseRequisitions[0]')
-  || !commercePageContract.includes('source snapshot locked · second operator next')
+  || !commercePageContract.includes("budget?.budgetCode ?? 'legacy authority'")
   || commercePageContract.includes('requisition.sourceDecisionDigest === shopProcurementDecision.digest')
   || !commercePageContract.includes('Create an internal order')
   || !commercePageContract.includes('This does not contact a supplier or create a payment.')
@@ -4221,15 +4221,27 @@ if (!commercePageContract.includes('purchaseOrderDraft')
   || !commerceSource.includes('export type CommercePurchaseRequisition =')
   || !commerceSource.includes('export function approveCommercePurchaseRequisition(')
   || !commerceSource.includes('export function commercePurchaseRequisitions(')
+  || !commerceSource.includes('export type CommercePurchaseBudgetEnvelope =')
+  || !commerceSource.includes('export function approveCommercePurchaseBudgetEnvelope(')
+  || !commerceSource.includes('export function commercePurchaseBudgetCommitment(')
+  || !commercePageContract.includes("kind: 'purchase_budget_approve'")
+  || !commercePageContract.includes("'commerce.purchase_budget.approved'")
+  || !commercePageContract.includes('Approve purchase budget')
+  || !commercePageContract.includes('Set buying limits')
   || !commerceSource.includes('does not match its approved requisition')
   || !commerceSource.includes('sameAccountableActor(proof.actor, requisition.approval.actor)')
   || !managedCommerceRuntime.includes('def _same_accountable_actor(')
   || !managedCommerceRuntime.includes('requires a later confirmation by a different operator')
   || !managedTrialSource.includes("'commerce.purchase_requisition.approved'")
+  || !managedTrialSource.includes("'commerce.purchase_budget.approved'")
   || !managedCommerceRuntime.includes('"commerce.purchase_requisition.approved"')
+  || !managedCommerceRuntime.includes('"commerce.purchase_budget.approved"')
+  || !managedCommerceRuntime.includes('def _validate_purchase_budget_approved(')
   || !managedCommerceRuntime.includes('def _validate_purchase_requisition_approved(')
   || !managedTrialStoreRuntime.includes('if event_type == "commerce.purchase_requisition.approved":')
+  || !managedTrialStoreRuntime.includes('if event_type == "commerce.purchase_budget.approved":')
   || !workspaceRuntimeSource.includes("'purchase_requisition_approve'")
+  || !workspaceRuntimeSource.includes("'purchase_budget_approve'")
   || !managedCommerceRuntime.includes('_PURCHASE_DISCREPANCY_FIELDS')
   || !commercePageContract.includes('Cancel remainder')
   || !commercePageContract.includes('id="purchase-orders"')
@@ -10555,6 +10567,29 @@ async function verifyCommerceRuntime() {
       && !settledCloseExpectation.paymentExceptionOrderIds.includes(paidOrder.id)
       && settledCloseExpectation.paymentExceptionOrderIds.includes(unrelatedOrder.id), 'settled_refund_left_as_due_only_exception')
 
+    const budgetEnvelopeId = 'PBE-00000000-0000-4000-8000-000000000018'
+    const budgetProof = proof('ACT-PURCHASE-BUDGET-APPROVE')
+    const budgetInput = {
+      id: budgetEnvelopeId,
+      budgetCode: 'SHOP-STOCK-2026',
+      label: 'Stock replenishment',
+      periodStart: budgetProof.capturedAt,
+      periodEnd: '2027-07-23T09:00:00.000Z',
+      ceilingMmk: 1_000,
+      perRequisitionLimitMmk: 750,
+    }
+    const budgetApproved = model.approveCommercePurchaseBudgetEnvelope(base, budgetInput, budgetProof)
+    assert(budgetApproved
+      && budgetApproved.purchaseBudgetEnvelopes[0].id === budgetEnvelopeId
+      && model.commercePurchaseBudgetCommitment(budgetApproved, budgetApproved.purchaseBudgetEnvelopes[0]).availableMmk === 1_000,
+    'purchase_budget_approval_not_immutable_or_available')
+    assert(model.approveCommercePurchaseBudgetEnvelope(budgetApproved, budgetInput, budgetProof) === budgetApproved,
+      'purchase_budget_exact_retry_not_idempotent')
+    assert(model.approveCommercePurchaseBudgetEnvelope(budgetApproved, {
+      ...budgetInput,
+      id: 'PBE-00000000-0000-4000-8000-000000000020',
+    }, proof('ACT-PURCHASE-BUDGET-OVERLAP', 1)) === null, 'overlapping_purchase_budget_succeeded')
+
     const requisitionId = 'PR-00000000-0000-4000-8000-000000000019'
     const requisitionProof = proof('ACT-PURCHASE-REQUISITION-APPROVE')
     const requisitionInput = {
@@ -10564,10 +10599,11 @@ async function verifyCommerceRuntime() {
       sku: 'SKU-1',
       quantityRequested: 10,
       unitCostMmk: 75,
+      budgetEnvelopeId,
       sourceDecisionDigest: `sha256:${'1'.repeat(64)}`,
       sourceReplenishmentDigest: `sha256:${'2'.repeat(64)}`,
     }
-    const requisitionApproved = model.approveCommercePurchaseRequisition(base, requisitionInput, requisitionProof)
+    const requisitionApproved = model.approveCommercePurchaseRequisition(budgetApproved, requisitionInput, requisitionProof)
     assert(requisitionApproved
       && requisitionApproved.purchaseRequisitions[0].id === requisitionId
       && requisitionApproved.purchaseRequisitions[0].totalMmk === 750
@@ -10578,6 +10614,10 @@ async function verifyCommerceRuntime() {
       'purchase_requisition_exact_retry_not_idempotent')
     assert(model.approveCommercePurchaseRequisition(requisitionApproved, { ...requisitionInput, unitCostMmk: 74 }, requisitionProof) === null,
       'changed_purchase_requisition_retry_succeeded')
+    assert(model.approveCommercePurchaseRequisition(budgetApproved, { ...requisitionInput, quantityRequested: 11 }, proof('ACT-PURCHASE-REQUISITION-OVER')) === null,
+      'purchase_requisition_over_budget_limit_succeeded')
+    assert(model.commercePurchaseBudgetCommitment(requisitionApproved, requisitionApproved.purchaseBudgetEnvelopes[0]).availableMmk === 250,
+      'purchase_requisition_commitment_not_reserved')
     const linkedPurchaseProof = proof('ACT-PURCHASE-CREATE-FROM-REQUISITION', 60_000, { actor: 'OP-BUYER' })
     const linkedPurchase = model.createCommercePurchaseOrder(requisitionApproved, {
       id: 'PO-00000000-0000-4000-8000-000000000019',
@@ -10591,6 +10631,14 @@ async function verifyCommerceRuntime() {
     assert(linkedPurchase?.purchaseOrders[0].requisitionId === requisitionId
       && model.commercePurchaseRequisitions(linkedPurchase)[0].approval === requisitionApproved.purchaseRequisitions[0].approval,
     'purchase_requisition_to_po_link_not_exact')
+    const linkedPurchaseCancelled = model.cancelCommercePurchaseOrder(
+      linkedPurchase,
+      linkedPurchase.purchaseOrders[0].id,
+      proof('ACT-PURCHASE-CANCEL-BUDGET-RELEASE', 120_000, { actor: 'OP-BUYER' }),
+    )
+    assert(linkedPurchaseCancelled
+      && model.commercePurchaseBudgetCommitment(linkedPurchaseCancelled, linkedPurchaseCancelled.purchaseBudgetEnvelopes[0]).availableMmk === 1_000,
+    'cancelled_purchase_order_did_not_release_budget_commitment')
     assert(model.createCommercePurchaseOrder(requisitionApproved, {
       id: 'PO-00000000-0000-4000-8000-000000000017', requisitionId,
       expectedAt: requisitionInput.expectedAt, supplier: requisitionInput.supplier,
@@ -15401,7 +15449,8 @@ await verifyCommerceRuntime()
 await verifyProductionRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-if (bytes > 2_548_000) fail(`artifact_budget:${bytes}`)
+// Bounded allowance for the purchase-budget commitment model and its compact editor.
+if (bytes > 2_556_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const largestJavascriptBytes = Math.max(...await Promise.all(javascriptFiles.map(async (path) => (await stat(path)).size)))
 const operationsArtifactPath = javascriptFiles.find((path) => /[\\/]core-app-[^\\/]+\.js$/.test(path))
@@ -15417,7 +15466,7 @@ if (!javascriptFiles.some((path) => /[\\/]router-[^\\/]+\.js$/.test(path))) fail
 if (!javascriptFiles.some((path) => /[\\/]ClientDataOnboarding-[^\\/]+\.js$/.test(path))) fail('client_onboarding_chunk_artifact_missing')
 if (!javascriptFiles.some((path) => /[\\/]local-client-import-[^\\/]+\.js$/.test(path))) fail('local_client_import_chunk_artifact_missing')
 if (!javascriptFiles.some((path) => /[\\/]ShopServiceSchedule-[^\\/]+\.js$/.test(path))) fail('shop_service_schedule_chunk_artifact_missing')
-if (largestJavascriptBytes > 480_000) fail(`javascript_headroom_budget:${largestJavascriptBytes}`)
+if (largestJavascriptBytes > 482_000) fail(`javascript_headroom_budget:${largestJavascriptBytes}`)
 
 if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))

@@ -291,6 +291,7 @@ const expectedHumanCommerceEvents = [
   'commerce.production_material.issued',
   'commerce.production_material.returned',
   'commerce.promotion_policy.saved',
+  'commerce.purchase_budget.approved',
   'commerce.purchase_order.cancelled',
   'commerce.purchase_order.created',
   'commerce.purchase_order.received',

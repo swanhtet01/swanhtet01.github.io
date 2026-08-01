@@ -55,6 +55,7 @@ import { formatTime, teamDefinitions, useTeamWorkspace } from './team-work'
 import { readPlantIndustryPackId } from './plant-industry-packs'
 import {
   advanceCommerceOrder,
+  approveCommercePurchaseBudgetEnvelope,
   approveCommercePurchaseRequisition,
   cancelCommercePurchaseOrder,
   cancelCommerceOrder,
@@ -100,6 +101,8 @@ import {
   commercePurchaseOrderArrivalUrgency,
   commercePurchaseOrderProgress,
   commercePurchaseOrders,
+  commercePurchaseBudgetCommitment,
+  commercePurchaseBudgetEnvelopes,
   commercePurchaseRequisitions,
   commerceSupplierInvoiceMatch,
   commerceSupplierPerformance,
@@ -234,6 +237,14 @@ const ProductHomeReadiness = lazy(() => import('./ProductHomeReadiness').then((m
 type PurchaseOrderDraft =
   | { mode: 'create'; requisitionId?: string; sku: string; supplier: string; expectedAt: string; quantity: string; unitCostMmk: string }
   | { mode: 'receive'; purchaseOrderId: string; quantity: string; rejectedQuantity: string; discrepancyCode: CommercePurchaseOrderDiscrepancyCode; locationId: string; trackingCode: string }
+
+type PurchaseBudgetDraft = {
+  budgetCode: string
+  label: string
+  periodEnd: string
+  ceilingMmk: string
+  perRequisitionLimitMmk: string
+}
 
 type SupplierInvoiceDraft = {
   purchaseOrderId: string
@@ -1806,6 +1817,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
   const [catalogCreateOpen, setCatalogCreateOpen] = useState(false)
   const [catalogEditDraft, setCatalogEditDraft] = useState<CatalogItemEditDraft | null>(null)
+  const [purchaseBudgetDraft, setPurchaseBudgetDraft] = useState<PurchaseBudgetDraft | null>(null)
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
   const [supplierInvoiceDraft, setSupplierInvoiceDraft] = useState<SupplierInvoiceDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
@@ -2037,6 +2049,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     .sort(compareCommercePurchaseOrderAttention)
   const convertedRequisitionIds = new Set(purchaseOrderRows.flatMap(({ purchaseOrder }) => purchaseOrder.requisitionId ? [purchaseOrder.requisitionId] : []))
   const openPurchaseRequisitions = commercePurchaseRequisitions(commerce).filter((requisition) => !convertedRequisitionIds.has(requisition.id))
+  const purchaseBudgetEnvelopes = commercePurchaseBudgetEnvelopes(commerce)
+  const activePurchaseBudget = purchaseBudgetEnvelopes.find((envelope) => (
+    Date.parse(envelope.periodStart) <= purchaseOrderClock && purchaseOrderClock < Date.parse(envelope.periodEnd)
+  ))
+  const activePurchaseBudgetCommitment = activePurchaseBudget
+    ? commercePurchaseBudgetCommitment(commerce, activePurchaseBudget)
+    : null
   const supplierPerformance = commerceSupplierPerformance(commerce, purchaseOrderClock)
   const activePurchaseOrderBySku = new Map(
     purchaseOrderRows
@@ -2953,6 +2972,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             ? 'Close partial receipt'
             : openPurchaseRequisitions.length
               ? 'Second operator creates order'
+              : !activePurchaseBudget
+                ? 'Set buying limits'
               : procurementReviews.length
                 ? shopProcurementDecision.summary.riskReviews ? 'Review supplier risk' : shopProcurementDecision.summary.termsRequired ? 'Complete supplier terms' : 'Review next requisition'
               : activePurchaseOrders.length
@@ -2960,16 +2981,16 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
                 : 'Supplier controls ready'
   const supplierControlRows = [
     ['Buy', purchaseRecommendations.length ? `${shopReplenishment.summary.recommendedOrderUnits} units` : 'Covered'],
-    ['Budget', shopProcurementDecision.summary.unknownExposure ? `${shopProcurementDecision.summary.unknownExposure} need terms` : shopProcurementDecision.summary.knownExposureMmk ? formatMoney(shopProcurementDecision.summary.knownExposureMmk) : 'Covered'],
+    ['Budget', activePurchaseBudgetCommitment ? `${formatMoney(activePurchaseBudgetCommitment.availableMmk)} left` : 'Set limits'],
     ['Demand', shopDemandIntelligence.summary.forecastWeeklyUnits ? `${shopDemandIntelligence.summary.forecastWeeklyUnits}/week` : 'Collecting'],
     ['Plant', shopReplenishment.summary.productionDemandUnits ? `${shopReplenishment.summary.productionDemandUnits} units` : 'No demand'],
     ['Risk', overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : shopReplenishment.summary.supplyAtRisk ? `${shopReplenishment.summary.supplyAtRisk} at risk` : 'Clear'],
-    ['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Owner confirms' : 'Locked'],
+    ['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Two-person' : 'Locked'],
   ] as const
   const supplierControl = <section className="shop-order-control supplier-control" aria-label="Supplier control">
-    <div><span className="core-eyebrow">Procurement control</span><strong>{supplierControlNext}</strong><small>AI combines demand, Shop stock, Plant materials, open orders, retained supplier terms, delivery evidence, quality, and exposure. One operator approves an immutable requisition; a different operator must create its exact purchase order. No RFQ, supplier message, payment, receipt, payable, costing, or stock write runs here.</small><button className="text-link" disabled={commerceControlsDisabled || (!openPurchaseRequisitions.length && !procurementReviews.length)} onClick={startSupplierRequest} type="button">{openPurchaseRequisitions.length ? 'Create with second operator' : 'Review next requisition'}</button></div>
+    <div><span className="core-eyebrow">Procurement control</span><strong>{supplierControlNext}</strong><small>AI combines demand, stock, Plant materials, supplier terms, delivery, quality, and exposure. An approved budget caps commitment; one operator approves a requisition and a different operator creates its exact purchase order. Nothing contacts or pays a supplier here.</small><button className="text-link" disabled={commerceControlsDisabled || (Boolean(activePurchaseBudget) && !openPurchaseRequisitions.length && !procurementReviews.length)} onClick={startSupplierRequest} type="button">{openPurchaseRequisitions.length ? 'Create with second operator' : activePurchaseBudget ? 'Review next requisition' : 'Set buying limits'}</button></div>
     <div className="shop-order-control-rows">{supplierControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
-    {procurementReviews.length ? <section aria-label="Shop procurement decisions" className="supplier-performance"><div className="supplier-performance-heading"><span className="core-eyebrow">Requisition review</span><small>Source-bound ranking · owner approval required</small></div><div className="shop-replenishment-list" role="list">{procurementReviews.slice(0, 4).map((row) => { const approved = openPurchaseRequisitions.find((requisition) => requisition.sku === row.sku); return <div data-status={approved ? 'approved' : row.status} key={row.requisitionReference} role="listitem"><span><strong>{row.itemName}</strong><small>{approved?.id ?? row.requisitionReference} · {approved?.quantityRequested ?? row.quantity} units{row.plantJobIds.length ? ` · Plant ${row.plantJobIds.join(', ')}` : ''}</small></span><span><b>{approved ? 'Approved requisition' : row.recommendedSupplier ?? 'Supplier terms needed'}</b><small>{approved ? `${approved.supplier} · ${formatMoney(approved.totalMmk)} · source snapshot locked · second operator next` : `${row.estimatedTotalMmk === null ? 'Cost not retained' : formatMoney(row.estimatedTotalMmk)} · ${row.supplierOptions.length} ${row.supplierOptions.length === 1 ? 'option' : 'options'} · ${row.status === 'risk_review_required' ? 'risk review' : row.status === 'terms_required' ? 'terms review' : 'ready for owner'}`}</small></span></div> })}</div></section> : null}
+    {procurementReviews.length ? <section aria-label="Shop procurement decisions" className="supplier-performance"><div className="supplier-performance-heading"><span className="core-eyebrow">Requisition review</span><small>Source-bound ranking · budget and owner approval required</small></div><div className="shop-replenishment-list" role="list">{procurementReviews.slice(0, 4).map((row) => { const approved = openPurchaseRequisitions.find((requisition) => requisition.sku === row.sku); const budget = approved?.budgetEnvelopeId ? purchaseBudgetEnvelopes.find((envelope) => envelope.id === approved.budgetEnvelopeId) : null; return <div data-status={approved ? 'approved' : row.status} key={row.requisitionReference} role="listitem"><span><strong>{row.itemName}</strong><small>{approved?.id ?? row.requisitionReference} · {approved?.quantityRequested ?? row.quantity} units{row.plantJobIds.length ? ` · Plant ${row.plantJobIds.join(', ')}` : ''}</small></span><span><b>{approved ? 'Approved requisition' : row.recommendedSupplier ?? 'Supplier terms needed'}</b><small>{approved ? `${approved.supplier} · ${formatMoney(approved.totalMmk)} · ${budget?.budgetCode ?? 'legacy authority'} · second operator next` : `${row.estimatedTotalMmk === null ? 'Cost not retained' : formatMoney(row.estimatedTotalMmk)} · ${row.supplierOptions.length} ${row.supplierOptions.length === 1 ? 'option' : 'options'} · ${row.status === 'risk_review_required' ? 'risk review' : row.status === 'terms_required' ? 'terms review' : 'ready for owner'}`}</small></span></div> })}</div></section> : null}
     {demandForecastRows.length ? <section aria-label="Shop demand intelligence" className="supplier-performance">
       <div className="supplier-performance-heading"><span className="core-eyebrow">Demand intelligence</span><small>28-day completed sales · returns netted · recommendation only</small></div>
       <div className="shop-replenishment-list" role="list">{demandForecastRows.slice(0, 4).map((row) => <div data-status={row.status} key={row.sku} role="listitem"><span><strong>{row.itemName}</strong><small>{row.completedOrderCount} completed {row.completedOrderCount === 1 ? 'order' : 'orders'} · {row.confidence} evidence</small></span><span><b>{row.status === 'stockout_risk' ? 'Stockout risk' : row.status === 'reorder_soon' ? 'Reorder soon' : `${row.forecastWeeklyUnits}/week`}</b><small>{row.projectedDaysOfCover === null ? 'Cover collecting' : `${row.projectedDaysOfCover}d projected cover`} · {row.planningHorizonDays}d {row.planningHorizonSource === 'supplier_policy' ? 'supplier lead' : 'planning horizon'}{row.recommendedSafetyStockUnits === null ? '' : ` · ${row.recommendedSafetyStockUnits} safety suggested`}</small></span></div>)}</div>
@@ -5078,8 +5099,69 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       : `Create an internal order for ${item.name}. This does not contact a supplier or create a payment.`)
   }
 
+  function openPurchaseBudgetEditor() {
+    setPurchaseOrderDraft(null)
+    setPurchaseBudgetDraft({
+      budgetCode: `SHOP-STOCK-${new Date(purchaseOrderClock).getUTCFullYear()}`,
+      label: 'Stock replenishment',
+      periodEnd: localDateTimeInputValue(new Date(purchaseOrderClock + 365 * 24 * 60 * 60 * 1000)),
+      ceilingMmk: '5000000',
+      perRequisitionLimitMmk: '1000000',
+    })
+    setNotice('Set the maximum approved buying commitment. This creates internal authority only; it does not order or pay for anything.')
+  }
+
+  function reviewPurchaseBudget(event: FormEvent) {
+    event.preventDefault()
+    if (!purchaseBudgetDraft) return
+    const budgetCode = purchaseBudgetDraft.budgetCode.trim().toUpperCase()
+    const label = purchaseBudgetDraft.label.trim()
+    const ceilingValue = Number(purchaseBudgetDraft.ceilingMmk)
+    const perRequisitionValue = Number(purchaseBudgetDraft.perRequisitionLimitMmk)
+    const ceilingMmk = Number.isSafeInteger(ceilingValue) && ceilingValue > 0 ? ceilingValue : null
+    const perRequisitionLimitMmk = Number.isSafeInteger(perRequisitionValue) && perRequisitionValue > 0 ? perRequisitionValue : null
+    const periodEndTime = Date.parse(purchaseBudgetDraft.periodEnd)
+    if (!/^[A-Z0-9][A-Z0-9_-]{2,39}$/.test(budgetCode) || !label || label.length > 120) {
+      setNotice('Use a 3–40 character budget code and a short budget name.')
+      return
+    }
+    if (ceilingMmk === null || perRequisitionLimitMmk === null || perRequisitionLimitMmk > ceilingMmk) {
+      setNotice('Enter whole-MMK limits with the per-request limit no higher than the total ceiling.')
+      return
+    }
+    if (!Number.isFinite(periodEndTime) || periodEndTime <= purchaseOrderClock) {
+      setNotice('Choose a budget end later than the current time.')
+      return
+    }
+    const envelopeId = uid('PBE')
+    queueAction({
+      kind: 'purchase_budget_approve',
+      subjectId: envelopeId,
+      summary: `Approve ${budgetCode} purchasing limits`,
+      before: 'No active purchase authority · requisitions blocked',
+      after: `${label} · ${formatMoney(ceilingMmk)} ceiling · ${formatMoney(perRequisitionLimitMmk)} per request · no order or payment created`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce('commerce.purchase_budget.approved', action.commandId, proof, (current) => approveCommercePurchaseBudgetEnvelope(current, {
+          id: envelopeId,
+          budgetCode,
+          label,
+          periodStart: proof.capturedAt,
+          periodEnd: new Date(periodEndTime).toISOString(),
+          ceilingMmk,
+          perRequisitionLimitMmk,
+        }, proof))
+        setPurchaseBudgetDraft(null)
+      },
+    })
+  }
+
   function startSupplierRequest() {
     const approved = openPurchaseRequisitions[0]
+    if (!approved && !activePurchaseBudget) {
+      openPurchaseBudgetEditor()
+      return
+    }
     const decision = procurementReviews.find((row) => row.sku === approved?.sku) ?? procurementReviews[0]
     const recommendation = decision ? purchaseRecommendations.find((row) => row.sku === decision.sku) : null
     const item = commerce.items.find((candidate) => candidate.sku === (approved?.sku ?? recommendation?.sku))
@@ -5155,6 +5237,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       const item = purchaseOrderDraftItem
       const quantityOrdered = purchaseOrderQuantityResult
       if (!purchaseOrderDraft.requisitionId) {
+        if (!activePurchaseBudget || !activePurchaseBudgetCommitment) {
+          setNotice('Approve an active buying limit before approving a new requisition.')
+          openPurchaseBudgetEditor()
+          return
+        }
+        if (purchaseOrderDraftTotal > activePurchaseBudget.perRequisitionLimitMmk || purchaseOrderDraftTotal > activePurchaseBudgetCommitment.availableMmk) {
+          setNotice(`This request exceeds ${activePurchaseBudget.budgetCode}. Reduce it or approve a later non-overlapping budget.`)
+          return
+        }
         const decision = procurementReviews.find((row) => row.sku === item.sku)
         if (!decision) {
           setNotice('The procurement decision changed. Reopen the requisition before approval.')
@@ -5172,7 +5263,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             await mutateCommerce('commerce.purchase_requisition.approved', action.commandId, proof, (current) => approveCommercePurchaseRequisition(current, {
               id: requisitionId, expectedAt, supplier, sku: item.sku, quantityRequested: quantityOrdered,
               unitCostMmk: purchaseOrderUnitCostResult, sourceDecisionDigest: shopProcurementDecision.digest,
-              sourceReplenishmentDigest: shopReplenishment.digest,
+              sourceReplenishmentDigest: shopReplenishment.digest, budgetEnvelopeId: activePurchaseBudget.id,
             }, proof))
             setPurchaseOrderDraft((current) => current?.mode === 'create' && current.sku === item.sku ? null : current)
           },
@@ -6439,6 +6530,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <label>Price (MMK)<input aria-invalid={Boolean(catalogEditPriceText) && catalogEditPriceResult === null} autoFocus disabled={commerceControlsDisabled || catalogEditStale} id="catalog-edit-price" inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="1" onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, price: event.target.value } : current)} required step="1" type="number" value={catalogEditDraft.price} /></label>
         <label>Reorder at<input aria-invalid={Boolean(catalogEditReorderText) && catalogEditReorderResult === null} disabled={commerceControlsDisabled || catalogEditStale} inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="0" onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, reorderAt: event.target.value } : current)} required step="1" type="number" value={catalogEditDraft.reorderAt} /></label>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelCatalogItemEditor} type="button">Cancel</button><button className="core-button primary" disabled={catalogEditStale ? Boolean(pendingAction) || !commerceCanWrite : commerceControlsDisabled || !catalogEditChanged} onClick={catalogEditStale ? () => openCatalogItemEditor(catalogEditItem.sku) : undefined} type={catalogEditStale ? 'button' : 'submit'}>{catalogEditStale ? 'Reload values' : 'Review changes'}</button></div>
+      </form> : null}
+      {purchaseBudgetDraft ? <form aria-labelledby="purchase-budget-title" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewPurchaseBudget}>
+        <div className="stock-receipt-copy"><span className="core-eyebrow">Buying limits</span><h3 id="purchase-budget-title">Approve purchase budget</h3><small>Immutable commitment ceiling · internal authority only</small></div>
+        <div className="form-row"><label>Budget code<input autoFocus disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, budgetCode: event.target.value.toUpperCase() } : current)} required value={purchaseBudgetDraft.budgetCode} /></label><label>Budget name<input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, label: event.target.value } : current)} required value={purchaseBudgetDraft.label} /></label></div>
+        <label>Valid until<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, periodEnd: event.target.value } : current)} required type="datetime-local" value={purchaseBudgetDraft.periodEnd} /></label>
+        <div className="form-row"><label>Total ceiling (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, ceilingMmk: event.target.value } : current)} required step="1" type="number" value={purchaseBudgetDraft.ceilingMmk} /></label><label>Per request (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, perRequisitionLimitMmk: event.target.value } : current)} required step="1" type="number" value={purchaseBudgetDraft.perRequisitionLimitMmk} /></label></div>
+        <div className="stock-receipt-preview"><small>Authority</small><strong>{formatMoney(Number(purchaseBudgetDraft.ceilingMmk) || 0)} total · {formatMoney(Number(purchaseBudgetDraft.perRequisitionLimitMmk) || 0)} per request</strong></div>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setPurchaseBudgetDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled} type="submit">Review buying limits</button></div>
       </form> : null}
       {purchaseOrderDraft && purchaseOrderDraftItem ? <form aria-labelledby="purchase-order-title" className="stock-receipt-editor purchase-order-editor" data-mode={purchaseOrderDraft.mode} onSubmit={reviewPurchaseOrder} ref={purchaseOrderEditorRef}>
         <div className="stock-receipt-copy">
