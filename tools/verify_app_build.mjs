@@ -50,7 +50,7 @@ let shopReplenishmentRuntimeChecks = 0
 let shopProcurementDecisionRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
-const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productHomeReadinessSource, productHomeTodaySource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
+const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productHomeReadinessSource, productHomeTodaySource, productSystemNavigatorSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
   readFile(resolve(root, 'site-manifest.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'package.json'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'App.tsx'), 'utf8'),
@@ -58,6 +58,7 @@ const [manifestText, appPackageText, appSource, coreSource, coreShellSource, pro
   readFile(resolve(root, 'showroom', 'src', 'core', 'CoreShell.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'ProductHomeReadiness.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'ProductHomeToday.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'ProductSystemNavigator.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'behavior-trail.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'shop-catalog-import.ts'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts'), 'utf8'),
@@ -905,6 +906,17 @@ if (!coreShellSource.includes("theme-${theme}${routeProduct === 'commerce' ? ' s
   || !coreCssSource.includes('.theme-dark .core-topbar {')
   || !coreCssSource.includes('.shop-product-shell .core-main { padding-bottom: calc(154px + env(safe-area-inset-bottom)); }')
   || coreCssSource.includes('.shop-shell')) fail('theme_and_shop_route_styling_not_separated')
+if (!productSystemNavigatorSource.includes('Start with a real workflow.')
+  || !productSystemNavigatorSource.includes('product-system-workflows')
+  || !productSystemNavigatorSource.includes('`${summary.demoReady} live`')
+  || !productSystemNavigatorSource.includes('future modules stay out of the main app')
+  || productSystemNavigatorSource.includes('Everything in one place.')
+  || productSystemNavigatorSource.includes('Data and controls')
+  || productSystemNavigatorSource.includes('clientCapabilityDependencyLabel')
+  || productSystemNavigatorSource.includes('deliveryDetails')
+  || !coreCssSource.includes('.product-system-workflows { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }')
+  || !coreCssSource.includes('.product-system-workflows { grid-template-columns: 1fr; }')
+  || !coreCssSource.includes('.product-system-advanced > summary { min-height: 38px;')) fail('product_system_launcher_not_simple')
 const productHomeStart = coreShellSource.indexOf('const customerTracks')
 const productHomeEnd = coreShellSource.indexOf('] as const', productHomeStart) + '] as const'.length
 const productHomePageContract = coreShellSource.slice(productHomeStart, coreShellSource.length)
