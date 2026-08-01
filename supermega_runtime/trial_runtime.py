@@ -1361,20 +1361,32 @@ def create_trial_router(
             and body.event_type == "production.order_execution.recorded"
         ):
             submitted_production = body.payload.get("state")
-            execution = (
-                submitted_production.get("orderExecution")
-                if isinstance(submitted_production, Mapping)
-                else None
-            )
-            commands = (
-                execution.get("commands") if isinstance(execution, Mapping) else None
-            )
-            latest_payload = (
-                commands[-1].get("payload")
-                if isinstance(commands, list)
-                and commands
-                and isinstance(commands[-1], Mapping)
-                else None
+            submitted_executions: list[Mapping[str, Any]] = []
+            if isinstance(submitted_production, Mapping):
+                legacy_execution = submitted_production.get("orderExecution")
+                if isinstance(legacy_execution, Mapping):
+                    submitted_executions.append(legacy_execution)
+                portfolio = submitted_production.get("orderPortfolio")
+                entries = portfolio.get("entries") if isinstance(portfolio, Mapping) else None
+                if isinstance(entries, list):
+                    submitted_executions.extend(
+                        entry["execution"]
+                        for entry in entries
+                        if isinstance(entry, Mapping) and isinstance(entry.get("execution"), Mapping)
+                    )
+            evidence_action_id = evidence.get("actionId") if isinstance(evidence, Mapping) else None
+            latest_payload = next(
+                (
+                    commands[-1].get("payload")
+                    for execution in submitted_executions
+                    if isinstance((commands := execution.get("commands")), list)
+                    and commands
+                    and isinstance(commands[-1], Mapping)
+                    and isinstance(commands[-1].get("payload"), Mapping)
+                    and isinstance(commands[-1]["payload"].get("proof"), Mapping)
+                    and commands[-1]["payload"]["proof"].get("actionId") == evidence_action_id
+                ),
+                None,
             )
             if (
                 isinstance(submitted_production, Mapping)

@@ -15,6 +15,7 @@ import {
 } from './plant-order-foundation.ts'
 
 export const PRODUCTION_MATERIAL_REQUIREMENTS_CONTRACT = 'supermega.production.material_requirements.v1' as const
+export const PRODUCTION_PORTFOLIO_MRP_CONTRACT = 'supermega.production.portfolio_mrp.v1' as const
 
 export type ProductionMaterialRequirement = {
   materialId: string
@@ -55,6 +56,32 @@ export type ProductionMaterialRequirements = {
   rows: ProductionMaterialRequirement[]
   summary: { materials: number; mappingRequired: number; shortages: number; supplyAtRisk: number; coveredByOpenPo: number; readyToIssue: number; fulfilled: number }
   authority: { purchaseCreated: false; supplierContacted: false; inventoryIssued: false; productionChanged: false; providerCalled: false }
+  digest: string
+}
+
+export type ProductionPortfolioMrp = {
+  contract: typeof PRODUCTION_PORTFOLIO_MRP_CONTRACT
+  source: { commerceSupplyDigest: string; orders: Array<{ jobId: string; headDigest: string }> }
+  orders: Array<{
+    jobId: string
+    product: string
+    priority: 'urgent' | 'normal' | 'low'
+    dueAt: string
+    status: ProductionMaterialRequirements['status']
+    rows: Array<{
+      materialId: string
+      materialName: string
+      sku: string | null
+      requiredStockUnits: number
+      allocatedOnHandStockUnits: number
+      allocatedScheduledPurchaseStockUnits: number
+      allocatedAtRiskPurchaseStockUnits: number
+      shortageStockUnits: number
+      status: ProductionMaterialRequirement['status']
+    }>
+  }>
+  summary: { orders: number; ready: number; coveredByPurchase: number; atRisk: number; shortage: number; mappingRequired: number }
+  authority: { purchaseCreated: false; supplierContacted: false; inventoryReserved: false; productionChanged: false; providerCalled: false }
   digest: string
 }
 
@@ -160,7 +187,8 @@ export function projectProductionMaterialRequirements(
 ): ProductionMaterialRequirements | null {
   const execution = validatePlantOrderState(executionValue ?? createEmptyPlantOrderState())
   const projection = projectPlantOrder(execution)
-  if (!projection.plan) return null
+  const plan = projection.plan
+  if (!plan) return null
   const commerce = validateCommerceState(commerceValue)
   const handoffs = productionMaterialHandoffs(execution, commerce)
   const relevantSkus = new Set(projection.materials.flatMap((material) => material.shopSupply ? [material.shopSupply.sku] : []))
@@ -182,8 +210,8 @@ export function projectProductionMaterialRequirements(
     if (!mapping || matchingItems.length !== 1) return { materialId: material.materialId, materialName: material.name, unit: material.unit, requiredQuantityMilli: material.requiredQuantityMilli, fulfilledQuantityMilli, remainingQuantityMilli, status: 'mapping_required', shopSupply: null }
     const item = matchingItems[0]
     const openOrders = purchaseOrders.filter((order) => order.sku === mapping.sku && order.remaining > 0 && order.status !== 'cancelled')
-    const effectiveFromMs = projection.plan.effectiveFrom ? Date.parse(projection.plan.effectiveFrom) : null
-    const effectiveUntilMs = projection.plan.effectiveUntil ? Date.parse(projection.plan.effectiveUntil) : null
+    const effectiveFromMs = plan.effectiveFrom ? Date.parse(plan.effectiveFrom) : null
+    const effectiveUntilMs = plan.effectiveUntil ? Date.parse(plan.effectiveUntil) : null
     const atRiskOrders = openOrders.filter((order) => {
       if (!order.expectedAt) return true
       const expectedMs = Date.parse(order.expectedAt)
@@ -237,7 +265,7 @@ export function projectProductionMaterialRequirements(
   const body = {
     contract: PRODUCTION_MATERIAL_REQUIREMENTS_CONTRACT,
     source: { plantRevision: projection.revision, plantHeadDigest: projection.headDigest, commerceSupplyDigest },
-    job: { jobId: projection.plan.job.jobId, product: projection.plan.job.product, targetQuantity: projection.plan.job.targetQuantity, effectiveFrom: projection.plan.effectiveFrom ?? null, effectiveUntil: projection.plan.effectiveUntil ?? null },
+    job: { jobId: plan.job.jobId, product: plan.job.product, targetQuantity: plan.job.targetQuantity, effectiveFrom: plan.effectiveFrom ?? null, effectiveUntil: plan.effectiveUntil ?? null },
     status, rows, summary,
     authority: { purchaseCreated: false, supplierContacted: false, inventoryIssued: false, productionChanged: false, providerCalled: false } as const,
   }
@@ -252,4 +280,109 @@ export function validateProductionMaterialRequirements(
   const expected = projectProductionMaterialRequirements(execution, commerce)
   if (!expected || typeof value !== 'object' || value === null || (value as { contract?: unknown }).contract !== PRODUCTION_MATERIAL_REQUIREMENTS_CONTRACT || plantOrderEvidenceDigest(value) !== plantOrderEvidenceDigest(expected)) throw new Error('Production material requirements do not match their current Plant and Shop evidence.')
   return expected
+}
+
+export function projectProductionPortfolioMrp(
+  inputs: Array<{ execution: PlantOrderState; priority: 'urgent' | 'normal' | 'low'; dueAt: string }>,
+  commerceValue: CommerceState | null | undefined,
+): ProductionPortfolioMrp | null {
+  if (!inputs.length) return null
+  const commerce = validateCommerceState(commerceValue)
+  const priorityRank = { urgent: 0, normal: 1, low: 2 }
+  const orders = inputs.map((input) => {
+    const execution = validatePlantOrderState(input.execution)
+    const projection = projectPlantOrder(execution)
+    const requirements = projectProductionMaterialRequirements(execution, commerce)
+    if (!projection.plan || !requirements || !['urgent', 'normal', 'low'].includes(input.priority) || !Number.isFinite(Date.parse(input.dueAt))) {
+      throw new Error('Production portfolio MRP requires a reviewed order with a valid priority and due time.')
+    }
+    return { execution, projection, requirements, priority: input.priority, dueAt: input.dueAt }
+  }).sort((left, right) => priorityRank[left.priority] - priorityRank[right.priority]
+    || Date.parse(left.dueAt) - Date.parse(right.dueAt)
+    || (left.requirements.job.jobId < right.requirements.job.jobId ? -1 : left.requirements.job.jobId > right.requirements.job.jobId ? 1 : 0))
+  const jobIds = orders.map((order) => order.requirements.job.jobId)
+  if (new Set(jobIds).size !== jobIds.length) throw new Error('Production portfolio MRP job IDs must be unique.')
+
+  const availableOnHand = new Map(commerce.items.map((item) => [item.sku, Math.max(item.onHand - item.reorderAt, 0)]))
+  const purchaseSupply = commercePurchaseOrders(commerce).map((order) => {
+    const progress = commercePurchaseOrderProgress(commerce, order)
+    return { id: order.id, sku: order.sku, expectedAt: order.expectedAt ?? null, remaining: progress.status === 'cancelled' ? 0 : progress.remaining }
+  }).filter((order) => order.remaining > 0)
+
+  const allocatedOrders = orders.map((order) => {
+    const effectiveFrom = order.requirements.job.effectiveFrom ? Date.parse(order.requirements.job.effectiveFrom) : null
+    const effectiveUntil = order.requirements.job.effectiveUntil ? Date.parse(order.requirements.job.effectiveUntil) : null
+    const rows = order.requirements.rows.map((requirement) => {
+      if (!requirement.shopSupply) return {
+        materialId: requirement.materialId, materialName: requirement.materialName, sku: null,
+        requiredStockUnits: 0, allocatedOnHandStockUnits: 0, allocatedScheduledPurchaseStockUnits: 0,
+        allocatedAtRiskPurchaseStockUnits: 0, shortageStockUnits: 0, status: requirement.status,
+      }
+      const sku = requirement.shopSupply.sku
+      const requiredStockUnits = requirement.shopSupply.requiredStockUnits
+      const onHandPool = availableOnHand.get(sku) ?? 0
+      const allocatedOnHandStockUnits = Math.min(requiredStockUnits, onHandPool)
+      availableOnHand.set(sku, onHandPool - allocatedOnHandStockUnits)
+      let remaining = requiredStockUnits - allocatedOnHandStockUnits
+      let allocatedScheduledPurchaseStockUnits = 0
+      let allocatedAtRiskPurchaseStockUnits = 0
+      const matching = purchaseSupply.filter((supply) => supply.sku === sku && supply.remaining > 0)
+        .sort((left, right) => (left.expectedAt ?? '9999') < (right.expectedAt ?? '9999') ? -1 : (left.expectedAt ?? '9999') > (right.expectedAt ?? '9999') ? 1 : left.id < right.id ? -1 : 1)
+      const scheduled = matching.filter((supply) => {
+        if (!supply.expectedAt) return false
+        const expected = Date.parse(supply.expectedAt)
+        return (effectiveFrom === null || expected >= effectiveFrom) && (effectiveUntil === null || expected < effectiveUntil)
+      })
+      const atRisk = matching.filter((supply) => !scheduled.includes(supply))
+      for (const [supplies, risk] of [[scheduled, false], [atRisk, true]] as const) {
+        for (const supply of supplies) {
+          if (!remaining) break
+          const allocated = Math.min(remaining, supply.remaining)
+          supply.remaining -= allocated
+          remaining -= allocated
+          if (risk) allocatedAtRiskPurchaseStockUnits += allocated
+          else allocatedScheduledPurchaseStockUnits += allocated
+        }
+      }
+      const status: ProductionMaterialRequirement['status'] = !requiredStockUnits ? 'fulfilled'
+        : allocatedOnHandStockUnits === requiredStockUnits ? 'ready_to_issue'
+          : !remaining && !allocatedAtRiskPurchaseStockUnits ? 'covered_by_open_po'
+            : !remaining ? 'supply_at_risk' : 'shortage'
+      return {
+        materialId: requirement.materialId, materialName: requirement.materialName, sku, requiredStockUnits,
+        allocatedOnHandStockUnits, allocatedScheduledPurchaseStockUnits, allocatedAtRiskPurchaseStockUnits,
+        shortageStockUnits: remaining, status,
+      }
+    })
+    const status: ProductionMaterialRequirements['status'] = rows.some((row) => row.status === 'mapping_required') ? 'mapping_required'
+      : rows.some((row) => row.status === 'shortage') ? 'shortage'
+        : rows.some((row) => row.status === 'supply_at_risk') ? 'supply_at_risk'
+          : rows.some((row) => row.status === 'covered_by_open_po') ? 'covered_by_open_po'
+            : rows.some((row) => row.status === 'ready_to_issue') ? 'ready_to_issue' : 'fulfilled'
+    return { jobId: order.requirements.job.jobId, product: order.requirements.job.product, priority: order.priority, dueAt: order.dueAt, status, rows }
+  })
+  const sourceOrders = orders.map((order) => ({ jobId: order.requirements.job.jobId, headDigest: order.execution.headDigest }))
+  const commerceSupplyDigest = plantOrderEvidenceDigest({
+    items: commerce.items.map((item) => ({ sku: item.sku, onHand: item.onHand, reorderAt: item.reorderAt })).sort((left, right) => left.sku < right.sku ? -1 : 1),
+    purchaseOrders: commercePurchaseOrders(commerce).map((purchaseOrder) => {
+      const progress = commercePurchaseOrderProgress(commerce, purchaseOrder)
+      return { id: purchaseOrder.id, sku: purchaseOrder.sku, expectedAt: purchaseOrder.expectedAt ?? null, remaining: progress.remaining, status: progress.status }
+    }).sort((left, right) => left.id < right.id ? -1 : 1),
+  })
+  const summary = {
+    orders: allocatedOrders.length,
+    ready: allocatedOrders.filter((order) => order.status === 'ready_to_issue' || order.status === 'fulfilled').length,
+    coveredByPurchase: allocatedOrders.filter((order) => order.status === 'covered_by_open_po').length,
+    atRisk: allocatedOrders.filter((order) => order.status === 'supply_at_risk').length,
+    shortage: allocatedOrders.filter((order) => order.status === 'shortage').length,
+    mappingRequired: allocatedOrders.filter((order) => order.status === 'mapping_required').length,
+  }
+  const body = {
+    contract: PRODUCTION_PORTFOLIO_MRP_CONTRACT,
+    source: { commerceSupplyDigest, orders: sourceOrders },
+    orders: allocatedOrders,
+    summary,
+    authority: { purchaseCreated: false, supplierContacted: false, inventoryReserved: false, productionChanged: false, providerCalled: false } as const,
+  }
+  return { ...body, digest: plantOrderEvidenceDigest(body) }
 }

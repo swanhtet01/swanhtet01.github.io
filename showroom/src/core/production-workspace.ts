@@ -1,5 +1,6 @@
 import { plantOrderEvidenceDigest, projectPlantOrder, type PlantOrderState } from './plant-order-foundation.ts'
 import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs.ts'
+import { productionOrderPortfolioEntries, validateProductionOrderPortfolio, type ProductionOrderPortfolio } from './production-order-portfolio.ts'
 import type { ShopProductionDemandSourceSnapshot } from './shop-production-demand.ts'
 
 export const PRODUCTION_WORKSPACE_SCHEMA = 'supermega.production.workspace.v2' as const
@@ -220,6 +221,7 @@ export type ProductionState = {
   events: ProductionEvent[]
   openingPlan?: ProductionOpeningPlan
   orderExecution?: PlantOrderState
+  orderPortfolio?: ProductionOrderPortfolio
   equipmentMaster?: ProductionEquipmentMaster
 }
 
@@ -453,7 +455,7 @@ const maintenanceHistoricalCompleteEventFields = maintenanceCompleteEventFields.
 const equipmentImportEventFields = [...baseEventFields, 'equipmentIds']
 const equipmentCommissionEventFields = [...baseEventFields, 'installedAt', 'toState', 'workCentreId']
 const equipmentMaintenanceStrategyEventFields = [...baseEventFields, 'strategyRevision', 'maintenanceOwner', 'intervalDays', 'nextDueAt', 'procedureReference']
-const productionStateFields = ['schema', 'revision', 'jobs', 'issues', 'machines', 'events', 'openingPlan', 'orderExecution', 'equipmentMaster']
+const productionStateFields = ['schema', 'revision', 'jobs', 'issues', 'machines', 'events', 'openingPlan', 'orderExecution', 'orderPortfolio', 'equipmentMaster']
 const productionOpeningPlanFields = ['contract', 'packageDigest', 'confirmedAt', 'industryPackId', 'jobIds', 'machineIds']
 const productionJobFields = ['id', 'line', 'product', 'target', 'output', 'owner', 'priority', 'dueAt', 'scrap', 'qualityHold', 'closure', 'shopDemandSource']
 const productionShopDemandSourceFields = ['contract', 'sourceDigest', 'evidenceReference', 'snapshot']
@@ -1190,6 +1192,12 @@ export function validateProductionState(value: unknown): ProductionState {
       if (equipmentAssetsWithEvidence.has(String(asset.id))) throw new Error('Equipment master records cannot reuse import evidence.')
       equipmentAssetsWithEvidence.add(String(asset.id))
     }
+  }
+
+  if (Object.hasOwn(value, 'orderPortfolio')) {
+    if (Object.hasOwn(value, 'orderExecution')) throw new Error('Production cannot retain both legacy order execution and the order portfolio.')
+    const portfolio = validateProductionOrderPortfolio(value.orderPortfolio)
+    if (portfolio.entries.some((entry) => !jobIds.includes(entry.jobId))) throw new Error('Production order portfolio references an unknown job.')
   }
   if (equipmentAssetsWithEvidence.size !== equipmentAssets.length) throw new Error('Every equipment master record requires one immutable import event.')
   const equipmentCommissionEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'equipment_commissioned')
@@ -2273,7 +2281,8 @@ export function buildProductionBatchGenealogy(state: ProductionState, jobId: str
       action: event.kind === 'quality_hold_placed' ? 'hold_placed' as const : 'hold_released' as const,
     }))
     .sort(compareProductionEvidence)
-  const controlled = current.orderExecution ? projectPlantOrder(current.orderExecution) : null
+  const retainedOrderExecution = productionOrderPortfolioEntries(current).find((entry) => entry.jobId === job.id)?.execution
+  const controlled = retainedOrderExecution ? projectPlantOrder(retainedOrderExecution) : null
   const controlledExecution = controlled?.plan?.job.jobId === job.id ? {
     planId: controlled.plan.planId,
     planDigest: controlled.plan.packageDigest,

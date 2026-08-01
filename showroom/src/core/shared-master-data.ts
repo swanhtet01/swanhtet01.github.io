@@ -4,6 +4,7 @@ import {
   type CommerceState,
 } from './commerce-workspace.ts'
 import { projectPlantOrder } from './plant-order-foundation.ts'
+import { productionOrderPortfolioEntries } from './production-order-portfolio.ts'
 import { createEmptyShopInventoryState, projectShopInventory } from './shop-inventory-foundation.ts'
 import type { ProductionState } from './production-workspace.ts'
 import type { WebsiteWorkspace } from '../products/website/website-model.ts'
@@ -261,11 +262,8 @@ export function buildSharedMasterDataRegistry(input: SharedMasterDataInput): Sha
   }
   if (allowedProducts.includes('production') && input.production) {
     input.production.jobs.forEach((job) => addRecord(records, allowedProducts, 'production', 'document', `job-${job.id}`, 'plant_workspace', input.production?.revision ?? null))
-    if (input.production.orderExecution) {
-      const plan = projectPlantOrder(input.production.orderExecution).plan
-      const units = [...new Set(plan?.materials.map((material) => material.unit) ?? [])]
-      units.forEach((unit) => addRecord(records, allowedProducts, 'production', 'unit', unit, 'plant_workspace', input.production?.revision ?? null))
-    }
+    const units = [...new Set(productionOrderPortfolioEntries(input.production).flatMap((entry) => projectPlantOrder(entry.execution).plan?.materials.map((material) => material.unit) ?? []))]
+    units.forEach((unit) => addRecord(records, allowedProducts, 'production', 'unit', unit, 'plant_workspace', input.production?.revision ?? null))
   }
   if (allowedProducts.includes('website') && input.website) {
     input.website.pages.forEach((page) => addRecord(records, allowedProducts, 'website', 'document', `page-${page.id}`, 'website_workspace', input.website?.revision ?? null))

@@ -80,7 +80,9 @@ _MAX_MACHINES = 100
 _MAX_EQUIPMENT = 100
 
 _STATE_FIELDS = frozenset({"schema", "revision", "jobs", "issues", "machines", "events"})
-_STATE_OPTIONAL_FIELDS = frozenset({"openingPlan", "orderExecution", "equipmentMaster"})
+_STATE_OPTIONAL_FIELDS = frozenset({"openingPlan", "orderExecution", "orderPortfolio", "equipmentMaster"})
+_ORDER_PORTFOLIO_CONTRACT = "supermega.production.order_portfolio.v1"
+_ORDER_PORTFOLIO_MAX = 20
 _OPENING_PLAN_FIELDS = frozenset(
     {"contract", "packageDigest", "confirmedAt", "jobIds", "machineIds"}
 )
@@ -990,6 +992,56 @@ def _validate_order_execution(candidate: object) -> dict[str, Any]:
         raise TrialValidationError(
             f"production state.orderExecution is invalid: {exc}"
         ) from exc
+
+
+def _validate_order_portfolio(candidate: object) -> dict[str, Any]:
+    portfolio = _object(candidate, "production state.orderPortfolio")
+    _exact_fields(
+        portfolio,
+        "production state.orderPortfolio",
+        required=frozenset({"contract", "entries"}),
+    )
+    if portfolio["contract"] != _ORDER_PORTFOLIO_CONTRACT:
+        raise TrialValidationError("production state.orderPortfolio contract is invalid.")
+    entries_raw = _list(
+        portfolio["entries"],
+        "production state.orderPortfolio.entries",
+        maximum=_ORDER_PORTFOLIO_MAX,
+    )
+    if not entries_raw:
+        raise TrialValidationError("production state.orderPortfolio must retain at least one reviewed order.")
+    entries: list[dict[str, Any]] = []
+    job_ids: list[str] = []
+    plan_ids: list[str] = []
+    for index, candidate_entry in enumerate(entries_raw):
+        field = f"production state.orderPortfolio.entries[{index}]"
+        entry = _object(candidate_entry, field)
+        _exact_fields(entry, field, required=frozenset({"jobId", "execution"}))
+        job_id = _text(entry["jobId"], f"{field}.jobId", maximum=80)
+        if _EQUIPMENT_ID_PATTERN.fullmatch(job_id) is None:
+            raise TrialValidationError(f"{field}.jobId must use a canonical Production identifier.")
+        execution = _validate_order_execution(entry["execution"])
+        plan = project_plant_order(execution).get("plan")
+        if not isinstance(plan, Mapping) or plan["job"]["jobId"] != job_id:
+            raise TrialValidationError(f"{field} must retain its reviewed job plan.")
+        job_ids.append(job_id)
+        plan_ids.append(plan["planId"])
+        entries.append({"jobId": job_id, "execution": execution})
+    _unique(job_ids, "Production order portfolio job ID")
+    _unique(plan_ids, "Production order portfolio plan ID")
+    if job_ids != sorted(job_ids):
+        raise TrialValidationError("production state.orderPortfolio entries must be sorted by job ID.")
+    return {"contract": _ORDER_PORTFOLIO_CONTRACT, "entries": entries}
+
+
+def _production_order_entries(state: Mapping[str, Any]) -> list[dict[str, Any]]:
+    if "orderPortfolio" in state:
+        return _validate_order_portfolio(state["orderPortfolio"])["entries"]
+    if "orderExecution" not in state:
+        return []
+    execution = _validate_order_execution(state["orderExecution"])
+    plan = project_plant_order(execution).get("plan")
+    return [{"jobId": plan["job"]["jobId"], "execution": execution}] if isinstance(plan, Mapping) else []
 
 
 def _validate_event(
@@ -2660,6 +2712,17 @@ def validate_production_state(value: object) -> dict[str, Any]:
         if "orderExecution" in state
         else None
     )
+    if order_execution is not None and "orderPortfolio" in state:
+        raise TrialValidationError(
+            "production state cannot retain both legacy order execution and the order portfolio."
+        )
+    order_portfolio = (
+        _validate_order_portfolio(state["orderPortfolio"])
+        if "orderPortfolio" in state
+        else None
+    )
+    if order_portfolio is not None and any(entry["jobId"] not in job_ids for entry in order_portfolio["entries"]):
+        raise TrialValidationError("production state.orderPortfolio references an unknown job.")
 
     events = [
         _validate_event(
@@ -2674,10 +2737,12 @@ def validate_production_state(value: object) -> dict[str, Any]:
     ]
     _unique([event["id"] for event in events], "Production event ID")
     _unique([event["actionId"] for event in events], "Production action ID")
-    if order_execution is not None:
+    retained_executions = [entry["execution"] for entry in _production_order_entries(state)]
+    if retained_executions:
         execution_action_ids = {
             command["payload"]["proof"]["actionId"]
-            for command in order_execution["commands"]
+            for execution in retained_executions
+            for command in execution["commands"]
         }
         if execution_action_ids.intersection(event["actionId"] for event in events):
             raise TrialValidationError(
@@ -3845,12 +3910,27 @@ def _validate_order_execution_recorded(
         "machines",
         "events",
     )
-    before = current.get("orderExecution", create_empty_plant_order_state())
-    after = next_state.get("orderExecution")
-    if not isinstance(after, Mapping):
+    if (
+        current.get("openingPlan") != next_state.get("openingPlan")
+        or current.get("equipmentMaster") != next_state.get("equipmentMaster")
+    ):
+        raise TrialValidationError("Plant execution cannot change opening or equipment records.")
+    before_entries = {entry["jobId"]: entry["execution"] for entry in _production_order_entries(current)}
+    after_entries = {entry["jobId"]: entry["execution"] for entry in _production_order_entries(next_state)}
+    changed_job_ids = sorted(
+        job_id
+        for job_id in set(before_entries) | set(after_entries)
+        if before_entries.get(job_id) != after_entries.get(job_id)
+    )
+    if len(changed_job_ids) != 1:
         raise TrialValidationError(
-            "production.order_execution.recorded must retain one Plant execution state."
+            "production.order_execution.recorded must change exactly one controlled order."
         )
+    changed_job_id = changed_job_ids[0]
+    before = before_entries.get(changed_job_id, create_empty_plant_order_state())
+    after = after_entries.get(changed_job_id)
+    if not isinstance(after, Mapping):
+        raise TrialValidationError("production.order_execution.recorded cannot remove a controlled order.")
     if (
         after["revision"] != before["revision"] + 1
         or after["commands"][:-1] != before["commands"]
@@ -3869,6 +3949,8 @@ def _validate_order_execution_recorded(
     plan = projection["plan"]
     if not isinstance(plan, Mapping):
         raise TrialValidationError("Plant execution must retain one reviewed plan.")
+    if plan["job"]["jobId"] != changed_job_id:
+        raise TrialValidationError("Plant execution must remain bound to its portfolio job.")
     matching_jobs = [job for job in current["jobs"] if job["id"] == plan["job"]["jobId"]]
     if len(matching_jobs) != 1:
         raise TrialValidationError("Plant execution must bind one current Production job.")
@@ -4107,6 +4189,7 @@ def reduce_production_state(
             for job in next_state["jobs"]
         )
         order_execution = next_state.get("orderExecution")
+        order_portfolio = next_state.get("orderPortfolio")
         if (
             next_state["revision"] != 0
             or not (legacy_shape_is_valid or managed_plan_shape_is_valid)
@@ -4116,6 +4199,7 @@ def reduce_production_state(
                 order_execution is not None
                 and order_execution != create_empty_plant_order_state()
             )
+            or order_portfolio is not None
             or not jobs_are_pristine
             or any(
                 machine["state"] != "running"
@@ -4154,7 +4238,10 @@ def reduce_production_state(
     if event_type == "production.order_execution.recorded":
         _validate_order_execution_recorded(current_state, next_state, evidence)
         return next_state
-    if current_state.get("orderExecution") != next_state.get("orderExecution"):
+    if (
+        current_state.get("orderExecution") != next_state.get("orderExecution")
+        or current_state.get("orderPortfolio") != next_state.get("orderPortfolio")
+    ):
         raise TrialValidationError(
             "Production order execution can change only through its dedicated event."
         )

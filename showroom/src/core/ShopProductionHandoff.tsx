@@ -15,7 +15,8 @@ import {
   type PlantOrderState,
 } from './plant-order-foundation'
 import { loadManagedBootstrap, requireManagedSurfaceState, type ManagedIdentity } from './managed-trial'
-import { validateProductionState } from './production-workspace'
+import { loadProductionWorkspace, PRODUCTION_KEY, validateProductionState } from './production-workspace'
+import { productionOrderPortfolioEntries } from './production-order-portfolio'
 
 type ShopProductionHandoffProps = {
   commerce: CommerceState
@@ -166,10 +167,14 @@ function returnActionProof(actor: string, option: MaterialReturnOption): Commerc
 const LOCAL_PLANT_SCOPE = 'plant:local-sample'
 const LEGACY_LOCAL_PLANT_SCOPE = 'plant:'
 
-function loadLocalPlantExecution() {
+function loadLocalPlantExecutions() {
+  const production = loadProductionWorkspace()
+  const entries = productionOrderPortfolioEntries(production.state)
+  if (entries.length) return { executions: entries.map((entry) => entry.execution), error: production.error }
   const snapshot = loadPlantOrderWorkspace(localStorage, LOCAL_PLANT_SCOPE)
-  if (snapshot.source !== 'empty') return snapshot
-  return loadPlantOrderWorkspace(localStorage, LEGACY_LOCAL_PLANT_SCOPE)
+  if (snapshot.source !== 'empty') return { executions: snapshot.error ? [] : [snapshot.state], error: snapshot.error }
+  const legacy = loadPlantOrderWorkspace(localStorage, LEGACY_LOCAL_PLANT_SCOPE)
+  return { executions: legacy.error ? [] : [legacy.state], error: legacy.error }
 }
 
 function ProductionMaterialReturn({
@@ -274,17 +279,16 @@ function ProductionMaterialReturn({
 
 export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }: ShopProductionHandoffProps) {
   const actor = identity?.userId ?? 'Local Shop operator'
-  const [execution, setExecution] = useState<PlantOrderState | null>(() => {
-    if (identity || typeof localStorage === 'undefined') return null
-    const snapshot = loadLocalPlantExecution()
-    return snapshot.error ? null : snapshot.state
+  const [executions, setExecutions] = useState<PlantOrderState[]>(() => {
+    if (identity || typeof localStorage === 'undefined') return []
+    return loadLocalPlantExecutions().executions
   })
   const [loadError, setLoadError] = useState('')
   useEffect(() => {
     if (identity || typeof localStorage === 'undefined') return undefined
     const refresh = () => {
-      const snapshot = loadLocalPlantExecution()
-      setExecution(snapshot.error ? null : snapshot.state)
+      const snapshot = loadLocalPlantExecutions()
+      setExecutions(snapshot.executions)
       setLoadError(snapshot.error)
     }
     const handleWorkspaceUpdate = (event: Event) => {
@@ -294,7 +298,8 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
       if (!eventScope || eventScope === LOCAL_PLANT_SCOPE) refresh()
     }
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === plantOrderStorageKey(LOCAL_PLANT_SCOPE)
+      if (event.key === PRODUCTION_KEY
+        || event.key === plantOrderStorageKey(LOCAL_PLANT_SCOPE)
         || event.key === plantOrderStorageKey(LEGACY_LOCAL_PLANT_SCOPE)) refresh()
     }
     refresh()
@@ -312,19 +317,19 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
       .then((bootstrap) => {
         if (!active) return
         const record = requireManagedSurfaceState(bootstrap, 'production', 'Plant')
-        setExecution(record.version ? validateProductionState(record.state).orderExecution ?? null : null)
+        setExecutions(record.version ? productionOrderPortfolioEntries(validateProductionState(record.state)).map((entry) => entry.execution) : [])
         setLoadError('')
       })
       .catch((nextError) => {
         if (!active) return
-        setExecution(null)
+        setExecutions([])
         setLoadError(nextError instanceof Error ? nextError.message : 'Plant material requests could not be loaded.')
       })
     return () => { active = false }
   }, [identity])
   const handoffs = useMemo(
-    () => productionMaterialHandoffs(execution, commerce),
-    [commerce, execution],
+    () => executions.flatMap((execution) => productionMaterialHandoffs(execution, commerce)),
+    [commerce, executions],
   )
   const pending = handoffs.filter((handoff) => !handoff.fulfilledBy)
   const request = pending[0]

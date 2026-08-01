@@ -106,6 +106,7 @@ import {
   type ClientSolutionId,
 } from './client-onboarding'
 import { PLANT_ORDER_STORAGE_PREFIX, projectPlantOrder } from './plant-order-foundation'
+import { productionOrderPortfolioEntries } from './production-order-portfolio'
 import {
   SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
   createShopServiceSchedule,
@@ -427,7 +428,7 @@ export function SettingsPage() {
     ? preparedArtifact?.products.find((product) => product.product === preparedBlockedProduct) ?? null
     : null
   const plantReleasedBatches = (() => {
-    try { return production.orderExecution && projectPlantOrder(production.orderExecution).status === 'released_to_stock' ? 1 : 0 } catch { return 0 }
+    try { return productionOrderPortfolioEntries(production).filter((entry) => projectPlantOrder(entry.execution).status === 'released_to_stock').length } catch { return 0 }
   })()
   const approvedWebsiteReleases = (() => {
     const loaded = loadWebsiteWorkspace(window.localStorage)

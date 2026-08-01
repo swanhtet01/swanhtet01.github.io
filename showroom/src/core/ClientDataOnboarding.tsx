@@ -136,7 +136,10 @@ function importCommandId() {
 function managedImportBase(product: ClientSolutionId, state: Record<string, unknown>) {
   const base = { ...state }
   if (product === 'commerce') delete base.serviceSchedule
-  if (product === 'production') delete base.orderExecution
+  if (product === 'production') {
+    delete base.orderExecution
+    delete base.orderPortfolio
+  }
   return base
 }
 

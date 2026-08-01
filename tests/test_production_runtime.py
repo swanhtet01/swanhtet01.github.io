@@ -1178,6 +1178,99 @@ class ProductionRuntimeTests(unittest.TestCase):
             501,
         )
 
+    def test_managed_order_portfolio_appends_one_job_at_a_time(self) -> None:
+        current = opening_plan_workspace()
+        first_evidence = action_evidence("ACT-PORTFOLIO-001")
+        first_execution = planned_order_execution(current, first_evidence)
+        first = deepcopy(current)
+        first["orderPortfolio"] = {
+            "contract": "supermega.production.order_portfolio.v1",
+            "entries": [{"jobId": "JOB-OPENING-001", "execution": first_execution}],
+        }
+        accepted_first = apply_event(
+            current,
+            "production.order_execution.recorded",
+            first,
+            first_evidence,
+        )
+
+        second_evidence = action_evidence("ACT-PORTFOLIO-002", captured_at=LATER)
+        second_job = current["jobs"][1]  # type: ignore[index]
+        second_plan = build_plant_order_execution_plan(
+            plan_id="PLN-MANAGED-002",
+            source_digest=plant_order_evidence_digest({"job": second_job}),
+            job={
+                "jobId": second_job["id"],
+                "product": second_job["product"],
+                "targetQuantity": second_job["target"],
+                "outputBatchId": "BATCH-MANAGED-002",
+            },
+            materials=[{
+                "materialId": "MAT-MANAGED-002",
+                "name": "Second managed material",
+                "unit": "kg",
+                "quantityPerUnitMilli": 1_000,
+            }],
+            work_centres=[{"workCentreId": "WC-MANAGED-002", "name": "Second line"}],
+            routing=[{
+                "operationId": "OP-MANAGED-20",
+                "sequence": 1,
+                "name": "Second managed operation",
+                "workCentreId": "WC-MANAGED-002",
+                "minutesPerUnitMilli": 1_000,
+            }],
+        )
+        empty = create_empty_plant_order_state()
+        second_execution = apply_plant_order_plan(
+            empty,
+            second_plan,
+            second_evidence,
+            expected_head_digest=empty["headDigest"],
+        )["state"]
+        second = deepcopy(accepted_first)
+        second["orderPortfolio"]["entries"].append({  # type: ignore[index]
+            "jobId": "JOB-OPENING-002",
+            "execution": second_execution,
+        })
+        accepted_second = apply_event(
+            accepted_first,
+            "production.order_execution.recorded",
+            second,
+            second_evidence,
+        )
+        self.assertEqual(
+            [entry["jobId"] for entry in accepted_second["orderPortfolio"]["entries"]],  # type: ignore[index]
+            ["JOB-OPENING-001", "JOB-OPENING-002"],
+        )
+
+        changed_two = deepcopy(accepted_second)
+        for index, action_id in enumerate(("ACT-PORTFOLIO-003", "ACT-PORTFOLIO-004")):
+            evidence = action_evidence(action_id, captured_at=LATEST)
+            execution = changed_two["orderPortfolio"]["entries"][index]["execution"]  # type: ignore[index]
+            changed_two["orderPortfolio"]["entries"][index]["execution"] = check_plant_order_availability(  # type: ignore[index]
+                execution,
+                check_id=f"CHK-PORTFOLIO-{index + 1:03d}",
+                source_digest=plant_order_evidence_digest({"portfolio": index}),
+                materials=[{
+                    "materialId": f"MAT-MANAGED-{index + 1:03d}",
+                    "inputLotId": f"LOT-MANAGED-{index + 1:03d}",
+                    "availableQuantityMilli": (100 if index else 10) * 1_000,
+                }],
+                work_centres=[{
+                    "workCentreId": f"WC-MANAGED-{index + 1:03d}",
+                    "availableMinutes": 100 if index else 10,
+                }],
+                proof=evidence,
+                expected_head_digest=execution["headDigest"],
+            )["state"]
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                accepted_second,
+                "production.order_execution.recorded",
+                changed_two,
+                action_evidence("ACT-PORTFOLIO-003", captured_at=LATEST),
+            )
+
     def test_opening_plan_is_atomic_multi_record_and_immutable(self) -> None:
         initial = opening_plan_workspace()
         evidence = action_evidence("ACT-INIT-OPENING-PLAN")

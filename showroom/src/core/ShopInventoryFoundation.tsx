@@ -13,6 +13,7 @@ import {
 } from './shop-inventory-foundation'
 import { ShopProductionHandoff } from './ShopProductionHandoff'
 import { projectPlantOrder } from './plant-order-foundation'
+import { productionOrderPortfolioEntries } from './production-order-portfolio'
 import {
   receiveCommerceProductionBatch,
   type CommerceActionProof,
@@ -174,10 +175,15 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
       : setupBlockedByOrders
         ? 'Finish or cancel open aggregate-stock orders before creating location history.'
         : 'Set up locations once so orders, returns, production issues, counts, and transfers share the same stock truth.'
-  const plantProjection = useMemo(
-    () => production.orderExecution ? projectPlantOrder(production.orderExecution) : null,
-    [production.orderExecution],
-  )
+  const plantProjection = useMemo(() => {
+    const released = productionOrderPortfolioEntries(production)
+      .map((entry) => projectPlantOrder(entry.execution))
+      .find((candidate) => candidate.status === 'released_to_stock'
+        && candidate.batchRelease
+        && !commerce.movements.some((movement) => movement.kind === 'production_receipt'
+          && movement.productionReleaseId === candidate.batchRelease?.id))
+    return released ?? null
+  }, [commerce.movements, production])
   const releasedPlantBatch = plantProjection?.status === 'released_to_stock'
     && plantProjection.plan
     && plantProjection.batchRelease

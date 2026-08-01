@@ -7,7 +7,6 @@ import {
   PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT,
   PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
   PLANT_ORDER_PLAN_REVISION_MAX,
-  PLANT_ORDER_WORKSPACE_UPDATED_EVENT,
   applyPlantOrderPlan,
   approvePlantOrderMaterialSubstitution,
   buildPlantOrderCostReviewPacket,
@@ -18,7 +17,6 @@ import {
   issuePlantOrderMaterial,
   issuePlantOrderSubstituteMaterial,
   loadPlantOrderWorkspace,
-  mutatePlantOrderWorkspace,
   parsePlantOrderDowntimePaste,
   parsePlantOrderMaterialPaste,
   parsePlantOrderMmkRate,
@@ -46,8 +44,13 @@ import {
   type PlantOrderTransitionResult,
 } from './plant-order-foundation'
 import type { CommerceState } from './commerce-workspace'
-import { pendingProductionMaterialHandoffs, projectProductionMaterialRequirements } from './production-material-handoff'
+import { pendingProductionMaterialHandoffs, projectProductionMaterialRequirements, projectProductionPortfolioMrp } from './production-material-handoff'
 import { validateProductionState, type ProductionJob, type ProductionState } from './production-workspace'
+import {
+  productionOrderExecutionForJob,
+  productionOrderPortfolioEntries,
+  upsertProductionOrderExecution,
+} from './production-order-portfolio'
 import { plantIndustryPack, plantIndustryPackSetup, type PlantIndustryPackId } from './plant-industry-packs'
 
 
@@ -57,8 +60,8 @@ type PlantOrderFoundationProps = {
   disabled: boolean
   jobs: ProductionJob[]
   industryPackId: PlantIndustryPackId
-  managedState?: PlantOrderState | null
-  onManagedCommand?: (
+  productionState: ProductionState
+  onProductionCommand: (
     eventType: 'production.order_execution.recorded',
     commandId: string,
     proof: PlantOrderProof,
@@ -123,10 +126,6 @@ type SubstitutionDraft = {
 }
 
 const setupMaterialUnits: PlantOrderMaterial['unit'][] = ['pcs', 'kg', 'g', 'l', 'ml', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm']
-
-const browserLocks = () => typeof navigator !== 'undefined'
-  ? navigator.locks as unknown as Parameters<typeof mutatePlantOrderWorkspace>[3]
-  : null
 
 function commandId(prefix: string) {
   const random = typeof crypto !== 'undefined' && crypto.randomUUID
@@ -297,13 +296,14 @@ const statusCopy = {
   released_to_stock: 'Batch released',
 } as const
 
-export function PlantOrderFoundation({ actor, commerceState, disabled, industryPackId, jobs, managedState, onManagedCommand, scope }: PlantOrderFoundationProps) {
-  const managed = managedState !== undefined
+export function PlantOrderFoundation({ actor, commerceState, disabled, industryPackId, jobs, productionState, onProductionCommand, scope }: PlantOrderFoundationProps) {
   const activeJobs = jobs.filter((job) => !job.closure && !job.qualityHold && remaining(job) > 0)
-  const [initial] = useState(() => managed
-    ? loadManagedState(managedState ?? null)
+  const portfolioEntries = useMemo(() => productionOrderPortfolioEntries(productionState), [productionState])
+  const [initial] = useState(() => portfolioEntries[0]
+    ? loadManagedState(portfolioEntries[0].execution)
     : loadState(scope))
   const [state, setState] = useState<PlantOrderState>(initial.state)
+  const [selectedOrderJobId, setSelectedOrderJobId] = useState(() => projectPlantOrder(initial.state).plan?.job.jobId ?? activeJobs[0]?.id ?? '')
   const [error, setError] = useState(initial.error)
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
@@ -328,6 +328,16 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   const financialCost = useMemo(() => projectPlantOrderFinancialCost(projection), [projection])
   const costReviewPacket = useMemo(() => buildPlantOrderCostReviewPacket(state), [state])
   const materialRequirements = useMemo(() => projectProductionMaterialRequirements(state, commerceState), [commerceState, state])
+  const portfolioMrp = useMemo(() => projectProductionPortfolioMrp(portfolioEntries.map((entry) => {
+    const job = jobs.find((candidate) => candidate.id === entry.jobId)
+    const plan = projectPlantOrder(entry.execution).plan
+    return {
+      execution: entry.execution,
+      priority: job?.priority ?? 'normal',
+      dueAt: job?.dueAt ?? plan?.effectiveUntil ?? '9999-12-31T23:59:59.999Z',
+    }
+  }), commerceState), [commerceState, jobs, portfolioEntries])
+  const selectedPortfolioOrder = portfolioMrp?.orders.find((order) => order.jobId === selectedOrderJobId)
   const costReviewDownload = useMemo(() => costReviewPacket ? {
     filename: `${costReviewPacket.plan.job.jobId.toLowerCase()}-cost-review.json`,
     href: `data:application/json;charset=utf-8,${encodeURIComponent(`${JSON.stringify(costReviewPacket, null, 2)}\n`)}`,
@@ -431,6 +441,19 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
                 ? { title: 'Release the accepted batch', detail: 'Record the final human quality release to stock.' }
                 : { title: 'Batch execution complete', detail: 'The released quantity is ready for a separate reviewed Shop receipt.' }
 
+  const orderChoices = [...new Map([
+    ...portfolioEntries.map((entry) => [entry.jobId, jobs.find((job) => job.id === entry.jobId)] as const),
+    ...activeJobs.map((job) => [job.id, job] as const),
+  ]).entries()].map(([id, job]) => ({ id, job, execution: productionOrderExecutionForJob(productionState, id) }))
+    .sort((left, right) => {
+      const rank = { urgent: 0, normal: 1, low: 2 }
+      const priority = rank[left.job?.priority ?? 'normal'] - rank[right.job?.priority ?? 'normal']
+      if (priority) return priority
+      const leftDue = Date.parse(left.job?.dueAt ?? '')
+      const rightDue = Date.parse(right.job?.dueAt ?? '')
+      if (Number.isFinite(leftDue) && Number.isFinite(rightDue) && leftDue !== rightDue) return leftDue - rightDue
+      return left.id < right.id ? -1 : left.id > right.id ? 1 : 0
+    })
 
   useEffect(() => {
     const dialog = setupDialogRef.current
@@ -452,6 +475,19 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
     if (!review && dialog.open) dialog.close()
   }, [review])
 
+  function selectOrder(jobId: string) {
+    const retained = productionOrderExecutionForJob(productionState, jobId)
+    const next = retained ?? createEmptyPlantOrderState()
+    setSelectedOrderJobId(jobId)
+    setState(next)
+    setAvailabilityDraft(availabilityDefaults(next))
+    setSetupDraft(defaultSetup(activeJobs.find((job) => job.id === jobId), industryPackId))
+    setReview(null)
+    setSetupOpen(false)
+    setError('')
+    setNotice(retained ? `Loaded ${jobId}.` : `${jobId} is ready for one reviewed BOM and routing.`)
+  }
+
   function stage(next: Omit<ReviewedTransition, 'commandId'>) {
     setError('')
     setSetupOpen(false)
@@ -460,42 +496,35 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   }
 
   async function mutateManaged(reviewed: ReviewedTransition) {
-    if (!onManagedCommand || !reviewed.commandId) throw new Error('Managed Plant command identity is unavailable.')
-    let applied: PlantOrderTransitionResult | null = null
-    await onManagedCommand(
+    if (!reviewed.commandId) throw new Error('Plant command identity is unavailable.')
+    const applied: { value: PlantOrderTransitionResult | null } = { value: null }
+    await onProductionCommand(
       'production.order_execution.recorded',
       reviewed.commandId,
       reviewed.proof,
       (current) => {
-        const currentExecution = validatePlantOrderState(current.orderExecution ?? createEmptyPlantOrderState())
+        const currentExecution = validatePlantOrderState(
+          productionOrderExecutionForJob(current, selectedOrderJobId)
+            ?? (state.revision ? state : createEmptyPlantOrderState()),
+        )
         const result = reviewed.apply(currentExecution)
-        applied = result
+        applied.value = result
         if (result.replayed) return current
-        return validateProductionState({ ...current, orderExecution: result.state })
+        return validateProductionState(upsertProductionOrderExecution(current, result.state))
       },
     )
-    if (!applied) throw new Error('The managed Plant execution transition did not run.')
-    return applied
+    if (!applied.value) throw new Error('The Plant execution transition did not run.')
+    return applied.value
   }
 
   async function confirmReview() {
     if (!review) return
     setBusy(true); setError('')
     try {
-      const result = managed
-        ? await mutateManaged(review)
-        : typeof localStorage !== 'undefined'
-          ? await mutatePlantOrderWorkspace(scope, review.apply, localStorage, browserLocks())
-          : null
-      if (!result) throw new Error(managed ? 'Managed Plant command identity is unavailable.' : 'Browser storage is unavailable.')
-      if ('error' in result) { setError(result.error); return }
-      const accepted: PlantOrderTransitionResult = 'ok' in result
-        ? { state: result.state, replayed: result.replayed }
-        : result
+      const accepted = await mutateManaged(review)
       setState(accepted.state); setEvaluationTime(Date.now()); setReview(null); setSetupOpen(false)
-      if (!managed && typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent(PLANT_ORDER_WORKSPACE_UPDATED_EVENT, { detail: { scope } }))
-      }
+      const acceptedJobId = projectPlantOrder(accepted.state).plan?.job.jobId
+      if (acceptedJobId) setSelectedOrderJobId(acceptedJobId)
       setNotice(accepted.replayed ? 'The exact command was already recorded.' : `${review.title} recorded with attributed evidence.`)
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Plant execution was not confirmed.')
@@ -832,6 +861,8 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         {effectivePlan && !projection.orderRelease ? <button aria-controls="plant-execution-setup" aria-expanded={setupOpen} className={`core-button ${releaseWindowExpired ? 'primary' : ''}`} disabled={disabled || busy || Boolean(review)} onClick={openPlanRevision} ref={setupTriggerRef} type="button">{releaseWindowExpired ? 'Create current revision' : 'Revise plan'}</button> : null}
         {projection.plan ? <span className={`status-pill ${calibrationDueCentre || awaitingWarehouse || projection.status === 'quality_hold' || projection.status === 'shortfall' ? 'pending' : 'bounded'}`}>{visibleStatus}</span> : null}
       </div>
+      {orderChoices.length > 1 ? <label className="plant-order-switcher">Controlled order<select aria-label="Controlled production order" disabled={busy || Boolean(review)} onChange={(event) => selectOrder(event.target.value)} value={selectedOrderJobId}>{orderChoices.map((choice) => <option key={choice.id} value={choice.id}>{choice.id} · {choice.job?.product ?? 'Retained order'} · {choice.execution ? 'planned' : 'not planned'}</option>)}</select></label> : null}
+      {portfolioMrp && portfolioMrp.orders.length > 1 ? <div className="plant-portfolio-mrp" role="status"><div><span className="core-eyebrow">Portfolio material plan</span><strong>{portfolioMrp.summary.orders} controlled orders share Shop supply once</strong><small>Urgent work first, then earliest due. Protected stock and open purchase quantities are never counted twice.</small></div><div className="plant-portfolio-counts"><span>{portfolioMrp.summary.ready} ready</span><span>{portfolioMrp.summary.coveredByPurchase} on purchase orders</span><span>{portfolioMrp.summary.atRisk} at risk</span><span>{portfolioMrp.summary.shortage + portfolioMrp.summary.mappingRequired} blocked</span></div>{selectedPortfolioOrder ? <small>{selectedPortfolioOrder.jobId}: {selectedPortfolioOrder.rows.map((row) => row.sku ? `${row.sku} ${row.allocatedOnHandStockUnits} stock + ${row.allocatedScheduledPurchaseStockUnits} PO + ${row.allocatedAtRiskPurchaseStockUnits} risk; ${row.shortageStockUnits} short` : `${row.materialId} needs Shop mapping`).join(' · ')}</small> : null}</div> : null}
       <section aria-label="Plant operating flow" className="plant-operating-flow" id="plant-operating-flow">
         <div className={`plant-next-work${flowBlocked ? ' is-blocked' : ''}`}>
           <div><span className="core-eyebrow">Next required step</span><strong>{flowNext.title}</strong><small>{flowNext.detail}</small></div>
@@ -937,7 +968,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
       </form> : <p className="panel-copy">Release the reviewed order before recording its production window.</p>}</details> : null}
       {projection.planRevisions.length ? <details className="compact-disclosure production-history"><summary>Plan revisions <span>{projection.planRevisions.length}/{PLANT_ORDER_PLAN_REVISION_MAX}</span></summary><div className="issue-list">{projection.planRevisions.map((revision, index) => <article key={revision.id}><span aria-hidden="true" className="issue-mark resolved">REV</span><div><strong>{revision.supersededPlanId} → {projection.planHistory[index + 1]?.planId}</strong><small>{revision.reason} · {new Date(revision.proof.capturedAt).toLocaleString()} · {revision.proof.actor}</small></div></article>)}</div><p className="panel-copy">Every predecessor remains digest-bound. A successor clears prior availability and calibration evidence and cannot replace a released package.</p></details> : null}
       {projection.genealogy.length ? <details className="compact-disclosure production-history"><summary>Batch genealogy <span>{projection.genealogy.length}</span></summary><div className="issue-list">{projection.genealogy.map((row, index) => <article key={`${row.materialId}-${row.inputLotId}-${index}`}><span aria-hidden="true" className="issue-mark resolved">LOT</span><div><strong>{row.inputLotId} → {row.outputBatchId}</strong><small>{row.substituteMaterialId ? `${row.substituteMaterialId} · ${formatMilli(row.substituteQuantityMilli ?? 0)} ${row.substituteUnit} → ${row.materialId} credit ${formatMilli(row.issuedQuantityMilli)} ${row.unit}` : `${row.materialId} · ${formatMilli(row.issuedQuantityMilli)} ${row.unit}`}</small></div></article>)}</div></details> : null}
-      <p aria-live="polite" className="form-notice">{error || notice || (projection.status === 'released_to_stock' ? 'Batch release is recorded. Post Shop receipt, costing, and accounting only through their own reviewed controls.' : `${managed ? 'Managed' : 'Local'} execution evidence only. No machine command, external send, inventory posting, payment, or accounting action occurs.`)}</p>
+      <p aria-live="polite" className="form-notice">{error || notice || (projection.status === 'released_to_stock' ? 'Batch release is recorded. Post Shop receipt, costing, and accounting only through their own reviewed controls.' : 'Production workspace evidence only. No machine command, external send, inventory posting, payment, or accounting action occurs.')}</p>
     </section>
 
     <dialog aria-labelledby="plant-execution-setup-title" className="production-issue-dialog" id="plant-execution-setup" onCancel={(event) => { event.preventDefault(); closeSetup() }} ref={setupDialogRef}>

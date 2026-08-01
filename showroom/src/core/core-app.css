@@ -493,6 +493,13 @@ textarea { min-height: 72px; resize: vertical; }
 .plant-execution-head > div { min-width: 0; display: grid; gap: 4px; }
 .plant-execution-head h3 { font-size: 16px; }
 .plant-execution-head p { margin: 0; color: var(--core-muted); font-size: 11px; line-height: 1.45; }
+.plant-order-switcher { display: grid; gap: 5px; max-width: 520px; color: var(--core-muted); font-size: 11px; font-weight: 700; }
+.plant-order-switcher select { min-height: 44px; }
+.plant-portfolio-mrp { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--core-line); border-radius: 12px; background: color-mix(in srgb, var(--core-green) 5%, var(--core-panel)); }
+.plant-portfolio-mrp > div:first-child { display: grid; gap: 3px; }
+.plant-portfolio-mrp small { color: var(--core-muted); line-height: 1.45; }
+.plant-portfolio-counts { display: flex; flex-wrap: wrap; gap: 6px; }
+.plant-portfolio-counts span { padding: 5px 8px; border: 1px solid var(--core-line); border-radius: 999px; font-size: 10px; font-weight: 800; }
 .plant-operating-flow { display: grid; gap: 10px; }
 .plant-next-work { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid color-mix(in srgb, var(--core-green) 28%, var(--core-line)); border-radius: var(--core-radius); padding: 14px 16px; background: linear-gradient(135deg, color-mix(in srgb, var(--core-green) 13%, var(--core-panel)), var(--core-panel)); }
 .plant-next-work.is-blocked { border-color: color-mix(in srgb, var(--core-warn) 38%, var(--core-line)); background: color-mix(in srgb, var(--core-warn) 7%, var(--core-panel)); }

@@ -1035,7 +1035,7 @@ export function assertManagedPlantEquipmentActivation(
       code: 'managed_plant_equipment_activation_invalid',
     })
   }
-  const unchangedFields = ['schema', 'jobs', 'issues', 'machines', 'openingPlan', 'orderExecution'] as const
+  const unchangedFields = ['schema', 'jobs', 'issues', 'machines', 'openingPlan', 'orderExecution', 'orderPortfolio'] as const
   const acceptedRecord = accepted as unknown as Record<string, unknown>
   const previousRecord = previous as unknown as Record<string, unknown>
   const previousAssets = previous.equipmentMaster?.assets ?? []
@@ -1136,7 +1136,7 @@ export function assertManagedPlantEquipmentCommissioning(
   const event = accepted.events[0]
   const machine = accepted.machines.at(-1)
   const actionId = `ACT-EQUIPMENT-COMMISSION-${commandId}`
-  const unchangedFields = ['schema', 'jobs', 'issues', 'openingPlan', 'orderExecution'] as const
+  const unchangedFields = ['schema', 'jobs', 'issues', 'openingPlan', 'orderExecution', 'orderPortfolio'] as const
   const acceptedRecord = accepted as unknown as Record<string, unknown>
   const previousRecord = previous as unknown as Record<string, unknown>
   const unchangedAssets = previous.equipmentMaster?.assets.filter((asset) => asset.id !== input.equipmentId) ?? []
@@ -1237,7 +1237,7 @@ export function assertManagedPlantEquipmentMaintenanceStrategy(
   const event = accepted.events[0]
   const actionId = `ACT-EQUIPMENT-MAINTENANCE-STRATEGY-${commandId}`
   const expectedStrategyRevision = (priorAsset?.maintenanceStrategy?.revision ?? 0) + 1
-  const unchangedFields = ['schema', 'jobs', 'issues', 'machines', 'openingPlan', 'orderExecution'] as const
+  const unchangedFields = ['schema', 'jobs', 'issues', 'machines', 'openingPlan', 'orderExecution', 'orderPortfolio'] as const
   const acceptedRecord = accepted as unknown as Record<string, unknown>
   const previousRecord = previous as unknown as Record<string, unknown>
   const unchangedAssets = previous.equipmentMaster?.assets.filter((asset) => asset.id !== input.equipmentId) ?? []

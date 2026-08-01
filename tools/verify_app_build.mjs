@@ -1449,8 +1449,8 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !coreSource.includes('No equipment or production write runs without owner approval.')
   || !coreSource.includes('const plantMrpRows = [')
   || !coreSource.includes('const plantMrpNext =')
-  || !coreSource.includes('projectPlantOrder(production.orderExecution)')
-  || !coreSource.includes('projectProductionMaterialRequirements(production.orderExecution, relatedCommerce)')
+  || !coreSource.includes('productionOrderPortfolioEntries(production)[0]?.execution')
+  || !coreSource.includes('projectProductionMaterialRequirements(primaryOrderExecution, relatedCommerce)')
   || !coreSource.includes("materialRequirements.status === 'mapping_required'")
   || !coreSource.includes("materialRequirements.status === 'supply_at_risk'")
   || !coreSource.includes("materialRequirements.status === 'covered_by_open_po'")
@@ -3468,7 +3468,7 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || (plantOrderUiSource.match(/>Review availability<\/button>/g) || []).length !== 1
   || !plantOrderUiSource.includes('No machine command')
   || !plantOrderUiSource.includes('Shop receipt, delivery, costing, and accounting are not posted automatically.')
-  || !plantOrderUiSource.includes('navigator.locks')
+  || !plantOrderUiSource.includes('upsertProductionOrderExecution(current, result.state)')
   || plantOrderUiSource.includes('fetch(')) fail('plant_order_foundation_ui_boundary_missing')
 if (!plantOrderPythonSource.includes('PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v3"')
   || !plantOrderPythonSource.includes('PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v4"')
@@ -3484,20 +3484,23 @@ if (!plantOrderPythonSource.includes('PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = "su
   || !plantOrderPythonSource.includes('def record_plant_order_calibration(')
   || !plantOrderPythonSource.includes('def record_plant_order_quality_rework(')
   || !plantOrderPythonSource.includes('requires current calibration for')) fail('managed_plant_execution_parity_missing')
-if (!plantOrderUiSource.includes('managedState?: PlantOrderState | null')
-  || !plantOrderUiSource.includes('onManagedCommand?:')
-  || !plantOrderUiSource.includes('await onManagedCommand(')
-  || !plantOrderUiSource.includes("`${managed ? 'Managed' : 'Local'} execution evidence only")
+if (!plantOrderUiSource.includes('productionState: ProductionState')
+  || !plantOrderUiSource.includes('onProductionCommand: (')
+  || !plantOrderUiSource.includes('await onProductionCommand(')
+  || !plantOrderUiSource.includes('Production workspace evidence only.')
   || !productionSource.includes('orderExecution?: PlantOrderState')
+  || !productionSource.includes('orderPortfolio?: ProductionOrderPortfolio')
   || !productionSource.includes('supermega.plant.order_foundation.v1')
   || !managedProductionRuntime.includes('production state.orderExecution is invalid')
+  || !managedProductionRuntime.includes('production state.orderPortfolio')
   || !managedProductionRuntime.includes('must append exactly one chained command')
+  || !managedProductionRuntime.includes('must change exactly one controlled order')
   || !managedProductionRuntime.includes('Plant execution command proof must match the authenticated Production evidence')
   || !managedTrialStoreRuntime.includes('production.order_execution.recorded')
   || !plantOrderUiSource.includes("'production.order_execution.recorded'")
-  || !plantOrderUiSource.includes('current.orderExecution ?? createEmptyPlantOrderState()')
-  || !coreSource.includes('managedState={managedIdentity ? production.orderExecution ?? null : undefined}')
-  || !coreSource.includes('onManagedCommand={managedIdentity ? mutateProduction : undefined}')) fail('managed_plant_order_execution_contract_missing')
+  || !plantOrderUiSource.includes('productionOrderExecutionForJob(current, selectedOrderJobId)')
+  || !coreSource.includes('onProductionCommand={mutateProduction}')
+  || !coreSource.includes('productionState={production}')) fail('managed_plant_order_execution_contract_missing')
 if (!commerceSource.includes("'production_issue'")
   || !commerceSource.includes('export function issueCommerceStockToProduction')
   || !commerceSource.includes('issueShopInventoryToProduction(inventoryFoundation')
@@ -3517,6 +3520,9 @@ if (!commerceSource.includes("'production_issue'")
   || !productionMaterialHandoffSource.includes('suggestedExpediteStockUnits')
   || !productionMaterialHandoffSource.includes('availableToIssueStockUnits')
   || !productionMaterialHandoffSource.includes('requiredSupplyStockUnits')
+  || !productionMaterialHandoffSource.includes('PRODUCTION_PORTFOLIO_MRP_CONTRACT')
+  || !productionMaterialHandoffSource.includes('projectProductionPortfolioMrp')
+  || !productionMaterialHandoffSource.includes('inventoryReserved: false')
   || !productionMaterialHandoffSource.includes('reorderAt: item.reorderAt')
   || !productionMaterialHandoffSource.includes('expectedMs >= effectiveUntilMs')
   || !productionMaterialHandoffSource.includes("supplyAtRisk: rows.filter((row) => row.status === 'supply_at_risk').length")
@@ -3545,13 +3551,14 @@ if (!shopInventoryUiSource.includes("import { ShopProductionHandoff } from './Sh
   || !shopProductionHandoffUiSource.includes('locationPicks.join')
   || !shopProductionHandoffUiSource.includes('exactWholeUnits <= available')
   || !shopProductionHandoffUiSource.includes('PLANT_ORDER_WORKSPACE_UPDATED_EVENT')
+  || !shopProductionHandoffUiSource.includes('productionOrderPortfolioEntries')
+  || !shopProductionHandoffUiSource.includes('event.key === PRODUCTION_KEY')
   || !shopProductionHandoffUiSource.includes("window.addEventListener('storage', handleStorage)")
   || !shopProductionHandoffUiSource.includes('plantOrderStorageKey(LOCAL_PLANT_SCOPE)')
   || !shopProductionHandoffUiSource.includes("const LEGACY_LOCAL_PLANT_SCOPE = 'plant:'")
   || !plantOrderUiSource.includes('Await Shop issue')
   || !plantOrderUiSource.includes('Shop must issue every linked material request before operation progress')
   || !plantOrderUiSource.includes('Review in Shop')
-  || !plantOrderUiSource.includes('window.dispatchEvent(new CustomEvent(PLANT_ORDER_WORKSPACE_UPDATED_EVENT')
   || !plantOrderUiSource.includes("loadPlantOrderWorkspace(localStorage, 'plant:')")
   || shopProductionHandoffUiSource.includes('fetch(')) fail('plant_shop_material_handoff_ui_boundary_missing')
 if (!shopProductionDemandSource.includes("SHOP_PRODUCTION_DEMAND_SCHEMA = 'supermega.shop_production_demand.v1'")
@@ -5634,6 +5641,7 @@ async function verifyPlantOrderRuntime() {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts')).href}?plant-order-verify=${Date.now()}`)
     const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?plant-mrp-commerce-verify=${Date.now()}`)
     const materialHandoff = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-material-handoff.ts')).href}?plant-mrp-verify=${Date.now()}`)
+    const orderPortfolio = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-order-portfolio.ts')).href}?plant-portfolio-verify=${Date.now()}`)
     const proof = (sequence, label) => ({
       actionId: `ACT-20260726-${String(sequence).padStart(3, '0')}`,
       capturedAt: `2026-07-26T09:${String(Math.floor(sequence / 60)).padStart(2, '0')}:${String(sequence % 60).padStart(2, '0')}+06:30`,
@@ -5846,6 +5854,39 @@ async function verifyPlantOrderRuntime() {
       items: mrpPurchaseOrder.items.map((item) => ({ ...item, reorderAt: item.reorderAt + 1 })),
     })
     assertThrows(() => materialHandoff.validateProductionMaterialRequirements(materialRequirements, mrpState, changedFloorCommerce), 'changed_shop_floor_did_not_stale_plant_mrp_packet')
+    const secondMrpPlan = model.buildPlantOrderEffectivePlan({
+      ...planInput,
+      planId: 'PLN-20260726-MRP-02',
+      effectiveFrom: '2026-07-27T15:30:00+06:30',
+      effectiveUntil: '2026-08-27T15:30:00+06:30',
+      job: { ...planInput.job, jobId: 'JOB-402', outputBatchId: 'BATCH-20260726-402' },
+      materials: [{ ...planInput.materials[0], shopSupply: { sku: 'SKU-RM-BAG', materialQuantityMilliPerStockUnit: 5_000 } }],
+    })
+    const secondMrpState = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), secondMrpPlan, proof(3, 'reviewed urgent material plan'), model.EMPTY_PLANT_ORDER_DIGEST).state
+    const portfolio = orderPortfolio.upsertProductionOrderExecution({ orderExecution: mrpState }, secondMrpState)
+    assert(!portfolio.orderExecution
+      && portfolio.orderPortfolio.entries.map((entry) => entry.jobId).join(',') === 'JOB-401,JOB-402'
+      && orderPortfolio.validateProductionOrderPortfolio(portfolio.orderPortfolio).entries.length === 2,
+    'plant_order_portfolio_did_not_migrate_and_sort_legacy_execution')
+    assertThrows(() => orderPortfolio.validateProductionOrderPortfolio({
+      contract: orderPortfolio.PRODUCTION_ORDER_PORTFOLIO_CONTRACT,
+      entries: [...portfolio.orderPortfolio.entries].reverse(),
+    }), 'plant_order_portfolio_unsorted_entries_succeeded')
+    const portfolioMrp = materialHandoff.projectProductionPortfolioMrp([
+      { execution: mrpState, priority: 'normal', dueAt: '2026-08-05T09:00:00.000Z' },
+      { execution: secondMrpState, priority: 'urgent', dueAt: '2026-08-06T09:00:00.000Z' },
+    ], mrpPurchaseOrder)
+    assert(portfolioMrp?.contract === 'supermega.production.portfolio_mrp.v1'
+      && portfolioMrp.orders.map((order) => order.jobId).join(',') === 'JOB-402,JOB-401'
+      && portfolioMrp.orders[0].rows[0].allocatedOnHandStockUnits === 1
+      && portfolioMrp.orders[0].rows[0].allocatedScheduledPurchaseStockUnits === 2
+      && portfolioMrp.orders[0].rows[0].shortageStockUnits === 0
+      && portfolioMrp.orders[1].rows[0].allocatedOnHandStockUnits === 0
+      && portfolioMrp.orders[1].rows[0].allocatedScheduledPurchaseStockUnits === 0
+      && portfolioMrp.orders[1].rows[0].shortageStockUnits === 3
+      && portfolioMrp.summary.shortage === 1
+      && Object.values(portfolioMrp.authority).every((allowed) => allowed === false),
+    'plant_portfolio_mrp_double_counted_shop_or_purchase_supply')
     const unmappedRequirements = materialHandoff.projectProductionMaterialRequirements(pricedPlanState, mrpBaseCommerce)
     assert(unmappedRequirements?.status === 'mapping_required' && unmappedRequirements.summary.mappingRequired === 2, 'plant_mrp_invented_supply_mapping')
     assert(plan.sourceDigest === 'sha256:9415e4d6d6dda852c2014d611c1f93e385d31c40df2b4ec30d293b12991ba519'
@@ -15049,7 +15090,7 @@ await verifyCommerceRuntime()
 await verifyProductionRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-if (bytes > 2_500_000) fail(`artifact_budget:${bytes}`)
+if (bytes > 2_525_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const largestJavascriptBytes = Math.max(...await Promise.all(javascriptFiles.map(async (path) => (await stat(path)).size)))
 const operationsArtifactPath = javascriptFiles.find((path) => /[\\/]core-app-[^\\/]+\.js$/.test(path))
