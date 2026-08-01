@@ -31,6 +31,12 @@ const capabilityGroups = [
   ['Control', 'Daily close, settlement review, accounting export, audit'],
 ] as const
 
+const guidedJobs = [
+  ['1', 'Review orders', 'Finish fulfilment, payment, return, or cancellation work.', '/shop/?tab=orders'],
+  ['2', 'Make a sale', 'Open the counter, tap items, choose payment, and keep receipt evidence.', '/shop/?tab=counter'],
+  ['3', 'Check stock', 'Review low stock, counts, receiving, and purchase actions.', '/shop/?tab=inventory'],
+] as const
+
 export function ShopToday({ metrics, modules, nextAction, nextDetail, nextTo }: ShopTodayProps) {
   return <div className="shop-today">
     <section className="shop-today-mission" aria-label="Next Shop action">
@@ -42,6 +48,13 @@ export function ShopToday({ metrics, modules, nextAction, nextDetail, nextTo }: 
       <div className="shop-today-actions">
         <Link className="core-button primary" to={nextTo}>Review orders</Link>
         <Link className="core-button" to="/shop/?tab=counter">New sale</Link>
+      </div>
+    </section>
+
+    <section className="shop-today-guide" aria-label="Shop guided jobs">
+      <header><span className="core-eyebrow">Start here</span><h3>Three jobs run the shop.</h3></header>
+      <div>
+        {guidedJobs.map(([step, label, detail, to]) => <Link key={label} to={to}><b>{step}</b><span><strong>{label}</strong><small>{detail}</small></span></Link>)}
       </div>
     </section>
 

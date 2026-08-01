@@ -2258,6 +2258,16 @@ textarea { min-height: 72px; resize: vertical; }
 .shop-today-mission h2 { max-width: 660px; margin: 7px 0 10px; font-size: clamp(30px,5vw,54px); line-height: .98; letter-spacing: -.045em; }
 .shop-today-mission p { max-width: 660px; margin: 0; color: var(--core-muted); font-size: 14px; line-height: 1.6; }
 .shop-today-actions { display: flex; align-items: center; gap: 8px; }
+.shop-today-guide { display: grid; grid-template-columns: minmax(180px,.35fr) minmax(0,1fr); gap: 12px; align-items: stretch; border: 1px solid var(--core-line); border-radius: 16px; padding: 13px; background: color-mix(in srgb,var(--core-panel) 88%,var(--core-soft)); }
+.shop-today-guide header { display: grid; align-content: center; gap: 4px; padding: 4px 8px; }
+.shop-today-guide h3 { margin: 0; font-size: 18px; line-height: 1.1; letter-spacing: -.025em; }
+.shop-today-guide > div { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.shop-today-guide a { min-height: 76px; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 10px; align-items: start; border: 1px solid var(--core-line); border-radius: 12px; padding: 12px; background: var(--core-panel); color: var(--core-text); text-decoration: none; }
+.shop-today-guide a:hover { border-color: color-mix(in srgb,var(--core-accent) 55%,var(--core-line)); background: color-mix(in srgb,var(--core-accent) 5%,var(--core-panel)); }
+.shop-today-guide b { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 999px; background: var(--core-accent); color: var(--core-accent-ink); font-family: var(--core-mono); font-size: 10px; }
+.shop-today-guide span { display: grid; gap: 5px; min-width: 0; }
+.shop-today-guide strong { font-size: 12px; line-height: 1.2; }
+.shop-today-guide small { color: var(--core-muted); font-size: 10px; line-height: 1.35; }
 .shop-today-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); border: 1px solid var(--core-line); border-radius: 16px; overflow: hidden; background: var(--core-panel); }
 .shop-today-metrics article { min-height: 88px; display: grid; align-content: center; gap: 7px; border-right: 1px solid var(--core-line); padding: 15px 18px; }
 .shop-today-metrics article:last-child { border-right: 0; }
@@ -2292,6 +2302,7 @@ textarea { min-height: 72px; resize: vertical; }
 @media (max-width: 840px) {
   .shop-today-mission { min-height: 0; grid-template-columns: 1fr; align-items: start; gap: 18px; }
   .shop-today-actions .core-button { flex: 1; }
+  .shop-today-guide { grid-template-columns: 1fr; }
   .shop-today-module-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 
@@ -2300,6 +2311,8 @@ textarea { min-height: 72px; resize: vertical; }
   .shop-today-mission { padding: 20px 16px; }
   .shop-today-mission h2 { font-size: 34px; }
   .shop-today-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .shop-today-guide > div { grid-template-columns: 1fr; }
+  .shop-today-guide a { min-height: 70px; }
   .shop-today-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .shop-today-metrics article { min-height: 72px; border-bottom: 1px solid var(--core-line); }
   .shop-today-metrics article:nth-child(2n) { border-right: 0; }
