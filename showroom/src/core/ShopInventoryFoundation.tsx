@@ -6,10 +6,12 @@ import {
   createShopInventoryMaster,
   createEmptyShopInventoryState,
   projectShopInventory,
+  setShopSupplierPolicy,
   shopInventoryEvidenceDigest,
   transferShopInventory,
   type ShopInventoryImportPackage,
   type ShopInventoryProof,
+  type ShopSupplierPolicy,
 } from './shop-inventory-foundation'
 import { ShopProductionHandoff } from './ShopProductionHandoff'
 import { projectPlantOrder } from './plant-order-foundation'
@@ -37,7 +39,7 @@ type ShopInventoryFoundationProps = {
     transition: (state: CommerceState) => CommerceState | null,
   ) => Promise<void>
   onInventory: (
-    eventType: 'commerce.inventory.initialized' | 'commerce.inventory.master_created' | 'commerce.inventory.transferred' | 'commerce.production_batch.received',
+    eventType: 'commerce.inventory.initialized' | 'commerce.inventory.master_created' | 'commerce.inventory.supplier_policy_saved' | 'commerce.inventory.transferred' | 'commerce.production_batch.received',
     commandId: string,
     proof: CommerceActionProof,
     transition: (state: CommerceState) => CommerceState | null,
@@ -65,6 +67,13 @@ type MasterReview = {
   commandId: string
   masterType: 'client' | 'vendor'
   master: { id: string; name: string }
+  proof: ShopInventoryProof
+  expectedHeadDigest: string
+}
+
+type SupplierPolicyReview = {
+  commandId: string
+  policy: Omit<ShopSupplierPolicy, 'commandId' | 'proof'>
   proof: ShopInventoryProof
   expectedHeadDigest: string
 }
@@ -128,6 +137,11 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
   const [transferReview, setTransferReview] = useState<TransferReview | null>(null)
   const [masterDraft, setMasterDraft] = useState<{ masterType: 'client' | 'vendor'; name: string }>({ masterType: 'client', name: '' })
   const [masterReview, setMasterReview] = useState<MasterReview | null>(null)
+  const [supplierPolicyDraft, setSupplierPolicyDraft] = useState({
+    vendorId: '', sku: catalog[0]?.sku ?? '', leadTimeDays: '7', minimumOrderUnits: '1',
+    orderMultipleUnits: '1', safetyStockUnits: '0', serviceLevelBasisPoints: '9500', status: 'active' as 'active' | 'inactive',
+  })
+  const [supplierPolicyReview, setSupplierPolicyReview] = useState<SupplierPolicyReview | null>(null)
   const [productionReceiptReview, setProductionReceiptReview] = useState<ProductionReceiptReview | null>(null)
   const [productionItemMapping, setProductionItemMapping] = useState<{ releaseId: string; sku: string } | null>(null)
 
@@ -138,6 +152,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
   const selectedMasters = masterDraft.masterType === 'client' ? projection.clients : projection.vendors
   const masterAtLimit = selectedMasters.length >= 200
   const masterListPreview = `${selectedMasters.slice(0, 4).map((master) => master.name).join(' · ')}${selectedMasters.length > 4 ? ` · +${selectedMasters.length - 4} more` : ''}`
+  const activeSupplierPolicies = projection.supplierPolicies.filter((policy) => policy.status === 'active')
   const catalogBySku = useMemo(() => new Map(catalog.map((item) => [item.sku, item])), [catalog])
   const balanceOptions = projection.balances.filter((row) => row.availableToPromise > 0)
   const activeAggregateOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
@@ -474,6 +489,88 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     }
   }
 
+  function selectSupplierPolicy(vendorId: string, sku: string) {
+    const retained = projection.supplierPolicies.find((policy) => policy.vendorId === vendorId && policy.sku === sku)
+    setSupplierPolicyReview(null)
+    setSupplierPolicyDraft({
+      vendorId,
+      sku,
+      leadTimeDays: String(retained?.leadTimeDays ?? 7),
+      minimumOrderUnits: String(retained?.minimumOrderUnits ?? 1),
+      orderMultipleUnits: String(retained?.orderMultipleUnits ?? 1),
+      safetyStockUnits: String(retained?.safetyStockUnits ?? catalogBySku.get(sku)?.reorderAt ?? 0),
+      serviceLevelBasisPoints: String(retained?.serviceLevelBasisPoints ?? 9_500),
+      status: retained?.status ?? 'active',
+    })
+  }
+
+  function reviewSupplierPolicy(event: FormEvent) {
+    event.preventDefault()
+    const integer = (value: string) => /^\d+$/.test(value) ? Number(value) : Number.NaN
+    const leadTimeDays = integer(supplierPolicyDraft.leadTimeDays)
+    const minimumOrderUnits = integer(supplierPolicyDraft.minimumOrderUnits)
+    const orderMultipleUnits = integer(supplierPolicyDraft.orderMultipleUnits)
+    const safetyStockUnits = integer(supplierPolicyDraft.safetyStockUnits)
+    const serviceLevelBasisPoints = integer(supplierPolicyDraft.serviceLevelBasisPoints)
+    if (!projection.vendors.some((vendor) => vendor.id === supplierPolicyDraft.vendorId)
+      || !catalogBySku.has(supplierPolicyDraft.sku)
+      || !Number.isSafeInteger(leadTimeDays) || leadTimeDays < 1 || leadTimeDays > 365
+      || ![minimumOrderUnits, orderMultipleUnits].every((value) => Number.isSafeInteger(value) && value >= 1 && value <= 1_000_000)
+      || !Number.isSafeInteger(safetyStockUnits) || safetyStockUnits < 0 || safetyStockUnits > 1_000_000
+      || !Number.isSafeInteger(serviceLevelBasisPoints) || serviceLevelBasisPoints < 5_000 || serviceLevelBasisPoints > 9_999) {
+      setError('Choose one supplier and item, then enter valid lead time, order quantities, safety stock, and a 50.00–99.99% service level.')
+      return
+    }
+    const vendor = projection.vendors.find((candidate) => candidate.id === supplierPolicyDraft.vendorId)
+    const item = catalogBySku.get(supplierPolicyDraft.sku)
+    const reviewProof = actionProof(actor, `the ${vendor?.name ?? 'supplier'} purchasing policy for ${item?.name ?? supplierPolicyDraft.sku}`)
+    setError('')
+    setSupplierPolicyReview({
+      commandId: commandId('SPP'),
+      policy: {
+        vendorId: supplierPolicyDraft.vendorId,
+        sku: supplierPolicyDraft.sku,
+        leadTimeDays,
+        minimumOrderUnits,
+        orderMultipleUnits,
+        safetyStockUnits,
+        serviceLevelBasisPoints,
+        status: supplierPolicyDraft.status,
+      },
+      proof: reviewProof,
+      expectedHeadDigest: state.headDigest,
+    })
+    setNotice('Review the purchasing constraints. Nothing has been recorded or sent to the supplier yet.')
+  }
+
+  async function confirmSupplierPolicy() {
+    if (!supplierPolicyReview) return
+    setBusy(true)
+    setError('')
+    try {
+      await onInventory(
+        'commerce.inventory.supplier_policy_saved',
+        supplierPolicyReview.proof.actionId.slice(4),
+        supplierPolicyReview.proof,
+        (current) => {
+          if (!current.inventoryFoundation) return null
+          const result = setShopSupplierPolicy(current.inventoryFoundation, {
+            ...supplierPolicyReview,
+            catalogSkus: current.items.map((item) => item.sku).sort(),
+          })
+          return { ...current, inventoryFoundation: result.state }
+        },
+      )
+      const vendor = projection.vendors.find((candidate) => candidate.id === supplierPolicyReview.policy.vendorId)
+      setSupplierPolicyReview(null)
+      setNotice(`${vendor?.name ?? 'Supplier'} purchasing policy is now retained for replenishment planning.`)
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'The supplier purchasing policy was not confirmed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return <>{releasedPlantBatch ? <section aria-labelledby="plant-receipt-title" className="catalog-onboarding-bridge">
     <div><span className="core-eyebrow">Released from Plant</span><h3 id="plant-receipt-title">{receivedPlantMovement ? 'Batch received' : releasedPlantBatch.product}</h3><p>{releasedPlantBatch.quantity.toLocaleString()} accepted units · batch {releasedPlantBatch.outputBatchId}{plantCatalogItem ? ` · ${plantCatalogItem.name}` : ''}</p></div>
     {!receivedPlantMovement && productionMappingRequired ? <label>Receive as Shop item<select aria-label="Map released Plant product to Shop item" disabled={disabled || busy || Boolean(productionReceiptReview)} onChange={(event) => { setProductionItemMapping({ releaseId: releasedPlantBatch.releaseId, sku: event.target.value }); setProductionReceiptReview(null) }} value={selectedProductionSku}><option value="">Choose one item</option>{catalog.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.sku}</option>)}</select><small>This reviewed choice is retained in the stock receipt evidence.</small></label> : null}
@@ -509,6 +606,15 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
         <div className="form-row"><label>Record type<select disabled={disabled || busy || Boolean(masterReview)} onChange={(event) => { setMasterDraft({ masterType: event.target.value as 'client' | 'vendor', name: '' }); setMasterReview(null); setError('') }} value={masterDraft.masterType}><option value="client">Client</option><option value="vendor">Supplier</option></select></label><label>Name<input disabled={disabled || busy || masterAtLimit || Boolean(masterReview)} maxLength={120} onChange={(event) => { setMasterDraft((current) => ({ ...current, name: event.target.value })); setMasterReview(null) }} placeholder={masterDraft.masterType === 'client' ? 'Customer or account name' : 'Supplier name'} required value={masterDraft.name} /></label></div>
         <div className="stock-receipt-preview" role="status"><small>{masterDraft.masterType === 'client' ? 'Client master' : 'Supplier master'}</small><strong>{masterReview ? `${masterReview.master.name} · ${masterReview.master.id}` : masterAtLimit ? '200-record pilot limit reached' : masterListPreview}</strong></div>
         <div className="form-actions">{masterReview ? <button className="core-button" disabled={busy} onClick={() => setMasterReview(null)} type="button">Edit</button> : null}<button className="core-button primary" disabled={disabled || busy || masterAtLimit || !masterDraft.name.trim()} onClick={masterReview ? () => void confirmMaster() : undefined} type={masterReview ? 'button' : 'submit'}>{masterReview ? busy ? 'Recording…' : 'Confirm record' : 'Review record'}</button></div>
+      </form>
+      <form aria-label="Supplier purchasing policy" className="core-form compact-form supplier-policy-form" onSubmit={reviewSupplierPolicy}>
+        <div><span className="core-eyebrow">Purchasing policy</span><strong>Set the constraints once</strong><small>Replenishment will respect lead time, minimum order, order multiples, safety stock, and service level.</small></div>
+        <div className="form-row"><label>Supplier<select disabled={disabled || busy || Boolean(supplierPolicyReview)} onChange={(event) => selectSupplierPolicy(event.target.value, supplierPolicyDraft.sku)} required value={supplierPolicyDraft.vendorId}><option value="">Choose supplier</option>{projection.vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}</select></label><label>Item<select disabled={disabled || busy || Boolean(supplierPolicyReview)} onChange={(event) => selectSupplierPolicy(supplierPolicyDraft.vendorId, event.target.value)} required value={supplierPolicyDraft.sku}><option value="">Choose item</option>{catalog.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.sku}</option>)}</select></label></div>
+        <div className="form-row"><label>Lead time (days)<input disabled={disabled || busy || Boolean(supplierPolicyReview)} inputMode="numeric" max="365" min="1" onChange={(event) => { setSupplierPolicyDraft((current) => ({ ...current, leadTimeDays: event.target.value })); setSupplierPolicyReview(null) }} required step="1" type="number" value={supplierPolicyDraft.leadTimeDays} /></label><label>Minimum order<input disabled={disabled || busy || Boolean(supplierPolicyReview)} inputMode="numeric" max="1000000" min="1" onChange={(event) => { setSupplierPolicyDraft((current) => ({ ...current, minimumOrderUnits: event.target.value })); setSupplierPolicyReview(null) }} required step="1" type="number" value={supplierPolicyDraft.minimumOrderUnits} /></label></div>
+        <div className="form-row"><label>Order multiple<input disabled={disabled || busy || Boolean(supplierPolicyReview)} inputMode="numeric" max="1000000" min="1" onChange={(event) => { setSupplierPolicyDraft((current) => ({ ...current, orderMultipleUnits: event.target.value })); setSupplierPolicyReview(null) }} required step="1" type="number" value={supplierPolicyDraft.orderMultipleUnits} /></label><label>Safety stock<input disabled={disabled || busy || Boolean(supplierPolicyReview)} inputMode="numeric" max="1000000" min="0" onChange={(event) => { setSupplierPolicyDraft((current) => ({ ...current, safetyStockUnits: event.target.value })); setSupplierPolicyReview(null) }} required step="1" type="number" value={supplierPolicyDraft.safetyStockUnits} /></label></div>
+        <div className="form-row"><label>Service level (basis points)<input disabled={disabled || busy || Boolean(supplierPolicyReview)} inputMode="numeric" max="9999" min="5000" onChange={(event) => { setSupplierPolicyDraft((current) => ({ ...current, serviceLevelBasisPoints: event.target.value })); setSupplierPolicyReview(null) }} required step="1" type="number" value={supplierPolicyDraft.serviceLevelBasisPoints} /><small>9500 = 95.00%</small></label><label>Status<select disabled={disabled || busy || Boolean(supplierPolicyReview)} onChange={(event) => { setSupplierPolicyDraft((current) => ({ ...current, status: event.target.value as 'active' | 'inactive' })); setSupplierPolicyReview(null) }} value={supplierPolicyDraft.status}><option value="active">Active</option><option value="inactive">Paused</option></select></label></div>
+        {supplierPolicyReview ? <div className="stock-receipt-preview" role="status"><small>{supplierPolicyReview.policy.sku} · {supplierPolicyReview.policy.status}</small><strong>{supplierPolicyReview.policy.leadTimeDays} days · MOQ {supplierPolicyReview.policy.minimumOrderUnits} · multiple {supplierPolicyReview.policy.orderMultipleUnits} · safety {supplierPolicyReview.policy.safetyStockUnits} · {(supplierPolicyReview.policy.serviceLevelBasisPoints / 100).toFixed(2)}%</strong></div> : activeSupplierPolicies.length ? <div className="stock-receipt-preview"><small>{activeSupplierPolicies.length} active {activeSupplierPolicies.length === 1 ? 'policy' : 'policies'}</small><strong>{activeSupplierPolicies.slice(0, 3).map((policy) => `${policy.sku}: ${policy.leadTimeDays}d / MOQ ${policy.minimumOrderUnits}`).join(' · ')}</strong></div> : null}
+        <div className="form-actions">{supplierPolicyReview ? <button className="core-button" disabled={busy} onClick={() => setSupplierPolicyReview(null)} type="button">Edit</button> : null}<button className="core-button primary" disabled={disabled || busy || !projection.vendors.length || !supplierPolicyDraft.vendorId || !supplierPolicyDraft.sku} onClick={supplierPolicyReview ? () => void confirmSupplierPolicy() : undefined} type={supplierPolicyReview ? 'button' : 'submit'}>{supplierPolicyReview ? busy ? 'Recording…' : 'Confirm policy' : 'Review policy'}</button></div>
       </form>
     </details> : null}
     {transferOpen && state.revision ? <form className="core-form compact-form" id="location-stock-transfer" onSubmit={reviewTransfer}>

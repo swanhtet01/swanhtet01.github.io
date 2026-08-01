@@ -74,6 +74,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.production_batch.received",
         "commerce.inventory.initialized",
         "commerce.inventory.master_created",
+        "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
@@ -120,6 +121,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.production_batch.received",
         "commerce.inventory.initialized",
         "commerce.inventory.master_created",
+        "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
@@ -4417,6 +4419,7 @@ def _validate_event_evidence(
     elif event_type in {
         "commerce.inventory.initialized",
         "commerce.inventory.master_created",
+        "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
         "commerce.stock.counted",
     } and (
@@ -4428,6 +4431,7 @@ def _validate_event_evidence(
         expected_location_kind = {
             "commerce.inventory.initialized": "import",
             "commerce.inventory.master_created": "master_create",
+            "commerce.inventory.supplier_policy_saved": "supplier_policy_set",
             "commerce.inventory.transferred": "transfer",
             "commerce.stock.counted": "count",
         }[event_type]
@@ -6625,6 +6629,53 @@ def _validate_inventory_master_created(
     ):
         raise TrialValidationError(
             "business-partner creation cannot change Shop stock or ATP."
+        )
+
+
+def _validate_inventory_supplier_policy_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _without(current, frozenset({"inventoryFoundation"})) != _without(
+        next_state, frozenset({"inventoryFoundation"})
+    ):
+        raise TrialValidationError(
+            "commerce.inventory.supplier_policy_saved may change only inventoryFoundation."
+        )
+    current_foundation = _inventory_foundation(current)
+    next_foundation = _inventory_foundation(next_state)
+    if current_foundation is None or next_foundation is None:
+        raise TrialValidationError("Shop location inventory must be initialized first.")
+    catalog_skus = [str(item["sku"]) for item in current["items"]]
+    try:
+        before = validate_shop_inventory_state(current_foundation, catalog_skus)
+        after = validate_shop_inventory_state(next_foundation, catalog_skus)
+        before_totals = shop_inventory_sku_totals(before, catalog_skus)
+        after_totals = shop_inventory_sku_totals(after, catalog_skus)
+        before_available = shop_inventory_sku_available_to_promise(
+            before, catalog_skus
+        )
+        after_available = shop_inventory_sku_available_to_promise(
+            after, catalog_skus
+        )
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+    if (
+        after["revision"] != before["revision"] + 1
+        or after["commands"][:-1] != before["commands"]
+        or after["commands"][-1]["payload"]["kind"] != "supplier_policy_set"
+    ):
+        raise TrialValidationError(
+            "commerce.inventory.supplier_policy_saved must append exactly one supplier-policy command."
+        )
+    expected = _inventory_item_totals(current)
+    if (
+        before_totals != after_totals
+        or before_available != after_available
+        or after_available != expected
+    ):
+        raise TrialValidationError(
+            "supplier-policy changes cannot change Shop stock or ATP."
         )
 
 
@@ -8979,6 +9030,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.production_batch.received": _validate_production_batch_received,
     "commerce.inventory.initialized": _validate_inventory_initialized,
     "commerce.inventory.master_created": _validate_inventory_master_created,
+    "commerce.inventory.supplier_policy_saved": _validate_inventory_supplier_policy_saved,
     "commerce.inventory.transferred": _validate_inventory_transferred,
     "commerce.purchase_order.created": _validate_purchase_order_created,
     "commerce.purchase_order.received": _validate_purchase_order_received,
@@ -9098,6 +9150,7 @@ def reduce_commerce_state(
     if event_type not in {
         "commerce.inventory.initialized",
         "commerce.inventory.master_created",
+        "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
         "commerce.stock.counted",
         "commerce.production_material.issued",

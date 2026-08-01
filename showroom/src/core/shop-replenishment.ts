@@ -9,6 +9,7 @@ import { projectProductionMaterialRequirements } from './production-material-han
 import { productionOrderPortfolioEntries } from './production-order-portfolio.ts'
 import { validateProductionState, type ProductionState } from './production-workspace.ts'
 import { projectShopInventory } from './shop-inventory-foundation.ts'
+import type { ShopSupplierPolicy } from './shop-inventory-foundation.ts'
 
 export const SHOP_REPLENISHMENT_PLAN_CONTRACT = 'supermega.shop.replenishment_plan.v1' as const
 
@@ -23,12 +24,15 @@ export type ShopReplenishmentRow = {
   productionDemandUnits: number
   openPurchaseUnits: number
   atRiskPurchaseUnits: number
+  unroundedOrderUnits: number
   recommendedOrderUnits: number
   jobIds: string[]
   earliestNeedAt: string | null
   nextExpectedAt: string | null
   suggestedSupplier: string | null
   suggestedUnitCostMmk: number | null
+  supplierPolicy: Omit<ShopSupplierPolicy, 'commandId' | 'proof'> | null
+  latestOrderAt: string | null
   status: ShopReplenishmentStatus
 }
 
@@ -70,6 +74,15 @@ function safeDouble(value: number, field: string) {
   return result
 }
 
+function roundOrderUnits(required: number, policy: ShopSupplierPolicy | null, sku: string) {
+  if (!required || !policy) return required
+  const minimum = Math.max(required, policy.minimumOrderUnits)
+  const multiples = Math.ceil(minimum / policy.orderMultipleUnits)
+  const result = multiples * policy.orderMultipleUnits
+  if (!Number.isSafeInteger(result)) throw new Error(`Policy-rounded order for ${sku} exceeds the supported quantity range.`)
+  return result
+}
+
 export function projectShopReplenishment(
   commerceValue: CommerceState,
   productionValue: ProductionState,
@@ -100,9 +113,11 @@ export function projectShopReplenishment(
     purchaseOrder,
     progress: commercePurchaseOrderProgress(commerce, purchaseOrder),
   })).filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received')
-  const retainedVendors = commerce.inventoryFoundation
-    ? projectShopInventory(commerce.inventoryFoundation, commerce.items.map((item) => item.sku).sort()).vendors
-    : []
+  const inventory = commerce.inventoryFoundation
+    ? projectShopInventory(commerce.inventoryFoundation, commerce.items.map((item) => item.sku).sort())
+    : null
+  const retainedVendors = inventory?.vendors ?? []
+  const retainedVendorNames = new Map(retainedVendors.map((vendor) => [vendor.id, vendor.name]))
 
   const rows = commerce.items.flatMap((item): ShopReplenishmentRow[] => {
     const demand = demandBySku.get(item.sku) ?? { units: 0, jobs: new Set<string>(), dueAt: [] }
@@ -114,20 +129,29 @@ export function projectShopReplenishment(
       .reduce((total, { progress }) => safeAdd(total, progress.remaining, `At-risk purchases for ${item.sku}`), 0)
     const nextExpectedAt = skuOrders.map(({ purchaseOrder }) => purchaseOrder.expectedAt)
       .filter((value): value is string => Boolean(value)).sort()[0] ?? null
-    const operatingTargetUnits = Math.max(
-      safeDouble(item.reorderAt, `Operating target for ${item.sku}`),
-      safeAdd(item.reorderAt, demand.units, `Protected Plant target for ${item.sku}`),
-    )
-    const availableSupply = safeAdd(item.onHand, openPurchaseUnits, `Available supply for ${item.sku}`)
-    const recommendedOrderUnits = Math.max(operatingTargetUnits - availableSupply, 0)
-    if (!demand.units && item.onHand > item.reorderAt && !openPurchaseUnits) return []
-
     const recentOrders = purchaseOrders.filter((purchaseOrder) => purchaseOrder.sku === item.sku && !purchaseOrder.cancellation)
       .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt) || (left.id < right.id ? -1 : 1))
     const supplierOrder = recentOrders.find((purchaseOrder) => purchaseOrder.supplier.trim())
+    const activePolicies = (inventory?.supplierPolicies ?? []).filter((policy) => policy.sku === item.sku && policy.status === 'active')
+    const policy = supplierOrder
+      ? activePolicies.find((candidate) => retainedVendorNames.get(candidate.vendorId) === supplierOrder.supplier) ?? null
+      : activePolicies.length === 1 ? activePolicies[0] : null
+    const operatingTargetUnits = Math.max(
+      safeDouble(item.reorderAt, `Operating target for ${item.sku}`),
+      safeAdd(item.reorderAt, demand.units, `Protected Plant target for ${item.sku}`),
+      policy ? safeAdd(safeAdd(item.reorderAt, demand.units, `Policy target for ${item.sku}`), policy.safetyStockUnits, `Policy safety stock for ${item.sku}`) : 0,
+    )
+    const availableSupply = safeAdd(item.onHand, openPurchaseUnits, `Available supply for ${item.sku}`)
+    const unroundedOrderUnits = Math.max(operatingTargetUnits - availableSupply, 0)
+    const recommendedOrderUnits = roundOrderUnits(unroundedOrderUnits, policy, item.sku)
+    if (!demand.units && item.onHand > item.reorderAt && !openPurchaseUnits) return []
+
     const costOrder = recentOrders.find((purchaseOrder) => purchaseOrder.unitCostMmk !== undefined)
-    const suggestedSupplier = supplierOrder?.supplier ?? (retainedVendors.length === 1 ? retainedVendors[0].name : null)
+    const suggestedSupplier = policy ? retainedVendorNames.get(policy.vendorId) ?? null : supplierOrder?.supplier ?? (retainedVendors.length === 1 ? retainedVendors[0].name : null)
     const suggestedUnitCostMmk = costOrder?.unitCostMmk ?? null
+    const latestOrderAt = earliestNeedAt && policy
+      ? new Date(Date.parse(earliestNeedAt) - policy.leadTimeDays * 86_400_000).toISOString()
+      : null
     const status: ShopReplenishmentStatus = recommendedOrderUnits
       ? suggestedSupplier && suggestedUnitCostMmk ? 'order_required' : 'terms_required'
       : atRiskPurchaseUnits ? 'supply_at_risk'
@@ -141,12 +165,24 @@ export function projectShopReplenishment(
       productionDemandUnits: demand.units,
       openPurchaseUnits,
       atRiskPurchaseUnits,
+      unroundedOrderUnits,
       recommendedOrderUnits,
       jobIds: [...demand.jobs].sort(),
       earliestNeedAt,
       nextExpectedAt,
       suggestedSupplier,
       suggestedUnitCostMmk,
+      supplierPolicy: policy ? {
+        vendorId: policy.vendorId,
+        sku: policy.sku,
+        leadTimeDays: policy.leadTimeDays,
+        minimumOrderUnits: policy.minimumOrderUnits,
+        orderMultipleUnits: policy.orderMultipleUnits,
+        safetyStockUnits: policy.safetyStockUnits,
+        serviceLevelBasisPoints: policy.serviceLevelBasisPoints,
+        status: policy.status,
+      } : null,
+      latestOrderAt,
       status,
     }]
   }).sort((left, right) => {
@@ -160,6 +196,16 @@ export function projectShopReplenishment(
       items: commerce.items.map(({ sku, name, onHand, reorderAt }) => ({ sku, name, onHand, reorderAt })).sort((left, right) => left.sku.localeCompare(right.sku)),
       purchaseOrders: purchaseOrders.map(({ id, createdAt, expectedAt, supplier, sku, quantityOrdered, unitCostMmk, cancellation }) => ({ id, createdAt, expectedAt: expectedAt ?? null, supplier, sku, quantityOrdered, unitCostMmk: unitCostMmk ?? null, cancelled: Boolean(cancellation), remaining: commercePurchaseOrderProgress(commerce, purchaseOrders.find((candidate) => candidate.id === id)!).remaining })).sort((left, right) => left.id.localeCompare(right.id)),
       vendors: retainedVendors.map(({ id, name }) => ({ id, name })).sort((left, right) => left.id.localeCompare(right.id)),
+      supplierPolicies: (inventory?.supplierPolicies ?? []).map((policy) => ({
+        vendorId: policy.vendorId,
+        sku: policy.sku,
+        leadTimeDays: policy.leadTimeDays,
+        minimumOrderUnits: policy.minimumOrderUnits,
+        orderMultipleUnits: policy.orderMultipleUnits,
+        safetyStockUnits: policy.safetyStockUnits,
+        serviceLevelBasisPoints: policy.serviceLevelBasisPoints,
+        status: policy.status,
+      })).sort((left, right) => `${left.sku}|${left.vendorId}`.localeCompare(`${right.sku}|${right.vendorId}`)),
     }),
     productionOrders: portfolio.map((entry) => ({ jobId: entry.jobId, headDigest: entry.execution.headDigest })),
   }

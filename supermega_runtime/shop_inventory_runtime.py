@@ -514,6 +514,76 @@ def _payload(value: object, field: str, catalog_skus: list[str]) -> dict[str, An
             },
             "proof": _proof(row["proof"], f"{field}.proof"),
         }
+    if kind == "supplier_policy_set":
+        row = _exact(row, field, {"kind", "id", "policy", "proof"})
+        policy = _exact(
+            row["policy"],
+            f"{field}.policy",
+            {
+                "vendorId", "sku", "leadTimeDays", "minimumOrderUnits",
+                "orderMultipleUnits", "safetyStockUnits",
+                "serviceLevelBasisPoints", "status",
+            },
+        )
+        sku = _text(policy["sku"], f"{field}.policy.sku", 80)
+        if sku not in catalog_skus:
+            raise ShopInventoryValidationError(
+                f"{field}.policy.sku is not in the Shop catalog."
+            )
+        lead_time_days = _integer(
+            policy["leadTimeDays"], f"{field}.policy.leadTimeDays", 1
+        )
+        minimum_order_units = _integer(
+            policy["minimumOrderUnits"], f"{field}.policy.minimumOrderUnits", 1
+        )
+        order_multiple_units = _integer(
+            policy["orderMultipleUnits"], f"{field}.policy.orderMultipleUnits", 1
+        )
+        safety_stock_units = _integer(
+            policy["safetyStockUnits"], f"{field}.policy.safetyStockUnits"
+        )
+        service_level = _integer(
+            policy["serviceLevelBasisPoints"],
+            f"{field}.policy.serviceLevelBasisPoints",
+            5_000,
+        )
+        if lead_time_days > 365:
+            raise ShopInventoryValidationError(
+                f"{field}.policy.leadTimeDays cannot exceed 365."
+            )
+        if any(
+            value > 1_000_000
+            for value in (minimum_order_units, order_multiple_units, safety_stock_units)
+        ):
+            raise ShopInventoryValidationError(
+                f"{field}.policy quantities cannot exceed 1,000,000 units."
+            )
+        if service_level > 9_999:
+            raise ShopInventoryValidationError(
+                f"{field}.policy.serviceLevelBasisPoints cannot exceed 9,999."
+            )
+        status = _text(policy["status"], f"{field}.policy.status", 8)
+        if status not in {"active", "inactive"}:
+            raise ShopInventoryValidationError(
+                f"{field}.policy.status is unsupported."
+            )
+        return {
+            "kind": "supplier_policy_set",
+            "id": _identifier(row["id"], f"{field}.id", "SPP"),
+            "policy": {
+                "vendorId": _identifier(
+                    policy["vendorId"], f"{field}.policy.vendorId", "VEN"
+                ),
+                "sku": sku,
+                "leadTimeDays": lead_time_days,
+                "minimumOrderUnits": minimum_order_units,
+                "orderMultipleUnits": order_multiple_units,
+                "safetyStockUnits": safety_stock_units,
+                "serviceLevelBasisPoints": service_level,
+                "status": status,
+            },
+            "proof": _proof(row["proof"], f"{field}.proof"),
+        }
     if kind == "transfer":
         row = _exact(
             row,
@@ -1057,6 +1127,7 @@ def _plan_order_return_allocations(
 def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
     clients: dict[str, dict[str, str]] = {}
     vendors: dict[str, dict[str, str]] = {}
+    supplier_policies: dict[tuple[str, str], dict[str, Any]] = {}
     locations: set[str] = set()
     units: dict[str, dict[str, str]] = {}
     balances: dict[tuple[str, str], dict[str, int]] = {}
@@ -1137,6 +1208,18 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
                     f"{field}.master.name is already recorded."
                 )
             masters[str(master["id"])] = master
+            continue
+        if command["kind"] == "supplier_policy_set":
+            policy = command["policy"]
+            if policy["vendorId"] not in vendors:
+                raise ShopInventoryValidationError(
+                    f"{field}.policy.vendorId is unknown."
+                )
+            supplier_policies[(str(policy["sku"]), str(policy["vendorId"]))] = {
+                **deepcopy(policy),
+                "commandId": command["id"],
+                "proof": deepcopy(command["proof"]),
+            }
             continue
         if command["kind"] in {"receipt", "production_receipt"}:
             if command["locationId"] not in locations:
@@ -1508,6 +1591,9 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "clients": [clients[key] for key in sorted(clients)],
         "vendors": [vendors[key] for key in sorted(vendors)],
+        "supplierPolicies": [
+            supplier_policies[key] for key in sorted(supplier_policies)
+        ],
         "skuTotals": {sku: value for sku, value in sku_totals.items() if value > 0},
         "skuAvailableToPromise": {
             sku: value for sku, value in sku_available.items() if value > 0
@@ -1735,6 +1821,14 @@ def shop_inventory_business_partners(
         "clients": deepcopy(projection["clients"]),
         "vendors": deepcopy(projection["vendors"]),
     }
+
+
+def shop_inventory_supplier_policies(
+    value: object, catalog_skus: Sequence[str]
+) -> list[dict[str, Any]]:
+    state = validate_shop_inventory_state(value, catalog_skus)
+    projection = _project([command["payload"] for command in state["commands"]])
+    return deepcopy(projection["supplierPolicies"])
 
 
 def shop_inventory_sku_available_to_promise(

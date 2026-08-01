@@ -2764,6 +2764,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.production_batch.received",
                     "commerce.inventory.initialized",
                     "commerce.inventory.master_created",
+                    "commerce.inventory.supplier_policy_saved",
                     "commerce.inventory.transferred",
                     "commerce.purchase_order.created",
                     "commerce.purchase_order.received",

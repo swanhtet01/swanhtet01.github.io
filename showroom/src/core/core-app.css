@@ -348,6 +348,8 @@ textarea { min-height: 72px; resize: vertical; }
 .inline-evidence { display: grid; grid-template-columns: minmax(110px,.48fr) minmax(150px,.85fr) minmax(180px,1.15fr) auto; gap: 8px; margin-top: 10px; }
 .core-form { display: grid; gap: 10px; }
 .compact-form { max-width: 680px; }
+.supplier-policy-form { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--core-line); }
+.supplier-policy-form > div:first-child { display: grid; gap: 3px; }
 .form-row { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
 .plant-availability-fields { max-height: 360px; display: grid; gap: 12px; overflow: auto; border: 1px solid var(--core-line); border-radius: 10px; padding: 10px; background: rgba(255,255,255,.7); }
 .plant-availability-group { display: grid; gap: 10px; }

@@ -272,6 +272,7 @@ const expectedHumanCommerceEvents = [
   'commerce.customer_credit_policy.saved',
   'commerce.inventory.initialized',
   'commerce.inventory.master_created',
+  'commerce.inventory.supplier_policy_saved',
   'commerce.inventory.transferred',
   'commerce.item.created',
   'commerce.item.updated',

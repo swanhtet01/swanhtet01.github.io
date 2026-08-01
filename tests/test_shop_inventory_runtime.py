@@ -17,6 +17,7 @@ from supermega_runtime.shop_inventory_runtime import (
     restamp_latest_shop_inventory_command,
     shop_inventory_balances,
     shop_inventory_catalog_digest,
+    shop_inventory_supplier_policies,
     shop_inventory_sku_available_to_promise,
     shop_inventory_sku_totals,
     validate_shop_inventory_state,
@@ -166,6 +167,34 @@ def master_created_inventory(
             "id": command_id,
             "masterType": master_type,
             "master": {"id": master_id, "name": name},
+            "proof": proof,
+        },
+    )
+
+
+def supplier_policy_inventory(
+    state: dict[str, object],
+    proof: dict[str, str],
+    *,
+    command_id: str = "SPP-SKU1-001",
+    service_level_basis_points: int = 9_500,
+    status: str = "active",
+) -> dict[str, object]:
+    return append_inventory_command(
+        state,
+        {
+            "kind": "supplier_policy_set",
+            "id": command_id,
+            "policy": {
+                "vendorId": "VEN-OPENING-001",
+                "sku": "SKU-1",
+                "leadTimeDays": 7,
+                "minimumOrderUnits": 12,
+                "orderMultipleUnits": 6,
+                "safetyStockUnits": 4,
+                "serviceLevelBasisPoints": service_level_basis_points,
+                "status": status,
+            },
             "proof": proof,
         },
     )
@@ -1373,6 +1402,88 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
         tampered["commands"][-1]["payload"]["master"]["name"] = "Changed"  # type: ignore[index]
         with self.assertRaises(ShopInventoryValidationError):
             validate_shop_inventory_state(tampered, ["SKU-1"])
+
+    def test_supplier_policy_is_revisioned_managed_and_stock_neutral(self) -> None:
+        current = commerce_state()
+        opening = opening_inventory()
+        initialized = reduce_commerce_state(
+            "commerce.inventory.initialized",
+            current,
+            {
+                "state": {**current, "inventoryFoundation": opening},
+                "evidence": opening["commands"][-1]["payload"]["proof"],  # type: ignore[index]
+            },
+        )
+        proof = action_proof(
+            "ACT-SUPPLIER-POLICY-001", "2026-07-27T02:35:00.000Z"
+        )
+        policy_foundation = supplier_policy_inventory(
+            initialized["inventoryFoundation"], proof
+        )
+        accepted = reduce_commerce_state(
+            "commerce.inventory.supplier_policy_saved",
+            initialized,
+            {
+                "state": {**initialized, "inventoryFoundation": policy_foundation},
+                "evidence": proof,
+            },
+        )
+        policies = shop_inventory_supplier_policies(
+            accepted["inventoryFoundation"], ["SKU-1"]
+        )
+        self.assertEqual(
+            policies,
+            [
+                {
+                    "vendorId": "VEN-OPENING-001",
+                    "sku": "SKU-1",
+                    "leadTimeDays": 7,
+                    "minimumOrderUnits": 12,
+                    "orderMultipleUnits": 6,
+                    "safetyStockUnits": 4,
+                    "serviceLevelBasisPoints": 9_500,
+                    "status": "active",
+                    "commandId": "SPP-SKU1-001",
+                    "proof": proof,
+                }
+            ],
+        )
+        self.assertEqual(
+            shop_inventory_sku_totals(accepted["inventoryFoundation"], ["SKU-1"]),
+            {"SKU-1": 10},
+        )
+        revised_proof = action_proof(
+            "ACT-SUPPLIER-POLICY-002", "2026-07-27T02:40:00.000Z"
+        )
+        revised = supplier_policy_inventory(
+            accepted["inventoryFoundation"],
+            revised_proof,
+            command_id="SPP-SKU1-002",
+            service_level_basis_points=9_800,
+            status="inactive",
+        )
+        revised_policies = shop_inventory_supplier_policies(revised, ["SKU-1"])
+        self.assertEqual(len(revised_policies), 1)
+        self.assertEqual(revised_policies[0]["commandId"], "SPP-SKU1-002")
+        self.assertEqual(revised_policies[0]["status"], "inactive")
+
+        invalid = supplier_policy_inventory(
+            accepted["inventoryFoundation"],
+            revised_proof,
+            command_id="SPP-SKU1-INVALID",
+            service_level_basis_points=10_000,
+        )
+        with self.assertRaises(ShopInventoryValidationError):
+            validate_shop_inventory_state(invalid, ["SKU-1"])
+
+        stock_tamper = deepcopy(accepted)
+        stock_tamper["items"][0]["onHand"] = 11  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            reduce_commerce_state(
+                "commerce.inventory.supplier_policy_saved",
+                initialized,
+                {"state": stock_tamper, "evidence": proof},
+            )
 
     def test_order_allocation_reserve_release_and_fulfil_are_atomic(self) -> None:
         current = commerce_state()

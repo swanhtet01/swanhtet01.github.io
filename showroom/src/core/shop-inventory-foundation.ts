@@ -12,6 +12,18 @@ export type ShopInventoryProof = {
 }
 
 export type ShopInventoryMaster = { id: string; name: string }
+export type ShopSupplierPolicy = {
+  vendorId: string
+  sku: string
+  leadTimeDays: number
+  minimumOrderUnits: number
+  orderMultipleUnits: number
+  safetyStockUnits: number
+  serviceLevelBasisPoints: number
+  status: 'active' | 'inactive'
+  commandId: string
+  proof: ShopInventoryProof
+}
 export type ShopInventoryStockUnit = {
   id: string
   sku: string
@@ -78,6 +90,7 @@ export type ShopInventoryImportPackage = {
 export type ShopInventoryCommandPayload =
   | { kind: 'import'; id: string; package: ShopInventoryImportPackage; proof: ShopInventoryProof }
   | { kind: 'master_create'; id: string; masterType: 'client' | 'vendor'; master: ShopInventoryMaster; proof: ShopInventoryProof }
+  | { kind: 'supplier_policy_set'; id: string; policy: Omit<ShopSupplierPolicy, 'commandId' | 'proof'>; proof: ShopInventoryProof }
   | { kind: 'transfer'; id: string; stockUnitId: string; fromLocationId: string; toLocationId: string; quantity: number; proof: ShopInventoryProof }
   | { kind: 'receipt'; id: string; purchaseOrderId: string; stockUnitId: string; sku: string; trackingCode: string; locationId: string; quantity: number; proof: ShopInventoryProof }
   | { kind: 'production_receipt'; id: string; productionReleaseId: string; productionCommandDigest: string; productionJobId: string; productionOutputBatchId: string; productionReleasedAt: string; stockUnitId: string; sku: string; trackingCode: string; locationId: string; quantity: number; proof: ShopInventoryProof }
@@ -121,6 +134,7 @@ export type ShopInventoryProjection = {
   headDigest: string
   clients: ShopInventoryMaster[]
   vendors: ShopInventoryMaster[]
+  supplierPolicies: ShopSupplierPolicy[]
   locations: ShopInventoryMaster[]
   stockUnits: ShopInventoryStockUnit[]
   balances: ShopInventoryBalance[]
@@ -144,7 +158,7 @@ export type ShopInventoryProjection = {
 const digestPattern = /^sha256:[0-9a-f]{64}$/
 const businessIdPattern = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$/
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
-const commandKinds = new Set(['import', 'master_create', 'transfer', 'receipt', 'production_receipt', 'count', 'production_issue', 'production_return', 'reserve', 'release', 'fulfil', 'order_reserve', 'order_release', 'order_fulfil', 'order_return'])
+const commandKinds = new Set(['import', 'master_create', 'supplier_policy_set', 'transfer', 'receipt', 'production_receipt', 'count', 'production_issue', 'production_return', 'reserve', 'release', 'fulfil', 'order_reserve', 'order_release', 'order_fulfil', 'order_return'])
 const productionUnits = new Set<ShopInventoryProductionUnit>(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -475,6 +489,42 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
       id: identifier(source.id, `${field}.id`, 'MST'),
       masterType,
       master,
+      proof: proof(source.proof, `${field}.proof`),
+    }
+  }
+  if (value.kind === 'supplier_policy_set') {
+    const source = exact(value, field, ['kind', 'id', 'policy', 'proof'])
+    const policySource = exact(source.policy, `${field}.policy`, [
+      'vendorId', 'sku', 'leadTimeDays', 'minimumOrderUnits', 'orderMultipleUnits',
+      'safetyStockUnits', 'serviceLevelBasisPoints', 'status',
+    ])
+    const sku = text(policySource.sku, `${field}.policy.sku`, 80)
+    if (!catalog.includes(sku)) throw new Error(`${field}.policy.sku is not present in the trusted Shop catalog.`)
+    const leadTimeDays = quantity(policySource.leadTimeDays, `${field}.policy.leadTimeDays`, 1)
+    const minimumOrderUnits = quantity(policySource.minimumOrderUnits, `${field}.policy.minimumOrderUnits`, 1)
+    const orderMultipleUnits = quantity(policySource.orderMultipleUnits, `${field}.policy.orderMultipleUnits`, 1)
+    const safetyStockUnits = quantity(policySource.safetyStockUnits, `${field}.policy.safetyStockUnits`)
+    const serviceLevelBasisPoints = quantity(policySource.serviceLevelBasisPoints, `${field}.policy.serviceLevelBasisPoints`, 5_000)
+    if (leadTimeDays > 365) throw new Error(`${field}.policy.leadTimeDays cannot exceed 365.`)
+    if (minimumOrderUnits > 1_000_000 || orderMultipleUnits > 1_000_000 || safetyStockUnits > 1_000_000) {
+      throw new Error(`${field}.policy quantities cannot exceed 1,000,000 units.`)
+    }
+    if (serviceLevelBasisPoints > 9_999) throw new Error(`${field}.policy.serviceLevelBasisPoints cannot exceed 9,999.`)
+    const status = text(policySource.status, `${field}.policy.status`, 8)
+    if (status !== 'active' && status !== 'inactive') throw new Error(`${field}.policy.status is unsupported.`)
+    return {
+      kind: 'supplier_policy_set',
+      id: identifier(source.id, `${field}.id`, 'SPP'),
+      policy: {
+        vendorId: identifier(policySource.vendorId, `${field}.policy.vendorId`, 'VEN'),
+        sku,
+        leadTimeDays,
+        minimumOrderUnits,
+        orderMultipleUnits,
+        safetyStockUnits,
+        serviceLevelBasisPoints,
+        status,
+      },
       proof: proof(source.proof, `${field}.proof`),
     }
   }
@@ -813,6 +863,7 @@ function planOrderReturnAllocationRows(
 function replayCommands(commands: ShopInventoryCommandPayload[]) {
   const clients = new Map<string, ShopInventoryMaster>()
   const vendors = new Map<string, ShopInventoryMaster>()
+  const supplierPolicies = new Map<string, ShopSupplierPolicy>()
   const locations = new Map<string, ShopInventoryMaster>()
   const stockUnits = new Map<string, ShopInventoryStockUnit>()
   const balances = new Map<string, { onHand: number; reserved: number }>()
@@ -872,6 +923,16 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
         throw new Error(`${field}.master.name is already recorded.`)
       }
       masters.set(command.master.id, command.master)
+      return
+    }
+    if (command.kind === 'supplier_policy_set') {
+      if (!vendors.has(command.policy.vendorId)) throw new Error(`${field}.policy.vendorId is unknown.`)
+      const key = `${command.policy.sku}\u0000${command.policy.vendorId}`
+      supplierPolicies.set(key, {
+        ...canonicalCopy(command.policy),
+        commandId: command.id,
+        proof: canonicalCopy(command.proof),
+      })
       return
     }
     if (command.kind === 'receipt' || command.kind === 'production_receipt') {
@@ -1201,7 +1262,9 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
   const totalReserved = balanceRows.reduce((total, row) => total + row.reserved, 0)
   const byId = <T extends { id: string }>(rows: Map<string, T>) => [...rows.values()].sort((left, right) => compareCanonicalText(left.id, right.id))
   return {
-    clients: byId(clients), vendors: byId(vendors), locations: byId(locations), stockUnits: byId(stockUnits), balances: balanceRows,
+    clients: byId(clients), vendors: byId(vendors),
+    supplierPolicies: [...supplierPolicies.values()].sort((left, right) => compareCanonicalText(`${left.sku}|${left.vendorId}`, `${right.sku}|${right.vendorId}`)),
+    locations: byId(locations), stockUnits: byId(stockUnits), balances: balanceRows,
     reservations: byId(reservations), ledger,
     metrics: { totalOnHand, totalReserved, totalAvailableToPromise: totalOnHand - totalReserved },
   }
@@ -1341,6 +1404,21 @@ export function createShopInventoryMaster(state: unknown, input: {
     id: input.commandId,
     masterType: input.masterType,
     master: input.master,
+    proof: proof(input.proof, 'proof'),
+  }, input.catalogSkus, input.expectedHeadDigest)
+}
+
+export function setShopSupplierPolicy(state: unknown, input: {
+  commandId: unknown
+  policy: unknown
+  proof: unknown
+  catalogSkus: unknown
+  expectedHeadDigest: unknown
+}) {
+  return appendCommand(state, {
+    kind: 'supplier_policy_set',
+    id: input.commandId,
+    policy: input.policy,
     proof: proof(input.proof, 'proof'),
   }, input.catalogSkus, input.expectedHeadDigest)
 }

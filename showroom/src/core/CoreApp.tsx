@@ -2952,7 +2952,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const supplierControl = <section className="shop-order-control supplier-control" aria-label="Supplier control">
     <div><span className="core-eyebrow">Replenishment plan</span><strong>{supplierControlNext}</strong><small>Combines reorder floors, remaining Plant materials, Shop stock, and open purchase orders. Supplier and cost come only from retained records; missing terms stay blank. No RFQ, message, payment, receipt, payable, costing, or stock write runs here.</small><button className="text-link" disabled={commerceControlsDisabled || !purchaseRecommendations.length} onClick={startSupplierRequest} type="button">Prepare next purchase order</button></div>
     <div className="shop-order-control-rows">{supplierControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
-    {shopReplenishment.rows.length ? <div aria-label="Shop replenishment recommendations" className="shop-replenishment-list" role="list">{shopReplenishment.rows.slice(0, 4).map((row) => <div data-status={row.status} key={row.sku} role="listitem"><span><strong>{row.itemName}</strong><small>{row.sku}{row.jobIds.length ? ` · Plant ${row.jobIds.join(', ')}` : ' · reorder floor'}</small></span><span><b>{row.recommendedOrderUnits ? `Buy ${row.recommendedOrderUnits}` : row.status === 'supply_at_risk' ? 'Check arrival' : 'Covered'}</b><small>{row.onHandUnits} stock + {row.openPurchaseUnits} on order · target {row.operatingTargetUnits}</small></span></div>)}</div> : null}
+    {shopReplenishment.rows.length ? <div aria-label="Shop replenishment recommendations" className="shop-replenishment-list" role="list">{shopReplenishment.rows.slice(0, 4).map((row) => <div data-status={row.status} key={row.sku} role="listitem"><span><strong>{row.itemName}</strong><small>{row.sku}{row.jobIds.length ? ` · Plant ${row.jobIds.join(', ')}` : ' · reorder floor'}{row.supplierPolicy ? ` · ${(row.supplierPolicy.serviceLevelBasisPoints / 100).toFixed(2)}% service` : ''}</small></span><span><b>{row.recommendedOrderUnits ? `Buy ${row.recommendedOrderUnits}` : row.status === 'supply_at_risk' ? 'Check arrival' : 'Covered'}</b><small>{row.onHandUnits} stock + {row.openPurchaseUnits} on order · target {row.operatingTargetUnits}{row.supplierPolicy ? ` · ${row.supplierPolicy.leadTimeDays}d / MOQ ${row.supplierPolicy.minimumOrderUnits}` : ''}</small></span></div>)}</div> : null}
   </section>
   const shopAgentJob = !commerceCanWrite
     ? 'Restore Shop write readiness'
@@ -5075,9 +5075,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice('Finish or cancel the stock count before starting a supplier request. Your count draft was preserved.')
       return
     }
+    const policyArrivalAt = recommendation.supplierPolicy
+      ? purchaseOrderClock + recommendation.supplierPolicy.leadTimeDays * 24 * 60 * 60 * 1000
+      : purchaseOrderClock + 60 * 60 * 1000
     const earliestSafeArrival = recommendation.earliestNeedAt
-      ? new Date(Math.max(purchaseOrderClock + 60 * 60 * 1000, Date.parse(recommendation.earliestNeedAt) - 24 * 60 * 60 * 1000))
-      : null
+      ? new Date(Math.max(policyArrivalAt, Date.parse(recommendation.earliestNeedAt) - 24 * 60 * 60 * 1000))
+      : new Date(policyArrivalAt)
     setPurchaseOrderDraft({
       mode: 'create',
       sku: item.sku,
@@ -5086,7 +5089,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       quantity: String(recommendation.recommendedOrderUnits),
       unitCostMmk: recommendation.suggestedUnitCostMmk ? String(recommendation.suggestedUnitCostMmk) : '',
     })
-    setNotice(`Purchase order prepared for ${item.name}: ${recommendation.recommendedOrderUnits} units${recommendation.jobIds.length ? ` cover Plant ${recommendation.jobIds.join(', ')}` : ' restore the Shop reorder target'}. Review any missing supplier, cost, and arrival terms; nothing was sent or written.`)
+    setNotice(`Purchase order prepared for ${item.name}: ${recommendation.recommendedOrderUnits} units${recommendation.supplierPolicy && recommendation.recommendedOrderUnits !== recommendation.unroundedOrderUnits ? ` (rounded from ${recommendation.unroundedOrderUnits} by MOQ/order multiple)` : ''}${recommendation.jobIds.length ? ` cover Plant ${recommendation.jobIds.join(', ')}` : ' restore the Shop reorder target'}. Review any missing supplier, cost, and arrival terms; nothing was sent or written.`)
     requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
   }
 

@@ -1737,7 +1737,12 @@ if (!coreSource.includes('const shopAccountingPacketRows = [')
 if (!shopReplenishmentSource.includes("SHOP_REPLENISHMENT_PLAN_CONTRACT = 'supermega.shop.replenishment_plan.v1'")
   || !shopReplenishmentSource.includes('export function projectShopReplenishment(')
   || !shopReplenishmentSource.includes("status: ShopReplenishmentStatus = recommendedOrderUnits")
-  || !shopReplenishmentSource.includes("suggestedSupplier = supplierOrder?.supplier ?? (retainedVendors.length === 1 ? retainedVendors[0].name : null)")
+  || !shopReplenishmentSource.includes('const recommendedOrderUnits = roundOrderUnits(unroundedOrderUnits, policy, item.sku)')
+  || !shopReplenishmentSource.includes('policy.minimumOrderUnits')
+  || !shopReplenishmentSource.includes('policy.orderMultipleUnits')
+  || !shopReplenishmentSource.includes('policy.safetyStockUnits')
+  || !shopReplenishmentSource.includes('policy.serviceLevelBasisPoints')
+  || !shopReplenishmentSource.includes('const suggestedSupplier = policy ? retainedVendorNames.get(policy.vendorId)')
   || !shopReplenishmentSource.includes('suggestedUnitCostMmk = costOrder?.unitCostMmk ?? null')
   || !shopReplenishmentSource.includes('purchaseCreated: false')
   || !shopReplenishmentSource.includes('supplierContacted: false')
@@ -3103,7 +3108,7 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${shopInventoryUiSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.support_case_opened', 'commerce.order.support_case_reopened', 'commerce.order.support_case_service_recorded', 'commerce.order.support_case_resolved', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.collection_action.recorded', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.supplier_invoice.recorded', 'commerce.supplier_invoice.payable_ready', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved', 'commerce.customer_credit_policy.saved']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.support_case_opened', 'commerce.order.support_case_reopened', 'commerce.order.support_case_service_recorded', 'commerce.order.support_case_resolved', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.collection_action.recorded', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.supplier_policy_saved', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.supplier_invoice.recorded', 'commerce.supplier_invoice.payable_ready', 'commerce.close.saved', 'commerce.website_intake.converted', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved', 'commerce.customer_credit_policy.saved']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.storefront_request.received')
@@ -3321,6 +3326,7 @@ if (!coreSource.includes('<ShopInventoryFoundation')
   || !shopInventoryUiSource.includes('Boolean(state.revision && catalog.some')
   || !shopInventoryUiSource.includes("await onInventory(\n        'commerce.inventory.initialized'")
   || !shopInventoryUiSource.includes("await onInventory(\n        'commerce.inventory.master_created'")
+  || !shopInventoryUiSource.includes("await onInventory(\n        'commerce.inventory.supplier_policy_saved'")
   || !shopInventoryUiSource.includes("await onInventory(\n        'commerce.inventory.transferred'")
   || !shopInventoryUiSource.includes('Clients and suppliers')
   || !shopInventoryUiSource.includes('Nothing has been recorded yet.')
@@ -3338,11 +3344,13 @@ if (!commerceSource.includes('inventoryFoundation?: ShopInventoryState')
   || !commerceSource.includes('Commerce location inventory envelope is invalid.')
   || !shopInventoryUiSource.includes("'commerce.inventory.initialized'")
   || !shopInventoryUiSource.includes("'commerce.inventory.master_created'")
+  || !shopInventoryUiSource.includes("'commerce.inventory.supplier_policy_saved'")
   || !shopInventoryUiSource.includes("'commerce.inventory.transferred'")
   || !shopInventoryUiSource.includes('current.inventoryFoundation')
   || !coreSource.includes('onInventory={mutateCommerce}')
   || !managedCommerceRuntime.includes('_validate_inventory_initialized')
   || !managedCommerceRuntime.includes('_validate_inventory_master_created')
+  || !managedCommerceRuntime.includes('_validate_inventory_supplier_policy_saved')
   || !managedCommerceRuntime.includes('_validate_inventory_transferred')
   || !managedTrialStoreRuntime.includes('"commerce.inventory.master_created"')
   || !managedTrialStoreRuntime.includes('restamp_latest_shop_inventory_command')
@@ -5658,6 +5666,7 @@ async function verifyPlantOrderRuntime() {
     const orderPortfolio = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-order-portfolio.ts')).href}?plant-portfolio-verify=${Date.now()}`)
     const productionWorkspace = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts')).href}?shop-replenishment-production-verify=${Date.now()}`)
     const replenishment = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-replenishment.ts')).href}?shop-replenishment-verify=${Date.now()}`)
+    const shopInventory = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-inventory-foundation.ts')).href}?shop-supplier-policy-verify=${Date.now()}`)
     const proof = (sequence, label) => ({
       actionId: `ACT-20260726-${String(sequence).padStart(3, '0')}`,
       capturedAt: `2026-07-26T09:${String(Math.floor(sequence / 60)).padStart(2, '0')}:${String(sequence % 60).padStart(2, '0')}+06:30`,
@@ -5942,6 +5951,65 @@ async function verifyPlantOrderRuntime() {
       && missingTermsRow.suggestedSupplier === null
       && missingTermsRow.suggestedUnitCostMmk === null,
     'shop_replenishment_invented_missing_supplier_or_cost_terms')
+    const supplierPolicyImport = shopInventory.buildShopInventoryImportPackage({
+      importId: 'IMP-SUPPLIER-POLICY-001',
+      sourceDigest: shopInventory.shopInventoryEvidenceDigest({ source: 'supplier policy runtime fixture' }),
+      catalogSkus: ['SKU-RM-BAG'],
+      clients: [{ id: 'CLI-SUPPLIER-POLICY-001', name: 'Policy fixture client' }],
+      vendors: [{ id: 'VEN-SUPPLIER-POLICY-001', name: 'Reviewed material supplier' }],
+      locations: [{ id: 'LOC-POLICY-BRANCH', name: 'Policy branch' }, { id: 'LOC-POLICY-MAIN', name: 'Policy main' }],
+      stockUnits: [{ id: 'LOT-SUPPLIER-POLICY-001', sku: 'SKU-RM-BAG', tracking: 'lot', trackingCode: 'SUPPLIER-POLICY-OPENING-001' }],
+      openings: [{ stockUnitId: 'LOT-SUPPLIER-POLICY-001', locationId: 'LOC-POLICY-MAIN', vendorId: 'VEN-SUPPLIER-POLICY-001', quantity: 2 }],
+    })
+    const supplierPolicyOpeningProof = {
+      actionId: 'ACT-SUPPLIER-POLICY-OPENING-001', capturedAt: '2026-07-26T08:00:00.000Z', actor: 'Shop buyer',
+      reason: 'Reviewed supplier policy opening stock.', evidenceReference: 'SUPPLIER-POLICY-OPENING-001',
+    }
+    const supplierPolicyOpening = shopInventory.applyShopInventoryImport(
+      shopInventory.createEmptyShopInventoryState(), supplierPolicyImport, supplierPolicyOpeningProof,
+      ['SKU-RM-BAG'], shopInventory.EMPTY_SHOP_INVENTORY_DIGEST,
+    )
+    const supplierPolicyProof = {
+      actionId: 'ACT-SUPPLIER-POLICY-001', capturedAt: '2026-07-26T08:01:00.000Z', actor: 'Shop buyer',
+      reason: 'Reviewed supplier service and order constraints.', evidenceReference: 'SUPPLIER-POLICY-001',
+    }
+    const supplierPolicyResult = shopInventory.setShopSupplierPolicy(supplierPolicyOpening.state, {
+      commandId: 'SPP-SUPPLIER-POLICY-001',
+      policy: {
+        vendorId: 'VEN-SUPPLIER-POLICY-001', sku: 'SKU-RM-BAG', leadTimeDays: 7,
+        minimumOrderUnits: 8, orderMultipleUnits: 4, safetyStockUnits: 2,
+        serviceLevelBasisPoints: 9_800, status: 'active',
+      },
+      proof: supplierPolicyProof,
+      catalogSkus: ['SKU-RM-BAG'],
+      expectedHeadDigest: supplierPolicyOpening.state.headDigest,
+    })
+    const supplierPolicyProjection = shopInventory.projectShopInventory(supplierPolicyResult.state, ['SKU-RM-BAG'])
+    assertReplenishment(supplierPolicyProjection.supplierPolicies.length === 1
+      && supplierPolicyProjection.supplierPolicies[0].commandId === 'SPP-SUPPLIER-POLICY-001'
+      && supplierPolicyProjection.supplierPolicies[0].serviceLevelBasisPoints === 9_800,
+    'shop_supplier_policy_not_retained_in_inventory_evidence')
+    const policyCommerce = commerce.validateCommerceState({ ...mrpPurchaseOrder, inventoryFoundation: supplierPolicyResult.state })
+    const policyPlan = replenishment.projectShopReplenishment(policyCommerce, productionForReplenishment)
+    const policyRow = policyPlan.rows.find((row) => row.sku === 'SKU-RM-BAG')
+    assertReplenishment(policyRow?.operatingTargetUnits === 9
+      && policyRow.unroundedOrderUnits === 5
+      && policyRow.recommendedOrderUnits === 8
+      && policyRow.supplierPolicy?.minimumOrderUnits === 8
+      && policyRow.suggestedSupplier === 'Reviewed material supplier',
+    'shop_replenishment_did_not_apply_safety_stock_moq_or_order_multiple')
+    assertReplenishment(policyRow?.latestOrderAt === '2026-07-28T09:00:00.000Z'
+      && policyRow.supplierPolicy?.leadTimeDays === 7
+      && policyRow.supplierPolicy.serviceLevelBasisPoints === 9_800
+      && replenishment.validateShopReplenishment(policyPlan, policyCommerce, productionForReplenishment).digest === policyPlan.digest,
+    'shop_replenishment_supplier_policy_evidence_or_lead_time_wrong')
+    assertReplenishmentThrows(() => shopInventory.setShopSupplierPolicy(supplierPolicyResult.state, {
+      commandId: 'SPP-SUPPLIER-POLICY-INVALID',
+      policy: { ...supplierPolicyResult.state.commands.at(-1).payload.policy, serviceLevelBasisPoints: 10_000 },
+      proof: { ...supplierPolicyProof, actionId: 'ACT-SUPPLIER-POLICY-INVALID', capturedAt: '2026-07-26T08:02:00.000Z' },
+      catalogSkus: ['SKU-RM-BAG'],
+      expectedHeadDigest: supplierPolicyResult.state.headDigest,
+    }), 'shop_supplier_policy_invalid_service_level_succeeded')
     const unmappedRequirements = materialHandoff.projectProductionMaterialRequirements(pricedPlanState, mrpBaseCommerce)
     assert(unmappedRequirements?.status === 'mapping_required' && unmappedRequirements.summary.mappingRequired === 2, 'plant_mrp_invented_supply_mapping')
     assert(plan.sourceDigest === 'sha256:9415e4d6d6dda852c2014d611c1f93e385d31c40df2b4ec30d293b12991ba519'
