@@ -284,6 +284,7 @@ a { color: inherit; }
 .product-track-card:hover { border-color: rgba(11,116,94,.38); background: var(--core-green-soft); transform: translateY(-1px); }
 .product-track-card h2 { margin: 8px 0 7px; font-size: 24px; line-height: 1.05; letter-spacing: -.03em; }
 .product-track-card p { margin: 0; color: var(--core-muted); font-size: 13px; line-height: 1.45; }
+.product-track-examples { display: block; margin-top: 10px; color: var(--core-quiet); font-size: 10px; line-height: 1.35; }
 .product-track-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .product-track-actions a { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--core-line-strong); border-radius: 9px; padding: 0 12px; color: var(--core-green); font-size: 12px; font-weight: 800; text-decoration: none; }
 .product-track-actions a:hover { border-color: rgba(11,116,94,.45); background: #fff; }

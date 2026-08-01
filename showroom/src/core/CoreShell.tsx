@@ -373,10 +373,10 @@ export function CoreLayout() {
 }
 
 const customerTracks = [
-  ['Shop', 'Sales and inventory', 'Sell, track stock, fulfil orders, and close the day.', '/shop/'],
-  ['Plant', 'Production and quality', 'Plan jobs, record output, trace materials, and handle problems.', '/plant/'],
-  ['Website', 'Pages and inquiries', 'Edit a real site preview, collect leads, and prepare launch.', '/website/'],
-  ['Ecommerce', 'Storefront and checkout', 'Run online orders, delivery, and Shop handoff.', '/ecommerce/'],
+  ['Shop', 'Sales and inventory', 'Sell, track stock, fulfil orders, and close the day.', 'retail, cafe, restaurant, spa, gym, school', '/shop/'],
+  ['Plant', 'Production and quality', 'Plan jobs, record output, trace materials, and handle problems.', 'food, packaging, printing, workshop, assembly', '/plant/'],
+  ['Website', 'Pages and inquiries', 'Edit a real site preview, collect leads, and prepare launch.', 'business site, services, catalog, landing page', '/website/'],
+  ['Ecommerce', 'Storefront and checkout', 'Run online orders, delivery, and Shop handoff.', 'pickup, local delivery, preorder, social orders', '/ecommerce/'],
 ] as const
 
 export function ProductHomePage() {
@@ -388,12 +388,13 @@ export function ProductHomePage() {
     <div className="workspace-screen product-home-screen">
       <PageHeading copy="Open a working sample and do one useful task. Setup and advanced controls stay out of the way until you need them." eyebrow="SuperMega" title="Choose what you want to run." />
       <nav aria-label="Business tracks" className="product-track-grid">
-        {customerTracks.map(([name, fit, outcome, path]) => (
+        {customerTracks.map(([name, fit, outcome, examples, path]) => (
           <article className="product-track-card" key={name}>
             <div>
               <span className="core-eyebrow">{fit}</span>
               <h2>{name}</h2>
               <p>{outcome}</p>
+              <small className="product-track-examples">{examples}</small>
             </div>
             <div className="product-track-actions">
               <Link aria-label={`Open ${name}`} to={path}>Open {name}</Link>
