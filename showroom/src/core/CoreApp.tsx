@@ -111,6 +111,7 @@ import {
   commerceSupplierInvoiceMatch,
   commerceSupplierPayablesHandoff,
   commerceSupplierPayablesHandoffCsv,
+  commerceSupplierPayablesAging,
   commerceSupplierReturnClaimBalance,
   commerceSupplierReturnClaimStatus,
   commerceSupplierPerformance,
@@ -2028,6 +2029,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
   const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
   const receivablesAging = commerceReceivablesAging(commerce, purchaseOrderClock)
+  const supplierPayablesAging = commerceSupplierPayablesAging(commerce, purchaseOrderClock)
   const actionOrders = commerce.orders.filter(commerceOrderNeedsAction).sort(compareCommerceOrderPromise)
   const actionOrderIds = new Set(actionOrders.map((order) => order.id))
   const closedOrders = commerce.orders.filter((order) => !actionOrderIds.has(order.id))
@@ -6265,6 +6267,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             ? 'Resolve invoice variance'
             : supplierInvoicesPendingReview.length
               ? 'Review matched invoice'
+              : supplierPayablesAging.overdueInvoiceCount
+                ? 'Review overdue supplier invoice'
           : supplierReceiptExposure
             ? 'Receive supplier evidence'
             : lowStock.length
@@ -6277,7 +6281,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Payments', pendingPaymentOrders.length ? `${pendingPaymentOrders.length} exception` : 'Clear'],
     ['Refunds', refundExposureOrders.length ? `${refundExposureOrders.length} due` : commerce.orders.some((order) => order.refundStatus === 'settled') ? 'Settled evidence' : 'Clear'],
     ['Receipts', supplierReceiptExposure ? `${supplierReceiptExposure} review` : activePurchaseOrders.length ? 'Open supply' : 'Clear'],
-    ['Invoices', supplierInvoiceExceptions.length ? `${supplierInvoiceExceptions.length} variance` : supplierInvoicesPendingReview.length ? `${supplierInvoicesPendingReview.length} review` : supplierInvoicesPayableReady.length ? `${supplierInvoicesPayableReady.length} ready` : 'None'],
+    ['Invoices', supplierInvoiceExceptions.length ? `${supplierInvoiceExceptions.length} variance` : supplierInvoicesPendingReview.length ? `${supplierInvoicesPendingReview.length} review` : supplierPayablesAging.overdueInvoiceCount ? `${supplierPayablesAging.overdueInvoiceCount} overdue` : supplierInvoicesPayableReady.length ? `${supplierInvoicesPayableReady.length} ready` : 'None'],
     ['Inventory', lowStock.length ? `${lowStock.length} reconcile` : managedInventoryProjection ? 'ATP evidence' : 'Catalog evidence'],
     ['Export gate', commerceCanWrite && !pendingAction ? 'Review only' : 'Locked'],
   ] as const
@@ -6289,12 +6293,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Close', latestCloseDownload ? 'CSV ready' : closePreview ? `${closableOrders.length} ready` : 'Close first'],
     ['Ledger', latestCloseDownload ? 'Review import' : 'Not posted'],
     ['Tax', 'Not configured'],
-    ['Payables', supplierInvoiceExceptions.length ? `${supplierInvoiceExceptions.length} blocked` : supplierInvoicesPendingReview.length ? `${supplierInvoicesPendingReview.length} match review` : supplierPayablesDownload ? `${supplierPayablesDownload.artifact.readyInvoiceCount} CSV ready` : 'None created'],
+    ['Payables', supplierInvoiceExceptions.length ? `${supplierInvoiceExceptions.length} blocked` : supplierInvoicesPendingReview.length ? `${supplierInvoicesPendingReview.length} match review` : supplierPayablesAging.overdueInvoiceCount ? `${supplierPayablesAging.overdueInvoiceCount} overdue` : supplierPayablesAging.dueWithin7DaysInvoiceCount ? `${supplierPayablesAging.dueWithin7DaysInvoiceCount} due this week` : supplierPayablesDownload ? `${supplierPayablesDownload.artifact.readyInvoiceCount} CSV ready` : 'None created'],
     ['Settlement', paymentReview.length ? `${paymentReview.length} exception` : 'External proof only'],
     ['Audit', latestClose?.evidenceReference ? 'Evidence linked' : 'Need close evidence'],
   ] as const
   const shopAccountingPacket = <section className="shop-order-control" aria-label="Shop accounting export packet">
-    <div><span className="core-eyebrow">Accounting export packet</span><strong>{latestCloseDownload || supplierPayablesDownload ? 'Ready for accountant review' : closePreview ? 'Close before export' : 'No export package yet'}</strong><small>AI packages reviewed sales and exact supplier payables with source evidence for accounting review. No ledger post, tax filing, bank settlement, refund, payment, inventory, or Shop write runs from this packet.</small>{supplierPayablesDownload ? <small><a className="text-link" data-supplier-payables-handoff="review-required" download={supplierPayablesDownload.filename} href={supplierPayablesDownload.href}>Download supplier payables CSV</a> · {formatMoney(supplierPayablesDownload.artifact.netPayableTotalMmk)} net · {formatMoney(supplierPayablesDownload.artifact.supplierCreditTotalMmk)} supplier credit · no payment initiated</small> : null}</div>
+    <div><span className="core-eyebrow">Accounting export packet</span><strong>{latestCloseDownload || supplierPayablesDownload ? 'Ready for accountant review' : closePreview ? 'Close before export' : 'No export package yet'}</strong><small>AI packages reviewed sales and exact supplier payables with source evidence for accounting review. No ledger post, tax filing, bank settlement, refund, payment, inventory, or Shop write runs from this packet.</small>{supplierPayablesDownload ? <small><a className="text-link" data-supplier-payables-handoff="review-required" download={supplierPayablesDownload.filename} href={supplierPayablesDownload.href}>Download supplier payables CSV</a> · {formatMoney(supplierPayablesDownload.artifact.netPayableTotalMmk)} net · {supplierPayablesAging.overdueInvoiceCount ? `${formatMoney(supplierPayablesAging.totalsMmk.overdue)} overdue` : supplierPayablesAging.dueWithin7DaysInvoiceCount ? `${formatMoney(supplierPayablesAging.totalsMmk.due_7_days)} due within 7 days` : 'nothing due within 7 days'} · {formatMoney(supplierPayablesDownload.artifact.supplierCreditTotalMmk)} supplier credit · no payment initiated</small> : null}</div>
     <div className="shop-order-control-rows">{shopAccountingPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
 

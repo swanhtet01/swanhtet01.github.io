@@ -7191,6 +7191,68 @@ def commerce_supplier_payables_handoff_csv(artifact: Mapping[str, Any]) -> str:
     ) + "\r\n"
 
 
+def commerce_supplier_payables_aging(
+    state: Mapping[str, Any],
+    as_of: str,
+) -> dict[str, Any]:
+    """Prioritize reviewed supplier payables without creating payment authority."""
+
+    current = validate_commerce_state(state)
+    canonical_as_of = _timestamp(as_of, "Supplier payables aging asOf")
+    as_of_time = datetime.fromisoformat(canonical_as_of.replace("Z", "+00:00"))
+    blocked_invoice_count = 0
+    rows: list[dict[str, Any]] = []
+    for purchase_order in _purchase_orders(current):
+        invoice = purchase_order.get("supplierInvoice")
+        if not isinstance(invoice, Mapping):
+            continue
+        match = commerce_supplier_invoice_match(current, purchase_order)
+        if not match["payableReady"]:
+            blocked_invoice_count += 1
+            continue
+        due_time = datetime.fromisoformat(invoice["dueAt"].replace("Z", "+00:00"))
+        if as_of_time > due_time:
+            days_past_due = max(1, (as_of_time - due_time + timedelta(days=1) - timedelta.resolution).days)
+            days_until_due = 0
+            bucket = "overdue"
+        else:
+            days_past_due = 0
+            days_until_due = max(0, (due_time - as_of_time + timedelta(days=1) - timedelta.resolution).days)
+            bucket = "due_7_days" if days_until_due <= 7 else "scheduled"
+        rows.append({
+            "purchaseOrderId": purchase_order["id"],
+            "invoiceId": invoice["id"],
+            "supplier": purchase_order["supplier"],
+            "dueAt": invoice["dueAt"],
+            "netPayableMmk": match["netInvoiceTotalMmk"],
+            "daysPastDue": days_past_due,
+            "daysUntilDue": days_until_due,
+            "bucket": bucket,
+        })
+    rank = {"overdue": 0, "due_7_days": 1, "scheduled": 2}
+    rows.sort(key=lambda row: (rank[row["bucket"]], row["dueAt"], row["invoiceId"]))
+    totals_mmk = {
+        bucket: sum(row["netPayableMmk"] for row in rows if row["bucket"] == bucket)
+        for bucket in ("overdue", "due_7_days", "scheduled")
+    }
+    total_net_payable_mmk = sum(row["netPayableMmk"] for row in rows)
+    if any(abs(value) > _MAX_SAFE_INTEGER for value in (*totals_mmk.values(), total_net_payable_mmk)):
+        raise TrialValidationError(
+            "Supplier payables aging totals exceed the supported safe integer range."
+        )
+    return {
+        "asOf": canonical_as_of,
+        "rows": rows,
+        "totalsMmk": totals_mmk,
+        "totalNetPayableMmk": total_net_payable_mmk,
+        "overdueInvoiceCount": sum(row["bucket"] == "overdue" for row in rows),
+        "dueWithin7DaysInvoiceCount": sum(row["bucket"] == "due_7_days" for row in rows),
+        "blockedInvoiceCount": blocked_invoice_count,
+        "paymentAuthority": "none",
+        "paymentInitiated": False,
+    }
+
+
 def _configured_storefront_preview_digest(
     state: Mapping[str, Any],
     configuration: Mapping[str, Any],
@@ -10611,6 +10673,7 @@ __all__ = [
     "commerce_supplier_invoice_match",
     "commerce_supplier_payables_handoff",
     "commerce_supplier_payables_handoff_csv",
+    "commerce_supplier_payables_aging",
     "commerce_website_intake_snapshot_digest",
     "reduce_commerce_state",
     "validate_commerce_state",

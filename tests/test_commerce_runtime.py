@@ -27,6 +27,7 @@ from supermega_runtime.commerce_runtime import (
     commerce_supplier_invoice_match,
     commerce_supplier_payables_handoff,
     commerce_supplier_payables_handoff_csv,
+    commerce_supplier_payables_aging,
     commerce_website_intake_snapshot_digest,
     validate_commerce_state,
 )
@@ -4137,6 +4138,40 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertEqual(handoff["rows"][0]["physicalReturnStatus"], "not_required")
         self.assertEqual(handoff["rows"][0]["payableReviewActionId"], review["actionId"])
         self.assertIn('"net_payable_mmk"', commerce_supplier_payables_handoff_csv(handoff))
+
+        blocked_aging = commerce_supplier_payables_aging(
+            invoiced,
+            "2026-08-15T09:20:00.000Z",
+        )
+        self.assertEqual(blocked_aging["rows"], [])
+        self.assertEqual(blocked_aging["blockedInvoiceCount"], 1)
+
+        scheduled_aging = commerce_supplier_payables_aging(
+            payable,
+            "2026-08-14T09:20:00.000Z",
+        )
+        self.assertEqual(scheduled_aging["rows"][0]["bucket"], "scheduled")
+        self.assertEqual(scheduled_aging["rows"][0]["daysUntilDue"], 8)
+        due_aging = commerce_supplier_payables_aging(
+            payable,
+            "2026-08-15T09:20:00.000Z",
+        )
+        self.assertEqual(due_aging["rows"][0]["bucket"], "due_7_days")
+        self.assertEqual(due_aging["rows"][0]["daysUntilDue"], 7)
+        self.assertEqual(due_aging["totalsMmk"]["due_7_days"], 750)
+        self.assertEqual(due_aging["dueWithin7DaysInvoiceCount"], 1)
+        self.assertEqual(due_aging["paymentAuthority"], "none")
+        self.assertFalse(due_aging["paymentInitiated"])
+        overdue_aging = commerce_supplier_payables_aging(
+            payable,
+            "2026-08-22T09:20:00.001Z",
+        )
+        self.assertEqual(overdue_aging["rows"][0]["bucket"], "overdue")
+        self.assertEqual(overdue_aging["rows"][0]["daysPastDue"], 1)
+        self.assertEqual(overdue_aging["overdueInvoiceCount"], 1)
+        self.assertEqual(overdue_aging["totalsMmk"]["overdue"], 750)
+        with self.assertRaises(TrialValidationError):
+            commerce_supplier_payables_aging(payable, "not-a-timestamp")
 
         tampered_handoff = deepcopy(handoff)
         tampered_handoff["netPayableTotalMmk"] = 751

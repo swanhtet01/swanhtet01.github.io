@@ -816,6 +816,31 @@ export type CommerceSupplierPayablesHandoff = {
   digest: string
 }
 
+export type CommerceSupplierPayableAgingBucket = 'overdue' | 'due_7_days' | 'scheduled'
+
+export type CommerceSupplierPayableAgingRow = {
+  purchaseOrderId: string
+  invoiceId: string
+  supplier: string
+  dueAt: string
+  netPayableMmk: number
+  daysPastDue: number
+  daysUntilDue: number
+  bucket: CommerceSupplierPayableAgingBucket
+}
+
+export type CommerceSupplierPayablesAging = {
+  asOf: string
+  rows: CommerceSupplierPayableAgingRow[]
+  totalsMmk: Record<CommerceSupplierPayableAgingBucket, number>
+  totalNetPayableMmk: number
+  overdueInvoiceCount: number
+  dueWithin7DaysInvoiceCount: number
+  blockedInvoiceCount: number
+  paymentAuthority: 'none'
+  paymentInitiated: false
+}
+
 export type CommerceWebsiteSource = {
   fingerprint: string
   approvalId: string
@@ -9982,6 +10007,60 @@ export function commerceSupplierPayablesHandoffCsv(artifact: CommerceSupplierPay
     String(row.supplierContacted), String(row.accountingPosted), String(row.paymentInitiated), artifact.digest,
   ])
   return [header, ...rows].map((row) => row.map(commerceCsvCell).join(',')).join('\r\n') + '\r\n'
+}
+
+export function commerceSupplierPayablesAging(state: CommerceState, now: number): CommerceSupplierPayablesAging {
+  const current = validateCommerceState(state)
+  const safeNow = Number.isFinite(now) ? now : 0
+  let blockedInvoiceCount = 0
+  const rows = commercePurchaseOrders(current).flatMap((purchaseOrder): CommerceSupplierPayableAgingRow[] => {
+    const invoice = purchaseOrder.supplierInvoice
+    if (!invoice) return []
+    const match = commerceSupplierInvoiceMatch(current, purchaseOrder)
+    if (!match.payableReady) {
+      blockedInvoiceCount += 1
+      return []
+    }
+    const dueTime = Date.parse(invoice.dueAt)
+    if (!Number.isFinite(dueTime)) return []
+    const daysPastDue = safeNow > dueTime ? Math.ceil((safeNow - dueTime) / dayMilliseconds) : 0
+    const daysUntilDue = safeNow < dueTime ? Math.ceil((dueTime - safeNow) / dayMilliseconds) : 0
+    return [{
+      purchaseOrderId: purchaseOrder.id,
+      invoiceId: invoice.id,
+      supplier: purchaseOrder.supplier,
+      dueAt: invoice.dueAt,
+      netPayableMmk: match.netInvoiceTotalMmk,
+      daysPastDue,
+      daysUntilDue,
+      bucket: daysPastDue ? 'overdue' : daysUntilDue <= 7 ? 'due_7_days' : 'scheduled',
+    }]
+  }).sort((left, right) => {
+    const rank: Record<CommerceSupplierPayableAgingBucket, number> = { overdue: 0, due_7_days: 1, scheduled: 2 }
+    return rank[left.bucket] - rank[right.bucket]
+      || left.dueAt.localeCompare(right.dueAt)
+      || left.invoiceId.localeCompare(right.invoiceId)
+  })
+  const buckets: CommerceSupplierPayableAgingBucket[] = ['overdue', 'due_7_days', 'scheduled']
+  const totalsMmk = Object.fromEntries(buckets.map((bucket) => [
+    bucket,
+    rows.filter((row) => row.bucket === bucket).reduce((total, row) => total + row.netPayableMmk, 0),
+  ])) as Record<CommerceSupplierPayableAgingBucket, number>
+  const totalNetPayableMmk = rows.reduce((total, row) => total + row.netPayableMmk, 0)
+  if (![...Object.values(totalsMmk), totalNetPayableMmk].every(Number.isSafeInteger)) {
+    throw new Error('Supplier payables aging totals exceed the supported safe integer range.')
+  }
+  return {
+    asOf: new Date(safeNow).toISOString(),
+    rows,
+    totalsMmk,
+    totalNetPayableMmk,
+    overdueInvoiceCount: rows.filter((row) => row.bucket === 'overdue').length,
+    dueWithin7DaysInvoiceCount: rows.filter((row) => row.bucket === 'due_7_days').length,
+    blockedInvoiceCount,
+    paymentAuthority: 'none',
+    paymentInitiated: false,
+  }
 }
 
 export function advanceCommerceOrder(

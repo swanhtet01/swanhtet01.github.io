@@ -4322,14 +4322,18 @@ if (!commerceSource.includes('export type CommerceSupplierReturnClaim')
 if (!commerceSource.includes("COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = 'supermega.commerce.supplier-payables-handoff.v1'")
   || !commerceSource.includes('export function commerceSupplierPayablesHandoff(')
   || !commerceSource.includes('export function commerceSupplierPayablesHandoffCsv(')
+  || !commerceSource.includes('export function commerceSupplierPayablesAging(')
   || !commerceSource.includes("paymentAuthority: 'none'")
   || !commerceSource.includes('paymentInitiated: false')
   || !coreSource.includes('data-supplier-payables-handoff="review-required"')
   || !coreSource.includes('Download supplier payables CSV')
+  || !coreSource.includes('Review overdue supplier invoice')
+  || !coreSource.includes('due within 7 days')
   || !coreSource.includes('no payment initiated')
   || !managedCommerceRuntime.includes('COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = "supermega.commerce.supplier-payables-handoff.v1"')
   || !managedCommerceRuntime.includes('def commerce_supplier_payables_handoff(')
-  || !managedCommerceRuntime.includes('def commerce_supplier_payables_handoff_csv(')) fail('commerce_supplier_payables_handoff_missing')
+  || !managedCommerceRuntime.includes('def commerce_supplier_payables_handoff_csv(')
+  || !managedCommerceRuntime.includes('def commerce_supplier_payables_aging(')) fail('commerce_supplier_payables_handoff_missing')
 const commerceOrdersContract = commercePageContract.slice(commercePageContract.indexOf("if (tab === 'orders')"), commercePageContract.indexOf("if (tab === 'inventory')"))
 if (!commerceOrdersContract.includes('order-daily-controls') || !commerceOrdersContract.includes('Review and save close') || !commerceOrdersContract.includes('Close and exceptions')) fail('commerce_daily_controls_not_inside_orders')
 if (!coreSource.includes('data-close-settlement=')
@@ -11079,6 +11083,33 @@ async function verifyCommerceRuntime() {
       && supplierPayablesHandoff.rows[0].physicalReturnStatus === 'not_required'
       && model.commerceSupplierPayablesHandoffCsv(supplierPayablesHandoff).includes('"net_payable_mmk"'),
     'supplier_payables_handoff_not_review_bound_or_exact')
+    const supplierInvoiceDue = Date.parse(supplierInvoiceInput.dueAt)
+    const agingDay = 24 * 60 * 60 * 1_000
+    const blockedSupplierAging = model.commerceSupplierPayablesAging(
+      invoiced, supplierInvoiceDue - (7 * agingDay),
+    )
+    const scheduledSupplierAging = model.commerceSupplierPayablesAging(
+      payable, supplierInvoiceDue - (8 * agingDay),
+    )
+    const dueSupplierAging = model.commerceSupplierPayablesAging(
+      payable, supplierInvoiceDue - (7 * agingDay),
+    )
+    const overdueSupplierAging = model.commerceSupplierPayablesAging(
+      payable, supplierInvoiceDue + 1,
+    )
+    assert(blockedSupplierAging.rows.length === 0
+      && blockedSupplierAging.blockedInvoiceCount === 1
+      && scheduledSupplierAging.rows[0].bucket === 'scheduled'
+      && scheduledSupplierAging.rows[0].daysUntilDue === 8
+      && dueSupplierAging.rows[0].bucket === 'due_7_days'
+      && dueSupplierAging.rows[0].daysUntilDue === 7
+      && dueSupplierAging.totalsMmk.due_7_days === 750
+      && overdueSupplierAging.rows[0].bucket === 'overdue'
+      && overdueSupplierAging.rows[0].daysPastDue === 1
+      && overdueSupplierAging.totalsMmk.overdue === 750
+      && overdueSupplierAging.paymentAuthority === 'none'
+      && overdueSupplierAging.paymentInitiated === false,
+    'supplier_payables_aging_not_exact_or_payment_bounded')
     assertThrows(() => model.commerceSupplierPayablesHandoffCsv({
       ...supplierPayablesHandoff,
       netPayableTotalMmk: 751,
