@@ -940,7 +940,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   returnFocus?: HTMLElement | null
 }) {
   const [trialSetup] = useSetupWorkspace()
-  const [actor, setActor] = useState(trialSetup.owner)
+  const [actor, setActor] = useState(action?.actorSuggestion ?? trialSetup.owner)
   const [reason, setReason] = useState(action?.reasonSuggestion ?? '')
   const [evidenceReference, setEvidenceReference] = useState(action?.evidenceReferenceSuggestion ?? '')
   const [busy, setBusy] = useState(false)
@@ -8247,6 +8247,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       summary: `Record ${recordedQuantity} ${resultLabel} for ${recordedJobId} · ${recordedShiftRef}`,
       before: `${selectedJob.output} good · ${recordedScrap} scrap · ${recordedShiftOutput.goodUnits} good / ${recordedShiftOutput.scrapUnits} scrap this shift`,
       after: `${nextGood} good · ${nextScrap} scrap · ${recordedShiftOutput.goodUnits + (recordedOutputKind === 'good' ? recordedQuantity : 0)} good / ${recordedShiftOutput.scrapUnits + (recordedOutputKind === 'scrap' ? recordedQuantity : 0)} scrap this shift`,
+      actorSuggestion: managedIdentity ? undefined : 'Plant operator',
+      reasonSuggestion: `${recordedOutputKind === 'scrap' ? 'Scrap' : 'Good output'} reviewed for ${recordedJobId} during ${recordedShiftRef}.`,
+      evidenceReferenceSuggestion: `Plant shift ${recordedShiftRef} · ${recordedJobId}`,
+      evidenceReferenceLocked: true,
       apply: async (record) => {
         await mutateProduction('production.output.recorded', record.commandId, productionActionProof(record), (current) => recordedOutputKind === 'scrap'
           ? recordProductionScrap(current, recordedJobId, recordedQuantity, recordedShiftRef, productionActionProof(record))

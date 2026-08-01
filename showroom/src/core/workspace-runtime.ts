@@ -178,6 +178,7 @@ export type AccountableAction = {
 
 export type PendingAccountableAction = Omit<AccountableAction, 'capturedAt' | 'actorKind' | 'actor' | 'reason' | 'evidenceReference'> & {
   apply: (record: AccountableAction) => void | Promise<void>
+  actorSuggestion?: string
   confirmation?: AccountableAction
   evidenceReferenceLocked?: boolean
   evidenceReferenceSuggestion?: string

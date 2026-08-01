@@ -1158,11 +1158,15 @@ export function WebsiteProduct() {
                       {savingDraft ? 'Saving…' : 'Save'}
                     </button>
                   </>
-                ) : canReview ? (
+                ) : storageMode === 'managed' ? canReview ? (
                   <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
-                    {storageMode === 'managed' ? 'Review release' : 'Get website'}
+                    Review release
                   </button>
-                ) : null}
+                ) : null : (
+                  <button className="website-button is-primary" onClick={downloadTrialSite} type="button">
+                    {canReview ? 'Download website' : 'Download draft'}
+                  </button>
+                )}
                 </div>
               ) : null}
             </section>
