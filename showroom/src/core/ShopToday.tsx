@@ -40,7 +40,7 @@ export function ShopToday({ metrics, modules, nextAction, nextDetail, nextTo }: 
         <p>{nextDetail}</p>
       </div>
       <div className="shop-today-actions">
-        <Link className="core-button primary" to={nextTo}>Continue</Link>
+        <Link className="core-button primary" to={nextTo}>Review orders</Link>
         <Link className="core-button" to="/shop/?tab=counter">New sale</Link>
       </div>
     </section>

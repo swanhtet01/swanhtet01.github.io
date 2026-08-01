@@ -238,6 +238,8 @@ if (!shopOperatingFlowSource.includes("export type ShopOperatingStageId = 'intak
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopOperatingFlowSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_operating_flow_side_effect_added')
 if (!shopTodayUiSource.includes('aria-label="Next Shop action"')
   || !shopTodayUiSource.includes('Run the whole shop')
+  || !shopTodayUiSource.includes('>Review orders</Link>')
+  || shopTodayUiSource.includes('>Continue</Link>')
   || !shopTodayUiSource.includes('Enterprise control coverage')
   || !coreSource.includes("type CommerceTab = 'today' | 'counter' | 'orders' | 'inventory'")
   || !coreSource.includes("if (tab === 'today')")
