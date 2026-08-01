@@ -57,6 +57,7 @@ import {
   advanceCommerceOrder,
   approveCommercePurchaseBudgetEnvelope,
   approveCommercePurchaseRequisition,
+  approveCommerceSupplierSourcingDecision,
   cancelCommercePurchaseOrder,
   cancelCommerceOrder,
   countCommerceStock,
@@ -104,6 +105,8 @@ import {
   commercePurchaseBudgetCommitment,
   commercePurchaseBudgetEnvelopes,
   commercePurchaseRequisitions,
+  commerceSupplierSourcingDecisions,
+  commerceSupplierSourcingSelectedQuote,
   commerceSupplierInvoiceMatch,
   commerceSupplierPerformance,
   commerceStorefrontRequestLines,
@@ -244,6 +247,25 @@ type PurchaseBudgetDraft = {
   periodEnd: string
   ceilingMmk: string
   perRequisitionLimitMmk: string
+}
+
+type SupplierQuoteDraft = {
+  supplier: string
+  quoteReference: string
+  vendorApprovalReference: string
+  unitCostMmk: string
+  deliveryAt: string
+}
+
+type SupplierSourcingDraft = {
+  sku: string
+  itemName: string
+  quantity: number
+  validUntil: string
+  quotes: [SupplierQuoteDraft, SupplierQuoteDraft]
+  selectedIndex: 0 | 1
+  unitCostTolerancePercent: string
+  deliveryToleranceDays: string
 }
 
 type SupplierInvoiceDraft = {
@@ -1818,6 +1840,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [catalogCreateOpen, setCatalogCreateOpen] = useState(false)
   const [catalogEditDraft, setCatalogEditDraft] = useState<CatalogItemEditDraft | null>(null)
   const [purchaseBudgetDraft, setPurchaseBudgetDraft] = useState<PurchaseBudgetDraft | null>(null)
+  const [supplierSourcingDraft, setSupplierSourcingDraft] = useState<SupplierSourcingDraft | null>(null)
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
   const [supplierInvoiceDraft, setSupplierInvoiceDraft] = useState<SupplierInvoiceDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
@@ -2056,6 +2079,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const activePurchaseBudgetCommitment = activePurchaseBudget
     ? commercePurchaseBudgetCommitment(commerce, activePurchaseBudget)
     : null
+  const consumedSourcingDecisionIds = new Set(commercePurchaseRequisitions(commerce).flatMap((requisition) => (
+    requisition.sourceSourcingDecisionId ? [requisition.sourceSourcingDecisionId] : []
+  )))
+  const openSupplierSourcingDecisions = commerceSupplierSourcingDecisions(commerce).filter((decision) => {
+    const selected = commerceSupplierSourcingSelectedQuote(decision)
+    return selected && !consumedSourcingDecisionIds.has(decision.id) && Date.parse(selected.validUntil) >= purchaseOrderClock
+  })
   const supplierPerformance = commerceSupplierPerformance(commerce, purchaseOrderClock)
   const activePurchaseOrderBySku = new Map(
     purchaseOrderRows
@@ -2975,7 +3005,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
               : !activePurchaseBudget
                 ? 'Set buying limits'
               : procurementReviews.length
-                ? shopProcurementDecision.summary.riskReviews ? 'Review supplier risk' : shopProcurementDecision.summary.termsRequired ? 'Complete supplier terms' : 'Review next requisition'
+                ? openSupplierSourcingDecisions.length ? 'Approve quoted requisition' : shopProcurementDecision.summary.riskReviews ? 'Review supplier risk' : 'Compare supplier quotes'
               : activePurchaseOrders.length
                 ? 'Monitor supplier promise'
                 : 'Supplier controls ready'
@@ -2988,7 +3018,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Two-person' : 'Locked'],
   ] as const
   const supplierControl = <section className="shop-order-control supplier-control" aria-label="Supplier control">
-    <div><span className="core-eyebrow">Procurement control</span><strong>{supplierControlNext}</strong><small>AI combines demand, stock, Plant materials, supplier terms, delivery, quality, and exposure. An approved budget caps commitment; one operator approves a requisition and a different operator creates its exact purchase order. Nothing contacts or pays a supplier here.</small><button className="text-link" disabled={commerceControlsDisabled || (Boolean(activePurchaseBudget) && !openPurchaseRequisitions.length && !procurementReviews.length)} onClick={startSupplierRequest} type="button">{openPurchaseRequisitions.length ? 'Create with second operator' : activePurchaseBudget ? 'Review next requisition' : 'Set buying limits'}</button></div>
+    <div><span className="core-eyebrow">Procurement control</span><strong>{supplierControlNext}</strong><small>AI combines demand, stock, Plant materials, approved-vendor evidence, comparable quotes, delivery, quality, and exposure. Budget, sourcing, requisition, and independent PO approval stay separate. Nothing contacts or pays a supplier here.</small><button className="text-link" disabled={commerceControlsDisabled || (Boolean(activePurchaseBudget) && !openPurchaseRequisitions.length && !procurementReviews.length)} onClick={startSupplierRequest} type="button">{openPurchaseRequisitions.length ? 'Create with second operator' : !activePurchaseBudget ? 'Set buying limits' : openSupplierSourcingDecisions.length ? 'Approve quoted requisition' : 'Compare supplier quotes'}</button></div>
     <div className="shop-order-control-rows">{supplierControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
     {procurementReviews.length ? <section aria-label="Shop procurement decisions" className="supplier-performance"><div className="supplier-performance-heading"><span className="core-eyebrow">Requisition review</span><small>Source-bound ranking · budget and owner approval required</small></div><div className="shop-replenishment-list" role="list">{procurementReviews.slice(0, 4).map((row) => { const approved = openPurchaseRequisitions.find((requisition) => requisition.sku === row.sku); const budget = approved?.budgetEnvelopeId ? purchaseBudgetEnvelopes.find((envelope) => envelope.id === approved.budgetEnvelopeId) : null; return <div data-status={approved ? 'approved' : row.status} key={row.requisitionReference} role="listitem"><span><strong>{row.itemName}</strong><small>{approved?.id ?? row.requisitionReference} · {approved?.quantityRequested ?? row.quantity} units{row.plantJobIds.length ? ` · Plant ${row.plantJobIds.join(', ')}` : ''}</small></span><span><b>{approved ? 'Approved requisition' : row.recommendedSupplier ?? 'Supplier terms needed'}</b><small>{approved ? `${approved.supplier} · ${formatMoney(approved.totalMmk)} · ${budget?.budgetCode ?? 'legacy authority'} · second operator next` : `${row.estimatedTotalMmk === null ? 'Cost not retained' : formatMoney(row.estimatedTotalMmk)} · ${row.supplierOptions.length} ${row.supplierOptions.length === 1 ? 'option' : 'options'} · ${row.status === 'risk_review_required' ? 'risk review' : row.status === 'terms_required' ? 'terms review' : 'ready for owner'}`}</small></span></div> })}</div></section> : null}
     {demandForecastRows.length ? <section aria-label="Shop demand intelligence" className="supplier-performance">
@@ -5156,6 +5186,80 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     })
   }
 
+  function updateSupplierQuote(index: 0 | 1, field: keyof SupplierQuoteDraft, value: string) {
+    setSupplierSourcingDraft((current) => {
+      if (!current) return current
+      const quotes: [SupplierQuoteDraft, SupplierQuoteDraft] = [{ ...current.quotes[0] }, { ...current.quotes[1] }]
+      quotes[index][field] = value
+      return { ...current, quotes }
+    })
+  }
+
+  function reviewSupplierSourcing(event: FormEvent) {
+    event.preventDefault()
+    if (!supplierSourcingDraft) return
+    const validUntilTime = Date.parse(supplierSourcingDraft.validUntil)
+    const tolerancePercent = Number(supplierSourcingDraft.unitCostTolerancePercent)
+    const deliveryToleranceDays = Number(supplierSourcingDraft.deliveryToleranceDays)
+    const unitCostToleranceBasisPoints = Math.round(tolerancePercent * 100)
+    const enteredQuotes = supplierSourcingDraft.quotes
+      .map((quote, index) => ({ quote, index }))
+      .filter(({ quote, index }) => index === 0 || [
+        quote.supplier,
+        quote.quoteReference,
+        quote.vendorApprovalReference,
+        quote.unitCostMmk,
+      ].some((value) => value.trim()))
+    if (!Number.isFinite(validUntilTime) || validUntilTime < purchaseOrderClock
+      || !Number.isFinite(tolerancePercent) || tolerancePercent < 0 || tolerancePercent > 20
+      || !Number.isSafeInteger(unitCostToleranceBasisPoints)
+      || !Number.isSafeInteger(deliveryToleranceDays) || deliveryToleranceDays < 0 || deliveryToleranceDays > 30
+      || !enteredQuotes.length || !enteredQuotes.some(({ index }) => index === supplierSourcingDraft.selectedIndex)) {
+      setNotice('Enter a current quote, selected award, cost tolerance up to 20%, and delivery tolerance up to 30 days.')
+      return
+    }
+    const quotes = enteredQuotes.map(({ quote }) => {
+      const unitCostMmk = Number(quote.unitCostMmk)
+      const deliveryTime = Date.parse(quote.deliveryAt)
+      if (!quote.supplier.trim() || quote.supplier.trim().length > 120
+        || !quote.quoteReference.trim() || quote.quoteReference.trim().length > 80
+        || !quote.vendorApprovalReference.trim() || quote.vendorApprovalReference.trim().length > 120
+        || !Number.isSafeInteger(unitCostMmk) || unitCostMmk < 1
+        || !Number.isFinite(deliveryTime) || deliveryTime <= purchaseOrderClock) return null
+      return {
+        supplier: quote.supplier.trim(), quoteReference: quote.quoteReference.trim(),
+        vendorApprovalReference: quote.vendorApprovalReference.trim(), unitCostMmk,
+        deliveryAt: new Date(deliveryTime).toISOString(), validUntil: new Date(validUntilTime).toISOString(),
+      }
+    })
+    if (quotes.some((quote) => quote === null)) {
+      setNotice('Each entered quote needs supplier, quote reference, approved-vendor reference, whole-MMK cost, and future delivery.')
+      return
+    }
+    const selectedQuoteReference = supplierSourcingDraft.quotes[supplierSourcingDraft.selectedIndex].quoteReference.trim()
+    const sourcingId = uid('SSD')
+    queueAction({
+      kind: 'supplier_sourcing_approve',
+      subjectId: sourcingId,
+      summary: `Approve supplier award for ${supplierSourcingDraft.quantity.toLocaleString()} units of ${supplierSourcingDraft.itemName}`,
+      before: `${quotes.length} retained ${quotes.length === 1 ? 'quote' : 'quotes'} · no supplier award or purchase authority`,
+      after: `${sourcingId} · award ${selectedQuoteReference} · ${formatTaxRate(unitCostToleranceBasisPoints)} cost tolerance · ${deliveryToleranceDays}d delivery tolerance · no requisition or order created`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce('commerce.supplier_sourcing.approved', action.commandId, proof, (current) => approveCommerceSupplierSourcingDecision(current, {
+          id: sourcingId,
+          sku: supplierSourcingDraft.sku,
+          quantity: supplierSourcingDraft.quantity,
+          quotes: quotes as NonNullable<(typeof quotes)[number]>[],
+          selectedQuoteReference,
+          unitCostToleranceBasisPoints,
+          deliveryToleranceDays,
+        }, proof))
+        setSupplierSourcingDraft(null)
+      },
+    })
+  }
+
   function startSupplierRequest() {
     const approved = openPurchaseRequisitions[0]
     if (!approved && !activePurchaseBudget) {
@@ -5185,18 +5289,46 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     const earliestSafeArrival = recommendation?.earliestNeedAt
       ? new Date(Math.max(policyArrivalAt, Date.parse(recommendation.earliestNeedAt) - 24 * 60 * 60 * 1000))
       : new Date(policyArrivalAt)
+    const sourcingDecision = !approved ? openSupplierSourcingDecisions.find((candidate) => (
+      candidate.sku === item.sku && candidate.quantity === recommendation?.recommendedOrderUnits
+    )) : null
+    const selectedQuote = sourcingDecision ? commerceSupplierSourcingSelectedQuote(sourcingDecision) : null
+    if (!approved && !selectedQuote) {
+      const primary = recommendedOption ?? decision?.supplierOptions[0]
+      const alternate = decision?.supplierOptions.find((option) => option.supplier !== primary?.supplier)
+      const deliveryAt = earliestSafeArrival && Number.isFinite(earliestSafeArrival.getTime())
+        ? localDateTimeInputValue(earliestSafeArrival)
+        : defaultPurchaseOrderExpectedInput()
+      setPurchaseOrderDraft(null)
+      setSupplierSourcingDraft({
+        sku: item.sku,
+        itemName: item.name,
+        quantity: recommendation!.recommendedOrderUnits,
+        validUntil: localDateTimeInputValue(new Date(purchaseOrderClock + 30 * 24 * 60 * 60 * 1000)),
+        quotes: [
+          { supplier: primary?.supplier ?? '', quoteReference: '', vendorApprovalReference: primary?.supplierPolicyCommandId ?? '', unitCostMmk: String(primary?.unitCostMmk ?? ''), deliveryAt },
+          { supplier: alternate?.supplier ?? '', quoteReference: '', vendorApprovalReference: alternate?.supplierPolicyCommandId ?? '', unitCostMmk: String(alternate?.unitCostMmk ?? ''), deliveryAt },
+        ],
+        selectedIndex: 0,
+        unitCostTolerancePercent: '0',
+        deliveryToleranceDays: '0',
+      })
+      setNotice(`Compare retained quotes for ${recommendation!.recommendedOrderUnits} ${item.name} units. Recording the award creates no requisition, order, message, or payment.`)
+      return
+    }
+    const sourcedExpectedAt = selectedQuote?.deliveryAt
     setPurchaseOrderDraft({
       mode: 'create',
       ...(approved ? { requisitionId: approved.id } : {}),
       sku: item.sku,
-      supplier: approved?.supplier ?? decision?.recommendedSupplier ?? '',
-      expectedAt: approved ? localDateTimeInputValue(new Date(approved.expectedAt)) : earliestSafeArrival && Number.isFinite(earliestSafeArrival.getTime()) ? localDateTimeInputValue(earliestSafeArrival) : defaultPurchaseOrderExpectedInput(),
+      supplier: approved?.supplier ?? selectedQuote?.supplier ?? '',
+      expectedAt: approved ? localDateTimeInputValue(new Date(approved.expectedAt)) : sourcedExpectedAt ? localDateTimeInputValue(new Date(sourcedExpectedAt)) : defaultPurchaseOrderExpectedInput(),
       quantity: String(approved?.quantityRequested ?? recommendation!.recommendedOrderUnits),
-      unitCostMmk: String(approved?.unitCostMmk ?? decision?.recommendedUnitCostMmk ?? ''),
+      unitCostMmk: String(approved?.unitCostMmk ?? selectedQuote?.unitCostMmk ?? ''),
     })
     setNotice(approved
       ? `${approved.id} is approved and ready to become one internal purchase order. A different operator must confirm the unchanged terms; nothing was sent or purchased.`
-      : `${decision!.requisitionReference} prepared for owner approval: ${recommendation!.recommendedOrderUnits} ${item.name} units${decision!.recommendedSupplier ? ` with ${decision!.recommendedSupplier}` : ''}${recommendation!.supplierPolicy && recommendation!.recommendedOrderUnits !== recommendation!.unroundedOrderUnits ? ` (rounded from ${recommendation!.unroundedOrderUnits} by MOQ/order multiple)` : ''}. Confirm supplier, cost, and arrival; approval records a requisition only.`)
+      : `${sourcingDecision!.id} awarded ${selectedQuote!.quoteReference} to ${selectedQuote!.supplier}. Review the bound terms; approval records a requisition only.`)
     requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
   }
 
@@ -5237,6 +5369,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       const item = purchaseOrderDraftItem
       const quantityOrdered = purchaseOrderQuantityResult
       if (!purchaseOrderDraft.requisitionId) {
+        const sourcingDecision = openSupplierSourcingDecisions.find((candidate) => (
+          candidate.sku === item.sku && candidate.quantity === quantityOrdered
+        ))
+        const selectedQuote = sourcingDecision ? commerceSupplierSourcingSelectedQuote(sourcingDecision) : null
+        if (!sourcingDecision || !selectedQuote) {
+          setNotice('Approve a current supplier quote comparison before approving this requisition.')
+          startSupplierRequest()
+          return
+        }
         if (!activePurchaseBudget || !activePurchaseBudgetCommitment) {
           setNotice('Approve an active buying limit before approving a new requisition.')
           openPurchaseBudgetEditor()
@@ -5257,13 +5398,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           subjectId: requisitionId,
           summary: `Approve requisition for ${quantityOrdered.toLocaleString()} units of ${item.name}`,
           before: `${item.onHand.toLocaleString()} on hand · recommendation only · no purchase authority`,
-          after: `${requisitionId} · ${supplier} · ${quantityOrdered.toLocaleString()} requested at ${formatMoney(purchaseOrderUnitCostResult)} each · ${formatMoney(purchaseOrderDraftTotal)} exposure · expected ${formatIssueDue(expectedAt)} · purchase order not created`,
+          after: `${requisitionId} · ${sourcingDecision.id}/${selectedQuote.quoteReference} · ${supplier} · ${quantityOrdered.toLocaleString()} at ${formatMoney(purchaseOrderUnitCostResult)} each · ${formatMoney(purchaseOrderDraftTotal)} exposure · purchase order not created`,
           apply: async (action) => {
             const proof = commerceActionProof(action)
             await mutateCommerce('commerce.purchase_requisition.approved', action.commandId, proof, (current) => approveCommercePurchaseRequisition(current, {
               id: requisitionId, expectedAt, supplier, sku: item.sku, quantityRequested: quantityOrdered,
               unitCostMmk: purchaseOrderUnitCostResult, sourceDecisionDigest: shopProcurementDecision.digest,
               sourceReplenishmentDigest: shopReplenishment.digest, budgetEnvelopeId: activePurchaseBudget.id,
+              sourceSourcingDecisionId: sourcingDecision.id,
             }, proof))
             setPurchaseOrderDraft((current) => current?.mode === 'create' && current.sku === item.sku ? null : current)
           },
@@ -6530,6 +6672,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <label>Price (MMK)<input aria-invalid={Boolean(catalogEditPriceText) && catalogEditPriceResult === null} autoFocus disabled={commerceControlsDisabled || catalogEditStale} id="catalog-edit-price" inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="1" onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, price: event.target.value } : current)} required step="1" type="number" value={catalogEditDraft.price} /></label>
         <label>Reorder at<input aria-invalid={Boolean(catalogEditReorderText) && catalogEditReorderResult === null} disabled={commerceControlsDisabled || catalogEditStale} inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="0" onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, reorderAt: event.target.value } : current)} required step="1" type="number" value={catalogEditDraft.reorderAt} /></label>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelCatalogItemEditor} type="button">Cancel</button><button className="core-button primary" disabled={catalogEditStale ? Boolean(pendingAction) || !commerceCanWrite : commerceControlsDisabled || !catalogEditChanged} onClick={catalogEditStale ? () => openCatalogItemEditor(catalogEditItem.sku) : undefined} type={catalogEditStale ? 'button' : 'submit'}>{catalogEditStale ? 'Reload values' : 'Review changes'}</button></div>
+      </form> : null}
+      {supplierSourcingDraft ? <form aria-labelledby="supplier-sourcing-title" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierSourcing}>
+        <div className="stock-receipt-copy"><span className="core-eyebrow">Supplier sourcing</span><h3 id="supplier-sourcing-title">Compare quotes for {supplierSourcingDraft.itemName}</h3><small>{supplierSourcingDraft.quantity.toLocaleString()} units · immutable award evidence · no supplier contact</small></div>
+        {supplierSourcingDraft.quotes.map((quote, index) => <fieldset className="form-row" key={index}><legend><label><input checked={supplierSourcingDraft.selectedIndex === index} disabled={commerceControlsDisabled || (index === 1 && !quote.supplier.trim())} name="selected-supplier-quote" onChange={() => setSupplierSourcingDraft((current) => current ? { ...current, selectedIndex: index as 0 | 1 } : current)} type="radio" /> {index === 0 ? 'Primary quote' : 'Alternate quote (optional)'}</label></legend><label>Supplier<input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'supplier', event.target.value)} required={index === 0} value={quote.supplier} /></label><label>Quote reference<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'quoteReference', event.target.value)} required={index === 0} value={quote.quoteReference} /></label><label>Approved-vendor reference<input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'vendorApprovalReference', event.target.value)} required={index === 0} value={quote.vendorApprovalReference} /></label><label>Unit cost (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => updateSupplierQuote(index as 0 | 1, 'unitCostMmk', event.target.value)} required={index === 0} step="1" type="number" value={quote.unitCostMmk} /></label><label>Delivery<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'deliveryAt', event.target.value)} required={index === 0} type="datetime-local" value={quote.deliveryAt} /></label></fieldset>)}
+        <div className="form-row"><label>Quotes valid until<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setSupplierSourcingDraft((current) => current ? { ...current, validUntil: event.target.value } : current)} required type="datetime-local" value={supplierSourcingDraft.validUntil} /></label><label>Cost tolerance (%)<input disabled={commerceControlsDisabled} max="20" min="0" onChange={(event) => setSupplierSourcingDraft((current) => current ? { ...current, unitCostTolerancePercent: event.target.value } : current)} required step="0.1" type="number" value={supplierSourcingDraft.unitCostTolerancePercent} /></label><label>Delivery tolerance (days)<input disabled={commerceControlsDisabled} max="30" min="0" onChange={(event) => setSupplierSourcingDraft((current) => current ? { ...current, deliveryToleranceDays: event.target.value } : current)} required step="1" type="number" value={supplierSourcingDraft.deliveryToleranceDays} /></label></div>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierSourcingDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled} type="submit">Review supplier award</button></div>
       </form> : null}
       {purchaseBudgetDraft ? <form aria-labelledby="purchase-budget-title" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewPurchaseBudget}>
         <div className="stock-receipt-copy"><span className="core-eyebrow">Buying limits</span><h3 id="purchase-budget-title">Approve purchase budget</h3><small>Immutable commitment ceiling · internal authority only</small></div>

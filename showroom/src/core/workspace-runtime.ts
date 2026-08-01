@@ -130,6 +130,7 @@ export type ActionKind =
   | 'inventory_count'
   | 'purchase_order_create'
   | 'purchase_budget_approve'
+  | 'supplier_sourcing_approve'
   | 'purchase_requisition_approve'
   | 'purchase_order_receive'
   | 'purchase_order_cancel'

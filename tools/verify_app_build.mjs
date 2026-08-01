@@ -1785,13 +1785,13 @@ if (!shopReplenishmentSource.includes("SHOP_REPLENISHMENT_PLAN_CONTRACT = 'super
   || !coreSource.includes('aria-label="Supplier control"')
   || !coreSource.includes('aria-label="Shop procurement decisions"')
   || !coreSource.includes('Procurement control')
-  || !coreSource.includes('An approved budget caps commitment')
+  || !coreSource.includes('Budget, sourcing, requisition, and independent PO approval stay separate.')
   || !coreSource.includes('budget and owner approval required')
   || !coreSource.includes('function startSupplierRequest()')
-  || !coreSource.includes('Review next requisition')
-  || !coreSource.includes('supplier: approved?.supplier ?? decision?.recommendedSupplier ??')
-  || !coreSource.includes('unitCostMmk: String(approved?.unitCostMmk ?? decision?.recommendedUnitCostMmk ??')
-  || !coreSource.includes('${decision!.requisitionReference} prepared for owner approval')
+  || !coreSource.includes('Compare supplier quotes')
+  || !coreSource.includes('supplier: approved?.supplier ?? selectedQuote?.supplier ??')
+  || !coreSource.includes('unitCostMmk: String(approved?.unitCostMmk ?? selectedQuote?.unitCostMmk ??')
+  || !coreSource.includes('${sourcingDecision!.id} awarded ${selectedQuote!.quoteReference}')
   || !coreSource.includes('Shop stock, open purchase orders, and current Plant demand are covered.')
   || !coreSource.includes("'Restore purchasing readiness'")
   || !coreSource.includes("'Approve pending supplier action'")
@@ -1799,8 +1799,8 @@ if (!shopReplenishmentSource.includes("SHOP_REPLENISHMENT_PLAN_CONTRACT = 'super
   || !coreSource.includes("'Prepare receiving evidence'")
   || !coreSource.includes("'Close partial receipt'")
   || !coreSource.includes("'Review supplier risk'")
-  || !coreSource.includes("'Complete supplier terms'")
-  || !coreSource.includes("'Review next requisition'")
+  || !coreSource.includes("'Compare supplier quotes'")
+  || !coreSource.includes("'Approve quoted requisition'")
   || !coreSource.includes("'Monitor supplier promise'")
   || !coreSource.includes("'Supplier controls ready'")
   || !coreSource.includes("['Buy', purchaseRecommendations.length ? `${shopReplenishment.summary.recommendedOrderUnits} units` : 'Covered']")
@@ -4180,12 +4180,19 @@ if (!shopCounterContract.includes('Tap an item to add it')
 if (!shopCounterRouteContract.includes('<ShopCounter') || shopCounterRouteContract.includes('{shopGuidance}')) fail('shop_counter_first_action_not_focused')
 const commercePageContract = coreSource.slice(coreSource.indexOf('function CommercePage'), coreSource.indexOf('function OrderList'))
 if (!commercePageContract.includes('purchaseOrderDraft')
+  || !commercePageContract.includes('supplierSourcingDraft')
+  || !commercePageContract.includes("'commerce.supplier_sourcing.approved'")
+  || !commercePageContract.includes('approveCommerceSupplierSourcingDecision(')
+  || !commercePageContract.includes("kind: 'supplier_sourcing_approve'")
+  || !commercePageContract.includes('Compare supplier quotes')
+  || !commercePageContract.includes('Review supplier award')
+  || !commercePageContract.includes('Approved-vendor reference')
   || !commercePageContract.includes("'commerce.purchase_requisition.approved'")
   || !commercePageContract.includes('approveCommercePurchaseRequisition(')
   || !commercePageContract.includes("kind: 'purchase_requisition_approve'")
   || !commercePageContract.includes("purchaseOrderDraft.requisitionId ? 'Review second approval' : 'Review requisition'")
   || !commercePageContract.includes('Create with second operator')
-  || !commercePageContract.includes('different operator creates its exact purchase order')
+  || !commercePageContract.includes('A different operator must confirm the unchanged terms')
   || !commercePageContract.includes('Use a different operator from ${approvedRequisition.approval.actor}')
   || !commercePageContract.includes('const approved = openPurchaseRequisitions[0]')
   || !commercePageContract.includes("budget?.budgetCode ?? 'legacy authority'")
@@ -4219,6 +4226,9 @@ if (!commercePageContract.includes('purchaseOrderDraft')
   || !commerceSource.includes("discrepancyDisposition?: 'return_to_vendor'")
   || !commerceSource.includes("status: 'open' | 'partially_received' | 'received' | 'received_with_discrepancy' | 'cancelled'")
   || !commerceSource.includes('export type CommercePurchaseRequisition =')
+  || !commerceSource.includes('export type CommerceSupplierSourcingDecision =')
+  || !commerceSource.includes('export function approveCommerceSupplierSourcingDecision(')
+  || !commerceSource.includes('export function commerceSupplierSourcingSelectedQuote(')
   || !commerceSource.includes('export function approveCommercePurchaseRequisition(')
   || !commerceSource.includes('export function commercePurchaseRequisitions(')
   || !commerceSource.includes('export type CommercePurchaseBudgetEnvelope =')
@@ -4233,14 +4243,19 @@ if (!commercePageContract.includes('purchaseOrderDraft')
   || !managedCommerceRuntime.includes('def _same_accountable_actor(')
   || !managedCommerceRuntime.includes('requires a later confirmation by a different operator')
   || !managedTrialSource.includes("'commerce.purchase_requisition.approved'")
+  || !managedTrialSource.includes("'commerce.supplier_sourcing.approved'")
   || !managedTrialSource.includes("'commerce.purchase_budget.approved'")
   || !managedCommerceRuntime.includes('"commerce.purchase_requisition.approved"')
+  || !managedCommerceRuntime.includes('"commerce.supplier_sourcing.approved"')
   || !managedCommerceRuntime.includes('"commerce.purchase_budget.approved"')
   || !managedCommerceRuntime.includes('def _validate_purchase_budget_approved(')
+  || !managedCommerceRuntime.includes('def _validate_supplier_sourcing_approved(')
   || !managedCommerceRuntime.includes('def _validate_purchase_requisition_approved(')
   || !managedTrialStoreRuntime.includes('if event_type == "commerce.purchase_requisition.approved":')
+  || !managedTrialStoreRuntime.includes('if event_type == "commerce.supplier_sourcing.approved":')
   || !managedTrialStoreRuntime.includes('if event_type == "commerce.purchase_budget.approved":')
   || !workspaceRuntimeSource.includes("'purchase_requisition_approve'")
+  || !workspaceRuntimeSource.includes("'supplier_sourcing_approve'")
   || !workspaceRuntimeSource.includes("'purchase_budget_approve'")
   || !managedCommerceRuntime.includes('_PURCHASE_DISCREPANCY_FIELDS')
   || !commercePageContract.includes('Cancel remainder')
@@ -10590,6 +10605,51 @@ async function verifyCommerceRuntime() {
       id: 'PBE-00000000-0000-4000-8000-000000000020',
     }, proof('ACT-PURCHASE-BUDGET-OVERLAP', 1)) === null, 'overlapping_purchase_budget_succeeded')
 
+    const sourcingDecisionId = 'SSD-00000000-0000-4000-8000-000000000017'
+    const sourcingProof = proof('ACT-SUPPLIER-SOURCING-APPROVE')
+    const sourcingInput = {
+      id: sourcingDecisionId,
+      sku: 'SKU-1',
+      quantity: 10,
+      quotes: [
+        {
+          supplier: 'Yangon Supply',
+          quoteReference: 'YS-Q-2026-0017',
+          vendorApprovalReference: 'SPP-SKU1-001',
+          unitCostMmk: 75,
+          deliveryAt: '2026-07-25T09:00:00.000Z',
+          validUntil: '2026-08-23T09:00:00.000Z',
+        },
+        {
+          supplier: 'Mandalay Supply',
+          quoteReference: 'MS-Q-2026-0017',
+          vendorApprovalReference: 'SPP-SKU1-002',
+          unitCostMmk: 80,
+          deliveryAt: '2026-07-24T09:00:00.000Z',
+          validUntil: '2026-08-23T09:00:00.000Z',
+        },
+      ],
+      selectedQuoteReference: 'YS-Q-2026-0017',
+      unitCostToleranceBasisPoints: 0,
+      deliveryToleranceDays: 0,
+    }
+    const sourcingApproved = model.approveCommerceSupplierSourcingDecision(budgetApproved, sourcingInput, sourcingProof)
+    assert(sourcingApproved
+      && sourcingApproved.supplierSourcingDecisions[0].id === sourcingDecisionId
+      && model.commerceSupplierSourcingSelectedQuote(sourcingApproved.supplierSourcingDecisions[0])?.supplier === 'Yangon Supply',
+    'supplier_sourcing_award_not_immutable_or_selected')
+    assert(model.approveCommerceSupplierSourcingDecision(sourcingApproved, sourcingInput, sourcingProof) === sourcingApproved,
+      'supplier_sourcing_exact_retry_not_idempotent')
+    assert(model.approveCommerceSupplierSourcingDecision(sourcingApproved, {
+      ...sourcingInput,
+      selectedQuoteReference: 'MS-Q-2026-0017',
+    }, sourcingProof) === null, 'changed_supplier_sourcing_retry_succeeded')
+    assert(model.approveCommerceSupplierSourcingDecision(budgetApproved, {
+      ...sourcingInput,
+      id: 'SSD-00000000-0000-4000-8000-000000000018',
+      selectedQuoteReference: 'UNKNOWN',
+    }, proof('ACT-SUPPLIER-SOURCING-UNKNOWN')) === null, 'unknown_supplier_quote_award_succeeded')
+
     const requisitionId = 'PR-00000000-0000-4000-8000-000000000019'
     const requisitionProof = proof('ACT-PURCHASE-REQUISITION-APPROVE')
     const requisitionInput = {
@@ -10600,10 +10660,11 @@ async function verifyCommerceRuntime() {
       quantityRequested: 10,
       unitCostMmk: 75,
       budgetEnvelopeId,
+      sourceSourcingDecisionId: sourcingDecisionId,
       sourceDecisionDigest: `sha256:${'1'.repeat(64)}`,
       sourceReplenishmentDigest: `sha256:${'2'.repeat(64)}`,
     }
-    const requisitionApproved = model.approveCommercePurchaseRequisition(budgetApproved, requisitionInput, requisitionProof)
+    const requisitionApproved = model.approveCommercePurchaseRequisition(sourcingApproved, requisitionInput, requisitionProof)
     assert(requisitionApproved
       && requisitionApproved.purchaseRequisitions[0].id === requisitionId
       && requisitionApproved.purchaseRequisitions[0].totalMmk === 750
@@ -10614,7 +10675,11 @@ async function verifyCommerceRuntime() {
       'purchase_requisition_exact_retry_not_idempotent')
     assert(model.approveCommercePurchaseRequisition(requisitionApproved, { ...requisitionInput, unitCostMmk: 74 }, requisitionProof) === null,
       'changed_purchase_requisition_retry_succeeded')
-    assert(model.approveCommercePurchaseRequisition(budgetApproved, { ...requisitionInput, quantityRequested: 11 }, proof('ACT-PURCHASE-REQUISITION-OVER')) === null,
+    assert(model.approveCommercePurchaseRequisition(sourcingApproved, { ...requisitionInput, unitCostMmk: 76 }, proof('ACT-PURCHASE-REQUISITION-COST-OVER')) === null,
+      'purchase_requisition_exceeded_quote_cost_tolerance')
+    assert(model.approveCommercePurchaseRequisition(sourcingApproved, { ...requisitionInput, expectedAt: '2026-07-25T09:00:00.001Z' }, proof('ACT-PURCHASE-REQUISITION-LATE')) === null,
+      'purchase_requisition_exceeded_quote_delivery_tolerance')
+    assert(model.approveCommercePurchaseRequisition(sourcingApproved, { ...requisitionInput, quantityRequested: 11 }, proof('ACT-PURCHASE-REQUISITION-OVER')) === null,
       'purchase_requisition_over_budget_limit_succeeded')
     assert(model.commercePurchaseBudgetCommitment(requisitionApproved, requisitionApproved.purchaseBudgetEnvelopes[0]).availableMmk === 250,
       'purchase_requisition_commitment_not_reserved')
@@ -15449,8 +15514,8 @@ await verifyCommerceRuntime()
 await verifyProductionRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded allowance for the purchase-budget commitment model and its compact editor.
-if (bytes > 2_556_000) fail(`artifact_budget:${bytes}`)
+// Bounded allowance for purchase budgets plus immutable supplier quote comparison and award controls.
+if (bytes > 2_566_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const largestJavascriptBytes = Math.max(...await Promise.all(javascriptFiles.map(async (path) => (await stat(path)).size)))
 const operationsArtifactPath = javascriptFiles.find((path) => /[\\/]core-app-[^\\/]+\.js$/.test(path))
@@ -15466,7 +15531,7 @@ if (!javascriptFiles.some((path) => /[\\/]router-[^\\/]+\.js$/.test(path))) fail
 if (!javascriptFiles.some((path) => /[\\/]ClientDataOnboarding-[^\\/]+\.js$/.test(path))) fail('client_onboarding_chunk_artifact_missing')
 if (!javascriptFiles.some((path) => /[\\/]local-client-import-[^\\/]+\.js$/.test(path))) fail('local_client_import_chunk_artifact_missing')
 if (!javascriptFiles.some((path) => /[\\/]ShopServiceSchedule-[^\\/]+\.js$/.test(path))) fail('shop_service_schedule_chunk_artifact_missing')
-if (largestJavascriptBytes > 482_000) fail(`javascript_headroom_budget:${largestJavascriptBytes}`)
+if (largestJavascriptBytes > 488_000) fail(`javascript_headroom_budget:${largestJavascriptBytes}`)
 
 if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))

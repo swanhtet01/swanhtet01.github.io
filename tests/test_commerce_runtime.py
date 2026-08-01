@@ -215,6 +215,7 @@ def purchase_requisition_record(
     unit_cost_mmk: int = 75,
     actor: str = "Accountable operator",
     budget_envelope_id: str | None = None,
+    source_sourcing_decision_id: str | None = None,
 ) -> dict[str, object]:
     requisition: dict[str, object] = {
         "id": requisition_id,
@@ -231,7 +232,50 @@ def purchase_requisition_record(
     }
     if budget_envelope_id:
         requisition["budgetEnvelopeId"] = budget_envelope_id
+    if source_sourcing_decision_id:
+        requisition["sourceSourcingDecisionId"] = source_sourcing_decision_id
     return requisition
+
+
+def supplier_sourcing_decision_record(
+    *,
+    decision_id: str = "SSD-00000000-0000-4000-8000-000000000017",
+    action_id: str = "ACT-SUPPLIER-SOURCING-APPROVE",
+    captured_at: str = NOW,
+    quantity: int = 10,
+    selected_quote_reference: str = "YS-Q-2026-0017",
+    unit_cost_tolerance_basis_points: int = 0,
+    delivery_tolerance_days: int = 0,
+    actor: str = "Accountable operator",
+) -> dict[str, object]:
+    return {
+        "id": decision_id,
+        "createdAt": captured_at,
+        "sku": "SKU-1",
+        "quantity": quantity,
+        "quotes": [
+            {
+                "supplier": "Yangon Supply",
+                "quoteReference": "YS-Q-2026-0017",
+                "vendorApprovalReference": "SPP-SKU1-001",
+                "unitCostMmk": 75,
+                "deliveryAt": PURCHASE_ORDER_EXPECTED_AT,
+                "validUntil": "2026-08-23T09:00:00.000Z",
+            },
+            {
+                "supplier": "Mandalay Supply",
+                "quoteReference": "MS-Q-2026-0017",
+                "vendorApprovalReference": "SPP-SKU1-002",
+                "unitCostMmk": 80,
+                "deliveryAt": "2026-07-24T09:00:00.000Z",
+                "validUntil": "2026-08-23T09:00:00.000Z",
+            },
+        ],
+        "selectedQuoteReference": selected_quote_reference,
+        "unitCostToleranceBasisPoints": unit_cost_tolerance_basis_points,
+        "deliveryToleranceDays": delivery_tolerance_days,
+        "approval": action_evidence(action_id, captured_at=captured_at, actor=actor),
+    }
 
 
 def purchase_budget_envelope_record(
@@ -931,6 +975,8 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         return dict(next_state["purchaseOrders"][0]["creation"])  # type: ignore[index, arg-type]
     if event_type == "commerce.purchase_budget.approved":
         return dict(next_state["purchaseBudgetEnvelopes"][0]["approval"])  # type: ignore[index, arg-type]
+    if event_type == "commerce.supplier_sourcing.approved":
+        return dict(next_state["supplierSourcingDecisions"][0]["approval"])  # type: ignore[index, arg-type]
     if event_type == "commerce.purchase_requisition.approved":
         return dict(next_state["purchaseRequisitions"][0]["approval"])  # type: ignore[index, arg-type]
     if event_type == "commerce.purchase_order.cancelled":
@@ -2950,6 +2996,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.inventory.supplier_policy_saved",
                     "commerce.inventory.transferred",
                     "commerce.purchase_budget.approved",
+                    "commerce.supplier_sourcing.approved",
                     "commerce.purchase_requisition.approved",
                     "commerce.purchase_order.created",
                     "commerce.purchase_order.received",
@@ -4096,11 +4143,18 @@ class CommerceRuntimeTests(unittest.TestCase):
         budget_state = deepcopy(current)
         budget_state["purchaseBudgetEnvelopes"] = [envelope]
         budgeted = apply_event(current, "commerce.purchase_budget.approved", budget_state)
-        requisition = purchase_requisition_record(budget_envelope_id=envelope["id"])  # type: ignore[arg-type]
-        requisition_state = deepcopy(budgeted)
+        sourcing = supplier_sourcing_decision_record()
+        sourcing_state = deepcopy(budgeted)
+        sourcing_state["supplierSourcingDecisions"] = [sourcing]
+        sourced = apply_event(budgeted, "commerce.supplier_sourcing.approved", sourcing_state)
+        requisition = purchase_requisition_record(
+            budget_envelope_id=envelope["id"],  # type: ignore[arg-type]
+            source_sourcing_decision_id=sourcing["id"],  # type: ignore[arg-type]
+        )
+        requisition_state = deepcopy(sourced)
         requisition_state["purchaseRequisitions"] = [requisition]
         approved = apply_event(
-            budgeted,
+            sourced,
             "commerce.purchase_requisition.approved",
             requisition_state,
         )
@@ -4219,12 +4273,58 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertEqual(retained_envelope["periodStart"], "2026-07-23T09:04:00.000+00:00")
         self.assertTrue(budget_replay.idempotent_replay)
 
+        sourcing = supplier_sourcing_decision_record(
+            captured_at="2099-01-01T00:00:00.000Z",
+        )
+        sourcing["approval"]["actor"] = "Fabricated buying agent"  # type: ignore[index]
+        sourcing_state = deepcopy(budgeted.state)
+        sourcing_state["supplierSourcingDecisions"] = [sourcing]
+        sourcing_payload = {
+            "state": sourcing_state,
+            "evidence": dict(sourcing["approval"]),  # type: ignore[arg-type]
+        }
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.supplier_sourcing.approved",
+                expected_version=budgeted.version,
+                payload=sourcing_payload,
+            )
+        sourcing_command_id = str(uuid4())
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-23T09:04:30.000+00:00",
+        ):
+            sourced = store.apply_command(
+                operator,
+                command_id=sourcing_command_id,
+                surface="commerce",
+                event_type="commerce.supplier_sourcing.approved",
+                expected_version=budgeted.version,
+                payload=sourcing_payload,
+            )
+            sourcing_replay = store.apply_command(
+                operator,
+                command_id=sourcing_command_id,
+                surface="commerce",
+                event_type="commerce.supplier_sourcing.approved",
+                expected_version=budgeted.version,
+                payload=sourcing_payload,
+            )
+        retained_sourcing = sourced.state["supplierSourcingDecisions"][0]  # type: ignore[index]
+        self.assertEqual(retained_sourcing["approval"]["actor"], operator.actor_id)  # type: ignore[index]
+        self.assertEqual(retained_sourcing["createdAt"], "2026-07-23T09:04:30.000+00:00")
+        self.assertTrue(sourcing_replay.idempotent_replay)
+
         requisition = purchase_requisition_record(
             captured_at="2099-01-01T00:00:00.000Z",
             budget_envelope_id=retained_envelope["id"],  # type: ignore[arg-type]
+            source_sourcing_decision_id=retained_sourcing["id"],  # type: ignore[arg-type]
         )
         requisition["approval"]["actor"] = "Fabricated buying agent"  # type: ignore[index]
-        next_state = deepcopy(budgeted.state)
+        next_state = deepcopy(sourced.state)
         next_state["purchaseRequisitions"] = [requisition]
         command_id = str(uuid4())
         payload = {
@@ -4237,7 +4337,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                 command_id=str(uuid4()),
                 surface="commerce",
                 event_type="commerce.purchase_requisition.approved",
-                expected_version=budgeted.version,
+                expected_version=sourced.version,
                 payload=payload,
             )
         with patch(
@@ -4249,7 +4349,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                 command_id=command_id,
                 surface="commerce",
                 event_type="commerce.purchase_requisition.approved",
-                expected_version=budgeted.version,
+                expected_version=sourced.version,
                 payload=payload,
             )
             replay = store.apply_command(
@@ -4257,7 +4357,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                 command_id=command_id,
                 surface="commerce",
                 event_type="commerce.purchase_requisition.approved",
-                expected_version=budgeted.version,
+                expected_version=sourced.version,
                 payload=payload,
             )
         retained = approved.state["purchaseRequisitions"][0]  # type: ignore[index]
@@ -4301,6 +4401,71 @@ class CommerceRuntimeTests(unittest.TestCase):
         retained_order = converted.state["purchaseOrders"][0]  # type: ignore[index]
         self.assertEqual(retained_order["creation"]["actor"], buyer.actor_id)  # type: ignore[index]
         self.assertNotEqual(retained_order["creation"]["actor"], retained["approval"]["actor"])  # type: ignore[index]
+
+    def test_supplier_sourcing_award_is_immutable_tolerance_bound_and_single_use(self) -> None:
+        current = catalog_state()
+        envelope = purchase_budget_envelope_record()
+        budget_state = deepcopy(current)
+        budget_state["purchaseBudgetEnvelopes"] = [envelope]
+        budgeted = apply_event(current, "commerce.purchase_budget.approved", budget_state)
+        decision = supplier_sourcing_decision_record(
+            unit_cost_tolerance_basis_points=1_000,
+            delivery_tolerance_days=2,
+        )
+        sourcing_state = deepcopy(budgeted)
+        sourcing_state["supplierSourcingDecisions"] = [decision]
+        sourced = apply_event(
+            budgeted,
+            "commerce.supplier_sourcing.approved",
+            sourcing_state,
+        )
+        self.assertEqual(sourced["supplierSourcingDecisions"], [decision])
+        self.assertEqual(sourced["items"], budgeted["items"])
+
+        unknown_award = deepcopy(sourced)
+        unknown_award["supplierSourcingDecisions"][0]["selectedQuoteReference"] = "UNKNOWN"  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "selectedQuoteReference"):
+            validate_commerce_state(unknown_award)
+
+        requisition = purchase_requisition_record(
+            unit_cost_mmk=82,
+            expected_at="2026-07-27T09:00:00.000Z",
+            budget_envelope_id=envelope["id"],  # type: ignore[arg-type]
+            source_sourcing_decision_id=decision["id"],  # type: ignore[arg-type]
+        )
+        approved_state = deepcopy(sourced)
+        approved_state["purchaseRequisitions"] = [requisition]
+        approved = apply_event(
+            sourced,
+            "commerce.purchase_requisition.approved",
+            approved_state,
+        )
+        self.assertEqual(
+            approved["purchaseRequisitions"][0]["sourceSourcingDecisionId"],  # type: ignore[index]
+            decision["id"],
+        )
+
+        excessive_cost = deepcopy(approved_state)
+        excessive_cost["purchaseRequisitions"][0]["unitCostMmk"] = 83  # type: ignore[index]
+        excessive_cost["purchaseRequisitions"][0]["totalMmk"] = 830  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "approved sourcing decision"):
+            validate_commerce_state(excessive_cost)
+
+        late_delivery = deepcopy(approved_state)
+        late_delivery["purchaseRequisitions"][0]["expectedAt"] = "2026-07-27T09:00:00.001Z"  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "approved sourcing decision"):
+            validate_commerce_state(late_delivery)
+
+        reused = deepcopy(approved)
+        second = purchase_requisition_record(
+            requisition_id="PR-00000000-0000-4000-8000-000000000020",
+            action_id="ACT-PURCHASE-REQUISITION-SECOND",
+            budget_envelope_id=envelope["id"],  # type: ignore[arg-type]
+            source_sourcing_decision_id=decision["id"],  # type: ignore[arg-type]
+        )
+        reused["purchaseRequisitions"] = [second, *approved["purchaseRequisitions"]]  # type: ignore[misc]
+        with self.assertRaisesRegex(TrialValidationError, "Consumed supplier sourcing decision"):
+            validate_commerce_state(reused)
 
     def test_purchase_order_lifecycle_supports_partial_receipt_and_cancellation(self) -> None:
         current = catalog_state()

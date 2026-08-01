@@ -970,9 +970,31 @@ export type CommercePurchaseBudgetEnvelope = {
   approval: CommerceActionProof
 }
 
+export type CommerceSupplierQuote = {
+  supplier: string
+  quoteReference: string
+  vendorApprovalReference: string
+  unitCostMmk: number
+  deliveryAt: string
+  validUntil: string
+}
+
+export type CommerceSupplierSourcingDecision = {
+  id: string
+  createdAt: string
+  sku: string
+  quantity: number
+  quotes: CommerceSupplierQuote[]
+  selectedQuoteReference: string
+  unitCostToleranceBasisPoints: number
+  deliveryToleranceDays: number
+  approval: CommerceActionProof
+}
+
 export type CommercePurchaseRequisition = {
   id: string
   budgetEnvelopeId?: string
+  sourceSourcingDecisionId?: string
   createdAt: string
   expectedAt: string
   supplier: string
@@ -1085,6 +1107,7 @@ export type CommerceState = {
   storefrontRequests?: CommerceStorefrontRequest[]
   storefrontConfiguration?: CommerceStorefrontConfiguration
   purchaseBudgetEnvelopes?: CommercePurchaseBudgetEnvelope[]
+  supplierSourcingDecisions?: CommerceSupplierSourcingDecision[]
   purchaseRequisitions?: CommercePurchaseRequisition[]
   purchaseOrders?: CommercePurchaseOrder[]
   inventoryFoundation?: ShopInventoryState
@@ -1234,6 +1257,7 @@ export type CommercePurchaseOrderInput = {
 export type CommercePurchaseRequisitionInput = {
   id: string
   budgetEnvelopeId: string
+  sourceSourcingDecisionId: string
   expectedAt: string
   supplier: string
   sku: string
@@ -1252,6 +1276,8 @@ export type CommercePurchaseBudgetEnvelopeInput = {
   ceilingMmk: number
   perRequisitionLimitMmk: number
 }
+
+export type CommerceSupplierSourcingDecisionInput = Omit<CommerceSupplierSourcingDecision, 'createdAt' | 'approval'>
 
 export type CommerceSupplierInvoiceInput = {
   id: string
@@ -1369,6 +1395,7 @@ const maxPromotionPolicies = 200
 const maxShippingPolicies = 200
 const maxPaymentPolicies = 200
 const maxPurchaseBudgetEnvelopes = 200
+const maxSupplierSourcingDecisions = 200
 const customerCreditTerms = new Set([0, 7, 30])
 const maxOrderLines = 20
 const maxReturnsPerOrder = 100
@@ -1382,6 +1409,7 @@ const businessDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const purchaseOrderIdPattern = /^PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const purchaseRequisitionIdPattern = /^PR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const purchaseBudgetEnvelopeIdPattern = /^PBE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
+const supplierSourcingDecisionIdPattern = /^SSD-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const purchaseBudgetCodePattern = /^[A-Z0-9][A-Z0-9_-]{2,39}$/
 const supplierInvoiceIdPattern = /^PINV-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const taxCodePattern = /^[A-Z0-9][A-Z0-9_-]{0,11}$/
@@ -1945,7 +1973,7 @@ export function commerceOrderLocationAllocationPreview(state: CommerceState, ord
 }
 
 export function createEmptyCommerce(): CommerceState {
-  return { schema: COMMERCE_WORKSPACE_SCHEMA, items: [], orders: [], movements: [], closes: [], catalogBaselines: [], catalogChanges: [], promotionPolicies: [], shippingPolicies: [], paymentPolicies: [], websiteIntakes: [], storefrontRequests: [], purchaseBudgetEnvelopes: [], purchaseOrders: [] }
+  return { schema: COMMERCE_WORKSPACE_SCHEMA, items: [], orders: [], movements: [], closes: [], catalogBaselines: [], catalogChanges: [], promotionPolicies: [], shippingPolicies: [], paymentPolicies: [], websiteIntakes: [], storefrontRequests: [], purchaseBudgetEnvelopes: [], supplierSourcingDecisions: [], purchaseOrders: [] }
 }
 
 export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
@@ -2180,6 +2208,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (value.storefrontRequests !== undefined && !Array.isArray(value.storefrontRequests)) throw new Error('Commerce storefront requests must be an array when present.')
   if (value.storefrontConfiguration !== undefined && !isRecord(value.storefrontConfiguration)) throw new Error('Commerce storefront configuration must be an object when present.')
   if (value.purchaseBudgetEnvelopes !== undefined && !Array.isArray(value.purchaseBudgetEnvelopes)) throw new Error('Commerce purchase budget envelopes must be an array when present.')
+  if (value.supplierSourcingDecisions !== undefined && !Array.isArray(value.supplierSourcingDecisions)) throw new Error('Commerce supplier sourcing decisions must be an array when present.')
   if (value.purchaseRequisitions !== undefined && !Array.isArray(value.purchaseRequisitions)) throw new Error('Commerce purchase requisitions must be an array when present.')
   if (value.purchaseOrders !== undefined && !Array.isArray(value.purchaseOrders)) throw new Error('Commerce purchase orders must be an array when present.')
   if (value.inventoryFoundation !== undefined) {
@@ -2214,6 +2243,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const storefrontRequests = (value.storefrontRequests ?? []) as unknown[]
   const storefrontConfiguration = value.storefrontConfiguration
   const purchaseBudgetEnvelopes = (value.purchaseBudgetEnvelopes ?? []) as unknown[]
+  const supplierSourcingDecisions = (value.supplierSourcingDecisions ?? []) as unknown[]
   const purchaseRequisitions = (value.purchaseRequisitions ?? []) as unknown[]
   const purchaseOrders = (value.purchaseOrders ?? []) as unknown[]
   if (catalogBaselines.length > maxCatalogBaselines) throw new Error(`Commerce catalog baselines cannot exceed ${maxCatalogBaselines}.`)
@@ -2225,6 +2255,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (shippingPolicies.length > maxShippingPolicies) throw new Error(`Commerce shipping policies cannot exceed ${maxShippingPolicies}.`)
   if (paymentPolicies.length > maxPaymentPolicies) throw new Error(`Commerce payment policies cannot exceed ${maxPaymentPolicies}.`)
   if (purchaseBudgetEnvelopes.length > maxPurchaseBudgetEnvelopes) throw new Error(`Commerce purchase budget envelopes cannot exceed ${maxPurchaseBudgetEnvelopes}.`)
+  if (supplierSourcingDecisions.length > maxSupplierSourcingDecisions) throw new Error(`Commerce supplier sourcing decisions cannot exceed ${maxSupplierSourcingDecisions}.`)
   if (storefrontRequests.length > maxStorefrontRequests) throw new Error(`Commerce storefront requests cannot exceed ${maxStorefrontRequests}.`)
   if (purchaseRequisitions.length > maxPurchaseRequisitions) throw new Error(`Commerce purchase requisitions cannot exceed ${maxPurchaseRequisitions}.`)
   if (purchaseOrders.length > maxPurchaseOrders) throw new Error(`Commerce purchase orders cannot exceed ${maxPurchaseOrders}.`)
@@ -2262,6 +2293,9 @@ export function validateCommerceState(value: unknown): CommerceState {
   const purchaseBudgetEnvelopeActionIds: string[] = []
   const purchaseBudgetEnvelopeIds: string[] = []
   const purchaseBudgetEnvelopeById = new Map<string, CommercePurchaseBudgetEnvelope>()
+  const supplierSourcingDecisionActionIds: string[] = []
+  const supplierSourcingDecisionIds: string[] = []
+  const supplierSourcingDecisionById = new Map<string, CommerceSupplierSourcingDecision>()
   const purchaseRequisitionActionIds: string[] = []
   const purchaseRequisitionIds: string[] = []
   const purchaseRequisitionById = new Map<string, CommercePurchaseRequisition>()
@@ -2643,11 +2677,65 @@ export function validateCommerceState(value: unknown): CommerceState {
     }
   }
 
+  const supplierQuoteSources: string[] = []
+  let newerSourcingDecision: CommerceSupplierSourcingDecision | null = null
+  for (const [index, candidate] of supplierSourcingDecisions.entries()) {
+    const field = `supplierSourcingDecisions[${index}]`
+    if (!isRecord(candidate) || !hasExactKeys(candidate, [
+      'id', 'createdAt', 'sku', 'quantity', 'quotes', 'selectedQuoteReference',
+      'unitCostToleranceBasisPoints', 'deliveryToleranceDays', 'approval',
+    ]) || !Array.isArray(candidate.quotes) || candidate.quotes.length < 1 || candidate.quotes.length > 5) throw new Error(`${field} is invalid.`)
+    const id = canonicalText(candidate.id, `${field}.id`, 80)
+    if (!supplierSourcingDecisionIdPattern.test(id)) throw new Error(`${field}.id is invalid.`)
+    const sku = canonicalText(candidate.sku, `${field}.sku`, 80)
+    if (!itemBySku.has(sku)) throw new Error(`${field}.sku is unknown.`)
+    assertSafeInteger(candidate.quantity, `${field}.quantity`, 1)
+    assertSafeInteger(candidate.unitCostToleranceBasisPoints, `${field}.unitCostToleranceBasisPoints`, 0)
+    assertSafeInteger(candidate.deliveryToleranceDays, `${field}.deliveryToleranceDays`, 0)
+    if (Number(candidate.unitCostToleranceBasisPoints) > 2_000 || Number(candidate.deliveryToleranceDays) > 30) throw new Error(`${field} tolerance is invalid.`)
+    const createdAt = canonicalText(candidate.createdAt, `${field}.createdAt`, 35)
+    if (!validTimestamp(createdAt) || !isRecord(candidate.approval)
+      || !hasExactKeys(candidate.approval, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !validProof(candidate.approval as CommerceActionProof)
+      || candidate.approval.capturedAt !== createdAt) throw new Error(`${field}.approval is invalid.`)
+    const quoteReferences: string[] = []
+    const suppliers: string[] = []
+    for (const [quoteIndex, quoteCandidate] of candidate.quotes.entries()) {
+      const quoteField = `${field}.quotes[${quoteIndex}]`
+      if (!isRecord(quoteCandidate) || !hasExactKeys(quoteCandidate, [
+        'supplier', 'quoteReference', 'vendorApprovalReference', 'unitCostMmk', 'deliveryAt', 'validUntil',
+      ])) throw new Error(`${quoteField} is invalid.`)
+      const supplier = canonicalText(quoteCandidate.supplier, `${quoteField}.supplier`, 120)
+      const quoteReference = canonicalText(quoteCandidate.quoteReference, `${quoteField}.quoteReference`, 80)
+      canonicalText(quoteCandidate.vendorApprovalReference, `${quoteField}.vendorApprovalReference`, 120)
+      assertSafeInteger(quoteCandidate.unitCostMmk, `${quoteField}.unitCostMmk`, 1)
+      if (BigInt(Number(quoteCandidate.unitCostMmk)) * BigInt(10_000 + Number(candidate.unitCostToleranceBasisPoints)) / 10_000n > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error(`${quoteField}.unitCostMmk exceeds the supported tolerance range.`)
+      if (!validTimestamp(quoteCandidate.deliveryAt) || !validTimestamp(quoteCandidate.validUntil)
+        || (timestampMicros(quoteCandidate.deliveryAt) as bigint) <= (timestampMicros(createdAt) as bigint)
+        || (timestampMicros(quoteCandidate.validUntil) as bigint) < (timestampMicros(createdAt) as bigint)) throw new Error(`${quoteField} dates are invalid.`)
+      quoteReferences.push(quoteReference)
+      suppliers.push(supplier)
+      supplierQuoteSources.push(`${supplier}\0${quoteReference}`)
+    }
+    assertUnique(quoteReferences, `${field} quote reference`)
+    assertUnique(suppliers, `${field} supplier`)
+    const selectedQuoteReference = canonicalText(candidate.selectedQuoteReference, `${field}.selectedQuoteReference`, 80)
+    if (!quoteReferences.includes(selectedQuoteReference)) throw new Error(`${field}.selectedQuoteReference is unknown.`)
+    const decision = candidate as unknown as CommerceSupplierSourcingDecision
+    if (newerSourcingDecision && (timestampMicros(newerSourcingDecision.createdAt) as bigint) < (timestampMicros(createdAt) as bigint)) throw new Error(`${field} breaks newest-first chronology.`)
+    newerSourcingDecision = decision
+    supplierSourcingDecisionIds.push(id)
+    supplierSourcingDecisionActionIds.push(decision.approval.actionId)
+    supplierSourcingDecisionById.set(id, decision)
+  }
+  assertUnique(supplierSourcingDecisionIds, 'Supplier sourcing decision ID')
+  assertUnique(supplierQuoteSources, 'Supplier quote source')
+
   for (const [index, candidate] of purchaseRequisitions.entries()) {
     if (!isRecord(candidate) || !hasExactKeys(candidate, [
       'id', 'createdAt', 'expectedAt', 'supplier', 'sku', 'quantityRequested',
       'unitCostMmk', 'totalMmk', 'sourceDecisionDigest', 'sourceReplenishmentDigest', 'approval',
-    ], ['budgetEnvelopeId'])) throw new Error(`purchaseRequisitions[${index}] is invalid.`)
+    ], ['budgetEnvelopeId', 'sourceSourcingDecisionId'])) throw new Error(`purchaseRequisitions[${index}] is invalid.`)
     const field = `purchaseRequisitions[${index}]`
     const id = canonicalText(candidate.id, `${field}.id`, 80)
     if (!purchaseRequisitionIdPattern.test(id)) throw new Error(`${field}.id is invalid.`)
@@ -2675,11 +2763,30 @@ export function validateCommerceState(value: unknown): CommerceState {
         || (timestampMicros(candidate.createdAt) as bigint) >= (timestampMicros(envelope.periodEnd) as bigint)
         || Number(candidate.totalMmk) > envelope.perRequisitionLimitMmk) throw new Error(`${field} exceeds or falls outside its purchase budget authority.`)
     }
+    if (candidate.sourceSourcingDecisionId !== undefined) {
+      const sourceId = canonicalText(candidate.sourceSourcingDecisionId, `${field}.sourceSourcingDecisionId`, 80)
+      const decision = supplierSourcingDecisionById.get(sourceId)
+      const selected = decision?.quotes.find((quote) => quote.quoteReference === decision.selectedQuoteReference)
+      const maximumUnitCost = selected && decision
+        ? Number(BigInt(selected.unitCostMmk) * BigInt(10_000 + decision.unitCostToleranceBasisPoints) / 10_000n)
+        : 0
+      const latestDelivery = selected && decision
+        ? (timestampMicros(selected.deliveryAt) as bigint) + BigInt(decision.deliveryToleranceDays) * 86_400_000_000n
+        : 0n
+      if (!decision || !selected || decision.sku !== sku || decision.quantity !== Number(candidate.quantityRequested)
+        || selected.supplier !== candidate.supplier || Number(candidate.unitCostMmk) > maximumUnitCost
+        || (timestampMicros(candidate.expectedAt) as bigint) > latestDelivery
+        || (timestampMicros(candidate.createdAt) as bigint) > (timestampMicros(selected.validUntil) as bigint)) throw new Error(`${field} does not match its approved sourcing decision.`)
+    }
     purchaseRequisitionIds.push(id)
     purchaseRequisitionActionIds.push(candidate.approval.actionId as string)
     purchaseRequisitionById.set(id, candidate as unknown as CommercePurchaseRequisition)
   }
   assertUnique(purchaseRequisitionIds, 'Purchase requisition ID')
+  assertUnique(
+    [...purchaseRequisitionById.values()].flatMap((requisition) => requisition.sourceSourcingDecisionId ? [requisition.sourceSourcingDecisionId] : []),
+    'Consumed supplier sourcing decision ID',
+  )
 
   const convertedRequisitionIds: string[] = []
   for (const [index, candidate] of purchaseOrders.entries()) {
@@ -4087,6 +4194,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     ...shippingPolicyActionIds,
     ...paymentPolicyActionIds,
     ...purchaseBudgetEnvelopeActionIds,
+    ...supplierSourcingDecisionActionIds,
     ...websiteIntakeCreationActionIds,
     ...closeActionIds,
     ...purchaseRequisitionActionIds,
@@ -4100,6 +4208,16 @@ export function validateCommerceState(value: unknown): CommerceState {
         value.inventoryFoundation as ShopInventoryState,
         value.items as CommerceItem[],
       )) throw new Error('available-to-promise stock does not match the Shop catalog')
+      const inventory = projectShopInventory(value.inventoryFoundation as ShopInventoryState, itemSkus)
+      for (const decision of supplierSourcingDecisionById.values()) {
+        for (const quote of decision.quotes) {
+          const vendor = inventory.vendors.find((candidate) => candidate.name === quote.supplier)
+          const policy = vendor && inventory.supplierPolicies.find((candidate) => (
+            candidate.vendorId === vendor.id && candidate.sku === decision.sku && candidate.status === 'active'
+          ))
+          if (!policy || policy.commandId !== quote.vendorApprovalReference) throw new Error(`supplier quote ${quote.quoteReference} is not bound to an active approved-vendor policy`)
+        }
+      }
     } catch (error) {
       throw new Error(
         `Commerce location inventory is invalid: ${error instanceof Error ? error.message : 'integrity check failed'}.`,
@@ -4321,6 +4439,7 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || commerceShippingPolicies(state).some((policy) => policy.proof.actionId === actionId)
     || commercePaymentPolicies(state).some((policy) => policy.proof.actionId === actionId)
     || commercePurchaseBudgetEnvelopes(state).some((envelope) => envelope.approval.actionId === actionId)
+    || commerceSupplierSourcingDecisions(state).some((decision) => decision.approval.actionId === actionId)
     || commerceWebsiteIntakes(state).some((intake) => intake.creation.actionId === actionId || intake.conversion?.actionId === actionId)
     || commercePurchaseRequisitions(state).some((requisition) => requisition.approval.actionId === actionId)
     || commercePurchaseOrders(state).some((purchaseOrder) => purchaseOrder.creation.actionId === actionId
@@ -5266,6 +5385,14 @@ export function commercePurchaseRequisitions(state: CommerceState) {
 
 export function commercePurchaseBudgetEnvelopes(state: CommerceState) {
   return state.purchaseBudgetEnvelopes ?? []
+}
+
+export function commerceSupplierSourcingDecisions(state: CommerceState) {
+  return state.supplierSourcingDecisions ?? []
+}
+
+export function commerceSupplierSourcingSelectedQuote(decision: CommerceSupplierSourcingDecision) {
+  return decision.quotes.find((quote) => quote.quoteReference === decision.selectedQuoteReference) ?? null
 }
 
 export function commercePurchaseBudgetCommitment(state: CommerceState, envelope: CommercePurchaseBudgetEnvelope) {
@@ -6617,6 +6744,30 @@ export function approveCommercePurchaseBudgetEnvelope(
   }
 }
 
+export function approveCommerceSupplierSourcingDecision(
+  state: CommerceState,
+  input: CommerceSupplierSourcingDecisionInput,
+  proof: CommerceActionProof,
+) {
+  if (!validProof(proof) || !supplierSourcingDecisionIdPattern.test(input.id)) return null
+  const current = validateCommerceState(state)
+  const history = commerceSupplierSourcingDecisions(current)
+  const proposed: CommerceSupplierSourcingDecision = {
+    ...input,
+    quotes: input.quotes.map((quote) => ({ ...quote })),
+    createdAt: proof.capturedAt,
+    approval: { ...proof },
+  }
+  const existing = history.find((decision) => decision.id === input.id || decision.approval.actionId === proof.actionId)
+  if (existing) return JSON.stringify(existing) === JSON.stringify(proposed) ? current : null
+  if (history.length >= maxSupplierSourcingDecisions || actionIdIsUsed(current, proof.actionId)) return null
+  try {
+    return validateCommerceState({ ...current, supplierSourcingDecisions: [proposed, ...history] })
+  } catch {
+    return null
+  }
+}
+
 export function approveCommercePurchaseRequisition(
   state: CommerceState,
   input: CommercePurchaseRequisitionInput,
@@ -6627,6 +6778,7 @@ export function approveCommercePurchaseRequisition(
   if (!validProof(proof)
     || !purchaseRequisitionIdPattern.test(input.id)
     || !purchaseBudgetEnvelopeIdPattern.test(input.budgetEnvelopeId)
+    || !supplierSourcingDecisionIdPattern.test(input.sourceSourcingDecisionId)
     || !validTimestamp(input.expectedAt)
     || (timestampMicros(input.expectedAt) as bigint) <= (timestampMicros(proof.capturedAt) as bigint)
     || !supplier || supplier !== input.supplier || supplier.length > 120
@@ -6640,23 +6792,38 @@ export function approveCommercePurchaseRequisition(
   const existing = commercePurchaseRequisitions(current).find((requisition) => requisition.id === input.id)
   if (existing) return existing.expectedAt === input.expectedAt
     && existing.budgetEnvelopeId === input.budgetEnvelopeId
+    && existing.sourceSourcingDecisionId === input.sourceSourcingDecisionId
     && existing.supplier === supplier && existing.sku === input.sku
     && existing.quantityRequested === input.quantityRequested && existing.unitCostMmk === input.unitCostMmk
     && existing.sourceDecisionDigest === input.sourceDecisionDigest
     && existing.sourceReplenishmentDigest === input.sourceReplenishmentDigest
     && sameActionProof(existing.approval, proof) ? current : null
   const budgetEnvelope = commercePurchaseBudgetEnvelopes(current).find((envelope) => envelope.id === input.budgetEnvelopeId)
+  const sourcingDecision = commerceSupplierSourcingDecisions(current).find((decision) => decision.id === input.sourceSourcingDecisionId)
+  const selectedQuote = sourcingDecision ? commerceSupplierSourcingSelectedQuote(sourcingDecision) : null
+  const maximumUnitCost = sourcingDecision && selectedQuote
+    ? Number(BigInt(selectedQuote.unitCostMmk) * BigInt(10_000 + sourcingDecision.unitCostToleranceBasisPoints) / 10_000n)
+    : 0
+  const latestDelivery = sourcingDecision && selectedQuote
+    ? (timestampMicros(selectedQuote.deliveryAt) as bigint) + BigInt(sourcingDecision.deliveryToleranceDays) * 86_400_000_000n
+    : 0n
   if (!budgetEnvelope
     || (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(budgetEnvelope.periodStart) as bigint)
     || (timestampMicros(proof.capturedAt) as bigint) >= (timestampMicros(budgetEnvelope.periodEnd) as bigint)
     || totalMmk > budgetEnvelope.perRequisitionLimitMmk
-    || commercePurchaseBudgetCommitment(current, budgetEnvelope).availableMmk < totalMmk) return null
+    || commercePurchaseBudgetCommitment(current, budgetEnvelope).availableMmk < totalMmk
+    || !sourcingDecision || !selectedQuote || sourcingDecision.sku !== input.sku
+    || sourcingDecision.quantity !== input.quantityRequested || selectedQuote.supplier !== supplier
+    || input.unitCostMmk > maximumUnitCost
+    || (timestampMicros(input.expectedAt) as bigint) > latestDelivery
+    || (timestampMicros(proof.capturedAt) as bigint) > (timestampMicros(selectedQuote.validUntil) as bigint)
+    || commercePurchaseRequisitions(current).some((requisition) => requisition.sourceSourcingDecisionId === sourcingDecision.id)) return null
   if (actionIdIsUsed(current, proof.actionId)
     || !current.items.some((item) => item.sku === input.sku)
     || commercePurchaseOrders(current).some((order) => order.sku === input.sku && !order.cancellation && commercePurchaseOrderProgress(current, order).remaining > 0)
     || commercePurchaseRequisitions(current).some((requisition) => requisition.sku === input.sku && !commercePurchaseOrders(current).some((order) => order.requisitionId === requisition.id))) return null
   const requisition: CommercePurchaseRequisition = {
-    id: input.id, budgetEnvelopeId: input.budgetEnvelopeId, createdAt: proof.capturedAt, expectedAt: input.expectedAt, supplier,
+    id: input.id, budgetEnvelopeId: input.budgetEnvelopeId, sourceSourcingDecisionId: input.sourceSourcingDecisionId, createdAt: proof.capturedAt, expectedAt: input.expectedAt, supplier,
     sku: input.sku, quantityRequested: input.quantityRequested, unitCostMmk: input.unitCostMmk,
     totalMmk, sourceDecisionDigest: input.sourceDecisionDigest,
     sourceReplenishmentDigest: input.sourceReplenishmentDigest, approval: { ...proof },

@@ -78,6 +78,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
         "commerce.purchase_budget.approved",
+        "commerce.supplier_sourcing.approved",
         "commerce.purchase_requisition.approved",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
@@ -127,6 +128,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
         "commerce.purchase_budget.approved",
+        "commerce.supplier_sourcing.approved",
         "commerce.purchase_requisition.approved",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
@@ -194,6 +196,7 @@ _COMMAND_ID_PATTERN = re.compile(
 _STOREFRONT_PREVIEW_SCHEMA = "supermega.ecommerce.storefront_preview.v1"
 _MAX_STOREFRONT_REQUESTS = 100
 _MAX_PURCHASE_BUDGET_ENVELOPES = 200
+_MAX_SUPPLIER_SOURCING_DECISIONS = 200
 _MAX_PURCHASE_REQUISITIONS = 100
 _MAX_PURCHASE_ORDERS = 100
 _MAX_CATALOG_BASELINES = 500
@@ -235,6 +238,9 @@ _PURCHASE_BUDGET_ENVELOPE_ID_PATTERN = re.compile(
     r"PBE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
 _PURCHASE_BUDGET_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{2,39}")
+_SUPPLIER_SOURCING_DECISION_ID_PATTERN = re.compile(
+    r"SSD-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
 _SUPPLIER_INVOICE_ID_PATTERN = re.compile(
     r"PINV-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
@@ -519,12 +525,23 @@ _PURCHASE_REQUISITION_REQUIRED_FIELDS = frozenset(
         "sourceReplenishmentDigest", "approval",
     }
 )
-_PURCHASE_REQUISITION_OPTIONAL_FIELDS = frozenset({"budgetEnvelopeId"})
+_PURCHASE_REQUISITION_OPTIONAL_FIELDS = frozenset(
+    {"budgetEnvelopeId", "sourceSourcingDecisionId"}
+)
 _PURCHASE_BUDGET_ENVELOPE_FIELDS = frozenset(
     {
         "id", "createdAt", "budgetCode", "label", "periodStart", "periodEnd",
         "ceilingMmk", "perRequisitionLimitMmk", "approval",
     }
+)
+_SUPPLIER_SOURCING_DECISION_FIELDS = frozenset(
+    {
+        "id", "createdAt", "sku", "quantity", "quotes", "selectedQuoteReference",
+        "unitCostToleranceBasisPoints", "deliveryToleranceDays", "approval",
+    }
+)
+_SUPPLIER_QUOTE_FIELDS = frozenset(
+    {"supplier", "quoteReference", "vendorApprovalReference", "unitCostMmk", "deliveryAt", "validUntil"}
 )
 _SUPPLIER_INVOICE_REQUIRED_FIELDS = frozenset(
     {
@@ -1102,6 +1119,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "storefrontRequests",
                 "storefrontConfiguration",
                 "purchaseBudgetEnvelopes",
+                "supplierSourcingDecisions",
                 "purchaseRequisitions",
                 "purchaseOrders",
                 "catalogBaselines",
@@ -1136,6 +1154,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     purchase_budget_envelopes = _list(
         state.get("purchaseBudgetEnvelopes", []),
         "commerce state.purchaseBudgetEnvelopes",
+    )
+    supplier_sourcing_decisions = _list(
+        state.get("supplierSourcingDecisions", []),
+        "commerce state.supplierSourcingDecisions",
     )
     purchase_requisitions = _list(
         state.get("purchaseRequisitions", []),
@@ -1200,6 +1222,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         raise TrialValidationError(
             "commerce state.purchaseBudgetEnvelopes cannot exceed "
             f"{_MAX_PURCHASE_BUDGET_ENVELOPES}."
+        )
+    if len(supplier_sourcing_decisions) > _MAX_SUPPLIER_SOURCING_DECISIONS:
+        raise TrialValidationError(
+            "commerce state.supplierSourcingDecisions cannot exceed "
+            f"{_MAX_SUPPLIER_SOURCING_DECISIONS}."
         )
     if len(purchase_requisitions) > _MAX_PURCHASE_REQUISITIONS:
         raise TrialValidationError(
@@ -1673,6 +1700,108 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         newer_purchase_budget = envelope
     _unique(purchase_budget_envelope_ids, "Purchase budget envelope ID")
 
+    supplier_sourcing_ids: list[str] = []
+    supplier_sourcing_action_ids: list[str] = []
+    supplier_quote_sources: list[str] = []
+    supplier_sourcing_by_id: dict[str, dict[str, Any]] = {}
+    newer_supplier_sourcing: dict[str, Any] | None = None
+    inventory_vendor_ids: dict[str, str] = {}
+    inventory_supplier_policies: list[dict[str, Any]] = []
+    if "inventoryFoundation" in state:
+        partners = shop_inventory_business_partners(state["inventoryFoundation"], item_skus)
+        inventory_vendor_ids = {str(vendor["name"]): str(vendor["id"]) for vendor in partners["vendors"]}
+        inventory_supplier_policies = shop_inventory_supplier_policies(state["inventoryFoundation"], item_skus)
+    for index, candidate in enumerate(supplier_sourcing_decisions):
+        field = f"supplierSourcingDecisions[{index}]"
+        decision = _object(candidate, field)
+        _exact_fields(decision, field, required=_SUPPLIER_SOURCING_DECISION_FIELDS)
+        decision_id = _text(decision["id"], f"{field}.id", maximum=80)
+        if _SUPPLIER_SOURCING_DECISION_ID_PATTERN.fullmatch(decision_id) is None:
+            raise TrialValidationError(f"{field}.id is invalid.")
+        created_at = _timestamp(decision["createdAt"], f"{field}.createdAt")
+        sku = _text(decision["sku"], f"{field}.sku", maximum=80)
+        if sku not in item_by_sku:
+            raise TrialValidationError(f"{field}.sku is unknown.")
+        _integer(decision["quantity"], f"{field}.quantity", minimum=1)
+        cost_tolerance = _integer(
+            decision["unitCostToleranceBasisPoints"],
+            f"{field}.unitCostToleranceBasisPoints",
+            minimum=0,
+        )
+        delivery_tolerance = _integer(
+            decision["deliveryToleranceDays"],
+            f"{field}.deliveryToleranceDays",
+            minimum=0,
+        )
+        if cost_tolerance > 2_000 or delivery_tolerance > 30:
+            raise TrialValidationError(f"{field} tolerance is invalid.")
+        quotes = _list(decision["quotes"], f"{field}.quotes")
+        if not 1 <= len(quotes) <= 5:
+            raise TrialValidationError(f"{field}.quotes must contain 1 to 5 quotes.")
+        quote_references: list[str] = []
+        quote_suppliers: list[str] = []
+        for quote_index, quote_candidate in enumerate(quotes):
+            quote_field = f"{field}.quotes[{quote_index}]"
+            quote_record = _object(quote_candidate, quote_field)
+            _exact_fields(quote_record, quote_field, required=_SUPPLIER_QUOTE_FIELDS)
+            supplier = _text(quote_record["supplier"], f"{quote_field}.supplier", maximum=120)
+            quote_reference = _text(quote_record["quoteReference"], f"{quote_field}.quoteReference", maximum=80)
+            approval_reference = _text(
+                quote_record["vendorApprovalReference"],
+                f"{quote_field}.vendorApprovalReference",
+                maximum=120,
+            )
+            unit_cost = _integer(quote_record["unitCostMmk"], f"{quote_field}.unitCostMmk", minimum=1)
+            if unit_cost * (10_000 + cost_tolerance) // 10_000 > _MAX_SAFE_INTEGER:
+                raise TrialValidationError(f"{quote_field}.unitCostMmk exceeds the supported tolerance range.")
+            delivery_at = _timestamp(quote_record["deliveryAt"], f"{quote_field}.deliveryAt")
+            valid_until = _timestamp(quote_record["validUntil"], f"{quote_field}.validUntil")
+            if (
+                datetime.fromisoformat(delivery_at.replace("Z", "+00:00"))
+                <= datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                or datetime.fromisoformat(valid_until.replace("Z", "+00:00"))
+                < datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            ):
+                raise TrialValidationError(f"{quote_field} dates are invalid.")
+            if inventory_vendor_ids:
+                vendor_id = inventory_vendor_ids.get(supplier)
+                policy = next(
+                    (
+                        policy for policy in inventory_supplier_policies
+                        if str(policy["vendorId"]) == vendor_id
+                        and policy["sku"] == sku
+                        and policy["status"] == "active"
+                    ),
+                    None,
+                )
+                if policy is None or str(policy["commandId"]) != approval_reference:
+                    raise TrialValidationError(f"{quote_field} is not bound to an active approved-vendor policy.")
+            quote_references.append(quote_reference)
+            quote_suppliers.append(supplier)
+            supplier_quote_sources.append(f"{supplier}\0{quote_reference}")
+        _unique(quote_references, f"{field} quote reference")
+        _unique(quote_suppliers, f"{field} supplier")
+        selected_quote_reference = _text(
+            decision["selectedQuoteReference"],
+            f"{field}.selectedQuoteReference",
+            maximum=80,
+        )
+        if selected_quote_reference not in quote_references:
+            raise TrialValidationError(f"{field}.selectedQuoteReference is unknown.")
+        approval = _action_proof(decision["approval"], f"{field}.approval")
+        if approval["capturedAt"] != created_at:
+            raise TrialValidationError(f"{field}.approval must be captured at creation.")
+        if newer_supplier_sourcing is not None and datetime.fromisoformat(
+            str(newer_supplier_sourcing["createdAt"]).replace("Z", "+00:00")
+        ) < datetime.fromisoformat(created_at.replace("Z", "+00:00")):
+            raise TrialValidationError("supplier sourcing decisions must be newest first.")
+        supplier_sourcing_ids.append(decision_id)
+        supplier_sourcing_action_ids.append(approval["actionId"])
+        supplier_sourcing_by_id[decision_id] = decision
+        newer_supplier_sourcing = decision
+    _unique(supplier_sourcing_ids, "Supplier sourcing decision ID")
+    _unique(supplier_quote_sources, "Supplier quote source")
+
     purchase_requisition_ids: list[str] = []
     purchase_requisition_action_ids: list[str] = []
     purchase_requisition_by_id: dict[str, dict[str, Any]] = {}
@@ -1719,6 +1848,41 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 raise TrialValidationError(f"{field} approval is outside its budget period.")
             if total > int(envelope["perRequisitionLimitMmk"]):
                 raise TrialValidationError(f"{field} exceeds its per-requisition budget limit.")
+        if "sourceSourcingDecisionId" in requisition:
+            source_id = _text(
+                requisition["sourceSourcingDecisionId"],
+                f"{field}.sourceSourcingDecisionId",
+                maximum=80,
+            )
+            decision = supplier_sourcing_by_id.get(source_id)
+            selected = next(
+                (
+                    quote for quote in decision["quotes"]
+                    if quote["quoteReference"] == decision["selectedQuoteReference"]
+                ),
+                None,
+            ) if decision else None
+            maximum_unit_cost = (
+                int(selected["unitCostMmk"])
+                * (10_000 + int(decision["unitCostToleranceBasisPoints"]))
+                // 10_000
+            ) if decision and selected else 0
+            latest_delivery = (
+                datetime.fromisoformat(str(selected["deliveryAt"]).replace("Z", "+00:00"))
+                + timedelta(days=int(decision["deliveryToleranceDays"]))
+            ) if decision and selected else datetime.min.replace(tzinfo=timezone.utc)
+            if (
+                decision is None
+                or selected is None
+                or decision["sku"] != sku
+                or decision["quantity"] != quantity
+                or selected["supplier"] != requisition["supplier"]
+                or unit_cost > maximum_unit_cost
+                or datetime.fromisoformat(expected_at.replace("Z", "+00:00")) > latest_delivery
+                or datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                > datetime.fromisoformat(str(selected["validUntil"]).replace("Z", "+00:00"))
+            ):
+                raise TrialValidationError(f"{field} does not match its approved sourcing decision.")
         for digest_field in ("sourceDecisionDigest", "sourceReplenishmentDigest"):
             digest = _text(requisition[digest_field], f"{field}.{digest_field}", maximum=71)
             if _SHA256_DIGEST_PATTERN.fullmatch(digest) is None:
@@ -1730,6 +1894,14 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         purchase_requisition_action_ids.append(approval["actionId"])
         purchase_requisition_by_id[requisition_id] = requisition
     _unique(purchase_requisition_ids, "Purchase requisition ID")
+    _unique(
+        [
+            str(requisition["sourceSourcingDecisionId"])
+            for requisition in purchase_requisition_by_id.values()
+            if "sourceSourcingDecisionId" in requisition
+        ],
+        "Consumed supplier sourcing decision ID",
+    )
 
     purchase_order_ids: list[str] = []
     purchase_order_action_ids: list[str] = []
@@ -4120,6 +4292,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *intake_action_ids,
             *close_action_ids,
             *purchase_budget_action_ids,
+            *supplier_sourcing_action_ids,
             *purchase_requisition_action_ids,
             *purchase_order_action_ids,
             *(
@@ -4420,6 +4593,12 @@ def _validate_event_evidence(
         if not _proof_matches_evidence(approval, evidence):
             raise TrialValidationError(
                 "command evidence must match the purchase budget approval proof."
+            )
+    elif event_type == "commerce.supplier_sourcing.approved":
+        approval = next_state["supplierSourcingDecisions"][0]["approval"]
+        if not _proof_matches_evidence(approval, evidence):
+            raise TrialValidationError(
+                "command evidence must match the supplier sourcing approval proof."
             )
     elif event_type == "commerce.purchase_requisition.approved":
         approval = next_state["purchaseRequisitions"][0]["approval"]
@@ -4846,6 +5025,10 @@ def _purchase_orders(state: Mapping[str, Any]) -> list[Any]:
 
 def _purchase_budget_envelopes(state: Mapping[str, Any]) -> list[Any]:
     return state.get("purchaseBudgetEnvelopes", [])
+
+
+def _supplier_sourcing_decisions(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("supplierSourcingDecisions", [])
 
 
 def _purchase_requisitions(state: Mapping[str, Any]) -> list[Any]:
@@ -6769,6 +6952,14 @@ def _require_purchase_budget_envelopes_unchanged(
 ) -> None:
     if _purchase_budget_envelopes(current) != _purchase_budget_envelopes(next_state):
         raise TrialValidationError("event cannot change: purchaseBudgetEnvelopes.")
+
+
+def _require_supplier_sourcing_decisions_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _supplier_sourcing_decisions(current) != _supplier_sourcing_decisions(next_state):
+        raise TrialValidationError("event cannot change: supplierSourcingDecisions.")
 
 
 def _require_purchase_requisitions_unchanged(
@@ -8802,6 +8993,10 @@ def _validate_purchase_requisition_approved(
         raise TrialValidationError(
             "a new purchase requisition requires an active purchase budget envelope."
         )
+    if "sourceSourcingDecisionId" not in requisition:
+        raise TrialValidationError(
+            "a new purchase requisition requires an approved supplier sourcing decision."
+        )
     if any(
         purchase_order.get("sku") == requisition["sku"]
         and "cancellation" not in purchase_order
@@ -8838,6 +9033,28 @@ def _validate_purchase_budget_approved(
     ):
         raise TrialValidationError(
             "commerce.purchase_budget.approved must prepend exactly one budget envelope."
+        )
+
+
+def _validate_supplier_sourcing_approved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_budget_envelopes_unchanged(current, next_state)
+    _require_purchase_requisitions_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    current_decisions = _supplier_sourcing_decisions(current)
+    next_decisions = _supplier_sourcing_decisions(next_state)
+    if (
+        len(next_decisions) != len(current_decisions) + 1
+        or next_decisions[1:] != current_decisions
+    ):
+        raise TrialValidationError(
+            "commerce.supplier_sourcing.approved must prepend exactly one sourcing decision."
         )
 
 
@@ -9821,6 +10038,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.inventory.supplier_policy_saved": _validate_inventory_supplier_policy_saved,
     "commerce.inventory.transferred": _validate_inventory_transferred,
     "commerce.purchase_budget.approved": _validate_purchase_budget_approved,
+    "commerce.supplier_sourcing.approved": _validate_supplier_sourcing_approved,
     "commerce.purchase_requisition.approved": _validate_purchase_requisition_approved,
     "commerce.purchase_order.created": _validate_purchase_order_created,
     "commerce.purchase_order.received": _validate_purchase_order_received,
@@ -9893,6 +10111,7 @@ def reduce_commerce_state(
             or _storefront_requests(next_state)
             or _storefront_configuration(next_state)
             or _purchase_budget_envelopes(next_state)
+            or _supplier_sourcing_decisions(next_state)
             or _purchase_requisitions(next_state)
             or _purchase_orders(next_state)
             or _catalog_changes(next_state)
@@ -9934,6 +10153,8 @@ def reduce_commerce_state(
         _require_service_schedule_unchanged(current_state, next_state)
     if event_type != "commerce.purchase_budget.approved":
         _require_purchase_budget_envelopes_unchanged(current_state, next_state)
+    if event_type != "commerce.supplier_sourcing.approved":
+        _require_supplier_sourcing_decisions_unchanged(current_state, next_state)
     if event_type != "commerce.purchase_requisition.approved":
         _require_purchase_requisitions_unchanged(current_state, next_state)
     if event_type not in {
