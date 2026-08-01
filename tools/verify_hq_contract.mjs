@@ -831,7 +831,7 @@ requireContract('manifest has one canonical four-product registry',
     === 'shop:commerce:Shop,plant:production:Plant,website:website:Website,ecommerce:ecommerce:Ecommerce')
 requireContract('manifest customer routes are canonical',
   manifest.customerProducts?.map((entry) => entry.appRoute).join(',')
-    === 'https://app.supermega.dev/shop/?tab=counter,https://app.supermega.dev/plant/?tab=production,https://app.supermega.dev/website/,https://app.supermega.dev/ecommerce/')
+    === 'https://app.supermega.dev/shop/,https://app.supermega.dev/plant/,https://app.supermega.dev/website/,https://app.supermega.dev/ecommerce/')
 requireContract('manifest shared capability is separate from products',
   manifest.sharedCapabilities?.map((entry) => `${entry.id}:${entry.status}:${entry.firstWorkflow}`).join(',')
     === 'ai-assistance:gated-r-and-d:Order Intake')

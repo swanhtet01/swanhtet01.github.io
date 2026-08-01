@@ -318,10 +318,10 @@ export function CoreLayout() {
 }
 
 const customerTracks = [
-  ['Shop', 'Retail, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/?tab=counter', '/settings/?product=shop'],
-  ['Plant', 'Factory, workshop, service floor.', 'Plan, record, hand off shifts.', '/plant/?tab=production', '/settings/?product=plant'],
-  ['Website', 'Company site and proof catalog.', 'Create pages, offers, leads.', '/website/', '/settings/?product=website'],
-  ['Ecommerce', 'Online ordering and delivery.', 'Build storefronts and Shop handoff.', '/ecommerce/', '/settings/?product=ecommerce'],
+  ['Shop', 'Retail, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/'],
+  ['Plant', 'Factory, workshop, service floor.', 'Plan, record, hand off shifts.', '/plant/'],
+  ['Website', 'Company site and proof catalog.', 'Create pages, offers, leads.', '/website/'],
+  ['Ecommerce', 'Online ordering and delivery.', 'Build storefronts and Shop handoff.', '/ecommerce/'],
 ] as const
 
 export function ProductHomePage() {
@@ -334,7 +334,7 @@ export function ProductHomePage() {
       <PageHeading copy="Four products, one operating system. Start with the most important work." eyebrow="SuperMega" title="What needs attention?" />
       <Suspense fallback={<p className="form-notice" role="status">Loading today...</p>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense>
       <nav aria-label="Business tracks" className="product-track-grid">
-        {customerTracks.map(([name, fit, outcome, path, setupPath]) => (
+        {customerTracks.map(([name, fit, outcome, path]) => (
           <article className="product-track-card" key={name}>
             <div>
               <span className="core-eyebrow">{fit}</span>
@@ -342,8 +342,7 @@ export function ProductHomePage() {
               <p>{outcome}</p>
             </div>
             <div className="product-track-actions">
-              <Link to={path}>Open product</Link>
-              <Link to={setupPath}>Set up product</Link>
+              <Link aria-label={`Open ${name}`} to={path}>Open {name}</Link>
             </div>
           </article>
         ))}

@@ -35,7 +35,7 @@ if (manifest.schemaVersion !== 'supermega.site-context.v2') fail('manifest_schem
 if (manifest.company?.publicPricing !== false) fail('public_pricing_enabled')
 if (manifest.release?.sourceBranch !== 'main') fail('release_source_not_main')
 if (manifest.customerProducts?.map((product) => `${product.id}:${product.runtimeId}:${product.name}`).join(',') !== 'shop:commerce:Shop,plant:production:Plant,website:website:Website,ecommerce:ecommerce:Ecommerce') fail('customer_product_portfolio_drift')
-if (manifest.customerProducts?.map((product) => product.appRoute).join(',') !== 'https://app.supermega.dev/shop/?tab=counter,https://app.supermega.dev/plant/?tab=production,https://app.supermega.dev/website/,https://app.supermega.dev/ecommerce/') fail('customer_product_routes_drift')
+if (manifest.customerProducts?.map((product) => product.appRoute).join(',') !== 'https://app.supermega.dev/shop/,https://app.supermega.dev/plant/,https://app.supermega.dev/website/,https://app.supermega.dev/ecommerce/') fail('customer_product_routes_drift')
 const operatingProducts = manifest.customerProducts?.filter((product) => product.kind === 'operating-product') || []
 const makerProducts = manifest.customerProducts?.filter((product) => product.kind === 'maker-product') || []
 const serviceProducts = manifest.serviceProducts || []
@@ -179,8 +179,8 @@ for (const token of [
   'id="trust"',
   'aria-label="Security boundary"',
   'AI may prepare drafts from approved records.',
-  'https://app.supermega.dev/shop/?tab=counter',
-  'https://app.supermega.dev/plant/?tab=production',
+  'https://app.supermega.dev/shop/',
+  'https://app.supermega.dev/plant/',
   'id="website"',
   'https://app.supermega.dev/website/',
   'id="ecommerce"',
