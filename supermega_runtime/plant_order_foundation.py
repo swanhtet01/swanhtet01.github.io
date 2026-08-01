@@ -23,6 +23,10 @@ PLANT_ORDER_EXECUTION_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v2"
 PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v3"
 PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v4"
 PLANT_ORDER_PROJECTION_CONTRACT = "supermega.plant.order_projection.v1"
+PLANT_ORDER_EFFECTIVENESS_CONTRACT = "supermega.plant.order_effectiveness.v2"
+PLANT_ORDER_COST_DRIVER_CONTRACT = "supermega.plant.cost_driver_variance.v1"
+PLANT_ORDER_FINANCIAL_COST_CONTRACT = "supermega.plant.financial_job_cost.v1"
+PLANT_ORDER_COST_REVIEW_PACKET_CONTRACT = "supermega.plant.cost_review_packet.v1"
 PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT = (
     "supermega.plant.material-substitution-approval.v1"
 )
@@ -232,10 +236,17 @@ def _materials(value: object, field: str) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for index, candidate in enumerate(rows):
         row_field = f"{field}[{index}]"
+        has_cost = isinstance(candidate, Mapping) and "standardCostPerUnitMmk" in candidate
         source = _object(
             candidate,
             row_field,
-            ("materialId", "name", "unit", "quantityPerUnitMilli"),
+            (
+                "materialId",
+                "name",
+                "unit",
+                "quantityPerUnitMilli",
+                *(("standardCostPerUnitMmk",) if has_cost else ()),
+            ),
         )
         unit = source["unit"]
         if not isinstance(unit, str) or unit not in _MATERIAL_UNITS:
@@ -251,6 +262,17 @@ def _materials(value: object, field: str) -> list[dict[str, Any]]:
                     source["quantityPerUnitMilli"],
                     f"{row_field}.quantityPerUnitMilli",
                     minimum=1,
+                ),
+                **(
+                    {
+                        "standardCostPerUnitMmk": _integer(
+                            source["standardCostPerUnitMmk"],
+                            f"{row_field}.standardCostPerUnitMmk",
+                            minimum=1,
+                        )
+                    }
+                    if has_cost
+                    else {}
                 ),
             }
         )
@@ -290,6 +312,7 @@ def _routing(
     result: list[dict[str, Any]] = []
     for index, candidate in enumerate(rows):
         row_field = f"{field}[{index}]"
+        has_cost = isinstance(candidate, Mapping) and "standardCostPerMinuteMmk" in candidate
         source = _object(
             candidate,
             row_field,
@@ -299,6 +322,7 @@ def _routing(
                 "name",
                 "workCentreId",
                 "minutesPerUnitMilli",
+                *(("standardCostPerMinuteMmk",) if has_cost else ()),
             ),
         )
         work_centre_id = _identifier(
@@ -321,6 +345,17 @@ def _routing(
                     source["minutesPerUnitMilli"],
                     f"{row_field}.minutesPerUnitMilli",
                     minimum=1,
+                ),
+                **(
+                    {
+                        "standardCostPerMinuteMmk": _integer(
+                            source["standardCostPerMinuteMmk"],
+                            f"{row_field}.standardCostPerMinuteMmk",
+                            minimum=1,
+                        )
+                    }
+                    if has_cost
+                    else {}
                 ),
             }
         )
@@ -1965,6 +2000,459 @@ def project_plant_order(state: object) -> dict[str, Any]:
     )
 
 
+def _ratio_basis_points(numerator: int, denominator: int) -> int | None:
+    if numerator < 0 or denominator < 1:
+        return None
+    rounded = (numerator * 10_000 + denominator // 2) // denominator
+    return rounded if rounded <= _MAX_SAFE_INTEGER else None
+
+
+def project_plant_order_effectiveness(projection: Mapping[str, Any]) -> dict[str, Any]:
+    """Derive evidence-bound availability, performance, quality, and OEE."""
+
+    missing_evidence: list[str] = []
+    if projection.get("plan") is None:
+        return {
+            "contract": PLANT_ORDER_EFFECTIVENESS_CONTRACT,
+            "status": "not_started",
+            "availabilityBasisPoints": None,
+            "availability": None,
+            "performance": None,
+            "quality": None,
+            "oeeBasisPoints": None,
+            "missingEvidence": [
+                "Order-bound planned productive time and downtime",
+                "Reviewed routing time",
+                "Current output inspection",
+            ],
+        }
+
+    window = projection["effectivenessWindow"]
+    planned_productive_minutes_milli = 0
+    downtime_minutes_milli = 0
+    if window is not None:
+        planned_productive_minutes_milli = sum(
+            row["plannedProductiveMinutesMilli"] for row in window["workCentres"]
+        )
+        downtime_minutes_milli = sum(
+            _duration_minutes_milli(
+                row["startedAt"],
+                row["endedAt"],
+                f"effectiveness downtime {row['downtimeId']}",
+            )
+            for row in window["downtimeIntervals"]
+        )
+    operating_minutes_milli = (
+        planned_productive_minutes_milli - downtime_minutes_milli
+    )
+    availability_basis_points = (
+        _ratio_basis_points(
+            operating_minutes_milli, planned_productive_minutes_milli
+        )
+        if window is not None
+        else None
+    )
+    availability = (
+        {
+            "basisPoints": availability_basis_points,
+            "plannedProductiveMinutesMilli": planned_productive_minutes_milli,
+            "downtimeMinutesMilli": downtime_minutes_milli,
+            "operatingMinutesMilli": operating_minutes_milli,
+            "windowStart": window["windowStart"],
+            "windowEnd": window["windowEnd"],
+            "workCentreCount": len(window["workCentres"]),
+            "downtimeIntervalCount": len(window["downtimeIntervals"]),
+            "sourceDigest": window["sourceDigest"],
+            "proof": window["proof"],
+        }
+        if window is not None and availability_basis_points is not None
+        else None
+    )
+    if availability is None:
+        missing_evidence.append("Order-bound planned productive time and downtime")
+
+    designed_minutes_milli = sum(
+        operation["completedQuantity"] * operation["minutesPerUnitMilli"]
+        for operation in projection["operations"]
+    )
+    if designed_minutes_milli > _MAX_SAFE_INTEGER:
+        performance_basis_points = None
+    else:
+        performance_basis_points = _ratio_basis_points(
+            designed_minutes_milli,
+            projection["metrics"]["actualOperationMinutesMilli"],
+        )
+    performance = (
+        {
+            "basisPoints": performance_basis_points,
+            "designedMinutesMilli": designed_minutes_milli,
+            "actualMinutesMilli": projection["metrics"]["actualOperationMinutesMilli"],
+            "speedLossMinutesMilli": max(
+                projection["metrics"]["actualOperationMinutesMilli"]
+                - designed_minutes_milli,
+                0,
+            ),
+        }
+        if performance_basis_points is not None
+        else None
+    )
+    if performance is None:
+        missing_evidence.append("Reviewed routing time")
+
+    inspection = projection["latestInspection"]
+    quality_basis_points = (
+        _ratio_basis_points(
+            inspection["acceptedQuantity"], inspection["inspectedQuantity"]
+        )
+        if inspection is not None
+        and inspection["inspectedQuantity"] == projection["totalOutput"]
+        and inspection["inspectedQuantity"] > 0
+        else None
+    )
+    quality = (
+        {
+            "basisPoints": quality_basis_points,
+            "inspectedQuantity": inspection["inspectedQuantity"],
+            "acceptedQuantity": inspection["acceptedQuantity"],
+            "rejectedQuantity": inspection["rejectedQuantity"],
+        }
+        if inspection is not None and quality_basis_points is not None
+        else None
+    )
+    if quality is None:
+        missing_evidence.append("Current output inspection")
+
+    oee_basis_points = None
+    if availability is not None and performance is not None and quality is not None:
+        rounded = (
+            availability["basisPoints"]
+            * performance["basisPoints"]
+            * quality["basisPoints"]
+            + 50_000_000
+        ) // 100_000_000
+        if rounded <= _MAX_SAFE_INTEGER:
+            oee_basis_points = rounded
+
+    return {
+        "contract": PLANT_ORDER_EFFECTIVENESS_CONTRACT,
+        "status": (
+            "complete"
+            if oee_basis_points is not None
+            else "availability_setup_required"
+            if performance is not None and quality is not None and availability is None
+            else "collecting"
+        ),
+        "availabilityBasisPoints": availability_basis_points,
+        "availability": availability,
+        "performance": performance,
+        "quality": quality,
+        "oeeBasisPoints": oee_basis_points,
+        "missingEvidence": missing_evidence,
+    }
+
+
+def project_plant_order_cost_drivers(projection: Mapping[str, Any]) -> dict[str, Any]:
+    """Derive standard-versus-actual material and conversion quantities."""
+
+    if projection.get("plan") is None:
+        return {
+            "contract": PLANT_ORDER_COST_DRIVER_CONTRACT,
+            "status": "not_started",
+            "earnedUnits": 0,
+            "materials": [],
+            "operations": [],
+            "conversion": {
+                "standardMinutesMilli": 0,
+                "actualMinutesMilli": 0,
+                "varianceMinutesMilli": 0,
+            },
+            "financialCostAvailable": False,
+            "financialCostReason": "Configure reviewed material and work-centre rates before claiming MMK cost.",
+        }
+    first_operation_quantity = (
+        projection["operations"][0]["completedQuantity"]
+        if projection["operations"]
+        else 0
+    )
+    earned_units = max(projection["totalOutput"], first_operation_quantity)
+    materials = []
+    for material in projection["materials"]:
+        standard_quantity_milli = _safe_product(
+            earned_units,
+            material["quantityPerUnitMilli"],
+            f"standard material quantity for {material['materialId']}",
+        )
+        materials.append(
+            {
+                "materialId": material["materialId"],
+                "name": material["name"],
+                "unit": material["unit"],
+                "standardQuantityMilli": standard_quantity_milli,
+                "actualQuantityMilli": material["issuedQuantityMilli"],
+                "varianceQuantityMilli": material["issuedQuantityMilli"]
+                - standard_quantity_milli,
+            }
+        )
+    operations = []
+    for operation in projection["operations"]:
+        standard_minutes_milli = _safe_product(
+            operation["completedQuantity"],
+            operation["minutesPerUnitMilli"],
+            f"standard conversion minutes for {operation['operationId']}",
+        )
+        operations.append(
+            {
+                "operationId": operation["operationId"],
+                "name": operation["name"],
+                "completedQuantity": operation["completedQuantity"],
+                "standardMinutesMilli": standard_minutes_milli,
+                "actualMinutesMilli": operation["actualMinutesMilli"],
+                "varianceMinutesMilli": operation["actualMinutesMilli"]
+                - standard_minutes_milli,
+            }
+        )
+    standard_minutes_milli = sum(
+        operation["standardMinutesMilli"] for operation in operations
+    )
+    actual_minutes_milli = sum(
+        operation["actualMinutesMilli"] for operation in operations
+    )
+    return {
+        "contract": PLANT_ORDER_COST_DRIVER_CONTRACT,
+        "status": (
+            "complete"
+            if projection["status"] == "released_to_stock"
+            else "collecting"
+            if earned_units
+            or actual_minutes_milli
+            or any(material["actualQuantityMilli"] for material in materials)
+            else "not_started"
+        ),
+        "earnedUnits": earned_units,
+        "materials": materials,
+        "operations": operations,
+        "conversion": {
+            "standardMinutesMilli": standard_minutes_milli,
+            "actualMinutesMilli": actual_minutes_milli,
+            "varianceMinutesMilli": actual_minutes_milli - standard_minutes_milli,
+        },
+        "financialCostAvailable": False,
+        "financialCostReason": "Configure reviewed material and work-centre rates before claiming MMK cost.",
+    }
+
+
+def _mmk_from_milli_basis(quantity_milli: int, rate_mmk: int, field: str) -> int:
+    rounded = (quantity_milli * rate_mmk + 500) // 1_000
+    if rounded > _MAX_SAFE_INTEGER:
+        raise _fail(f"{field} exceeds the supported MMK range.")
+    return rounded
+
+
+def _proportional_mmk(total_mmk: int, numerator: int, denominator: int, field: str) -> int:
+    rounded = (total_mmk * numerator + denominator // 2) // denominator
+    if rounded > _MAX_SAFE_INTEGER:
+        raise _fail(f"{field} exceeds the supported MMK range.")
+    return rounded
+
+
+def project_plant_order_financial_cost(projection: Mapping[str, Any]) -> dict[str, Any]:
+    """Price validated cost drivers using only reviewed MMK rates."""
+
+    missing_rates = [
+        material["materialId"]
+        for material in projection["materials"]
+        if not material.get("standardCostPerUnitMmk")
+    ] + [
+        operation["operationId"]
+        for operation in projection["operations"]
+        if not operation.get("standardCostPerMinuteMmk")
+    ]
+    empty = {"materialMmk": 0, "conversionMmk": 0, "totalMmk": 0}
+    if projection.get("plan") is None or missing_rates:
+        return {
+            "contract": PLANT_ORDER_FINANCIAL_COST_CONTRACT,
+            "status": "setup_required",
+            "currency": "MMK",
+            "missingRates": missing_rates,
+            "planned": empty,
+            "earned": empty,
+            "actual": empty,
+            "varianceMmk": None,
+            "qualityLossMmk": None,
+        }
+
+    drivers = project_plant_order_cost_drivers(projection)
+    planned_material_mmk = sum(
+        _mmk_from_milli_basis(
+            material["requiredQuantityMilli"],
+            material["standardCostPerUnitMmk"],
+            f"planned material cost for {material['materialId']}",
+        )
+        for material in projection["materials"]
+    )
+    actual_material_mmk = sum(
+        _mmk_from_milli_basis(
+            material["issuedQuantityMilli"],
+            material["standardCostPerUnitMmk"],
+            f"actual material cost for {material['materialId']}",
+        )
+        for material in projection["materials"]
+    )
+    materials_by_id = {
+        material["materialId"]: material for material in projection["materials"]
+    }
+    earned_material_mmk = sum(
+        _mmk_from_milli_basis(
+            driver["standardQuantityMilli"],
+            materials_by_id[driver["materialId"]]["standardCostPerUnitMmk"],
+            f"earned material cost for {driver['materialId']}",
+        )
+        for driver in drivers["materials"]
+    )
+    planned_conversion_mmk = sum(
+        _mmk_from_milli_basis(
+            operation["plannedMinutesMilli"],
+            operation["standardCostPerMinuteMmk"],
+            f"planned conversion cost for {operation['operationId']}",
+        )
+        for operation in projection["operations"]
+    )
+    actual_conversion_mmk = sum(
+        _mmk_from_milli_basis(
+            operation["actualMinutesMilli"],
+            operation["standardCostPerMinuteMmk"],
+            f"actual conversion cost for {operation['operationId']}",
+        )
+        for operation in projection["operations"]
+    )
+    operations_by_id = {
+        operation["operationId"]: operation for operation in projection["operations"]
+    }
+    earned_conversion_mmk = sum(
+        _mmk_from_milli_basis(
+            driver["standardMinutesMilli"],
+            operations_by_id[driver["operationId"]]["standardCostPerMinuteMmk"],
+            f"earned conversion cost for {driver['operationId']}",
+        )
+        for driver in drivers["operations"]
+    )
+    planned = {
+        "materialMmk": planned_material_mmk,
+        "conversionMmk": planned_conversion_mmk,
+        "totalMmk": planned_material_mmk + planned_conversion_mmk,
+    }
+    earned = {
+        "materialMmk": earned_material_mmk,
+        "conversionMmk": earned_conversion_mmk,
+        "totalMmk": earned_material_mmk + earned_conversion_mmk,
+    }
+    actual = {
+        "materialMmk": actual_material_mmk,
+        "conversionMmk": actual_conversion_mmk,
+        "totalMmk": actual_material_mmk + actual_conversion_mmk,
+    }
+    rejected_quantity = (
+        projection["latestInspection"]["rejectedQuantity"]
+        if projection["latestInspection"] is not None
+        else 0
+    )
+    return {
+        "contract": PLANT_ORDER_FINANCIAL_COST_CONTRACT,
+        "status": (
+            "complete"
+            if projection["status"] == "released_to_stock"
+            else "collecting"
+        ),
+        "currency": "MMK",
+        "missingRates": [],
+        "planned": planned,
+        "earned": earned,
+        "actual": actual,
+        "varianceMmk": actual["totalMmk"] - earned["totalMmk"],
+        "qualityLossMmk": (
+            _proportional_mmk(
+                planned["totalMmk"],
+                rejected_quantity,
+                projection["metrics"]["targetQuantity"],
+                "quality loss cost",
+            )
+            if rejected_quantity
+            else 0
+        ),
+    }
+
+
+def build_plant_order_cost_review_packet(state: object) -> dict[str, Any] | None:
+    """Build a detached, digest-bound ERP review packet without posting cost."""
+
+    source_state = validate_plant_order_state(state)
+    projection = project_plant_order(source_state)
+    if projection["plan"] is None:
+        return None
+    financial_cost = project_plant_order_financial_cost(projection)
+    if financial_cost["status"] == "setup_required":
+        return None
+    body = {
+        "contract": PLANT_ORDER_COST_REVIEW_PACKET_CONTRACT,
+        "source": {
+            "revision": projection["revision"],
+            "headDigest": projection["headDigest"],
+            "projectionStatus": projection["status"],
+        },
+        "sourceState": _canonical_copy(source_state),
+        "plan": _canonical_copy(projection["plan"]),
+        "costDrivers": project_plant_order_cost_drivers(projection),
+        "financialCost": financial_cost,
+        "effectiveness": project_plant_order_effectiveness(projection),
+        "inspection": _canonical_copy(projection["latestInspection"]),
+        "releaseEvidence": {
+            "orderRelease": _canonical_copy(projection["orderRelease"]),
+            "batchRelease": _canonical_copy(projection["batchRelease"]),
+        },
+        "materialGenealogy": _canonical_copy(projection["genealogy"]),
+        "authority": {
+            "costPosted": False,
+            "inventoryPosted": False,
+            "journalPosted": False,
+            "payrollPosted": False,
+            "invoiceCreated": False,
+            "providerCalled": False,
+        },
+    }
+    return {**body, "digest": _canonical_digest(body)}
+
+
+def validate_plant_order_cost_review_packet(value: object) -> dict[str, Any]:
+    """Reject any cost packet not reproduced from its retained command chain."""
+
+    packet = _object(
+        value,
+        "Plant cost review packet",
+        (
+            "contract",
+            "source",
+            "sourceState",
+            "plan",
+            "costDrivers",
+            "financialCost",
+            "effectiveness",
+            "inspection",
+            "releaseEvidence",
+            "materialGenealogy",
+            "authority",
+            "digest",
+        ),
+    )
+    if packet["contract"] != PLANT_ORDER_COST_REVIEW_PACKET_CONTRACT:
+        raise _fail("Plant cost review packet contract is unsupported.")
+    expected = build_plant_order_cost_review_packet(packet["sourceState"])
+    if expected is None or _canonical_copy(packet) != expected:
+        raise _fail(
+            "Plant cost review packet does not match its validated command chain."
+        )
+    return expected
+
+
 def _append_command(
     state: object,
     payload: object,
@@ -2365,8 +2853,12 @@ def release_plant_order_batch(
 __all__ = (
     "EMPTY_PLANT_ORDER_DIGEST",
     "PLANT_ORDER_CONTROLLED_PLAN_CONTRACT",
+    "PLANT_ORDER_COST_DRIVER_CONTRACT",
+    "PLANT_ORDER_COST_REVIEW_PACKET_CONTRACT",
     "PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT",
+    "PLANT_ORDER_EFFECTIVENESS_CONTRACT",
     "PLANT_ORDER_EXECUTION_PLAN_CONTRACT",
+    "PLANT_ORDER_FINANCIAL_COST_CONTRACT",
     "PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT",
     "PLANT_ORDER_PLAN_CONTRACT",
     "PLANT_ORDER_PLAN_REVISION_MAX",
@@ -2375,6 +2867,7 @@ __all__ = (
     "PlantOrderValidationError",
     "apply_plant_order_plan",
     "approve_plant_order_material_substitution",
+    "build_plant_order_cost_review_packet",
     "build_plant_order_execution_plan",
     "build_plant_order_controlled_plan",
     "build_plant_order_effective_plan",
@@ -2386,6 +2879,9 @@ __all__ = (
     "issue_plant_order_substitute_material",
     "plant_order_evidence_digest",
     "project_plant_order",
+    "project_plant_order_cost_drivers",
+    "project_plant_order_effectiveness",
+    "project_plant_order_financial_cost",
     "record_plant_order_effectiveness",
     "record_plant_order_calibration",
     "record_plant_order_quality_rework",
@@ -2394,5 +2890,6 @@ __all__ = (
     "release_plant_order",
     "release_plant_order_batch",
     "supersede_plant_order_plan",
+    "validate_plant_order_cost_review_packet",
     "validate_plant_order_state",
 )

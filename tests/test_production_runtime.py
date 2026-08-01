@@ -10,14 +10,20 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from supermega_runtime.plant_order_foundation import (
+    PlantOrderValidationError,
     apply_plant_order_plan,
+    build_plant_order_cost_review_packet,
     build_plant_order_execution_plan,
     check_plant_order_availability,
     create_empty_plant_order_state,
     issue_plant_order_material,
     plant_order_evidence_digest,
+    project_plant_order,
+    project_plant_order_cost_drivers,
+    project_plant_order_financial_cost,
     record_plant_order_operation,
     release_plant_order,
+    validate_plant_order_cost_review_packet,
 )
 from supermega_runtime.production_runtime import (
     PRODUCTION_EVENTS,
@@ -635,6 +641,105 @@ def apply_event(
 
 
 class ProductionRuntimeTests(unittest.TestCase):
+    def test_plant_cost_packet_has_python_browser_parity_and_rejects_tamper(self) -> None:
+        plan_input = {
+            "plan_id": "PLN-20260726-402",
+            "source_digest": plant_order_evidence_digest(
+                {"jobId": "JOB-401", "revision": 12, "target": 10}
+            ),
+            "job": {
+                "jobId": "JOB-401",
+                "product": "Premium water filter",
+                "targetQuantity": 10,
+                "outputBatchId": "BATCH-20260726-401",
+            },
+            "materials": [
+                {
+                    "materialId": "MAT-FILTER-001",
+                    "name": "Filter media",
+                    "unit": "kg",
+                    "quantityPerUnitMilli": 1_500,
+                    "standardCostPerUnitMmk": 1_000,
+                },
+                {
+                    "materialId": "MAT-SHELL-001",
+                    "name": "Outer shell",
+                    "unit": "pcs",
+                    "quantityPerUnitMilli": 2_000,
+                    "standardCostPerUnitMmk": 2_000,
+                },
+            ],
+            "work_centres": [
+                {"workCentreId": "WC-ASSEMBLY-01", "name": "Assembly bench"},
+                {"workCentreId": "WC-TEST-01", "name": "Pressure test"},
+            ],
+            "routing": [
+                {
+                    "operationId": "OP-ASSEMBLY-10",
+                    "sequence": 1,
+                    "name": "Assemble",
+                    "workCentreId": "WC-ASSEMBLY-01",
+                    "minutesPerUnitMilli": 500,
+                    "standardCostPerMinuteMmk": 500,
+                },
+                {
+                    "operationId": "OP-TEST-20",
+                    "sequence": 2,
+                    "name": "Pressure test",
+                    "workCentreId": "WC-TEST-01",
+                    "minutesPerUnitMilli": 1_000,
+                    "standardCostPerMinuteMmk": 600,
+                },
+            ],
+        }
+        plan = build_plant_order_execution_plan(**plan_input)
+        empty = create_empty_plant_order_state()
+        state = apply_plant_order_plan(
+            empty,
+            plan,
+            action_evidence("ACT-20260726-001"),
+            expected_head_digest=empty["headDigest"],
+        )["state"]
+
+        projection = project_plant_order(state)
+        drivers = project_plant_order_cost_drivers(projection)
+        financial_cost = project_plant_order_financial_cost(projection)
+        packet = build_plant_order_cost_review_packet(state)
+
+        self.assertEqual(plan["packageDigest"], "sha256:c8c747513a48ab4ef6a055bcf612bfdc9244c94771d5eeaae94b6204312b5f69")
+        self.assertEqual(drivers["status"], "not_started")
+        self.assertEqual(financial_cost["planned"]["totalMmk"], 63_500)
+        self.assertEqual(financial_cost["varianceMmk"], 0)
+        self.assertIsNotNone(packet)
+        assert packet is not None
+        self.assertTrue(all(value is False for value in packet["authority"].values()))
+        self.assertEqual(
+            validate_plant_order_cost_review_packet(packet)["digest"], packet["digest"]
+        )
+
+        tampered = deepcopy(packet)
+        tampered["financialCost"]["planned"]["totalMmk"] += 1
+        with self.assertRaisesRegex(
+            PlantOrderValidationError,
+            "does not match its validated command chain",
+        ):
+            validate_plant_order_cost_review_packet(tampered)
+
+        unpriced_input = deepcopy(plan_input)
+        unpriced_input["plan_id"] = "PLN-20260726-403"
+        for material in unpriced_input["materials"]:
+            material.pop("standardCostPerUnitMmk")
+        for operation in unpriced_input["routing"]:
+            operation.pop("standardCostPerMinuteMmk")
+        unpriced_plan = build_plant_order_execution_plan(**unpriced_input)
+        unpriced = apply_plant_order_plan(
+            empty,
+            unpriced_plan,
+            action_evidence("ACT-20260726-002", captured_at=LATER),
+            expected_head_digest=empty["headDigest"],
+        )["state"]
+        self.assertIsNone(build_plant_order_cost_review_packet(unpriced))
+
     def test_event_contract_and_real_workspace_initialization(self) -> None:
         expected_events = {
             "production.workspace.initialized",
