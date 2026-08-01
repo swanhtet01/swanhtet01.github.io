@@ -3954,6 +3954,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       before: `${lineReview} · ${review.payment}`,
       after: `Sale ${displayReference} · Stock ${stockReview}`,
       presentation: 'counter',
+      actorSuggestion: managedIdentity ? undefined : 'Sample cashier',
       evidenceReferenceSuggestion: `Counter receipt ${displayReference}`,
       evidenceReferenceLocked: true,
       reasonSuggestion: 'Walk-in sale reviewed at the Shop counter.',
@@ -4226,6 +4227,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       summary: ecommerceDraft ? 'Review Ecommerce order' : `Confirm order for ${order.customer}`,
       before: `${sourceRecordId ? `Request ${sourceRecordId} · ` : ''}Customer ${order.customer} · ${lineReview}`,
       after: `Order ${order.id} · ${formatCommerceCalculation(calculationReview)}${promotionDecision?.status === 'approved' ? ` · promotion ${promotionDecision.code} -${formatMoney(promotionDecision.discountMmk)} under policy R${promotionDecision.policyRevision}` : promotionDecision?.status === 'rejected' ? ` · promotion ${promotionDecision.code} rejected (${promotionDecision.reason.replaceAll('_', ' ')})` : ''} · Payment ${payment} · due ${paymentDueAt ? formatIssueDue(paymentDueAt) : 'at handoff'}${paymentTermsDays ? ` · credit ${formatMoney(creditReview.exposureBeforeMmk)} → ${formatMoney(creditReview.exposureAfterMmk)} under policy R${creditReview.policy?.revision}` : ''} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
+      actorSuggestion: managedIdentity ? undefined : 'Shop reviewer',
       evidenceReferenceSuggestion: confirmationEvidence,
       evidenceReferenceLocked: Boolean(sourceRecordId),
       reasonSuggestion: ecommerceDraft

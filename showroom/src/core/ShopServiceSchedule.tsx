@@ -59,7 +59,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
   const [initial] = useState(initialSchedule)
   const [schedule, setSchedule] = useState<ShopServiceSchedule | null>(initial.schedule)
   const [notice, setNotice] = useState(initial.error)
-  const [workspaceOpen, setWorkspaceOpen] = useState((initial.schedule?.bookings.length ?? 0) === 0)
+  const [workspaceOpen, setWorkspaceOpen] = useState(false)
   const [bookingDraft, setBookingDraft] = useState({ customerName: '', contact: '', serviceId: initial.schedule?.services[0]?.id ?? '', resourceId: initial.schedule?.resources[0]?.id ?? '', startsAt: nextLocalStart(), note: '' })
   const [serviceDraft, setServiceDraft] = useState({ name: '', durationMinutes: '60', priceMmk: '' })
   const [resourceDraft, setResourceDraft] = useState({ name: '', kind: 'staff' as 'staff' | 'room' | 'equipment' })

@@ -480,7 +480,7 @@ export function EcommerceBuyingWorkspace({
         ? 'Review order'
         : !handoffConfirmed
           ? 'Confirm reviewed quote'
-          : 'Open in Shop'
+          : 'Continue to Shop review'
   const orderAutopilotBoundary = onRecordManagedRequest
     ? 'Managed Shop inbox only. Stock, delivery, message, and payment still need Shop review.'
     : 'Browser-local quote only. No stock, delivery, message, payment, or Shop record changes here.'
@@ -488,7 +488,7 @@ export function EcommerceBuyingWorkspace({
     ['Cart', cart.length ? `${cart.length} ${cart.length === 1 ? 'item' : 'items'}` : 'Empty'],
     ['Quote', quoteCurrent ? `${quoteMinutesRemaining} min left` : latestRequest ? 'Review again' : 'Not quoted'],
     ['Recovery', recoveryBlocked ? 'Blocked' : recoveryStatus === 'ready' ? 'Ready' : 'Local'],
-    ['Shop handoff', quoteCurrent ? handoffConfirmed ? 'Approved to open' : 'Needs owner check' : 'Locked'],
+    ['Shop handoff', quoteCurrent ? handoffConfirmed ? 'Ready for Shop review' : 'Needs owner check' : 'Locked'],
     ['Payment', 'Not charged'],
   ] as const
 
@@ -1245,10 +1245,10 @@ export function EcommerceBuyingWorkspace({
               <small>Reference {latestRequest.id} · valid until {new Date(latestRequest.quote.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
               <label className="website-intake-confirm ecommerce-quote-confirm">
                 <input checked={handoffConfirmed} disabled={!quoteCurrent || handoffBusy} onChange={(event) => setHandoffConfirmed(event.target.checked)} ref={confirmationRef} type="checkbox" />
-                <span>I reviewed every item, the MMK total, how I receive it, and the payment method.</span>
+                <span>I checked the items, total, fulfilment, and payment.</span>
               </label>
               <button className="core-button primary" disabled={!quoteCurrent || !handoffConfirmed || handoffBusy} onClick={() => void openInShop()} type="button">
-                {handoffBusy ? 'Checking Shop…' : 'Open in Shop'}
+                {handoffBusy ? 'Checking Shop…' : 'Continue to Shop review'}
               </button>
             </article>
           ) : null}
