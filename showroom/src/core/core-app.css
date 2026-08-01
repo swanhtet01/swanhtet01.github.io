@@ -352,7 +352,7 @@ a { color: inherit; }
 .operation-module > .split-workspace, .operation-module > .module-today, .operation-module > .control-workspace, .operation-module > .inventory-panel { height: auto; min-height: 0; flex: 1; }
 .production-operation-module { overflow-y: auto; padding-right: 2px; scrollbar-gutter: stable; }
 .production-operation-module > .production-view { min-height: clamp(420px,62vh,620px); flex: 0 0 auto; }
-.production-operation-module > .plant-execution-foundation { flex: 0 0 auto; }
+.production-operation-module > .plant-batch-disclosure { flex: 0 0 auto; }
 .production-operation-module > .production-view > .output-panel { position: sticky; top: 0; height: min(620px,calc(100svh - 240px)); max-height: 620px; align-self: start; }
 .split-workspace { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(300px,.85fr) minmax(0,1.15fr); gap: 11px; }
 .core-panel { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--core-line); border-radius: var(--core-radius); padding: 18px; background: var(--core-panel); box-shadow: 0 10px 28px rgba(25,54,42,.055); }
@@ -550,6 +550,15 @@ textarea { min-height: 72px; resize: vertical; }
 .shop-flow-stages b { font-size: 1.25rem; }
 .shop-flow-stages small { color: var(--core-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plant-execution-foundation { display: grid; align-items: stretch; gap: 12px; margin-top: 12px; }
+.plant-batch-disclosure { border: 1px solid var(--core-line); border-radius: 11px; background: var(--core-panel); overflow: hidden; }
+.plant-batch-disclosure > summary { min-height: 52px; display: flex; align-items: center; gap: 12px; padding: 11px 14px; cursor: pointer; color: var(--core-ink); font-size: 12px; font-weight: 800; list-style: none; }
+.plant-batch-disclosure > summary::-webkit-details-marker { display: none; }
+.plant-batch-disclosure > summary small { margin-left: auto; color: var(--core-muted); font-size: 10px; font-weight: 600; }
+.plant-batch-disclosure > summary::after { content: '+'; color: var(--core-green); font-family: var(--core-mono); font-size: 16px; }
+.plant-batch-disclosure[open] > summary { border-bottom: 1px solid var(--core-line); }
+.plant-batch-disclosure[open] > summary::after { content: '\2212'; }
+.plant-batch-content { padding: 10px; }
+.plant-batch-content > .plant-execution-foundation { margin-top: 0; }
 .plant-execution-head { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .plant-execution-head > div { min-width: 0; display: grid; gap: 4px; }
 .plant-execution-head h3 { font-size: 16px; }
@@ -2146,14 +2155,17 @@ textarea { min-height: 72px; resize: vertical; }
   .plant-mes-strip span:nth-child(-n+3) { border-bottom: 1px solid var(--core-line); }
   .plant-business-controls:not([open]) > summary { align-items: center; flex-wrap: nowrap; }
   .plant-business-controls:not([open]) > summary small { display: none; }
-  .plant-today { grid-template-columns: 1fr; padding: 13px; }
+  .plant-today { grid-template-columns: 1fr; gap: 10px; padding: 12px; }
   .plant-today-priority .core-button { width: 100%; }
-  .plant-today-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .plant-today-metrics { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .plant-today-metrics span:nth-child(n) { border-right: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); }
-  .plant-today-metrics span:nth-child(2n) { border-right: 0; }
-  .plant-today-metrics span:nth-last-child(-n+2) { border-bottom: 0; }
-  .plant-today-source { align-items: flex-start; flex-direction: column; }
-  .plant-today-source small { margin-left: 0; text-align: left; }
+  .plant-today-metrics span:nth-child(3n) { border-right: 0; }
+  .plant-today-metrics span:nth-last-child(-n+3) { border-bottom: 0; }
+  .plant-today-metrics span { min-height: 50px; padding: 8px; }
+  .plant-today-source { padding-top: 8px; }
+  .plant-today-source small { display: none; }
+  .plant-batch-disclosure > summary { align-items: flex-start; flex-wrap: wrap; }
+  .plant-batch-disclosure > summary small { width: 100%; margin-left: 0; }
   .plant-job-import { grid-template-columns: 1fr; }
   .plant-job-import-upload { width: 100%; }
   .plant-job-import-repair { grid-template-columns: 1fr; }

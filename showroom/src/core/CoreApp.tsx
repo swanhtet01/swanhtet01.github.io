@@ -7582,6 +7582,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [outputKind, setOutputKind] = useState<ProductionOutputKind>('good')
   const [shiftRef, setShiftRef] = useState('')
   const [outputOpen, setOutputOpen] = useState(false)
+  const [plantBatchOpen, setPlantBatchOpen] = useState(false)
   const [materialDraft, setMaterialDraft] = useState({
     jobId: production.jobs.find((job) => !job.closure && job.output + (job.scrap ?? 0) < job.target)?.id ?? '',
     materialRef: '',
@@ -9181,7 +9182,6 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
   if (tab === 'production') return <div className="operation-module production-operation-module">
     {plantToday}
-    {plantBusinessControls}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
@@ -9262,7 +9262,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         </details>
       </section>
     </div>
-    <Suspense fallback={<p className="form-notice" role="status">Loading batch execution…</p>}><PlantOrderFoundation actor={managedIdentity?.userId ?? 'Local Plant supervisor'} commerceState={relatedCommerce} disabled={!productionCanWrite || Boolean(pendingAction)} industryPackId={plantIndustryPackId} jobs={production.jobs} key={`plant-order:${plantOrderScopeWorkspaceId}:${plantIndustryPackId}`} onProductionCommand={mutateProduction} productionState={production} scope={`plant:${plantOrderScopeWorkspaceId}`} /></Suspense>
+    <details className="plant-batch-disclosure" onToggle={(event) => setPlantBatchOpen(event.currentTarget.open)} open={plantBatchOpen}>
+      <summary><span>Controlled batch execution</span><small>BOM, routing, material, quality, and release</small></summary>
+      <div className="plant-batch-content">
+        {plantBatchOpen ? <Suspense fallback={<p className="form-notice" role="status">Loading batch execution…</p>}><PlantOrderFoundation actor={managedIdentity?.userId ?? 'Local Plant supervisor'} commerceState={relatedCommerce} disabled={!productionCanWrite || Boolean(pendingAction)} industryPackId={plantIndustryPackId} jobs={production.jobs} key={`plant-order:${plantOrderScopeWorkspaceId}:${plantIndustryPackId}`} onProductionCommand={mutateProduction} productionState={production} scope={`plant:${plantOrderScopeWorkspaceId}`} /></Suspense> : null}
+      </div>
+    </details>
+    {plantBusinessControls}
     <dialog aria-labelledby="job-schedule-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeJobSchedule() }} ref={scheduleDialogRef}>
       {scheduleDraft ? <>
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2 id="job-schedule-title">Change {scheduleDraft.jobId} plan</h2></div><button aria-label="Close job schedule" className="text-link" onClick={closeJobSchedule} type="button">Close</button></div>

@@ -242,7 +242,7 @@ if (!shopTodayUiSource.includes('aria-label="Next Shop action"')
   || !coreSource.includes("if (tab === 'today')")
   || !coreSource.includes('<ShopToday')
   || !coreCssSource.includes('.shop-today-module-grid')) fail('shop_today_command_surface_missing')
-if (!coreCssSource.includes('.production-operation-module > .plant-execution-foundation { flex: 0 0 auto; }')) fail('plant_execution_panel_can_shrink_out_of_view')
+if (!coreCssSource.includes('.production-operation-module > .plant-batch-disclosure { flex: 0 0 auto; }')) fail('plant_execution_panel_can_shrink_out_of_view')
 if (!localWorkspaceBackupSource.includes("key.startsWith(PLANT_ORDER_STORAGE_PREFIX)")
   || !settingsPageSource.includes('listResettableCompanyStorageKeys(window.localStorage)')) fail('plant_execution_evidence_not_reset_or_restored_with_workspace')
 if (!plantOrderUiSource.includes('<details className="compact-disclosure production-history" open>')) fail('plant_required_batch_fields_hidden_by_default')
@@ -1925,7 +1925,9 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !coreCssSource.includes('.plant-today-priority')
   || !coreCssSource.includes('.plant-today-metrics')
   || !coreCssSource.includes('.plant-today-source')
-  || !coreCssSource.includes('.plant-today { grid-template-columns: 1fr; padding: 13px; }')
+  || !coreCssSource.includes('.plant-today { grid-template-columns: 1fr; gap: 10px; padding: 12px; }')
+  || !coreCssSource.includes('.plant-today-metrics { grid-template-columns: repeat(3,minmax(0,1fr)); }')
+  || !coreCssSource.includes('.plant-today-source small { display: none; }')
   || !coreCssSource.includes('.plant-business-controls:not([open]) > summary small { display: none; }')
   || !coreCssSource.includes('.mes-dispatch-control')
   || coreCssSource.includes('.plant-agent-queue')
@@ -3922,7 +3924,8 @@ if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.orde
 if (['fetch(', 'supabase', 'openai', 'anthropic'].some((marker) => plantOrderSource.toLowerCase().includes(marker))) fail('plant_order_foundation_external_side_effect_added')
 if (!coreSource.includes('<PlantOrderFoundation')
   || !coreSource.includes("lazy(() => import('./PlantOrderFoundation')")
-  || coreSource.includes('className="plant-execution-disclosure"')
+  || !coreSource.includes('className="plant-batch-disclosure"')
+  || !coreSource.includes('{plantBatchOpen ? <Suspense')
   || !coreSource.includes('Loading batch execution')
   || !plantOrderUiSource.includes('Run one controlled batch')
   || !plantOrderUiSource.includes('Additional BOM materials (optional)')
@@ -5159,14 +5162,17 @@ const productionControlContract = productionPageContract.slice(productionPageCon
 const productionStatusPosition = productionJobsContract.indexOf('{plantToday}')
 const productionCommandPosition = productionJobsContract.indexOf('{plantBusinessControls}')
 const productionWorkPosition = productionJobsContract.indexOf('<h2>Jobs to finish</h2>')
+const productionBatchPosition = productionJobsContract.indexOf('className="plant-batch-disclosure"')
 const controlStatusPosition = productionControlContract.indexOf('{plantToday}')
 const controlCommandPosition = productionControlContract.indexOf('{plantControlBusinessControls}')
 const controlWorkPosition = productionControlContract.indexOf('<h2>Open problems</h2>')
 if (productionStatusPosition < 0
   || productionCommandPosition < 0
   || productionWorkPosition < 0
-  || productionStatusPosition > productionCommandPosition
-  || productionCommandPosition > productionWorkPosition
+  || productionBatchPosition < 0
+  || productionStatusPosition > productionWorkPosition
+  || productionWorkPosition > productionBatchPosition
+  || productionBatchPosition > productionCommandPosition
   || controlStatusPosition < 0
   || controlCommandPosition < 0
   || controlWorkPosition < 0
