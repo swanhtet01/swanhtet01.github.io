@@ -218,25 +218,7 @@ export function projectShopDemandIntelligence(stateValue: CommerceState, asOfVal
     .filter((returned) => Date.parse(returned.createdAt) <= asOfValue)
     .map((returned) => returned.actionId).sort()
   const source = {
-    commerceDigest: plantOrderEvidenceDigest({
-      asOf,
-      items: state.items.map(({ sku, name, onHand }) => ({ sku, name, onHand })).sort((left, right) => left.sku.localeCompare(right.sku)),
-      completedOrders: completedOrders.map((order) => ({
-        id: order.id,
-        completedAt: order.completion!.capturedAt,
-        lines: orderLines(order).sort((left, right) => left.sku.localeCompare(right.sku)),
-        returns: (order.returns ?? []).filter((returned) => Date.parse(returned.createdAt) <= asOfValue)
-          .map(({ actionId, createdAt, sku, quantity }) => ({ actionId, createdAt, sku, quantity }))
-          .sort((left, right) => left.actionId.localeCompare(right.actionId)),
-      })).sort((left, right) => left.id.localeCompare(right.id)),
-      activePurchases: activePurchaseOrders.map((purchaseOrder) => ({
-        id: purchaseOrder.id,
-        sku: purchaseOrder.sku,
-        remaining: commercePurchaseOrderProgress(state, purchaseOrder).remaining,
-      })).sort((left, right) => left.id.localeCompare(right.id)),
-      supplierPolicies: policies.map(({ vendorId, sku, leadTimeDays, safetyStockUnits, status }) => ({ vendorId, sku, leadTimeDays, safetyStockUnits, status }))
-        .sort((left, right) => `${left.sku}|${left.vendorId}`.localeCompare(`${right.sku}|${right.vendorId}`)),
-    }),
+    commerceDigest: plantOrderEvidenceDigest({ asOf, state }),
     completedOrderIds,
     returnActionIds,
   }

@@ -4917,67 +4917,10 @@ def commerce_shop_demand_intelligence(
         if isinstance(returned, Mapping)
         and datetime.fromisoformat(str(returned["createdAt"]).replace("Z", "+00:00")) <= as_of_time
     )
-    commerce_source = {
-        "asOf": canonical_as_of,
-        "items": sorted(
-            [
-                {"sku": item["sku"], "name": item["name"], "onHand": item["onHand"]}
-                for item in state["items"]
-            ],
-            key=lambda item: item["sku"],
-        ),
-        "completedOrders": sorted(
-            [
-                {
-                    "id": order["id"],
-                    "completedAt": order["completion"]["capturedAt"],
-                    "lines": sorted(order_lines(order), key=lambda line: line["sku"]),
-                    "returns": sorted(
-                        [
-                            {
-                                "actionId": returned["actionId"],
-                                "createdAt": returned["createdAt"],
-                                "sku": returned["sku"],
-                                "quantity": returned["quantity"],
-                            }
-                            for returned in order.get("returns", [])
-                            if isinstance(returned, Mapping)
-                            and datetime.fromisoformat(str(returned["createdAt"]).replace("Z", "+00:00")) <= as_of_time
-                        ],
-                        key=lambda returned: returned["actionId"],
-                    ),
-                }
-                for order in completed_orders
-            ],
-            key=lambda order: order["id"],
-        ),
-        "activePurchases": sorted(
-            [
-                {
-                    "id": order["id"],
-                    "sku": order["sku"],
-                    "remaining": purchase_progress(order)[0],
-                }
-                for order in active_purchase_orders
-            ],
-            key=lambda order: order["id"],
-        ),
-        "supplierPolicies": sorted(
-            [
-                {
-                    "vendorId": policy["vendorId"],
-                    "sku": policy["sku"],
-                    "leadTimeDays": policy["leadTimeDays"],
-                    "safetyStockUnits": policy["safetyStockUnits"],
-                    "status": policy["status"],
-                }
-                for policy in policies
-            ],
-            key=lambda policy: f"{policy['sku']}|{policy['vendorId']}",
-        ),
-    }
     source = {
-        "commerceDigest": _order_inventory_digest(commerce_source),
+        "commerceDigest": _order_inventory_digest(
+            {"asOf": canonical_as_of, "state": state}
+        ),
         "completedOrderIds": completed_order_ids,
         "returnActionIds": return_action_ids,
     }
