@@ -1520,7 +1520,7 @@ export function EcommerceProduct() {
   }
   const aiDeskRows = [
     ['Import', importNeeded ? 'Needed' : `${catalog.items.length} items`],
-    ['Merchandise', selectedSkus.length ? `${selectedSkus.length} live` : 'Pick products'],
+    ['Merchandise', selectedSkus.length ? `${selectedSkus.length} selected` : 'Pick products'],
     ['Checkout', buyingReady ? 'Quote ready' : 'Save first'],
     ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : 'No queue'],
   ] as const

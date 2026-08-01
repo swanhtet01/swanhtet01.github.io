@@ -45,7 +45,7 @@ export function ProductSystemNavigator({ product }: { product: ClientSolutionId 
     <details className="product-system-navigator" onToggle={(event) => setOpen(event.currentTarget.open)} open={open}>
       <summary>
         <span><b>{details.label}</b><small>{details.summary}</small></span>
-        <strong>{open ? 'Close' : `${summary.demoReady} live`}</strong>
+        <strong>{open ? 'Close' : `${summary.demoReady} ready samples`}</strong>
       </summary>
       <div className="product-system-body">
         <header>
