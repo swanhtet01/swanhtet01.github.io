@@ -584,9 +584,9 @@ function initialInterfaceTheme(): InterfaceTheme {
     const saved = window.localStorage.getItem(THEME_KEY)
     if (saved === 'light' || saved === 'dark') return saved
   } catch {
-    // Use the device preference when local theme storage is unavailable.
+    // Keep the first-run interface readable even when storage is unavailable.
   }
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  return 'light'
 }
 
 export type ManagedTrialRequestPrefill = {
@@ -9072,7 +9072,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   }
   const plantToday = <section aria-labelledby="plant-today-title" className="plant-today" data-state={plantTodayState}>
     <div className="plant-today-priority"><span className="core-eyebrow">Today</span><h2 id="plant-today-title">{plantTodayHeadline}</h2><p>{plantAgentReason}</p><button className="core-button primary" onClick={(event) => runPlantAutopilot(event.currentTarget)} type="button">{plantTodayAction}</button></div>
-    <div aria-label="Plant today status" className="plant-today-metrics">{plantTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+    <div aria-label="Plant today status" className="plant-today-metrics" role="group">{plantTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <div className="plant-today-source" role={productionCanWrite ? 'status' : 'alert'}><span>{plantTodaySource}</span><small>{plantTodayNotice}</small></div>
   </section>
   const plantControl = <section aria-label="Plant control" className="plant-control">

@@ -1678,7 +1678,7 @@ export function EcommerceProduct() {
           <p>{ecommerceTodaySummary}</p>
           <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>
         </div>
-        <div aria-label="Ecommerce today status" className="ecommerce-today-metrics">
+        <div aria-label="Ecommerce today status" className="ecommerce-today-metrics" role="group">
           {ecommerceTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
         <div className="ecommerce-today-source" role="status">

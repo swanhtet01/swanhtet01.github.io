@@ -146,9 +146,9 @@ function initialInterfaceTheme(): InterfaceTheme {
     const saved = window.localStorage.getItem(THEME_KEY)
     if (saved === 'light' || saved === 'dark') return saved
   } catch {
-    // Fall back to the browser theme below.
+    // Keep the first-run interface readable even when storage is unavailable.
   }
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  return 'light'
 }
 
 function productFromPathname(pathname: string): ClientSolutionId | null {
@@ -388,7 +388,7 @@ export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
       <PageHeading copy="Four products, one operating system. Start with the most important work." eyebrow="SuperMega" title="What needs attention?" />
-      <Suspense fallback={<p className="form-notice" role="status">Loading today...</p>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense>
+      <Suspense fallback={<section aria-label="Today across SuperMega" className="product-home-today"><p className="form-notice" role="status">Preparing today view...</p></section>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense>
       <nav aria-label="Business tracks" className="product-track-grid">
         {customerTracks.map(([name, fit, outcome, path]) => (
           <article className="product-track-card" key={name}>

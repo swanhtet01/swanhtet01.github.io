@@ -1177,7 +1177,7 @@ export function WebsiteProduct() {
               <p>{websiteAgentReason}</p>
               <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">{websiteAgentActionLabel}</button>
             </div>
-            <div aria-label="Website today status" className="website-today-metrics">
+            <div aria-label="Website today status" className="website-today-metrics" role="group">
               {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
             </div>
             <div className="website-today-source" role="status">

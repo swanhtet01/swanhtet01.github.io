@@ -869,7 +869,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
           <div><span className="core-eyebrow">Next required step</span><strong>{flowNext.title}</strong><small>{flowNext.detail}</small></div>
           <span className={`status-pill ${flowBlocked ? 'pending' : projection.status === 'released_to_stock' ? 'bounded' : ''}`}>{projection.status === 'released_to_stock' ? 'Complete' : flowBlocked ? 'Needs attention' : `Step ${Math.min(flowActiveIndex + 1, flowStages.length)} of ${flowStages.length}`}</span>
         </div>
-        <ol className="plant-flow-stages">
+        <ol aria-label="Plant workflow stages" className="plant-flow-stages" tabIndex={0}>
           {flowStages.map((stage, index) => <li aria-current={stage.state === 'current' || stage.state === 'blocked' ? 'step' : undefined} className={stage.state} key={stage.id}>
             <span>{String(index + 1).padStart(2, '0')} · {stage.label}</span><strong>{stage.state === 'complete' ? 'Done' : stage.state === 'blocked' ? 'Blocked' : stage.state === 'current' ? 'Now' : 'Next'}</strong><small>{stage.detail}</small>
           </li>)}
