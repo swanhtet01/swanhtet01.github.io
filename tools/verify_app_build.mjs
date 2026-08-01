@@ -354,6 +354,12 @@ if (!websiteModelSource.includes('leadLedger?: WebsiteLeadLedger')
   || websiteSource.includes('Managed Website inquiries require the managed form endpoint')
   || websiteSource.includes("disabled={storageMode === 'managed'}")) fail('managed_website_inquiry_lifecycle_missing')
 
+if (!viteConfigSource.includes('onlyExplicitManualChunks: true')
+  || !viteConfigSource.includes("id.includes('vite/preload-helper')")
+  || !viteConfigSource.includes("return 'preload-helper'")
+  || !viteConfigSource.includes("id.includes('/src/core/CoreApp.tsx')")
+  || !viteConfigSource.includes("id.includes('/src/core/OperationsPageRoute.tsx')")
+  || !viteConfigSource.includes("return 'core-app'")) fail('initial_product_chunk_isolation_missing')
 if (!viteConfigSource.includes("id.includes('/src/core/channel-order-intake.ts')")
   || !viteConfigSource.includes("id.includes('/src/core/managed-trial.ts')")
   || !viteConfigSource.includes("id.includes('/src/core/team-work.ts')")
@@ -16843,6 +16849,37 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // Bounded allowance for supplier return claims, credit evidence, and credit-adjusted invoice matching.
 if (bytes > 2_800_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
+const builtIndexSource = await readFile(rootPage, 'utf8')
+const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
+if (!initialEntryMatch) fail('initial_javascript_entry_missing')
+else {
+  const initialJavascriptAssets = new Set()
+  const visitInitialJavascriptAsset = async (asset) => {
+    if (initialJavascriptAssets.has(asset)) return
+    if (!/^[A-Za-z0-9_.-]+\.js$/.test(asset)) {
+      fail(`initial_javascript_asset_invalid:${asset}`)
+      return
+    }
+    const artifactPath = resolve(dist, 'assets', asset)
+    if (!await exists(artifactPath)) {
+      fail(`initial_javascript_asset_missing:${asset}`)
+      return
+    }
+    initialJavascriptAssets.add(asset)
+    const artifactSource = await readFile(artifactPath, 'utf8')
+    for (const match of artifactSource.matchAll(/(?:^|[;\n])import(?:[^('";]*?from)?["']\.\/([^"']+\.js)["']/g)) {
+      await visitInitialJavascriptAsset(match[1])
+    }
+  }
+  await visitInitialJavascriptAsset(initialEntryMatch[1])
+  const initialJavascriptBytes = (await Promise.all([...initialJavascriptAssets].map(async (asset) => (
+    await stat(resolve(dist, 'assets', asset))
+  ).size))).reduce((total, size) => total + size, 0)
+  if (initialJavascriptBytes > 300_000) fail(`initial_javascript_budget:${initialJavascriptBytes}`)
+  if ([...initialJavascriptAssets].some((asset) => /^(?:core-app|commerce-model|operating-models|shop-planning-models|website-model)-/.test(asset))) {
+    fail('product_operations_eagerly_loaded_on_home')
+  }
+}
 if (files.some((path) => /[\\/]VisionProduct-[^\\/]+\.(?:js|css)$/.test(path))) fail('private_vision_preview_shipped_in_production')
 const largestJavascriptBytes = Math.max(...await Promise.all(javascriptFiles.map(async (path) => (await stat(path)).size)))
 const operationsArtifactPath = javascriptFiles.find((path) => /[\\/]core-app-[^\\/]+\.js$/.test(path))

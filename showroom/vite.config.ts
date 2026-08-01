@@ -69,7 +69,11 @@ export default defineConfig({
     target: 'es2022',
     rollupOptions: {
       output: {
+        onlyExplicitManualChunks: true,
         manualChunks(id) {
+          if (id.includes('vite/preload-helper')) {
+            return 'preload-helper'
+          }
           if (id.includes('/node_modules/react-router/')
             || id.includes('/node_modules/react-router-dom/')) {
             return 'router'
@@ -89,7 +93,8 @@ export default defineConfig({
             || id.includes('/src/core/shop-procurement-decision.ts')) {
             return 'shop-planning-models'
           }
-          if (id.includes('/src/core/CoreApp.tsx')) {
+          if (id.includes('/src/core/CoreApp.tsx')
+            || id.includes('/src/core/OperationsPageRoute.tsx')) {
             return 'core-app'
           }
         },
