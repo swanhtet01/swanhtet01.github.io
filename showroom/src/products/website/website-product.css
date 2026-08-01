@@ -3788,6 +3788,10 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .website-action-bar[data-surface="preview"] .website-primary-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .website-primary-actions > .website-button,
   .website-site-settings > summary {
     width: 100%;

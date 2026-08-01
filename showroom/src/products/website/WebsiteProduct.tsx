@@ -1029,6 +1029,7 @@ export function WebsiteProduct() {
               className="website-action-bar"
               data-editing={hasUnsavedChanges ? 'true' : 'false'}
               data-starter={starterSetupActive ? 'true' : 'false'}
+              data-surface={surface}
             >
               {starterSetupActive ? (
                 <div className="website-page-control website-starter-control">
@@ -1061,7 +1062,7 @@ export function WebsiteProduct() {
               </span>
               {!starterSetupActive ? (
                 <div className="website-primary-actions">
-                {starterAvailable ? (
+                {starterAvailable && surface === 'preview' ? (
                   <button className="website-button is-primary" onClick={openStarterSetup} type="button">
                     Use this demo
                   </button>
@@ -1134,7 +1135,7 @@ export function WebsiteProduct() {
                   </details>
                 ) : null}
                 <button
-                  className={`website-button ${surface === 'preview' ? 'is-primary' : 'is-secondary'}`}
+                  className={`website-button ${surface === 'preview' && !starterAvailable ? 'is-primary' : 'is-secondary'}`}
                   onClick={() => {
                     if (surface === 'preview') openContentSurface('work')
                     else previewPage()
@@ -1167,11 +1168,11 @@ export function WebsiteProduct() {
                   <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
                     Review release
                   </button>
-                ) : null : (
+                ) : null : surface === 'work' ? (
                   <button className="website-button is-primary" onClick={downloadTrialSite} type="button">
                     {canReview ? 'Download website' : 'Download draft'}
                   </button>
-                )}
+                ) : null}
                 </div>
               ) : null}
             </section>
