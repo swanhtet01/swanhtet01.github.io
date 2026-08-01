@@ -1883,8 +1883,11 @@ if (!appSource.includes("lazy(() => import('./products/ecommerce/EcommerceProduc
   || !appSource.includes('path="plant/*"')) fail('canonical_product_routes_missing')
 const publicProductRoutes = [...appSource.matchAll(/<Route element=\{<Suspense fallback=\{<ProductLoading name="[^"]+" \/>\}>.*?path="([a-z][a-z0-9-]*)\/\*" \/>/g)]
   .map((match) => match[1])
-  .filter((route) => route !== 'settings')
+  .filter((route) => route !== 'settings' && route !== 'vision')
 if (publicProductRoutes.join(',') !== 'shop,plant,website,ecommerce') fail('public_product_route_drift')
+if (!appSource.includes("const VisionProduct = visionPreviewEnabled\n  ? lazy(() => import('./products/vision/VisionProduct')")
+  || !appSource.includes('visionPreviewEnabled && VisionProduct ? <Route')
+  || !appSource.includes('path="vision/*"')) fail('private_vision_preview_gate_missing')
 if (!appSource.includes("} from './core/CoreShell'")
   || appSource.includes("} from './core/CoreApp'")
   || !appSource.includes("const OperationsPage = lazy(() => import('./core/OperationsPageRoute'))")
@@ -15695,6 +15698,7 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // Bounded allowance for supplier return claims, credit evidence, and credit-adjusted invoice matching.
 if (bytes > 2_590_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
+if (files.some((path) => /[\\/]VisionProduct-[^\\/]+\.(?:js|css)$/.test(path))) fail('private_vision_preview_shipped_in_production')
 const largestJavascriptBytes = Math.max(...await Promise.all(javascriptFiles.map(async (path) => (await stat(path)).size)))
 const operationsArtifactPath = javascriptFiles.find((path) => /[\\/]core-app-[^\\/]+\.js$/.test(path))
 if (!operationsArtifactPath) fail('operations_route_artifact_missing')

@@ -6,7 +6,7 @@ const root = resolve(import.meta.dirname, '..')
 const normalizeSourceText = (value) => value.replace(/\r\n?/g, '\n')
 const read = async (path) => normalizeSourceText(await readRawFile(resolve(root, path), 'utf8'))
 const commerceWorkspace = await import(pathToFileURL(resolve(root, 'showroom/src/core/commerce-workspace.ts')).href)
-const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance, vercelEntry, portableEntry, trialRuntime, trialStore, commerceRuntime, productionRuntime, websiteRuntime, managedTrialClient, coreApp, workspaceRuntime, settingsPage, websiteWorkspaceHook, rolePreflight, foundationMigration, decisionMigration, websiteMigration, hardeningMigration, readCapabilityMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment, storagePrivacyVerifier] = await Promise.all([
+const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance, vercelEntry, portableEntry, trialRuntime, trialStore, commerceRuntime, productionRuntime, websiteRuntime, managedTrialClient, coreApp, workspaceRuntime, settingsPage, websiteWorkspaceHook, rolePreflight, foundationMigration, decisionMigration, websiteMigration, hardeningMigration, readCapabilityMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment, storagePrivacyVerifier, appRouter, coreShell, visionProduct, visionStyles, visionProofRaw] = await Promise.all([
   read('supermega_runtime/runtime.py'),
   read('supermega_runtime/supabase_auth.py'),
   read('supermega_runtime/cloud_runtime.py'),
@@ -38,7 +38,13 @@ const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance
   read('Dockerfile'),
   read('.env.app.example'),
   read('tools/verify_private_storage_privacy.py'),
+  read('showroom/src/App.tsx'),
+  read('showroom/src/core/CoreShell.tsx'),
+  read('showroom/src/products/vision/VisionProduct.tsx'),
+  read('showroom/src/products/vision/vision-product.css'),
+  read('showroom/src/products/vision/vision-proof.json'),
 ])
+const visionProof = JSON.parse(visionProofRaw)
 const migration = `${rolePreflight}\n${foundationMigration}\n${decisionMigration}\n${websiteMigration}\n${hardeningMigration}\n${readCapabilityMigration}`
 const productionMaterialHandoff = await read('supermega_runtime/production_material_handoff.py')
 const shopInventoryRuntime = await read('supermega_runtime/shop_inventory_runtime.py')
@@ -631,6 +637,34 @@ requireContract('managed storage privacy proof is bounded, read-only, owner-conf
   && workflow.includes("- 'tools/verify_private_storage_privacy.py'")
   && workflow.includes("- 'tools/verify_app_security_contract.mjs'")
   && rootPackage.scripts?.['storage:privacy:self-test'] === 'node tools/run_python_tool.mjs tools/verify_private_storage_privacy.py --self-test')
+requireContract('Vision product preview is gated out of normal production routing',
+  /const visionPreviewEnabled = import\.meta\.env\.DEV \|\| import\.meta\.env\.VITE_SUPERMEGA_VISION_PREVIEW === '1'/.test(appRouter)
+  && /visionPreviewEnabled && VisionProduct \? <Route[\s\S]*path="vision\/\*"/.test(appRouter)
+  && /visionPreviewEnabled && \(demo === 'vision'/.test(appRouter)
+  && /location\.pathname\.startsWith\('\/vision\/'\)[\s\S]{0,80}\? 'Vision'/.test(coreShell)
+  && /if \(location\.pathname\.startsWith\('\/vision\/'\)\) return/.test(coreShell))
+requireContract('Vision preview is bound to the source-authenticated privacy-reduced proof',
+  visionProof.schema === 'supermega.vision.private-demo-proof.v1'
+  && visionProof.proof_id === '560aeb776a93f323f22cbbf6'
+  && visionProof.source_identity?.private_demo_package_id === 'dd5698ecd24dac2278e45cb2'
+  && visionProof.verified_evidence?.screens_processed_locally === 56
+  && visionProof.verified_evidence?.model_observations === 92
+  && visionProof.verified_evidence?.private_demo_files_verified === 239)
+requireContract('Vision preview retains publication and commercial authority boundaries',
+  visionProof.decision === 'not_approved_for_publication'
+  && visionProof.authority?.owner_review_required === true
+  && Object.entries(visionProof.authority).filter(([key]) => key !== 'owner_review_required').every(([, value]) => value === false)
+  && Object.values(visionProof.claims ?? {}).every((value) => value === false)
+  && Object.values(visionProof.effects ?? {}).every((value) => value === 0)
+  && /Not approved for publication, pricing, customer outreach, production sale, or payment requests/.test(visionProduct)
+  && /Engineering counts, not accuracy metrics/.test(visionProduct)
+  && !/<form|mailto:|https?:\/\/|checkout|price\s*[:=]/i.test(visionProduct))
+requireContract('Vision preview contains no private visual evidence or source locator',
+  visionProof.privacy?.screenshot_pixels_included === false
+  && visionProof.privacy?.source_filenames_included === false
+  && visionProof.privacy?.source_paths_included === false
+  && visionProof.privacy?.customer_labels_included === false
+  && !/data:image|[A-Z]:\\|OneDrive|\.png|\.jpe?g|\.webp|<script|https?:\/\//i.test(`${visionProofRaw}\n${visionProduct}\n${visionStyles}`))
 
 if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_security', failures }, null, 2))

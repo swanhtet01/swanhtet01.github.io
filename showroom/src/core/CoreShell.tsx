@@ -249,6 +249,8 @@ export function CoreLayout() {
     ? 'Website'
     : location.pathname.startsWith('/ecommerce/')
       ? 'Ecommerce'
+      : location.pathname.startsWith('/vision/')
+        ? 'Vision'
       : location.pathname.startsWith('/settings/')
         ? 'Workspace'
         : location.pathname.startsWith('/shop/')
@@ -264,6 +266,7 @@ export function CoreLayout() {
   }, [location.pathname, location.search, routeName])
 
   useEffect(() => {
+    if (location.pathname.startsWith('/vision/')) return
     const route = `${location.pathname}${location.search}`
     const product = routeProduct ?? settingsProduct ?? 'unknown'
     recordBehaviorSignal(window.localStorage, {
