@@ -1150,10 +1150,6 @@ export function EcommerceBuyingWorkspace({
           <b>{cart.length ? `${cart.length} ${cart.length === 1 ? 'item' : 'items'}` : latestRequest ? 'Recovered' : 'Empty'}</b>
         </summary>
         <div className="ecommerce-buying-body">
-          <section className="ecommerce-order-autopilot" aria-label="Order autopilot">
-            <div><span>Order autopilot</span><strong>{orderAutopilotNext}</strong><small>{orderAutopilotBoundary}</small></div>
-            <div className="ecommerce-order-autopilot-rows">{orderAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
-          </section>
           {cart.length ? (
             <div className="ecommerce-cart" aria-label="Cart items">
               {cartItems.map(({ item, quantity, sku }) => (
@@ -1231,9 +1227,9 @@ export function EcommerceBuyingWorkspace({
             </button> : null}
           </form>
 
-          {latestRequest ? (
-            <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current={quoteCurrent ? 'true' : 'false'}>
-              <span className="status-pill bounded">{quoteCurrent ? 'Ready for Shop' : 'Review again'}</span>
+          {latestRequest ? quoteCurrent ? (
+            <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true">
+              <span className="status-pill bounded">Ready for Shop</span>
               <strong>Quote for {latestRequest.customerReference}</strong>
               <b>{formatMmk(latestRequest.totalMmk)}</b>
               <div className="ecommerce-quote-boundaries">
@@ -1251,6 +1247,11 @@ export function EcommerceBuyingWorkspace({
                 {handoffBusy ? 'Checking Shop…' : 'Continue to Shop review'}
               </button>
             </article>
+          ) : (
+            <div className="ecommerce-stale-quote" role="status">
+              <strong>Cart changed — review a new total</strong>
+              <small>The previous quote remains in Your orders and cannot continue with this cart.</small>
+            </div>
           ) : null}
 
           <section className="ecommerce-order-tracking" aria-label="Customer order tracking">
@@ -1279,6 +1280,14 @@ export function EcommerceBuyingWorkspace({
               </div>
             ) : <p>Use the same name and phone as checkout to see request, fulfilment, and payment status here.</p>}
           </section>
+
+          <details className="ecommerce-checkout-help">
+            <summary><span><strong>How checkout stays safe</strong><small>Quote, stock, and payment checks</small></span></summary>
+            <section className="ecommerce-order-autopilot" aria-label="Checkout safeguards">
+              <div><span>Checkout safeguards</span><strong>{orderAutopilotNext}</strong><small>{orderAutopilotBoundary}</small></div>
+              <div className="ecommerce-order-autopilot-rows">{orderAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+            </section>
+          </details>
 
           <p className="form-notice ecommerce-buying-notice" aria-live="polite">{recoveryStatus === 'checking'
             ? 'Checking saved checkout recovery…'

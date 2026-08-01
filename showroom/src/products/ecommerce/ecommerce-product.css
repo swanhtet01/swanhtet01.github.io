@@ -1230,11 +1230,6 @@
   gap: 7px 10px;
 }
 
-.ecommerce-quote-receipt[data-current="false"] {
-  border-color: rgba(177, 113, 0, .24);
-  background: rgba(177, 113, 0, .05);
-}
-
 .ecommerce-quote-receipt > strong {
   grid-column: 1 / -1;
   grid-row: 2;
@@ -1284,6 +1279,27 @@
 
 .ecommerce-quote-receipt > .core-button {
   min-height: 48px;
+}
+
+.ecommerce-stale-quote {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 3px;
+  border: 1px solid rgba(177, 113, 0, .24);
+  border-radius: 10px;
+  padding: 10px 11px;
+  background: rgba(177, 113, 0, .05);
+}
+
+.ecommerce-stale-quote strong {
+  color: #694b12;
+  font-size: 11px;
+}
+
+.ecommerce-stale-quote small {
+  color: #75684f;
+  font-size: 9px;
+  line-height: 1.4;
 }
 
 .ecommerce-buying-notice {
@@ -1344,6 +1360,60 @@
 
 .ecommerce-order-tracking > p {
   margin: 0;
+}
+
+.ecommerce-checkout-help {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  border: 1px solid rgba(31, 68, 51, .12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .55);
+}
+
+.ecommerce-checkout-help > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 8px 10px;
+  list-style: none;
+}
+
+.ecommerce-checkout-help > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ecommerce-checkout-help > summary > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.ecommerce-checkout-help > summary strong {
+  color: #17231d;
+  font-size: 11px;
+}
+
+.ecommerce-checkout-help > summary small {
+  color: #66746b;
+  font-size: 9px;
+}
+
+.ecommerce-checkout-help > summary::after {
+  content: '+';
+  margin-left: auto;
+  color: #0b745e;
+  font-weight: 800;
+}
+
+.ecommerce-checkout-help[open] > summary::after {
+  content: '−';
+}
+
+.ecommerce-checkout-help .ecommerce-order-autopilot {
+  border: 0;
+  border-top: 1px solid rgba(31, 68, 51, .1);
+  border-radius: 0;
 }
 
 .ecommerce-order-history {
@@ -1661,6 +1731,8 @@
 
   .ecommerce-buying-body > form > .core-button,
   .ecommerce-quote-receipt,
+  .ecommerce-stale-quote,
+  .ecommerce-checkout-help,
   .ecommerce-buying-notice {
     grid-column: auto;
   }
