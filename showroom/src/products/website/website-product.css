@@ -2508,6 +2508,7 @@
 
 .website-workspace-grid,
 .website-workspace-grid.view-publish {
+  order: 2;
   position: relative;
   z-index: 5;
   min-height: 0;
@@ -3213,6 +3214,8 @@
 }
 
 .website-start-tools {
+  order: 3;
+  margin-top: 0;
   border: 1px solid var(--website-line);
   border-radius: 12px;
   background: var(--website-panel);
@@ -3257,6 +3260,7 @@
 
 /* Unified Website workflow: edit by default, then Site, Preview, or Publish. */
 .website-action-bar {
+  order: 1;
   position: relative;
   z-index: 20;
   min-height: 60px;
