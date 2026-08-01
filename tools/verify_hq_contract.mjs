@@ -72,6 +72,7 @@ const portfolio = JSON.parse(portfolioText)
 const workforce = JSON.parse(workforceText)
 const agentWorkspace = JSON.parse(agentWorkspaceText)
 const databaseRehearsal = JSON.parse(databaseRehearsalText)
+const normalizedAgentGovernanceText = agentGovernanceText.replace(/\r\n?/g, '\n')
 const liveReleaseCommit = now.match(/^Live release commit: `([0-9a-f]{40})`$/m)?.[1] ?? ''
 const executionOrderMarker = '## Execution order'
 const workboardExecutionOrder = workboard.includes(executionOrderMarker)
@@ -346,8 +347,8 @@ requireContract('agent capacity agrees across HQ, coordinator, and Kernel',
   && agentGovernanceText.includes('AGENT_DAILY_RUN_LIMIT = sum(AGENT_JOB_DAILY_LIMITS.values())')
   && agentGovernanceText.includes('AGENT_DAILY_WORK_UNIT_LIMIT = sum(')
   && agentGovernanceText.includes('max_daily_runs=_bounded_environment_int(')
-  && agentGovernanceText.includes('AGENT_DAILY_RUN_LIMIT,\n            1,\n            AGENT_DAILY_RUN_LIMIT,')
-  && agentGovernanceText.includes('AGENT_DAILY_WORK_UNIT_LIMIT,\n            1,\n            AGENT_DAILY_WORK_UNIT_LIMIT,'))
+  && normalizedAgentGovernanceText.includes('"SUPERMEGA_AGENT_MAX_DAILY_RUNS",\n            AGENT_DAILY_RUN_LIMIT,\n            1,\n            AGENT_DAILY_RUN_LIMIT,')
+  && normalizedAgentGovernanceText.includes('"SUPERMEGA_AGENT_MAX_DAILY_UNITS",\n            AGENT_DAILY_WORK_UNIT_LIMIT,\n            1,\n            AGENT_DAILY_WORK_UNIT_LIMIT,'))
 requireContract('CEO outcome authority is bounded and reconciled to HQ',
   SUPERMEGA_HQ_AUTHORITY.contract === portfolio.agentOperatingModel?.ceoOutcomeAuthority
   && SUPERMEGA_HQ_AUTHORITY.maxSelectedOutcomes === portfolio.agentOperatingModel?.maxOutcomesPerCeoCycle
