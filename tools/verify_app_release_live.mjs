@@ -386,6 +386,12 @@ const ecommerceLiveCopyUpdates = new Map([
   ['Save storefront before recovery', 'Save store before recovery'],
   ['Save storefront before follow-up', 'Save store before follow-up'],
   ['Save storefront before reply templates', 'Save store before reply templates'],
+  ['AI prepares pickup, local delivery, manual QR review, quote expiry, and Shop confirmation from the same checkout request.', 'Review pickup, local delivery, manual QR payment, quote expiry, and Shop confirmation from the same checkout request.'],
+  ['AI prepares a local delivery zone, fee, rider handoff, and payment review packet from the customer request.', 'Prepare a local delivery zone, fee, rider assignment, and payment review from the customer request.'],
+  ['AI turns repeated delivery requests into reusable area, fee, rider, payment, and cut-off templates.', 'Build reusable area, fee, rider, payment, and cut-off templates from repeated delivery requests.'],
+  ['AI prepares stale quote review, aged request recovery, and a safe cart draft from the same Shop-controlled source.', 'Prepare stale quote review, aged request recovery, and a safe cart draft from the same Shop-controlled source.'],
+  ['AI prepares the next owner-reviewed customer update from quote expiry, stock risk, payment state, delivery mode, and Shop review status.', 'Prepare the next owner-reviewed customer update from quote expiry, stock risk, payment state, delivery mode, and Shop review status.'],
+  ['AI prepares owner-reviewed Viber, LINE, WeChat, and email reply templates from the same customer request evidence.', 'Prepare owner-reviewed Viber, LINE, WeChat, and email reply templates from the same customer request evidence.'],
 ])
 for (const required of ['Run next step', 'Review an order batch', 'Upload CSV or paste channel orders only when needed.', 'Enterprise order controls', 'Inbox, payment, delivery, recovery, replies, and activation evidence.']) {
   const currentRequired = ecommerceLiveCopyUpdates.get(required) ?? required

@@ -999,13 +999,13 @@ export function EcommerceProduct() {
         finishStorefrontSetup()
         return
       }
-      setDeliveryReviewDraft('Owner draft only: delivery review is ready. Wait for a delivery request, then confirm zone, fee, rider handoff, and payment in Shop before quoting a customer.')
+      setDeliveryReviewDraft('Owner draft only: delivery review is ready. Wait for a delivery request, then confirm zone, fee, rider assignment, and payment in Shop before quoting a customer.')
       return
     }
     const lines = commerceStorefrontRequestLines(deliveryReviewRequest)
     const zoneHint = deliveryAreaFromCustomerReference(deliveryReviewRequest.customerReference)
     const itemSummary = lines.length === 1 ? lines[0].name : `${lines.length} items`
-    setDeliveryReviewDraft(`Owner draft only: review ${zoneHint} as the delivery zone for ${deliveryReviewRequest.customerReference}. Quote ${itemSummary} at ${formatMmk(deliveryReviewRequest.totalMmk)} before delivery fee. Shop must confirm fee, rider handoff, payment, and stock before any customer message or booking. Reference ${deliveryReviewRequest.id}.`)
+    setDeliveryReviewDraft(`Owner draft only: review ${zoneHint} as the delivery zone for ${deliveryReviewRequest.customerReference}. Quote ${itemSummary} at ${formatMmk(deliveryReviewRequest.totalMmk)} before delivery fee. Shop must confirm fee, rider assignment, payment, and stock before any customer message or booking. Reference ${deliveryReviewRequest.id}.`)
   }
 
   function prepareDeliveryAreaTemplate() {
@@ -1014,14 +1014,14 @@ export function EcommerceProduct() {
         finishStorefrontSetup()
         return
       }
-      setDeliveryAreaTemplateDraft('Owner draft only: delivery-area templates are ready. Wait for a reviewed delivery request, then approve area, fee rule, rider handoff, payment policy, and cut-off before reuse.')
+      setDeliveryAreaTemplateDraft('Owner draft only: delivery-area templates are ready. Wait for a reviewed delivery request, then approve area, fee rule, rider assignment, payment policy, and cut-off before reuse.')
       return
     }
     const area = deliveryAreaFromCustomerReference(deliveryReviewRequest.customerReference)
     const paymentPolicy = 'quote' in deliveryReviewRequest && deliveryReviewRequest.quote.payment.adapter === 'kbzpay_manual'
       ? 'manual QR review'
       : 'cash-on-delivery review'
-    setDeliveryAreaTemplateDraft(`Owner draft only: save ${area} as a delivery-area template after Shop approves fee, rider handoff, ${paymentPolicy}, cut-off, and stock confirmation. Reuse stays locked until managed activation proves audit, roles, and write controls. Reference ${deliveryReviewRequest.id}.`)
+    setDeliveryAreaTemplateDraft(`Owner draft only: save ${area} as a delivery-area template after Shop approves fee, rider assignment, ${paymentPolicy}, cut-off, and stock confirmation. Reuse stays locked until go-live setup proves audit, roles, and write controls. Reference ${deliveryReviewRequest.id}.`)
   }
 
   function openFilteredRequestInShop() {
@@ -1856,7 +1856,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Payment and delivery controls</span>
           <h2>{paymentDeliveryStage}</h2>
-          <p>AI prepares pickup, local delivery, manual QR review, quote expiry, and Shop confirmation from the same checkout request. No card charge, wallet debit, driver booking, customer message, or settlement write runs here.</p>
+          <p>Review pickup, local delivery, manual QR payment, quote expiry, and Shop confirmation from the same checkout request. No card charge, wallet debit, driver booking, customer message, or settlement write runs here.</p>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
           {paymentDeliveryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
@@ -1867,7 +1867,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Delivery fee review</span>
           <h2>{deliveryFeeStage}</h2>
-          <p>AI prepares a local delivery zone, fee, rider handoff, and payment review packet from the customer request. No rider booking, fee charge, customer message, payment capture, stock move, refund, or Shop write runs here.</p>
+          <p>Prepare a local delivery zone, fee, rider assignment, and payment review from the customer request. No rider booking, fee charge, customer message, payment capture, stock move, refund, or Shop write runs here.</p>
           <button className="text-link" disabled={catalogHydrating || (!deliveryReviewRequest && !buyingReady)} onClick={prepareDeliveryFeeReview} type="button">Prepare delivery review</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
@@ -1880,7 +1880,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Delivery-area templates</span>
           <h2>{deliveryAreaTemplateStage}</h2>
-          <p>AI turns repeated delivery requests into reusable area, fee, rider, payment, and cut-off templates. No saved template, customer message, rider booking, fee charge, settlement write, stock move, or Shop write runs here.</p>
+          <p>Build reusable area, fee, rider, payment, and cut-off templates from repeated delivery requests. No saved template, customer message, rider booking, fee charge, settlement write, stock move, or Shop write runs here.</p>
           <button className="text-link" disabled={catalogHydrating || (!deliveryReviewRequest && !buyingReady)} onClick={prepareDeliveryAreaTemplate} type="button">Prepare area template</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
@@ -1893,7 +1893,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Quote recovery</span>
           <h2>{quoteRecoveryStage}</h2>
-          <p>AI prepares stale quote review, aged request recovery, and a safe cart draft from the same Shop-controlled source. No customer message, discount, payment, delivery, refund, stock, or Shop write runs here.</p>
+          <p>Prepare stale quote review, aged request recovery, and a safe cart draft from the same Shop-controlled source. No customer message, discount, payment, delivery, refund, stock, or Shop write runs here.</p>
           <button className="text-link" disabled={catalogHydrating || (!pendingManagedRequests.length && !buyingReady)} onClick={prepareQuoteRecovery} type="button">Prepare quote recovery</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
@@ -1905,7 +1905,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Customer follow-up</span>
           <h2>{customerFollowUpStage}</h2>
-          <p>AI prepares the next owner-reviewed customer update from quote expiry, stock risk, payment state, delivery mode, and Shop review status. No SMS, email, Viber, WhatsApp, discount, payment, delivery, refund, stock, or Shop write runs here.</p>
+          <p>Prepare the next owner-reviewed customer update from quote expiry, stock risk, payment state, delivery mode, and Shop review status. No SMS, email, Viber, WhatsApp, discount, payment, delivery, refund, stock, or Shop write runs here.</p>
           <button className="text-link" disabled={catalogHydrating || (!pendingManagedRequests.length && !buyingReady)} onClick={prepareCustomerFollowUpDraft} type="button">Prepare follow-up draft</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
@@ -1918,7 +1918,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Channel reply templates</span>
           <h2>{channelReplyStage}</h2>
-          <p>AI prepares owner-reviewed Viber, LINE, WeChat, and email reply templates from the same customer request evidence. No message send, clipboard copy, discount, payment, delivery booking, refund, stock move, or Shop write runs here.</p>
+          <p>Prepare owner-reviewed Viber, LINE, WeChat, and email reply templates from the same customer request evidence. No message send, clipboard copy, discount, payment, delivery booking, refund, stock move, or Shop write runs here.</p>
           <div className="ecommerce-request-filter" role="group" aria-label="Reply channel template">
             {replyChannelButtons.map(([value, label]) => <button aria-pressed={replyChannelTemplate === value} key={value} onClick={() => setReplyChannelTemplate(value)} type="button">{label}</button>)}
           </div>
