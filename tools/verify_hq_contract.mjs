@@ -664,7 +664,7 @@ requireContract('product QA brief is discoverable from assignment authority',
   && workboard.includes('Checkpoint `dadb013` passes 10 routes at 390/1280 px')
   && workboard.includes('focus lands on `#workspace-main`'))
 requireContract('accepted core checkpoints lead directly to real work',
-  workboard.includes('Current accepted product checkpoint: `79f86e7f6c1e8f87fbc43ff5ef3e7c7395b19ffd`')
+  workboard.includes('Current accepted product checkpoint: `02e5dba15bab766a1916a79bb669f3395fffeed5`')
   && workboard.includes('| ENG-075 | Shop + Data Engineering Codex | done-local |')
   && workboard.includes('| ENG-076 | Plant + Manufacturing Engineering Codex | done-local |')
   && workboard.includes('| ENG-077 | Website + Product Engineering Codex | done-local |')
@@ -735,7 +735,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && now.includes('Product: Ecommerce-Shop completion `54b4d31`, order recovery `3fb9794`, and database v8 `7963981`; release gates pass.')
   && now.includes('First-action QA routes Shop, Plant, and Website blockers to the next task')
   && now.includes('The active delivery focus is:')
-  && now.includes('Live HQ and both domains agree on `79f86e7`; no release drift is present.')
+  && now.includes('Live HQ and both domains agree on `02e5dba`; no release drift is present.')
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
   && now.includes('operation/output requires exact authenticated Shop issue evidence')
   && now.includes('Controlled batches bind reviewed productive time and closed downtime')
@@ -775,6 +775,14 @@ requireContract('workboard release authority and active execution order are curr
   && workboardExecutionOrder.includes('Keep hosted scheduling and AI provider execution dormant')
   && !workboardExecutionOrder.includes('PR #258')
   && !workboardExecutionOrder.includes('fast-forward only the existing draft'))
+requireContract('live Plant quality CAPA release is retained without overstated authority',
+  workboard.includes('| OPS-151 | Product Platform + Plant Quality Codex | done-live |')
+  && workboard.includes('NFKC-normalized recurrence keys preserve Unicode letters, marks, and numbers for Myanmar text')
+  && workboard.includes('No fresh rendered-mobile claim is made')
+  && now.includes('Plant quality problems now require structured CAPA evidence before an actionable record can close')
+  && enterpriseRoadmap.includes('Checkpoint `8155e4b3` adds `supermega.production.quality-capa.v1`')
+  && enterpriseRoadmap.includes('not a due-dated post-close effectiveness review')
+  && !workboard.includes('OPS-151 | Product Platform + Plant Quality Codex | done-live | Automate'))
 requireContract('release reconciliation binds exact Git and Vercel evidence',
   releaseReconciliation.includes('Audited implementation checkpoint: `b67db9422b523df0c1707f8dc39082ffa1c7a8dd`')
   && releaseReconciliation.includes('Live `main`: `6885c3201d523d42d176c3dcd91de28dc1e17f6f`')
