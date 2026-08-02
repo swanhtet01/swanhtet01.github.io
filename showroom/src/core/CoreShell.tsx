@@ -95,6 +95,8 @@ const navigation = [
   { to: '/ecommerce/', label: 'Ecommerce' },
 ] as const
 
+const mobileNavigation = navigation.filter((item) => item.to !== '/')
+
 const THEME_KEY = 'supermega-interface-theme'
 const SETUP_KEY = 'supermega.setup.v3'
 const setupRequiredFields = ['workspace', 'owner', 'entryPoint', 'currentRecord', 'baseline', 'targetOutcome', 'authorityBoundary', 'acceptanceEvidence'] as const
@@ -362,7 +364,7 @@ export function CoreLayout() {
       </aside>
       <div className="core-stage">
         <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Sign in" className="account-shell-link mobile-account-link" to={companyLoginPath}>Sign in</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
-        <nav className="mobile-nav" aria-label="Mobile application">{navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={'end' in item ? item.end : undefined} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
+        <nav className="mobile-nav" aria-label="Mobile product navigation">{mobileNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
         <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
           {routeProduct ? <Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} product={routeProduct} /></Suspense> : null}
           <div className="core-route-content"><Outlet context={runtime} /></div>
