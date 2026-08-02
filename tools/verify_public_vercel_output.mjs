@@ -157,6 +157,7 @@ for (const token of [
   '@media (max-width: 520px)',
   '.compact-solution .module-tags { display: none; }',
   'min-height: 44px',
+  'href="#products">Choose a product</a>',
   'id="products"',
   '>Products<',
   'Choose the system that fits your work.',
@@ -190,7 +191,7 @@ for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
   if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })
 }
 if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
-if ((home.match(/<a\b/g) || []).length > 8) fail('homepage_link_surface_too_large')
+if ((home.match(/<a\b/g) || []).length > 9) fail('homepage_link_surface_too_large')
 
 const contact = pages.get('/contact/')?.html || ''
 for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="plant"', 'value="website"', 'value="ecommerce"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="proof_contract"', 'name="proof_version"', 'name="proof_digest"', 'name="proof_product"', 'name="proof_template"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'name="proof_raw_records"', 'class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'trial_proof_invalid', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', '>Shop<', '>Plant<', '>Website<', '>Ecommerce<', 'No account, data connection, automation, or external action begins from this form.', 'Reply email', 'data-contact-heading', 'data-contact-lede', 'data-contact-copy-heading', 'data-contact-copy', 'data-trial-proof', 'Client-provided trial proof', 'Reviewed setup summary', 'it does not verify a managed account.', 'digest-bound aggregate summary', 'location.hash.slice(1)', '/^(guide|shop|plant|website|ecommerce)$/.test(requestedProduct||\'\')', "handoff.get('company')", "handoff.get('goal')", "history.replaceState(null,'',location.pathname+location.search)", "heading.textContent='Finish your '+productName+' request.'", 'Your company and goal are already filled. Add your name and reply email, review the request, then send it.', 'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.', 'Raw records, questions, approval contents, and account details stay out.', 'Trial summary attached for review. Nothing has been sent.', 'Trial summary detached. Review the updated request before sending.', 'Company and goal are ready for review from your AI memory.', 'Request received:', 'Keep this ID for follow-up.', 'Too many requests from this connection. Please wait ten minutes and try again.', 'Could not route the request here. Please wait and try again.']) {
