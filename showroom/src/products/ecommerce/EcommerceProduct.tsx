@@ -1393,7 +1393,7 @@ export function EcommerceProduct() {
     ['Payment', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} manual` : pendingManagedRequests.length || buyingReady ? 'Not charged' : 'Locked'],
     ['Fulfilment', deliveryReviewCount ? `${deliveryReviewCount} delivery` : pickupReviewCount ? `${pickupReviewCount} pickup` : savedDraftIsCurrent ? 'Pickup/delivery' : 'Locked'],
     ['Reply', customerFollowUpRequest ? 'Draftable' : buyingReady ? 'Template ready' : 'Locked'],
-    ['Shop handoff', pendingManagedRequests.length ? 'Owner queue' : orderImportReview?.status === 'ready' ? 'Packet ready' : buyingReady ? 'Quote only' : 'Setup first'],
+    ['Shop review', pendingManagedRequests.length ? 'Owner queue' : orderImportReview?.status === 'ready' ? 'Packet ready' : buyingReady ? 'Quote only' : 'Save store first'],
     ['Boundary', 'No auto fulfill'],
   ] as const
   const deliveryReviewRequest = pendingManagedRequests.find((request) => request.fulfilment === 'delivery')
@@ -1538,7 +1538,7 @@ export function EcommerceProduct() {
     : importNeeded
       ? 'The order desk needs a real Shop catalog before the storefront can sell.'
       : !savedDraftIsCurrent
-        ? 'The customer view must be saved before quote and Shop handoff are trusted.'
+        ? 'Save the customer view before quotes and order review are trusted.'
         : buyingCart.length
           ? `${buyingCart.length} cart line${buyingCart.length === 1 ? '' : 's'} ready for quote review.`
           : 'The storefront is saved and ready for a customer request.'
@@ -1547,7 +1547,7 @@ export function EcommerceProduct() {
     : importNeeded
       ? 'Owner approves the imported catalog before managed activation.'
       : !savedDraftIsCurrent
-        ? 'Owner saves the exact storefront fingerprint first.'
+        ? 'Owner saves the exact customer view first.'
         : buyingCart.length
           ? 'Owner reviews the quote before sending to Shop.'
           : 'Owner keeps payment and customer messages locked.'
@@ -1598,7 +1598,7 @@ export function EcommerceProduct() {
   const ecommerceTodaySummary = importNeeded
     ? 'Import one Shop catalog. Products, stock, prices, checkout, and order review will use that source.'
     : !savedDraftIsCurrent
-      ? 'Review the customer view once, then save its exact catalog and storefront fingerprint.'
+      ? 'Review the customer view once, then save the exact products, prices, and page customers will see.'
       : pendingManagedRequests.length
         ? 'Shop keeps the accountable order record. Review stock, payment, and delivery before customer contact.'
         : activeManagedOrders.length
@@ -1627,7 +1627,7 @@ export function EcommerceProduct() {
   const ecommerceGuidedJobs = [
     ['1', 'Shop the sample', 'Open the customer view, add items, and create one reviewable request.', '#ecommerce-preview-panel'],
     ['2', 'Edit store', 'Choose products, copy, and display details from the Shop-controlled catalog.', '#ecommerce-setup-panel'],
-    ['3', 'Review orders', 'Send accepted customer requests to the Shop queue for payment and fulfilment.', '/shop/?tab=orders&source=ecommerce'],
+    ['3', 'Review orders', 'Open reviewed customer requests in Shop for payment and fulfilment.', '/shop/?tab=orders&source=ecommerce'],
   ] as const
 
   function runOrderAutopilot() {
@@ -1701,7 +1701,7 @@ export function EcommerceProduct() {
       </section>
 
       <details className="ecommerce-business-controls">
-        <summary><span><strong>Setup and order controls</strong><small>Store readiness, inbox, imports, payment, and delivery</small></span><b>Open when needed</b></summary>
+        <summary><span><strong>Store and order controls</strong><small>Products, customer requests, imports, payment, and delivery</small></span><b>Open when needed</b></summary>
         <div className="ecommerce-business-controls-content">
       <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-state={ecommerceTodayState}>
         <div className="ecommerce-today-priority">
@@ -1725,9 +1725,9 @@ export function EcommerceProduct() {
           <p>{pendingManagedRequests.length
             ? 'Requests are retained for Shop confirmation before stock, delivery, payment, or customer contact changes.'
             : importNeeded
-              ? 'Upload or connect the Shop catalog once. The storefront, quote, and Shop handoff use that source.'
+              ? 'Upload or connect the Shop catalog once. The customer view, quote, and order review use that source.'
               : !savedDraftIsCurrent
-                ? 'Save the customer view so the quote, cart, and Shop handoff all share one verified fingerprint.'
+                ? 'Save the customer view so the quote, cart, and Shop review all use the same products and prices.'
                 : 'Customers can build a cart; Shop still confirms the accountable order before anything consequential happens.'}</p>
         </div>
         <div className="ecommerce-ai-desk-queue">
@@ -1811,7 +1811,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Ordering readiness</span>
           <h2>{orderingReadinessStage}</h2>
-          <p>AI checks catalog, storefront fingerprint, quote readiness, Shop review queue, and safety mode before a customer request can move forward. No customer message, payment, delivery, stock, refund, or Shop write runs from this panel.</p>
+          <p>AI checks products, prices, quote readiness, Shop review queue, and safety mode before a customer request can move forward. No customer message, payment, delivery, stock, refund, or Shop write runs from this panel.</p>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
           {orderingReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
@@ -1822,7 +1822,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Managed store activation packet</span>
           <h2>{managedStoreActivationStage}</h2>
-          <p>AI packages catalog, storefront fingerprint, checkout quote controls, manual payment review, delivery template readiness, Shop review queue, and managed gate for store activation. No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or managed activation runs from this packet.</p>
+          <p>AI packages products, prices, checkout controls, manual payment review, delivery template readiness, Shop review queue, and managed gate for store activation. No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or managed activation runs from this packet.</p>
           <button className="text-link" onClick={downloadManagedStoreActivationPacket} type="button">Download activation packet</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows ecommerce-managed-activation-rows">
@@ -2022,7 +2022,7 @@ export function EcommerceProduct() {
               <strong>{catalogHydrating
                 ? 'Checking storefront workspace'
                 : localFingerprintPending
-                ? 'Checking saved storefront fingerprint'
+                ? 'Checking saved customer view'
                 : draftStorageBlocked
                 ? 'Saved setup needs recovery'
                 : managedCatalogDigestError
