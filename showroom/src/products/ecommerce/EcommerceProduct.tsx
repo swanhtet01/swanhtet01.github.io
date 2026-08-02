@@ -1383,10 +1383,10 @@ export function EcommerceProduct() {
               : deliveryReviewCount
                 ? 'Review delivery before review'
                 : pendingManagedRequests.length
-                  ? 'Open Shop fulfillment queue'
+                    ? 'Open Shop fulfilment queue'
                   : buyingReady
-                    ? 'Fulfillment review ready'
-                    : 'Fulfillment review locked'
+                    ? 'Fulfilment review ready'
+                    : 'Fulfilment review locked'
   const fulfillmentHandoffRows = [
     ['Source', orderImportReview ? `${orderImportReview.readyRows}/${orderImportReview.totalRows} import` : pendingManagedRequests.length ? 'Managed queue' : buyingCart.length ? 'Cart quote' : 'No request yet'],
     ['Stock', orderOpsStockRiskCount ? `${orderOpsStockRiskCount} risk` : catalog.items.length ? 'ATP check' : 'Need catalog'],
@@ -1394,7 +1394,7 @@ export function EcommerceProduct() {
     ['Fulfilment', deliveryReviewCount ? `${deliveryReviewCount} delivery` : pickupReviewCount ? `${pickupReviewCount} pickup` : savedDraftIsCurrent ? 'Pickup/delivery' : 'Locked'],
     ['Reply', customerFollowUpRequest ? 'Draftable' : buyingReady ? 'Template ready' : 'Locked'],
     ['Shop review', pendingManagedRequests.length ? 'Review queue' : orderImportReview?.status === 'ready' ? 'Packet ready' : buyingReady ? 'Quote only' : 'Save store first'],
-    ['Boundary', 'No auto fulfill'],
+    ['Safety', 'Review first'],
   ] as const
   const deliveryReviewRequest = pendingManagedRequests.find((request) => request.fulfilment === 'delivery')
     ?? null
@@ -1717,11 +1717,11 @@ export function EcommerceProduct() {
       </section>
 
       <details className="ecommerce-business-controls">
-        <summary><span><strong>Optional order tools</strong><small>Imports, payment, delivery, customer replies, and go-live checks</small></span><b>Optional</b></summary>
+        <summary><span><strong>Extra order tools</strong><small>Use only when importing orders, checking delivery, or preparing launch</small></span><b>Extra</b></summary>
         <div className="ecommerce-business-controls-content">
-      <section aria-label="Order desk" className="ecommerce-ai-desk">
+      <section aria-label="Order workspace" className="ecommerce-ai-desk">
         <div>
-          <span className="core-eyebrow">Order desk</span>
+          <span className="core-eyebrow">Order workspace</span>
           <h2>{pendingManagedRequests.length ? 'Shop review is waiting' : importNeeded ? 'Import first, then sell' : !savedDraftIsCurrent ? 'Save store before orders' : 'Ready to take reviewed orders'}</h2>
           <p>{pendingManagedRequests.length
             ? 'Requests are retained for Shop confirmation before stock, delivery, payment, or customer contact changes.'
@@ -1740,11 +1740,11 @@ export function EcommerceProduct() {
         <button className="core-button primary compact" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">Open next step</button>
       </section>
 
-      <section aria-label="Order import helper" className="ecommerce-ops-cockpit ecommerce-order-import-cockpit">
+      <section aria-label="Import customer orders" className="ecommerce-ops-cockpit ecommerce-order-import-cockpit">
         <div>
-          <span className="core-eyebrow">Order import helper</span>
+          <span className="core-eyebrow">Import customer orders</span>
           <h2>{orderImportStage}</h2>
-          <p>Review CSV, Viber, LINE, WeChat, email, and form order batches against the saved Shop catalog so Shop gets one clean review queue. No customer message, payment, delivery booking, stock move, refund, or Shop write runs from this importer.</p>
+          <p>Check CSV, Viber, LINE, WeChat, email, and form orders against the saved Shop catalog so Shop gets one clean order list. Nothing is sent, charged, delivered, refunded, or saved to Shop until a manager reviews it.</p>
           <div className="ecommerce-inline-actions">
             <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
             <button className="text-link" onClick={downloadOrderImportTemplate} type="button">Download order template</button>
@@ -1766,7 +1766,7 @@ export function EcommerceProduct() {
                 setOrderImportSourceName('')
               }} placeholder="Paste customer_reference, channel, sku, quantity, fulfilment, payment, source_message rows" value={orderImportText} /></label>
               <button className="text-link" disabled={!orderImportText.trim()} onClick={reviewOrderImportBatch} type="button">Review order batch</button>
-              {orderImportReview ? <div className={`ecommerce-order-import-review ${orderImportReview.status}`} role="status"><strong>{orderImportReview.status === 'ready' ? 'Ready for review' : 'Repair before Shop review'}</strong><span>{orderImportReview.summary}</span><small>{orderImportReview.readyRows} ready · {orderImportReview.blockedRows} blocked · no Shop write</small><button className="text-link" onClick={downloadOrderImportReviewPacket} type="button">Download review packet</button></div> : null}
+              {orderImportReview ? <div className={`ecommerce-order-import-review ${orderImportReview.status}`} role="status"><strong>{orderImportReview.status === 'ready' ? 'Ready for review' : 'Repair before Shop review'}</strong><span>{orderImportReview.summary}</span><small>{orderImportReview.readyRows} ready · {orderImportReview.blockedRows} blocked · review first</small><button className="text-link" onClick={downloadOrderImportReviewPacket} type="button">Download review packet</button></div> : null}
               {orderImportSourceName ? <p className="ecommerce-order-import-source">Local file: {orderImportSourceName}</p> : null}
               {orderImportNotice ? <p className="ecommerce-order-import-notice" role="status">{orderImportNotice}</p> : null}
             </div>
@@ -1777,14 +1777,14 @@ export function EcommerceProduct() {
         </div>
       </section>
 
-      <details aria-label="Advanced order controls" className="ecommerce-enterprise-controls">
-        <summary><span>Advanced order controls</span><small>Inbox, payment, delivery, recovery, replies, and go-live checks.</small></summary>
+      <details aria-label="More order tools" className="ecommerce-enterprise-controls">
+        <summary><span>More order tools</span><small>Inbox, payment, delivery, recovery, replies, and launch checks.</small></summary>
         <div className="ecommerce-enterprise-controls-body">
       <section aria-label="Ecommerce request inbox" className="ecommerce-ops-cockpit ecommerce-request-inbox-cockpit">
         <div>
           <span className="core-eyebrow">Request inbox</span>
           <h2>{requestInboxStage}</h2>
-          <p>Filter customer requests by stock risk, quote expiry, manual QR review, and delivery mode so the owner opens the right Shop review first. No customer message, payment, delivery booking, stock move, refund, or Shop write runs here.</p>
+          <p>Filter customer requests by stock risk, quote expiry, QR payment review, and delivery mode so the manager opens the right Shop order first. Nothing is sent, charged, delivered, refunded, or saved to Shop from this screen.</p>
           <div className="ecommerce-request-filter" role="group" aria-label="Request inbox filter">
             {requestInboxFilterButtons.map(([value, label]) => <button aria-pressed={requestInboxFilter === value} key={value} onClick={() => setRequestInboxFilter(value)} type="button">{label}</button>)}
           </div>
@@ -1812,7 +1812,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Ordering readiness</span>
           <h2>{orderingReadinessStage}</h2>
-          <p>Check products, prices, quote readiness, Shop review queue, and safety mode before a customer request can move forward. No customer message, payment, delivery, stock, refund, or Shop write runs from this panel.</p>
+          <p>Check products, prices, quote readiness, Shop review queue, and safety mode before a customer request moves forward. The manager reviews important changes before they are saved.</p>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
           {orderingReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
@@ -1821,7 +1821,7 @@ export function EcommerceProduct() {
 
       <section aria-label="Ecommerce managed store go-live file" className="ecommerce-ops-cockpit ecommerce-managed-activation-cockpit">
         <div>
-          <span className="core-eyebrow">Managed store go-live file</span>
+          <span className="core-eyebrow">Store launch checklist</span>
           <h2>{managedStoreActivationStage}</h2>
           <p>Package products, prices, checkout controls, manual payment review, delivery templates, and Shop review queue for go-live review. No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or go-live action runs from this file.</p>
           <button className="text-link" onClick={downloadManagedStoreActivationPacket} type="button">Download go-live file</button>
@@ -1833,9 +1833,9 @@ export function EcommerceProduct() {
 
       <section aria-label="Ecommerce fulfillment review" className="ecommerce-ops-cockpit ecommerce-fulfillment-handoff-cockpit">
         <div>
-          <span className="core-eyebrow">Fulfillment review</span>
+          <span className="core-eyebrow">Fulfilment review</span>
           <h2>{fulfillmentHandoffStage}</h2>
-          <p>Review the exact customer order across source evidence, ATP, payment review, pickup or delivery, reply draft, and Shop queue ownership. No customer message, payment capture, wallet debit, rider booking, stock move, refund, Shop write, or fulfillment confirmation runs from this panel.</p>
+          <p>Review the exact customer order across source evidence, stock availability, payment review, pickup or delivery, reply draft, and Shop queue ownership. Nothing is sent, charged, booked, refunded, moved, or saved until a manager reviews it.</p>
         </div>
         <div className="ecommerce-ops-cockpit-rows ecommerce-fulfillment-handoff-rows">
           {fulfillmentHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
