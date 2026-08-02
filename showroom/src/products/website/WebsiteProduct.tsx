@@ -1209,12 +1209,8 @@ export function WebsiteProduct() {
             </div>
           </section> : null}
 
-          {!starterSetupActive ? <details className="website-start-tools">
-            <summary><span><strong>Inquiries</strong><small>Capture customer requests</small></span><b>Extra</b></summary>
-            <div>
-
-          <details className="website-business-controls">
-            <summary><span><strong>Inquiry inbox</strong><small>Local capture, ownership, decisions, and export</small></span><b>{leadCounts.new} new</b></summary>
+          {!starterSetupActive ? <details className="website-start-tools website-business-controls">
+            <summary><span><strong>Inquiries</strong><small>Inquiry inbox, customer capture, ownership, and export</small></span><b>{leadCounts.new} new</b></summary>
             <div className="website-business-controls-content">
               <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox" id="website-lead-inbox">
                 <header>
@@ -1240,8 +1236,6 @@ export function WebsiteProduct() {
                 </div>
                 {websiteLeads.length ? <a className="website-button is-secondary is-compact website-lead-export" download={`website-leads-${workspace.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.json`} href={leadExportHref}>Export inquiries</a> : null}
               </section>
-            </div>
-          </details>
             </div>
           </details> : null}
 
