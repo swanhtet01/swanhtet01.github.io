@@ -53,9 +53,8 @@ export function ProductSystemNavigator({ product }: { product: ClientSolutionId 
           <div className="product-system-actions"><Link className="core-button compact primary" to={details.primaryPath}>Open {details.label}</Link><Link className="core-button compact" to={details.setupPath}>Setup later</Link></div>
         </header>
         <div className="product-system-map" aria-label={`${details.label} product map`}>
-          <span><small>Run now</small><strong>{summary.demoReady}</strong><em>Working sample flows</em></span>
-          <span><small>Setup next</small><strong>{summary.configureNext}</strong><em>Imports and controls</em></span>
-          <span><small>Scale later</small><strong>{summary.scaleLater}</strong><em>Enterprise modules</em></span>
+          <span><small>Use now</small><strong>{summary.demoReady}</strong><em>Working demo flows</em></span>
+          <span><small>Add data later</small><strong>{summary.configureNext}</strong><em>Imports and controls</em></span>
         </div>
         <div className="product-system-workflows" aria-label={`${details.label} working workflows`}>
           {workingFlows.map((capability) => <WorkflowLink capability={capability} fallbackPath={details.primaryPath} key={capability.id} />)}
@@ -64,7 +63,7 @@ export function ProductSystemNavigator({ product }: { product: ClientSolutionId 
           <summary><span>Add your data</span><strong>{setupModules.length}</strong></summary>
           <p>{setupModules.map((capability) => capability.label).join(' / ')}</p>
         </details>
-        <footer>{summary.scaleLater} extra modules stay hidden until they are useful.</footer>
+        <footer>Advanced modules stay hidden until a real client needs them.</footer>
       </div>
     </details>
   )

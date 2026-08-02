@@ -91,7 +91,7 @@ a { color: inherit; }
 .product-system-body h2 { margin: 4px 0; font-size: 20px; letter-spacing: 0; }
 .product-system-body header p { margin: 0; color: var(--core-muted); font-size: 11px; line-height: 1.45; }
 .product-system-actions { display: flex; gap: 7px; }
-.product-system-map { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 10px; background: var(--core-panel-raised); }
+.product-system-map { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 10px; background: var(--core-panel-raised); }
 .product-system-map span { min-width: 0; min-height: 76px; display: grid; align-content: center; gap: 3px; border-right: 1px solid var(--core-line); padding: 10px 12px; }
 .product-system-map span:last-child { border-right: 0; }
 .product-system-map small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
