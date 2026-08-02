@@ -45,11 +45,11 @@ export function ProductSystemNavigator({ product }: { product: ClientSolutionId 
     <details className="product-system-navigator" onToggle={(event) => setOpen(event.currentTarget.open)} open={open}>
       <summary>
         <span><b>{details.label}</b><small>{details.summary}</small></span>
-        <strong>{open ? 'Close' : `${summary.demoReady} ready samples`}</strong>
+        <strong>{open ? 'Close' : `${summary.demoReady} sample flows`}</strong>
       </summary>
       <div className="product-system-body">
         <header>
-          <div><span className="core-eyebrow">{details.label}</span><h2>Start with a real workflow.</h2><p>Open the working app first. Bring in real data only after the sample makes sense.</p></div>
+          <div><span className="core-eyebrow">{details.label}</span><h2>Try the sample first.</h2><p>Open the app, then add your data when you are ready.</p></div>
           <div className="product-system-actions"><Link className="core-button compact primary" to={details.primaryPath}>Open {details.label}</Link><Link className="core-button compact" to={details.setupPath}>Use your data</Link></div>
         </header>
         <div className="product-system-workflows" aria-label={`${details.label} working workflows`}>

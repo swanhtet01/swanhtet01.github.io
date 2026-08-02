@@ -1200,9 +1200,9 @@ export function Empty({ children }: { children: ReactNode }) {
 
 const customerTracks = [
   ['Shop', 'Retail, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/?tab=counter', 'commerce'],
-  ['Plant', 'Factory, workshop, service floor.', 'Plan, record, hand off shifts.', '/plant/?tab=production', 'production'],
+  ['Plant', 'Factory, workshop, service floor.', 'Plan jobs, record output, and close shifts.', '/plant/?tab=production', 'production'],
   ['Website', 'Company site and proof catalog.', 'Create pages, offers, leads.', '/website/', 'website'],
-  ['Ecommerce', 'Online ordering and delivery.', 'Build storefronts and Shop handoff.', '/ecommerce/', 'ecommerce'],
+  ['Ecommerce', 'Online ordering and delivery.', 'Build storefronts and Shop review.', '/ecommerce/', 'ecommerce'],
 ] as const
 
 export function ProductHomePage() {
@@ -1217,35 +1217,35 @@ export function ProductHomePage() {
   const activationCoverage = runtime.activationManifest?.ready_percent ?? runtime.coverageScore
   const hostedReady = runtime.operatingMode === 'managed_trial' && runtime.writesReady && runtime.requirements.length === 0
   const nextHref = ready ? '/settings/' : clientSetupPath(setup.product)
-  const nextAction = ready ? 'Export evidence' : 'Finish setup'
+  const nextAction = ready ? 'Export readiness file' : 'Add your data'
   const nextDetail = ready
-    ? `${contract.name} is ready for managed data review.`
-    : `${contract.name} setup is ${progress}% complete.`
+    ? `${contract.name} is ready for data review.`
+    : `${contract.name} data setup is ${progress}% complete.`
   const autopilotRows = [
     ['Track', contract.name, template.name],
     ['Data', sourceNamed ? 'First source named' : 'Needs first source', sourceNamed ? setup.currentRecord : 'Upload, paste, or describe one real record.'],
-    ['Proof', proofNamed ? 'Acceptance proof named' : 'Needs acceptance proof', proofNamed ? setup.acceptanceEvidence : 'Define the evidence that proves the workflow works.'],
-    ['AI context', ready ? 'Ready for managed import' : 'Locked until evidence', ready ? 'Premium can learn from approved data, roles, and audit.' : 'Free stays local until the owner approves activation.'],
+    ['Proof', proofNamed ? 'Acceptance proof named' : 'Needs acceptance proof', proofNamed ? setup.acceptanceEvidence : 'Define how you know the workflow works.'],
+    ['Data access', ready ? 'Ready for import review' : 'Locked until approved', ready ? 'Approved data can use users, audit, and controlled writes.' : 'Samples stay local until the owner approves real data.'],
   ] as const
   const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Managed activation proof is still required.'
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Use a local workspace first. Activate managed data and AI when ready." eyebrow="Products" title="Choose a product. Run work." />
+      <PageHeading copy="Pick one product and try the sample. Add your data only when it helps." eyebrow="Products" title="Start with one product." />
       <section className="product-home-operating-model" aria-label="SuperMega operating model">
         <div>
-          <span className="core-eyebrow">Free workspace</span>
-          <strong>Sample data, imports, review, and evidence.</strong>
+          <span className="core-eyebrow">Try first</span>
+          <strong>Sample data stays on this device.</strong>
         </div>
         <div>
-          <span className="core-eyebrow">Premium activation</span>
-          <strong>Managed data, AI context, roles, audit, and writes.</strong>
+          <span className="core-eyebrow">Use your data</span>
+          <strong>Approved users, audit, and controlled writes.</strong>
         </div>
-        <Link className="core-button primary" to="/settings/">Check readiness</Link>
+        <Link className="core-button primary" to="/settings/">Open data setup</Link>
       </section>
       <section className="product-home-autopilot" aria-label="AI operating plan">
         <div className="product-home-autopilot-head">
           <div>
-            <span className="core-eyebrow">AI operating plan</span>
+            <span className="core-eyebrow">Next step</span>
             <h2>Recommended next move</h2>
             <p>{nextDetail} No external send, publish, payment, or production write runs from this screen.</p>
           </div>

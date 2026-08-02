@@ -430,7 +430,7 @@ function attentionAnswer(snapshot: LocalBusinessSnapshot): BusinessCommandAnswer
         { label: 'Shop', value: 'No source', detail: 'Catalog, stock, orders, and money review are unavailable.' },
         { label: 'Plant', value: 'No source', detail: 'Jobs, issues, quality, and equipment state are unavailable.' },
         { label: 'Website', value: 'No source', detail: 'Pages, readiness, approval, and release evidence are unavailable.' },
-        { label: 'Ecommerce', value: 'No source', detail: 'Storefront draft and Shop handoff are unavailable.' },
+        { label: 'Ecommerce', value: 'No source', detail: 'Store draft and Shop review are unavailable.' },
       ],
       nextAction: { label: 'Open Shop sample', path: '/shop/?tab=counter', product: 'shop' },
       boundary,

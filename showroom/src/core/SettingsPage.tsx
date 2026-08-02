@@ -467,8 +467,8 @@ export function SettingsPage() {
         ]
         : [
           ['Bring', 'Catalog rows, order CSV, channel samples', 'Start from products plus Viber, LINE, WeChat, email, form, or CSV order examples.'],
-          ['AI prepares', 'Storefront, quote, order review, Shop handoff', 'The workspace normalizes customer, SKU, quantity, fulfilment, payment, and source proof.'],
-          ['First proof', 'One Shop-ready order packet', 'Show ready/blocked order rows and the owner handoff before customer contact or fulfilment.'],
+          ['AI prepares', 'Store, quote, order review, Shop review', 'The workspace normalizes customer, SKU, quantity, fulfilment, payment, and source proof.'],
+          ['First proof', 'One Shop-ready order packet', 'Show ready/blocked order rows and owner review before customer contact or fulfilment.'],
           ['Gate', 'Owner approves fulfilment', 'No customer message, payment capture, delivery booking, stock move, refund, or Shop write runs from setup.'],
         ]
   const launchPackManifest = {

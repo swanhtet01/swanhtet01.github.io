@@ -376,7 +376,7 @@ const customerTracks = [
   ['Shop', 'Sales and inventory', 'Sell, track stock, fulfil orders, and close the day.', 'retail, cafe, restaurant, spa, gym, school', '/shop/'],
   ['Plant', 'Production and quality', 'Plan jobs, record output, trace materials, and handle problems.', 'food, packaging, printing, workshop, assembly', '/plant/'],
   ['Website', 'Pages and inquiries', 'Edit a real site preview, collect leads, and prepare launch.', 'business site, services, catalog, landing page', '/website/'],
-  ['Ecommerce', 'Storefront and checkout', 'Run online orders, delivery, and Shop handoff.', 'pickup, local delivery, preorder, social orders', '/ecommerce/'],
+  ['Ecommerce', 'Storefront and checkout', 'Run online orders, delivery, and Shop review.', 'pickup, local delivery, preorder, social orders', '/ecommerce/'],
 ] as const
 
 export function ProductHomePage() {
@@ -386,7 +386,7 @@ export function ProductHomePage() {
   const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Managed activation proof is still required.'
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Pick one product, open the sample, and do one useful task. Setup stays hidden until you need real data." eyebrow="SuperMega" title="Start with one product." />
+      <PageHeading copy="Pick one product and try the sample. Add your data only when it helps." eyebrow="SuperMega" title="Start with one product." />
       <nav aria-label="Business tracks" className="product-track-grid">
         {customerTracks.map(([name, fit, outcome, examples, path]) => (
           <article className="product-track-card" key={name}>
@@ -403,13 +403,13 @@ export function ProductHomePage() {
         ))}
       </nav>
       <details className="product-home-setup">
-        <summary><span><strong>Setup and data import</strong><small>Imports, readiness, and managed access</small></span><b>Open when needed</b></summary>
+        <summary><span><strong>Add your data</strong><small>Imports, readiness, and secure access</small></span><b>Later</b></summary>
         <div>
           <Suspense fallback={<section aria-label="Today across SuperMega" className="product-home-today"><p className="form-notice" role="status">Preparing business overview...</p></section>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense>
           <section className="product-home-operating-model" aria-label="SuperMega operating model">
-            <div><span className="core-eyebrow">This device</span><strong>Sample data, imports, review, and evidence.</strong></div>
-            <div><span className="core-eyebrow">Managed workspace</span><strong>Real data, approved users, audit, and controlled writes.</strong></div>
-            <Link className="core-button primary" to="/settings/">Open setup</Link>
+            <div><span className="core-eyebrow">Try first</span><strong>Sample data stays on this device.</strong></div>
+            <div><span className="core-eyebrow">Use your data</span><strong>Approved users, audit, and controlled writes.</strong></div>
+            <Link className="core-button primary" to="/settings/">Open data setup</Link>
           </section>
           <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
             <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={hostedReady ? 100 : activationCoverage} ready={hostedReady} />

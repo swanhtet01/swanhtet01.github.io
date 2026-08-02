@@ -488,14 +488,14 @@ export function EcommerceBuyingWorkspace({
     ['Cart', cart.length ? `${cart.length} ${cart.length === 1 ? 'item' : 'items'}` : 'Empty'],
     ['Quote', quoteCurrent ? `${quoteMinutesRemaining} min left` : latestRequest ? 'Review again' : 'Not quoted'],
     ['Recovery', recoveryBlocked ? 'Blocked' : recoveryStatus === 'ready' ? 'Ready' : 'Local'],
-    ['Shop handoff', quoteCurrent ? handoffConfirmed ? 'Ready for Shop review' : 'Needs owner check' : 'Locked'],
+    ['Shop review', quoteCurrent ? handoffConfirmed ? 'Ready for Shop review' : 'Needs owner check' : 'Locked'],
     ['Payment', 'Not charged'],
   ] as const
 
   function updateCart(sku: string, quantity: number) {
     if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 99) return
     onCartChange(cart.map((line) => line.sku === sku ? { ...line, quantity } : line))
-    setNotice('Cart changed. Review a new total before Shop handoff.')
+    setNotice('Cart changed. Review a new total before Shop review.')
   }
 
   function removeFromCart(sku: string) {
@@ -1130,7 +1130,7 @@ export function EcommerceBuyingWorkspace({
         onDraft(draft)
       }
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Shop handoff failed closed.')
+      setNotice(error instanceof Error ? error.message : 'Shop review failed closed.')
     } finally {
       setHandoffBusy(false)
     }

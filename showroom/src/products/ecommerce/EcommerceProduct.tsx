@@ -1164,7 +1164,7 @@ export function EcommerceProduct() {
   const paymentDeliveryStage = importNeeded
     ? 'Import catalog before checkout'
     : !savedDraftIsCurrent
-      ? 'Save storefront before checkout'
+      ? 'Save store before checkout'
       : pendingManagedRequests.length
         ? 'Review payment and delivery'
         : buyingCart.length
@@ -1188,7 +1188,7 @@ export function EcommerceProduct() {
                   ? 'Import sellable catalog'
                   : savedDraftIsCurrent
                     ? 'Ready for customer orders'
-                    : 'Save storefront'
+                    : 'Save store'
   const orderOpsRows = [
     ['Review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : 'Clear'],
     ['Fulfil', activeManagedOrders.length ? `${activeManagedOrders.length} active` : 'Clear'],
@@ -1203,7 +1203,7 @@ export function EcommerceProduct() {
       ? 'Review imported orders'
       : buyingReady
         ? 'Ready for order upload'
-        : 'Save storefront first'
+        : 'Save store first'
   const orderImportRows = [
     ['Input', catalog.source === 'managed-shop' ? 'Managed catalog' : catalog.source === 'shop-local' ? 'Local catalog' : 'Sample/import'],
     ['Bulk', importNeeded ? 'Need products' : 'CSV or messages'],
@@ -1264,7 +1264,7 @@ export function EcommerceProduct() {
   const requestInboxStage = importNeeded
     ? 'Import catalog before request review'
     : !savedDraftIsCurrent
-      ? 'Save storefront before request review'
+      ? 'Save store before order review'
       : requestInboxFilteredRequests.length
         ? 'Open filtered Shop review'
         : pendingManagedRequests.length
@@ -1294,7 +1294,7 @@ export function EcommerceProduct() {
   const quoteRecoveryStage = importNeeded
     ? 'Import catalog before recovery'
     : !savedDraftIsCurrent
-      ? 'Save storefront before recovery'
+      ? 'Save store before recovery'
       : orderOpsExpiringCount
         ? 'Prepare quote refresh'
         : orderOpsAgingCount
@@ -1325,7 +1325,7 @@ export function EcommerceProduct() {
   const customerFollowUpStage = importNeeded
     ? 'Import catalog before follow-up'
     : !savedDraftIsCurrent
-      ? 'Save storefront before follow-up'
+      ? 'Save store before follow-up'
       : orderOpsStockRiskCount
         ? 'Draft availability update'
         : orderOpsExpiringCount
@@ -1355,7 +1355,7 @@ export function EcommerceProduct() {
   const channelReplyStage = importNeeded
     ? 'Import catalog before reply templates'
     : !savedDraftIsCurrent
-      ? 'Save storefront before reply templates'
+      ? 'Save store before reply templates'
       : customerFollowUpRequest
         ? 'Prepare reviewed channel reply'
         : buyingReady
@@ -1371,7 +1371,7 @@ export function EcommerceProduct() {
   const fulfillmentHandoffStage = importNeeded
     ? 'Import catalog before fulfillment'
     : !savedDraftIsCurrent
-      ? 'Save storefront before fulfillment'
+      ? 'Save store before fulfillment'
       : orderImportReview?.status === 'blocked'
         ? 'Repair imported orders'
         : orderImportReview?.status === 'ready'
@@ -1402,7 +1402,7 @@ export function EcommerceProduct() {
   const deliveryAreaTemplateStage = importNeeded
     ? 'Import catalog before delivery templates'
     : !savedDraftIsCurrent
-      ? 'Save storefront before delivery templates'
+      ? 'Save store before delivery templates'
       : deliveryReviewRequest
         ? 'Prepare delivery-area template'
         : buyingReady
@@ -1418,7 +1418,7 @@ export function EcommerceProduct() {
   const deliveryFeeStage = importNeeded
     ? 'Import catalog before delivery setup'
     : !savedDraftIsCurrent
-      ? 'Save storefront before delivery setup'
+      ? 'Save store before delivery setup'
       : deliveryReviewCount
         ? 'Review delivery zone and fee'
         : buyingReady
@@ -1438,7 +1438,7 @@ export function EcommerceProduct() {
       : !previewResult.preview
         ? 'Repair storefront preview'
         : !savedDraftIsCurrent
-          ? 'Save ordering setup'
+          ? 'Save store'
           : pendingManagedRequests.length
             ? 'Clear Shop review queue'
             : buyingReady
@@ -1454,7 +1454,7 @@ export function EcommerceProduct() {
   const managedStoreActivationStage = importNeeded
     ? 'Import catalog for activation'
     : !savedDraftIsCurrent
-      ? 'Save storefront for activation'
+      ? 'Save store before going live'
       : !buyingReady
         ? 'Repair checkout activation'
         : pendingManagedRequests.length
@@ -1529,19 +1529,19 @@ export function EcommerceProduct() {
     : importNeeded
       ? 'Prepare catalog import'
       : !savedDraftIsCurrent
-        ? 'Finish storefront setup'
+        ? 'Finish store'
         : buyingCart.length
           ? 'Review cart quote'
-          : 'Open storefront for ordering'
+          : 'Open store for ordering'
   const aiAgentReason = pendingManagedRequests.length
     ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'} waiting for accountable Shop review.`
     : importNeeded
-      ? 'The order desk needs a real Shop catalog before the storefront can sell.'
+      ? 'The order desk needs a real Shop catalog before the store can sell.'
       : !savedDraftIsCurrent
         ? 'Save the customer view before quotes and order review are trusted.'
         : buyingCart.length
           ? `${buyingCart.length} cart line${buyingCart.length === 1 ? '' : 's'} ready for quote review.`
-          : 'The storefront is saved and ready for a customer request.'
+          : 'The store is saved and ready for a customer request.'
   const aiOwnerGate = pendingManagedRequests.length
     ? 'Shop confirms stock, delivery, payment, and customer contact.'
     : importNeeded
@@ -1559,7 +1559,7 @@ export function EcommerceProduct() {
   const orderAutopilotStage = importNeeded
     ? 'Connect products'
     : !savedDraftIsCurrent
-      ? 'Save storefront'
+      ? 'Save store'
       : orderImportReview?.status === 'ready'
         ? 'Package order batch'
         : orderImportReview?.status === 'blocked'
@@ -1583,7 +1583,7 @@ export function EcommerceProduct() {
   const ecommerceTodayHeadline = importNeeded
     ? 'Connect your products to start selling'
     : !savedDraftIsCurrent
-      ? 'Finish the storefront customers will see'
+      ? 'Finish the store customers will see'
       : lifecycleRefundAttention.length
         ? `${lifecycleRefundAttention.length} refund${lifecycleRefundAttention.length === 1 ? '' : 's'} need evidence`
         : lifecyclePaymentAttention.length
@@ -1607,7 +1607,7 @@ export function EcommerceProduct() {
   const ecommerceTodayAction = importNeeded
     ? 'Connect products'
     : !savedDraftIsCurrent
-      ? 'Finish storefront'
+      ? 'Finish store'
       : orderImportReview?.status === 'ready'
         ? 'Download order packet'
         : orderImportReview?.status === 'blocked'
@@ -1679,7 +1679,7 @@ export function EcommerceProduct() {
         <header>
           <span className="core-eyebrow">Start here</span>
           <h2>Three jobs run online orders.</h2>
-          <p>Use the storefront like a customer, set up what they see, then confirm real orders in Shop.</p>
+          <p>Use the store like a customer, choose what they see, then confirm real orders in Shop.</p>
         </header>
         <div>
           {ecommerceGuidedJobs.map(([step, label, detail, to]) => to.startsWith('#') ? (
@@ -1701,7 +1701,7 @@ export function EcommerceProduct() {
       </section>
 
       <details className="ecommerce-business-controls">
-        <summary><span><strong>Store and order controls</strong><small>Products, customer requests, imports, payment, and delivery</small></span><b>Open when needed</b></summary>
+        <summary><span><strong>Store and order controls</strong><small>Products, customer requests, imports, payment, and delivery</small></span><b>Later</b></summary>
         <div className="ecommerce-business-controls-content">
       <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-state={ecommerceTodayState}>
         <div className="ecommerce-today-priority">
@@ -1721,7 +1721,7 @@ export function EcommerceProduct() {
       <section aria-label="Order desk" className="ecommerce-ai-desk">
         <div>
           <span className="core-eyebrow">Order desk</span>
-          <h2>{pendingManagedRequests.length ? 'Shop review is waiting' : importNeeded ? 'Import first, then sell' : !savedDraftIsCurrent ? 'Finish setup before orders' : 'Ready to take reviewed orders'}</h2>
+          <h2>{pendingManagedRequests.length ? 'Shop review is waiting' : importNeeded ? 'Import first, then sell' : !savedDraftIsCurrent ? 'Save store before orders' : 'Ready to take reviewed orders'}</h2>
           <p>{pendingManagedRequests.length
             ? 'Requests are retained for Shop confirmation before stock, delivery, payment, or customer contact changes.'
             : importNeeded
@@ -1776,8 +1776,8 @@ export function EcommerceProduct() {
         </div>
       </section>
 
-      <details aria-label="Enterprise order controls" className="ecommerce-enterprise-controls">
-        <summary><span>Enterprise order controls</span><small>Inbox, payment, delivery, recovery, replies, and activation evidence.</small></summary>
+      <details aria-label="Advanced order controls" className="ecommerce-enterprise-controls">
+        <summary><span>Advanced order controls</span><small>Inbox, payment, delivery, recovery, replies, and go-live checks.</small></summary>
         <div className="ecommerce-enterprise-controls-body">
       <section aria-label="Ecommerce request inbox" className="ecommerce-ops-cockpit ecommerce-request-inbox-cockpit">
         <div>
@@ -2020,7 +2020,7 @@ export function EcommerceProduct() {
           >
             <div>
               <strong>{catalogHydrating
-                ? 'Checking storefront workspace'
+                ? 'Checking saved store'
                 : localFingerprintPending
                 ? 'Checking saved customer view'
                 : draftStorageBlocked
@@ -2041,12 +2041,12 @@ export function EcommerceProduct() {
                 : localFingerprintPending
                 ? 'Comparing the saved fingerprint with the current Shop-backed customer view.'
                 : draftIssue || managedCatalogDigestError || (catalogRebindRequired
-                ? 'Save again to bind this storefront to the current Shop catalog.'
+                ? 'Save again to bind this store to the current Shop catalog.'
                 : savedDraftIsCurrent && savedDraft
                 ? `Saved ${new Date(savedDraft.savedAt).toLocaleString()}`
                 : managedIdentity
-                  ? 'Save the storefront name, description, and selected products to this workspace.'
-                  : 'Save the storefront name, description, and selected products for the next visit.')}</small>
+                  ? 'Save the store name, description, and selected products.'
+                  : 'Save the store name, description, and selected products for the next visit.')}</small>
               {draftStorageBlocked
                 ? <Link className="text-link" to="/settings/#controls">Open recovery settings</Link>
                 : null}
@@ -2070,7 +2070,7 @@ export function EcommerceProduct() {
                 ref={storefrontSaveRef}
                 type="button"
               >
-                {draftBusy ? 'Saving…' : localFingerprintUpgradeRequired ? 'Upgrade storefront' : catalogRebindRequired ? 'Rebind storefront' : 'Save storefront'}
+                {draftBusy ? 'Saving…' : localFingerprintUpgradeRequired ? 'Upgrade store' : catalogRebindRequired ? 'Reconnect store' : 'Save store'}
               </button>
             </div> : null}
           </div>
@@ -2079,7 +2079,7 @@ export function EcommerceProduct() {
 
         <section className="core-panel ecommerce-preview-panel" aria-labelledby="ecommerce-preview-title" id="ecommerce-preview-panel">
           <div className="panel-head ecommerce-preview-head">
-            <div><span className="core-eyebrow">Storefront demo</span><h2 id="ecommerce-preview-title" ref={storefrontPreviewHeadingRef} tabIndex={-1}>Shop the sample</h2></div>
+            <div><span className="core-eyebrow">Store demo</span><h2 id="ecommerce-preview-title" ref={storefrontPreviewHeadingRef} tabIndex={-1}>Shop the sample</h2></div>
             <div className="segmented-control" role="group" aria-label="Preview size">
               <button aria-pressed={device === 'phone'} onClick={() => setDevice('phone')} type="button">Phone</button>
               <button aria-pressed={device === 'desktop'} onClick={() => setDevice('desktop')} type="button">Desktop</button>
@@ -2090,7 +2090,7 @@ export function EcommerceProduct() {
             <div className="ecommerce-preview-gate">
               <span>
                 <strong>{managedIdentity ? 'Review the store before taking orders' : 'Preparing the sample store'}</strong>
-                <small>{managedIdentity ? 'Save the managed storefront before customer requests are available.' : 'The exact Shop catalog and prices are being checked.'}</small>
+                <small>{managedIdentity ? 'Save the store before customer requests are available.' : 'The exact Shop catalog and prices are being checked.'}</small>
               </span>
               <button
                 aria-controls="ecommerce-setup-panel"
@@ -2191,7 +2191,7 @@ export function EcommerceProduct() {
             <div className="ecommerce-digest" aria-live="polite">
               <span>Preview fingerprint</span>
               <code>{digest || (digestError ? 'Unavailable' : 'Calculating…')}</code>
-              <small>{digestError || 'The same storefront fields and Shop snapshot produce the same local fingerprint.'}</small>
+              <small>{digestError || 'The same store fields and Shop snapshot produce the same local check.'}</small>
             </div>
           </details>
         </section>
