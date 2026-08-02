@@ -8538,7 +8538,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     const rows = [
       ['job_id', 'line', 'product', 'target', 'owner', 'priority', 'due_at'],
       ['JOB-AI-101', 'Line A', 'First production run', 120, 'Plant supervisor', 'urgent', localDateTimeInputValue(new Date(Date.now() + 10 * 60 * 60 * 1000))],
-      ['JOB-AI-102', 'Quality Lab', 'ISO release sample', 1, 'Quality owner', 'normal', localDateTimeInputValue(new Date(Date.now() + 12 * 60 * 60 * 1000))],
+      ['JOB-SAMPLE-102', 'Quality Lab', 'Quality release sample', 1, 'Quality owner', 'normal', localDateTimeInputValue(new Date(Date.now() + 12 * 60 * 60 * 1000))],
     ]
     return rows.map((row) => row.map(plantJobImportCsvCell).join(',')).join('\r\n')
   }
@@ -9130,35 +9130,35 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div className="plant-control-rows">{plantControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const mesDispatch = <section aria-label="Plant dispatch helper" className="plant-control mes-dispatch-control">
-    <div><span className="core-eyebrow">MES dispatch</span><strong>{plantAgentJob}</strong><small>AI chooses the next station, blocker, evidence need, and handoff route from live Plant state. No equipment command or production write runs from this panel.</small></div>
+    <div><span className="core-eyebrow">Daily dispatch</span><strong>{plantAgentJob}</strong><small>SuperMega shows the next station, blocker, evidence need, and shift route from live Plant state. No equipment command or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{mesDispatchRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantLifecycle = <section aria-label="Plant lifecycle control" className="plant-control">
-    <div><span className="core-eyebrow">MES lifecycle</span><strong>Plan to handoff</strong><small>AI guides plan, execution, quality, WCM, trace, and handoff. No equipment or production write runs without owner approval.</small></div>
+    <div><span className="core-eyebrow">Production lifecycle</span><strong>Plan to shift close</strong><small>Follow planning, execution, quality, WCM, trace, and shift close in one place. No equipment or production write runs without owner approval.</small></div>
     <div className="plant-control-rows">{plantLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantMrp = <section aria-label="Plant MRP readiness" className="plant-control">
-    <div><span className="core-eyebrow">MRP readiness</span><strong>{plantMrpNext}</strong><small>AI reviews job demand, BOM, availability, Shop supply, material blockers, and trace evidence. No purchase, issue, costing, inventory, or production write runs from this panel.</small></div>
+    <div><span className="core-eyebrow">Material readiness</span><strong>{plantMrpNext}</strong><small>Review job demand, BOM, availability, Shop supply, material blockers, and trace evidence. No purchase, issue, costing, inventory, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantMrpRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
-  const plantCostReadiness = <section aria-label="Plant ERP cost readiness" className="plant-control">
-    <div><span className="core-eyebrow">ERP cost readiness</span><strong>{plantCostReadinessNext}</strong><small>AI checks good output, scrap, material trace, quality release, WCM closure, and shift handoff before any costing package is reviewed. No costing, accounting, inventory, payroll, invoice, or production write runs from this panel.</small></div>
+  const plantCostReadiness = <section aria-label="Plant cost readiness" className="plant-control">
+    <div><span className="core-eyebrow">Cost readiness</span><strong>{plantCostReadinessNext}</strong><small>Check good output, scrap, material trace, quality release, WCM closure, and shift close before any costing package is reviewed. No costing, accounting, inventory, payroll, invoice, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantCostReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantCostPacket = <section aria-label="Plant ERP cost package packet" className="plant-control">
-    <div><span className="core-eyebrow">Cost package packet</span><strong>{plantCostPacketReady ? 'Ready for cost review' : plantCostReadinessNext}</strong><small>AI packages finished batch output, scrap, material trace, quality release state, WCM closure, and handoff evidence for ERP cost review. No standard cost update, inventory valuation, journal, payroll, invoice, certificate, or production write runs from this packet.</small></div>
+    <div><span className="core-eyebrow">Cost review file</span><strong>{plantCostPacketReady ? 'Ready for cost review' : plantCostReadinessNext}</strong><small>Package finished batch output, scrap, material trace, quality release state, WCM closure, and shift evidence for cost review. No standard cost update, inventory valuation, journal, payroll, invoice, certificate, or production write runs from this packet.</small></div>
     <div className="plant-control-rows">{plantCostPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantQualityRelease = <section aria-label="Plant quality release" className="plant-control">
-    <div><span className="core-eyebrow">ISO release</span><strong>{plantQualityReleaseNext}</strong><small>AI checks quality holds, WCM closure, material trace, shift handoff, and owner release evidence before output can be treated as ready. No quality release, certificate, equipment command, material issue, costing, inventory, or production write runs from this panel.</small></div>
+    <div><span className="core-eyebrow">Quality release</span><strong>{plantQualityReleaseNext}</strong><small>Check quality holds, WCM closure, material trace, shift close, and owner release evidence before output can be treated as ready. No quality release, certificate, equipment command, material issue, costing, inventory, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantQualityReleaseRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantInspectionControl = <section aria-label="Plant inspection and CAPA" className="plant-control">
-    <div><span className="core-eyebrow">Inspection + CAPA</span><strong>{plantInspectionNext}</strong><small>AI turns sampling, NCR containment, corrective action, evidence, and release review into one quality queue. No certificate, CAPA closure, customer claim, inventory block, costing, or production write runs from this panel.</small>{tab === 'control' ? <button className="text-link" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={startInspectionNcr} type="button">Start inspection NCR</button> : <Link className="text-link" to="/plant/?tab=control">Open inspection queue</Link>}</div>
+    <div><span className="core-eyebrow">Inspection + CAPA</span><strong>{plantInspectionNext}</strong><small>Keep sampling, NCR containment, corrective action, evidence, and release review in one quality queue. No certificate, CAPA closure, customer claim, inventory block, costing, or production write runs from this panel.</small>{tab === 'control' ? <button className="text-link" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={startInspectionNcr} type="button">Start inspection NCR</button> : <Link className="text-link" to="/plant/?tab=control">Open inspection queue</Link>}</div>
     <div className="plant-control-rows">{plantInspectionRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantComplianceDossier = <section aria-label="Plant compliance dossier" className="plant-control plant-compliance-dossier">
-    <div><span className="core-eyebrow">Compliance dossier</span><strong>{plantComplianceDossierNext}</strong><small>AI summarizes ISO quality release, WCM closure, material traceability, output evidence, shift handoff, and cost-readiness into one audit packet. No certificate, quality release, costing, inventory valuation, equipment command, customer claim, or production write runs from this dossier.</small></div>
+    <div><span className="core-eyebrow">Compliance file</span><strong>{plantComplianceDossierNext}</strong><small>Summarize quality release, WCM closure, material traceability, output evidence, shift close, and cost-readiness into one audit packet. No certificate, quality release, costing, inventory valuation, equipment command, customer claim, or production write runs from this file.</small></div>
     <div className="plant-control-rows">{plantComplianceDossierRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantJobRepairRows = plantJobImportReview
@@ -9199,8 +9199,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <CompletedJobHistory jobs={completedJobs} now={issueClock} />
         <details className="compact-disclosure catalog-disclosure" ref={jobDisclosureRef}>
           <summary>{selectedShopDemand ? 'Add Shop-demand job' : 'Add job'}</summary>
-          <section aria-label="Plant job CSV autopilot" className="plant-job-import">
-            <div><span className="core-eyebrow">Job CSV autopilot</span><strong>Upload job list</strong><small>AI checks job ID, line, product, target, owner, priority, due time, and duplicates before copying one ready job into review. No production job, equipment command, material movement, accounting post, or managed write runs from this importer.</small></div>
+          <section aria-label="Plant job CSV import" className="plant-job-import">
+            <div><span className="core-eyebrow">Job CSV import</span><strong>Upload job list</strong><small>Check job ID, line, product, target, owner, priority, due time, and duplicates before copying one ready job into review. No production job, equipment command, material movement, accounting post, or managed write runs from this importer.</small></div>
             <div className="plant-job-import-actions">
               <button className="core-button" disabled={Boolean(pendingAction)} onClick={loadSamplePlantJobImportBatch} type="button">Load sample job batch</button>
               <label className="plant-job-import-upload">Upload Plant job CSV<input accept=".csv,text/csv" disabled={Boolean(pendingAction)} onChange={uploadPlantJobCsv} type="file" /></label>
