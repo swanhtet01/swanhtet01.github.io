@@ -324,6 +324,10 @@ export function EcommerceBuyingWorkspace({
     const localOnlyRequests = activeBuyingState.requests.filter((request) => !sharedRequestIds.has(request.id))
     return commerceStorefrontOrderTimeline(commerceState, [...sharedRequests, ...localOnlyRequests])
   }, [activeBuyingState.requests, commerceState])
+  const latestRequestEntry = latestRequest
+    ? combinedOrderTimeline.find((entry) => entry.request.id === latestRequest.id) ?? null
+    : null
+  const latestRequestOrder = latestRequestEntry?.order ?? null
   const customerReference = [customerName.trim(), customerPhone.trim()].filter(Boolean).join(' · ')
   const trackedCustomerReference = customerReference || latestRequest?.customerReference || ''
   const replacementRequestIds = new Set([
@@ -494,29 +498,37 @@ export function EcommerceBuyingWorkspace({
     && latestRequest.quote.payment.adapter === effectivePaymentAdapter
     && (latestRequest.quote.promotion.code ?? '') === promotionCode.trim()
     && cartMatchesRequest(cart, latestRequest))
+  const latestRequestConfirmed = Boolean(latestRequestOrder && quoteCurrent)
   const recoveryBlocked = recoveryStatus !== 'empty' && recoveryStatus !== 'ready'
   const quoteMinutesRemaining = latestRequest
     ? Math.max(0, Math.ceil((Date.parse(latestRequest.quote.expiresAt) - quoteClock) / 60000))
     : 0
   const orderAutopilotNext = recoveryBlocked
     ? 'Repair checkout recovery'
-    : !cart.length
-      ? 'Add product'
-      : !quoteCurrent
-        ? 'Review order'
-        : !handoffConfirmed
-          ? 'Confirm reviewed quote'
-          : 'Continue to Shop review'
+    : latestRequestConfirmed
+      ? 'Order confirmed in Shop'
+      : !cart.length
+        ? 'Add product'
+        : !quoteCurrent
+          ? 'Review order'
+          : !handoffConfirmed
+            ? 'Confirm reviewed quote'
+            : 'Continue to Shop review'
   const orderAutopilotBoundary = onRecordManagedRequest
     ? 'Shop review inbox only. Stock, delivery, message, and payment still need Shop review.'
     : 'Browser-local quote only. No stock, delivery, message, payment, or Shop record changes here.'
   const orderAutopilotRows = [
     ['Cart', cart.length ? `${cart.length} ${cart.length === 1 ? 'item' : 'items'}` : 'Empty'],
-    ['Quote', quoteCurrent ? `${quoteMinutesRemaining} min left` : latestRequest ? 'Review again' : 'Not quoted'],
+    ['Quote', latestRequestConfirmed ? 'Confirmed' : quoteCurrent ? `${quoteMinutesRemaining} min left` : latestRequest ? 'Review again' : 'Not quoted'],
     ['Recovery', recoveryBlocked ? 'Blocked' : recoveryStatus === 'ready' ? 'Ready' : 'Local'],
-    ['Shop review', quoteCurrent ? handoffConfirmed ? 'Ready for Shop review' : 'Needs review' : 'Locked'],
-    ['Payment', 'Not charged'],
+    ['Shop review', latestRequestConfirmed ? 'Confirmed' : quoteCurrent ? handoffConfirmed ? 'Ready for Shop review' : 'Needs review' : 'Locked'],
+    ['Payment', latestRequestEntry?.paymentStatus === 'reconciled' ? 'Confirmed' : latestRequestConfirmed ? 'Pending' : 'Not charged'],
   ] as const
+  const checkoutNotice = latestRequestConfirmed && latestRequestOrder
+    ? `${latestRequest?.id} is confirmed as ${latestRequestOrder.id}. ${latestRequestEntry?.paymentStatus === 'reconciled' ? 'Payment is reconciled in Shop.' : 'Payment still needs Shop reconciliation.'}`
+    : recoveryIssue || notice || (cart.length
+      ? 'Review the cart. Shop handles orders, stock, delivery, refunds, and payment review.'
+      : 'Add a product to begin.')
 
   function updateCart(sku: string, quantity: number) {
     if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 99) return
@@ -527,6 +539,13 @@ export function EcommerceBuyingWorkspace({
   function removeFromCart(sku: string) {
     onCartChange(cart.filter((line) => line.sku !== sku))
     setNotice('Item removed. No Shop record or payment changed.')
+  }
+
+  function beginAnotherOrder() {
+    onCartChange([])
+    setFreshQuoteId('')
+    setHandoffConfirmed(false)
+    setNotice('Ready for a new order. Add products, then review the current total.')
   }
 
   function changeFulfilment(next: EcommerceFulfilment) {
@@ -1143,7 +1162,7 @@ export function EcommerceBuyingWorkspace({
   }
 
   async function openInShop() {
-    if (!latestRequest || !quoteCurrent || !handoffConfirmed || handoffBusy) return
+    if (!latestRequest || latestRequestConfirmed || !quoteCurrent || !handoffConfirmed || handoffBusy) return
     setHandoffBusy(true)
     setNotice('')
     try {
@@ -1266,12 +1285,26 @@ export function EcommerceBuyingWorkspace({
               <span>Promotion code <small>optional · Shop checks it</small></span>
               <input maxLength={40} onChange={(event) => { setPromotionCode(event.target.value); setHandoffConfirmed(false) }} placeholder="Optional" value={promotionCode} />
             </label>
-            {!quoteCurrent ? <button className="core-button primary" disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
+            {!quoteCurrent && !latestRequestConfirmed ? <button className="core-button primary" disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
               {quoteBusy ? 'Checking…' : 'Review order'}
             </button> : null}
           </form>
 
-          {latestRequest ? quoteCurrent ? (
+          {latestRequest ? latestRequestOrder && latestRequestConfirmed ? (
+            <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true">
+              <span className="status-pill ready">Confirmed in Shop</span>
+              <strong>Order {latestRequestOrder.id}</strong>
+              <b>{formatMmk(latestRequestOrder.total)}</b>
+              <div className="ecommerce-quote-boundaries">
+                <span><small>Customer</small><b>{latestRequestOrder.customer}</b></span>
+                <span><small>Receive order</small><b>{receiveOrderLabel(latestRequest.fulfilment)}</b></span>
+                <span><small>Payment</small><b>{latestRequestEntry?.paymentStatus === 'reconciled' ? 'Confirmed' : 'Pending in Shop'}</b></span>
+                <span><small>Promise</small><b>{latestRequestOrder.promisedAt ? new Date(latestRequestOrder.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not set'}</b></span>
+              </div>
+              <small>Request {latestRequest.id} · Shop recorded the order and stock reservation.</small>
+              <button className="core-button secondary" disabled={disabled} onClick={beginAnotherOrder} type="button">Start another order</button>
+            </article>
+          ) : quoteCurrent ? (
             <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true">
               <span className="status-pill bounded">Ready for Shop</span>
               <strong>Quote for {latestRequest.customerReference}</strong>
@@ -1335,9 +1368,7 @@ export function EcommerceBuyingWorkspace({
 
           <p className="form-notice ecommerce-buying-notice" aria-live="polite">{recoveryStatus === 'checking'
             ? 'Checking saved checkout recovery…'
-            : recoveryIssue || notice || (cart.length
-              ? 'Review the cart. Shop handles orders, stock, delivery, refunds, and payment review.'
-              : 'Add a product to begin.')}</p>
+            : checkoutNotice}</p>
         </div>
       </details>
 
