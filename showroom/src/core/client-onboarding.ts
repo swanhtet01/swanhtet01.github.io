@@ -5,7 +5,7 @@ export const CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1' as cons
 export const CLIENT_STAGING_SCHEMA = 'supermega.client_import_staging.v1' as const
 export const CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v3' as const
 export const CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v3' as const
-export const CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v3' as const
+export const CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v4' as const
 export const CLIENT_DEMO_RUNBOOK_SCHEMA = 'supermega.client_demo_runbook.v1' as const
 export const CLIENT_DEMO_PREPARATION_SCHEMA = 'supermega.client_demo_preparation.v3' as const
 export const CLIENT_OPERATING_FOUNDATION_SCHEMA = 'supermega.client_operating_foundation.v1' as const
@@ -17,6 +17,7 @@ const LEGACY_CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v1' as const
 const LEGACY_V2_CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v2' as const
 const LEGACY_CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v1' as const
 const LEGACY_V2_CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v2' as const
+const LEGACY_V3_CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v3' as const
 export const CLIENT_DEMO_WORKSPACE_STORAGE_KEY = 'supermega.client-demo-workspace.v1'
 export const CLIENT_DEMO_KIT_MAX_BYTES = 128 * 1024
 export const CLIENT_DEMO_PREPARATION_MAX_BYTES = 5 * 1024 * 1024
@@ -287,6 +288,7 @@ export type ClientDemoWorkspace = {
   schema: typeof CLIENT_DEMO_WORKSPACE_SCHEMA
   blueprint: ClientDemoBlueprint
   products: ClientDemoProductProgress[]
+  proofBaselineAt: string
   updatedAt: string
 }
 
@@ -302,10 +304,15 @@ export type ClientDemoKit = {
 }
 
 export type ClientDemoOperationalEvidence = {
-  commerce: { completedOrders: number; reconciledOrders: number }
-  production: { releasedBatches: number }
-  website: { approvedReleases: number }
-  ecommerce: { savedStorefronts: number; reviewedRequests: number }
+  commerce: { completedOrders: number; reconciledOrders: number; latestAccountableSaleAt: string | null }
+  production: { releasedBatches: number; latestReleasedAt: string | null }
+  website: { approvedReleases: number; latestApprovedAt: string | null }
+  ecommerce: {
+    savedStorefronts: number
+    reviewedRequests: number
+    latestSavedStorefrontAt: string | null
+    latestReviewedRequestAt: string | null
+  }
 }
 
 export type ClientDemoRunbookStatus = 'prepare_data' | 'needs_fix' | 'ready_to_run' | 'proven'
@@ -1739,22 +1746,31 @@ export function createClientDemoWorkspace(blueprintValue: unknown, updatedAtValu
     schema: CLIENT_DEMO_WORKSPACE_SCHEMA,
     blueprint,
     products: blueprint.products.map(({ product }) => ({ product, status: 'not_started', rows: 0, readyRows: 0, issueRows: 0, updatedAt: null })),
+    proofBaselineAt: updatedAt,
     updatedAt,
   }
 }
 
 export function restoreClientDemoWorkspace(value: unknown): ClientDemoWorkspace | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  if (!hasExactKeys(value, ['schema', 'blueprint', 'products', 'updatedAt'])) return null
   const source = value as Partial<ClientDemoWorkspace>
+  const sourceSchema = source.schema as string | undefined
+  const currentSchema = sourceSchema === CLIENT_DEMO_WORKSPACE_SCHEMA
+  const legacySchema = sourceSchema === LEGACY_V3_CLIENT_DEMO_WORKSPACE_SCHEMA
+    || sourceSchema === LEGACY_V2_CLIENT_DEMO_WORKSPACE_SCHEMA
+    || sourceSchema === LEGACY_CLIENT_DEMO_WORKSPACE_SCHEMA
+  if ((!currentSchema && !legacySchema)
+    || !hasExactKeys(value, currentSchema
+      ? ['schema', 'blueprint', 'products', 'proofBaselineAt', 'updatedAt']
+      : ['schema', 'blueprint', 'products', 'updatedAt'])) return null
   const blueprint = canonicalClientDemoBlueprint(source.blueprint)
   const updatedAt = canonicalTimestamp(source.updatedAt)
-  const sourceSchema = source.schema as string | undefined
-  if ((sourceSchema !== CLIENT_DEMO_WORKSPACE_SCHEMA && sourceSchema !== LEGACY_V2_CLIENT_DEMO_WORKSPACE_SCHEMA && sourceSchema !== LEGACY_CLIENT_DEMO_WORKSPACE_SCHEMA) || !blueprint || !updatedAt || !Array.isArray(source.products)
+  const proofBaselineAt = currentSchema ? canonicalTimestamp(source.proofBaselineAt) : updatedAt
+  if (!blueprint || !updatedAt || !proofBaselineAt || Date.parse(proofBaselineAt) > Date.parse(updatedAt) || !Array.isArray(source.products)
     || source.products.length !== blueprint.products.length) return null
   const products = blueprint.products.map(({ product }, index) => canonicalProgress(source.products?.[index], product))
   if (products.some((product) => !product)) return null
-  return { schema: CLIENT_DEMO_WORKSPACE_SCHEMA, blueprint, products: products as ClientDemoProductProgress[], updatedAt }
+  return { schema: CLIENT_DEMO_WORKSPACE_SCHEMA, blueprint, products: products as ClientDemoProductProgress[], proofBaselineAt, updatedAt }
 }
 
 export function reconcileClientDemoWorkspace(
@@ -1797,6 +1813,13 @@ function clientDemoEvidenceCount(value: unknown, field: string) {
   return Number(value)
 }
 
+function clientDemoEvidenceTimestamp(value: unknown, field: string) {
+  if (value === null) return null
+  const timestamp = canonicalTimestamp(value)
+  if (!timestamp) throw new Error(`Client demo evidence ${field} is invalid.`)
+  return timestamp
+}
+
 function canonicalClientDemoEvidence(value: unknown): ClientDemoOperationalEvidence {
   if (!value || typeof value !== 'object' || Array.isArray(value)
     || !hasExactKeys(value, ['commerce', 'production', 'website', 'ecommerce'])) {
@@ -1804,24 +1827,37 @@ function canonicalClientDemoEvidence(value: unknown): ClientDemoOperationalEvide
   }
   const source = value as Partial<ClientDemoOperationalEvidence>
   if (!source.commerce || !source.production || !source.website || !source.ecommerce
-    || !hasExactKeys(source.commerce, ['completedOrders', 'reconciledOrders'])
-    || !hasExactKeys(source.production, ['releasedBatches'])
-    || !hasExactKeys(source.website, ['approvedReleases'])
-    || !hasExactKeys(source.ecommerce, ['savedStorefronts', 'reviewedRequests'])) {
+    || !hasExactKeys(source.commerce, ['completedOrders', 'reconciledOrders', 'latestAccountableSaleAt'])
+    || !hasExactKeys(source.production, ['releasedBatches', 'latestReleasedAt'])
+    || !hasExactKeys(source.website, ['approvedReleases', 'latestApprovedAt'])
+    || !hasExactKeys(source.ecommerce, ['savedStorefronts', 'reviewedRequests', 'latestSavedStorefrontAt', 'latestReviewedRequestAt'])) {
     throw new Error('The client demo operational evidence is invalid.')
   }
   return {
     commerce: {
       completedOrders: clientDemoEvidenceCount(source.commerce.completedOrders, 'completed orders'),
       reconciledOrders: clientDemoEvidenceCount(source.commerce.reconciledOrders, 'reconciled orders'),
+      latestAccountableSaleAt: clientDemoEvidenceTimestamp(source.commerce.latestAccountableSaleAt, 'latest accountable sale'),
     },
-    production: { releasedBatches: clientDemoEvidenceCount(source.production.releasedBatches, 'released batches') },
-    website: { approvedReleases: clientDemoEvidenceCount(source.website.approvedReleases, 'approved releases') },
+    production: {
+      releasedBatches: clientDemoEvidenceCount(source.production.releasedBatches, 'released batches'),
+      latestReleasedAt: clientDemoEvidenceTimestamp(source.production.latestReleasedAt, 'latest released batch'),
+    },
+    website: {
+      approvedReleases: clientDemoEvidenceCount(source.website.approvedReleases, 'approved releases'),
+      latestApprovedAt: clientDemoEvidenceTimestamp(source.website.latestApprovedAt, 'latest approved release'),
+    },
     ecommerce: {
       savedStorefronts: clientDemoEvidenceCount(source.ecommerce.savedStorefronts, 'saved storefronts'),
       reviewedRequests: clientDemoEvidenceCount(source.ecommerce.reviewedRequests, 'reviewed requests'),
+      latestSavedStorefrontAt: clientDemoEvidenceTimestamp(source.ecommerce.latestSavedStorefrontAt, 'latest saved storefront'),
+      latestReviewedRequestAt: clientDemoEvidenceTimestamp(source.ecommerce.latestReviewedRequestAt, 'latest reviewed request'),
     },
   }
+}
+
+function evidenceFollowsBaseline(value: string | null, baseline: string) {
+  return value !== null && Date.parse(value) > Date.parse(baseline)
 }
 
 export function buildClientDemoRunbook(workspaceValue: unknown, evidenceValue: unknown): ClientDemoRunbook {
@@ -1830,19 +1866,26 @@ export function buildClientDemoRunbook(workspaceValue: unknown, evidenceValue: u
   const evidence = canonicalClientDemoEvidence(evidenceValue)
   const proofByProduct: Record<ClientSolutionId, { ready: boolean; observed: string }> = {
     commerce: {
-      ready: evidence.commerce.completedOrders > 0 && evidence.commerce.reconciledOrders > 0,
+      ready: evidence.commerce.completedOrders > 0
+        && evidence.commerce.reconciledOrders > 0
+        && evidenceFollowsBaseline(evidence.commerce.latestAccountableSaleAt, workspace.proofBaselineAt),
       observed: `${evidence.commerce.completedOrders} completed · ${evidence.commerce.reconciledOrders} payment reconciled`,
     },
     production: {
-      ready: evidence.production.releasedBatches > 0,
+      ready: evidence.production.releasedBatches > 0
+        && evidenceFollowsBaseline(evidence.production.latestReleasedAt, workspace.proofBaselineAt),
       observed: `${evidence.production.releasedBatches} batch${evidence.production.releasedBatches === 1 ? '' : 'es'} released to stock`,
     },
     website: {
-      ready: evidence.website.approvedReleases > 0,
+      ready: evidence.website.approvedReleases > 0
+        && evidenceFollowsBaseline(evidence.website.latestApprovedAt, workspace.proofBaselineAt),
       observed: `${evidence.website.approvedReleases} approved local release${evidence.website.approvedReleases === 1 ? '' : 's'}`,
     },
     ecommerce: {
-      ready: evidence.ecommerce.savedStorefronts > 0 && evidence.ecommerce.reviewedRequests > 0,
+      ready: evidence.ecommerce.savedStorefronts > 0
+        && evidence.ecommerce.reviewedRequests > 0
+        && evidenceFollowsBaseline(evidence.ecommerce.latestSavedStorefrontAt, workspace.proofBaselineAt)
+        && evidenceFollowsBaseline(evidence.ecommerce.latestReviewedRequestAt, workspace.proofBaselineAt),
       observed: `${evidence.ecommerce.savedStorefronts} saved storefront · ${evidence.ecommerce.reviewedRequests} Shop request${evidence.ecommerce.reviewedRequests === 1 ? '' : 's'}`,
     },
   }

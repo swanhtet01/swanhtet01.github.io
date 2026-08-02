@@ -256,6 +256,13 @@ function safePacketFilename(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'store'
 }
 
+function latestIsoTimestamp(values: Array<string | null | undefined>) {
+  return values.reduce<string | null>((latest, value) => {
+    if (!value || !Number.isFinite(Date.parse(value))) return latest
+    return !latest || Date.parse(value) > Date.parse(latest) ? value : latest
+  }, null)
+}
+
 function settingsCommandUuid() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16))
@@ -507,23 +514,43 @@ export function SettingsPage() {
   const preparedBlockedEntry = preparedBlockedProduct
     ? preparedArtifact?.products.find((product) => product.product === preparedBlockedProduct) ?? null
     : null
-  const plantReleasedBatches = (() => {
-    try { return productionOrderPortfolioEntries(production).filter((entry) => projectPlantOrder(entry.execution).status === 'released_to_stock').length } catch { return 0 }
+  const accountableShopSaleTimes = commerce.orders.flatMap((order) => {
+    const completedAt = order.status === 'completed' ? order.completion?.capturedAt : null
+    const reconciledAt = order.paymentStatus === 'reconciled' ? order.paymentReconciledAt : null
+    if (!completedAt || !reconciledAt || !Number.isFinite(Date.parse(completedAt)) || !Number.isFinite(Date.parse(reconciledAt))) return []
+    return [Date.parse(completedAt) < Date.parse(reconciledAt) ? completedAt : reconciledAt]
+  })
+  const releasedPlantBatchProofTimes = (() => {
+    try {
+      return productionOrderPortfolioEntries(production).flatMap((entry) => {
+        const projection = projectPlantOrder(entry.execution)
+        return projection.status === 'released_to_stock' && projection.batchRelease ? [projection.batchRelease.proof.capturedAt] : []
+      })
+    } catch { return [] }
   })()
-  const approvedWebsiteReleases = (() => {
+  const currentWebsitePublish = (() => {
     const loaded = loadWebsiteWorkspace(window.localStorage)
-    return loaded.ok && getCurrentPublish(loaded.workspace) ? 1 : 0
+    return loaded.ok ? getCurrentPublish(loaded.workspace) : null
   })()
   const demoRunbook = demoWorkspace ? buildClientDemoRunbook(demoWorkspace, {
     commerce: {
       completedOrders: commerce.orders.filter((order) => order.status === 'completed').length,
       reconciledOrders: commerce.orders.filter((order) => order.paymentStatus === 'reconciled').length,
+      latestAccountableSaleAt: latestIsoTimestamp(accountableShopSaleTimes),
     },
-    production: { releasedBatches: plantReleasedBatches },
-    website: { approvedReleases: approvedWebsiteReleases },
+    production: {
+      releasedBatches: releasedPlantBatchProofTimes.length,
+      latestReleasedAt: latestIsoTimestamp(releasedPlantBatchProofTimes),
+    },
+    website: {
+      approvedReleases: currentWebsitePublish ? 1 : 0,
+      latestApprovedAt: currentWebsitePublish?.recordedAt ?? null,
+    },
     ecommerce: {
       savedStorefronts: commerce.storefrontConfiguration ? 1 : 0,
       reviewedRequests: commerce.storefrontRequests?.length ?? 0,
+      latestSavedStorefrontAt: commerce.storefrontConfiguration?.saved.capturedAt ?? null,
+      latestReviewedRequestAt: latestIsoTimestamp(commerce.storefrontRequests?.map((request) => request.createdAt) ?? []),
     },
   }) : null
   const nextDemoMission = demoRunbook?.products.find((product) => product.product === demoRunbook.nextProduct) ?? null
