@@ -1700,9 +1700,6 @@ export function EcommerceProduct() {
         </div>
       </section>
 
-      <details className="ecommerce-business-controls">
-        <summary><span><strong>Optional order tools</strong><small>Imports, payment, delivery, customer replies, and go-live checks</small></span><b>Optional</b></summary>
-        <div className="ecommerce-business-controls-content">
       <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-state={ecommerceTodayState}>
         <div className="ecommerce-today-priority">
           <span className="core-eyebrow">Today</span>
@@ -1718,6 +1715,10 @@ export function EcommerceProduct() {
           <small>Shop controls prices, stock, payment, delivery, and the accountable order record.</small>
         </div>
       </section>
+
+      <details className="ecommerce-business-controls">
+        <summary><span><strong>Optional order tools</strong><small>Imports, payment, delivery, customer replies, and go-live checks</small></span><b>Optional</b></summary>
+        <div className="ecommerce-business-controls-content">
       <section aria-label="Order desk" className="ecommerce-ai-desk">
         <div>
           <span className="core-eyebrow">Order desk</span>
