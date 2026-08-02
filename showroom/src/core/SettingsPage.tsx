@@ -86,7 +86,6 @@ import {
   type PilotOutcomeReview,
 } from './pilot-outcome'
 import { useLocalPilotOutcome } from './useLocalPilotOutcome'
-import { listResettableCompanyStorageKeys } from './company-backup'
 import { buildClientCapabilityPlan } from './client-capability-plan'
 import {
   buildClientCsvStarterPack,
@@ -139,6 +138,7 @@ import {
   LOCAL_WORKSPACE_RESTORE_POINT_KEY,
   applyLocalWorkspaceBackup,
   collectLocalWorkspaceBackup,
+  listLocalWorkspaceStorageKeys,
   restoreLocalWorkspaceBackup,
   restoreLocalWorkspaceBackupFromEvidence,
   type LocalWorkspaceBackup,
@@ -1870,7 +1870,7 @@ export function SettingsPage() {
       }
       const { resetCommerceOrderDraftRecovery } = await import('./commerce-order-draft')
       await resetCommerceOrderDraftRecovery()
-      const resettableKeys = listResettableCompanyStorageKeys(window.localStorage)
+      const resettableKeys = listLocalWorkspaceStorageKeys(window.localStorage)
       resettableKeys.forEach((key) => window.localStorage.removeItem(key))
       window.location.assign('/')
     } catch (error) {
@@ -2252,7 +2252,6 @@ export function SettingsPage() {
                 <button className="core-button" onClick={saveLocalRestorePoint} type="button">Save restore point</button>
                 <a className="core-button" download={evidenceFilename} href={evidenceHref}>Export full evidence</a>
                 <label className="core-button">Load evidence backup<input accept=".json,application/json" className="sr-only" onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void loadEvidenceRestorePoint(file) }} type="file" /></label>
-                {restorePoint ? <button className="core-button" disabled={restoreBusy} onClick={restoreSavedLocalWorkspace} type="button">{restoreBusy ? 'Restoring...' : 'Restore previous workspace'}</button> : null}
                 {resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting...' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}
               </div>
             </section>
