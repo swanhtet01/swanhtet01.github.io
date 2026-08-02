@@ -701,7 +701,12 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
   ) {
     if (!managedIdentity) {
       if (eventType === 'production.workspace.initialized') throw new Error('Browser demo Plant is already initialized.')
-      const result = await mutateProductionWorkspace(transition)
+      const result = await mutateProductionWorkspace(
+        transition,
+        undefined,
+        undefined,
+        eventType === 'production.order_execution.recorded' ? 'order-execution' : 'operating-event',
+      )
       if (!result.ok) {
         if (result.error === 'The Production state changed or the requested transition is not valid. Nothing was written.') {
           const latest = loadProductionWorkspace()

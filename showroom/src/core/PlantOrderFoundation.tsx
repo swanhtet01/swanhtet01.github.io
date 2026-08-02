@@ -7,6 +7,7 @@ import {
   PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT,
   PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
   PLANT_ORDER_PLAN_REVISION_MAX,
+  PLANT_ORDER_WORKSPACE_UPDATED_EVENT,
   applyPlantOrderPlan,
   approvePlantOrderMaterialSubstitution,
   buildPlantOrderCostReviewPacket,
@@ -474,6 +475,11 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
     }
     if (!review && dialog.open) dialog.close()
   }, [review])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.dispatchEvent(new CustomEvent(PLANT_ORDER_WORKSPACE_UPDATED_EVENT, { detail: { scope } }))
+  }, [scope, state.headDigest])
 
   function selectOrder(jobId: string) {
     const retained = productionOrderExecutionForJob(productionState, jobId)
