@@ -1413,7 +1413,7 @@ export function EcommerceProduct() {
     ['Rule', deliveryReviewRequest ? 'Owner fee review' : savedDraftIsCurrent ? 'Template shell' : 'Locked'],
     ['Rider', deliveryReviewRequest ? 'Owner review' : 'Not assigned'],
     ['Payment', deliveryReviewRequest && 'quote' in deliveryReviewRequest ? deliveryReviewRequest.quote.payment.adapter === 'kbzpay_manual' ? 'Manual QR' : 'COD review' : 'No charge'],
-    ['Reuse', deliveryReviewRequest ? 'After approval' : 'Managed gate'],
+    ['Reuse', deliveryReviewRequest ? 'After review' : 'Needs order'],
   ] as const
   const deliveryFeeStage = importNeeded
     ? 'Import catalog before delivery setup'
@@ -1449,7 +1449,7 @@ export function EcommerceProduct() {
     ['Storefront', previewResult.preview ? savedDraftIsCurrent ? 'Saved' : 'Draft ready' : 'Blocked'],
     ['Checkout', buyingReady ? 'Quote ready' : 'Locked'],
     ['Queue', pendingManagedRequests.length ? `${pendingManagedRequests.length} Shop review` : 'Clear'],
-    ['Safety', managedIdentity ? 'Managed gate' : 'Local trial'],
+    ['Safety', managedIdentity ? 'Account review' : 'Sample only'],
   ] as const
   const managedStoreActivationStage = importNeeded
     ? 'Import catalog for go-live'
@@ -1473,7 +1473,7 @@ export function EcommerceProduct() {
     ['Payments', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} manual QR` : 'Review only'],
     ['Delivery', deliveryReviewCount ? `${deliveryReviewCount} review` : savedDraftIsCurrent ? 'Template ready' : 'Locked'],
     ['Shop gate', pendingManagedRequests.length ? `${pendingManagedRequests.length} owner review` : 'No queue'],
-    ['Go-live', managedIdentity ? 'Managed controls' : 'Free local only'],
+    ['Go-live', managedIdentity ? 'Account controls' : 'Download file'],
   ] as const
   function downloadManagedStoreActivationPacket() {
     const packet = buildEcommerceManagedStoreActivationPacket({
@@ -1733,7 +1733,7 @@ export function EcommerceProduct() {
         <div className="ecommerce-ai-desk-queue">
           {aiDeskRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
-        <div className="ecommerce-ai-agent-queue" aria-label="Recommended Ecommerce next step" role="group">
+        <div className="ecommerce-ai-agent-queue" aria-label="Ecommerce next step" role="group">
           {aiAgentQueueRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
         <button className="core-button primary compact" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">Open next step</button>
@@ -1822,7 +1822,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Managed store go-live file</span>
           <h2>{managedStoreActivationStage}</h2>
-          <p>Package products, prices, checkout controls, manual payment review, delivery template readiness, Shop review queue, and managed gate for go-live review. No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or managed activation runs from this file.</p>
+          <p>Package products, prices, checkout controls, manual payment review, delivery templates, and Shop review queue for go-live review. No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or managed activation runs from this file.</p>
           <button className="text-link" onClick={downloadManagedStoreActivationPacket} type="button">Download go-live file</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows ecommerce-managed-activation-rows">
@@ -1845,7 +1845,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Order lifecycle</span>
           <h2>One path from cart to return</h2>
-          <p>AI guides capture, pricing, available-to-promise, fulfilment, and returns from the same Shop-controlled source. No charge, message, refund, or stock write starts here.</p>
+          <p>Follow capture, pricing, available-to-promise, fulfilment, and returns from the same Shop-controlled source. No charge, message, refund, or stock write starts here.</p>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
           {lifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
