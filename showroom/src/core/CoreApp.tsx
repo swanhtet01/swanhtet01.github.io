@@ -3237,8 +3237,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         ? '/shop/?tab=inventory'
         : '/shop/?tab=counter'
   const shopAgentRows = [
-    ['Agent job', shopAgentJob],
-    ['Reason', shopAgentReason],
+    ['Next step', shopAgentJob],
+    ['Why', shopAgentReason],
     ['Owner gate', shopOwnerGate],
   ]
   const shopAutopilotStage = !commerceCanWrite
@@ -3340,16 +3340,16 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     <div>
       <span className="core-eyebrow">Shop next step</span>
       <h2>{shopAutopilotStage}</h2>
-      <p>One button chooses the next safe owner action from online requests, orders, payment exceptions, purchase orders, low stock, inventory foundation, and write-readiness state. The assistant may prepare records and packets; it does not send customers, charge payments, book delivery, move stock, reconcile cash, or write Shop records here.</p>
+      <p>Open the next safe owner action from online requests, orders, payment exceptions, purchase orders, low stock, inventory foundation, and write-readiness state. SuperMega can prepare records and packets; it does not send customers, charge payments, book delivery, move stock, reconcile cash, or write Shop records here.</p>
     </div>
     <div className="shop-command-center-rows">{shopAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-    <button className="core-button primary compact" onClick={runShopAutopilot} type="button">Run next step</button>
+    <button className="core-button primary compact" onClick={runShopAutopilot} type="button">Open next step</button>
   </section>
   const shopSetupGuide = <section aria-label="Shop setup guide" className="shop-order-control shop-setup-guide">
     <div>
       <span className="core-eyebrow">Shop setup guide</span>
       <strong>Import products once. Then run the daily queue.</strong>
-      <small>The assistant prepares catalog import, stock foundation, online order review, payment exceptions, supplier receiving, and accounting packets. The owner confirms every sale, payment, stock, supplier, refund, and accounting handoff.</small>
+      <small>SuperMega prepares catalog import, stock foundation, online order review, payment exceptions, supplier receiving, and accounting packets. The owner confirms every sale, payment, stock, supplier, refund, and accounting review.</small>
     </div>
     <div className="shop-order-control-rows">{shopSetupGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
@@ -3358,7 +3358,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     <div>
       <span className="core-eyebrow">Recommended next step</span>
       <h2>{shopAgentJob}</h2>
-      <p>The assistant prepares the next Shop move. A named human approves every consequential action.</p>
+      <p>SuperMega shows the next Shop move. A named human approves every consequential action.</p>
     </div>
     <div>{shopAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <Link className="core-button compact" onClick={() => {
