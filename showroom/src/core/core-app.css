@@ -1755,6 +1755,8 @@ textarea { min-height: 72px; resize: vertical; }
   .mobile-brand { display: flex !important; }
   .topbar-title, .topbar-meta > span { display: none !important; }
   .topbar-meta > a { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; color: var(--core-muted); font-size: 10px; font-weight: 720; text-decoration: none; }
+  .core-topbar .mobile-account-link,
+  .core-topbar .runtime-badge { display: none; }
   .mobile-nav { position: fixed; inset: auto 0 0; z-index: 40; width: 100%; max-width: 100%; min-height: 64px; display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); overflow: hidden; border-top: 1px solid var(--core-line); padding-bottom: env(safe-area-inset-bottom); background: rgba(255,255,255,.97); box-shadow: 0 -12px 34px rgba(25,54,42,.1); backdrop-filter: blur(18px); }
   .mobile-nav a:first-child { display: none; }
   .mobile-nav a { min-width: 0; display: grid; place-items: center; border-top: 2px solid transparent; padding-inline: 2px; overflow: hidden; color: var(--core-quiet); font-size: 9px; font-weight: 740; text-align: center; text-overflow: ellipsis; text-decoration: none; white-space: nowrap; }

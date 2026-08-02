@@ -1625,9 +1625,9 @@ export function EcommerceProduct() {
     ['Returns', managedReturnedUnits ? `${managedReturnedUnits} unit${managedReturnedUnits === 1 ? '' : 's'}` : 'Clear'],
   ] as const
   const ecommerceGuidedJobs = [
-    ['1', 'Shop the sample', 'Open the customer view, add items, and create one reviewable request.', '#ecommerce-preview-panel'],
-    ['2', 'Edit store', 'Choose products, copy, and display details from the Shop-controlled catalog.', '#ecommerce-setup-panel'],
-    ['3', 'Review orders', 'Open reviewed customer requests in Shop for payment and fulfilment.', '/shop/?tab=orders&source=ecommerce'],
+    ['1', 'Shop the sample', 'Add items and send one test order.', '#ecommerce-preview-panel'],
+    ['2', 'Edit store', 'Pick products, prices, photos, and copy.', '#ecommerce-setup-panel'],
+    ['3', 'Review orders', 'Confirm payment, fulfilment, and delivery in Shop.', '/shop/?tab=orders&source=ecommerce'],
   ] as const
 
   function runOrderAutopilot() {
@@ -1671,7 +1671,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">{managedIdentity ? 'Managed commerce' : 'Local commerce workspace'}</span>
           <h1>Ecommerce</h1>
-          <p>Run your online store from catalog to cart, order, delivery, and return.</p>
+          <p>Sell online with products, cart, orders, delivery, and returns.</p>
         </div>
       </header>
 
@@ -1679,7 +1679,7 @@ export function EcommerceProduct() {
         <header>
           <span className="core-eyebrow">Start here</span>
           <h2>Start selling in 3 steps.</h2>
-          <p>Use the store like a customer, choose what they see, then confirm real orders in Shop.</p>
+          <p>Try the storefront, edit products, then review orders in Shop.</p>
         </header>
         <div>
           {ecommerceGuidedJobs.map(([step, label, detail, to]) => to.startsWith('#') ? (
