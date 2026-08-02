@@ -1675,6 +1675,22 @@ export function EcommerceProduct() {
         </div>
       </header>
 
+      <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-state={ecommerceTodayState}>
+        <div className="ecommerce-today-priority">
+          <span className="core-eyebrow">Today</span>
+          <h2 id="ecommerce-today-title">{ecommerceTodayHeadline}</h2>
+          <p>{ecommerceTodaySummary}</p>
+          <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>
+        </div>
+        <div aria-label="Ecommerce today status" className="ecommerce-today-metrics" role="group">
+          {ecommerceTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+        </div>
+        <div className="ecommerce-today-source" role="status">
+          <span>{sourceLabel}</span>
+          <small>Shop keeps the real stock, payment, delivery, and order record behind this store.</small>
+        </div>
+      </section>
+
       <section className="ecommerce-start-guide" aria-label="Ecommerce guided jobs">
         <header>
           <span className="core-eyebrow">Start here</span>
@@ -1697,22 +1713,6 @@ export function EcommerceProduct() {
               <span><strong>{label}</strong><small>{detail}</small></span>
             </Link>
           ))}
-        </div>
-      </section>
-
-      <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-state={ecommerceTodayState}>
-        <div className="ecommerce-today-priority">
-          <span className="core-eyebrow">Today</span>
-          <h2 id="ecommerce-today-title">{ecommerceTodayHeadline}</h2>
-          <p>{ecommerceTodaySummary}</p>
-          <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>
-        </div>
-        <div aria-label="Ecommerce today status" className="ecommerce-today-metrics" role="group">
-          {ecommerceTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-        </div>
-        <div className="ecommerce-today-source" role="status">
-          <span>{sourceLabel}</span>
-          <small>Shop keeps the real stock, payment, delivery, and order record behind this store.</small>
         </div>
       </section>
 
