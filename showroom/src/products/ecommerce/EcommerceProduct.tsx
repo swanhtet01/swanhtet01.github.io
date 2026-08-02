@@ -1146,6 +1146,27 @@ export function EcommerceProduct() {
   const lifecyclePaymentAttention = managedOrderTimeline.filter((entry) => entry.nextAction === 'confirm_payment')
   const lifecycleRefundAttention = managedOrderTimeline.filter((entry) => entry.nextAction === 'settle_refund')
   const managedReturnedUnits = managedOrderTimeline.reduce((total, entry) => total + entry.returnedQuantity, 0)
+  const localEcommerceOrders = managedIdentity
+    ? []
+    : (activeCommerceState?.orders ?? []).filter((order) => order.sourceRecordId?.startsWith('ECR-'))
+  const ecommerceActiveOrderCount = managedIdentity
+    ? activeManagedOrders.length
+    : localEcommerceOrders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled').length
+  const ecommerceCompletedOrderCount = managedIdentity
+    ? completedManagedOrders.length
+    : localEcommerceOrders.filter((order) => order.status === 'completed').length
+  const ecommerceCancelledOrderCount = managedIdentity
+    ? cancelledManagedOrders.length
+    : localEcommerceOrders.filter((order) => order.status === 'cancelled').length
+  const ecommercePaymentAttentionCount = managedIdentity
+    ? lifecyclePaymentAttention.length
+    : localEcommerceOrders.filter((order) => order.status === 'ready' && order.paymentStatus !== 'reconciled').length
+  const ecommerceRefundAttentionCount = managedIdentity
+    ? lifecycleRefundAttention.length
+    : localEcommerceOrders.filter((order) => order.refundStatus === 'due').length
+  const ecommerceReturnedUnits = managedIdentity
+    ? managedReturnedUnits
+    : localEcommerceOrders.reduce((total, order) => total + (order.returns ?? []).reduce((returned, record) => returned + record.quantity, 0), 0)
   const importNeeded = catalog.source === 'sample' || catalog.source === 'unavailable' || catalog.items.length === 0
   const orderOpsNow = Date.now()
   const orderOpsAgingCount = pendingManagedRequests.filter((request) => Date.parse(request.createdAt) <= orderOpsNow - 30 * 60 * 1000).length
@@ -1170,9 +1191,9 @@ export function EcommerceProduct() {
         : buyingCart.length
           ? 'Quote payment and delivery'
           : 'Checkout controls ready'
-  const orderOpsPriority = lifecycleRefundAttention.length
+  const orderOpsPriority = ecommerceRefundAttentionCount
     ? 'Settle refund evidence'
-    : lifecyclePaymentAttention.length
+    : ecommercePaymentAttentionCount
       ? 'Confirm payment before completion'
       : orderOpsStockRiskCount
         ? 'Resolve stock risk'
@@ -1182,7 +1203,7 @@ export function EcommerceProduct() {
             ? 'Clear aged requests'
             : pendingManagedRequests.length
               ? 'Review next request'
-              : activeManagedOrders.length
+              : ecommerceActiveOrderCount
                 ? 'Continue fulfilment'
                 : importNeeded
                   ? 'Import sellable catalog'
@@ -1191,11 +1212,11 @@ export function EcommerceProduct() {
                     : 'Save store'
   const orderOpsRows = [
     ['Review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : 'Clear'],
-    ['Fulfil', activeManagedOrders.length ? `${activeManagedOrders.length} active` : 'Clear'],
-    ['Payment', lifecyclePaymentAttention.length ? `${lifecyclePaymentAttention.length} blocking` : 'Clear'],
-    ['Refund', lifecycleRefundAttention.length ? `${lifecycleRefundAttention.length} due` : 'Clear'],
-    ['Done', `${completedManagedOrders.length} completed · ${cancelledManagedOrders.length} cancelled`],
-    ['Returns', managedReturnedUnits ? `${managedReturnedUnits} units recorded` : 'None'],
+    ['Fulfil', ecommerceActiveOrderCount ? `${ecommerceActiveOrderCount} active` : 'Clear'],
+    ['Payment', ecommercePaymentAttentionCount ? `${ecommercePaymentAttentionCount} blocking` : 'Clear'],
+    ['Refund', ecommerceRefundAttentionCount ? `${ecommerceRefundAttentionCount} due` : 'Clear'],
+    ['Done', `${ecommerceCompletedOrderCount} completed · ${ecommerceCancelledOrderCount} cancelled`],
+    ['Returns', ecommerceReturnedUnits ? `${ecommerceReturnedUnits} units recorded` : 'None'],
   ] as const
   const orderImportStage = importNeeded
     ? 'Upload catalog first'
@@ -1526,6 +1547,8 @@ export function EcommerceProduct() {
   ] as const
   const aiAgentJob = pendingManagedRequests.length
     ? 'Review Ecommerce requests in Shop'
+    : ecommerceActiveOrderCount
+      ? 'Continue Ecommerce order in Shop'
     : importNeeded
       ? 'Prepare catalog import'
       : !savedDraftIsCurrent
@@ -1535,6 +1558,8 @@ export function EcommerceProduct() {
           : 'Open store for ordering'
   const aiAgentReason = pendingManagedRequests.length
     ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'} waiting for accountable Shop review.`
+    : ecommerceActiveOrderCount
+      ? `${ecommerceActiveOrderCount} Ecommerce order${ecommerceActiveOrderCount === 1 ? '' : 's'} now use the Shop-owned fulfilment record.`
     : importNeeded
       ? 'The order desk needs a real Shop catalog before the store can sell.'
       : !savedDraftIsCurrent
@@ -1544,6 +1569,8 @@ export function EcommerceProduct() {
           : 'The store is saved and ready for a customer request.'
   const aiOwnerGate = pendingManagedRequests.length
     ? 'Shop confirms stock, delivery, payment, and customer contact.'
+    : ecommerceActiveOrderCount
+      ? 'Shop remains authoritative for fulfilment, payment, cancellation, and returns.'
     : importNeeded
       ? 'Review the imported catalog before going live.'
       : !savedDraftIsCurrent
@@ -1566,32 +1593,36 @@ export function EcommerceProduct() {
           ? 'Repair order batch'
           : pendingManagedRequests.length
             ? 'Open Shop review'
+            : ecommerceActiveOrderCount
+              ? 'Continue fulfilment'
             : buyingReady
               ? 'Ready for customer orders'
               : 'Check setup'
   const ecommerceTodayCustomerCount = new Set(
-    managedOrderTimeline
-      .map((entry) => entry.request.customerReference.trim())
+    (managedIdentity
+      ? managedOrderTimeline.map((entry) => entry.request.customerReference)
+      : localEcommerceOrders.map((order) => order.customer))
+      .map((customer) => customer.trim())
       .filter(Boolean),
   ).size
   const ecommerceTodayCartUnits = buyingCart.reduce((total, line) => total + line.quantity, 0)
   const ecommerceTodayState = importNeeded || !savedDraftIsCurrent
     ? 'setup'
-    : lifecycleRefundAttention.length || lifecyclePaymentAttention.length || orderOpsStockRiskCount || pendingManagedRequests.length
+    : ecommerceRefundAttentionCount || ecommercePaymentAttentionCount || orderOpsStockRiskCount || pendingManagedRequests.length
       ? 'attention'
       : 'ready'
   const ecommerceTodayHeadline = importNeeded
     ? 'Connect your products to start selling'
     : !savedDraftIsCurrent
       ? 'Finish the store customers will see'
-      : lifecycleRefundAttention.length
-        ? `${lifecycleRefundAttention.length} refund${lifecycleRefundAttention.length === 1 ? '' : 's'} need evidence`
-        : lifecyclePaymentAttention.length
-          ? `${lifecyclePaymentAttention.length} payment${lifecyclePaymentAttention.length === 1 ? '' : 's'} need confirmation`
+      : ecommerceRefundAttentionCount
+        ? `${ecommerceRefundAttentionCount} refund${ecommerceRefundAttentionCount === 1 ? '' : 's'} need evidence`
+        : ecommercePaymentAttentionCount
+          ? `${ecommercePaymentAttentionCount} payment${ecommercePaymentAttentionCount === 1 ? '' : 's'} need confirmation`
           : pendingManagedRequests.length
             ? `${pendingManagedRequests.length} order request${pendingManagedRequests.length === 1 ? '' : 's'} need review`
-            : activeManagedOrders.length
-              ? `${activeManagedOrders.length} order${activeManagedOrders.length === 1 ? '' : 's'} in progress`
+            : ecommerceActiveOrderCount
+              ? `${ecommerceActiveOrderCount} order${ecommerceActiveOrderCount === 1 ? '' : 's'} in progress`
               : ecommerceTodayCartUnits
                 ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'} ready for checkout`
                 : 'Your store is ready for the next order'
@@ -1601,7 +1632,7 @@ export function EcommerceProduct() {
       ? 'Review the customer view once, then save the exact products, prices, and page customers will see.'
       : pendingManagedRequests.length
         ? 'Shop keeps the accountable order record. Review stock, payment, and delivery before customer contact.'
-        : activeManagedOrders.length
+        : ecommerceActiveOrderCount
           ? 'Continue fulfilment from the Shop-owned order record; no duplicate order ledger is created here.'
           : 'Customers can browse and build a cart. Shop remains in control of payment, stock, delivery, and returns.'
   const ecommerceTodayAction = importNeeded
@@ -1614,15 +1645,17 @@ export function EcommerceProduct() {
           ? 'Fix order import'
           : pendingManagedRequests.length
             ? 'Review orders in Shop'
+            : ecommerceActiveOrderCount
+              ? 'Continue in Shop'
             : ecommerceTodayCartUnits
               ? 'Review checkout'
               : 'Prepare next order'
   const ecommerceTodayMetrics = [
     ['Storefront', savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : 'Needs setup'],
     ['Shop requests', pendingManagedRequests.length ? `${pendingManagedRequests.length} to review` : 'Clear'],
-    ['Cart & checkout', ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
+    ['Cart & checkout', ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Order confirmed' : ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
     ['Customers', ecommerceTodayCustomerCount ? `${ecommerceTodayCustomerCount} known` : 'No orders yet'],
-    ['Returns', managedReturnedUnits ? `${managedReturnedUnits} unit${managedReturnedUnits === 1 ? '' : 's'}` : 'Clear'],
+    ['Returns', ecommerceReturnedUnits ? `${ecommerceReturnedUnits} unit${ecommerceReturnedUnits === 1 ? '' : 's'}` : 'Clear'],
   ] as const
   const ecommerceGuidedJobs = [
     ['1', 'Browse demo', 'See the customer store first.', '#ecommerce-preview-panel'],
@@ -1651,6 +1684,10 @@ export function EcommerceProduct() {
     }
     if (pendingManagedRequests.length) {
       navigate('/shop/?tab=orders&source=ecommerce')
+      return
+    }
+    if (ecommerceActiveOrderCount) {
+      navigate('/shop/?tab=orders')
       return
     }
     prepareQuoteRecovery()

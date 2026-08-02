@@ -631,7 +631,7 @@ const clientDemoRunbookContracts: Record<ClientSolutionId, {
   ecommerce: {
     scenario: 'Turn one storefront visit into a Shop-reviewed request.',
     steps: ['Save the Shop-backed storefront', 'Build and review one customer quote', 'Send the request to Shop for confirmation'],
-    evidenceRequirement: 'A saved storefront configuration and at least one reviewed request in Shop.',
+    evidenceRequirement: 'A saved storefront configuration and at least one request confirmed into a Shop order.',
   },
 }
 
@@ -1886,7 +1886,7 @@ export function buildClientDemoRunbook(workspaceValue: unknown, evidenceValue: u
         && evidence.ecommerce.reviewedRequests > 0
         && evidenceFollowsBaseline(evidence.ecommerce.latestSavedStorefrontAt, workspace.proofBaselineAt)
         && evidenceFollowsBaseline(evidence.ecommerce.latestReviewedRequestAt, workspace.proofBaselineAt),
-      observed: `${evidence.ecommerce.savedStorefronts} saved storefront · ${evidence.ecommerce.reviewedRequests} Shop request${evidence.ecommerce.reviewedRequests === 1 ? '' : 's'}`,
+      observed: `${evidence.ecommerce.savedStorefronts} saved storefront · ${evidence.ecommerce.reviewedRequests} Shop-confirmed request${evidence.ecommerce.reviewedRequests === 1 ? '' : 's'}`,
     },
   }
   const products = workspace.blueprint.products.map((product) => {
