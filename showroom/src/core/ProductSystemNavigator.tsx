@@ -12,7 +12,7 @@ const productDetails: Record<ClientSolutionId, { label: string; summary: string;
   commerce: { label: 'Shop', summary: 'Sell, fulfil, restock, and close the day.', setupPath: '/settings/?product=shop', primaryPath: '/shop/' },
   production: { label: 'Plant', summary: 'Plan jobs, run output, quality, and maintenance.', setupPath: '/settings/?product=plant', primaryPath: '/plant/' },
   website: { label: 'Website', summary: 'Edit pages, review leads, and prepare launch.', setupPath: '/settings/?product=website', primaryPath: '/website/' },
-  ecommerce: { label: 'Ecommerce', summary: 'Run storefront orders and Shop handoff.', setupPath: '/settings/?product=ecommerce', primaryPath: '/ecommerce/' },
+  ecommerce: { label: 'Ecommerce', summary: 'Run storefront orders and Shop review.', setupPath: '/settings/?product=ecommerce', primaryPath: '/ecommerce/' },
 }
 
 function WorkflowLink({ capability }: { capability: ClientCapability }) {
@@ -50,13 +50,13 @@ export function ProductSystemNavigator({ product }: { product: ClientSolutionId 
       <div className="product-system-body">
         <header>
           <div><span className="core-eyebrow">{details.label}</span><h2>Start with a real workflow.</h2><p>Open the working app first. Bring in real data only after the sample makes sense.</p></div>
-          <div className="product-system-actions"><Link className="core-button compact primary" to={details.primaryPath}>Open {details.label}</Link><Link className="core-button compact" to={details.setupPath}>Use real data</Link></div>
+          <div className="product-system-actions"><Link className="core-button compact primary" to={details.primaryPath}>Open {details.label}</Link><Link className="core-button compact" to={details.setupPath}>Use your data</Link></div>
         </header>
         <div className="product-system-workflows" aria-label={`${details.label} working workflows`}>
           {workingFlows.map((capability) => <WorkflowLink capability={capability} key={capability.id} />)}
         </div>
         <details className="product-system-advanced">
-          <summary><span>Real-data setup</span><strong>{setupModules.length}</strong></summary>
+          <summary><span>Add your data</span><strong>{setupModules.length}</strong></summary>
           <p>{setupModules.map((capability) => capability.label).join(' / ')}</p>
         </details>
         <footer>{summary.scaleLater} future modules stay hidden until they are ready to use.</footer>
