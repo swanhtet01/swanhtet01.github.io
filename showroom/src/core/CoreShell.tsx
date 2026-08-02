@@ -375,8 +375,8 @@ export function CoreLayout() {
 }
 
 const customerTracks = [
-  ['Shop', 'Sales and inventory', 'Sell, track stock, fulfil orders, and close the day.', 'retail, cafe, restaurant, spa, gym, school', '/shop/'],
-  ['Plant', 'Production and quality', 'Plan jobs, record output, trace materials, and handle problems.', 'food, packaging, printing, workshop, assembly', '/plant/'],
+  ['Shop', 'Sales and inventory', 'Sell at the counter, track stock, fulfil orders, and close the day.', 'retail, cafe, restaurant, spa, gym, school', '/shop/?tab=counter'],
+  ['Plant', 'Production and quality', 'Choose a job, record output, trace materials, and handle problems.', 'food, packaging, printing, workshop, assembly', '/plant/?tab=production'],
   ['Website', 'Pages and inquiries', 'Edit a real site preview, collect leads, and prepare launch.', 'business site, services, catalog, landing page', '/website/'],
   ['Ecommerce', 'Storefront and checkout', 'Run online orders, delivery, and Shop review.', 'pickup, local delivery, preorder, social orders', '/ecommerce/'],
 ] as const
@@ -388,7 +388,7 @@ export function ProductHomePage() {
   const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Go-live proof is still required.'
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Pick one product and try the sample. Add your data only when it helps." eyebrow="SuperMega" title="Start with one product." />
+      <PageHeading copy="Pick one product and use the working demo first. Add your data only after the flow makes sense." eyebrow="SuperMega" title="Start with one product." />
       <nav aria-label="Business tracks" className="product-track-grid">
         {customerTracks.map(([name, fit, outcome, examples, path]) => (
           <article className="product-track-card" key={name}>
