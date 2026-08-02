@@ -4964,6 +4964,28 @@ export function commercePaymentDecision(
   return { ...base, status: 'approved', reason: 'approved' }
 }
 
+export function restoreBrowserLocalSamplePaymentPolicies(
+  stateValue: CommerceState,
+  decision: CommercePaymentDecision,
+  fulfilment: 'pickup' | 'delivery',
+  orderAmountMmk: number,
+) {
+  const state = validateCommerceState(stateValue)
+  if (commercePaymentPolicies(state).length) return state
+  const samplePolicies = createSeedCommerce().paymentPolicies ?? []
+  const expected = commercePaymentDecision(
+    samplePolicies,
+    decision.adapter,
+    fulfilment,
+    orderAmountMmk,
+    decision.reviewedAt,
+  )
+  if (!expected
+    || expected.status !== 'approved'
+    || JSON.stringify(expected) !== JSON.stringify(decision)) return null
+  return validateCommerceState({ ...state, paymentPolicies: samplePolicies })
+}
+
 export function commercePaymentAdapterLabel(adapter: CommercePaymentAdapter) {
   if (adapter === 'cash_on_delivery') return 'Cash on delivery'
   if (adapter === 'kbzpay_manual') return 'KBZPay'

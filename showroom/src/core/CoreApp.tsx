@@ -143,6 +143,7 @@ import {
   recordCommerceOrderCorrection,
   registerCommerceItem,
   reserveCommerceOrder,
+  restoreBrowserLocalSamplePaymentPolicies,
   saveCommerceClose,
   settleCommerceRefund,
   updateCommerceItem,
@@ -4230,7 +4231,23 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         : 'Order and handoff reviewed.',
       apply: async (action) => {
         const ownedOrder = { ...order, owner: action.actor }
-        await mutateCommerce('commerce.order.created', action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, ownedOrder, commerceActionProof(action)))
+        const proof = commerceActionProof(action)
+        await mutateCommerce('commerce.order.created', action.commandId, proof, (current) => {
+          const paymentPolicyState = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+            && !managedIdentity
+            && paymentDecision
+            && (current.paymentPolicies?.length ?? 0) === 0
+            ? restoreBrowserLocalSamplePaymentPolicies(
+                current,
+                paymentDecision,
+                ecommerceDraft.fulfilment,
+                ecommerceDraft.totalMmk,
+              )
+            : current
+          return paymentPolicyState
+            ? reserveCommerceOrder(paymentPolicyState, ownedOrder, proof)
+            : null
+        })
         if (ecommerceDraft) {
           consumedEcommerceDraftId.current = ecommerceDraft.id
           navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
