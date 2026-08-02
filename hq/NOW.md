@@ -4,8 +4,8 @@ Updated: 2026-08-02
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `95c134afd2eea7325cd3bbef78883ca968063859`
-Live state observed: `2026-08-02T16:41:41.946Z`
+Live release commit: `79f86e7f6c1e8f87fbc43ff5ef3e7c7395b19ffd`
+Live state observed: `2026-08-02T17:36:14.357Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -55,9 +55,9 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 ## Verified baseline
 
 - Product: Ecommerce-Shop completion `54b4d31`, order recovery `3fb9794`, and database v8 `7963981`; release gates pass.
-- Checks: 106 Ecommerce, 342 Commerce, 306 Production, 95 security, 233 onboarding, 85 managed import, and 52 PostgreSQL 17 checks across nine migrations.
+- Checks: 106 Ecommerce, 342 Commerce, 313 Production, 95 security, 233 onboarding, 85 managed import, and 52 PostgreSQL 17 checks across nine migrations.
 - First-action QA routes Shop, Plant, and Website blockers to the next task.
-- Both domains serve deployed `95c134afd2eea7325cd3bbef78883ca968063859`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes.
+- Both domains serve deployed `79f86e7f6c1e8f87fbc43ff5ef3e7c7395b19ffd`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating; audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
@@ -71,7 +71,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
 - `supermegabase` has the private managed schema at v7 with no activated workspace rows. The reviewed v8 RLS performance migration is released as code but not applied; managed writes remain off until backup, exact target binding, hosted advisor checks, tenant proof, and owner-authorized migration complete. The 27 legacy public tables stay outside the app contract and inaccessible through browser roles.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
-- Live HQ and both domains agree on `95c134a`; no release drift is present. Managed activation and broad marketing remain blocked by the seven explicit hosted-readiness gates, and any external handoff must pass `release:handoff:verify`.
+- Live HQ and both domains agree on `79f86e7`; no release drift is present. Managed activation and broad marketing remain blocked by the seven explicit hosted-readiness gates, and any external handoff must pass `release:handoff:verify`.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 

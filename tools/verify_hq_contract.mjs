@@ -664,7 +664,7 @@ requireContract('product QA brief is discoverable from assignment authority',
   && workboard.includes('Checkpoint `dadb013` passes 10 routes at 390/1280 px')
   && workboard.includes('focus lands on `#workspace-main`'))
 requireContract('accepted core checkpoints lead directly to real work',
-  workboard.includes('Current accepted product checkpoint: `3fb9794c33c15e3a240abdaf97a678d2703fa3eb`')
+  workboard.includes('Current accepted product checkpoint: `79f86e7f6c1e8f87fbc43ff5ef3e7c7395b19ffd`')
   && workboard.includes('| ENG-075 | Shop + Data Engineering Codex | done-local |')
   && workboard.includes('| ENG-076 | Plant + Manufacturing Engineering Codex | done-local |')
   && workboard.includes('| ENG-077 | Website + Product Engineering Codex | done-local |')
@@ -735,7 +735,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && now.includes('Product: Ecommerce-Shop completion `54b4d31`, order recovery `3fb9794`, and database v8 `7963981`; release gates pass.')
   && now.includes('First-action QA routes Shop, Plant, and Website blockers to the next task')
   && now.includes('The active delivery focus is:')
-  && now.includes('Live HQ and both domains agree on `95c134a`; no release drift is present.')
+  && now.includes('Live HQ and both domains agree on `79f86e7`; no release drift is present.')
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
   && now.includes('operation/output requires exact authenticated Shop issue evidence')
   && now.includes('Controlled batches bind reviewed productive time and closed downtime')
