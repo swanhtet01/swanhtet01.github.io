@@ -3366,7 +3366,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     <div>
       <span className="core-eyebrow">Shop setup guide</span>
       <strong>Import products once. Then run the daily queue.</strong>
-      <small>SuperMega prepares catalog import, stock foundation, online order review, payment exceptions, supplier receiving, and accounting packets. A manager confirms every sale, payment, stock, supplier, refund, and accounting review.</small>
+      <small>Use this only when you are adding real products, receiving stock, checking payment problems, or preparing end-of-day reports. Daily selling stays in the main order screen.</small>
     </div>
     <div className="shop-order-control-rows">{shopSetupGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
@@ -6523,7 +6523,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       </section> : null}
       <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />
       <details className="shop-business-controls">
-        <summary><span>Workflow &amp; reports</span><small>Setup, accounting, and audit</small></summary>
+        <summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>
         <div className="shop-business-controls-content">
           {shopCommandCenter}
           {shopSetupGuide}
