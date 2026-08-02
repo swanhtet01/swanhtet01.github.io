@@ -233,7 +233,7 @@ export function WebsiteProduct() {
             ? 'This page is saved as a draft. Select Edit site to update it and mark it ready.'
             : 'Check the selected page at desktop, tablet, or mobile size.',
       }
-    : view === 'publish' && storageMode !== 'managed'
+    : view === 'publish' && storageMode === 'session-only'
       ? {
           title: 'Your website is ready',
           copy: 'Download it now. Go live only after final review.',
@@ -770,7 +770,7 @@ export function WebsiteProduct() {
     && Boolean(page.hero.ctaHref.trim()))
   const websiteLeads = leadLedger.leads.filter((lead) => lead.siteName === workspace.siteName)
   const leadCounts = websiteLeadCounts(leadLedger, workspace.siteName)
-  const managedReleaseRequired = storageMode === 'managed'
+  const releaseRecordRequired = storageMode !== 'session-only'
   const websiteAgentJob = storageIssue || canRepairLocalStorage
     ? 'Recover Website workspace'
     : starterSetupActive
@@ -783,11 +783,11 @@ export function WebsiteProduct() {
             ? 'Fix page checks'
             : leadCounts.new
               ? 'Review new inquiries'
-              : managedReleaseRequired && !approvalIsCurrent
+              : releaseRecordRequired && !approvalIsCurrent
                 ? 'Final review'
-                : managedReleaseRequired && !publishIsCurrent
+                : releaseRecordRequired && !publishIsCurrent
                   ? 'Save website file'
-                  : managedReleaseRequired
+                  : releaseRecordRequired
                     ? 'Review go-live plan'
                     : 'Download website'
   const websiteAgentReason = storageIssue || canRepairLocalStorage
@@ -802,11 +802,11 @@ export function WebsiteProduct() {
             ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} need attention before approval.`
             : leadCounts.new
               ? `${leadCounts.new} new inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} a responsible person and a local decision before follow-up.`
-              : managedReleaseRequired && !approvalIsCurrent
+              : releaseRecordRequired && !approvalIsCurrent
                 ? 'Final review is required before a website file is saved.'
-                : managedReleaseRequired && !publishIsCurrent
+                : releaseRecordRequired && !publishIsCurrent
                   ? 'Save a static release file for the approved website.'
-                  : managedReleaseRequired
+                  : releaseRecordRequired
                     ? 'Review the go-live checklist. Deployment still happens separately.'
                     : 'Your reviewed site is ready to download. Nothing is deployed here.'
   const websiteReviewNote = storageIssue || canRepairLocalStorage
@@ -821,11 +821,11 @@ export function WebsiteProduct() {
             ? 'Fix content, navigation, proof, and contact readiness.'
             : leadCounts.new
               ? 'You qualify or close each inquiry; no customer message is sent here.'
-              : managedReleaseRequired && !approvalIsCurrent
+              : releaseRecordRequired && !approvalIsCurrent
                 ? 'You record review evidence.'
-                : managedReleaseRequired && !publishIsCurrent
+                : releaseRecordRequired && !publishIsCurrent
                   ? 'You create the website file.'
-                  : managedReleaseRequired
+                  : releaseRecordRequired
                     ? 'You review the go-live checklist before deployment planning.'
                     : 'You decide where it goes live.'
   const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
@@ -836,7 +836,7 @@ export function WebsiteProduct() {
         ? 'Open editor'
         : leadCounts.new
           ? 'Review inquiries'
-        : managedReleaseRequired
+        : releaseRecordRequired
           ? 'Open checklist'
           : 'Get website'
   const websiteTodayState = storageIssue || canRepairLocalStorage
@@ -851,8 +851,8 @@ export function WebsiteProduct() {
     ['Pages', `${statusWorkspace.pages.filter((page) => page.stage === 'ready').length}/${statusWorkspace.pages.length} ready`],
     ['Readiness', hasUnsavedChanges ? 'Review draft' : failingContentChecks.length ? `${failingContentChecks.length} to fix` : 'Clear'],
     ['Inquiries', leadCounts.new ? `${leadCounts.new} new` : websiteLeads.length ? `${websiteLeads.length} total` : 'None yet'],
-    ['Review', hasUnsavedChanges ? 'Blocked by draft' : managedReleaseRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required'],
-    ['File', hasUnsavedChanges ? 'Blocked by draft' : managedReleaseRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download'],
+    ['Review', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required'],
+    ['File', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download'],
   ] as const
   const websiteTodaySource = storageMode === 'managed'
     ? `Company account · ${managedActorId || 'signed in'}`
@@ -1179,7 +1179,7 @@ export function WebsiteProduct() {
                       {savingDraft ? 'Saving…' : 'Save'}
                     </button>
                   </>
-                ) : storageMode === 'managed' ? canReview ? (
+                ) : storageMode !== 'session-only' ? canReview ? (
                   <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
                     Prepare file
                   </button>
@@ -1266,19 +1266,19 @@ export function WebsiteProduct() {
               ) : null}
 
               {view === 'publish' ? (
-                storageMode === 'managed' ? (
+                storageMode !== 'session-only' ? (
                   <PublishWorkspace
                     approvalIsCurrent={approvalIsCurrent}
                     checks={checks}
                     currentPublishId={publish?.id ?? ''}
                     fingerprint={fingerprint}
                     managedActorId={managedActorId}
-                    managedReleaseRecords={workspace.releaseRecords ?? []}
+                    managedReleaseRecords={storageMode === 'managed' ? workspace.releaseRecords ?? [] : undefined}
                     onAddEvidence={addEvidence}
                     onApprove={approveCurrentRevision}
                     onDownloadPublish={downloadPublishedSite}
                     onRecordPublish={recordLocalPublish}
-                    onSaveManagedRelease={saveManagedRelease}
+                    onSaveManagedRelease={storageMode === 'managed' ? saveManagedRelease : undefined}
                     publishIsCurrent={publishIsCurrent}
                     workspace={workspace}
                   />
@@ -1286,7 +1286,7 @@ export function WebsiteProduct() {
                   <TrialReadyWorkspace
                     checks={checks}
                     onDownload={downloadTrialSite}
-                    retentionLabel={storageMode === 'browser-local' ? 'Saved on this device' : 'Available in this session'}
+                    retentionLabel="Available in this session"
                     workspace={workspace}
                   />
                 )
