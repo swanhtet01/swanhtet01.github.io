@@ -4597,7 +4597,7 @@ if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_i
   || !clientOnboardingSource.includes('plantIndustryPackId: PlantIndustryPackId')
   || !clientOnboardingSource.includes("...(plantPackId ? { plantIndustryPackId: plantPackId } : {})")
   || !clientOnboardingSource.includes('export function buildClientDemoBlueprint')
-  || !clientOnboardingSource.includes("CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v3'")
+  || !clientOnboardingSource.includes("CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v4'")
   || !clientOnboardingSource.includes("CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v3'")
   || !clientOnboardingSource.includes('CLIENT_DEMO_KIT_MAX_BYTES = 128 * 1024')
   || !clientOnboardingSource.includes("CLIENT_DEMO_RUNBOOK_SCHEMA = 'supermega.client_demo_runbook.v1'")
@@ -4838,6 +4838,8 @@ if (!productSetupSource.includes('templateId: string')
   || !settingsPageSource.includes('updateClientDemoWorkspaceProgress')
   || !settingsPageSource.includes("previous.status === 'applied' && progress.status !== 'applied'")
   || !settingsPageSource.includes('buildClientDemoRunbook')
+  || !settingsPageSource.includes('latestAccountableSaleAt: latestIsoTimestamp(accountableShopSaleTimes)')
+  || !clientOnboardingSource.includes('evidenceFollowsBaseline(evidence.commerce.latestAccountableSaleAt, workspace.proofBaselineAt)')
   || !settingsPageSource.includes('aria-label="Client demo launchpad"')
   || !settingsPageSource.includes('const demoLaunchActionRef = useRef<HTMLAnchorElement>(null)')
   || !settingsPageSource.includes('const demoLaunchHandoffPendingRef = useRef(false)')
@@ -7978,7 +7980,10 @@ async function verifyClientOnboardingRuntime() {
     rejectsSync(() => model.clientImportTemplate('commerce', 'unknown', { shopIndustryPackId: 'school' }), 'client_demo_industry_template_bypassed_workflow_validation')
     const workspaceCreatedAt = '2026-07-28T08:00:00.000Z'
     const demoWorkspace = model.createClientDemoWorkspace(manufacturingBlueprint, workspaceCreatedAt)
-    assert(demoWorkspace.schema === model.CLIENT_DEMO_WORKSPACE_SCHEMA && demoWorkspace.products.length === 4 && demoWorkspace.products.every((product) => product.status === 'not_started'), 'client_demo_workspace_not_initialized')
+    assert(demoWorkspace.schema === model.CLIENT_DEMO_WORKSPACE_SCHEMA
+      && demoWorkspace.proofBaselineAt === workspaceCreatedAt
+      && demoWorkspace.products.length === 4
+      && demoWorkspace.products.every((product) => product.status === 'not_started'), 'client_demo_workspace_not_initialized')
     assert(JSON.stringify(model.restoreClientDemoWorkspace(JSON.parse(JSON.stringify(demoWorkspace)))) === JSON.stringify(demoWorkspace), 'client_demo_workspace_not_restorable')
     const demoKit = model.buildClientDemoKit(manufacturingBlueprint, workspaceCreatedAt)
     const readyDemoKit = model.clientDemoKitReadiness(manufacturingBlueprint, workspaceCreatedAt)
@@ -8089,18 +8094,27 @@ async function verifyClientOnboardingRuntime() {
     delete legacyBlueprint.client.shopIndustryPackId
     const migratedLegacyWorkspace = model.createClientDemoWorkspace(legacyBlueprint, workspaceCreatedAt)
     assert(migratedLegacyWorkspace.blueprint.client.shopIndustryPackId === 'retail', 'client_demo_legacy_shop_pack_not_migrated')
+    const legacyV3Workspace = structuredClone(demoWorkspace)
+    legacyV3Workspace.schema = 'supermega.client_demo_workspace.v3'
+    delete legacyV3Workspace.proofBaselineAt
+    assert(model.restoreClientDemoWorkspace(legacyV3Workspace)?.proofBaselineAt === workspaceCreatedAt, 'client_demo_v3_workspace_proof_baseline_not_migrated')
     const shopReadyAt = '2026-07-28T08:05:00.000Z'
     const shopReady = model.updateClientDemoWorkspaceProgress(demoWorkspace, { product: 'commerce', status: 'data_ready', rows: 2, readyRows: 2, issueRows: 0, updatedAt: null }, shopReadyAt)
-    assert(shopReady.updatedAt === shopReadyAt && shopReady.products[0].status === 'data_ready' && shopReady.products.slice(1).every((product) => product.status === 'not_started'), 'client_demo_workspace_progress_not_isolated')
+    assert(shopReady.updatedAt === shopReadyAt
+      && shopReady.proofBaselineAt === workspaceCreatedAt
+      && shopReady.products[0].status === 'data_ready'
+      && shopReady.products.slice(1).every((product) => product.status === 'not_started'), 'client_demo_workspace_progress_not_isolated')
     const reopenedShopReady = model.reconcileClientDemoWorkspace(manufacturingBlueprint, shopReady, '2026-07-28T08:10:00.000Z')
     assert(JSON.stringify(reopenedShopReady) === JSON.stringify(shopReady), 'client_demo_matching_package_erased_progress')
     const changedWorkspace = model.reconcileClientDemoWorkspace(schoolIntegratedBlueprint, shopReady, '2026-07-28T08:10:00.000Z')
-    assert(changedWorkspace.blueprint.client.workspace === 'Learning Centre' && changedWorkspace.products.every((product) => product.status === 'not_started'), 'client_demo_changed_package_preserved_wrong_progress')
+    assert(changedWorkspace.blueprint.client.workspace === 'Learning Centre'
+      && changedWorkspace.proofBaselineAt === '2026-07-28T08:10:00.000Z'
+      && changedWorkspace.products.every((product) => product.status === 'not_started'), 'client_demo_changed_package_preserved_wrong_progress')
     const noOperationalEvidence = {
-      commerce: { completedOrders: 0, reconciledOrders: 0 },
-      production: { releasedBatches: 0 },
-      website: { approvedReleases: 0 },
-      ecommerce: { savedStorefronts: 0, reviewedRequests: 0 },
+      commerce: { completedOrders: 0, reconciledOrders: 0, latestAccountableSaleAt: null },
+      production: { releasedBatches: 0, latestReleasedAt: null },
+      website: { approvedReleases: 0, latestApprovedAt: null },
+      ecommerce: { savedStorefronts: 0, reviewedRequests: 0, latestSavedStorefrontAt: null, latestReviewedRequestAt: null },
     }
     const readyRunbook = model.buildClientDemoRunbook(shopReady, noOperationalEvidence)
     assert(readyRunbook.schema === model.CLIENT_DEMO_RUNBOOK_SCHEMA
@@ -8108,26 +8122,35 @@ async function verifyClientOnboardingRuntime() {
       && readyRunbook.provenCount === 0
       && readyRunbook.products.map((product) => product.status).join(',') === 'ready_to_run,prepare_data,prepare_data,prepare_data', 'client_demo_runbook_readiness_wrong')
     assert(readyRunbook.products.every((product) => product.steps.length === 3 && product.evidenceRequirement && product.startPath.startsWith('/')), 'client_demo_runbook_scenario_contract_incomplete')
+    const seededShopRunbook = model.buildClientDemoRunbook(shopReady, {
+      ...noOperationalEvidence,
+      commerce: { completedOrders: 1, reconciledOrders: 1, latestAccountableSaleAt: '2026-07-28T07:59:00.000Z' },
+    })
+    assert(seededShopRunbook.provenCount === 0 && seededShopRunbook.products[0].status === 'ready_to_run', 'client_demo_seeded_history_claimed_current_proof')
     const shopProvenRunbook = model.buildClientDemoRunbook(shopReady, {
       ...noOperationalEvidence,
-      commerce: { completedOrders: 1, reconciledOrders: 1 },
+      commerce: { completedOrders: 1, reconciledOrders: 1, latestAccountableSaleAt: '2026-07-28T08:06:00.000Z' },
     })
     assert(shopProvenRunbook.provenCount === 1 && shopProvenRunbook.nextProduct === 'production' && shopProvenRunbook.products[0].status === 'proven', 'client_demo_runbook_shop_proof_not_derived')
     const allProvenRunbook = model.buildClientDemoRunbook(shopReady, {
-      commerce: { completedOrders: 1, reconciledOrders: 1 },
-      production: { releasedBatches: 1 },
-      website: { approvedReleases: 1 },
-      ecommerce: { savedStorefronts: 1, reviewedRequests: 1 },
+      commerce: { completedOrders: 1, reconciledOrders: 1, latestAccountableSaleAt: '2026-07-28T08:06:00.000Z' },
+      production: { releasedBatches: 1, latestReleasedAt: '2026-07-28T08:07:00.000Z' },
+      website: { approvedReleases: 1, latestApprovedAt: '2026-07-28T08:08:00.000Z' },
+      ecommerce: { savedStorefronts: 1, reviewedRequests: 1, latestSavedStorefrontAt: '2026-07-28T08:09:00.000Z', latestReviewedRequestAt: '2026-07-28T08:10:00.000Z' },
     })
     assert(allProvenRunbook.provenCount === 4 && allProvenRunbook.nextProduct === null && allProvenRunbook.products.every((product) => product.status === 'proven'), 'client_demo_runbook_complete_proof_wrong')
-    rejectsSync(() => model.buildClientDemoRunbook(shopReady, { ...noOperationalEvidence, production: { releasedBatches: -1 } }), 'client_demo_runbook_negative_evidence_accepted')
-    rejectsSync(() => model.buildClientDemoRunbook(shopReady, { ...noOperationalEvidence, website: { approvedReleases: 0, manualDone: true } }), 'client_demo_runbook_manual_completion_field_accepted')
+    rejectsSync(() => model.buildClientDemoRunbook(shopReady, { ...noOperationalEvidence, production: { releasedBatches: -1, latestReleasedAt: null } }), 'client_demo_runbook_negative_evidence_accepted')
+    rejectsSync(() => model.buildClientDemoRunbook(shopReady, { ...noOperationalEvidence, website: { approvedReleases: 0, latestApprovedAt: null, manualDone: true } }), 'client_demo_runbook_manual_completion_field_accepted')
+    rejectsSync(() => model.buildClientDemoRunbook(shopReady, { ...noOperationalEvidence, website: { approvedReleases: 1, latestApprovedAt: 'not-a-time' } }), 'client_demo_runbook_invalid_evidence_timestamp_accepted')
     const tamperedWorkspace = structuredClone(shopReady)
     tamperedWorkspace.blueprint.products[0].demoPath = 'https://attacker.example/'
     assert(model.restoreClientDemoWorkspace(tamperedWorkspace) === null, 'client_demo_workspace_blueprint_tamper_accepted')
     const rawDataWorkspace = structuredClone(shopReady)
     rawDataWorkspace.products[0].sourceText = 'customer-secret-csv'
     assert(model.restoreClientDemoWorkspace(rawDataWorkspace) === null, 'client_demo_workspace_raw_data_field_accepted')
+    const missingProofBaselineWorkspace = structuredClone(shopReady)
+    delete missingProofBaselineWorkspace.proofBaselineAt
+    assert(model.restoreClientDemoWorkspace(missingProofBaselineWorkspace) === null, 'client_demo_workspace_missing_proof_baseline_accepted')
     rejectsSync(() => model.updateClientDemoWorkspaceProgress(demoWorkspace, { product: 'production', status: 'applied', rows: 2, readyRows: 3, issueRows: 0, updatedAt: null }, shopReadyAt), 'client_demo_workspace_impossible_progress_accepted')
     rejectsSync(() => model.buildClientDemoBlueprint({ workspace: '', owner: 'Owner', presetId: 'social-seller', selections: model.clientDemoPresets[0].selections }), 'client_demo_blank_workspace_accepted')
     rejectsSync(() => model.buildClientDemoBlueprint({ workspace: 'Client', owner: 'Owner', presetId: 'social-seller', selections: [{ product: 'commerce', templateId: 'social-commerce' }, { product: 'commerce', templateId: 'retail-wholesale' }] }), 'client_demo_duplicate_product_accepted')
