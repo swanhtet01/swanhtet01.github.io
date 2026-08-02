@@ -1639,7 +1639,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   const tabs = view === 'commerce' ? commerceTabs : productionTabs
   const productCopy = view === 'commerce'
     ? {
-        today: 'See the next priority, key numbers, and every connected Shop workspace.',
+        today: 'See today’s next job and key numbers.',
         counter: 'Tap an item, choose payment, and confirm the sale.',
         orders: 'Finish fulfilment, follow up payment, and handle exceptions.',
         inventory: 'Count stock, replenish items, and review location availability.',
@@ -3134,7 +3134,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         ? 'Writes paused: this browser could not confirm durable local storage and write locking.'
         : notice || (managedIdentity
           ? `Company records - revision ${managedVersion ?? 0}. Writes are confirmed by the tenant API.`
-          : 'Sample records stay on this device. Sign in to use real company data with your team.')}</p>
+          : 'Sample data on this device. Sign in for team data.')}</p>
     {!commerceCanWrite ? <Link to="/settings/#controls">Open Settings</Link> : null}
   </div>
   const orderNotice = notice || commerceStorageError
@@ -3205,7 +3205,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
         ? `${pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)} online request${pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0) === 1 ? '' : 's'} need Shop review before order, stock, payment, or delivery changes.`
         : actionOrders.length
-          ? `${actionOrders.length} order${actionOrders.length === 1 ? '' : 's'} need fulfilment, payment, return, or cancellation handling.`
+          ? `${actionOrders.length} order${actionOrders.length === 1 ? '' : 's'} need fulfilment or payment review.`
           : activePurchaseOrders.length
             ? `${activePurchaseOrders.length} purchase order${activePurchaseOrders.length === 1 ? '' : 's'} can be checked against received stock evidence.`
             : lowStock.length
@@ -9116,7 +9116,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div className="plant-today-source" role={productionCanWrite ? 'status' : 'alert'}><span>{plantTodaySource}</span><small>{plantTodayNotice}</small></div>
   </section>
   const plantStartGuide = <section className="plant-start-guide" aria-label="Plant guided jobs">
-    <header><span className="core-eyebrow">Start here</span><h2>Run today&apos;s production in three steps.</h2><p>Choose the next job, enter what was made, then fix blockers before the shift ends.</p></header>
+    <header><span className="core-eyebrow">Start here</span><h2>Run production in 3 steps.</h2><p>Record output, use materials, then fix blockers.</p></header>
     <div>
       <button disabled={!selectedJob || !productionCanWrite || Boolean(pendingAction)} onClick={(event) => selectedJob ? openJobOutput(selectedJob, event.currentTarget) : runPlantAutopilot(event.currentTarget)} type="button"><b>1</b><span><strong>Record output</strong><small>Enter good units, waste, and the operator note for the active job.</small></span></button>
       <button disabled={!selectedJob || !productionCanWrite || Boolean(pendingAction)} onClick={(event) => selectedJob ? openJobOutput(selectedJob, event.currentTarget) : runPlantAutopilot(event.currentTarget)} type="button"><b>2</b><span><strong>Use materials</strong><small>Record which batch, lot, and quantity were used for the job.</small></span></button>
