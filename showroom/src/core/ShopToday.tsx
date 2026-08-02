@@ -33,7 +33,7 @@ const capabilityGroups = [
 
 const guidedJobs = [
   ['1', 'Review orders', 'Finish fulfilment, payment, return, or cancellation work.', '/shop/?tab=orders'],
-  ['2', 'Make a sale', 'Open the counter, tap items, choose payment, and keep receipt evidence.', '/shop/?tab=counter'],
+  ['2', 'Make a sale', 'Open the counter, tap items, choose payment, and save a receipt note.', '/shop/?tab=counter'],
   ['3', 'Check stock', 'Review low stock, counts, receiving, and purchase actions.', '/shop/?tab=inventory'],
 ] as const
 
@@ -67,8 +67,8 @@ export function ShopToday({ metrics, modules, nextAction, nextDetail, nextTo }: 
 
     <section className="shop-today-workspaces" aria-labelledby="shop-workspaces-title">
       <header>
-        <div><span className="core-eyebrow">Workspaces</span><h2 id="shop-workspaces-title">Run the whole shop</h2></div>
-        <p>Open the area for the job. Each card uses the same orders, stock, customer, and evidence records.</p>
+        <div><span className="core-eyebrow">Shop areas</span><h2 id="shop-workspaces-title">Run the whole shop</h2></div>
+        <p>Open the area for the job. Orders, stock, customers, and receipts stay connected.</p>
       </header>
       <div className="shop-today-module-grid">
         {modules.map((module) => <Link data-tone={module.tone ?? 'ready'} key={module.label} to={module.to}>
