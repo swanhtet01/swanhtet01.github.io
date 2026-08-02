@@ -3215,20 +3215,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
                 ? 'Stock can move from simple on-hand counts to location, lot, ATP, reservation, and count evidence.'
                 : 'Orders, inventory, purchase orders, and stock foundation are ready for front-counter work.'
   const shopOwnerGate = !commerceCanWrite
-    ? 'Owner opens Settings before any Shop write is allowed.'
+    ? 'Open Settings before any Shop write is allowed.'
     : pendingAction
-      ? 'Owner approves or cancels the pending accountable action.'
+      ? 'Approve or cancel the pending accountable action.'
       : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
-        ? 'Owner chooses whether each online request becomes a Shop order.'
+        ? 'Choose whether each online request becomes a Shop order.'
         : actionOrders.length
-          ? 'Owner confirms fulfilment, payment, return, cancellation, or settlement.'
+          ? 'Confirm fulfilment, payment, return, cancellation, or settlement.'
           : activePurchaseOrders.length
-            ? 'Owner confirms received quantity, location, lot, and evidence.'
+            ? 'Confirm received quantity, location, lot, and evidence.'
             : lowStock.length
-              ? 'Owner confirms supplier reference, expected arrival, and quantity.'
+              ? 'Confirm supplier reference, expected arrival, and quantity.'
               : !commerce.inventoryFoundation || !managedInventoryProjection
-                ? 'Owner enables the inventory foundation before location-level stock control.'
-                : 'Owner confirms each sale before stock or cash records change.'
+                ? 'Enable the inventory foundation before location-level stock control.'
+                : 'Confirm each sale before stock or cash records change.'
   const shopAgentPath = !commerceCanWrite
     ? '/settings/#controls'
     : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting || actionOrders.length || pendingAction
@@ -3244,7 +3244,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const shopAutopilotStage = !commerceCanWrite
     ? 'Restore Shop readiness'
     : pendingAction
-      ? 'Approve pending Shop change'
+      ? 'Review pending Shop change'
       : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
         ? 'Review online requests'
         : actionOrders.length
