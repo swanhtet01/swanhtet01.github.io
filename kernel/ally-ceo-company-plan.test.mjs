@@ -75,7 +75,7 @@ function managedReadiness() {
       localVerification: { externallyHosted: false },
     },
     storageAudit: 'Status: local verifier ready; hosted proof blocked',
-    hqNow: 'Live operating mode: `isolated_demo`\nLive managed persistence ready: `false`\nLive security ready: `false`\napp_product_contract_drift\nNo named pilot customer',
+    hqNow: 'Live operating mode: `isolated_demo`\nLive managed persistence ready: `false`\nLive security ready: `false`\nno release drift is present\nNo named pilot customer',
     packageManifest: { supermega: { productionSupabaseTargetStatus: 'protected-unapproved' } },
     sourceReceipts,
   }))
