@@ -443,7 +443,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             ? 'The clean file can be checked against the company workspace before anything changes.'
             : 'Free mode can export the package for support review without sending data from the browser.'
           : state.preview
-            ? 'The handoff stays locked until required columns, row issues, and duplicate keys are clear.'
+            ? 'Setup stays locked until required columns, row issues, and duplicate keys are clear.'
             : 'Start with the sample or a CSV so SuperMega can build one clear setup file.'
   const activationHandoffRows = [
     ['Package', state.preview ? `${state.preview.totals.ready}/${state.preview.totals.rows} ready` : 'Waiting'],
@@ -454,7 +454,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   const provisioningPlan = validationIsCurrent ? state.validation?.provisioningPlan : null
   const provisioningPlanRows = provisioningPlan
     ? [
-        ['Status', provisioningPlan.status === 'ready_for_owner_review' ? 'Owner review' : 'Blocked'],
+        ['Status', provisioningPlan.status === 'ready_for_owner_review' ? 'Review' : 'Blocked'],
         ['Target', provisioningPlan.target_surface],
         ['Rows', `${provisioningPlan.row_count}`],
         ['Version', `${provisioningPlan.expected_version}`],
@@ -915,7 +915,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           </div>
         </div>
         {state.preview ? <details className="catalog-import-advanced">
-          <summary><span>Import details</span><small>Controls, ownership, and handoff</small></summary>
+          <summary><span>Import details</span><small>Setup checks and review</small></summary>
           <div className="catalog-import-advanced-body">
             <div aria-label={`${productName} setup helper`} className="catalog-import-coach">
               <div><strong>{importCoachAction}</strong><small>{importCoachReason}</small></div>
@@ -923,7 +923,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
                 {importCoachRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
               </div>
             </div>
-            <div aria-label={`${productName} setup handoff`} className="catalog-import-handoff">
+            <div aria-label={`${productName} setup summary`} className="catalog-import-handoff">
               <div><strong>{activationHandoffAction}</strong><small>{activationHandoffReason}</small></div>
               <div className="catalog-import-handoff-list">
                 {activationHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
