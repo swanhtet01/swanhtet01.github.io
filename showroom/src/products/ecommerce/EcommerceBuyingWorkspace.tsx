@@ -1049,7 +1049,7 @@ export function EcommerceBuyingWorkspace({
         setHandoffConfirmed(false)
         setFreshQuoteId(retained.id)
         setQuoteClock(quotedAt.getTime())
-        setNotice('This quote is confirmed in the managed Shop inbox. No order, stock, message, or charge changed.')
+        setNotice('This quote is confirmed in the Company Shop inbox. No order, stock, message, or charge changed.')
         requestAnimationFrame(() => {
           confirmationRef.current?.scrollIntoView({ block: 'center' })
           confirmationRef.current?.focus({ preventScroll: true })
@@ -1089,7 +1089,7 @@ export function EcommerceBuyingWorkspace({
       setFreshQuoteId(request.id)
       setQuoteClock(quotedAt.getTime())
       setNotice(onRecordManagedRequest
-        ? 'This quote is saved to the managed Shop inbox and local recovery. No order, stock, message, or charge changed.'
+        ? 'This quote is saved to the Company Shop inbox and local recovery. No order, stock, message, or charge changed.'
         : 'This quote is saved on this device for 15 minutes. No order, stock, message, or charge changed.')
       requestAnimationFrame(() => {
         confirmationRef.current?.scrollIntoView({ block: 'center' })
@@ -1123,7 +1123,7 @@ export function EcommerceBuyingWorkspace({
         confirmedAt: new Date().toISOString(),
       })
       if (onOpenManagedRequest) {
-        setNotice(`${latestRequest.id} is ready in the managed Shop inbox. Payment remains unauthorized.`)
+        setNotice(`${latestRequest.id} is ready in the Company Shop inbox. Payment remains unauthorized.`)
         onOpenManagedRequest(latestRequest.id)
       } else {
         setNotice(`${draft.id} is ready for Shop review at ${formatMmk(draft.totalMmk)}. ${draft.pricing.promotion.status === 'approved' ? `${formatMmk(draft.pricing.promotion.discountMmk)} promotion approved.` : draft.pricing.promotion.status === 'rejected' ? 'The promotion code was rejected by Shop policy.' : 'No promotion requested.'} ${draft.pricing.tax.status === 'configured' ? `${formatMmk(draft.pricing.tax.taxMmk)} tax uses ${draft.pricing.tax.taxCode} revision ${draft.pricing.tax.taxConfigurationRevision}.` : 'No Shop tax schedule is configured.'} Payment remains unauthorized.`)

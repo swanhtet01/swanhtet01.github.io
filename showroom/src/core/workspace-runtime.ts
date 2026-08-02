@@ -473,7 +473,7 @@ function managedCommerceView(record: ManagedStateRecord, workspaceId: string): C
   if (record.surface !== 'commerce' || !Number.isSafeInteger(record.version) || record.version < 0) throw new Error('Managed Shop returned an invalid state envelope.')
   if (record.version === 0) {
     if (Object.keys(record.state).length) throw new Error('Managed Shop has state without a valid revision.')
-    return { state: createEmptyCommerce(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This managed workspace has no Shop catalog yet.', writeReady: false }
+    return { state: createEmptyCommerce(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This company account has no Shop catalog yet.', writeReady: false }
   }
   return { state: validateCommerceState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '', writeReady: true }
 }
@@ -565,7 +565,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
         expectedVersion: current.version,
         state: candidate as unknown as Record<string, unknown>,
       })
-      if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before the write was confirmed.')
+      if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The company account changed before the write was confirmed.')
       if (result.surface !== 'commerce' || result.event_type !== eventType || result.version !== current.version + 1) {
         throw new Error('Managed Shop returned an invalid command result.')
       }
@@ -573,7 +573,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
       let nextSnapshot: CommerceWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '', writeReady: true }
       if (result.idempotent_replay) {
         const bootstrap = await loadManagedBootstrap(managedIdentity)
-        if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before the replay could be reconciled.')
+        if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The company account changed before the replay could be reconciled.')
         const refreshed = managedCommerceView(
           requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
           workspaceId,
@@ -590,7 +590,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
       if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
         try {
           const bootstrap = await loadManagedBootstrap(managedIdentity)
-          if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before Shop could refresh.', { cause: error })
+          if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The company account changed before Shop could refresh.', { cause: error })
           const refreshed = managedCommerceView(
             requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
             workspaceId,
@@ -638,7 +638,7 @@ function managedProductionView(record: ManagedStateRecord, workspaceId: string):
   if (record.surface !== 'production' || !Number.isSafeInteger(record.version) || record.version < 0) throw new Error('Managed Plant returned an invalid state envelope.')
   if (record.version === 0) {
     if (Object.keys(record.state).length) throw new Error('Managed Plant has state without a valid revision.')
-    return { state: createEmptyProduction(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This managed workspace has no Plant plan yet.', writeReady: false }
+    return { state: createEmptyProduction(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This company account has no Plant plan yet.', writeReady: false }
   }
   return { state: validateProductionState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '', writeReady: true }
 }
@@ -759,7 +759,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
         identity: managedIdentity,
         state: candidate as unknown as Record<string, unknown>,
       })
-      if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before the write was confirmed.')
+      if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The company account changed before the write was confirmed.')
       if (result.surface !== 'production' || result.event_type !== eventType || result.version !== current.version + 1) {
         throw new Error('Managed Plant returned an invalid command result.')
       }
@@ -767,7 +767,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
       let nextSnapshot: ProductionWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '', writeReady: true }
       if (result.idempotent_replay) {
         const bootstrap = await loadManagedBootstrap(managedIdentity)
-        if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before the replay could be reconciled.')
+        if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The company account changed before the replay could be reconciled.')
         const refreshed = managedProductionView(
           requireManagedSurfaceState(bootstrap, 'production', 'Plant'),
           workspaceId,
@@ -784,7 +784,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
       if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
         try {
           const bootstrap = await loadManagedBootstrap(managedIdentity)
-          if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before Plant could refresh.', { cause: error })
+          if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The company account changed before Plant could refresh.', { cause: error })
           const refreshed = managedProductionView(
             requireManagedSurfaceState(bootstrap, 'production', 'Plant'),
             workspaceId,

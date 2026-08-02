@@ -84,7 +84,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
       if (managed.schedule) {
         setSchedule(managed.schedule)
         window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(managed.schedule))
-        setNotice('Appointments loaded from this managed workspace.')
+        setNotice('Appointments loaded from this company account.')
       } else {
         setNotice('Managed appointments are ready. Your next change will create the shared schedule.')
       }
@@ -112,7 +112,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
     const expectedVersion = managedVersionRef.current
     if (!identity || expectedVersion === null) return
     if (managedSaveBusyRef.current) {
-      setNotice('Wait for the current managed appointment change to finish.')
+      setNotice('Wait for the current company appointment change to finish.')
       return
     }
     managedSaveBusyRef.current = true
@@ -128,7 +128,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
         setSchedule(saved.schedule)
         try { persistLocal(saved.schedule) } catch { /* The managed copy remains authoritative. */ }
       }
-      setNotice(`${message} Shared workspace saved.`)
+      setNotice(`${message} Shared company schedule saved.`)
     }).catch(async (error) => {
       if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
         try {
@@ -260,7 +260,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
           <form onSubmit={createResource}><strong>Add staff or resource</strong><label>Name<input disabled={disabled} maxLength={160} onChange={(event) => setResourceDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Staff name or Room 2" required value={resourceDraft.name} /></label><label>Type<select disabled={disabled} onChange={(event) => setResourceDraft((current) => ({ ...current, kind: event.target.value as typeof resourceDraft.kind }))} value={resourceDraft.kind}><option value="staff">Staff</option><option value="room">Room</option><option value="equipment">Equipment</option></select></label><button className="core-button" disabled={disabled} type="submit">Add resource</button></form>
         </div>
       </details>
-      <p className="form-notice" aria-live="polite">{notice || (managedConnected ? 'Appointments persist in this managed workspace. Customer messages, calendar sync, and payment remain separate human-approved actions.' : 'Appointments persist on this device. Sign in to share them across the managed workspace.')}</p>
+      <p className="form-notice" aria-live="polite">{notice || (managedConnected ? 'Appointments persist in this company account. Customer messages, calendar sync, and payment remain separate human-approved actions.' : 'Appointments persist on this device. Sign in to share them with a company account.')}</p>
     </div>
   </details>
 }

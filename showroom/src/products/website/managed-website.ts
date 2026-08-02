@@ -80,7 +80,7 @@ export function acceptManagedWebsiteCommand(
     || result.event_type !== expected.eventType
     || result.version !== expected.priorVersion + 1
     || typeof result.idempotent_replay !== 'boolean') {
-    throw new Error('The managed workspace returned an unrelated Website receipt.')
+    throw new Error('The company account returned an unrelated Website receipt.')
   }
   const confirmed = restoreWorkspace(result.state)
   const planned = restoreWorkspace(expectedState)
@@ -93,7 +93,7 @@ export function acceptManagedWebsiteCommand(
     )
   )
   if (!confirmed || !planned || !stateMatches) {
-    throw new Error('The managed workspace returned a different Website state.')
+    throw new Error('The company account returned a different Website state.')
   }
   return {
     workspace: confirmed,

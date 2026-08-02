@@ -1207,7 +1207,7 @@ export function assertManagedEcommerceOrderQueueValidation(
   expectedIdentity: ManagedIdentity,
 ): ManagedEcommerceOrderQueueValidation {
   if (!isRecord(response) || !isRecord(response.validation)) {
-    throw new ManagedTrialError('The managed workspace returned an invalid Ecommerce order queue validation.', {
+    throw new ManagedTrialError('The company account returned an invalid Ecommerce order queue validation.', {
       code: 'managed_ecommerce_order_queue_validation_invalid',
     })
   }
@@ -1247,7 +1247,7 @@ export function assertManagedEcommerceOrderQueueImportPlan(
   expectedIdentity: ManagedIdentity,
 ): ManagedEcommerceOrderQueueImportPlan {
   if (!isRecord(response) || !isRecord(response.plan)) {
-    throw new ManagedTrialError('The managed workspace returned an invalid Ecommerce import plan.', {
+    throw new ManagedTrialError('The company account returned an invalid Ecommerce import plan.', {
       code: 'managed_ecommerce_order_queue_import_plan_invalid',
     })
   }
@@ -1297,7 +1297,7 @@ export function assertManagedEcommerceOrderQueueApplyPreflight(
   expectedIdentity: ManagedIdentity,
 ): ManagedEcommerceOrderQueueApplyPreflight {
   if (!isRecord(response) || !isRecord(response.preflight)) {
-    throw new ManagedTrialError('The managed workspace returned an invalid Ecommerce apply preflight.', {
+    throw new ManagedTrialError('The company account returned an invalid Ecommerce apply preflight.', {
       code: 'managed_ecommerce_order_queue_apply_preflight_invalid',
     })
   }
@@ -1399,7 +1399,7 @@ export function assertManagedClientImportValidation(
   expectedPackageDigest: string,
 ): ManagedClientImportValidation {
   if (!isRecord(response) || !isRecord(response.validation) || !isRecord(response.validation.activation)) {
-    throw new ManagedTrialError('The managed workspace returned an invalid import validation.', {
+    throw new ManagedTrialError('The company account returned an invalid import validation.', {
       code: 'managed_client_import_validation_invalid',
     })
   }
@@ -1426,12 +1426,12 @@ export function assertManagedClientImportValidation(
     || activation.human_approval_required !== true
     || activation.atomic_adapter_ready !== Boolean(clientImportAtomicAdapter(stagingPackage.product))
     || activation.external_writes_performed !== false) {
-    throw new ManagedTrialError('The managed workspace returned a mismatched import validation.', {
+    throw new ManagedTrialError('The company account returned a mismatched import validation.', {
       code: 'managed_client_import_validation_invalid',
     })
   }
   if (validation.workspace_id !== expectedIdentity.workspaceId) {
-    throw new ManagedTrialError('The managed workspace returned a different identity.', {
+    throw new ManagedTrialError('The company account returned a different identity.', {
       code: 'managed_identity_changed',
     })
   }
@@ -1551,7 +1551,7 @@ export function assertManagedShopImportState(
     || state.movements.length !== 0
     || state.closes.length !== 0
     || state.items.length !== stagingPackage.rows.length) {
-    throw new ManagedTrialError('The managed workspace returned an invalid Shop import state.', {
+    throw new ManagedTrialError('The company account returned an invalid Shop import state.', {
       code: 'managed_client_import_activation_invalid',
     })
   }
@@ -1625,7 +1625,7 @@ export function assertManagedPlantImportState(
     || !isCanonicalManagedImportTimestamp(state.openingPlan.confirmedAt)
     || !Array.isArray(state.openingPlan.jobIds)
     || !Array.isArray(state.openingPlan.machineIds)) {
-    throw new ManagedTrialError('The managed workspace returned an invalid Plant opening plan.', {
+    throw new ManagedTrialError('The company account returned an invalid Plant opening plan.', {
       code: 'managed_client_import_activation_invalid',
     })
   }
@@ -1685,7 +1685,7 @@ export function assertManagedPlantEquipmentValidation(
   expectedPackageDigest: string,
 ): ManagedPlantEquipmentValidation {
   if (!isRecord(response) || !isRecord(response.validation) || !isRecord(response.validation.activation)) {
-    throw new ManagedTrialError('The managed workspace returned an invalid equipment validation.', {
+    throw new ManagedTrialError('The company account returned an invalid equipment validation.', {
       code: 'managed_plant_equipment_validation_invalid',
     })
   }
@@ -1761,7 +1761,7 @@ export function assertManagedPlantEquipmentActivation(
     accepted = validateProductionState(result.state)
     previous = validateProductionState(priorState)
   } catch {
-    throw new ManagedTrialError('The managed workspace returned invalid Production equipment state.', {
+    throw new ManagedTrialError('The company account returned invalid Production equipment state.', {
       code: 'managed_plant_equipment_activation_invalid',
     })
   }
@@ -1857,7 +1857,7 @@ export function assertManagedPlantEquipmentCommissioning(
     accepted = validateProductionState(result.state)
     previous = validateProductionState(priorState)
   } catch {
-    throw new ManagedTrialError('The managed workspace returned invalid commissioned equipment state.', {
+    throw new ManagedTrialError('The company account returned invalid commissioned equipment state.', {
       code: 'managed_plant_equipment_commissioning_invalid',
     })
   }
@@ -1957,7 +1957,7 @@ export function assertManagedPlantEquipmentMaintenanceStrategy(
     accepted = validateProductionState(result.state)
     previous = validateProductionState(priorState)
   } catch {
-    throw new ManagedTrialError('The managed workspace returned an invalid maintenance strategy state.', {
+    throw new ManagedTrialError('The company account returned an invalid maintenance strategy state.', {
       code: 'managed_plant_equipment_maintenance_strategy_invalid',
     })
   }
@@ -2122,7 +2122,7 @@ export function assertManagedWebsiteImportState(
     || state.localPublishes.length !== 0
     || !Array.isArray(state.events)
     || state.events.length !== 0) {
-    throw new ManagedTrialError('The managed workspace returned an invalid Website import state.', {
+    throw new ManagedTrialError('The company account returned an invalid Website import state.', {
       code: 'managed_client_import_activation_invalid',
     })
   }
@@ -2191,7 +2191,7 @@ export async function assertManagedEcommerceImportState(
     accepted = validateCommerceState(state)
     previous = validateCommerceState(priorState)
   } catch {
-    throw new ManagedTrialError('The managed workspace returned an invalid Ecommerce import state.', {
+    throw new ManagedTrialError('The company account returned an invalid Ecommerce import state.', {
       code: 'managed_client_import_activation_invalid',
     })
   }
@@ -2355,14 +2355,14 @@ export function assertManagedBootstrapIdentity(
     || !isRecord(bootstrap.readiness)
     || !isRecord(bootstrap.states)
     || !Array.isArray(bootstrap.approvals)) {
-    throw new ManagedTrialError('The managed workspace returned an invalid bootstrap response.', {
+    throw new ManagedTrialError('The company account returned an invalid bootstrap response.', {
       code: 'managed_bootstrap_invalid',
     })
   }
   if (bootstrap.identity.workspace_id !== expectedIdentity.workspaceId
     || bootstrap.identity.actor_id !== expectedIdentity.userId
     || bootstrap.identity.actor_kind !== 'human') {
-    throw new ManagedTrialError('The managed workspace returned a different identity.', {
+    throw new ManagedTrialError('The company account returned a different identity.', {
       code: 'managed_identity_changed',
     })
   }
@@ -2442,7 +2442,7 @@ function authClient() {
 function normalizeWorkspaceId(value: string) {
   const workspaceId = value.trim()
   if (!WORKSPACE_ID.test(workspaceId)) {
-    throw new ManagedTrialError('Enter a valid managed workspace ID.', { code: 'workspace_invalid' })
+    throw new ManagedTrialError('Enter a valid company account ID.', { code: 'workspace_invalid' })
   }
   return workspaceId
 }
@@ -2503,7 +2503,7 @@ function parseWorkspaceDirectory(value: unknown): ManagedWorkspaceDirectoryEntry
     || value.secret_values_exposed !== false
     || !Array.isArray(value.workspaces)
     || value.workspaces.length > 50) {
-    throw new ManagedTrialError('The managed workspace directory returned an invalid response.', {
+    throw new ManagedTrialError('The company account directory returned an invalid response.', {
       code: 'workspace_directory_invalid',
     })
   }
@@ -2515,7 +2515,7 @@ function parseWorkspaceDirectory(value: unknown): ManagedWorkspaceDirectoryEntry
       || !entry.label.trim()
       || entry.label.length > 120
       || !['owner', 'operator', 'viewer'].includes(String(entry.access))) {
-      throw new ManagedTrialError('The managed workspace directory returned an invalid company.', {
+      throw new ManagedTrialError('The company account directory returned an invalid company.', {
         code: 'workspace_directory_invalid',
       })
     }
@@ -2526,7 +2526,7 @@ function parseWorkspaceDirectory(value: unknown): ManagedWorkspaceDirectoryEntry
     }
   })
   if (new Set(workspaces.map((entry) => entry.workspaceId)).size !== workspaces.length) {
-    throw new ManagedTrialError('The managed workspace directory returned duplicate companies.', {
+    throw new ManagedTrialError('The company account directory returned duplicate companies.', {
       code: 'workspace_directory_invalid',
     })
   }
@@ -2805,7 +2805,7 @@ async function sessionForRequest(expectedIdentity?: ManagedIdentity) {
   if (!supabase) throw new ManagedTrialError('Managed sign-in is not configured.', { code: 'auth_not_configured' })
   const workspaceId = normalizeWorkspaceId(currentManagedWorkspace())
   let { data, error } = await supabase.auth.getSession()
-  if (error || !data.session) throw new ManagedTrialError('Sign in to the managed workspace first.', { code: 'auth_required' })
+  if (error || !data.session) throw new ManagedTrialError('Sign in to the company account first.', { code: 'auth_required' })
   if (data.session.expires_at && data.session.expires_at * 1000 <= Date.now() + 60_000) {
     const refreshed = await supabase.auth.refreshSession()
     data = refreshed.data
@@ -2815,13 +2815,13 @@ async function sessionForRequest(expectedIdentity?: ManagedIdentity) {
     throw new ManagedTrialError('The managed session expired. Sign in again.', { code: 'auth_expired' })
   }
   if (currentManagedWorkspace() !== workspaceId) {
-    throw new ManagedTrialError('The managed workspace changed during authentication.', {
+    throw new ManagedTrialError('The company account changed during authentication.', {
       code: 'managed_identity_changed',
     })
   }
   const resolvedIdentity = identity(data.session, workspaceId)
   if (expectedIdentity && !sameManagedIdentity(resolvedIdentity, expectedIdentity)) {
-    throw new ManagedTrialError('The managed workspace identity changed during the request.', {
+    throw new ManagedTrialError('The company account changed during the request.', {
       code: 'managed_identity_changed',
     })
   }

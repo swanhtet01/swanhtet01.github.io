@@ -205,7 +205,7 @@ function accountableTransition(
 
 function managedFailure(error: unknown) {
   if (error instanceof ManagedTrialError) return error.message
-  return error instanceof Error ? error.message : 'unknown managed workspace error'
+  return error instanceof Error ? error.message : 'unknown company account error'
 }
 
 async function requireCurrentManagedIdentity(expected: ManagedIdentity) {
@@ -487,7 +487,7 @@ export function useWebsiteWorkspace(): {
                 managedVersionRef.current = record.version
                 workspaceRef.current = refreshed
                 setWorkspace(refreshed)
-                setStorageIssue('Website changed in another session. The managed workspace was refreshed; review before retrying.')
+                setStorageIssue('Website changed in another session. The company account was refreshed; review before retrying.')
                 resolve({ ok: false, error: 'Website changed in another session. Review the refreshed workspace before retrying.' })
                 return
               } catch (refreshError) {

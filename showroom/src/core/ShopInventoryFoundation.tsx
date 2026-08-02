@@ -304,7 +304,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
       )
       setProductionReceiptReview(null)
       setNotice(identity
-        ? 'The managed Shop workspace received the released Plant batch with linked lot evidence.'
+        ? 'Company Shop received the released Plant batch with linked lot evidence.'
         : 'The released Plant batch is now in Shop stock with linked lot evidence.')
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'The Plant batch was not received into Shop.')
@@ -381,7 +381,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
       setSetupReview(null)
       setSetupOpen(false)
       setNotice(identity
-        ? 'Two-location stock is now confirmed by the managed Shop workspace.'
+        ? 'Two-location stock is now confirmed in Company Shop.'
         : 'Two-location stock is now part of this Shop record. No supplier or accounting action was sent.')
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Location setup was not confirmed.')
@@ -427,7 +427,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
       setTransferReview(null)
       setTransferOpen(false)
       setNotice(identity
-        ? 'The managed Shop workspace confirmed the paired location transfer.'
+        ? 'Company Shop confirmed the paired location transfer.'
         : 'Stock moved inside this Shop record with paired evidence.')
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Location transfer was not confirmed.')

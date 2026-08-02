@@ -726,7 +726,7 @@ requireContract('free company backup is encrypted, bounded, customer-owned, excl
   && /previous company state was restored/.test(companyBackupClient)
   && !/fetch\s*\(/.test(companyBackupClient)
   && /backupFile\.size > COMPANY_BACKUP_MAX_FILE_BYTES/.test(companyBackupPanel)
-  && /Auth sessions, managed workspace IDs, and credentials are excluded/.test(companyBackupPanel)
+  && /Auth sessions, company account IDs, and credentials are excluded/.test(companyBackupPanel)
   && /SuperMega cannot recover a lost password/.test(companyBackupPanel)
   && /inspectEncryptedCompanyBackup/.test(companyBackupPanel)
   && /restoreCompanyBackup/.test(companyBackupPanel)

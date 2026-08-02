@@ -106,7 +106,7 @@ export function acceptManagedStorefrontSave(
   if (plan.status !== 'ready') throw new Error('An unchanged storefront configuration cannot be submitted.')
   const accepted = validateCommerceState(returnedState)
   const configuration = commerceStorefrontConfiguration(accepted)
-  if (!configuration) throw new Error('The managed workspace did not retain the storefront configuration.')
+  if (!configuration) throw new Error('The company account did not retain the storefront configuration.')
   const expected = plan.configuration
   if (configuration.schema !== expected.schema
     || configuration.revision !== expected.revision
@@ -120,7 +120,7 @@ export function acceptManagedStorefrontSave(
     || configuration.saved.actor !== expectedActor
     || configuration.saved.reason !== expected.saved.reason
     || configuration.saved.evidenceReference !== expected.saved.evidenceReference) {
-    throw new Error('The managed workspace returned a different storefront configuration.')
+    throw new Error('The company account returned a different storefront configuration.')
   }
   for (const field of ['items', 'orders', 'movements', 'closes'] as const) {
     if (!sameJson(accepted[field], plan.current[field])) {
@@ -148,7 +148,7 @@ export function acceptManagedStorefrontCommand(
     || result.event_type !== 'commerce.storefront.configuration.saved'
     || result.version !== expected.priorVersion + 1
     || typeof result.idempotent_replay !== 'boolean') {
-    throw new Error('The managed workspace returned an unrelated storefront save receipt.')
+    throw new Error('The company account returned an unrelated storefront save receipt.')
   }
   return {
     state: acceptManagedStorefrontSave(plan, result.state, expected.actor),

@@ -770,7 +770,7 @@ export function EcommerceProduct() {
     if (!currentIdentity
       || currentIdentity.workspaceId !== identity.workspaceId
       || currentIdentity.userId !== identity.userId) {
-      throw new Error('The managed workspace identity changed. Reload before saving.')
+      throw new Error('The company account changed. Reload before saving.')
     }
     const bootstrap = await loadManagedBootstrap(identity)
     const view = resolveManagedStorefront(
@@ -883,7 +883,7 @@ export function EcommerceProduct() {
         try {
           const identity = await currentManagedIdentity()
           if (!identity || identity.workspaceId !== managedIdentity.workspaceId || identity.userId !== managedIdentity.userId) {
-            throw new Error('The managed workspace identity changed before the conflict could be refreshed.', { cause: error })
+            throw new Error('The company account changed before the conflict could be refreshed.', { cause: error })
           }
           const bootstrap = await loadManagedBootstrap(identity)
           const view = resolveManagedStorefront(
@@ -1035,7 +1035,7 @@ export function EcommerceProduct() {
     const currentIdentity = await currentManagedIdentity()
     if (!currentIdentity
       || currentIdentity.workspaceId !== identity.workspaceId
-      || currentIdentity.userId !== identity.userId) throw new Error('The managed workspace identity changed. Reload before sending this request to Shop.')
+      || currentIdentity.userId !== identity.userId) throw new Error('The company account changed. Reload before sending this request to Shop.')
     const bootstrap = await loadManagedBootstrap(identity)
     const view = resolveManagedStorefront(identity, requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'))
     if (!view?.saved) throw new Error('Save the managed storefront before sending a customer request to Shop.')
@@ -1069,9 +1069,9 @@ export function EcommerceProduct() {
         || result.surface !== 'commerce'
         || result.event_type !== 'commerce.storefront_request.received'
         || result.version !== view.inbox.version + 1
-        || typeof result.idempotent_replay !== 'boolean') throw new Error('The managed workspace returned an unrelated Ecommerce receipt.')
+        || typeof result.idempotent_replay !== 'boolean') throw new Error('The company account returned an unrelated Ecommerce receipt.')
       const accepted = validateCommerceState(result.state)
-      if (!exactRequestIsRetained(accepted)) throw new Error('The managed workspace returned a different Ecommerce request.')
+      if (!exactRequestIsRetained(accepted)) throw new Error('The company account returned a different Ecommerce request.')
       const confirmedIdentity = await currentManagedIdentity()
       if (!confirmedIdentity
         || confirmedIdentity.workspaceId !== identity.workspaceId

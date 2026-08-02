@@ -259,7 +259,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         resultVerb: 'created',
         progressLabel: 'Creating one revisioned Shop catalog and confirming the durable result…',
         busyLabel: 'Creating catalog…',
-        failure: 'The managed Shop catalog was not created. The checked import is still available.',
+        failure: 'The Company Shop catalog was not created. The checked import is still available.',
       }
     : product === 'production'
       ? {
@@ -271,7 +271,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           resultVerb: 'created',
           progressLabel: 'Creating one Plant opening plan and confirming the durable result…',
           busyLabel: 'Creating plan…',
-          failure: 'The managed Plant opening plan was not created. The checked import is still available.',
+          failure: 'The Company Plant opening plan was not created. The checked import is still available.',
         }
       : product === 'website'
       ? {
@@ -281,9 +281,9 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           completedLabel: 'Website drafts',
           productLabel: 'Website',
           resultVerb: 'created',
-          progressLabel: 'Creating one revisioned Website draft workspace and confirming the durable result…',
+          progressLabel: 'Creating one Website draft set and confirming the durable result…',
           busyLabel: 'Creating drafts…',
-          failure: 'The managed Website drafts were not created. The checked import is still available.',
+          failure: 'The Company Website drafts were not created. The checked import is still available.',
         }
       : product === 'ecommerce'
         ? {
@@ -320,7 +320,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   const importStageRows = [
     ['Read file', state.preview ? `${state.preview.totals.rows} rows` : state.busy ? 'Reading' : 'Waiting'],
     ['Match columns', state.preview ? mappingNeedsReview ? 'Review' : `${matchedFieldCount}/${state.preview.fields.length}` : 'Auto'],
-    ['Check workspace', appliedIsCurrent || localAppliedIsCurrent ? 'Applied' : validationIsCurrent ? 'Checked' : state.validating ? 'Checking' : managedIdentity ? 'Ready' : localActivationAvailable ? `Local ${productName}` : 'Local file'],
+    ['Check company', appliedIsCurrent || localAppliedIsCurrent ? 'Applied' : validationIsCurrent ? 'Checked' : state.validating ? 'Checking' : managedIdentity ? 'Ready' : localActivationAvailable ? `Local ${productName}` : 'Local file'],
     ['Confirm import', appliedIsCurrent || localAppliedIsCurrent ? 'Done' : state.preflighting ? 'Final check' : state.applying ? 'Writing' : canApplyManagedImport || canApplyLocalImport ? 'Ready' : state.preview?.readyForStaging ? 'Prepare' : 'Locked'],
   ] as const
   const importStageMessage = localAppliedIsCurrent
@@ -332,7 +332,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         ? 'Choose the missing required columns. Rows stay read-only until the mapping is clean.'
         : state.preview.readyForStaging
           ? managedIdentity
-            ? 'The file is clean. Check it with the workspace, then confirm the final import.'
+            ? 'The file is clean. Check it with the company account, then confirm the final import.'
             : `The file is clean. Review it once, then confirm it into this browser's ${productName} demo.`
           : 'Fix the highlighted rows before this can become a clean import.'
       : `Drop in a CSV or try the sample. SuperMega reads, maps, and checks ${object.label.toLowerCase()} before any write.`
@@ -387,7 +387,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           : validationIsCurrent
             ? 'Approve checked import'
             : state.validating
-              ? 'Checking workspace'
+              ? 'Checking company'
               : state.preview
                 ? mappingNeedsReview
                   ? 'Match required columns'
@@ -396,19 +396,19 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
                     : state.preview.totals.issueRows
                       ? 'Fix row issues'
                       : !importContextReady
-                        ? 'Add workspace and owner'
+                        ? 'Add company and owner'
                         : managedIdentity
-                          ? 'Check with workspace'
+                          ? 'Check with company'
                           : 'Prepare import file'
                 : 'Upload or try sample'
   const importCoachReason = appliedIsCurrent
-    ? 'The workspace import is confirmed and ready to use.'
+    ? 'The company import is confirmed and ready to use.'
     : state.preflighting
       ? 'SuperMega is checking this file against the selected company, owner, product, and latest saved records before anything changes.'
       : canApplyManagedImport
-        ? 'The workspace check passed and the review box is ticked.'
+        ? 'The company check passed and the review box is ticked.'
         : validationIsCurrent
-          ? 'The file passed the workspace check. Review is still required before records change.'
+          ? 'The file passed the company check. Review is still required before records change.'
           : state.preview
             ? state.preview.readyForStaging
               ? 'The file is clean; the next step is a company check or setup file.'
@@ -420,7 +420,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     ['Safety', managedIdentity ? 'Company check first' : 'Local file only'],
   ] as const
   const activationHandoffAction = appliedIsCurrent
-    ? 'Open company workspace'
+    ? 'Open company account'
     : canApplyManagedImport
       ? 'Import is ready'
       : validationIsCurrent
@@ -437,17 +437,17 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     : canApplyManagedImport
       ? 'The file is checked, the product is ready, and the review box is selected.'
       : validationIsCurrent
-        ? 'Workspace check passed with zero records written; review the import before going live.'
+        ? 'Company check passed with zero records written; review the import before going live.'
         : state.preview?.readyForStaging
           ? managedIdentity
-            ? 'The clean file can be checked against the company workspace before anything changes.'
+            ? 'The clean file can be checked against the company account before anything changes.'
             : 'Free mode can export the package for support review without sending data from the browser.'
           : state.preview
             ? 'Setup stays locked until required columns, row issues, and duplicate keys are clear.'
             : 'Start with the sample or a CSV so SuperMega can build one clear setup file.'
   const activationHandoffRows = [
     ['Package', state.preview ? `${state.preview.totals.ready}/${state.preview.totals.rows} ready` : 'Waiting'],
-    ['Workspace', importContextReady ? workspace.trim() : 'Missing'],
+    ['Company', importContextReady ? workspace.trim() : 'Missing'],
     ['Owner', importContextReady ? owner.trim() : 'Missing'],
     ['Review', appliedIsCurrent ? 'Receipt ready' : canApplyManagedImport ? 'Approved' : validationIsCurrent ? 'Approve' : state.preview?.readyForStaging ? 'Prepare' : 'Locked'],
   ] as const
@@ -824,7 +824,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         const currentSchedule = await loadManagedServiceSchedule(expectedIdentity)
         if (contextChanged()) return
         if (currentSchedule.schedule && currentSchedule.schedule.industryPackId !== packId) {
-          throw new Error(`This managed Shop already uses the ${currentSchedule.schedule.industryPackId} pack. Existing appointment evidence was preserved.`)
+          throw new Error(`This Company Shop already uses the ${currentSchedule.schedule.industryPackId} pack. Existing appointment evidence was preserved.`)
         }
         const provisioned = currentSchedule.schedule
           ? currentSchedule
@@ -867,7 +867,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         applied: null,
         validation: activationNeedsRefresh ? null : current.validation,
         error: activationNeedsRefresh
-          ? 'The managed workspace changed after validation, or this import is already current. Review the preview and validate again.'
+          ? 'The company account changed after validation, or this import is already current. Review the preview and validate again.'
           : error instanceof Error ? error.message : managedActivation.failure,
       }))
     }
@@ -906,7 +906,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           : appliedIsCurrent && state.applied
           ? `${state.applied.receipt.activation.row_count} ${managedActivation?.createdLabel ?? 'records'} were imported for this company.${state.applied.shopPack ? ` The ${state.applied.shopPack.id} services and resources are ready in the same workspace.` : ''}${state.applied.plantPack ? ` The ${state.applied.plantPack.id} Plant setup pack is bound to the opening plan.` : ''} Your source CSV was not uploaded or sent to AI.`
           : managedIdentity
-          ? 'Your CSV stays in this tab. Only prepared rows are checked with your managed company; nothing is written until you confirm the import.'
+          ? 'Your CSV stays in this tab. Only prepared rows are checked with your company account; nothing is written until you confirm the import.'
           : `Your CSV stays in this browser. Nothing is sent to AI or added to ${productName} while you review it.`}</p>
         <div aria-label={`${productName} import next step`} className="catalog-import-next-step">
           <div><span className="core-eyebrow">Next</span><strong>{importCoachAction}</strong><small>{importStageMessage}</small></div>
@@ -989,7 +989,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             <div className="form-actions"><button className="core-button primary" disabled={!canApplyLocalImport} onClick={() => void activateLocalImport()} type="button">{state.applying ? `Adding ${productName.toLowerCase()} records...` : `Add ${state.preview.totals.ready} ${localActionLabel}`}</button></div>
           </> : null}
           <div className="catalog-import-footer">
-            <div><strong>{localAppliedIsCurrent && state.localApplied ? `${state.localApplied.created} ${localRecordLabel} added; ${state.localApplied.alreadyPresent} already current.` : appliedIsCurrent && state.applied ? `${state.applied.receipt.activation.row_count} ${managedActivation?.completedLabel ?? 'records'} ${managedActivation?.resultVerb ?? 'created'} in revision ${state.applied.receipt.result.version}.` : validationIsCurrent ? 'Validated for this company.' : state.preview.readyForStaging && !importContextReady ? 'Add workspace and owner above.' : state.preview.readyForStaging ? localActivationAvailable ? `Ready to add to this ${productName} demo.` : 'Data check passed.' : 'Fix the highlighted rows first.'}</strong><small>{localAppliedIsCurrent
+            <div><strong>{localAppliedIsCurrent && state.localApplied ? `${state.localApplied.created} ${localRecordLabel} added; ${state.localApplied.alreadyPresent} already current.` : appliedIsCurrent && state.applied ? `${state.applied.receipt.activation.row_count} ${managedActivation?.completedLabel ?? 'records'} ${managedActivation?.resultVerb ?? 'created'} in revision ${state.applied.receipt.result.version}.` : validationIsCurrent ? 'Validated for this company.' : state.preview.readyForStaging && !importContextReady ? 'Add company and owner above.' : state.preview.readyForStaging ? localActivationAvailable ? `Ready to add to this ${productName} demo.` : 'Data check passed.' : 'Fix the highlighted rows first.'}</strong><small>{localAppliedIsCurrent
               ? `Open ${productName} to use the imported ${localUseLabel}.`
               : appliedIsCurrent && state.applied
               ? `The ${managedActivation?.productLabel ?? 'product'} import is confirmed.${state.applied.shopPack ? ` ${state.applied.shopPack.id} pack revision ${state.applied.shopPack.version} is ready.` : ''}${state.applied.plantPack ? ` ${state.applied.plantPack.id} Plant setup is ready.` : ''}`
@@ -1002,7 +1002,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
                 : 'Ready to prepare an accountable import file.'}</small>
               {appliedIsCurrent && state.applied ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.applied.receipt.activation.package_digest.slice(7, 19).toUpperCase()} / revision {state.applied.receipt.result.version} / idempotent command confirmed</p></details> : validationIsCurrent && state.validation ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.validation.receipt.package_digest.slice(7, 19).toUpperCase()} / {state.validation.preflight ? 'company check retained' : 'zero records written'} / {object.activationBoundary}</p></details> : null}
             </div>
-            <div className="form-actions"><button className="core-button" disabled={state.preflighting || state.applying} onClick={clearPreview} type="button">Clear</button>{localAppliedIsCurrent ? <Link className="core-button primary" to={localOpenPath}>Open {productName}</Link> : !localActivationAvailable && !appliedIsCurrent && !(validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation) ? <button className="core-button" disabled={!canPrepareImport} onClick={() => void validateOrDownloadStagingPackage()} type="button">{state.validating ? 'Checking...' : !importContextReady ? 'Add workspace and owner' : validationIsCurrent ? 'Download checked file' : managedIdentity ? 'Check with workspace' : 'Download prepared file'}</button> : null}</div>
+            <div className="form-actions"><button className="core-button" disabled={state.preflighting || state.applying} onClick={clearPreview} type="button">Clear</button>{localAppliedIsCurrent ? <Link className="core-button primary" to={localOpenPath}>Open {productName}</Link> : !localActivationAvailable && !appliedIsCurrent && !(validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation) ? <button className="core-button" disabled={!canPrepareImport} onClick={() => void validateOrDownloadStagingPackage()} type="button">{state.validating ? 'Checking...' : !importContextReady ? 'Add company and owner' : validationIsCurrent ? 'Download checked file' : managedIdentity ? 'Check with company' : 'Download prepared file'}</button> : null}</div>
           </div>
         </div> : null}
       </div>
