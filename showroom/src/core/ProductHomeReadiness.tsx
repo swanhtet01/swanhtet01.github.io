@@ -90,9 +90,9 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
     })
   }
   const agentCommandQueueRows = [
-    [ready ? 'Export evidence' : 'Finish setup', ready ? 'Ready for support review' : `${progress}% ready`, ready ? 'Package setup, imports, behavior, decisions, and activation proof before premium starts.' : 'Finish baseline, owner, source, and acceptance evidence first.'],
-    [behaviorPreference.preferred ? 'Owner pattern' : 'Choose an agent job', behaviorPreference.preferred && preferredContinuation ? `${preferredContinuation.label} / ${behaviorPreference.preferred.chosenCount} chosen` : 'Needs signal', behaviorPreference.preferred ? behaviorPreference.preferred.detail : 'Open a product and choose one recommended job to teach the local queue.'],
-    [hostedReady ? 'Activate managed lane' : 'Clear managed gate', hostedReady ? 'Controls ready' : `${activationCoverage}% gated`, hostedReady ? 'Use tenant roles, audit, and approval before any real write.' : nextHostedAction],
+    [ready ? 'Export setup' : 'Finish setup', ready ? 'Ready for support review' : `${progress}% ready`, ready ? 'Package setup, imports, behavior, decisions, and go-live proof before premium starts.' : 'Finish baseline, owner, source, and acceptance evidence first.'],
+    [behaviorPreference.preferred ? 'Owner pattern' : 'Choose next step', behaviorPreference.preferred && preferredContinuation ? `${preferredContinuation.label} / ${behaviorPreference.preferred.chosenCount} chosen` : 'Needs signal', behaviorPreference.preferred ? behaviorPreference.preferred.detail : 'Open a product and choose one recommended step to teach the local queue.'],
+    [hostedReady ? 'Prepare managed lane' : 'Clear managed gate', hostedReady ? 'Controls ready' : `${activationCoverage}% gated`, hostedReady ? 'Use tenant roles, audit, and approval before any real write.' : nextHostedAction],
     ['Operate products', behaviorProducts ? `${behaviorProducts}/4 touched` : 'Pick one product', 'Shop, Plant, Website, and Ecommerce stay separate apps but share one evidence and approval system.'],
   ] as const
 
@@ -408,7 +408,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
           <div>
             <span className="core-eyebrow">Starter paths</span>
             <h2>Start one product in 2 clicks.</h2>
-            <p>Choose a local template, then open the working app. AI prepares the setup and keeps business changes behind owner approval.</p>
+            <p>Choose a local template, then open the working app. Setup stays behind owner review before business changes are saved.</p>
           </div>
           <Link className="core-button" to="/settings/">Open setup hub</Link>
         </div>

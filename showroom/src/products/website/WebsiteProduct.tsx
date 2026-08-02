@@ -1024,10 +1024,10 @@ export function WebsiteProduct() {
           </header>
 
           {view === 'content' && !starterSetupActive ? (
-            <section className="website-start-guide" aria-label="Website guided jobs">
+            <section className="website-start-guide" aria-label="Website setup steps">
               <header>
                 <span className="website-kicker">Start here</span>
-                <h2>Three jobs launch the website.</h2>
+                <h2>Three steps finish the website.</h2>
                 <p>Preview the real demo, edit only what matters, then download a safe website file.</p>
               </header>
               <div>
@@ -1217,7 +1217,7 @@ export function WebsiteProduct() {
             <div className="website-business-controls-content">
               <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox" id="website-lead-inbox">
                 <header>
-                  <div><span className="website-kicker">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture and route inquiries</h2><p>{storageMode === 'managed' ? 'Inquiries stay in this managed workspace with ownership and decision history.' : 'Try the full workflow locally. Contact data stays in this browser.'} No message, CRM, or Shop write is sent.</p></div>
+                  <div><span className="website-kicker">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture and route inquiries</h2><p>{storageMode === 'managed' ? 'Inquiries stay in this company account with ownership and decision history.' : 'Try the full workflow locally. Contact data stays in this browser.'} No message, CRM, or Shop write is sent.</p></div>
                   <div className="website-lead-counts"><span><strong>{leadCounts.new}</strong><small>New</small></span><span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span><span><strong>{leadCounts.closed}</strong><small>Closed</small></span></div>
                 </header>
 
