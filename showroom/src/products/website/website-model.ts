@@ -290,7 +290,7 @@ export function createInitialWorkspace(): WebsiteWorkspace {
     version: 2,
     revision: 0,
     contentRevision: 0,
-    siteName: 'SuperMega',
+    siteName: 'Mingalar Fresh Mart',
     selectedPageId: 'page-home',
     evidence: [],
     approvals: [],
@@ -304,56 +304,56 @@ export function createInitialWorkspace(): WebsiteWorkspace {
         stage: 'ready',
         navigation: { label: 'Home', visible: true },
         hero: {
-          eyebrow: 'Company operating system',
-          headline: 'Turn accountable work into visible progress.',
-          summary: 'SuperMega gives teams one compact place to operate, review evidence, and keep consequential actions under human control.',
-          ctaLabel: 'Explore products',
-          ctaHref: '/products',
+          eyebrow: 'Groceries in Yangon',
+          headline: 'Fresh everyday groceries without the extra trip.',
+          summary: 'Shop pantry staples, drinks, household refills, and ready-made family packs for pickup or local delivery.',
+          ctaLabel: 'Browse the catalog',
+          ctaHref: '/catalog',
         },
         sections: [
           {
             id: 'section-home-control',
-            eyebrow: 'Control',
-            title: 'Software that shows its work.',
-            body: 'Every important change keeps its owner, source, current state, and approval boundary close to the record.',
+            eyebrow: 'Clear ordering',
+            title: 'See the product, price, and fulfilment choice.',
+            body: 'Choose a practical pack, then confirm quantity, pickup or delivery, and timing before the order is accepted.',
           },
           {
             id: 'section-home-local',
-            eyebrow: 'Local first',
-            title: 'Useful before it is connected.',
-            body: 'Start with a bounded browser workspace, then connect identity, data, and deployment only when those controls are ready.',
+            eyebrow: 'Local service',
+            title: 'A simple order from request to handoff.',
+            body: 'The store checks current stock and delivery details before confirming what is available.',
           },
         ],
         seo: {
-          title: 'SuperMega | Accountable company software',
-          description: 'Compact operating software for teams that need evidence, clear ownership, and human approval.',
+          title: 'Mingalar Fresh Mart | Groceries in Yangon',
+          description: 'Everyday groceries, pantry packs, pickup, and local delivery in Yangon.',
         },
         updatedAt: INITIAL_CREATED_AT,
       },
       {
         id: 'page-products',
-        internalName: 'Products',
-        slug: '/products',
+        internalName: 'Catalog',
+        slug: '/catalog',
         stage: 'ready',
-        navigation: { label: 'Products', visible: true },
+        navigation: { label: 'Catalog', visible: true },
         hero: {
-          eyebrow: 'Products',
-          headline: 'Focused workspaces for the work that matters.',
-          summary: 'Run commerce, production, team delivery, and publishing from compact tools with explicit operational boundaries.',
-          ctaLabel: 'Talk to us',
+          eyebrow: 'Everyday essentials',
+          headline: 'Stock the week in one simple order.',
+          summary: 'Start with daily essentials, cold drinks, household refills, and personal care packs. Current availability is confirmed before purchase.',
+          ctaLabel: 'Ask about availability',
           ctaHref: '/contact',
         },
         sections: [
           {
             id: 'section-products-workspaces',
-            eyebrow: 'Workspaces',
-            title: 'Purpose-built, not page-built.',
-            body: 'Each product starts with the records, decisions, and evidence its operators actually need.',
+            eyebrow: 'Popular choices',
+            title: 'Practical packs for home and office.',
+            body: 'Choose the products and quantities you need. The store reviews stock, fulfilment, and final total before confirmation.',
           },
         ],
         seo: {
-          title: 'Products | SuperMega',
-          description: 'Explore SuperMega workspaces for accountable commerce, production, team delivery, and websites.',
+          title: 'Catalog | Mingalar Fresh Mart',
+          description: 'Browse practical grocery and household packs for pickup or local delivery in Yangon.',
         },
         updatedAt: INITIAL_CREATED_AT,
       },
@@ -364,23 +364,23 @@ export function createInitialWorkspace(): WebsiteWorkspace {
         stage: 'ready',
         navigation: { label: 'Contact', visible: true },
         hero: {
-          eyebrow: 'Start a conversation',
-          headline: 'Bring one real workflow.',
-          summary: 'We will map the record, the accountable owner, the evidence needed, and the actions that must remain human-controlled.',
-          ctaLabel: 'Email SuperMega',
-          ctaHref: 'https://supermega.dev',
+          eyebrow: 'Order help',
+          headline: 'Tell us what you need today.',
+          summary: 'Share the item, quantity, township, and preferred pickup or delivery time. We will review availability before confirming.',
+          ctaLabel: 'Browse products',
+          ctaHref: '/catalog',
         },
         sections: [
           {
             id: 'section-contact-scope',
-            eyebrow: 'First step',
-            title: 'Begin with a bounded outcome.',
-            body: 'A useful pilot has one owner, one operating surface, a measurable acceptance condition, and no hidden production access.',
+            eyebrow: 'What to include',
+            title: 'One message is enough to start.',
+            body: 'Include product names, quantities, location, and timing so the store can answer with a clear next step.',
           },
         ],
         seo: {
-          title: 'Contact | SuperMega',
-          description: 'Start a bounded SuperMega pilot with a real workflow, evidence requirements, and clear authority.',
+          title: 'Contact | Mingalar Fresh Mart',
+          description: 'Ask Mingalar Fresh Mart about current stock, pickup, or local delivery in Yangon.',
         },
         updatedAt: INITIAL_CREATED_AT,
       },
@@ -1344,8 +1344,28 @@ function migrateLegacyWorkspace(legacy: LegacyWebsiteWorkspace): WebsiteWorkspac
   }
 }
 
+function isUntouchedLegacyCorporateSample(workspace: WebsiteWorkspace) {
+  return workspace.revision === 0
+    && workspace.contentRevision === 0
+    && workspace.siteName === 'SuperMega'
+    && workspace.selectedPageId === 'page-home'
+    && workspace.pages.length === 3
+    && workspace.pages.some((page) => page.id === 'page-home' && page.slug === '/')
+    && workspace.pages.some((page) => page.id === 'page-products' && page.slug === '/products')
+    && workspace.pages.some((page) => page.id === 'page-contact' && page.slug === '/contact')
+    && workspace.evidence.length === 0
+    && workspace.approvals.length === 0
+    && workspace.localPublishes.length === 0
+    && workspace.events.length === 0
+}
+
 function parseStoredWorkspace(raw: string) {
-  try { return restoreV2(JSON.parse(raw) as unknown) } catch { return null }
+  try {
+    const restored = restoreV2(JSON.parse(raw) as unknown)
+    return restored && isUntouchedLegacyCorporateSample(restored)
+      ? createInitialWorkspace()
+      : restored
+  } catch { return null }
 }
 
 function parseLegacyWorkspace(raw: string) {

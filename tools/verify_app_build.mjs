@@ -3439,6 +3439,20 @@ if (!websiteSource.includes('starterSetupActive')
   || !websiteStarterSource.includes("stage: 'draft'")
   || !websiteStarterSource.includes('websiteStarterBriefIssues')
   || ['fetch(', 'localStorage', 'sessionStorage', 'XMLHttpRequest'].some((marker) => websiteStarterSource.includes(marker) || websiteStarterSetupSource.includes(marker))) fail('website_named_business_starter_missing_or_side_effectful')
+if (!websiteModelSource.includes("siteName: 'Mingalar Fresh Mart'")
+  || !websiteModelSource.includes("headline: 'Fresh everyday groceries without the extra trip.'")
+  || !websiteModelSource.includes("internalName: 'Catalog'")
+  || !websiteModelSource.includes("slug: '/catalog'")
+  || !websiteModelSource.includes("headline: 'Stock the week in one simple order.'")
+  || !websiteModelSource.includes("headline: 'Tell us what you need today.'")
+  || !websiteModelSource.includes('isUntouchedLegacyCorporateSample')
+  || !websiteModelSource.includes("workspace.siteName === 'SuperMega'")
+  || !websiteModelSource.includes("page.id === 'page-products' && page.slug === '/products'")
+  || !websiteModelSource.includes('restored && isUntouchedLegacyCorporateSample(restored)')
+  || !websiteStarterSource.includes("workspace.pages.find((page) => page.id === 'page-products')")
+  || websiteModelSource.includes("headline: 'Turn accountable work into visible progress.'")
+  || websiteModelSource.includes("headline: 'Focused workspaces for the work that matters.'")
+  || websiteModelSource.includes("headline: 'Bring one real workflow.'")) fail('website_real_client_sample_missing')
 if (!websiteModelSource.includes("supermega.website.workspace.v2")
   || !websiteModelSource.includes('LEGACY_WEBSITE_STORAGE_KEY')
   || !websiteModelSource.includes('mutateWebsiteWorkspace')
@@ -9685,6 +9699,29 @@ async function verifyWebsiteRuntime() {
     const starter = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-starter.ts')).href}?website-starter-verify=${Date.now()}`)
     const seed = model.createInitialWorkspace()
     const fingerprint = model.workspaceFingerprint(seed)
+    assert(seed.siteName === 'Mingalar Fresh Mart'
+      && seed.pages.map((page) => page.slug).join(',') === '/,/catalog,/contact'
+      && seed.pages[0].hero.headline === 'Fresh everyday groceries without the extra trip.'
+      && seed.pages[1].hero.headline === 'Stock the week in one simple order.'
+      && seed.pages[2].hero.headline === 'Tell us what you need today.', 'website_real_client_sample_was_not_seeded')
+    const legacyCorporateSample = {
+      ...seed,
+      siteName: 'SuperMega',
+      pages: seed.pages.map((page) => page.id === 'page-products'
+        ? { ...page, internalName: 'Products', slug: '/products', navigation: { label: 'Products', visible: true } }
+        : page),
+    }
+    values.set(model.WEBSITE_STORAGE_KEY, JSON.stringify(legacyCorporateSample))
+    const upgradedLegacySample = model.loadWebsiteWorkspace(storage)
+    assert(upgradedLegacySample.ok
+      && upgradedLegacySample.workspace.siteName === seed.siteName
+      && upgradedLegacySample.workspace.pages[1].slug === '/catalog', 'website_untouched_legacy_sample_was_not_upgraded')
+    values.set(model.WEBSITE_STORAGE_KEY, JSON.stringify({ ...legacyCorporateSample, revision: 1, contentRevision: 1 }))
+    const preservedLegacyEdit = model.loadWebsiteWorkspace(storage)
+    assert(preservedLegacyEdit.ok
+      && preservedLegacyEdit.workspace.siteName === 'SuperMega'
+      && preservedLegacyEdit.workspace.pages[1].slug === '/products', 'website_edited_legacy_workspace_was_replaced')
+    values.clear()
     const starterBrief = {
       templateId: 'catalog-showcase',
       businessName: 'Shwe Family Store',
@@ -10265,7 +10302,7 @@ async function verifyWebsiteRuntime() {
     const firstDownload = exporter.createWebsiteHtmlDownload(retainedArtifact)
     const secondDownload = exporter.createWebsiteHtmlDownload(retainedArtifact)
     assert(JSON.stringify(firstDownload) === JSON.stringify(secondDownload) && firstDownload.filename.endsWith('.html'), 'website_artifact_export_not_deterministic')
-    assert(firstDownload.content.includes('Content-Security-Policy') && firstDownload.content.includes('href="#products"') && firstDownload.content.includes('https://supermega.dev/'), 'website_artifact_links_or_security_boundary_missing')
+    assert(firstDownload.content.includes('Content-Security-Policy') && firstDownload.content.includes('href="#catalog"') && firstDownload.content.includes('Mingalar Fresh Mart'), 'website_artifact_links_or_security_boundary_missing')
     assert(![fingerprint, approvalInput.actionId, firstInput.actionId, 'OP-OWNER', 'page-home'].some((value) => firstDownload.content.includes(value)), 'website_artifact_export_leaked_governance_metadata')
     const unsafeArtifact = structuredClone(retainedArtifact)
     unsafeArtifact.pages[0].hero.ctaHref = 'javascript:alert(1)'
